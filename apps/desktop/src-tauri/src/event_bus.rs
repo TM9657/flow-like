@@ -12,10 +12,25 @@ use flow_like_types::{Value, sync::mpsc};
 use flow_like_types::{json, tokio};
 use std::time::Duration;
 use std::{path::PathBuf, sync::Arc};
-use tauri::AppHandle;
+use tauri::{AppHandle, Manager};
 
 // Maximum number of events to queue. 100,000 should be plenty for local handling.
 const MAX_QUEUE_SIZE: usize = 100_000;
+
+/// Update the last_node_update timestamp for a run when we see run events
+fn touch_run_last_update(app_handle: &AppHandle, events: &[InterComEvent]) {
+    for event in events {
+        // Run events have type "run:{run_id}"
+        if event.event_type.starts_with("run:") {
+            let run_id = &event.event_type[4..]; // Skip "run:" prefix
+            if let Some(state) = app_handle.try_state::<crate::state::TauriFlowLikeState>() {
+                if let Some(run_data) = state.0.board_run_registry.get(run_id) {
+                    run_data.touch_last_node_update();
+                }
+            }
+        }
+    }
+}
 
 pub struct EventBusEvent {
     pub payload: Option<Value>,
@@ -48,6 +63,7 @@ impl EventBusEvent {
         let payload = RunPayload {
             id: loaded_event.node_id.clone(),
             payload: self.payload.to_owned(),
+            runtime_variables: None, // Event bus triggers don't have runtime vars context
         };
 
         let board_version = loaded_event.board_version;
@@ -72,6 +88,9 @@ impl EventBusEvent {
                     let app_handle = app_handle_clone.clone();
                     Box::pin({
                         async move {
+                            // Update last_node_update for run events
+                            touch_run_last_update(&app_handle, &event);
+
                             let first_event = event.first();
 
                             if let Some(first_event) = first_event {
@@ -102,6 +121,9 @@ impl EventBusEvent {
             credentials = Some(shared_credentials);
         }
 
+        let event_name = loaded_event.name.clone();
+        let event_type = loaded_event.event_type.clone();
+
         let mut internal_run = InternalRun::new(
             &self.app_id,
             board,
@@ -127,7 +149,16 @@ impl EventBusEvent {
             .await;
 
         let cancellation_token = CancellationToken::new();
-        let run_data = RunData::new(&board_id, &payload.id, None, cancellation_token.clone());
+        let board_name = internal_run.board.name.clone();
+        let run_data = RunData::with_metadata(
+            &board_id,
+            &payload.id,
+            Some(self.event_id.clone()),
+            cancellation_token.clone(),
+            Some(board_name),
+            Some(event_name),
+            Some(event_type),
+        );
 
         flow_like_state.register_run(&run_id, run_data);
 

@@ -11,6 +11,7 @@ import { useTheme } from "next-themes";
 import { memo, useCallback, useEffect, useMemo, useRef } from "react";
 import {
 	type IBoard,
+	IExecutionMode,
 	IExecutionStage,
 	ILogLevel,
 	type INode,
@@ -101,6 +102,7 @@ function FlowPreviewInner({ nodes }: Readonly<{ nodes: INode[] }>) {
 			variables: {},
 			viewport: [0, 0, 0, 0],
 			page_ids: [],
+			execution_mode: IExecutionMode.Hybrid,
 		};
 
 		const parsedBoard = parseBoard(

@@ -46,6 +46,14 @@ impl NodeLogic for SetHeadersNode {
         )
         .set_value_type(ValueType::HashMap);
 
+        node.add_input_pin(
+            "merge",
+            "Merge",
+            "Merge with existing headers instead of replacing",
+            VariableType::Boolean,
+        )
+        .set_default_value(Some(json!(true)));
+
         node.add_output_pin(
             "request_out",
             "Request",
@@ -61,8 +69,19 @@ impl NodeLogic for SetHeadersNode {
         let mut request: HttpRequest = context.evaluate_pin("request").await?;
         let headers: std::collections::HashMap<String, String> =
             context.evaluate_pin("headers").await?;
+        let merge: bool = context.evaluate_pin("merge").await?;
 
-        request.headers = Some(headers);
+        if merge {
+            if request.headers.is_none() {
+                request.headers = Some(std::collections::HashMap::new());
+            }
+
+            if let Some(existing) = request.headers.as_mut() {
+                existing.extend(headers);
+            }
+        } else {
+            request.headers = Some(headers);
+        }
 
         context.set_pin_value("request_out", json!(request)).await?;
 

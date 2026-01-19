@@ -26,3 +26,4 @@ async-trait.workspace = true
 nalgebra = "0.34.0"
 hayro = { version = "0.4.0", features = ["embed-fonts"] }
 rayon = "1.11.0"
+qrcode = { version = "0.14.1", default-features = false, features = ["image"] }

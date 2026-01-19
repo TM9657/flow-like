@@ -41,6 +41,14 @@ pub enum ExecutionStage {
     PreProd,
     Prod,
 }
+
+#[derive(Serialize, Deserialize, JsonSchema, Clone, Default, Debug)]
+pub enum ExecutionMode {
+    #[default]
+    Hybrid,
+    Remote,
+    Local,
+}
 #[derive(Serialize, Deserialize, JsonSchema, Clone, Debug)]
 pub enum LayerType {
     Function,
@@ -166,6 +174,7 @@ pub struct Board {
     pub version: (u32, u32, u32),
     pub stage: ExecutionStage,
     pub log_level: LogLevel,
+    pub execution_mode: ExecutionMode,
     pub refs: HashMap<String, String>,
     pub layers: HashMap<String, Layer>,
     pub page_ids: Vec<String>,
@@ -208,6 +217,7 @@ impl Board {
             comments: HashMap::new(),
             log_level: LogLevel::Info,
             stage: ExecutionStage::Dev,
+            execution_mode: ExecutionMode::Hybrid,
             viewport: (0.0, 0.0, 0.0),
             version: (0, 0, 1),
             created_at: SystemTime::now(),

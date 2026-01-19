@@ -22,6 +22,22 @@ import type { ITeamState } from "./backend-state/team-state";
 import type { ITemplateState } from "./backend-state/template-state";
 import type { IUserState } from "./backend-state/user-state";
 import type { IWidgetState } from "./backend-state/widget-state";
+import {
+	EmptyAIState,
+	EmptyApiState,
+	EmptyAppState,
+	EmptyBitState,
+	EmptyBoardState,
+	EmptyDatabaseState,
+	EmptyEventState,
+	EmptyHelperState,
+	EmptyRoleState,
+	EmptyRouteState,
+	EmptyStorageState,
+	EmptyTeamState,
+	EmptyTemplateState,
+	EmptyUserState,
+} from "./backend-state/empty-states";
 
 export * from "./backend-state/api-state";
 export * from "./backend-state/empty-states/index";
@@ -83,6 +99,10 @@ export type {
 	INotificationsOverview,
 	INotificationEvent,
 	NotificationType,
+	IRuntimeVariable,
+	IOAuthRequirement,
+	IPrerunBoardResponse,
+	IPrerunEventResponse,
 } from "./backend-state/types";
 export * from "./backend-state/db-state";
 export type {
@@ -135,8 +155,58 @@ export const useBackendStore = create<BackendStoreState>((set) => ({
 	setBackend: (backend: IBackendState) => set({ backend }),
 }));
 
+const serverBackend: IBackendState = {
+	appState: new EmptyAppState(),
+	apiState: new EmptyApiState(),
+	bitState: new EmptyBitState(),
+	boardState: new EmptyBoardState(),
+	userState: new EmptyUserState(),
+	teamState: new EmptyTeamState(),
+	roleState: new EmptyRoleState(),
+	storageState: new EmptyStorageState(),
+	templateState: new EmptyTemplateState(),
+	helperState: new EmptyHelperState(),
+	eventState: new EmptyEventState(),
+	aiState: new EmptyAIState(),
+	dbState: new EmptyDatabaseState(),
+	widgetState: new Proxy(
+		{},
+		{
+			get: () => {
+				throw new Error("WidgetState is not available during prerender");
+			},
+		},
+	) as IWidgetState,
+	pageState: new Proxy(
+		{},
+		{
+			get: () => {
+				throw new Error("PageState is not available during prerender");
+			},
+		},
+	) as IPageState,
+	routeState: new EmptyRouteState(),
+	registryState: new Proxy(
+		{},
+		{
+			get: () => {
+				throw new Error("RegistryState is not available during prerender");
+			},
+		},
+	) as IRegistryState,
+	capabilities: () => ({
+		needsSignIn: false,
+		canHostLlamaCPP: false,
+		canHostEmbeddings: false,
+		canExecuteLocally: false,
+	}),
+	isOffline: async () => true,
+};
+
 export function useBackend(): IBackendState {
 	const backend = useBackendStore((state) => state.backend);
-	if (!backend) throw new Error("Backend not initialized");
+	if (!backend) {
+		return serverBackend;
+	}
 	return backend;
 }

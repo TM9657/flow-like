@@ -5,8 +5,10 @@ import type {
 	IOAuthProvider,
 	IOAuthToken,
 	IRunPayload,
+	IVariable,
 	IVersionType,
 } from "../../lib";
+import type { IPrerunEventResponse } from "./types";
 
 export interface IOAuthCheckResult {
 	tokens?: Record<string, IOAuthToken>;
@@ -64,4 +66,11 @@ export interface IEventState {
 	cancelExecution(runId: string): Promise<void>;
 
 	isEventSinkActive(eventId: string): Promise<boolean>;
+
+	/** Pre-run analysis: get required runtime variables and OAuth for an event */
+	prerunEvent?(
+		appId: string,
+		eventId: string,
+		version?: [number, number, number],
+	): Promise<IPrerunEventResponse>;
 }

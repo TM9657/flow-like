@@ -53,7 +53,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 
 const CATEGORY_CONFIG: Record<
 	string,
-	{ label: string; icon: React.ElementType; color: string }
+	{ label: string; icon: React.ComponentType<{ className?: string }>; color: string }
 > = {
 	[IAppCategory.Productivity]: {
 		label: "Productivity",
@@ -464,6 +464,8 @@ function CategoryChips({
 				const Icon = config.icon;
 				const isSelected = selected === category;
 
+				const iconClassName = `w-3.5 h-3.5 ${isSelected ? "" : config.color}`;
+
 				return (
 					<Badge
 						key={category}
@@ -471,7 +473,7 @@ function CategoryChips({
 						className="cursor-pointer hover:bg-primary/20 transition-all duration-200 gap-1.5 py-1.5 px-3"
 						onClick={() => onSelect(isSelected ? undefined : category)}
 					>
-						<Icon className={`w-3.5 h-3.5 ${isSelected ? "" : config.color}`} />
+						<Icon className={iconClassName} />
 						{config.label}
 					</Badge>
 				);

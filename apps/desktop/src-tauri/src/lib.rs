@@ -5,6 +5,7 @@ mod functions;
 mod profile;
 mod settings;
 mod state;
+mod tray;
 pub mod utils;
 
 use flow_like::{
@@ -32,6 +33,14 @@ use tauri_plugin_updater::UpdaterExt;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 use crate::{deeplink::handle_deep_link, event_bus::EventBus};
+
+#[cfg(target_os = "macos")]
+fn disable_app_nap() {
+    macos_app_nap::prevent();
+}
+
+#[cfg(not(target_os = "macos"))]
+fn disable_app_nap() {}
 
 // --- iOS Release logging -----------------------------------------------------
 #[cfg(all(target_os = "ios", not(debug_assertions)))]
@@ -106,6 +115,7 @@ pub fn run() {
     }));
     #[cfg(all(target_os = "ios", not(debug_assertions)))]
     ios_release_logging::init();
+    disable_app_nap();
 
     let mut settings_state = Settings::new();
     let project_dir = settings_state.project_dir.clone();
@@ -258,6 +268,9 @@ pub fn run() {
         .manage(state::TauriSettingsState(settings_state.clone()))
         .manage(state::TauriFlowLikeState(state_ref.clone()))
         .manage(state::TauriRegistryState(Arc::new(Mutex::new(None))))
+        .manage(state::TauriTrayState(Arc::new(Mutex::new(
+            tray::TrayRuntimeState::default(),
+        ))))
         .plugin(tauri_plugin_http::init())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_deep_link::init())
@@ -326,6 +339,15 @@ pub fn run() {
             let refetch_handle = relay_handle.clone();
             let deep_link_handle = relay_handle.clone();
             let event_bus_handle = relay_handle.clone();
+
+            #[cfg(desktop)]
+            {
+                if let Err(err) = tray::init_tray(&relay_handle) {
+                    eprintln!("Failed to initialize tray: {}", err);
+                } else {
+                    tray::spawn_tray_refresh(relay_handle.clone());
+                }
+            }
 
             #[cfg(desktop)]
             {
@@ -509,6 +531,7 @@ pub fn run() {
             functions::ai::invoke::chat_completion,
             functions::ai::invoke::find_best_model,
             functions::system::get_system_info,
+            tray::tray_update_state,
             functions::download::init::init_downloads,
             functions::download::init::get_downloads,
             functions::settings::profiles::get_profiles,

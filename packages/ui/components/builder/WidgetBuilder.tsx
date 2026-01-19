@@ -23,6 +23,7 @@ import {
 	presignPageAssets,
 } from "../../lib/presign-assets";
 import { useBackend } from "../../state/backend-state";
+import { useExecutionServiceOptional } from "../../state/execution-service-context";
 import type { IWidgetRef } from "../../state/backend-state/page-state";
 import type { IWidget } from "../../state/backend-state/widget-state";
 import { A2UIRenderer } from "../a2ui/A2UIRenderer";
@@ -912,6 +913,7 @@ interface BuilderPreviewProps {
 
 function BuilderPreview({ surfaceId }: BuilderPreviewProps) {
 	const backend = useBackend();
+	const executionService = useExecutionServiceOptional();
 	const { components, canvasSettings, actionContext, widgetRefs } =
 		useBuilder();
 	const previewCanvasId = useId();
@@ -1284,7 +1286,9 @@ function BuilderPreview({ surfaceId }: BuilderPreviewProps) {
 					},
 				};
 
-				await backend.boardState.executeBoard(
+				// Use execution service if available (checks runtime variables)
+				const execFn = executionService?.executeBoard ?? backend.boardState.executeBoard;
+				await execFn(
 					appId,
 					boardId,
 					payload,
@@ -1307,6 +1311,7 @@ function BuilderPreview({ surfaceId }: BuilderPreviewProps) {
 	}, [
 		actionContext,
 		backend.boardState,
+		executionService,
 		handleA2UIMessage,
 		getElementsFromComponents,
 	]);
@@ -1344,7 +1349,9 @@ function BuilderPreview({ surfaceId }: BuilderPreviewProps) {
 					},
 				};
 
-				await backend.boardState.executeBoard(
+				// Use execution service if available (checks runtime variables)
+				const execFn = executionService?.executeBoard ?? backend.boardState.executeBoard;
+				await execFn(
 					appId,
 					boardId,
 					payload,
@@ -1370,6 +1377,7 @@ function BuilderPreview({ surfaceId }: BuilderPreviewProps) {
 	}, [
 		actionContext,
 		backend.boardState,
+		executionService,
 		handleA2UIMessage,
 		getElementsFromComponents,
 	]);

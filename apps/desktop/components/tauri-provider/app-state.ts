@@ -68,6 +68,7 @@ export class AppState implements IAppState {
 			template?.description ?? "A blank canvas ready for your ideas",
 			template?.log_level ?? ILogLevel.Debug,
 			IExecutionStage.Dev,
+			template?.execution_mode,
 			template,
 		);
 

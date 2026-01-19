@@ -2,6 +2,7 @@ import type { SurfaceComponent } from "../../components/a2ui/types";
 import type {
 	IBoard,
 	IConnectionMode,
+	IExecutionMode,
 	IExecutionStage,
 	IGenericCommand,
 	IIntercomEvent,
@@ -11,6 +12,7 @@ import type {
 	INode,
 	IRunContext,
 	IRunPayload,
+	IVariable,
 	IVersionType,
 } from "../../lib";
 import type { IJwks, IRealtimeAccess } from "../../lib";
@@ -20,6 +22,7 @@ import type {
 	UnifiedChatMessage,
 	UnifiedCopilotResponse,
 } from "../../lib/schema/copilot";
+import type { IPrerunBoardResponse } from "./types";
 
 export interface IBoardState {
 	getBoards(appId: string): Promise<IBoard[]>;
@@ -102,6 +105,7 @@ export interface IBoardState {
 		description: string,
 		logLevel: ILogLevel,
 		stage: IExecutionStage,
+		executionMode?: IExecutionMode,
 		template?: IBoard,
 	): Promise<void>;
 
@@ -141,4 +145,11 @@ export interface IBoardState {
 		runContext?: IRunContext,
 		actionContext?: UIActionContext,
 	): Promise<UnifiedCopilotResponse>;
+
+	/** Pre-run analysis: get required runtime variables and OAuth for a board */
+	prerunBoard?(
+		appId: string,
+		boardId: string,
+		version?: [number, number, number],
+	): Promise<IPrerunBoardResponse>;
 }

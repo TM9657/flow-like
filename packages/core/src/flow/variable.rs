@@ -20,6 +20,9 @@ pub struct Variable {
     pub editable: bool,
     pub hash: Option<u64>,
     pub schema: Option<String>,
+    /// If true, this variable is configured per-user at runtime (stored locally, not in flow)
+    #[serde(default)]
+    pub runtime_configured: bool,
 
     #[serde(skip)]
     pub value: Arc<Mutex<Value>>,
@@ -38,6 +41,7 @@ impl PartialEq for Variable {
             && self.secret == other.secret
             && self.editable == other.editable
             && self.schema == other.schema
+            && self.runtime_configured == other.runtime_configured
         // Intentionally excluding self.value comparison
     }
 }
@@ -60,6 +64,7 @@ impl Variable {
             value: Arc::new(Mutex::new(Value::Null)),
             hash: None,
             schema: None,
+            runtime_configured: false,
         }
     }
 
@@ -78,6 +83,7 @@ impl Variable {
             value: Arc::new(Mutex::new(Value::Null)),
             hash: None,
             schema: self.schema.clone(),
+            runtime_configured: self.runtime_configured,
         }
     }
 
@@ -93,6 +99,11 @@ impl Variable {
 
     pub fn set_secret(&mut self, secret: bool) -> &mut Self {
         self.secret = secret;
+        self
+    }
+
+    pub fn set_runtime_configured(&mut self, runtime_configured: bool) -> &mut Self {
+        self.runtime_configured = runtime_configured;
         self
     }
 
@@ -150,6 +161,7 @@ impl Variable {
         hasher.append(&[self.exposed as u8]);
         hasher.append(&[self.secret as u8]);
         hasher.append(&[self.editable as u8]);
+        hasher.append(&[self.runtime_configured as u8]);
 
         self.hash = Some(hasher.finalize64());
     }

@@ -72,6 +72,17 @@ function TableView({
 	onBack,
 }: Readonly<{ table: string; appId: string; onBack: () => void }>) {
 	const backend = useBackend();
+	const router = useRouter();
+	const pathname = usePathname();
+	const searchParams = useSearchParams();
+
+	// Get page and pageSize from URL params
+	const pageParam = searchParams?.get("page");
+	const pageSizeParam = searchParams?.get("pageSize");
+	const page = pageParam ? Math.max(1, Number.parseInt(pageParam, 10) || 1) : 1;
+	const pageSize = pageSizeParam ? Number.parseInt(pageSizeParam, 10) || 25 : 25;
+	const offset = (page - 1) * pageSize;
+
 	const schema = useInvoke(backend.dbState.getSchema, backend.dbState, [
 		appId,
 		table,
@@ -80,14 +91,30 @@ function TableView({
 		appId,
 		table,
 	]);
-	const [offset, setOffset] = useState(0);
-	const [limit, setLimit] = useState(25);
 	const list = useInvoke(backend.dbState.listItems, backend.dbState, [
 		appId,
 		table,
 		offset,
-		limit,
+		pageSize,
 	]);
+
+	const updateUrlParams = useCallback(
+		(newPage: number, newPageSize: number) => {
+			const params = new URLSearchParams(searchParams?.toString() ?? "");
+			if (newPage > 1) {
+				params.set("page", String(newPage));
+			} else {
+				params.delete("page");
+			}
+			if (newPageSize !== 25) {
+				params.set("pageSize", String(newPageSize));
+			} else {
+				params.delete("pageSize");
+			}
+			router.replace(`${pathname}?${params.toString()}`, { scroll: false });
+		},
+		[router, pathname, searchParams],
+	);
 
 	const handleRefresh = useCallback(() => {
 		schema.refetch();
@@ -171,9 +198,10 @@ function TableView({
 					tableName={table}
 					arrowSchema={schema.data}
 					rows={list.data}
+					initialPage={page}
+					initialPageSize={pageSize}
 					onPageRequest={(args) => {
-						setOffset((args.page - 1) * args.pageSize);
-						setLimit(args.pageSize);
+						updateUrlParams(args.page, args.pageSize);
 					}}
 					loading={list.isLoading}
 					error={list.error?.message}

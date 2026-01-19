@@ -6,3 +6,4 @@ export * from "./variables/variables-menu-edit";
 export * from "./variables/components";
 export * from "./flow-copilot";
 export * from "./flow-library";
+export * from "./runtime-variables-prompt";

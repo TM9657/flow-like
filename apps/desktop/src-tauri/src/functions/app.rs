@@ -9,7 +9,7 @@ use flow_like::{
     app::App,
     bit::Metadata,
     flow::{
-        board::{Board, ExecutionStage},
+        board::{Board, ExecutionMode, ExecutionStage},
         execution::LogLevel,
     },
     flow_like_storage::{Path, object_store::ObjectStore},
@@ -158,6 +158,7 @@ pub async fn upsert_board(
     description: String,
     log_level: Option<LogLevel>,
     stage: Option<ExecutionStage>,
+    execution_mode: Option<ExecutionMode>,
     board_data: Option<Board>,
     template: Option<Board>,
 ) -> Result<(), TauriFunctionError> {
@@ -177,6 +178,10 @@ pub async fn upsert_board(
 
             if let Some(stage) = stage {
                 board.stage = stage;
+            }
+
+            if let Some(execution_mode) = execution_mode {
+                board.execution_mode = execution_mode;
             }
 
             if let Some(data) = board_data {
@@ -215,6 +220,7 @@ pub async fn upsert_board(
         board.viewport = board_data.viewport;
         board.stage = board.stage.clone();
         board.log_level = board.log_level;
+        board.execution_mode = board.execution_mode.clone();
         board.created_at = board_data.created_at;
         board.updated_at = board_data.updated_at;
         board.save(None).await?;
@@ -234,6 +240,10 @@ pub async fn upsert_board(
 
     if let Some(stage) = stage {
         board.stage = stage;
+    }
+
+    if let Some(execution_mode) = execution_mode {
+        board.execution_mode = execution_mode;
     }
     board.save(None).await?;
 

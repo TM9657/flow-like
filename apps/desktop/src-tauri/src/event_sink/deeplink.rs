@@ -130,10 +130,15 @@ impl DeeplinkSink {
             .ok_or_else(|| anyhow::anyhow!("EventSinkManager state not available"))?;
 
         let manager = manager_state.0.clone();
-        let db = {
-            let manager_guard =
-                flow_like_types::tokio::task::block_in_place(|| manager.blocking_lock());
-            manager_guard.db()
+        let db = match manager.try_lock() {
+            Ok(manager_guard) => manager_guard.db(),
+            Err(_) => {
+                tracing::warn!(
+                    "EventSinkManager busy while resolving deeplink route for app '{}'",
+                    app_id
+                );
+                return Ok(false);
+            }
         };
 
         let conn = db.lock().unwrap();
@@ -168,8 +173,16 @@ impl DeeplinkSink {
             other => Some(other),
         };
 
-        let manager_guard =
-            flow_like_types::tokio::task::block_in_place(|| manager.blocking_lock());
+        let manager_guard = match manager.try_lock() {
+            Ok(manager_guard) => manager_guard,
+            Err(_) => {
+                tracing::warn!(
+                    "EventSinkManager busy while firing deeplink event '{}'",
+                    event_id
+                );
+                return Ok(false);
+            }
+        };
 
         manager_guard.fire_event(app_handle, &event_id, payload, None)
     }

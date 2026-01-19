@@ -3,14 +3,18 @@ import {
 	type IBoard,
 	type IEvent,
 	type IEventState,
+	IExecutionMode,
 	type IHub,
 	type IIntercomEvent,
 	type ILogMetadata,
 	type IOAuthProvider,
 	type IOAuthToken,
+	type IPrerunEventResponse,
 	type IRunPayload,
+	type IVariable,
 	type IVersionType,
 	checkOAuthTokens,
+	extractOAuthRequirementsFromBoard,
 	injectDataFunction,
 	isEqual,
 } from "@tm9657/flow-like-ui";
@@ -565,5 +569,90 @@ export class EventState implements IEventState {
 					: undefined,
 			missingProviders: [],
 		};
+	}
+
+	async prerunEvent(
+		appId: string,
+		eventId: string,
+		version?: [number, number, number],
+	): Promise<IPrerunEventResponse> {
+		const isOffline = await this.backend.isOffline(appId);
+
+		// Helper to build prerun response from local event/board
+		const buildLocalPrerun = async (): Promise<IPrerunEventResponse> => {
+			const event: IEvent = await invoke("get_event", {
+				appId,
+				eventId,
+				version,
+			});
+			const board: IBoard = await invoke("get_board", {
+				appId,
+				boardId: event.board_id,
+				version: event.board_version,
+			});
+
+			const runtimeVariables = Object.values(board.variables)
+				.filter((v) => v.runtime_configured)
+				.map((v) => ({
+					id: v.id,
+					name: v.name,
+					description: v.description ?? undefined,
+					data_type: v.data_type,
+					value_type: v.value_type,
+					secret: v.secret,
+					schema: v.schema ?? undefined,
+				}));
+
+			const { oauth_requirements, requires_local_execution, execution_mode, can_execute_locally } =
+				extractOAuthRequirementsFromBoard(board);
+
+			return {
+				board_id: event.board_id,
+				runtime_variables: runtimeVariables,
+				oauth_requirements,
+				requires_local_execution,
+				execution_mode,
+				can_execute_locally,
+			};
+		};
+
+		// Offline apps: always use local data
+		if (isOffline) {
+			return buildLocalPrerun();
+		}
+
+		// Online apps: fetch from API to get execution requirements
+		// The API tells us if we can execute locally (based on permissions)
+		if (this.backend.profile && this.backend.auth) {
+			let url = `apps/${appId}/events/${eventId}/prerun`;
+			if (version) {
+				url += `?version=${version.join("_")}`;
+			}
+
+			try {
+				const response = await fetcher<IPrerunEventResponse>(
+					this.backend.profile,
+					url,
+					{ method: "GET" },
+					this.backend.auth,
+				);
+
+				if (response) {
+					// If we can execute locally and execution_mode is not Remote, use local board
+					// This ensures we get secrets from local board for local execution
+					if (response.can_execute_locally && response.execution_mode !== IExecutionMode.Remote) {
+						return buildLocalPrerun();
+					}
+
+					// Server execution: return API response (no secrets needed locally)
+					return response;
+				}
+			} catch (e) {
+				console.warn("[prerunEvent] API call failed, falling back to local:", e);
+			}
+		}
+
+		// Fallback to local data
+		return buildLocalPrerun();
 	}
 }

@@ -236,6 +236,8 @@ impl FlowNodeRegistry {
     }
 }
 
+use std::sync::atomic::AtomicU64;
+
 #[derive(Clone)]
 pub struct RunData {
     pub start_time: Instant,
@@ -243,6 +245,11 @@ pub struct RunData {
     pub node_id: Arc<str>,
     pub event_id: Option<Arc<str>>,
     pub cancellation_token: CancellationToken,
+    pub board_name: Option<Arc<str>>,
+    pub event_name: Option<Arc<str>>,
+    pub event_type: Option<Arc<str>>,
+    /// Timestamp (ms since epoch) of the last node update event
+    last_node_update_ms: Arc<AtomicU64>,
 }
 
 impl RunData {
@@ -258,6 +265,32 @@ impl RunData {
             node_id: Arc::from(node_id),
             event_id: event_id.map(|s| Arc::from(s.as_str())),
             cancellation_token,
+            board_name: None,
+            event_name: None,
+            event_type: None,
+            last_node_update_ms: Arc::new(AtomicU64::new(0)),
+        }
+    }
+
+    pub fn with_metadata(
+        board_id: &str,
+        node_id: &str,
+        event_id: Option<String>,
+        cancellation_token: CancellationToken,
+        board_name: Option<String>,
+        event_name: Option<String>,
+        event_type: Option<String>,
+    ) -> Self {
+        RunData {
+            start_time: Instant::now(),
+            board_id: Arc::from(board_id),
+            node_id: Arc::from(node_id),
+            event_id: event_id.map(|s| Arc::from(s.as_str())),
+            cancellation_token,
+            board_name: board_name.map(|s| Arc::from(s.as_str())),
+            event_name: event_name.map(|s| Arc::from(s.as_str())),
+            event_type: event_type.map(|s| Arc::from(s.as_str())),
+            last_node_update_ms: Arc::new(AtomicU64::new(0)),
         }
     }
 
@@ -273,6 +306,20 @@ impl RunData {
         self.start_time.elapsed()
     }
 
+    /// Update the last node update timestamp to now
+    pub fn touch_last_node_update(&self) {
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_millis() as u64)
+            .unwrap_or(0);
+        self.last_node_update_ms.store(now, std::sync::atomic::Ordering::Relaxed);
+    }
+
+    /// Get the last node update timestamp in milliseconds since epoch
+    pub fn get_last_node_update_ms(&self) -> u64 {
+        self.last_node_update_ms.load(std::sync::atomic::Ordering::Relaxed)
+    }
+
     pub fn from_event(event: &Event, cancellation_token: CancellationToken) -> Self {
         RunData {
             start_time: Instant::now(),
@@ -280,6 +327,10 @@ impl RunData {
             node_id: Arc::from(event.node_id.as_str()),
             event_id: Some(Arc::from(event.id.as_str())),
             cancellation_token,
+            board_name: None,
+            event_name: Some(Arc::from(event.name.as_str())),
+            event_type: Some(Arc::from(event.event_type.as_str())),
+            last_node_update_ms: Arc::new(AtomicU64::new(0)),
         }
     }
 }

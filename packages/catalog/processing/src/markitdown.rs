@@ -58,33 +58,10 @@ async fn document_to_pages(
     context: &mut ExecutionContext,
 ) -> flow_like_types::Result<Vec<DocumentPage>> {
     let mut pages = Vec::with_capacity(document.pages.len());
-    println!(
-        "[MARKITDOWN DEBUG] Processing {} pages to DocumentPages",
-        document.pages.len()
-    );
 
     for page in &document.pages {
         let content = page.to_markdown();
         let mut images = Vec::new();
-        println!(
-            "[MARKITDOWN DEBUG] Page {} has {} images",
-            page.page_number,
-            page.images().len()
-        );
-        println!(
-            "[MARKITDOWN DEBUG] Page {} content length: {} bytes",
-            page.page_number,
-            content.len()
-        );
-        println!(
-            "[MARKITDOWN DEBUG] Page {} content preview: {}",
-            page.page_number,
-            if content.len() > 200 {
-                format!("{}...", &content[..200])
-            } else {
-                content.clone()
-            }
-        );
 
         for extracted in page.images() {
             if let Some(node_image) = extracted_image_to_node_image(extracted, context).await? {
@@ -211,14 +188,17 @@ impl NodeLogic for ExtractDocumentNode {
         let file_buffer = file.get(context, false).await?;
         let bytes = Bytes::from(file_buffer);
 
-        let md = MarkItDown::new();
         let options = ConversionOptions::default()
             .with_extension(&extension)
             .with_images(extract_images);
 
-        let result = md
-            .convert_bytes(bytes, Some(options))
-            .await
+        // Run the heavy document conversion in a cancellable task
+        let result = context
+            .run_cancellable(async move {
+                let md = MarkItDown::new();
+                md.convert_bytes(bytes, Some(options)).await
+            })
+            .await?
             .map_err(|e| flow_like_types::anyhow!("Failed to extract document: {}", e))?;
 
         let pages = document_to_pages(&result, context).await?;
@@ -330,43 +310,37 @@ impl NodeLogic for ExtractDocumentAiNode {
             .map(|e| format!(".{}", e))
             .unwrap_or_default();
 
+        let file_start = std::time::Instant::now();
         let file_buffer = file.get(context, false).await?;
         let bytes = Bytes::from(file_buffer);
 
         let model_factory = context.app_state.model_factory.clone();
+        let model_start = std::time::Instant::now();
         let model = model_factory
             .lock()
             .await
             .build(&model_bit, context.app_state.clone(), context.token.clone())
             .await?;
 
+        let llm_start = std::time::Instant::now();
         let completion_handle = model.completion_model_handle(None).await?;
         let llm_client = create_llm_client(completion_handle);
 
-        println!(
-            "[MARKITDOWN DEBUG] Starting AI document extraction with extension: {}, extract_images: {}",
-            extension, extract_images
-        );
         let md = MarkItDown::new();
         let options = ConversionOptions::default()
             .with_extension(&extension)
             .with_images(extract_images)
             .with_llm(llm_client);
 
-        println!(
-            "[MARKITDOWN DEBUG] Calling convert_bytes with file size: {} bytes",
-            bytes.len()
-        );
+        let convert_start = std::time::Instant::now();
         let result = md
             .convert_bytes(bytes, Some(options))
             .await
             .map_err(|e| flow_like_types::anyhow!("Failed to extract document with AI: {}", e))?;
 
-        println!(
-            "[MARKITDOWN DEBUG] Conversion complete, processing {} pages",
-            result.pages.len()
-        );
+        let pages_start = std::time::Instant::now();
         let pages = document_to_pages(&result, context).await?;
+
 
         context.set_pin_value("pages", json!(pages)).await?;
         context.activate_exec_pin("exec_out").await?;

@@ -3,4 +3,5 @@ pub mod extension;
 pub mod filename;
 pub mod parent;
 pub mod raw;
+pub mod replace_segment;
 pub mod set_extension;

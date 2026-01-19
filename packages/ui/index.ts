@@ -9,6 +9,8 @@ export * from "./state/run-execution-state";
 export * from "./state/log-aggregation-state";
 export * from "./state/execution-engine-context";
 export * from "./state/spotlight-state";
+export * from "./state/runtime-variables-context";
+export * from "./state/execution-service-context";
 export type { IRunUpdateEvent } from "./state/run-execution-state";
 export * from "./types";
 export * from "./db/index";

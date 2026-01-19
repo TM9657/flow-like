@@ -27,6 +27,7 @@ export {
 	type IComment,
 	ICommentType,
 	IExecutionStage,
+	IExecutionMode,
 	ILogLevel,
 	type ISystemTime,
 } from "./flow/board";

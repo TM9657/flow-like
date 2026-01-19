@@ -25,6 +25,12 @@ enum LogLevel {
   FATAL = 4;
 }
 
+enum ExecutionMode {
+  EXECUTION_MODE_HYBRID = 0;
+  EXECUTION_MODE_REMOTE = 1;
+  EXECUTION_MODE_LOCAL = 2;
+}
+
 enum LayerType {
   FUNCTION = 0 [deprecated = true];
   MACRO = 1 [deprecated = true];
@@ -76,4 +82,5 @@ message Board {
   google.protobuf.Timestamp updated_at = 17;
   map<string, Layer> layers = 18;
   repeated string page_ids = 19;
+  ExecutionMode execution_mode = 20;
 }

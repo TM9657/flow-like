@@ -588,6 +588,23 @@ export function Variable({
 						</small>
 					</div>
 
+					<div className="flex flex-col gap-1">
+						<div className="flex items-center space-x-2">
+							<Switch
+								checked={localVariable.runtime_configured ?? false}
+								onCheckedChange={(checked) =>
+									setLocalVariable((old) => ({ ...old, runtime_configured: checked }))
+								}
+								id="runtime_configured"
+							/>
+							<Label htmlFor="runtime_configured">Runtime Configured?</Label>
+						</div>
+						<small className="text-[0.8rem] text-muted-foreground">
+							Runtime configured variables are set per-user locally. They are
+							never stored in the flow itself.
+						</small>
+					</div>
+
 					{localVariable.data_type === IVariableType.Struct && (
 						<StructSchemaEditor
 							variable={localVariable}

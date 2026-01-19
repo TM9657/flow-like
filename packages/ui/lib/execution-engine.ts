@@ -1,4 +1,5 @@
 import type { IBackendState } from "../state/backend-state";
+import type { ILogMetadata } from "./schema";
 import type { IRunPayload } from "./schema";
 import type { IIntercomEvent } from "./schema/events/intercom-event";
 
@@ -30,15 +31,30 @@ interface IExecuteEventOptions {
 	skipConsentCheck?: boolean;
 }
 
+export type ExecuteEventFn = (
+	appId: string,
+	eventId: string,
+	payload: IRunPayload,
+	streamState?: boolean,
+	onEventId?: (id: string) => void,
+	cb?: (event: IIntercomEvent[]) => void,
+	skipConsentCheck?: boolean,
+) => Promise<ILogMetadata | undefined>;
+
 export class ExecutionEngineProvider {
 	private eventStreams: Map<string, IEventStream> = new Map();
 	private backend: IBackendState | null = null;
 	private globalListeners: Set<() => void> = new Set();
+	private executeEventFn: ExecuteEventFn | null = null;
 
 	constructor() {}
 
 	setBackend(backend: IBackendState): void {
 		this.backend = backend;
+	}
+
+	setExecuteEventFn(fn: ExecuteEventFn): void {
+		this.executeEventFn = fn;
 	}
 
 	subscribeToGlobalUpdates(listener: () => void): () => void {
@@ -146,7 +162,10 @@ export class ExecutionEngineProvider {
 			return stream.executionPromise;
 		}
 
-		const executionPromise = this.backend.eventState.executeEvent(
+		// Use the executeEventFn if set (handles runtime variables), otherwise fall back to direct call
+		const executeEventCall = this.executeEventFn ?? this.backend.eventState.executeEvent.bind(this.backend.eventState);
+
+		const executionPromise = executeEventCall(
 			options.appId,
 			options.eventId,
 			options.payload,

@@ -4,14 +4,17 @@ import type { UseQueryResult } from "@tanstack/react-query";
 import {
 	AlertTriangle,
 	Calendar,
+	Cloud,
 	Cpu,
 	DollarSign,
 	ExternalLink,
 	FileText,
 	LockKeyhole,
+	Monitor,
 	PlusCircleIcon,
 	Shield,
 	ShieldAlert,
+	Shuffle,
 	SquareMousePointerIcon,
 	Trash2,
 	VariableIcon,
@@ -22,7 +25,7 @@ import type { ReactNode } from "react";
 import { useMemo } from "react";
 import { useInvoke } from "../../hooks/use-invoke";
 import { cn, formatRelativeTime } from "../../lib";
-import type { IBoard } from "../../lib/schema/flow/board";
+import { IExecutionMode, type IBoard } from "../../lib/schema/flow/board";
 import { useBackend } from "../../state/backend-state";
 import type { IApp } from "../../types";
 import { Badge } from "../ui/badge";
@@ -472,10 +475,10 @@ export function FlowLibraryBoardCard({
 		>
 			<Card
 				title={board.id}
-				className="relative group border shadow-sm hover:shadow-lg transition-all duration-200 cursor-pointer hover:border-primary/30"
+				className="relative group border shadow-sm hover:shadow-lg transition-all duration-200 cursor-pointer hover:border-primary/30 h-full flex flex-col"
 			>
 				<CardHeader className="pb-2">
-					<div className="flex items-start justify-between gap-3">
+					<div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
 						<div className="flex items-start gap-3 flex-1 min-w-0">
 							<div className="p-2 rounded-lg bg-primary/10 shrink-0">
 								<WorkflowIcon className="h-4 w-4 text-primary" />
@@ -484,13 +487,14 @@ export function FlowLibraryBoardCard({
 								<CardTitle className="text-base font-semibold truncate group-hover:text-primary transition-colors">
 									{board.name}
 								</CardTitle>
-								<div className="flex items-center gap-1.5 mt-1">
+								<div className="flex items-center gap-1.5 mt-1 flex-wrap">
 									<Badge
 										variant="secondary"
 										className="text-[10px] px-1.5 py-0"
 									>
 										{board.stage}
 									</Badge>
+									<ExecutionModeBadge mode={board.execution_mode} />
 									<span className="text-[10px] text-muted-foreground">
 										{board.log_level}
 									</span>
@@ -499,7 +503,7 @@ export function FlowLibraryBoardCard({
 						</div>
 						{aggregatedScores && (
 							<div
-								className="relative z-10"
+								className="relative z-10 shrink-0"
 								onClick={(event) => event.stopPropagation()}
 							>
 								<FlowLibraryScoreBar scores={aggregatedScores} />
@@ -507,7 +511,7 @@ export function FlowLibraryBoardCard({
 						)}
 					</div>
 				</CardHeader>
-				<CardContent className="pt-0 space-y-3">
+				<CardContent className="pt-0 space-y-3 flex-1 flex flex-col">
 					{board.description && (
 						<p className="text-sm text-muted-foreground line-clamp-2">
 							{board.description}
@@ -563,7 +567,7 @@ export function FlowLibraryBoardCard({
 						</div>
 					)}
 
-					<div className="flex items-center justify-between pt-2 border-t text-xs text-muted-foreground">
+					<div className="flex items-center justify-between pt-2 border-t text-xs text-muted-foreground mt-auto">
 						<div className="flex items-center gap-3">
 							<Tooltip>
 								<TooltipTrigger asChild>
@@ -606,5 +610,46 @@ export function FlowLibraryBoardCard({
 				/>
 			</Card>
 		</BubbleActions>
+	);
+}
+
+function ExecutionModeBadge({
+	mode,
+}: Readonly<{ mode?: IExecutionMode }>) {
+	const effectiveMode = mode ?? IExecutionMode.Hybrid;
+	const config = {
+		[IExecutionMode.Hybrid]: {
+			icon: <Shuffle className="h-2.5 w-2.5" />,
+			label: "Hybrid",
+		},
+		[IExecutionMode.Remote]: {
+			icon: <Cloud className="h-2.5 w-2.5" />,
+			label: "Remote",
+		},
+		[IExecutionMode.Local]: {
+			icon: <Monitor className="h-2.5 w-2.5" />,
+			label: "Local",
+		},
+	}[effectiveMode];
+
+	return (
+		<Tooltip>
+			<TooltipTrigger asChild>
+				<Badge
+					variant="outline"
+					className="text-[10px] px-1.5 py-0 gap-0.5"
+				>
+					{config.icon}
+					{config.label}
+				</Badge>
+			</TooltipTrigger>
+			<TooltipContent>
+				{effectiveMode === IExecutionMode.Hybrid &&
+					"Runs locally when possible, falls back to remote"}
+				{effectiveMode === IExecutionMode.Remote &&
+					"Always runs on remote servers"}
+				{effectiveMode === IExecutionMode.Local && "Always runs locally"}
+			</TooltipContent>
+		</Tooltip>
 	);
 }

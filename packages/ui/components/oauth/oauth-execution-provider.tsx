@@ -10,7 +10,10 @@ import {
 	useState,
 } from "react";
 import type { IOAuthConsentStore } from "../../db/oauth-db";
-import { checkOAuthTokens } from "../../lib/oauth/helpers";
+import {
+	checkOAuthTokens,
+	checkOAuthTokensFromPrerun,
+} from "../../lib/oauth/helpers";
 import type { OAuthService } from "../../lib/oauth/service";
 import type {
 	IOAuthProvider,
@@ -27,6 +30,11 @@ import { OAuthConsentDialog } from "./oauth-consent-dialog";
 export interface OAuthExecutionContextValue {
 	withOAuthCheck: <T>(
 		board: IBoard,
+		executor: (tokens?: Record<string, IOAuthToken>) => Promise<T>,
+	) => Promise<T>;
+	/** Check OAuth using prerun requirements (only needs execute permission, not read board) */
+	withOAuthCheckFromPrerun: <T>(
+		oauthRequirements: Array<{ provider_id: string; scopes: string[] }>,
 		executor: (tokens?: Record<string, IOAuthToken>) => Promise<T>,
 	) => Promise<T>;
 	handleOAuthCallback: (providerId: string, token: IStoredOAuthToken) => void;
@@ -381,6 +389,34 @@ export function OAuthExecutionProvider({
 		[tokenStore, hub, oauthService],
 	);
 
+	const withOAuthCheckFromPrerun = useCallback(
+		async <T,>(
+			oauthRequirements: Array<{ provider_id: string; scopes: string[] }>,
+			executor: (tokens?: Record<string, IOAuthToken>) => Promise<T>,
+		): Promise<T> => {
+			const result = await checkOAuthTokensFromPrerun(
+				oauthRequirements,
+				tokenStore,
+				hub,
+				{
+					refreshToken: oauthService.refreshToken.bind(oauthService),
+				},
+			);
+
+			if (result.missingProviders.length === 0) {
+				const tokens =
+					Object.keys(result.tokens).length > 0 ? result.tokens : undefined;
+				return executor(tokens);
+			}
+
+			setMissingProviders(result.missingProviders);
+			setIsDialogOpen(true);
+
+			throw new Error("OAuth authorization required");
+		},
+		[tokenStore, hub, oauthService],
+	);
+
 	// Register callback handler for OAuth callbacks
 	const handleOAuthCallbackInternal = useCallback(
 		(providerId: string, token: IStoredOAuthToken) => {
@@ -398,6 +434,7 @@ export function OAuthExecutionProvider({
 		<OAuthExecutionContext.Provider
 			value={{
 				withOAuthCheck,
+				withOAuthCheckFromPrerun,
 				handleOAuthCallback: handleOAuthCallbackInternal,
 			}}
 		>

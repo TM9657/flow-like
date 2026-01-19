@@ -56,6 +56,7 @@ import {
 	EyeOffIcon,
 	FolderClosedIcon,
 	GlobeIcon,
+	KeyIcon,
 	LayoutGridIcon,
 	LockIcon,
 	Maximize2Icon,
@@ -88,6 +89,12 @@ const navigationItems = [
 		label: "Configuration",
 		icon: CogIcon,
 		description: "App configuration and environment variables",
+	},
+	{
+		href: "/library/config/runtime-vars",
+		label: "Runtime Variables",
+		icon: KeyIcon,
+		description: "User-specific runtime secrets and configurations",
 	},
 	{
 		href: "/library/config/flows",

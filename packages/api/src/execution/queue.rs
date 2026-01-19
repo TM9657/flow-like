@@ -99,6 +99,9 @@ pub struct QueuedJob {
     pub oauth_tokens: Option<HashMap<String, OAuthTokenInput>>,
     #[serde(default)]
     pub stream_state: bool,
+    /// Runtime-configured variables to override board variables
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub runtime_variables: Option<HashMap<String, flow_like::flow::variable::Variable>>,
 }
 
 /// Queue worker errors

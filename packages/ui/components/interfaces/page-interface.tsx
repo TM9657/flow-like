@@ -18,6 +18,7 @@ import {
 } from "../../lib/presign-assets";
 import type { IEvent } from "../../lib/schema/flow/event";
 import { useBackend } from "../../state/backend-state";
+import { useExecutionServiceOptional } from "../../state/execution-service-context";
 import type { IPage } from "../../state/backend-state/page-state";
 import type { IRouteMapping } from "../../state/backend-state/route-state";
 import {
@@ -445,6 +446,7 @@ function PageInterfaceInner({
 	page: providedPage,
 }: PageInterfaceProps) {
 	const backend = useBackend();
+	const executionService = useExecutionServiceOptional();
 	const router = useRouter();
 	const { openDialog, closeDialog } = useRouteDialog();
 	const pageContainerId = useId();
@@ -821,7 +823,9 @@ function PageInterfaceInner({
 					},
 				};
 
-				await backend.boardState.executeBoard(
+				// Use execution service if available (checks runtime variables)
+				const execFn = executionService?.executeBoard ?? backend.boardState.executeBoard;
+				await execFn(
 					appId,
 					boardId,
 					payload,
@@ -848,6 +852,7 @@ function PageInterfaceInner({
 			routeEvent,
 			pageRoute,
 			backend.boardState,
+			executionService,
 			handleA2UIMessage,
 			getElementsFromSurface,
 		],

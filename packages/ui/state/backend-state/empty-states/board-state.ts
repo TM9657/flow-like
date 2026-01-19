@@ -2,6 +2,7 @@ import type {
 	IBoard,
 	IBoardState,
 	IConnectionMode,
+	IExecutionMode,
 	IExecutionStage,
 	IGenericCommand,
 	IIntercomEvent,
@@ -11,6 +12,7 @@ import type {
 	INode,
 	IRunContext,
 	IRunPayload,
+	IVariable,
 	IVersionType,
 } from "../../../";
 import type { IJwks, IRealtimeAccess } from "../../../";
@@ -117,6 +119,7 @@ export class EmptyBoardState implements IBoardState {
 		description: string,
 		logLevel: ILogLevel,
 		stage: IExecutionStage,
+		executionMode?: IExecutionMode,
 		template?: IBoard,
 	): Promise<void> {
 		throw new Error("Method not implemented.");

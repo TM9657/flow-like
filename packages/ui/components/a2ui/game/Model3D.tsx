@@ -204,7 +204,7 @@ function ViewTracker({
 }
 
 // Inner component that uses R3F hooks - only render inside Canvas
-function Model3DInner({ component }: ComponentProps<Model3DComponent>) {
+function Model3DInner({ component }: { component: Model3DComponent }) {
 	const src = useResolved<string>(component.src);
 	const position = useResolved<[number, number, number]>(
 		component.position,
@@ -250,7 +250,10 @@ function Model3DInner({ component }: ComponentProps<Model3DComponent>) {
 function StandaloneModel3D({
 	component,
 	componentId,
-}: ComponentProps<Model3DComponent>) {
+}: {
+	component: Model3DComponent;
+	componentId: string;
+}) {
 	// Viewer options
 	const viewerHeight = useResolved<string>(component.viewerHeight) ?? "100%";
 	const backgroundColor =

@@ -11,6 +11,8 @@ export interface IVariable {
 	schema?: null | string;
 	secret: boolean;
 	value_type: IValueType;
+	/** If true, this variable is configured per-user at runtime (stored locally, not in flow) */
+	runtime_configured?: boolean;
 	[property: string]: any;
 }
 

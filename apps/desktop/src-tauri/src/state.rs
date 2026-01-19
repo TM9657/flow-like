@@ -6,7 +6,7 @@ use flow_like_wasm::client::RegistryClient;
 use std::sync::Arc;
 use tauri::{AppHandle, Manager};
 
-use crate::{event_bus::EventBus, profile::UserProfile, settings::Settings};
+use crate::{event_bus::EventBus, profile::UserProfile, settings::Settings, tray::TrayRuntimeState};
 
 #[derive(Clone)]
 pub struct TauriFlowLikeState(pub Arc<FlowLikeState>);
@@ -125,3 +125,5 @@ impl TauriRegistryState {
             .ok_or_else(|| anyhow::anyhow!("Registry client not initialized"))
     }
 }
+
+pub struct TauriTrayState(pub Arc<Mutex<TrayRuntimeState>>);

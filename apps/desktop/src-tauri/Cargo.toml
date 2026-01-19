@@ -28,6 +28,7 @@ flow-like-wasm.workspace = true
 tauri = { version = "2.8.5", features = [
     "protocol-asset",
     "macos-private-api",
+    "tray-icon",
 ] }
 window-vibrancy = "0.6.0"
 anyhow = "1.0.95"
@@ -65,6 +66,7 @@ axum = "0.8.6"
 tower = "0.5.2"
 chrono-tz.workspace = true
 mimalloc.workspace = true
+sysinfo = "0.37.2"
 
 [target."cfg(any(target_os = \"macos\", windows, target_os = \"linux\"))".dependencies]
 tauri-plugin-single-instance = { version = "2.3.4", features = ["deep-link"] }
@@ -73,6 +75,7 @@ tauri-plugin-updater = "2.9.0"
 
 [target."cfg(target_os = \"macos\")".dependencies]
 cocoa = "0.26"
+macos-app-nap = "0.0.1"
 
 [profile.release]
 panic = "abort"

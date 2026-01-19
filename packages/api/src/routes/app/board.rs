@@ -7,6 +7,7 @@ pub mod get_execution_elements;
 pub mod get_runs;
 pub mod invoke_board;
 pub mod invoke_board_async;
+pub mod prerun_board;
 pub mod query_logs;
 pub mod realtime;
 pub mod undo_redo_board;
@@ -44,6 +45,10 @@ pub fn routes() -> Router<AppState> {
         .route(
             "/{board_id}/elements",
             get(get_execution_elements::get_execution_elements),
+        )
+        .route(
+            "/{board_id}/prerun",
+            get(prerun_board::prerun_board),
         )
         .route("/{board_id}/undo", patch(undo_redo_board::undo_board))
         .route("/{board_id}/redo", patch(undo_redo_board::redo_board))

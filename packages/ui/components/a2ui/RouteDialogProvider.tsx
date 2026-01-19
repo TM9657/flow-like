@@ -12,6 +12,7 @@ import {
 } from "react";
 import type { IEvent } from "../../lib/schema/flow/event";
 import { useBackend } from "../../state/backend-state";
+import { useExecutionServiceOptional } from "../../state/execution-service-context";
 import type { IPage } from "../../state/backend-state/page-state";
 import type { IRouteMapping } from "../../state/backend-state/route-state";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "../ui/dialog";
@@ -146,6 +147,7 @@ function RouteDialogRenderer({
 	closeDialog,
 }: RouteDialogRendererProps) {
 	const backend = useBackend();
+	const executionService = useExecutionServiceOptional();
 	const [isLoading, setIsLoading] = useState(true);
 	const [isLoadEventRunning, setIsLoadEventRunning] = useState(false);
 	const [error, setError] = useState<string | null>(null);
@@ -349,7 +351,9 @@ function RouteDialogRenderer({
 					},
 				};
 
-				await backend.boardState.executeBoard(
+				// Use execution service if available (checks runtime variables)
+				const execFn = executionService?.executeBoard ?? backend.boardState.executeBoard;
+				await execFn(
 					appId,
 					boardId,
 					payload,
@@ -380,6 +384,7 @@ function RouteDialogRenderer({
 		dialog,
 		isLoading,
 		backend.boardState,
+		executionService,
 		handleServerMessage,
 		getElementsFromSurface,
 	]);

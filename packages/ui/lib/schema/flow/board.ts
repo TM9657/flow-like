@@ -5,6 +5,7 @@ export interface IBoard {
 	id: string;
 	layers: { [key: string]: ILayer };
 	log_level: ILogLevel;
+	execution_mode: IExecutionMode;
 	name: string;
 	nodes: { [key: string]: INode };
 	refs: { [key: string]: string };
@@ -196,4 +197,10 @@ export enum IExecutionStage {
 	PreProd = "PreProd",
 	Prod = "Prod",
 	QA = "QA",
+}
+
+export enum IExecutionMode {
+	Hybrid = "Hybrid",
+	Remote = "Remote",
+	Local = "Local",
 }

@@ -117,6 +117,7 @@ async fn process_queued_job(job: QueuedJob, executor_config: ExecutorConfig) -> 
         token: job.token,
         oauth_tokens,
         stream_state: job.stream_state,
+        runtime_variables: job.runtime_variables,
     };
 
     let result = execute(exec_request, executor_config).await;

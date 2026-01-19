@@ -1,3 +1,5 @@
+import type { IExecutionMode } from "../../lib/schema";
+
 export interface IStorageItemActionResult {
 	prefix: string;
 	url?: string;
@@ -104,4 +106,42 @@ export interface INotificationEvent {
 	target_user_sub?: string;
 	source_run_id?: string;
 	source_node_id?: string;
+}
+
+/** A runtime-configured variable that needs a value before execution */
+export interface IRuntimeVariable {
+	id: string;
+	name: string;
+	description?: string;
+	data_type: string;
+	value_type: string;
+	secret: boolean;
+	schema?: string;
+}
+
+/** OAuth provider requirement */
+export interface IOAuthRequirement {
+	provider_id: string;
+	scopes: string[];
+}
+
+/** Response from pre-run analysis for boards */
+export interface IPrerunBoardResponse {
+	runtime_variables: IRuntimeVariable[];
+	oauth_requirements: IOAuthRequirement[];
+	requires_local_execution: boolean;
+	execution_mode: IExecutionMode;
+	/** Whether user can execute locally (has ReadBoards permission). If false, must execute on server */
+	can_execute_locally: boolean;
+}
+
+/** Response from pre-run analysis for events */
+export interface IPrerunEventResponse {
+	board_id: string;
+	runtime_variables: IRuntimeVariable[];
+	oauth_requirements: IOAuthRequirement[];
+	requires_local_execution: boolean;
+	execution_mode: IExecutionMode;
+	/** Whether user can execute locally (has ReadBoards permission). If false, must execute on server */
+	can_execute_locally: boolean;
 }

@@ -2,18 +2,22 @@
 
 import { createId } from "@paralleldrive/cuid2";
 import {
+	Cloud,
 	ExternalLink,
 	FileText,
 	Loader2,
+	Monitor,
 	MoreHorizontal,
 	PlusIcon,
 	Settings,
+	Shuffle,
 	Trash2,
 } from "lucide-react";
 import { useCallback, useState } from "react";
 import { useInvalidateInvoke, useInvoke } from "../../hooks";
 import {
 	type IBoard,
+	IExecutionMode,
 	IExecutionStage,
 	ILogLevel,
 	IVersionType,
@@ -57,6 +61,7 @@ export interface IBoardMeta {
 	description: string;
 	stage: IExecutionStage;
 	logLevel: ILogLevel;
+	executionMode: IExecutionMode;
 }
 
 export function BoardMeta({
@@ -67,6 +72,7 @@ export function BoardMeta({
 	closeMeta,
 	selectVersion,
 	onPageClick,
+	isOffline,
 }: Readonly<{
 	appId: string;
 	boardId: string;
@@ -75,12 +81,14 @@ export function BoardMeta({
 	closeMeta: () => void;
 	selectVersion: (version?: [number, number, number]) => void;
 	onPageClick?: (pageId: string) => void;
+	isOffline?: boolean;
 }>) {
 	const [boardMeta, setBoardMeta] = useState<IBoardMeta>({
 		name: board.name,
 		description: board.description,
 		stage: board.stage,
 		logLevel: board.log_level,
+		executionMode: board.execution_mode ?? IExecutionMode.Hybrid,
 	});
 	const [activeTab, setActiveTab] = useState<"settings" | "pages">("settings");
 	const backend = useBackend();
@@ -111,6 +119,7 @@ export function BoardMeta({
 			boardMeta.description,
 			boardMeta.logLevel,
 			boardMeta.stage,
+			boardMeta.executionMode,
 		);
 
 		await invalidateBoard();
@@ -175,6 +184,7 @@ export function BoardMeta({
 							versions={versions.data ?? []}
 							createVersion={createVersion}
 							saveMeta={saveMeta}
+							isOffline={isOffline}
 						/>
 					</TabsContent>
 
@@ -201,6 +211,7 @@ function SettingsTab({
 	versions,
 	createVersion,
 	saveMeta,
+	isOffline,
 }: {
 	boardMeta: IBoardMeta;
 	setBoardMeta: React.Dispatch<React.SetStateAction<IBoardMeta>>;
@@ -210,6 +221,7 @@ function SettingsTab({
 	versions: [number, number, number][];
 	createVersion: (type: IVersionType) => Promise<void>;
 	saveMeta: () => Promise<void>;
+	isOffline?: boolean;
 }) {
 	return (
 		<>
@@ -283,6 +295,64 @@ function SettingsTab({
 						<SelectItem value={ILogLevel.Fatal}>Fatal</SelectItem>
 					</SelectContent>
 				</Select>
+			</div>
+			<div className="grid w-full items-center gap-1.5">
+				<Label htmlFor="execution-mode">Execution Mode</Label>
+				{isOffline ? (
+					<>
+						<div className="flex items-center gap-2 h-10 px-3 py-2 rounded-md border border-input bg-background text-sm">
+							<Monitor className="h-4 w-4" />
+							<span>Local</span>
+						</div>
+						<p className="text-xs text-muted-foreground">
+							Offline projects only support local execution.
+						</p>
+					</>
+				) : (
+					<>
+						<Select
+							value={boardMeta.executionMode}
+							onValueChange={(e) =>
+								setBoardMeta((old) => ({
+									...old,
+									executionMode: e as IExecutionMode,
+								}))
+							}
+						>
+							<SelectTrigger id="execution-mode" className="w-full">
+								<SelectValue placeholder="Execution Mode" />
+							</SelectTrigger>
+							<SelectContent>
+								<SelectItem value={IExecutionMode.Hybrid}>
+									<div className="flex items-center gap-2">
+										<Shuffle className="h-4 w-4" />
+										<span>Hybrid</span>
+									</div>
+								</SelectItem>
+								<SelectItem value={IExecutionMode.Remote}>
+									<div className="flex items-center gap-2">
+										<Cloud className="h-4 w-4" />
+										<span>Remote</span>
+									</div>
+								</SelectItem>
+								<SelectItem value={IExecutionMode.Local}>
+									<div className="flex items-center gap-2">
+										<Monitor className="h-4 w-4" />
+										<span>Local</span>
+									</div>
+								</SelectItem>
+							</SelectContent>
+						</Select>
+						<p className="text-xs text-muted-foreground">
+							{boardMeta.executionMode === IExecutionMode.Hybrid &&
+								"Runs locally when possible, falls back to remote execution."}
+							{boardMeta.executionMode === IExecutionMode.Remote &&
+								"Always runs on remote servers. Required for boards with secrets."}
+							{boardMeta.executionMode === IExecutionMode.Local &&
+								"Always runs locally. Best for high-performance workloads like embeddings."}
+						</p>
+					</>
+				)}
 			</div>
 			<div className="grid w-full items-center gap-1.5">
 				<Label htmlFor="version">Version</Label>

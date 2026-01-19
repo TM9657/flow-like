@@ -6,8 +6,18 @@ interface IRunExecutionState {
 		{
 			eventIds: string[];
 			boardId: string;
+			/** Currently executing nodes (unique) */
 			nodes: Set<string>;
+			/** Nodes that have finished executing (unique) */
 			already_executed: Set<string>;
+			/** Timestamp (ms since epoch) of the last node update event */
+			lastNodeUpdateMs: number;
+			/** Total number of node executions started (counts duplicates for loops) */
+			totalExecutionsStarted: number;
+			/** Total number of node executions completed (counts duplicates for loops) */
+			totalExecutionsCompleted: number;
+			/** The most recently active node ID */
+			lastActiveNodeId: string | undefined;
 		}
 	>;
 	pushUpdate(runId: string, events: IRunUpdateEvent[]): void;
@@ -15,11 +25,12 @@ interface IRunExecutionState {
 	removeRun: (runId: string) => void;
 	addNodesOnRun: (runId: string, nodeIds: string[]) => void;
 	removeNodesOnRun: (runId: string, nodeIds: string[]) => void;
+	getTimeSinceLastUpdate: (runId: string) => number | null;
 }
 
 export interface IRunUpdateEvent {
-	run_id: string;
-	node_ids: string[];
+	runId: string;
+	nodeIds: string[];
 	method: "remove" | "add" | "update";
 }
 
@@ -32,27 +43,40 @@ export const useRunExecutionStore = create<IRunExecutionState>((set, get) => ({
 
 		for (const payload of events) {
 			if (payload.method === "add") {
-				if (add_nodes.has(payload.run_id)) {
-					add_nodes.set(payload.run_id, [
-						...add_nodes.get(payload.run_id),
-						...payload.node_ids,
+				if (add_nodes.has(payload.runId)) {
+					add_nodes.set(payload.runId, [
+						...add_nodes.get(payload.runId),
+						...payload.nodeIds,
 					]);
 					continue;
 				}
-				add_nodes.set(payload.run_id, payload.node_ids);
+				add_nodes.set(payload.runId, payload.nodeIds);
 				continue;
 			}
 
-			if (remove_nodes.has(payload.run_id)) {
-				remove_nodes.set(payload.run_id, [
-					...remove_nodes.get(payload.run_id),
-					...payload.node_ids,
+			if (remove_nodes.has(payload.runId)) {
+				remove_nodes.set(payload.runId, [
+					...remove_nodes.get(payload.runId),
+					...payload.nodeIds,
 				]);
 				continue;
 			}
 
-			remove_nodes.set(payload.run_id, payload.node_ids);
+			remove_nodes.set(payload.runId, payload.nodeIds);
 		}
+
+		// Update lastNodeUpdateMs for each run that received events
+		const now = Date.now();
+		set((state) => {
+			const runs = new Map(state.runs);
+			for (const run_id of [...add_nodes.keys(), ...remove_nodes.keys()]) {
+				const run = runs.get(run_id);
+				if (run) {
+					runs.set(run_id, { ...run, lastNodeUpdateMs: now });
+				}
+			}
+			return { runs };
+		});
 
 		add_nodes.forEach((node_ids, run_id) => {
 			get().addNodesOnRun(run_id, node_ids);
@@ -74,6 +98,10 @@ export const useRunExecutionStore = create<IRunExecutionState>((set, get) => ({
 				boardId,
 				nodes: new Set(),
 				already_executed: new Set(),
+				lastNodeUpdateMs: Date.now(),
+				totalExecutionsStarted: 0,
+				totalExecutionsCompleted: 0,
+				lastActiveNodeId: undefined,
 			});
 			return { runs };
 		});
@@ -94,8 +122,20 @@ export const useRunExecutionStore = create<IRunExecutionState>((set, get) => ({
 				return state;
 			}
 
-			nodeIds.forEach((nodeId) => run.nodes.add(nodeId));
-			runs.set(runId, run);
+			const newNodes = new Set(run.nodes);
+			nodeIds.forEach((nodeId) => newNodes.add(nodeId));
+
+			// Track last active node (most recent in the batch)
+			const lastActiveNodeId = nodeIds.length > 0 ? nodeIds[nodeIds.length - 1] : run.lastActiveNodeId;
+
+			runs.set(runId, {
+				...run,
+				nodes: newNodes,
+				lastNodeUpdateMs: Date.now(),
+				// Count every execution start, not just unique nodes
+				totalExecutionsStarted: run.totalExecutionsStarted + nodeIds.length,
+				lastActiveNodeId,
+			});
 			return { runs };
 		}),
 
@@ -107,10 +147,25 @@ export const useRunExecutionStore = create<IRunExecutionState>((set, get) => ({
 				return state;
 			}
 
-			nodeIds.forEach((nodeId) => run.nodes.delete(nodeId));
-			nodeIds.forEach((nodeId) => run.already_executed.add(nodeId));
+			const newNodes = new Set(run.nodes);
+			const newAlreadyExecuted = new Set(run.already_executed);
+			nodeIds.forEach((nodeId) => newNodes.delete(nodeId));
+			nodeIds.forEach((nodeId) => newAlreadyExecuted.add(nodeId));
 
-			runs.set(runId, run);
+			runs.set(runId, {
+				...run,
+				nodes: newNodes,
+				already_executed: newAlreadyExecuted,
+				lastNodeUpdateMs: Date.now(),
+				// Count every execution completion, not just unique nodes
+				totalExecutionsCompleted: run.totalExecutionsCompleted + nodeIds.length,
+			});
 			return { runs };
 		}),
+
+	getTimeSinceLastUpdate: (runId: string) => {
+		const run = get().runs.get(runId);
+		if (!run) return null;
+		return Date.now() - run.lastNodeUpdateMs;
+	},
 }));

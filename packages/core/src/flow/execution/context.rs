@@ -20,6 +20,7 @@ use flow_like_model_provider::provider::ModelProviderConfiguration;
 use flow_like_storage::object_store::path::Path;
 use flow_like_types::Value;
 use flow_like_types::intercom::{InterComCallback, InterComEvent};
+use flow_like_types::tokio_util::sync::CancellationToken;
 use flow_like_types::{
     Cacheable,
     json::from_value,
@@ -143,6 +144,7 @@ enum RunUpdateEventMethod {
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
+#[serde(rename_all = "camelCase")]
 struct RunUpdateEvent {
     run_id: String,
     node_ids: Vec<String>,
@@ -174,6 +176,7 @@ pub struct ExecutionContext {
     pub context_pin_overrides: Option<BTreeMap<String, Value>>,
     pub result: Option<Value>,
     pub oauth_tokens: Arc<AHashMap<String, OAuthToken>>,
+    cancellation_token: Option<CancellationToken>,
     run_id: String,
     state: NodeState,
     callback: InterComCallback,
@@ -240,6 +243,7 @@ impl ExecutionContext {
             result: None,
             delegated: false,
             oauth_tokens,
+            cancellation_token: None,
         }
     }
     pub fn run_id(&self) -> &str {
@@ -307,6 +311,7 @@ impl ExecutionContext {
             result: None,
             delegated: false,
             oauth_tokens,
+            cancellation_token: None,
         }
     }
 
@@ -341,6 +346,64 @@ impl ExecutionContext {
         }
     }
 
+    pub fn is_cancelled(&self) -> bool {
+        self.cancellation_token
+            .as_ref()
+            .is_some_and(|t| t.is_cancelled())
+    }
+
+    pub fn check_cancelled(&self) -> flow_like_types::Result<()> {
+        if self.is_cancelled() {
+            return Err(flow_like_types::anyhow!("Execution was cancelled"));
+        }
+        Ok(())
+    }
+
+    /// Run a long-running async operation that can be cancelled.
+    /// If the context's cancellation token is triggered, the operation will be aborted.
+    /// Use this for expensive operations like file parsing, API calls, etc.
+    pub async fn run_cancellable<F, T>(&self, future: F) -> flow_like_types::Result<T>
+    where
+        F: std::future::Future<Output = T> + Send + 'static,
+        T: Send + 'static,
+    {
+        use flow_like_types::tokio;
+
+        if let Some(token) = &self.cancellation_token {
+            // Spawn the future so we can abort it when cancelled
+            let handle = tokio::spawn(future);
+            let abort_handle = handle.abort_handle();
+
+            tokio::select! {
+                biased;
+                _ = token.cancelled() => {
+                    abort_handle.abort();
+                    Err(flow_like_types::anyhow!("Execution was cancelled"))
+                }
+                result = handle => {
+                    result.map_err(|e| {
+                        if e.is_cancelled() {
+                            flow_like_types::anyhow!("Execution was cancelled")
+                        } else {
+                            flow_like_types::anyhow!("Task failed: {}", e)
+                        }
+                    })
+                }
+            }
+        } else {
+            // No cancellation token - just run directly without spawning
+            Ok(future.await)
+        }
+    }
+
+    pub fn get_cancellation_token(&self) -> Option<CancellationToken> {
+        self.cancellation_token.clone()
+    }
+
+    pub fn set_cancellation_token(&mut self, token: CancellationToken) {
+        self.cancellation_token = Some(token);
+    }
+
     pub async fn create_sub_context(&self, node: &Arc<InternalNode>) -> ExecutionContext {
         let mut context = ExecutionContext::new(
             self.nodes.clone(),
@@ -361,6 +424,7 @@ impl ExecutionContext {
         .await;
 
         context.context_pin_overrides = self.context_pin_overrides.clone();
+        context.cancellation_token = self.cancellation_token.clone();
 
         context
     }
@@ -755,23 +819,34 @@ impl ExecutionContext {
     /// logs are visible to users in real-time.
     pub async fn flush_logs(&mut self) -> flow_like_types::Result<()> {
         let run = self.try_get_run()?;
-        let mut run = run.lock().await;
+        let prepared: Option<super::PreparedFlush> = {
+            let mut run = super::lock_with_timeout(run.as_ref(), "execution_context_run").await?;
 
-        // Push current trace logs to run
-        if !self.trace.logs.is_empty() {
-            let mut trace_copy = self.trace.clone();
-            trace_copy.finish();
-            run.traces.push(trace_copy);
-            self.trace.logs.clear();
+            // Push current trace logs to run
+            if !self.trace.logs.is_empty() {
+                let mut trace_copy = self.trace.clone();
+                trace_copy.finish();
+                run.traces.push(trace_copy);
+                self.trace.logs.clear();
+            }
+
+            // Also push any sub-traces
+            for trace in self.sub_traces.drain(..) {
+                run.traces.push(trace);
+            }
+
+            run.prepare_flush(false)?
+        };
+
+        if let Some(prepared) = prepared {
+            let result = prepared.write().await?;
+            if result.created_table {
+                let mut run =
+                    super::lock_with_timeout(run.as_ref(), "execution_context_mark").await?;
+                run.log_initialized = true;
+            }
         }
 
-        // Also push any sub-traces
-        for trace in self.sub_traces.drain(..) {
-            run.traces.push(trace);
-        }
-
-        // Flush to database
-        run.flush_logs(false).await?;
         Ok(())
     }
 

@@ -13,6 +13,7 @@ import {
 import { appGlobalState, pageLocalState } from "../../lib/idb-storage";
 import type { IIntercomEvent } from "../../lib/schema/events/intercom-event";
 import { useBackend } from "../../state/backend-state";
+import { useExecutionServiceOptional } from "../../state/execution-service-context";
 import { useRouteDialogSafe } from "./RouteDialogProvider";
 import type {
 	A2UIClientMessage,
@@ -406,6 +407,7 @@ export function useExecuteAction() {
 	const router = useRouter();
 	const pathname = usePathname();
 	const backend = useBackend();
+	const executionService = useExecutionServiceOptional();
 	const {
 		onAction,
 		onA2UIMessage,
@@ -801,7 +803,9 @@ export function useExecuteAction() {
 								version: boardVersion,
 							};
 
-							await backend.boardState.executeBoard(
+							// Use execution service if available (checks runtime variables)
+							const execFn = executionService?.executeBoard ?? backend.boardState.executeBoard;
+							await execFn(
 								effectiveAppId,
 								effectiveBoardId,
 								payload,
@@ -838,6 +842,7 @@ export function useExecuteAction() {
 			router,
 			pathname,
 			backend,
+			executionService,
 			onAction,
 			surfaceId,
 			appId,

@@ -46,7 +46,10 @@ import {
 	useInvoke,
 } from "@tm9657/flow-like-ui";
 import type { IOAuthConsentStore } from "@tm9657/flow-like-ui/db/oauth-db";
-import { checkOAuthTokens } from "@tm9657/flow-like-ui/lib/oauth/helpers";
+import {
+	checkOAuthTokens,
+	checkOAuthTokensFromPrerun,
+} from "@tm9657/flow-like-ui/lib/oauth/helpers";
 import type {
 	IOAuthTokenStoreWithPending,
 	IStoredOAuthToken,
@@ -762,18 +765,35 @@ function EventConfiguration({
 		const requiresSink = checkRequiresSink();
 
 		// Check OAuth requirements first if we have the stores
-		if (
-			board.data &&
-			tokenStore &&
-			consentStore &&
-			onStartOAuth &&
-			!oauthTokens
-		) {
-			const oauthResult = await checkOAuthTokens(board.data, tokenStore, hub, {
-				refreshToken: onRefreshToken,
-			});
+		if (tokenStore && consentStore && onStartOAuth && !oauthTokens) {
+			let oauthResult:
+				| Awaited<ReturnType<typeof checkOAuthTokens>>
+				| undefined;
 
-			if (oauthResult.requiredProviders.length > 0) {
+			// Try board first, fallback to prerun for execute-only permissions
+			if (board.data) {
+				oauthResult = await checkOAuthTokens(board.data, tokenStore, hub, {
+					refreshToken: onRefreshToken,
+				});
+			} else if (backend.eventState.prerunEvent && formData.board_id) {
+				try {
+					const prerun = await backend.eventState.prerunEvent(
+						appId,
+						event.id,
+						event.board_version as [number, number, number] | undefined,
+					);
+					oauthResult = await checkOAuthTokensFromPrerun(
+						prerun.oauth_requirements,
+						tokenStore,
+						hub,
+						{ refreshToken: onRefreshToken },
+					);
+				} catch {
+					// Prerun not available, skip OAuth check
+				}
+			}
+
+			if (oauthResult && oauthResult.requiredProviders.length > 0) {
 				// Check consent for providers that have tokens but might not have consent for this app
 				const consentedIds = await consentStore.getConsentedProviderIds(appId);
 				const providersNeedingConsent: IOAuthProvider[] = [];
@@ -807,7 +827,7 @@ function EventConfiguration({
 			}
 
 			// If we have tokens but no missing providers, use those tokens
-			if (Object.keys(oauthResult.tokens).length > 0) {
+			if (oauthResult && Object.keys(oauthResult.tokens).length > 0) {
 				oauthTokens = oauthResult.tokens;
 			}
 		}
@@ -1900,53 +1920,73 @@ function TableActivateSinkButton({
 		// Check OAuth requirements if tokenStore is provided
 		if (!isOffline && tokenStore) {
 			try {
-				const board = await backend.boardState.getBoard(
-					appId,
-					event.board_id,
-					event.board_version as [number, number, number] | undefined,
-				);
+				let oauthResult:
+					| Awaited<ReturnType<typeof checkOAuthTokens>>
+					| undefined;
+
+				// Try board first, fallback to prerun for execute-only permissions
+				const board = await backend.boardState
+					.getBoard(
+						appId,
+						event.board_id,
+						event.board_version as [number, number, number] | undefined,
+					)
+					.catch(() => undefined);
+
 				if (board) {
-					const oauthResult = await checkOAuthTokens(board, tokenStore, hub, {
+					oauthResult = await checkOAuthTokens(board, tokenStore, hub, {
 						refreshToken: onRefreshToken,
 					});
+				} else if (backend.eventState.prerunEvent) {
+					const prerun = await backend.eventState.prerunEvent(
+						appId,
+						event.id,
+						event.board_version as [number, number, number] | undefined,
+					);
+					oauthResult = await checkOAuthTokensFromPrerun(
+						prerun.oauth_requirements,
+						tokenStore,
+						hub,
+						{ refreshToken: onRefreshToken },
+					);
+				}
 
-					if (oauthResult.requiredProviders.length > 0) {
-						// Check consent for providers that have tokens but might not have consent for this app
-						const consentedIds = consentStore
-							? await consentStore.getConsentedProviderIds(appId)
-							: new Set<string>();
-						const providersNeedingConsent: IOAuthProvider[] = [];
-						const hasTokenNeedsConsent: Set<string> = new Set();
+				if (oauthResult && oauthResult.requiredProviders.length > 0) {
+					// Check consent for providers that have tokens but might not have consent for this app
+					const consentedIds = consentStore
+						? await consentStore.getConsentedProviderIds(appId)
+						: new Set<string>();
+					const providersNeedingConsent: IOAuthProvider[] = [];
+					const hasTokenNeedsConsent: Set<string> = new Set();
 
-						// Add providers that are missing tokens
-						providersNeedingConsent.push(...oauthResult.missingProviders);
+					// Add providers that are missing tokens
+					providersNeedingConsent.push(...oauthResult.missingProviders);
 
-						// Also add providers that have tokens but no consent for this specific app
-						for (const provider of oauthResult.requiredProviders) {
-							const hasToken = oauthResult.tokens[provider.id] !== undefined;
-							const hasConsent = consentedIds.has(provider.id);
+					// Also add providers that have tokens but no consent for this specific app
+					for (const provider of oauthResult.requiredProviders) {
+						const hasToken = oauthResult.tokens[provider.id] !== undefined;
+						const hasConsent = consentedIds.has(provider.id);
 
-							if (hasToken && !hasConsent) {
-								hasTokenNeedsConsent.add(provider.id);
-								providersNeedingConsent.push(provider);
-							}
+						if (hasToken && !hasConsent) {
+							hasTokenNeedsConsent.add(provider.id);
+							providersNeedingConsent.push(provider);
 						}
+					}
 
-						if (providersNeedingConsent.length > 0) {
-							// Store tokens for later use and show OAuth consent dialog
-							setPendingOAuthTokens(oauthResult.tokens);
-							setMissingProviders(providersNeedingConsent);
-							setPreAuthorizedProviders(hasTokenNeedsConsent);
-							setAuthorizedProviders(new Set());
-							setShowOAuthConsent(true);
-							return;
-						}
+					if (providersNeedingConsent.length > 0) {
+						// Store tokens for later use and show OAuth consent dialog
+						setPendingOAuthTokens(oauthResult.tokens);
+						setMissingProviders(providersNeedingConsent);
+						setPreAuthorizedProviders(hasTokenNeedsConsent);
+						setAuthorizedProviders(new Set());
+						setShowOAuthConsent(true);
+						return;
+					}
 
-						// All OAuth is satisfied, proceed with activation
-						if (Object.keys(oauthResult.tokens).length > 0) {
-							await handleActivate(oauthResult.tokens);
-							return;
-						}
+					// All OAuth is satisfied, proceed with activation
+					if (Object.keys(oauthResult.tokens).length > 0) {
+						await handleActivate(oauthResult.tokens);
+						return;
 					}
 				}
 			} catch (error) {
@@ -2409,53 +2449,73 @@ function EventsTable({
 			// Check OAuth requirements if tokenStore is provided
 			if (!isOffline && tokenStore) {
 				try {
-					const board = await backend.boardState.getBoard(
-						appId,
-						event.board_id,
-						event.board_version as [number, number, number] | undefined,
-					);
+					let oauthResult:
+						| Awaited<ReturnType<typeof checkOAuthTokens>>
+						| undefined;
+
+					// Try board first, fallback to prerun for execute-only permissions
+					const board = await backend.boardState
+						.getBoard(
+							appId,
+							event.board_id,
+							event.board_version as [number, number, number] | undefined,
+						)
+						.catch(() => undefined);
+
 					if (board) {
-						const oauthResult = await checkOAuthTokens(board, tokenStore, hub, {
+						oauthResult = await checkOAuthTokens(board, tokenStore, hub, {
 							refreshToken: onRefreshToken,
 						});
+					} else if (backend.eventState.prerunEvent) {
+						const prerun = await backend.eventState.prerunEvent(
+							appId,
+							event.id,
+							event.board_version as [number, number, number] | undefined,
+						);
+						oauthResult = await checkOAuthTokensFromPrerun(
+							prerun.oauth_requirements,
+							tokenStore,
+							hub,
+							{ refreshToken: onRefreshToken },
+						);
+					}
 
-						if (oauthResult.requiredProviders.length > 0) {
-							// Check consent for providers that have tokens but might not have consent for this app
-							const consentedIds = consentStore
-								? await consentStore.getConsentedProviderIds(appId)
-								: new Set<string>();
-							const providersNeedingConsent: IOAuthProvider[] = [];
-							const hasTokenNeedsConsent: Set<string> = new Set();
+					if (oauthResult && oauthResult.requiredProviders.length > 0) {
+						// Check consent for providers that have tokens but might not have consent for this app
+						const consentedIds = consentStore
+							? await consentStore.getConsentedProviderIds(appId)
+							: new Set<string>();
+						const providersNeedingConsent: IOAuthProvider[] = [];
+						const hasTokenNeedsConsent: Set<string> = new Set();
 
-							// Add providers that are missing tokens
-							providersNeedingConsent.push(...oauthResult.missingProviders);
+						// Add providers that are missing tokens
+						providersNeedingConsent.push(...oauthResult.missingProviders);
 
-							// Also add providers that have tokens but no consent for this specific app
-							for (const provider of oauthResult.requiredProviders) {
-								const hasToken = oauthResult.tokens[provider.id] !== undefined;
-								const hasConsent = consentedIds.has(provider.id);
+						// Also add providers that have tokens but no consent for this specific app
+						for (const provider of oauthResult.requiredProviders) {
+							const hasToken = oauthResult.tokens[provider.id] !== undefined;
+							const hasConsent = consentedIds.has(provider.id);
 
-								if (hasToken && !hasConsent) {
-									hasTokenNeedsConsent.add(provider.id);
-									providersNeedingConsent.push(provider);
-								}
+							if (hasToken && !hasConsent) {
+								hasTokenNeedsConsent.add(provider.id);
+								providersNeedingConsent.push(provider);
 							}
+						}
 
-							if (providersNeedingConsent.length > 0) {
-								// Store tokens for later use and show OAuth consent dialog
-								setPendingOAuthTokens(oauthResult.tokens);
-								setMissingProviders(providersNeedingConsent);
-								setPreAuthorizedProviders(hasTokenNeedsConsent);
-								setAuthorizedProviders(new Set());
-								setShowOAuthConsent(true);
-								return;
-							}
+						if (providersNeedingConsent.length > 0) {
+							// Store tokens for later use and show OAuth consent dialog
+							setPendingOAuthTokens(oauthResult.tokens);
+							setMissingProviders(providersNeedingConsent);
+							setPreAuthorizedProviders(hasTokenNeedsConsent);
+							setAuthorizedProviders(new Set());
+							setShowOAuthConsent(true);
+							return;
+						}
 
-							// All OAuth is satisfied, proceed with activation
-							if (Object.keys(oauthResult.tokens).length > 0) {
-								await handleActivateSink(oauthResult.tokens);
-								return;
-							}
+						// All OAuth is satisfied, proceed with activation
+						if (Object.keys(oauthResult.tokens).length > 0) {
+							await handleActivateSink(oauthResult.tokens);
+							return;
 						}
 					}
 				} catch (error) {
