@@ -96,8 +96,28 @@ export const MessageContent = memo(function MessageContent({
 
 	// Memoize processed content
 	const { thinkingMatch, openThinkingMatch, processedContent } = useMemo(() => {
-		const thinkMatch = content.match(/<think>([\s\S]*?)<\/think>/);
-		const openThinkMatch = content.match(/<think>([\s\S]*?)$/);
+		// Use indexOf-based extraction to avoid ReDoS vulnerability with [\s\S]*? patterns
+		const thinkStart = content.indexOf("<think>");
+		const thinkEnd = content.indexOf("</think>");
+
+		let thinkMatch: { content: string; fullMatch: string } | null = null;
+		let openThinkMatch: { content: string; index: number } | null = null;
+
+		if (thinkStart !== -1 && thinkEnd !== -1 && thinkEnd > thinkStart) {
+			// Complete thinking block found
+			const thinkingContent = content.slice(thinkStart + 7, thinkEnd);
+			thinkMatch = {
+				content: thinkingContent,
+				fullMatch: content.slice(thinkStart, thinkEnd + 8),
+			};
+		} else if (thinkStart !== -1 && thinkEnd === -1) {
+			// Open thinking block (streaming)
+			openThinkMatch = {
+				content: content.slice(thinkStart + 7),
+				index: thinkStart,
+			};
+		}
+
 		const processed = preprocessFocusNodes(content);
 		return {
 			thinkingMatch: thinkMatch,
@@ -108,9 +128,9 @@ export const MessageContent = memo(function MessageContent({
 
 	// Render with thinking section expanded
 	if (thinkingMatch) {
-		const thinkingContent = thinkingMatch[1];
+		const thinkingContent = thinkingMatch.content;
 		const restContent = preprocessFocusNodes(
-			content.replace(/<think>[\s\S]*?<\/think>/, "").trim(),
+			content.replace(thinkingMatch.fullMatch, "").trim(),
 		);
 
 		return (
@@ -145,7 +165,7 @@ export const MessageContent = memo(function MessageContent({
 
 	// Render with active (open) thinking section
 	if (openThinkingMatch) {
-		const thinkingContent = openThinkingMatch[1];
+		const thinkingContent = openThinkingMatch.content;
 		const beforeContent = preprocessFocusNodes(
 			content.substring(0, openThinkingMatch.index).trim(),
 		);

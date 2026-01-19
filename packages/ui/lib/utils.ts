@@ -30,3 +30,22 @@ export function humanFileSize(bytes: number, si = false, dp = 1) {
 
 	return `${value.toFixed(dp)} ${units[u]}`;
 }
+
+const SAFE_URL_PROTOCOLS = ["http:", "https:", "blob:", "data:"];
+
+/** Sanitize image URL to prevent XSS - only allow safe protocols */
+export function sanitizeImageUrl(
+	url: string | undefined,
+	fallback: string,
+): string {
+	if (!url) return fallback;
+	try {
+		const parsed = new URL(url, window.location.origin);
+		if (SAFE_URL_PROTOCOLS.includes(parsed.protocol)) {
+			return url;
+		}
+		return fallback;
+	} catch {
+		return fallback;
+	}
+}

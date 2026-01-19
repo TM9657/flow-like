@@ -18,7 +18,7 @@ import {
 	useRef,
 	useState,
 } from "react";
-import { humanFileSize } from "../../../lib";
+import { humanFileSize, sanitizeImageUrl } from "../../../lib";
 import {
 	Button,
 	Popover,
@@ -438,7 +438,10 @@ export const ChatBox = forwardRef<ChatBoxRef, ChatBoxProps>(
 												<div className="flex items-center gap-2 min-w-0 flex-1">
 													<div className="relative flex-shrink-0">
 														<img
-															src={URL.createObjectURL(file)}
+															src={sanitizeImageUrl(
+																URL.createObjectURL(file),
+																"",
+															)}
 															alt={file.name}
 															className="w-8 h-8 object-cover rounded border"
 														/>
