@@ -7,16 +7,8 @@ import { TouchBackend } from "react-dnd-touch-backend";
 import { DndPlugin } from "@platejs/dnd";
 import { PlaceholderPlugin } from "@platejs/media/react";
 
+import { isTauri } from "../../../lib/platform";
 import { BlockDraggable } from "../ui/block-draggable";
-
-// Detect Tauri environment (WebView) where HTML5 DnD backend is unreliable
-const isTauri = (): boolean => {
-	// Common Tauri globals
-	// __TAURI__ in Tauri v1, __TAURI_INTERNALS__ / __TAURI_IPC__ in some builds
-	if (typeof window === "undefined") return false;
-	const w = window as any;
-	return !!(w.__TAURI__ || w.__TAURI_IPC__ || w.__TAURI_INTERNALS__);
-};
 
 export const DndKit = [
 	DndPlugin.configure({

@@ -1,6 +1,8 @@
 ---
 import { Image } from "astro:assets";
 import { LuCircleGauge, LuCodeXml, LuLock, LuPaintbrush } from "react-icons/lu";
+import type { Lang, TranslationKey } from "../i18n";
+import { translations, defaultLang } from "../i18n";
 
 import designBubblegumLight from "../images/index/theme-bubblegum-light.png";
 import designBubblegum from "../images/index/theme-bubblegum.png";
@@ -9,6 +11,17 @@ import designCosmicNight from "../images/index/theme-cosmic-night.png";
 import designDoom from "../images/index/theme-doom.png";
 import designNeoBrutalism from "../images/index/theme-neo-brutalism.png";
 import designSoftPop from "../images/index/theme-soft-pop.png";
+
+interface Props {
+  lang?: Lang;
+}
+
+const { lang = defaultLang } = Astro.props;
+const t = (key: TranslationKey): string => {
+  const langTranslations = translations[lang] as Record<string, string>;
+  const enTranslations = translations.en as Record<string, string>;
+  return langTranslations?.[key] ?? enTranslations[key] ?? key;
+};
 ---
 
 <section
@@ -64,7 +77,7 @@ import designSoftPop from "../images/index/theme-soft-pop.png";
 							<span
 								class="w-2 h-2 bg-violet-500 rounded-full animate-pulse shadow-[0_0_12px_rgba(139,92,246,0.8)]"
 							></span>
-							Under your brand
+							{t("theming.tagline")}
 						</div>
 
 						<h2
@@ -72,16 +85,14 @@ import designSoftPop from "../images/index/theme-soft-pop.png";
 						>
 							<span
 								class="bg-gradient-to-r from-foreground via-violet-500 to-purple-500 bg-clip-text text-transparent drop-shadow-sm"
-								>Add the editor or just the engine</span
+								>{t("theming.headline")}</span
 							>
 						</h2>
 
 						<p
 							class="mt-4 sm:mt-5 text-base sm:text-lg text-muted-foreground leading-relaxed"
 						>
-							Drop the visual editor into your app, run the engine
-							behind the scenes, or combine both. Your logo, your
-							colors — with the same visibility and audit trail.
+							{t("theming.description")}
 						</p>
 					</div>
 

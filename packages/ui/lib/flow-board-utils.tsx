@@ -323,6 +323,11 @@ export function parseBoard(
 	boardRef?: RefObject<IBoard | undefined>,
 	version?: [number, number, number],
 	onOpenInfo?: (node: INode) => void,
+	onExplain?: (nodeIds: string[]) => void,
+	remoteBoardExecution?: {
+		isOffline: boolean;
+		onRemoteExecute?: (node: INode, payload?: object) => Promise<void>;
+	},
 ) {
 	const nodes: any[] = [];
 	const edges: any[] = [];
@@ -381,10 +386,17 @@ export function parseBoard(
 					onExecute: async (node: INode, payload?: object) => {
 						await executeBoard(node, payload);
 					},
+					onRemoteExecute: remoteBoardExecution?.onRemoteExecute
+						? async (node: INode, payload?: object) => {
+								await remoteBoardExecution.onRemoteExecute?.(node, payload);
+							}
+						: undefined,
+					isOffline: remoteBoardExecution?.isOffline ?? true,
 					onCopy: async () => {
 						handleCopy();
 					},
 					onOpenInfo: onOpenInfo,
+					onExplain: onExplain,
 				},
 				selected: selected.has(node.id),
 			});
@@ -554,6 +566,7 @@ export function parseBoard(
 						});
 						await executeCommand(command, false);
 					},
+					onExplain: onExplain,
 				},
 				selected: selected.has(layer.id),
 			});

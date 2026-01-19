@@ -3,7 +3,6 @@ import { CalendarIcon } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Calendar } from "../../../components/ui/calendar";
 import { cn } from "../../../lib";
-import type { ISystemTime } from "../../../lib/schema/flow/board";
 import type { IVariable } from "../../../lib/schema/flow/variable";
 import {
 	convertJsonToUint8Array,
@@ -28,10 +27,23 @@ export function DateVariable({
 }>) {
 	const parsed = parseUint8ArrayToJson(variable.default_value);
 
-	const defaultDate =
-		parsed && (parsed.secs_since_epoch > 0 || parsed.nanos_since_epoch > 0)
-			? new Date(parsed.nanos_since_epoch / 1_000_000)
-			: new Date();
+	const defaultDate = (() => {
+		if (typeof parsed === "string" && parsed) {
+			try {
+				return new Date(parsed);
+			} catch {
+				return new Date();
+			}
+		}
+		// Fallback for old SystemTime format
+		if (parsed && typeof parsed === "object" && "secs_since_epoch" in parsed) {
+			return new Date(
+				parsed.secs_since_epoch * 1000 +
+					(parsed.nanos_since_epoch || 0) / 1_000_000,
+			);
+		}
+		return new Date();
+	})();
 
 	const [selected, setSelected] = useState<Date>(defaultDate);
 	const [timeValue, setTimeValue] = useState<string>(
@@ -40,9 +52,6 @@ export function DateVariable({
 
 	useEffect(() => {
 		if (!selected) return;
-
-		console.log("Selected date:", selected);
-		console.log("Time value:", timeValue);
 
 		const [hours, minutes] = timeValue
 			.split(":")
@@ -56,16 +65,9 @@ export function DateVariable({
 			minutes,
 		);
 
-		console.log("New date:", newDate);
-
-		const rustDate: ISystemTime = {
-			secs_since_epoch: newDate.getTime() / 1000,
-			nanos_since_epoch: newDate.getTime() * 1000000,
-		};
-
 		onChange({
 			...variable,
-			default_value: convertJsonToUint8Array(rustDate),
+			default_value: convertJsonToUint8Array(newDate.toISOString()),
 		});
 	}, [selected, timeValue]);
 

@@ -4,7 +4,6 @@ import {
 	AlertCircle,
 	ArrowLeft,
 	Building2,
-	Calendar,
 	Check,
 	ChevronLeft,
 	ChevronRight,
@@ -23,7 +22,6 @@ import {
 	Loader2,
 	Mail,
 	MessageSquare,
-	Plus,
 	RefreshCw,
 	Search,
 	Send,
@@ -33,7 +31,6 @@ import {
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
-	type ISolutionFile,
 	type ISolutionListResponse,
 	type ISolutionLog,
 	type ISolutionLogPayload,
@@ -47,7 +44,13 @@ import {
 } from "../../../lib/schema/solution/solution";
 import { Badge } from "../../ui/badge";
 import { Button } from "../../ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../../ui/card";
+import {
+	Card,
+	CardContent,
+	CardDescription,
+	CardHeader,
+	CardTitle,
+} from "../../ui/card";
 import {
 	Dialog,
 	DialogContent,
@@ -133,50 +136,62 @@ export function SolutionsPage({
 	onFetchSolution,
 	trackingBaseUrl = "",
 }: Readonly<SolutionsPageProps>) {
-	const [selectedSolutionId, setSelectedSolutionId] = useState<string | null>(null);
-	const [selectedSolution, setSelectedSolution] = useState<ISolutionRequest | null>(null);
+	const [selectedSolutionId, setSelectedSolutionId] = useState<string | null>(
+		null,
+	);
+	const [selectedSolution, setSelectedSolution] =
+		useState<ISolutionRequest | null>(null);
 	const [isLoadingDetail, setIsLoadingDetail] = useState(false);
 
-	const handleViewDetails = useCallback(async (solution: ISolutionRequest) => {
-		setSelectedSolutionId(solution.id);
-		if (onFetchSolution) {
-			setIsLoadingDetail(true);
-			try {
-				const detail = await onFetchSolution(solution.id);
-				setSelectedSolution(detail);
-			} catch {
+	const handleViewDetails = useCallback(
+		async (solution: ISolutionRequest) => {
+			setSelectedSolutionId(solution.id);
+			if (onFetchSolution) {
+				setIsLoadingDetail(true);
+				try {
+					const detail = await onFetchSolution(solution.id);
+					setSelectedSolution(detail);
+				} catch {
+					setSelectedSolution(solution);
+				} finally {
+					setIsLoadingDetail(false);
+				}
+			} else {
 				setSelectedSolution(solution);
-			} finally {
-				setIsLoadingDetail(false);
 			}
-		} else {
-			setSelectedSolution(solution);
-		}
-	}, [onFetchSolution]);
+		},
+		[onFetchSolution],
+	);
 
 	const handleBack = useCallback(() => {
 		setSelectedSolutionId(null);
 		setSelectedSolution(null);
 	}, []);
 
-	const handleUpdateAndRefresh = useCallback(async (id: string, update: ISolutionUpdatePayload) => {
-		await onUpdateSolution(id, update);
-		onRefresh();
-		if (onFetchSolution && selectedSolutionId === id) {
-			const updated = await onFetchSolution(id);
-			setSelectedSolution(updated);
-		}
-	}, [onUpdateSolution, onRefresh, onFetchSolution, selectedSolutionId]);
-
-	const handleAddLog = useCallback(async (id: string, log: ISolutionLogPayload) => {
-		if (onAddLog) {
-			await onAddLog(id, log);
-			if (onFetchSolution) {
+	const handleUpdateAndRefresh = useCallback(
+		async (id: string, update: ISolutionUpdatePayload) => {
+			await onUpdateSolution(id, update);
+			onRefresh();
+			if (onFetchSolution && selectedSolutionId === id) {
 				const updated = await onFetchSolution(id);
 				setSelectedSolution(updated);
 			}
-		}
-	}, [onAddLog, onFetchSolution]);
+		},
+		[onUpdateSolution, onRefresh, onFetchSolution, selectedSolutionId],
+	);
+
+	const handleAddLog = useCallback(
+		async (id: string, log: ISolutionLogPayload) => {
+			if (onAddLog) {
+				await onAddLog(id, log);
+				if (onFetchSolution) {
+					const updated = await onFetchSolution(id);
+					setSelectedSolution(updated);
+				}
+			}
+		},
+		[onAddLog, onFetchSolution],
+	);
 
 	const totalPages = useMemo(() => {
 		if (!data) return 1;
@@ -303,7 +318,9 @@ function SolutionFilters({
 						<DropdownMenuTrigger asChild>
 							<Button variant="outline" className="min-w-[140px]">
 								<Filter className="h-4 w-4 mr-2" />
-								{statusFilter ? SolutionStatusLabels[statusFilter] : "All Status"}
+								{statusFilter
+									? SolutionStatusLabels[statusFilter]
+									: "All Status"}
 							</Button>
 						</DropdownMenuTrigger>
 						<DropdownMenuContent align="end" className="w-48">
@@ -407,7 +424,10 @@ function SolutionsTable({
 								<StatusBadge status={solution.status} />
 							</TableCell>
 							<TableCell>
-								<PaymentBadge paidDeposit={solution.paidDeposit} status={solution.status} />
+								<PaymentBadge
+									paidDeposit={solution.paidDeposit}
+									status={solution.status}
+								/>
 							</TableCell>
 							<TableCell className="text-right font-medium">
 								{formatCurrency(solution.totalCents)}
@@ -459,10 +479,16 @@ function StatusBadge({ status }: { status: SolutionStatus }) {
 	);
 }
 
-function PaymentBadge({ paidDeposit, status }: { paidDeposit: boolean; status: SolutionStatus }) {
+function PaymentBadge({
+	paidDeposit,
+	status,
+}: { paidDeposit: boolean; status: SolutionStatus }) {
 	if (status === SolutionStatus.AWAITING_DEPOSIT) {
 		return (
-			<Badge variant="outline" className="text-yellow-600 border-yellow-600/50 bg-yellow-500/10">
+			<Badge
+				variant="outline"
+				className="text-yellow-600 border-yellow-600/50 bg-yellow-500/10"
+			>
 				<CreditCard className="h-3 w-3 mr-1" />
 				Awaiting
 			</Badge>
@@ -471,7 +497,10 @@ function PaymentBadge({ paidDeposit, status }: { paidDeposit: boolean; status: S
 
 	if (paidDeposit) {
 		return (
-			<Badge variant="outline" className="text-green-600 border-green-600/50 bg-green-500/10">
+			<Badge
+				variant="outline"
+				className="text-green-600 border-green-600/50 bg-green-500/10"
+			>
 				<Check className="h-3 w-3 mr-1" />
 				Deposit Paid
 			</Badge>
@@ -479,7 +508,10 @@ function PaymentBadge({ paidDeposit, status }: { paidDeposit: boolean; status: S
 	}
 
 	return (
-		<Badge variant="outline" className="text-blue-600 border-blue-600/50 bg-blue-500/10">
+		<Badge
+			variant="outline"
+			className="text-blue-600 border-blue-600/50 bg-blue-500/10"
+		>
 			<Check className="h-3 w-3 mr-1" />
 			Setup Complete
 		</Badge>
@@ -508,8 +540,8 @@ function SolutionsPagination({
 			<CardContent className="p-4">
 				<div className="flex flex-col sm:flex-row items-center justify-between gap-4">
 					<div className="text-sm text-muted-foreground">
-						Showing {(page - 1) * limit + 1} to{" "}
-						{Math.min(page * limit, total)} of {total} results
+						Showing {(page - 1) * limit + 1} to {Math.min(page * limit, total)}{" "}
+						of {total} results
 					</div>
 
 					<div className="flex items-center gap-4">
@@ -743,8 +775,16 @@ function SolutionDetailView({
 						<CardContent className="grid grid-cols-2 gap-4">
 							<InfoItem icon={User} label="Name" value={solution.name} />
 							<InfoItem icon={Mail} label="Email" value={solution.email} />
-							<InfoItem icon={Building2} label="Company" value={solution.company} />
-							<InfoItem icon={Clock} label="Timeline" value={solution.timeline ?? "Not specified"} />
+							<InfoItem
+								icon={Building2}
+								label="Company"
+								value={solution.company}
+							/>
+							<InfoItem
+								icon={Clock}
+								label="Timeline"
+								value={solution.timeline ?? "Not specified"}
+							/>
 						</CardContent>
 					</Card>
 
@@ -755,11 +795,17 @@ function SolutionDetailView({
 						</CardHeader>
 						<CardContent className="space-y-6">
 							<div className="grid grid-cols-2 gap-4">
-								<InfoItem label="Application Type" value={solution.applicationType} />
+								<InfoItem
+									label="Application Type"
+									value={solution.applicationType}
+								/>
 								<InfoItem label="Data Security" value={solution.dataSecurity} />
 								<InfoItem label="User Type" value={solution.userType} />
 								<InfoItem label="User Count" value={solution.userCount} />
-								<InfoItem label="Technical Level" value={solution.technicalLevel} />
+								<InfoItem
+									label="Technical Level"
+									value={solution.technicalLevel}
+								/>
 							</div>
 
 							<Separator />
@@ -778,14 +824,18 @@ function SolutionDetailView({
 									</p>
 								</div>
 								<div>
-									<Label className="text-sm font-semibold">Expected Output</Label>
+									<Label className="text-sm font-semibold">
+										Expected Output
+									</Label>
 									<p className="mt-1 text-sm text-muted-foreground whitespace-pre-wrap bg-muted/50 p-3 rounded-md">
 										{solution.expectedOutput}
 									</p>
 								</div>
 								{solution.additionalNotes && (
 									<div>
-										<Label className="text-sm font-semibold">Additional Notes</Label>
+										<Label className="text-sm font-semibold">
+											Additional Notes
+										</Label>
 										<p className="mt-1 text-sm text-muted-foreground whitespace-pre-wrap">
 											{solution.additionalNotes}
 										</p>
@@ -822,7 +872,11 @@ function SolutionDetailView({
 											</div>
 											{file.downloadUrl && (
 												<Button variant="ghost" size="sm" asChild>
-													<a href={file.downloadUrl} target="_blank" rel="noopener noreferrer">
+													<a
+														href={file.downloadUrl}
+														target="_blank"
+														rel="noopener noreferrer"
+													>
 														<Download className="h-4 w-4" />
 													</a>
 												</Button>
@@ -862,22 +916,32 @@ function SolutionDetailView({
 						<CardContent className="space-y-4">
 							<div className="flex items-center justify-between">
 								<span className="text-sm text-muted-foreground">Total</span>
-								<span className="font-semibold">{formatCurrency(solution.totalCents)}</span>
+								<span className="font-semibold">
+									{formatCurrency(solution.totalCents)}
+								</span>
 							</div>
 							<div className="flex items-center justify-between">
 								<span className="text-sm text-muted-foreground">Deposit</span>
 								<div className="flex items-center gap-2">
-									<span className="font-medium">{formatCurrency(solution.depositCents)}</span>
+									<span className="font-medium">
+										{formatCurrency(solution.depositCents)}
+									</span>
 									{solution.paidDeposit ? (
-										<Badge className="bg-green-500/10 text-green-500">Paid</Badge>
+										<Badge className="bg-green-500/10 text-green-500">
+											Paid
+										</Badge>
 									) : (
-										<Badge className="bg-yellow-500/10 text-yellow-500">Pending</Badge>
+										<Badge className="bg-yellow-500/10 text-yellow-500">
+											Pending
+										</Badge>
 									)}
 								</div>
 							</div>
 							<div className="flex items-center justify-between">
 								<span className="text-sm text-muted-foreground">Remainder</span>
-								<span className="font-medium">{formatCurrency(solution.remainderCents)}</span>
+								<span className="font-medium">
+									{formatCurrency(solution.remainderCents)}
+								</span>
 							</div>
 							<Separator />
 							<div className="flex items-center justify-between">
@@ -909,7 +973,11 @@ function SolutionDetailView({
 									<TooltipProvider>
 										<Tooltip>
 											<TooltipTrigger asChild>
-												<Button variant="outline" size="icon" onClick={handleCopyTrackingUrl}>
+												<Button
+													variant="outline"
+													size="icon"
+													onClick={handleCopyTrackingUrl}
+												>
 													<Copy className="h-4 w-4" />
 												</Button>
 											</TooltipTrigger>
@@ -1020,13 +1088,17 @@ function SolutionDetailView({
 	);
 }
 
-function StatusTimeline({ status, priority }: { status: SolutionStatus; priority: boolean }) {
-	const isCancelled = status === SolutionStatus.CANCELLED || status === SolutionStatus.REFUNDED;
+function StatusTimeline({
+	status,
+	priority,
+}: { status: SolutionStatus; priority: boolean }) {
+	const isCancelled =
+		status === SolutionStatus.CANCELLED || status === SolutionStatus.REFUNDED;
 
 	// For priority orders, show all steps. For standard orders, skip the AwaitingDeposit step.
 	const statusOrder = priority
 		? SolutionStatusOrder
-		: SolutionStatusOrder.filter(s => s !== SolutionStatus.AWAITING_DEPOSIT);
+		: SolutionStatusOrder.filter((s) => s !== SolutionStatus.AWAITING_DEPOSIT);
 
 	const currentIndex = statusOrder.indexOf(status);
 	const isPaid = status === SolutionStatus.PAID;
@@ -1078,7 +1150,9 @@ function StatusTimeline({ status, priority }: { status: SolutionStatus; priority
 										) : isCurrent ? (
 											<div className="h-1.5 w-1.5 rounded-full bg-primary animate-pulse" />
 										) : (
-											<span className="text-[10px] font-medium">{index + 1}</span>
+											<span className="text-[10px] font-medium">
+												{index + 1}
+											</span>
 										)}
 									</div>
 									<span

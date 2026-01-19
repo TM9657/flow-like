@@ -27,6 +27,7 @@ interface IExecuteEventOptions {
 	path?: string;
 	title?: string;
 	interfaceType?: string;
+	skipConsentCheck?: boolean;
 }
 
 export class ExecutionEngineProvider {
@@ -178,6 +179,7 @@ export class ExecutionEngineProvider {
 					this.notifyGlobalListeners();
 				}
 			},
+			options.skipConsentCheck,
 		);
 
 		stream.executionPromise = executionPromise;

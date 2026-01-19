@@ -1,6 +1,5 @@
 "use client";
 import { createId } from "@paralleldrive/cuid2";
-import { InfoCircledIcon } from "@radix-ui/react-icons";
 import { useDebounce } from "@uidotdev/usehooks";
 import {
 	Handle,
@@ -10,25 +9,14 @@ import {
 	useReactFlow,
 } from "@xyflow/react";
 import {
-	AlignCenterVerticalIcon,
-	AlignEndVerticalIcon,
-	AlignStartVerticalIcon,
-	AlignVerticalJustifyCenterIcon,
-	AlignVerticalJustifyEndIcon,
-	AlignVerticalJustifyStartIcon,
 	BanIcon,
 	CircleStopIcon,
 	CircleXIcon,
 	ClockIcon,
-	CopyIcon,
-	FoldVerticalIcon,
-	MessageSquareIcon,
+	CloudCog,
 	PlayCircleIcon,
 	ScrollTextIcon,
-	SlidersHorizontalIcon,
 	SquareCheckIcon,
-	SquarePenIcon,
-	Trash2Icon,
 	TriangleAlertIcon,
 	WorkflowIcon,
 } from "lucide-react";
@@ -44,52 +32,42 @@ import {
 } from "react";
 import PuffLoader from "react-spinners/PuffLoader";
 import { useLogAggregation } from "../..";
-import {
-	ContextMenu,
-	ContextMenuContent,
-	ContextMenuItem,
-	ContextMenuLabel,
-	ContextMenuSeparator,
-	ContextMenuSub,
-	ContextMenuSubContent,
-	ContextMenuSubTrigger,
-	ContextMenuTrigger,
-} from "../../components/ui/context-menu";
 import { useInvalidateInvoke } from "../../hooks";
 import {
 	ILogLevel,
 	IPinType,
 	IValueType,
+	isTauri,
 	moveNodeCommand,
 	removeNodeCommand,
 	updateNodeCommand,
 	upsertLayerCommand,
 	upsertPinCommand,
 } from "../../lib";
+import type { INode } from "../../lib";
 import { logLevelFromNumber } from "../../lib/log-level";
 import type { IBoard, IComment, ILayer } from "../../lib/schema/flow/board";
 import { ILayerType } from "../../lib/schema/flow/board/commands/upsert-layer";
-import type { INode } from "../../lib/schema/flow/node";
 import { type IPin, IVariableType } from "../../lib/schema/flow/pin";
 import { convertJsonToUint8Array } from "../../lib/uint8";
 import { useBackendStore } from "../../state/backend-state";
 import { useRunExecutionStore } from "../../state/run-execution-state";
 import {
-	Button,
 	Dialog,
 	DialogContent,
 	DialogDescription,
 	DialogHeader,
 	DialogTitle,
 	DialogTrigger,
-	Textarea,
 } from "../ui";
-import { DynamicImage } from "../ui/dynamic-image";
+import { DynamicImage } from "../ui";
 import { AutoResizeText } from "./auto-resize-text";
 import { useUndoRedo } from "./flow-history";
+import { EventPayloadForm } from "./flow-node/event-payload-form";
 import { FlowNodeCommentMenu } from "./flow-node/flow-node-comment-menu";
 import { FlowPinAction } from "./flow-node/flow-node-pin-action";
 import { FlowNodeRenameMenu } from "./flow-node/flow-node-rename-menu";
+import { FlowNodeToolbar } from "./flow-node/flow-node-toolbar";
 import { FlowPin } from "./flow-pin";
 import { LayerEditMenu } from "./layer-editing-menu";
 import { typeToColor } from "./utils";
@@ -118,9 +96,12 @@ export type FlowNode = Node<
 		fnRefsHash?: string;
 		version?: [number, number, number];
 		onExecute: (node: INode, payload?: object) => Promise<void>;
+		onRemoteExecute?: (node: INode, payload?: object) => Promise<void>;
+		isOffline?: boolean;
 		onCopy: () => Promise<void>;
 		remoteSelections?: RemoteSelectionParticipant[];
 		onOpenInfo?: (node: INode) => void;
+		onExplain?: (nodeIds: string[]) => void;
 	},
 	"node"
 >;
@@ -642,6 +623,12 @@ const FlowNodeInner = memo(
 		]);
 		const playNode = useMemo(() => {
 			if (!props.data.node.start) return null;
+
+			const canRemoteExecute =
+				isTauri() &&
+				!props.data.isOffline &&
+				props.data.onRemoteExecute !== undefined;
+
 			if (executionState === "done" || executing)
 				return (
 					<button
@@ -655,19 +642,41 @@ const FlowNodeInner = memo(
 						<CircleStopIcon className="w-3 h-3 group-hover/play:scale-110 text-primary" />
 					</button>
 				);
+
+			const handleLocalExecute = async (payloadObj?: object) => {
+				if (executing) return;
+				setExecuting(true);
+				await props.data.onExecute(props.data.node, payloadObj);
+				setExecuting(false);
+			};
+
+			const handleRemoteExecute = async (payloadObj?: object) => {
+				if (executing || !props.data.onRemoteExecute) return;
+				setExecuting(true);
+				await props.data.onRemoteExecute(props.data.node, payloadObj);
+				setExecuting(false);
+			};
+
 			if (Object.keys(props.data.node.pins).length <= 1)
 				return (
-					<button
-						className="bg-background hover:bg-card group/play transition-all rounded-md hover:rounded-lg border p-1 absolute left-0 top-0 translate-x-[calc(-120%)]"
-						onClick={async (e) => {
-							if (executing) return;
-							setExecuting(true);
-							await props.data.onExecute(props.data.node);
-							setExecuting(false);
-						}}
-					>
-						<PlayCircleIcon className="w-3 h-3 group-hover/play:scale-110" />
-					</button>
+					<div className="absolute left-0 top-0 translate-x-[calc(-120%)] flex flex-col gap-1">
+						<button
+							className="bg-background hover:bg-card group/play transition-all rounded-md hover:rounded-lg border p-1"
+							onClick={() => handleLocalExecute()}
+							title="Execute locally"
+						>
+							<PlayCircleIcon className="w-3 h-3 group-hover/play:scale-110" />
+						</button>
+						{canRemoteExecute && (
+							<button
+								className="bg-background hover:bg-card group/play transition-all rounded-md hover:rounded-lg border p-1 relative"
+								onClick={() => handleRemoteExecute()}
+								title="Execute on server"
+							>
+								<CloudCog className="w-3 h-3 group-hover/play:scale-110" />
+							</button>
+						)}
+					</div>
 				);
 
 			return (
@@ -675,44 +684,33 @@ const FlowNodeInner = memo(
 					open={payload.open}
 					onOpenChange={(open) => setPayload((old) => ({ ...old, open }))}
 				>
-					<DialogTrigger>
-						<button className="bg-background hover:bg-card group/play transition-all rounded-md hover:rounded-lg border p-1 absolute left-0 top-0 translate-x-[calc(-120%)]">
-							<PlayCircleIcon className="w-3 h-3 group-hover/play:scale-110" />
-						</button>
+					<DialogTrigger asChild>
+						<div className="absolute left-0 top-0 translate-x-[calc(-120%)] flex flex-col gap-1">
+							<button
+								className="bg-background hover:bg-card group/play transition-all rounded-md hover:rounded-lg border p-1"
+								title="Execute locally"
+							>
+								<PlayCircleIcon className="w-3 h-3 group-hover/play:scale-110" />
+							</button>
+						</div>
 					</DialogTrigger>
-					<DialogContent>
+					<DialogContent className="max-w-lg">
 						<DialogHeader>
-							<DialogTitle>Execution Payload</DialogTitle>
+							<DialogTitle>Execute {props.data.node.friendly_name}</DialogTitle>
 							<DialogDescription>
-								JSON Payload for the Event. Please have a look at the
-								documentation for example Payloads.
+								Provide input values for the event payload.
 							</DialogDescription>
 						</DialogHeader>
-						<Textarea
-							rows={10}
-							placeholder="JSON payload"
-							value={payload.payload}
-							onChange={(e) =>
-								setPayload((old) => ({
-									...old,
-									payload: e.target.value,
-								}))
+						<EventPayloadForm
+							node={props.data.node}
+							boardRef={props.data.boardRef}
+							onLocalExecute={handleLocalExecute}
+							onRemoteExecute={
+								canRemoteExecute ? handleRemoteExecute : undefined
 							}
+							canRemoteExecute={canRemoteExecute}
+							onClose={() => setPayload((old) => ({ ...old, open: false }))}
 						/>
-						<Button
-							onClick={async () => {
-								if (executing) return;
-								setExecuting(true);
-								await props.data.onExecute(
-									props.data.node,
-									JSON.parse(payload.payload),
-								);
-								setExecuting(false);
-								setPayload((old) => ({ ...old, open: false }));
-							}}
-						>
-							Send
-						</Button>
 					</DialogContent>
 				</Dialog>
 			);
@@ -723,6 +721,8 @@ const FlowNodeInner = memo(
 			executing,
 			executionState,
 			props.data.onExecute,
+			props.data.onRemoteExecute,
+			props.data.isOffline,
 			props.data.node,
 		]);
 
@@ -868,7 +868,6 @@ const FlowNodeInner = memo(
 
 function FlowNode(props: NodeProps<FlowNode>) {
 	const [isHovered, setIsHovered] = useState(false);
-	const [isOpen, setIsOpen] = useState(false);
 	const [commentMenu, setCommentMenu] = useState(false);
 	const [renameMenu, setRenameMenu] = useState(false);
 	const [editingMenu, setEditingMenu] = useState(false);
@@ -878,18 +877,6 @@ function FlowNode(props: NodeProps<FlowNode>) {
 		props.data.boardId,
 	);
 	const invalidate = useInvalidateInvoke();
-	const errorHandled = useMemo(() => {
-		return Object.values(props.data.node.pins).some(
-			(pin) =>
-				pin.name === "auto_handle_error" && pin.pin_type === IPinType.Output,
-		);
-	}, [props.data.node.pins]);
-
-	const isExec = useMemo(() => {
-		return Object.values(props.data.node.pins).some(
-			(pin) => pin.data_type === IVariableType.Execution,
-		);
-	}, [props.data.node.pins]);
 
 	const copy = useCallback(async () => {
 		props.data.onCopy();
@@ -1075,7 +1062,6 @@ function FlowNode(props: NodeProps<FlowNode>) {
 			props.data.boardId,
 			commands,
 		);
-		setIsOpen(false);
 		await pushCommands(result);
 		await invalidate(backend.boardState.getBoard, [
 			props.data.appId,
@@ -1161,174 +1147,25 @@ function FlowNode(props: NodeProps<FlowNode>) {
 		[props.data.node, invalidate, pushCommands, flow],
 	);
 
-	if (isOpen || isHovered) {
-		return (
-			<ContextMenu
-				onOpenChange={(open) => {
-					setIsOpen(open);
-				}}
-				key={props.id}
-			>
-				<ContextMenuTrigger>
-					<FlowNodeInner props={props} onHover={setIsHovered} />
-				</ContextMenuTrigger>
-				<ContextMenuContent className="">
-					<ContextMenuLabel>Node Actions</ContextMenuLabel>
-					{flow.getNodes().filter((node) => node.selected).length <= 1 &&
-						props.data.node.start && (
-							<ContextMenuItem onClick={() => setRenameMenu(true)}>
-								<div className="flex flex-row items-center gap-2 text-nowrap">
-									<SquarePenIcon className="w-4 h-4" />
-									Rename
-								</div>
-							</ContextMenuItem>
-						)}
-					{flow.getNodes().filter((node) => node.selected).length <= 1 &&
-						props.data.node.name === "events_generic" && (
-							<ContextMenuItem onClick={() => setEditingMenu(true)}>
-								<div className="flex flex-row items-center gap-2 text-nowrap">
-									<SlidersHorizontalIcon className="w-4 h-4" />
-									Edit
-								</div>
-							</ContextMenuItem>
-						)}
-					{flow.getNodes().filter((node) => node.selected).length <= 1 && (
-						<ContextMenuItem onClick={() => setCommentMenu(true)}>
-							<div className="flex flex-row items-center gap-2 text-nowrap">
-								<MessageSquareIcon className="w-4 h-4" />
-								Comment
-							</div>
-						</ContextMenuItem>
-					)}
-					{flow.getNodes().filter((node) => node.selected).length > 1 && (
-						<ContextMenuItem
-							onClick={(e) => {
-								e.preventDefault();
-								const screenCoords = e.currentTarget.getBoundingClientRect();
-								const x = screenCoords.x + screenCoords.width / 2;
-								const y = screenCoords.y + screenCoords.height / 2;
-								handleCollapse(x, y);
-							}}
-						>
-							<div className="flex flex-row items-center gap-2 text-nowrap">
-								<FoldVerticalIcon className="w-4 h-4" />
-								Collapse
-							</div>
-						</ContextMenuItem>
-					)}
+	const selectedCount = useMemo(
+		() => flow.getNodes().filter((node) => node.selected).length,
+		[flow.getNodes()],
+	);
 
-					<ContextMenuItem onClick={async () => await copy()}>
-						<div className="flex flex-row items-center gap-2 text-nowrap">
-							<CopyIcon className="w-4 h-4" />
-							Copy
-						</div>
-					</ContextMenuItem>
+	const isReadOnly = typeof props.data.version !== "undefined";
 
-					{isExec &&
-						flow.getNodes().filter((node) => node.selected).length <= 1 && (
-							<>
-								<ContextMenuSeparator />
-								<ContextMenuItem onClick={() => handleError()}>
-									<div className="flex flex-row items-center gap-2 text-nowrap">
-										<CircleXIcon className="w-4 h-4" />
-										{errorHandled ? "Remove Handling" : "Handle Errors"}
-									</div>
-								</ContextMenuItem>
-							</>
-						)}
-					{flow.getNodes().filter((node) => node.selected).length <= 1 && (
-						<>
-							<ContextMenuSeparator />
-							<ContextMenuItem
-								onClick={() => props.data.onOpenInfo?.(props.data.node)}
-							>
-								<div className="flex flex-row items-center gap-2 text-nowrap">
-									<InfoCircledIcon className="w-4 h-4" />
-									Info
-								</div>
-							</ContextMenuItem>
-						</>
-					)}
-					<ContextMenuSeparator />
-					<ContextMenuItem onClick={async () => await deleteNodes()}>
-						<div className="flex flex-row items-center gap-2 text-nowrap">
-							<Trash2Icon className="w-4 h-4" />
-							Delete
-						</div>
-					</ContextMenuItem>
-					{flow.getNodes().filter((node) => node.selected).length > 1 && (
-						<>
-							<ContextMenuSeparator />
-							<ContextMenuSub>
-								<ContextMenuSubTrigger>
-									<div className="flex flex-row items-center gap-2 text-nowrap">
-										<AlignStartVerticalIcon className="w-4 h-4" />
-										Align
-									</div>
-								</ContextMenuSubTrigger>
-								<ContextMenuSubContent>
-									<ContextMenuItem onClick={() => orderNodes("align", "start")}>
-										<div className="flex flex-row items-center gap-2 text-nowrap">
-											<AlignStartVerticalIcon className="w-4 h-4" />
-											Start
-										</div>
-									</ContextMenuItem>
-									<ContextMenuItem
-										onClick={() => orderNodes("align", "center")}
-									>
-										<div className="flex flex-row items-center gap-2 text-nowrap">
-											<AlignCenterVerticalIcon className="w-4 h-4" />
-											Center
-										</div>
-									</ContextMenuItem>
-									<ContextMenuItem onClick={() => orderNodes("align", "end")}>
-										<div className="flex flex-row items-center gap-2 text-nowrap">
-											<AlignEndVerticalIcon className="w-4 h-4" />
-											End
-										</div>
-									</ContextMenuItem>
-								</ContextMenuSubContent>
-							</ContextMenuSub>
+	const handleOpenInfo = useCallback(() => {
+		props.data.onOpenInfo?.(props.data.node);
+	}, [props.data.onOpenInfo, props.data.node]);
 
-							<ContextMenuSeparator />
-							<ContextMenuSub>
-								<ContextMenuSubTrigger>
-									<div className="flex flex-row items-center gap-2 text-nowrap">
-										<AlignVerticalJustifyStartIcon className="w-4 h-4" />
-										Justify
-									</div>
-								</ContextMenuSubTrigger>
-								<ContextMenuSubContent>
-									<ContextMenuItem
-										onClick={() => orderNodes("justify", "start")}
-									>
-										<div className="flex flex-row items-center gap-2 text-nowrap">
-											<AlignVerticalJustifyStartIcon className="w-4 h-4" />
-											Start
-										</div>
-									</ContextMenuItem>
-									<ContextMenuItem
-										onClick={() => orderNodes("justify", "center")}
-									>
-										<div className="flex flex-row items-center gap-2 text-nowrap">
-											<AlignVerticalJustifyCenterIcon className="w-4 h-4" />
-											Center
-										</div>
-									</ContextMenuItem>
-									<ContextMenuItem onClick={() => orderNodes("justify", "end")}>
-										<div className="flex flex-row items-center gap-2 text-nowrap">
-											<AlignVerticalJustifyEndIcon className="w-4 h-4" />
-											End
-										</div>
-									</ContextMenuItem>
-								</ContextMenuSubContent>
-							</ContextMenuSub>
-						</>
-					)}
-				</ContextMenuContent>
-			</ContextMenu>
-		);
-	}
+	const handleExplain = useCallback(() => {
+		const selectedNodes = flow.getNodes().filter((node) => node.selected);
+		const nodeIds =
+			selectedNodes.length > 0
+				? selectedNodes.map((node) => node.id)
+				: [props.data.node.id];
+		props.data.onExplain?.(nodeIds);
+	}, [flow, props.data.node.id, props.data.onExplain]);
 
 	return (
 		<>
@@ -1391,7 +1228,32 @@ function FlowNode(props: NodeProps<FlowNode>) {
 					mode="node"
 				/>
 			)}
-			<FlowNodeInner props={props} onHover={setIsHovered} />
+			<div
+				className="relative"
+				onMouseEnter={() => setIsHovered(true)}
+				onMouseLeave={() => setIsHovered(false)}
+			>
+				{(isHovered || props.selected) && (
+					<FlowNodeToolbar
+						node={props.data.node}
+						appId={props.data.appId}
+						boardId={props.data.boardId}
+						selectedCount={selectedCount}
+						isReadOnly={isReadOnly}
+						onCopy={copy}
+						onDelete={deleteNodes}
+						onComment={() => setCommentMenu(true)}
+						onRename={() => setRenameMenu(true)}
+						onEdit={() => setEditingMenu(true)}
+						onInfo={handleOpenInfo}
+						onHandleError={handleError}
+						onCollapse={handleCollapse}
+						onAlign={orderNodes}
+						onExplain={handleExplain}
+					/>
+				)}
+				<FlowNodeInner props={props} onHover={() => {}} />
+			</div>
 		</>
 	);
 }

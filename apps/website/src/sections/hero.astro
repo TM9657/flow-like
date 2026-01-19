@@ -1,8 +1,21 @@
 ---
 import { EmptyBackendProvider } from "../components/backend-provider";
+import type { Lang, TranslationKey } from "../i18n";
+import { translations, defaultLang } from "../i18n";
+
+interface Props {
+  lang?: Lang;
+}
+
+const { lang = defaultLang } = Astro.props;
+const t = (key: TranslationKey): string => {
+  const langTranslations = translations[lang] as Record<string, string>;
+  const enTranslations = translations.en as Record<string, string>;
+  return langTranslations?.[key] ?? enTranslations[key] ?? key;
+};
 
 const github = "https://github.com/TM9657/flow-like";
-const docs = "https://docs.flow-like.com";
+const enterpriseContact = "mailto:enterprise@flow-like.com?subject=Automation%20Risk%20Review";
 ---
 
 <section class="relative py-8 md:py-12 lg:py-16 max-w-screen overflow-hidden">
@@ -65,27 +78,31 @@ const docs = "https://docs.flow-like.com";
                 <!-- Left: Content -->
                 <div class="p-8 sm:p-10 lg:p-12 xl:p-14 flex flex-col justify-center reveal order-2 lg:order-1">
                     <p class="text-[10px] sm:text-[11px] font-medium tracking-[0.25em] uppercase text-muted-foreground/70 mb-6">
-                        Model · Automate · Scale
+                        {t("hero.tagline")}
                     </p>
 
                     <h1 class="text-3xl sm:text-4xl lg:text-[2.75rem] xl:text-5xl font-bold tracking-tight leading-[1.1] mb-5">
-                        Automate your work — see the full data story
+                        {t("hero.headline")}
                     </h1>
 
-                    <p class="text-base sm:text-lg text-muted-foreground leading-relaxed mb-8 max-w-xl">
-                        Flow-Like is a visual workflow tool. Build with drag-and-drop blocks, and get a clear record of where data came from, what changed, and why — no black boxes.
+                    <p class="text-base sm:text-lg text-muted-foreground leading-relaxed mb-4 max-w-xl">
+                        {t("hero.subheadline")}
+                    </p>
+
+                    <p class="text-sm text-muted-foreground/80 leading-relaxed mb-8 max-w-xl">
+                        {t("hero.description")}
                     </p>
 
                     <div class="flex flex-wrap items-center gap-3 mb-8">
                         <a
-                            href="/download"
+                            href={enterpriseContact}
                             class="inline-flex items-center justify-center rounded-full bg-foreground text-background px-6 py-3 text-sm font-medium hover:bg-foreground/90 transition-all hover:scale-[1.02] active:scale-[0.98]"
-                            >Download</a
+                            >{t("hero.cta.risk_review")}</a
                         >
                         <a
-                            href={docs}
+                            href="/download"
                             class="inline-flex items-center justify-center rounded-full border border-border/80 bg-background/50 px-6 py-3 text-sm font-medium text-foreground hover:bg-muted/50 hover:border-border transition-colors"
-                            >Explore docs</a
+                            >{t("hero.cta.download")}</a
                         >
                         <a
                             href={github}
@@ -96,13 +113,13 @@ const docs = "https://docs.flow-like.com";
 
                     <div class="flex flex-wrap items-center gap-2">
                         <span class="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-full border border-border/40 text-muted-foreground bg-muted/10">
-                            🧩 Drag-and-drop
+                            🔍 Full transparency
                         </span>
                         <span class="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-full border border-border/40 text-muted-foreground bg-muted/10">
-                            🔒 Private by default
+                            🔐 On-prem ready
                         </span>
                         <span class="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-full border border-border/40 text-muted-foreground bg-muted/10">
-                            ⚡ Rust-fast
+                            ⚙️ Deterministic
                         </span>
                     </div>
                 </div>
@@ -114,8 +131,8 @@ const docs = "https://docs.flow-like.com";
                         aria-hidden="true"
                         class="pointer-events-none absolute bottom-3 right-3 flex gap-1.5"
                     >
-                        <span class="text-[9px] sm:text-[10px] px-2 py-0.5 rounded bg-background/70 backdrop-blur-sm border border-border/30 text-muted-foreground/70">Node Graph</span>
-                        <span class="text-[9px] sm:text-[10px] px-2 py-0.5 rounded bg-emerald-500/10 border border-emerald-500/20 text-emerald-500">Live</span>
+                        <span class="text-[9px] sm:text-[10px] px-2 py-0.5 rounded bg-background/70 backdrop-blur-sm border border-border/30 text-muted-foreground/70">Visual Workflow</span>
+                        <span class="text-[9px] sm:text-[10px] px-2 py-0.5 rounded bg-emerald-500/10 border border-emerald-500/20 text-emerald-500">Auditable</span>
                     </div>
                 </div>
             </div>

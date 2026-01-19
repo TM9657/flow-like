@@ -90,6 +90,7 @@ model App {
   technicalUsers TechnicalUser[]
   llmUsage LLMUsageTracking[]
   executionUsage ExecutionUsageTracking[]
+  executionRuns ExecutionRun[]
   executionMode ExecutionMode @default(ANY)
 
   syncs BoardSync[]

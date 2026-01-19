@@ -1,6 +1,7 @@
 export * from "./flow-board";
 export * from "./flow-history";
 export * from "./flow-preview";
+export * from "./flow-template-selector";
 export * from "./variables/variables-menu-edit";
 export * from "./variables/components";
 export * from "./flow-copilot";

@@ -402,8 +402,31 @@ impl From<Content> for RigUserContent {
                 // Detect media type from URL or default to PNG
                 let media_type = detect_image_media_type(&image_url.url);
 
+                // Prefer passing raw base64 payloads to rig providers when the input is a data URL.
+                // Some providers (notably OpenAI-compatible ones) are more reliable with base64 than
+                // with large `data:` URLs.
+                let data = if image_url.url.starts_with("data:") {
+                    // Expected shape: data:<mime>;base64,<payload>
+                    image_url
+                        .url
+                        .find(",")
+                        .and_then(|comma_pos| {
+                            let prefix = &image_url.url[..comma_pos];
+                            if prefix.contains(";base64") {
+                                Some(DocumentSourceKind::Base64(
+                                    image_url.url[(comma_pos + 1)..].to_string(),
+                                ))
+                            } else {
+                                None
+                            }
+                        })
+                        .unwrap_or_else(|| DocumentSourceKind::url(&image_url.url))
+                } else {
+                    DocumentSourceKind::url(&image_url.url)
+                };
+
                 RigUserContent::Image(RigImage {
-                    data: DocumentSourceKind::url(&image_url.url),
+                    data,
                     media_type: Some(media_type),
                     detail: None,
                     additional_params: None,

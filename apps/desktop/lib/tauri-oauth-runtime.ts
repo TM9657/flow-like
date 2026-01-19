@@ -1,10 +1,10 @@
 import { fetch as tauriFetch } from "@tauri-apps/plugin-http";
-import { open } from "@tauri-apps/plugin-shell";
+import { openUrl } from "@tauri-apps/plugin-opener";
 import type { IOAuthRuntime } from "@tm9657/flow-like-ui";
 
 export const tauriOAuthRuntime: IOAuthRuntime = {
 	async openUrl(url: string): Promise<void> {
-		await open(url);
+		await openUrl(url);
 	},
 
 	async httpPost(url: string, body: string, headers?: Record<string, string>) {

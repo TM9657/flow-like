@@ -33,6 +33,8 @@ export * from "./label";
 export * from "./lance-viewer";
 export * from "./loading-screen";
 export * from "./mobile-header";
+export * from "./model-card";
+export * from "./model-detail-sheet";
 export * from "./monaco-file-editor";
 export * from "./popover";
 export * from "./progress";

@@ -1,0 +1,342 @@
+services:
+  # =============================================================================
+  # PostgreSQL Database
+  # =============================================================================
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-flowlike}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-flowlike_dev}
+      POSTGRES_DB: ${POSTGRES_DB:-flowlike}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+      - flowlike
+
+  # =============================================================================
+  # Redis (Execution State + Job Queue)
+  # =============================================================================
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+      - flowlike
+
+  # =============================================================================
+  # Database Migration Job
+  # =============================================================================
+  db-init:
+    build:
+      context: ../../../packages/api
+      dockerfile: Dockerfile.tools
+    depends_on:
+      postgres:
+        condition: service_healthy
+    working_dir: /workspace
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-flowlike}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-flowlike_dev}
+      POSTGRES_DB: ${POSTGRES_DB:-flowlike}
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+    volumes:
+      - ../../../packages/api:/workspace
+    entrypoint: ["/usr/local/bin/export-database-url.sh"]
+    command:
+      - bash
+      - -lc
+      - |
+        wait-for-postgres.sh &&
+        bun install || true &&
+        make-postgres-prisma-mirror.sh &&
+        bunx prisma db push --schema=prisma-postgres-mirror/schema &&
+        echo '✅ Database schema applied!' &&
+        rm -rf node_modules bun.lockb bun.lock prisma-postgres-mirror &&
+        echo '✅ Cleanup complete!'
+    networks:
+      - flowlike
+
+  # =============================================================================
+  # Flow-Like API Service
+  # =============================================================================
+  api:
+    build:
+      context: ../../..
+      dockerfile: apps/backend/docker-compose/api/Dockerfile
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      db-init:
+        condition: service_completed_successfully
+    ports:
+      - "${API_PORT:-8080}:8080"
+      - "${METRICS_PORT:-9090}:9090"
+    environment:
+      # Server
+      PORT: 8080
+      RUST_LOG: ${RUST_LOG:-info,docker_compose_api=debug}
+
+      # Database
+      DATABASE_URL: postgresql://${POSTGRES_USER:-flowlike}:${POSTGRES_PASSWORD:-flowlike_dev}@postgres:5432/${POSTGRES_DB:-flowlike}
+
+      # Redis (execution state + job queue)
+      REDIS_URL: redis://redis:6379
+      EXECUTION_STATE_BACKEND: redis
+      EXECUTION_STATE_TTL_SECONDS: ${EXECUTION_STATE_TTL_SECONDS:-86400}
+
+      # Storage provider
+      STORAGE_PROVIDER: ${STORAGE_PROVIDER:-aws}
+
+      # Generic bucket names (fallback for all providers)
+      META_BUCKET: ${META_BUCKET:-flow-like-meta}
+      CONTENT_BUCKET: ${CONTENT_BUCKET:-flow-like-content}
+      LOG_BUCKET: ${LOG_BUCKET:-flow-like-logs}
+
+      # AWS S3 (when STORAGE_PROVIDER=aws)
+      AWS_ENDPOINT: ${AWS_ENDPOINT:-}
+      AWS_REGION: ${AWS_REGION:-us-east-1}
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-}
+      AWS_USE_PATH_STYLE: ${AWS_USE_PATH_STYLE:-true}
+      # Role ARN for scoped credentials (per-user/per-app isolation)
+      RUNTIME_ROLE_ARN: ${RUNTIME_ROLE_ARN:-}
+
+      # Azure Blob (when STORAGE_PROVIDER=azure)
+      AZURE_STORAGE_ACCOUNT_NAME: ${AZURE_STORAGE_ACCOUNT_NAME:-}
+      AZURE_STORAGE_ACCOUNT_KEY: ${AZURE_STORAGE_ACCOUNT_KEY:-}
+      AZURE_META_CONTAINER: ${AZURE_META_CONTAINER:-}
+      AZURE_CONTENT_CONTAINER: ${AZURE_CONTENT_CONTAINER:-}
+      AZURE_LOG_CONTAINER: ${AZURE_LOG_CONTAINER:-}
+
+      # GCP Storage (when STORAGE_PROVIDER=gcp)
+      GCS_PROJECT_ID: ${GCS_PROJECT_ID:-}
+      GOOGLE_APPLICATION_CREDENTIALS_JSON: ${GOOGLE_APPLICATION_CREDENTIALS_JSON:-}
+
+      # Execution Backend Configuration
+      # EXECUTION_BACKEND: For /invoke (streaming) - default http
+      # ASYNC_EXECUTION_BACKEND: For /invoke/async - default redis
+      EXECUTION_BACKEND: ${EXECUTION_BACKEND:-http}
+      ASYNC_EXECUTION_BACKEND: ${ASYNC_EXECUTION_BACKEND:-redis}
+      EXECUTOR_URL: http://runtime:9000
+      REDIS_EXECUTION_QUEUE: ${REDIS_EXECUTION_QUEUE:-exec:jobs}
+      EXECUTION_TIMEOUT_SECONDS: ${EXECUTION_TIMEOUT_SECONDS:-3600}
+
+      # Unified backend JWT keys (used for execution, realtime, etc.)
+      BACKEND_KEY: ${BACKEND_KEY:-}
+      BACKEND_PUB: ${BACKEND_PUB:-}
+      BACKEND_KID: ${BACKEND_KID:-backend-es256-v1}
+
+      # Optional services
+      SENTRY_DSN: ${SENTRY_DSN:-}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENAI_ENDPOINT: ${OPENAI_ENDPOINT:-}
+
+      # Stripe (required when premium features enabled in config)
+      STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY:-}
+
+      # Tracing (OTLP) - set OTEL_EXPORTER_OTLP_ENDPOINT when using monitoring profile
+      OTEL_SERVICE_NAME: flow-like-api
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-http://tempo:4317}
+      OTEL_EXPORTER_OTLP_PROTOCOL: ${OTEL_EXPORTER_OTLP_PROTOCOL:-grpc}
+      OTEL_TRACES_SAMPLER: ${OTEL_TRACES_SAMPLER:-parentbased_traceidratio}
+      OTEL_TRACES_SAMPLER_ARG: ${OTEL_TRACES_SAMPLER_ARG:-0.1}
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/api/v1/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - flowlike
+
+  # =============================================================================
+  # Execution Runtime (Shared Mode + Queue Worker)
+  # =============================================================================
+  runtime:
+    build:
+      context: ../../..
+      dockerfile: apps/backend/docker-compose/runtime/Dockerfile
+    depends_on:
+      api:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    ports:
+      - "${RUNTIME_PORT:-9000}:9000"
+    environment:
+      # Server mode (multiple concurrent executions)
+      EXECUTOR_SERVER_MODE: "true"
+      PORT: 9000
+      RUST_LOG: ${RUST_LOG:-info,docker_compose_runtime=debug}
+
+      # API callback URL
+      API_URL: http://api:${API_PORT:-8080}
+
+      # Redis queue worker (for async execution)
+      QUEUE_WORKER_ENABLED: ${QUEUE_WORKER_ENABLED:-true}
+      REDIS_URL: redis://redis:6379
+      REDIS_EXECUTION_QUEUE: ${REDIS_EXECUTION_QUEUE:-exec:jobs}
+
+      # Backend JWT public key for verifying API tokens
+      BACKEND_PUB: ${BACKEND_PUB:-}
+
+      # Execution limits
+      MAX_CONCURRENT_EXECUTIONS: ${MAX_CONCURRENT_EXECUTIONS:-10}
+      EXECUTION_TIMEOUT_SECONDS: ${EXECUTION_TIMEOUT_SECONDS:-3600}
+
+      # Tracing (OTLP) - set OTEL_EXPORTER_OTLP_ENDPOINT when using monitoring profile
+      OTEL_SERVICE_NAME: flow-like-runtime
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-http://tempo:4317}
+      OTEL_EXPORTER_OTLP_PROTOCOL: ${OTEL_EXPORTER_OTLP_PROTOCOL:-grpc}
+      OTEL_TRACES_SAMPLER: ${OTEL_TRACES_SAMPLER:-parentbased_traceidratio}
+      OTEL_TRACES_SAMPLER_ARG: ${OTEL_TRACES_SAMPLER_ARG:-0.1}
+    deploy:
+      resources:
+        limits:
+          cpus: '4'
+          memory: 8G
+        reservations:
+          cpus: '1'
+          memory: 2G
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - flowlike
+
+  # =============================================================================
+  # Monitoring Stack (Optional - set MONITORING_ENABLED=true)
+  # =============================================================================
+  prometheus:
+    image: prom/prometheus:v2.48.0
+    profiles:
+      - monitoring
+    ports:
+      - "${PROMETHEUS_PORT:-9091}:9090"
+    volumes:
+      - ./monitoring/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./monitoring/prometheus/rules:/etc/prometheus/rules:ro
+      - prometheus_data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--storage.tsdb.retention.time=15d'
+      - '--web.enable-lifecycle'
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:9090/-/healthy"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - flowlike
+
+  grafana:
+    image: grafana/grafana:10.2.2
+    profiles:
+      - monitoring
+    depends_on:
+      prometheus:
+        condition: service_healthy
+      tempo:
+        condition: service_healthy
+    ports:
+      - "${GRAFANA_PORT:-3002}:3000"
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-admin}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_SERVER_ROOT_URL: ${GRAFANA_ROOT_URL:-http://localhost:3002}
+    volumes:
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana_data:/var/lib/grafana
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:3000/api/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - flowlike
+
+  redis-exporter:
+    image: oliver006/redis_exporter:v1.55.0
+    profiles:
+      - monitoring
+    depends_on:
+      redis:
+        condition: service_healthy
+    ports:
+      - "${REDIS_EXPORTER_PORT:-9121}:9121"
+    environment:
+      REDIS_ADDR: redis://redis:6379
+    networks:
+      - flowlike
+
+  postgres-exporter:
+    image: prometheuscommunity/postgres-exporter:v0.15.0
+    profiles:
+      - monitoring
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "${POSTGRES_EXPORTER_PORT:-9187}:9187"
+    environment:
+      DATA_SOURCE_NAME: postgresql://${POSTGRES_USER:-flowlike}:${POSTGRES_PASSWORD:-flowlike_dev}@postgres:5432/${POSTGRES_DB:-flowlike}?sslmode=disable
+    networks:
+      - flowlike
+
+  # =============================================================================
+  # Tempo (Distributed Tracing)
+  # =============================================================================
+  tempo:
+    image: grafana/tempo:2.3.1
+    profiles:
+      - monitoring
+    ports:
+      - "${TEMPO_HTTP_PORT:-3200}:3200"
+      - "${TEMPO_OTLP_GRPC_PORT:-4317}:4317"
+      - "${TEMPO_OTLP_HTTP_PORT:-4318}:4318"
+    volumes:
+      - ./monitoring/tempo/tempo.yaml:/etc/tempo/tempo.yaml:ro
+      - tempo_data:/var/tempo
+    command:
+      - -config.file=/etc/tempo/tempo.yaml
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:3200/ready"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - flowlike
+
+volumes:
+  postgres_data:
+  redis_data:
+  prometheus_data:
+  grafana_data:
+  tempo_data:
+
+
+networks:
+  flowlike:
+    driver: bridge

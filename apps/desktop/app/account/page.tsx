@@ -1,6 +1,5 @@
 "use client";
-
-import { WebviewWindow } from "@tauri-apps/api/webviewWindow";
+import { openUrl } from "@tauri-apps/plugin-opener";
 import { Button, useBackend, useHub, useInvoke } from "@tm9657/flow-like-ui";
 import { Amplify } from "aws-amplify";
 import {
@@ -19,7 +18,6 @@ import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { type AuthContextProps, useAuth } from "react-oidc-context";
 import { toast } from "sonner";
-import { fetcher } from "../../lib/api";
 import { type ProfileActions, ProfilePage } from "./account";
 import ChangeEmailDialog from "./change-email";
 import ChangePasswordDialog from "./change-password";
@@ -120,7 +118,8 @@ const AccountPage: React.FC = () => {
 					Auth: {
 						Cognito: {
 							userPoolClientId: currentAuth.settings.client_id,
-							userPoolId: currentHub.hub.authentication.openid.cognito.user_pool_id,
+							userPoolId:
+								currentHub.hub.authentication.openid.cognito.user_pool_id,
 						},
 					},
 				},
@@ -178,16 +177,10 @@ const AccountPage: React.FC = () => {
 
 	const handleViewBilling = useCallback(async () => {
 		try {
-			const billingSession = await backendRef.current.userState.getBillingSession();
+			const billingSession =
+				await backendRef.current.userState.getBillingSession();
 
-			const _view = new WebviewWindow("billing", {
-				url: billingSession.url,
-				title: "Billing",
-				focus: true,
-				resizable: true,
-				maximized: true,
-				contentProtected: true,
-			});
+			await openUrl(billingSession.url);
 		} catch (error) {
 			console.error("Failed to get billing session:", error);
 			toast.error("Failed to open billing portal");
@@ -202,24 +195,27 @@ const AccountPage: React.FC = () => {
 		router.push("/subscription");
 	}, [router]);
 
-	const profileActions = useMemo<ProfileActions>(() => ({
-		updateEmail: cognito && !federated ? handleUpdateEmail : undefined,
-		changePassword: cognito && !federated ? handleChangePassword : undefined,
-		viewBilling: isPremiumEnabled ? handleViewBilling : undefined,
-		viewSubscription: isPremiumEnabled ? handleViewSubscription : undefined,
-		previewProfile: handlePreviewProfile,
-		handleAttributeUpdate: cognito ? updateUserAttribute : undefined,
-	}), [
-		cognito,
-		federated,
-		isPremiumEnabled,
-		handleUpdateEmail,
-		handleChangePassword,
-		handleViewBilling,
-		handleViewSubscription,
-		handlePreviewProfile,
-		updateUserAttribute,
-	]);
+	const profileActions = useMemo<ProfileActions>(
+		() => ({
+			updateEmail: cognito && !federated ? handleUpdateEmail : undefined,
+			changePassword: cognito && !federated ? handleChangePassword : undefined,
+			viewBilling: isPremiumEnabled ? handleViewBilling : undefined,
+			viewSubscription: isPremiumEnabled ? handleViewSubscription : undefined,
+			previewProfile: handlePreviewProfile,
+			handleAttributeUpdate: cognito ? updateUserAttribute : undefined,
+		}),
+		[
+			cognito,
+			federated,
+			isPremiumEnabled,
+			handleUpdateEmail,
+			handleChangePassword,
+			handleViewBilling,
+			handleViewSubscription,
+			handlePreviewProfile,
+			updateUserAttribute,
+		],
+	);
 
 	if (!auth.isAuthenticated) {
 		return (

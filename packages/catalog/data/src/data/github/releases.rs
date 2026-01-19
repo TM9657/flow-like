@@ -1,0 +1,821 @@
+use super::{
+    list_issues::GitHubIssueUser,
+    provider::{GITHUB_PROVIDER_ID, GitHubProvider},
+};
+use flow_like::flow::{
+    execution::{LogLevel, context::ExecutionContext},
+    node::{Node, NodeLogic, NodeScores},
+    pin::{PinOptions, ValueType},
+    variable::VariableType,
+};
+use flow_like_types::{JsonSchema, Value, async_trait, json::json, reqwest};
+use serde::{Deserialize, Serialize};
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+pub struct GitHubReleaseAsset {
+    pub id: i64,
+    pub name: String,
+    pub label: Option<String>,
+    pub content_type: String,
+    pub size: i64,
+    pub download_count: i64,
+    pub browser_download_url: String,
+    pub created_at: String,
+    pub updated_at: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+pub struct GitHubRelease {
+    pub id: i64,
+    pub tag_name: String,
+    pub name: Option<String>,
+    pub body: Option<String>,
+    pub draft: bool,
+    pub prerelease: bool,
+    pub html_url: String,
+    pub tarball_url: Option<String>,
+    pub zipball_url: Option<String>,
+    pub author: GitHubIssueUser,
+    pub assets: Vec<GitHubReleaseAsset>,
+    pub created_at: String,
+    pub published_at: Option<String>,
+}
+
+fn parse_asset(asset: &Value) -> Option<GitHubReleaseAsset> {
+    Some(GitHubReleaseAsset {
+        id: asset["id"].as_i64()?,
+        name: asset["name"].as_str()?.to_string(),
+        label: asset["label"].as_str().map(String::from),
+        content_type: asset["content_type"].as_str()?.to_string(),
+        size: asset["size"].as_i64().unwrap_or(0),
+        download_count: asset["download_count"].as_i64().unwrap_or(0),
+        browser_download_url: asset["browser_download_url"].as_str()?.to_string(),
+        created_at: asset["created_at"].as_str()?.to_string(),
+        updated_at: asset["updated_at"].as_str()?.to_string(),
+    })
+}
+
+pub fn parse_release(release: &Value) -> Option<GitHubRelease> {
+    let author = &release["author"];
+    Some(GitHubRelease {
+        id: release["id"].as_i64()?,
+        tag_name: release["tag_name"].as_str()?.to_string(),
+        name: release["name"].as_str().map(String::from),
+        body: release["body"].as_str().map(String::from),
+        draft: release["draft"].as_bool().unwrap_or(false),
+        prerelease: release["prerelease"].as_bool().unwrap_or(false),
+        html_url: release["html_url"].as_str()?.to_string(),
+        tarball_url: release["tarball_url"].as_str().map(String::from),
+        zipball_url: release["zipball_url"].as_str().map(String::from),
+        author: GitHubIssueUser {
+            id: author["id"].as_i64()?,
+            login: author["login"].as_str()?.to_string(),
+            avatar_url: author["avatar_url"].as_str()?.to_string(),
+            html_url: author["html_url"].as_str()?.to_string(),
+        },
+        assets: release["assets"]
+            .as_array()
+            .map(|arr| arr.iter().filter_map(parse_asset).collect())
+            .unwrap_or_default(),
+        created_at: release["created_at"].as_str()?.to_string(),
+        published_at: release["published_at"].as_str().map(String::from),
+    })
+}
+
+// =============================================================================
+// List Releases Node
+// =============================================================================
+
+#[crate::register_node]
+#[derive(Default)]
+pub struct ListGitHubReleasesNode {}
+
+impl ListGitHubReleasesNode {
+    pub fn new() -> Self {
+        Self {}
+    }
+}
+
+#[async_trait]
+impl NodeLogic for ListGitHubReleasesNode {
+    fn get_node(&self) -> Node {
+        let mut node = Node::new(
+            "data_github_list_releases",
+            "List Releases",
+            "List releases for a repository",
+            "Data/GitHub",
+        );
+        node.add_icon("/flow/icons/github.svg");
+
+        node.add_input_pin("exec_in", "Input", "Trigger", VariableType::Execution);
+
+        node.add_input_pin(
+            "provider",
+            "Provider",
+            "GitHub provider",
+            VariableType::Struct,
+        )
+        .set_schema::<GitHubProvider>()
+        .set_options(PinOptions::new().set_enforce_schema(true).build());
+
+        node.add_input_pin("owner", "Owner", "Repository owner", VariableType::String);
+        node.add_input_pin(
+            "repo",
+            "Repository",
+            "Repository name",
+            VariableType::String,
+        );
+
+        node.add_input_pin(
+            "per_page",
+            "Per Page",
+            "Results per page (max 100)",
+            VariableType::Integer,
+        )
+        .set_default_value(Some(json!(30)));
+
+        node.add_input_pin("page", "Page", "Page number", VariableType::Integer)
+            .set_default_value(Some(json!(1)));
+
+        node.add_output_pin(
+            "exec_out",
+            "Success",
+            "Triggered on success",
+            VariableType::Execution,
+        );
+
+        node.add_output_pin(
+            "error",
+            "Error",
+            "Triggered on error",
+            VariableType::Execution,
+        );
+
+        node.add_output_pin(
+            "releases",
+            "Releases",
+            "Array of releases",
+            VariableType::Struct,
+        )
+        .set_value_type(ValueType::Array)
+        .set_schema::<GitHubRelease>();
+
+        node.add_output_pin(
+            "count",
+            "Count",
+            "Number of releases returned",
+            VariableType::Integer,
+        );
+
+        node.add_required_oauth_scopes(GITHUB_PROVIDER_ID, vec!["repo"]);
+        node.set_scores(
+            NodeScores::new()
+                .set_privacy(8)
+                .set_security(8)
+                .set_performance(8)
+                .set_governance(8)
+                .set_reliability(9)
+                .set_cost(9)
+                .build(),
+        );
+
+        node
+    }
+
+    async fn run(&self, context: &mut ExecutionContext) -> flow_like_types::Result<()> {
+        context.deactivate_exec_pin("exec_out").await?;
+        context.deactivate_exec_pin("error").await?;
+
+        let provider: GitHubProvider = context.evaluate_pin("provider").await?;
+        let owner: String = context.evaluate_pin("owner").await?;
+        let repo: String = context.evaluate_pin("repo").await?;
+        let per_page: i64 = context.evaluate_pin("per_page").await.unwrap_or(30);
+        let page: i64 = context.evaluate_pin("page").await.unwrap_or(1);
+
+        if owner.is_empty() || repo.is_empty() {
+            context.log_message("Owner and repository are required", LogLevel::Error);
+            context.activate_exec_pin("error").await?;
+            return Ok(());
+        }
+
+        let url = provider.api_url(&format!(
+            "/repos/{}/{}/releases?per_page={}&page={}",
+            owner,
+            repo,
+            per_page.clamp(1, 100),
+            page.max(1)
+        ));
+
+        let client = reqwest::Client::new();
+        let response = client
+            .get(&url)
+            .header("Authorization", format!("Bearer {}", provider.access_token))
+            .header("Accept", "application/vnd.github+json")
+            .header("X-GitHub-Api-Version", "2022-11-28")
+            .header("User-Agent", "flow-like")
+            .send()
+            .await;
+
+        match response {
+            Ok(resp) => {
+                if !resp.status().is_success() {
+                    let status = resp.status();
+                    let error_text = resp.text().await.unwrap_or_default();
+                    context.log_message(
+                        &format!("GitHub API error {}: {}", status, error_text),
+                        LogLevel::Error,
+                    );
+                    context.activate_exec_pin("error").await?;
+                    return Ok(());
+                }
+
+                let releases_json: Vec<Value> = resp
+                    .json()
+                    .await
+                    .map_err(|e| flow_like_types::anyhow!("Failed to parse response: {}", e))?;
+
+                let releases: Vec<GitHubRelease> =
+                    releases_json.iter().filter_map(parse_release).collect();
+
+                let count = releases.len() as i64;
+
+                context.log_message(&format!("Found {} releases", count), LogLevel::Info);
+                context.set_pin_value("releases", json!(releases)).await?;
+                context.set_pin_value("count", json!(count)).await?;
+                context.activate_exec_pin("exec_out").await?;
+            }
+            Err(e) => {
+                context.log_message(&format!("Network error: {}", e), LogLevel::Error);
+                context.activate_exec_pin("error").await?;
+            }
+        }
+
+        Ok(())
+    }
+}
+
+// =============================================================================
+// Get Latest Release Node
+// =============================================================================
+
+#[crate::register_node]
+#[derive(Default)]
+pub struct GetLatestGitHubReleaseNode {}
+
+impl GetLatestGitHubReleaseNode {
+    pub fn new() -> Self {
+        Self {}
+    }
+}
+
+#[async_trait]
+impl NodeLogic for GetLatestGitHubReleaseNode {
+    fn get_node(&self) -> Node {
+        let mut node = Node::new(
+            "data_github_get_latest_release",
+            "Get Latest Release",
+            "Get the latest published release (excludes drafts and prereleases)",
+            "Data/GitHub",
+        );
+        node.add_icon("/flow/icons/github.svg");
+
+        node.add_input_pin("exec_in", "Input", "Trigger", VariableType::Execution);
+
+        node.add_input_pin(
+            "provider",
+            "Provider",
+            "GitHub provider",
+            VariableType::Struct,
+        )
+        .set_schema::<GitHubProvider>()
+        .set_options(PinOptions::new().set_enforce_schema(true).build());
+
+        node.add_input_pin("owner", "Owner", "Repository owner", VariableType::String);
+        node.add_input_pin(
+            "repo",
+            "Repository",
+            "Repository name",
+            VariableType::String,
+        );
+
+        node.add_output_pin(
+            "exec_out",
+            "Success",
+            "Triggered on success",
+            VariableType::Execution,
+        );
+
+        node.add_output_pin(
+            "error",
+            "Error",
+            "Triggered on error",
+            VariableType::Execution,
+        );
+
+        node.add_output_pin("release", "Release", "Latest release", VariableType::Struct)
+            .set_schema::<GitHubRelease>();
+
+        node.add_output_pin(
+            "tag_name",
+            "Tag Name",
+            "Release tag name",
+            VariableType::String,
+        );
+        node.add_output_pin("name", "Name", "Release name", VariableType::String);
+
+        node.add_required_oauth_scopes(GITHUB_PROVIDER_ID, vec!["repo"]);
+        node.set_scores(
+            NodeScores::new()
+                .set_privacy(8)
+                .set_security(8)
+                .set_performance(9)
+                .set_governance(8)
+                .set_reliability(9)
+                .set_cost(9)
+                .build(),
+        );
+
+        node
+    }
+
+    async fn run(&self, context: &mut ExecutionContext) -> flow_like_types::Result<()> {
+        context.deactivate_exec_pin("exec_out").await?;
+        context.deactivate_exec_pin("error").await?;
+
+        let provider: GitHubProvider = context.evaluate_pin("provider").await?;
+        let owner: String = context.evaluate_pin("owner").await?;
+        let repo: String = context.evaluate_pin("repo").await?;
+
+        if owner.is_empty() || repo.is_empty() {
+            context.log_message("Owner and repository are required", LogLevel::Error);
+            context.activate_exec_pin("error").await?;
+            return Ok(());
+        }
+
+        let url = provider.api_url(&format!("/repos/{}/{}/releases/latest", owner, repo));
+
+        let client = reqwest::Client::new();
+        let response = client
+            .get(&url)
+            .header("Authorization", format!("Bearer {}", provider.access_token))
+            .header("Accept", "application/vnd.github+json")
+            .header("X-GitHub-Api-Version", "2022-11-28")
+            .header("User-Agent", "flow-like")
+            .send()
+            .await;
+
+        match response {
+            Ok(resp) => {
+                if !resp.status().is_success() {
+                    let status = resp.status();
+                    let error_text = resp.text().await.unwrap_or_default();
+                    context.log_message(
+                        &format!("GitHub API error {}: {}", status, error_text),
+                        LogLevel::Error,
+                    );
+                    context.activate_exec_pin("error").await?;
+                    return Ok(());
+                }
+
+                let release_json: Value = resp
+                    .json()
+                    .await
+                    .map_err(|e| flow_like_types::anyhow!("Failed to parse response: {}", e))?;
+
+                if let Some(release) = parse_release(&release_json) {
+                    context
+                        .set_pin_value("tag_name", json!(release.tag_name.clone()))
+                        .await?;
+                    context
+                        .set_pin_value("name", json!(release.name.clone().unwrap_or_default()))
+                        .await?;
+                    context.set_pin_value("release", json!(release)).await?;
+                    context.activate_exec_pin("exec_out").await?;
+                } else {
+                    context.log_message("Failed to parse release", LogLevel::Error);
+                    context.activate_exec_pin("error").await?;
+                }
+            }
+            Err(e) => {
+                context.log_message(&format!("Network error: {}", e), LogLevel::Error);
+                context.activate_exec_pin("error").await?;
+            }
+        }
+
+        Ok(())
+    }
+}
+
+// =============================================================================
+// Get Release by Tag Node
+// =============================================================================
+
+#[crate::register_node]
+#[derive(Default)]
+pub struct GetGitHubReleaseByTagNode {}
+
+impl GetGitHubReleaseByTagNode {
+    pub fn new() -> Self {
+        Self {}
+    }
+}
+
+#[async_trait]
+impl NodeLogic for GetGitHubReleaseByTagNode {
+    fn get_node(&self) -> Node {
+        let mut node = Node::new(
+            "data_github_get_release_by_tag",
+            "Get Release by Tag",
+            "Get a release by its tag name",
+            "Data/GitHub",
+        );
+        node.add_icon("/flow/icons/github.svg");
+
+        node.add_input_pin("exec_in", "Input", "Trigger", VariableType::Execution);
+
+        node.add_input_pin(
+            "provider",
+            "Provider",
+            "GitHub provider",
+            VariableType::Struct,
+        )
+        .set_schema::<GitHubProvider>()
+        .set_options(PinOptions::new().set_enforce_schema(true).build());
+
+        node.add_input_pin("owner", "Owner", "Repository owner", VariableType::String);
+        node.add_input_pin(
+            "repo",
+            "Repository",
+            "Repository name",
+            VariableType::String,
+        );
+        node.add_input_pin(
+            "tag",
+            "Tag",
+            "Tag name (e.g., v1.0.0)",
+            VariableType::String,
+        );
+
+        node.add_output_pin(
+            "exec_out",
+            "Success",
+            "Triggered on success",
+            VariableType::Execution,
+        );
+
+        node.add_output_pin(
+            "error",
+            "Error",
+            "Triggered on error",
+            VariableType::Execution,
+        );
+
+        node.add_output_pin(
+            "release",
+            "Release",
+            "Release details",
+            VariableType::Struct,
+        )
+        .set_schema::<GitHubRelease>();
+
+        node.add_output_pin("body", "Body", "Release notes", VariableType::String);
+
+        node.add_required_oauth_scopes(GITHUB_PROVIDER_ID, vec!["repo"]);
+        node.set_scores(
+            NodeScores::new()
+                .set_privacy(8)
+                .set_security(8)
+                .set_performance(9)
+                .set_governance(8)
+                .set_reliability(9)
+                .set_cost(9)
+                .build(),
+        );
+
+        node
+    }
+
+    async fn run(&self, context: &mut ExecutionContext) -> flow_like_types::Result<()> {
+        context.deactivate_exec_pin("exec_out").await?;
+        context.deactivate_exec_pin("error").await?;
+
+        let provider: GitHubProvider = context.evaluate_pin("provider").await?;
+        let owner: String = context.evaluate_pin("owner").await?;
+        let repo: String = context.evaluate_pin("repo").await?;
+        let tag: String = context.evaluate_pin("tag").await?;
+
+        if owner.is_empty() || repo.is_empty() || tag.is_empty() {
+            context.log_message("Owner, repository, and tag are required", LogLevel::Error);
+            context.activate_exec_pin("error").await?;
+            return Ok(());
+        }
+
+        let url = provider.api_url(&format!(
+            "/repos/{}/{}/releases/tags/{}",
+            owner,
+            repo,
+            urlencoding::encode(&tag)
+        ));
+
+        let client = reqwest::Client::new();
+        let response = client
+            .get(&url)
+            .header("Authorization", format!("Bearer {}", provider.access_token))
+            .header("Accept", "application/vnd.github+json")
+            .header("X-GitHub-Api-Version", "2022-11-28")
+            .header("User-Agent", "flow-like")
+            .send()
+            .await;
+
+        match response {
+            Ok(resp) => {
+                if !resp.status().is_success() {
+                    let status = resp.status();
+                    let error_text = resp.text().await.unwrap_or_default();
+                    context.log_message(
+                        &format!("GitHub API error {}: {}", status, error_text),
+                        LogLevel::Error,
+                    );
+                    context.activate_exec_pin("error").await?;
+                    return Ok(());
+                }
+
+                let release_json: Value = resp
+                    .json()
+                    .await
+                    .map_err(|e| flow_like_types::anyhow!("Failed to parse response: {}", e))?;
+
+                if let Some(release) = parse_release(&release_json) {
+                    context
+                        .set_pin_value("body", json!(release.body.clone().unwrap_or_default()))
+                        .await?;
+                    context.set_pin_value("release", json!(release)).await?;
+                    context.activate_exec_pin("exec_out").await?;
+                } else {
+                    context.log_message("Failed to parse release", LogLevel::Error);
+                    context.activate_exec_pin("error").await?;
+                }
+            }
+            Err(e) => {
+                context.log_message(&format!("Network error: {}", e), LogLevel::Error);
+                context.activate_exec_pin("error").await?;
+            }
+        }
+
+        Ok(())
+    }
+}
+
+// =============================================================================
+// Create Release Node
+// =============================================================================
+
+#[crate::register_node]
+#[derive(Default)]
+pub struct CreateGitHubReleaseNode {}
+
+impl CreateGitHubReleaseNode {
+    pub fn new() -> Self {
+        Self {}
+    }
+}
+
+#[async_trait]
+impl NodeLogic for CreateGitHubReleaseNode {
+    fn get_node(&self) -> Node {
+        let mut node = Node::new(
+            "data_github_create_release",
+            "Create Release",
+            "Create a new release",
+            "Data/GitHub",
+        );
+        node.add_icon("/flow/icons/github.svg");
+
+        node.add_input_pin("exec_in", "Input", "Trigger", VariableType::Execution);
+
+        node.add_input_pin(
+            "provider",
+            "Provider",
+            "GitHub provider",
+            VariableType::Struct,
+        )
+        .set_schema::<GitHubProvider>()
+        .set_options(PinOptions::new().set_enforce_schema(true).build());
+
+        node.add_input_pin("owner", "Owner", "Repository owner", VariableType::String);
+        node.add_input_pin(
+            "repo",
+            "Repository",
+            "Repository name",
+            VariableType::String,
+        );
+        node.add_input_pin(
+            "tag_name",
+            "Tag Name",
+            "Tag name for the release (e.g., v1.0.0)",
+            VariableType::String,
+        );
+
+        node.add_input_pin(
+            "name",
+            "Name",
+            "Release title (defaults to tag name if empty)",
+            VariableType::String,
+        )
+        .set_default_value(Some(json!("")));
+
+        node.add_input_pin(
+            "body",
+            "Body",
+            "Release notes (Markdown supported)",
+            VariableType::String,
+        )
+        .set_default_value(Some(json!("")));
+
+        node.add_input_pin(
+            "target_commitish",
+            "Target",
+            "Branch or SHA to tag (default: default branch)",
+            VariableType::String,
+        )
+        .set_default_value(Some(json!("")));
+
+        node.add_input_pin(
+            "draft",
+            "Draft",
+            "Create as draft release",
+            VariableType::Boolean,
+        )
+        .set_default_value(Some(json!(false)));
+
+        node.add_input_pin(
+            "prerelease",
+            "Prerelease",
+            "Mark as prerelease",
+            VariableType::Boolean,
+        )
+        .set_default_value(Some(json!(false)));
+
+        node.add_input_pin(
+            "generate_release_notes",
+            "Generate Notes",
+            "Auto-generate release notes from commits",
+            VariableType::Boolean,
+        )
+        .set_default_value(Some(json!(false)));
+
+        node.add_output_pin(
+            "exec_out",
+            "Success",
+            "Triggered on success",
+            VariableType::Execution,
+        );
+
+        node.add_output_pin(
+            "error",
+            "Error",
+            "Triggered on error",
+            VariableType::Execution,
+        );
+
+        node.add_output_pin(
+            "release",
+            "Release",
+            "Created release",
+            VariableType::Struct,
+        )
+        .set_schema::<GitHubRelease>();
+
+        node.add_output_pin(
+            "release_id",
+            "Release ID",
+            "ID of the created release",
+            VariableType::Integer,
+        );
+        node.add_output_pin(
+            "html_url",
+            "URL",
+            "URL to the release",
+            VariableType::String,
+        );
+
+        node.add_required_oauth_scopes(GITHUB_PROVIDER_ID, vec!["repo"]);
+        node.set_scores(
+            NodeScores::new()
+                .set_privacy(6)
+                .set_security(7)
+                .set_performance(8)
+                .set_governance(6)
+                .set_reliability(8)
+                .set_cost(8)
+                .build(),
+        );
+
+        node
+    }
+
+    async fn run(&self, context: &mut ExecutionContext) -> flow_like_types::Result<()> {
+        context.deactivate_exec_pin("exec_out").await?;
+        context.deactivate_exec_pin("error").await?;
+
+        let provider: GitHubProvider = context.evaluate_pin("provider").await?;
+        let owner: String = context.evaluate_pin("owner").await?;
+        let repo: String = context.evaluate_pin("repo").await?;
+        let tag_name: String = context.evaluate_pin("tag_name").await?;
+        let name: String = context.evaluate_pin("name").await.unwrap_or_default();
+        let body: String = context.evaluate_pin("body").await.unwrap_or_default();
+        let target_commitish: String = context
+            .evaluate_pin("target_commitish")
+            .await
+            .unwrap_or_default();
+        let draft: bool = context.evaluate_pin("draft").await.unwrap_or(false);
+        let prerelease: bool = context.evaluate_pin("prerelease").await.unwrap_or(false);
+        let generate_release_notes: bool = context
+            .evaluate_pin("generate_release_notes")
+            .await
+            .unwrap_or(false);
+
+        if owner.is_empty() || repo.is_empty() || tag_name.is_empty() {
+            context.log_message(
+                "Owner, repository, and tag name are required",
+                LogLevel::Error,
+            );
+            context.activate_exec_pin("error").await?;
+            return Ok(());
+        }
+
+        let url = provider.api_url(&format!("/repos/{}/{}/releases", owner, repo));
+
+        let mut request_body = json!({
+            "tag_name": tag_name,
+            "draft": draft,
+            "prerelease": prerelease,
+            "generate_release_notes": generate_release_notes
+        });
+
+        if !name.is_empty() {
+            request_body["name"] = json!(name);
+        }
+        if !body.is_empty() {
+            request_body["body"] = json!(body);
+        }
+        if !target_commitish.is_empty() {
+            request_body["target_commitish"] = json!(target_commitish);
+        }
+
+        let client = reqwest::Client::new();
+        let response = client
+            .post(&url)
+            .header("Authorization", format!("Bearer {}", provider.access_token))
+            .header("Accept", "application/vnd.github+json")
+            .header("X-GitHub-Api-Version", "2022-11-28")
+            .header("User-Agent", "flow-like")
+            .json(&request_body)
+            .send()
+            .await;
+
+        match response {
+            Ok(resp) => {
+                if !resp.status().is_success() {
+                    let status = resp.status();
+                    let error_text = resp.text().await.unwrap_or_default();
+                    context.log_message(
+                        &format!("GitHub API error {}: {}", status, error_text),
+                        LogLevel::Error,
+                    );
+                    context.activate_exec_pin("error").await?;
+                    return Ok(());
+                }
+
+                let release_json: Value = resp
+                    .json()
+                    .await
+                    .map_err(|e| flow_like_types::anyhow!("Failed to parse response: {}", e))?;
+
+                if let Some(release) = parse_release(&release_json) {
+                    context.log_message(
+                        &format!("Created release: {}", release.tag_name),
+                        LogLevel::Info,
+                    );
+                    context
+                        .set_pin_value("release_id", json!(release.id))
+                        .await?;
+                    context
+                        .set_pin_value("html_url", json!(release.html_url.clone()))
+                        .await?;
+                    context.set_pin_value("release", json!(release)).await?;
+                    context.activate_exec_pin("exec_out").await?;
+                } else {
+                    context.log_message("Failed to parse created release", LogLevel::Error);
+                    context.activate_exec_pin("error").await?;
+                }
+            }
+            Err(e) => {
+                context.log_message(&format!("Network error: {}", e), LogLevel::Error);
+                context.activate_exec_pin("error").await?;
+            }
+        }
+
+        Ok(())
+    }
+}

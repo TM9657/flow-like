@@ -7,6 +7,19 @@ import {
   LuPlug2,
   LuArrowRight,
 } from "react-icons/lu";
+import type { Lang, TranslationKey } from "../i18n";
+import { translations, defaultLang } from "../i18n";
+
+interface Props {
+  lang?: Lang;
+}
+
+const { lang = defaultLang } = Astro.props;
+const t = (key: TranslationKey): string => {
+  const langTranslations = translations[lang] as Record<string, string>;
+  const enTranslations = translations.en as Record<string, string>;
+  return langTranslations?.[key] ?? enTranslations[key] ?? key;
+};
 ---
 
 <section
@@ -53,19 +66,17 @@ import {
             <span class="absolute inline-flex h-full w-full rounded-full bg-secondary opacity-60 animate-ping"></span>
             <span class="relative flex h-2 w-2 rounded-full bg-secondary"></span>
           </div>
-          <span>Reusable building blocks</span>
+          <span>{t("extensibility.tagline")}</span>
         </div>
 
         <h2
           class="text-4xl font-extrabold sm:text-5xl bg-gradient-to-r from-foreground via-secondary to-tertiary bg-clip-text text-transparent leading-tight"
         >
-          Turn any system into a node you can trust
+          {t("extensibility.headline")}
         </h2>
 
         <p class="mt-6 text-lg text-muted-foreground">
-          Connect APIs, databases, devices, or spreadsheets without guesswork.
-          Each node has a clear interface, tests, and versions — so what worked
-          yesterday works tomorrow, for you and your team.
+          {t("extensibility.description")}
         </p>
 
         <!-- connector categories -->

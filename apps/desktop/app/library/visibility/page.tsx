@@ -9,6 +9,7 @@ import {
 	Separator,
 	useBackend,
 	useInvoke,
+	useSpotlightStore,
 } from "@tm9657/flow-like-ui";
 import { EyeIcon, FilesIcon, LayoutGridIcon, Sparkles } from "lucide-react";
 import { useRouter } from "next/navigation";
@@ -120,7 +121,8 @@ export default function Page() {
 							{
 								label: "Create Your First App",
 								onClick: () => {
-									router.push("/library/new");
+									useSpotlightStore.getState().open();
+									useSpotlightStore.getState().setMode("quick-create");
 								},
 							},
 						]}

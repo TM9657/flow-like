@@ -17,6 +17,7 @@
 		"db:view": "bun run --cwd packages/api db:view",
 		"db:push:sync": "bun run --cwd packages/api db:push:sync",
 		"dev:api": "bun run --cwd ./apps/backend/local/api dev",
+		"dev:runtime": "bun run --cwd ./apps/backend/local/runtime dev",
 		"dev:embedded": "bun run --cwd ./apps/embedded dev",
 		"dev:website": "bun run --cwd ./apps/website dev",
 		"dev:docs": "bun run --cwd ./apps/docs dev",

@@ -65,6 +65,8 @@ next-env.d.ts
 .cargo/config.toml
 .codacy/codacy.yaml
 
+# Kubernetes secrets
+**/values-secrets.yaml
 
 #Ignore vscode AI rules
 .github/instructions/codacy.instructions.md

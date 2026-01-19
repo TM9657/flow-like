@@ -1,9 +1,22 @@
 ---
 import { Image } from "astro:assets";
+import type { Lang, TranslationKey } from "../i18n";
+import { translations, defaultLang } from "../i18n";
 
 import portabilityInvite from "../images/index/portability-invite.png";
 import portabilityOffline from "../images/index/portability-offline.png";
 import portabilityShare from "../images/index/portability-share.png";
+
+interface Props {
+  lang?: Lang;
+}
+
+const { lang = defaultLang } = Astro.props;
+const t = (key: TranslationKey): string => {
+  const langTranslations = translations[lang] as Record<string, string>;
+  const enTranslations = translations.en as Record<string, string>;
+  return langTranslations?.[key] ?? enTranslations[key] ?? key;
+};
 ---
 
 <section
@@ -43,19 +56,17 @@ import portabilityShare from "../images/index/portability-share.png";
             <span class="absolute inline-flex h-full w-full rounded-full bg-primary opacity-60 animate-ping"></span>
             <span class="relative flex h-2 w-2 rounded-full bg-primary"></span>
           </div>
-          <span>Lifecycle with context</span>
+          <span>{t("portability.tagline")}</span>
         </div>
 
         <h2 class="text-4xl font-bold sm:text-5xl leading-tight">
-          Start <span class="text-primary">offline</span>. Go <span
-            class="text-secondary">online</span
-          > later. <span class="text-tertiary">Deploy</span> with one click.
+          {t("portability.headline.start")} <span class="text-primary">{t("portability.headline.offline")}</span>. {t("portability.headline.go")} <span
+            class="text-secondary">{t("portability.headline.online")}</span
+          > {t("portability.headline.later")} <span class="text-tertiary">{t("portability.headline.deploy")}</span> {t("portability.headline.click")}
         </h2>
 
         <p class="mt-6 text-lg text-muted-foreground max-w-prose">
-          Manage the whole journey without losing visibility. Start a private
-          draft, invite your team when it’s ready, and go live — with the same
-          saved “what went in, what changed, what came out” at every step.
+          {t("portability.description")}
         </p>
       </div>
 
@@ -69,21 +80,21 @@ import portabilityShare from "../images/index/portability-share.png";
             data-tab="offline"
             class="stage-tab aria-selected:shadow-sm aria-selected:border-primary/40 aria-selected:bg-primary/10 aria-selected:text-primary flex-1 rounded-xl border border-transparent px-4 py-2 text-sm font-medium transition"
           >
-            Solo
+            {t("portability.tab.solo")}
           </button>
           <button
             type="button"
             data-tab="team"
             class="stage-tab aria-selected:shadow-sm aria-selected:border-secondary/40 aria-selected:bg-secondary/10 aria-selected:text-secondary flex-1 rounded-xl border border-transparent px-4 py-2 text-sm font-medium transition"
           >
-            Team
+            {t("portability.tab.team")}
           </button>
           <button
             type="button"
             data-tab="prod"
             class="stage-tab aria-selected:shadow-sm aria-selected:border-tertiary/40 aria-selected:bg-tertiary/10 aria-selected:text-tertiary flex-1 rounded-xl border border-transparent px-4 py-2 text-sm font-medium transition"
           >
-            Live
+            {t("portability.tab.prod")}
           </button>
         </div>
 
@@ -92,7 +103,7 @@ import portabilityShare from "../images/index/portability-share.png";
           <ol class="flex items-center gap-3">
             <li class="flex items-center gap-2">
               <span class="size-2 rounded-full bg-primary animate-pulse"></span>
-              <span class="text-xs font-medium">Solo</span>
+              <span class="text-xs font-medium">{t("portability.tab.solo")}</span>
             </li>
             <div class="relative h-1 flex-1">
               <div class="absolute inset-0 rounded-full bg-muted/50"></div>
@@ -107,7 +118,7 @@ import portabilityShare from "../images/index/portability-share.png";
               <span
                 class="size-2 rounded-full bg-secondary animate-pulse [animation-delay:.25s]"
               ></span>
-              <span class="text-xs font-medium">Team</span>
+              <span class="text-xs font-medium">{t("portability.tab.team")}</span>
             </li>
             <div class="relative h-1 flex-1">
               <div class="absolute inset-0 rounded-full bg-muted/50"></div>
@@ -122,11 +133,11 @@ import portabilityShare from "../images/index/portability-share.png";
               <span
                 class="size-2 rounded-full bg-tertiary animate-pulse [animation-delay:.4s]"
               ></span>
-              <span class="text-xs font-medium">Live</span>
+              <span class="text-xs font-medium">{t("portability.tab.prod")}</span>
             </li>
           </ol>
           <p class="mt-2 text-xs text-muted-foreground">
-            Same behavior at every stage.
+            {t("portability.track.behavior")}
           </p>
         </div>
       </div>
@@ -148,10 +159,9 @@ import portabilityShare from "../images/index/portability-share.png";
               1
             </div>
             <div>
-              <h3 class="text-xl font-semibold mb-1.5">Sketch privately</h3>
+              <h3 class="text-xl font-semibold mb-1.5">{t("portability.step1.title")}</h3>
               <p class="text-muted-foreground">
-                Try ideas on your machine. Each step saves what went in and what
-                came out, so you can see what changed — no guesswork.
+                {t("portability.step1.description")}
               </p>
             </div>
           </div>
@@ -173,11 +183,10 @@ import portabilityShare from "../images/index/portability-share.png";
             </div>
             <div>
               <h3 class="text-xl font-semibold mb-1.5">
-                Make it Online & Invite
+                {t("portability.step2.title")}
               </h3>
               <p class="text-muted-foreground">
-                Flip the project online and invite colleagues. Roles and
-                approvals come along for the ride.
+                {t("portability.step2.description")}
               </p>
             </div>
           </div>
@@ -199,11 +208,10 @@ import portabilityShare from "../images/index/portability-share.png";
             </div>
             <div>
               <h3 class="text-xl font-semibold mb-1.5">
-                Go live with confidence
+                {t("portability.step3.title")}
               </h3>
               <p class="text-muted-foreground">
-                Choose your target — Edge, Cloud, or on-prem. Click deploy. Same
-                validated graph, different runtime target.
+                {t("portability.step3.description")}
               </p>
             </div>
           </div>

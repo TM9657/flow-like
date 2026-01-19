@@ -1,0 +1,16 @@
+# Environment files (contain secrets)
+.env
+.env.local
+.env.*.local
+
+# Kubernetes generated files
+*.kubeconfig
+
+# Build artifacts
+target/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo

@@ -3,7 +3,6 @@ import { CalendarIcon, PlusCircleIcon, XIcon } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { cn } from "../../..";
 import { Calendar } from "../../../components/ui/calendar";
-import type { ISystemTime } from "../../../lib/schema/flow/board";
 import type { IVariable } from "../../../lib/schema/flow/variable";
 import {
 	convertJsonToUint8Array,
@@ -28,19 +27,26 @@ export function DateArrayVariable({
 	variable: IVariable;
 	onChange: (v: IVariable) => void;
 }>) {
-	// parse once per render
-	const parsedTimes = useMemo<ISystemTime[]>(() => {
+	const parsedTimes = useMemo<Date[]>(() => {
 		const p = parseUint8ArrayToJson(variable.default_value);
-		return Array.isArray(p) ? p : [];
+		if (!Array.isArray(p)) return [];
+
+		return p.map((item) => {
+			if (typeof item === "string") {
+				return new Date(item);
+			}
+			// Fallback for old SystemTime format
+			if (typeof item === "object" && "secs_since_epoch" in item) {
+				return new Date(
+					item.secs_since_epoch * 1000 +
+						(item.nanos_since_epoch || 0) / 1_000_000,
+				);
+			}
+			return new Date();
+		});
 	}, [variable.default_value]);
 
-	// convert to Date[]
-	const values = useMemo<Date[]>(
-		() => parsedTimes.map((t) => new Date(t.secs_since_epoch * 1000)),
-		[parsedTimes],
-	);
-
-	// state for the “new” entry
+	// state for the "new" entry
 	const [newDate, setNewDate] = useState<Date>(new Date());
 	const [newTime, setNewTime] = useState<string>(format(newDate, "HH:mm"));
 
@@ -59,11 +65,7 @@ export function DateArrayVariable({
 			hrs,
 			mins,
 		);
-		const newSys: ISystemTime = {
-			secs_since_epoch: Math.floor(dt.getTime() / 1000),
-			nanos_since_epoch: dt.getTime() * 1_000_000,
-		};
-		const updated = [...parsedTimes, newSys];
+		const updated = [...parsedTimes, dt.toISOString()];
 		onChange({
 			...variable,
 			default_value: convertJsonToUint8Array(updated),
@@ -73,13 +75,15 @@ export function DateArrayVariable({
 	const handleRemove = useCallback(
 		(idx: number) => {
 			if (disabled) return;
-			const updated = parsedTimes.filter((_, i) => i !== idx);
+			const p = parseUint8ArrayToJson(variable.default_value);
+			const arr = Array.isArray(p) ? p : [];
+			const updated = arr.filter((_, i) => i !== idx);
 			onChange({
 				...variable,
 				default_value: convertJsonToUint8Array(updated),
 			});
 		},
-		[disabled, parsedTimes, variable, onChange],
+		[disabled, variable, onChange],
 	);
 
 	return (
@@ -142,11 +146,11 @@ export function DateArrayVariable({
 				</Button>
 			</div>
 
-			{values.length > 0 && (
+			{parsedTimes.length > 0 && (
 				<>
 					<Separator />
 					<div className="flex flex-col gap-2 rounded-md border p-3">
-						{values.map((dt, idx) => (
+						{parsedTimes.map((dt, idx) => (
 							<Badge
 								key={`${dt.toString()}-${idx}`}
 								variant="secondary"

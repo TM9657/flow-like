@@ -1,4 +1,5 @@
 use crate::{
+    backend_jwt::{self, BackendJwtError, TokenType, get_jwks, get_kid, issuer, make_time_claims},
     ensure_permission,
     entity::{board_sync, prelude::*},
     error::ApiError,
@@ -11,57 +12,33 @@ use axum::{
     extract::{Path, State},
 };
 use flow_like_types::base64::Engine;
-use flow_like_types::base64::engine::general_purpose::{STANDARD, URL_SAFE_NO_PAD};
+use flow_like_types::base64::engine::general_purpose::STANDARD;
 use flow_like_types::{anyhow, create_id};
-use jsonwebtoken::{Algorithm, EncodingKey, Header, encode};
-use p256::{
-    PublicKey as P256PublicKey, elliptic_curve::sec1::ToEncodedPoint, pkcs8::DecodePublicKey,
-};
 use sea_orm::TransactionTrait;
 use sea_orm::{ActiveModelTrait, ActiveValue::Set, ColumnTrait, EntityTrait, QueryFilter};
 use serde::{Deserialize, Serialize};
-use std::sync::LazyLock;
 
 // ============================================================================
-// Realtime collaboration auth (JWT + room key) + JWKS
+// Realtime collaboration auth (JWT + room key) using unified backend JWT
 // ============================================================================
 
-// Generated via: tools/gen-pk.sh
-static PRIVATE_KEY_PEM: LazyLock<Vec<u8>> = LazyLock::new(|| {
-    let b64 = std::env::var("REALTIME_KEY").expect("Missing REALTIME_KEY env var");
-    STANDARD
-        .decode(&b64)
-        .expect("Failed to decode REALTIME_KEY b64")
-});
-
-static PUBLIC_KEY_PEM: LazyLock<Vec<u8>> = LazyLock::new(|| {
-    let b64 = std::env::var("REALTIME_PUB").expect("Missing REALTIME_PUB env var");
-    STANDARD
-        .decode(&b64)
-        .expect("Failed to decode REALTIME_PUB b64")
-});
-
-static KID: LazyLock<String> = LazyLock::new(|| {
-    std::env::var("REALTIME_KID").unwrap_or_else(|_| "realtime-es256-v1".to_string())
-});
-
-const ISSUER: &str = "flow-like";
-const AUDIENCE: &str = "y-webrtc";
 const SCOPE: &str = "realtime.read";
 
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RealtimeClaims {
-    sub: String,
-    name: Option<String>,
-    app_id: String,
-    board_id: String,
-    scope: String,
-    iss: String,
-    aud: String,
-    iat: i64,
-    nbf: i64,
-    exp: i64,
-    jti: String,
+    pub sub: String,
+    pub name: Option<String>,
+    pub app_id: String,
+    pub board_id: String,
+    pub scope: String,
+    #[serde(rename = "typ")]
+    pub token_type: TokenType,
+    pub iss: String,
+    pub aud: String,
+    pub iat: i64,
+    pub nbf: i64,
+    pub exp: i64,
+    pub jti: String,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -72,25 +49,6 @@ pub struct RealtimeParams {
     encryption_key: String,
     /// Key identifier (ISO date, e.g. "2025-10-23")
     key_id: String,
-}
-
-// ---- JWKS types ----
-
-#[derive(Serialize)]
-pub struct Jwk {
-    kty: String,
-    crv: String,
-    x: String,
-    y: String,
-    alg: String,
-    kid: String,
-    #[serde(rename = "use")]
-    r#use: String,
-}
-
-#[derive(Serialize)]
-pub struct Jwks {
-    keys: Vec<Jwk>,
 }
 
 fn generate_encryption_key() -> String {
@@ -113,32 +71,14 @@ pub async fn jwks(
     State(_state): State<AppState>,
     Extension(user): Extension<AppUser>,
     Path((_app_id, _board_id)): Path<(String, String)>,
-) -> Result<Json<Jwks>, ApiError> {
+) -> Result<Json<backend_jwt::Jwks>, ApiError> {
     user.sub()?;
-    // Parse PEM -> P-256 public key, then extract uncompressed point (x,y).
-    let pem = String::from_utf8_lossy(&PUBLIC_KEY_PEM);
-    let pubkey: P256PublicKey = P256PublicKey::from_public_key_pem(&pem).map_err(|e| {
-        ApiError::InternalError(anyhow!("Invalid ES256 public key PEM: {}", e).into())
-    })?;
-    let encoded = pubkey.to_encoded_point(false); // uncompressed
-    let x = encoded
-        .x()
-        .ok_or_else(|| ApiError::InternalError(anyhow!("Missing X coord").into()))?;
-    let y = encoded
-        .y()
-        .ok_or_else(|| ApiError::InternalError(anyhow!("Missing Y coord").into()))?;
 
-    let jwk = Jwk {
-        kty: "EC".to_string(),
-        crv: "P-256".to_string(),
-        x: URL_SAFE_NO_PAD.encode(x),
-        y: URL_SAFE_NO_PAD.encode(y),
-        alg: "ES256".to_string(),
-        kid: KID.clone(),
-        r#use: "sig".to_string(),
-    };
+    // Get JWKS from unified backend module
+    let jwks = get_jwks()
+        .map_err(|e| ApiError::InternalError(anyhow!("Realtime not configured: {}", e).into()))?;
 
-    Ok(Json(Jwks { keys: vec![jwk] }))
+    Ok(Json(jwks))
 }
 
 // ============================================================================
@@ -163,9 +103,7 @@ pub async fn access(
 
     let (encryption_key, key_id) = get_or_rotate_room_key(&state, &app_id, &board_id).await?;
 
-    let iat = chrono::Utc::now().timestamp();
-    let exp = iat + (3 * 60 * 60); // 3 hours
-    let nbf = iat - 30; // small skew window
+    let time = make_time_claims(TokenType::Realtime, None);
 
     let claims = RealtimeClaims {
         sub: sub.clone(),
@@ -173,22 +111,17 @@ pub async fn access(
         app_id: app_id.clone(),
         board_id: board_id.clone(),
         scope: SCOPE.to_string(),
-        iss: ISSUER.to_string(),
-        aud: AUDIENCE.to_string(),
-        iat,
-        nbf,
-        exp,
+        token_type: TokenType::Realtime,
+        iss: issuer().to_string(),
+        aud: TokenType::Realtime.audience().to_string(),
+        iat: time.iat,
+        nbf: time.nbf,
+        exp: time.exp,
         jti: create_id(),
     };
 
-    let mut header = Header::new(Algorithm::ES256);
-    header.kid = Some(KID.clone());
-
-    let encoding_key = EncodingKey::from_ec_pem(&PRIVATE_KEY_PEM)
-        .map_err(|e| ApiError::InternalError(anyhow!("Failed to load EC key: {}", e).into()))?;
-
-    let jwt = encode(&header, &claims, &encoding_key)
-        .map_err(|e| ApiError::InternalError(anyhow!("Failed to encode JWT: {}", e).into()))?;
+    let jwt = backend_jwt::sign(&claims)
+        .map_err(|e| ApiError::InternalError(anyhow!("Realtime not configured: {}", e).into()))?;
 
     Ok(Json(RealtimeParams {
         jwt,

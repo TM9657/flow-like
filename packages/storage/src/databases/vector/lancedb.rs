@@ -138,6 +138,68 @@ impl LanceDBVectorStore {
         Ok(indices.into_iter().map(IndexConfigDto::from).collect())
     }
 
+    pub async fn drop_index(&self, name: &str) -> Result<()> {
+        let table = self
+            .table
+            .clone()
+            .ok_or_else(|| anyhow!("Table not initialized"))?;
+        table.drop_index(name).await?;
+        Ok(())
+    }
+
+    pub async fn update(
+        &self,
+        filter: &str,
+        updates: std::collections::HashMap<String, Value>,
+    ) -> Result<()> {
+        let table = self
+            .table
+            .clone()
+            .ok_or_else(|| anyhow!("Table not initialized"))?;
+
+        let mut op = table.update();
+        op = op.only_if(filter);
+
+        for (column, value) in updates {
+            let value_str = match &value {
+                Value::String(s) => format!("'{}'", s.replace('\'', "''")),
+                Value::Number(n) => n.to_string(),
+                Value::Bool(b) => b.to_string(),
+                Value::Null => "NULL".to_string(),
+                _ => format!("'{}'", value.to_string().replace('\'', "''")),
+            };
+            op = op.column(&column, &value_str);
+        }
+
+        op.execute().await?;
+        Ok(())
+    }
+
+    pub async fn add_column(&self, name: &str, sql_expression: &str) -> Result<()> {
+        let table = self
+            .table
+            .clone()
+            .ok_or_else(|| anyhow!("Table not initialized"))?;
+
+        let transform = NewColumnTransform::SqlExpressions(vec![(
+            name.to_string(),
+            sql_expression.to_string(),
+        )]);
+        table.add_columns(transform, None).await?;
+        Ok(())
+    }
+
+    pub async fn make_column_nullable(&self, column: &str, nullable: bool) -> Result<()> {
+        let table = self
+            .table
+            .clone()
+            .ok_or_else(|| anyhow!("Table not initialized"))?;
+
+        let alteration = ColumnAlteration::new(column.to_string()).set_nullable(nullable);
+        table.alter_columns(&[alteration]).await?;
+        Ok(())
+    }
+
     pub async fn to_datafusion(&self) -> Result<lancedb::table::datafusion::BaseTableAdapter> {
         let table = self
             .table

@@ -1,9 +1,22 @@
 ---
 import { Image } from "astro:assets";
 import { LuLock, LuSearch, LuUnplug } from "react-icons/lu";
+import type { Lang, TranslationKey } from "../i18n";
+import { translations, defaultLang } from "../i18n";
 
 import designOverview from "../images/index/design-overview.png";
 import designValidation from "../images/index/design-validation.png";
+
+interface Props {
+  lang?: Lang;
+}
+
+const { lang = defaultLang } = Astro.props;
+const t = (key: TranslationKey): string => {
+  const langTranslations = translations[lang] as Record<string, string>;
+  const enTranslations = translations.en as Record<string, string>;
+  return langTranslations?.[key] ?? enTranslations[key] ?? key;
+};
 ---
 
 <section
@@ -42,20 +55,17 @@ import designValidation from "../images/index/design-validation.png";
             <span class="absolute inline-flex h-full w-full rounded-full bg-secondary opacity-60 animate-ping"></span>
             <span class="relative flex h-2 w-2 rounded-full bg-secondary"></span>
           </div>
-          <span>Visual builder</span>
+          <span>{t("design.tagline")}</span>
         </div>
 
         <h2
           class="text-4xl font-bold sm:text-5xl bg-gradient-to-r from-foreground to-secondary bg-clip-text text-transparent leading-tight"
         >
-          Design workflows <span class="text-secondary">visually</span>
+          {t("design.headline")} <span class="text-secondary">{t("design.headline.highlight")}</span>
         </h2>
 
         <p class="mt-6 text-lg text-muted-foreground">
-          Draw your flow and see your <b>data’s journey</b> as you build: what came
-          in, how it was filtered and transformed, and what went out. Inline feedback
-          keeps things usable, and snapshots let you reproduce issues and compare
-          runs—no guesswork.
+          {t("design.description")}
         </p>
       </div>
 
@@ -71,10 +81,9 @@ import designValidation from "../images/index/design-validation.png";
               <LuUnplug className="w-6 h-6 text-primary-foreground" />
             </div>
             <div>
-              <h3 class="font-semibold text-lg">Connections that fit</h3>
+              <h3 class="font-semibold text-lg">{t("design.feature1.title")}</h3>
               <p class="text-muted-foreground">
-                Pins know what they accept, so you wire correctly and refactors
-                don’t break flows.
+                {t("design.feature1.desc")}
               </p>
             </div>
           </div>
@@ -90,10 +99,9 @@ import designValidation from "../images/index/design-validation.png";
               <LuLock className="w-6 h-6 text-secondary-foreground" />
             </div>
             <div>
-              <h3 class="font-semibold text-lg">Instant feedback</h3>
+              <h3 class="font-semibold text-lg">{t("design.feature2.title")}</h3>
               <p class="text-muted-foreground">
-                Miswired edges surface immediately. Fix mistakes as you
-                go—before they ship.
+                {t("design.feature2.desc")}
               </p>
             </div>
           </div>
@@ -109,10 +117,9 @@ import designValidation from "../images/index/design-validation.png";
               <LuSearch className="w-6 h-6 text-tertiary-foreground" />
             </div>
             <div>
-              <h3 class="font-semibold text-lg">See every input & output</h3>
+              <h3 class="font-semibold text-lg">{t("design.feature3.title")}</h3>
               <p class="text-muted-foreground">
-                Inspect payloads and timings at each step. Trace changes and
-                explain results with confidence.
+                {t("design.feature3.desc")}
               </p>
             </div>
           </div>

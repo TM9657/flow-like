@@ -4,8 +4,10 @@ import {
 	BanIcon,
 	CheckCircle2Icon,
 	CircleXIcon,
+	CloudIcon,
 	CornerRightUpIcon,
 	EllipsisVerticalIcon,
+	HardDriveIcon,
 	LogsIcon,
 	RefreshCcwIcon,
 	ScrollIcon,
@@ -220,7 +222,7 @@ const FlowRunsComponent = ({
 				/>
 			)}
 			<div className="flex flex-col gap-2 max-h-full overflow-y-auto">
-				{currentLogs.map((run) => (
+				{currentLogs?.map((run) => (
 					<button
 						key={run.run_id}
 						className={`flex flex-row gap-2 items-center justify-between border p-2 rounded-md ${currentMetadata?.run_id === run.run_id ? "bg-muted/50" : "hover:bg-muted/50"}`}
@@ -232,19 +234,40 @@ const FlowRunsComponent = ({
 							}
 
 							setCurrentMetadata(run);
+
+							// Parse version string safely - handle cases like "v1", "v1-0", "v1-0-0"
+							const parseVersion = (
+								versionStr: string,
+							): [number, number, number] | undefined => {
+								const parts = versionStr
+									.replace("v", "")
+									.split("-")
+									.map(Number);
+								if (parts.length >= 3 && parts.every((n) => !isNaN(n))) {
+									return [parts[0], parts[1], parts[2]];
+								}
+								// If version doesn't have 3 parts, return undefined (use latest)
+								return undefined;
+							};
+
 							onVersionChange(
 								run.version === `v${version.join("-")}`
 									? undefined
-									: (run.version.replace("v", "").split("-").map(Number) as [
-											number,
-											number,
-											number,
-										]),
+									: parseVersion(run.version),
 							);
 						}}
 					>
 						<div className="flex flex-col gap-2 items-start justify-center">
 							<div className="flex flex-row gap-2 items-center">
+								{run.is_remote ? (
+									<span title="Remote execution">
+										<CloudIcon className="w-3 h-3 text-blue-500" />
+									</span>
+								) : (
+									<span title="Local execution">
+										<HardDriveIcon className="w-3 h-3 text-muted-foreground" />
+									</span>
+								)}
 								<small className="leading-none">
 									{nodes[run.node_id]?.friendly_name ?? "Deleted Event"}
 								</small>
@@ -322,9 +345,19 @@ const FlowRunsComponent = ({
 											executeBoard(node, parseUint8ArrayToJson(run.payload));
 										}}
 										className="flex flex-row gap-2 items-center"
+										disabled={
+											run.is_remote &&
+											(!run.payload || run.payload.length === 0)
+										}
 									>
 										<RefreshCcwIcon className="w-4 h-4" />
 										Re-Run
+										{run.is_remote &&
+											(!run.payload || run.payload.length === 0) && (
+												<span className="text-xs text-muted-foreground">
+													(no payload)
+												</span>
+											)}
 									</DropdownMenuItem>
 								</DropdownMenuContent>
 							</DropdownMenu>

@@ -1,0 +1,28 @@
+[package]
+name = "flow-like-executor"
+version = "0.1.0"
+edition = "2021"
+description = "Environment-agnostic execution runtime for Flow-Like"
+
+[dependencies]
+flow-like.workspace = true
+flow-like-types.workspace = true
+flow-like-storage.workspace = true
+flow-like-catalog.workspace = true
+
+serde = { workspace = true, features = ["derive"] }
+serde_json.workspace = true
+tracing.workspace = true
+chrono.workspace = true
+reqwest = { version = "0.12", features = ["json"] }
+tokio = { version = "1", features = ["sync", "time"] }
+axum.workspace = true
+futures-util.workspace = true
+
+# JWT verification
+jsonwebtoken = "9"
+base64 = "0.22"
+p256 = { version = "0.13", features = ["pkcs8", "pem"] }
+
+[dev-dependencies]
+tokio = { version = "1", features = ["full", "test-util"] }

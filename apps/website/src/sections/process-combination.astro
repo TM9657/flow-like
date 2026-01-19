@@ -1,6 +1,19 @@
 ---
 import LayerViz from "../components/layer-viz.astro";
 import { LuBriefcaseBusiness, LuCode, LuDatabase } from "react-icons/lu";
+import type { Lang, TranslationKey } from "../i18n";
+import { translations, defaultLang } from "../i18n";
+
+interface Props {
+  lang?: Lang;
+}
+
+const { lang = defaultLang } = Astro.props;
+const t = (key: TranslationKey): string => {
+  const langTranslations = translations[lang] as Record<string, string>;
+  const enTranslations = translations.en as Record<string, string>;
+  return langTranslations?.[key] ?? enTranslations[key] ?? key;
+};
 ---
 
 <section
@@ -37,17 +50,15 @@ import { LuBriefcaseBusiness, LuCode, LuDatabase } from "react-icons/lu";
             >
                 <div class="w-2 h-2 bg-indigo-500 rounded-full animate-pulse shadow-[0_0_12px_rgba(99,102,241,0.8)]">
                 </div>
-                One flow, many views
+                {t("process.tagline")}
             </div>
             <h2
                 class="text-4xl font-bold sm:text-5xl lg:text-6xl bg-gradient-to-r from-foreground via-indigo-500 to-cyan-500 bg-clip-text text-transparent drop-shadow-sm"
             >
-                One process, seen three ways
+                {t("process.headline")}
             </h2>
             <p class="mt-6 text-lg text-muted-foreground max-w-3xl mx-auto leading-relaxed">
-                People think in steps. Systems run on data. IT cares about
-                logic. Flow-Like shows all three together, so every role sees
-                the same truth — just in their own language.
+                {t("process.description")}
             </p>
         </div>
 

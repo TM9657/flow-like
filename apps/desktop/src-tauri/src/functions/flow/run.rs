@@ -248,7 +248,7 @@ pub async fn list_runs(
     status: Option<LogLevel>,
     limit: Option<usize>,
     offset: Option<usize>,
-    last_meta: Option<LogMeta>,
+    _last_meta: Option<LogMeta>,
 ) -> Result<Vec<LogMeta>, TauriFunctionError> {
     let limit = limit.unwrap_or(100);
     let offset = offset.unwrap_or(0);
@@ -324,8 +324,9 @@ pub async fn list_runs(
         .map_err(|_| flow_like_types::anyhow!("Failed to collect results"))?;
     let mut log_meta = Vec::with_capacity(results.len() * 10);
     for result in results {
-        let result = serde_arrow::from_record_batch::<Vec<LogMeta>>(&result).unwrap_or_default();
-        log_meta.extend(result);
+        let stored: Vec<flow_like::flow::execution::StoredLogMeta> =
+            serde_arrow::from_record_batch(&result).unwrap_or_default();
+        log_meta.extend(stored.into_iter().map(LogMeta::from));
     }
     Ok(log_meta)
 

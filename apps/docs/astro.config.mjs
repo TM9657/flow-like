@@ -17,9 +17,10 @@ export default defineConfig({
 			title: "Flow-Like",
 			favicon: "/ico-light.svg",
 			description:
-				"Flow-Like is a visual programming language for creating very fast and efficient workflows and automations.",
+				"Build typed, scalable workflows with visual design, Rust performance, and production-ready governance.",
 			components: {
 				Hero: "./src/components/docs/Hero.astro",
+				SiteTitle: "./src/components/docs/SiteTitle.astro",
 			},
 			head: [
 				{
@@ -66,30 +67,169 @@ posthog.init('phc_hxGZEJaPqyCNzqqfrYyuUDCUSpcc7RSbwh07t4xtfrE', { api_host:'http
 				},
 			],
 			lastUpdated: true,
+			tableOfContents: { minHeadingLevel: 2, maxHeadingLevel: 4 },
 			sidebar: [
 				{
 					label: "Getting Started",
-					autogenerate: { directory: "start" },
-				},
-				{
-					label: "Apps",
-					autogenerate: { directory: "apps" },
+					items: [
+						{ label: "Quick Start", slug: "start/getting-started" },
+						{ label: "What is Flow-Like?", slug: "start/what-is-flow-like" },
+						{ label: "Download & Install", slug: "start/get" },
+						{ label: "First Steps", slug: "start/first-use" },
+						{ label: "Login & Accounts", slug: "start/login" },
+						{ label: "AI Models", slug: "start/models" },
+						{ label: "Profiles", slug: "start/profiles" },
+						{ label: "Get Support", slug: "start/support" },
+					],
 				},
 				{
 					label: "Studio",
-					autogenerate: { directory: "studio" },
+					items: [
+						{ label: "Overview", slug: "studio/overview" },
+						{ label: "Working with Nodes", slug: "studio/nodes" },
+						{ label: "Connecting Pins", slug: "studio/connecting" },
+						{ label: "Layers & Organization", slug: "studio/layers" },
+						{ label: "Variables", slug: "studio/variables" },
+						{ label: "Logging & Debugging", slug: "studio/logging" },
+						{ label: "Version Control", slug: "studio/versioning" },
+					],
+				},
+				{
+					label: "Apps",
+					items: [
+						{ label: "Overview", slug: "apps/overview" },
+						{ label: "Creating Apps", slug: "apps/create" },
+						{ label: "Boards & Flows", slug: "apps/boards" },
+						{ label: "Chat UI", slug: "apps/chat-ui" },
+						{ label: "Custom UI", slug: "apps/a2ui" },
+						{ label: "Templates", slug: "apps/templates" },
+						{ label: "Events", slug: "apps/events" },
+						{ label: "Storage", slug: "apps/storage" },
+						{ label: "Sharing", slug: "apps/share" },
+						{ label: "Offline & Online", slug: "apps/offline-online" },
+					],
+				},
+				{
+					label: "Self Hosting",
+					items: [
+						{ label: "Overview", slug: "self-hosting/overview" },
+						{
+							label: "Execution Backends",
+							slug: "self-hosting/execution-backends",
+						},
+						{ label: "Desktop Client", slug: "self-hosting/desktop-client" },
+						{
+							label: "Docker Compose",
+							collapsed: true,
+							autogenerate: { directory: "self-hosting/docker-compose" },
+						},
+						{
+							label: "Kubernetes",
+							collapsed: true,
+							autogenerate: { directory: "self-hosting/kubernetes" },
+						},
+					],
 				},
 				{
 					label: "For Developers",
-					autogenerate: { directory: "dev" },
+					items: [
+						{ label: "Architecture", slug: "dev/architecture" },
+						{ label: "Building from Source", slug: "dev/build" },
+						{ label: "Contributing", slug: "dev/contribute" },
+						{ label: "Writing Custom Nodes", slug: "dev/writing-nodes" },
+						{ label: "Rust SDK", slug: "dev/rust" },
+						{ label: "Storage Providers", slug: "dev/storage-providers" },
+						{ label: "Customization", slug: "dev/customizing" },
+						{
+							label: "WASM Nodes",
+							collapsed: true,
+							autogenerate: { directory: "dev/wasm-nodes" },
+						},
+						{
+							label: "A2UI",
+							collapsed: true,
+							autogenerate: { directory: "dev/a2ui" },
+						},
+					],
 				},
 				{
 					label: "For Enterprises",
 					autogenerate: { directory: "enterprise" },
 				},
 				{
+					label: "Reference",
+					items: [{ label: "Benchmarks", slug: "reference/benchmarks" }],
+				},
+				{
 					label: "Node Catalog",
-					autogenerate: { directory: "nodes" },
+					items: [
+						{ label: "Overview", slug: "nodes/overview" },
+						{
+							label: "AI & LLM",
+							collapsed: true,
+							autogenerate: { directory: "nodes/AI" },
+						},
+						{
+							label: "Control Flow",
+							collapsed: true,
+							autogenerate: { directory: "nodes/Control" },
+						},
+						{
+							label: "Database",
+							collapsed: true,
+							autogenerate: { directory: "nodes/Database" },
+						},
+						{
+							label: "Events",
+							collapsed: true,
+							autogenerate: { directory: "nodes/Events" },
+						},
+						{
+							label: "Image Processing",
+							collapsed: true,
+							autogenerate: { directory: "nodes/Image" },
+						},
+						{
+							label: "Logging",
+							collapsed: true,
+							autogenerate: { directory: "nodes/Logging" },
+						},
+						{
+							label: "Math",
+							collapsed: true,
+							autogenerate: { directory: "nodes/Math" },
+						},
+						{
+							label: "Storage",
+							collapsed: true,
+							autogenerate: { directory: "nodes/Storage" },
+						},
+						{
+							label: "Data Structures",
+							collapsed: true,
+							autogenerate: { directory: "nodes/Structs" },
+						},
+						{
+							label: "Utilities",
+							collapsed: true,
+							autogenerate: { directory: "nodes/Utils" },
+						},
+						{
+							label: "Variables",
+							collapsed: true,
+							autogenerate: { directory: "nodes/Variable" },
+						},
+						{
+							label: "Web & HTTP",
+							collapsed: true,
+							autogenerate: { directory: "nodes/Web" },
+						},
+						{
+							label: "Bit Operations",
+							collapsed: true,
+							autogenerate: { directory: "nodes/Bit" },
+						},
+					],
 				},
 			],
 		}),
@@ -107,9 +247,7 @@ posthog.init('phc_hxGZEJaPqyCNzqqfrYyuUDCUSpcc7RSbwh07t4xtfrE', { api_host:'http
 			],
 		},
 		define: {
-			// stub out `process.env` so next/dist/client code can import it without blowing up
 			"process.env": {},
-			// if any code reads process.env.NODE_ENV, you can explicitly set it:
 			"process.env.NODE_ENV": JSON.stringify(
 				process.env.NODE_ENV || "production",
 			),

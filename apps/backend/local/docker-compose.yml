@@ -1,0 +1,81 @@
+services:
+  # =============================================================================
+  # PostgreSQL Database
+  # =============================================================================
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: flowlike
+      POSTGRES_PASSWORD: flowlike_dev
+      POSTGRES_DB: flowlike
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U flowlike -d flowlike"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+      - flowlike-local
+
+  # =============================================================================
+  # Redis (Execution State + Job Queue)
+  # =============================================================================
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+      - flowlike-local
+
+  # =============================================================================
+  # Database Migration Job
+  # =============================================================================
+  db-init:
+    build:
+      context: ../../../packages/api
+      dockerfile: Dockerfile.tools
+    depends_on:
+      postgres:
+        condition: service_healthy
+    working_dir: /workspace
+    environment:
+      POSTGRES_USER: flowlike
+      POSTGRES_PASSWORD: flowlike_dev
+      POSTGRES_DB: flowlike
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+    volumes:
+      - ../../../packages/api:/workspace
+    entrypoint: ["/usr/local/bin/export-database-url.sh"]
+    command:
+      - bash
+      - -lc
+      - |
+        wait-for-postgres.sh &&
+        bun install || true &&
+        make-postgres-prisma-mirror.sh &&
+        bunx prisma db push --schema=prisma-postgres-mirror/schema &&
+        echo '✅ Database schema applied!' &&
+        rm -rf node_modules bun.lockb bun.lock prisma-postgres-mirror &&
+        echo '✅ Cleanup complete!'
+    networks:
+      - flowlike-local
+
+networks:
+  flowlike-local:
+    driver: bridge
+
+volumes:
+  postgres_data:
+  redis_data:

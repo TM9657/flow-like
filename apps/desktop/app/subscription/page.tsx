@@ -1,6 +1,5 @@
 "use client";
-
-import { WebviewWindow } from "@tauri-apps/api/webviewWindow";
+import { openUrl } from "@tauri-apps/plugin-opener";
 import {
 	Button,
 	SubscriptionPage,
@@ -8,9 +7,8 @@ import {
 	useHub,
 	useInvoke,
 } from "@tm9657/flow-like-ui";
-import type { IPricingResponse } from "@tm9657/flow-like-ui/state/backend-state/user-state";
 import { Loader2 } from "lucide-react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useState } from "react";
 import { useAuth } from "react-oidc-context";
 import { toast } from "sonner";
 
@@ -22,7 +20,12 @@ export default function SubscriptionPageWrapper() {
 
 	const isPremiumEnabled = hub.hub?.features?.premium ?? false;
 
-    const pricing = useInvoke(backend.userState.getPricing, backend.userState, [], isPremiumEnabled && auth.isAuthenticated);
+	const pricing = useInvoke(
+		backend.userState.getPricing,
+		backend.userState,
+		[],
+		isPremiumEnabled && auth.isAuthenticated,
+	);
 
 	const handleUpgrade = useCallback(
 		async (tier: string) => {
@@ -33,14 +36,7 @@ export default function SubscriptionPageWrapper() {
 					cancel_url: `${window.location.origin}/subscription?canceled=true`,
 				});
 
-				const _view = new WebviewWindow("checkout", {
-					url: response.checkout_url,
-					title: "Checkout",
-					focus: true,
-					resizable: true,
-					maximized: true,
-					contentProtected: true,
-				});
+				await openUrl(response.checkout_url);
 			} catch (error) {
 				console.error("Failed to create subscription checkout:", error);
 				toast.error("Failed to start checkout process");
@@ -53,14 +49,7 @@ export default function SubscriptionPageWrapper() {
 		try {
 			const billingSession = await backend.userState.getBillingSession();
 
-			const _view = new WebviewWindow("billing", {
-				url: billingSession.url,
-				title: "Billing",
-				focus: true,
-				resizable: true,
-				maximized: true,
-				contentProtected: true,
-			});
+			await openUrl(billingSession.url);
 		} catch (error) {
 			console.error("Failed to get billing session:", error);
 			toast.error("Failed to open billing portal");
@@ -105,24 +94,24 @@ export default function SubscriptionPageWrapper() {
 
 	return (
 		<main className="flex flex-col w-full flex-1 min-h-0 overflow-auto">
-			{pricing.data && <SubscriptionPage
-				pricing={pricing.data}
-				onUpgrade={handleUpgrade}
-				onManageBilling={handleManageBilling}
-				isPremiumEnabled={isPremiumEnabled}
-			/>}
-            {!pricing.data && (
-                <div className="flex flex-row items-center justify-center w-full flex-1 min-h-0 py-12">
-                    <div className="text-center p-6">
-                        <h3 className="text-xl font-semibold mb-2">
-                            Failed to load pricing information.
-                        </h3>
-                        <p className="text-muted-foreground">
-                            Please try again later.
-                        </p>
-                    </div>
-                </div>
-            )}
+			{pricing.data && (
+				<SubscriptionPage
+					pricing={pricing.data}
+					onUpgrade={handleUpgrade}
+					onManageBilling={handleManageBilling}
+					isPremiumEnabled={isPremiumEnabled}
+				/>
+			)}
+			{!pricing.data && (
+				<div className="flex flex-row items-center justify-center w-full flex-1 min-h-0 py-12">
+					<div className="text-center p-6">
+						<h3 className="text-xl font-semibold mb-2">
+							Failed to load pricing information.
+						</h3>
+						<p className="text-muted-foreground">Please try again later.</p>
+					</div>
+				</div>
+			)}
 		</main>
 	);
 }

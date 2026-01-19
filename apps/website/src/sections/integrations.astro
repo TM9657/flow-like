@@ -18,6 +18,19 @@ import {
   SiTrello,
   SiOpenai,
 } from "react-icons/si";
+import type { Lang, TranslationKey } from "../i18n";
+import { translations, defaultLang } from "../i18n";
+
+interface Props {
+  lang?: Lang;
+}
+
+const { lang = defaultLang } = Astro.props;
+const t = (key: TranslationKey): string => {
+  const langTranslations = translations[lang] as Record<string, string>;
+  const enTranslations = translations.en as Record<string, string>;
+  return langTranslations?.[key] ?? enTranslations[key] ?? key;
+};
 ---
 
 <section
@@ -44,17 +57,17 @@ import {
           <span class="absolute left-0 inline-flex h-full w-full rounded-full bg-cyan-400 opacity-60 animate-ping"></span>
           <span class="relative flex h-2 w-2 rounded-full bg-cyan-400"></span>
         </div>
-        <span>Connect Everything</span>
+        <span>{t("integrations.tagline")}</span>
       </div>
 
       <h2 class="text-4xl sm:text-5xl lg:text-6xl font-bold tracking-tight leading-tight">
-        Seamless integrations with
+        {t("integrations.headline")}
         <br class="hidden sm:block" />
-        <span class="bg-linear-to-r from-cyan-400 via-blue-500 to-violet-500 bg-clip-text text-transparent">tools you already use</span>
+        <span class="bg-linear-to-r from-cyan-400 via-blue-500 to-violet-500 bg-clip-text text-transparent">{t("integrations.headline.highlight")}</span>
       </h2>
 
       <p class="text-muted-foreground text-lg sm:text-xl max-w-2xl mx-auto leading-relaxed">
-        Connect Flow-Like to your favorite platforms. Pull data from anywhere, push results everywhere, and automate workflows across your entire stack.
+        {t("integrations.description")}
       </p>
     </div>
 

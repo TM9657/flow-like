@@ -40,6 +40,7 @@ import { useInvoke } from "../../../hooks";
 import { IBitTypes } from "../../../lib";
 import { useBackend } from "../../../state/backend-state";
 
+import { ContextNodes } from "./context-nodes";
 import { MessageContent } from "./message-content";
 import { PendingCommandsView } from "./pending-commands-view";
 import { PlanStepsView } from "./plan-steps-view";
@@ -67,6 +68,7 @@ interface Message {
 	agentType?: string;
 	planSteps?: PlanStep[];
 	executedCommands?: BoardCommand[];
+	contextNodeIds?: string[];
 }
 
 export function FlowCopilot({
@@ -79,6 +81,8 @@ export function FlowCopilot({
 	runContext,
 	onFocusNode,
 	onClose,
+	onSelectNodes,
+	initialPrompt,
 }: FlowCopilotProps) {
 	const [isOpen, setIsOpen] = useState(mode === "panel" || embedded);
 	const [messages, setMessages] = useState<Message[]>([]);
@@ -96,6 +100,7 @@ export function FlowCopilot({
 	const [planSteps, setPlanSteps] = useState<PlanStep[]>([]);
 	const [userScrolledUp, setUserScrolledUp] = useState(false);
 	const [attachedImages, setAttachedImages] = useState<AttachedImage[]>([]);
+	const initialPromptHandledRef = useRef(false);
 
 	const scrollContainerRef = useRef<HTMLDivElement>(null);
 	const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -353,6 +358,8 @@ ${input}`;
 
 		// Capture current images before clearing
 		const currentImages = [...attachedImages];
+		// Capture current selected nodes
+		const currentContextNodes = [...selectedNodeIds];
 
 		setMessages((prev) => [
 			...prev,
@@ -360,6 +367,8 @@ ${input}`;
 				role: "user",
 				content: input,
 				images: currentImages.length > 0 ? currentImages : undefined,
+				contextNodeIds:
+					currentContextNodes.length > 0 ? currentContextNodes : undefined,
 			},
 		]);
 		setInput("");
@@ -377,9 +386,23 @@ ${input}`;
 			if (!board || !backendContext) return;
 
 			let currentMessageContent = "";
+			let lastUpdateTime = 0;
+			const UPDATE_INTERVAL = 100; // Throttle UI updates to every 100ms
+
 			setMessages((prev) => [...prev, { role: "assistant", content: "" }]);
 
 			setTimeout(() => setLoadingPhase("analyzing"), 300);
+
+			const flushMessageContent = () => {
+				setMessages((prev) => {
+					const newMessages = [...prev];
+					const lastMessage = newMessages[newMessages.length - 1];
+					if (lastMessage && lastMessage.role === "assistant") {
+						lastMessage.content = currentMessageContent;
+					}
+					return newMessages;
+				});
+			};
 
 			const onToken = (token: string) => {
 				setTokenCount((prev) => prev + 1);
@@ -450,14 +473,13 @@ ${input}`;
 				}
 
 				currentMessageContent += token;
-				setMessages((prev) => {
-					const newMessages = [...prev];
-					const lastMessage = newMessages[newMessages.length - 1];
-					if (lastMessage && lastMessage.role === "assistant") {
-						lastMessage.content = currentMessageContent;
-					}
-					return newMessages;
-				});
+
+				// Throttle UI updates to reduce re-renders
+				const now = Date.now();
+				if (now - lastUpdateTime >= UPDATE_INTERVAL) {
+					lastUpdateTime = now;
+					flushMessageContent();
+				}
 			};
 
 			const chatHistory: ChatMessage[] = messages.map((m) => ({
@@ -499,6 +521,9 @@ ${input}`;
 				undefined,
 				backendRunContext,
 			);
+
+			// Flush any remaining content after streaming completes
+			flushMessageContent();
 
 			setMessages((prev) => {
 				const newMessages = [...prev];
@@ -555,6 +580,23 @@ ${input}`;
 		handleSubmitRef.current = handleSubmit;
 	}, [handleSubmit]);
 
+	// Handle initial prompt when provided
+	useEffect(() => {
+		if (
+			initialPrompt &&
+			!initialPromptHandledRef.current &&
+			selectedModelId &&
+			board
+		) {
+			initialPromptHandledRef.current = true;
+			setInput(initialPrompt);
+			// Trigger submit after a short delay to ensure state is ready
+			setTimeout(() => {
+				handleSubmitRef.current?.();
+			}, 100);
+		}
+	}, [initialPrompt, selectedModelId, board]);
+
 	// Panel mode - renders directly as a panel (controlled externally)
 	if (mode === "panel") {
 		return (
@@ -582,6 +624,8 @@ ${input}`;
 				onAcceptSuggestion={onAcceptSuggestion}
 				onFocusNode={onFocusNode}
 				onClose={onClose}
+				onSelectNodes={onSelectNodes}
+				selectedNodeIds={selectedNodeIds}
 				board={board}
 				models={models}
 				selectedModelId={selectedModelId}
@@ -623,6 +667,8 @@ ${input}`;
 				handleDismissCommands={handleDismissCommands}
 				onAcceptSuggestion={onAcceptSuggestion}
 				onFocusNode={onFocusNode}
+				onSelectNodes={onSelectNodes}
+				selectedNodeIds={selectedNodeIds}
 				board={board}
 				models={models}
 				selectedModelId={selectedModelId}
@@ -710,6 +756,8 @@ ${input}`;
 					onAcceptSuggestion={onAcceptSuggestion}
 					onFocusNode={onFocusNode}
 					onClose={() => setIsOpen(false)}
+					onSelectNodes={onSelectNodes}
+					selectedNodeIds={selectedNodeIds}
 					board={board}
 					mode={mode}
 					models={models}
@@ -751,6 +799,8 @@ interface EmbeddedViewProps {
 	handleDismissCommands: () => void;
 	onAcceptSuggestion: (suggestion: Suggestion) => void;
 	onFocusNode?: (nodeId: string) => void;
+	onSelectNodes?: (nodeIds: string[]) => void;
+	selectedNodeIds: string[];
 	board: any;
 	models: any[];
 	selectedModelId: string;
@@ -786,6 +836,8 @@ const EmbeddedView = memo(function EmbeddedView({
 	handleDismissCommands,
 	onAcceptSuggestion,
 	onFocusNode,
+	onSelectNodes,
+	selectedNodeIds,
 	board,
 	models,
 	selectedModelId,
@@ -934,6 +986,7 @@ const EmbeddedView = memo(function EmbeddedView({
 						pendingCommands={pendingCommands}
 						suggestions={suggestions}
 						onFocusNode={onFocusNode}
+						onSelectNodes={onSelectNodes}
 						onAcceptSuggestion={onAcceptSuggestion}
 						handleExecuteCommands={handleExecuteCommands}
 						handleExecuteSingle={handleExecuteSingle}
@@ -970,6 +1023,19 @@ const EmbeddedView = memo(function EmbeddedView({
 
 			{/* Input area */}
 			<div className="shrink-0 p-2.5 border-t border-border/30 bg-background/80 backdrop-blur-sm">
+				{/* Selected nodes context indicator */}
+				{selectedNodeIds.length > 0 && (
+					<>
+						<ContextNodes
+							nodeIds={selectedNodeIds}
+							board={board}
+							onSelectNodes={onSelectNodes}
+							onFocusNode={onFocusNode}
+							compact
+						/>
+						<div className="mb-3" />
+					</>
+				)}
 				{/* Image previews */}
 				{attachedImages.length > 0 && (
 					<div className="flex gap-1.5 mb-2 flex-wrap">
@@ -1075,6 +1141,8 @@ const PanelView = memo(function PanelView({
 	onAcceptSuggestion,
 	onFocusNode,
 	onClose,
+	onSelectNodes,
+	selectedNodeIds,
 	board,
 	models,
 	selectedModelId,
@@ -1269,6 +1337,18 @@ const PanelView = memo(function PanelView({
 											board={board}
 										/>
 									)}
+									{/* Show context nodes for user messages */}
+									{message.role === "user" &&
+										message.contextNodeIds &&
+										message.contextNodeIds.length > 0 && (
+											<ContextNodes
+												nodeIds={message.contextNodeIds}
+												board={board}
+												onSelectNodes={onSelectNodes}
+												onFocusNode={onFocusNode}
+												compact
+											/>
+										)}
 									{/* Show loading indicator for last assistant message */}
 									{message.role === "assistant" &&
 										index === messages.length - 1 &&
@@ -1336,6 +1416,20 @@ const PanelView = memo(function PanelView({
 
 			{/* Input Area */}
 			<div className="shrink-0 p-4 border-t border-border/30 bg-background/50">
+				{/* Selected nodes context indicator */}
+				{selectedNodeIds.length > 0 && (
+					<>
+						<ContextNodes
+							nodeIds={selectedNodeIds}
+							board={board}
+							onSelectNodes={onSelectNodes}
+							onFocusNode={onFocusNode}
+							compact
+						/>
+						<div className="mb-3" />
+					</>
+				)}
+
 				{/* Attached images preview */}
 				{attachedImages.length > 0 && (
 					<div className="flex flex-wrap gap-2 mb-2">
@@ -1450,6 +1544,8 @@ const FloatingPanelView = memo(function FloatingPanelView({
 	onAcceptSuggestion,
 	onFocusNode,
 	onClose,
+	onSelectNodes,
+	selectedNodeIds,
 	board,
 	mode,
 	models,
@@ -1669,6 +1765,7 @@ const FloatingPanelView = memo(function FloatingPanelView({
 							pendingCommands={pendingCommands}
 							suggestions={suggestions}
 							onFocusNode={onFocusNode}
+							onSelectNodes={onSelectNodes}
 							onAcceptSuggestion={onAcceptSuggestion}
 							handleExecuteCommands={handleExecuteCommands}
 							handleExecuteSingle={handleExecuteSingle}
@@ -1705,6 +1802,19 @@ const FloatingPanelView = memo(function FloatingPanelView({
 
 				{/* Input Area */}
 				<div className="p-4 bg-background/80 backdrop-blur-sm border-t border-border/50">
+					{/* Selected nodes context indicator */}
+					{selectedNodeIds.length > 0 && (
+						<>
+							<ContextNodes
+								nodeIds={selectedNodeIds}
+								board={board}
+								onSelectNodes={onSelectNodes}
+								onFocusNode={onFocusNode}
+								compact
+							/>
+							<div className="mb-3" />
+						</>
+					)}
 					{/* Image previews */}
 					{attachedImages.length > 0 && (
 						<div className="flex gap-2 mb-3 flex-wrap">
@@ -1791,6 +1901,7 @@ interface MessagesAreaProps {
 	pendingCommands: BoardCommand[];
 	suggestions: Suggestion[];
 	onFocusNode?: (nodeId: string) => void;
+	onSelectNodes?: (nodeIds: string[]) => void;
 	onAcceptSuggestion: (suggestion: Suggestion) => void;
 	handleExecuteCommands: () => void;
 	handleExecuteSingle: (index: number) => void;
@@ -1808,6 +1919,7 @@ const MessagesArea = memo(function MessagesArea({
 	pendingCommands,
 	suggestions,
 	onFocusNode,
+	onSelectNodes,
 	onAcceptSuggestion,
 	handleExecuteCommands,
 	handleExecuteSingle,
@@ -1932,6 +2044,18 @@ const MessagesArea = memo(function MessagesArea({
 								))}
 							</div>
 						)}
+						{/* Show context nodes for user messages */}
+						{m.role === "user" &&
+							m.contextNodeIds &&
+							m.contextNodeIds.length > 0 && (
+								<ContextNodes
+									nodeIds={m.contextNodeIds}
+									board={board}
+									onSelectNodes={onSelectNodes}
+									onFocusNode={onFocusNode}
+									compact
+								/>
+							)}
 						{m.content ? (
 							<>
 								<MessageContent

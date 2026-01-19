@@ -1,0 +1,121 @@
+{{- if .Values.api.enabled }}
+{{- $provider := default "s3" .Values.storage.provider }}
+{{- $storageSecretName := include "flow-like.storageSecretName" . }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "flow-like.fullname" . }}-api
+  labels:
+    {{- include "flow-like.api.labels" . | nindent 4 }}
+spec:
+  {{- if not .Values.api.autoscaling.enabled }}
+  replicas: {{ .Values.api.replicaCount }}
+  {{- end }}
+  selector:
+    matchLabels:
+      {{- include "flow-like.api.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "flow-like.api.selectorLabels" . | nindent 8 }}
+    spec:
+      serviceAccountName: {{ include "flow-like.serviceAccountName" . }}
+      {{- with .Values.global.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: api
+          image: "{{ .Values.global.imageRegistry }}{{ .Values.api.image.repository }}:{{ .Values.api.image.tag }}"
+          imagePullPolicy: {{ .Values.api.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+            - name: metrics
+              containerPort: 9090
+              protocol: TCP
+          env:
+            - name: PORT
+              value: "8080"
+            - name: METRICS_PORT
+              value: "9090"
+            {{- if and .Values.monitoring.enabled .Values.monitoring.tracing.enabled }}
+            - name: OTEL_EXPORTER_OTLP_ENDPOINT
+              value: "http://{{ include "flow-like.fullname" . }}-tempo:4317"
+            - name: OTEL_SERVICE_NAME
+              value: "flow-like-api"
+            {{- end }}
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "flow-like.databaseSecretName" . }}
+                  key: DATABASE_URL
+            - name: REDIS_URL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "flow-like.fullname" . }}-redis
+                  key: REDIS_URL
+            - name: KUBERNETES_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            - name: K8S_EXECUTOR_IMAGE
+              value: "{{ .Values.global.imageRegistry }}{{ .Values.executor.image.repository }}:{{ .Values.executor.image.tag }}"
+            - name: K8S_EXECUTOR_RUNTIME_CLASS
+              value: {{ default .Values.runtimeClass.name .Values.executor.runtimeClass | quote }}
+            - name: EXECUTION_BACKEND
+              value: {{ .Values.execution.backend | quote }}
+            - name: ASYNC_EXECUTION_BACKEND
+              value: {{ .Values.execution.asyncBackend | quote }}
+            - name: EXECUTOR_URL
+              value: {{ if .Values.execution.executorUrl }}{{ .Values.execution.executorUrl | quote }}{{ else if .Values.executorPool.enabled }}{{ printf "http://%s-executor-pool:%d" (include "flow-like.fullname" .) (int .Values.executorPool.service.port) }}{{ else }}""{{ end }}
+            - name: JOB_TIMEOUT_SECONDS
+              value: {{ .Values.executor.timeout | quote }}
+            - name: JOB_MAX_RETRIES
+              value: {{ .Values.executor.maxRetries | quote }}
+            - name: RUST_LOG
+              value: "info"
+            {{- with .Values.api.env }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          envFrom:
+            - secretRef:
+                name: {{ $storageSecretName }}
+            {{- with .Values.api.envFrom }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          livenessProbe:
+            httpGet:
+              path: /health/live
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /health/ready
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          startupProbe:
+            httpGet:
+              path: /health/startup
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            failureThreshold: 30
+          resources:
+            {{- toYaml .Values.api.resources | nindent 12 }}
+      {{- with .Values.api.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.api.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.api.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+{{- end }}

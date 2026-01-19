@@ -6,6 +6,7 @@ export * from "./flow-board-utils";
 export * from "./date";
 export * from "./llm/history";
 export * from "./llm/response";
+export * from "./platform";
 
 export * from "./bit/bit";
 export * from "./bit/bit-pack";

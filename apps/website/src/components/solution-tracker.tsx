@@ -1,4 +1,3 @@
-import React, { useState, useEffect } from "react";
 import {
 	Button,
 	Card,
@@ -9,24 +8,26 @@ import {
 	Input,
 	Label,
 } from "@tm9657/flow-like-ui";
+import type React from "react";
+import { useEffect, useState } from "react";
 import {
+	LuArrowRight,
+	LuBuilding2,
+	LuCalendar,
 	LuCheck,
+	LuCircleAlert,
+	LuCircleDollarSign,
+	LuClipboardCheck,
 	LuClock,
 	LuCreditCard,
 	LuLoader,
 	LuPackage,
-	LuSearch,
-	LuCircleAlert,
-	LuX,
 	LuRefreshCw,
-	LuArrowRight,
-	LuBuilding2,
-	LuCalendar,
-	LuZap,
+	LuSearch,
 	LuSparkles,
-	LuClipboardCheck,
 	LuUserCheck,
-	LuCircleDollarSign,
+	LuX,
+	LuZap,
 } from "react-icons/lu";
 
 interface PublicSolutionLog {
@@ -185,11 +186,16 @@ export function SolutionTracker({ initialToken }: SolutionTrackerProps) {
 		setSearched(true);
 
 		try {
-			const apiUrl = import.meta.env.PUBLIC_API_URL || "https://api.flow-like.com";
-			const response = await fetch(`${apiUrl}/api/v1/solution/track/${encodeURIComponent(trackingToken.trim())}`);
+			const apiUrl =
+				import.meta.env.PUBLIC_API_URL || "https://api.flow-like.com";
+			const response = await fetch(
+				`${apiUrl}/api/v1/solution/track/${encodeURIComponent(trackingToken.trim())}`,
+			);
 
 			if (response.status === 404) {
-				setError("No solution found with this tracking token. Please check and try again.");
+				setError(
+					"No solution found with this tracking token. Please check and try again.",
+				);
 				setSolution(null);
 				return;
 			}
@@ -217,10 +223,16 @@ export function SolutionTracker({ initialToken }: SolutionTrackerProps) {
 		window.history.replaceState({}, "", url.toString());
 	}
 
-	const statusSteps = solution ? getStatusSteps(solution.priority) : STANDARD_STATUS_STEPS;
-	const statusOrder = solution ? getStatusOrder(solution.priority) : getStatusOrder(false);
-	const currentStep = solution ? statusOrder[solution.status] ?? -1 : -1;
-	const isCancelledOrRefunded = solution && (solution.status === "CANCELLED" || solution.status === "REFUNDED");
+	const statusSteps = solution
+		? getStatusSteps(solution.priority)
+		: STANDARD_STATUS_STEPS;
+	const statusOrder = solution
+		? getStatusOrder(solution.priority)
+		: getStatusOrder(false);
+	const currentStep = solution ? (statusOrder[solution.status] ?? -1) : -1;
+	const isCancelledOrRefunded =
+		solution &&
+		(solution.status === "CANCELLED" || solution.status === "REFUNDED");
 
 	return (
 		<div className="w-full max-w-4xl mx-auto space-y-8">
@@ -229,13 +241,19 @@ export function SolutionTracker({ initialToken }: SolutionTrackerProps) {
 				<CardHeader className="text-center">
 					<CardTitle className="text-2xl">Track Your Solution</CardTitle>
 					<CardDescription>
-						Enter your tracking token to view the status of your 24-hour solution request
+						Enter your tracking token to view the status of your 24-hour
+						solution request
 					</CardDescription>
 				</CardHeader>
 				<CardContent>
-					<form onSubmit={handleSubmit} className="flex flex-col sm:flex-row gap-3">
+					<form
+						onSubmit={handleSubmit}
+						className="flex flex-col sm:flex-row gap-3"
+					>
 						<div className="flex-1">
-							<Label htmlFor="token" className="sr-only">Tracking Token</Label>
+							<Label htmlFor="token" className="sr-only">
+								Tracking Token
+							</Label>
 							<Input
 								id="token"
 								type="text"
@@ -264,7 +282,8 @@ export function SolutionTracker({ initialToken }: SolutionTrackerProps) {
 						<LuCircleAlert className="h-12 w-12 text-destructive mx-auto mb-4" />
 						<p className="text-destructive font-medium">{error}</p>
 						<p className="text-sm text-muted-foreground mt-2">
-							If you just submitted a request, your tracking token was sent to your email.
+							If you just submitted a request, your tracking token was sent to
+							your email.
 						</p>
 					</CardContent>
 				</Card>
@@ -292,9 +311,15 @@ export function SolutionTracker({ initialToken }: SolutionTrackerProps) {
 											Priority
 										</span>
 									)}
-									<span className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium ${getStatusColor(solution.status)} bg-current/10`}>
+									<span
+										className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium ${getStatusColor(solution.status)} bg-current/10`}
+									>
 										{isCancelledOrRefunded ? (
-											solution.status === "Cancelled" ? <LuX className="h-3.5 w-3.5" /> : <LuRefreshCw className="h-3.5 w-3.5" />
+											solution.status === "Cancelled" ? (
+												<LuX className="h-3.5 w-3.5" />
+											) : (
+												<LuRefreshCw className="h-3.5 w-3.5" />
+											)
 										) : (
 											<LuSparkles className="h-3.5 w-3.5" />
 										)}
@@ -311,7 +336,9 @@ export function SolutionTracker({ initialToken }: SolutionTrackerProps) {
 										<div className="absolute top-5 left-0 right-0 h-0.5 bg-muted">
 											<div
 												className="h-full bg-primary transition-all duration-500"
-												style={{ width: `${Math.max(0, (currentStep / (statusSteps.length - 1)) * 100)}%` }}
+												style={{
+													width: `${Math.max(0, (currentStep / (statusSteps.length - 1)) * 100)}%`,
+												}}
 											/>
 										</div>
 
@@ -322,13 +349,18 @@ export function SolutionTracker({ initialToken }: SolutionTrackerProps) {
 											const Icon = step.icon;
 
 											return (
-												<div key={step.key} className="relative flex flex-col items-center z-10">
-													<div className={`
+												<div
+													key={step.key}
+													className="relative flex flex-col items-center z-10"
+												>
+													<div
+														className={`
 														w-10 h-10 rounded-full flex items-center justify-center transition-all duration-300
 														${isCompleted ? "bg-primary text-primary-foreground" : ""}
 														${isCurrent ? "bg-primary text-primary-foreground ring-4 ring-primary/20" : ""}
 														${!isCompleted && !isCurrent ? "bg-muted text-muted-foreground" : ""}
-													`}>
+													`}
+													>
 														{isCompleted ? (
 															<LuCheck className="h-5 w-5" />
 														) : isCurrent && step.key === "InProgress" ? (
@@ -337,7 +369,9 @@ export function SolutionTracker({ initialToken }: SolutionTrackerProps) {
 															<Icon className="h-5 w-5" />
 														)}
 													</div>
-													<span className={`mt-2 text-xs font-medium text-center max-w-20 ${isCurrent ? "text-primary" : "text-muted-foreground"}`}>
+													<span
+														className={`mt-2 text-xs font-medium text-center max-w-20 ${isCurrent ? "text-primary" : "text-muted-foreground"}`}
+													>
 														{step.label}
 													</span>
 												</div>
@@ -369,12 +403,16 @@ export function SolutionTracker({ initialToken }: SolutionTrackerProps) {
 							<CardContent className="space-y-4">
 								<div className="flex justify-between items-center">
 									<span className="text-muted-foreground">Total</span>
-									<span className="font-semibold text-lg">{formatCurrency(solution.totalCents)}</span>
+									<span className="font-semibold text-lg">
+										{formatCurrency(solution.totalCents)}
+									</span>
 								</div>
 								<div className="flex justify-between items-center">
 									<span className="text-muted-foreground">Deposit</span>
 									<div className="flex items-center gap-2">
-										<span className="font-medium">{formatCurrency(solution.depositCents)}</span>
+										<span className="font-medium">
+											{formatCurrency(solution.depositCents)}
+										</span>
 										{solution.paidDeposit ? (
 											<span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-green-500/10 text-green-500 text-xs font-medium">
 												<LuCheck className="h-3 w-3" />
@@ -390,7 +428,9 @@ export function SolutionTracker({ initialToken }: SolutionTrackerProps) {
 								</div>
 								<div className="flex justify-between items-center pt-3 border-t">
 									<span className="text-muted-foreground">Remainder</span>
-									<span className="font-medium">{formatCurrency(solution.remainderCents)}</span>
+									<span className="font-medium">
+										{formatCurrency(solution.remainderCents)}
+									</span>
 								</div>
 								<div className="flex justify-between items-center text-sm">
 									<span className="text-muted-foreground">Tier</span>
@@ -410,16 +450,22 @@ export function SolutionTracker({ initialToken }: SolutionTrackerProps) {
 							<CardContent className="space-y-4">
 								<div className="flex justify-between items-center">
 									<span className="text-muted-foreground">Submitted</span>
-									<span className="text-sm font-medium">{formatDate(solution.createdAt)}</span>
+									<span className="text-sm font-medium">
+										{formatDate(solution.createdAt)}
+									</span>
 								</div>
 								<div className="flex justify-between items-center">
 									<span className="text-muted-foreground">Last Updated</span>
-									<span className="text-sm font-medium">{formatDate(solution.updatedAt)}</span>
+									<span className="text-sm font-medium">
+										{formatDate(solution.updatedAt)}
+									</span>
 								</div>
 								{solution.deliveredAt && (
 									<div className="flex justify-between items-center pt-3 border-t">
 										<span className="text-muted-foreground">Delivered</span>
-										<span className="text-sm font-medium text-green-500">{formatDate(solution.deliveredAt)}</span>
+										<span className="text-sm font-medium text-green-500">
+											{formatDate(solution.deliveredAt)}
+										</span>
 									</div>
 								)}
 							</CardContent>
@@ -445,7 +491,9 @@ export function SolutionTracker({ initialToken }: SolutionTrackerProps) {
 											<div className="shrink-0 w-2 h-2 mt-2 rounded-full bg-primary" />
 											<div className="flex-1 min-w-0">
 												<p className="font-medium">{log.action}</p>
-												<p className="text-sm text-muted-foreground">{formatDate(log.createdAt)}</p>
+												<p className="text-sm text-muted-foreground">
+													{formatDate(log.createdAt)}
+												</p>
 											</div>
 										</div>
 									))}
@@ -465,7 +513,10 @@ export function SolutionTracker({ initialToken }: SolutionTrackerProps) {
 									</p>
 								</div>
 								<Button variant="outline" asChild>
-									<a href="mailto:support@flow-like.com" className="flex items-center gap-2">
+									<a
+										href="mailto:support@flow-like.com"
+										className="flex items-center gap-2"
+									>
 										Contact Support
 										<LuArrowRight className="h-4 w-4" />
 									</a>
@@ -483,8 +534,9 @@ export function SolutionTracker({ initialToken }: SolutionTrackerProps) {
 						<LuPackage className="h-16 w-16 text-muted-foreground/50 mx-auto mb-4" />
 						<h3 className="font-semibold text-lg mb-2">Track Your Solution</h3>
 						<p className="text-muted-foreground max-w-md mx-auto">
-							Enter your tracking token above to view the current status of your 24-hour solution request.
-							You received this token in your confirmation email.
+							Enter your tracking token above to view the current status of your
+							24-hour solution request. You received this token in your
+							confirmation email.
 						</p>
 					</CardContent>
 				</Card>

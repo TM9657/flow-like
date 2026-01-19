@@ -34,7 +34,7 @@ is visible in the node info overlay to help users discover trade-offs at-a-glanc
 ```rust title="Branch Node"
 #[async_trait]
 impl NodeLogic for BranchNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "control_branch",
             "Branch",
@@ -99,7 +99,7 @@ The `Branch` Node from [the previous section](##the-node-skeleton) is an example
 ```rust title="A Pure Node 'Add'"
 #[async_trait]
 impl NodeLogic for AddIntegerNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new("int_add", "+", "Adds two Integers", "Math/Int");
         node.add_icon("/flow/icons/sigma.svg");
 
@@ -262,7 +262,7 @@ We are hashing these Schemars for all nodes and storing them in the references o
 As you might have seen already, there is the option to allow an arbitrary amount of input or output pins. This can be achieved by defining the same Pin Name multiple times. Users can than add more Pins of this type to the node in the frontend. The minimum number of Pins in this case is however 2.
 
 ```rust title="And Node" {7} {15}
-async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+fn get_node(&self) -> Node {
         let mut node = Node::new("bool_and", "And", "Boolean And operation", "Utils/Bool");
 
         node.add_icon("/flow/icons/bool.svg");

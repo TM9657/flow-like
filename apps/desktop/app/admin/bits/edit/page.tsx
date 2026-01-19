@@ -141,164 +141,168 @@ export default function EditPage() {
 	};
 
 	return (
-		<main className="flex flex-grow h-full bg-background max-h-full overflow-hidden flex-col items-start w-full justify-start p-6 space-y-6">
-			{/* Search and Filters */}
-			<Card className="w-full">
-				<CardContent className="p-6 space-y-4">
-					{/* Search Bar and Items Per Page */}
-					<div className="flex items-center gap-4">
-						<div className="relative flex-1">
-							<Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground h-4 w-4" />
-							<Input
-								placeholder="Search bits..."
-								value={searchTerm}
-								onChange={(e) => setSearchTerm(e.target.value)}
-								className="pl-10"
-							/>
-						</div>
-						<div className="flex items-center gap-2">
-							<span className="text-sm font-medium whitespace-nowrap">
-								Items per page:
-							</span>
-							<Select
-								value={itemsPerPage.toString()}
-								onValueChange={(value) => setItemsPerPage(Number(value))}
-							>
-								<SelectTrigger className="w-20">
-									<SelectValue />
-								</SelectTrigger>
-								<SelectContent>
-									{ITEMS_PER_PAGE_OPTIONS.map((option) => (
-										<SelectItem key={option} value={option.toString()}>
-											{option}
-										</SelectItem>
-									))}
-								</SelectContent>
-							</Select>
-						</div>
-					</div>
-
-					{/* Bit Type Filters */}
-					<div className="space-y-3">
-						<div className="flex items-end justify-between">
-							<div className="flex items-center gap-2">
-								<Filter className="h-4 w-4" />
-								<span className="text-sm font-medium">Filter by Type:</span>
-							</div>
-							<div className="flex gap-2">
-								<Button
-									variant="outline"
-									size="default"
-									onClick={handleSelectAllBitTypes}
-								>
-									Select All
-								</Button>
-								<Button
-									variant="outline"
-									size="default"
-									onClick={handleClearBitTypes}
-								>
-									Clear All
-								</Button>
-							</div>
-						</div>
-						<div className="w-full flex flex-wrap gap-2 items-center flex-row flex-between">
-							{ALL_BIT_TYPES.map((bitType) => (
-								<Badge
-									key={bitType}
-									variant={
-										selectedBitTypes.includes(bitType) ? "default" : "secondary"
-									}
-									className={`group cursor-pointer hover:bg-primary gap-2 ${selectedBitTypes.includes(bitType) ? "text-primary-foreground" : "text-secondary-foreground"}`}
-									onClick={() => handleBitTypeToggle(bitType)}
-								>
-									<BitTypeIcon
-										type={bitType}
-										className={`w-3 h-3 group-hover:text-primary-foreground ${selectedBitTypes.includes(bitType) ? "text-primary-foreground" : "text-secondary-foreground"}`}
-									/>
-									<p
-										className={`group-hover:text-primary-foreground ${selectedBitTypes.includes(bitType) ? "text-primary-foreground" : "text-secondary-foreground"}`}
-									>
-										{bitTypeToText(bitType)}
-									</p>
-								</Badge>
-							))}
-						</div>
-					</div>
-				</CardContent>
-			</Card>
-
-			{/* Results Summary */}
-			<div className="text-sm text-muted-foreground">
-				{bits.isLoading
-					? "Loading..."
-					: `Showing ${paginatedBits.length} items`}
-			</div>
-
-			{/* Bits Grid */}
-			<div className="flex-1 w-full overflow-auto">
-				{bits.data && paginatedBits.length > 0 ? (
-					<BentoGrid className="mx-auto cursor-pointer w-full pb-20">
-						{paginatedBits.map((bit, i) => {
-							if (i === 0) counter = 0;
-							const wide = counter === 3 || counter === 6;
-							if (counter === 6) counter = 0;
-							else counter += 1;
-							return <BitCard key={bit.id} bit={bit} wide={wide} />;
-						})}
-					</BentoGrid>
-				) : bits.isLoading ? (
-					<div className="flex items-center justify-center h-32">
-						<div className="text-muted-foreground">Loading bits...</div>
-					</div>
-				) : (
-					<div className="flex items-center justify-center h-32">
-						<div className="text-muted-foreground">
-							No bits found matching your criteria
-						</div>
-					</div>
-				)}
-			</div>
-
-			{/* Pagination */}
-			{(currentPage > 1 || hasMorePages) && (
+		<main className="flex grow h-full min-h-0 bg-background overflow-hidden flex-col w-full">
+			<div className="flex-1 min-h-0 overflow-y-auto p-6 space-y-6">
+				{/* Search and Filters */}
 				<Card className="w-full">
-					<CardContent className="p-4">
-						<div className="flex items-center justify-between">
-							<div className="text-sm text-muted-foreground">
-								Page {currentPage} {hasMorePages ? "(more available)" : ""}
+					<CardContent className="p-6 space-y-4">
+						{/* Search Bar and Items Per Page */}
+						<div className="flex items-center gap-4">
+							<div className="relative flex-1">
+								<Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground h-4 w-4" />
+								<Input
+									placeholder="Search bits..."
+									value={searchTerm}
+									onChange={(e) => setSearchTerm(e.target.value)}
+									className="pl-10"
+								/>
 							</div>
 							<div className="flex items-center gap-2">
-								<Button
-									variant="outline"
-									size="sm"
-									onClick={handleFirstPage}
-									disabled={currentPage === 1}
+								<span className="text-sm font-medium whitespace-nowrap">
+									Items per page:
+								</span>
+								<Select
+									value={itemsPerPage.toString()}
+									onValueChange={(value) => setItemsPerPage(Number(value))}
 								>
-									<ChevronsLeft className="h-4 w-4" />
-								</Button>
-								<Button
-									variant="outline"
-									size="sm"
-									onClick={handlePrevPage}
-									disabled={currentPage === 1}
-								>
-									<ChevronLeft className="h-4 w-4" />
-								</Button>
-								<span className="text-sm px-2">Page {currentPage}</span>
-								<Button
-									variant="outline"
-									size="sm"
-									onClick={handleNextPage}
-									disabled={!hasMorePages}
-								>
-									<ChevronRight className="h-4 w-4" />
-								</Button>
+									<SelectTrigger className="w-20">
+										<SelectValue />
+									</SelectTrigger>
+									<SelectContent>
+										{ITEMS_PER_PAGE_OPTIONS.map((option) => (
+											<SelectItem key={option} value={option.toString()}>
+												{option}
+											</SelectItem>
+										))}
+									</SelectContent>
+								</Select>
+							</div>
+						</div>
+
+						{/* Bit Type Filters */}
+						<div className="space-y-3">
+							<div className="flex items-end justify-between">
+								<div className="flex items-center gap-2">
+									<Filter className="h-4 w-4" />
+									<span className="text-sm font-medium">Filter by Type:</span>
+								</div>
+								<div className="flex gap-2">
+									<Button
+										variant="outline"
+										size="default"
+										onClick={handleSelectAllBitTypes}
+									>
+										Select All
+									</Button>
+									<Button
+										variant="outline"
+										size="default"
+										onClick={handleClearBitTypes}
+									>
+										Clear All
+									</Button>
+								</div>
+							</div>
+							<div className="w-full flex flex-wrap gap-2 items-center flex-row flex-between">
+								{ALL_BIT_TYPES.map((bitType) => (
+									<Badge
+										key={bitType}
+										variant={
+											selectedBitTypes.includes(bitType)
+												? "default"
+												: "secondary"
+										}
+										className={`group cursor-pointer hover:bg-primary gap-2 ${selectedBitTypes.includes(bitType) ? "text-primary-foreground" : "text-secondary-foreground"}`}
+										onClick={() => handleBitTypeToggle(bitType)}
+									>
+										<BitTypeIcon
+											type={bitType}
+											className={`w-3 h-3 group-hover:text-primary-foreground ${selectedBitTypes.includes(bitType) ? "text-primary-foreground" : "text-secondary-foreground"}`}
+										/>
+										<p
+											className={`group-hover:text-primary-foreground ${selectedBitTypes.includes(bitType) ? "text-primary-foreground" : "text-secondary-foreground"}`}
+										>
+											{bitTypeToText(bitType)}
+										</p>
+									</Badge>
+								))}
 							</div>
 						</div>
 					</CardContent>
 				</Card>
-			)}
+
+				{/* Results Summary */}
+				<div className="text-sm text-muted-foreground">
+					{bits.isLoading
+						? "Loading..."
+						: `Showing ${paginatedBits.length} items`}
+				</div>
+
+				{/* Bits Grid */}
+				<div className="flex-1 w-full overflow-auto">
+					{bits.data && paginatedBits.length > 0 ? (
+						<BentoGrid className="mx-auto cursor-pointer w-full pb-20">
+							{paginatedBits.map((bit, i) => {
+								if (i === 0) counter = 0;
+								const wide = counter === 3 || counter === 6;
+								if (counter === 6) counter = 0;
+								else counter += 1;
+								return <BitCard key={bit.id} bit={bit} wide={wide} />;
+							})}
+						</BentoGrid>
+					) : bits.isLoading ? (
+						<div className="flex items-center justify-center h-32">
+							<div className="text-muted-foreground">Loading bits...</div>
+						</div>
+					) : (
+						<div className="flex items-center justify-center h-32">
+							<div className="text-muted-foreground">
+								No bits found matching your criteria
+							</div>
+						</div>
+					)}
+				</div>
+
+				{/* Pagination */}
+				{(currentPage > 1 || hasMorePages) && (
+					<Card className="w-full">
+						<CardContent className="p-4">
+							<div className="flex items-center justify-between">
+								<div className="text-sm text-muted-foreground">
+									Page {currentPage} {hasMorePages ? "(more available)" : ""}
+								</div>
+								<div className="flex items-center gap-2">
+									<Button
+										variant="outline"
+										size="sm"
+										onClick={handleFirstPage}
+										disabled={currentPage === 1}
+									>
+										<ChevronsLeft className="h-4 w-4" />
+									</Button>
+									<Button
+										variant="outline"
+										size="sm"
+										onClick={handlePrevPage}
+										disabled={currentPage === 1}
+									>
+										<ChevronLeft className="h-4 w-4" />
+									</Button>
+									<span className="text-sm px-2">Page {currentPage}</span>
+									<Button
+										variant="outline"
+										size="sm"
+										onClick={handleNextPage}
+										disabled={!hasMorePages}
+									>
+										<ChevronRight className="h-4 w-4" />
+									</Button>
+								</div>
+							</div>
+						</CardContent>
+					</Card>
+				)}
+			</div>
 		</main>
 	);
 }

@@ -6,6 +6,19 @@ import {
   LuMessageCircleQuestion,
   LuPlay,
 } from "react-icons/lu";
+import type { Lang, TranslationKey } from "../i18n";
+import { translations, defaultLang } from "../i18n";
+
+interface Props {
+  lang?: Lang;
+}
+
+const { lang = defaultLang } = Astro.props;
+const t = (key: TranslationKey): string => {
+  const langTranslations = translations[lang] as Record<string, string>;
+  const enTranslations = translations.en as Record<string, string>;
+  return langTranslations?.[key] ?? enTranslations[key] ?? key;
+};
 ---
 
 <section
@@ -55,20 +68,19 @@ import {
           <LuSparkles className="w-4 h-4 group-hover:rotate-12 transition-transform" />
           <div class="absolute inset-0 blur-sm bg-violet-400/50 rounded-full"></div>
         </div>
-        <span>AI-powered workflow assistant</span>
+        <span>{t("flowpilot.tagline")}</span>
       </div>
 
       <!-- Title with text shadow for depth -->
       <h2 class="text-5xl font-black sm:text-6xl lg:text-7xl leading-[1.05] tracking-tight drop-shadow-2xl">
-        <span class="bg-linear-to-r from-white to-white/90 bg-clip-text text-transparent">Meet</span>
+        <span class="bg-linear-to-r from-white to-white/90 bg-clip-text text-transparent">{t("flowpilot.headline.meet")}</span>
         <br />
-        <span class="bg-linear-to-br from-violet-300 via-fuchsia-300 to-cyan-300 bg-clip-text text-transparent animate-gradient-x">FlowPilot</span>
+        <span class="bg-linear-to-br from-violet-300 via-fuchsia-300 to-cyan-300 bg-clip-text text-transparent animate-gradient-x">{t("flowpilot.headline.name")}</span>
       </h2>
 
       <!-- Subtitle with better contrast -->
       <p class="mt-8 text-lg lg:text-xl text-white/80 max-w-md leading-relaxed drop-shadow-lg">
-        Your AI copilot for building, debugging, and understanding workflows.
-        From a screenshot to a fully implemented flow — <span class="text-violet-300 font-semibold">in seconds</span>.
+        {t("flowpilot.description")} <span class="text-violet-300 font-semibold">{t("flowpilot.description.highlight")}</span>.
       </p>
 
       <!-- Feature pills - glassy and interactive -->
@@ -77,28 +89,28 @@ import {
           <div class="feature-icon from-violet-500 to-fuchsia-600">
             <LuBug className="w-3.5 h-3.5 text-white" />
           </div>
-          <span class="text-violet-100 group-hover:text-white">Debug logs</span>
+          <span class="text-violet-100 group-hover:text-white">{t("flowpilot.feature.debug")}</span>
         </div>
 
         <div class="feature-pill group border-cyan-400/40 hover:border-cyan-300/60">
           <div class="feature-icon from-cyan-500 to-blue-600">
             <LuSparkles className="w-3.5 h-3.5 text-white" />
           </div>
-          <span class="text-cyan-100 group-hover:text-white">Build workflows</span>
+          <span class="text-cyan-100 group-hover:text-white">{t("flowpilot.feature.build")}</span>
         </div>
 
         <div class="feature-pill group border-emerald-400/40 hover:border-emerald-300/60">
           <div class="feature-icon from-emerald-500 to-teal-600">
             <LuPuzzle className="w-3.5 h-3.5 text-white" />
           </div>
-          <span class="text-emerald-100 group-hover:text-white">Extend flows</span>
+          <span class="text-emerald-100 group-hover:text-white">{t("flowpilot.feature.extend")}</span>
         </div>
 
         <div class="feature-pill group border-amber-400/40 hover:border-amber-300/60">
           <div class="feature-icon from-amber-500 to-orange-600">
             <LuMessageCircleQuestion className="w-3.5 h-3.5 text-white" />
           </div>
-          <span class="text-amber-100 group-hover:text-white">Explain logic</span>
+          <span class="text-amber-100 group-hover:text-white">{t("flowpilot.feature.ask")}</span>
         </div>
       </div>
 

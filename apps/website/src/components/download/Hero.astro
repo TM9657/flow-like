@@ -1,0 +1,102 @@
+---
+import {
+  LuDownload,
+  LuCpu,
+  LuPackage,
+  LuTerminal,
+  LuShieldCheck,
+  LuArrowRight,
+} from "react-icons/lu";
+
+interface Props {
+  t: (key: string) => string;
+  description: string;
+  version: string | null;
+  ownerRepo: string;
+}
+
+const { t, description, version, ownerRepo } = Astro.props;
+---
+
+<div class="grid lg:grid-cols-2 gap-12 lg:gap-20 items-center mb-24">
+  <div class="space-y-8">
+    <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full border border-zinc-200 bg-white/50 backdrop-blur text-xs font-mono uppercase tracking-widest text-zinc-500">
+      <span class="relative flex h-2 w-2">
+        <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+        <span class="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+      </span>
+      {t("download.hero.badge")}
+    </div>
+
+    <h1 class="text-5xl md:text-7xl font-bold tracking-tighter text-zinc-900 leading-[0.9]">
+      {t("download.hero.headline")} <br/>
+      <span class="text-transparent bg-clip-text bg-gradient-to-r from-zinc-900 to-zinc-500">{t("download.hero.headline.highlight")}</span>
+    </h1>
+
+    <p class="text-lg text-zinc-600 font-light leading-relaxed max-w-md border-l-2 border-zinc-200 pl-6">
+      {description} <br/>
+      <span class="text-sm text-zinc-400 mt-2 block">{t("download.hero.version")} {version ?? "..."}</span>
+    </p>
+
+    <div class="flex flex-wrap gap-4">
+       <a
+        id="download-primary"
+        href={`https://github.com/${ownerRepo}/releases`}
+        target="_blank"
+        rel="noopener noreferrer"
+        class="group relative inline-flex items-center justify-center gap-3 bg-zinc-900 text-white px-8 py-4 text-sm font-bold uppercase tracking-wide overflow-hidden transition-all hover:scale-[1.02]"
+      >
+        <div class="absolute inset-0 bg-gradient-to-r from-zinc-800 to-zinc-900 transition-transform group-hover:scale-105"></div>
+        <div class="relative flex items-center gap-3">
+            <LuDownload className="text-lg" />
+            <span>{t("download.hero.cta.download")}</span>
+        </div>
+      </a>
+
+      <a href="#all-downloads" class="inline-flex items-center justify-center gap-2 px-8 py-4 text-sm font-bold uppercase tracking-wide border border-zinc-200 hover:bg-zinc-50 transition-colors text-zinc-600">
+        {t("download.hero.cta.all")} <LuArrowRight />
+      </a>
+    </div>
+  </div>
+
+  <!-- Visual / 3D Element Placeholder or Abstract Graphic -->
+  <div class="relative hidden lg:block">
+     <div class="absolute inset-0 bg-gradient-to-tr from-emerald-500/20 to-blue-500/20 blur-3xl rounded-full opacity-60"></div>
+     <div class="relative bg-white border border-zinc-100 shadow-2xl shadow-zinc-200/50 p-8 rounded-xl backdrop-blur-sm">
+        <div class="flex items-center justify-between border-b border-zinc-100 pb-4 mb-6">
+            <div class="flex gap-2">
+                <div class="w-3 h-3 rounded-full bg-red-400/20 border border-red-400/50"></div>
+                <div class="w-3 h-3 rounded-full bg-amber-400/20 border border-amber-400/50"></div>
+                <div class="w-3 h-3 rounded-full bg-emerald-400/20 border border-emerald-400/50"></div>
+            </div>
+            <div class="text-[10px] font-mono text-zinc-400">flow-like-desktop</div>
+        </div>
+        <div class="space-y-4">
+            <div class="h-2 bg-zinc-100 rounded w-3/4"></div>
+            <div class="h-2 bg-zinc-100 rounded w-1/2"></div>
+            <div class="grid grid-cols-3 gap-4 mt-8">
+                <div class="h-20 bg-zinc-50 border border-zinc-100 rounded flex items-center justify-center">
+                    <LuCpu className="text-2xl text-zinc-300" />
+                </div>
+                <div class="h-20 bg-zinc-50 border border-zinc-100 rounded flex items-center justify-center">
+                    <LuPackage className="text-2xl text-zinc-300" />
+                </div>
+                <div class="h-20 bg-zinc-50 border border-zinc-100 rounded flex items-center justify-center">
+                    <LuTerminal className="text-2xl text-zinc-300" />
+                </div>
+            </div>
+        </div>
+
+        <!-- Floating Badge -->
+        <div class="absolute -bottom-6 -right-6 bg-white border border-zinc-200 p-4 shadow-xl rounded-lg flex items-center gap-3">
+            <div class="bg-emerald-100 p-2 rounded-full text-emerald-600">
+                <LuShieldCheck />
+            </div>
+            <div>
+                <div class="text-xs font-bold text-zinc-900">{t("download.verified.title")}</div>
+                <div class="text-[10px] text-zinc-500">{t("download.verified.subtitle")}</div>
+            </div>
+        </div>
+     </div>
+  </div>
+</div>

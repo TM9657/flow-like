@@ -208,11 +208,11 @@ async function handleStreamCompletion(
 		await chatDb.globalState.put(tmpGlobalState);
 	}
 
+	// Clear the streaming message BEFORE writing to Dexie to prevent duplicates
+	chatRef.current?.clearCurrentMessageUpdate();
+
 	await chatDb.messages.put(responseMessage);
 
-	// Wait for the message to appear in the UI before clearing the temporary one
-	await new Promise((resolve) => setTimeout(resolve, 200));
-	chatRef.current?.clearCurrentMessageUpdate();
 	chatRef.current?.scrollToBottom();
 
 	executionEngine.unsubscribeFromEventStream(streamId, subscriberId);
@@ -235,6 +235,14 @@ export const ChatInterfaceMemoized = memo(function ChatInterface({
 	const activeSubscriptions = useRef<string[]>([]);
 	const processedCompletedStreams = useRef<Set<string>>(new Set());
 	const [isSendingFromWelcome, setIsSendingFromWelcome] = useState(false);
+
+	// Store pending message data for OAuth retry
+	const pendingMessageRef = useRef<{
+		content: string;
+		filesAttached?: File[];
+		activeTools?: string[];
+		audioFile?: File;
+	} | null>(null);
 
 	useEffect(() => {
 		if (!sessionIdParameter || sessionIdParameter === "") {
@@ -396,6 +404,12 @@ export const ChatInterfaceMemoized = memo(function ChatInterface({
 
 		const subscriberId = `chat-reconnect-${sessionIdParameter}`;
 
+		// Skip if we already have an active subscription for this stream (from handleSendMessage)
+		// This prevents duplicate message creation when the reconnection effect re-runs
+		if (activeSubscriptions.current.length > 0) {
+			return;
+		}
+
 		const responseMessage: IMessage = {
 			id: createId(),
 			sessionId: sessionIdParameter,
@@ -487,7 +501,256 @@ export const ChatInterfaceMemoized = memo(function ChatInterface({
 		return () => {
 			executionEngine.unsubscribeFromEventStream(streamId, subscriberId);
 		};
-	}, [sessionIdParameter, appId, event.id, event.name, executionEngine, messages]);
+	}, [
+		sessionIdParameter,
+		appId,
+		event.id,
+		event.name,
+		executionEngine,
+		messages,
+	]);
+
+	// Internal function to execute the chat (called after OAuth is confirmed)
+	const executeChatMessage = useCallback(
+		async (
+			content: string,
+			filesAttached?: File[],
+			activeTools?: string[],
+			audioFile?: File,
+			skipConsentCheck?: boolean,
+		) => {
+			const isOffline = await backend.isOffline(appId);
+			const history_elements =
+				parseUint8ArrayToJson(event.config)?.history_elements ?? 5;
+
+			// Check OAuth BEFORE adding message to DB (skip if consent was just granted)
+			console.log(
+				"[Chat] Checking OAuth. isOffline:",
+				isOffline,
+				"skipConsentCheck:",
+				skipConsentCheck,
+			);
+			if (!skipConsentCheck && backend.eventState.checkEventOAuth) {
+				const oauthResult = await backend.eventState.checkEventOAuth(
+					appId,
+					event,
+				);
+				console.log(
+					"[Chat] OAuth check result:",
+					oauthResult.missingProviders.length,
+					"missing providers",
+				);
+				if (oauthResult.missingProviders.length > 0) {
+					// Store pending message for retry
+					pendingMessageRef.current = {
+						content,
+						filesAttached,
+						activeTools,
+						audioFile,
+					};
+					// Emit OAuth required event
+					window.dispatchEvent(
+						new CustomEvent("flow:oauth-required", {
+							detail: {
+								missingProviders: oauthResult.missingProviders,
+								appId,
+								boardId: event.board_id,
+								nodeId: event.node_id,
+								payload: {},
+							},
+						}),
+					);
+					return; // Don't add message to DB yet
+				}
+			}
+
+			// Clear pending message since OAuth is satisfied
+			pendingMessageRef.current = null;
+
+			const { imageAttachments, otherAttachments } = await prepareAttachments(
+				filesAttached,
+				audioFile,
+				backend,
+				isOffline,
+			);
+
+			const historyMessage = createHistoryMessage(content, imageAttachments);
+
+			const userMessage = createUserMessage(
+				sessionIdParameter,
+				appId,
+				otherAttachments,
+				historyMessage,
+				activeTools ?? [],
+			);
+
+			await updateSession(sessionIdParameter, appId, content);
+			await chatDb.messages.add(userMessage);
+
+			const lastMessages = messages?.slice(-history_elements) ?? [];
+
+			const payload = createPayload(
+				userMessage,
+				lastMessages,
+				historyMessage,
+				localState,
+				globalState,
+				activeTools ?? [],
+				otherAttachments,
+			);
+
+			const responseMessage = createResponseMessage(
+				sessionIdParameter,
+				appId,
+				event.name,
+			);
+
+			chatRef.current?.pushCurrentMessageUpdate({ ...responseMessage });
+			chatRef.current?.scrollToBottom();
+
+			let intermediateResponse = Response.default();
+			let tmpLocalState = localState;
+			let tmpGlobalState = globalState;
+			let done = false;
+			const attachments: Map<string, IAttachment> = new Map();
+
+			const streamId = sessionIdParameter;
+			const subscriberId = `chat-${responseMessage.id}`;
+			activeSubscriptions.current.push(subscriberId);
+
+			// Start execution first to reset the stream state
+			const executionPromise = executionEngine.executeEvent(streamId, {
+				appId,
+				eventId: event.id,
+				payload: {
+					id: event.node_id,
+					payload: payload,
+				},
+				streamState: false,
+				onExecutionStart: (execution_id: string) => {},
+				path: `${pathname}?id=${appId}&eventId=${event.id}&sessionId=${sessionIdParameter}`,
+				title: event.name || "Chat",
+				interfaceType: "chat",
+				skipConsentCheck,
+			});
+			executionEngine.subscribeToEventStream(
+				streamId,
+				subscriberId,
+				(events) => {
+					const result = processChatEvents(events, {
+						intermediateResponse,
+						responseMessage,
+						attachments,
+						tmpLocalState,
+						tmpGlobalState,
+						done,
+						appId,
+						eventId: event.id,
+						sessionId: sessionIdParameter,
+					});
+
+					intermediateResponse = result.intermediateResponse;
+					tmpLocalState = result.tmpLocalState;
+					tmpGlobalState = result.tmpGlobalState;
+					done = result.done;
+
+					if (result.shouldUpdate) {
+						chatRef.current?.pushCurrentMessageUpdate({
+							...result.responseMessage,
+						});
+						chatRef.current?.scrollToBottom();
+					}
+				},
+				async (events) => {
+					try {
+						await handleStreamCompletion(
+							responseMessage,
+							chatRef,
+							executionEngine,
+							streamId,
+							subscriberId,
+							tmpLocalState,
+							tmpGlobalState,
+						);
+					} finally {
+						activeSubscriptions.current = activeSubscriptions.current.filter(
+							(id) => id !== subscriberId,
+						);
+					}
+				},
+			);
+
+			await executionPromise;
+		},
+		[
+			backend,
+			executionEngine,
+			sessionIdParameter,
+			appId,
+			event,
+			messages,
+			localState,
+			globalState,
+			pathname,
+		],
+	);
+
+	// Listen for OAuth retry events
+	useEffect(() => {
+		const handleOAuthRetry = (e: Event) => {
+			const retryEvent = e as CustomEvent<{
+				appId: string;
+				boardId?: string;
+				nodeId?: string;
+				skipConsentCheck?: boolean;
+			}>;
+
+			const { appId: eventAppId, boardId } = retryEvent.detail;
+			console.log("[Chat] OAuth retry event received:", {
+				eventAppId,
+				boardId,
+				appId,
+				eventBoardId: event.board_id,
+			});
+
+			// Only handle if this is for our app (boardId may be undefined from execution engine)
+			if (eventAppId !== appId) {
+				console.log("[Chat] OAuth retry event not for this app, ignoring");
+				return;
+			}
+
+			// If boardId is provided, also check it matches
+			if (boardId && boardId !== event.board_id) {
+				console.log("[Chat] OAuth retry event not for this board, ignoring");
+				return;
+			}
+
+			const pending = pendingMessageRef.current;
+			if (!pending) {
+				console.log("[Chat] No pending message to retry");
+				return;
+			}
+
+			console.log("[Chat] Re-sending pending message with skipConsentCheck");
+
+			// Re-execute - consent was just granted so skip the check
+			executeChatMessage(
+				pending.content,
+				pending.filesAttached,
+				pending.activeTools,
+				pending.audioFile,
+				true, // skipConsentCheck
+			).catch((err) => {
+				console.error("Failed to retry chat message after OAuth:", err);
+				toast.error("Failed to send message. Please try again.");
+			});
+		};
+
+		window.addEventListener("flow:oauth-retry", handleOAuthRetry);
+		return () => {
+			window.removeEventListener("flow:oauth-retry", handleOAuthRetry);
+		};
+	}, [appId, event.board_id, executeChatMessage]);
 
 	const handleSendMessage: ISendMessageFunction = useCallback(
 		async (
@@ -496,10 +759,6 @@ export const ChatInterfaceMemoized = memo(function ChatInterface({
 			activeTools?: string[],
 			audioFile?: File,
 		) => {
-			const isOffline = await backend.isOffline(appId);
-			const history_elements =
-				parseUint8ArrayToJson(event.config)?.history_elements ?? 5;
-
 			if (!sessionIdParameter || sessionIdParameter === "") {
 				toast.error("Session ID is not set. Please start a new chat.");
 				return;
@@ -512,140 +771,23 @@ export const ChatInterfaceMemoized = memo(function ChatInterface({
 			}
 
 			try {
-				const { imageAttachments, otherAttachments } = await prepareAttachments(
+				await executeChatMessage(
+					content,
 					filesAttached,
+					activeTools,
 					audioFile,
-					backend,
-					isOffline,
 				);
-
-				const historyMessage = createHistoryMessage(content, imageAttachments);
-
-				const userMessage = createUserMessage(
-					sessionIdParameter,
-					appId,
-					otherAttachments,
-					historyMessage,
-					activeTools ?? [],
-				);
-
-				await updateSession(sessionIdParameter, appId, content);
-				await chatDb.messages.add(userMessage);
-
-				const lastMessages = messages?.slice(-history_elements) ?? [];
-
-				const payload = createPayload(
-					userMessage,
-					lastMessages,
-					historyMessage,
-					localState,
-					globalState,
-					activeTools ?? [],
-					otherAttachments,
-				);
-
-				const responseMessage = createResponseMessage(
-					sessionIdParameter,
-					appId,
-					event.name,
-				);
-
-				chatRef.current?.pushCurrentMessageUpdate({ ...responseMessage });
-				chatRef.current?.scrollToBottom();
-
-				let intermediateResponse = Response.default();
-				let tmpLocalState = localState;
-				let tmpGlobalState = globalState;
-				let done = false;
-				const attachments: Map<string, IAttachment> = new Map();
-
-				const streamId = sessionIdParameter;
-				const subscriberId = `chat-${responseMessage.id}`;
-				activeSubscriptions.current.push(subscriberId);
-
-				// Start execution first to reset the stream state
-				const executionPromise = executionEngine.executeEvent(streamId, {
-					appId,
-					eventId: event.id,
-					payload: {
-						id: event.node_id,
-						payload: payload,
-					},
-					streamState: false,
-					onExecutionStart: (execution_id: string) => {},
-					path: `${pathname}?id=${appId}&eventId=${event.id}&sessionId=${sessionIdParameter}`,
-					title: event.name || "Chat",
-					interfaceType: "chat",
-				});
-				executionEngine.subscribeToEventStream(
-					streamId,
-					subscriberId,
-					(events) => {
-						const result = processChatEvents(events, {
-							intermediateResponse,
-							responseMessage,
-							attachments,
-							tmpLocalState,
-							tmpGlobalState,
-							done,
-							appId,
-							eventId: event.id,
-							sessionId: sessionIdParameter,
-						});
-
-						intermediateResponse = result.intermediateResponse;
-						tmpLocalState = result.tmpLocalState;
-						tmpGlobalState = result.tmpGlobalState;
-						done = result.done;
-
-						if (result.shouldUpdate) {
-							chatRef.current?.pushCurrentMessageUpdate({
-								...result.responseMessage,
-							});
-							chatRef.current?.scrollToBottom();
-						}
-					},
-					async (events) => {
-						try {
-							await handleStreamCompletion(
-								responseMessage,
-								chatRef,
-								executionEngine,
-								streamId,
-								subscriberId,
-								tmpLocalState,
-								tmpGlobalState,
-							);
-						} finally {
-							activeSubscriptions.current = activeSubscriptions.current.filter(
-								(id) => id !== subscriberId,
-							);
-						}
-					},
-				);
-
-				await executionPromise;
 			} catch (error) {
-				console.error("Error sending message:", error);
-				toast.error("Failed to send message. Please try again.");
+				// OAuth errors are handled by execution engine - don't show error toast for those
+				if (!(error as any)?.isOAuthError) {
+					console.error("Error sending message:", error);
+					toast.error("Failed to send message. Please try again.");
+				}
 			} finally {
 				setIsSendingFromWelcome(false);
 			}
 		},
-		[
-			backend,
-			executionEngine,
-			sessionIdParameter,
-			appId,
-			event.id,
-			event.name,
-			event.node_id,
-			event.config,
-			messages,
-			localState,
-			globalState,
-			pathname,
-		],
+		[sessionIdParameter, messages, executeChatMessage],
 	);
 
 	const onMessageUpdate = useCallback(

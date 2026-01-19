@@ -4,6 +4,7 @@ import {
 	Card,
 	CardHeader,
 	CardTitle,
+	IIndexType,
 	Input,
 	ScrollArea,
 	useBackend,
@@ -88,6 +89,80 @@ function TableView({
 		limit,
 	]);
 
+	const handleRefresh = useCallback(() => {
+		schema.refetch();
+		count.refetch();
+		list.refetch();
+	}, [schema, count, list]);
+
+	const handleOptimize = useCallback(async () => {
+		await backend.dbState.optimize(appId, table);
+		handleRefresh();
+	}, [backend.dbState, appId, table, handleRefresh]);
+
+	const handleUpdateItem = useCallback(
+		async (filter: string, updates: Record<string, unknown>) => {
+			await backend.dbState.updateItem(appId, table, filter, updates);
+			handleRefresh();
+		},
+		[backend.dbState, appId, table, handleRefresh],
+	);
+
+	const handleDropColumns = useCallback(
+		async (columns: string[]) => {
+			await backend.dbState.dropColumns(appId, table, columns);
+			handleRefresh();
+		},
+		[backend.dbState, appId, table, handleRefresh],
+	);
+
+	const handleAddColumn = useCallback(
+		async (name: string, sqlExpression: string) => {
+			await backend.dbState.addColumn(appId, table, {
+				name,
+				sql_expression: sqlExpression,
+			});
+			handleRefresh();
+		},
+		[backend.dbState, appId, table, handleRefresh],
+	);
+
+	const handleAlterColumn = useCallback(
+		async (column: string, nullable: boolean) => {
+			await backend.dbState.alterColumn(appId, table, column, nullable);
+			handleRefresh();
+		},
+		[backend.dbState, appId, table, handleRefresh],
+	);
+
+	const handleGetIndices = useCallback(async () => {
+		return backend.dbState.getIndices(appId, table);
+	}, [backend.dbState, appId, table]);
+
+	const handleDropIndex = useCallback(
+		async (indexName: string) => {
+			await backend.dbState.dropIndex(appId, table, indexName);
+			handleRefresh();
+		},
+		[backend.dbState, appId, table, handleRefresh],
+	);
+
+	const handleBuildIndex = useCallback(
+		async (column: string, indexType: string) => {
+			const typeMap: Record<string, IIndexType> = {
+				fulltext: IIndexType.FullText,
+				btree: IIndexType.BTree,
+				bitmap: IIndexType.Bitmap,
+				labellist: IIndexType.LabelList,
+				auto: IIndexType.Auto,
+			};
+			const enumType = typeMap[indexType.toLowerCase()] ?? IIndexType.Auto;
+			await backend.dbState.buildIndex(appId, table, column, enumType);
+			handleRefresh();
+		},
+		[backend.dbState, appId, table, handleRefresh],
+	);
+
 	return (
 		<div className="flex flex-col h-full flex-grow max-h-full overflow-hidden">
 			{schema.data && list.data && (
@@ -102,6 +177,15 @@ function TableView({
 					}}
 					loading={list.isLoading}
 					error={list.error?.message}
+					onRefresh={handleRefresh}
+					onOptimize={handleOptimize}
+					onUpdateItem={handleUpdateItem}
+					onDropColumns={handleDropColumns}
+					onAddColumn={handleAddColumn}
+					onAlterColumn={handleAlterColumn}
+					onGetIndices={handleGetIndices}
+					onDropIndex={handleDropIndex}
+					onBuildIndex={handleBuildIndex}
 				>
 					<Button
 						variant={"default"}

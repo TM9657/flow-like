@@ -1,0 +1,85 @@
+{{- if .Values.database.migration.enabled }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "flow-like.fullname" . }}-db-migrate
+  labels:
+    {{- include "flow-like.labels" . | nindent 4 }}
+    app.kubernetes.io/component: db-migration
+  annotations:
+    {{- if eq (include "flow-like.databaseMode" .) "internal" }}
+    "helm.sh/hook": post-install,post-upgrade
+    "helm.sh/hook-weight": "5"
+    {{- else }}
+    "helm.sh/hook": pre-install,pre-upgrade
+    "helm.sh/hook-weight": "-5"
+    {{- end }}
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+spec:
+  backoffLimit: {{ .Values.database.migration.backoffLimit | default 5 }}
+  ttlSecondsAfterFinished: {{ .Values.database.migration.ttlSecondsAfterFinished | default 300 }}
+  template:
+    metadata:
+      labels:
+        {{- include "flow-like.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: db-migration
+    spec:
+      restartPolicy: Never
+      {{- with .Values.global.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: migrate
+          image: "{{ .Values.global.imageRegistry }}{{ .Values.database.migration.image.repository }}:{{ .Values.database.migration.image.tag | default "dev" }}"
+          imagePullPolicy: {{ .Values.database.migration.image.pullPolicy | default "Always" }}
+          command:
+            - /bin/bash
+            - -c
+            - |
+              set -e
+              echo "=== Flow-Like Database Migration ==="
+              echo "Waiting for database to be ready..."
+
+              # Wait for database to be accessible using pg_isready
+              max_retries=60
+              retry_count=0
+              until pg_isready -h "$DB_HOST" -p "$DB_PORT" -U "$DB_USER" 2>/dev/null; do
+                retry_count=$((retry_count + 1))
+                if [ $retry_count -ge $max_retries ]; then
+                  echo "ERROR: Database not ready after $max_retries attempts"
+                  exit 1
+                fi
+                echo "Database not ready yet, attempt $retry_count/$max_retries..."
+                sleep 2
+              done
+
+              echo "Database is ready!"
+              echo "Applying database schema..."
+
+              # Run prisma db push to create/update schema
+              if bunx prisma db push --schema=prisma/schema --accept-data-loss; then
+                echo "✅ Database schema applied successfully!"
+              else
+                echo "❌ Failed to apply database schema"
+                exit 1
+              fi
+
+              echo "=== Migration Complete ==="
+          env:
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "flow-like.databaseSecretName" . }}
+                  key: DATABASE_URL
+            - name: DB_HOST
+              value: {{ include "flow-like.databaseHost" . | quote }}
+            - name: DB_PORT
+              value: "26257"
+            - name: DB_USER
+              value: "flowlike"
+          {{- with .Values.database.migration.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+{{- end }}

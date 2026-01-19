@@ -12,11 +12,11 @@ function constructUrl(profile: IProfile, path: string): string {
 	}
 
 	if (baseUrl.startsWith("http://") || baseUrl.startsWith("https://")) {
-		// If the base URL is already a full URL, use it as is
 		return `${baseUrl}api/v1/${path}`;
 	}
 
-	return `https://${baseUrl}api/v1/${path}`;
+	const protocol = profile.secure === false ? "http" : "https";
+	return `${protocol}://${baseUrl}api/v1/${path}`;
 }
 
 type SSEMessage = {
@@ -34,6 +34,52 @@ function tryParseJSON<T>(text: string): T | null {
 	}
 }
 
+/**
+ * Parse SSE events from a text buffer.
+ * Returns parsed events and remaining incomplete buffer.
+ */
+function parseSSEBuffer(buffer: string): {
+	events: SSEMessage[];
+	remaining: string;
+} {
+	const events: SSEMessage[] = [];
+	const parts = buffer.split("\n\n");
+
+	// Last part might be incomplete, keep it as remaining
+	const remaining = parts.pop() ?? "";
+
+	for (const part of parts) {
+		if (!part.trim()) continue;
+
+		let event: string | undefined;
+		let data = "";
+		let id: string | undefined;
+
+		for (const line of part.split("\n")) {
+			if (line.startsWith("event:")) {
+				event = line.slice(6).trim();
+			} else if (line.startsWith("data:")) {
+				data = line.slice(5).trim();
+			} else if (line.startsWith("id:")) {
+				id = line.slice(3).trim();
+			} else if (line.startsWith(":")) {
+				// Comment/keep-alive, ignore
+				continue;
+			}
+		}
+
+		if (data) {
+			events.push({ event, data, id, raw: part });
+		}
+	}
+
+	return { events, remaining };
+}
+
+/**
+ * Stream fetcher using raw fetch for POST requests (more reliable with Tauri)
+ * and eventsource-client for GET requests.
+ */
 export async function streamFetcher<T>(
 	profile: IProfile,
 	path: string,
@@ -41,20 +87,176 @@ export async function streamFetcher<T>(
 	auth?: AuthContextProps,
 	onMessage?: (data: T) => void,
 ): Promise<void> {
-	const authHeader = auth?.user?.access_token
+	const authHeader: Record<string, string> = auth?.user?.access_token
 		? { Authorization: `Bearer ${auth.user.access_token}` }
 		: {};
 	const url = constructUrl(profile, path);
+	const method = options?.method ?? "GET";
+
+	console.log("[SSE Debug] Starting stream to:", url);
+	console.log("[SSE Debug] Method:", method);
+	console.log("[SSE Debug] Has body:", !!options?.body);
+	console.log("[SSE Debug] Has auth token:", !!authHeader.Authorization);
+
+	// For POST/PUT requests, use raw fetch streaming (more reliable with Tauri)
+	if (method === "POST" || method === "PUT") {
+		await streamFetcherRaw<T>(url, options, authHeader, onMessage);
+		return;
+	}
+
+	// For GET requests, use eventsource-client
+	await streamFetcherEventSource<T>(url, options, authHeader, onMessage);
+}
+
+/**
+ * Raw fetch streaming implementation for POST/PUT requests
+ */
+async function streamFetcherRaw<T>(
+	url: string,
+	options: RequestInit | undefined,
+	authHeader: Record<string, string>,
+	onMessage?: (data: T) => void,
+): Promise<void> {
+	const abortController = new AbortController();
+	const response = await tauriFetch(url, {
+		method: options?.method ?? "POST",
+		headers: {
+			Accept: "text/event-stream",
+			"Content-Type": "application/json",
+			...((options?.headers as Record<string, string>) ?? {}),
+			...authHeader,
+		},
+		body: options?.body,
+		signal: abortController.signal,
+	});
+
+	if (!response.ok) {
+		throw new Error(`HTTP error: ${response.status} ${response.statusText}`);
+	}
+
+	if (!response.body) {
+		throw new Error("Response body is null - streaming not supported");
+	}
+
+	console.log("[SSE Debug] Connected to SSE stream (raw fetch):", url);
+
+	const reader = response.body.getReader();
+	const decoder = new TextDecoder();
+	let buffer = "";
+
+	try {
+		while (true) {
+			const { done, value } = await reader.read();
+
+			if (done) {
+				console.log("[SSE Debug] Stream ended (done=true)");
+				// Process any remaining buffer
+				if (buffer.trim()) {
+					const { events } = parseSSEBuffer(buffer + "\n\n");
+					for (const event of events) {
+						processSSEEvent(event, onMessage);
+					}
+				}
+				break;
+			}
+
+			buffer += decoder.decode(value, { stream: true });
+			const { events, remaining } = parseSSEBuffer(buffer);
+			buffer = remaining;
+
+			for (const event of events) {
+				const result = processSSEEvent(event, onMessage);
+				if (result === "completed" || result === "error") {
+					console.log("[SSE Debug] Received terminal event:", result);
+					// Use AbortController to cleanly terminate the stream
+					abortController.abort();
+					return;
+				}
+			}
+		}
+	} finally {
+		try {
+			reader.releaseLock();
+		} catch {
+			// Ignore errors when releasing lock - stream may already be closed
+		}
+	}
+}
+
+/**
+ * Process a single SSE event, returns the event type for terminal detection
+ */
+function processSSEEvent<T>(
+	event: SSEMessage,
+	onMessage?: (data: T) => void,
+): string {
+	const evt = event.event ?? "message";
+	console.log(
+		"[SSE Debug] Received event:",
+		evt,
+		event.data?.substring(0, 200),
+	);
+
+	const parsedData = tryParseJSON<T>(event.data);
+	if (parsedData && onMessage) {
+		onMessage(parsedData);
+	} else if (event.data && !event.data.startsWith("keep-alive")) {
+		console.warn("[SSE Debug] Non-JSON data:", event.data);
+	}
+
+	// Check SSE event name and JSON data's event_type field for terminal events
+	// All events from executor are InterComEvent with event_type field
+	const data = parsedData as Record<string, unknown> | null;
+	const eventType = data?.event_type ?? data?.type;
+	if (evt === "done" || evt === "completed" || eventType === "completed") {
+		return "completed";
+	}
+	if (evt === "error" || eventType === "error") {
+		return "error";
+	}
+	return evt;
+}
+
+/**
+ * EventSource-based streaming for GET requests
+ */
+async function streamFetcherEventSource<T>(
+	url: string,
+	options: RequestInit | undefined,
+	authHeader: Record<string, string>,
+	onMessage?: (data: T) => void,
+): Promise<void> {
 	let finished = false;
 
 	await new Promise<void>((resolve, reject) => {
-		const es = createEventSource({
+		let esRef: ReturnType<typeof createEventSource> | null = null;
+
+		const closeAndResolve = () => {
+			if (!finished) {
+				finished = true;
+				try {
+					esRef?.close();
+				} catch {}
+				resolve();
+			}
+		};
+
+		const closeAndReject = (error: Error) => {
+			if (!finished) {
+				finished = true;
+				try {
+					esRef?.close();
+				} catch {}
+				reject(error);
+			}
+		};
+
+		esRef = createEventSource({
 			url: url,
 			fetch: tauriFetch,
 			// @ts-ignore
 			headers: {
 				Accept: "text/event-stream",
-				// Only set Content-Type if we actually send a body
 				...(options?.body ? { "Content-Type": "application/json" } : {}),
 				...(options?.headers ?? {}),
 				...(authHeader.Authorization
@@ -65,6 +267,11 @@ export async function streamFetcher<T>(
 			body: options?.body ? options.body : undefined,
 			signal: options?.signal,
 			onMessage: (message: EventSourceMessage) => {
+				console.log(
+					"[SSE Debug] Received message:",
+					message.event,
+					message.data?.substring(0, 200),
+				);
 				const evt = message?.event ?? "message";
 				const parsedData = tryParseJSON<T>(message.data);
 				if (parsedData && onMessage) {
@@ -73,33 +280,33 @@ export async function streamFetcher<T>(
 					console.warn("Received non-JSON data:", message.data);
 				}
 
-				if (evt === "done") {
-					if (!finished) {
-						finished = true;
-						try {
-							es.close();
-						} catch {}
-						resolve();
-					}
+				if (evt === "done" || evt === "completed") {
+					closeAndResolve();
 				}
-
 				if (evt === "error") {
-					if (!finished) {
-						finished = true;
-						try {
-							es.close();
-						} catch {}
-						reject(new Error("SSE stream error"));
-					}
+					closeAndReject(new Error("SSE stream error"));
 				}
 			},
 			onConnect: () => {
-				console.log("Connected to SSE stream:", url);
+				console.log("[SSE Debug] Connected to SSE stream:", url);
+			},
+			onScheduleReconnect: (info) => {
+				console.log(
+					"[SSE Debug] Preventing reconnection attempt (delay would be:",
+					info.delay,
+					"ms)",
+				);
+				closeAndResolve();
 			},
 			onDisconnect: () => {
-				console.log("Disconnected from SSE stream:", url);
-				es.close();
-				resolve();
+				console.log("[SSE Debug] Disconnected from SSE stream:", url);
+				closeAndResolve();
+			},
+			onError: (error: unknown) => {
+				console.error("[SSE Debug] Stream error:", error);
+				closeAndReject(
+					error instanceof Error ? error : new Error(String(error)),
+				);
 			},
 		});
 	});

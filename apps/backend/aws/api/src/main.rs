@@ -2,6 +2,7 @@
 static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
 
 use flow_like_api::construct_router;
+use flow_like_catalog::get_catalog;
 use flow_like_storage::object_store::aws::AmazonS3Builder;
 use flow_like_types::tokio;
 use lambda_http::{Error, run_with_streaming_response, tracing};
@@ -54,7 +55,7 @@ async fn main() -> Result<(), Error> {
     let cdn_bucket =
         flow_like_storage::files::store::FlowLikeStore::AWS(Arc::new(cdn_bucket.build().unwrap()));
 
-    let catalog = Arc::new(flow_like_catalog::get_catalog());
+    let catalog = Arc::new(get_catalog());
     let state = Arc::new(flow_like_api::state::State::new(catalog, Arc::new(cdn_bucket)).await);
     let app = construct_router(state);
 

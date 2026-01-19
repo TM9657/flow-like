@@ -56,6 +56,10 @@ impl ProfileApp {
     }
 }
 
+fn default_secure() -> bool {
+    true
+}
+
 #[derive(Serialize, Deserialize, JsonSchema, Debug, Clone, Hash, PartialEq, Eq)]
 pub struct Profile {
     #[serde(default = "flow_like_types::create_id")]
@@ -71,6 +75,8 @@ pub struct Profile {
     pub tags: Vec<String>,
     #[serde(default)]
     pub hub: String,
+    #[serde(default = "default_secure")]
+    pub secure: bool,
     #[serde(default)]
     pub hubs: Vec<String>,
     #[serde(default)]
@@ -92,6 +98,7 @@ impl Default for Profile {
             description: Some("".to_string()),
             thumbnail: Some("".to_string()),
             hub: "".to_string(),
+            secure: true,
             hubs: vec![],
             bits: vec![],
             icon: Some("".to_string()),

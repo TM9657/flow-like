@@ -193,6 +193,12 @@ export function OAuthExecutionProvider({
 				payload,
 				missingProviders: allMissing,
 			} = oauthEvent.detail;
+			console.log("[OAuthExecutionProvider] Received oauth-required:", {
+				appId,
+				boardId,
+				nodeId,
+				missingProviders: allMissing?.length,
+			});
 			setCurrentAppId(appId);
 			setPendingExecution({ appId, boardId, nodeId, payload });
 
@@ -285,10 +291,22 @@ export function OAuthExecutionProvider({
 			const providers = missingProvidersRef.current;
 			const execution = pendingExecutionRef.current;
 
+			console.log("[OAuthExecutionProvider] handleConfirmAll:", {
+				appId,
+				providers: providers?.length,
+				execution,
+				rememberConsent,
+			});
+
+			// Only persist consent if "remember" is checked
 			if (rememberConsent && appId) {
 				for (const provider of providers) {
 					await consentStore.setConsent(appId, provider.id, provider.scopes);
 				}
+				console.log(
+					"[OAuthExecutionProvider] Consent saved for providers:",
+					providers.map((p) => p.id),
+				);
 			}
 
 			setIsDialogOpen(false);
@@ -297,6 +315,10 @@ export function OAuthExecutionProvider({
 			setPreAuthorizedProviders(new Set());
 
 			if (execution) {
+				console.log(
+					"[OAuthExecutionProvider] Dispatching oauth-retry:",
+					execution,
+				);
 				window.dispatchEvent(
 					new CustomEvent("flow:oauth-retry", {
 						detail: {

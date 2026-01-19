@@ -101,6 +101,24 @@ pub fn ensure_app_dirs() -> std::io::Result<()> {
     ensure_dir(&cache_dir)?;
     Ok(())
 }
+
+fn resolve_default_hub() -> String {
+    if let Ok(url) = std::env::var("FLOW_LIKE_API_URL") {
+        return url;
+    }
+
+    let config_domain = option_env!("FLOW_LIKE_CONFIG_DOMAIN");
+    let config_secure = option_env!("FLOW_LIKE_CONFIG_SECURE");
+
+    if let Some(domain) = config_domain {
+        let secure = config_secure.map(|s| s == "true").unwrap_or(true);
+        let protocol = if secure { "https" } else { "http" };
+        return format!("{}://{}", protocol, domain);
+    }
+
+    String::from("https://api.alpha.flow-like.com")
+}
+
 #[derive(Serialize, Deserialize)]
 pub struct Settings {
     loaded: bool,
@@ -187,7 +205,7 @@ impl Settings {
         Self {
             loaded: false,
             dev_mode: false,
-            default_hub: String::from("api.alpha.flow-like.com"),
+            default_hub: resolve_default_hub(),
             current_profile: String::from("default"),
             bit_dir,
             project_dir,

@@ -138,7 +138,9 @@ export function BitCard({
 	// User tier is stored in userInfo.data.tier (e.g., "FREE", "PREMIUM", "PRO", "ENTERPRISE")
 	// Hub tiers config shows which llm_tiers each user tier can access
 	const tierInfo = useMemo(() => {
-		const params = bit.parameters as { provider?: { params?: { tier?: string } } };
+		const params = bit.parameters as {
+			provider?: { params?: { tier?: string } };
+		};
 		const modelTier = params?.provider?.params?.tier;
 
 		// No tier restriction for local models (no tier specified) or if hub config not loaded
