@@ -163,7 +163,9 @@ export class ExecutionEngineProvider {
 		}
 
 		// Use the executeEventFn if set (handles runtime variables), otherwise fall back to direct call
-		const executeEventCall = this.executeEventFn ?? this.backend.eventState.executeEvent.bind(this.backend.eventState);
+		const executeEventCall =
+			this.executeEventFn ??
+			this.backend.eventState.executeEvent.bind(this.backend.eventState);
 
 		const executionPromise = executeEventCall(
 			options.appId,

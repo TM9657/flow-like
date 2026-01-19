@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { PuffLoader } from "react-spinners";
 import { useShallow } from "zustand/react/shallow";
 import { useRunExecutionStore } from "../../state/run-execution-state";
@@ -58,7 +58,9 @@ function formatDuration(ms: number): string {
 	return `${hours}h ${minutes % 60}m`;
 }
 
-export function BoardActivityIndicator({ boardId }: BoardActivityIndicatorProps) {
+export function BoardActivityIndicator({
+	boardId,
+}: BoardActivityIndicatorProps) {
 	const [now, setNow] = useState(Date.now());
 
 	// Subscribe to primitive values to avoid infinite re-renders
@@ -68,12 +70,15 @@ export function BoardActivityIndicator({ boardId }: BoardActivityIndicatorProps)
 			const ids: string[] = [];
 			for (const [runId, run] of state.runs) {
 				// Show runs that have any activity
-				if (run.boardId === boardId && (run.nodes.size > 0 || run.totalExecutionsCompleted > 0)) {
+				if (
+					run.boardId === boardId &&
+					(run.nodes.size > 0 || run.totalExecutionsCompleted > 0)
+				) {
 					ids.push(runId);
 				}
 			}
 			return ids;
-		})
+		}),
 	);
 
 	// Get currently executing nodes count (unique nodes)
@@ -134,11 +139,15 @@ export function BoardActivityIndicator({ boardId }: BoardActivityIndicatorProps)
 	const colors = getStatusColor(status);
 
 	// Build the node count display - show execution count which properly counts loop iterations
-	const nodeDisplay = currentlyExecuting > 0
-		? `${currentlyExecuting} active` + (totalExecutionsCompleted > 0 ? ` • ${totalExecutionsCompleted} exec` : "")
-		: totalExecutionsCompleted > 0
-			? `${totalExecutionsCompleted} exec`
-			: "starting...";
+	const nodeDisplay =
+		currentlyExecuting > 0
+			? `${currentlyExecuting} active` +
+				(totalExecutionsCompleted > 0
+					? ` • ${totalExecutionsCompleted} exec`
+					: "")
+			: totalExecutionsCompleted > 0
+				? `${totalExecutionsCompleted} exec`
+				: "starting...";
 
 	// Only show time after 15 seconds
 	const showTime = timeSinceUpdate >= 15000;
@@ -150,7 +159,8 @@ export function BoardActivityIndicator({ boardId }: BoardActivityIndicatorProps)
 			<PuffLoader color="currentColor" size={14} className={colors.icon} />
 			<div className="flex flex-col">
 				<span className={`text-xs font-medium ${colors.text}`}>
-					{activeRunIds.length} run{activeRunIds.length > 1 ? "s" : ""} • {nodeDisplay}
+					{activeRunIds.length} run{activeRunIds.length > 1 ? "s" : ""} •{" "}
+					{nodeDisplay}
 				</span>
 				{showTime && (
 					<span className={`text-[10px] ${colors.text} opacity-75`}>

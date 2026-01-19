@@ -53,7 +53,9 @@ pub async fn upsert_board(
     board.description = params.description.unwrap_or(board.description.clone());
     board.stage = params.stage.unwrap_or(board.stage.clone());
     board.log_level = params.log_level.unwrap_or(board.log_level);
-    board.execution_mode = params.execution_mode.unwrap_or(board.execution_mode.clone());
+    board.execution_mode = params
+        .execution_mode
+        .unwrap_or(board.execution_mode.clone());
     board.save(None).await?;
 
     Ok(Json(UpsertBoardResponse {

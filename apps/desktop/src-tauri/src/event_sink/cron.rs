@@ -280,10 +280,7 @@ impl CronSink {
             match manager_state.0.try_lock() {
                 Ok(manager) => manager.fire_event(app_handle, event_id, None, None),
                 Err(_) => {
-                    tracing::warn!(
-                        "EventSinkManager busy while firing cron event {}",
-                        event_id
-                    );
+                    tracing::warn!("EventSinkManager busy while firing cron event {}", event_id);
                     Ok(false)
                 }
             }

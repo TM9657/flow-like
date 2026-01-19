@@ -18,7 +18,6 @@ import {
 	type IRunContext,
 	type IRunPayload,
 	type ISettingsProfile,
-	type IVariable,
 	type IVersionType,
 	type UIActionContext,
 	type UnifiedChatMessage,
@@ -1164,8 +1163,12 @@ export class BoardState implements IBoardState {
 					schema: v.schema ?? undefined,
 				}));
 
-			const { oauth_requirements, requires_local_execution, execution_mode, can_execute_locally } =
-				extractOAuthRequirementsFromBoard(board);
+			const {
+				oauth_requirements,
+				requires_local_execution,
+				execution_mode,
+				can_execute_locally,
+			} = extractOAuthRequirementsFromBoard(board);
 
 			return {
 				runtime_variables: runtimeVariables,
@@ -1200,7 +1203,10 @@ export class BoardState implements IBoardState {
 				if (response) {
 					// If we can execute locally and execution_mode is not Remote, use local board
 					// This ensures we get secrets from local board for local execution
-					if (response.can_execute_locally && response.execution_mode !== IExecutionMode.Remote) {
+					if (
+						response.can_execute_locally &&
+						response.execution_mode !== IExecutionMode.Remote
+					) {
 						return buildLocalPrerun();
 					}
 
@@ -1208,7 +1214,10 @@ export class BoardState implements IBoardState {
 					return response;
 				}
 			} catch (e) {
-				console.warn("[prerunBoard] API call failed, falling back to local:", e);
+				console.warn(
+					"[prerunBoard] API call failed, falling back to local:",
+					e,
+				);
 			}
 		}
 

@@ -341,7 +341,6 @@ impl NodeLogic for ExtractDocumentAiNode {
         let pages_start = std::time::Instant::now();
         let pages = document_to_pages(&result, context).await?;
 
-
         context.set_pin_value("pages", json!(pages)).await?;
         context.activate_exec_pin("exec_out").await?;
 

@@ -804,7 +804,9 @@ export function useExecuteAction() {
 							};
 
 							// Use execution service if available (checks runtime variables)
-							const execFn = executionService?.executeBoard ?? backend.boardState.executeBoard;
+							const execFn =
+								executionService?.executeBoard ??
+								backend.boardState.executeBoard;
 							await execFn(
 								effectiveAppId,
 								effectiveBoardId,

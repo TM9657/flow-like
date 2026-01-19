@@ -38,12 +38,7 @@ impl NodeLogic for SetBearerAuthNode {
         .set_schema::<HttpRequest>()
         .set_options(PinOptions::new().set_enforce_schema(true).build());
 
-        node.add_input_pin(
-            "token",
-            "Token",
-            "Bearer token",
-            VariableType::String,
-        );
+        node.add_input_pin("token", "Token", "Bearer token", VariableType::String);
 
         node.add_output_pin(
             "request_out",

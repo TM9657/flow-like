@@ -312,12 +312,14 @@ impl RunData {
             .duration_since(std::time::UNIX_EPOCH)
             .map(|d| d.as_millis() as u64)
             .unwrap_or(0);
-        self.last_node_update_ms.store(now, std::sync::atomic::Ordering::Relaxed);
+        self.last_node_update_ms
+            .store(now, std::sync::atomic::Ordering::Relaxed);
     }
 
     /// Get the last node update timestamp in milliseconds since epoch
     pub fn get_last_node_update_ms(&self) -> u64 {
-        self.last_node_update_ms.load(std::sync::atomic::Ordering::Relaxed)
+        self.last_node_update_ms
+            .load(std::sync::atomic::Ordering::Relaxed)
     }
 
     pub fn from_event(event: &Event, cancellation_token: CancellationToken) -> Self {

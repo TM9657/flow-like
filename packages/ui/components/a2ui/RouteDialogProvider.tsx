@@ -12,9 +12,9 @@ import {
 } from "react";
 import type { IEvent } from "../../lib/schema/flow/event";
 import { useBackend } from "../../state/backend-state";
-import { useExecutionServiceOptional } from "../../state/execution-service-context";
 import type { IPage } from "../../state/backend-state/page-state";
 import type { IRouteMapping } from "../../state/backend-state/route-state";
+import { useExecutionServiceOptional } from "../../state/execution-service-context";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "../ui/dialog";
 import { A2UIRenderer } from "./A2UIRenderer";
 import type { A2UIServerMessage, Surface, SurfaceComponent } from "./types";
@@ -352,21 +352,15 @@ function RouteDialogRenderer({
 				};
 
 				// Use execution service if available (checks runtime variables)
-				const execFn = executionService?.executeBoard ?? backend.boardState.executeBoard;
-				await execFn(
-					appId,
-					boardId,
-					payload,
-					false,
-					undefined,
-					(events) => {
-						for (const event of events) {
-							if (event.event_type === "a2ui") {
-								handleServerMessage(event.payload as A2UIServerMessage);
-							}
+				const execFn =
+					executionService?.executeBoard ?? backend.boardState.executeBoard;
+				await execFn(appId, boardId, payload, false, undefined, (events) => {
+					for (const event of events) {
+						if (event.event_type === "a2ui") {
+							handleServerMessage(event.payload as A2UIServerMessage);
 						}
-					},
-				);
+					}
+				});
 			} catch (e) {
 				console.error("[RouteDialog] Failed to execute onLoad event:", e);
 			} finally {

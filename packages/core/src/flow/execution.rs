@@ -372,8 +372,8 @@ impl Run {
                 .as_micros()
                 .try_into()
                 .map_err(|_| anyhow!("end timestamp overflowed u64"))?;
-            let payload = to_vec(&self.payload.payload.clone().unwrap_or(Value::Null))
-                .unwrap_or_default();
+            let payload =
+                to_vec(&self.payload.payload.clone().unwrap_or(Value::Null)).unwrap_or_default();
             let visited_nodes = self
                 .visited_nodes
                 .drain()
@@ -426,9 +426,8 @@ impl Run {
 }
 
 pub(crate) struct PreparedFlush {
-    db_fn: Arc<
-        dyn Fn(Path) -> flow_like_storage::lancedb::connection::ConnectBuilder + Send + Sync,
-    >,
+    db_fn:
+        Arc<dyn Fn(Path) -> flow_like_storage::lancedb::connection::ConnectBuilder + Send + Sync>,
     base_path: Path,
     run_id: String,
     arrow_batch: RecordBatch,
@@ -524,11 +523,13 @@ pub struct RunMeta {
 
 impl RunMeta {
     pub fn increment_nodes_executed(&self) {
-        self.nodes_executed.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        self.nodes_executed
+            .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
     }
 
     pub fn get_nodes_executed(&self) -> u64 {
-        self.nodes_executed.load(std::sync::atomic::Ordering::Relaxed)
+        self.nodes_executed
+            .load(std::sync::atomic::Ordering::Relaxed)
     }
 }
 
@@ -1079,22 +1080,22 @@ impl InternalRun {
 
                 let prepared: Option<PreparedFlush> =
                     match lock_with_timeout(run_clone.as_ref(), "run_flush_prepare").await {
-                    Ok(mut run) => {
-                        if run.traces.is_empty() {
-                            None
-                        } else {
-                            match run.prepare_flush(false) {
-                                Ok(prepared) => prepared,
-                                Err(err) => {
-                                    eprintln!(
-                                        "[Error] preparing background log flush: {:?}",
-                                        err
-                                    );
-                                    None
+                        Ok(mut run) => {
+                            if run.traces.is_empty() {
+                                None
+                            } else {
+                                match run.prepare_flush(false) {
+                                    Ok(prepared) => prepared,
+                                    Err(err) => {
+                                        eprintln!(
+                                            "[Error] preparing background log flush: {:?}",
+                                            err
+                                        );
+                                        None
+                                    }
                                 }
                             }
                         }
-                    }
                         Err(err) => {
                             eprintln!("[Error] {}", err);
                             None
@@ -1152,21 +1153,21 @@ impl InternalRun {
         let meta = {
             let prepared: Option<PreparedFlush> =
                 match lock_with_timeout(self.run.as_ref(), "run_finalize").await {
-                Ok(mut run) => {
-                    run.end = SystemTime::now();
-                    run.status = if errored {
-                        RunStatus::Failed
-                    } else {
-                        RunStatus::Success
-                    };
-                    match run.prepare_flush(true) {
-                        Ok(prepared) => prepared,
-                        Err(err) => {
-                            eprintln!("[Error] preparing logs (final): {:?}", err);
-                            None
+                    Ok(mut run) => {
+                        run.end = SystemTime::now();
+                        run.status = if errored {
+                            RunStatus::Failed
+                        } else {
+                            RunStatus::Success
+                        };
+                        match run.prepare_flush(true) {
+                            Ok(prepared) => prepared,
+                            Err(err) => {
+                                eprintln!("[Error] preparing logs (final): {:?}", err);
+                                None
+                            }
                         }
                     }
-                }
                     Err(err) => {
                         eprintln!("[Error] {}", err);
                         None
@@ -1177,9 +1178,7 @@ impl InternalRun {
                 match prepared.write().await {
                     Ok(result) => {
                         if result.created_table {
-                            match lock_with_timeout(self.run.as_ref(), "run_finalize_mark")
-                                .await
-                            {
+                            match lock_with_timeout(self.run.as_ref(), "run_finalize_mark").await {
                                 Ok(mut run) => {
                                     run.log_initialized = true;
                                 }

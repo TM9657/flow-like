@@ -28,7 +28,8 @@ struct DispatchPayload {
     #[serde(default)]
     stream_state: bool,
     #[serde(default)]
-    runtime_variables: Option<std::collections::HashMap<String, flow_like::flow::variable::Variable>>,
+    runtime_variables:
+        Option<std::collections::HashMap<String, flow_like::flow::variable::Variable>>,
 }
 
 #[instrument(skip(body), fields(job_id, run_id, app_id))]

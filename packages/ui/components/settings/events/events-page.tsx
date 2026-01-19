@@ -766,9 +766,7 @@ function EventConfiguration({
 
 		// Check OAuth requirements first if we have the stores
 		if (tokenStore && consentStore && onStartOAuth && !oauthTokens) {
-			let oauthResult:
-				| Awaited<ReturnType<typeof checkOAuthTokens>>
-				| undefined;
+			let oauthResult: Awaited<ReturnType<typeof checkOAuthTokens>> | undefined;
 
 			// Try board first, fallback to prerun for execute-only permissions
 			if (board.data) {

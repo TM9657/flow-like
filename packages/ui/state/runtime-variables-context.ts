@@ -1,5 +1,4 @@
 import { createContext, useContext } from "react";
-import type { IVariable } from "../lib/schema/flow/board";
 
 export interface RuntimeVariableValue {
 	variableId: string;
@@ -38,6 +37,8 @@ const RuntimeVariablesContext = createContext<
 
 export const RuntimeVariablesProvider = RuntimeVariablesContext.Provider;
 
-export function useRuntimeVariables(): RuntimeVariablesContextValue | undefined {
+export function useRuntimeVariables():
+	| RuntimeVariablesContextValue
+	| undefined {
 	return useContext(RuntimeVariablesContext);
 }

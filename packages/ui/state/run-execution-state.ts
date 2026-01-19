@@ -126,7 +126,8 @@ export const useRunExecutionStore = create<IRunExecutionState>((set, get) => ({
 			nodeIds.forEach((nodeId) => newNodes.add(nodeId));
 
 			// Track last active node (most recent in the batch)
-			const lastActiveNodeId = nodeIds.length > 0 ? nodeIds[nodeIds.length - 1] : run.lastActiveNodeId;
+			const lastActiveNodeId =
+				nodeIds.length > 0 ? nodeIds[nodeIds.length - 1] : run.lastActiveNodeId;
 
 			runs.set(runId, {
 				...run,

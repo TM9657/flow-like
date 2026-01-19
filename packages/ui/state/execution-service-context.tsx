@@ -1,21 +1,23 @@
 "use client";
 
 import {
+	type ReactNode,
 	createContext,
 	useCallback,
 	useContext,
 	useMemo,
 	useState,
-	type ReactNode,
 } from "react";
+import { RuntimeVariablesPrompt } from "../components/flow/runtime-variables-prompt";
 import type { IIntercomEvent, ILogMetadata, IRunPayload } from "../lib";
 import type { IBoard, IVariable } from "../lib/schema/flow/board";
 import { IExecutionMode } from "../lib/schema/flow/board";
-import { RuntimeVariablesPrompt } from "../components/flow/runtime-variables-prompt";
-import { useRuntimeVariables, type RuntimeVariableValue } from "./runtime-variables-context";
-import { getRuntimeConfiguredVariables } from "../lib/runtime-vars-utils";
 import { useBackend } from "./backend-state";
 import type { IRuntimeVariable } from "./backend-state/types";
+import {
+	type RuntimeVariableValue,
+	useRuntimeVariables,
+} from "./runtime-variables-context";
 
 interface PendingExecution {
 	appId: string;
@@ -101,17 +103,23 @@ interface ExecutionServiceContextValue {
 	) => Promise<ILogMetadata | undefined>;
 }
 
-const ExecutionServiceContext = createContext<ExecutionServiceContextValue | undefined>(undefined);
+const ExecutionServiceContext = createContext<
+	ExecutionServiceContextValue | undefined
+>(undefined);
 
 export function useExecutionService(): ExecutionServiceContextValue {
 	const ctx = useContext(ExecutionServiceContext);
 	if (!ctx) {
-		throw new Error("useExecutionService must be used within ExecutionServiceProvider");
+		throw new Error(
+			"useExecutionService must be used within ExecutionServiceProvider",
+		);
 	}
 	return ctx;
 }
 
-export function useExecutionServiceOptional(): ExecutionServiceContextValue | undefined {
+export function useExecutionServiceOptional():
+	| ExecutionServiceContextValue
+	| undefined {
 	return useContext(ExecutionServiceContext);
 }
 
@@ -126,11 +134,14 @@ export function ExecutionServiceProvider({
 	const runtimeVarsContext = useRuntimeVariables();
 
 	const [promptOpen, setPromptOpen] = useState(false);
-	const [pendingExecution, setPendingExecution] = useState<PendingExecution | null>(null);
-	const [runtimeConfiguredVars, setRuntimeConfiguredVars] = useState<IVariable[]>([]);
-	const [existingRuntimeVars, setExistingRuntimeVars] = useState<Map<string, RuntimeVariableValue>>(
-		new Map(),
-	);
+	const [pendingExecution, setPendingExecution] =
+		useState<PendingExecution | null>(null);
+	const [runtimeConfiguredVars, setRuntimeConfiguredVars] = useState<
+		IVariable[]
+	>([]);
+	const [existingRuntimeVars, setExistingRuntimeVars] = useState<
+		Map<string, RuntimeVariableValue>
+	>(new Map());
 
 	const convertToRuntimeVariablesMap = useCallback(
 		async (
@@ -170,7 +181,8 @@ export function ExecutionServiceProvider({
 	const getVariablesNeedingPrompt = useCallback(
 		(board: IBoard, isRemote: boolean): IVariable[] => {
 			const executionMode = board.execution_mode ?? IExecutionMode.Hybrid;
-			const isLocalExecution = !isRemote && executionMode !== IExecutionMode.Remote;
+			const isLocalExecution =
+				!isRemote && executionMode !== IExecutionMode.Remote;
 
 			return Object.values(board.variables).filter((v) => {
 				if (v.runtime_configured) return true;
@@ -224,9 +236,24 @@ export function ExecutionServiceProvider({
 			// If no runtime vars context, execute directly
 			if (!runtimeVarsContext) {
 				if (isRemote && backend.boardState.executeBoardRemote) {
-					return backend.boardState.executeBoardRemote(appId, boardId, payload, streamState, eventId, cb);
+					return backend.boardState.executeBoardRemote(
+						appId,
+						boardId,
+						payload,
+						streamState,
+						eventId,
+						cb,
+					);
 				}
-				return backend.boardState.executeBoard(appId, boardId, payload, streamState, eventId, cb, skipConsentCheck);
+				return backend.boardState.executeBoard(
+					appId,
+					boardId,
+					payload,
+					streamState,
+					eventId,
+					cb,
+					skipConsentCheck,
+				);
 			}
 
 			// For remote execution, prefer prerunBoard endpoint if available
@@ -235,8 +262,14 @@ export function ExecutionServiceProvider({
 
 			if (isRemote && backend.boardState.prerunBoard) {
 				try {
-					const prerunResult = await backend.boardState.prerunBoard(appId, boardId);
-					varsNeedingValues = convertPrerunToVariables(prerunResult.runtime_variables, isRemote);
+					const prerunResult = await backend.boardState.prerunBoard(
+						appId,
+						boardId,
+					);
+					varsNeedingValues = convertPrerunToVariables(
+						prerunResult.runtime_variables,
+						isRemote,
+					);
 				} catch {
 					// Prerun failed, try to fall back to local board
 					try {
@@ -244,7 +277,14 @@ export function ExecutionServiceProvider({
 						varsNeedingValues = getVariablesNeedingPrompt(board, isRemote);
 					} catch {
 						// Board not found either, execute anyway
-						return backend.boardState.executeBoardRemote!(appId, boardId, payload, streamState, eventId, cb);
+						return backend.boardState.executeBoardRemote!(
+							appId,
+							boardId,
+							payload,
+							streamState,
+							eventId,
+							cb,
+						);
 					}
 				}
 			} else {
@@ -255,18 +295,48 @@ export function ExecutionServiceProvider({
 				} catch {
 					// Board not found, execute anyway
 					if (isRemote && backend.boardState.executeBoardRemote) {
-						return backend.boardState.executeBoardRemote(appId, boardId, payload, streamState, eventId, cb);
+						return backend.boardState.executeBoardRemote(
+							appId,
+							boardId,
+							payload,
+							streamState,
+							eventId,
+							cb,
+						);
 					}
-					return backend.boardState.executeBoard(appId, boardId, payload, streamState, eventId, cb, skipConsentCheck);
+					return backend.boardState.executeBoard(
+						appId,
+						boardId,
+						payload,
+						streamState,
+						eventId,
+						cb,
+						skipConsentCheck,
+					);
 				}
 			}
 
 			if (varsNeedingValues.length === 0) {
 				// No runtime-configured variables needed, execute directly
 				if (isRemote && backend.boardState.executeBoardRemote) {
-					return backend.boardState.executeBoardRemote(appId, boardId, payload, streamState, eventId, cb);
+					return backend.boardState.executeBoardRemote(
+						appId,
+						boardId,
+						payload,
+						streamState,
+						eventId,
+						cb,
+					);
 				}
-				return backend.boardState.executeBoard(appId, boardId, payload, streamState, eventId, cb, skipConsentCheck);
+				return backend.boardState.executeBoard(
+					appId,
+					boardId,
+					payload,
+					streamState,
+					eventId,
+					cb,
+					skipConsentCheck,
+				);
 			}
 
 			// Check if all needed variables are configured
@@ -278,15 +348,34 @@ export function ExecutionServiceProvider({
 
 			if (hasAll) {
 				// All variables configured, convert to runtime variables map and execute
-				const runtimeVariablesMap = await convertToRuntimeVariablesMap(appId, varsNeedingValues, includeSecrets);
+				const runtimeVariablesMap = await convertToRuntimeVariablesMap(
+					appId,
+					varsNeedingValues,
+					includeSecrets,
+				);
 				const payloadWithVars: IRunPayload = {
 					...payload,
 					runtime_variables: runtimeVariablesMap,
 				};
 				if (isRemote && backend.boardState.executeBoardRemote) {
-					return backend.boardState.executeBoardRemote(appId, boardId, payloadWithVars, streamState, eventId, cb);
+					return backend.boardState.executeBoardRemote(
+						appId,
+						boardId,
+						payloadWithVars,
+						streamState,
+						eventId,
+						cb,
+					);
 				}
-				return backend.boardState.executeBoard(appId, boardId, payloadWithVars, streamState, eventId, cb, skipConsentCheck);
+				return backend.boardState.executeBoard(
+					appId,
+					boardId,
+					payloadWithVars,
+					streamState,
+					eventId,
+					cb,
+					skipConsentCheck,
+				);
 			}
 
 			// Need to prompt for runtime variables
@@ -311,7 +400,13 @@ export function ExecutionServiceProvider({
 				setPromptOpen(true);
 			});
 		},
-		[backend.boardState, runtimeVarsContext, convertToRuntimeVariablesMap, getVariablesNeedingPrompt, convertPrerunToVariables],
+		[
+			backend.boardState,
+			runtimeVarsContext,
+			convertToRuntimeVariablesMap,
+			getVariablesNeedingPrompt,
+			convertPrerunToVariables,
+		],
 	);
 
 	const checkAndExecuteEvent = useCallback(
@@ -326,7 +421,15 @@ export function ExecutionServiceProvider({
 		): Promise<ILogMetadata | undefined> => {
 			// If no runtime vars context, execute directly
 			if (!runtimeVarsContext) {
-				return backend.eventState.executeEvent(appId, eventIdStr, payload, streamState, onEventId, cb, skipConsentCheck);
+				return backend.eventState.executeEvent(
+					appId,
+					eventIdStr,
+					payload,
+					streamState,
+					onEventId,
+					cb,
+					skipConsentCheck,
+				);
 			}
 
 			// Try prerunEvent first if available, otherwise fall back to fetching event + board
@@ -335,21 +438,41 @@ export function ExecutionServiceProvider({
 
 			if (backend.eventState.prerunEvent) {
 				try {
-					const prerunResult = await backend.eventState.prerunEvent(appId, eventIdStr);
+					const prerunResult = await backend.eventState.prerunEvent(
+						appId,
+						eventIdStr,
+					);
 					boardId = prerunResult.board_id;
 					// Events execute locally, so include secrets (isRemote = false)
-					varsNeedingValues = convertPrerunToVariables(prerunResult.runtime_variables, false);
+					varsNeedingValues = convertPrerunToVariables(
+						prerunResult.runtime_variables,
+						false,
+					);
 				} catch {
 					// Prerun failed, fall back to fetching event + board
 					try {
 						const event = await backend.eventState.getEvent(appId, eventIdStr);
 						boardId = event.board_id;
-						const version = event.board_version as [number, number, number] | undefined;
-						const board = await backend.boardState.getBoard(appId, event.board_id, version ?? undefined);
+						const version = event.board_version as
+							| [number, number, number]
+							| undefined;
+						const board = await backend.boardState.getBoard(
+							appId,
+							event.board_id,
+							version ?? undefined,
+						);
 						varsNeedingValues = getVariablesNeedingPrompt(board, false);
 					} catch {
 						// Event or board not found, execute anyway
-						return backend.eventState.executeEvent(appId, eventIdStr, payload, streamState, onEventId, cb, skipConsentCheck);
+						return backend.eventState.executeEvent(
+							appId,
+							eventIdStr,
+							payload,
+							streamState,
+							onEventId,
+							cb,
+							skipConsentCheck,
+						);
 					}
 				}
 			} else {
@@ -357,18 +480,40 @@ export function ExecutionServiceProvider({
 				try {
 					const event = await backend.eventState.getEvent(appId, eventIdStr);
 					boardId = event.board_id;
-					const version = event.board_version as [number, number, number] | undefined;
-					const board = await backend.boardState.getBoard(appId, event.board_id, version ?? undefined);
+					const version = event.board_version as
+						| [number, number, number]
+						| undefined;
+					const board = await backend.boardState.getBoard(
+						appId,
+						event.board_id,
+						version ?? undefined,
+					);
 					varsNeedingValues = getVariablesNeedingPrompt(board, false);
 				} catch {
 					// Event or board not found, execute anyway
-					return backend.eventState.executeEvent(appId, eventIdStr, payload, streamState, onEventId, cb, skipConsentCheck);
+					return backend.eventState.executeEvent(
+						appId,
+						eventIdStr,
+						payload,
+						streamState,
+						onEventId,
+						cb,
+						skipConsentCheck,
+					);
 				}
 			}
 
 			if (varsNeedingValues.length === 0) {
 				// No runtime-configured variables, execute directly
-				return backend.eventState.executeEvent(appId, eventIdStr, payload, streamState, onEventId, cb, skipConsentCheck);
+				return backend.eventState.executeEvent(
+					appId,
+					eventIdStr,
+					payload,
+					streamState,
+					onEventId,
+					cb,
+					skipConsentCheck,
+				);
 			}
 
 			// Check if all runtime variables are configured
@@ -378,12 +523,24 @@ export function ExecutionServiceProvider({
 			if (hasAll) {
 				// All variables configured, convert to runtime variables map and execute
 				// Events execute locally, so include secrets
-				const runtimeVariablesMap = await convertToRuntimeVariablesMap(appId, varsNeedingValues, true);
+				const runtimeVariablesMap = await convertToRuntimeVariablesMap(
+					appId,
+					varsNeedingValues,
+					true,
+				);
 				const payloadWithVars: IRunPayload = {
 					...payload,
 					runtime_variables: runtimeVariablesMap,
 				};
-				return backend.eventState.executeEvent(appId, eventIdStr, payloadWithVars, streamState, onEventId, cb, skipConsentCheck);
+				return backend.eventState.executeEvent(
+					appId,
+					eventIdStr,
+					payloadWithVars,
+					streamState,
+					onEventId,
+					cb,
+					skipConsentCheck,
+				);
 			}
 
 			// Need to prompt for runtime variables
@@ -409,7 +566,14 @@ export function ExecutionServiceProvider({
 				setPromptOpen(true);
 			});
 		},
-		[backend.eventState, backend.boardState, runtimeVarsContext, convertToRuntimeVariablesMap, getVariablesNeedingPrompt, convertPrerunToVariables],
+		[
+			backend.eventState,
+			backend.boardState,
+			runtimeVarsContext,
+			convertToRuntimeVariablesMap,
+			getVariablesNeedingPrompt,
+			convertPrerunToVariables,
+		],
 	);
 
 	const executeBoard = useCallback(
@@ -421,7 +585,17 @@ export function ExecutionServiceProvider({
 			eventId?: (id: string) => void,
 			cb?: (event: IIntercomEvent[]) => void,
 			skipConsentCheck?: boolean,
-		) => checkAndExecute(appId, boardId, payload, streamState, eventId, cb, skipConsentCheck, false),
+		) =>
+			checkAndExecute(
+				appId,
+				boardId,
+				payload,
+				streamState,
+				eventId,
+				cb,
+				skipConsentCheck,
+				false,
+			),
 		[checkAndExecute],
 	);
 
@@ -433,7 +607,17 @@ export function ExecutionServiceProvider({
 			streamState?: boolean,
 			eventId?: (id: string) => void,
 			cb?: (event: IIntercomEvent[]) => void,
-		) => checkAndExecute(appId, boardId, payload, streamState, eventId, cb, undefined, true),
+		) =>
+			checkAndExecute(
+				appId,
+				boardId,
+				payload,
+				streamState,
+				eventId,
+				cb,
+				undefined,
+				true,
+			),
 		[checkAndExecute],
 	);
 
@@ -446,7 +630,16 @@ export function ExecutionServiceProvider({
 			eventId?: (id: string) => void,
 			cb?: (event: IIntercomEvent[]) => void,
 			skipConsentCheck?: boolean,
-		) => backend.boardState.executeBoard(appId, boardId, payload, streamState, eventId, cb, skipConsentCheck),
+		) =>
+			backend.boardState.executeBoard(
+				appId,
+				boardId,
+				payload,
+				streamState,
+				eventId,
+				cb,
+				skipConsentCheck,
+			),
 		[backend.boardState],
 	);
 
@@ -459,7 +652,16 @@ export function ExecutionServiceProvider({
 			onEventId?: (id: string) => void,
 			cb?: (event: IIntercomEvent[]) => void,
 			skipConsentCheck?: boolean,
-		) => checkAndExecuteEvent(appId, eventIdStr, payload, streamState, onEventId, cb, skipConsentCheck),
+		) =>
+			checkAndExecuteEvent(
+				appId,
+				eventIdStr,
+				payload,
+				streamState,
+				onEventId,
+				cb,
+				skipConsentCheck,
+			),
 		[checkAndExecuteEvent],
 	);
 
@@ -472,7 +674,16 @@ export function ExecutionServiceProvider({
 			onEventId?: (id: string) => void,
 			cb?: (event: IIntercomEvent[]) => void,
 			skipConsentCheck?: boolean,
-		) => backend.eventState.executeEvent(appId, eventIdStr, payload, streamState, onEventId, cb, skipConsentCheck),
+		) =>
+			backend.eventState.executeEvent(
+				appId,
+				eventIdStr,
+				payload,
+				streamState,
+				onEventId,
+				cb,
+				skipConsentCheck,
+			),
 		[backend.eventState],
 	);
 
@@ -480,13 +691,27 @@ export function ExecutionServiceProvider({
 		async (values: RuntimeVariableValue[]) => {
 			if (!pendingExecution || !runtimeVarsContext) return;
 
-			const { appId, boardId, payload, streamState, eventId, cb, skipConsentCheck, isRemote, isEvent, eventIdStr, resolve, reject } =
-				pendingExecution;
+			const {
+				appId,
+				boardId,
+				payload,
+				streamState,
+				eventId,
+				cb,
+				skipConsentCheck,
+				isRemote,
+				isEvent,
+				eventIdStr,
+				resolve,
+				reject,
+			} = pendingExecution;
 
 			try {
 				// Save the runtime variable values
 				const saveValues = values.map((v) => {
-					const variable = runtimeConfiguredVars.find((rv) => rv.id === v.variableId);
+					const variable = runtimeConfiguredVars.find(
+						(rv) => rv.id === v.variableId,
+					);
 					return {
 						variableId: v.variableId,
 						variableName: variable?.name || "",
@@ -503,7 +728,9 @@ export function ExecutionServiceProvider({
 				const runtimeVariablesMap: Record<string, IVariable> = {};
 
 				for (const v of values) {
-					const variable = runtimeConfiguredVars.find((rv) => rv.id === v.variableId);
+					const variable = runtimeConfiguredVars.find(
+						(rv) => rv.id === v.variableId,
+					);
 					if (variable) {
 						// Skip secrets for remote execution
 						if (!includeSecrets && variable.secret) continue;
@@ -522,18 +749,44 @@ export function ExecutionServiceProvider({
 
 				// Execute with runtime variables in the payload
 				let result: ILogMetadata | undefined;
-				const varsMap = Object.keys(runtimeVariablesMap).length > 0 ? runtimeVariablesMap : undefined;
+				const varsMap =
+					Object.keys(runtimeVariablesMap).length > 0
+						? runtimeVariablesMap
+						: undefined;
 				const payloadWithVars: IRunPayload = {
 					...payload,
 					runtime_variables: varsMap,
 				};
 
 				if (isEvent && eventIdStr) {
-					result = await backend.eventState.executeEvent(appId, eventIdStr, payloadWithVars, streamState, eventId, cb, skipConsentCheck);
+					result = await backend.eventState.executeEvent(
+						appId,
+						eventIdStr,
+						payloadWithVars,
+						streamState,
+						eventId,
+						cb,
+						skipConsentCheck,
+					);
 				} else if (isRemote && backend.boardState.executeBoardRemote) {
-					result = await backend.boardState.executeBoardRemote(appId, boardId, payloadWithVars, streamState, eventId, cb);
+					result = await backend.boardState.executeBoardRemote(
+						appId,
+						boardId,
+						payloadWithVars,
+						streamState,
+						eventId,
+						cb,
+					);
 				} else {
-					result = await backend.boardState.executeBoard(appId, boardId, payloadWithVars, streamState, eventId, cb, skipConsentCheck);
+					result = await backend.boardState.executeBoard(
+						appId,
+						boardId,
+						payloadWithVars,
+						streamState,
+						eventId,
+						cb,
+						skipConsentCheck,
+					);
 				}
 
 				resolve(result);
@@ -541,12 +794,20 @@ export function ExecutionServiceProvider({
 				reject(error instanceof Error ? error : new Error(String(error)));
 			}
 		},
-		[pendingExecution, runtimeVarsContext, runtimeConfiguredVars, backend.boardState, backend.eventState],
+		[
+			pendingExecution,
+			runtimeVarsContext,
+			runtimeConfiguredVars,
+			backend.boardState,
+			backend.eventState,
+		],
 	);
 
 	const handleCancel = useCallback(() => {
 		if (pendingExecution) {
-			pendingExecution.reject(new Error("Execution cancelled: runtime variables not configured"));
+			pendingExecution.reject(
+				new Error("Execution cancelled: runtime variables not configured"),
+			);
 		}
 		setPromptOpen(false);
 		setPendingExecution(null);
@@ -560,7 +821,13 @@ export function ExecutionServiceProvider({
 			executeEvent,
 			executeEventDirect,
 		}),
-		[executeBoard, executeBoardRemote, executeBoardDirect, executeEvent, executeEventDirect],
+		[
+			executeBoard,
+			executeBoardRemote,
+			executeBoardDirect,
+			executeEvent,
+			executeEventDirect,
+		],
 	);
 
 	return (

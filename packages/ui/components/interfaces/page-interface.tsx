@@ -18,9 +18,9 @@ import {
 } from "../../lib/presign-assets";
 import type { IEvent } from "../../lib/schema/flow/event";
 import { useBackend } from "../../state/backend-state";
-import { useExecutionServiceOptional } from "../../state/execution-service-context";
 import type { IPage } from "../../state/backend-state/page-state";
 import type { IRouteMapping } from "../../state/backend-state/route-state";
+import { useExecutionServiceOptional } from "../../state/execution-service-context";
 import {
 	A2UIRenderer,
 	DataProvider,
@@ -824,21 +824,15 @@ function PageInterfaceInner({
 				};
 
 				// Use execution service if available (checks runtime variables)
-				const execFn = executionService?.executeBoard ?? backend.boardState.executeBoard;
-				await execFn(
-					appId,
-					boardId,
-					payload,
-					false,
-					undefined,
-					(events) => {
-						for (const evt of events) {
-							if (evt.event_type === "a2ui") {
-								handleA2UIMessage(evt.payload as A2UIServerMessage);
-							}
+				const execFn =
+					executionService?.executeBoard ?? backend.boardState.executeBoard;
+				await execFn(appId, boardId, payload, false, undefined, (events) => {
+					for (const evt of events) {
+						if (evt.event_type === "a2ui") {
+							handleA2UIMessage(evt.payload as A2UIServerMessage);
 						}
-					},
-				);
+					}
+				});
 			} catch (e) {
 				console.error(
 					`[PageInterface] Failed to execute ${eventName} event:`,

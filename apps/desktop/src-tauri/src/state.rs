@@ -6,7 +6,9 @@ use flow_like_wasm::client::RegistryClient;
 use std::sync::Arc;
 use tauri::{AppHandle, Manager};
 
-use crate::{event_bus::EventBus, profile::UserProfile, settings::Settings, tray::TrayRuntimeState};
+use crate::{
+    event_bus::EventBus, profile::UserProfile, settings::Settings, tray::TrayRuntimeState,
+};
 
 #[derive(Clone)]
 pub struct TauriFlowLikeState(pub Arc<FlowLikeState>);

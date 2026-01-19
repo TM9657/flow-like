@@ -10,7 +10,7 @@ use flow_like_types::{
     image::{DynamicImage, ImageBuffer, Luma},
     json::json,
 };
-use qrcode::{types::Color, QrCode};
+use qrcode::{QrCode, types::Color};
 
 #[crate::register_node]
 #[derive(Default)]

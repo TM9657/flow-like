@@ -165,7 +165,10 @@ pub async fn prerun_event(
 
     let oauth_requirements: Vec<OAuthRequirement> = oauth_scopes
         .into_iter()
-        .map(|(provider_id, scopes)| OAuthRequirement { provider_id, scopes })
+        .map(|(provider_id, scopes)| OAuthRequirement {
+            provider_id,
+            scopes,
+        })
         .collect();
 
     Ok(Json(PrerunEventResponse {

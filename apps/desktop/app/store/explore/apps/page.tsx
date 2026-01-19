@@ -53,7 +53,11 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 
 const CATEGORY_CONFIG: Record<
 	string,
-	{ label: string; icon: React.ComponentType<{ className?: string }>; color: string }
+	{
+		label: string;
+		icon: React.ComponentType<{ className?: string }>;
+		color: string;
+	}
 > = {
 	[IAppCategory.Productivity]: {
 		label: "Productivity",

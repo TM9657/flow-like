@@ -51,8 +51,8 @@ import { RuntimeVariablesProviderComponent } from "../components/runtime-variabl
 import { SpotlightWrapper } from "../components/spotlight-wrapper";
 import { TauriProvider } from "../components/tauri-provider";
 import { ThemeLoader } from "../components/theme-loader";
-import TrayProvider from "../components/tray-provider";
 import ToastProvider from "../components/toast-provider";
+import TrayProvider from "../components/tray-provider";
 import { UpdateProvider } from "../components/update-provider";
 import PostHogPageView from "./PostHogPageView";
 import { PHProvider } from "./provider";

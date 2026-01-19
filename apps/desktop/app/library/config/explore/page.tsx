@@ -80,7 +80,9 @@ function TableView({
 	const pageParam = searchParams?.get("page");
 	const pageSizeParam = searchParams?.get("pageSize");
 	const page = pageParam ? Math.max(1, Number.parseInt(pageParam, 10) || 1) : 1;
-	const pageSize = pageSizeParam ? Number.parseInt(pageSizeParam, 10) || 25 : 25;
+	const pageSize = pageSizeParam
+		? Number.parseInt(pageSizeParam, 10) || 25
+		: 25;
 	const offset = (page - 1) * pageSize;
 
 	const schema = useInvoke(backend.dbState.getSchema, backend.dbState, [

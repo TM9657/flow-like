@@ -12,7 +12,6 @@ import type {
 	INode,
 	IRunContext,
 	IRunPayload,
-	IVariable,
 	IVersionType,
 } from "../../../";
 import type { IJwks, IRealtimeAccess } from "../../../";

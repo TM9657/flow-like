@@ -32,7 +32,7 @@ export { runtimeVarsDB };
  * Get all runtime variable values for an app
  */
 export async function getRuntimeVarsForApp(
-	appId: string
+	appId: string,
 ): Promise<IRuntimeVariableValue[]> {
 	return runtimeVarsDB.values.where("appId").equals(appId).toArray();
 }
@@ -42,11 +42,9 @@ export async function getRuntimeVarsForApp(
  */
 export async function getRuntimeVarsForBoard(
 	appId: string,
-	boardId: string
+	boardId: string,
 ): Promise<IRuntimeVariableValue[]> {
-	return runtimeVarsDB.values
-		.where({ appId, boardId })
-		.toArray();
+	return runtimeVarsDB.values.where({ appId, boardId }).toArray();
 }
 
 /**
@@ -54,7 +52,7 @@ export async function getRuntimeVarsForBoard(
  */
 export async function getRuntimeVar(
 	appId: string,
-	variableId: string
+	variableId: string,
 ): Promise<IRuntimeVariableValue | undefined> {
 	const id = `${appId}:${variableId}`;
 	return runtimeVarsDB.values.get(id);
@@ -69,7 +67,7 @@ export async function setRuntimeVar(
 	variableId: string,
 	variableName: string,
 	value: number[],
-	isSecret: boolean
+	isSecret: boolean,
 ): Promise<void> {
 	const id = `${appId}:${variableId}`;
 	await runtimeVarsDB.values.put({
@@ -89,7 +87,7 @@ export async function setRuntimeVar(
  */
 export async function deleteRuntimeVar(
 	appId: string,
-	variableId: string
+	variableId: string,
 ): Promise<void> {
 	const id = `${appId}:${variableId}`;
 	await runtimeVarsDB.values.delete(id);
@@ -107,7 +105,7 @@ export async function deleteRuntimeVarsForApp(appId: string): Promise<void> {
  */
 export async function hasAllRuntimeVars(
 	appId: string,
-	requiredVariableIds: string[]
+	requiredVariableIds: string[],
 ): Promise<boolean> {
 	if (requiredVariableIds.length === 0) return true;
 
@@ -125,7 +123,7 @@ export async function hasAllRuntimeVars(
  */
 export async function getMissingRuntimeVars(
 	appId: string,
-	requiredVariableIds: string[]
+	requiredVariableIds: string[],
 ): Promise<string[]> {
 	if (requiredVariableIds.length === 0) return [];
 

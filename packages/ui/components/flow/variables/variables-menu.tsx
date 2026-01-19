@@ -593,7 +593,10 @@ export function Variable({
 							<Switch
 								checked={localVariable.runtime_configured ?? false}
 								onCheckedChange={(checked) =>
-									setLocalVariable((old) => ({ ...old, runtime_configured: checked }))
+									setLocalVariable((old) => ({
+										...old,
+										runtime_configured: checked,
+									}))
 								}
 								id="runtime_configured"
 							/>

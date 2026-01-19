@@ -3,10 +3,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { check } from "@tauri-apps/plugin-updater";
-import {
-	useBackend,
-	useNetworkStatus,
-} from "@tm9657/flow-like-ui";
+import { useBackend, useNetworkStatus } from "@tm9657/flow-like-ui";
 import { useSpotlightStore } from "@tm9657/flow-like-ui/state/spotlight-state";
 import { useEffect, useMemo } from "react";
 
@@ -56,7 +53,9 @@ const TrayProvider: React.FC = () => {
 			update: {
 				syncStatus,
 			},
-		}).catch((error) => console.warn("Failed to update tray sync status", error));
+		}).catch((error) =>
+			console.warn("Failed to update tray sync status", error),
+		);
 	}, [syncStatus]);
 
 	useEffect(() => {

@@ -33,7 +33,10 @@ export function formatTimeSinceUpdate(timeSinceMs: number | null): string {
 	const seconds = Math.floor(timeSinceMs / 1000);
 
 	// Use Intl.RelativeTimeFormat for localization
-	const rtf = new Intl.RelativeTimeFormat("en", { numeric: "always", style: "narrow" });
+	const rtf = new Intl.RelativeTimeFormat("en", {
+		numeric: "always",
+		style: "narrow",
+	});
 
 	if (seconds < 60) {
 		return rtf.format(-seconds, "second");
@@ -56,7 +59,7 @@ export function formatTimeSinceUpdate(timeSinceMs: number | null): string {
  */
 export function useRunActivity(
 	runId: string | undefined,
-	updateIntervalMs: number = 1000,
+	updateIntervalMs = 1000,
 ): RunActivity {
 	// Subscribe to the specific run's lastNodeUpdateMs to trigger re-renders
 	const lastNodeUpdateMs = useRunExecutionStore((state) => {

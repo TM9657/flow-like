@@ -32,19 +32,9 @@ impl NodeLogic for ReplaceSegmentNode {
             .set_schema::<FlowPath>()
             .set_options(PinOptions::new().set_enforce_schema(true).build());
 
-        node.add_input_pin(
-            "from",
-            "From",
-            "Segment to replace",
-            VariableType::String,
-        );
+        node.add_input_pin("from", "From", "Segment to replace", VariableType::String);
 
-        node.add_input_pin(
-            "to",
-            "To",
-            "Replacement segment",
-            VariableType::String,
-        );
+        node.add_input_pin("to", "To", "Replacement segment", VariableType::String);
 
         node.add_input_pin(
             "replace_all",

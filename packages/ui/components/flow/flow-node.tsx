@@ -34,7 +34,10 @@ import {
 import PuffLoader from "react-spinners/PuffLoader";
 import { useLogAggregation } from "../..";
 import { useInvalidateInvoke } from "../../hooks";
-import { useRunActivity, getActivityColorClasses } from "../../hooks/use-run-activity";
+import {
+	getActivityColorClasses,
+	useRunActivity,
+} from "../../hooks/use-run-activity";
 import {
 	IExecutionMode,
 	ILogLevel,
@@ -630,13 +633,14 @@ const FlowNodeInner = memo(
 				!props.data.node.only_offline;
 
 			if (executionStatus === "done" || executing)
-								return (
+				return (
 					<button
 						className="bg-background hover:bg-card group/play transition-all rounded-md hover:rounded-lg border p-1 absolute left-0 top-0 translate-x-[calc(-120%)] opacity-200!"
 						onClick={async (e) => {
 							const backend = useBackendStore.getState().backend;
 							if (!backend) return;
-							if (activeRunId) await backend.eventState.cancelExecution(activeRunId);
+							if (activeRunId)
+								await backend.eventState.cancelExecution(activeRunId);
 						}}
 					>
 						<CircleStopIcon className="w-3 h-3 group-hover/play:scale-110 text-primary" />
@@ -690,7 +694,9 @@ const FlowNodeInner = memo(
 						<div className="absolute left-0 top-0 translate-x-[calc(-120%)] flex flex-col gap-1">
 							<button
 								className="bg-background hover:bg-card group/play transition-all rounded-md hover:rounded-lg border p-1"
-								title={canLocalExecute ? "Execute locally" : "Execute on server"}
+								title={
+									canLocalExecute ? "Execute locally" : "Execute on server"
+								}
 							>
 								{canLocalExecute ? (
 									<PlayCircleIcon className="w-3 h-3 group-hover/play:scale-110" />
@@ -870,7 +876,9 @@ const FlowNodeInner = memo(
 								/>
 							)}
 							{debouncedExecutionState === "running" && (
-								<span className={`text-[8px] ${getActivityColorClasses(runActivity.status).text}`}>
+								<span
+									className={`text-[8px] ${getActivityColorClasses(runActivity.status).text}`}
+								>
 									{runActivity.formattedTime}
 								</span>
 							)}

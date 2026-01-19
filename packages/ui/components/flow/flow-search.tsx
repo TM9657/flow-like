@@ -7,7 +7,6 @@ import {
 	LayersIcon,
 	MessageSquareTextIcon,
 	PanelRightCloseIcon,
-	PanelRightOpenIcon,
 	SearchIcon,
 	VariableIcon,
 	XIcon,
@@ -251,15 +250,15 @@ function buildSearchDocuments(board: IBoard | undefined): SearchResult[] {
 	for (const variable of Object.values(board.variables ?? {})) {
 		const decodedValue = variable.default_value
 			? (() => {
-				try {
-					const parsed = parseUint8ArrayToJson(variable.default_value);
-					if (parsed === null || parsed === undefined) return undefined;
-					if (typeof parsed === "string") return parsed;
-					return JSON.stringify(parsed);
-				} catch {
-					return undefined;
-				}
-			})()
+					try {
+						const parsed = parseUint8ArrayToJson(variable.default_value);
+						if (parsed === null || parsed === undefined) return undefined;
+						if (typeof parsed === "string") return parsed;
+						return JSON.stringify(parsed);
+					} catch {
+						return undefined;
+					}
+				})()
 			: undefined;
 
 		results.push({
@@ -356,7 +355,10 @@ function useSearchIndex(board: IBoard | undefined) {
 			});
 
 			// Deduplicate results by nodeId, keeping the highest scored one
-			const seenNodes = new Map<string, { score: number; result: SearchResult }>();
+			const seenNodes = new Map<
+				string,
+				{ score: number; result: SearchResult }
+			>();
 
 			for (const r of results) {
 				const doc = docMap.get(r.id);
@@ -722,13 +724,7 @@ export const FlowSearch = memo(
 					handleOpenChange(false);
 				}
 			},
-			[
-				navigateResults,
-				results,
-				selectedIndex,
-				handleSelect,
-				handleOpenChange,
-			],
+			[navigateResults, results, selectedIndex, handleSelect, handleOpenChange],
 		);
 
 		if (mode === "sidebar") {

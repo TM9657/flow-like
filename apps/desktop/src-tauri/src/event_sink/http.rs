@@ -315,10 +315,7 @@ impl HttpSink {
                         "EventSinkManager busy while handling HTTP event {}",
                         event_id
                     );
-                    return (
-                        StatusCode::SERVICE_UNAVAILABLE,
-                        "Event manager busy, retry",
-                    )
+                    return (StatusCode::SERVICE_UNAVAILABLE, "Event manager busy, retry")
                         .into_response();
                 }
             };

@@ -1,4 +1,10 @@
-import type { IBoard, IExecutionMode, IHub, INode, IOAuthProviderConfig } from "../schema";
+import type {
+	IBoard,
+	IExecutionMode,
+	IHub,
+	INode,
+	IOAuthProviderConfig,
+} from "../schema";
 import type {
 	IOAuthProvider,
 	IOAuthToken,

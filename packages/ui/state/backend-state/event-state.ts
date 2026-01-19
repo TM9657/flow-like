@@ -5,7 +5,6 @@ import type {
 	IOAuthProvider,
 	IOAuthToken,
 	IRunPayload,
-	IVariable,
 	IVersionType,
 } from "../../lib";
 import type { IPrerunEventResponse } from "./types";

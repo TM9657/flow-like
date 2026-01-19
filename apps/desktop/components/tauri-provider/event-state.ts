@@ -11,7 +11,6 @@ import {
 	type IOAuthToken,
 	type IPrerunEventResponse,
 	type IRunPayload,
-	type IVariable,
 	type IVersionType,
 	checkOAuthTokens,
 	extractOAuthRequirementsFromBoard,
@@ -603,8 +602,12 @@ export class EventState implements IEventState {
 					schema: v.schema ?? undefined,
 				}));
 
-			const { oauth_requirements, requires_local_execution, execution_mode, can_execute_locally } =
-				extractOAuthRequirementsFromBoard(board);
+			const {
+				oauth_requirements,
+				requires_local_execution,
+				execution_mode,
+				can_execute_locally,
+			} = extractOAuthRequirementsFromBoard(board);
 
 			return {
 				board_id: event.board_id,
@@ -640,7 +643,10 @@ export class EventState implements IEventState {
 				if (response) {
 					// If we can execute locally and execution_mode is not Remote, use local board
 					// This ensures we get secrets from local board for local execution
-					if (response.can_execute_locally && response.execution_mode !== IExecutionMode.Remote) {
+					if (
+						response.can_execute_locally &&
+						response.execution_mode !== IExecutionMode.Remote
+					) {
 						return buildLocalPrerun();
 					}
 
@@ -648,7 +654,10 @@ export class EventState implements IEventState {
 					return response;
 				}
 			} catch (e) {
-				console.warn("[prerunEvent] API call failed, falling back to local:", e);
+				console.warn(
+					"[prerunEvent] API call failed, falling back to local:",
+					e,
+				);
 			}
 		}
 

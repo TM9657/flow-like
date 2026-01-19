@@ -3,9 +3,11 @@ use std::time::Duration;
 
 use flow_like_types::tokio::time::sleep;
 use sysinfo::{MemoryRefreshKind, RefreshKind, System};
-use tauri::{AppHandle, Emitter, Manager};
-use tauri::menu::{CheckMenuItem, IsMenuItem, Menu, MenuEvent, MenuItem, PredefinedMenuItem, Submenu};
+use tauri::menu::{
+    CheckMenuItem, IsMenuItem, Menu, MenuEvent, MenuItem, PredefinedMenuItem, Submenu,
+};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
+use tauri::{AppHandle, Emitter, Manager};
 use tauri_plugin_opener::OpenerExt;
 
 use crate::functions::TauriFunctionError;
@@ -379,7 +381,12 @@ fn build_active_runs_menu(
     let mut items: Vec<MenuItem<tauri::Wry>> = Vec::new();
 
     if data.active_runs.is_empty() {
-        items.push(MenuItem::new(app_handle, "No active runs", false, None::<&str>)?);
+        items.push(MenuItem::new(
+            app_handle,
+            "No active runs",
+            false,
+            None::<&str>,
+        )?);
     } else {
         let now_ms = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
@@ -392,12 +399,16 @@ fn build_active_runs_menu(
                 .map(|ms| format!("{}s", ms / 1000))
                 .unwrap_or_default();
 
-            let display_name = run.event_name.as_ref()
+            let display_name = run
+                .event_name
+                .as_ref()
                 .or(run.board_name.as_ref())
                 .map(|s| s.as_str())
                 .unwrap_or(&run.board_id);
 
-            let event_type_label = run.event_type.as_ref()
+            let event_type_label = run
+                .event_type
+                .as_ref()
                 .map(|t| format!(" [{}]", t))
                 .unwrap_or_default();
 
@@ -419,10 +430,7 @@ fn build_active_runs_menu(
                 app_handle,
                 format!(
                     "{}{} • {} • {}",
-                    display_name,
-                    event_type_label,
-                    last_update_label,
-                    elapsed
+                    display_name, event_type_label, last_update_label, elapsed
                 ),
                 false,
                 None::<&str>,
@@ -430,8 +438,10 @@ fn build_active_runs_menu(
         }
     }
 
-    let refs: Vec<&dyn IsMenuItem<tauri::Wry>> =
-        items.iter().map(|item| item as &dyn IsMenuItem<tauri::Wry>).collect();
+    let refs: Vec<&dyn IsMenuItem<tauri::Wry>> = items
+        .iter()
+        .map(|item| item as &dyn IsMenuItem<tauri::Wry>)
+        .collect();
     Submenu::with_items(app_handle, label, true, &refs)
 }
 
@@ -455,7 +465,12 @@ fn build_notifications_menu(
     )?);
 
     if data.notifications.is_empty() {
-        items.push(MenuItem::new(app_handle, "No notifications", false, None::<&str>)?);
+        items.push(MenuItem::new(
+            app_handle,
+            "No notifications",
+            false,
+            None::<&str>,
+        )?);
     } else {
         for notification in data.notifications.iter().take(6) {
             let prefix = if notification.read { "" } else { "• " };
@@ -468,19 +483,36 @@ fn build_notifications_menu(
         }
     }
 
-    let refs: Vec<&dyn IsMenuItem<tauri::Wry>> =
-        items.iter().map(|item| item as &dyn IsMenuItem<tauri::Wry>).collect();
+    let refs: Vec<&dyn IsMenuItem<tauri::Wry>> = items
+        .iter()
+        .map(|item| item as &dyn IsMenuItem<tauri::Wry>)
+        .collect();
     Submenu::with_items(app_handle, label, true, &refs)
 }
 
 fn build_shortcuts_menu(app_handle: &AppHandle) -> tauri::Result<Submenu<tauri::Wry>> {
     let new_flow = MenuItem::with_id(app_handle, MENU_NEW_FLOW, "New flow", true, None::<&str>)?;
-    let open_recent =
-        MenuItem::with_id(app_handle, MENU_OPEN_RECENT, "Open recent", true, None::<&str>)?;
-    let search_flows =
-        MenuItem::with_id(app_handle, MENU_SEARCH_FLOWS, "Search flows", true, None::<&str>)?;
+    let open_recent = MenuItem::with_id(
+        app_handle,
+        MENU_OPEN_RECENT,
+        "Open recent",
+        true,
+        None::<&str>,
+    )?;
+    let search_flows = MenuItem::with_id(
+        app_handle,
+        MENU_SEARCH_FLOWS,
+        "Search flows",
+        true,
+        None::<&str>,
+    )?;
 
-    Submenu::with_items(app_handle, "Shortcuts", true, &[&new_flow, &open_recent, &search_flows])
+    Submenu::with_items(
+        app_handle,
+        "Shortcuts",
+        true,
+        &[&new_flow, &open_recent, &search_flows],
+    )
 }
 
 fn build_resource_menu(
@@ -514,7 +546,10 @@ fn build_resource_menu(
     Submenu::with_items(app_handle, "Resources", true, &[&cpu, &ram, &throttle])
 }
 
-fn build_update_menu(app_handle: &AppHandle, data: &TrayData) -> tauri::Result<Submenu<tauri::Wry>> {
+fn build_update_menu(
+    app_handle: &AppHandle,
+    data: &TrayData,
+) -> tauri::Result<Submenu<tauri::Wry>> {
     let status = if data.update_state.available {
         "Update available"
     } else {
@@ -539,7 +574,12 @@ fn build_failures_menu(
     let mut items: Vec<MenuItem<tauri::Wry>> = Vec::new();
 
     if data.background_failures.is_empty() {
-        items.push(MenuItem::new(app_handle, "No failures", false, None::<&str>)?);
+        items.push(MenuItem::new(
+            app_handle,
+            "No failures",
+            false,
+            None::<&str>,
+        )?);
     } else {
         for failure in data.background_failures.iter().take(6) {
             items.push(MenuItem::new(
@@ -559,8 +599,10 @@ fn build_failures_menu(
         None::<&str>,
     )?);
 
-    let refs: Vec<&dyn IsMenuItem<tauri::Wry>> =
-        items.iter().map(|item| item as &dyn IsMenuItem<tauri::Wry>).collect();
+    let refs: Vec<&dyn IsMenuItem<tauri::Wry>> = items
+        .iter()
+        .map(|item| item as &dyn IsMenuItem<tauri::Wry>)
+        .collect();
     Submenu::with_items(app_handle, "Background tasks", true, &refs)
 }
 
@@ -594,7 +636,12 @@ fn build_account_menu(
         None::<&str>,
     )?;
 
-    Submenu::with_items(app_handle, "Account", true, &[&account_item, &tier_item, &manage_item])
+    Submenu::with_items(
+        app_handle,
+        "Account",
+        true,
+        &[&account_item, &tier_item, &manage_item],
+    )
 }
 
 fn build_diagnostics_menu(
@@ -617,7 +664,12 @@ fn build_diagnostics_menu(
         None::<&str>,
     )?;
 
-    Submenu::with_items(app_handle, "Diagnostics", true, &[&debug_toggle, &report_issue])
+    Submenu::with_items(
+        app_handle,
+        "Diagnostics",
+        true,
+        &[&debug_toggle, &report_issue],
+    )
 }
 
 fn handle_menu_event(app_handle: &AppHandle, id: &str) {
@@ -659,9 +711,10 @@ fn handle_menu_event(app_handle: &AppHandle, id: &str) {
             tauri::async_runtime::spawn(async move {
                 if let Ok(settings) = TauriSettingsState::construct(&app_handle).await {
                     let settings = settings.lock().await;
-                    let _ = app_handle
-                        .opener()
-                        .open_path(settings.logs_dir.to_string_lossy().to_string(), None::<&str>);
+                    let _ = app_handle.opener().open_path(
+                        settings.logs_dir.to_string_lossy().to_string(),
+                        None::<&str>,
+                    );
                 }
             });
         }
@@ -669,9 +722,10 @@ fn handle_menu_event(app_handle: &AppHandle, id: &str) {
             open_route(app_handle, "/account");
         }
         MENU_REPORT_ISSUE => {
-            let _ = app_handle
-                .opener()
-                .open_url("https://github.com/TM9657/flow-like/issues/new", None::<&str>);
+            let _ = app_handle.opener().open_url(
+                "https://github.com/TM9657/flow-like/issues/new",
+                None::<&str>,
+            );
         }
         MENU_QUIT => {
             app_handle.exit(0);

@@ -5,7 +5,6 @@ import type {
 	ILogMetadata,
 	IOAuthToken,
 	IRunPayload,
-	IVariable,
 	IVersionType,
 } from "@tm9657/flow-like-ui";
 

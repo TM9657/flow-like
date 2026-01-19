@@ -153,9 +153,7 @@ async fn execute_internal(
 
     // Spawn execution as a task so we can abort it immediately on cancellation
     let flow_like_state_for_task = flow_like_state.clone();
-    let handle = tokio::spawn(async move {
-        internal_run.execute(flow_like_state_for_task).await
-    });
+    let handle = tokio::spawn(async move { internal_run.execute(flow_like_state_for_task).await });
 
     let abort_handle = handle.abort_handle();
 

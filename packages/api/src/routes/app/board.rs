@@ -46,10 +46,7 @@ pub fn routes() -> Router<AppState> {
             "/{board_id}/elements",
             get(get_execution_elements::get_execution_elements),
         )
-        .route(
-            "/{board_id}/prerun",
-            get(prerun_board::prerun_board),
-        )
+        .route("/{board_id}/prerun", get(prerun_board::prerun_board))
         .route("/{board_id}/undo", patch(undo_redo_board::undo_board))
         .route("/{board_id}/redo", patch(undo_redo_board::redo_board))
         .route("/{board_id}/invoke", post(invoke_board::invoke_board))

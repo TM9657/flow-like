@@ -7,6 +7,13 @@ import {
 	SaveIcon,
 } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
+import type { IVariable } from "../../lib/schema/flow/board";
+import {
+	convertJsonToUint8Array,
+	parseUint8ArrayToJson,
+} from "../../lib/uint8";
+import type { RuntimeVariableValue } from "../../state/runtime-variables-context";
+import { Badge } from "../ui/badge";
 import { Button } from "../ui/button";
 import { Card } from "../ui/card";
 import {
@@ -19,10 +26,6 @@ import {
 } from "../ui/dialog";
 import { Input } from "../ui/input";
 import { Label } from "../ui/label";
-import { Badge } from "../ui/badge";
-import type { IVariable } from "../../lib/schema/flow/board";
-import { convertJsonToUint8Array, parseUint8ArrayToJson } from "../../lib/uint8";
-import type { RuntimeVariableValue } from "../../state/runtime-variables-context";
 
 export interface RuntimeVariablesPromptProps {
 	open: boolean;

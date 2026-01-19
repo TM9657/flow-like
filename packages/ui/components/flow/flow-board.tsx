@@ -122,7 +122,8 @@ import {
 } from "../../lib/flow-board-utils";
 import { toastError } from "../../lib/messages";
 import { isTauri } from "../../lib/platform";
-import { IAppExecutionMode, IAppVisibility } from "../../lib/schema/app/app";
+import { getRuntimeConfiguredVariables } from "../../lib/runtime-vars-utils";
+import { IAppVisibility } from "../../lib/schema/app/app";
 import {
 	type IBoard,
 	type IComment,
@@ -136,6 +137,10 @@ import { convertJsonToUint8Array } from "../../lib/uint8";
 import { useBackend } from "../../state/backend-state";
 import { useFlowBoardParentState } from "../../state/flow-board-parent-state";
 import { useRunExecutionStore } from "../../state/run-execution-state";
+import {
+	type RuntimeVariableValue,
+	useRuntimeVariables,
+} from "../../state/runtime-variables-context";
 import { BoardMeta } from "./board-meta";
 import { FlowCopilot, type Suggestion } from "./flow-copilot";
 import { FlowCursors } from "./flow-cursors";
@@ -151,11 +156,6 @@ import { FlowVeilEdge } from "./flow-veil-edge";
 import { LayerInnerNode } from "./layer-inner-node";
 import { LayerNode } from "./layer-node";
 import { RuntimeVariablesPrompt } from "./runtime-variables-prompt";
-import {
-	useRuntimeVariables,
-	type RuntimeVariableValue,
-} from "../../state/runtime-variables-context";
-import { getRuntimeConfiguredVariables } from "../../lib/runtime-vars-utils";
 
 export function FlowBoard({
 	appId,
@@ -564,7 +564,14 @@ export function FlowBoard({
 	// Returns { intercepted: false, runtimeVariables: map } if all configured
 	// Returns { intercepted: true } if prompting user for values
 	const checkRuntimeVarsAndExecute = useCallback(
-		async (node: INode, payload?: object, isRemote?: boolean): Promise<{ intercepted: boolean; runtimeVariables?: Record<string, IVariable> }> => {
+		async (
+			node: INode,
+			payload?: object,
+			isRemote?: boolean,
+		): Promise<{
+			intercepted: boolean;
+			runtimeVariables?: Record<string, IVariable>;
+		}> => {
 			// If no runtime-configured variables or no context, proceed directly
 			if (runtimeConfiguredVars.length === 0 || !runtimeVarsContext) {
 				return { intercepted: false }; // No interception needed
@@ -596,7 +603,10 @@ export function FlowBoard({
 
 				return {
 					intercepted: false,
-					runtimeVariables: Object.keys(runtimeVariables).length > 0 ? runtimeVariables : undefined
+					runtimeVariables:
+						Object.keys(runtimeVariables).length > 0
+							? runtimeVariables
+							: undefined,
 				};
 			}
 
@@ -618,7 +628,12 @@ export function FlowBoard({
 
 	// Internal execution function (called after runtime vars check)
 	const executeBoardInternal = useCallback(
-		async (node: INode, payload?: object, skipConsentCheck?: boolean, runtimeVariables?: Record<string, IVariable>) => {
+		async (
+			node: INode,
+			payload?: object,
+			skipConsentCheck?: boolean,
+			runtimeVariables?: Record<string, IVariable>,
+		) => {
 			let added = false;
 			let runId = "";
 			let meta: ILogMetadata | undefined = undefined;
@@ -709,7 +724,11 @@ export function FlowBoard({
 	);
 
 	const executeBoardRemoteInternal = useCallback(
-		async (node: INode, payload?: object, runtimeVariables?: Record<string, IVariable>) => {
+		async (
+			node: INode,
+			payload?: object,
+			runtimeVariables?: Record<string, IVariable>,
+		) => {
 			if (!backend.boardState.executeBoardRemote) {
 				toastError(
 					"Remote execution not available",
@@ -811,7 +830,9 @@ export function FlowBoard({
 			// Build runtime variables map from the saved values
 			const runtimeVariables: Record<string, IVariable> = {};
 			for (const v of values) {
-				const variable = runtimeConfiguredVars.find((rv) => rv.id === v.variableId);
+				const variable = runtimeConfiguredVars.find(
+					(rv) => rv.id === v.variableId,
+				);
 				if (variable) {
 					// For remote execution, skip secrets
 					if (pendingExecution.isRemote && variable.secret) continue;
@@ -828,14 +849,24 @@ export function FlowBoard({
 			const { node, payload, isRemote } = pendingExecution;
 			setPendingExecution(null);
 
-			const varsMap = Object.keys(runtimeVariables).length > 0 ? runtimeVariables : undefined;
+			const varsMap =
+				Object.keys(runtimeVariables).length > 0 ? runtimeVariables : undefined;
 			if (isRemote) {
 				await executeBoardRemoteInternal(node, payload, varsMap);
 			} else {
 				await executeBoardInternal(node, payload, true, varsMap);
 			}
 		},
-		[appId, boardId, runtimeVarsContext, pendingExecution, runtimeConfiguredVars, board.data, executeBoardInternal, executeBoardRemoteInternal],
+		[
+			appId,
+			boardId,
+			runtimeVarsContext,
+			pendingExecution,
+			runtimeConfiguredVars,
+			board.data,
+			executeBoardInternal,
+			executeBoardRemoteInternal,
+		],
 	);
 
 	// Public execution function - checks runtime vars first
@@ -843,7 +874,12 @@ export function FlowBoard({
 		async (node: INode, payload?: object, skipConsentCheck?: boolean) => {
 			const result = await checkRuntimeVarsAndExecute(node, payload, false);
 			if (!result.intercepted) {
-				await executeBoardInternal(node, payload, skipConsentCheck, result.runtimeVariables);
+				await executeBoardInternal(
+					node,
+					payload,
+					skipConsentCheck,
+					result.runtimeVariables,
+				);
 			}
 		},
 		[checkRuntimeVarsAndExecute, executeBoardInternal],
@@ -854,7 +890,11 @@ export function FlowBoard({
 		async (node: INode, payload?: object) => {
 			const result = await checkRuntimeVarsAndExecute(node, payload, true);
 			if (!result.intercepted) {
-				await executeBoardRemoteInternal(node, payload, result.runtimeVariables);
+				await executeBoardRemoteInternal(
+					node,
+					payload,
+					result.runtimeVariables,
+				);
 			}
 		},
 		[checkRuntimeVarsAndExecute, executeBoardRemoteInternal],

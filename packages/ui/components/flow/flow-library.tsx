@@ -25,7 +25,7 @@ import type { ReactNode } from "react";
 import { useMemo } from "react";
 import { useInvoke } from "../../hooks/use-invoke";
 import { cn, formatRelativeTime } from "../../lib";
-import { IExecutionMode, type IBoard } from "../../lib/schema/flow/board";
+import { type IBoard, IExecutionMode } from "../../lib/schema/flow/board";
 import { useBackend } from "../../state/backend-state";
 import type { IApp } from "../../types";
 import { Badge } from "../ui/badge";
@@ -613,9 +613,7 @@ export function FlowLibraryBoardCard({
 	);
 }
 
-function ExecutionModeBadge({
-	mode,
-}: Readonly<{ mode?: IExecutionMode }>) {
+function ExecutionModeBadge({ mode }: Readonly<{ mode?: IExecutionMode }>) {
 	const effectiveMode = mode ?? IExecutionMode.Hybrid;
 	const config = {
 		[IExecutionMode.Hybrid]: {
@@ -635,10 +633,7 @@ function ExecutionModeBadge({
 	return (
 		<Tooltip>
 			<TooltipTrigger asChild>
-				<Badge
-					variant="outline"
-					className="text-[10px] px-1.5 py-0 gap-0.5"
-				>
+				<Badge variant="outline" className="text-[10px] px-1.5 py-0 gap-0.5">
 					{config.icon}
 					{config.label}
 				</Badge>

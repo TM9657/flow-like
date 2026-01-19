@@ -73,10 +73,7 @@ fn parse_version(version_str: &str) -> Option<(u32, u32, u32)> {
 /// Analyze a board to determine what's needed before execution.
 ///
 /// Returns runtime-configured variables and OAuth requirements.
-#[tracing::instrument(
-    name = "GET /apps/{app_id}/board/{board_id}/prerun",
-    skip(state, user)
-)]
+#[tracing::instrument(name = "GET /apps/{app_id}/board/{board_id}/prerun", skip(state, user))]
 pub async fn prerun_board(
     State(state): State<AppState>,
     Extension(user): Extension<AppUser>,
@@ -157,7 +154,10 @@ pub async fn prerun_board(
 
     let oauth_requirements: Vec<OAuthRequirement> = oauth_scopes
         .into_iter()
-        .map(|(provider_id, scopes)| OAuthRequirement { provider_id, scopes })
+        .map(|(provider_id, scopes)| OAuthRequirement {
+            provider_id,
+            scopes,
+        })
         .collect();
 
     Ok(Json(PrerunBoardResponse {

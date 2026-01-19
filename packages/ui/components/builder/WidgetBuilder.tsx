@@ -23,9 +23,9 @@ import {
 	presignPageAssets,
 } from "../../lib/presign-assets";
 import { useBackend } from "../../state/backend-state";
-import { useExecutionServiceOptional } from "../../state/execution-service-context";
 import type { IWidgetRef } from "../../state/backend-state/page-state";
 import type { IWidget } from "../../state/backend-state/widget-state";
+import { useExecutionServiceOptional } from "../../state/execution-service-context";
 import { A2UIRenderer } from "../a2ui/A2UIRenderer";
 import type {
 	A2UIClientMessage,
@@ -1287,21 +1287,15 @@ function BuilderPreview({ surfaceId }: BuilderPreviewProps) {
 				};
 
 				// Use execution service if available (checks runtime variables)
-				const execFn = executionService?.executeBoard ?? backend.boardState.executeBoard;
-				await execFn(
-					appId,
-					boardId,
-					payload,
-					false,
-					undefined,
-					(events) => {
-						for (const evt of events) {
-							if (evt.event_type === "a2ui") {
-								handleA2UIMessage(evt.payload as A2UIServerMessage);
-							}
+				const execFn =
+					executionService?.executeBoard ?? backend.boardState.executeBoard;
+				await execFn(appId, boardId, payload, false, undefined, (events) => {
+					for (const evt of events) {
+						if (evt.event_type === "a2ui") {
+							handleA2UIMessage(evt.payload as A2UIServerMessage);
 						}
-					},
-				);
+					}
+				});
 			} catch (e) {
 				console.error("[BuilderPreview] Failed to execute onLoad event:", e);
 			}
@@ -1350,21 +1344,15 @@ function BuilderPreview({ surfaceId }: BuilderPreviewProps) {
 				};
 
 				// Use execution service if available (checks runtime variables)
-				const execFn = executionService?.executeBoard ?? backend.boardState.executeBoard;
-				await execFn(
-					appId,
-					boardId,
-					payload,
-					false,
-					undefined,
-					(events) => {
-						for (const evt of events) {
-							if (evt.event_type === "a2ui") {
-								handleA2UIMessage(evt.payload as A2UIServerMessage);
-							}
+				const execFn =
+					executionService?.executeBoard ?? backend.boardState.executeBoard;
+				await execFn(appId, boardId, payload, false, undefined, (events) => {
+					for (const evt of events) {
+						if (evt.event_type === "a2ui") {
+							handleA2UIMessage(evt.payload as A2UIServerMessage);
 						}
-					},
-				);
+					}
+				});
 			} catch (e) {
 				console.error(
 					"[BuilderPreview] Failed to execute onInterval event:",
