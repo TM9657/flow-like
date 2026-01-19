@@ -282,9 +282,7 @@ impl WasmEngine {
         let dir = dir.as_ref();
         let mut modules = Vec::new();
 
-        let mut entries = tokio::fs::read_dir(dir)
-            .await
-            .map_err(|e| WasmError::Io(e))?;
+        let mut entries = tokio::fs::read_dir(dir).await.map_err(WasmError::Io)?;
 
         while let Some(entry) = entries.next_entry().await.map_err(WasmError::Io)? {
             let path = entry.path();

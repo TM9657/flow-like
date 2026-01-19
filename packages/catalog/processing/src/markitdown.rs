@@ -310,19 +310,19 @@ impl NodeLogic for ExtractDocumentAiNode {
             .map(|e| format!(".{}", e))
             .unwrap_or_default();
 
-        let file_start = std::time::Instant::now();
+        let _file_start = std::time::Instant::now();
         let file_buffer = file.get(context, false).await?;
         let bytes = Bytes::from(file_buffer);
 
         let model_factory = context.app_state.model_factory.clone();
-        let model_start = std::time::Instant::now();
+        let _model_start = std::time::Instant::now();
         let model = model_factory
             .lock()
             .await
             .build(&model_bit, context.app_state.clone(), context.token.clone())
             .await?;
 
-        let llm_start = std::time::Instant::now();
+        let _llm_start = std::time::Instant::now();
         let completion_handle = model.completion_model_handle(None).await?;
         let llm_client = create_llm_client(completion_handle);
 
@@ -332,13 +332,13 @@ impl NodeLogic for ExtractDocumentAiNode {
             .with_images(extract_images)
             .with_llm(llm_client);
 
-        let convert_start = std::time::Instant::now();
+        let _convert_start = std::time::Instant::now();
         let result = md
             .convert_bytes(bytes, Some(options))
             .await
             .map_err(|e| flow_like_types::anyhow!("Failed to extract document with AI: {}", e))?;
 
-        let pages_start = std::time::Instant::now();
+        let _pages_start = std::time::Instant::now();
         let pages = document_to_pages(&result, context).await?;
 
         context.set_pin_value("pages", json!(pages)).await?;

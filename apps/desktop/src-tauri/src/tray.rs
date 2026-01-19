@@ -176,11 +176,10 @@ pub fn init_tray(app_handle: &AppHandle) -> tauri::Result<()> {
                 button_state: MouseButtonState::Down,
                 ..
             } = event
+                && let Some(main) = tray.app_handle().get_webview_window("main")
             {
-                if let Some(main) = tray.app_handle().get_webview_window("main") {
-                    let _ = main.show();
-                    let _ = main.set_focus();
-                }
+                let _ = main.show();
+                let _ = main.set_focus();
             }
         });
 
@@ -745,7 +744,7 @@ fn open_route(app_handle: &AppHandle, route: &str) {
     if let Some(main) = app_handle.get_webview_window("main") {
         let _ = main.show();
         let _ = main.set_focus();
-        let _ = main.eval(&format!("window.location.assign('{}')", route));
+        let _ = main.eval(format!("window.location.assign('{}')", route));
     }
 }
 

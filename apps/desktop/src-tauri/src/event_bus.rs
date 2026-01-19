@@ -23,10 +23,10 @@ fn touch_run_last_update(app_handle: &AppHandle, events: &[InterComEvent]) {
         // Run events have type "run:{run_id}"
         if event.event_type.starts_with("run:") {
             let run_id = &event.event_type[4..]; // Skip "run:" prefix
-            if let Some(state) = app_handle.try_state::<crate::state::TauriFlowLikeState>() {
-                if let Some(run_data) = state.0.board_run_registry.get(run_id) {
-                    run_data.touch_last_node_update();
-                }
+            if let Some(state) = app_handle.try_state::<crate::state::TauriFlowLikeState>()
+                && let Some(run_data) = state.0.board_run_registry.get(run_id)
+            {
+                run_data.touch_last_node_update();
             }
         }
     }
