@@ -39,9 +39,7 @@ pub mod types;
 pub use config::ExecutorConfig;
 pub use error::ExecutorError;
 pub use execute::execute;
+pub use flow_like_types::OAuthTokenInput;
 pub use router::{executor_router, ExecutorState};
 pub use streaming::{execute_streaming, ExecutionStream, StreamEvent};
-pub use types::{
-    BoardVersion, ExecutionEvent, ExecutionRequest, ExecutionResult, ExecutionStatus,
-    OAuthTokenInput,
-};
+pub use types::{BoardVersion, ExecutionEvent, ExecutionRequest, ExecutionResult, ExecutionStatus};

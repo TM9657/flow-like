@@ -1,0 +1,119 @@
+# Test database containers for DataFusion integration tests
+# Usage: docker compose -f tests/docker-compose.test.yml up -d
+# Teardown: docker compose -f tests/docker-compose.test.yml down -v
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: flowlike-test-postgres
+    environment:
+      POSTGRES_USER: flowlike
+      POSTGRES_PASSWORD: flowlike_test
+      POSTGRES_DB: flowlike_test
+    ports:
+      - "54320:5432"
+    volumes:
+      - ./init-scripts/postgres:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U flowlike -d flowlike_test"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  mysql:
+    image: mysql:8.0
+    container_name: flowlike-test-mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: root_test
+      MYSQL_USER: flowlike
+      MYSQL_PASSWORD: flowlike_test
+      MYSQL_DATABASE: flowlike_test
+    ports:
+      - "33060:3306"
+    volumes:
+      - ./init-scripts/mysql:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "flowlike", "-pflowlike_test"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    command: --default-authentication-plugin=mysql_native_password
+
+  clickhouse:
+    image: clickhouse/clickhouse-server:24.1
+    container_name: flowlike-test-clickhouse
+    environment:
+      CLICKHOUSE_USER: flowlike
+      CLICKHOUSE_PASSWORD: flowlike_test
+      CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: 1
+    ports:
+      - "8123:8123"   # HTTP interface
+      - "9000:9000"   # Native interface
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:8123/ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  clickhouse-setup:
+    image: clickhouse/clickhouse-server:24.1
+    container_name: flowlike-test-clickhouse-setup
+    depends_on:
+      clickhouse:
+        condition: service_healthy
+    volumes:
+      - ./init-scripts/clickhouse:/scripts:ro
+    entrypoint: ["/bin/bash", "/scripts/01-init.sh"]
+    environment:
+      CLICKHOUSE_HOST: clickhouse
+    network_mode: "service:clickhouse"
+
+  oracle:
+    image: gvenzl/oracle-free:23-slim
+    container_name: flowlike-test-oracle
+    environment:
+      ORACLE_PASSWORD: flowlike_test
+      APP_USER: flowlike
+      APP_USER_PASSWORD: flowlike_test
+    ports:
+      - "1521:1521"
+    volumes:
+      - ./init-scripts/oracle:/container-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD", "healthcheck.sh"]
+      interval: 30s
+      timeout: 10s
+      retries: 10
+      start_period: 60s
+
+  # MinIO for S3-compatible storage tests (Parquet, Delta, Iceberg)
+  minio:
+    image: minio/minio:latest
+    container_name: flowlike-test-minio
+    environment:
+      MINIO_ROOT_USER: flowlike
+      MINIO_ROOT_PASSWORD: flowlike_test
+    ports:
+      - "9002:9000"   # API
+      - "9003:9001"   # Console
+    command: server /data --console-address ":9001"
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # MinIO setup - creates test buckets and scoped users for credential testing
+  minio-setup:
+    image: minio/mc:latest
+    container_name: flowlike-test-minio-setup
+    depends_on:
+      minio:
+        condition: service_healthy
+    volumes:
+      - ./init-scripts/minio:/scripts:ro
+    entrypoint: ["/bin/bash", "/scripts/setup.sh"]
+
+networks:
+  default:
+    name: flowlike-test-network

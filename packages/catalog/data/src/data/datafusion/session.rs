@@ -221,6 +221,16 @@ impl NodeLogic for CreateDataFusionSessionNode {
                     .with_parquet_bloom_filter_pruning(true);
             }
 
+            // Note: Federation support (query push-down to external databases) requires
+            // datafusion-federation 0.4.7+ which needs DataFusion 50+.
+            // When upgrading to DataFusion 50+, enable federation feature and use:
+            // let rules = datafusion_federation::default_optimizer_rules();
+            // let state = SessionStateBuilder::new()
+            //     .with_config(config)
+            //     .with_optimizer_rules(rules)
+            //     .with_query_planner(Arc::new(FederatedQueryPlanner::new()))
+            //     .with_default_features()
+            //     .build();
             let ctx = SessionContext::new_with_config(config);
 
             let cached = CachedDataFusionSession { ctx: Arc::new(ctx) };

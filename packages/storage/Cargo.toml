@@ -32,6 +32,9 @@ rmcp.workspace = true
 # Data lake formats - Delta Lake support (v0.28 compatible with datafusion 49 + arrow 55)
 deltalake = { version = "0.28", optional = true, default-features = false, features = ["datafusion", "rustls"] }
 
+# Note: Federation support requires datafusion-federation 0.4.7+ which needs DataFusion 50+
+# When upgrading to DataFusion 50+, add: datafusion-federation = { version = "0.4.7", optional = true }
+
 [features]
 tauri = []
 default = []
@@ -40,5 +43,8 @@ default = []
 delta = ["deltalake"]
 all-lakes = ["delta"]
 
-# Full feature set (currently only lakes - database providers pending datafusion version compatibility)
+# Note: Federation feature will be available when upgrading to DataFusion 50+
+# federation = ["datafusion-federation"]
+
+# Full feature set
 full = ["all-lakes"]

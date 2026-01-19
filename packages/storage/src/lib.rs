@@ -16,3 +16,7 @@ pub use serde_arrow;
 // Re-export data lake formats
 #[cfg(feature = "delta")]
 pub use deltalake;
+
+// Note: Federation support (datafusion-federation) will be available when upgrading to DataFusion 50+
+// #[cfg(feature = "federation")]
+// pub use datafusion_federation;
