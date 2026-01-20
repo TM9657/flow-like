@@ -5,7 +5,9 @@ edition = "2024"
 
 [features]
 default = []
-local-ml = ["flow-like-catalog-core/local-ml"]
+local-ml = ["flow-like-catalog-core/local-ml", "execute"]
+# Execution feature - enables heavy dependencies for node execution
+execute = ["flow-like-catalog-core/execute", "dep:tract-tflite", "flow-like-model-provider/local-ml"]
 
 [dependencies]
 flow-like-catalog-core.workspace = true
@@ -23,5 +25,7 @@ serde = { workspace = true, features = ["derive", "rc"] }
 tokio = { workspace = true, features = ["rt-multi-thread", "macros"] }
 uuid.workspace = true
 async-trait.workspace = true
-tract-tflite = { git = "https://github.com/TM9657/tract", rev = "ed3b020" }
 ndarray.workspace = true
+
+# Optional execution dependencies
+tract-tflite = { git = "https://github.com/TM9657/tract", rev = "ed3b020", optional = true }

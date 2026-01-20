@@ -149,6 +149,75 @@ pub fn set_value_by_path(value: &mut Value, path: &str, new_value: Value) -> Res
     Ok(())
 }
 
+pub fn remove_value_by_path(value: &mut Value, path: &str) -> Result<Option<Value>> {
+    let segments = parse_path(path);
+
+    if segments.is_empty() {
+        return Err(anyhow!("Cannot remove root value"));
+    }
+
+    let mut current = value;
+    let last_index = segments.len() - 1;
+
+    for (i, segment) in segments.iter().enumerate() {
+        if i == last_index {
+            match segment {
+                PathSegment::Field(field_name) => {
+                    if let Some(obj) = current.as_object_mut() {
+                        return Ok(obj.remove(field_name));
+                    } else {
+                        return Err(anyhow!(
+                            "Cannot remove field '{}' from non-object",
+                            field_name
+                        ));
+                    }
+                }
+                PathSegment::ArrayIndex(index) => {
+                    if let Some(arr) = current.as_array_mut() {
+                        if *index < arr.len() {
+                            return Ok(Some(arr.remove(*index)));
+                        } else {
+                            return Err(anyhow!("Array index {} out of bounds", index));
+                        }
+                    } else {
+                        return Err(anyhow!("Cannot index non-array"));
+                    }
+                }
+            }
+        } else {
+            match segment {
+                PathSegment::Field(field_name) => {
+                    if let Some(obj) = current.as_object_mut() {
+                        if let Some(next) = obj.get_mut(field_name) {
+                            current = next;
+                        } else {
+                            return Err(anyhow!("Field '{}' not found", field_name));
+                        }
+                    } else {
+                        return Err(anyhow!(
+                            "Cannot traverse field '{}' on non-object",
+                            field_name
+                        ));
+                    }
+                }
+                PathSegment::ArrayIndex(index) => {
+                    if let Some(arr) = current.as_array_mut() {
+                        if *index < arr.len() {
+                            current = &mut arr[*index];
+                        } else {
+                            return Err(anyhow!("Array index {} out of bounds", index));
+                        }
+                    } else {
+                        return Err(anyhow!("Cannot index non-array"));
+                    }
+                }
+            }
+        }
+    }
+
+    Ok(None)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -250,5 +319,54 @@ mod tests {
         assert!(has_value_by_path(&data, "items[0]"));
         assert!(!has_value_by_path(&data, "message.missing"));
         assert!(!has_value_by_path(&data, "items[10]"));
+    }
+
+    #[test]
+    fn test_remove_simple_field() {
+        let mut data = json!({
+            "name": "Alice",
+            "age": 30
+        });
+
+        let removed = remove_value_by_path(&mut data, "name").unwrap();
+        assert_eq!(removed, Some(json!("Alice")));
+        assert!(!has_value_by_path(&data, "name"));
+        assert!(has_value_by_path(&data, "age"));
+    }
+
+    #[test]
+    fn test_remove_nested_field() {
+        let mut data = json!({
+            "message": {
+                "content": "Hi",
+                "sender": "Bob"
+            }
+        });
+
+        let removed = remove_value_by_path(&mut data, "message.content").unwrap();
+        assert_eq!(removed, Some(json!("Hi")));
+        assert!(!has_value_by_path(&data, "message.content"));
+        assert!(has_value_by_path(&data, "message.sender"));
+    }
+
+    #[test]
+    fn test_remove_array_element() {
+        let mut data = json!({
+            "items": [1, 2, 3]
+        });
+
+        let removed = remove_value_by_path(&mut data, "items[1]").unwrap();
+        assert_eq!(removed, Some(json!(2)));
+        assert_eq!(data["items"], json!([1, 3]));
+    }
+
+    #[test]
+    fn test_remove_missing_field() {
+        let mut data = json!({
+            "name": "Alice"
+        });
+
+        let removed = remove_value_by_path(&mut data, "missing").unwrap();
+        assert_eq!(removed, None);
     }
 }

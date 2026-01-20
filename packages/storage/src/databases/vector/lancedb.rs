@@ -504,9 +504,7 @@ impl VectorStore for LanceDBVectorStore {
             .await?;
 
         table
-            .optimize(lancedb::table::OptimizeAction::Index(OptimizeOptions {
-                ..Default::default()
-            }))
+            .optimize(lancedb::table::OptimizeAction::Index(OptimizeOptions::new()))
             .await?;
 
         return Ok(());

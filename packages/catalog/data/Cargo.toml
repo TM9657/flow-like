@@ -6,25 +6,46 @@ edition = "2024"
 [features]
 default = []
 local-ml = ["flow-like-catalog-core/local-ml"]
+
+# Execution feature - enables heavy dependencies for node execution
+# APIs that only serve catalog metadata should NOT enable this
+execute = [
+    "flow-like-catalog-core/execute",
+    "flow-like-storage/full",
+    "dep:calamine",
+    "dep:umya-spreadsheet",
+    "dep:csv-async",
+    "dep:csv",
+    "dep:jsonschema",
+    "dep:rayon",
+]
+
 # Data lake formats
 delta = ["flow-like-storage/delta"]
+iceberg = ["flow-like-storage/iceberg"]
 # Database providers (requires datafusion-table-providers)
-# Note: Federation features (*-federation) require datafusion-federation 0.4.7+ which needs DataFusion 50+
-# When upgrading to DataFusion 50+, add federation features: e.g., postgres-federation, mysql-federation, etc.
 postgres = ["datafusion-table-providers/postgres"]
 mysql = ["datafusion-table-providers/mysql"]
-sqlite = ["datafusion-table-providers/sqlite"]
+sqlite = ["datafusion-table-providers/sqlite-bundled"]
 duckdb = ["datafusion-table-providers/duckdb"]
 clickhouse = ["datafusion-table-providers/clickhouse"]
 flight = ["datafusion-table-providers/flight"]
 odbc = ["datafusion-table-providers/odbc"]
-# Federation support (requires DataFusion 50+ - currently disabled)
-# When enabled, adds federation optimizer rules for query push-down to remote databases
-# federation = ["datafusion-table-providers/federation", "flow-like-storage/federation"]
+# Federation support - enables query push-down to remote databases
+federation = ["datafusion-table-providers/federation", "flow-like-storage/federation"]
+postgres-federation = ["postgres", "datafusion-table-providers/postgres-federation", "federation"]
+mysql-federation = ["mysql", "datafusion-table-providers/mysql-federation", "federation"]
+sqlite-federation = ["sqlite", "datafusion-table-providers/sqlite-federation", "federation"]
+duckdb-federation = ["duckdb", "datafusion-table-providers/duckdb-federation", "federation"]
+clickhouse-federation = ["clickhouse", "datafusion-table-providers/clickhouse-federation", "federation"]
+odbc-federation = ["odbc", "datafusion-table-providers/odbc-federation", "federation"]
 # Feature bundles
-all-lakes = ["delta"]
-all-databases = ["postgres", "mysql", "sqlite", "duckdb", "clickhouse", "flight"]
-full = ["all-lakes", "all-databases"]
+all-lakes = ["delta", "iceberg"]
+all-databases = ["postgres", "mysql", "sqlite", "duckdb", "clickhouse", "flight", "odbc"]
+all-databases-federation = ["postgres-federation", "mysql-federation", "sqlite-federation", "duckdb-federation", "clickhouse-federation", "odbc-federation"]
+full = ["all-lakes", "all-databases", "federation"]
+# Full with execution (for executors and desktop)
+full-execute = ["full", "execute"]
 
 [dependencies]
 flow-like-catalog-core.workspace = true
@@ -48,18 +69,21 @@ regex.workspace = true
 chrono.workspace = true
 chrono-tz.workspace = true
 iana-time-zone.workspace = true
-calamine = { version = "0.30", default-features = false, features = ["dates"] }
-umya-spreadsheet = "2.3.2"
-csv-async = { version = "1.3.0", features = ["tokio"] }
-csv = "1.3"
 dirs-next.workspace = true
-jsonschema.workspace = true
-rayon = "1.11.0"
 once_cell = "1.21.3"
 strsim = "0.11.1"
 
-# Database table providers for DataFusion (v0.7.0 compatible with DataFusion 49)
-datafusion-table-providers = { version = "0.7.0", default-features = false, optional = true }
+# Data processing dependencies - only included when execute feature is enabled
+calamine = { version = "0.30", default-features = false, features = ["dates"], optional = true }
+umya-spreadsheet = { version = "2.3.2", optional = true }
+csv-async = { version = "1.3.0", features = ["tokio"], optional = true }
+csv = { version = "1.3", optional = true }
+jsonschema = { workspace = true, optional = true }
+rayon = { version = "1.11.0", optional = true }
+
+# Database table providers for DataFusion (TM9657 fork with Arrow 56.2 + DataFusion 50 support)
+# Includes ODBC support with proper arrow version alignment
+datafusion-table-providers = { git = "https://github.com/TM9657/datafusion-table-providers.git", branch = "main", default-features = false, optional = true }
 
 [dev-dependencies]
 reqwest = { version = "0.12", features = ["json"] }

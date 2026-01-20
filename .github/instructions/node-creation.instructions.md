@@ -8,6 +8,74 @@ Apply the [general coding guidelines](./general-coding.instructions.md) to all c
 This document describes the creation process of nodes for Flow-Like. Nodes generally have the run functionality and Pins which hold
 data.
 
+## Feature Gating for Heavy Dependencies
+
+**IMPORTANT:** Nodes that use heavy dependencies (PDF parsing, ML inference, email clients, etc.) MUST gate their execution logic behind the `execute` feature flag. This allows API services to compile without these dependencies when they only need to serve node metadata.
+
+### When to use feature gating:
+- Dependencies that add significant compile time or binary size
+- External service clients (email, databases, HTTP scrapers)
+- ML/AI libraries (ONNX, linfa, fastembed)
+- Document processing (PDF, Excel, Word parsers)
+- Image processing beyond basic operations
+
+### How to gate a node:
+
+1. **In `Cargo.toml`** - Make heavy dependencies optional:
+```toml
+[features]
+execute = ["dep:heavy-crate", "dep:another-heavy-crate"]
+
+[dependencies]
+heavy-crate = { workspace = true, optional = true }
+```
+
+2. **In the source file** - Gate imports and run() method:
+```rust
+// Gate heavy imports
+#[cfg(feature = "execute")]
+use heavy_crate::SomeType;
+
+#[async_trait]
+impl NodeLogic for MyNode {
+    fn get_node(&self) -> Node {
+        // get_node() is NEVER gated - it provides metadata
+        let mut node = Node::new(...);
+        // ...
+        node
+    }
+
+    // Gate the run() implementation
+    #[cfg(feature = "execute")]
+    async fn run(&self, context: &mut ExecutionContext) -> flow_like_types::Result<()> {
+        // Full implementation using heavy dependencies
+        Ok(())
+    }
+
+    // Provide fallback when execute feature is disabled
+    #[cfg(not(feature = "execute"))]
+    async fn run(&self, _context: &mut ExecutionContext) -> flow_like_types::Result<()> {
+        Err(flow_like_types::anyhow!(
+            "This node requires the 'execute' feature"
+        ))
+    }
+}
+```
+
+3. **Gate helper functions** that use heavy dependencies:
+```rust
+#[cfg(feature = "execute")]
+fn helper_using_heavy_dep() -> SomeType {
+    // ...
+}
+```
+
+### What NOT to gate:
+- `get_node()` - Always available for metadata
+- `on_update()` - Always available for board parsing
+- Basic standard library operations
+- Lightweight dependencies (serde, json, etc.)
+
 ## Node Creation
 Nodes can be Pure and Impure. Pure nodes are those that do not have any side effects and always return the same output for the same input.
 Impure nodes are those that may have side effects or return different outputs for the same input.
@@ -389,3 +457,81 @@ impl NodeLogic for CallReferenceNode {
     }
 }
 </Example Node with on_update Function>
+
+<Example Feature-Gated Node (Heavy Dependencies)>
+// For nodes that use heavy dependencies like PDF parsing, ML inference, etc.
+// The run() method must be gated behind the execute feature
+
+#[cfg(feature = "execute")]
+use heavy_pdf_crate::PdfParser;
+
+use flow_like::{
+    flow::{
+        execution::context::ExecutionContext,
+        node::{Node, NodeLogic},
+        variable::VariableType,
+    },
+};
+use flow_like_types::{async_trait, json::json};
+
+#[derive(Default)]
+pub struct ParsePdfNode {}
+
+impl ParsePdfNode {
+    pub fn new() -> Self {
+        ParsePdfNode {}
+    }
+}
+
+#[async_trait]
+impl NodeLogic for ParsePdfNode {
+    // get_node() is NEVER gated - always provides metadata
+    fn get_node(&self) -> Node {
+        let mut node = Node::new(
+            "parse_pdf",
+            "Parse PDF",
+            "Extracts text content from a PDF file",
+            "Document/PDF",
+        );
+        node.add_icon("/flow/icons/pdf.svg");
+
+        node.add_input_pin("exec_in", "Input", "Trigger Pin", VariableType::Execution);
+        node.add_input_pin(
+            "file_path",
+            "File Path",
+            "Path to the PDF file",
+            VariableType::Struct,
+        );
+
+        node.add_output_pin("exec_out", "Done", "Execution continues", VariableType::Execution);
+        node.add_output_pin("text", "Text", "Extracted text content", VariableType::String);
+
+        node
+    }
+
+    // Gated run() - only compiles when execute feature is enabled
+    #[cfg(feature = "execute")]
+    async fn run(&self, context: &mut ExecutionContext) -> flow_like_types::Result<()> {
+        context.deactivate_exec_pin("exec_out").await?;
+
+        let file_path: String = context.evaluate_pin("file_path").await?;
+
+        // Use heavy dependency
+        let parser = PdfParser::new();
+        let text = parser.extract_text(&file_path)?;
+
+        context.set_pin_value("text", json!(text)).await?;
+        context.activate_exec_pin("exec_out").await?;
+
+        Ok(())
+    }
+
+    // Fallback run() - compiles when execute feature is disabled
+    #[cfg(not(feature = "execute"))]
+    async fn run(&self, _context: &mut ExecutionContext) -> flow_like_types::Result<()> {
+        Err(flow_like_types::anyhow!(
+            "PDF parsing requires the 'execute' feature"
+        ))
+    }
+}
+</Example Feature-Gated Node (Heavy Dependencies)>

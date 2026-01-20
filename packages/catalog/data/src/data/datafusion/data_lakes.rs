@@ -5,7 +5,7 @@ use flow_like::flow::{
     node::{Node, NodeLogic, NodeScores},
     variable::VariableType,
 };
-use flow_like_types::{async_trait, json::json, reqwest::Url};
+use flow_like_types::{Value as JsonValue, async_trait, json::json, reqwest::Url};
 
 fn build_store_url(store_ref: &str, path: &str) -> String {
     format!("flowlike://{}/{}", store_ref, path.trim_start_matches('/'))
@@ -97,13 +97,6 @@ impl NodeLogic for RegisterDeltaTableNode {
             VariableType::Integer,
         );
 
-        node.add_output_pin(
-            "num_files",
-            "Num Files",
-            "Number of data files in the table",
-            VariableType::Integer,
-        );
-
         node.scores = Some(NodeScores {
             privacy: 8,
             security: 8,
@@ -116,7 +109,7 @@ impl NodeLogic for RegisterDeltaTableNode {
         node
     }
 
-    async fn run(&self, _context: &mut ExecutionContext) -> flow_like_types::Result<()> {
+    async fn run(&self, context: &mut ExecutionContext) -> flow_like_types::Result<()> {
         #[cfg(feature = "delta")]
         {
             use flow_like_storage::deltalake::DeltaTableBuilder;
@@ -136,7 +129,7 @@ impl NodeLogic for RegisterDeltaTableNode {
             let url = Url::parse(&url_str)?;
 
             let mut builder =
-                DeltaTableBuilder::from_uri(&url_str).with_storage_backend(object_store, url);
+                DeltaTableBuilder::from_uri(url.clone())?.with_storage_backend(object_store, url);
 
             if version >= 0 {
                 builder = builder.with_version(version);
@@ -147,8 +140,7 @@ impl NodeLogic for RegisterDeltaTableNode {
                 .await
                 .map_err(|e| flow_like_types::anyhow!("Failed to open Delta table: {}", e))?;
 
-            let actual_version = delta_table.version();
-            let num_files = delta_table.get_files_count() as i64;
+            let actual_version = delta_table.version().unwrap_or(0);
 
             cached_session
                 .ctx
@@ -158,7 +150,6 @@ impl NodeLogic for RegisterDeltaTableNode {
             context
                 .set_pin_value("table_version", json!(actual_version))
                 .await?;
-            context.set_pin_value("num_files", json!(num_files)).await?;
             context.activate_exec_pin("exec_out").await?;
             Ok(())
         }
@@ -282,7 +273,7 @@ impl NodeLogic for DeltaTimeTravelNode {
         node
     }
 
-    async fn run(&self, _context: &mut ExecutionContext) -> flow_like_types::Result<()> {
+    async fn run(&self, context: &mut ExecutionContext) -> flow_like_types::Result<()> {
         #[cfg(feature = "delta")]
         {
             use flow_like_storage::deltalake::DeltaTableBuilder;
@@ -304,13 +295,13 @@ impl NodeLogic for DeltaTimeTravelNode {
             let url = Url::parse(&url_str)?;
 
             let builder = match travel_mode.to_lowercase().as_str() {
-                "version" => DeltaTableBuilder::from_uri(&url_str)
+                "version" => DeltaTableBuilder::from_uri(url.clone())?
                     .with_storage_backend(object_store, url)
                     .with_version(version),
                 "timestamp" => {
                     let dt = chrono::DateTime::parse_from_rfc3339(&timestamp)
                         .map_err(|e| flow_like_types::anyhow!("Invalid timestamp format: {}", e))?;
-                    DeltaTableBuilder::from_uri(&url_str)
+                    DeltaTableBuilder::from_uri(url.clone())?
                         .with_storage_backend(object_store, url)
                         .with_timestamp(dt.to_utc())
                 }
@@ -327,7 +318,7 @@ impl NodeLogic for DeltaTimeTravelNode {
                 .await
                 .map_err(|e| flow_like_types::anyhow!("Failed to load Delta table: {}", e))?;
 
-            let loaded_version = delta_table.version();
+            let loaded_version = delta_table.version().unwrap_or(0);
             cached_session
                 .ctx
                 .register_table(&table_name, std::sync::Arc::new(delta_table))?;
@@ -409,13 +400,6 @@ impl NodeLogic for DeltaTableInfoNode {
         );
 
         node.add_output_pin(
-            "num_files",
-            "Num Files",
-            "Number of data files",
-            VariableType::Integer,
-        );
-
-        node.add_output_pin(
             "schema",
             "Schema",
             "Table schema as JSON",
@@ -448,7 +432,7 @@ impl NodeLogic for DeltaTableInfoNode {
         node
     }
 
-    async fn run(&self, _context: &mut ExecutionContext) -> flow_like_types::Result<()> {
+    async fn run(&self, context: &mut ExecutionContext) -> flow_like_types::Result<()> {
         #[cfg(feature = "delta")]
         {
             use flow_like_storage::deltalake::DeltaTableBuilder;
@@ -464,60 +448,58 @@ impl NodeLogic for DeltaTableInfoNode {
             let url_str = build_store_url(&path.store_ref, &path.path);
             let url = Url::parse(&url_str)?;
 
-            let delta_table = DeltaTableBuilder::from_uri(&url_str)
+            let delta_table = DeltaTableBuilder::from_uri(url.clone())?
                 .with_storage_backend(object_store, url)
                 .load()
                 .await
                 .map_err(|e| flow_like_types::anyhow!("Failed to open Delta table: {}", e))?;
 
-            let current_version = delta_table.version();
-            let num_files = delta_table.get_files_count() as i64;
+            let current_version = delta_table.version().unwrap_or(0);
 
-            let schema = delta_table
-                .schema()
-                .map(|s| {
-                    let fields: Vec<_> = s
-                        .fields()
-                        .map(|f| {
-                            json!({
-                                "name": f.name(),
-                                "type": format!("{:?}", f.data_type()),
-                                "nullable": f.is_nullable(),
-                            })
+            let snapshot = delta_table
+                .snapshot()
+                .map_err(|e| flow_like_types::anyhow!("Failed to get snapshot: {}", e))?;
+
+            let schema_json = {
+                let schema = snapshot.schema();
+                let fields: Vec<_> = schema
+                    .fields()
+                    .map(|f| {
+                        json!({
+                            "name": f.name(),
+                            "type": format!("{:?}", f.data_type()),
+                            "nullable": f.is_nullable(),
                         })
-                        .collect();
-                    json!({ "fields": fields })
-                })
-                .unwrap_or(json!(null));
+                    })
+                    .collect();
+                json!({ "fields": fields })
+            };
 
-            let partitions: Vec<String> = delta_table
+            let partitions: Vec<String> = snapshot
                 .metadata()
-                .map(|m| m.partition_columns().clone())
-                .unwrap_or_default();
+                .partition_columns()
+                .iter()
+                .cloned()
+                .collect();
 
-            let history = delta_table
+            let history: Vec<_> = delta_table
                 .history(Some(history_limit as usize))
                 .await
                 .map(|h| {
-                    h.iter()
-                        .map(|entry| {
-                            json!({
-                                "read_version": entry.read_version,
-                                "timestamp": entry.timestamp,
-                                "operation": entry.operation,
-                                "user_id": entry.user_id,
-                                "user_name": entry.user_name,
-                            })
+                    h.map(|entry| {
+                        json!({
+                            "timestamp": entry.timestamp,
+                            "operation": entry.operation,
                         })
-                        .collect::<Vec<_>>()
+                    })
+                    .collect()
                 })
                 .unwrap_or_default();
 
             context
                 .set_pin_value("current_version", json!(current_version))
                 .await?;
-            context.set_pin_value("num_files", json!(num_files)).await?;
-            context.set_pin_value("schema", schema).await?;
+            context.set_pin_value("schema", schema_json).await?;
             context.set_pin_value("history", json!(history)).await?;
             context
                 .set_pin_value("partitions", json!(partitions))
@@ -911,7 +893,7 @@ impl NodeLogic for WriteDeltaTableNode {
         node
     }
 
-    async fn run(&self, _context: &mut ExecutionContext) -> flow_like_types::Result<()> {
+    async fn run(&self, context: &mut ExecutionContext) -> flow_like_types::Result<()> {
         #[cfg(feature = "delta")]
         {
             use flow_like_storage::deltalake::protocol::SaveMode;
@@ -966,15 +948,15 @@ impl NodeLogic for WriteDeltaTableNode {
                 _ => return Err(flow_like_types::anyhow!("Invalid write mode: {}", mode)),
             };
 
-            let ops = match DeltaTableBuilder::from_uri(&url_str)
+            let ops = match DeltaTableBuilder::from_uri(url.clone())?
                 .with_storage_backend(object_store.clone(), url.clone())
                 .load()
                 .await
             {
                 Ok(table) => DeltaOps::from(table),
                 Err(_) => {
-                    let table = DeltaTableBuilder::from_uri(&url_str)
-                        .with_storage_backend(object_store.clone(), url.clone())
+                    let table = DeltaTableBuilder::from_uri(url.clone())?
+                        .with_storage_backend(object_store.clone(), url)
                         .build()
                         .map_err(|e| {
                             flow_like_types::anyhow!("Failed to create Delta table: {}", e)
@@ -993,7 +975,7 @@ impl NodeLogic for WriteDeltaTableNode {
                 .await
                 .map_err(|e| flow_like_types::anyhow!("Failed to write to Delta table: {}", e))?;
 
-            let new_version = table.version();
+            let new_version = table.version().unwrap_or(0);
 
             context.set_pin_value("session_out", json!(session)).await?;
             context
@@ -1010,6 +992,566 @@ impl NodeLogic for WriteDeltaTableNode {
         {
             Err(flow_like_types::anyhow!(
                 "Delta Lake support not enabled. Rebuild with the 'delta' feature flag."
+            ))
+        }
+    }
+}
+
+// ============================================================================
+// Apache Iceberg Support
+// ============================================================================
+
+/// Register an Apache Iceberg table in DataFusion from a metadata file
+#[crate::register_node]
+#[derive(Default)]
+pub struct RegisterIcebergTableNode {}
+
+impl RegisterIcebergTableNode {
+    pub fn new() -> Self {
+        RegisterIcebergTableNode {}
+    }
+}
+
+#[async_trait]
+impl NodeLogic for RegisterIcebergTableNode {
+    fn get_node(&self) -> Node {
+        let mut node = Node::new(
+            "df_register_iceberg",
+            "Register Iceberg Table",
+            "Register an Apache Iceberg table in DataFusion from a metadata file. Supports schema evolution and partition pruning.",
+            "Data/DataFusion/Lakes",
+        );
+        node.add_icon("/flow/icons/database.svg");
+
+        node.add_input_pin(
+            "exec_in",
+            "Input",
+            "Trigger execution",
+            VariableType::Execution,
+        );
+        node.add_input_pin(
+            "session",
+            "Session",
+            "DataFusion session",
+            VariableType::Struct,
+        )
+        .set_schema::<DataFusionSession>();
+        node.add_input_pin(
+            "warehouse_path",
+            "Warehouse Path",
+            "FlowPath to the Iceberg table metadata directory",
+            VariableType::Struct,
+        )
+        .set_schema::<FlowPath>();
+        node.add_input_pin(
+            "metadata_file",
+            "Metadata File",
+            "Relative path to metadata JSON file (e.g., 'metadata/v1.metadata.json')",
+            VariableType::String,
+        );
+        node.add_input_pin(
+            "table_name",
+            "DataFusion Name",
+            "Name to register in DataFusion",
+            VariableType::String,
+        );
+
+        node.add_output_pin(
+            "exec_out",
+            "Done",
+            "Table registered",
+            VariableType::Execution,
+        );
+        node.add_output_pin(
+            "session_out",
+            "Session",
+            "DataFusion session",
+            VariableType::Struct,
+        )
+        .set_schema::<DataFusionSession>();
+        node.add_output_pin(
+            "current_snapshot",
+            "Current Snapshot",
+            "Current snapshot ID",
+            VariableType::String,
+        );
+        node.add_output_pin(
+            "schema_info",
+            "Schema Info",
+            "Table schema field count",
+            VariableType::Integer,
+        );
+
+        node.scores = Some(NodeScores {
+            privacy: 8,
+            security: 8,
+            performance: 9,
+            governance: 10,
+            reliability: 9,
+            cost: 8,
+        });
+        node
+    }
+
+    async fn run(&self, context: &mut ExecutionContext) -> flow_like_types::Result<()> {
+        context.deactivate_exec_pin("exec_out").await?;
+
+        #[cfg(feature = "iceberg")]
+        {
+            use flow_like_storage::iceberg::TableIdent;
+            use flow_like_storage::iceberg::io::FileIO;
+            use flow_like_storage::iceberg::table::StaticTable;
+            use flow_like_storage::iceberg_datafusion::table::IcebergStaticTableProvider;
+            use std::sync::Arc;
+
+            let session: DataFusionSession = context.evaluate_pin("session").await?;
+            let warehouse_path: FlowPath = context.evaluate_pin("warehouse_path").await?;
+            let metadata_file: String = context.evaluate_pin("metadata_file").await?;
+            let table_name: String = context.evaluate_pin("table_name").await?;
+
+            let cached_session = session.load(context).await?;
+            let store = warehouse_path.to_store(context).await?;
+
+            let url_str = build_store_url(&warehouse_path.store_ref, &warehouse_path.path);
+            let url = Url::parse(&url_str)?;
+            cached_session
+                .ctx
+                .register_object_store(&url, store.as_generic());
+
+            let metadata_location = format!("{}/{}", warehouse_path.path, metadata_file);
+
+            let file_io = FileIO::from_path(&metadata_location)?
+                .build()
+                .map_err(|e| flow_like_types::anyhow!("Failed to build FileIO: {}", e))?;
+
+            let table_ident = TableIdent::from_strs(vec![&table_name])?;
+
+            let static_table =
+                StaticTable::from_metadata_file(&metadata_location, table_ident, file_io)
+                    .await
+                    .map_err(|e| flow_like_types::anyhow!("Failed to load Iceberg table: {}", e))?;
+
+            let metadata = static_table.metadata();
+            let current_snapshot = metadata
+                .current_snapshot()
+                .map(|s| s.snapshot_id().to_string())
+                .unwrap_or_else(|| "none".to_string());
+
+            let schema_fields = metadata.current_schema().as_struct().fields().len() as i64;
+
+            let iceberg_table = static_table.into_table();
+            let table_provider = IcebergStaticTableProvider::try_new_from_table(iceberg_table)
+                .await
+                .map_err(|e| flow_like_types::anyhow!("Failed to create table provider: {}", e))?;
+
+            cached_session
+                .ctx
+                .register_table(&table_name, Arc::new(table_provider))?;
+
+            context.set_pin_value("session_out", json!(session)).await?;
+            context
+                .set_pin_value("current_snapshot", json!(current_snapshot))
+                .await?;
+            context
+                .set_pin_value("schema_info", json!(schema_fields))
+                .await?;
+            context.activate_exec_pin("exec_out").await?;
+            Ok(())
+        }
+
+        #[cfg(not(feature = "iceberg"))]
+        {
+            Err(flow_like_types::anyhow!(
+                "Iceberg support not enabled. Rebuild with the 'iceberg' feature flag."
+            ))
+        }
+    }
+}
+
+/// Get metadata and history of an Iceberg table from a metadata file
+#[crate::register_node]
+#[derive(Default)]
+pub struct IcebergTableInfoNode {}
+
+impl IcebergTableInfoNode {
+    pub fn new() -> Self {
+        IcebergTableInfoNode {}
+    }
+}
+
+#[async_trait]
+impl NodeLogic for IcebergTableInfoNode {
+    fn get_node(&self) -> Node {
+        let mut node = Node::new(
+            "df_iceberg_info",
+            "Iceberg Table Info",
+            "Get metadata, snapshots, and history of an Apache Iceberg table from a metadata file.",
+            "Data/DataFusion/Lakes",
+        );
+        node.add_icon("/flow/icons/info.svg");
+
+        node.add_input_pin(
+            "exec_in",
+            "Input",
+            "Trigger execution",
+            VariableType::Execution,
+        );
+        node.add_input_pin(
+            "warehouse_path",
+            "Warehouse Path",
+            "FlowPath to the Iceberg table directory",
+            VariableType::Struct,
+        )
+        .set_schema::<FlowPath>();
+        node.add_input_pin(
+            "metadata_file",
+            "Metadata File",
+            "Relative path to metadata JSON file",
+            VariableType::String,
+        );
+
+        node.add_output_pin(
+            "exec_out",
+            "Done",
+            "Info retrieved",
+            VariableType::Execution,
+        );
+        node.add_output_pin(
+            "current_snapshot",
+            "Current Snapshot",
+            "Current snapshot ID",
+            VariableType::String,
+        );
+        node.add_output_pin(
+            "schema",
+            "Schema",
+            "Table schema as JSON",
+            VariableType::Struct,
+        );
+        node.add_output_pin(
+            "snapshots",
+            "Snapshots",
+            "List of all snapshots",
+            VariableType::Struct,
+        );
+        node.add_output_pin(
+            "partition_spec",
+            "Partition Spec",
+            "Current partition specification",
+            VariableType::Struct,
+        );
+        node.add_output_pin(
+            "properties",
+            "Properties",
+            "Table properties",
+            VariableType::Struct,
+        );
+
+        node.scores = Some(NodeScores {
+            privacy: 9,
+            security: 9,
+            performance: 10,
+            governance: 10,
+            reliability: 10,
+            cost: 10,
+        });
+        node
+    }
+
+    async fn run(&self, context: &mut ExecutionContext) -> flow_like_types::Result<()> {
+        context.deactivate_exec_pin("exec_out").await?;
+
+        #[cfg(feature = "iceberg")]
+        {
+            use flow_like_storage::iceberg::TableIdent;
+            use flow_like_storage::iceberg::io::FileIO;
+            use flow_like_storage::iceberg::table::StaticTable;
+
+            let warehouse_path: FlowPath = context.evaluate_pin("warehouse_path").await?;
+            let metadata_file: String = context.evaluate_pin("metadata_file").await?;
+
+            let metadata_location = format!("{}/{}", warehouse_path.path, metadata_file);
+
+            let file_io = FileIO::from_path(&metadata_location)?
+                .build()
+                .map_err(|e| flow_like_types::anyhow!("Failed to build FileIO: {}", e))?;
+
+            let table_ident = TableIdent::from_strs(vec!["info_table"])?;
+
+            let static_table =
+                StaticTable::from_metadata_file(&metadata_location, table_ident, file_io)
+                    .await
+                    .map_err(|e| flow_like_types::anyhow!("Failed to load Iceberg table: {}", e))?;
+
+            let metadata = static_table.metadata();
+
+            let current_snapshot = metadata
+                .current_snapshot()
+                .map(|s| s.snapshot_id().to_string())
+                .unwrap_or_else(|| "none".to_string());
+
+            let schema_json = json!({
+                "schema_id": metadata.current_schema().schema_id(),
+                "fields": metadata.current_schema().as_struct().fields().iter().map(|f| json!({
+                    "id": f.id,
+                    "name": f.name.clone(),
+                    "required": f.required,
+                })).collect::<Vec<_>>()
+            });
+
+            let snapshots: Vec<JsonValue> = metadata
+                .snapshots()
+                .map(|s| {
+                    json!({
+                        "snapshot_id": s.snapshot_id(),
+                        "timestamp_ms": s.timestamp_ms(),
+                        "parent_snapshot_id": s.parent_snapshot_id(),
+                    })
+                })
+                .collect();
+
+            let partition_spec = json!({
+                "spec_id": metadata.default_partition_spec().spec_id(),
+                "fields_count": metadata.default_partition_spec().fields().len()
+            });
+
+            let properties: std::collections::HashMap<&String, &String> =
+                metadata.properties().iter().collect();
+
+            context
+                .set_pin_value("current_snapshot", json!(current_snapshot))
+                .await?;
+            context.set_pin_value("schema", schema_json).await?;
+            context.set_pin_value("snapshots", json!(snapshots)).await?;
+            context
+                .set_pin_value("partition_spec", partition_spec)
+                .await?;
+            context
+                .set_pin_value("properties", json!(properties))
+                .await?;
+            context.activate_exec_pin("exec_out").await?;
+            Ok(())
+        }
+
+        #[cfg(not(feature = "iceberg"))]
+        {
+            Err(flow_like_types::anyhow!(
+                "Iceberg support not enabled. Rebuild with the 'iceberg' feature flag."
+            ))
+        }
+    }
+}
+
+/// Time travel to a specific Iceberg snapshot
+#[crate::register_node]
+#[derive(Default)]
+pub struct IcebergTimeTravelNode {}
+
+impl IcebergTimeTravelNode {
+    pub fn new() -> Self {
+        IcebergTimeTravelNode {}
+    }
+}
+
+#[async_trait]
+impl NodeLogic for IcebergTimeTravelNode {
+    fn get_node(&self) -> Node {
+        let mut node = Node::new(
+            "df_iceberg_time_travel",
+            "Iceberg Time Travel",
+            "Load a specific snapshot of an Iceberg table for point-in-time queries.",
+            "Data/DataFusion/Lakes",
+        );
+        node.add_icon("/flow/icons/clock.svg");
+
+        node.add_input_pin(
+            "exec_in",
+            "Input",
+            "Trigger execution",
+            VariableType::Execution,
+        );
+        node.add_input_pin(
+            "session",
+            "Session",
+            "DataFusion session",
+            VariableType::Struct,
+        )
+        .set_schema::<DataFusionSession>();
+        node.add_input_pin(
+            "warehouse_path",
+            "Warehouse Path",
+            "FlowPath to the Iceberg table directory",
+            VariableType::Struct,
+        )
+        .set_schema::<FlowPath>();
+        node.add_input_pin(
+            "metadata_file",
+            "Metadata File",
+            "Relative path to metadata JSON file",
+            VariableType::String,
+        );
+        node.add_input_pin(
+            "table_name",
+            "DataFusion Name",
+            "Name to register in DataFusion",
+            VariableType::String,
+        );
+        node.add_input_pin(
+            "travel_mode",
+            "Travel Mode",
+            "Mode: 'snapshot' or 'timestamp'",
+            VariableType::String,
+        )
+        .set_default_value(Some(json!("snapshot")));
+        node.add_input_pin(
+            "snapshot_id",
+            "Snapshot ID",
+            "Snapshot ID (when mode is 'snapshot')",
+            VariableType::String,
+        )
+        .set_default_value(Some(json!("")));
+        node.add_input_pin(
+            "timestamp_ms",
+            "Timestamp",
+            "Unix timestamp in milliseconds (when mode is 'timestamp')",
+            VariableType::Integer,
+        )
+        .set_default_value(Some(json!(0)));
+
+        node.add_output_pin(
+            "exec_out",
+            "Done",
+            "Table registered",
+            VariableType::Execution,
+        );
+        node.add_output_pin(
+            "session_out",
+            "Session",
+            "DataFusion session",
+            VariableType::Struct,
+        )
+        .set_schema::<DataFusionSession>();
+        node.add_output_pin(
+            "loaded_snapshot",
+            "Loaded Snapshot",
+            "Actual snapshot ID that was loaded",
+            VariableType::String,
+        );
+
+        node.scores = Some(NodeScores {
+            privacy: 8,
+            security: 8,
+            performance: 8,
+            governance: 10,
+            reliability: 9,
+            cost: 8,
+        });
+        node
+    }
+
+    async fn run(&self, context: &mut ExecutionContext) -> flow_like_types::Result<()> {
+        context.deactivate_exec_pin("exec_out").await?;
+
+        #[cfg(feature = "iceberg")]
+        {
+            use flow_like_storage::iceberg::TableIdent;
+            use flow_like_storage::iceberg::io::FileIO;
+            use flow_like_storage::iceberg::table::StaticTable;
+            use flow_like_storage::iceberg_datafusion::table::IcebergStaticTableProvider;
+            use std::sync::Arc;
+
+            let session: DataFusionSession = context.evaluate_pin("session").await?;
+            let warehouse_path: FlowPath = context.evaluate_pin("warehouse_path").await?;
+            let metadata_file: String = context.evaluate_pin("metadata_file").await?;
+            let table_name: String = context.evaluate_pin("table_name").await?;
+            let travel_mode: String = context
+                .evaluate_pin("travel_mode")
+                .await
+                .unwrap_or_else(|_| "snapshot".to_string());
+            let snapshot_id_str: String = context
+                .evaluate_pin("snapshot_id")
+                .await
+                .unwrap_or_default();
+            let timestamp_ms: i64 = context.evaluate_pin("timestamp_ms").await.unwrap_or(0);
+
+            let cached_session = session.load(context).await?;
+            let store = warehouse_path.to_store(context).await?;
+
+            let url_str = build_store_url(&warehouse_path.store_ref, &warehouse_path.path);
+            let url = Url::parse(&url_str)?;
+            cached_session
+                .ctx
+                .register_object_store(&url, store.as_generic());
+
+            let metadata_location = format!("{}/{}", warehouse_path.path, metadata_file);
+
+            let file_io = FileIO::from_path(&metadata_location)?
+                .build()
+                .map_err(|e| flow_like_types::anyhow!("Failed to build FileIO: {}", e))?;
+
+            let table_ident = TableIdent::from_strs(vec![&table_name])?;
+
+            let static_table =
+                StaticTable::from_metadata_file(&metadata_location, table_ident, file_io)
+                    .await
+                    .map_err(|e| flow_like_types::anyhow!("Failed to load Iceberg table: {}", e))?;
+
+            let metadata = static_table.metadata();
+
+            let target_snapshot_id = match travel_mode.as_str() {
+                "timestamp" => {
+                    let snapshot = metadata
+                        .snapshots()
+                        .filter(|s| s.timestamp_ms() <= timestamp_ms)
+                        .max_by_key(|s| s.timestamp_ms())
+                        .ok_or_else(|| {
+                            flow_like_types::anyhow!(
+                                "No snapshot found at or before timestamp {}",
+                                timestamp_ms
+                            )
+                        })?;
+                    snapshot.snapshot_id()
+                }
+                _ => {
+                    if snapshot_id_str.is_empty() {
+                        metadata
+                            .current_snapshot()
+                            .map(|s| s.snapshot_id())
+                            .ok_or_else(|| {
+                                flow_like_types::anyhow!("No current snapshot available")
+                            })?
+                    } else {
+                        snapshot_id_str
+                            .parse()
+                            .map_err(|e| flow_like_types::anyhow!("Invalid snapshot ID: {}", e))?
+                    }
+                }
+            };
+
+            let iceberg_table = static_table.into_table();
+            let table_provider = IcebergStaticTableProvider::try_new_from_table_snapshot(
+                iceberg_table,
+                target_snapshot_id,
+            )
+            .await
+            .map_err(|e| flow_like_types::anyhow!("Failed to create table provider: {}", e))?;
+
+            cached_session
+                .ctx
+                .register_table(&table_name, Arc::new(table_provider))?;
+
+            context.set_pin_value("session_out", json!(session)).await?;
+            context
+                .set_pin_value("loaded_snapshot", json!(target_snapshot_id.to_string()))
+                .await?;
+            context.activate_exec_pin("exec_out").await?;
+            Ok(())
+        }
+
+        #[cfg(not(feature = "iceberg"))]
+        {
+            Err(flow_like_types::anyhow!(
+                "Iceberg support not enabled. Rebuild with the 'iceberg' feature flag."
             ))
         }
     }
@@ -1104,7 +1646,6 @@ mod tests {
         assert!(output_pins.iter().any(|p| p.name == "exec_out"));
         assert!(output_pins.iter().any(|p| p.name == "session_out"));
         assert!(output_pins.iter().any(|p| p.name == "table_version"));
-        assert!(output_pins.iter().any(|p| p.name == "num_files"));
     }
 
     #[test]
@@ -1161,7 +1702,6 @@ mod tests {
             .collect();
 
         assert!(output_pins.iter().any(|p| p.name == "current_version"));
-        assert!(output_pins.iter().any(|p| p.name == "num_files"));
         assert!(output_pins.iter().any(|p| p.name == "schema"));
         assert!(output_pins.iter().any(|p| p.name == "partitions"));
         assert!(output_pins.iter().any(|p| p.name == "history"));
@@ -1262,6 +1802,152 @@ mod tests {
                 path_pin.unwrap().data_type,
                 VariableType::Struct,
                 "Node {} path pin should be Struct type",
+                node.name
+            );
+        }
+    }
+
+    // ========================================================================
+    // Iceberg Node Tests
+    // ========================================================================
+
+    #[test]
+    fn test_register_iceberg_table_node_structure() {
+        let node_logic = RegisterIcebergTableNode::new();
+        let node = node_logic.get_node();
+
+        assert_eq!(node.name, "df_register_iceberg");
+        assert_eq!(node.friendly_name, "Register Iceberg Table");
+        assert_eq!(node.category, "Data/DataFusion/Lakes");
+    }
+
+    #[test]
+    fn test_register_iceberg_table_node_input_pins() {
+        let node_logic = RegisterIcebergTableNode::new();
+        let node = node_logic.get_node();
+
+        let input_pins: Vec<_> = node
+            .pins
+            .values()
+            .filter(|p| p.pin_type == PinType::Input)
+            .collect();
+
+        assert!(input_pins.iter().any(|p| p.name == "exec_in"));
+        assert!(input_pins.iter().any(|p| p.name == "session"));
+        assert!(input_pins.iter().any(|p| p.name == "warehouse_path"));
+        assert!(input_pins.iter().any(|p| p.name == "metadata_file"));
+        assert!(input_pins.iter().any(|p| p.name == "table_name"));
+    }
+
+    #[test]
+    fn test_register_iceberg_table_node_output_pins() {
+        let node_logic = RegisterIcebergTableNode::new();
+        let node = node_logic.get_node();
+
+        let output_pins: Vec<_> = node
+            .pins
+            .values()
+            .filter(|p| p.pin_type == PinType::Output)
+            .collect();
+
+        assert!(output_pins.iter().any(|p| p.name == "exec_out"));
+        assert!(output_pins.iter().any(|p| p.name == "session_out"));
+        assert!(output_pins.iter().any(|p| p.name == "current_snapshot"));
+        assert!(output_pins.iter().any(|p| p.name == "schema_info"));
+    }
+
+    #[test]
+    fn test_iceberg_table_info_node_structure() {
+        let node_logic = IcebergTableInfoNode::new();
+        let node = node_logic.get_node();
+
+        assert_eq!(node.name, "df_iceberg_info");
+        assert_eq!(node.friendly_name, "Iceberg Table Info");
+        assert_eq!(node.category, "Data/DataFusion/Lakes");
+    }
+
+    #[test]
+    fn test_iceberg_table_info_node_output_pins() {
+        let node_logic = IcebergTableInfoNode::new();
+        let node = node_logic.get_node();
+
+        let output_pins: Vec<_> = node
+            .pins
+            .values()
+            .filter(|p| p.pin_type == PinType::Output)
+            .collect();
+
+        assert!(output_pins.iter().any(|p| p.name == "current_snapshot"));
+        assert!(output_pins.iter().any(|p| p.name == "schema"));
+        assert!(output_pins.iter().any(|p| p.name == "snapshots"));
+        assert!(output_pins.iter().any(|p| p.name == "partition_spec"));
+        assert!(output_pins.iter().any(|p| p.name == "properties"));
+    }
+
+    #[test]
+    fn test_iceberg_time_travel_node_structure() {
+        let node_logic = IcebergTimeTravelNode::new();
+        let node = node_logic.get_node();
+
+        assert_eq!(node.name, "df_iceberg_time_travel");
+        assert_eq!(node.friendly_name, "Iceberg Time Travel");
+        assert_eq!(node.category, "Data/DataFusion/Lakes");
+    }
+
+    #[test]
+    fn test_iceberg_time_travel_node_travel_pins() {
+        let node_logic = IcebergTimeTravelNode::new();
+        let node = node_logic.get_node();
+
+        let input_pins: Vec<_> = node
+            .pins
+            .values()
+            .filter(|p| p.pin_type == PinType::Input)
+            .collect();
+
+        let travel_mode_pin = input_pins.iter().find(|p| p.name == "travel_mode");
+        assert!(travel_mode_pin.is_some());
+        assert_eq!(travel_mode_pin.unwrap().data_type, VariableType::String);
+
+        let snapshot_id_pin = input_pins.iter().find(|p| p.name == "snapshot_id");
+        assert!(snapshot_id_pin.is_some());
+        assert_eq!(snapshot_id_pin.unwrap().data_type, VariableType::String);
+
+        let timestamp_pin = input_pins.iter().find(|p| p.name == "timestamp_ms");
+        assert!(timestamp_pin.is_some());
+        assert_eq!(timestamp_pin.unwrap().data_type, VariableType::Integer);
+    }
+
+    #[test]
+    fn test_all_iceberg_nodes_have_scores() {
+        let register_node = RegisterIcebergTableNode::new().get_node();
+        let info_node = IcebergTableInfoNode::new().get_node();
+        let time_travel_node = IcebergTimeTravelNode::new().get_node();
+
+        assert!(register_node.scores.is_some());
+        assert!(info_node.scores.is_some());
+        assert!(time_travel_node.scores.is_some());
+    }
+
+    #[test]
+    fn test_all_iceberg_nodes_use_warehouse_path() {
+        let nodes = vec![
+            RegisterIcebergTableNode::new().get_node(),
+            IcebergTableInfoNode::new().get_node(),
+            IcebergTimeTravelNode::new().get_node(),
+        ];
+
+        for node in nodes {
+            let path_pin = node.pins.values().find(|p| p.name == "warehouse_path");
+            assert!(
+                path_pin.is_some(),
+                "Node {} missing warehouse_path pin",
+                node.name
+            );
+            assert_eq!(
+                path_pin.unwrap().data_type,
+                VariableType::Struct,
+                "Node {} warehouse_path pin should be Struct type",
                 node.name
             );
         }

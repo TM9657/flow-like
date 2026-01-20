@@ -24,10 +24,10 @@ use flow_like_storage::datafusion::datasource::listing::{
     ListingOptions, ListingTable, ListingTableConfig, ListingTableUrl,
 };
 use flow_like_storage::datafusion::prelude::{SessionConfig, SessionContext};
-use flow_like_storage::files::store::local_store::LocalObjectStore;
 use flow_like_storage::files::store::FlowLikeStore;
-use flow_like_storage::object_store::path::Path as ObjectPath;
+use flow_like_storage::files::store::local_store::LocalObjectStore;
 use flow_like_storage::object_store::ObjectStore;
+use flow_like_storage::object_store::path::Path as ObjectPath;
 use flow_like_types::reqwest::Url;
 use futures::StreamExt;
 use uuid::Uuid;
@@ -71,8 +71,8 @@ async fn register_parquet_from_store(
     let table_url = format!("{}{}", store_url, path.as_ref());
     let table_path = ListingTableUrl::parse(&table_url).unwrap();
 
-    let options = ListingOptions::new(Arc::new(ParquetFormat::default()))
-        .with_file_extension("parquet");
+    let options =
+        ListingOptions::new(Arc::new(ParquetFormat::default())).with_file_extension("parquet");
 
     let config = ListingTableConfig::new(table_path)
         .with_listing_options(options)
@@ -2288,7 +2288,7 @@ mod s3_minio_store_tests {
 mod scoped_credentials_tests {
     use super::*;
     use flow_like_storage::object_store::aws::AmazonS3Builder;
-    use flow_like_storage::object_store::{path::Path as ObjectStorePath, ObjectStore, PutPayload};
+    use flow_like_storage::object_store::{ObjectStore, PutPayload, path::Path as ObjectStorePath};
     use reqwest::Client;
 
     const MINIO_ENDPOINT: &str = "http://localhost:9002";
@@ -2356,7 +2356,9 @@ mod scoped_credentials_tests {
         ));
         let test_content = b"Hello from scoped user!";
 
-        let put_result = s3.put(&test_path, PutPayload::from(test_content.to_vec())).await;
+        let put_result = s3
+            .put(&test_path, PutPayload::from(test_content.to_vec()))
+            .await;
 
         match put_result {
             Ok(_) => {
@@ -2396,7 +2398,9 @@ mod scoped_credentials_tests {
         ));
         let test_content = br#"{"user": "test", "data": "allowed"}"#;
 
-        let put_result = s3.put(&test_path, PutPayload::from(test_content.to_vec())).await;
+        let put_result = s3
+            .put(&test_path, PutPayload::from(test_content.to_vec()))
+            .await;
 
         match put_result {
             Ok(_) => {
@@ -2434,7 +2438,9 @@ mod scoped_credentials_tests {
         ));
         let test_content = b"temporary data";
 
-        let put_result = s3.put(&test_path, PutPayload::from(test_content.to_vec())).await;
+        let put_result = s3
+            .put(&test_path, PutPayload::from(test_content.to_vec()))
+            .await;
 
         match put_result {
             Ok(_) => {
@@ -2463,11 +2469,15 @@ mod scoped_credentials_tests {
         };
 
         // Scoped user should NOT be able to write to apps/other-app/
-        let forbidden_path =
-            ObjectStorePath::from(format!("apps/other-app-456/forbidden_{}.txt", Uuid::new_v4()));
+        let forbidden_path = ObjectStorePath::from(format!(
+            "apps/other-app-456/forbidden_{}.txt",
+            Uuid::new_v4()
+        ));
         let test_content = b"This should fail";
 
-        let put_result = s3.put(&forbidden_path, PutPayload::from(test_content.to_vec())).await;
+        let put_result = s3
+            .put(&forbidden_path, PutPayload::from(test_content.to_vec()))
+            .await;
 
         match put_result {
             Ok(_) => {
@@ -2503,7 +2513,9 @@ mod scoped_credentials_tests {
         ));
         let test_content = b"This should fail";
 
-        let put_result = s3.put(&forbidden_path, PutPayload::from(test_content.to_vec())).await;
+        let put_result = s3
+            .put(&forbidden_path, PutPayload::from(test_content.to_vec()))
+            .await;
 
         match put_result {
             Ok(_) => {
@@ -2532,10 +2544,8 @@ mod scoped_credentials_tests {
             }
         };
 
-        let test_path = ObjectStorePath::from(format!(
-            "apps/test-app-123/readable_{}.txt",
-            Uuid::new_v4()
-        ));
+        let test_path =
+            ObjectStorePath::from(format!("apps/test-app-123/readable_{}.txt", Uuid::new_v4()));
         let test_content = b"Content to be read by scoped user";
 
         if root_s3
@@ -2682,8 +2692,8 @@ mod scoped_credentials_tests {
         ctx.register_object_store(&s3_url, scoped_s3);
 
         let table_url = format!("s3://{}/{}", CONTENT_BUCKET, parquet_path.as_ref());
-        let options = ListingOptions::new(Arc::new(ParquetFormat::default()))
-            .with_file_extension("parquet");
+        let options =
+            ListingOptions::new(Arc::new(ParquetFormat::default())).with_file_extension("parquet");
 
         match ListingTableConfig::new(ListingTableUrl::parse(&table_url).unwrap())
             .with_listing_options(options)
@@ -2725,13 +2735,13 @@ mod scoped_credentials_tests {
         };
 
         // Scoped user should be able to write to logs/runs/test-app-123/
-        let log_path = ObjectStorePath::from(format!(
-            "logs/runs/test-app-123/run_{}.log",
-            Uuid::new_v4()
-        ));
+        let log_path =
+            ObjectStorePath::from(format!("logs/runs/test-app-123/run_{}.log", Uuid::new_v4()));
         let log_content = b"[INFO] Test log entry from scoped credential test";
 
-        let put_result = s3.put(&log_path, PutPayload::from(log_content.to_vec())).await;
+        let put_result = s3
+            .put(&log_path, PutPayload::from(log_content.to_vec()))
+            .await;
 
         match put_result {
             Ok(_) => {

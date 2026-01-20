@@ -7,6 +7,8 @@ edition = "2024"
 # default = ["local-ml"]
 default = []
 local-ml = ["dep:ort", "dep:fastembed"]
+# Execution feature - alias for local-ml for consistency across catalog crates
+execute = ["local-ml"]
 
 [dependencies]
 flow-like-types.workspace = true

@@ -1,26 +1,40 @@
 //! Sub-Catalog for Machine Learning
 //!
 //! This module contains various machine learning algorithms and dataset utilities based on the `[linfa]` crate.
+//!
+//! Note: The `execute` feature must be enabled for actual ML model training and inference.
+//! Without it, only node metadata (get_node()) is available.
 
-use flow_like::flow::execution::context::ExecutionContext;
 use flow_like_storage::arrow_schema::{DataType, Field};
-use flow_like_types::json;
-use flow_like_types::{
-    Cacheable, Error, Ok, Result, Value, anyhow, create_id, json::json, sync::Mutex,
-};
-use linfa::composing::MultiClassModel;
-use linfa::prelude::Pr;
-use linfa::{DatasetBase, traits::Predict};
-use linfa_clustering::KMeans;
-use linfa_linear::FittedLinearRegression;
-use linfa_nn::distance::L2Dist;
-use linfa_svm::Svm;
+use flow_like_types::{Error, Result, Value, anyhow};
 use ndarray::{Array1, Array2};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+
+#[cfg(feature = "execute")]
+use flow_like::flow::execution::context::ExecutionContext;
+#[cfg(feature = "execute")]
+use flow_like_types::{Cacheable, create_id, json::json, sync::Mutex};
+#[cfg(feature = "execute")]
+use linfa::composing::MultiClassModel;
+#[cfg(feature = "execute")]
+use linfa::prelude::Pr;
+#[cfg(feature = "execute")]
+use linfa::{DatasetBase, traits::Predict};
+#[cfg(feature = "execute")]
+use linfa_clustering::KMeans;
+#[cfg(feature = "execute")]
+use linfa_linear::FittedLinearRegression;
+#[cfg(feature = "execute")]
+use linfa_nn::distance::L2Dist;
+#[cfg(feature = "execute")]
+use linfa_svm::Svm;
+#[cfg(feature = "execute")]
 use std::fmt;
+#[cfg(feature = "execute")]
 use std::sync::Arc;
+
 pub mod classification;
 pub mod clustering;
 pub mod dataset;
@@ -34,6 +48,7 @@ pub mod save;
 /// TODO: block-wise processing, at least for predictions
 pub const MAX_ML_PREDICTION_RECORDS: usize = 20000;
 
+#[cfg(feature = "execute")]
 #[derive(Debug, Serialize, Deserialize)]
 struct ClassEntry {
     id: usize,
@@ -41,12 +56,7 @@ struct ClassEntry {
 }
 
 /// Helper-Module to serialize HashMap as Vec and deserialize Vec as HashMap for the class mappings.
-/// For some reason, a pure HashMap<usize, _> attribute is not properly deserialized as usize keys are recognzed as strings only.
-/// This causes the Load Model Node to fail (in a playground project it works, but here it doesn't).
-/// A HashMap uize -> String is still useful though, as we can easily map class predictions to class names with this.
-/// So that's why we are taking the detour writing our own serializer/deserializer for the classes attribute.
-/// In the long run, we could consider writing our own dumper/loader logic to account for further customizations,
-/// e.g. serializing only strictly necessary information to reproduce a model to reduce checkpoint sizes.
+#[cfg(feature = "execute")]
 mod vec_as_map {
     use super::ClassEntry;
     use serde::ser::SerializeSeq;
@@ -85,6 +95,7 @@ mod vec_as_map {
     }
 }
 
+#[cfg(feature = "execute")]
 #[derive(Debug, Serialize, Deserialize)]
 /// # Linfa models attached with additional metadata
 pub struct ModelWithMeta<M> {
@@ -96,6 +107,7 @@ pub struct ModelWithMeta<M> {
     pub classes: Option<HashMap<usize, String>>,
 }
 
+#[cfg(feature = "execute")]
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(tag = "type")]
 /// # Unified Type for Machine Learning Models from Linfa Crate
@@ -105,6 +117,7 @@ pub enum MLModel {
     LinearRegression(ModelWithMeta<FittedLinearRegression<f64>>),
 }
 
+#[cfg(feature = "execute")]
 impl fmt::Display for MLModel {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
@@ -115,12 +128,13 @@ impl fmt::Display for MLModel {
     }
 }
 
+#[cfg(feature = "execute")]
 impl MLModel {
-    fn to_json_vec(&self) -> Result<Vec<u8>> {
-        Ok(json::to_vec(&self)?)
+    pub fn to_json_vec(&self) -> Result<Vec<u8>> {
+        Ok(flow_like_types::json::to_vec(&self)?)
     }
 
-    fn predict_on_values(
+    pub fn predict_on_values(
         &self,
         values: &mut Vec<Value>,
         record_col: &str,
@@ -236,10 +250,12 @@ pub struct NodeMLModel {
     pub model_ref: String,
 }
 
+#[cfg(feature = "execute")]
 pub struct NodeMLModelWrapper {
     pub model: Arc<Mutex<MLModel>>,
 }
 
+#[cfg(feature = "execute")]
 impl Cacheable for NodeMLModelWrapper {
     fn as_any(&self) -> &dyn std::any::Any {
         self
@@ -249,6 +265,7 @@ impl Cacheable for NodeMLModelWrapper {
     }
 }
 
+#[cfg(feature = "execute")]
 impl NodeMLModel {
     pub async fn new(ctx: &mut ExecutionContext, model: MLModel) -> Self {
         let id = create_id();

@@ -1,4 +1,5 @@
 use crate::image::NodeImage;
+#[cfg(feature = "execute")]
 use crate::image::pdf::{load_pdf_from_flowpath, pixmap_to_dynamic_image, validate_scale};
 use flow_like::flow::execution::context::ExecutionContext;
 use flow_like::flow::node::{Node, NodeLogic};
@@ -6,6 +7,7 @@ use flow_like::flow::pin::{PinOptions, ValueType};
 use flow_like::flow::variable::VariableType;
 use flow_like_catalog_core::FlowPath;
 use flow_like_types::{async_trait, json::json};
+#[cfg(feature = "execute")]
 use hayro::{InterpreterSettings, RenderSettings, render};
 
 #[crate::register_node]
@@ -57,6 +59,7 @@ impl NodeLogic for PdfToImagesNode {
         node
     }
 
+    #[cfg(feature = "execute")]
     async fn run(&self, context: &mut ExecutionContext) -> flow_like_types::Result<()> {
         context.deactivate_exec_pin("exec_out").await?;
 
@@ -70,8 +73,16 @@ impl NodeLogic for PdfToImagesNode {
 
         Ok(())
     }
+
+    #[cfg(not(feature = "execute"))]
+    async fn run(&self, _context: &mut ExecutionContext) -> flow_like_types::Result<()> {
+        Err(flow_like_types::anyhow!(
+            "Media processing requires the 'execute' feature"
+        ))
+    }
 }
 
+#[cfg(feature = "execute")]
 async fn render_pdf_pages(
     context: &mut ExecutionContext,
     pdf_path: &FlowPath,

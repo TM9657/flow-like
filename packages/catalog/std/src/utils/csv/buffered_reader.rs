@@ -1,15 +1,18 @@
+#[cfg(feature = "execute")]
+use flow_like::flow::execution::{LogLevel, internal_node::InternalNode};
 use flow_like::flow::{
-    execution::{LogLevel, context::ExecutionContext, internal_node::InternalNode},
+    execution::context::ExecutionContext,
     node::{Node, NodeLogic},
     pin::PinOptions,
     variable::VariableType,
 };
 use flow_like_catalog_core::FlowPath;
+#[cfg(feature = "execute")]
 use flow_like_storage::object_store::buffered::BufReader;
-use flow_like_types::{
-    async_trait,
-    json::{json, to_value},
-};
+#[cfg(feature = "execute")]
+use flow_like_types::json::to_value;
+use flow_like_types::{async_trait, json::json};
+#[cfg(feature = "execute")]
 use futures::StreamExt;
 
 #[crate::register_node]
@@ -76,6 +79,7 @@ impl NodeLogic for BufferedCsvReaderNode {
         node
     }
 
+    #[cfg(feature = "execute")]
     async fn run(&self, context: &mut ExecutionContext) -> flow_like_types::Result<()> {
         context.deactivate_exec_pin("exec_done").await?;
         context.activate_exec_pin("for_chunk").await?;
@@ -164,6 +168,13 @@ impl NodeLogic for BufferedCsvReaderNode {
         context.deactivate_exec_pin("for_chunk").await?;
 
         return Ok(());
+    }
+
+    #[cfg(not(feature = "execute"))]
+    async fn run(&self, _context: &mut ExecutionContext) -> flow_like_types::Result<()> {
+        Err(flow_like_types::anyhow!(
+            "This feature requires the 'execute' feature"
+        ))
     }
 }
 

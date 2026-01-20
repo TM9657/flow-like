@@ -2,9 +2,12 @@ use crate::generative::agent::Agent;
 /// # Agent Execution Helpers
 /// This module contains reusable logic for executing agents with tools and streaming.
 /// Extracted from simple.rs to be shared across multiple agent nodes.
+#[cfg(feature = "execute")]
 use ahash::AHashSet;
+#[cfg(feature = "execute")]
+use flow_like::flow::execution::LogLevel;
 use flow_like::flow::{
-    execution::{LogLevel, context::ExecutionContext, internal_node::InternalNode},
+    execution::{context::ExecutionContext, internal_node::InternalNode},
     pin::PinType,
     variable::VariableType,
 };
@@ -17,11 +20,17 @@ use flow_like_types::{
     Value, anyhow, async_trait, json,
     sync::{DashMap, Mutex},
 };
+#[cfg(feature = "execute")]
 use futures::StreamExt;
+#[cfg(feature = "execute")]
 use rig::OneOrMany;
+#[cfg(feature = "execute")]
 use rig::completion::{Completion, ToolDefinition, Usage as RigUsage};
+#[cfg(feature = "execute")]
 use rig::message::{AssistantContent, ToolCall as RigToolCall};
+#[cfg(feature = "execute")]
 use rig::streaming::StreamedAssistantContent;
+#[cfg(feature = "execute")]
 use rmcp::{
     ServiceExt,
     model::{
@@ -29,8 +38,10 @@ use rmcp::{
     },
 };
 use std::{collections::HashMap, sync::Arc};
+
 /// Generate OpenAI function call schema from a referenced function node.
 /// Returns a Tool definition with function name, description, and parameter schema.
+#[cfg(feature = "execute")]
 pub async fn generate_tool_from_function(
     referenced_node: &Arc<InternalNode>,
 ) -> flow_like_types::Result<Tool> {
@@ -150,6 +161,7 @@ pub async fn generate_tool_from_function(
 
 /// Execute a tool call by invoking the referenced function node with the provided arguments.
 /// Returns the result as a JSON Value.
+#[cfg(feature = "execute")]
 pub async fn execute_tool_call(
     context: &mut ExecutionContext,
     referenced_node: &Arc<InternalNode>,
@@ -210,12 +222,14 @@ pub async fn execute_tool_call(
 }
 
 /// Agent execution result containing the final response and updated history
+#[cfg(feature = "execute")]
 pub struct AgentExecutionResult {
     pub response: Response,
     pub history: History,
 }
 
 /// Trait for handling stream emissions during agent execution
+#[cfg(feature = "execute")]
 #[async_trait]
 pub trait StreamHandler: Send + Sync {
     async fn emit_chunk(
@@ -229,6 +243,7 @@ pub trait StreamHandler: Send + Sync {
 
 /// Execute an agent with the given history and tool name mappings.
 /// This is a non-streaming wrapper around execute_agent_streaming.
+#[cfg(feature = "execute")]
 pub async fn execute_agent(
     context: &mut ExecutionContext,
     agent: &Agent,
@@ -243,8 +258,10 @@ pub async fn execute_agent(
 }
 
 /// No-op stream handler for non-streaming agent execution
+#[cfg(feature = "execute")]
 struct NoOpStreamState {}
 
+#[cfg(feature = "execute")]
 #[async_trait]
 impl StreamHandler for NoOpStreamState {
     async fn emit_chunk(
@@ -263,6 +280,7 @@ impl StreamHandler for NoOpStreamState {
 }
 
 /// Stream handler for emitting chunks during agent execution
+#[cfg(feature = "execute")]
 pub struct AgentStreamState {
     parent_node_id: String,
     chunk_pin_available: bool,
@@ -270,6 +288,7 @@ pub struct AgentStreamState {
     connected_nodes: Option<Arc<DashMap<String, Arc<Mutex<ExecutionContext>>>>>,
 }
 
+#[cfg(feature = "execute")]
 impl AgentStreamState {
     pub async fn new(context: &mut ExecutionContext) -> flow_like_types::Result<Self> {
         let parent_node_id = context.node.node.lock().await.id.clone();
@@ -304,6 +323,7 @@ impl AgentStreamState {
     }
 }
 
+#[cfg(feature = "execute")]
 #[async_trait]
 impl StreamHandler for AgentStreamState {
     async fn emit_chunk(
@@ -363,6 +383,7 @@ impl StreamHandler for AgentStreamState {
 
 /// Execute an agent with streaming support.
 /// Emits chunks through the provided stream state as the agent generates responses.
+#[cfg(feature = "execute")]
 pub async fn execute_agent_streaming(
     context: &mut ExecutionContext,
     agent: &Agent,

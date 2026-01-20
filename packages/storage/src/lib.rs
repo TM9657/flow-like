@@ -17,6 +17,12 @@ pub use serde_arrow;
 #[cfg(feature = "delta")]
 pub use deltalake;
 
-// Note: Federation support (datafusion-federation) will be available when upgrading to DataFusion 50+
-// #[cfg(feature = "federation")]
-// pub use datafusion_federation;
+#[cfg(feature = "iceberg")]
+pub use iceberg;
+
+#[cfg(feature = "iceberg")]
+pub use iceberg_datafusion;
+
+// Federation support for query push-down to remote databases
+#[cfg(feature = "federation")]
+pub use datafusion_federation;

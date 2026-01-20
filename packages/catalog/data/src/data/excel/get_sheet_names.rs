@@ -1,3 +1,4 @@
+#[cfg(feature = "execute")]
 use calamine::Reader;
 use flow_like::flow::{
     execution::context::ExecutionContext,
@@ -6,6 +7,7 @@ use flow_like::flow::{
     variable::VariableType,
 };
 use flow_like_types::{anyhow, async_trait, json::json};
+#[cfg(feature = "execute")]
 use std::io::Cursor;
 
 use crate::data::path::FlowPath;
@@ -71,6 +73,7 @@ impl NodeLogic for GetSheetNamesNode {
         node
     }
 
+    #[cfg(feature = "execute")]
     async fn run(&self, context: &mut ExecutionContext) -> flow_like_types::Result<()> {
         let file: FlowPath = context.evaluate_pin("file").await?; // throws on failure
         let bytes = file.get(context, false).await?; // throws on failure
@@ -85,5 +88,12 @@ impl NodeLogic for GetSheetNamesNode {
         context.set_pin_value("count", json!(count)).await?;
 
         Ok(())
+    }
+
+    #[cfg(not(feature = "execute"))]
+    async fn run(&self, _context: &mut ExecutionContext) -> flow_like_types::Result<()> {
+        Err(flow_like_types::anyhow!(
+            "Data processing requires the 'execute' feature"
+        ))
     }
 }

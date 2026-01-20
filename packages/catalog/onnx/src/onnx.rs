@@ -1,11 +1,14 @@
 /// # ONNX Nodes
 /// Loading and Inference for ONNX-based Models
+#[cfg(feature = "execute")]
 use flow_like::flow::execution::context::ExecutionContext;
-#[cfg(feature = "local-ml")]
+#[cfg(feature = "execute")]
 use flow_like_model_provider::ml::ort::session::Session;
+#[cfg(feature = "execute")]
 use flow_like_types::{Cacheable, Result, create_id, sync::Mutex};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
+#[cfg(feature = "execute")]
 use std::sync::Arc;
 
 /// ONNX Image Classification Nodes
@@ -31,19 +34,21 @@ pub struct NodeOnnxSession {
 }
 
 /// ONNX Runtime Session Bundled with Provider Metadata
+#[cfg(feature = "execute")]
 pub struct SessionWithMeta {
-    #[cfg(feature = "local-ml")]
     pub session: Session,
     pub provider: Provider,
 }
 
 /// ONNX Runtime Session Wrapper
+#[cfg(feature = "execute")]
 pub struct NodeOnnxSessionWrapper {
     /// Shared Mutable ONNX Runtime Session
     /// Todo: we might not need a Mutex?
     pub session: Arc<Mutex<SessionWithMeta>>,
 }
 
+#[cfg(feature = "execute")]
 impl Cacheable for NodeOnnxSessionWrapper {
     fn as_any(&self) -> &dyn std::any::Any {
         self
@@ -55,6 +60,7 @@ impl Cacheable for NodeOnnxSessionWrapper {
 
 impl NodeOnnxSession {
     /// Push new ONNX Runtime Session to Execution Context
+    #[cfg(feature = "execute")]
     pub async fn new(ctx: &mut ExecutionContext, session: SessionWithMeta) -> Self {
         let id = create_id();
         let session_ref = Arc::new(Mutex::new(session));
@@ -69,6 +75,7 @@ impl NodeOnnxSession {
     }
 
     /// Fetch ONNX Runtime Session from Cached Runtime Context
+    #[cfg(feature = "execute")]
     pub async fn get_session(
         &self,
         ctx: &mut ExecutionContext,

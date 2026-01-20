@@ -1,3 +1,4 @@
+#[cfg(feature = "execute")]
 use chrono::{DateTime, NaiveDateTime, Utc};
 use flow_like::flow::{
     execution::context::ExecutionContext,
@@ -5,8 +6,13 @@ use flow_like::flow::{
     pin::{PinOptions, ValueType},
     variable::VariableType,
 };
+#[cfg(feature = "execute")]
 use flow_like_types::{anyhow, async_trait, json::json, reqwest};
+#[cfg(not(feature = "execute"))]
+use flow_like_types::{async_trait, json::json};
+#[cfg(feature = "execute")]
 use futures::TryStreamExt;
+#[cfg(feature = "execute")]
 use icalendar::{Calendar, CalendarDateTime, Component, DatePerhapsTime, Event};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -99,6 +105,7 @@ impl NodeLogic for ImapListCalendarEventsNode {
         node
     }
 
+    #[cfg(feature = "execute")]
     async fn run(&self, context: &mut ExecutionContext) -> flow_like_types::Result<()> {
         context.deactivate_exec_pin("exec_out").await?;
 
@@ -166,6 +173,13 @@ impl NodeLogic for ImapListCalendarEventsNode {
         context.set_pin_value("events", json!(events)).await?;
         context.activate_exec_pin("exec_out").await?;
         Ok(())
+    }
+
+    #[cfg(not(feature = "execute"))]
+    async fn run(&self, _context: &mut ExecutionContext) -> flow_like_types::Result<()> {
+        Err(flow_like_types::anyhow!(
+            "Web functionality requires the 'execute' feature"
+        ))
     }
 }
 
@@ -235,6 +249,7 @@ impl NodeLogic for ImapListCalendarsNode {
         node
     }
 
+    #[cfg(feature = "execute")]
     async fn run(&self, context: &mut ExecutionContext) -> flow_like_types::Result<()> {
         context.deactivate_exec_pin("exec_out").await?;
 
@@ -277,6 +292,13 @@ impl NodeLogic for ImapListCalendarsNode {
 
         context.activate_exec_pin("exec_out").await?;
         Ok(())
+    }
+
+    #[cfg(not(feature = "execute"))]
+    async fn run(&self, _context: &mut ExecutionContext) -> flow_like_types::Result<()> {
+        Err(flow_like_types::anyhow!(
+            "Web functionality requires the 'execute' feature"
+        ))
     }
 }
 
@@ -363,6 +385,7 @@ impl NodeLogic for ImapSubscribeCalendarNode {
         node
     }
 
+    #[cfg(feature = "execute")]
     async fn run(&self, context: &mut ExecutionContext) -> flow_like_types::Result<()> {
         context.deactivate_exec_pin("exec_out").await?;
         context.deactivate_exec_pin("error").await?;
@@ -464,6 +487,13 @@ impl NodeLogic for ImapSubscribeCalendarNode {
         context.activate_exec_pin("exec_out").await?;
         Ok(())
     }
+
+    #[cfg(not(feature = "execute"))]
+    async fn run(&self, _context: &mut ExecutionContext) -> flow_like_types::Result<()> {
+        Err(flow_like_types::anyhow!(
+            "Web functionality requires the 'execute' feature"
+        ))
+    }
 }
 
 #[crate::register_node]
@@ -538,6 +568,7 @@ impl NodeLogic for ImapGetCalendarEventNode {
         node
     }
 
+    #[cfg(feature = "execute")]
     async fn run(&self, context: &mut ExecutionContext) -> flow_like_types::Result<()> {
         context.deactivate_exec_pin("exec_out").await?;
         context.deactivate_exec_pin("error").await?;
@@ -610,6 +641,13 @@ impl NodeLogic for ImapGetCalendarEventNode {
             .await?;
         context.activate_exec_pin("error").await?;
         Ok(())
+    }
+
+    #[cfg(not(feature = "execute"))]
+    async fn run(&self, _context: &mut ExecutionContext) -> flow_like_types::Result<()> {
+        Err(flow_like_types::anyhow!(
+            "Web functionality requires the 'execute' feature"
+        ))
     }
 }
 
@@ -706,6 +744,7 @@ impl NodeLogic for ImapCreateCalendarEventNode {
         node
     }
 
+    #[cfg(feature = "execute")]
     async fn run(&self, context: &mut ExecutionContext) -> flow_like_types::Result<()> {
         context.deactivate_exec_pin("exec_out").await?;
         context.deactivate_exec_pin("error").await?;
@@ -784,6 +823,13 @@ impl NodeLogic for ImapCreateCalendarEventNode {
 
         Ok(())
     }
+
+    #[cfg(not(feature = "execute"))]
+    async fn run(&self, _context: &mut ExecutionContext) -> flow_like_types::Result<()> {
+        Err(flow_like_types::anyhow!(
+            "Web functionality requires the 'execute' feature"
+        ))
+    }
 }
 
 #[crate::register_node]
@@ -855,6 +901,7 @@ impl NodeLogic for ImapDeleteCalendarEventNode {
         node
     }
 
+    #[cfg(feature = "execute")]
     async fn run(&self, context: &mut ExecutionContext) -> flow_like_types::Result<()> {
         context.deactivate_exec_pin("exec_out").await?;
         context.deactivate_exec_pin("error").await?;
@@ -923,8 +970,16 @@ impl NodeLogic for ImapDeleteCalendarEventNode {
 
         Ok(())
     }
+
+    #[cfg(not(feature = "execute"))]
+    async fn run(&self, _context: &mut ExecutionContext) -> flow_like_types::Result<()> {
+        Err(flow_like_types::anyhow!(
+            "Web functionality requires the 'execute' feature"
+        ))
+    }
 }
 
+#[cfg(feature = "execute")]
 fn parse_event_datetime(datetime_str: &str) -> Option<DateTime<Utc>> {
     // Try parsing RFC3339 (for UTC dates like "2023-12-19T13:00:00+00:00")
     if let Ok(dt) = DateTime::parse_from_rfc3339(datetime_str) {
@@ -955,6 +1010,7 @@ fn parse_event_datetime(datetime_str: &str) -> Option<DateTime<Utc>> {
     None
 }
 
+#[cfg(feature = "execute")]
 fn format_date_perhaps_time(dt: DatePerhapsTime) -> String {
     match dt {
         DatePerhapsTime::DateTime(calendar_dt) => match calendar_dt {
@@ -970,6 +1026,7 @@ fn format_date_perhaps_time(dt: DatePerhapsTime) -> String {
     }
 }
 
+#[cfg(feature = "execute")]
 fn parse_calendar_event(event: &Event) -> CalendarEvent {
     let uid = event
         .get_uid()

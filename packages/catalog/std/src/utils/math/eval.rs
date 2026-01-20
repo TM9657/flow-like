@@ -1,9 +1,13 @@
+#[cfg(feature = "execute")]
+use flow_like::flow::execution::LogLevel;
 use flow_like::flow::{
-    execution::{LogLevel, context::ExecutionContext},
+    execution::context::ExecutionContext,
     node::{Node, NodeLogic},
     variable::VariableType,
 };
-use flow_like_types::{async_trait, json::json};
+use flow_like_types::async_trait;
+#[cfg(feature = "execute")]
+use flow_like_types::json::json;
 
 #[crate::register_node]
 #[derive(Default)]
@@ -43,6 +47,7 @@ impl NodeLogic for EvalNode {
         node
     }
 
+    #[cfg(feature = "execute")]
     async fn run(&self, context: &mut ExecutionContext) -> flow_like_types::Result<()> {
         let expression: String = context.evaluate_pin("expression").await?;
         let mut ns = fasteval::EmptyNamespace;
@@ -57,5 +62,12 @@ impl NodeLogic for EvalNode {
 
         context.set_pin_value("result", json!(result)).await?;
         Ok(())
+    }
+
+    #[cfg(not(feature = "execute"))]
+    async fn run(&self, _context: &mut ExecutionContext) -> flow_like_types::Result<()> {
+        Err(flow_like_types::anyhow!(
+            "This feature requires the 'execute' feature"
+        ))
     }
 }

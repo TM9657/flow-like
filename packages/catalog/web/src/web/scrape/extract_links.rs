@@ -1,3 +1,4 @@
+#[cfg(feature = "execute")]
 use std::{
     collections::{HashSet, VecDeque},
     time::Duration,
@@ -8,12 +9,16 @@ use flow_like::flow::{
     node::{Node, NodeLogic},
     variable::VariableType,
 };
+#[cfg(not(feature = "execute"))]
+use flow_like_types::{async_trait, json::json};
+#[cfg(feature = "execute")]
 use flow_like_types::{
     async_trait,
     json::json,
     reqwest::{self, Url},
     tokio,
 };
+#[cfg(feature = "execute")]
 use scraper::{Html, Selector};
 
 #[crate::register_node]
@@ -83,6 +88,7 @@ impl NodeLogic for ExtractLinksNode {
         node
     }
 
+    #[cfg(feature = "execute")]
     async fn run(&self, context: &mut ExecutionContext) -> flow_like_types::Result<()> {
         context.deactivate_exec_pin("exec_out").await?;
 
@@ -101,10 +107,16 @@ impl NodeLogic for ExtractLinksNode {
         context.activate_exec_pin("exec_out").await?;
         Ok(())
     }
+
+    #[cfg(not(feature = "execute"))]
+    async fn run(&self, _context: &mut ExecutionContext) -> flow_like_types::Result<()> {
+        Err(flow_like_types::anyhow!(
+            "Web functionality requires the 'execute' feature"
+        ))
+    }
 }
 
-/// Crawls up to `max_depth` starting from `start_url`.
-/// If `same_domain` is true, only follows links on the same domain.
+#[cfg(feature = "execute")]
 async fn crawl_links(
     start_url: Url,
     max_depth: usize,

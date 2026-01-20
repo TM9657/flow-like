@@ -6,6 +6,8 @@ edition = "2024"
 [features]
 default = []
 local-ml = ["flow-like-model-provider/local-ml", "flow-like/local-ml"]
+# Execution feature - enables heavy dependencies for node execution
+execute = []
 
 [dependencies]
 flow-like.workspace = true

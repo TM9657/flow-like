@@ -22,7 +22,7 @@ Sharable Widgets for reuse and the nodes to control the frontend
     - Let's you query your lancedb tables (database default implementation)
     - Ingest new data
     - Use Parquet ingest (time based aggregations, filters, etc)
-    - Connection of Postgres, MySQL, and other databases through DataFusion connectors
+    - Connection of Postgres, MySQL, and other databases through DataFusion connectors (ODBC, FlightSQL, etc) -> SnowFlake etc should also be supported
     - Athena Integration
     - S3 based data lake querying (Iceberg, Delta Lake, etc)
     - And more...
@@ -31,14 +31,41 @@ Sharable Widgets for reuse and the nodes to control the frontend
 ## WASM Nodes
 - Rust and AssemblyScript templates for building custom WASM nodes
 - Expanded node catalog with new functionalities without adjusting the source code
+-> Very early stage, expect better documentation and functionality next release
+
+## Runtime Variables
+- You can now user specific runtime variables. E.g your workflow execution requires a custom user API key -> define and let user set it at runtime (stored only local, never shared with backend)
 
 ## Node Updates
 - Open Database now supports user scoped databases (secure by design)
+- Improved Document Extraction + summarization options -> source for this is open source here:  https://github.com/TM9657/markitdown-rs
+- New Web Nodes (standard Headers)
+- New Default Node (Checks for value, if invalid -> use default value pin)
+- Create QR Code Node
+- Remove field from Struct Node
+
+## Notification System
+- In-App Notifications for workflow executions, system updates, errors, and more
+- Configurable notification settings -> Notify yourself when something in the background workflow happens / Notify a specific team member when something happens (has to be part of the project)
+
+## Clear Board Execution settings
+- You can now define where the workflow runs (locally, remote or hybrid)
+- This change also introduces local only nodes which would force execution locally (e.g. Computer and Browser Use, File System Nodes, etc)
+- If you run a shared workflow containing secret variables locally, you will be prompted to enter the secret too. The backend never returns the secret to the frontend for security reasons.
 
 ## Some UI and UX Improvements
 - Improved project creation, removed the old way of doing that.
 - Faster navigation through quick search / spotlight
+- More information about current execution
+- In workflows you can quickly create variables from pins (carrying over their schema for schema save variable handling)
+- Make and Break struct based nodes if they have a pin. No need to manually set the field with x nodes, just one make and break.
 
 ## Documentation updates & code base changes
 - New docs for our new features
 - Frontend for the desktop app was moved into ui components as preparation for the Web App.
+- Leaner Backend (Gated Execution for Nodes with feature flags, so these crates and code is not loaded into backend compilation)
+
+### Updated Dependencies
+- LanceDB upgraded to latest version
+- DataFusion upgraded to latest version
+- Rig upgraded to latest version

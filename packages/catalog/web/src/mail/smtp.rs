@@ -4,18 +4,24 @@ use flow_like::flow::{
     pin::PinOptions,
     variable::VariableType,
 };
+#[cfg(feature = "execute")]
 use flow_like_types::{Cacheable, anyhow, async_trait, json::json};
+#[cfg(not(feature = "execute"))]
+use flow_like_types::{async_trait, json::json};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
+#[cfg(feature = "execute")]
 use std::{
     any::Any,
     collections::hash_map::DefaultHasher,
     hash::{Hash, Hasher},
     sync::Arc,
 };
+#[cfg(feature = "execute")]
 use tokio::{self, io::BufStream, net::TcpStream, sync::Mutex};
 pub mod send_mail;
 
+#[cfg(feature = "execute")]
 use async_smtp::{
     SmtpClient, SmtpTransport,
     authentication::{Credentials, DEFAULT_ENCRYPTED_MECHANISMS},
@@ -31,6 +37,7 @@ impl SmtpConnection {
         SmtpConnection { id }
     }
 
+    #[cfg(feature = "execute")]
     pub async fn to_session(
         &self,
         context: &mut ExecutionContext,
@@ -49,6 +56,7 @@ impl SmtpConnection {
         }
     }
 
+    #[cfg(feature = "execute")]
     pub async fn to_session_cache(
         &self,
         context: &mut ExecutionContext,
@@ -67,14 +75,18 @@ impl SmtpConnection {
     }
 }
 
+#[cfg(feature = "execute")]
 pub type SmtpTransportTls = SmtpTransport<BufStream<async_native_tls::TlsStream<TcpStream>>>;
+#[cfg(feature = "execute")]
 pub type SmtpSession = Arc<Mutex<SmtpTransportTls>>;
 
+#[cfg(feature = "execute")]
 #[derive(Clone)]
 pub struct SmtpSessionCache {
     pub session: SmtpSession,
 }
 
+#[cfg(feature = "execute")]
 impl Cacheable for SmtpSessionCache {
     fn as_any(&self) -> &dyn Any {
         self
@@ -94,6 +106,7 @@ impl SmtpConnectNode {
     }
 }
 
+#[cfg(feature = "execute")]
 fn tls() -> async_native_tls::TlsConnector {
     async_native_tls::TlsConnector::new()
         .danger_accept_invalid_hostnames(true)
@@ -159,6 +172,7 @@ impl NodeLogic for SmtpConnectNode {
         node
     }
 
+    #[cfg(feature = "execute")]
     async fn run(&self, context: &mut ExecutionContext) -> flow_like_types::Result<()> {
         context.deactivate_exec_pin("exec_out").await?;
 
@@ -277,5 +291,12 @@ impl NodeLogic for SmtpConnectNode {
             .await?;
         context.activate_exec_pin("exec_out").await?;
         Ok(())
+    }
+
+    #[cfg(not(feature = "execute"))]
+    async fn run(&self, _context: &mut ExecutionContext) -> flow_like_types::Result<()> {
+        Err(flow_like_types::anyhow!(
+            "Web functionality requires the 'execute' feature"
+        ))
     }
 }

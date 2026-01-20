@@ -1,5 +1,7 @@
 /// # ONNX Model Loader Nodes
-use crate::onnx::{NodeOnnxSession, Provider, SessionWithMeta, classification, detection};
+use crate::onnx::NodeOnnxSession;
+#[cfg(feature = "execute")]
+use crate::onnx::{Provider, SessionWithMeta, classification, detection};
 use flow_like::flow::{
     execution::context::ExecutionContext,
     node::{Node, NodeLogic},
@@ -7,20 +9,28 @@ use flow_like::flow::{
     variable::VariableType,
 };
 use flow_like_catalog_core::FlowPath;
-#[cfg(feature = "local-ml")]
+#[cfg(feature = "execute")]
 use flow_like_model_provider::ml::ort::session::Session;
-use flow_like_types::{Error, Result, anyhow, async_trait, json::json};
+#[cfg(feature = "execute")]
+use flow_like_types::{Error, json::json};
+use flow_like_types::{Result, anyhow, async_trait};
 
 // ## Loader Utilities
 // Identifying ONNX-I/Os
+#[cfg(feature = "execute")]
 static DFINE_INPUTS: [&str; 2] = ["images", "orig_target_sizes"];
+#[cfg(feature = "execute")]
 static DFINE_OUTPUTS: [&str; 3] = ["labels", "boxes", "scores"];
+#[cfg(feature = "execute")]
 static YOLO_INPUTS: [&str; 1] = ["images"];
+#[cfg(feature = "execute")]
 static YOLO_OUTPUTS: [&str; 1] = ["output0"];
+#[cfg(feature = "execute")]
 static TIMM_INPUTS: [&str; 1] = ["input0"];
+#[cfg(feature = "execute")]
 static TIMM_OUTPUTS: [&str; 1] = ["output0"];
 
-#[cfg(feature = "local-ml")]
+#[cfg(feature = "execute")]
 /// Factory Function Matching ONNX Assets to a Provider-Frameworks
 pub fn determine_provider(session: &Session) -> Result<Provider, Error> {
     let input_names: Vec<&str> = session.inputs.iter().map(|i| i.name.as_str()).collect();
@@ -60,7 +70,7 @@ pub fn determine_provider(session: &Session) -> Result<Provider, Error> {
     }
 }
 
-#[cfg(feature = "local-ml")]
+#[cfg(feature = "execute")]
 pub fn determine_input_shape(session: &Session, input_name: &str) -> Result<(u32, u32), Error> {
     for input in &session.inputs {
         if input.name == input_name
@@ -128,8 +138,9 @@ impl NodeLogic for LoadOnnxNode {
         node
     }
 
+    #[allow(unused_variables)]
     async fn run(&self, context: &mut ExecutionContext) -> Result<()> {
-        #[cfg(feature = "local-ml")]
+        #[cfg(feature = "execute")]
         {
             context.deactivate_exec_pin("exec_out").await?;
 
@@ -152,10 +163,10 @@ impl NodeLogic for LoadOnnxNode {
             Ok(())
         }
 
-        #[cfg(not(feature = "local-ml"))]
+        #[cfg(not(feature = "execute"))]
         {
             Err(anyhow!(
-                "Local ONNX models are not supported. Please enable the 'local-ml' feature."
+                "ONNX execution requires the 'execute' feature. Rebuild with --features execute"
             ))
         }
     }

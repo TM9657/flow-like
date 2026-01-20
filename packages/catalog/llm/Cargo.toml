@@ -6,6 +6,14 @@ edition = "2024"
 [features]
 default = []
 local-ml = ["flow-like-catalog-core/local-ml"]
+# Execution feature - enables heavy dependencies for node execution
+execute = [
+    "flow-like-catalog-core/execute",
+    "flow-like-catalog-data/execute",
+    "dep:rig-core",
+    "dep:rmcp",
+    "dep:jsonschema",
+]
 
 [dependencies]
 flow-like-catalog-core.workspace = true
@@ -24,7 +32,7 @@ serde = { workspace = true, features = ["derive", "rc"] }
 tokio = { workspace = true, features = ["rt-multi-thread", "macros"] }
 uuid.workspace = true
 async-trait.workspace = true
-rig-core.workspace = true
-rmcp.workspace = true
-jsonschema.workspace = true
+rig-core = { workspace = true, optional = true }
+rmcp = { workspace = true, optional = true }
+jsonschema = { workspace = true, optional = true }
 regex.workspace = true

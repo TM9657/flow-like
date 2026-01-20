@@ -17,8 +17,10 @@ use flow_like_model_provider::{
     history::History, response::Response, response_chunk::ResponseChunk,
 };
 use flow_like_types::{async_trait, json};
+#[cfg(feature = "execute")]
 use std::collections::HashMap;
 
+#[cfg(feature = "execute")]
 use super::helpers::{AgentStreamState, StreamHandler, execute_agent_streaming};
 
 #[crate::register_node]
@@ -30,6 +32,7 @@ impl SimpleAgentNode {
         SimpleAgentNode {}
     }
 
+    #[cfg(feature = "execute")]
     async fn run_internal(
         &self,
         context: &mut ExecutionContext,
@@ -190,6 +193,7 @@ impl NodeLogic for SimpleAgentNode {
         node
     }
 
+    #[cfg(feature = "execute")]
     async fn run(&self, context: &mut ExecutionContext) -> flow_like_types::Result<()> {
         let stream_state = AgentStreamState::new(context).await?;
         let run_result = self.run_internal(context, &stream_state).await;
@@ -202,5 +206,12 @@ impl NodeLogic for SimpleAgentNode {
         }
 
         run_result
+    }
+
+    #[cfg(not(feature = "execute"))]
+    async fn run(&self, _context: &mut ExecutionContext) -> flow_like_types::Result<()> {
+        Err(flow_like_types::anyhow!(
+            "LLM processing requires the 'execute' feature"
+        ))
     }
 }
