@@ -22,6 +22,10 @@ export interface DataContextValue {
 
 export const DataContext = createContext<DataContextValue | null>(null);
 
+function isUnsafeKey(key: string): boolean {
+	return key === "__proto__" || key === "constructor" || key === "prototype";
+}
+
 function getByPath(obj: Record<string, unknown>, path: string): unknown {
 	if (!path) return obj;
 	const parts = path.split(".");
@@ -34,10 +38,12 @@ function getByPath(obj: Record<string, unknown>, path: string): unknown {
 		const match = part.match(/^(\w+)\[(\d+)\]$/);
 		if (match) {
 			const [, key, index] = match;
+			if (isUnsafeKey(key)) return undefined;
 			const arr = (current as Record<string, unknown>)[key];
 			if (!Array.isArray(arr)) return undefined;
 			current = arr[Number.parseInt(index, 10)];
 		} else {
+			if (isUnsafeKey(part)) return undefined;
 			current = (current as Record<string, unknown>)[part];
 		}
 	}
@@ -60,21 +66,25 @@ function setByPath(
 
 		if (match) {
 			const [, key, index] = match;
+			if (isUnsafeKey(key)) return;
 			if (!current[key]) current[key] = [];
 			const arr = current[key] as unknown[];
 			const idx = Number.parseInt(index, 10);
 			if (!arr[idx]) arr[idx] = {};
 			current = arr[idx] as Record<string, unknown>;
 		} else {
+			if (isUnsafeKey(part)) return;
 			if (!current[part]) current[part] = {};
 			current = current[part] as Record<string, unknown>;
 		}
 	}
 
 	const lastPart = parts[parts.length - 1];
+	if (isUnsafeKey(lastPart)) return;
 	const match = lastPart.match(/^(\w+)\[(\d+)\]$/);
 	if (match) {
 		const [, key, index] = match;
+		if (isUnsafeKey(key)) return;
 		if (!current[key]) current[key] = [];
 		(current[key] as unknown[])[Number.parseInt(index, 10)] = value;
 	} else {
