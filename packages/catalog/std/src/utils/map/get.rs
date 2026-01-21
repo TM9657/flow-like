@@ -62,11 +62,11 @@ impl NodeLogic for GetMapNode {
         {
             let map_guard = map_in.as_ref().lock().await;
 
-            if let Some(obj) = map_guard.as_object() {
-                if let Some(v) = obj.get(&key) {
-                    value = v.clone();
-                    found = true;
-                }
+            if let Some(obj) = map_guard.as_object()
+                && let Some(v) = obj.get(&key)
+            {
+                value = v.clone();
+                found = true;
             }
         }
 

@@ -9,7 +9,7 @@ pub use rig::client::completion::{CompletionClientDyn, CompletionModelHandle};
 use rig::completion::CompletionModelDyn;
 use rig::completion::{
     CompletionError, CompletionModel, CompletionRequest, CompletionRequestBuilder,
-    CompletionResponse, GetTokenUsage, Message, Usage as RigUsage,
+    CompletionResponse, Message, Usage as RigUsage,
 };
 use rig::streaming::{StreamedAssistantContent, StreamingCompletionResponse, ToolCallDeltaContent};
 use serde::{Deserialize, Serialize};
@@ -56,13 +56,13 @@ pub fn extract_headers(params: &HashMap<String, Value>) -> HeaderMap {
     let mut headers = HeaderMap::new();
     if let Some(headers_obj) = params.get("headers").and_then(|v| v.as_object()) {
         for (key, value) in headers_obj {
-            if let Some(value_str) = value.as_str() {
-                if let (Ok(name), Ok(val)) = (
+            if let Some(value_str) = value.as_str()
+                && let (Ok(name), Ok(val)) = (
                     HeaderName::try_from(key.as_str()),
                     HeaderValue::from_str(value_str),
-                ) {
-                    headers.insert(name, val);
-                }
+                )
+            {
+                headers.insert(name, val);
             }
         }
     }

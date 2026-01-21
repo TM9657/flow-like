@@ -9,8 +9,8 @@ use flow_like_model_provider::provider::{
 use flow_like_storage::Path;
 use flow_like_storage::files::store::FlowLikeStore;
 use flow_like_storage::files::store::local_store::LocalObjectStore;
+use flow_like_types::Value;
 use flow_like_types::intercom::InterComCallback;
-use flow_like_types::{Value, anyhow};
 
 use rig::agent::AgentBuilder;
 use rig::client::completion::{CompletionClientDyn, CompletionModelHandle};

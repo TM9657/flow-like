@@ -731,17 +731,12 @@ impl NodeLogic for PagesToMarkdownNode {
 }
 
 /// Detail level for document summarization
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, JsonSchema, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, JsonSchema, PartialEq, Eq, Default)]
 pub enum SummaryDetailLevel {
     Low,
+    #[default]
     Medium,
     High,
-}
-
-impl Default for SummaryDetailLevel {
-    fn default() -> Self {
-        Self::Medium
-    }
 }
 
 impl SummaryDetailLevel {
@@ -1230,7 +1225,7 @@ fn parse_page_reference_line(line: &str) -> Option<PageReference> {
     let page_str = captures.get(1)?.as_str();
 
     let pages: Vec<u32> = page_str
-        .split(|c| c == ',' || c == '-')
+        .split([',', '-'])
         .filter_map(|s| s.trim().parse().ok())
         .collect();
 
@@ -1239,7 +1234,7 @@ fn parse_page_reference_line(line: &str) -> Option<PageReference> {
     }
 
     let topic = line
-        .split(|c| c == '(' || c == '[')
+        .split(['(', '['])
         .next()
         .unwrap_or(line)
         .trim()
@@ -1483,18 +1478,18 @@ fn parse_sections_response(response: &str) -> Vec<ContentSection> {
 
     if let Some(pattern) = section_pattern {
         for cap in pattern.captures_iter(response) {
-            if let Some(content) = cap.get(1) {
-                if let Some(section) = parse_single_section(content.as_str()) {
-                    sections.push(section);
-                }
+            if let Some(content) = cap.get(1)
+                && let Some(section) = parse_single_section(content.as_str())
+            {
+                sections.push(section);
             }
         }
     }
 
-    if sections.is_empty() {
-        if let Some(section) = parse_single_section(response) {
-            sections.push(section);
-        }
+    if sections.is_empty()
+        && let Some(section) = parse_single_section(response)
+    {
+        sections.push(section);
     }
 
     sections
@@ -1606,7 +1601,7 @@ This means: sections 0, 3, 7 should be merged; sections 1, 5 should be merged; o
                 }
 
                 if !combined_summary.is_empty() {
-                    combined_summary.push_str(" ");
+                    combined_summary.push(' ');
                 }
                 combined_summary.push_str(&s.summary);
 

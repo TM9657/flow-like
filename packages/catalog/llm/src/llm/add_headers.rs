@@ -121,38 +121,36 @@ impl NodeLogic for AddModelHeadersNode {
         let mut hasher = blake3::Hasher::new();
         hasher.update(model.id.as_bytes());
 
-        if let Some(params) = new_bit.parameters.as_object_mut() {
-            if let Some(provider) = params.get_mut("provider").and_then(|p| p.as_object_mut()) {
-                if let Some(inner_params) =
-                    provider.get_mut("params").and_then(|p| p.as_object_mut())
-                {
-                    let existing_headers = inner_params
-                        .get("headers")
-                        .and_then(|h| h.as_object())
-                        .cloned()
-                        .unwrap_or_default();
+        if let Some(params) = new_bit.parameters.as_object_mut()
+            && let Some(provider) = params.get_mut("provider").and_then(|p| p.as_object_mut())
+        {
+            if let Some(inner_params) = provider.get_mut("params").and_then(|p| p.as_object_mut()) {
+                let existing_headers = inner_params
+                    .get("headers")
+                    .and_then(|h| h.as_object())
+                    .cloned()
+                    .unwrap_or_default();
 
-                    let mut merged_headers = existing_headers;
-                    for (k, v) in &headers_map {
-                        hasher.update(k.as_bytes());
-                        if let Some(s) = v.as_str() {
-                            hasher.update(s.as_bytes());
-                        }
-                        merged_headers.insert(k.clone(), v.clone());
+                let mut merged_headers = existing_headers;
+                for (k, v) in &headers_map {
+                    hasher.update(k.as_bytes());
+                    if let Some(s) = v.as_str() {
+                        hasher.update(s.as_bytes());
                     }
-
-                    inner_params.insert("headers".to_string(), json!(merged_headers));
-                } else {
-                    let mut new_params: HashMap<String, Value> = HashMap::new();
-                    for (k, v) in &headers_map {
-                        hasher.update(k.as_bytes());
-                        if let Some(s) = v.as_str() {
-                            hasher.update(s.as_bytes());
-                        }
-                    }
-                    new_params.insert("headers".to_string(), json!(headers_map));
-                    provider.insert("params".to_string(), json!(new_params));
+                    merged_headers.insert(k.clone(), v.clone());
                 }
+
+                inner_params.insert("headers".to_string(), json!(merged_headers));
+            } else {
+                let mut new_params: HashMap<String, Value> = HashMap::new();
+                for (k, v) in &headers_map {
+                    hasher.update(k.as_bytes());
+                    if let Some(s) = v.as_str() {
+                        hasher.update(s.as_bytes());
+                    }
+                }
+                new_params.insert("headers".to_string(), json!(headers_map));
+                provider.insert("params".to_string(), json!(new_params));
             }
         }
 

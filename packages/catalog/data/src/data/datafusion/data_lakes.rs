@@ -475,12 +475,7 @@ impl NodeLogic for DeltaTableInfoNode {
                 json!({ "fields": fields })
             };
 
-            let partitions: Vec<String> = snapshot
-                .metadata()
-                .partition_columns()
-                .iter()
-                .cloned()
-                .collect();
+            let partitions: Vec<String> = snapshot.metadata().partition_columns().to_vec();
 
             let history: Vec<_> = delta_table
                 .history(Some(history_limit as usize))

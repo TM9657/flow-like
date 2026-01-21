@@ -6,8 +6,6 @@ use flow_like::flow::{
 };
 use flow_like_catalog_core::NodeImage;
 use flow_like_types::{async_trait, json::json};
-use schemars::JsonSchema;
-use serde::{Deserialize, Serialize};
 
 use crate::geo::GeoCoordinate;
 
