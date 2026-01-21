@@ -1,60 +1,89 @@
 export const svBi = {
 	// Meta
-	"bi.meta.title": "Modern BI-Stack: Dashboard-Byggare med AI | Flow-Like",
+	"bi.meta.title":
+		"Flow-Like för BI — Intelligensplattformen som Fungerar Där Du Arbetar",
 	"bi.meta.description":
-		"Bygg BI-dashboards visuellt eller med AI på minuter. Ingen prissättning per användare, självhostad, obegränsad anpassning. Alternativ till Tableau och Power BI.",
+		"Modern BI behöver mer än dashboards. Realtidsdata från alla källor, personaliserade insikter, Copilot AI-integration och deployment var som helst — on-premise, cloud, mobil eller i fält.",
 	"bi.meta.keywords":
-		"business intelligence, BI-stack, dashboard-byggare, datavisualisering, anpassade dashboards, AI-dashboards, Flow-Like BI, modern analys, Tableau-alternativ, Power BI-alternativ, självhostad BI, no-code dashboard",
-	"bi.meta.og.title": "Bygg BI-Dashboards med AI | Flow-Like",
+		"enterprise BI, business intelligence, realtidsanalys, dataplattform, operativ intelligens, AI-analys, on-premise BI, mobil BI, SharePoint-data, Teams-integration, Copilot BI, inbäddade AI-pipelines",
+	"bi.meta.og.title": "Flow-Like för BI — Intelligens som Fungerar Där Du Är",
 	"bi.meta.og.description":
-		"Dra-och-släpp dashboard-byggare med AI-assistans. Anslut vilken datakälla som helst, distribuera var som helst. Ingen leverantörsinlåsning.",
+		"Realtidsdata från alla källor. Personaliserade insikter. Driven av AI. Fungerar överallt.",
 
 	// Hero
-	"bi.hero.tagline": "Den Moderna BI-Stacken",
-	"bi.hero.headline": "Dashboards som",
-	"bi.hero.headline.highlight": "verkligen passar",
-	"bi.hero.headline.end": "ditt företag",
+	"bi.hero.tagline": "Flow-Like för BI",
+	"bi.hero.headline": "Modern BI är",
+	"bi.hero.headline.highlight": "Flow-Like",
+	"bi.hero.headline.end": "",
 	"bi.hero.description":
-		"Traditionella BI-verktyg tvingar dig in i stela mallar. Flow-Like låter dig bygga exakt det du behöver — visuellt, med AI eller båda. Dina data, din design, dina regler.",
-	"bi.hero.cta.primary": "Börja Bygga",
-	"bi.hero.cta.secondary": "Se Hur Det Fungerar",
+		"BI behöver sällan bara en databas och några grafer. Den verkliga världen kräver realtidsanslutningar, data från överallt, omedelbara insikter och intelligens som når dig där du arbetar.",
+	"bi.hero.cta.primary": "Bygg Din Intelligens",
+	"bi.hero.cta.secondary": "Se Skillnaden",
 
-	// Problem
-	"bi.problem.tagline": "BI-Problemet",
-	"bi.problem.headline": "Varför traditionell BI misslyckas",
+	// Problem - The Reality Check
+	"bi.problem.tagline": "Verkligheten",
+	"bi.problem.headline": "Traditionell BI kan inte hänga med",
 	"bi.problem.description":
-		"Business intelligence lovade insikter. Istället fick du stela dashboards som aldrig passar, dyra per-seat licenser och data låst bakom proprietära väggar.",
-	"bi.problem.item1.title": "Mallar som inte passar någon",
+		"Affärer väntar inte. Det bör inte din intelligens heller.",
+	"bi.problem.item1.title": "Fragmenterad Data",
 	"bi.problem.item1.description":
-		"Förbyggda dashboards som nästan fungerar — men aldrig riktigt matchar ditt verkliga arbetsflöde.",
-	"bi.problem.item2.title": "Per-seat prisfällor",
+		"Din data lever i databaser, SharePoint, Teams, produktionssystem, kalkylblad — traditionell BI visar dig bara en del.",
+	"bi.problem.item2.title": "Gårdagens Insikter",
 	"bi.problem.item2.description":
-		"Dela insikter med ditt team? Betala per användare. Varje. Månad.",
-	"bi.problem.item3.title": "Vendor lock-in",
+		"När din dashboard uppdateras har möjligheten passerat. Problem eskalerar medan du väntar på nästa synkronisering.",
+	"bi.problem.item3.title": "En Storlek för Ingen",
 	"bi.problem.item3.description":
-		"Dina data i deras moln. Dina dashboards i deras format. Migrering? Lycka till.",
-	"bi.problem.item4.title": "Begränsad anpassning",
+		"VD:n behöver strategi. Operations behöver detaljer. Försäljning behöver pipeline. En enda dashboard kan inte tjäna alla.",
+	"bi.problem.item4.title": "Bunden till Skrivbordet",
 	"bi.problem.item4.description":
-		"CSS-hack, workarounds och funktionsförfrågningar som aldrig kommer. Låter det bekant?",
+		"Intelligens som bara fungerar på kontoret är inte intelligens — det är en rapport. Fältet kan inte vänta.",
 
-	// Solution
-	"bi.solution.tagline": "Flow-Like-Sättet",
-	"bi.solution.headline": "Bygg dashboards som fungerar",
-	"bi.solution.headline.highlight": "på ditt sätt",
+	// Solution Pillars
+	"bi.solution.tagline": "Flow-Like-Fördelen",
+	"bi.solution.headline": "Intelligens, omdesignad",
+	"bi.solution.headline.highlight": "för verkligheten",
 	"bi.solution.description":
-		"Flow-Like kombinerar en kraftfull visuell UI-byggare med intelligenta datapipelines. Designa pixel-perfekta dashboards, anslut vilken datakälla som helst och deploya var som helst — utan kompromisser.",
-	"bi.solution.feature1.title": "Visuell UI-Byggare",
+		"Byggt för hur moderna organisationer verkligen arbetar — distribuerade, snabba och datarika.",
+	"bi.solution.feature1.title": "Anslut Allt",
 	"bi.solution.feature1.description":
-		"Dra, släpp och designa dashboards visuellt. Ingen kod krävs — men tillgänglig när du behöver den.",
-	"bi.solution.feature2.title": "AI-Assisterad Skapande",
+		"Databaser, API:er, SharePoint, Teams-kanaler, produktionslinjer, IoT-sensorer, kalkylblad — om det har data, ansluter Flow-Like det. I realtid.",
+	"bi.solution.feature2.title": "Rör Dig i Affärshastighet",
 	"bi.solution.feature2.description":
-		"Beskriv vad du behöver. FlowPilot genererar dashboard-komponenter, diagram och layouter på sekunder.",
-	"bi.solution.feature3.title": "Flow-Driven Data",
+		"Insikter i det ögonblick du behöver dem. Problem dyker upp innan de eskalerar. Möjligheter visas medan de fortfarande är genomförbara.",
+	"bi.solution.feature3.title": "Personaliserad Intelligens",
 	"bi.solution.feature3.description":
-		"Anslut flows till din UI. Realtidsdata, transformationer och aggregeringar — allt visuellt.",
-	"bi.solution.feature4.title": "Obegränsad Anpassning",
+		"Varje användare ser vad som är relevant för dem — deras KPI:er, deras dataåtkomst, deras vy. Rollbaserad, behörighetsmedveten, individuellt relevant.",
+	"bi.solution.feature4.title": "AI i Kärnan av Dina Pipelines",
 	"bi.solution.feature4.description":
-		"Varje pixel är din. Anpassade teman, komponenter, animationer — om du kan föreställa dig det kan du bygga det.",
+		"AI är inte bara en chattöverlagring — det är inbyggt i dina datapipelines. Anomalidetektion, förutsägelser och intelligenta transformationer sker automatiskt, inte bara på begäran.",
+	"bi.solution.feature5.title": "Arbeta Där Du Är",
+	"bi.solution.feature5.description":
+		"On-premise för compliance. Cloud för skala. Mobil för fältet. Offline när anslutning saknas. Ditt val.",
+	"bi.solution.feature6.title": "Integrera i Ditt Landskap",
+	"bi.solution.feature6.description":
+		"Flow-Like pratar med dina befintliga verktyg. Power BI-inbäddningar, Teams-notifikationer, ERP-anslutningar, anpassade integrationer.",
+
+	// Data Sources Visual Section
+	"bi.sources.tagline": "Universell Anslutning",
+	"bi.sources.headline": "Din data, var den än lever",
+	"bi.sources.description":
+		"Flow-Like bryr sig inte om var din data kommer ifrån. Vi ansluter allt.",
+	"bi.sources.databases": "Databaser",
+	"bi.sources.databases.desc":
+		"PostgreSQL, MySQL, SQL Server, Snowflake (FlightSQL), Oracle, MongoDB och mer",
+	"bi.sources.files": "Filer & Lagring",
+	"bi.sources.files.desc":
+		"SharePoint, OneDrive, S3, lokala diskar, nätverksdelningar",
+	"bi.sources.realtime": "Realtidssystem",
+	"bi.sources.realtime.desc":
+		"MQTT, Kafka, WebSockets, OPC-UA, produktionsdata",
+	"bi.sources.communication": "Kommunikation",
+	"bi.sources.communication.desc":
+		"Teams, Slack, Email, ärenden, supportkanaler",
+	"bi.sources.apis": "API:er & Tjänster",
+	"bi.sources.apis.desc": "REST, GraphQL, SOAP, vilken extern tjänst som helst",
+	"bi.sources.traces": "Spår & Loggar",
+	"bi.sources.traces.desc": "Applikationsloggar, systemspår, övervakningsdata",
 
 	// Stack
 	"bi.stack.tagline": "Den Kompletta Stacken",
@@ -62,110 +91,132 @@ export const svBi = {
 	"bi.stack.data.title": "Datalager",
 	"bi.stack.data.item1": "Anslut vilken databas, API eller fil som helst",
 	"bi.stack.data.item2": "Visuella datatransformationer",
-	"bi.stack.data.item3": "Realtids streaming-stöd",
-	"bi.stack.data.item4": "Inbyggd caching & optimering",
-	"bi.stack.ui.title": "UI-Lager",
+	"bi.stack.data.item3": "Stöd för realtidsströmning",
+	"bi.stack.data.item4": "Inbyggd caching och optimering",
+	"bi.stack.ui.title": "UI-lager",
 	"bi.stack.ui.item1": "Drag-and-drop dashboard-byggare",
-	"bi.stack.ui.item2": "100+ förbyggda diagramkomponenter",
+	"bi.stack.ui.item2": "100+ diagramkomponenter",
 	"bi.stack.ui.item3": "Stöd för anpassade komponenter",
-	"bi.stack.ui.item4": "Responsiv & mobilredo",
-	"bi.stack.ai.title": "AI-Lager",
+	"bi.stack.ui.item4": "Responsiv och mobilklar",
+	"bi.stack.ai.title": "AI-lager",
 	"bi.stack.ai.item1": "Naturligt språk till dashboard",
-	"bi.stack.ai.item2": "Auto-generera visualiseringar",
-	"bi.stack.ai.item3": "Smarta dataförslag",
+	"bi.stack.ai.item2": "Automatisk generering av visualiseringar",
+	"bi.stack.ai.item3": "Intelligenta dataförslag",
 	"bi.stack.ai.item4": "Anomalidetektion",
-	"bi.stack.deploy.title": "Deploy-Lager",
+	"bi.stack.deploy.title": "Deployment-lager",
 	"bi.stack.deploy.item1": "Ett-klicks deployment",
-	"bi.stack.deploy.item2": "Self-host eller moln",
+	"bi.stack.deploy.item2": "Self-host eller cloud",
 	"bi.stack.deploy.item3": "Bädda in var som helst",
 	"bi.stack.deploy.item4": "White-label-redo",
 
+	// Deployment Options
+	"bi.deploy.tagline": "Deploya Överallt",
+	"bi.deploy.headline": "Din infrastruktur, dina regler",
+	"bi.deploy.onprem.title": "On-Premise",
+	"bi.deploy.onprem.desc":
+		"Total kontroll. Total compliance. Dina servrar, din data, din säkerhet.",
+	"bi.deploy.cloud.title": "Cloud",
+	"bi.deploy.cloud.desc":
+		"Skala direkt. Hanterad infrastruktur. Fokusera på insikter, inte drift.",
+	"bi.deploy.mobile.title": "Mobil",
+	"bi.deploy.mobile.desc":
+		"iOS, Android, responsiv webb. Intelligens i fickan.",
+	"bi.deploy.field.title": "Fältredo",
+	"bi.deploy.field.desc":
+		"Offline-kapabel. Synkar vid återanslutning. Förlora aldrig data.",
+	"bi.deploy.hybrid.title": "Hybrid",
+	"bi.deploy.hybrid.desc":
+		"Mixa och matcha. Edge-processning med cloud-aggregering.",
+
 	// Comparison
-	"bi.comparison.tagline": "Ärlig Jämförelse",
+	"bi.comparison.tagline": "Enterprise-Redo",
 	"bi.comparison.headline": "Hur Flow-Like jämför sig",
 	"bi.comparison.description":
-		"Varje verktyg har sina styrkor. Här är där Flow-Like utmärker sig — och där andra kanske passar bättre.",
-	"bi.comparison.feature": "Funktion",
+		"Byggt för organisationer som behöver mer än dashboards — de behöver operativ intelligens.",
+	"bi.comparison.feature": "Kapacitet",
 	"bi.comparison.flowlike": "Flow-Like",
 	"bi.comparison.traditional": "Traditionell BI",
-	"bi.comparison.spreadsheets": "Kalkylblad",
+	"bi.comparison.spreadsheets": "Enterprise-Plattformar",
 
-	"bi.comparison.row1.feature": "Anpassad dashboard-design",
-	"bi.comparison.row1.flowlike": "Obegränsad — pixel-perfekt kontroll",
-	"bi.comparison.row1.traditional": "Mallbaserad med begränsningar",
-	"bi.comparison.row1.spreadsheets": "Endast grundläggande diagram",
+	"bi.comparison.row1.feature": "Realtidsdata",
+	"bi.comparison.row1.flowlike": "Nativ strömning, sub-sekund uppdateringar",
+	"bi.comparison.row1.traditional": "Schemalagda uppdateringar (15min+)",
+	"bi.comparison.row1.spreadsheets": "Kräver anpassad strömningsinfrastruktur",
 
-	"bi.comparison.row2.feature": "Prismodell",
-	"bi.comparison.row2.flowlike": "Obegränsade användare inkluderade",
-	"bi.comparison.row2.traditional": "Per-seat, skalas snabbt",
-	"bi.comparison.row2.spreadsheets": "Per-seat eller gratisversioner",
+	"bi.comparison.row2.feature": "Datakällor",
+	"bi.comparison.row2.flowlike":
+		"Universell — DB:er, filer, API:er, strömmar, Teams",
+	"bi.comparison.row2.traditional": "Databaser + begränsade cloud-kontakter",
+	"bi.comparison.row2.spreadsheets": "Leverantörsspecifik, kräver integratörer",
 
-	"bi.comparison.row3.feature": "Dataägarskap",
-	"bi.comparison.row3.flowlike": "100% din, self-host tillgängligt",
-	"bi.comparison.row3.traditional": "Vendor-moln, exportgränser",
-	"bi.comparison.row3.spreadsheets": "Lokalt eller molnberoende",
+	"bi.comparison.row3.feature": "Per-Användare Vyer",
+	"bi.comparison.row3.flowlike": "Dynamiska, rollmedvetna, realtidsfiltrerade",
+	"bi.comparison.row3.traditional": "Statiska dashboard-behörigheter",
+	"bi.comparison.row3.spreadsheets": "Komplex anpassad utveckling",
 
-	"bi.comparison.row4.feature": "AI-kapacitet",
-	"bi.comparison.row4.flowlike": "Inbyggd AI-generering & analys",
-	"bi.comparison.row4.traditional": "Tilläggsfunktioner, begränsade",
-	"bi.comparison.row4.spreadsheets": "Grundläggande eller ingen",
+	"bi.comparison.row4.feature": "AI-Integrationsdjup",
+	"bi.comparison.row4.flowlike": "Inbäddad i pipelines + konversationell",
+	"bi.comparison.row4.traditional":
+		"Endast chattöverlagring, ingen pipeline-AI",
+	"bi.comparison.row4.spreadsheets":
+		"Separata AI-produkter, manuell integration",
 
-	"bi.comparison.row5.feature": "Realtidsdata",
-	"bi.comparison.row5.flowlike": "Nativt streaming-stöd",
-	"bi.comparison.row5.traditional": "Schemalagda uppdateringar",
-	"bi.comparison.row5.spreadsheets": "Manuellt eller begränsat",
+	"bi.comparison.row5.feature": "Deployment",
+	"bi.comparison.row5.flowlike": "On-prem, cloud, edge, mobil, offline",
+	"bi.comparison.row5.traditional": "Endast cloud eller dyr on-prem",
+	"bi.comparison.row5.spreadsheets": "Leverantörslåst deployment",
 
-	"bi.comparison.row6.feature": "Utvecklarutbyggbarhet",
-	"bi.comparison.row6.flowlike": "Full kodåtkomst, anpassade noder",
-	"bi.comparison.row6.traditional": "API-åtkomst, begränsad anpassning",
-	"bi.comparison.row6.spreadsheets": "Makron, skript",
+	"bi.comparison.row6.feature": "Tid till Produktion",
+	"bi.comparison.row6.flowlike": "Timmar till dagar",
+	"bi.comparison.row6.traditional": "Veckor till månader",
+	"bi.comparison.row6.spreadsheets": "6-18 månaders implementationer",
 
 	"bi.comparison.note":
-		"Traditionella BI-verktyg excellerar på standardiserad enterprise-rapportering. Flow-Like är byggt för team som behöver flexibilitet utan att offra kraft.",
+		"Enterprise-grade operativ intelligens utan enterprise-komplexitet, tidslinjer eller kostnader.",
 
 	// Use Cases
-	"bi.usecases.tagline": "Byggt För",
-	"bi.usecases.headline": "Där Flow-Like utmärker sig",
-	"bi.usecases.case1.title": "Executive Dashboards",
+	"bi.usecases.tagline": "Byggt för Verkligheten",
+	"bi.usecases.headline": "Intelligens som levererar",
+	"bi.usecases.case1.title": "Operations Kommandocentral",
 	"bi.usecases.case1.description":
-		"KPIs, mätvärden och insikter i ett format som matchar ditt varumärke — inte en generisk mall.",
-	"bi.usecases.case2.title": "Operativ Övervakning",
+		"Realtidsvy av produktion, logistik och serviceverksamhet. Anomalier dyker upp direkt. Team reagerar innan kunder märker.",
+	"bi.usecases.case2.title": "Exekutiv Intelligens",
 	"bi.usecases.case2.description":
-		"Realtidsvyer av produktion, logistik eller serviceverksamhet med omedelbara larm.",
-	"bi.usecases.case3.title": "Kundvänd Analys",
+		"Strategiska KPI:er uppdaterade i realtid. Drill down från överblick till detalj. Fråga din Copilot för djupare analys.",
+	"bi.usecases.case3.title": "Fältservice-Insikter",
 	"bi.usecases.case3.description":
-		"Bädda in dashboards i din produkt. White-label, anpassad, din.",
-	"bi.usecases.case4.title": "Dataprodukter",
+		"Tekniker ser vad de behöver, var de än är. Fungerar offline. Synkar automatiskt. Inget behov av att återvända till kontoret för data.",
+	"bi.usecases.case4.title": "Försäljningsintelligens",
 	"bi.usecases.case4.description":
-		"Förvandla dina data till säljbara insikter med vackra, varumärkta dashboards.",
+		"Pipeline-hälsa. Kontoinsikter. Konkurrensintelligens. Allt i en vy, personaliserat för varje säljare.",
 
 	// CTA
-	"bi.cta.tagline": "Redo att bygga?",
-	"bi.cta.headline": "Börja skapa dashboards som passar",
+	"bi.cta.tagline": "Redo att gå bortom dashboards?",
+	"bi.cta.headline": "Bygg intelligens som fungerar",
 	"bi.cta.description":
-		"Ladda ner Flow-Like och bygg din första dashboard på minuter. Inget kreditkort. Ingen vendor lock-in. Bara bättre BI.",
-	"bi.cta.button": "Ladda Ner Gratis",
+		"Ladda ner Flow-Like och anslut din första datakälla på minuter. Realtid. Personaliserad. Överallt.",
+	"bi.cta.button": "Kom Igång Gratis",
 	"bi.cta.note":
-		"Gratis för alltid för individer. Team & Enterprise-planer tillgängliga.",
+		"Gratis för alltid för individer. Enterprise-planer för organisationer.",
 
 	// FAQ
 	"bi.faq.tagline": "Frågor",
-	"bi.faq.q1": "Kan jag migrera mina befintliga dashboards?",
+	"bi.faq.q1": "Hur ansluter Flow-Like så många datakällor?",
 	"bi.faq.a1":
-		"Flow-Like kan ansluta till dina befintliga datakällor omedelbart. För dashboard-migrering kan vårt 24-Timmars Solution-team hjälpa till att återskapa och förbättra din nuvarande setup.",
-	"bi.faq.q2": "Hur fungerar AI dashboard-generering?",
+		"Flow-Like använder ett visuellt flödesbaserat system med förbyggda kontakter och möjligheten att skapa anpassade integrationer. Anslut databaser, API:er, filer och realtidsströmmar — allt via ett drag-and-drop-gränssnitt.",
+	"bi.faq.q2": "Kan jag verkligen använda det offline?",
 	"bi.faq.a2":
-		"FlowPilot förstår din datastruktur och naturliga språkförfrågningar. Beskriv vad du vill — 'försäljning per region över tid' — och få ett fullt fungerande diagram.",
-	"bi.faq.q3": "Kan jag bädda in dashboards i min produkt?",
+		"Ja. Flow-Likes desktop- och mobilappar inkluderar offline-first-arkitektur. Arbeta utan anslutning, och ändringar synkroniseras automatiskt när du är tillbaka online.",
+	"bi.faq.q3": "Hur fungerar personalisering?",
 	"bi.faq.a3":
-		"Ja. Flow-Like dashboards kan bäddas in var som helst med full white-labeling. Perfekt för SaaS-produkter och kundportaler.",
-	"bi.faq.q4": "Vilka datakällor stöds?",
+		"Definiera roller, behörigheter och dataåtkomstregler. Varje användare ser dashboards filtrerade baserat på deras åtkomstnivå och konfigurerade för att visa deras relevanta KPI:er. En plattform, oändliga personaliserade vyer.",
+	"bi.faq.q4": "Vad med AI och Copilot-integration?",
 	"bi.faq.a4":
-		"Databaser (PostgreSQL, MySQL, MongoDB, etc.), APIs (REST, GraphQL), filer (CSV, Excel, JSON) och streaming-källor. Om det har data kan Flow-Like ansluta till det.",
-	"bi.faq.q5": "Finns det en användargräns?",
+		"FlowPilot är vår inbyggda AI-assistent. Ställ frågor om din data på naturligt språk, generera visualiseringar automatiskt och få insikter utan att skriva frågor. Integrerar också med Microsoft Copilot.",
+	"bi.faq.q5": "Är on-premise deployment verkligen tillgänglig?",
 	"bi.faq.a5":
-		"Nej. Flow-Like inkluderar obegränsade användare på alla planer. Dela dashboards med hela din organisation utan att oroa dig för licenskostnader.",
-	"bi.faq.q6": "Kan jag self-hosta Flow-Like?",
+		"Absolut. Flow-Like körs helt på din egen infrastruktur — Docker, Kubernetes, bare metal. Din data behöver aldrig lämna ditt nätverk. GDPR, HIPAA, air-gapped-miljöer — allt stöds.",
+	"bi.faq.q6": "Hur jämför det med enterprise BI-plattformar?",
 	"bi.faq.a6":
-		"Absolut. Self-hosting är alltid tillgängligt. Dina data behöver aldrig lämna din infrastruktur.",
+		"Flow-Like ger operativa intelligenskapaciteter för en bråkdel av komplexiteten och kostnaden. Visuell arbetsflödesbyggare, realtidsdataintegration, AI inbäddad i pipelines — utan enterprise-priset eller flerårliga implementeringstidslinjer.",
 };

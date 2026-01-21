@@ -943,9 +943,10 @@ export default function Id({
 							</div>
 						</CardHeader>
 						<CardContent className="flex-1 p-0 overflow-hidden min-h-0">
-							{currentRoute?.includes("/storage") ? (
+							{currentRoute?.includes("/storage") ||
+							currentRoute?.includes("/explore") ? (
 								<div className="h-full flex flex-col">
-									<div className="flex-1 min-h-0 p-6 pb-0 pt-0">
+									<div className="flex-1 min-h-0 p-6 pb-0 pt-0 overflow-auto">
 										<Suspense
 											fallback={
 												<div className="space-y-4">

@@ -1,4 +1,4 @@
-use std::{any::Any, sync::Arc};
+use std::any::Any;
 
 use super::ModelLogic;
 use crate::provider::random_provider;
@@ -7,10 +7,9 @@ use crate::{
     provider::{ModelProvider, ModelProviderConfiguration},
 };
 use flow_like_types::{Cacheable, Result, async_trait};
-use rig::client::ProviderClient;
 
 pub struct OllamaModel {
-    client: Arc<Box<dyn ProviderClient>>,
+    client: rig::providers::ollama::Client,
     provider: ModelProvider,
     default_model: Option<String>,
 }
@@ -27,13 +26,13 @@ impl OllamaModel {
             .clone()
             .unwrap_or_else(|| "http://localhost:11434".to_string());
 
-        let mut builder = rig::providers::ollama::Client::builder();
+        let mut builder = rig::providers::ollama::Client::builder().api_key(rig::client::Nothing);
         builder = builder.base_url(&endpoint);
 
-        let client = builder.build().boxed();
+        let client = builder.build()?;
 
         Ok(OllamaModel {
-            client: Arc::new(client),
+            client,
             provider: provider.clone(),
             default_model: model_id,
         })
@@ -50,13 +49,13 @@ impl OllamaModel {
             .and_then(|v| v.as_str())
             .unwrap_or("http://localhost:11434");
 
-        let mut builder = rig::providers::ollama::Client::builder();
+        let mut builder = rig::providers::ollama::Client::builder().api_key(rig::client::Nothing);
         builder = builder.base_url(endpoint);
 
-        let client = builder.build().boxed();
+        let client = builder.build()?;
 
         Ok(OllamaModel {
-            client: Arc::new(client),
+            client,
             default_model: model_id,
             provider: provider.clone(),
         })
@@ -75,9 +74,10 @@ impl Cacheable for OllamaModel {
 
 #[async_trait]
 impl ModelLogic for OllamaModel {
+    #[allow(deprecated)]
     async fn provider(&self) -> Result<ModelConstructor> {
         Ok(ModelConstructor {
-            inner: self.client.clone(),
+            inner: Box::new(self.client.clone()),
         })
     }
 

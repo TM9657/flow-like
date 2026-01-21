@@ -12,6 +12,7 @@
 [![Codacy Badge](https://app.codacy.com/project/badge/Grade/244d2db2a84f4e79b64d984639a2b18f)](https://app.codacy.com/gh/TM9657/flow-like/dashboard?utm_source=gh&utm_medium=referral&utm_content=&utm_campaign=Badge_grade)
 ![Discord](https://img.shields.io/discord/673169081704120334)
 [![FOSSA Status](https://app.fossa.com/api/projects/custom%2B49014%2Fflow-like.svg?type=small)](https://app.fossa.com/projects/custom%2B49014%2Fflow-like?ref=badge_small)
+<a href="https://buymeacoffee.com/flow.like" target="_blank"><img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" alt="Buy Me A Coffee" height="20"></a>
 [![Website](https://img.shields.io/badge/website-flow--like.com-0a7cff?logo=google-chrome&logoColor=white)](https://flow-like.com)
 [![Docs](https://img.shields.io/badge/docs-docs.flow--like.com-0a7cff?logo=readthedocs&logoColor=white)](https://docs.flow-like.com)
 [![Download](https://img.shields.io/badge/download-Desktop%20App-28a745?logo=tauri&logoColor=white)](https://flow-like.com/download)
@@ -68,6 +69,7 @@ Flow-Like is a **visual workflow automation platform** that shows you not just *
 - [Build From Source](#️-build-flow-like-from-source)
 - [Gallery](#-screenshots--gallery)
 - [FAQ](#-frequently-asked-questions)
+- [License](#-about-our-license)
 - [Community](#-join-the-flow-like-community)
 - [Built With](#️-built-with-amazing-open-source)
 - [Project Stats](#-project-stats--analytics)
@@ -463,6 +465,38 @@ While there's no automatic migration tool yet, our flexible node system and data
 Flow-Like is actively developed and used in production by many users. However, as with any automation platform, we recommend thorough testing before deploying mission-critical workflows. Check our [releases page](https://github.com/TM9657/flow-like/releases) for stability information on each version.
 
 </details>
+
+<br>
+
+## 📜 About Our License
+
+We chose the **Business Source License (BSL 1.1)** after careful consideration of what makes open source sustainable. Here's our reasoning:
+
+### Why Not Pure Open Source?
+
+We've watched too many open source projects follow the same painful pattern: passionate maintainers burn out, companies extract value without contributing back, and eventually the project either dies or gets acquired and locked down. We wanted a different path.
+
+### Why BSL?
+
+The BSL gives us a way to build a sustainable business while keeping the code transparent and accessible:
+
+- **Full Source Access** — You can read, audit, modify, and learn from every line of code
+- **Free for Most Users** — If you're under 2,000 employees and $300M revenue, use it freely
+- **Guaranteed Open Source Future** — After 8 years, the code automatically converts to **MPL 2.0** (a permissive, OSI-approved license)
+- **No Vendor Lock-in** — You can fork, self-host, and run it entirely on your own infrastructure
+- **Contributions Welcome** — We accept community contributions and actively develop in the open
+
+### What's Restricted?
+
+Only one thing: you can't take Flow-Like and build a competing SaaS product with it. That's it. Internal tools, private deployments, custom integrations — all fair game.
+
+### The Conversion Clause
+
+This is the part we think matters most: **every release automatically becomes MPL 2.0 after 8 years**. This isn't a maybe or a promise we can revoke — it's baked into the license itself. Even if we disappeared tomorrow, the code would still become fully open source on schedule.
+
+We believe this strikes the right balance: sustainable development funding now, guaranteed open source later, and maximum freedom for users in between.
+
+📄 [Read the full license](./LICENSE) | 💬 [Questions? Ask on Discord](https://discord.com/invite/mdBA9kMjFJ)
 
 <br>
 

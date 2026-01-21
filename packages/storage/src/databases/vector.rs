@@ -9,7 +9,10 @@ pub trait VectorStore: Send + Sync {
     ///
     /// * `vector`: The vector to search for similar vectors.
     /// * `filter`: An optional filter to narrow down the search results.
+    /// * `select`: Optional columns to return in the results.
+    /// * `fields`: Column names to search. For vector search, searches each column.
     /// * `limit`: The maximum number of results to return.
+    /// * `offset`: The number of results to skip.
     ///
     /// # Returns
     ///
@@ -28,7 +31,11 @@ pub trait VectorStore: Send + Sync {
     /// # Arguments
     ///
     /// * `text`: The text to search for similar items.
+    /// * `filter`: An optional filter to narrow down the search results.
+    /// * `select`: Optional columns to return in the results.
+    /// * `fields`: Column names to search with full-text search.
     /// * `limit`: The maximum number of results to return.
+    /// * `offset`: The number of results to skip.
     ///
     /// # Returns
     ///
@@ -38,6 +45,7 @@ pub trait VectorStore: Send + Sync {
         text: &str,
         filter: Option<&str>,
         select: Option<Vec<String>>,
+        fields: Option<Vec<String>>,
         limit: usize,
         offset: usize,
     ) -> Result<Vec<Value>>;
@@ -48,7 +56,12 @@ pub trait VectorStore: Send + Sync {
     ///
     /// * `vector`: The vector to search for similar vectors.
     /// * `text`: The text to search for similar items.
+    /// * `filter`: An optional filter to narrow down the search results.
+    /// * `select`: Optional columns to return in the results.
+    /// * `fields`: Column names for both vector and FTS search.
     /// * `limit`: The maximum number of results to return.
+    /// * `offset`: The number of results to skip.
+    /// * `rerank`: Whether to rerank results using RRF.
     ///
     /// # Returns
     ///
@@ -59,6 +72,7 @@ pub trait VectorStore: Send + Sync {
         text: &str,
         filter: Option<&str>,
         select: Option<Vec<String>>,
+        fields: Option<Vec<String>>,
         limit: usize,
         offset: usize,
         rerank: bool,

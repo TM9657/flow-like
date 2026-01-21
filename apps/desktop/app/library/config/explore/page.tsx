@@ -193,7 +193,7 @@ function TableView({
 	);
 
 	return (
-		<div className="flex flex-col h-full flex-grow max-h-full overflow-hidden">
+		<div className="flex flex-col h-full flex-grow max-h-full min-w-0">
 			{schema.data && list.data && (
 				<LanceDBExplorer
 					total={count.data}

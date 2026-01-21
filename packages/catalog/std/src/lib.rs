@@ -9,6 +9,7 @@
 //! - Utilities
 //! - A2UI (Agent-to-UI) operations
 //! - Notifications
+//! - Faker (mock data generation)
 
 use std::sync::Arc;
 
@@ -16,6 +17,7 @@ pub use flow_like_catalog_core::{NodeConstructor, NodeLogic, inventory, register
 
 pub mod a2ui;
 pub mod control;
+pub mod faker;
 pub mod logging;
 pub mod math;
 pub mod notifications;

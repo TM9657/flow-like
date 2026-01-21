@@ -340,6 +340,7 @@ impl NodeLogic for ExtractDocumentAiNode {
             .await?;
 
         let _llm_start = std::time::Instant::now();
+        #[allow(deprecated)]
         let completion_handle = model.completion_model_handle(None).await?;
         let llm_client = create_llm_client(completion_handle);
 
@@ -605,6 +606,7 @@ impl NodeLogic for ExtractDocumentsAiNode {
             .build(&model_bit, context.app_state.clone(), context.token.clone())
             .await?;
 
+        #[allow(deprecated)]
         let completion_handle = model.completion_model_handle(None).await?;
         let llm_client = create_llm_client(completion_handle);
 

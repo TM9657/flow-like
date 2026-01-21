@@ -183,7 +183,7 @@ impl From<RigMessage> for HistoryMessage {
                                 },
                             });
                         }
-                        RigAssistantContent::Reasoning(_) => {}
+                        RigAssistantContent::Reasoning(_) | RigAssistantContent::Image(_) => {}
                     }
                 }
 
@@ -261,6 +261,8 @@ impl TryFrom<HistoryMessage> for RigMessage {
                                 arguments: json::from_str(&tool_call.function.arguments)
                                     .unwrap_or(json::json!({})),
                             },
+                            signature: None,
+                            additional_params: None,
                         }));
                     }
                 }

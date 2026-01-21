@@ -1,4 +1,4 @@
-use std::{any::Any, sync::Arc};
+use std::any::Any;
 
 use super::ModelLogic;
 use crate::provider::random_provider;
@@ -7,9 +7,9 @@ use crate::{
     provider::{ModelProvider, ModelProviderConfiguration},
 };
 use flow_like_types::{Cacheable, Result, async_trait};
-use rig::client::ProviderClient;
+
 pub struct AnthropicModel {
-    client: Arc<Box<dyn ProviderClient>>,
+    client: rig::providers::anthropic::Client,
     provider: ModelProvider,
     default_model: Option<String>,
 }
@@ -23,7 +23,7 @@ impl AnthropicModel {
         let api_key = anthropic_config.api_key.clone().unwrap_or_default();
         let model_id = provider.model_id.clone();
 
-        let mut builder = rig::providers::anthropic::Client::builder(&api_key);
+        let mut builder = rig::providers::anthropic::Client::builder().api_key(&api_key);
         if let Some(endpoint) = anthropic_config.endpoint.as_deref() {
             builder = builder.base_url(endpoint);
         }
@@ -36,10 +36,10 @@ impl AnthropicModel {
             builder = builder.anthropic_version(version);
         }
 
-        let client = builder.build()?.boxed();
+        let client = builder.build()?;
 
         Ok(AnthropicModel {
-            client: Arc::new(client),
+            client,
             provider: provider.clone(),
             default_model: model_id,
         })
@@ -54,7 +54,7 @@ impl AnthropicModel {
             .cloned()
             .and_then(|v| v.as_str().map(|s| s.to_string()));
 
-        let mut builder = rig::providers::anthropic::Client::builder(api_key);
+        let mut builder = rig::providers::anthropic::Client::builder().api_key(api_key);
         if let Some(endpoint) = params.get("endpoint").and_then(|v| v.as_str()) {
             builder = builder.base_url(endpoint);
         }
@@ -66,10 +66,10 @@ impl AnthropicModel {
             builder = builder.anthropic_version(version);
         }
 
-        let client = builder.build()?.boxed();
+        let client = builder.build()?;
 
         Ok(AnthropicModel {
-            client: Arc::new(client),
+            client,
             default_model: model_id,
             provider: provider.clone(),
         })
@@ -88,9 +88,10 @@ impl Cacheable for AnthropicModel {
 
 #[async_trait]
 impl ModelLogic for AnthropicModel {
+    #[allow(deprecated)]
     async fn provider(&self) -> Result<ModelConstructor> {
         Ok(ModelConstructor {
-            inner: self.client.clone(),
+            inner: Box::new(self.client.clone()),
         })
     }
 

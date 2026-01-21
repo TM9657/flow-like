@@ -1,4 +1,4 @@
-use std::{any::Any, sync::Arc};
+use std::any::Any;
 
 use super::ModelLogic;
 use crate::provider::random_provider;
@@ -7,10 +7,9 @@ use crate::{
     provider::{ModelProvider, ModelProviderConfiguration},
 };
 use flow_like_types::{Cacheable, Result, async_trait};
-use rig::client::ProviderClient;
 
 pub struct GaladrielModel {
-    client: Arc<Box<dyn ProviderClient>>,
+    client: rig::providers::galadriel::Client,
     default_model: Option<String>,
 }
 
@@ -23,16 +22,16 @@ impl GaladrielModel {
         let api_key = galadriel_config.api_key.clone().unwrap_or_default();
         let model_id = provider.model_id.clone();
 
-        let mut builder = rig::providers::galadriel::Client::builder(&api_key);
+        let mut builder = rig::providers::galadriel::Client::builder().api_key(&api_key);
 
         if let Some(endpoint) = galadriel_config.endpoint.as_deref() {
             builder = builder.base_url(endpoint);
         }
 
-        let client = builder.build().boxed();
+        let client = builder.build()?;
 
         Ok(GaladrielModel {
-            client: Arc::new(client),
+            client,
             default_model: model_id,
         })
     }
@@ -46,15 +45,15 @@ impl GaladrielModel {
             .cloned()
             .and_then(|v| v.as_str().map(|s| s.to_string()));
 
-        let mut builder = rig::providers::galadriel::Client::builder(api_key);
+        let mut builder = rig::providers::galadriel::Client::builder().api_key(api_key);
         if let Some(endpoint) = params.get("endpoint").and_then(|v| v.as_str()) {
             builder = builder.base_url(endpoint);
         }
 
-        let client = builder.build().boxed();
+        let client = builder.build()?;
 
         Ok(GaladrielModel {
-            client: Arc::new(client),
+            client,
             default_model: model_id,
         })
     }
@@ -72,9 +71,10 @@ impl Cacheable for GaladrielModel {
 
 #[async_trait]
 impl ModelLogic for GaladrielModel {
+    #[allow(deprecated)]
     async fn provider(&self) -> Result<ModelConstructor> {
         Ok(ModelConstructor {
-            inner: self.client.clone(),
+            inner: Box::new(self.client.clone()),
         })
     }
 

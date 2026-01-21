@@ -222,6 +222,27 @@ impl A2UICopilot {
                         reasoning_step_id = None;
                         current_reasoning.clear();
                     }
+                    StreamedAssistantContent::ReasoningDelta { reasoning, .. } => {
+                        current_reasoning.push_str(&reasoning);
+                        if let Some(ref callback) = on_token {
+                            if reasoning_step_id.is_none() {
+                                plan_step_counter += 1;
+                                reasoning_step_id =
+                                    Some(format!("reasoning_{}", plan_step_counter));
+                            }
+
+                            let step_event = A2UIStreamEvent::PlanStep(A2UIPlanStep {
+                                id: reasoning_step_id.clone().unwrap(),
+                                description: current_reasoning.trim().to_string(),
+                                status: A2UIPlanStepStatus::InProgress,
+                                tool_name: Some("think".to_string()),
+                            });
+                            callback(format!(
+                                "<plan_step>{}</plan_step>",
+                                serde_json::to_string(&step_event).unwrap_or_default()
+                            ));
+                        }
+                    }
                 }
             }
 
@@ -458,7 +479,7 @@ impl A2UICopilot {
         &self,
         model_id: Option<String>,
         token: Option<String>,
-    ) -> Result<(String, Box<dyn CompletionClientDyn + 'a>)> {
+    ) -> Result<(String, Box<dyn CompletionClientDyn + Send + Sync + 'a>)> {
         let bit = if let Some(profile) = &self.profile {
             if let Some(id) = model_id {
                 profile
@@ -500,10 +521,7 @@ impl A2UICopilot {
             .await?;
         let default_model = model.default_model().await.unwrap_or("gpt-4o".to_string());
         let provider = model.provider().await?;
-        let client = provider.client();
-        let completion = client
-            .as_completion()
-            .ok_or_else(|| flow_like_types::anyhow!("Model does not support completion"))?;
+        let completion = provider.into_client();
 
         Ok((default_model, completion))
     }

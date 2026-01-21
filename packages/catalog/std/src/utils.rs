@@ -8,6 +8,7 @@ pub mod float;
 pub mod hash;
 pub mod int;
 pub mod json;
+pub mod map;
 pub mod math;
 pub mod md;
 pub mod set;

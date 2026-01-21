@@ -38,6 +38,7 @@ chrono.workspace = true
 chrono-tz.workspace = true
 regex.workspace = true
 base64.workspace = true
+urlencoding.workspace = true
 
 # Web/scraping/email dependencies - only included when execute feature is enabled
 htmd = { version = "0.3.0", optional = true }

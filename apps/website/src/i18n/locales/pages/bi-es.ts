@@ -1,64 +1,94 @@
 export const esBi = {
 	// Meta
 	"bi.meta.title":
-		"Stack BI Moderno: Constructor de Dashboards con IA | Flow-Like",
+		"Flow-Like para BI — La Plataforma de Inteligencia que Trabaja Donde Tú Trabajas",
 	"bi.meta.description":
-		"Crea dashboards BI visual o con IA en minutos. Sin precios por usuario, auto-hospedado, personalización ilimitada. Alternativa a Tableau y Power BI.",
+		"El BI moderno necesita más que dashboards. Datos en tiempo real de cualquier fuente, insights personalizados, integración con IA Copilot y despliegue en cualquier lugar — on-premise, nube, móvil o en campo.",
 	"bi.meta.keywords":
-		"inteligencia de negocios, pila BI, constructor de dashboards, visualización de datos, dashboards personalizados, dashboards IA, Flow-Like BI, analítica moderna, alternativa Tableau, alternativa Power BI, BI auto-hospedado",
-	"bi.meta.og.title": "Crea Dashboards BI con IA | Flow-Like",
+		"BI empresarial, inteligencia de negocios, analítica en tiempo real, plataforma de datos, inteligencia operativa, analítica IA, BI on-premise, BI móvil, datos SharePoint, integración Teams, Copilot BI, pipelines IA embebidos",
+	"bi.meta.og.title":
+		"Flow-Like para BI — Inteligencia que Trabaja Donde Estás",
 	"bi.meta.og.description":
-		"Constructor drag-and-drop con asistencia de IA. Conecta cualquier fuente, despliega en cualquier lugar. Sin dependencia de proveedores.",
+		"Datos en tiempo real de cualquier fuente. Insights personalizados. Potenciado por IA. Funciona en cualquier lugar.",
 
 	// Hero
-	"bi.hero.tagline": "La Pila BI Moderna",
-	"bi.hero.headline": "Dashboards que",
-	"bi.hero.headline.highlight": "realmente encajan",
-	"bi.hero.headline.end": "en tu negocio",
+	"bi.hero.tagline": "Flow-Like para BI",
+	"bi.hero.headline": "El BI moderno es",
+	"bi.hero.headline.highlight": "Flow-Like",
+	"bi.hero.headline.end": "",
 	"bi.hero.description":
-		"Las herramientas BI tradicionales te fuerzan a plantillas rígidas. Flow-Like te permite construir exactamente lo que necesitas — visual, con IA o ambos. Tus datos, tu diseño, tus reglas.",
-	"bi.hero.cta.primary": "Empezar a Construir",
-	"bi.hero.cta.secondary": "Ver Cómo Funciona",
+		"El BI rara vez necesita solo una base de datos y algunos gráficos. El mundo real demanda conexiones en tiempo real, datos de todas partes, insights instantáneos e inteligencia que te encuentre donde trabajas.",
+	"bi.hero.cta.primary": "Construye Tu Inteligencia",
+	"bi.hero.cta.secondary": "Ver la Diferencia",
 
-	// Problem
-	"bi.problem.tagline": "El Problema BI",
-	"bi.problem.headline": "Por qué el BI tradicional falla",
+	// Problem - The Reality Check
+	"bi.problem.tagline": "La Realidad",
+	"bi.problem.headline": "El BI tradicional no puede seguir el ritmo",
 	"bi.problem.description":
-		"Business intelligence prometió insights. En cambio, obtuviste dashboards rígidos que nunca encajan, licencias caras por usuario y datos bloqueados tras muros propietarios.",
-	"bi.problem.item1.title": "Plantillas que no sirven",
+		"Los negocios no esperan. Tu inteligencia tampoco debería.",
+	"bi.problem.item1.title": "Datos Fragmentados",
 	"bi.problem.item1.description":
-		"Dashboards prefabricados que casi funcionan — pero nunca encajan en tu flujo real.",
-	"bi.problem.item2.title": "Trampas de precio por usuario",
+		"Tus datos viven en bases de datos, SharePoint, Teams, sistemas de producción, hojas de cálculo — el BI tradicional te muestra solo una parte.",
+	"bi.problem.item2.title": "Insights de Ayer",
 	"bi.problem.item2.description":
-		"¿Compartir insights con tu equipo? Paga por usuario. Cada. Mes.",
-	"bi.problem.item3.title": "Dependencia del proveedor",
+		"Para cuando tu dashboard se actualiza, la oportunidad ya pasó. Los problemas escalan mientras esperas la próxima sincronización.",
+	"bi.problem.item3.title": "Una Talla No Sirve a Nadie",
 	"bi.problem.item3.description":
-		"Tus datos en su nube. Tus dashboards en su formato. ¿Migración? Buena suerte.",
-	"bi.problem.item4.title": "Personalización limitada",
+		"El CEO necesita estrategia. Operaciones necesita detalles. Ventas necesita pipeline. Un dashboard no puede servir a todos.",
+	"bi.problem.item4.title": "Atado al Escritorio",
 	"bi.problem.item4.description":
-		"Hacks de CSS, workarounds y solicitudes de funciones que nunca llegan. ¿Te suena?",
+		"Inteligencia que solo funciona en la oficina no es inteligencia — es un reporte. El campo no puede esperar.",
 
-	// Solution
-	"bi.solution.tagline": "El Modo Flow-Like",
-	"bi.solution.headline": "Construye dashboards que funcionan",
-	"bi.solution.headline.highlight": "a tu manera",
+	// Solution Pillars
+	"bi.solution.tagline": "La Ventaja Flow-Like",
+	"bi.solution.headline": "Inteligencia, reimaginada",
+	"bi.solution.headline.highlight": "para la realidad",
 	"bi.solution.description":
-		"Flow-Like combina un potente constructor visual de UI con pipelines de datos inteligentes. Diseña dashboards pixel-perfect, conecta cualquier fuente de datos y despliega donde quieras — sin compromisos.",
-	"bi.solution.feature1.title": "Constructor Visual de UI",
+		"Construido para cómo las organizaciones modernas realmente trabajan — distribuidas, rápidas y ricas en datos.",
+	"bi.solution.feature1.title": "Conecta Todo",
 	"bi.solution.feature1.description":
-		"Arrastra, suelta y diseña dashboards visualmente. Sin código — pero disponible cuando lo necesites.",
-	"bi.solution.feature2.title": "Creación Asistida por IA",
+		"Bases de datos, APIs, SharePoint, canales de Teams, líneas de producción, sensores IoT, hojas de cálculo — si tiene datos, Flow-Like lo conecta. En tiempo real.",
+	"bi.solution.feature2.title": "Muévete a la Velocidad del Negocio",
 	"bi.solution.feature2.description":
-		"Describe lo que necesitas. FlowPilot genera componentes de dashboard, gráficos y layouts en segundos.",
-	"bi.solution.feature3.title": "Datos Potenciados por Flow",
+		"Insights en el momento que los necesitas. Los problemas emergen antes de escalar. Las oportunidades aparecen mientras aún son accionables.",
+	"bi.solution.feature3.title": "Inteligencia Personalizada",
 	"bi.solution.feature3.description":
-		"Conecta flows a tu UI. Datos en tiempo real, transformaciones y agregaciones — todo visual.",
-	"bi.solution.feature4.title": "Personalización Ilimitada",
+		"Cada usuario ve lo que le importa — sus KPIs, su acceso a datos, su vista. Basado en roles, consciente de permisos, individualmente relevante.",
+	"bi.solution.feature4.title": "IA Profunda en Tus Pipelines",
 	"bi.solution.feature4.description":
-		"Cada píxel es tuyo. Temas personalizados, componentes, animaciones — si puedes imaginarlo, puedes construirlo.",
+		"La IA no es solo un overlay de chat — está embebida en tus pipelines de datos. Detección de anomalías, predicciones y transformaciones inteligentes ocurren automáticamente, no solo bajo demanda.",
+	"bi.solution.feature5.title": "Trabaja Donde Estés",
+	"bi.solution.feature5.description":
+		"On-premise para compliance. Nube para escalar. Móvil para el campo. Offline para cuando falla la conectividad. Tu elección.",
+	"bi.solution.feature6.title": "Intégrate en Tu Ecosistema",
+	"bi.solution.feature6.description":
+		"Flow-Like habla con tus herramientas existentes. Embeds de Power BI, notificaciones de Teams, conexiones ERP, integraciones personalizadas.",
+
+	// Data Sources Visual Section
+	"bi.sources.tagline": "Conectividad Universal",
+	"bi.sources.headline": "Tus datos, donde sea que vivan",
+	"bi.sources.description":
+		"A Flow-Like no le importa de dónde vienen tus datos. Conectamos todo.",
+	"bi.sources.databases": "Bases de Datos",
+	"bi.sources.databases.desc":
+		"PostgreSQL, MySQL, SQL Server, Snowflake (FlightSQL), Oracle, MongoDB y más",
+	"bi.sources.files": "Archivos y Almacenamiento",
+	"bi.sources.files.desc":
+		"SharePoint, OneDrive, S3, discos locales, recursos de red",
+	"bi.sources.realtime": "Sistemas en Tiempo Real",
+	"bi.sources.realtime.desc":
+		"MQTT, Kafka, WebSockets, OPC-UA, datos de producción",
+	"bi.sources.communication": "Comunicación",
+	"bi.sources.communication.desc":
+		"Teams, Slack, Email, tickets, canales de soporte",
+	"bi.sources.apis": "APIs y Servicios",
+	"bi.sources.apis.desc": "REST, GraphQL, SOAP, cualquier servicio externo",
+	"bi.sources.traces": "Trazas y Logs",
+	"bi.sources.traces.desc":
+		"Logs de aplicación, trazas de sistema, datos de monitoreo",
 
 	// Stack
-	"bi.stack.tagline": "La Pila Completa",
+	"bi.stack.tagline": "El Stack Completo",
 	"bi.stack.headline": "Todo lo que necesitas para BI moderno",
 	"bi.stack.data.title": "Capa de Datos",
 	"bi.stack.data.item1": "Conecta cualquier base de datos, API o archivo",
@@ -78,96 +108,121 @@ export const esBi = {
 	"bi.stack.deploy.title": "Capa de Deploy",
 	"bi.stack.deploy.item1": "Despliegue con un clic",
 	"bi.stack.deploy.item2": "Self-host o nube",
-	"bi.stack.deploy.item3": "Embeber en cualquier lugar",
+	"bi.stack.deploy.item3": "Embebe en cualquier lugar",
 	"bi.stack.deploy.item4": "Listo para marca blanca",
 
+	// Deployment Options
+	"bi.deploy.tagline": "Despliega en Cualquier Lugar",
+	"bi.deploy.headline": "Tu infraestructura, tus reglas",
+	"bi.deploy.onprem.title": "On-Premise",
+	"bi.deploy.onprem.desc":
+		"Control total. Compliance total. Tus servidores, tus datos, tu seguridad.",
+	"bi.deploy.cloud.title": "Nube",
+	"bi.deploy.cloud.desc":
+		"Escala instantáneamente. Infraestructura gestionada. Enfócate en insights, no en operaciones.",
+	"bi.deploy.mobile.title": "Móvil",
+	"bi.deploy.mobile.desc":
+		"iOS, Android, web responsive. Inteligencia en tu bolsillo.",
+	"bi.deploy.field.title": "Listo para Campo",
+	"bi.deploy.field.desc":
+		"Capaz de trabajar offline. Sincroniza cuando hay conexión. Nunca pierdas datos.",
+	"bi.deploy.hybrid.title": "Híbrido",
+	"bi.deploy.hybrid.desc":
+		"Mezcla y combina. Procesamiento en el edge con agregación en la nube.",
+
 	// Comparison
-	"bi.comparison.tagline": "Comparación Honesta",
+	"bi.comparison.tagline": "Listo para Empresas",
 	"bi.comparison.headline": "Cómo se compara Flow-Like",
 	"bi.comparison.description":
-		"Cada herramienta tiene sus fortalezas. Aquí es donde Flow-Like brilla — y donde otros podrían encajar mejor.",
-	"bi.comparison.feature": "Característica",
+		"Construido para organizaciones que necesitan más que dashboards — necesitan inteligencia operativa.",
+	"bi.comparison.feature": "Capacidad",
 	"bi.comparison.flowlike": "Flow-Like",
 	"bi.comparison.traditional": "BI Tradicional",
-	"bi.comparison.spreadsheets": "Hojas de cálculo",
+	"bi.comparison.spreadsheets": "Plataformas Enterprise",
 
-	"bi.comparison.row1.feature": "Diseño de dashboard personalizado",
-	"bi.comparison.row1.flowlike": "Ilimitado — control pixel-perfect",
-	"bi.comparison.row1.traditional": "Basado en plantillas con limitaciones",
-	"bi.comparison.row1.spreadsheets": "Solo gráficos básicos",
+	"bi.comparison.row1.feature": "Datos en Tiempo Real",
+	"bi.comparison.row1.flowlike":
+		"Streaming nativo, actualizaciones sub-segundo",
+	"bi.comparison.row1.traditional": "Actualizaciones programadas (15min+)",
+	"bi.comparison.row1.spreadsheets":
+		"Requiere infraestructura de streaming personalizada",
 
-	"bi.comparison.row2.feature": "Modelo de precios",
-	"bi.comparison.row2.flowlike": "Usuarios ilimitados incluidos",
-	"bi.comparison.row2.traditional": "Por usuario, escala rápido",
-	"bi.comparison.row2.spreadsheets": "Por usuario o niveles gratuitos",
+	"bi.comparison.row2.feature": "Fuentes de Datos",
+	"bi.comparison.row2.flowlike":
+		"Universal — DBs, archivos, APIs, streams, Teams",
+	"bi.comparison.row2.traditional":
+		"Bases de datos + conectores cloud limitados",
+	"bi.comparison.row2.spreadsheets":
+		"Específico del proveedor, requiere integradores",
 
-	"bi.comparison.row3.feature": "Propiedad de datos",
-	"bi.comparison.row3.flowlike": "100% tuya, self-host disponible",
-	"bi.comparison.row3.traditional": "Nube del vendor, límites de exportación",
-	"bi.comparison.row3.spreadsheets": "Local o dependiente de nube",
+	"bi.comparison.row3.feature": "Vistas por Usuario",
+	"bi.comparison.row3.flowlike":
+		"Dinámicas, conscientes de roles, filtrado en tiempo real",
+	"bi.comparison.row3.traditional": "Permisos de dashboard estáticos",
+	"bi.comparison.row3.spreadsheets": "Desarrollo personalizado complejo",
 
-	"bi.comparison.row4.feature": "Capacidades de IA",
-	"bi.comparison.row4.flowlike": "Generación y análisis IA integrados",
-	"bi.comparison.row4.traditional": "Funciones adicionales, limitadas",
-	"bi.comparison.row4.spreadsheets": "Básico o ninguno",
+	"bi.comparison.row4.feature": "Profundidad de Integración IA",
+	"bi.comparison.row4.flowlike": "Embebida en pipelines + conversacional",
+	"bi.comparison.row4.traditional": "Solo overlay de chat, sin IA en pipelines",
+	"bi.comparison.row4.spreadsheets":
+		"Productos IA separados, integración manual",
 
-	"bi.comparison.row5.feature": "Datos en tiempo real",
-	"bi.comparison.row5.flowlike": "Soporte nativo de streaming",
-	"bi.comparison.row5.traditional": "Actualizaciones programadas",
-	"bi.comparison.row5.spreadsheets": "Manual o limitado",
+	"bi.comparison.row5.feature": "Despliegue",
+	"bi.comparison.row5.flowlike": "On-prem, nube, edge, móvil, offline",
+	"bi.comparison.row5.traditional": "Solo nube o on-prem costoso",
+	"bi.comparison.row5.spreadsheets": "Despliegue bloqueado al proveedor",
 
-	"bi.comparison.row6.feature": "Extensibilidad para desarrolladores",
-	"bi.comparison.row6.flowlike":
-		"Acceso completo al código, nodos personalizados",
-	"bi.comparison.row6.traditional": "Acceso API, personalización limitada",
-	"bi.comparison.row6.spreadsheets": "Macros, scripts",
+	"bi.comparison.row6.feature": "Tiempo a Producción",
+	"bi.comparison.row6.flowlike": "Horas a días",
+	"bi.comparison.row6.traditional": "Semanas a meses",
+	"bi.comparison.row6.spreadsheets": "Implementaciones de 6-18 meses",
 
 	"bi.comparison.note":
-		"Las herramientas BI tradicionales destacan en reportes empresariales estandarizados. Flow-Like está construido para equipos que necesitan flexibilidad sin sacrificar potencia.",
+		"Inteligencia operativa de nivel enterprise sin la complejidad, los plazos o el costo enterprise.",
 
 	// Use Cases
-	"bi.usecases.tagline": "Construido Para",
-	"bi.usecases.headline": "Donde Flow-Like brilla",
-	"bi.usecases.case1.title": "Dashboards Ejecutivos",
+	"bi.usecases.tagline": "Construido para la Realidad",
+	"bi.usecases.headline": "Inteligencia que entrega",
+	"bi.usecases.case1.title": "Centro de Comando de Operaciones",
 	"bi.usecases.case1.description":
-		"KPIs, métricas e insights en un formato que coincide con tu marca — no una plantilla genérica.",
-	"bi.usecases.case2.title": "Monitoreo Operacional",
+		"Vista en tiempo real de producción, logística y operaciones de servicio. Las anomalías emergen instantáneamente. Los equipos responden antes de que los clientes lo noten.",
+	"bi.usecases.case2.title": "Inteligencia Ejecutiva",
 	"bi.usecases.case2.description":
-		"Vistas en tiempo real de producción, logística u operaciones de servicio con alertas instantáneas.",
-	"bi.usecases.case3.title": "Analytics para Clientes",
+		"KPIs estratégicos que se actualizan en tiempo real. Drill down del resumen al detalle. Pregunta a tu Copilot para análisis más profundo.",
+	"bi.usecases.case3.title": "Insights de Servicio en Campo",
 	"bi.usecases.case3.description":
-		"Embebe dashboards en tu producto. Marca blanca, personalizado, tuyo.",
-	"bi.usecases.case4.title": "Productos de Datos",
+		"Los técnicos ven lo que necesitan, donde están. Funciona offline. Sincroniza automáticamente. Sin volver a la oficina por datos.",
+	"bi.usecases.case4.title": "Inteligencia de Ventas",
 	"bi.usecases.case4.description":
-		"Convierte tus datos en insights vendibles con dashboards hermosos y de marca.",
+		"Salud del pipeline. Insights de cuentas. Inteligencia competitiva. Todo en una vista, personalizado para cada representante.",
 
 	// CTA
-	"bi.cta.tagline": "¿Listo para construir?",
-	"bi.cta.headline": "Comienza a crear dashboards que encajen",
+	"bi.cta.tagline": "¿Listo para ir más allá de los dashboards?",
+	"bi.cta.headline": "Construye inteligencia que funciona",
 	"bi.cta.description":
-		"Descarga Flow-Like y construye tu primer dashboard en minutos. Sin tarjeta de crédito. Sin dependencia de vendor. Solo mejor BI.",
-	"bi.cta.button": "Descargar Gratis",
+		"Descarga Flow-Like y conecta tu primera fuente de datos en minutos. Tiempo real. Personalizado. En todas partes.",
+	"bi.cta.button": "Empieza Gratis",
 	"bi.cta.note":
-		"Gratis para siempre para individuos. Planes Team & Enterprise disponibles.",
+		"Gratis para siempre para individuos. Planes enterprise para organizaciones.",
 
 	// FAQ
 	"bi.faq.tagline": "Preguntas",
-	"bi.faq.q1": "¿Puedo migrar mis dashboards existentes?",
+	"bi.faq.q1": "¿Cómo conecta Flow-Like tantas fuentes de datos?",
 	"bi.faq.a1":
-		"Flow-Like puede conectarse a tus fuentes de datos existentes inmediatamente. Para migración de dashboards, nuestro equipo de Solución 24 Horas puede ayudar a recrear y mejorar tu configuración actual.",
-	"bi.faq.q2": "¿Cómo funciona la generación de dashboards con IA?",
+		"Flow-Like usa un sistema visual basado en flows con conectores preconstruidos y la capacidad de crear integraciones personalizadas. Conecta bases de datos, APIs, archivos y streams en tiempo real — todo mediante interfaz drag-and-drop.",
+	"bi.faq.q2": "¿Realmente puedo usarlo offline?",
 	"bi.faq.a2":
-		"FlowPilot entiende tu estructura de datos y solicitudes en lenguaje natural. Describe lo que quieres — 'ventas por región en el tiempo' — y obtén un gráfico completamente funcional.",
-	"bi.faq.q3": "¿Puedo embeber dashboards en mi producto?",
+		"Sí. Las apps de escritorio y móvil de Flow-Like incluyen arquitectura offline-first. Trabaja sin conectividad, y los cambios se sincronizan automáticamente cuando vuelves a estar online.",
+	"bi.faq.q3": "¿Cómo funciona la personalización?",
 	"bi.faq.a3":
-		"Sí. Los dashboards de Flow-Like pueden embeberse en cualquier lugar con marca blanca completa. Perfecto para productos SaaS y portales de clientes.",
-	"bi.faq.q4": "¿Qué fuentes de datos se soportan?",
+		"Define roles, permisos y reglas de acceso a datos. Cada usuario ve dashboards filtrados a su nivel de acceso y configurados para mostrar sus KPIs relevantes. Una plataforma, infinitas vistas personalizadas.",
+	"bi.faq.q4": "¿Qué hay de la IA e integración con Copilot?",
 	"bi.faq.a4":
-		"Bases de datos (PostgreSQL, MySQL, MongoDB, etc.), APIs (REST, GraphQL), archivos (CSV, Excel, JSON) y fuentes de streaming. Si tiene datos, Flow-Like puede conectarse.",
-	"bi.faq.q5": "¿Hay límite de usuarios?",
+		"FlowPilot es nuestro asistente IA integrado. Haz preguntas sobre tus datos en lenguaje natural, genera visualizaciones automáticamente y obtén insights sin escribir queries. También se integra con Microsoft Copilot.",
+	"bi.faq.q5": "¿El despliegue on-premise está realmente disponible?",
 	"bi.faq.a5":
-		"No. Flow-Like incluye usuarios ilimitados en todos los planes. Comparte dashboards con toda tu organización sin preocuparte por costos de licencias.",
-	"bi.faq.q6": "¿Puedo auto-hospedar Flow-Like?",
+		"Absolutamente. Flow-Like corre completamente en tu infraestructura — Docker, Kubernetes, bare metal. Tus datos nunca tienen que salir de tu red. GDPR, HIPAA, entornos air-gapped — todo soportado.",
+	"bi.faq.q6": "¿Cómo se compara con plataformas BI enterprise?",
 	"bi.faq.a6":
-		"Absolutamente. Self-hosting siempre está disponible. Tus datos nunca tienen que salir de tu infraestructura.",
+		"Flow-Like proporciona capacidades de inteligencia operativa a una fracción de la complejidad y el costo. Constructor de workflows visual, integración de datos en tiempo real, IA embebida en pipelines — sin el precio enterprise o líneas de tiempo de implementación multi-año.",
 };

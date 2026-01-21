@@ -724,7 +724,7 @@ impl Bit {
     ) -> flow_like_types::Result<(
         String,
         Option<flow_like_types::Value>,
-        Box<dyn CompletionClientDyn + 'a>,
+        Box<dyn CompletionClientDyn + Send + Sync + 'a>,
     )> {
         let (model_name, additional_params, completion_client) = {
             let model_factory = context.app_state.model_factory.clone();
@@ -736,10 +736,7 @@ impl Bit {
             let additional_params = model.additional_params(history);
             let default_model = model.default_model().await.unwrap_or_default();
             let provider = model.provider().await?;
-            let client = provider.client();
-            let completion = client
-                .as_completion()
-                .ok_or_else(|| anyhow!("Provider does not support completion"))?;
+            let completion = provider.into_client();
             (default_model, additional_params, completion)
         };
 

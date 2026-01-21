@@ -3,11 +3,8 @@ use flow_like_types::json::{self as serde_json, json};
 use flow_like_types::reqwest;
 use rig::{
     OneOrMany,
-    client::{
-        ClientBuilderError, CompletionClient as RigCompletionClient, ProviderClient, ProviderValue,
-    },
+    client::{ClientBuilderError, CompletionClient},
     completion::{self, CompletionError, CompletionRequest, GetTokenUsage, Usage},
-    impl_conversion_traits,
     message::{self},
     streaming,
 };
@@ -32,32 +29,15 @@ impl LlamaCppClient {
         let url = format!("{}/{}", self.base_url, path);
         Ok(self.http_client.post(url))
     }
-}
 
-impl ProviderClient for LlamaCppClient {
-    fn from_env() -> Self {
-        Self::new("http://localhost:8080")
-    }
-
-    fn from_val(_val: ProviderValue) -> Self {
-        Self::new("http://localhost:8080")
-    }
-}
-
-impl RigCompletionClient for LlamaCppClient {
-    type CompletionModel = CompletionModel;
-
-    fn completion_model(&self, model: &str) -> CompletionModel {
+    pub fn completion_model(&self, model: &str) -> CompletionModel {
         CompletionModel::new(self.clone(), model)
     }
 }
 
-impl_conversion_traits!(
-    AsTranscription,
-    AsImageGeneration,
-    AsAudioGeneration,
-    AsEmbeddings for LlamaCppClient
-);
+impl CompletionClient for LlamaCppClient {
+    type CompletionModel = CompletionModel;
+}
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct CompletionResponse {
@@ -515,6 +495,11 @@ impl GetTokenUsage for StreamingCompletionResponse {
 impl completion::CompletionModel for CompletionModel {
     type Response = CompletionResponse;
     type StreamingResponse = StreamingCompletionResponse;
+    type Client = LlamaCppClient;
+
+    fn make(client: &Self::Client, model: impl Into<String>) -> Self {
+        Self::new(client.clone(), &model.into())
+    }
 
     async fn completion(
         &self,
@@ -638,12 +623,9 @@ impl completion::CompletionModel for CompletionModel {
 
             for (_, (id, name, args)) in tool_calls {
                 if let Ok(arguments) = serde_json::from_str(&args) {
-                    yield Ok(streaming::RawStreamingChoice::ToolCall {
-                        id,
-                        call_id: None,
-                        name,
-                        arguments,
-                    });
+                    yield Ok(streaming::RawStreamingChoice::ToolCall(
+                        streaming::RawStreamingToolCall::new(id, name, arguments)
+                    ));
                 }
             }
 

@@ -620,15 +620,24 @@ pub async fn execute_agent_streaming(
                     stream_state.emit_chunk(context, &chunk).await?;
                     response_contents.push(AssistantContent::ToolCall(tool_call));
                 }
-                StreamedAssistantContent::ToolCallDelta { id, delta } => {
+                StreamedAssistantContent::ToolCallDelta { id, content } => {
+                    let delta_str = match &content {
+                        rig::streaming::ToolCallDeltaContent::Name(name) => name.clone(),
+                        rig::streaming::ToolCallDeltaContent::Delta(delta) => delta.clone(),
+                    };
                     let chunk =
-                        ResponseChunk::from_tool_call_delta(&id, &delta, &model_display_name);
+                        ResponseChunk::from_tool_call_delta(&id, &delta_str, &model_display_name);
                     response_obj.push_chunk(chunk.clone());
                     stream_state.emit_chunk(context, &chunk).await?;
                 }
                 StreamedAssistantContent::Reasoning(reasoning) => {
                     let reasoning_text = reasoning.reasoning.join("\n");
                     let chunk = ResponseChunk::from_reasoning(&reasoning_text, &model_display_name);
+                    response_obj.push_chunk(chunk.clone());
+                    stream_state.emit_chunk(context, &chunk).await?;
+                }
+                StreamedAssistantContent::ReasoningDelta { reasoning, .. } => {
+                    let chunk = ResponseChunk::from_reasoning(&reasoning, &model_display_name);
                     response_obj.push_chunk(chunk.clone());
                     stream_state.emit_chunk(context, &chunk).await?;
                 }
@@ -666,6 +675,7 @@ pub async fn execute_agent_streaming(
                     rig::message::ToolFunction {
                         name, arguments, ..
                     },
+                ..
             }) = content
             {
                 tool_calls_found = true;
@@ -688,6 +698,7 @@ pub async fn execute_agent_streaming(
                         .call_tool(CallToolRequestParam {
                             name: name.clone().into(),
                             arguments: args_map,
+                            task: None,
                         })
                         .await
                     {

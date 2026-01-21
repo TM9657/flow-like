@@ -10,7 +10,6 @@ use crate::{
 };
 use flow_like_types::json::to_value;
 use flow_like_types::{Cacheable, Result, anyhow, async_trait};
-use rig::client::ProviderClient;
 use rig::completion::CompletionModel;
 use rig::message::DocumentSourceKind;
 use rig::providers::gemini::completion::gemini_api_types::{
@@ -18,7 +17,7 @@ use rig::providers::gemini::completion::gemini_api_types::{
 };
 use rig::{OneOrMany, completion::Message as RigMessage};
 pub struct GeminiModel {
-    client: Arc<Box<dyn ProviderClient>>,
+    client: rig::providers::gemini::Client,
     provider: ModelProvider,
     default_model: Option<String>,
 }
@@ -32,15 +31,15 @@ impl GeminiModel {
         let api_key = gemini_config.api_key.clone().unwrap_or_default();
         let model_id = provider.model_id.clone();
 
-        let mut builder = rig::providers::gemini::Client::builder(&api_key);
+        let mut builder = rig::providers::gemini::Client::builder().api_key(&api_key);
         if let Some(endpoint) = gemini_config.endpoint.as_deref() {
             builder = builder.base_url(endpoint);
         }
 
-        let client = builder.build()?.boxed();
+        let client = builder.build()?;
 
         Ok(GeminiModel {
-            client: Arc::new(client),
+            client,
             provider: provider.clone(),
             default_model: model_id,
         })
@@ -55,14 +54,14 @@ impl GeminiModel {
             .cloned()
             .and_then(|v| v.as_str().map(|s| s.to_string()));
 
-        let mut builder = rig::providers::gemini::Client::builder(api_key);
+        let mut builder = rig::providers::gemini::Client::builder().api_key(api_key);
         if let Some(endpoint) = params.get("endpoint").and_then(|v| v.as_str()) {
             builder = builder.base_url(endpoint);
         }
-        let client = builder.build()?.boxed();
+        let client = builder.build()?;
 
         Ok(GeminiModel {
-            client: Arc::new(client),
+            client,
             default_model: model_id,
             provider: provider.clone(),
         })
@@ -133,9 +132,10 @@ impl Cacheable for GeminiModel {
 
 #[async_trait]
 impl ModelLogic for GeminiModel {
+    #[allow(deprecated)]
     async fn provider(&self) -> Result<ModelConstructor> {
         Ok(ModelConstructor {
-            inner: self.client.clone(),
+            inner: Box::new(self.client.clone()),
         })
     }
 
@@ -147,6 +147,7 @@ impl ModelLogic for GeminiModel {
         // Not used - we override invoke() to transform RigMessages instead
     }
 
+    #[allow(deprecated)]
     async fn invoke(&self, history: &History, lambda: Option<LLMCallback>) -> Result<Response> {
         use crate::llm::{CompletionModelHandle, invoke_with_stream, invoke_without_stream};
 
@@ -156,16 +157,8 @@ impl ModelLogic for GeminiModel {
             .unwrap_or_else(|| history.model.clone());
 
         let constructor = self.provider().await?;
-        let client = constructor.client();
-        let completion_client = client
-            .as_ref()
-            .as_completion()
-            .ok_or_else(|| anyhow!("Provider does not support completion"))?;
-
-        let completion_model = completion_client.completion_model(&model_name);
-        let completion_handle = CompletionModelHandle {
-            inner: Arc::from(completion_model),
-        };
+        let completion_model = constructor.inner.completion_model(&model_name);
+        let completion_handle = CompletionModelHandle::new(Arc::from(completion_model));
 
         let (mut prompt, mut chat_history) = history
             .extract_prompt_and_history()

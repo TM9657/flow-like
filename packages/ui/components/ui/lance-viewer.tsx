@@ -588,8 +588,8 @@ const LanceDBExplorer: React.FC<LanceDBExplorerProps> = ({
 					}}
 				/>
 
-				<div className="flex flex-col flex-1 min-h-0 rounded-xl border bg-card max-w-full">
-					<div className="flex-1 w-full overflow-auto">
+				<div className="flex flex-col flex-1 min-h-0 min-w-0 rounded-xl border bg-card">
+					<div className="flex-1 w-full overflow-auto min-h-0">
 						<DataTable className="w-full">
 							<TableHeader className="sticky top-0 bg-card z-10">
 								{table.getHeaderGroups().map((headerGroup) => {

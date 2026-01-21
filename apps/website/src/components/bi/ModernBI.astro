@@ -7,7 +7,8 @@ import { BlogFooter } from "../blog-footer";
 import BiHero from "./BiHero.astro";
 import BiProblem from "./BiProblem.astro";
 import BiSolution from "./BiSolution.astro";
-import BiStack from "./BiStack.astro";
+import BiDataSources from "./BiDataSources.astro";
+import BiDeploy from "./BiDeploy.astro";
 import BiComparison from "./BiComparison.astro";
 import BiUseCases from "./BiUseCases.astro";
 import BiCTA from "./BiCTA.astro";
@@ -64,6 +65,15 @@ const cover = "/og.png";
     <PostHog />
 
     <style is:global>
+      body {
+        background-image: radial-gradient(
+          color-mix(in srgb, var(--muted) 20%, transparent) 1px,
+          transparent 1px
+        ) !important;
+        background-size: 16px 16px !important;
+        background-attachment: scroll !important;
+      }
+
       @media (max-width: 768px) {
         * { scroll-snap-type: none !important; }
         html { scroll-behavior: auto !important; }
@@ -91,7 +101,8 @@ const cover = "/og.png";
       <BiHero t={t} />
       <BiProblem t={t} />
       <BiSolution t={t} />
-      <BiStack t={t} />
+      <BiDataSources t={t} />
+      <BiDeploy t={t} />
       <BiComparison t={t} />
       <BiUseCases t={t} />
       <BiCTA t={t} />

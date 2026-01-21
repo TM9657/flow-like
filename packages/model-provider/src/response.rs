@@ -189,6 +189,8 @@ impl TryFrom<ResponseMessage> for RigMessage {
                     arguments: json::from_str(&tool_call.function.arguments)
                         .unwrap_or(json::json!({})),
                 },
+                signature: None,
+                additional_params: None,
             }));
         }
 
@@ -234,7 +236,7 @@ impl TryFrom<RigMessage> for ResponseMessage {
                                 },
                             });
                         }
-                        RigAssistantContent::Reasoning(_) => {}
+                        RigAssistantContent::Reasoning(_) | RigAssistantContent::Image(_) => {}
                     }
                 }
 
