@@ -55,9 +55,9 @@ pub async fn store_payload(
     // Create cipher and encrypt
     let cipher = Aes256Gcm::new_from_slice(&key)
         .map_err(|e| PayloadStorageError::Encryption(e.to_string()))?;
-    let nonce = Nonce::from_slice(&nonce_bytes);
+    let nonce = Nonce::from(nonce_bytes);
     let ciphertext = cipher
-        .encrypt(nonce, payload)
+        .encrypt(&nonce, payload)
         .map_err(|e| PayloadStorageError::Encryption(e.to_string()))?;
 
     // Store in object storage
@@ -103,9 +103,12 @@ pub async fn retrieve_payload(
     // Decrypt
     let cipher = Aes256Gcm::new_from_slice(key)
         .map_err(|e| PayloadStorageError::Decryption(e.to_string()))?;
-    let nonce = Nonce::from_slice(nonce_bytes);
+    let nonce_bytes: [u8; NONCE_LEN] = nonce_bytes
+        .try_into()
+        .map_err(|_| PayloadStorageError::Decryption("Invalid nonce length".to_string()))?;
+    let nonce = Nonce::from(nonce_bytes);
     let plaintext = cipher
-        .decrypt(nonce, ciphertext.as_ref())
+        .decrypt(&nonce, ciphertext.as_ref())
         .map_err(|e| PayloadStorageError::Decryption(e.to_string()))?;
 
     Ok(plaintext)

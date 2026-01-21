@@ -49,6 +49,8 @@ pub struct Model {
     pub course_id: Option<String>,
     #[sea_orm(column_name = "templateId", column_type = "Text", nullable)]
     pub template_id: Option<String>,
+    #[sea_orm(column_name = "widgetId", column_type = "Text", nullable)]
+    pub widget_id: Option<String>,
     #[sea_orm(column_name = "createdAt")]
     pub created_at: DateTime,
     #[sea_orm(column_name = "updatedAt")]
@@ -89,6 +91,14 @@ pub enum Relation {
         on_delete = "Cascade"
     )]
     Template,
+    #[sea_orm(
+        belongs_to = "super::widget::Entity",
+        from = "Column::WidgetId",
+        to = "super::widget::Column::Id",
+        on_update = "Cascade",
+        on_delete = "Cascade"
+    )]
+    Widget,
 }
 
 impl Related<super::app::Entity> for Entity {
@@ -112,6 +122,12 @@ impl Related<super::course::Entity> for Entity {
 impl Related<super::template::Entity> for Entity {
     fn to() -> RelationDef {
         Relation::Template.def()
+    }
+}
+
+impl Related<super::widget::Entity> for Entity {
+    fn to() -> RelationDef {
+        Relation::Widget.def()
     }
 }
 

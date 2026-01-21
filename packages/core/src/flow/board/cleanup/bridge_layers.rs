@@ -27,8 +27,7 @@ struct BridgePlan {
 /// external pins. Bridge pins are created on the layer to mediate these connections.
 ///
 /// ## Purpose
-/// - Detect empty layers (layers with no boundary pins)
-/// - Find internal pins with external connections
+/// - Find internal pins with external connections that are not already bridged
 /// - Create bridge pins to connect internal and external pins
 /// - Maintain proper execution flow without circular dependencies
 ///
@@ -43,8 +42,10 @@ struct BridgePlan {
 /// ```
 #[derive(Default)]
 pub struct BridgeLayersCleanup {
-    /// Set of layer IDs that have no pins (need bridging)
-    empty_layers: HashSet<String>,
+    /// Set of all layer IDs
+    all_layers: HashSet<String>,
+    /// Set of pin IDs that are layer boundary pins (already bridge pins)
+    layer_pin_ids: HashSet<String>,
     /// Maps pin ID to the layer it belongs to (None if not in a layer)
     pin_layer: HashMap<String, Option<String>>,
     /// Maps (layer_id, pin_id) to the plan for creating bridge pins
@@ -57,7 +58,8 @@ impl BoardCleanupLogic for BridgeLayersCleanup {
         Self: Sized,
     {
         Self {
-            empty_layers: HashSet::with_capacity(10),
+            all_layers: HashSet::with_capacity(10),
+            layer_pin_ids: HashSet::with_capacity(50),
             pin_layer: HashMap::with_capacity((board.nodes.len() + board.layers.len()) * 4),
             bridge_plans: HashMap::with_capacity(10),
         }
@@ -71,6 +73,8 @@ impl BoardCleanupLogic for BridgeLayersCleanup {
             NodeOrLayerRef::Layer(layer) => {
                 self.pin_layer
                     .insert(pin.id.clone(), Some(layer.id.clone()));
+                // Track this as a layer boundary pin
+                self.layer_pin_ids.insert(pin.id.clone());
             }
         }
     }
@@ -84,15 +88,24 @@ impl BoardCleanupLogic for BridgeLayersCleanup {
             return;
         };
 
-        // Only process pins inside empty layers (layers with no pins on their boundary)
-        // Empty layers need bridge pins to connect internal nodes to external nodes
-        if !self.empty_layers.contains(&layer_id) {
+        // Only process pins inside layers (not top-level pins)
+        if !self.all_layers.contains(&layer_id) {
+            return;
+        }
+
+        // Skip layer boundary pins themselves - they don't need bridging
+        if self.layer_pin_ids.contains(&pin.id) {
             return;
         }
 
         // Collect all outgoing connections (connected_to) that cross layer boundaries
         // These are connections from this internal pin to pins outside the layer
+        // Skip connections that already go through layer pins (already bridged)
         pin.connected_to.iter().for_each(|connected_to| {
+            // If connected to a layer pin, it's already bridged
+            if self.layer_pin_ids.contains(connected_to) {
+                return;
+            }
             let connected_layer = self.pin_layer.get(connected_to).cloned().flatten();
             if connected_layer != Some(layer_id.clone()) {
                 let key = (layer_id.clone(), pin.id.clone());
@@ -103,7 +116,12 @@ impl BoardCleanupLogic for BridgeLayersCleanup {
 
         // Collect all incoming connections (depends_on) that cross layer boundaries
         // These are connections from pins outside the layer to this internal pin
+        // Skip connections that already go through layer pins (already bridged)
         pin.depends_on.iter().for_each(|depends_on| {
+            // If depends on a layer pin, it's already bridged
+            if self.layer_pin_ids.contains(depends_on) {
+                return;
+            }
             let depends_on_layer = self.pin_layer.get(depends_on).cloned().flatten();
             if depends_on_layer != Some(layer_id.clone()) {
                 let key = (layer_id.clone(), pin.id.clone());
@@ -114,9 +132,7 @@ impl BoardCleanupLogic for BridgeLayersCleanup {
     }
 
     fn initial_layer_iteration(&mut self, layer: &Layer) {
-        if layer.pins.is_empty() {
-            self.empty_layers.insert(layer.id.clone());
-        }
+        self.all_layers.insert(layer.id.clone());
     }
 
     fn post_process(&mut self, board: &mut Board, pin_lookup: &PinLookup) {

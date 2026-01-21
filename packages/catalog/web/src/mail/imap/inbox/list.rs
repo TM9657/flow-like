@@ -5,11 +5,15 @@ use flow_like::flow::{
     pin::{PinOptions, ValueType},
     variable::VariableType,
 };
+#[cfg(feature = "execute")]
+use flow_like_types::anyhow;
 use flow_like_types::{
-    anyhow, async_trait,
+    async_trait,
     json::{from_slice, json},
 };
+#[cfg(feature = "execute")]
 use futures::TryStreamExt;
+#[cfg(feature = "execute")]
 use mail_parser::{MessageParser, MimeHeaders};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -24,6 +28,7 @@ pub struct Attachment {
     pub data: Vec<u8>,
 }
 
+#[cfg(feature = "execute")]
 fn parse_mail_addresses(addresses: &mail_parser::Address<'_>) -> Vec<MailAddress> {
     addresses
         .iter()
@@ -76,6 +81,7 @@ impl EmailRef {
         }
     }
 
+    #[cfg(feature = "execute")]
     pub async fn fetch(&self, context: &mut ExecutionContext) -> flow_like_types::Result<Email> {
         let inbox = self.inbox.clone();
         let session_arc = self.connection.to_session(context).await?;
@@ -234,6 +240,7 @@ impl NodeLogic for ListMailsNode {
         node
     }
 
+    #[cfg(feature = "execute")]
     async fn run(&self, context: &mut ExecutionContext) -> flow_like_types::Result<()> {
         context.deactivate_exec_pin("exec_out").await?;
 
@@ -286,6 +293,13 @@ impl NodeLogic for ListMailsNode {
         context.set_pin_value("emails", json!(emails)).await?;
         context.activate_exec_pin("exec_out").await?;
         Ok(())
+    }
+
+    #[cfg(not(feature = "execute"))]
+    async fn run(&self, _context: &mut ExecutionContext) -> flow_like_types::Result<()> {
+        Err(flow_like_types::anyhow!(
+            "Web functionality requires the 'execute' feature"
+        ))
     }
 
     async fn on_update(&self, node: &mut Node, _board: Arc<Board>) {

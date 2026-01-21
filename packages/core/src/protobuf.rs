@@ -1,3 +1,4 @@
+pub mod a2ui;
 pub mod app;
 pub mod board;
 pub mod comment;

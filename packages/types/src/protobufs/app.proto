@@ -5,6 +5,7 @@ package flow_like_types;
 import "google/protobuf/timestamp.proto";
 import "bit.proto";
 import "variable.proto";
+import "a2ui.proto";
 
 enum AppCategory {
   OTHER = 0;
@@ -76,4 +77,12 @@ message App {
 
   optional int32 price = 21;
   optional AppExecutionMode execution_mode = 22;
+
+  // A2UI Integration - IDs only, actual data stored separately
+  repeated string widget_ids = 23;
+  repeated string page_ids = 24;
+
+  // Route mappings: path -> event_id (e.g., "/" -> "event123")
+  // The event determines what to display (page-target or board-target)
+  map<string, string> route_mappings = 25;
 }

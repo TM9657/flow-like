@@ -7,7 +7,7 @@ use axum::{
     extract::{Path, State},
 };
 use flow_like::flow::{
-    board::{Board, ExecutionStage},
+    board::{Board, ExecutionMode, ExecutionStage},
     execution::LogLevel,
 };
 use serde::{Deserialize, Serialize};
@@ -18,6 +18,7 @@ pub struct UpsertBoard {
     pub description: Option<String>,
     pub stage: Option<ExecutionStage>,
     pub log_level: Option<LogLevel>,
+    pub execution_mode: Option<ExecutionMode>,
     pub template: Option<Board>,
 }
 
@@ -52,6 +53,9 @@ pub async fn upsert_board(
     board.description = params.description.unwrap_or(board.description.clone());
     board.stage = params.stage.unwrap_or(board.stage.clone());
     board.log_level = params.log_level.unwrap_or(board.log_level);
+    board.execution_mode = params
+        .execution_mode
+        .unwrap_or(board.execution_mode.clone());
     board.save(None).await?;
 
     Ok(Json(UpsertBoardResponse {

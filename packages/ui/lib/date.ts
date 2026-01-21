@@ -1,10 +1,26 @@
 import type { IDate } from "../types";
 
 export function formatRelativeTime(
-	date: IDate,
+	dateInput: IDate | string,
 	style: Intl.RelativeTimeFormatStyle = "long",
 ) {
-	const diffMilliseconds = Date.now() - date.secs_since_epoch * 1000;
+	// 1. Normalize the input to milliseconds
+	let targetTimeMs: number;
+
+	if (typeof dateInput === "string") {
+		targetTimeMs = new Date(dateInput).getTime();
+	} else {
+		// Handle IDate
+		targetTimeMs = dateInput.secs_since_epoch * 1000;
+	}
+
+	// Safety check: if string was invalid, getTime() returns NaN
+	if (isNaN(targetTimeMs)) {
+		return "Invalid date";
+	}
+
+	// 2. Calculate units
+	const diffMilliseconds = Date.now() - targetTimeMs;
 	const seconds = Math.round(diffMilliseconds / 1000);
 	const minutes = Math.round(seconds / 60);
 	const hours = Math.round(minutes / 60);
@@ -15,16 +31,17 @@ export function formatRelativeTime(
 		style: style,
 	});
 
-	if (seconds < 60) {
-		return formatter.format(-1 * seconds, "second");
+	// 3. Format with Math.abs() to handle future dates safely
+	if (Math.abs(seconds) < 60) {
+		return formatter.format(-seconds, "second");
 	}
-	if (minutes < 60) {
-		return formatter.format(-1 * minutes, "minute");
+	if (Math.abs(minutes) < 60) {
+		return formatter.format(-minutes, "minute");
 	}
-	if (hours < 24) {
-		return formatter.format(-1 * hours, "hour");
+	if (Math.abs(hours) < 24) {
+		return formatter.format(-hours, "hour");
 	}
-	return formatter.format(-1 * days, "day");
+	return formatter.format(-days, "day");
 }
 
 export function parseTimespan(start: IDate, end: IDate) {

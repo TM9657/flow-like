@@ -6,6 +6,17 @@ edition = "2024"
 [features]
 default = []
 local-ml = ["flow-like-catalog-core/local-ml"]
+# Execution feature - enables heavy dependencies for node execution
+execute = [
+    "flow-like-catalog-core/execute",
+    "dep:htmd",
+    "dep:scraper",
+    "dep:async-imap",
+    "dep:async-native-tls",
+    "dep:async-smtp",
+    "dep:mail-parser",
+    "dep:icalendar",
+]
 
 [dependencies]
 flow-like-catalog-core.workspace = true
@@ -23,14 +34,17 @@ serde = { workspace = true, features = ["derive", "rc"] }
 tokio = { workspace = true, features = ["rt-multi-thread", "macros"] }
 uuid.workspace = true
 async-trait.workspace = true
-htmd = "0.3.0"
-scraper = "0.23.1"
-async-imap = { version = "0.11.1", default-features = false, features = ["runtime-tokio", "tokio"] }
-async-native-tls = { version = "0.5", default-features = false, features = ["runtime-tokio"] }
-async-smtp = { version = "0.10.2", default-features = false, features = ["runtime-tokio", "tokio"] }
-mail-parser = "0.11.0"
-icalendar.workspace = true
 chrono.workspace = true
 chrono-tz.workspace = true
 regex.workspace = true
 base64.workspace = true
+urlencoding.workspace = true
+
+# Web/scraping/email dependencies - only included when execute feature is enabled
+htmd = { version = "0.3.0", optional = true }
+scraper = { version = "0.23.1", optional = true }
+async-imap = { version = "0.11.1", default-features = false, features = ["runtime-tokio", "tokio"], optional = true }
+async-native-tls = { version = "0.5", default-features = false, features = ["runtime-tokio"], optional = true }
+async-smtp = { version = "0.10.2", default-features = false, features = ["runtime-tokio", "tokio"], optional = true }
+mail-parser = { version = "0.11.0", optional = true }
+icalendar = { workspace = true, optional = true }

@@ -109,12 +109,12 @@ impl ObjectStore for LocalObjectStore {
     async fn get_range(
         &self,
         location: &Path,
-        range: Range<usize>,
+        range: Range<u64>,
     ) -> Result<flow_like_types::Bytes> {
         self.store.get_range(location, range).await
     }
 
-    async fn get_ranges(&self, location: &Path, ranges: &[Range<usize>]) -> Result<Vec<Bytes>> {
+    async fn get_ranges(&self, location: &Path, ranges: &[Range<u64>]) -> Result<Vec<Bytes>> {
         self.store.get_ranges(location, ranges).await
     }
 
@@ -141,7 +141,7 @@ impl ObjectStore for LocalObjectStore {
         self.store.delete_stream(locations)
     }
 
-    fn list(&self, prefix: Option<&Path>) -> BoxStream<'_, Result<ObjectMeta>> {
+    fn list(&self, prefix: Option<&Path>) -> BoxStream<'static, Result<ObjectMeta>> {
         self.store.list(prefix)
     }
 
@@ -149,7 +149,7 @@ impl ObjectStore for LocalObjectStore {
         &self,
         prefix: Option<&Path>,
         offset: &Path,
-    ) -> BoxStream<'_, Result<ObjectMeta>> {
+    ) -> BoxStream<'static, Result<ObjectMeta>> {
         self.store.list_with_offset(prefix, offset)
     }
 

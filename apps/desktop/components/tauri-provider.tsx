@@ -3,6 +3,8 @@ import { invoke } from "@tauri-apps/api/core";
 
 import { createId } from "@paralleldrive/cuid2";
 import {
+	type IApiState,
+	type IAppRouteState,
 	type IAppState,
 	IAppVisibility,
 	type IBackendState,
@@ -14,12 +16,16 @@ import {
 	type IEventState,
 	type IGenericCommand,
 	type IHelperState,
+	type IPageState,
 	type IProfile,
+	type IRegistryState,
 	type IRoleState,
+	type ISinkState,
 	type IStorageState,
 	type ITeamState,
 	type ITemplateState,
 	type IUserState,
+	type IWidgetState,
 	LoadingScreen,
 	type QueryClient,
 	offlineSyncDB,
@@ -35,17 +41,23 @@ import { useCallback, useEffect, useRef, useTransition } from "react";
 import type { AuthContextProps } from "react-oidc-context";
 import { appsDB } from "../lib/apps-db";
 import { AiState } from "./tauri-provider/ai-state";
+import { TauriApiState } from "./tauri-provider/api-state";
 import { AppState } from "./tauri-provider/app-state";
 import { BitState } from "./tauri-provider/bit-state";
 import { BoardState } from "./tauri-provider/board-state";
 import { DatabaseState } from "./tauri-provider/db-state";
 import { EventState } from "./tauri-provider/event-state";
 import { HelperState } from "./tauri-provider/helper-state";
+import { PageState } from "./tauri-provider/page-state";
+import { RegistryState } from "./tauri-provider/registry-state";
 import { RoleState } from "./tauri-provider/role-state";
+import { RouteState } from "./tauri-provider/route-state";
+import { SinkState } from "./tauri-provider/sink-state";
 import { StorageState } from "./tauri-provider/storage-state";
 import { TeamState } from "./tauri-provider/team-state";
 import { TemplateState } from "./tauri-provider/template-state";
 import { UserState } from "./tauri-provider/user-state";
+import { WidgetState } from "./tauri-provider/widget-state";
 
 // One-time resume guards for the whole app session
 declare global {
@@ -57,17 +69,25 @@ declare global {
 
 export class TauriBackend implements IBackendState {
 	appState: IAppState;
+	apiState: IApiState;
 	bitState: IBitState;
 	boardState: IBoardState;
 	eventState: IEventState;
 	helperState: IHelperState;
 	roleState: IRoleState;
+	routeState: IAppRouteState;
 	storageState: IStorageState;
 	teamState: ITeamState;
 	templateState: ITemplateState;
 	userState: IUserState;
 	aiState: IAIState;
 	dbState: IDatabaseState;
+	widgetState: IWidgetState;
+	pageState: IPageState;
+	registryState: IRegistryState;
+	sinkState: ISinkState;
+
+	private _apiState: TauriApiState;
 
 	constructor(
 		public readonly backgroundTaskHandler: (task: Promise<any>) => void,
@@ -75,18 +95,25 @@ export class TauriBackend implements IBackendState {
 		public auth?: AuthContextProps,
 		public profile?: IProfile,
 	) {
+		this._apiState = new TauriApiState();
+		this.apiState = this._apiState;
 		this.appState = new AppState(this);
 		this.bitState = new BitState(this);
 		this.boardState = new BoardState(this);
 		this.eventState = new EventState(this);
 		this.helperState = new HelperState(this);
 		this.roleState = new RoleState(this);
+		this.routeState = new RouteState(this);
 		this.storageState = new StorageState(this);
 		this.teamState = new TeamState(this);
 		this.templateState = new TemplateState(this);
 		this.userState = new UserState(this);
 		this.aiState = new AiState(this);
 		this.dbState = new DatabaseState(this);
+		this.widgetState = new WidgetState(this);
+		this.pageState = new PageState(this);
+		this.registryState = new RegistryState(this);
+		this.sinkState = new SinkState();
 	}
 
 	capabilities(): ICapabilities {
@@ -106,6 +133,7 @@ export class TauriBackend implements IBackendState {
 
 	pushAuthContext(auth: AuthContextProps) {
 		this.auth = auth;
+		this._apiState.setAuth(auth);
 	}
 
 	pushQueryClient(queryClient: QueryClient) {

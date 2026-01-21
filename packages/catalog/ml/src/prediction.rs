@@ -5,7 +5,9 @@
 //!
 //! Adds / upserts predictions back into the Database.
 
-use crate::ml::{MAX_ML_PREDICTION_RECORDS, MLPrediction, NodeMLModel, make_new_field};
+#[cfg(feature = "execute")]
+use crate::ml::{MAX_ML_PREDICTION_RECORDS, make_new_field};
+use crate::ml::{MLPrediction, NodeMLModel};
 use flow_like::flow::pin::ValueType;
 use flow_like::flow::{
     board::Board,
@@ -14,11 +16,18 @@ use flow_like::flow::{
     pin::PinOptions,
     variable::VariableType,
 };
+#[cfg(feature = "execute")]
 use flow_like_catalog_core::NodeDBConnection;
+#[cfg(feature = "execute")]
 use flow_like_storage::arrow_schema::Schema;
+#[cfg(feature = "execute")]
 use flow_like_storage::databases::vector::VectorStore;
+#[cfg(feature = "execute")]
 use flow_like_storage::lancedb::table::NewColumnTransform;
-use flow_like_types::{Result, Value, anyhow, async_trait, json::json};
+#[cfg(feature = "execute")]
+use flow_like_types::anyhow;
+use flow_like_types::{Result, Value, async_trait, json::json};
+#[cfg(feature = "execute")]
 use std::collections::HashSet;
 use std::sync::Arc;
 
@@ -93,6 +102,7 @@ impl NodeLogic for MLPredictNode {
         node
     }
 
+    #[cfg(feature = "execute")]
     async fn run(&self, context: &mut ExecutionContext) -> Result<()> {
         // fetch inputs
         context.deactivate_exec_pin("exec_out").await?;
@@ -209,7 +219,17 @@ impl NodeLogic for MLPredictNode {
         Ok(())
     }
 
+    #[cfg(not(feature = "execute"))]
+    async fn run(&self, _context: &mut ExecutionContext) -> Result<()> {
+        Err(flow_like_types::anyhow!(
+            "ML execution requires the 'execute' feature. Rebuild with --features execute"
+        ))
+    }
+
+    #[cfg(feature = "execute")]
     async fn on_update(&self, node: &mut Node, _board: Arc<Board>) {
+        use flow_like_catalog_core::NodeDBConnection;
+
         let source_pin: String = node
             .get_pin_by_name("source")
             .and_then(|pin| pin.default_value.clone())

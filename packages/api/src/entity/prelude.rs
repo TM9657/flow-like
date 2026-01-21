@@ -8,6 +8,7 @@ pub use super::board_sync::Entity as BoardSync;
 pub use super::comment::Entity as Comment;
 pub use super::course::Entity as Course;
 pub use super::course_connection::Entity as CourseConnection;
+pub use super::error_report::Entity as ErrorReport;
 pub use super::execution_event::Entity as ExecutionEvent;
 pub use super::execution_run::Entity as ExecutionRun;
 pub use super::execution_usage_tracking::Entity as ExecutionUsageTracking;

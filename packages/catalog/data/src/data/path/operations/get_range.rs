@@ -62,7 +62,7 @@ impl NodeLogic for GetRangeNode {
         let path: FlowPath = context.evaluate_pin("path").await?;
         let from: i64 = context.evaluate_pin("from").await?;
         let to: i64 = context.evaluate_pin("to").await?;
-        let range: Range<usize> = from as usize..to as usize;
+        let range: Range<u64> = from as u64..to as u64;
 
         let path = path.to_runtime(context).await?;
         let generic_store = path.store.as_generic();

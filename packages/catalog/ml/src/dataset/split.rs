@@ -5,11 +5,16 @@ use flow_like::flow::{
     variable::VariableType,
 };
 use flow_like_catalog_core::NodeDBConnection;
+#[cfg(feature = "execute")]
 use flow_like_storage::arrow_utils::record_batch_to_value;
+#[cfg(feature = "execute")]
 use flow_like_storage::databases::vector::VectorStore;
+#[cfg(feature = "execute")]
 use flow_like_storage::lancedb::query::ExecutableQuery;
+#[cfg(feature = "execute")]
 use flow_like_types::rand::{self, Rng};
 use flow_like_types::{Result, async_trait, json::json};
+#[cfg(feature = "execute")]
 use futures::TryStreamExt;
 
 #[crate::register_node]
@@ -97,6 +102,7 @@ impl NodeLogic for SplitDatasetNode {
         node
     }
 
+    #[cfg(feature = "execute")]
     async fn run(&self, context: &mut ExecutionContext) -> Result<()> {
         // fetch inputs
         context.deactivate_exec_pin("exec_out").await?;
@@ -147,5 +153,12 @@ impl NodeLogic for SplitDatasetNode {
 
         context.activate_exec_pin("exec_out").await?;
         Ok(())
+    }
+
+    #[cfg(not(feature = "execute"))]
+    async fn run(&self, _context: &mut ExecutionContext) -> Result<()> {
+        Err(flow_like_types::anyhow!(
+            "ML execution requires the 'execute' feature. Rebuild with --features execute"
+        ))
     }
 }

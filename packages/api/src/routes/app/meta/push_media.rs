@@ -36,7 +36,7 @@ pub async fn push_media(
     let existing_meta = mode
         .find_existing_meta(language, &txn)
         .await?
-        .ok_or_else(|| ApiError::NotFound)?;
+        .ok_or(ApiError::NOT_FOUND)?;
 
     let mut existing_preview = existing_meta.preview_media.clone().unwrap_or_default();
 
@@ -97,9 +97,7 @@ pub async fn push_media(
                 item_name,
                 e
             );
-            ApiError::InternalError(
-                anyhow!("Failed to create signed URL, reference ID: {}", id).into(),
-            )
+            ApiError::internal_error(anyhow!("Failed to create signed URL, reference ID: {}", id))
         })?;
 
     txn.commit().await?;

@@ -3,9 +3,10 @@
 //! This node loads a dataset (currently from a database source), transforms it into
 //! a regression dataset, and fits a linear regression model using the [`linfa`] crate.
 
+use crate::ml::NodeMLModel;
+#[cfg(feature = "execute")]
 use crate::ml::{
-    MAX_ML_PREDICTION_RECORDS, MLModel, ModelWithMeta, NodeMLModel, values_to_array1_f64,
-    values_to_array2_f64,
+    MAX_ML_PREDICTION_RECORDS, MLModel, ModelWithMeta, values_to_array1_f64, values_to_array2_f64,
 };
 use flow_like::flow::{
     board::Board,
@@ -14,12 +15,20 @@ use flow_like::flow::{
     pin::PinOptions,
     variable::VariableType,
 };
+#[cfg(feature = "execute")]
 use flow_like_catalog_core::NodeDBConnection;
+#[cfg(feature = "execute")]
 use flow_like_storage::databases::vector::VectorStore;
-use flow_like_types::{Value, anyhow, async_trait, json::json};
+#[cfg(feature = "execute")]
+use flow_like_types::anyhow;
+use flow_like_types::{Result, Value, async_trait, json::json};
+#[cfg(feature = "execute")]
 use linfa::DatasetBase;
+#[cfg(feature = "execute")]
 use linfa::traits::Fit;
+#[cfg(feature = "execute")]
 use linfa_linear::{FittedLinearRegression, LinearRegression};
+#[cfg(feature = "execute")]
 use std::collections::HashSet;
 use std::sync::Arc;
 
@@ -94,7 +103,8 @@ impl NodeLogic for FitLinearRegressionNode {
         node
     }
 
-    async fn run(&self, context: &mut ExecutionContext) -> flow_like_types::Result<()> {
+    #[cfg(feature = "execute")]
+    async fn run(&self, context: &mut ExecutionContext) -> Result<()> {
         // fetch inputs
         context.deactivate_exec_pin("exec_out").await?;
         let source: String = context.evaluate_pin("source").await?;
@@ -166,7 +176,17 @@ impl NodeLogic for FitLinearRegressionNode {
         Ok(())
     }
 
+    #[cfg(not(feature = "execute"))]
+    async fn run(&self, _context: &mut ExecutionContext) -> Result<()> {
+        Err(flow_like_types::anyhow!(
+            "ML execution requires the 'execute' feature. Rebuild with --features execute"
+        ))
+    }
+
+    #[cfg(feature = "execute")]
     async fn on_update(&self, node: &mut Node, _board: Arc<Board>) {
+        use flow_like_catalog_core::NodeDBConnection;
+
         let source_pin: String = node
             .get_pin_by_name("source")
             .and_then(|pin| pin.default_value.clone())

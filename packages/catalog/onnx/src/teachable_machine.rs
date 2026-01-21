@@ -7,11 +7,16 @@ use flow_like::flow::{
 use flow_like_catalog_core::{FlowPath, NodeImage};
 use flow_like_types::{
     JsonSchema, Result, async_trait,
-    image::{RgbImage, imageops, imageops::FilterType},
     json::{Deserialize, Serialize, json},
+};
+#[cfg(feature = "execute")]
+use flow_like_types::{
+    image::{RgbImage, imageops, imageops::FilterType},
     tokio,
 };
+#[cfg(feature = "execute")]
 use std::io::Cursor;
+#[cfg(feature = "execute")]
 use tract_tflite::prelude::*;
 
 #[derive(Default, Serialize, Deserialize, JsonSchema, Clone, Debug)]
@@ -104,6 +109,7 @@ impl NodeLogic for TeachableMachineNode {
         node
     }
 
+    #[cfg(feature = "execute")]
     async fn run(&self, context: &mut ExecutionContext) -> Result<()> {
         context.deactivate_exec_pin("exec_out").await?;
 
@@ -243,8 +249,16 @@ impl NodeLogic for TeachableMachineNode {
         context.activate_exec_pin("exec_out").await?;
         Ok(())
     }
+
+    #[cfg(not(feature = "execute"))]
+    async fn run(&self, _context: &mut ExecutionContext) -> Result<()> {
+        Err(flow_like_types::anyhow!(
+            "TFLite execution requires the 'execute' feature. Rebuild with --features execute"
+        ))
+    }
 }
 
+#[cfg(feature = "execute")]
 fn find_tflite_slice(buf: &[u8]) -> Option<&[u8]> {
     if buf.len() < 8 {
         return None;

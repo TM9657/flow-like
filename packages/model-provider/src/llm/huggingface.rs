@@ -1,4 +1,4 @@
-use std::{any::Any, sync::Arc};
+use std::any::Any;
 
 use super::ModelLogic;
 use crate::provider::random_provider;
@@ -7,9 +7,9 @@ use crate::{
     provider::{ModelProvider, ModelProviderConfiguration},
 };
 use flow_like_types::{Cacheable, Result, async_trait};
-use rig::client::ProviderClient;
+
 pub struct HuggingfaceModel {
-    client: Arc<Box<dyn ProviderClient>>,
+    client: rig::providers::huggingface::Client,
     provider: ModelProvider,
     default_model: Option<String>,
 }
@@ -23,20 +23,20 @@ impl HuggingfaceModel {
         let api_key = huggingface_config.api_key.clone().unwrap_or_default();
         let model_id = provider.model_id.clone();
 
-        let mut builder = rig::providers::huggingface::Client::builder(&api_key);
+        let mut builder = rig::providers::huggingface::Client::builder().api_key(&api_key);
 
         if let Some(sub_provider) = huggingface_config.sub_provider.as_deref() {
-            builder = builder.sub_provider(sub_provider);
+            builder = builder.subprovider(sub_provider.into());
         }
 
         if let Some(endpoint) = huggingface_config.endpoint.as_deref() {
             builder = builder.base_url(endpoint);
         }
 
-        let client = builder.build()?.boxed();
+        let client = builder.build()?;
 
         Ok(HuggingfaceModel {
-            client: Arc::new(client),
+            client,
             provider: provider.clone(),
             default_model: model_id,
         })
@@ -51,19 +51,19 @@ impl HuggingfaceModel {
             .cloned()
             .and_then(|v| v.as_str().map(|s| s.to_string()));
 
-        let mut builder = rig::providers::huggingface::Client::builder(api_key);
+        let mut builder = rig::providers::huggingface::Client::builder().api_key(api_key);
         if let Some(endpoint) = params.get("endpoint").and_then(|v| v.as_str()) {
             builder = builder.base_url(endpoint);
         }
 
         if let Some(sub_provider) = params.get("sub_provider").and_then(|v| v.as_str()) {
-            builder = builder.sub_provider(sub_provider);
+            builder = builder.subprovider(sub_provider.into());
         }
 
-        let client = builder.build()?.boxed();
+        let client = builder.build()?;
 
         Ok(HuggingfaceModel {
-            client: Arc::new(client),
+            client,
             default_model: model_id,
             provider: provider.clone(),
         })
@@ -82,9 +82,10 @@ impl Cacheable for HuggingfaceModel {
 
 #[async_trait]
 impl ModelLogic for HuggingfaceModel {
+    #[allow(deprecated)]
     async fn provider(&self) -> Result<ModelConstructor> {
         Ok(ModelConstructor {
-            inner: self.client.clone(),
+            inner: Box::new(self.client.clone()),
         })
     }
 

@@ -3,7 +3,12 @@ use flow_like::flow::{
     node::{Node, NodeLogic},
     variable::VariableType,
 };
-use flow_like_types::{async_trait, tokio::time};
+use flow_like_types::{
+    async_trait,
+    sync::Mutex,
+    tokio::{self, time},
+    tokio_util::sync::CancellationToken,
+};
 use std::sync::Arc;
 
 #[crate::register_node]
@@ -13,35 +18,6 @@ pub struct TimeoutNode {}
 impl TimeoutNode {
     pub fn new() -> Self {
         TimeoutNode {}
-    }
-
-    async fn execute_nodes(sub_contexts: Vec<ExecutionContext>) -> Vec<ExecutionContext> {
-        let mut completed = Vec::new();
-        for mut sub in sub_contexts {
-            if let Err(err) = InternalNode::trigger(&mut sub, &mut None, true).await {
-                sub.log_message(
-                    &format!("Error running node in timeout: {err:?}"),
-                    LogLevel::Error,
-                );
-            }
-            sub.end_trace();
-            completed.push(sub);
-        }
-        completed
-    }
-
-    async fn create_interrupted_contexts(
-        context: &mut ExecutionContext,
-        nodes: &[Arc<InternalNode>],
-    ) -> Vec<ExecutionContext> {
-        let mut interrupted_contexts = Vec::new();
-        for node in nodes {
-            let mut sub = context.create_sub_context(node).await;
-            sub.log_message("Execution was interrupted due to timeout", LogLevel::Warn);
-            sub.end_trace();
-            interrupted_contexts.push(sub);
-        }
-        interrupted_contexts
     }
 }
 
@@ -113,20 +89,77 @@ impl NodeLogic for TimeoutNode {
         let (timed_out, sub_contexts) = if nodes.is_empty() {
             (false, Vec::new())
         } else {
-            let mut sub_contexts = Vec::new();
+            let cancellation_token = CancellationToken::new();
+
+            let mut initial_contexts = Vec::new();
             for node in &nodes {
-                sub_contexts.push(context.create_sub_context(node).await);
+                let mut sub = context.create_sub_context(node).await;
+                sub.set_cancellation_token(cancellation_token.clone());
+                initial_contexts.push(sub);
             }
 
-            let execution_task = Self::execute_nodes(sub_contexts);
+            // Separate containers: pending (to execute) and completed (done)
+            let pending = Arc::new(Mutex::new(initial_contexts));
+            let completed: Arc<Mutex<Vec<ExecutionContext>>> = Arc::new(Mutex::new(Vec::new()));
 
-            match time::timeout(timeout_duration, execution_task).await {
-                Ok(completed) => (false, completed),
-                Err(_) => {
-                    let interrupted = Self::create_interrupted_contexts(context, &nodes).await;
-                    (true, interrupted)
+            let pending_for_exec = pending.clone();
+            let completed_for_exec = completed.clone();
+            let token_for_exec = cancellation_token.clone();
+
+            let execution = async move {
+                loop {
+                    // Take one context from pending
+                    let maybe_sub = pending_for_exec.lock().await.pop();
+
+                    let Some(mut sub) = maybe_sub else {
+                        break;
+                    };
+
+                    if token_for_exec.is_cancelled() {
+                        sub.log_message("Execution was cancelled due to timeout", LogLevel::Warn);
+                        sub.end_trace();
+                        completed_for_exec.lock().await.push(sub);
+                        break;
+                    }
+
+                    let mut recursion_guard = None;
+                    if let Err(err) =
+                        InternalNode::trigger(&mut sub, &mut recursion_guard, true).await
+                    {
+                        sub.log_message(
+                            &format!("Error running node in timeout: {err:?}"),
+                            LogLevel::Error,
+                        );
+                    }
+
+                    sub.end_trace();
+                    completed_for_exec.lock().await.push(sub);
                 }
-            }
+            };
+
+            let handle = tokio::spawn(execution);
+            let abort_handle = handle.abort_handle();
+
+            let timed_out = tokio::select! {
+                biased;
+                _ = time::sleep(timeout_duration) => {
+                    cancellation_token.cancel();
+                    // Brief wait for cooperative cancellation
+                    tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
+                    abort_handle.abort();
+                    true
+                }
+                _ = handle => {
+                    false
+                }
+            };
+
+            let result = {
+                let mut guard = completed.lock().await;
+                std::mem::take(&mut *guard)
+            };
+
+            (timed_out, result)
         };
 
         for mut sub in sub_contexts {

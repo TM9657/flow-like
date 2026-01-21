@@ -64,6 +64,10 @@ impl Cacheable for LanceDBVectorStore {
     }
 }
 impl LanceDBVectorStore {
+    pub fn table_name(&self) -> &str {
+        &self.table_name
+    }
+
     pub async fn new(path: PathBuf, table_name: String) -> Result<Self> {
         let connection = connect(path.to_str().unwrap()).execute().await.ok();
         let connection: Connection = connection.ok_or(anyhow!("Error connecting to LanceDB"))?;
@@ -298,6 +302,7 @@ impl VectorStore for LanceDBVectorStore {
         text: &str,
         filter: Option<&str>,
         select: Option<Vec<String>>,
+        fields: Option<Vec<String>>,
         limit: usize,
         offset: usize,
     ) -> Result<Vec<Value>> {
@@ -306,9 +311,18 @@ impl VectorStore for LanceDBVectorStore {
             .clone()
             .ok_or_else(|| anyhow!("Table not initialized"))?;
 
+        let mut fts_query = FullTextSearchQuery::new(text.to_string());
+        if let Some(fields) = fields {
+            match fields.len() {
+                1 => fts_query = fts_query.with_column(fields[0].clone())?,
+                n if n > 1 => fts_query = fts_query.with_columns(&fields)?,
+                _ => {}
+            }
+        }
+
         let mut query = table
             .query()
-            .full_text_search(FullTextSearchQuery::new(text.to_string()))
+            .full_text_search(fts_query)
             .limit(limit)
             .offset(offset);
 
@@ -332,6 +346,7 @@ impl VectorStore for LanceDBVectorStore {
         text: &str,
         filter: Option<&str>,
         select: Option<Vec<String>>,
+        fields: Option<Vec<String>>,
         limit: usize,
         offset: usize,
         rerank: bool,
@@ -341,11 +356,20 @@ impl VectorStore for LanceDBVectorStore {
             .clone()
             .ok_or_else(|| anyhow!("Table not initialized"))?;
 
+        let mut fts_query = FullTextSearchQuery::new(text.to_string());
+        if let Some(ref fields) = fields {
+            match fields.len() {
+                1 => fts_query = fts_query.with_column(fields[0].clone())?,
+                n if n > 1 => fts_query = fts_query.with_columns(fields)?,
+                _ => {}
+            }
+        }
+
         let mut query = table
             .query()
             .nearest_to(vector)?
             .distance_type(lancedb::DistanceType::Cosine)
-            .full_text_search(FullTextSearchQuery::new(text.to_string()))
+            .full_text_search(fts_query)
             .fast_search()
             .limit(limit)
             .offset(offset);
@@ -500,9 +524,7 @@ impl VectorStore for LanceDBVectorStore {
             .await?;
 
         table
-            .optimize(lancedb::table::OptimizeAction::Index(OptimizeOptions {
-                ..Default::default()
-            }))
+            .optimize(lancedb::table::OptimizeAction::Index(OptimizeOptions::new()))
             .await?;
 
         return Ok(());
@@ -690,12 +712,11 @@ mod tests {
         db.upsert(json_records, "id".to_string()).await?;
         db.index("name", Some("FULL TEXT")).await?;
 
-        let search_results: Vec<Value> = db.fts_search("Alice", None, None, 10, 0).await?;
+        let search_results: Vec<Value> = db.fts_search("Alice", None, None, None, 10, 0).await?;
 
         assert!(!search_results.is_empty());
 
         let first_item: TestStruct = from_value(search_results[0].clone())?;
-
         assert_eq!(first_item, records[0]);
 
         std::fs::remove_dir_all(&test_path).unwrap();

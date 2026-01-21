@@ -27,17 +27,7 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
-/// OAuth token passed in from the dispatcher
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct OAuthTokenInput {
-    pub access_token: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub refresh_token: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub token_type: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub expires_at: Option<i64>,
-}
+pub use flow_like_types::OAuthTokenInput;
 
 /// Queue configuration
 #[derive(Clone, Debug)]
@@ -99,6 +89,9 @@ pub struct QueuedJob {
     pub oauth_tokens: Option<HashMap<String, OAuthTokenInput>>,
     #[serde(default)]
     pub stream_state: bool,
+    /// Runtime-configured variables to override board variables
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub runtime_variables: Option<HashMap<String, flow_like::flow::variable::Variable>>,
 }
 
 /// Queue worker errors

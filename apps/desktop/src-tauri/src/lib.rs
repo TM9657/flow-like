@@ -5,6 +5,7 @@ mod functions;
 mod profile;
 mod settings;
 mod state;
+mod tray;
 pub mod utils;
 
 use flow_like::{
@@ -32,6 +33,14 @@ use tauri_plugin_updater::UpdaterExt;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 use crate::{deeplink::handle_deep_link, event_bus::EventBus};
+
+#[cfg(target_os = "macos")]
+fn disable_app_nap() {
+    macos_app_nap::prevent();
+}
+
+#[cfg(not(target_os = "macos"))]
+fn disable_app_nap() {}
 
 // --- iOS Release logging -----------------------------------------------------
 #[cfg(all(target_os = "ios", not(debug_assertions)))]
@@ -99,13 +108,14 @@ pub fn run() {
         } else {
             tracing::error!(target: "panic", message = %info, "Application panic (no location)");
         }
-        #[allow(unused_must_use)]
+
         {
             let _ = sentry::capture_message(&format!("panic: {info}"), sentry::Level::Fatal);
         }
     }));
     #[cfg(all(target_os = "ios", not(debug_assertions)))]
     ios_release_logging::init();
+    disable_app_nap();
 
     let mut settings_state = Settings::new();
     let project_dir = settings_state.project_dir.clone();
@@ -142,6 +152,7 @@ pub fn run() {
 
     config.register_bits_store(build_store(settings_state.bit_dir.clone()));
 
+    let user_dir = settings_state.user_dir.clone();
     config.register_user_store(build_store(settings_state.user_dir.clone()));
 
     config.register_app_storage_store(build_store(project_dir.clone()));
@@ -154,6 +165,12 @@ pub fn run() {
 
     config.register_build_project_database(Arc::new(move |path: Path| {
         let directory = project_dir.join(path.to_string());
+        let _ = std::fs::create_dir_all(&directory);
+        lancedb::connect(directory.to_string_lossy().as_ref())
+    }));
+
+    config.register_build_user_database(Arc::new(move |path: Path| {
+        let directory = user_dir.join(path.to_string());
         let _ = std::fs::create_dir_all(&directory);
         lancedb::connect(directory.to_string_lossy().as_ref())
     }));
@@ -250,6 +267,10 @@ pub fn run() {
     let mut builder = tauri::Builder::default()
         .manage(state::TauriSettingsState(settings_state.clone()))
         .manage(state::TauriFlowLikeState(state_ref.clone()))
+        .manage(state::TauriRegistryState(Arc::new(Mutex::new(None))))
+        .manage(state::TauriTrayState(Arc::new(Mutex::new(
+            tray::TrayRuntimeState::default(),
+        ))))
         .plugin(tauri_plugin_http::init())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_deep_link::init())
@@ -318,6 +339,15 @@ pub fn run() {
             let refetch_handle = relay_handle.clone();
             let deep_link_handle = relay_handle.clone();
             let event_bus_handle = relay_handle.clone();
+
+            #[cfg(desktop)]
+            {
+                if let Err(err) = tray::init_tray(&relay_handle) {
+                    eprintln!("Failed to initialize tray: {}", err);
+                } else {
+                    tray::spawn_tray_refresh(relay_handle.clone());
+                }
+            }
 
             #[cfg(desktop)]
             {
@@ -501,6 +531,7 @@ pub fn run() {
             functions::ai::invoke::chat_completion,
             functions::ai::invoke::find_best_model,
             functions::system::get_system_info,
+            tray::tray_update_state,
             functions::download::init::init_downloads,
             functions::download::init::get_downloads,
             functions::settings::profiles::get_profiles,
@@ -573,6 +604,7 @@ pub fn run() {
             functions::flow::board::redo_board,
             functions::flow::board::execute_command,
             functions::flow::board::execute_commands,
+            functions::flow::board::get_execution_elements,
             functions::flow::board::save_board,
             functions::flow::run::execute_board,
             functions::flow::run::execute_event,
@@ -593,12 +625,51 @@ pub fn run() {
             functions::flow::template::delete_template,
             functions::flow::template::get_template_meta,
             functions::flow::template::push_template_meta,
-            functions::flow::copilot::flowpilot_chat,
+            functions::ai::copilot::copilot_chat,
+            functions::a2ui::widget::get_widgets,
+            functions::a2ui::widget::get_widget,
+            functions::a2ui::widget::create_widget,
+            functions::a2ui::widget::update_widget,
+            functions::a2ui::widget::delete_widget,
+            functions::a2ui::widget::create_widget_version,
+            functions::a2ui::widget::get_widget_versions,
+            functions::a2ui::widget::get_open_widgets,
+            functions::a2ui::widget::close_widget,
+            functions::a2ui::widget::get_widget_meta,
+            functions::a2ui::widget::push_widget_meta,
+            functions::a2ui::page::get_pages,
+            functions::a2ui::page::get_page,
+            functions::a2ui::page::get_page_by_route,
+            functions::a2ui::page::create_page,
+            functions::a2ui::page::update_page,
+            functions::a2ui::page::delete_page,
+            functions::a2ui::page::get_open_pages,
+            functions::a2ui::page::close_page,
+            functions::a2ui::page::get_page_meta,
+            functions::a2ui::page::push_page_meta,
+            functions::a2ui::route::get_app_routes,
+            functions::a2ui::route::get_app_route_by_path,
+            functions::a2ui::route::get_default_app_route,
+            functions::a2ui::route::set_app_route,
+            functions::a2ui::route::set_app_routes,
+            functions::a2ui::route::delete_app_route_by_path,
+            functions::a2ui::route::delete_app_route_by_event,
             functions::event_sink_commands::add_event_sink,
             functions::event_sink_commands::remove_event_sink,
             functions::event_sink_commands::get_event_sink,
             functions::event_sink_commands::list_event_sinks,
             functions::event_sink_commands::is_event_sink_active,
+            functions::registry::registry_search_packages,
+            functions::registry::registry_get_package,
+            functions::registry::registry_install_package,
+            functions::registry::registry_uninstall_package,
+            functions::registry::registry_get_installed_packages,
+            functions::registry::registry_is_package_installed,
+            functions::registry::registry_get_installed_version,
+            functions::registry::registry_update_package,
+            functions::registry::registry_check_for_updates,
+            functions::registry::registry_load_local,
+            functions::registry::registry_init,
         ]);
 
     #[cfg(desktop)]

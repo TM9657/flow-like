@@ -32,7 +32,8 @@
 		"ai_act": true,
 		"unauthorized_read": true,
 		"admin_interface": true,
-		"premium": true
+		"premium": true,
+		"wasm_registry": true
 	},
 	"hubs": [],
 	"cdn": "https://cdn.flow-like.com",
@@ -57,6 +58,9 @@
 		"provider": "ses",
 		"from_email": "no-reply@flow-like.com",
 		"from_name": "Flow-Like"
+	},
+	"alerting": {
+		"mail": "info@great-co.de"
 	},
 	"tiers": {
 		"FREE": {

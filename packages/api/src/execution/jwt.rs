@@ -10,10 +10,8 @@
 use crate::backend_jwt::{self, BackendJwtError, Jwk, Jwks, TokenType, issuer, make_time_claims};
 use serde::{Deserialize, Serialize};
 
-// Re-export for backwards compatibility
-pub use crate::backend_jwt::{
-    Jwk as ExecutionJwk, Jwks as ExecutionJwks, get_jwks as get_execution_jwks,
-};
+pub type ExecutionJwk = Jwk;
+pub type ExecutionJwks = Jwks;
 
 /// Execution JWT error type (wraps BackendJwtError)
 pub type ExecutionJwtError = BackendJwtError;

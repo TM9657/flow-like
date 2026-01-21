@@ -7,6 +7,7 @@ use axum::{
 };
 use error::InternalError;
 use flow_like_types::Value;
+use middleware::error_reporting::error_reporting_middleware;
 use middleware::jwt::jwt_middleware;
 use state::{AppState, State};
 use tower::ServiceBuilder;
@@ -20,6 +21,7 @@ pub mod entity;
 mod middleware;
 mod routes;
 
+pub mod alerting;
 pub mod credentials;
 pub mod error;
 pub mod mail;
@@ -30,6 +32,8 @@ pub mod user_management;
 
 pub mod backend_jwt;
 pub mod execution;
+
+pub use routes::registry::ServerRegistry;
 
 #[cfg(feature = "kubernetes")]
 pub mod kubernetes;
@@ -55,13 +59,19 @@ pub fn construct_router(state: Arc<State>) -> Router {
         .nest("/auth", routes::auth::routes())
         .nest("/oauth", routes::oauth::routes())
         .nest("/chat", routes::chat::routes())
+        .nest("/ai", routes::ai::routes())
         .nest("/admin", routes::admin::routes())
         .nest("/tmp", routes::tmp::routes())
         .nest("/solution", routes::solution::routes())
         .nest("/execution", routes::execution::routes())
+        .nest("/registry", routes::registry::routes())
         .route("/webhook/stripe", post(routes::webhook::stripe_webhook))
         .with_state(state.clone())
         .route("/version", get(|| async { "0.0.0" }))
+        .layer(from_fn_with_state(
+            state.clone(),
+            error_reporting_middleware,
+        ))
         .layer(from_fn_with_state(state.clone(), jwt_middleware))
         .layer(CorsLayer::permissive())
         .layer(

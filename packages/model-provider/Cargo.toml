@@ -7,6 +7,8 @@ edition = "2024"
 # default = ["local-ml"]
 default = []
 local-ml = ["dep:ort", "dep:fastembed"]
+# Execution feature - alias for local-ml for consistency across catalog crates
+execute = ["local-ml"]
 
 [dependencies]
 flow-like-types.workspace = true
@@ -21,6 +23,7 @@ aws-sdk-bedrockruntime = "1.101.0"
 ndarray.workspace = true
 rig-core.workspace = true
 rmcp.workspace = true
+http = "1.4.0"
 
 [target.'cfg(not(any(target_os = "ios", target_os = "tvos")))'.dependencies]
 # We can enable the standard ort crate again with the next release, when PR: https://github.com/pykeio/ort/pull/430 is merged and released.

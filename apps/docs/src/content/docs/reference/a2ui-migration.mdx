@@ -1,0 +1,615 @@
+---
+title: A2UI Migration Guide
+description: Migrate from existing UI approaches to the A2UI component system
+---
+
+import { Steps, Aside, Card, CardGrid, Tabs, TabItem } from '@astrojs/starlight/components';
+
+# A2UI Migration Guide
+
+This guide helps you migrate from other UI approaches to the A2UI component system.
+
+## Overview
+
+A2UI (App-to-UI) is a declarative, platform-agnostic UI system that:
+
+- Renders natively on web, desktop, and mobile
+- Supports real-time streaming updates
+- Integrates with flow-based architectures
+- Enables AI-assisted UI generation
+
+---
+
+## Migration Paths
+
+<CardGrid>
+  <Card title="From React Components" icon="react">
+    Convert React JSX to A2UI JSON structures.
+  </Card>
+  <Card title="From HTML/CSS" icon="html">
+    Transform static markup to A2UI components.
+  </Card>
+  <Card title="From Custom JSON" icon="document">
+    Map your schema to A2UI format.
+  </Card>
+  <Card title="From Figma" icon="figma">
+    Export Figma designs as A2UI.
+  </Card>
+</CardGrid>
+
+---
+
+## From React Components
+
+### Basic Mapping
+
+<Tabs>
+  <TabItem label="React">
+    ```tsx
+    <div className="p-4 bg-white rounded-lg shadow">
+      <h2 className="text-xl font-bold">{title}</h2>
+      <p className="text-gray-600">{description}</p>
+      <button onClick={handleClick}>
+        Click me
+      </button>
+    </div>
+    ```
+  </TabItem>
+  <TabItem label="A2UI">
+    ```json
+    {
+      "type": "Column",
+      "style": {
+        "className": "p-4 bg-white rounded-lg shadow"
+      },
+      "children": [
+        {
+          "type": "Text",
+          "props": {
+            "variant": "h2",
+            "content": { "path": "/title" }
+          },
+          "style": { "className": "text-xl font-bold" }
+        },
+        {
+          "type": "Text",
+          "props": {
+            "content": { "path": "/description" }
+          },
+          "style": { "className": "text-gray-600" }
+        },
+        {
+          "type": "Button",
+          "props": {
+            "label": "Click me"
+          },
+          "actions": {
+            "onClick": {
+              "type": "emit",
+              "event": "button_clicked"
+            }
+          }
+        }
+      ]
+    }
+    ```
+  </TabItem>
+</Tabs>
+
+### Component Mapping Table
+
+| React | A2UI Equivalent |
+|-------|-----------------|
+| `<div>` | `Column`, `Row`, or `Stack` |
+| `<span>` | `Text` |
+| `<h1>`-`<h6>` | `Text` with `variant` prop |
+| `<p>` | `Text` |
+| `<img>` | `Image` |
+| `<button>` | `Button` |
+| `<input type="text">` | `TextField` |
+| `<input type="checkbox">` | `Checkbox` |
+| `<input type="radio">` | `RadioGroup` |
+| `<select>` | `Select` |
+| `<ul>/<ol>` | `List` |
+| `<form>` | `Column` with form handling |
+
+### Event Handling
+
+<Tabs>
+  <TabItem label="React">
+    ```tsx
+    const handleSubmit = (e) => {
+      e.preventDefault();
+      submitForm(formData);
+    };
+
+    <form onSubmit={handleSubmit}>
+      <input
+        value={name}
+        onChange={(e) => setName(e.target.value)}
+      />
+      <button type="submit">Submit</button>
+    </form>
+    ```
+  </TabItem>
+  <TabItem label="A2UI">
+    ```json
+    {
+      "type": "Column",
+      "children": [
+        {
+          "type": "TextField",
+          "props": {
+            "value": { "path": "/form/name" }
+          },
+          "actions": {
+            "onChange": {
+              "type": "update",
+              "path": "/form/name"
+            }
+          }
+        },
+        {
+          "type": "Button",
+          "props": { "label": "Submit" },
+          "actions": {
+            "onClick": {
+              "type": "submit",
+              "formId": "contact-form"
+            }
+          }
+        }
+      ]
+    }
+    ```
+  </TabItem>
+</Tabs>
+
+### Conditional Rendering
+
+<Tabs>
+  <TabItem label="React">
+    ```tsx
+    {isLoading && <Spinner />}
+    {error && <ErrorMessage error={error} />}
+    {data && <DataDisplay data={data} />}
+    ```
+  </TabItem>
+  <TabItem label="A2UI">
+    ```json
+    {
+      "type": "Column",
+      "children": [
+        {
+          "type": "Icon",
+          "condition": { "path": "/isLoading" },
+          "props": { "name": "spinner", "spin": true }
+        },
+        {
+          "type": "Text",
+          "condition": { "path": "/error" },
+          "props": { "content": { "path": "/error" } },
+          "style": { "className": "text-red-500" }
+        },
+        {
+          "type": "Column",
+          "condition": { "path": "/data" },
+          "children": [...]
+        }
+      ]
+    }
+    ```
+  </TabItem>
+</Tabs>
+
+### Lists and Iteration
+
+<Tabs>
+  <TabItem label="React">
+    ```tsx
+    <ul>
+      {items.map((item) => (
+        <li key={item.id}>
+          <span>{item.name}</span>
+          <button onClick={() => deleteItem(item.id)}>
+            Delete
+          </button>
+        </li>
+      ))}
+    </ul>
+    ```
+  </TabItem>
+  <TabItem label="A2UI">
+    ```json
+    {
+      "type": "List",
+      "props": {
+        "items": { "path": "/items" }
+      },
+      "itemTemplate": {
+        "type": "Row",
+        "style": { "className": "justify-between items-center" },
+        "children": [
+          {
+            "type": "Text",
+            "props": { "content": { "path": "name" } }
+          },
+          {
+            "type": "Button",
+            "props": { "label": "Delete", "variant": "ghost" },
+            "actions": {
+              "onClick": {
+                "type": "emit",
+                "event": "delete_item",
+                "payload": { "id": { "path": "id" } }
+              }
+            }
+          }
+        ]
+      }
+    }
+    ```
+  </TabItem>
+</Tabs>
+
+---
+
+## From HTML/CSS
+
+### Structure Conversion
+
+<Tabs>
+  <TabItem label="HTML">
+    ```html
+    <div class="card">
+      <div class="card-header">
+        <img src="avatar.jpg" class="avatar">
+        <div class="user-info">
+          <h3 class="user-name">John Doe</h3>
+          <span class="user-role">Developer</span>
+        </div>
+      </div>
+      <div class="card-body">
+        <p>User description here...</p>
+      </div>
+      <div class="card-footer">
+        <button class="btn btn-primary">Follow</button>
+      </div>
+    </div>
+    ```
+  </TabItem>
+  <TabItem label="A2UI">
+    ```json
+    {
+      "type": "Card",
+      "children": [
+        {
+          "type": "Row",
+          "style": { "className": "gap-3 items-center" },
+          "children": [
+            {
+              "type": "Image",
+              "props": { "src": { "path": "/user/avatar" } },
+              "style": { "className": "w-12 h-12 rounded-full" }
+            },
+            {
+              "type": "Column",
+              "children": [
+                {
+                  "type": "Text",
+                  "props": {
+                    "variant": "h3",
+                    "content": { "path": "/user/name" }
+                  }
+                },
+                {
+                  "type": "Text",
+                  "props": { "content": { "path": "/user/role" } },
+                  "style": { "className": "text-muted-foreground" }
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "Text",
+          "props": { "content": { "path": "/user/description" } },
+          "style": { "className": "py-4" }
+        },
+        {
+          "type": "Button",
+          "props": { "label": "Follow", "variant": "default" }
+        }
+      ]
+    }
+    ```
+  </TabItem>
+</Tabs>
+
+### CSS to Tailwind
+
+A2UI uses Tailwind CSS classes. Common conversions:
+
+| CSS Property | Tailwind Class |
+|-------------|----------------|
+| `margin: 16px` | `m-4` |
+| `padding: 24px` | `p-6` |
+| `display: flex` | `flex` |
+| `flex-direction: column` | `flex-col` |
+| `justify-content: space-between` | `justify-between` |
+| `align-items: center` | `items-center` |
+| `gap: 8px` | `gap-2` |
+| `border-radius: 8px` | `rounded-lg` |
+| `font-size: 18px` | `text-lg` |
+| `font-weight: bold` | `font-bold` |
+| `color: #gray` | `text-gray-500` |
+| `background: white` | `bg-white` |
+
+---
+
+## State Management
+
+### Local State
+
+A2UI uses a data path system instead of component state:
+
+<Tabs>
+  <TabItem label="React useState">
+    ```tsx
+    const [count, setCount] = useState(0);
+
+    <button onClick={() => setCount(c => c + 1)}>
+      Count: {count}
+    </button>
+    ```
+  </TabItem>
+  <TabItem label="A2UI Data Paths">
+    ```json
+    {
+      "type": "Button",
+      "props": {
+        "label": {
+          "template": "Count: {count}",
+          "values": { "count": { "path": "/count" } }
+        }
+      },
+      "actions": {
+        "onClick": {
+          "type": "update",
+          "path": "/count",
+          "transform": "increment"
+        }
+      }
+    }
+    ```
+  </TabItem>
+</Tabs>
+
+### Form State
+
+<Tabs>
+  <TabItem label="React Form">
+    ```tsx
+    const [form, setForm] = useState({
+      email: '',
+      password: ''
+    });
+
+    <input
+      type="email"
+      value={form.email}
+      onChange={(e) => setForm({
+        ...form,
+        email: e.target.value
+      })}
+    />
+    ```
+  </TabItem>
+  <TabItem label="A2UI Form">
+    ```json
+    {
+      "type": "TextField",
+      "props": {
+        "type": "email",
+        "value": { "path": "/form/email" },
+        "placeholder": "Enter email"
+      },
+      "actions": {
+        "onChange": {
+          "type": "update",
+          "path": "/form/email"
+        }
+      }
+    }
+    ```
+  </TabItem>
+</Tabs>
+
+---
+
+## Step-by-Step Migration
+
+<Steps>
+
+1. **Audit Your Components**
+
+   List all components that need migration. Prioritize:
+   - High-usage components
+   - Simple, self-contained components
+   - Components without complex state
+
+2. **Map Data Requirements**
+
+   Document what data each component needs:
+   - Props received from parents
+   - Internal state
+   - External data (API, context)
+
+3. **Design Data Paths**
+
+   Create a data path schema:
+   ```
+   /user/name
+   /user/email
+   /form/email
+   /form/password
+   /ui/isModalOpen
+   /items/0/name
+   ```
+
+4. **Convert Components**
+
+   Start with leaf components (no children), then work up:
+   - Convert structure to A2UI JSON
+   - Map CSS/styles to Tailwind classes
+   - Replace event handlers with actions
+   - Add data bindings
+
+5. **Set Up Actions**
+
+   Map interactions to A2UI actions:
+   - Click handlers → `onClick` actions
+   - Form changes → `onChange` with `update`
+   - Submissions → `submit` actions
+   - Navigation → `navigate` actions
+
+6. **Test and Validate**
+
+   - Verify visual appearance matches
+   - Test all interactions
+   - Check responsive behavior
+   - Validate data flows correctly
+
+</Steps>
+
+---
+
+## Common Patterns
+
+### Modal Dialog
+
+<Tabs>
+  <TabItem label="Before">
+    ```tsx
+    const [isOpen, setIsOpen] = useState(false);
+
+    <button onClick={() => setIsOpen(true)}>Open</button>
+    <Modal open={isOpen} onClose={() => setIsOpen(false)}>
+      <ModalContent>...</ModalContent>
+    </Modal>
+    ```
+  </TabItem>
+  <TabItem label="A2UI">
+    ```json
+    {
+      "type": "Column",
+      "children": [
+        {
+          "type": "Button",
+          "props": { "label": "Open" },
+          "actions": {
+            "onClick": {
+              "type": "update",
+              "path": "/ui/modalOpen",
+              "value": true
+            }
+          }
+        },
+        {
+          "type": "Modal",
+          "props": {
+            "open": { "path": "/ui/modalOpen" }
+          },
+          "actions": {
+            "onClose": {
+              "type": "update",
+              "path": "/ui/modalOpen",
+              "value": false
+            }
+          },
+          "children": [...]
+        }
+      ]
+    }
+    ```
+  </TabItem>
+</Tabs>
+
+### Tabs
+
+<Tabs>
+  <TabItem label="Before">
+    ```tsx
+    const [activeTab, setActiveTab] = useState('tab1');
+
+    <Tabs value={activeTab} onChange={setActiveTab}>
+      <Tab value="tab1">Tab 1</Tab>
+      <Tab value="tab2">Tab 2</Tab>
+    </Tabs>
+    <TabPanel value="tab1">Content 1</TabPanel>
+    <TabPanel value="tab2">Content 2</TabPanel>
+    ```
+  </TabItem>
+  <TabItem label="A2UI">
+    ```json
+    {
+      "type": "Tabs",
+      "props": {
+        "value": { "path": "/ui/activeTab" },
+        "tabs": [
+          { "value": "tab1", "label": "Tab 1" },
+          { "value": "tab2", "label": "Tab 2" }
+        ]
+      },
+      "actions": {
+        "onChange": {
+          "type": "update",
+          "path": "/ui/activeTab"
+        }
+      },
+      "children": [
+        {
+          "type": "Column",
+          "condition": {
+            "path": "/ui/activeTab",
+            "equals": "tab1"
+          },
+          "children": [...]
+        },
+        {
+          "type": "Column",
+          "condition": {
+            "path": "/ui/activeTab",
+            "equals": "tab2"
+          },
+          "children": [...]
+        }
+      ]
+    }
+    ```
+  </TabItem>
+</Tabs>
+
+---
+
+## Tips for Success
+
+<Aside type="tip" title="Start Small">
+Begin with simple, isolated components. Gain confidence before tackling complex components.
+</Aside>
+
+<Aside type="tip" title="Use FlowPilot">
+FlowPilot can help convert React components to A2UI. Paste your React code and ask for conversion.
+</Aside>
+
+<Aside type="caution" title="Complex Logic">
+Heavy JavaScript logic in components may need to move to flow nodes. A2UI handles presentation; flows handle business logic.
+</Aside>
+
+---
+
+## Next Steps
+
+- [A2UI Component Reference](/reference/a2ui-components) - Full component documentation
+- [Widget Builder Guide](/reference/widget-builder) - Visual widget creation
+- [FlowPilot UI Generation](/reference/flowpilot-ui) - AI-assisted UI generation

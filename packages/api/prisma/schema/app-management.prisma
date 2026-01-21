@@ -103,3 +103,36 @@ model Role {
     createdAt DateTime @default(now())
     updatedAt DateTime @updatedAt
 }
+
+enum NotificationType {
+    WORKFLOW
+    SYSTEM
+}
+
+model Notification {
+    id String @id
+
+    user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+    userId String
+
+    app   App?    @relation(fields: [appId], references: [id], onDelete: Cascade)
+    appId String?
+
+    title       String
+    description String?
+    icon        String?
+    link        String?
+
+    type NotificationType @default(WORKFLOW)
+    read Boolean          @default(false)
+
+    sourceRunId  String?
+    sourceNodeId String?
+
+    createdAt DateTime  @default(now())
+    readAt    DateTime?
+
+    @@index([userId, createdAt])
+    @@index([userId, read])
+    @@index([appId, createdAt])
+}

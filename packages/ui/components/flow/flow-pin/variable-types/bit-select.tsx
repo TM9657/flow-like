@@ -34,7 +34,7 @@ export function BitVariable({
 	);
 
 	return (
-		<div className="flex flex-row items-center justify-start ml-1">
+		<div className="flex flex-row items-center justify-start max-w-full ml-1 overflow-hidden">
 			<Select
 				defaultValue={parseUint8ArrayToJson(value)}
 				value={parseUint8ArrayToJson(value)}
@@ -43,12 +43,12 @@ export function BitVariable({
 				<SelectTrigger
 					noChevron
 					size="sm"
-					className="!w-fit !max-w-fit p-0 border-0 text-xs !bg-card text-nowrap text-start max-h-fit h-4 gap-0.5 flex-row items-center"
+					className="w-fit! max-w-full! p-0 border-0 text-xs bg-card! text-start max-h-fit h-4 gap-0.5 flex-row items-center overflow-hidden"
 				>
-					<small className="text-nowrap text-start text-[10px] !m-0 w-fit">
+					<small className="text-start text-[10px] m-0! truncate">
 						<BitRender backend={backend} bitId={parseUint8ArrayToJson(value)} />
 					</small>
-					<ChevronDown className="size-2 min-w-2 min-h-2 text-card-foreground mt-0.5" />
+					<ChevronDown className="size-2 min-w-2 min-h-2 text-card-foreground mt-0.5 shrink-0" />
 				</SelectTrigger>
 				<SelectContent>
 					<SelectGroup>
@@ -78,18 +78,9 @@ function BitRender({
 		!!bitId,
 	);
 
-	if (!bitId)
-		return <small className="text-nowrap text-start m-0">Select a bit</small>;
-	if (bit.isFetching)
-		return <small className="text-nowrap text-start m-0">Loading</small>;
-	if (bit.error)
-		return (
-			<small className="text-nowrap text-start m-0">Error loading bit</small>
-		);
+	if (!bitId) return <span className="truncate m-0">Select a bit</span>;
+	if (bit.isFetching) return <span className="truncate m-0">Loading</span>;
+	if (bit.error) return <span className="truncate m-0">Error loading bit</span>;
 
-	return (
-		<small className="text-nowrap text-start m-0">
-			{bit.data?.meta?.["en"]?.name}
-		</small>
-	);
+	return <span className="truncate m-0">{bit.data?.meta?.["en"]?.name}</span>;
 }

@@ -71,8 +71,7 @@ pub async fn get_pricing(
 
         if let (Some(stripe_client), Some(product_id)) =
             (&state.stripe_client, &tier_config.product_id)
-        {
-            if let Ok(prices) = stripe::Price::list(
+            && let Ok(prices) = stripe::Price::list(
                 stripe_client,
                 &stripe::ListPrices {
                     product: Some(stripe::IdOrCreate::Id(product_id)),
@@ -82,18 +81,16 @@ pub async fn get_pricing(
                 },
             )
             .await
-            {
-                if let Some(price) = prices.data.first() {
-                    tier_info.price = Some(PriceInfo {
-                        amount: price.unit_amount.unwrap_or(0),
-                        currency: price
-                            .currency
-                            .map(|c| c.to_string())
-                            .unwrap_or_else(|| "usd".to_string()),
-                        interval: price.recurring.as_ref().map(|r| r.interval.to_string()),
-                    });
-                }
-            }
+            && let Some(price) = prices.data.first()
+        {
+            tier_info.price = Some(PriceInfo {
+                amount: price.unit_amount.unwrap_or(0),
+                currency: price
+                    .currency
+                    .map(|c| c.to_string())
+                    .unwrap_or_else(|| "usd".to_string()),
+                interval: price.recurring.as_ref().map(|r| r.interval.to_string()),
+            });
         }
 
         tiers.insert(tier_name.clone(), tier_info);

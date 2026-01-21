@@ -37,7 +37,7 @@ pub async fn get_with_dependencies(
     let bit_model = bit::Entity::find_by_id(&bit_id)
         .one(&state.db)
         .await?
-        .ok_or(ApiError::NotFound)?;
+        .ok_or(ApiError::NOT_FOUND)?;
 
     if bit_model.dependency_tree_hash == bit_model.hash {
         // If the dependency tree hash is the same as the bit hash, it means there are no dependencies.

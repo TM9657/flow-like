@@ -25,7 +25,7 @@ impl NodeLogic for HybridSearchLocalDatabaseNode {
         let mut node = Node::new(
             "hybrid_search_local_db",
             "Hybrid Search",
-            "Searches the Database based on a Vector and Text",
+            "Searches the Database using both Vector and Full-Text Search",
             "Data/Database/Search",
         );
         node.add_icon("/flow/icons/database.svg");
@@ -49,6 +49,14 @@ impl NodeLogic for HybridSearchLocalDatabaseNode {
         node.add_input_pin("vector", "Vector", "Vector to Search", VariableType::Float)
             .set_value_type(ValueType::Array);
         node.add_input_pin(
+            "fields",
+            "Fields",
+            "Column names for both vector (first) and FTS search",
+            VariableType::String,
+        )
+        .set_value_type(ValueType::Array)
+        .set_default_value(Some(json!([])));
+        node.add_input_pin(
             "filter",
             "SQL Filter",
             "Optional SQL Filter",
@@ -59,7 +67,7 @@ impl NodeLogic for HybridSearchLocalDatabaseNode {
         node.add_input_pin(
             "rerank",
             "Re-Rank",
-            "Should the items be reranked?",
+            "Should the items be reranked using RRF?",
             VariableType::Boolean,
         )
         .set_default_value(Some(json!(true)));
@@ -72,8 +80,8 @@ impl NodeLogic for HybridSearchLocalDatabaseNode {
 
         node.add_output_pin(
             "exec_out",
-            "Created Database",
-            "Done Creating Database",
+            "Done",
+            "Done Searching Database",
             VariableType::Execution,
         );
 
@@ -89,6 +97,12 @@ impl NodeLogic for HybridSearchLocalDatabaseNode {
         let database: NodeDBConnection = context.evaluate_pin("database").await?;
         let vector: Vec<f64> = context.evaluate_pin("vector").await?;
         let search: String = context.evaluate_pin("search").await?;
+        let fields: Vec<String> = context.evaluate_pin("fields").await.unwrap_or(vec![]);
+        let fields = if fields.is_empty() {
+            None
+        } else {
+            Some(fields)
+        };
         let filter: String = context.evaluate_pin("filter").await?;
         let filter: Option<&str> = if filter.is_empty() {
             None
@@ -106,6 +120,7 @@ impl NodeLogic for HybridSearchLocalDatabaseNode {
                 &search,
                 filter,
                 None,
+                fields,
                 limit as usize,
                 offset as usize,
                 rerank,

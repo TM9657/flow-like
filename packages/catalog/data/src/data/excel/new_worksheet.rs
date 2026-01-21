@@ -96,6 +96,7 @@ impl NodeLogic for NewWorksheetNode {
         node
     }
 
+    #[cfg(feature = "execute")]
     async fn run(&self, context: &mut ExecutionContext) -> flow_like_types::Result<()> {
         use std::io::Cursor;
 
@@ -158,9 +159,16 @@ impl NodeLogic for NewWorksheetNode {
         context.activate_exec_pin("exec_out").await?;
         Ok(())
     }
+
+    #[cfg(not(feature = "execute"))]
+    async fn run(&self, _context: &mut ExecutionContext) -> flow_like_types::Result<()> {
+        Err(flow_like_types::anyhow!(
+            "Data processing requires the 'execute' feature"
+        ))
+    }
 }
 
-/// Replace illegal characters and enforce Excel name limits.
+#[cfg(feature = "execute")]
 fn sanitize_sheet_name(input: &str) -> String {
     let illegal = [':', '/', '\\', '?', '*', '[', ']'];
     let mut s: String = input
@@ -193,7 +201,7 @@ fn sanitize_sheet_name(input: &str) -> String {
     collapsed
 }
 
-/// Generate a unique sheet name with numeric suffixes: "Name (1)", "Name (2)", ...
+#[cfg(feature = "execute")]
 fn next_unique_sheet_name(book: &umya_spreadsheet::Spreadsheet, base: &str) -> String {
     let mut n = 1usize;
     loop {
@@ -209,7 +217,7 @@ fn next_unique_sheet_name(book: &umya_spreadsheet::Spreadsheet, base: &str) -> S
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "execute"))]
 mod tests {
     use super::sanitize_sheet_name;
     #[test]

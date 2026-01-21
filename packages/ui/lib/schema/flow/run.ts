@@ -166,6 +166,7 @@ export interface IVariable {
 	exposed: boolean;
 	id: string;
 	name: string;
+	schema?: null | string;
 	secret: boolean;
 	value_type: IValueType;
 	[property: string]: any;
@@ -190,6 +191,7 @@ export enum IExecutionStage {
 export interface IRunPayload {
 	id: string;
 	payload?: any;
+	runtime_variables?: Record<string, IVariable>;
 	[property: string]: any;
 }
 

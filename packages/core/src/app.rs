@@ -5,14 +5,16 @@ use crate::{
         event::Event,
     },
     state::FlowLikeState,
-    utils::compression::{compress_to_file, from_compressed},
+    utils::compression::{
+        compress_to_file, compress_to_file_json, from_compressed, from_compressed_json,
+    },
 };
 use flow_like_storage::Path;
 use flow_like_types::{FromProto, ToProto, create_id, proto, sync::Mutex};
 use futures::{StreamExt, TryStreamExt};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
-use std::{sync::Arc, time::SystemTime, vec};
+use std::{collections::HashMap, sync::Arc, time::SystemTime, vec};
 pub mod sharing;
 
 #[derive(Clone, Serialize, Deserialize, JsonSchema)]
@@ -21,6 +23,7 @@ pub enum StandardInterfaces {
     Search,
     Form,
     List,
+    A2UI,
 }
 
 #[derive(Clone, Serialize, Deserialize, JsonSchema)]
@@ -139,6 +142,17 @@ pub struct App {
 
     pub price: Option<u32>,
 
+    // A2UI Integration - stored as IDs, loaded separately
+    #[serde(default)]
+    pub widget_ids: Vec<String>,
+    #[serde(default)]
+    pub page_ids: Vec<String>,
+
+    /// Route mappings: path -> event_id (e.g., "/" -> "event123")
+    /// The event determines what to display (page-target or board-target)
+    #[serde(default)]
+    pub route_mappings: HashMap<String, String>,
+
     #[serde(skip)]
     pub app_state: Option<Arc<FlowLikeState>>,
 }
@@ -170,6 +184,9 @@ impl Clone for App {
             execution_mode: self.execution_mode.clone(),
             app_state: self.app_state.clone(),
             frontend: self.frontend.clone(),
+            widget_ids: self.widget_ids.clone(),
+            page_ids: self.page_ids.clone(),
+            route_mappings: self.route_mappings.clone(),
         }
     }
 }
@@ -212,6 +229,9 @@ impl App {
             price: None,
 
             frontend: None,
+            widget_ids: vec![],
+            page_ids: vec![],
+            route_mappings: HashMap::new(),
             app_state: Some(app_state.clone()),
         };
 
@@ -331,8 +351,15 @@ impl App {
             };
             let paste_command =
                 crate::flow::board::commands::GenericCommand::CopyPaste(paste_command);
-            board.execute_command(paste_command, state).await?;
+            board.execute_command(paste_command, state.clone()).await?;
             board.refs = template.refs.clone();
+            for page_id in &template.page_ids {
+                if let Ok(page) = template.load_page(page_id, None).await {
+                    let mut new_page = page.clone();
+                    new_page.board_id = Some(board.id.clone());
+                    board.save_page(&new_page, None).await?;
+                }
+            }
         }
         board.save(None).await?;
         self.boards.push(board.id.clone());
@@ -459,15 +486,15 @@ impl App {
         let enforce_id = enforce_id.unwrap_or(false);
         let mut event = event;
 
-        event.upsert(self, version_type, enforce_id).await?;
+        let saved_event = event.upsert(self, version_type, enforce_id).await?;
 
-        if !self.events.contains(&event.id) {
-            self.events.push(event.id.clone());
+        if !self.events.contains(&saved_event.id) {
+            self.events.push(saved_event.id.clone());
         }
 
         self.updated_at = SystemTime::now();
         self.save().await?;
-        Ok(event)
+        Ok(saved_event)
     }
 
     pub async fn validate_event(
@@ -699,6 +726,436 @@ impl App {
         Ok(Metadata::from_proto(metadata?))
     }
 
+    // WIDGETS
+
+    /// Get all widgets for this app
+    pub async fn get_widgets(&self) -> flow_like_types::Result<Vec<crate::a2ui::widget::Widget>> {
+        let mut widgets = Vec::with_capacity(self.widget_ids.len());
+        for widget_id in &self.widget_ids {
+            if let Ok(widget) = self.open_widget(widget_id.clone(), None).await {
+                widgets.push(widget);
+            }
+        }
+        Ok(widgets)
+    }
+
+    /// Open/load a widget by ID with optional version
+    pub async fn open_widget(
+        &self,
+        widget_id: String,
+        version: Option<(u32, u32, u32)>,
+    ) -> flow_like_types::Result<crate::a2ui::widget::Widget> {
+        let state = self
+            .app_state
+            .clone()
+            .ok_or(flow_like_types::anyhow!("App state not found"))?;
+        let store = FlowLikeState::project_meta_store(&state)
+            .await?
+            .as_generic();
+
+        let widget_path = if let Some(v) = version {
+            Path::from("apps")
+                .child(self.id.clone())
+                .child("widgets")
+                .child("versions")
+                .child(widget_id.as_str())
+                .child(format!("{}-{}-{}.widget", v.0, v.1, v.2))
+        } else {
+            Path::from("apps")
+                .child(self.id.clone())
+                .child(format!("{}.widget", widget_id))
+        };
+
+        let widget: crate::a2ui::widget::Widget = from_compressed_json(store, widget_path).await?;
+        Ok(widget)
+    }
+
+    /// Save/create a widget
+    pub async fn save_widget(
+        &mut self,
+        widget: &crate::a2ui::widget::Widget,
+    ) -> flow_like_types::Result<()> {
+        let state = self
+            .app_state
+            .clone()
+            .ok_or(flow_like_types::anyhow!("App state not found"))?;
+        let store = FlowLikeState::project_meta_store(&state)
+            .await?
+            .as_generic();
+
+        let widget_path = Path::from("apps")
+            .child(self.id.clone())
+            .child(format!("{}.widget", widget.id));
+
+        compress_to_file_json(store, widget_path, widget).await?;
+
+        // Add widget ID to the list if not already present
+        if !self.widget_ids.contains(&widget.id) {
+            self.widget_ids.push(widget.id.clone());
+            self.save().await?;
+        }
+
+        Ok(())
+    }
+
+    /// Delete a widget
+    pub async fn delete_widget(&mut self, widget_id: &str) -> flow_like_types::Result<()> {
+        let state = self
+            .app_state
+            .clone()
+            .ok_or(flow_like_types::anyhow!("App state not found"))?;
+        let store = FlowLikeState::project_meta_store(&state)
+            .await?
+            .as_generic();
+
+        let widget_path = Path::from("apps")
+            .child(self.id.clone())
+            .child(format!("{}.widget", widget_id));
+        store.delete(&widget_path).await?;
+
+        // Delete all versions
+        let versions_path = Path::from("apps")
+            .child(self.id.clone())
+            .child("widgets")
+            .child("versions")
+            .child(widget_id);
+        let locations = store
+            .list(Some(&versions_path))
+            .map_ok(|m| m.location)
+            .boxed();
+        store
+            .delete_stream(locations)
+            .try_collect::<Vec<Path>>()
+            .await?;
+
+        // Remove widget ID from the list
+        self.widget_ids.retain(|id| id != widget_id);
+        self.save().await?;
+
+        Ok(())
+    }
+
+    /// Get all versions of a widget
+    pub async fn get_widget_versions(
+        &self,
+        widget_id: &str,
+    ) -> flow_like_types::Result<Vec<(u32, u32, u32)>> {
+        let state = self
+            .app_state
+            .clone()
+            .ok_or(flow_like_types::anyhow!("App state not found"))?;
+        let store = FlowLikeState::project_meta_store(&state)
+            .await?
+            .as_generic();
+
+        let versions_path = Path::from("apps")
+            .child(self.id.clone())
+            .child("widgets")
+            .child("versions")
+            .child(widget_id);
+
+        let mut versions = Vec::new();
+        let mut stream = store.list(Some(&versions_path));
+        while let Some(entry) = stream.next().await {
+            if let std::result::Result::Ok(entry) = entry {
+                let filename = entry.location.filename().unwrap_or_default();
+                if let Some(version_str) = filename.strip_suffix(".widget") {
+                    let parts: Vec<&str> = version_str.split('-').collect();
+                    if parts.len() == 3
+                        && let (
+                            std::result::Result::Ok(major),
+                            std::result::Result::Ok(minor),
+                            std::result::Result::Ok(patch),
+                        ) = (parts[0].parse(), parts[1].parse(), parts[2].parse())
+                    {
+                        versions.push((major, minor, patch));
+                    }
+                }
+            }
+        }
+        Ok(versions)
+    }
+
+    /// Push widget metadata for a specific language
+    pub async fn push_widget_meta(
+        &self,
+        widget_id: &str,
+        language: Option<String>,
+        meta: Metadata,
+    ) -> flow_like_types::Result<()> {
+        let language = language.unwrap_or_else(|| "en".to_string());
+        let store = FlowLikeState::project_storage_store(&self.app_state.clone().unwrap())
+            .await?
+            .as_generic();
+
+        let meta_path = Path::from("apps")
+            .child(self.id.clone())
+            .child("metadata")
+            .child("widgets")
+            .child(widget_id)
+            .child(format!("{}.meta", language));
+
+        let proto_metadata = meta.to_proto();
+        compress_to_file(store, meta_path, &proto_metadata).await?;
+        Ok(())
+    }
+
+    /// Get widget metadata for a specific language
+    pub async fn get_widget_meta(
+        &self,
+        widget_id: &str,
+        language: Option<String>,
+    ) -> flow_like_types::Result<Metadata> {
+        let store = FlowLikeState::project_storage_store(&self.app_state.clone().unwrap())
+            .await?
+            .as_generic();
+
+        let language = language.unwrap_or_else(|| "en".to_string());
+        let meta_path = Path::from("apps")
+            .child(self.id.clone())
+            .child("metadata")
+            .child("widgets")
+            .child(widget_id)
+            .child(format!("{}.meta", language));
+
+        let metadata = from_compressed::<proto::Metadata>(store.clone(), meta_path).await;
+        if let Err(e) = metadata {
+            eprintln!("Failed to get widget metadata: {}", e);
+            let meta_path = Path::from("apps")
+                .child(self.id.clone())
+                .child("metadata")
+                .child("widgets")
+                .child(widget_id)
+                .child("en.meta");
+            let metadata = from_compressed::<proto::Metadata>(store, meta_path).await;
+            if let Err(e) = metadata {
+                eprintln!("Failed to get widget metadata in English: {}", e);
+                return Err(flow_like_types::anyhow!(
+                    "No metadata found for widget {} in any language",
+                    widget_id
+                ));
+            }
+            return Ok(Metadata::from_proto(metadata?));
+        }
+
+        Ok(Metadata::from_proto(metadata?))
+    }
+
+    // PAGES
+
+    /// Get all pages for this app
+    pub async fn get_pages(&self) -> flow_like_types::Result<Vec<crate::a2ui::widget::Page>> {
+        let mut pages = Vec::with_capacity(self.page_ids.len());
+        for page_id in &self.page_ids {
+            if let Ok(page) = self.open_page(page_id.clone(), None).await {
+                pages.push(page);
+            }
+        }
+        Ok(pages)
+    }
+
+    /// Open/load a page by ID with optional version
+    pub async fn open_page(
+        &self,
+        page_id: String,
+        version: Option<(u32, u32, u32)>,
+    ) -> flow_like_types::Result<crate::a2ui::widget::Page> {
+        let state = self
+            .app_state
+            .clone()
+            .ok_or(flow_like_types::anyhow!("App state not found"))?;
+        let store = FlowLikeState::project_meta_store(&state)
+            .await?
+            .as_generic();
+
+        let page_path = if let Some(v) = version {
+            Path::from("apps")
+                .child(self.id.clone())
+                .child("pages")
+                .child("versions")
+                .child(page_id.as_str())
+                .child(format!("{}-{}-{}.page", v.0, v.1, v.2))
+        } else {
+            Path::from("apps")
+                .child(self.id.clone())
+                .child(format!("{}.page", page_id))
+        };
+
+        let page: crate::a2ui::widget::Page = from_compressed_json(store, page_path).await?;
+        Ok(page)
+    }
+
+    /// Save/create a page
+    pub async fn save_page(
+        &mut self,
+        page: &crate::a2ui::widget::Page,
+    ) -> flow_like_types::Result<()> {
+        let state = self
+            .app_state
+            .clone()
+            .ok_or(flow_like_types::anyhow!("App state not found"))?;
+        let store = FlowLikeState::project_meta_store(&state)
+            .await?
+            .as_generic();
+
+        let page_path = Path::from("apps")
+            .child(self.id.clone())
+            .child(format!("{}.page", page.id));
+
+        compress_to_file_json(store, page_path, page).await?;
+
+        // Add page ID to the list if not already present
+        if !self.page_ids.contains(&page.id) {
+            self.page_ids.push(page.id.clone());
+            self.save().await?;
+        }
+
+        Ok(())
+    }
+
+    /// Delete a page
+    pub async fn delete_page(&mut self, page_id: &str) -> flow_like_types::Result<()> {
+        let state = self
+            .app_state
+            .clone()
+            .ok_or(flow_like_types::anyhow!("App state not found"))?;
+        let store = FlowLikeState::project_meta_store(&state)
+            .await?
+            .as_generic();
+
+        let page_path = Path::from("apps")
+            .child(self.id.clone())
+            .child(format!("{}.page", page_id));
+        store.delete(&page_path).await?;
+
+        // Delete all versions
+        let versions_path = Path::from("apps")
+            .child(self.id.clone())
+            .child("pages")
+            .child("versions")
+            .child(page_id);
+        let locations = store
+            .list(Some(&versions_path))
+            .map_ok(|m| m.location)
+            .boxed();
+        store
+            .delete_stream(locations)
+            .try_collect::<Vec<Path>>()
+            .await?;
+
+        // Remove page ID from the list
+        self.page_ids.retain(|id| id != page_id);
+        self.save().await?;
+
+        Ok(())
+    }
+
+    /// Get all versions of a page
+    pub async fn get_page_versions(
+        &self,
+        page_id: &str,
+    ) -> flow_like_types::Result<Vec<(u32, u32, u32)>> {
+        let state = self
+            .app_state
+            .clone()
+            .ok_or(flow_like_types::anyhow!("App state not found"))?;
+        let store = FlowLikeState::project_meta_store(&state)
+            .await?
+            .as_generic();
+
+        let versions_path = Path::from("apps")
+            .child(self.id.clone())
+            .child("pages")
+            .child("versions")
+            .child(page_id);
+
+        let mut versions = Vec::new();
+        let mut stream = store.list(Some(&versions_path));
+        while let Some(entry) = stream.next().await {
+            if let std::result::Result::Ok(entry) = entry {
+                let filename = entry.location.filename().unwrap_or_default();
+                if let Some(version_str) = filename.strip_suffix(".page") {
+                    let parts: Vec<&str> = version_str.split('-').collect();
+                    if parts.len() == 3
+                        && let (
+                            std::result::Result::Ok(major),
+                            std::result::Result::Ok(minor),
+                            std::result::Result::Ok(patch),
+                        ) = (parts[0].parse(), parts[1].parse(), parts[2].parse())
+                    {
+                        versions.push((major, minor, patch));
+                    }
+                }
+            }
+        }
+        Ok(versions)
+    }
+
+    /// Push page metadata for a specific language
+    pub async fn push_page_meta(
+        &self,
+        page_id: &str,
+        language: Option<String>,
+        meta: Metadata,
+    ) -> flow_like_types::Result<()> {
+        let language = language.unwrap_or_else(|| "en".to_string());
+        let store = FlowLikeState::project_storage_store(&self.app_state.clone().unwrap())
+            .await?
+            .as_generic();
+
+        let meta_path = Path::from("apps")
+            .child(self.id.clone())
+            .child("metadata")
+            .child("pages")
+            .child(page_id)
+            .child(format!("{}.meta", language));
+
+        let proto_metadata = meta.to_proto();
+        compress_to_file(store, meta_path, &proto_metadata).await?;
+        Ok(())
+    }
+
+    /// Get page metadata for a specific language
+    pub async fn get_page_meta(
+        &self,
+        page_id: &str,
+        language: Option<String>,
+    ) -> flow_like_types::Result<Metadata> {
+        let store = FlowLikeState::project_storage_store(&self.app_state.clone().unwrap())
+            .await?
+            .as_generic();
+
+        let language = language.unwrap_or_else(|| "en".to_string());
+        let meta_path = Path::from("apps")
+            .child(self.id.clone())
+            .child("metadata")
+            .child("pages")
+            .child(page_id)
+            .child(format!("{}.meta", language));
+
+        let metadata = from_compressed::<proto::Metadata>(store.clone(), meta_path).await;
+        if let Err(e) = metadata {
+            eprintln!("Failed to get page metadata: {}", e);
+            let meta_path = Path::from("apps")
+                .child(self.id.clone())
+                .child("metadata")
+                .child("pages")
+                .child(page_id)
+                .child("en.meta");
+            let metadata = from_compressed::<proto::Metadata>(store, meta_path).await;
+            if let Err(e) = metadata {
+                eprintln!("Failed to get page metadata in English: {}", e);
+                return Err(flow_like_types::anyhow!(
+                    "No metadata found for page {} in any language",
+                    page_id
+                ));
+            }
+            return Ok(Metadata::from_proto(metadata?));
+        }
+
+        Ok(Metadata::from_proto(metadata?))
+    }
+
     pub async fn save(&self) -> flow_like_types::Result<()> {
         if let Some(app_state) = &self.app_state {
             let store = FlowLikeState::project_meta_store(app_state)
@@ -747,7 +1204,6 @@ impl App {
 mod tests {
     use crate::{state::FlowLikeConfig, utils::http::HTTPClient};
     use flow_like_storage::files::store::FlowLikeStore;
-    use flow_like_types::sync::Mutex;
     use flow_like_types::{FromProto, ToProto};
     use flow_like_types::{Message, tokio};
     use std::sync::Arc;
@@ -789,6 +1245,9 @@ mod tests {
             rating_sum: 800,
             relevance_score: Some(0.9),
             frontend: None,
+            widget_ids: vec![],
+            page_ids: vec![],
+            route_mappings: std::collections::HashMap::new(),
         };
 
         let mut buf = Vec::new();

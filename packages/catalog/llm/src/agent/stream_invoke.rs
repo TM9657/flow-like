@@ -1,9 +1,11 @@
 use crate::generative::agent::Agent;
+#[cfg(feature = "execute")]
+use flow_like::flow::execution::LogLevel;
 /// # Stream Invoke Agent Node
 /// Executes an Agent with streaming support, emitting chunks as they are generated.
 /// Similar to simple agent's streaming behavior but using the built Agent object.
 use flow_like::flow::{
-    execution::{LogLevel, context::ExecutionContext},
+    execution::context::ExecutionContext,
     node::{Node, NodeLogic, NodeScores},
     pin::PinOptions,
     variable::VariableType,
@@ -12,8 +14,10 @@ use flow_like_model_provider::{
     history::History, response::Response, response_chunk::ResponseChunk,
 };
 use flow_like_types::{async_trait, json};
+#[cfg(feature = "execute")]
 use std::collections::HashMap;
 
+#[cfg(feature = "execute")]
 use super::helpers::{AgentStreamState, StreamHandler, execute_agent_streaming};
 
 #[crate::register_node]
@@ -119,6 +123,7 @@ impl NodeLogic for StreamInvokeAgentNode {
         node
     }
 
+    #[cfg(feature = "execute")]
     async fn run(&self, context: &mut ExecutionContext) -> flow_like_types::Result<()> {
         context.deactivate_exec_pin("exec_done").await?;
 
@@ -173,5 +178,12 @@ impl NodeLogic for StreamInvokeAgentNode {
         context.activate_exec_pin("exec_done").await?;
 
         Ok(())
+    }
+
+    #[cfg(not(feature = "execute"))]
+    async fn run(&self, _context: &mut ExecutionContext) -> flow_like_types::Result<()> {
+        Err(flow_like_types::anyhow!(
+            "LLM processing requires the 'execute' feature"
+        ))
     }
 }

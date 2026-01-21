@@ -72,6 +72,16 @@ impl NodeLogic for LoadModelNode {
             bail!("Not an Embedding Model");
         }
 
+        if context.has_cache(&bit.id).await {
+            let model = CachedEmbeddingModel {
+                cache_key: bit.id.clone(),
+                model_type: bit.bit_type.clone(),
+            };
+            context.set_pin_value("model", json!(model)).await?;
+            context.activate_exec_pin("exec_out").await?;
+            return Ok(());
+        }
+
         let app_state = context.app_state.clone();
         let model_factory = context.app_state.embedding_factory.clone();
 

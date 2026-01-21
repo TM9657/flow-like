@@ -5,10 +5,13 @@ use flow_like::flow::{
     variable::VariableType,
 };
 use flow_like_types::{Value, async_trait, json::json};
+#[cfg(feature = "execute")]
 use rake::{KeywordSort, Rake, StopWords};
 use std::collections::HashSet;
+#[cfg(feature = "execute")]
 use whatlang::detect;
 
+#[cfg(feature = "execute")]
 fn lang_to_code(lang: whatlang::Lang) -> &'static str {
     use whatlang::Lang::*;
     match lang {
@@ -30,6 +33,7 @@ fn lang_to_code(lang: whatlang::Lang) -> &'static str {
     }
 }
 
+#[cfg(feature = "execute")]
 fn get_stop_words_for_language(lang: &str) -> HashSet<String> {
     match lang {
         "de" => german_stop_words(),
@@ -49,6 +53,7 @@ fn get_stop_words_for_language(lang: &str) -> HashSet<String> {
     }
 }
 
+#[cfg(feature = "execute")]
 fn english_stop_words() -> HashSet<String> {
     [
         "a",
@@ -231,6 +236,7 @@ fn english_stop_words() -> HashSet<String> {
     .collect()
 }
 
+#[cfg(feature = "execute")]
 fn german_stop_words() -> HashSet<String> {
     [
         "aber",
@@ -458,6 +464,7 @@ fn german_stop_words() -> HashSet<String> {
     .collect()
 }
 
+#[cfg(feature = "execute")]
 fn french_stop_words() -> HashSet<String> {
     [
         "ai", "aie", "aient", "aies", "ait", "as", "au", "aura", "aurai", "auraient", "aurais",
@@ -481,6 +488,7 @@ fn french_stop_words() -> HashSet<String> {
     .collect()
 }
 
+#[cfg(feature = "execute")]
 fn spanish_stop_words() -> HashSet<String> {
     [
         "a",
@@ -796,6 +804,7 @@ fn spanish_stop_words() -> HashSet<String> {
     .collect()
 }
 
+#[cfg(feature = "execute")]
 fn italian_stop_words() -> HashSet<String> {
     [
         "a",
@@ -1084,6 +1093,7 @@ fn italian_stop_words() -> HashSet<String> {
     .collect()
 }
 
+#[cfg(feature = "execute")]
 fn portuguese_stop_words() -> HashSet<String> {
     [
         "a", "ao", "aos", "aquela", "aquelas", "aquele", "aqueles", "aquilo", "as", "até", "com",
@@ -1103,6 +1113,7 @@ fn portuguese_stop_words() -> HashSet<String> {
     .collect()
 }
 
+#[cfg(feature = "execute")]
 fn dutch_stop_words() -> HashSet<String> {
     [
         "aan", "af", "al", "als", "bij", "dan", "dat", "de", "die", "dit", "een", "en", "er",
@@ -1117,6 +1128,7 @@ fn dutch_stop_words() -> HashSet<String> {
     .collect()
 }
 
+#[cfg(feature = "execute")]
 fn polish_stop_words() -> HashSet<String> {
     [
         "a",
@@ -1399,6 +1411,7 @@ fn polish_stop_words() -> HashSet<String> {
     .collect()
 }
 
+#[cfg(feature = "execute")]
 fn russian_stop_words() -> HashSet<String> {
     [
         "а",
@@ -1542,6 +1555,7 @@ fn russian_stop_words() -> HashSet<String> {
     .collect()
 }
 
+#[cfg(feature = "execute")]
 fn turkish_stop_words() -> HashSet<String> {
     [
         "acaba",
@@ -1730,6 +1744,7 @@ fn turkish_stop_words() -> HashSet<String> {
     .collect()
 }
 
+#[cfg(feature = "execute")]
 fn swedish_stop_words() -> HashSet<String> {
     [
         "alla", "allt", "att", "av", "bli", "blev", "blir", "blivit", "de", "dem", "den", "denna",
@@ -1748,6 +1763,7 @@ fn swedish_stop_words() -> HashSet<String> {
     .collect()
 }
 
+#[cfg(feature = "execute")]
 fn danish_stop_words() -> HashSet<String> {
     [
         "af", "alle", "alt", "anden", "andre", "at", "blev", "blive", "bliver", "da", "de", "dem",
@@ -1767,6 +1783,7 @@ fn danish_stop_words() -> HashSet<String> {
     .collect()
 }
 
+#[cfg(feature = "execute")]
 fn norwegian_stop_words() -> HashSet<String> {
     [
         "alle",
@@ -1951,6 +1968,7 @@ fn norwegian_stop_words() -> HashSet<String> {
     .collect()
 }
 
+#[cfg(feature = "execute")]
 fn finnish_stop_words() -> HashSet<String> {
     [
         "alla",
@@ -2320,6 +2338,7 @@ impl NodeLogic for RakeExtractionNode {
         node
     }
 
+    #[cfg(feature = "execute")]
     async fn run(&self, context: &mut ExecutionContext) -> flow_like_types::Result<()> {
         let text: String = context.evaluate_pin("text").await?;
         let language: String = context.evaluate_pin("language").await?;
@@ -2362,5 +2381,12 @@ impl NodeLogic for RakeExtractionNode {
 
         context.set_pin_value("keywords", json!(result)).await?;
         Ok(())
+    }
+
+    #[cfg(not(feature = "execute"))]
+    async fn run(&self, _context: &mut ExecutionContext) -> flow_like_types::Result<()> {
+        Err(flow_like_types::anyhow!(
+            "Processing requires the 'execute' feature"
+        ))
     }
 }

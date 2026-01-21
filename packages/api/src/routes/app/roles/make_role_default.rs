@@ -27,20 +27,20 @@ pub async fn make_role_default(
         .filter(role::Column::AppId.eq(app_id.clone()))
         .one(&state.db)
         .await?
-        .ok_or(ApiError::NotFound)?;
+        .ok_or(ApiError::NOT_FOUND)?;
 
     let Some(permission) = RolePermissions::from_bits(role.permissions) else {
-        return Err(ApiError::Forbidden);
+        return Err(ApiError::FORBIDDEN);
     };
 
     if permission.contains(RolePermissions::Owner) {
-        return Err(ApiError::Forbidden);
+        return Err(ApiError::FORBIDDEN);
     }
 
     let app = app::Entity::find_by_id(app_id.clone())
         .one(&state.db)
         .await?
-        .ok_or(ApiError::NotFound)?;
+        .ok_or(ApiError::NOT_FOUND)?;
 
     let mut app: app::ActiveModel = app.into();
     app.default_role_id = Set(Some(role_id.clone()));

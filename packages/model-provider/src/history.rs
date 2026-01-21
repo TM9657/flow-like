@@ -13,7 +13,7 @@ use rig::OneOrMany;
 use rig::completion::{Message as RigMessage, ToolDefinition};
 use rig::message::{
     AssistantContent as RigAssistantContent, Audio as RigAudio, Document as RigDocument,
-    DocumentSourceKind, Image as RigImage, ImageMediaType, Text as RigText,
+    DocumentSourceKind, Image as RigImage, ImageDetail, ImageMediaType, Text as RigText,
     ToolCall as RigToolCall, ToolChoice as RigToolChoice, ToolFunction as RigToolFunction,
     UserContent as RigUserContent, Video as RigVideo,
 };
@@ -183,7 +183,7 @@ impl From<RigMessage> for HistoryMessage {
                                 },
                             });
                         }
-                        RigAssistantContent::Reasoning(_) => {}
+                        RigAssistantContent::Reasoning(_) | RigAssistantContent::Image(_) => {}
                     }
                 }
 
@@ -261,6 +261,8 @@ impl TryFrom<HistoryMessage> for RigMessage {
                                 arguments: json::from_str(&tool_call.function.arguments)
                                     .unwrap_or(json::json!({})),
                             },
+                            signature: None,
+                            additional_params: None,
                         }));
                     }
                 }
@@ -428,7 +430,7 @@ impl From<Content> for RigUserContent {
                 RigUserContent::Image(RigImage {
                     data,
                     media_type: Some(media_type),
-                    detail: None,
+                    detail: Some(parse_image_detail(image_url.detail.as_deref())),
                     additional_params: None,
                 })
             }
@@ -487,6 +489,16 @@ fn detect_image_media_type(url: &str) -> ImageMediaType {
     } else {
         // Default to PNG if we can't detect
         ImageMediaType::PNG
+    }
+}
+
+/// Parses image detail string to ImageDetail enum, defaulting to Auto
+fn parse_image_detail(detail: Option<&str>) -> ImageDetail {
+    match detail {
+        Some("low") => ImageDetail::Low,
+        Some("high") => ImageDetail::High,
+        Some("auto") => ImageDetail::Auto,
+        _ => ImageDetail::Auto, // Default to Auto if not specified or unknown
     }
 }
 

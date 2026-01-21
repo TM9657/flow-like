@@ -1,0 +1,57 @@
+//! `SeaORM` Entity for WASM Package Author (junction table)
+
+use sea_orm::entity::prelude::*;
+use serde::{Deserialize, Serialize};
+
+#[derive(Clone, Debug, PartialEq, DeriveEntityModel, Eq, Serialize, Deserialize)]
+#[sea_orm(schema_name = "public", table_name = "WasmPackageAuthor")]
+pub struct Model {
+    #[sea_orm(primary_key, auto_increment = false, column_type = "Text")]
+    pub id: String,
+
+    #[sea_orm(column_name = "packageId", column_type = "Text")]
+    pub package_id: String,
+
+    #[sea_orm(column_name = "userId", column_type = "Text")]
+    pub user_id: String,
+
+    #[sea_orm(column_type = "Text", nullable)]
+    pub role: Option<String>,
+
+    #[sea_orm(column_name = "addedAt")]
+    pub added_at: DateTime,
+}
+
+#[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
+pub enum Relation {
+    #[sea_orm(
+        belongs_to = "super::wasm_package::Entity",
+        from = "Column::PackageId",
+        to = "super::wasm_package::Column::Id",
+        on_update = "Cascade",
+        on_delete = "Cascade"
+    )]
+    WasmPackage,
+    #[sea_orm(
+        belongs_to = "super::user::Entity",
+        from = "Column::UserId",
+        to = "super::user::Column::Id",
+        on_update = "Cascade",
+        on_delete = "Cascade"
+    )]
+    User,
+}
+
+impl Related<super::wasm_package::Entity> for Entity {
+    fn to() -> RelationDef {
+        Relation::WasmPackage.def()
+    }
+}
+
+impl Related<super::user::Entity> for Entity {
+    fn to() -> RelationDef {
+        Relation::User.def()
+    }
+}
+
+impl ActiveModelBehavior for ActiveModel {}

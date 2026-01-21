@@ -17,7 +17,7 @@ pub mod local_store;
 pub struct StorageItem {
     pub location: String,
     pub last_modified: String,
-    pub size: usize,
+    pub size: u64,
     pub e_tag: Option<String>,
     pub version: Option<String>,
     pub is_dir: bool,

@@ -264,7 +264,7 @@ export default function YoursPage() {
 			removeAll();
 			clearSearch();
 		};
-	}, [allItems]);
+	}, [allItems, removeAll, addAll, clearSearch]);
 
 	const menuActions = useMemo(
 		() => [
@@ -285,7 +285,7 @@ export default function YoursPage() {
 				<Link2 className="h-4 w-4" />
 			</Button>,
 		],
-		[pickImportFile, setJoinDialogOpen],
+		[pickImportFile],
 	);
 
 	// Listen for import/file events (e.g., from iOS when a file is opened with the app)
@@ -316,7 +316,7 @@ export default function YoursPage() {
 					{items.map((meta) => (
 						<div key={viewMode + meta.id} className="group w-full">
 							<AppCard
-								apps={items}
+								isOwned
 								app={meta.app}
 								metadata={meta as IMetadata}
 								variant="extended"
@@ -337,7 +337,7 @@ export default function YoursPage() {
 				{items.map((meta) => (
 					<div key={`left${meta.id}`} className="group">
 						<AppCard
-							apps={items}
+							isOwned
 							app={meta.app}
 							metadata={meta as IMetadata}
 							variant="small"

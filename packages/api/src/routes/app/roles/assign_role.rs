@@ -31,7 +31,7 @@ pub async fn assign_role(
             called_sub,
             app_id
         );
-        return Err(ApiError::Forbidden);
+        return Err(ApiError::FORBIDDEN);
     }
 
     let txn = state.db.begin().await?;
@@ -40,10 +40,10 @@ pub async fn assign_role(
         .filter(role::Column::AppId.eq(app_id.clone()))
         .one(&txn)
         .await?
-        .ok_or_else(|| ApiError::NotFound)?;
+        .ok_or(ApiError::NOT_FOUND)?;
 
     let target_permission =
-        RolePermissions::from_bits(target_role.permissions).ok_or_else(|| ApiError::Forbidden)?;
+        RolePermissions::from_bits(target_role.permissions).ok_or(ApiError::FORBIDDEN)?;
 
     let target_current_role = role::Entity::find()
         .inner_join(membership::Entity)
@@ -51,10 +51,10 @@ pub async fn assign_role(
         .filter(membership::Column::UserId.eq(sub.clone()))
         .one(&txn)
         .await?
-        .ok_or_else(|| ApiError::NotFound)?;
+        .ok_or(ApiError::NOT_FOUND)?;
 
     let target_current_permission =
-        RolePermissions::from_bits(target_current_role.permissions).ok_or(ApiError::Forbidden)?;
+        RolePermissions::from_bits(target_current_role.permissions).ok_or(ApiError::FORBIDDEN)?;
 
     // Owners can not remove their own permission. Every project has to have exactly one owner.
     if target_current_permission.contains(RolePermissions::Owner) {
@@ -63,7 +63,7 @@ pub async fn assign_role(
             sub,
             app_id
         );
-        return Err(ApiError::Forbidden);
+        return Err(ApiError::FORBIDDEN);
     }
 
     if target_permission.contains(RolePermissions::Owner) {
@@ -74,10 +74,10 @@ pub async fn assign_role(
             .filter(membership::Column::UserId.eq(caller_sub.clone()))
             .one(&txn)
             .await?
-            .ok_or_else(|| ApiError::NotFound)?;
+            .ok_or(ApiError::NOT_FOUND)?;
 
-        let caller_permissions = RolePermissions::from_bits(caller_role.permissions)
-            .ok_or_else(|| ApiError::Forbidden)?;
+        let caller_permissions =
+            RolePermissions::from_bits(caller_role.permissions).ok_or(ApiError::FORBIDDEN)?;
 
         if !caller_permissions.contains(RolePermissions::Owner) {
             tracing::warn!(
@@ -86,7 +86,7 @@ pub async fn assign_role(
                 sub,
                 app_id
             );
-            return Err(ApiError::Forbidden);
+            return Err(ApiError::FORBIDDEN);
         }
 
         tracing::warn!(
@@ -99,14 +99,14 @@ pub async fn assign_role(
         let app = app::Entity::find_by_id(app_id.clone())
             .one(&txn)
             .await?
-            .ok_or_else(|| ApiError::NotFound)?;
+            .ok_or(ApiError::NOT_FOUND)?;
 
         if let Some(default_role) = app.default_role_id {
             let new_role_for_owner = role::Entity::find_by_id(default_role.clone())
                 .filter(role::Column::AppId.eq(app_id.clone()))
                 .one(&txn)
                 .await?
-                .ok_or_else(|| ApiError::NotFound)?;
+                .ok_or(ApiError::NOT_FOUND)?;
 
             let new_owner = membership::Entity::update_many()
                 .filter(membership::Column::AppId.eq(app_id.clone()))
@@ -135,16 +135,16 @@ pub async fn assign_role(
                     caller_sub,
                     app_id
                 );
-                return Err(ApiError::InternalError(
-                    anyhow!("Failed to update roles for user and new owner".to_string()).into(),
-                ));
+                return Err(ApiError::internal_error(anyhow!(
+                    "Failed to update roles for user and new owner".to_string()
+                )));
             }
 
             txn.commit().await?;
             return Ok(Json(()));
         }
 
-        return Err(ApiError::Forbidden);
+        return Err(ApiError::FORBIDDEN);
     }
 
     tracing::info!(

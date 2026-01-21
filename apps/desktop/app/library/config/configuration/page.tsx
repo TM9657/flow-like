@@ -180,6 +180,7 @@ function BoardConfig({
 								<VariableConfigCard
 									key={variable.id}
 									variable={variable}
+									refs={board.refs}
 									onUpdate={upsertVariable}
 								/>
 							))}

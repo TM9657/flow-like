@@ -1,5 +1,6 @@
 use serde::Serialize;
 
+pub mod a2ui;
 pub mod ai;
 pub mod app;
 pub mod bit;
@@ -7,6 +8,7 @@ pub mod download;
 pub mod event_sink_commands;
 pub mod file;
 pub mod flow;
+pub mod registry;
 pub mod settings;
 pub mod system;
 pub mod tmp;

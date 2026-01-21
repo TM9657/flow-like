@@ -1,18 +1,8 @@
 use flow_like::credentials::SharedCredentials;
+use flow_like::flow::variable::Variable;
+use flow_like_types::OAuthTokenInput;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-
-/// OAuth token passed to the executor
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct OAuthTokenInput {
-    pub access_token: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub refresh_token: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub token_type: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub expires_at: Option<i64>,
-}
 
 /// Board version as a tuple (major, minor, patch)
 pub type BoardVersion = (u32, u32, u32);
@@ -49,6 +39,9 @@ pub struct ExecutionRequest {
     /// Whether to stream node state updates (true for interactive boards, false for events/background)
     #[serde(default)]
     pub stream_state: bool,
+    /// Runtime-configured variables to override board variables
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub runtime_variables: Option<HashMap<String, Variable>>,
 }
 
 /// Result of an execution

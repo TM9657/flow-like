@@ -1,4 +1,4 @@
-use std::{any::Any, sync::Arc};
+use std::any::Any;
 
 use super::ModelLogic;
 use crate::provider::random_provider;
@@ -7,10 +7,9 @@ use crate::{
     provider::{ModelProvider, ModelProviderConfiguration},
 };
 use flow_like_types::{Cacheable, Result, async_trait};
-use rig::client::ProviderClient;
 
 pub struct MoonshotModel {
-    client: Arc<Box<dyn ProviderClient>>,
+    client: rig::providers::moonshot::Client,
     provider: ModelProvider,
     default_model: Option<String>,
 }
@@ -24,16 +23,16 @@ impl MoonshotModel {
         let api_key = moonshot_config.api_key.clone().unwrap_or_default();
         let model_id = provider.model_id.clone();
 
-        let mut builder = rig::providers::moonshot::Client::builder(&api_key);
+        let mut builder = rig::providers::moonshot::Client::builder().api_key(&api_key);
 
         if let Some(endpoint) = moonshot_config.endpoint.as_deref() {
             builder = builder.base_url(endpoint);
         }
 
-        let client = builder.build().boxed();
+        let client = builder.build()?;
 
         Ok(MoonshotModel {
-            client: Arc::new(client),
+            client,
             provider: provider.clone(),
             default_model: model_id,
         })
@@ -48,15 +47,15 @@ impl MoonshotModel {
             .cloned()
             .and_then(|v| v.as_str().map(|s| s.to_string()));
 
-        let mut builder = rig::providers::moonshot::Client::builder(api_key);
+        let mut builder = rig::providers::moonshot::Client::builder().api_key(api_key);
         if let Some(endpoint) = params.get("endpoint").and_then(|v| v.as_str()) {
             builder = builder.base_url(endpoint);
         }
 
-        let client = builder.build().boxed();
+        let client = builder.build()?;
 
         Ok(MoonshotModel {
-            client: Arc::new(client),
+            client,
             default_model: model_id,
             provider: provider.clone(),
         })
@@ -75,9 +74,10 @@ impl Cacheable for MoonshotModel {
 
 #[async_trait]
 impl ModelLogic for MoonshotModel {
+    #[allow(deprecated)]
     async fn provider(&self) -> Result<ModelConstructor> {
         Ok(ModelConstructor {
-            inner: self.client.clone(),
+            inner: Box::new(self.client.clone()),
         })
     }
 

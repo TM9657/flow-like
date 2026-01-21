@@ -1,4 +1,4 @@
-use flow_like_types::{Value, create_id, sync::Mutex};
+use flow_like_types::{Value, create_id, json, sync::Mutex};
 use highway::{HighwayHash, HighwayHasher};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -19,6 +19,10 @@ pub struct Variable {
     pub secret: bool,
     pub editable: bool,
     pub hash: Option<u64>,
+    pub schema: Option<String>,
+    /// If true, this variable is configured per-user at runtime (stored locally, not in flow)
+    #[serde(default)]
+    pub runtime_configured: bool,
 
     #[serde(skip)]
     pub value: Arc<Mutex<Value>>,
@@ -36,6 +40,8 @@ impl PartialEq for Variable {
             && self.exposed == other.exposed
             && self.secret == other.secret
             && self.editable == other.editable
+            && self.schema == other.schema
+            && self.runtime_configured == other.runtime_configured
         // Intentionally excluding self.value comparison
     }
 }
@@ -57,6 +63,8 @@ impl Variable {
             editable: true,
             value: Arc::new(Mutex::new(Value::Null)),
             hash: None,
+            schema: None,
+            runtime_configured: false,
         }
     }
 
@@ -74,6 +82,8 @@ impl Variable {
             editable: self.editable,
             value: Arc::new(Mutex::new(Value::Null)),
             hash: None,
+            schema: self.schema.clone(),
+            runtime_configured: self.runtime_configured,
         }
     }
 
@@ -89,6 +99,11 @@ impl Variable {
 
     pub fn set_secret(&mut self, secret: bool) -> &mut Self {
         self.secret = secret;
+        self
+    }
+
+    pub fn set_runtime_configured(&mut self, runtime_configured: bool) -> &mut Self {
+        self.runtime_configured = runtime_configured;
         self
     }
 
@@ -137,14 +152,101 @@ impl Variable {
             hasher.append(default_value);
         }
 
+        if let Some(schema) = &self.schema {
+            hasher.append(schema.as_bytes());
+        }
+
         hasher.append(format!("{:?}", self.data_type).as_bytes());
         hasher.append(format!("{:?}", self.value_type).as_bytes());
         hasher.append(&[self.exposed as u8]);
         hasher.append(&[self.secret as u8]);
         hasher.append(&[self.editable as u8]);
+        hasher.append(&[self.runtime_configured as u8]);
 
         self.hash = Some(hasher.finalize64());
     }
+
+    pub fn set_schema(&mut self, schema: Option<String>) -> &mut Self {
+        self.schema = schema;
+        self
+    }
+
+    /// Infer and set schema from example JSON or validate existing schema.
+    /// If input looks like a JSON Schema, validates it. Otherwise infers schema from the JSON value.
+    /// Returns the normalized schema string on success.
+    pub fn infer_schema_from_json(&mut self, raw: &str) -> flow_like_types::Result<String> {
+        let schema = infer_schema_from_json(raw)?;
+        self.schema = Some(schema.clone());
+        Ok(schema)
+    }
+}
+
+/// Check if a JSON value looks like a JSON Schema
+fn looks_like_schema(value: &Value) -> bool {
+    const SCHEMA_KEYWORDS: &[&str] = &[
+        "type",
+        "properties",
+        "items",
+        "$schema",
+        "$ref",
+        "allOf",
+        "anyOf",
+        "oneOf",
+        "not",
+        "required",
+        "additionalProperties",
+        "patternProperties",
+        "enum",
+        "const",
+        "minimum",
+        "maximum",
+        "minLength",
+        "maxLength",
+        "pattern",
+        "format",
+        "definitions",
+        "$defs",
+    ];
+
+    value
+        .as_object()
+        .is_some_and(|obj| SCHEMA_KEYWORDS.iter().any(|kw| obj.contains_key(*kw)))
+}
+
+/// Infer a JSON Schema from example JSON or validate an existing schema.
+/// Returns the schema as a JSON string.
+/// Only infers from objects/arrays - primitive values (numbers, strings, bools) are rejected
+/// to avoid accidentally treating hash references as example data.
+pub fn infer_schema_from_json(raw: &str) -> flow_like_types::Result<String> {
+    let trimmed = raw.trim();
+    if trimmed.is_empty() {
+        return Err(flow_like_types::anyhow!("Schema input cannot be empty"));
+    }
+
+    let user_json = json::from_str::<Value>(trimmed).map_err(|e| {
+        flow_like_types::anyhow!(
+            "Schema must be valid JSON (either a JSON Schema or an example JSON). Parse error: {e}"
+        )
+    })?;
+
+    let is_schema = looks_like_schema(&user_json) && jsonschema::meta::is_valid(&user_json);
+    let inferred = if is_schema {
+        user_json
+    } else {
+        // Only infer schema from objects or arrays - primitive values (numbers, strings, bools, null)
+        // should not be used for inference as they might be hash references or other non-example data
+        if !user_json.is_object() && !user_json.is_array() {
+            return Err(flow_like_types::anyhow!(
+                "Schema must be a JSON Schema object or example JSON object/array, not a primitive value"
+            ));
+        }
+        let schema = schemars::schema_for_value!(&user_json);
+        let string = json::to_string_pretty(&schema)?;
+        json::from_str(&string)?
+    };
+
+    json::to_string_pretty(&inferred)
+        .map_err(|e| flow_like_types::anyhow!("Failed to serialize schema: {e}"))
 }
 
 #[derive(PartialEq, Eq, Serialize, Deserialize, JsonSchema, Debug, Clone)]

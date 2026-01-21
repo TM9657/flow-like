@@ -3,6 +3,7 @@ import { getCollection } from "astro:content";
 import "@tm9657/flow-like-ui/global.css";
 import "../../styles/Blog.css";
 import BlogLayout from "../../layouts/Blog-Layout.astro";
+import BlogNewsletter from "../../components/blog-newsletter.astro";
 import { LuCopy, LuShare } from "react-icons/lu";
 
 export async function getStaticPaths() {
@@ -90,6 +91,9 @@ const canonical = site ? new URL(Astro.url.pathname, site).toString() : "";
       class="prose prose-zinc dark:prose-invert max-w-none prose-headings:scroll-mt-20 first-h1-hidden"
     >
       <Content />
+
+      <!-- Newsletter CTA -->
+      <BlogNewsletter />
 
       <hr class="my-8" />
       <div class="flex flex-wrap gap-2 justify-between items-center not-prose text-sm">

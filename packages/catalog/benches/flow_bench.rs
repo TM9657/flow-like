@@ -64,6 +64,7 @@ async fn run_once(board: Arc<Board>, state: Arc<FlowLikeState>, profile: &Profil
     let payload = RunPayload {
         id: start_id.to_string(),
         payload: None,
+        runtime_variables: None,
     };
     let mut run = InternalRun::new(
         "bench",

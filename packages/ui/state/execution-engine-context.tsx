@@ -5,6 +5,7 @@ import { RunningTasksIndicator } from "../components/execution-indicator";
 import { ExecutionEngineProvider } from "../lib/execution-engine";
 import type { IIntercomEvent } from "../lib/schema/events/intercom-event";
 import { useBackend } from "./backend-state";
+import { useExecutionServiceOptional } from "./execution-service-context";
 
 const ExecutionEngineContext = createContext<ExecutionEngineProvider | null>(
 	null,
@@ -14,6 +15,7 @@ export function ExecutionEngineProviderComponent({
 	children,
 }: { children: React.ReactNode }) {
 	const backend = useBackend();
+	const executionService = useExecutionServiceOptional();
 	const engineRef = useRef<ExecutionEngineProvider | null>(null);
 
 	if (!engineRef.current) {
@@ -25,6 +27,12 @@ export function ExecutionEngineProviderComponent({
 			engineRef.current.setBackend(backend);
 		}
 	}, [backend]);
+
+	useEffect(() => {
+		if (engineRef.current && executionService) {
+			engineRef.current.setExecuteEventFn(executionService.executeEvent);
+		}
+	}, [executionService]);
 
 	return (
 		<ExecutionEngineContext.Provider value={engineRef.current}>

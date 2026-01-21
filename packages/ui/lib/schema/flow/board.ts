@@ -5,6 +5,7 @@ export interface IBoard {
 	id: string;
 	layers: { [key: string]: ILayer };
 	log_level: ILogLevel;
+	execution_mode: IExecutionMode;
 	name: string;
 	nodes: { [key: string]: INode };
 	refs: { [key: string]: string };
@@ -13,6 +14,7 @@ export interface IBoard {
 	variables: { [key: string]: IVariable };
 	version: number[];
 	viewport: number[];
+	page_ids: string[];
 	[property: string]: any;
 }
 
@@ -175,6 +177,7 @@ export interface IVariable {
 	hash?: number | null;
 	id: string;
 	name: string;
+	schema?: null | string;
 	secret: boolean;
 	value_type: IValueType;
 	[property: string]: any;
@@ -194,4 +197,10 @@ export enum IExecutionStage {
 	PreProd = "PreProd",
 	Prod = "Prod",
 	QA = "QA",
+}
+
+export enum IExecutionMode {
+	Hybrid = "Hybrid",
+	Remote = "Remote",
+	Local = "Local",
 }

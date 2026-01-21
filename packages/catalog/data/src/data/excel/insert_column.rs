@@ -152,6 +152,7 @@ impl NodeLogic for InsertColumnNode {
         node
     }
 
+    #[cfg(feature = "execute")]
     async fn run(&self, context: &mut ExecutionContext) -> flow_like_types::Result<()> {
         use std::io::Cursor;
 
@@ -218,9 +219,16 @@ impl NodeLogic for InsertColumnNode {
         context.activate_exec_pin("exec_out").await?;
         Ok(())
     }
+
+    #[cfg(not(feature = "execute"))]
+    async fn run(&self, _context: &mut ExecutionContext) -> flow_like_types::Result<()> {
+        Err(flow_like_types::anyhow!(
+            "Data processing requires the 'execute' feature"
+        ))
+    }
 }
 
-/// Parse a column reference string (e.g. "B", "AA", or "2") into a 1-based index.
+#[cfg(feature = "execute")]
 fn parse_column_ref(s: &str) -> Option<u32> {
     let t = s.trim();
     if t.is_empty() {
@@ -244,7 +252,7 @@ fn parse_column_ref(s: &str) -> Option<u32> {
     Some(acc)
 }
 
-/// Convert 1-based index to Excel column letters (1 -> A, 27 -> AA)
+#[cfg(feature = "execute")]
 fn index_to_column_letter(mut idx: u32) -> String {
     if idx < 1 {
         return "A".to_string();
@@ -259,7 +267,7 @@ fn index_to_column_letter(mut idx: u32) -> String {
     String::from_utf8(buf).unwrap_or_else(|_| "A".to_string())
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "execute"))]
 mod tests {
     use super::{index_to_column_letter, parse_column_ref};
 

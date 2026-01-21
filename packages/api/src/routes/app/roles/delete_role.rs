@@ -29,10 +29,10 @@ pub async fn delete_role(
         .find_also_related(app::Entity)
         .one(&txn)
         .await?
-        .ok_or(ApiError::NotFound)?;
+        .ok_or(ApiError::NOT_FOUND)?;
 
-    let app = app.ok_or(ApiError::NotFound)?;
-    let default_role_id = app.default_role_id.ok_or(ApiError::NotFound)?;
+    let app = app.ok_or(ApiError::NOT_FOUND)?;
+    let default_role_id = app.default_role_id.ok_or(ApiError::NOT_FOUND)?;
 
     if role_id == default_role_id {
         tracing::warn!(
@@ -41,15 +41,15 @@ pub async fn delete_role(
             role_id,
             app_id
         );
-        return Err(ApiError::Forbidden);
+        return Err(ApiError::FORBIDDEN);
     }
 
     let Some(permission) = RolePermissions::from_bits(role.permissions) else {
-        return Err(ApiError::Forbidden);
+        return Err(ApiError::FORBIDDEN);
     };
 
     if permission.contains(RolePermissions::Owner) {
-        return Err(ApiError::Forbidden);
+        return Err(ApiError::FORBIDDEN);
     }
 
     membership::Entity::update_many()

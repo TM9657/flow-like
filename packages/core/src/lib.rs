@@ -1,5 +1,8 @@
 #![recursion_limit = "256"]
 
+pub mod a2ui;
+#[cfg(feature = "flow")]
+pub mod copilot;
 pub mod credentials;
 #[cfg(feature = "flow")]
 pub mod flow;

@@ -156,6 +156,8 @@ export interface LanceDBExplorerProps {
 	onRefresh?: () => void;
 
 	pageSizeOptions?: readonly number[];
+	initialPage?: number;
+	initialPageSize?: number;
 	initialMode?: "table" | "vector";
 	onSearch?: (args: {
 		query: string;
@@ -236,16 +238,46 @@ const LanceDBExplorer: React.FC<LanceDBExplorerProps> = ({
 	onDropIndex,
 	onRefresh,
 	pageSizeOptions = [25, 50, 100, 250],
+	initialPage = 1,
+	initialPageSize,
 	initialMode = "table",
 	onSearch,
 	className,
 }) => {
 	const [schema, setSchema] = useState<LanceSchema | null>(null);
 
-	const [page, setPage] = useState(1);
+	const [page, setPage] = useState(initialPage);
 	const [pageSize, setPageSize] = useState<number>(
-		pageSizeOptions?.[0] ?? DEFAULT_PAGE_SIZE,
+		initialPageSize ?? pageSizeOptions?.[0] ?? DEFAULT_PAGE_SIZE,
 	);
+
+	// Track if page/pageSize change came from user interaction vs prop sync
+	const isUserInteraction = React.useRef(false);
+
+	// Sync page/pageSize from props when they change (controlled mode)
+	useEffect(() => {
+		if (page !== initialPage) {
+			setPage(initialPage);
+		}
+	}, [initialPage, page]);
+
+	useEffect(() => {
+		if (initialPageSize !== undefined && pageSize !== initialPageSize) {
+			setPageSize(initialPageSize);
+		}
+	}, [initialPageSize, pageSize]);
+
+	// Wrapper to track user-initiated page changes
+	const handlePageChange = React.useCallback((newPage: number) => {
+		isUserInteraction.current = true;
+		setPage(newPage);
+	}, []);
+
+	const handlePageSizeChange = React.useCallback((newSize: number) => {
+		isUserInteraction.current = true;
+		setPageSize(newSize);
+		setPage(1); // Reset to first page on size change
+	}, []);
 
 	const [columnVisibility, setColumnVisibility] = useState<VisibilityState>({});
 	const [columnOrder, setColumnOrder] = useState<ColumnOrderState>([]);
@@ -278,7 +310,6 @@ const LanceDBExplorer: React.FC<LanceDBExplorerProps> = ({
 		let cancelled = false;
 		setSettingsLoaded(false);
 		setInitialPageRequestDone(false);
-		setPage(1);
 		const load = async () => {
 			try {
 				const settings = await db.tableSettings.get(settingsId);
@@ -286,7 +317,10 @@ const LanceDBExplorer: React.FC<LanceDBExplorerProps> = ({
 					setColumnVisibility(settings.columnVisibility ?? {});
 					setColumnOrder(settings.columnOrder ?? []);
 					setSorting(settings.sorting ?? []);
-					setPageSize(settings.pageSize ?? pageSizeDefault);
+					// Only use stored pageSize if no initialPageSize was provided
+					if (initialPageSize === undefined) {
+						setPageSize(settings.pageSize ?? pageSizeDefault);
+					}
 					setColumnSizing(settings.columnSizing ?? {});
 					setDensity(settings.density ?? DEFAULT_DENSITY);
 				}
@@ -300,6 +334,7 @@ const LanceDBExplorer: React.FC<LanceDBExplorerProps> = ({
 		return () => {
 			cancelled = true;
 		};
+		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [settingsId, pageSizeDefault]);
 
 	// Parse schema from Arrow schema when available (separate from settings)
@@ -339,15 +374,19 @@ const LanceDBExplorer: React.FC<LanceDBExplorerProps> = ({
 	]);
 
 	// Notify parent to fetch when page/pageSize/appliedQuery change (after settings loaded)
+	// Only fire callback on user interaction, not on prop sync
 	useEffect(() => {
 		if (!settingsLoaded) return;
+		if (!isUserInteraction.current && initialPageRequestDone) return;
+
+		isUserInteraction.current = false;
 		const offset = (page - 1) * pageSize;
 		const limit = pageSize;
 		onPageRequest?.({ page, pageSize, offset, limit, query: appliedQuery });
 		if (!initialPageRequestDone) {
 			setInitialPageRequestDone(true);
 		}
-	}, [page, pageSize, appliedQuery, settingsLoaded]);
+	}, [page, pageSize, appliedQuery, settingsLoaded, initialPageRequestDone]);
 
 	// Keep inferred schema from rows if no Arrow schema was provided
 	useEffect(() => {
@@ -416,10 +455,9 @@ const LanceDBExplorer: React.FC<LanceDBExplorerProps> = ({
 					? updater({ pageIndex: Math.max(0, page - 1), pageSize })
 					: updater;
 			if (next.pageSize !== pageSize) {
-				setPageSize(next.pageSize);
-				setPage(1);
+				handlePageSizeChange(next.pageSize);
 			} else if (next.pageIndex !== Math.max(0, page - 1)) {
-				setPage(next.pageIndex + 1);
+				handlePageChange(next.pageIndex + 1);
 			}
 		},
 		getCoreRowModel: getCoreRowModel(),
@@ -539,19 +577,19 @@ const LanceDBExplorer: React.FC<LanceDBExplorerProps> = ({
 					onValueChange={setGlobalQuery}
 					onSearch={() => {
 						setAppliedQuery(globalQuery);
-						setPage(1);
+						handlePageChange(1);
 						onSearch?.({ query: globalQuery, mode: initialMode });
 					}}
 					onReset={() => {
 						setGlobalQuery("");
 						setAppliedQuery("");
-						setPage(1);
+						handlePageChange(1);
 						onSearch?.({ query: "", mode: initialMode });
 					}}
 				/>
 
-				<div className="flex flex-col flex-1 min-h-0 rounded-xl border bg-card">
-					<div className="flex-1 w-full overflow-auto">
+				<div className="flex flex-col flex-1 min-h-0 min-w-0 rounded-xl border bg-card">
+					<div className="flex-1 w-full overflow-auto min-h-0">
 						<DataTable className="w-full">
 							<TableHeader className="sticky top-0 bg-card z-10">
 								{table.getHeaderGroups().map((headerGroup) => {
@@ -706,10 +744,7 @@ const LanceDBExplorer: React.FC<LanceDBExplorerProps> = ({
 						<div className="flex items-center gap-2">
 							<Select
 								value={String(pageSize)}
-								onValueChange={(v) => {
-									setPageSize(Number(v));
-									setPage(1);
-								}}
+								onValueChange={(v) => handlePageSizeChange(Number(v))}
 							>
 								<SelectTrigger className="h-8 w-[120px]">
 									<SelectValue placeholder="Page size" />
@@ -725,7 +760,7 @@ const LanceDBExplorer: React.FC<LanceDBExplorerProps> = ({
 							<Button
 								variant="outline"
 								size="sm"
-								onClick={() => setPage((p) => Math.max(1, p - 1))}
+								onClick={() => handlePageChange(Math.max(1, page - 1))}
 								disabled={page === 1}
 							>
 								Prev
@@ -734,7 +769,7 @@ const LanceDBExplorer: React.FC<LanceDBExplorerProps> = ({
 							<Button
 								variant="outline"
 								size="sm"
-								onClick={() => setPage((p) => p + 1)}
+								onClick={() => handlePageChange(page + 1)}
 								disabled={isLastPage}
 							>
 								Next
@@ -1309,7 +1344,7 @@ const CellViewDialog: React.FC<{
 			case "object":
 			case "unknown":
 				return (
-					<pre className="whitespace-pre-wrap text-xs font-mono bg-muted rounded-md p-3">
+					<pre className="whitespace-pre-wrap break-all text-xs font-mono bg-muted rounded-md p-3 overflow-x-auto max-w-full">
 						{safeStringify(value, 2)}
 					</pre>
 				);
@@ -1318,7 +1353,7 @@ const CellViewDialog: React.FC<{
 					return <TextEditor initialContent={value} isMarkdown={true} />;
 				}
 				return (
-					<pre className="whitespace-pre-wrap text-sm bg-muted/50 rounded-md p-3">
+					<pre className="whitespace-pre-wrap break-all text-sm bg-muted/50 rounded-md p-3 overflow-x-auto max-w-full">
 						{String(value)}
 					</pre>
 				);
@@ -1328,7 +1363,7 @@ const CellViewDialog: React.FC<{
 
 	return (
 		<Dialog open={open} onOpenChange={onOpenChange}>
-			<DialogContent className="max-w-7xl w-full min-w-fit">
+			<DialogContent className="max-w-7xl w-full min-w-fit overflow-hidden">
 				<DialogHeader>
 					<DialogTitle className="flex items-center justify-between">
 						<span>
@@ -1352,7 +1387,7 @@ const CellViewDialog: React.FC<{
 						</div>
 					</DialogTitle>
 				</DialogHeader>
-				<div className="space-y-4">
+				<div className="space-y-4 overflow-hidden">
 					{!isEditing ? (
 						<div className="max-h-[60vh] overflow-auto pr-1">
 							{PreviewContent}

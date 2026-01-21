@@ -1,0 +1,129 @@
+---
+interface Props {
+  t: (key: string) => string;
+}
+
+const { t } = Astro.props;
+
+const layers = [
+  {
+    title: t("bi.stack.data.title"),
+    color: "emerald",
+    items: [
+      t("bi.stack.data.item1"),
+      t("bi.stack.data.item2"),
+      t("bi.stack.data.item3"),
+      t("bi.stack.data.item4"),
+    ],
+  },
+  {
+    title: t("bi.stack.ui.title"),
+    color: "blue",
+    items: [
+      t("bi.stack.ui.item1"),
+      t("bi.stack.ui.item2"),
+      t("bi.stack.ui.item3"),
+      t("bi.stack.ui.item4"),
+    ],
+  },
+  {
+    title: t("bi.stack.ai.title"),
+    color: "violet",
+    items: [
+      t("bi.stack.ai.item1"),
+      t("bi.stack.ai.item2"),
+      t("bi.stack.ai.item3"),
+      t("bi.stack.ai.item4"),
+    ],
+  },
+  {
+    title: t("bi.stack.deploy.title"),
+    color: "amber",
+    items: [
+      t("bi.stack.deploy.item1"),
+      t("bi.stack.deploy.item2"),
+      t("bi.stack.deploy.item3"),
+      t("bi.stack.deploy.item4"),
+    ],
+  },
+];
+---
+
+<section class="relative py-28 bg-muted/30">
+  <div class="absolute top-0 left-0 right-0 h-px bg-border" />
+
+  <div class="mx-auto max-w-6xl px-6 lg:px-8">
+    <div class="text-center mb-16">
+      <p class="text-[11px] font-medium tracking-[0.3em] uppercase text-muted-foreground mb-4">
+        {t("bi.stack.tagline")}
+      </p>
+      <h2 class="text-3xl sm:text-4xl font-semibold tracking-tight">
+        {t("bi.stack.headline")}
+      </h2>
+    </div>
+
+    <div class="grid sm:grid-cols-2 lg:grid-cols-4 gap-6">
+      {layers.map((layer, i) => (
+        <div class="relative group">
+          <div class={`
+            absolute inset-0 rounded-2xl transition-opacity duration-300 opacity-0 group-hover:opacity-100
+            ${layer.color === 'emerald' ? 'bg-emerald-500/5' : ''}
+            ${layer.color === 'blue' ? 'bg-blue-500/5' : ''}
+            ${layer.color === 'violet' ? 'bg-violet-500/5' : ''}
+            ${layer.color === 'amber' ? 'bg-amber-500/5' : ''}
+          `} />
+
+          <div class="relative p-6 rounded-2xl border border-border/50 bg-card/50 h-full">
+            <div class={`
+              w-10 h-10 rounded-lg flex items-center justify-center mb-4
+              ${layer.color === 'emerald' ? 'bg-emerald-500/10 text-emerald-600' : ''}
+              ${layer.color === 'blue' ? 'bg-blue-500/10 text-blue-600' : ''}
+              ${layer.color === 'violet' ? 'bg-violet-500/10 text-violet-600' : ''}
+              ${layer.color === 'amber' ? 'bg-amber-500/10 text-amber-600' : ''}
+            `}>
+              {layer.color === 'emerald' && (
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4" />
+                </svg>
+              )}
+              {layer.color === 'blue' && (
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                </svg>
+              )}
+              {layer.color === 'violet' && (
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+                </svg>
+              )}
+              {layer.color === 'amber' && (
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                </svg>
+              )}
+            </div>
+
+            <h3 class={`
+              text-lg font-semibold mb-4
+              ${layer.color === 'emerald' ? 'text-emerald-600' : ''}
+              ${layer.color === 'blue' ? 'text-blue-600' : ''}
+              ${layer.color === 'violet' ? 'text-violet-600' : ''}
+              ${layer.color === 'amber' ? 'text-amber-600' : ''}
+            `}>{layer.title}</h3>
+
+            <ul class="space-y-3">
+              {layer.items.map((item) => (
+                <li class="flex items-start gap-2 text-sm text-muted-foreground">
+                  <svg class="w-4 h-4 mt-0.5 text-primary shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+                  </svg>
+                  <span>{item}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        </div>
+      ))}
+    </div>
+  </div>
+</section>

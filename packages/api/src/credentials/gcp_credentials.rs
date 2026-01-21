@@ -525,6 +525,10 @@ impl RuntimeCredentialsTrait for GcpRuntimeCredentials {
                 service_account_key.clone(),
             )));
             config.register_build_project_database(Arc::new(make_gcs_builder_with_key(
+                bucket.clone(),
+                service_account_key.clone(),
+            )));
+            config.register_build_user_database(Arc::new(make_gcs_builder_with_key(
                 bucket,
                 service_account_key.clone(),
             )));
@@ -534,6 +538,10 @@ impl RuntimeCredentialsTrait for GcpRuntimeCredentials {
                 access_token.clone(),
             )));
             config.register_build_project_database(Arc::new(make_gcs_builder_with_token(
+                bucket.clone(),
+                access_token.clone(),
+            )));
+            config.register_build_user_database(Arc::new(make_gcs_builder_with_token(
                 bucket,
                 access_token.clone(),
             )));

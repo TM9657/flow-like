@@ -1,5 +1,6 @@
 pub mod atlassian;
 pub mod databricks;
+pub mod datafusion;
 pub mod db;
 pub mod excel;
 pub mod github;

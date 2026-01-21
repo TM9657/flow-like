@@ -222,6 +222,7 @@ async fn execute_inner(
     let run_payload = RunPayload {
         id: request.node_id.clone(),
         payload: request.payload.clone(),
+        runtime_variables: request.runtime_variables.clone(),
     };
 
     // Create BufferedInterComHandler to stream events back to client

@@ -1,33 +1,92 @@
 import { create } from "zustand";
 
+import type { IProfile } from "../types";
 import type { IAIState } from "./backend-state/ai-state";
+import type { IApiState } from "./backend-state/api-state";
 import type { IAppState } from "./backend-state/app-state";
 import type { IBitState } from "./backend-state/bit-state";
 import type { IBoardState } from "./backend-state/board-state";
 import type { IDatabaseState } from "./backend-state/db-state";
+import {
+	EmptyAIState,
+	EmptyApiState,
+	EmptyAppState,
+	EmptyBitState,
+	EmptyBoardState,
+	EmptyDatabaseState,
+	EmptyEventState,
+	EmptyHelperState,
+	EmptyRoleState,
+	EmptyRouteState,
+	EmptyStorageState,
+	EmptyTeamState,
+	EmptyTemplateState,
+	EmptyUserState,
+} from "./backend-state/empty-states";
 import type { IEventState } from "./backend-state/event-state";
 import type { IHelperState } from "./backend-state/helper-state";
+import type { IPageState } from "./backend-state/page-state";
+import type { IRegistryState } from "./backend-state/registry-state";
 import type { IRoleState } from "./backend-state/role-state";
+import type { IAppRouteState } from "./backend-state/route-state";
+import type {
+	IEventRegistration,
+	ISinkState,
+} from "./backend-state/sink-state";
 import type { IStorageState } from "./backend-state/storage-state";
 import type { ITeamState } from "./backend-state/team-state";
 import type { ITemplateState } from "./backend-state/template-state";
 import type { IUserState } from "./backend-state/user-state";
+import type { IWidgetState } from "./backend-state/widget-state";
 
+export * from "./backend-state/api-state";
 export * from "./backend-state/empty-states/index";
-
+export * from "./backend-state/registry-state";
+export * from "./backend-state/idb-route-state";
 export type {
 	IAIState,
+	IApiState,
 	IAppState,
+	IAppRouteState,
 	IBitState,
 	IBoardState,
 	IEventState,
 	IHelperState,
+	IPageState,
+	IRegistryState,
 	IRoleState,
+	ISinkState,
+	IEventRegistration,
 	IStorageState,
 	ITeamState,
 	ITemplateState,
 	IUserState,
+	IWidgetState,
 };
+
+export type { SinkType } from "./backend-state/sink-state";
+
+export type {
+	IPage,
+	IWidgetRef,
+	PageContent,
+	PageLayoutType,
+	PageMeta,
+	PageListItem,
+	CanvasSettings,
+	WidgetInstance,
+} from "./backend-state/page-state";
+
+export type { IRouteMapping } from "./backend-state/route-state";
+
+export type {
+	CustomizationOption,
+	CustomizationType,
+	IWidget,
+	ValidationRule,
+	Version,
+	VersionType,
+} from "./backend-state/widget-state";
 
 export type {
 	IBackendRole,
@@ -36,8 +95,20 @@ export type {
 	IJoinRequest,
 	IMember,
 	IStorageItemActionResult,
+	INotification,
+	INotificationsOverview,
+	INotificationEvent,
+	NotificationType,
+	IRuntimeVariable,
+	IOAuthRequirement,
+	IPrerunBoardResponse,
+	IPrerunEventResponse,
 } from "./backend-state/types";
 export * from "./backend-state/db-state";
+export type {
+	IUserWidgetInfo,
+	IUserTemplateInfo,
+} from "./backend-state/user-state";
 
 export interface ICapabilities {
 	needsSignIn: boolean;
@@ -48,6 +119,7 @@ export interface ICapabilities {
 
 export interface IBackendState {
 	appState: IAppState;
+	apiState: IApiState;
 	bitState: IBitState;
 	boardState: IBoardState;
 	userState: IUserState;
@@ -59,6 +131,15 @@ export interface IBackendState {
 	eventState: IEventState;
 	aiState: IAIState;
 	dbState: IDatabaseState;
+	widgetState: IWidgetState;
+	pageState: IPageState;
+	routeState: IAppRouteState;
+	registryState: IRegistryState;
+	/** Sink state for managing active event sinks (desktop only) */
+	sinkState?: ISinkState;
+
+	/** Optional runtime profile (desktop/mobile providers populate this). */
+	profile?: IProfile;
 
 	capabilities(): ICapabilities;
 	isOffline(appId: string): Promise<boolean>;
@@ -74,8 +155,58 @@ export const useBackendStore = create<BackendStoreState>((set) => ({
 	setBackend: (backend: IBackendState) => set({ backend }),
 }));
 
+const serverBackend: IBackendState = {
+	appState: new EmptyAppState(),
+	apiState: new EmptyApiState(),
+	bitState: new EmptyBitState(),
+	boardState: new EmptyBoardState(),
+	userState: new EmptyUserState(),
+	teamState: new EmptyTeamState(),
+	roleState: new EmptyRoleState(),
+	storageState: new EmptyStorageState(),
+	templateState: new EmptyTemplateState(),
+	helperState: new EmptyHelperState(),
+	eventState: new EmptyEventState(),
+	aiState: new EmptyAIState(),
+	dbState: new EmptyDatabaseState(),
+	widgetState: new Proxy(
+		{},
+		{
+			get: () => {
+				throw new Error("WidgetState is not available during prerender");
+			},
+		},
+	) as IWidgetState,
+	pageState: new Proxy(
+		{},
+		{
+			get: () => {
+				throw new Error("PageState is not available during prerender");
+			},
+		},
+	) as IPageState,
+	routeState: new EmptyRouteState(),
+	registryState: new Proxy(
+		{},
+		{
+			get: () => {
+				throw new Error("RegistryState is not available during prerender");
+			},
+		},
+	) as IRegistryState,
+	capabilities: () => ({
+		needsSignIn: false,
+		canHostLlamaCPP: false,
+		canHostEmbeddings: false,
+		canExecuteLocally: false,
+	}),
+	isOffline: async () => true,
+};
+
 export function useBackend(): IBackendState {
 	const backend = useBackendStore((state) => state.backend);
-	if (!backend) throw new Error("Backend not initialized");
+	if (!backend) {
+		return serverBackend;
+	}
 	return backend;
 }

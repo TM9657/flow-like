@@ -57,8 +57,8 @@ impl NodeLogic for VectorSearchLocalDatabaseNode {
 
         node.add_output_pin(
             "exec_out",
-            "Created Database",
-            "Done Creating Database",
+            "Done",
+            "Done Searching Database",
             VariableType::Execution,
         );
 

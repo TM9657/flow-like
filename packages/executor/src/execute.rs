@@ -175,6 +175,7 @@ pub async fn execute(
     let run_payload = RunPayload {
         id: request.node_id.clone(),
         payload: request.payload.clone(),
+        runtime_variables: request.runtime_variables.clone(),
     };
 
     // Create BufferedInterComHandler - this is REQUIRED for meaningful execution output

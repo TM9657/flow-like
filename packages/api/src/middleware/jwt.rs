@@ -262,7 +262,7 @@ impl AppUser {
         if has_permission {
             Ok(global_permission)
         } else {
-            Err(ApiError::Forbidden)
+            Err(ApiError::FORBIDDEN)
         }
     }
 
@@ -376,15 +376,15 @@ pub async fn jwt_middleware(
         let cache_key = hash_token(token);
 
         // Check cache first
-        if let Some(cached) = state.auth_cache.get(&cache_key) {
-            if let CachedAuth::OpenID { sub } = cached {
-                let user = AppUser::OpenID(OpenIDUser {
-                    sub,
-                    access_token: token.to_string(),
-                });
-                request.extensions_mut().insert::<AppUser>(user);
-                return Ok(next.run(request).await);
-            }
+        if let Some(cached) = state.auth_cache.get(&cache_key)
+            && let CachedAuth::OpenID { sub } = cached
+        {
+            let user = AppUser::OpenID(OpenIDUser {
+                sub,
+                access_token: token.to_string(),
+            });
+            request.extensions_mut().insert::<AppUser>(user);
+            return Ok(next.run(request).await);
         }
 
         // Cache miss - validate token

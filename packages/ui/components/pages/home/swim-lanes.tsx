@@ -553,17 +553,17 @@ function AppCardLoading({
 
 	const meta = app.data[0][1];
 	const data = app.data[0][0];
+	const isOwned = apps.data?.some((a) => a[0].id === data.id) ?? false;
 
 	return (
 		<AppCard
-			apps={apps.data?.map((i) => i[0]) ?? []}
+			isOwned={isOwned}
 			app={data}
 			metadata={meta}
 			variant={variant}
 			className={"w-full max-w-full h-full flex grow"}
 			onClick={async () => {
-				const hasAccess = apps.data?.find((a) => a[0].id === data.id);
-				if (hasAccess) return router.push(`/use?id=${data.id}`);
+				if (isOwned) return router.push(`/use?id=${data.id}`);
 				return router.push(`/store?id=${data.id}`);
 			}}
 		/>

@@ -37,7 +37,6 @@ impl Config {
 }
 
 #[derive(Debug)]
-#[allow(dead_code)]
 pub enum ConfigError {
     MissingVar(&'static str),
     InvalidValue(String),

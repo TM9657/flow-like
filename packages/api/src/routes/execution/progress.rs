@@ -98,7 +98,7 @@ pub async fn report_progress(
 
     let claims = verify_execution_jwt(token).map_err(|e| {
         tracing::warn!(error = %e, "Invalid execution JWT");
-        ApiError::BadRequest(format!("Invalid execution JWT: {}", e))
+        ApiError::bad_request(format!("Invalid execution JWT: {}", e))
     })?;
 
     let store = get_state_store(&state).await?;
@@ -106,8 +106,8 @@ pub async fn report_progress(
     let run = store
         .get_run_for_app(&claims.run_id, &claims.app_id)
         .await
-        .map_err(|e| ApiError::InternalError(anyhow!("Failed to get run: {}", e).into()))?
-        .ok_or_else(|| ApiError::NotFound)?;
+        .map_err(|e| ApiError::internal_error(anyhow!("Failed to get run: {}", e)))?
+        .ok_or(ApiError::NOT_FOUND)?;
 
     // Don't accept updates for terminal states
     if run.status.is_terminal() {
@@ -163,7 +163,7 @@ pub async fn report_progress(
     let updated = store
         .update_run(&claims.run_id, update)
         .await
-        .map_err(|e| ApiError::InternalError(anyhow!("Failed to update run: {}", e).into()))?;
+        .map_err(|e| ApiError::internal_error(anyhow!("Failed to update run: {}", e)))?;
 
     Ok(Json(ProgressUpdateResponse {
         accepted: true,
@@ -183,14 +183,15 @@ pub async fn push_events(
     let token = extract_bearer_token(&headers)?;
 
     let claims = verify_execution_jwt(token)
-        .map_err(|e| ApiError::BadRequest(format!("Invalid execution JWT: {}", e)))?;
+        .map_err(|e| ApiError::bad_request(format!("Invalid execution JWT: {}", e)))?;
 
     let store = get_state_store(&state).await?;
 
     // Get current max sequence for this run
-    let max_seq = store.get_max_sequence(&claims.run_id).await.map_err(|e| {
-        ApiError::InternalError(anyhow!("Failed to get max sequence: {}", e).into())
-    })?;
+    let max_seq = store
+        .get_max_sequence(&claims.run_id)
+        .await
+        .map_err(|e| ApiError::internal_error(anyhow!("Failed to get max sequence: {}", e)))?;
 
     let expires_at = chrono::Utc::now().timestamp_millis() + 24 * 60 * 60 * 1000; // 24 hours
     let mut next_seq = max_seq.saturating_add(1);
@@ -215,7 +216,7 @@ pub async fn push_events(
     let accepted = store
         .push_events(events)
         .await
-        .map_err(|e| ApiError::InternalError(anyhow!("Failed to push events: {}", e).into()))?;
+        .map_err(|e| ApiError::internal_error(anyhow!("Failed to push events: {}", e)))?;
 
     Ok(Json(PushEventsResponse {
         accepted,
@@ -271,7 +272,7 @@ pub async fn poll_status(
     let token = extract_bearer_token(&headers)?;
 
     let claims = verify_user_jwt(token)
-        .map_err(|e| ApiError::BadRequest(format!("Invalid user JWT: {}", e)))?;
+        .map_err(|e| ApiError::bad_request(format!("Invalid user JWT: {}", e)))?;
 
     let store = get_state_store(&state).await?;
 
@@ -284,8 +285,8 @@ pub async fn poll_status(
         let run = store
             .get_run_for_app(&claims.run_id, &claims.app_id)
             .await
-            .map_err(|e| ApiError::InternalError(anyhow!("Failed to get run: {}", e).into()))?
-            .ok_or_else(|| ApiError::NotFound)?;
+            .map_err(|e| ApiError::internal_error(anyhow!("Failed to get run: {}", e)))?
+            .ok_or(ApiError::NOT_FOUND)?;
 
         // Get undelivered events
         let events = store
@@ -296,7 +297,7 @@ pub async fn poll_status(
                 limit: Some(100),
             })
             .await
-            .map_err(|e| ApiError::InternalError(anyhow!("Failed to get events: {}", e).into()))?;
+            .map_err(|e| ApiError::internal_error(anyhow!("Failed to get events: {}", e)))?;
 
         // Return immediately if terminal state or we have events
         let is_terminal = run.status.is_terminal();
@@ -352,8 +353,8 @@ pub async fn get_run_status(
     let run = store
         .get_run(&run_id)
         .await
-        .map_err(|e| ApiError::InternalError(anyhow!("Failed to get run: {}", e).into()))?
-        .ok_or_else(|| ApiError::NotFound)?;
+        .map_err(|e| ApiError::internal_error(anyhow!("Failed to get run: {}", e)))?
+        .ok_or(ApiError::NOT_FOUND)?;
 
     crate::ensure_permission!(
         user,
@@ -411,9 +412,9 @@ fn extract_bearer_token(headers: &HeaderMap) -> Result<&str, ApiError> {
     headers
         .get("authorization")
         .and_then(|h| h.to_str().ok())
-        .ok_or_else(|| ApiError::BadRequest("Missing Authorization header".to_string()))?
+        .ok_or_else(|| ApiError::bad_request("Missing Authorization header".to_string()))?
         .strip_prefix("Bearer ")
-        .ok_or_else(|| ApiError::BadRequest("Invalid Authorization header format".to_string()))
+        .ok_or_else(|| ApiError::bad_request("Invalid Authorization header format".to_string()))
 }
 
 /// Get or create the execution state store from app state
@@ -435,5 +436,5 @@ async fn get_state_store(state: &AppState) -> Result<Arc<dyn ExecutionStateStore
 
     crate::execution::state::create_state_store(config)
         .await
-        .map_err(|e| ApiError::InternalError(anyhow!("Failed to create state store: {}", e).into()))
+        .map_err(|e| ApiError::internal_error(anyhow!("Failed to create state store: {}", e)))
 }

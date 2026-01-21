@@ -397,6 +397,7 @@ export function parseBoard(
 					},
 					onOpenInfo: onOpenInfo,
 					onExplain: onExplain,
+					executionMode: board.execution_mode,
 				},
 				selected: selected.has(node.id),
 			});

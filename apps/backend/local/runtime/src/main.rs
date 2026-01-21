@@ -6,9 +6,8 @@ use dotenv::dotenv;
 use flow_like::credentials::SharedCredentials;
 use flow_like_api::execution::{QueueConfig, QueueWorker, QueuedJob};
 use flow_like_executor::{
-    execute, executor_router, ExecutionRequest, ExecutorConfig, ExecutorState, OAuthTokenInput,
+    execute, executor_router, ExecutionRequest, ExecutorConfig, ExecutorState,
 };
-use std::collections::HashMap;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 mod config;
@@ -87,24 +86,6 @@ async fn process_queued_job(job: QueuedJob, executor_config: ExecutorConfig) -> 
     let credentials: SharedCredentials = serde_json::from_str(&job.credentials)
         .map_err(|e| format!("Failed to parse credentials: {}", e))?;
 
-    // Convert oauth_tokens from API type to executor type
-    let oauth_tokens: Option<HashMap<String, OAuthTokenInput>> = job.oauth_tokens.map(|tokens| {
-        tokens
-            .into_iter()
-            .map(|(k, v)| {
-                (
-                    k,
-                    OAuthTokenInput {
-                        access_token: v.access_token,
-                        refresh_token: v.refresh_token,
-                        token_type: v.token_type,
-                        expires_at: v.expires_at,
-                    },
-                )
-            })
-            .collect()
-    });
-
     let exec_request = ExecutionRequest {
         credentials,
         app_id: job.app_id,
@@ -115,8 +96,9 @@ async fn process_queued_job(job: QueuedJob, executor_config: ExecutorConfig) -> 
         payload: job.payload,
         executor_jwt: job.executor_jwt,
         token: job.token,
-        oauth_tokens,
+        oauth_tokens: job.oauth_tokens,
         stream_state: job.stream_state,
+        runtime_variables: job.runtime_variables,
     };
 
     let result = execute(exec_request, executor_config).await;

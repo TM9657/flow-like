@@ -25,7 +25,7 @@ impl NodeLogic for FTSLocalDatabaseNode {
         let mut node = Node::new(
             "fts_search_local_db",
             "Full-Text Search",
-            "Searches the Database based on a Vector and Text",
+            "Searches the Database using Full-Text Search",
             "Data/Database/Search",
         );
         node.add_icon("/flow/icons/database.svg");
@@ -46,6 +46,14 @@ impl NodeLogic for FTSLocalDatabaseNode {
             VariableType::String,
         )
         .set_default_value(Some(json!("")));
+        node.add_input_pin(
+            "fields",
+            "Fields",
+            "Column names to search with FTS (searches all indexed columns if empty)",
+            VariableType::String,
+        )
+        .set_value_type(ValueType::Array)
+        .set_default_value(Some(json!([])));
 
         node.add_input_pin(
             "filter",
@@ -63,8 +71,8 @@ impl NodeLogic for FTSLocalDatabaseNode {
 
         node.add_output_pin(
             "exec_out",
-            "Created Database",
-            "Done Creating Database",
+            "Done",
+            "Done Searching Database",
             VariableType::Execution,
         );
 
@@ -79,6 +87,12 @@ impl NodeLogic for FTSLocalDatabaseNode {
 
         let database: NodeDBConnection = context.evaluate_pin("database").await?;
         let search: String = context.evaluate_pin("search").await?;
+        let fields: Vec<String> = context.evaluate_pin("fields").await.unwrap_or(vec![]);
+        let fields = if fields.is_empty() {
+            None
+        } else {
+            Some(fields)
+        };
         let filter: String = context.evaluate_pin("filter").await?;
         let filter: Option<&str> = if filter.is_empty() {
             None
@@ -90,7 +104,14 @@ impl NodeLogic for FTSLocalDatabaseNode {
         let database = database.load(context).await?.db.clone();
         let database = database.read().await;
         let results = database
-            .fts_search(&search, filter, None, limit as usize, offset as usize)
+            .fts_search(
+                &search,
+                filter,
+                None,
+                fields,
+                limit as usize,
+                offset as usize,
+            )
             .await?;
         context.set_pin_value("values", json!(results)).await?;
         context.activate_exec_pin("exec_out").await?;

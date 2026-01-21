@@ -84,6 +84,7 @@ pub async fn push_meta(
         course_id: Set(None),
         preview_media: Set(None),
         template_id: Set(None),
+        widget_id: Set(None),
     };
 
     new_meta.insert(&state.db).await?;

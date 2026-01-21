@@ -353,7 +353,6 @@ impl AzureRuntimeCredentials {
 
 #[cfg(all(test, feature = "azure"))]
 mod sas_tests {
-    use super::*;
     use base64::{Engine, engine::general_purpose::STANDARD};
     use hmac::{Hmac, Mac};
     use sha2::Sha256;
@@ -600,8 +599,12 @@ impl RuntimeCredentialsTrait for AzureRuntimeCredentials {
             container.clone(),
             sas.clone(),
         )));
-        config
-            .register_build_project_database(Arc::new(make_azure_builder(account, container, sas)));
+        config.register_build_project_database(Arc::new(make_azure_builder(
+            account.clone(),
+            container.clone(),
+            sas.clone(),
+        )));
+        config.register_build_user_database(Arc::new(make_azure_builder(account, container, sas)));
 
         let mut flow_like_state = FlowLikeState::new(config, http_client);
 
@@ -638,7 +641,6 @@ mod integration_tests {
     use super::*;
     use crate::credentials::CredentialsAccess;
     use crate::credentials::RuntimeCredentialsTrait;
-    use flow_like::credentials::SharedCredentialsTrait;
     use flow_like_storage::Path;
     use flow_like_storage::object_store::ObjectStore;
     use flow_like_types::json::{from_str, to_string};

@@ -224,3 +224,24 @@ pub async fn execute_commands(
     board.save(Some(store)).await?;
     Ok(commands)
 }
+
+/// Gets the elements required for executing a workflow on a specific page.
+///
+/// This returns only the elements that are referenced by nodes in the board,
+/// along with their children. Use `wildcard: true` to get all elements.
+#[tauri::command(async)]
+pub async fn get_execution_elements(
+    handler: AppHandle,
+    board_id: String,
+    page_id: String,
+    wildcard: bool,
+) -> Result<std::collections::HashMap<String, flow_like_types::Value>, TauriFunctionError> {
+    let flow_like_state = TauriFlowLikeState::construct(&handler).await?;
+    let board = flow_like_state.get_board(&board_id, None)?;
+    let board = board.lock().await;
+
+    let elements = board
+        .get_execution_elements(&page_id, wildcard, None)
+        .await?;
+    Ok(elements)
+}

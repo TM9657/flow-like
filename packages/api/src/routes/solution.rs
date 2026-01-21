@@ -1,3 +1,4 @@
+use crate::alerting;
 use crate::error::ApiError;
 use crate::mail::{EmailMessage, templates};
 use crate::state::AppState;
@@ -149,26 +150,26 @@ async fn submit_solution(
     };
 
     if submission.name.trim().is_empty() {
-        return Err(ApiError::BadRequest("Name is required".to_string()));
+        return Err(ApiError::bad_request("Name is required".to_string()));
     }
     if submission.email.trim().is_empty() || !submission.email.contains('@') {
-        return Err(ApiError::BadRequest("Valid email is required".to_string()));
+        return Err(ApiError::bad_request("Valid email is required".to_string()));
     }
     if submission.company.trim().is_empty() {
-        return Err(ApiError::BadRequest("Company is required".to_string()));
+        return Err(ApiError::bad_request("Company is required".to_string()));
     }
     if submission.description.len() < 50 {
-        return Err(ApiError::BadRequest(
+        return Err(ApiError::bad_request(
             "Description must be at least 50 characters".to_string(),
         ));
     }
     if submission.example_input.len() < 20 {
-        return Err(ApiError::BadRequest(
+        return Err(ApiError::bad_request(
             "Example input must be at least 20 characters".to_string(),
         ));
     }
     if submission.expected_output.len() < 20 {
-        return Err(ApiError::BadRequest(
+        return Err(ApiError::bad_request(
             "Expected output must be at least 20 characters".to_string(),
         ));
     }
@@ -185,7 +186,7 @@ async fn submit_solution(
             SolutionPricingTier::Appstore,
         ),
         _ => {
-            return Err(ApiError::BadRequest(
+            return Err(ApiError::bad_request(
                 "Invalid pricing tier. Must be 'standard' or 'appstore'".to_string(),
             ));
         }
@@ -214,7 +215,7 @@ async fn submit_solution(
         .as_generic()
         .put(&path, submission_data.into())
         .await
-        .map_err(|e| ApiError::BadRequest(format!("Failed to store submission: {}", e)))?;
+        .map_err(|e| ApiError::bad_request(format!("Failed to store submission: {}", e)))?;
 
     let files_json = serde_json::to_value(&submission.files).ok();
 
@@ -262,6 +263,16 @@ async fn submit_solution(
     };
 
     new_solution.insert(&state.db).await?;
+    alerting::send_alert_email(
+        &state,
+        "New 24-Hour Solution Request",
+        format!(
+            "A new 24-hour solution request has been submitted by {} ({}).",
+            submission.company, submission.email
+        ),
+    )
+    .await
+    .ok();
 
     tracing::info!(
         submission_id = %submission_id,
@@ -490,7 +501,7 @@ async fn get_solution_status(
         .filter(solution_request::Column::TrackingToken.eq(&token))
         .one(&state.db)
         .await?
-        .ok_or(ApiError::NotFound)?;
+        .ok_or(ApiError::NOT_FOUND)?;
 
     let logs = solution_log::Entity::find()
         .filter(solution_log::Column::SolutionId.eq(&solution.id))
@@ -518,7 +529,9 @@ async fn get_solution_status(
         total_cents: solution.total_cents,
         deposit_cents: solution.deposit_cents,
         remainder_cents: solution.remainder_cents,
-        delivered_at: solution.delivered_at.map(|d| d.to_string()),
+        delivered_at: solution
+            .delivered_at
+            .map(|d: chrono::NaiveDateTime| d.to_string()),
         created_at: solution.created_at.to_string(),
         updated_at: solution.updated_at.to_string(),
         logs,

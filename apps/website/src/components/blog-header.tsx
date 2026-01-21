@@ -4,7 +4,13 @@ import type React from "react";
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { BsDiscord, BsGithub, BsTwitterX } from "react-icons/bs";
-import { LuBookHeart, LuBookMarked, LuDownload, LuZap } from "react-icons/lu";
+import {
+	LuBookHeart,
+	LuBookMarked,
+	LuChartBarStacked,
+	LuDownload,
+	LuZap,
+} from "react-icons/lu";
 import { translationsCommon } from "../i18n/locales/pages/common";
 
 const languages = {
@@ -274,27 +280,25 @@ export function BlogHeader() {
 		onClick?: () => void;
 	}> = ({ open, className, onClick }) => (
 		<button
+			type="button"
 			aria-label={open ? "Close menu" : "Open menu"}
 			onClick={onClick}
-			className={`relative w-8 h-8 inline-flex items-center justify-center ${className ?? ""}`}
+			className={`relative w-10 h-10 inline-flex items-center justify-center rounded-md hover:bg-muted/50 transition-colors ${className ?? ""}`}
 		>
 			<span
-				className={`block absolute left-1/2 top-1/2 w-6 h-[2px] bg-foreground transition-transform duration-300 ease-in-out transform origin-center ${
-					open ? "translate-y-0 rotate-45" : "-translate-y-2"
+				className={`block absolute w-5 h-0.5 bg-foreground rounded-full transition-all duration-300 ease-in-out ${
+					open ? "rotate-45" : "-translate-y-1.5"
 				}`}
-				style={{ transformOrigin: "center" }}
 			/>
 			<span
-				className={`block absolute left-1/2 top-1/2 w-6 h-[2px] bg-foreground transition-opacity duration-200 ease-in-out transform ${
-					open ? "opacity-0 scale-90" : "opacity-100 scale-100"
+				className={`block absolute w-5 h-0.5 bg-foreground rounded-full transition-all duration-200 ease-in-out ${
+					open ? "opacity-0 scale-0" : "opacity-100 scale-100"
 				}`}
-				style={{ transform: "translateX(-50%) translateY(-50%)" }}
 			/>
 			<span
-				className={`block absolute left-1/2 top-1/2 w-6 h-[2px] bg-foreground transition-transform duration-300 ease-in-out transform origin-center ${
-					open ? "translate-y-0 -rotate-45" : "translate-y-2"
+				className={`block absolute w-5 h-0.5 bg-foreground rounded-full transition-all duration-300 ease-in-out ${
+					open ? "-rotate-45" : "translate-y-1.5"
 				}`}
-				style={{ transformOrigin: "center" }}
 			/>
 		</button>
 	);
@@ -344,6 +348,20 @@ export function BlogHeader() {
 						</div>
 
 						<nav className="px-6 pb-6 space-y-4">
+							<a
+								href="/modern-bi"
+								onClick={handleNavLinkClick}
+								className={`flex items-center gap-3 px-4 py-3 rounded-md border border-emerald-500/50 text-emerald-600 font-medium transition transform ${
+									open
+										? "opacity-100 translate-x-0"
+										: "opacity-0 -translate-x-2"
+								}`}
+								style={{ transitionDelay: open ? "15ms" : "0ms" }}
+							>
+								<LuChartBarStacked className="w-5 h-5" />
+								<span>Business Intelligence</span>
+							</a>
+
 							<a
 								href="/24-hour-solution"
 								onClick={handleNavLinkClick}
@@ -527,7 +545,7 @@ export function BlogHeader() {
 
 	return (
 		<>
-			<header className="w-full flex flex-row items-center sticky top-0 left-0 right-0 min-h-16 h-16 z-20 backdrop-blur-sm shadow-md bg-background/40 justify-between px-2">
+			<header className="w-full flex flex-row items-center sticky top-0 left-0 right-0 min-h-16 h-16 z-50 backdrop-blur-sm shadow-md bg-background/80 justify-between px-2">
 				<a href="/" className="flex flex-row items-center gap-2 shrink-0">
 					<img alt="logo" src="/icon.webp" className="h-12 w-12" />
 					<h3 className="hidden sm:block">Flow Like</h3>
@@ -535,6 +553,15 @@ export function BlogHeader() {
 
 				{/* Desktop nav (lg+) */}
 				<div className="hidden lg:flex flex-row items-center gap-2">
+					<a href="/modern-bi">
+						<Button
+							variant={"outline"}
+							className="border-emerald-500/50 text-emerald-600 hover:bg-emerald-500/10"
+						>
+							<LuChartBarStacked className="w-5 h-5" />
+							Business Intelligence
+						</Button>
+					</a>
 					<a href="/24-hour-solution">
 						<Button
 							variant={"outline"}
@@ -590,6 +617,15 @@ export function BlogHeader() {
 
 				{/* Tablet nav (sm to lg) */}
 				<div className="hidden sm:flex lg:hidden flex-row items-center gap-1.5">
+					<a href="/modern-bi">
+						<Button
+							variant={"outline"}
+							size={"icon"}
+							className="border-emerald-500/50 text-emerald-600 hover:bg-emerald-500/10"
+						>
+							<LuChartBarStacked className="w-5 h-5" />
+						</Button>
+					</a>
 					<a href="/24-hour-solution">
 						<Button
 							variant={"outline"}

@@ -1,0 +1,1375 @@
+//! A2UI Component Type Definitions
+//!
+//! This module provides strongly-typed Rust representations of all A2UI component types.
+//! These schemas enable better tooling support including autocomplete and node recommendations.
+
+use flow_like_types::json::{Deserialize, Serialize};
+use schemars::JsonSchema;
+use std::collections::HashMap;
+
+use super::{Action, BoundValue, Children, Style};
+
+/// All possible A2UI component types
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[serde(tag = "type", rename_all = "camelCase")]
+pub enum A2UIComponentType {
+    // Layout components
+    Row(RowProps),
+    Column(ColumnProps),
+    Stack(StackProps),
+    Grid(GridProps),
+    ScrollArea(ScrollAreaProps),
+    AspectRatio(AspectRatioProps),
+    Overlay(OverlayProps),
+    Absolute(AbsoluteProps),
+
+    // Display components
+    Text(TextProps),
+    Image(ImageProps),
+    Icon(IconProps),
+    Video(VideoProps),
+    Lottie(LottieProps),
+    Markdown(MarkdownProps),
+    Divider(DividerProps),
+    Badge(BadgeProps),
+    Avatar(AvatarProps),
+    Progress(ProgressProps),
+    Spinner(SpinnerProps),
+    Skeleton(SkeletonProps),
+    Table(TableProps),
+    TableRow(TableRowProps),
+    TableCell(TableCellProps),
+    FilePreview(FilePreviewProps),
+    BoundingBoxOverlay(BoundingBoxOverlayProps),
+
+    // Interactive components
+    Button(ButtonProps),
+    TextField(TextFieldProps),
+    Select(SelectProps),
+    Slider(SliderProps),
+    Checkbox(CheckboxProps),
+    Switch(SwitchProps),
+    RadioGroup(RadioGroupProps),
+    DateTimeInput(DateTimeInputProps),
+    FileInput(FileInputProps),
+    ImageInput(ImageInputProps),
+    Link(LinkProps),
+    ImageLabeler(ImageLabelerProps),
+    ImageHotspot(ImageHotspotProps),
+
+    // Container components
+    Card(CardProps),
+    Modal(ModalProps),
+    Tabs(TabsProps),
+    Accordion(AccordionProps),
+    Drawer(DrawerProps),
+    Tooltip(TooltipProps),
+    Popover(PopoverProps),
+
+    // Game components
+    Canvas2d(Canvas2dProps),
+    Sprite(SpriteProps),
+    Shape(ShapeProps),
+    Scene3d(Scene3dProps),
+    Model3d(Model3dProps),
+    Dialogue(DialogueProps),
+    CharacterPortrait(CharacterPortraitProps),
+    ChoiceMenu(ChoiceMenuProps),
+    InventoryGrid(InventoryGridProps),
+    HealthBar(HealthBarProps),
+    MiniMap(MiniMapProps),
+
+    // Embeds & Charts
+    Iframe(IframeProps),
+    PlotlyChart(PlotlyChartProps),
+    NivoChart(NivoChartProps),
+}
+
+/// A complete A2UI element with its component data, style, and metadata
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct A2UIElement {
+    /// Unique identifier for this element
+    pub id: String,
+    /// Optional style configuration
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub style: Option<Style>,
+    /// The component type and its properties
+    #[serde(flatten)]
+    pub component: A2UIComponentType,
+    /// Child component references
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub children: Option<Children>,
+    /// Actions that can be triggered on this component
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub actions: Option<Vec<Action>>,
+    /// Internal element ID for workflow operations (added at runtime)
+    #[serde(rename = "__element_id", skip_serializing_if = "Option::is_none")]
+    pub element_id: Option<String>,
+}
+
+// =============================================================================
+// Layout Components
+// =============================================================================
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct RowProps {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub gap: Option<BoundValue>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub align: Option<BoundValue>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub justify: Option<BoundValue>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub wrap: Option<BoundValue>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub reverse: Option<BoundValue>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct ColumnProps {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub gap: Option<BoundValue>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub align: Option<BoundValue>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub justify: Option<BoundValue>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub reverse: Option<BoundValue>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub wrap: Option<BoundValue>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct StackProps {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub align: Option<BoundValue>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct GridProps {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub columns: Option<BoundValue>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub rows: Option<BoundValue>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub gap: Option<BoundValue>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub column_gap: Option<BoundValue>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub row_gap: Option<BoundValue>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub auto_flow: Option<BoundValue>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct ScrollAreaProps {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub direction: Option<BoundValue>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct AspectRatioProps {
+    pub ratio: BoundValue,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct OverlayItem {
+    pub component_id: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub anchor: Option<BoundValue>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub offset_x: Option<BoundValue>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub offset_y: Option<BoundValue>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub z_index: Option<BoundValue>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct OverlayProps {
+    pub base_component_id: String,
+    pub overlays: Vec<OverlayItem>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct AbsoluteProps {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub width: Option<BoundValue>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub height: Option<BoundValue>,
+}
+
+// =============================================================================
+// Display Components
+// =============================================================================
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct TextProps {
+    pub content: BoundValue,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub variant: Option<BoundValue>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub size: Option<BoundValue>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub weight: Option<BoundValue>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub color: Option<BoundValue>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub align: Option<BoundValue>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub truncate: Option<BoundValue>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub max_lines: Option<BoundValue>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ImageProps {
+    pub src: BoundValue,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub alt: Option<BoundValue>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub fit: Option<BoundValue>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub fallback: Option<BoundValue>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub loading: Option<BoundValue>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub aspect_ratio: Option<BoundValue>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct IconProps {
+    pub name: BoundValue,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub size: Option<BoundValue>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub color: Option<BoundValue>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub stroke_width: Option<BoundValue>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct VideoProps {
+    pub src: BoundValue,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub poster: Option<BoundValue>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub autoplay: Option<BoundValue>,
+    #[serde(rename = "loop", skip_serializing_if = "Option::is_none")]
+    pub loop_video: Option<BoundValue>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub muted: Option<BoundValue>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub controls: Option<BoundValue>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub width: Option<BoundValue>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub height: Option<BoundValue>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct LottieProps {
+    pub src: BoundValue,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub autoplay: Option<BoundValue>,
+    #[serde(rename = "loop", skip_serializing_if = "Option::is_none")]
+    pub loop_animation: Option<BoundValue>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub speed: Option<BoundValue>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub width: Option<BoundValue>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub height: Option<BoundValue>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct MarkdownProps {
+    pub content: BoundValue,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub allow_html: Option<BoundValue>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct DividerProps {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub orientation: Option<BoundValue>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub thickness: Option<BoundValue>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub color: Option<BoundValue>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct BadgeProps {
+    pub content: BoundValue,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub variant: Option<BoundValue>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub color: Option<BoundValue>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct AvatarProps {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub src: Option<BoundValue>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub fallback: Option<BoundValue>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub size: Option<BoundValue>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ProgressProps {
+    pub value: BoundValue,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub max: Option<BoundValue>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub show_label: Option<BoundValue>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub variant: Option<BoundValue>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub color: Option<BoundValue>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct SpinnerProps {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub size: Option<BoundValue>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub color: Option<BoundValue>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct SkeletonProps {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub width: Option<BoundValue>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub height: Option<BoundValue>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub rounded: Option<BoundValue>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct TableColumnDef {
+    pub id: String,
+    pub header: BoundValue,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub accessor: Option<BoundValue>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub width: Option<BoundValue>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub align: Option<BoundValue>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub sortable: Option<BoundValue>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub hidden: Option<BoundValue>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct TableProps {
+    pub columns: BoundValue,
+    pub data: BoundValue,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub caption: Option<BoundValue>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub striped: Option<BoundValue>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub bordered: Option<BoundValue>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub hoverable: Option<BoundValue>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub compact: Option<BoundValue>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub sticky_header: Option<BoundValue>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub sortable: Option<BoundValue>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub searchable: Option<BoundValue>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub paginated: Option<BoundValue>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub page_size: Option<BoundValue>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub selectable: Option<BoundValue>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub on_row_click: Option<BoundValue>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct TableRowProps {
+    pub cells: BoundValue,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub selected: Option<BoundValue>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub disabled: Option<BoundValue>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct TableCellProps {
+    pub content: BoundValue,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub is_header: Option<BoundValue>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub col_span: Option<BoundValue>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub row_span: Option<BoundValue>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub align: Option<BoundValue>,
+}
+
+// =============================================================================
+// Interactive Components
+// =============================================================================
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ButtonProps {
+    pub label: BoundValue,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub variant: Option<BoundValue>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub size: Option<BoundValue>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub disabled: Option<BoundValue>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub loading: Option<BoundValue>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub icon: Option<BoundValue>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub icon_position: Option<BoundValue>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tooltip: Option<BoundValue>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct TextFieldProps {
+    pub value: BoundValue,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub placeholder: Option<BoundValue>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub label: Option<BoundValue>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub helper_text: Option<BoundValue>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error: Option<BoundValue>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub disabled: Option<BoundValue>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub input_type: Option<BoundValue>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub multiline: Option<BoundValue>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub rows: Option<BoundValue>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub max_length: Option<BoundValue>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub required: Option<BoundValue>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct SelectProps {
+    pub value: BoundValue,
+    pub options: BoundValue,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub placeholder: Option<BoundValue>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub label: Option<BoundValue>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub disabled: Option<BoundValue>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub multiple: Option<BoundValue>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub searchable: Option<BoundValue>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct SliderProps {
+    pub value: BoundValue,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub min: Option<BoundValue>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub max: Option<BoundValue>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub step: Option<BoundValue>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub disabled: Option<BoundValue>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub show_value: Option<BoundValue>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub label: Option<BoundValue>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct CheckboxProps {
+    pub checked: BoundValue,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub label: Option<BoundValue>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub disabled: Option<BoundValue>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub indeterminate: Option<BoundValue>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct SwitchProps {
+    pub checked: BoundValue,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub label: Option<BoundValue>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub disabled: Option<BoundValue>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct RadioGroupProps {
+    pub value: BoundValue,
+    pub options: BoundValue,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub disabled: Option<BoundValue>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub orientation: Option<BoundValue>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub label: Option<BoundValue>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct DateTimeInputProps {
+    pub value: BoundValue,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub mode: Option<BoundValue>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub min: Option<BoundValue>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub max: Option<BoundValue>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub disabled: Option<BoundValue>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub label: Option<BoundValue>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct FileInputProps {
+    pub value: BoundValue,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub label: Option<BoundValue>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub helper_text: Option<BoundValue>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub accept: Option<BoundValue>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub multiple: Option<BoundValue>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub max_size: Option<BoundValue>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub max_files: Option<BoundValue>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub disabled: Option<BoundValue>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error: Option<BoundValue>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ImageInputProps {
+    pub value: BoundValue,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub label: Option<BoundValue>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub helper_text: Option<BoundValue>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub accept: Option<BoundValue>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub multiple: Option<BoundValue>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub max_size: Option<BoundValue>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub max_files: Option<BoundValue>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub disabled: Option<BoundValue>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error: Option<BoundValue>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub aspect_ratio: Option<BoundValue>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub show_preview: Option<BoundValue>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct LinkProps {
+    pub href: BoundValue,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub label: Option<BoundValue>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub route: Option<BoundValue>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub external: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub target: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub variant: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub underline: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub disabled: Option<BoundValue>,
+}
+
+// =============================================================================
+// Container Components
+// =============================================================================
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct CardProps {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub title: Option<BoundValue>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub description: Option<BoundValue>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub footer: Option<BoundValue>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub hoverable: Option<BoundValue>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub clickable: Option<BoundValue>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub variant: Option<BoundValue>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub padding: Option<BoundValue>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub header_image: Option<BoundValue>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub header_icon: Option<BoundValue>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ModalProps {
+    pub open: BoundValue,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub title: Option<BoundValue>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub description: Option<BoundValue>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub close_on_overlay: Option<BoundValue>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub close_on_escape: Option<BoundValue>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub show_close_button: Option<BoundValue>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub size: Option<BoundValue>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub centered: Option<BoundValue>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct TabDefinition {
+    pub id: String,
+    pub label: BoundValue,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub icon: Option<BoundValue>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub disabled: Option<BoundValue>,
+    pub content_component_id: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct TabsProps {
+    pub value: BoundValue,
+    pub tabs: Vec<TabDefinition>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub orientation: Option<BoundValue>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub variant: Option<BoundValue>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct AccordionItem {
+    pub id: String,
+    pub title: BoundValue,
+    pub content_component_id: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct AccordionProps {
+    pub items: Vec<AccordionItem>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub multiple: Option<BoundValue>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub default_expanded: Option<BoundValue>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub collapsible: Option<BoundValue>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct DrawerProps {
+    pub open: BoundValue,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub side: Option<BoundValue>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub title: Option<BoundValue>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub size: Option<BoundValue>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub overlay: Option<BoundValue>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub closable: Option<BoundValue>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct TooltipProps {
+    pub content: BoundValue,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub side: Option<BoundValue>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub delay_ms: Option<BoundValue>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub max_width: Option<BoundValue>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct PopoverProps {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub open: Option<BoundValue>,
+    pub content_component_id: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub side: Option<BoundValue>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub trigger: Option<BoundValue>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub close_on_click_outside: Option<BoundValue>,
+}
+
+// =============================================================================
+// Game Components
+// =============================================================================
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct Canvas2dProps {
+    pub width: BoundValue,
+    pub height: BoundValue,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub background_color: Option<BoundValue>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub pixel_perfect: Option<BoundValue>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct SpriteProps {
+    pub src: BoundValue,
+    pub x: BoundValue,
+    pub y: BoundValue,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub width: Option<BoundValue>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub height: Option<BoundValue>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub rotation: Option<BoundValue>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub scale: Option<BoundValue>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub opacity: Option<BoundValue>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub flip_x: Option<BoundValue>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub flip_y: Option<BoundValue>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub z_index: Option<BoundValue>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ShapeProps {
+    pub shape_type: BoundValue,
+    pub x: BoundValue,
+    pub y: BoundValue,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub width: Option<BoundValue>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub height: Option<BoundValue>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub radius: Option<BoundValue>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub points: Option<BoundValue>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub fill: Option<BoundValue>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub stroke: Option<BoundValue>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub stroke_width: Option<BoundValue>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct Scene3dProps {
+    pub width: BoundValue,
+    pub height: BoundValue,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub camera_type: Option<BoundValue>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub camera_position: Option<BoundValue>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub background_color: Option<BoundValue>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub control_mode: Option<BoundValue>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub fixed_view: Option<BoundValue>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub auto_rotate_speed: Option<BoundValue>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub enable_controls: Option<BoundValue>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub enable_zoom: Option<BoundValue>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub enable_pan: Option<BoundValue>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub fov: Option<BoundValue>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub near: Option<BoundValue>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub far: Option<BoundValue>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub target: Option<BoundValue>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub ambient_light: Option<BoundValue>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub directional_light: Option<BoundValue>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub show_grid: Option<BoundValue>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub show_axes: Option<BoundValue>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct Model3dProps {
+    pub src: BoundValue,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub position: Option<BoundValue>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub rotation: Option<BoundValue>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub scale: Option<BoundValue>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub cast_shadow: Option<BoundValue>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub receive_shadow: Option<BoundValue>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub animation: Option<BoundValue>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub auto_rotate: Option<BoundValue>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub rotate_speed: Option<BoundValue>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct DialogueProps {
+    pub text: BoundValue,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub speaker_name: Option<BoundValue>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub speaker_portrait_id: Option<BoundValue>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub typewriter: Option<BoundValue>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub typewriter_speed: Option<BoundValue>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct CharacterPortraitProps {
+    pub image: BoundValue,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub expression: Option<BoundValue>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub position: Option<BoundValue>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub size: Option<BoundValue>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub dimmed: Option<BoundValue>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ChoiceMenuProps {
+    pub choices: BoundValue,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub title: Option<BoundValue>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub layout: Option<BoundValue>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct InventoryGridProps {
+    pub items: BoundValue,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub columns: Option<BoundValue>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub rows: Option<BoundValue>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub cell_size: Option<BoundValue>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct HealthBarProps {
+    pub value: BoundValue,
+    pub max_value: BoundValue,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub label: Option<BoundValue>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub show_value: Option<BoundValue>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub fill_color: Option<BoundValue>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub background_color: Option<BoundValue>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub variant: Option<BoundValue>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct MiniMapProps {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub map_image: Option<BoundValue>,
+    pub width: BoundValue,
+    pub height: BoundValue,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub markers: Option<BoundValue>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub player_x: Option<BoundValue>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub player_y: Option<BoundValue>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub player_rotation: Option<BoundValue>,
+}
+
+// =============================================================================
+// Embeds
+// =============================================================================
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct IframeProps {
+    pub src: BoundValue,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub width: Option<BoundValue>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub height: Option<BoundValue>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub sandbox: Option<BoundValue>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub allow: Option<BoundValue>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub title: Option<BoundValue>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub loading: Option<BoundValue>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub referrer_policy: Option<BoundValue>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub border: Option<BoundValue>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ChartAxis {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub title: Option<String>,
+    #[serde(rename = "type", skip_serializing_if = "Option::is_none")]
+    pub axis_type: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub min: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub max: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub show_grid: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tick_format: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ChartSeries {
+    pub name: String,
+    #[serde(rename = "type")]
+    pub series_type: String,
+    pub data_source: HashMap<String, String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub color: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub mode: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct PlotlyChartProps {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub chart_type: Option<BoundValue>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub title: Option<BoundValue>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub series: Option<Vec<ChartSeries>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub x_axis: Option<ChartAxis>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub y_axis: Option<ChartAxis>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub data: Option<BoundValue>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub layout: Option<BoundValue>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub config: Option<BoundValue>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub width: Option<BoundValue>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub height: Option<BoundValue>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub responsive: Option<BoundValue>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub show_legend: Option<BoundValue>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub legend_position: Option<BoundValue>,
+}
+
+// =============================================================================
+// Nivo Charts
+// =============================================================================
+
+/// Nivo Chart component props - supports 25+ chart types from the Nivo library
+/// Chart types: bar, line, pie, radar, heatmap, scatter, funnel, treemap, sunburst,
+/// calendar, bump, areaBump, circlePacking, network, sankey, stream, swarmplot,
+/// voronoi, waffle, marimekko, parallelCoordinates, radialBar, boxplot, bullet, chord
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct NivoChartProps {
+    /// The chart type (bar, line, pie, radar, etc.)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub chart_type: Option<BoundValue>,
+    /// Chart title displayed above the chart
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub title: Option<BoundValue>,
+    /// Chart data in Nivo format (varies by chart type)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub data: Option<BoundValue>,
+    /// Chart height (e.g., "400px")
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub height: Option<BoundValue>,
+    /// Color scheme name (e.g., "nivo", "paired") or array of colors
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub colors: Option<BoundValue>,
+    /// Enable animations
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub animate: Option<BoundValue>,
+    /// Show legend
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub show_legend: Option<BoundValue>,
+    /// Legend position: "top", "bottom", "left", "right"
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub legend_position: Option<BoundValue>,
+    /// Key for indexing data (bar, radar charts)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub index_by: Option<BoundValue>,
+    /// Data keys to display (bar, radar, stream charts)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub keys: Option<BoundValue>,
+    /// Chart margins { top, right, bottom, left }
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub margin: Option<BoundValue>,
+    /// Bottom axis configuration
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub axis_bottom: Option<BoundValue>,
+    /// Left axis configuration
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub axis_left: Option<BoundValue>,
+    /// Top axis configuration
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub axis_top: Option<BoundValue>,
+    /// Right axis configuration
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub axis_right: Option<BoundValue>,
+    /// Bar chart specific style options
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub bar_style: Option<BoundValue>,
+    /// Line chart specific style options
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub line_style: Option<BoundValue>,
+    /// Pie/donut chart specific style options
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub pie_style: Option<BoundValue>,
+    /// Radar chart specific style options
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub radar_style: Option<BoundValue>,
+    /// Heatmap chart specific style options
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub heatmap_style: Option<BoundValue>,
+    /// Scatter chart specific style options
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub scatter_style: Option<BoundValue>,
+    /// Funnel chart specific style options
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub funnel_style: Option<BoundValue>,
+    /// Treemap chart specific style options
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub treemap_style: Option<BoundValue>,
+    /// Sankey diagram specific style options
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub sankey_style: Option<BoundValue>,
+    /// Calendar chart specific style options
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub calendar_style: Option<BoundValue>,
+    /// Chord diagram specific style options
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub chord_style: Option<BoundValue>,
+    /// Full Nivo config override for advanced customization
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub config: Option<BoundValue>,
+}
+
+// =============================================================================
+// Image Labeler (Bounding Box Annotation)
+// =============================================================================
+
+/// A labeled bounding box on an image
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct LabelBox {
+    /// Unique identifier for the box
+    pub id: String,
+    /// X coordinate (pixels or normalized 0-1)
+    pub x: f64,
+    /// Y coordinate (pixels or normalized 0-1)
+    pub y: f64,
+    /// Box width
+    pub width: f64,
+    /// Box height
+    pub height: f64,
+    /// Label/class name for the box
+    pub label: String,
+    /// Optional confidence score (0-1)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub confidence: Option<f64>,
+    /// Optional custom color
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub color: Option<String>,
+}
+
+/// Image Labeler component for drawing and managing bounding boxes
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ImageLabelerProps {
+    /// Image source URL
+    pub src: BoundValue,
+    /// Alternative text for accessibility
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub alt: Option<BoundValue>,
+    /// Initial bounding boxes
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub boxes: Option<BoundValue>,
+    /// Available labels to choose from
+    pub labels: BoundValue,
+    /// Disable editing
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub disabled: Option<BoundValue>,
+    /// Show labels on boxes
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub show_labels: Option<BoundValue>,
+    /// Minimum box size in pixels
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub min_box_size: Option<BoundValue>,
+}
+
+// =============================================================================
+// Image Hotspot (Point and Click Interactive Image)
+// =============================================================================
+
+/// A clickable hotspot on an image
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct Hotspot {
+    /// Unique identifier
+    pub id: String,
+    /// X coordinate (pixels or normalized 0-1)
+    pub x: f64,
+    /// Y coordinate (pixels or normalized 0-1)
+    pub y: f64,
+    /// Hotspot size in pixels
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub size: Option<f64>,
+    /// Hotspot color
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub color: Option<String>,
+    /// Icon to display (emoji or icon name)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub icon: Option<String>,
+    /// Label text
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub label: Option<String>,
+    /// Description shown in tooltip
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
+    /// Action name to trigger on click
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub action: Option<String>,
+    /// Whether this hotspot is disabled
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub disabled: Option<bool>,
+}
+
+/// Image Hotspot component for interactive point-and-click images
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ImageHotspotProps {
+    /// Image source URL
+    pub src: BoundValue,
+    /// Alternative text for accessibility
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub alt: Option<BoundValue>,
+    /// Array of hotspots
+    pub hotspots: BoundValue,
+    /// Show marker indicators
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub show_markers: Option<BoundValue>,
+    /// Marker style: "pulse", "dot", "ring", "square", "diamond", "none"
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub marker_style: Option<BoundValue>,
+    /// Image fit: "contain", "cover", "fill"
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub fit: Option<BoundValue>,
+    /// Use normalized coordinates (0-1) instead of pixels
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub normalized: Option<BoundValue>,
+    /// Show tooltips on hover
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub show_tooltips: Option<BoundValue>,
+}
+
+// =============================================================================
+// Bounding Box Overlay (Display Only)
+// =============================================================================
+
+/// A bounding box for display overlay
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct BoundingBox {
+    /// Optional unique identifier
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub id: Option<String>,
+    /// X coordinate
+    pub x: f64,
+    /// Y coordinate
+    pub y: f64,
+    /// Box width
+    pub width: f64,
+    /// Box height
+    pub height: f64,
+    /// Optional label text
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub label: Option<String>,
+    /// Optional confidence score (0-1)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub confidence: Option<f64>,
+    /// Optional custom color
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub color: Option<String>,
+}
+
+/// Bounding Box Overlay component for displaying detection results
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct BoundingBoxOverlayProps {
+    /// Image source URL
+    pub src: BoundValue,
+    /// Alternative text for accessibility
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub alt: Option<BoundValue>,
+    /// Array of bounding boxes to display
+    pub boxes: BoundValue,
+    /// Show labels on boxes
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub show_labels: Option<BoundValue>,
+    /// Show confidence scores
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub show_confidence: Option<BoundValue>,
+    /// Stroke width for boxes
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub stroke_width: Option<BoundValue>,
+    /// Font size for labels
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub font_size: Option<BoundValue>,
+    /// Image fit: "contain", "cover", "fill"
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub fit: Option<BoundValue>,
+    /// Use normalized coordinates (0-1)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub normalized: Option<BoundValue>,
+    /// Enable click events on boxes
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub interactive: Option<BoundValue>,
+}
+
+// =============================================================================
+// File Preview
+// =============================================================================
+
+/// File Preview component for displaying various file types
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct FilePreviewProps {
+    /// File URL or data URI
+    pub src: BoundValue,
+    /// File name (used for type detection if not specified)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub filename: Option<BoundValue>,
+    /// File type override: "pdf", "image", "video", "audio", "code", "text"
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub file_type: Option<BoundValue>,
+    /// Height of the preview area
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub height: Option<BoundValue>,
+    /// Show download button
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub show_download: Option<BoundValue>,
+}

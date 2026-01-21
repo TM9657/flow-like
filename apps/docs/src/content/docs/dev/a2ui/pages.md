@@ -3,14 +3,7 @@ title: Pages
 description: Creating app-specific page layouts with A2UI
 sidebar:
   order: 1
-  badge:
-    text: Coming Soon
-    variant: caution
 ---
-
-:::caution[Coming Soon]
-Page creation is currently under development. This documentation previews the planned features.
-:::
 
 ## What are Pages?
 

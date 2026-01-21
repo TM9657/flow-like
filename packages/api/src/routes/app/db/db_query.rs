@@ -15,11 +15,9 @@ use flow_like_storage::{
     },
     datafusion::prelude::SessionContext,
 };
-use futures_util::StreamExt;
 
 #[derive(Debug, Clone, serde::Deserialize)]
 pub struct VectorQueryPayload {
-    pub column: String,
     pub vector: Vec<f64>,
 }
 
@@ -77,7 +75,7 @@ pub async fn query_table(
         (None, Some(fts_term), filter) => {
             let filter_str = filter.as_deref();
             let items = db
-                .fts_search(&fts_term, filter_str, payload.select, limit, offset)
+                .fts_search(&fts_term, filter_str, payload.select, None, limit, offset)
                 .await?;
             return Ok(Json(items));
         }
@@ -89,6 +87,7 @@ pub async fn query_table(
                     &fts_term,
                     filter_str,
                     payload.select,
+                    None,
                     limit,
                     offset,
                     payload.rerank.unwrap_or(true),
@@ -101,7 +100,7 @@ pub async fn query_table(
             return Ok(Json(items));
         }
         _ => {
-            return Err(ApiError::BadRequest(
+            return Err(ApiError::bad_request(
                 "No valid query parameters provided".to_string(),
             ));
         }

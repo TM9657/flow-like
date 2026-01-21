@@ -3,9 +3,11 @@ pub mod execute_commands;
 pub mod get_board;
 pub mod get_board_versions;
 pub mod get_boards;
+pub mod get_execution_elements;
 pub mod get_runs;
 pub mod invoke_board;
 pub mod invoke_board_async;
+pub mod prerun_board;
 pub mod query_logs;
 pub mod realtime;
 pub mod undo_redo_board;
@@ -40,6 +42,11 @@ pub fn routes() -> Router<AppState> {
         )
         .route("/{board_id}/runs", get(get_runs::get_runs))
         .route("/{board_id}/logs", get(query_logs::query_logs))
+        .route(
+            "/{board_id}/elements",
+            get(get_execution_elements::get_execution_elements),
+        )
+        .route("/{board_id}/prerun", get(prerun_board::prerun_board))
         .route("/{board_id}/undo", patch(undo_redo_board::undo_board))
         .route("/{board_id}/redo", patch(undo_redo_board::redo_board))
         .route("/{board_id}/invoke", post(invoke_board::invoke_board))

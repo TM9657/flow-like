@@ -14,6 +14,8 @@ message Variable {
     bool secret = 9;
     bool editable = 10;
     optional uint64 hash = 11;
+    optional string schema = 12;
+    bool runtime_configured = 13;
 }
 
 enum VariableType {

@@ -121,6 +121,9 @@ pub struct Node {
     pub oauth_providers: Option<Vec<String>>,
     /// OAuth scopes required by this node (provider_id -> scopes)
     pub required_oauth_scopes: Option<HashMap<String, Vec<String>>>,
+    /// If true, this node can only run locally (compute-intensive, RPA, browser automation)
+    #[serde(default)]
+    pub only_offline: bool,
 }
 
 impl Node {
@@ -146,6 +149,7 @@ impl Node {
             fn_refs: None,
             oauth_providers: None,
             required_oauth_scopes: None,
+            only_offline: false,
         }
     }
 
@@ -233,6 +237,11 @@ impl Node {
             .and_then(|scopes| scopes.get(provider_id))
             .cloned()
             .unwrap_or_default()
+    }
+
+    /// Set whether this node can only run locally (offline)
+    pub fn set_only_offline(&mut self, only_offline: bool) {
+        self.only_offline = only_offline;
     }
 
     pub fn add_input_pin(

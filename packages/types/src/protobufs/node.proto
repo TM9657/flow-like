@@ -43,6 +43,7 @@ message Node {
     optional FnRefs fn_refs = 20;
     repeated string oauth_providers = 21;
     map<string, StringList> required_oauth_scopes = 22;
+    bool only_offline = 23;
 }
 
 message StringList {

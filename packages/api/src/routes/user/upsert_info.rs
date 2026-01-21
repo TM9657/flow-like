@@ -37,7 +37,7 @@ pub async fn upsert_info(
     let current_user = user::Entity::find_by_id(&sub)
         .one(&state.db)
         .await?
-        .ok_or(ApiError::NotFound)?;
+        .ok_or(ApiError::NOT_FOUND)?;
 
     let mut updated_user: user::ActiveModel = current_user.clone().into();
 

@@ -1,6 +1,7 @@
 "use client";
 import {
 	ExecutionEngineProviderComponent,
+	ExecutionServiceProvider,
 	PersistQueryClientProvider,
 	QueryClient,
 	ReactFlowProvider,
@@ -43,12 +44,15 @@ import { useEffect } from "react";
 import { AppSidebar } from "../components/app-sidebar";
 import { DesktopAuthProvider } from "../components/auth-provider";
 import GlobalAnchorHandler from "../components/global-anchor-component";
+import NotificationProvider from "../components/notification-provider";
 import { OAuthCallbackHandler } from "../components/oauth-callback-handler";
 import { OAuthExecutionProvider } from "../components/oauth-execution-provider";
+import { RuntimeVariablesProviderComponent } from "../components/runtime-variables-provider";
 import { SpotlightWrapper } from "../components/spotlight-wrapper";
 import { TauriProvider } from "../components/tauri-provider";
 import { ThemeLoader } from "../components/theme-loader";
 import ToastProvider from "../components/toast-provider";
+import TrayProvider from "../components/tray-provider";
 import { UpdateProvider } from "../components/update-provider";
 import PostHogPageView from "./PostHogPageView";
 import { PHProvider } from "./provider";
@@ -163,6 +167,7 @@ export default function RootLayout({
 							<body className={inter.className}>
 								<NetworkStatusIndicator />
 								<UpdateProvider />
+								<TrayProvider />
 								<GlobalAnchorHandler />
 								<ThemeProvider
 									attribute="class"
@@ -178,13 +183,18 @@ export default function RootLayout({
 											<OAuthCallbackHandler>
 												<OAuthExecutionProvider>
 													<DesktopAuthProvider>
-														<ExecutionEngineProviderComponent>
-															<SpotlightWrapper>
-																<PostHogPageView />
-																<ThemeLoader />
-																<AppSidebar>{children}</AppSidebar>
-															</SpotlightWrapper>
-														</ExecutionEngineProviderComponent>
+														<NotificationProvider />
+														<RuntimeVariablesProviderComponent>
+															<ExecutionServiceProvider>
+																<ExecutionEngineProviderComponent>
+																	<SpotlightWrapper>
+																		<PostHogPageView />
+																		<ThemeLoader />
+																		<AppSidebar>{children}</AppSidebar>
+																	</SpotlightWrapper>
+																</ExecutionEngineProviderComponent>
+															</ExecutionServiceProvider>
+														</RuntimeVariablesProviderComponent>
 													</DesktopAuthProvider>
 												</OAuthExecutionProvider>
 											</OAuthCallbackHandler>

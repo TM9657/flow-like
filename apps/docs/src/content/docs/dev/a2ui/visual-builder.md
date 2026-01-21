@@ -3,14 +3,7 @@ title: Visual Builder
 description: Drag-and-drop interface for creating A2UI pages and widgets
 sidebar:
   order: 3
-  badge:
-    text: Coming Soon
-    variant: caution
 ---
-
-:::caution[Coming Soon]
-The visual builder is currently under development. This documentation previews the planned interface.
-:::
 
 ## Overview
 

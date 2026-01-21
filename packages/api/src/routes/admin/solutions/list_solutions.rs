@@ -94,21 +94,21 @@ pub async fn list_solutions(
             "paid" => crate::entity::sea_orm_active_enums::SolutionStatus::Paid,
             "cancelled" => crate::entity::sea_orm_active_enums::SolutionStatus::Cancelled,
             "refunded" => crate::entity::sea_orm_active_enums::SolutionStatus::Refunded,
-            _ => return Err(ApiError::BadRequest("Invalid status filter".to_string())),
+            _ => return Err(ApiError::bad_request("Invalid status filter".to_string())),
         };
         select = select.filter(solution_request::Column::Status.eq(status));
     }
 
-    if let Some(search) = &query.search {
-        if !search.trim().is_empty() {
-            let search_pattern = format!("%{}%", search.trim().to_lowercase());
-            select = select.filter(
-                solution_request::Column::Name
-                    .like(&search_pattern)
-                    .or(solution_request::Column::Email.like(&search_pattern))
-                    .or(solution_request::Column::Company.like(&search_pattern)),
-            );
-        }
+    if let Some(search) = &query.search
+        && !search.trim().is_empty()
+    {
+        let search_pattern = format!("%{}%", search.trim().to_lowercase());
+        select = select.filter(
+            solution_request::Column::Name
+                .like(&search_pattern)
+                .or(solution_request::Column::Email.like(&search_pattern))
+                .or(solution_request::Column::Company.like(&search_pattern)),
+        );
     }
 
     let total = select.clone().count(&state.db).await?;

@@ -64,6 +64,7 @@ import {
 	BugIcon,
 	ChevronRight,
 	ChevronsUpDown,
+	Code2Icon,
 	CreditCard,
 	Edit3Icon,
 	ExternalLinkIcon,
@@ -83,6 +84,7 @@ import {
 	Sun,
 	UsersRoundIcon,
 	WorkflowIcon,
+	ZapIcon,
 } from "lucide-react";
 import { useTheme } from "next-themes";
 import Link from "next/link";
@@ -133,6 +135,23 @@ const data = {
 				// 	title: "Favorites",
 				// 	url: "/library/favorites",
 				// },
+			],
+		},
+		{
+			title: "Developer",
+			url: "/settings/registry",
+			icon: Code2Icon,
+			isActive: false,
+			permission: false,
+			items: [
+				{
+					title: "Installed",
+					url: "/settings/registry/installed",
+				},
+				{
+					title: "Explore",
+					url: "/settings/registry/explore",
+				},
 			],
 		},
 		// {
@@ -838,8 +857,14 @@ export function NavUser({
 		backend.userState.getNotifications,
 		backend.userState,
 		[],
+		true,
+		[],
+		0, // staleTime: 0 to always refetch on mount
 	);
-	const notificationCount = notifications.data?.invites_count ?? 0;
+	// Show total unread count (includes invites + local workflow notifications)
+	const notificationCount =
+		(notifications.data?.unread_count ?? 0) +
+		(notifications.data?.invites_count ?? 0);
 
 	return (
 		<SidebarMenu>
@@ -860,7 +885,7 @@ export function NavUser({
 								</AvatarFallback>
 							</Avatar>
 							{notificationCount > 0 && (
-								<div className="absolute -top-0 -left-0 bg-red-500 text-white text-xs rounded-full min-w-[16px] h-4 flex items-center justify-center px-1">
+								<div className="absolute -top-2 -right-2 bg-red-500 text-white text-xs rounded-full min-w-[16px] h-4 flex items-center justify-center px-1">
 									{notificationCount > 5 ? "5+" : notificationCount}
 								</div>
 							)}
@@ -951,6 +976,12 @@ export function NavUser({
 										<DropdownMenuItem className="gap-2 p-2">
 											<KeyIcon className="size-4" />
 											Token
+										</DropdownMenuItem>
+									</a>
+									<a href="/settings/sinks">
+										<DropdownMenuItem className="gap-2 p-2">
+											<ZapIcon className="size-4" />
+											Active Sinks
 										</DropdownMenuItem>
 									</a>
 								</DropdownMenuGroup>

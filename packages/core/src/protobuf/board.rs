@@ -1,5 +1,5 @@
 use crate::flow::{
-    board::{Board, Comment, ExecutionStage, Layer, LayerType},
+    board::{Board, Comment, ExecutionMode, ExecutionStage, Layer, LayerType},
     execution::LogLevel,
     node::Node,
     pin::Pin,
@@ -27,7 +27,26 @@ impl ExecutionStage {
             2 => ExecutionStage::QA,
             3 => ExecutionStage::PreProd,
             4 => ExecutionStage::Prod,
-            _ => ExecutionStage::Dev, // Default
+            _ => ExecutionStage::Dev,
+        }
+    }
+}
+
+impl ExecutionMode {
+    fn to_proto(&self) -> i32 {
+        match self {
+            ExecutionMode::Hybrid => 0,
+            ExecutionMode::Remote => 1,
+            ExecutionMode::Local => 2,
+        }
+    }
+
+    fn from_proto(value: i32) -> Self {
+        match value {
+            0 => ExecutionMode::Hybrid,
+            1 => ExecutionMode::Remote,
+            2 => ExecutionMode::Local,
+            _ => ExecutionMode::Hybrid,
         }
     }
 }
@@ -100,6 +119,7 @@ impl ToProto<flow_like_types::proto::Board> for Board {
                 .iter()
                 .map(|(layer_id, layer)| (layer_id.clone(), layer.to_proto()))
                 .collect(),
+            page_ids: self.page_ids.clone(),
             viewport_x: self.viewport.0,
             viewport_y: self.viewport.1,
             viewport_zoom: self.viewport.2,
@@ -108,6 +128,7 @@ impl ToProto<flow_like_types::proto::Board> for Board {
             version_patch: self.version.2,
             stage: self.stage.to_proto(),
             log_level: self.log_level.to_proto(),
+            execution_mode: self.execution_mode.to_proto(),
             refs: self.refs.clone(),
             created_at: Some(Timestamp::from(self.created_at)),
             updated_at: Some(Timestamp::from(self.updated_at)),
@@ -147,8 +168,10 @@ impl FromProto<flow_like_types::proto::Board> for Board {
                 .into_iter()
                 .map(|(layer_id, layer)| (layer_id, Layer::from_proto(layer)))
                 .collect(),
+            page_ids: proto.page_ids,
             stage: ExecutionStage::from_proto(proto.stage),
             log_level: LogLevel::from_proto(proto.log_level),
+            execution_mode: ExecutionMode::from_proto(proto.execution_mode),
             refs: proto.refs,
             created_at: proto
                 .created_at
@@ -159,7 +182,7 @@ impl FromProto<flow_like_types::proto::Board> for Board {
                 .map(|t| SystemTime::try_from(t).unwrap_or(SystemTime::UNIX_EPOCH))
                 .unwrap_or(SystemTime::UNIX_EPOCH),
             parent: None,
-            board_dir: Path::from("/default"), // Placeholder, set as needed
+            board_dir: Path::from("/default"),
             logic_nodes: HashMap::new(),
             app_state: None,
         }

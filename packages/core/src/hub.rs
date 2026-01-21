@@ -42,6 +42,11 @@ pub struct MailConfig {
 }
 
 #[derive(Clone, Debug, Serialize, JsonSchema, Deserialize)]
+pub struct AlertingConfig {
+    pub mail: String,
+}
+
+#[derive(Clone, Debug, Serialize, JsonSchema, Deserialize)]
 pub struct UserTier {
     pub max_non_visible_projects: i32,
     pub max_remote_executions: i32,
@@ -79,6 +84,7 @@ pub struct Hub {
     pub app: Option<String>,
     pub web: Option<String>,
     pub mail: Option<MailConfig>,
+    pub alerting: Option<AlertingConfig>,
     pub legal_notice: String,
     pub privacy_policy: String,
     pub contact: Contact,
@@ -232,6 +238,8 @@ pub struct Features {
     pub unauthorized_read: bool,
     pub admin_interface: bool,
     pub premium: bool,
+    #[serde(default)]
+    pub wasm_registry: bool,
 }
 
 #[derive(Debug, Serialize, Deserialize, JsonSchema, Clone)]

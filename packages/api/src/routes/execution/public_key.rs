@@ -16,7 +16,7 @@ use axum::Json;
 pub async fn get_execution_jwks() -> Result<Json<Jwks>, ApiError> {
     let jwks = backend_jwt::get_jwks().map_err(|e: BackendJwtError| {
         tracing::error!(error = %e, "Failed to get backend JWKS");
-        ApiError::InternalError(e.into())
+        ApiError::internal_error(e.into())
     })?;
 
     Ok(Json(jwks))

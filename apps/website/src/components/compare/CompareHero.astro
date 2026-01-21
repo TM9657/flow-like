@@ -1,0 +1,63 @@
+---
+interface Props {
+  t: (key: string) => string;
+}
+
+const { t } = Astro.props;
+---
+
+<section class="relative min-h-[70vh] flex items-center overflow-hidden">
+  <!-- Decorative background -->
+  <div aria-hidden="true" class="pointer-events-none absolute inset-0 -z-10">
+    <div class="absolute inset-0 bg-[radial-gradient(60%_60%_at_50%_20%,hsl(var(--primary)/.08),transparent)]"></div>
+    <div class="absolute inset-0 bg-[radial-gradient(40%_40%_at_80%_60%,hsl(var(--secondary)/.06),transparent)]"></div>
+    <div class="absolute inset-0 [mask-image:radial-gradient(70%_70%_at_50%_40%,black,transparent)] bg-[linear-gradient(to_right,theme(colors.muted.DEFAULT/.08)_1px,transparent_1px),linear-gradient(to_bottom,theme(colors.muted.DEFAULT/.08)_1px,transparent_1px)] bg-[size:48px_48px]"></div>
+  </div>
+
+  <div class="mx-auto max-w-5xl px-6 lg:px-8 py-20 lg:py-28 w-full">
+    <div class="text-center">
+      <p class="text-[11px] font-medium tracking-[0.3em] uppercase text-muted-foreground mb-6">
+        {t("compare.hero.tagline")}
+      </p>
+
+      <h1 class="text-4xl sm:text-5xl lg:text-6xl font-bold tracking-tight leading-[1.1] mb-6">
+        {t("compare.hero.headline")} <span class="text-primary">{t("compare.hero.headline.highlight")}</span>
+      </h1>
+
+      <p class="text-lg sm:text-xl text-muted-foreground leading-relaxed max-w-3xl mx-auto mb-10">
+        {t("compare.hero.description")}
+      </p>
+
+      <div class="flex flex-wrap items-center justify-center gap-4">
+        <a
+          href="/download"
+          class="inline-flex items-center justify-center rounded-full bg-primary text-primary-foreground px-6 py-3 text-sm font-medium hover:bg-primary/90 transition-all hover:scale-[1.02] active:scale-[0.98] shadow-lg shadow-primary/20"
+        >
+          {t("compare.hero.cta")}
+        </a>
+        <a
+          href="#matrix"
+          class="inline-flex items-center justify-center rounded-full border border-border/80 bg-background/50 px-6 py-3 text-sm font-medium text-foreground hover:bg-muted/50 hover:border-border transition-colors"
+        >
+          {t("compare.hero.cta.demo")}
+        </a>
+      </div>
+
+      <!-- Legend -->
+      <div class="mt-16 flex flex-wrap items-center justify-center gap-6 text-sm">
+        <div class="flex items-center gap-2">
+          <span class="flex items-center justify-center w-6 h-6 rounded-full bg-emerald-500/20 text-emerald-500">✓</span>
+          <span class="text-muted-foreground">{t("compare.legend.native")}</span>
+        </div>
+        <div class="flex items-center gap-2">
+          <span class="flex items-center justify-center w-6 h-6 rounded-full bg-amber-500/20 text-amber-500">◐</span>
+          <span class="text-muted-foreground">{t("compare.legend.partial")}</span>
+        </div>
+        <div class="flex items-center gap-2">
+          <span class="flex items-center justify-center w-6 h-6 rounded-full bg-red-500/20 text-red-500">✗</span>
+          <span class="text-muted-foreground">{t("compare.legend.none")}</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>

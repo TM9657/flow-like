@@ -50,10 +50,10 @@ fn create_sse_stream(
             match result {
                 Ok(sse_event) => {
                     // Check if this is a completed event and update the database
-                    if let Some(db) = &db {
-                        if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(&sse_event.data) {
-                            if let Some(event_type) = parsed.get("event_type").and_then(|v| v.as_str()) {
-                                if event_type == "completed" {
+                    if let Some(db) = &db
+                        && let Ok(parsed) = serde_json::from_str::<serde_json::Value>(&sse_event.data)
+                            && let Some(event_type) = parsed.get("event_type").and_then(|v| v.as_str())
+                                && event_type == "completed" {
                                     let log_level = parsed.get("payload")
                                         .and_then(|p| p.get("log_level"))
                                         .and_then(|l| l.as_i64())
@@ -78,9 +78,6 @@ fn create_sse_stream(
                                         }
                                     });
                                 }
-                            }
-                        }
-                    }
 
                     let event = Event::default()
                         .event(&sse_event.event)

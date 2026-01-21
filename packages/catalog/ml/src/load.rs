@@ -3,7 +3,9 @@
 //! Deserializes a previously trained and saved MLModel JSON file as the matching MLModel variant.
 //! Wraps the MLModel in a cached NodeMLModel.
 
-use crate::ml::{MLModel, NodeMLModel};
+#[cfg(feature = "execute")]
+use crate::ml::MLModel;
+use crate::ml::NodeMLModel;
 use flow_like::flow::{
     execution::{LogLevel, context::ExecutionContext},
     node::{Node, NodeLogic, NodeScores},
@@ -11,7 +13,9 @@ use flow_like::flow::{
     variable::VariableType,
 };
 use flow_like_catalog_core::FlowPath;
-use flow_like_types::{Result, async_trait, json};
+#[cfg(feature = "execute")]
+use flow_like_types::json;
+use flow_like_types::{Result, async_trait};
 
 #[crate::register_node]
 #[derive(Default)]
@@ -80,6 +84,7 @@ impl NodeLogic for LoadMLModelNode {
         node
     }
 
+    #[cfg(feature = "execute")]
     async fn run(&self, context: &mut ExecutionContext) -> Result<()> {
         // fetch inputs
         context.deactivate_exec_pin("exec_out").await?;
@@ -100,5 +105,12 @@ impl NodeLogic for LoadMLModelNode {
             .await?;
         context.activate_exec_pin("exec_out").await?;
         Ok(())
+    }
+
+    #[cfg(not(feature = "execute"))]
+    async fn run(&self, _context: &mut ExecutionContext) -> Result<()> {
+        Err(flow_like_types::anyhow!(
+            "ML execution requires the 'execute' feature. Rebuild with --features execute"
+        ))
     }
 }

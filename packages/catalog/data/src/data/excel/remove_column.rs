@@ -5,7 +5,9 @@ use flow_like::flow::{
     variable::VariableType,
 };
 use flow_like_types::{async_trait, json::json};
+#[cfg(feature = "execute")]
 use std::io::Cursor;
+#[cfg(feature = "execute")]
 use umya_spreadsheet::{self};
 
 /// Remove one or more columns from an XLSX worksheet (object-store aware).
@@ -67,6 +69,7 @@ impl NodeLogic for RemoveColumnNode {
         node
     }
 
+    #[cfg(feature = "execute")]
     async fn run(&self, ctx: &mut ExecutionContext) -> flow_like_types::Result<()> {
         ctx.deactivate_exec_pin("exec_out").await?;
 
@@ -129,8 +132,16 @@ impl NodeLogic for RemoveColumnNode {
         ctx.activate_exec_pin("exec_out").await?;
         Ok(())
     }
+
+    #[cfg(not(feature = "execute"))]
+    async fn run(&self, _context: &mut ExecutionContext) -> flow_like_types::Result<()> {
+        Err(flow_like_types::anyhow!(
+            "Data processing requires the 'execute' feature"
+        ))
+    }
 }
 
+#[cfg(feature = "execute")]
 fn normalize_col_letters(input: &str) -> flow_like_types::Result<String> {
     let s = input.trim();
     // If it's numeric, convert to letters
@@ -156,6 +167,7 @@ fn normalize_col_letters(input: &str) -> flow_like_types::Result<String> {
     Ok(upper)
 }
 
+#[cfg(feature = "execute")]
 fn col_index_to_letters_1_based(mut n: u32) -> String {
     let mut s = String::new();
     while n > 0 {

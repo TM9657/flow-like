@@ -41,4 +41,21 @@ message Event {
   bool active = 15;
   string event_type = 16;
   uint32 priority = 17;
+  // A2UI: default page to render for this event
+  optional string default_page_id = 18;
+  // Input pins copied from the node at publish time
+  repeated EventInput inputs = 19;
+}
+
+// Simplified input pin metadata for events
+message EventInput {
+  string id = 1;
+  string name = 2;
+  string friendly_name = 3;
+  string description = 4;
+  string data_type = 5;
+  string value_type = 6;
+  optional string schema = 7;
+  optional bytes default_value = 8;
+  uint32 index = 9;
 }

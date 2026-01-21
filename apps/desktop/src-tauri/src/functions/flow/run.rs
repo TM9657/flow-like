@@ -2,7 +2,7 @@ use flow_like::app::App;
 use flow_like::credentials::SharedCredentials;
 use flow_like::flow::execution::InternalRun;
 use flow_like::flow::execution::log::LogMessage;
-use flow_like::flow::execution::{LogLevel, LogMeta, RunPayload};
+use flow_like::flow::execution::{LogLevel, LogMeta, RunPayload, flush_run_cancelled};
 use flow_like::flow::oauth::OAuthToken;
 use flow_like::flow_like_storage::lancedb::query::{ExecutableQuery, QueryBase};
 use flow_like::flow_like_storage::{Path, serde_arrow};
@@ -14,13 +14,28 @@ use futures::TryStreamExt;
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
-use tauri::AppHandle;
+use tauri::{AppHandle, Manager};
 
 use crate::utils::UiEmitTarget;
 use crate::{
     functions::TauriFunctionError,
     state::{TauriFlowLikeState, TauriSettingsState},
 };
+
+/// Update the last_node_update timestamp for a run when we see run events
+fn touch_run_last_update(app_handle: &AppHandle, events: &[InterComEvent]) {
+    for event in events {
+        // Run events have type "run:{run_id}"
+        if event.event_type.starts_with("run:") {
+            let run_id = &event.event_type[4..]; // Skip "run:" prefix
+            if let Some(state) = app_handle.try_state::<TauriFlowLikeState>()
+                && let Some(run_data) = state.0.board_run_registry.get(run_id)
+            {
+                run_data.touch_last_node_update();
+            }
+        }
+    }
+}
 
 async fn execute_internal(
     app_handle: AppHandle,
@@ -67,6 +82,9 @@ async fn execute_internal(
             let app_handle = app_handle.clone();
             Box::pin({
                 async move {
+                    // Update last_node_update for run events
+                    touch_run_last_update(&app_handle, &event);
+
                     if let Err(err) = events_cb.send(event.clone()) {
                         println!("Error emitting event: {}", err);
                     }
@@ -92,6 +110,11 @@ async fn execute_internal(
         Some(true),
     ));
 
+    let (event_name, event_type) = event
+        .as_ref()
+        .map(|e| (Some(e.name.clone()), Some(e.event_type.clone())))
+        .unwrap_or((None, None));
+
     let mut internal_run = InternalRun::new(
         &app_id,
         board,
@@ -116,28 +139,53 @@ async fn execute_internal(
         .await;
 
     let cancellation_token = CancellationToken::new();
-    let run_data = RunData::new(&board_id, &payload.id, None, cancellation_token.clone());
+    let board_name = internal_run.board.name.clone();
+    let run_data = RunData::with_metadata(
+        &board_id,
+        &payload.id,
+        None,
+        cancellation_token.clone(),
+        Some(board_name),
+        event_name,
+        event_type,
+    );
 
     flow_like_state.register_run(&run_id, run_data);
 
+    let run_arc = internal_run.run.clone();
+
+    // Spawn execution as a task so we can abort it immediately on cancellation
+    let flow_like_state_for_task = flow_like_state.clone();
+    let handle = tokio::spawn(async move { internal_run.execute(flow_like_state_for_task).await });
+
+    let abort_handle = handle.abort_handle();
+
     let meta = tokio::select! {
-        result = internal_run.execute(flow_like_state.clone()) => result,
+        biased;
         _ = cancellation_token.cancelled() => {
             println!("Board execution cancelled for run: {}", run_id);
-            match tokio::time::timeout(Duration::from_secs(30), internal_run.flush_logs_cancelled()).await {
-                Ok(Ok(Some(meta))) => {
-                    Some(meta)
-                },
-                Ok(Ok(None)) => {
-                    println!("No meta flushing early");
-                    None
-                },
+            abort_handle.abort();
+            match tokio::time::timeout(Duration::from_secs(30), flush_run_cancelled(&run_arc)).await {
+                Ok(Ok(meta)) => meta,
                 Ok(Err(e)) => {
-                    println!("Error flushing logs early for run: {}, {:?}", run_id, e);
+                    println!("Error flushing logs for cancelled run: {}, {:?}", run_id, e);
                     None
-                },
+                }
                 Err(_) => {
-                    println!("Timeout while flushing logs early for run: {}", run_id);
+                    println!("Timeout while flushing logs for cancelled run: {}", run_id);
+                    None
+                }
+            }
+        }
+        result = handle => {
+            match result {
+                Ok(meta) => meta,
+                Err(e) if e.is_cancelled() => {
+                    println!("Task was cancelled for run: {}", run_id);
+                    None
+                }
+                Err(e) => {
+                    println!("Task panicked for run: {}, {:?}", run_id, e);
                     None
                 }
             }

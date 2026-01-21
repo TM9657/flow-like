@@ -157,7 +157,7 @@ pub async fn db_query(
         (None, Some(fts_term), filter) => {
             let filter_str = filter.as_deref();
             let items = db
-                .fts_search(&fts_term, filter_str, payload.select, limit, offset)
+                .fts_search(&fts_term, filter_str, payload.select, None, limit, offset)
                 .await?;
             Ok(items)
         }
@@ -169,6 +169,7 @@ pub async fn db_query(
                     &fts_term,
                     filter_str,
                     payload.select,
+                    None,
                     limit,
                     offset,
                     payload.rerank.unwrap_or(true),

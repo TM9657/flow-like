@@ -6,6 +6,17 @@ edition = "2024"
 [features]
 default = []
 local-ml = ["flow-like-catalog-core/local-ml"]
+# Execution feature - enables heavy ML dependencies for node execution
+execute = [
+    "flow-like-catalog-core/execute",
+    "dep:linfa",
+    "dep:linfa-datasets",
+    "dep:linfa-clustering",
+    "dep:linfa-nn",
+    "dep:linfa-linear",
+    "dep:linfa-reduction",
+    "dep:linfa-svm",
+]
 
 [dependencies]
 flow-like-catalog-core.workspace = true
@@ -23,11 +34,13 @@ serde = { workspace = true, features = ["derive", "rc"] }
 tokio = { workspace = true, features = ["rt-multi-thread", "macros"] }
 uuid.workspace = true
 async-trait.workspace = true
-linfa = { version = "0.8.0", features = ["serde"] }
-linfa-datasets = { version = "0.8.0", features = ["generate"] }
-linfa-clustering = { version = "0.8.0", features = ["serde"] }
-linfa-nn = { version = "0.8.0", features = ["serde"] }
-linfa-linear = { version = "0.8.0", features = ["serde"] }
-linfa-reduction = { version = "0.8.0", features = ["serde"] }
-linfa-svm = { version = "0.8.0", features = ["serde"] }
 ndarray.workspace = true
+
+# ML dependencies - only included when execute feature is enabled
+linfa = { version = "0.8.0", features = ["serde"], optional = true }
+linfa-datasets = { version = "0.8.0", features = ["generate"], optional = true }
+linfa-clustering = { version = "0.8.0", features = ["serde"], optional = true }
+linfa-nn = { version = "0.8.0", features = ["serde"], optional = true }
+linfa-linear = { version = "0.8.0", features = ["serde"], optional = true }
+linfa-reduction = { version = "0.8.0", features = ["serde"], optional = true }
+linfa-svm = { version = "0.8.0", features = ["serde"], optional = true }

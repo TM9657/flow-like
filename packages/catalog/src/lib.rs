@@ -65,6 +65,7 @@ pub use flow_like_catalog_onnx::{onnx, teachable_machine};
 pub use flow_like_catalog_llm::generative;
 
 // Re-export processing modules
+pub use flow_like_catalog_geo::geo;
 pub use flow_like_catalog_processing::processing;
 
 /// Available catalog packages that can be included/excluded
@@ -79,6 +80,7 @@ pub enum CatalogPackage {
     Onnx,
     Llm,
     Processing,
+    Geo,
 }
 
 impl CatalogPackage {
@@ -93,6 +95,7 @@ impl CatalogPackage {
             CatalogPackage::Onnx,
             CatalogPackage::Llm,
             CatalogPackage::Processing,
+            CatalogPackage::Geo,
         ]
     }
 
@@ -107,6 +110,7 @@ impl CatalogPackage {
             CatalogPackage::Onnx => flow_like_catalog_onnx::get_catalog(),
             CatalogPackage::Llm => flow_like_catalog_llm::get_catalog(),
             CatalogPackage::Processing => flow_like_catalog_processing::get_catalog(),
+            CatalogPackage::Geo => flow_like_catalog_geo::get_catalog(),
         }
     }
 }
@@ -125,6 +129,7 @@ impl std::str::FromStr for CatalogPackage {
             "onnx" => Ok(CatalogPackage::Onnx),
             "llm" | "genai" | "generative" => Ok(CatalogPackage::Llm),
             "processing" => Ok(CatalogPackage::Processing),
+            "geo" | "geolocation" => Ok(CatalogPackage::Geo),
             _ => Err(format!("Unknown catalog package: {}", s)),
         }
     }

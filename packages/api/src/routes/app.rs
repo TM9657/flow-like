@@ -1,9 +1,9 @@
-use std::time::SystemTime;
+use std::{collections::HashMap, time::SystemTime};
 
 use crate::{entity::app, state::AppState};
 use axum::{
     Router,
-    routing::{get, patch},
+    routing::{get, patch, post},
 };
 
 pub mod internal;
@@ -14,9 +14,13 @@ pub mod db;
 pub mod events;
 pub mod invoke;
 pub mod meta;
+pub mod notifications;
+pub mod page;
 pub mod roles;
+pub mod route;
 pub mod team;
 pub mod template;
+pub mod widget;
 
 pub fn routes() -> Router<AppState> {
     Router::new()
@@ -33,7 +37,14 @@ pub fn routes() -> Router<AppState> {
             "/{app_id}/visibility",
             patch(internal::change_visibility::change_visibility),
         )
+        .route(
+            "/{app_id}/notifications/create",
+            post(notifications::create_notification),
+        )
         .nest("/{app_id}/templates", template::routes())
+        .nest("/{app_id}/widgets", widget::routes())
+        .nest("/{app_id}/pages", page::routes())
+        .nest("/{app_id}/routes", route::routes())
         .nest("/{app_id}/board", board::routes())
         .nest("/{app_id}/meta", meta::routes())
         .nest("/{app_id}/roles", roles::routes())
@@ -51,7 +62,7 @@ macro_rules! ensure_permission {
         if !sub.has_permission($perm) {
             let user_id = sub.sub()?;
             $state.invalidate_permission(&user_id, $app_id);
-            return Err($crate::error::ApiError::Forbidden);
+            return Err($crate::error::ApiError::FORBIDDEN);
         }
         sub
     }};
@@ -71,7 +82,7 @@ macro_rules! ensure_permissions {
         let sub = $user.app_permission($app_id, $state).await?;
         for perm in $perms.iter() {
             if !sub.has_permission(perm) {
-                return Err($crate::error::ApiError::Forbidden);
+                return Err($crate::error::ApiError::FORBIDDEN);
             }
         }
         sub
@@ -283,6 +294,9 @@ impl From<app::Model> for flow_like::app::App {
             version: model.version,
             frontend: None,
             app_state: None,
+            widget_ids: vec![],
+            page_ids: vec![],
+            route_mappings: HashMap::new(),
         }
     }
 }

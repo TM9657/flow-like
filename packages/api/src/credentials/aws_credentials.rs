@@ -290,7 +290,13 @@ impl RuntimeCredentialsTrait for AwsRuntimeCredentials {
             secret.clone(),
             token.clone(),
         )));
-        config.register_build_project_database(Arc::new(make_s3_builder(bkt, key, secret, token)));
+        config.register_build_project_database(Arc::new(make_s3_builder(
+            bkt.clone(),
+            key.clone(),
+            secret.clone(),
+            token.clone(),
+        )));
+        config.register_build_user_database(Arc::new(make_s3_builder(bkt, key, secret, token)));
 
         let mut flow_like_state = FlowLikeState::new(config, http_client);
 
@@ -695,7 +701,6 @@ fn read_logs_policy(
 mod tests {
     use super::*;
     use crate::credentials::RuntimeCredentialsTrait;
-    use flow_like::credentials::SharedCredentialsTrait;
     use flow_like_storage::Path;
     use flow_like_storage::object_store::ObjectStore;
     use flow_like_types::json::{from_str, to_string};

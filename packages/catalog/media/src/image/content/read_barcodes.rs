@@ -67,8 +67,8 @@ impl NodeLogic for ReadBarcodesNode {
     fn get_node(&self) -> Node {
         let mut node = Node::new(
             "read_barcodes",
-            "Read Barcodes",
-            "Read/Decode Barcodes",
+            "Read QR-/Barcode",
+            "Read/Decode QR Codes and Barcodes",
             "Image/Content",
         );
         node.add_icon("/flow/icons/barcode.svg");

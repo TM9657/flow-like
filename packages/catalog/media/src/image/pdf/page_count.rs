@@ -1,3 +1,4 @@
+#[cfg(feature = "execute")]
 use crate::image::pdf::load_pdf_from_flowpath;
 use flow_like::flow::execution::context::ExecutionContext;
 use flow_like::flow::node::{Node, NodeLogic};
@@ -51,6 +52,7 @@ impl NodeLogic for PdfPageCountNode {
         node
     }
 
+    #[cfg(feature = "execute")]
     async fn run(&self, context: &mut ExecutionContext) -> flow_like_types::Result<()> {
         context.deactivate_exec_pin("exec_out").await?;
 
@@ -64,5 +66,12 @@ impl NodeLogic for PdfPageCountNode {
         context.activate_exec_pin("exec_out").await?;
 
         Ok(())
+    }
+
+    #[cfg(not(feature = "execute"))]
+    async fn run(&self, _context: &mut ExecutionContext) -> flow_like_types::Result<()> {
+        Err(flow_like_types::anyhow!(
+            "Media processing requires the 'execute' feature"
+        ))
     }
 }
