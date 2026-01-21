@@ -41,10 +41,19 @@ export function sanitizeImageUrl(
 	if (!url) return fallback;
 	try {
 		const parsed = new URL(url, window.location.origin);
-		if (SAFE_URL_PROTOCOLS.includes(parsed.protocol)) {
-			return url;
+		if (!SAFE_URL_PROTOCOLS.includes(parsed.protocol)) {
+			return fallback;
 		}
-		return fallback;
+
+		if (parsed.protocol === "data:") {
+			const safeImageDataUrlPattern =
+				/^data:image\/(png|jpeg|jpg|webp);base64,[a-zA-Z0-9+/=]+$/;
+			if (!safeImageDataUrlPattern.test(url)) {
+				return fallback;
+			}
+		}
+
+		return url;
 	} catch {
 		return fallback;
 	}
