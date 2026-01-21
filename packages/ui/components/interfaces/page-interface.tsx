@@ -11,7 +11,7 @@ import {
 	useRef,
 	useState,
 } from "react";
-import { safeScopedCss } from "../../lib/css-utils";
+import { createSanitizedStyleProps, safeScopedCss } from "../../lib/css-utils";
 import {
 	presignCanvasSettings,
 	presignPageAssets,
@@ -977,12 +977,9 @@ function PageInterfaceInner({
 		<div className="h-full w-full overflow-hidden bg-background">
 			{customCss && (
 				<style
-					dangerouslySetInnerHTML={{
-						__html: safeScopedCss(
-							customCss,
-							`[data-page-id="${pageContainerId}"]`,
-						),
-					}}
+					{...createSanitizedStyleProps(
+						safeScopedCss(customCss, `[data-page-id="${pageContainerId}"]`),
+					)}
 				/>
 			)}
 			<div

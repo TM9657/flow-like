@@ -6,6 +6,12 @@ import postcss, {
 } from "postcss";
 
 /**
+ * Branded type representing CSS that has been sanitized by safeScopedCss.
+ * This marks the string as safe for use in dangerouslySetInnerHTML.
+ */
+export type SanitizedCSS = string & { readonly __sanitized: unique symbol };
+
+/**
  * Sanitizes and scopes CSS using PostCSS for proper parsing.
  * This prevents XSS attacks like `</style>` injection that regex-based
  * approaches are vulnerable to.
@@ -152,15 +158,18 @@ function processAtRule(atRule: AtRule, scope: string): void {
  * @param scopeSelector - The attribute selector for scoping (e.g., '[data-page-id="abc"]')
  * @returns Safe, scoped CSS ready for injection. Returns empty string on parse errors.
  */
-export function safeScopedCss(css: string, scopeSelector: string): string {
+export function safeScopedCss(
+	css: string,
+	scopeSelector: string,
+): SanitizedCSS {
 	if (!css || typeof css !== "string") {
-		return "";
+		return "" as SanitizedCSS;
 	}
 
 	// Trim whitespace - empty/whitespace-only CSS is valid
 	let trimmedCss = css.trim();
 	if (!trimmedCss) {
-		return "";
+		return "" as SanitizedCSS;
 	}
 
 	// Fix double-encoded JSON strings (legacy data corruption)
@@ -194,7 +203,7 @@ export function safeScopedCss(css: string, scopeSelector: string): string {
 		console.warn(
 			`[safeScopedCss] Invalid CSS${location}: ${reason}. First 200 chars: ${trimmedCss.slice(0, 200)}`,
 		);
-		return "";
+		return "" as SanitizedCSS;
 	}
 
 	// Process top-level rules
@@ -214,5 +223,20 @@ export function safeScopedCss(css: string, scopeSelector: string): string {
 		}
 	});
 
-	return root.toString();
+	return root.toString() as SanitizedCSS;
+}
+
+/**
+ * Creates props for a style element with sanitized CSS.
+ * This helper ensures dangerouslySetInnerHTML is only used with sanitized content.
+ * The CSS MUST be sanitized by safeScopedCss before being passed here.
+ */
+export function createSanitizedStyleProps(sanitizedCss: SanitizedCSS): {
+	dangerouslySetInnerHTML: { __html: string };
+} {
+	// Security: This function only accepts SanitizedCSS type which can only be
+	// produced by safeScopedCss, ensuring the CSS has been properly sanitized.
+	return {
+		dangerouslySetInnerHTML: { __html: sanitizedCss },
+	};
 }

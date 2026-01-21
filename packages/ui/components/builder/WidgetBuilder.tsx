@@ -17,7 +17,7 @@ import {
 	useState,
 } from "react";
 import { cn } from "../../lib";
-import { safeScopedCss } from "../../lib/css-utils";
+import { createSanitizedStyleProps, safeScopedCss } from "../../lib/css-utils";
 import {
 	presignCanvasSettings,
 	presignPageAssets,
@@ -826,12 +826,12 @@ function VisualCanvas({ surfaceId }: { surfaceId: string }) {
 			{/* Custom CSS injection (scoped and sanitized) */}
 			{presignedCanvasSettings.customCss && (
 				<style
-					dangerouslySetInnerHTML={{
-						__html: safeScopedCss(
+					{...createSanitizedStyleProps(
+						safeScopedCss(
 							presignedCanvasSettings.customCss,
 							`[data-canvas-id="${canvasId}"]`,
 						),
-					}}
+					)}
 				/>
 			)}
 
@@ -1375,12 +1375,12 @@ function BuilderPreview({ surfaceId }: BuilderPreviewProps) {
 			{/* Custom CSS injection (scoped and sanitized) */}
 			{presignedCanvasSettings.customCss && (
 				<style
-					dangerouslySetInnerHTML={{
-						__html: safeScopedCss(
+					{...createSanitizedStyleProps(
+						safeScopedCss(
 							presignedCanvasSettings.customCss,
 							`[data-canvas-id="${previewCanvasId}"]`,
 						),
-					}}
+					)}
 				/>
 			)}
 			<div
