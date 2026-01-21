@@ -6911,6 +6911,7 @@ dependencies = [
  "fastembed",
  "flow-like-types",
  "futures",
+ "http 1.4.0",
  "ndarray",
  "ort",
  "rig-core",

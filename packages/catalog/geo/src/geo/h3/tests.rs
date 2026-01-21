@@ -277,7 +277,11 @@ mod tests {
         let neighbors: Vec<CellIndex> = cell.grid_disk::<Vec<_>>(1);
         let neighbor = neighbors.iter().find(|&&n| n != cell).unwrap();
 
-        let path: Vec<CellIndex> = cell.grid_path_cells(*neighbor).unwrap().map(|r| r.unwrap()).collect();
+        let path: Vec<CellIndex> = cell
+            .grid_path_cells(*neighbor)
+            .unwrap()
+            .map(|r| r.unwrap())
+            .collect();
 
         assert_eq!(path.len(), 2);
         assert_eq!(path[0], cell);
@@ -413,7 +417,9 @@ mod tests {
         let cell_nyc: CellIndex = nyc.to_cell(res);
 
         let solvent = SolventBuilder::new().build();
-        let multi_poly = solvent.dissolve(vec![cell_berlin, cell_nyc].into_iter()).unwrap();
+        let multi_poly = solvent
+            .dissolve(vec![cell_berlin, cell_nyc].into_iter())
+            .unwrap();
 
         // Two cells far apart should create two separate polygons
         assert_eq!(multi_poly.0.len(), 2);

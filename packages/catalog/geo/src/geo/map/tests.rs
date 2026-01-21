@@ -177,15 +177,23 @@ mod tests {
     fn test_style_to_url_mapping() {
         let styles = vec![
             ("Standard", "https://tile.openstreetmap.org"),
-            ("Satellite", "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile"),
+            (
+                "Satellite",
+                "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile",
+            ),
             ("Terrain", "https://tile.opentopomap.org"),
-            ("Dark", "https://tiles.stadiamaps.com/tiles/alidade_smooth_dark"),
+            (
+                "Dark",
+                "https://tiles.stadiamaps.com/tiles/alidade_smooth_dark",
+            ),
         ];
 
         for (style, expected_base) in styles {
             let tile_base_url = match style {
                 "Standard" => "https://tile.openstreetmap.org",
-                "Satellite" => "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile",
+                "Satellite" => {
+                    "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile"
+                }
                 "Terrain" => "https://tile.opentopomap.org",
                 "Dark" => "https://tiles.stadiamaps.com/tiles/alidade_smooth_dark",
                 _ => "https://tile.openstreetmap.org",

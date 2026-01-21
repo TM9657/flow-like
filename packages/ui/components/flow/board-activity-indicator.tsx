@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { PuffLoader } from "react-spinners";
+import PuffLoader from "react-spinners/PuffLoader";
 import { useShallow } from "zustand/react/shallow";
 import { useRunExecutionStore } from "../../state/run-execution-state";
 

@@ -1,6 +1,7 @@
 use flow_like_types::async_trait;
-use flow_like_types::{Result, anyhow};
+use flow_like_types::{Result, Value, anyhow};
 use futures::StreamExt;
+use http::{HeaderMap, HeaderName, HeaderValue};
 use rig::client::FinalCompletionResponse;
 #[allow(deprecated)]
 pub use rig::client::completion::{CompletionClientDyn, CompletionModelHandle};
@@ -12,6 +13,7 @@ use rig::completion::{
 };
 use rig::streaming::{StreamedAssistantContent, StreamingCompletionResponse, ToolCallDeltaContent};
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::{future::Future, pin::Pin, sync::Arc};
 
 use super::{
@@ -47,6 +49,25 @@ pub type LLMCallback = Arc<
         + Sync
         + 'static,
 >;
+
+/// Extract custom HTTP headers from provider params
+/// Expects a "headers" key containing an object with header name-value pairs
+pub fn extract_headers(params: &HashMap<String, Value>) -> HeaderMap {
+    let mut headers = HeaderMap::new();
+    if let Some(headers_obj) = params.get("headers").and_then(|v| v.as_object()) {
+        for (key, value) in headers_obj {
+            if let Some(value_str) = value.as_str() {
+                if let (Ok(name), Ok(val)) = (
+                    HeaderName::try_from(key.as_str()),
+                    HeaderValue::from_str(value_str),
+                ) {
+                    headers.insert(name, val);
+                }
+            }
+        }
+    }
+    headers
+}
 
 #[async_trait]
 pub trait ModelLogic: Send + Sync {

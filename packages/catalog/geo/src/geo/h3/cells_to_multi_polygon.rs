@@ -95,7 +95,8 @@ impl NodeLogic for CellsToMultiPolygonNode {
         }
 
         let solvent = SolventBuilder::new().build();
-        let multi_poly = solvent.dissolve(cells.into_iter())
+        let multi_poly = solvent
+            .dissolve(cells.into_iter())
             .map_err(|e| flow_like_types::anyhow!("Failed to create polygon: {}", e))?;
 
         let polygons: Vec<Polygon> = multi_poly

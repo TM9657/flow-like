@@ -1,6 +1,6 @@
 use std::any::Any;
 
-use super::ModelLogic;
+use super::{ModelLogic, extract_headers};
 use crate::provider::random_provider;
 use crate::{
     llm::ModelConstructor,
@@ -53,6 +53,7 @@ impl AnthropicModel {
             .get("model_id")
             .cloned()
             .and_then(|v| v.as_str().map(|s| s.to_string()));
+        let custom_headers = extract_headers(&params);
 
         let mut builder = rig::providers::anthropic::Client::builder().api_key(api_key);
         if let Some(endpoint) = params.get("endpoint").and_then(|v| v.as_str()) {
@@ -64,6 +65,10 @@ impl AnthropicModel {
 
         if let Some(version) = params.get("version").and_then(|v| v.as_str()) {
             builder = builder.anthropic_version(version);
+        }
+
+        if !custom_headers.is_empty() {
+            builder = builder.http_headers(custom_headers);
         }
 
         let client = builder.build()?;

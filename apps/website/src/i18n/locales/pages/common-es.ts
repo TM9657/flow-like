@@ -45,4 +45,26 @@ export const esCommon = {
 	"footer.eula": "CLUF",
 	"footer.privacy": "Política de privacidad",
 	"footer.legal": "Aviso legal",
+
+	// BI Preview Section
+	"bi.preview.badge": "Business Intelligence",
+	"bi.preview.title": "Business Intelligence",
+	"bi.preview.titleHighlight": "reinventada",
+	"bi.preview.description":
+		"El BI tradicional no puede seguir el ritmo de los negocios modernos. Conecta todas tus fuentes de datos — bases de datos, SharePoint, Teams, sistemas de producción — con IA integrada en tus pipelines, no solo encima.",
+	"bi.preview.feature1":
+		"Datos en tiempo real de todas partes — sin más esperas por sincronizaciones",
+	"bi.preview.feature2":
+		"IA en pipelines, no solo dashboards — detección de anomalías, predicciones, transformaciones",
+	"bi.preview.feature3":
+		"Despliega en cualquier lugar — on-prem, nube, móvil, incluso offline",
+	"bi.preview.cta": "Explorar Business Intelligence",
+	"bi.preview.visual.databases": "Bases de datos",
+	"bi.preview.visual.realtime": "Tiempo real",
+	"bi.preview.visual.teams": "Teams",
+	"bi.preview.visual.aiPipeline": "Pipeline con IA",
+	"bi.preview.visual.aiPipelineDesc":
+		"Detección de anomalías • Predicciones • Transformaciones inteligentes",
+	"bi.preview.visual.dashboards": "Dashboards",
+	"bi.preview.visual.mobile": "Móvil",
 };

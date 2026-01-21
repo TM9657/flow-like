@@ -359,7 +359,7 @@ export function BlogHeader() {
 								style={{ transitionDelay: open ? "15ms" : "0ms" }}
 							>
 								<LuChartBarStacked className="w-5 h-5" />
-								<span>Flow-Like for BI</span>
+								<span>Business Intelligence</span>
 							</a>
 
 							<a
@@ -559,7 +559,7 @@ export function BlogHeader() {
 							className="border-emerald-500/50 text-emerald-600 hover:bg-emerald-500/10"
 						>
 							<LuChartBarStacked className="w-5 h-5" />
-							Flow-Like for BI
+							Business Intelligence
 						</Button>
 					</a>
 					<a href="/24-hour-solution">

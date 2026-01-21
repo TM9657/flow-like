@@ -1,6 +1,6 @@
 use std::any::Any;
 
-use super::ModelLogic;
+use super::{ModelLogic, extract_headers};
 use crate::provider::random_provider;
 use crate::{
     llm::ModelConstructor,
@@ -84,6 +84,7 @@ impl OpenAIModel {
 
         let is_azure = params.get("is_azure").cloned();
         let endpoint = params.get("endpoint").cloned();
+        let custom_headers = extract_headers(&params);
 
         let is_azure = match is_azure {
             Some(val) => val.as_bool().unwrap_or(false),
@@ -118,11 +119,17 @@ impl OpenAIModel {
             if let Some(version_str) = params.get("version").and_then(|v| v.as_str()) {
                 builder = builder.api_version(version_str);
             }
+            if !custom_headers.is_empty() {
+                builder = builder.http_headers(custom_headers);
+            }
             OpenAIClientType::Azure(builder.build()?)
         } else {
             let mut builder = rig::providers::openai::Client::builder().api_key(api_key);
             if let Some(endpoint) = endpoint.as_ref().and_then(|v| v.as_str()) {
                 builder = builder.base_url(endpoint);
+            }
+            if !custom_headers.is_empty() {
+                builder = builder.http_headers(custom_headers);
             }
             OpenAIClientType::OpenAI(builder.build()?)
         };
@@ -307,8 +314,7 @@ mod tests {
         let (prompt, history_msgs) = history.extract_prompt_and_history().unwrap();
 
         use futures::StreamExt;
-        let mut stream =
-            agent.stream_chat(prompt, history_msgs).await;
+        let mut stream = agent.stream_chat(prompt, history_msgs).await;
         let mut chunks = 0;
         let mut response = String::new();
 

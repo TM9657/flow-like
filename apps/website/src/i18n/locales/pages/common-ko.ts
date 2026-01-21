@@ -45,4 +45,23 @@ export const koCommon = {
 	"footer.eula": "EULA",
 	"footer.privacy": "개인정보 처리방침",
 	"footer.legal": "법적 고지",
+
+	// BI Preview Section
+	"bi.preview.badge": "비즈니스 인텔리전스",
+	"bi.preview.title": "비즈니스 인텔리전스",
+	"bi.preview.titleHighlight": "재정의",
+	"bi.preview.description":
+		"기존 BI는 현대 비즈니스를 따라갈 수 없습니다. 모든 데이터 소스(데이터베이스, SharePoint, Teams, 생산 시스템)를 파이프라인에 내장된 AI로 연결하세요.",
+	"bi.preview.feature1": "어디서나 실시간 데이터 — 동기화 대기 시간 제로",
+	"bi.preview.feature2": "파이프라인 내 AI — 이상 탐지, 예측, 변환",
+	"bi.preview.feature3":
+		"어디서나 배포 — 온프레미스, 클라우드, 모바일, 오프라인도 가능",
+	"bi.preview.cta": "비즈니스 인텔리전스 탐색",
+	"bi.preview.visual.databases": "데이터베이스",
+	"bi.preview.visual.realtime": "실시간",
+	"bi.preview.visual.teams": "Teams",
+	"bi.preview.visual.aiPipeline": "AI 파이프라인",
+	"bi.preview.visual.aiPipelineDesc": "이상 탐지 • 예측 • 스마트 변환",
+	"bi.preview.visual.dashboards": "대시보드",
+	"bi.preview.visual.mobile": "모바일",
 };

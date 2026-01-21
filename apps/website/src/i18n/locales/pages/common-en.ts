@@ -47,4 +47,26 @@ export const enCommon = {
 	"footer.eula": "EULA",
 	"footer.privacy": "Privacy Policy",
 	"footer.legal": "Legal Notice",
+
+	// BI Preview Section
+	"bi.preview.badge": "Business Intelligence",
+	"bi.preview.title": "Business Intelligence",
+	"bi.preview.titleHighlight": "reimagined",
+	"bi.preview.description":
+		"Traditional BI can't keep up with modern business. Connect every data source — databases, SharePoint, Teams, production systems — with AI embedded in your pipelines, not just on top.",
+	"bi.preview.feature1":
+		"Real-time data from everywhere — no more waiting for syncs",
+	"bi.preview.feature2":
+		"AI in pipelines, not just dashboards — anomaly detection, predictions, transformations",
+	"bi.preview.feature3":
+		"Deploy anywhere — on-prem, cloud, mobile, even offline",
+	"bi.preview.cta": "Explore Business Intelligence",
+	"bi.preview.visual.databases": "Databases",
+	"bi.preview.visual.realtime": "Real-time",
+	"bi.preview.visual.teams": "Teams",
+	"bi.preview.visual.aiPipeline": "AI-Powered Pipeline",
+	"bi.preview.visual.aiPipelineDesc":
+		"Anomaly detection • Predictions • Smart transforms",
+	"bi.preview.visual.dashboards": "Dashboards",
+	"bi.preview.visual.mobile": "Mobile",
 };

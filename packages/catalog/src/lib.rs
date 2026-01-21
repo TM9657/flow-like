@@ -65,8 +65,8 @@ pub use flow_like_catalog_onnx::{onnx, teachable_machine};
 pub use flow_like_catalog_llm::generative;
 
 // Re-export processing modules
-pub use flow_like_catalog_processing::processing;
 pub use flow_like_catalog_geo::geo;
+pub use flow_like_catalog_processing::processing;
 
 /// Available catalog packages that can be included/excluded
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]

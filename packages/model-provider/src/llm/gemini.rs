@@ -1,6 +1,6 @@
 use std::{any::Any, sync::Arc};
 
-use super::{LLMCallback, ModelLogic};
+use super::{LLMCallback, ModelLogic, extract_headers};
 use crate::provider::random_provider;
 use crate::{
     history::History,
@@ -53,10 +53,14 @@ impl GeminiModel {
             .get("model_id")
             .cloned()
             .and_then(|v| v.as_str().map(|s| s.to_string()));
+        let custom_headers = extract_headers(&params);
 
         let mut builder = rig::providers::gemini::Client::builder().api_key(api_key);
         if let Some(endpoint) = params.get("endpoint").and_then(|v| v.as_str()) {
             builder = builder.base_url(endpoint);
+        }
+        if !custom_headers.is_empty() {
+            builder = builder.http_headers(custom_headers);
         }
         let client = builder.build()?;
 

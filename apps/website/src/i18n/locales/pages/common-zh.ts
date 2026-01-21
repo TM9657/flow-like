@@ -44,4 +44,22 @@ export const zhCommon = {
 	"footer.eula": "最终用户许可协议",
 	"footer.privacy": "隐私政策",
 	"footer.legal": "法律声明",
+
+	// BI Preview Section
+	"bi.preview.badge": "商业智能",
+	"bi.preview.title": "商业智能",
+	"bi.preview.titleHighlight": "重新定义",
+	"bi.preview.description":
+		"传统BI无法跟上现代业务的步伐。连接所有数据源——数据库、SharePoint、Teams、生产系统——通过嵌入管道的AI，而不仅仅是在上层。",
+	"bi.preview.feature1": "来自各处的实时数据——不再等待同步",
+	"bi.preview.feature2": "管道中的AI，不仅仅是仪表板——异常检测、预测、转换",
+	"bi.preview.feature3": "随处部署——本地、云端、移动端，甚至离线",
+	"bi.preview.cta": "探索商业智能",
+	"bi.preview.visual.databases": "数据库",
+	"bi.preview.visual.realtime": "实时",
+	"bi.preview.visual.teams": "Teams",
+	"bi.preview.visual.aiPipeline": "AI驱动管道",
+	"bi.preview.visual.aiPipelineDesc": "异常检测 • 预测 • 智能转换",
+	"bi.preview.visual.dashboards": "仪表板",
+	"bi.preview.visual.mobile": "移动端",
 };

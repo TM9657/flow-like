@@ -1,8 +1,8 @@
 #[cfg(all(test, feature = "execute"))]
 mod tests {
     use crate::geo::{
-        routing::plan_route::{RouteLeg, RouteProfile, RouteResult, RouteStep},
         GeoCoordinate,
+        routing::plan_route::{RouteLeg, RouteProfile, RouteResult, RouteStep},
     };
 
     #[test]

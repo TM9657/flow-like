@@ -1,17 +1,17 @@
 export const enBiNew = {
 	// Meta
 	"bi.meta.title":
-		"Flow-Like for BI — The Intelligence Platform That Works Where You Do",
+		"Flow-Like Business Intelligence — The Platform That Works Where You Do",
 	"bi.meta.description":
 		"Modern BI needs more than dashboards. Real-time data from every source, personalized insights, AI copilot integration, and deployment anywhere — on-prem, cloud, mobile, or in the field.",
 	"bi.meta.keywords":
 		"enterprise BI, business intelligence, real-time analytics, data platform, Palantir alternative, operational intelligence, AI analytics, on-premise BI, mobile BI, SharePoint data, Teams integration, copilot BI",
-	"bi.meta.og.title": "Flow-Like for BI — Intelligence That Works Where You Do",
+	"bi.meta.og.title": "Flow-Like Business Intelligence — Works Where You Do",
 	"bi.meta.og.description":
 		"Real-time data from every source. Personalized insights. AI-powered. Runs anywhere.",
 
 	// Hero
-	"bi.hero.tagline": "Flow-Like for BI",
+	"bi.hero.tagline": "Business Intelligence",
 	"bi.hero.headline": "Modern BI is",
 	"bi.hero.headline.highlight": "Flow-Like",
 	"bi.hero.description":

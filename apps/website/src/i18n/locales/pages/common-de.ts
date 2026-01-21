@@ -47,4 +47,26 @@ export const deCommon = {
 	"footer.eula": "EULA",
 	"footer.privacy": "Datenschutz",
 	"footer.legal": "Impressum",
+
+	// BI Preview Section
+	"bi.preview.badge": "Business Intelligence",
+	"bi.preview.title": "Business Intelligence",
+	"bi.preview.titleHighlight": "neu gedacht",
+	"bi.preview.description":
+		"Traditionelles BI kann mit modernem Business nicht mithalten. Verbinden Sie jede Datenquelle — Datenbanken, SharePoint, Teams, Produktionssysteme — mit KI in Ihren Pipelines, nicht nur darüber.",
+	"bi.preview.feature1":
+		"Echtzeit-Daten von überall — kein Warten mehr auf Synchronisierungen",
+	"bi.preview.feature2":
+		"KI in Pipelines, nicht nur Dashboards — Anomalieerkennung, Vorhersagen, Transformationen",
+	"bi.preview.feature3":
+		"Überall einsetzbar — On-Premise, Cloud, Mobil, sogar offline",
+	"bi.preview.cta": "Business Intelligence entdecken",
+	"bi.preview.visual.databases": "Datenbanken",
+	"bi.preview.visual.realtime": "Echtzeit",
+	"bi.preview.visual.teams": "Teams",
+	"bi.preview.visual.aiPipeline": "KI-gestützte Pipeline",
+	"bi.preview.visual.aiPipelineDesc":
+		"Anomalieerkennung • Vorhersagen • Smarte Transformationen",
+	"bi.preview.visual.dashboards": "Dashboards",
+	"bi.preview.visual.mobile": "Mobil",
 };

@@ -45,4 +45,24 @@ export const jaCommon = {
 	"footer.eula": "EULA",
 	"footer.privacy": "プライバシーポリシー",
 	"footer.legal": "法的通知",
+
+	// BI Preview Section
+	"bi.preview.badge": "ビジネスインテリジェンス",
+	"bi.preview.title": "ビジネスインテリジェンス",
+	"bi.preview.titleHighlight": "を再定義",
+	"bi.preview.description":
+		"従来のBIは現代のビジネスについていけません。すべてのデータソース（データベース、SharePoint、Teams、生産システム）をパイプラインに組み込まれたAIで接続します。",
+	"bi.preview.feature1":
+		"あらゆる場所からリアルタイムデータ — 同期待ち時間ゼロ",
+	"bi.preview.feature2": "パイプライン内のAI — 異常検知、予測、変換",
+	"bi.preview.feature3":
+		"どこでもデプロイ — オンプレミス、クラウド、モバイル、オフラインでも",
+	"bi.preview.cta": "ビジネスインテリジェンスを探る",
+	"bi.preview.visual.databases": "データベース",
+	"bi.preview.visual.realtime": "リアルタイム",
+	"bi.preview.visual.teams": "Teams",
+	"bi.preview.visual.aiPipeline": "AI搭載パイプライン",
+	"bi.preview.visual.aiPipelineDesc": "異常検知 • 予測 • スマート変換",
+	"bi.preview.visual.dashboards": "ダッシュボード",
+	"bi.preview.visual.mobile": "モバイル",
 };

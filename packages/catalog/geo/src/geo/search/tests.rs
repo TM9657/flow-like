@@ -1,9 +1,9 @@
 #[cfg(all(test, feature = "execute"))]
 mod tests {
     use crate::geo::{
+        BoundingBox, GeoCoordinate,
         search::reverse_geocode::{Address, ReverseGeocodeResult},
         search::search_location::SearchResult,
-        BoundingBox, GeoCoordinate,
     };
 
     const BERLIN_LAT: f64 = 52.52;

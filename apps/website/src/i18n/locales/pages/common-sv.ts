@@ -45,4 +45,26 @@ export const svCommon = {
 	"footer.eula": "EULA",
 	"footer.privacy": "Integritetspolicy",
 	"footer.legal": "Juridiskt meddelande",
+
+	// BI Preview Section
+	"bi.preview.badge": "Business Intelligence",
+	"bi.preview.title": "Business Intelligence",
+	"bi.preview.titleHighlight": "nytänkt",
+	"bi.preview.description":
+		"Traditionell BI kan inte hålla jämna steg med moderna företag. Anslut alla datakällor — databaser, SharePoint, Teams, produktionssystem — med AI inbyggd i dina pipelines, inte bara ovanpå.",
+	"bi.preview.feature1":
+		"Realtidsdata från överallt — inget mer väntan på synkroniseringar",
+	"bi.preview.feature2":
+		"AI i pipelines, inte bara dashboards — anomalidetektering, förutsägelser, transformationer",
+	"bi.preview.feature3":
+		"Distribuera var som helst — on-prem, moln, mobil, även offline",
+	"bi.preview.cta": "Utforska Business Intelligence",
+	"bi.preview.visual.databases": "Databaser",
+	"bi.preview.visual.realtime": "Realtid",
+	"bi.preview.visual.teams": "Teams",
+	"bi.preview.visual.aiPipeline": "AI-driven Pipeline",
+	"bi.preview.visual.aiPipelineDesc":
+		"Anomalidetektering • Förutsägelser • Smarta transformationer",
+	"bi.preview.visual.dashboards": "Dashboards",
+	"bi.preview.visual.mobile": "Mobil",
 };

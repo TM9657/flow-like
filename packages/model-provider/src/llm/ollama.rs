@@ -1,6 +1,6 @@
 use std::any::Any;
 
-use super::ModelLogic;
+use super::{ModelLogic, extract_headers};
 use crate::provider::random_provider;
 use crate::{
     llm::ModelConstructor,
@@ -48,9 +48,13 @@ impl OllamaModel {
             .get("endpoint")
             .and_then(|v| v.as_str())
             .unwrap_or("http://localhost:11434");
+        let custom_headers = extract_headers(&params);
 
         let mut builder = rig::providers::ollama::Client::builder().api_key(rig::client::Nothing);
         builder = builder.base_url(endpoint);
+        if !custom_headers.is_empty() {
+            builder = builder.http_headers(custom_headers);
+        }
 
         let client = builder.build()?;
 
