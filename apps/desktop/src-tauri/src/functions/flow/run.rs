@@ -2,7 +2,7 @@ use flow_like::app::App;
 use flow_like::credentials::SharedCredentials;
 use flow_like::flow::execution::InternalRun;
 use flow_like::flow::execution::log::LogMessage;
-use flow_like::flow::execution::{LogLevel, LogMeta, RunPayload};
+use flow_like::flow::execution::{LogLevel, LogMeta, RunPayload, flush_run_cancelled};
 use flow_like::flow::oauth::OAuthToken;
 use flow_like::flow_like_storage::lancedb::query::{ExecutableQuery, QueryBase};
 use flow_like::flow_like_storage::{Path, serde_arrow};
@@ -13,6 +13,7 @@ use flow_like_types::{json, tokio};
 use futures::TryStreamExt;
 use std::collections::HashMap;
 use std::sync::Arc;
+use std::time::Duration;
 use tauri::{AppHandle, Manager};
 
 use crate::utils::UiEmitTarget;
@@ -151,6 +152,8 @@ async fn execute_internal(
 
     flow_like_state.register_run(&run_id, run_data);
 
+    let run_arc = internal_run.run.clone();
+
     // Spawn execution as a task so we can abort it immediately on cancellation
     let flow_like_state_for_task = flow_like_state.clone();
     let handle = tokio::spawn(async move { internal_run.execute(flow_like_state_for_task).await });
@@ -162,7 +165,17 @@ async fn execute_internal(
         _ = cancellation_token.cancelled() => {
             println!("Board execution cancelled for run: {}", run_id);
             abort_handle.abort();
-            None
+            match tokio::time::timeout(Duration::from_secs(30), flush_run_cancelled(&run_arc)).await {
+                Ok(Ok(meta)) => meta,
+                Ok(Err(e)) => {
+                    println!("Error flushing logs for cancelled run: {}, {:?}", run_id, e);
+                    None
+                }
+                Err(_) => {
+                    println!("Timeout while flushing logs for cancelled run: {}", run_id);
+                    None
+                }
+            }
         }
         result = handle => {
             match result {

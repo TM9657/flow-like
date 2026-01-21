@@ -1495,3 +1495,45 @@ pub fn extract_sub_from_jwt(token: &str) -> flow_like_types::Result<String> {
 
     Ok(claims.sub)
 }
+
+pub async fn flush_run_cancelled(
+    run: &Arc<Mutex<Run>>,
+) -> flow_like_types::Result<Option<LogMeta>> {
+    let prepared = {
+        let mut run = flow_like_types::tokio::time::timeout(RUN_LOCK_TIMEOUT, run.lock())
+            .await
+            .map_err(|_| anyhow!("Timeout acquiring run lock for cancel flush"))?;
+        run.highest_log_level = LogLevel::Fatal;
+        run.status = RunStatus::Stopped;
+        run.end = std::time::SystemTime::now();
+
+        let cancel_log = LogMessage::new("Run cancelled", LogLevel::Fatal, None);
+        if let Some(trace) = run.traces.last_mut() {
+            trace.logs.push(cancel_log);
+        } else {
+            let mut system_trace = Trace::new(
+                run.visited_nodes
+                    .keys()
+                    .next()
+                    .unwrap_or(&"system".to_string()),
+            );
+            system_trace.logs.push(cancel_log);
+            run.traces.push(system_trace);
+        }
+
+        run.prepare_flush(true)?
+    };
+
+    if let Some(prepared) = prepared {
+        let result = prepared.write().await?;
+        if result.created_table {
+            let mut run = flow_like_types::tokio::time::timeout(RUN_LOCK_TIMEOUT, run.lock())
+                .await
+                .map_err(|_| anyhow!("Timeout acquiring run lock after cancel flush"))?;
+            run.log_initialized = true;
+        }
+        Ok(result.meta)
+    } else {
+        Ok(None)
+    }
+}
