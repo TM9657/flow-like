@@ -792,49 +792,47 @@ impl EventCapture {
             if matches!(
                 event,
                 CapturedEvent::MouseDown { .. } | CapturedEvent::MouseUp { .. }
-            ) {
-                if let Some(current_window) = Self::get_focused_window() {
-                    let focus_changed = match &last_focused_window {
-                        Some(last) => {
-                            last.title != current_window.title
-                                || last.process != current_window.process
-                        }
-                        None => true, // First focus detection
-                    };
-
-                    if focus_changed
-                        && (!current_window.title.is_empty() || !current_window.process.is_empty())
-                    {
-                        println!(
-                            "[EventCapture] Window focus changed to: {} ({})",
-                            current_window.title, current_window.process
-                        );
-
-                        // Flush any pending keystrokes before focus change
-                        {
-                            let mut state_guard = state.write().await;
-                            if let Some(typed_action) = state_guard.flush_keystroke_buffer() {
-                                let _ = app_handle.emit("recording:action", &typed_action);
-                            }
-                        }
-
-                        // Create and emit WindowFocus action
-                        let action = RecordedAction::new(
-                            flow_like_types::create_id(),
-                            ActionType::WindowFocus {
-                                window_title: current_window.title.clone(),
-                                process: current_window.process.clone(),
-                            },
-                        );
-
-                        {
-                            let mut state_guard = state.write().await;
-                            state_guard.add_action(action.clone());
-                        }
-                        let _ = app_handle.emit("recording:action", &action);
-
-                        last_focused_window = Some(current_window);
+            ) && let Some(current_window) = Self::get_focused_window()
+            {
+                let focus_changed = match &last_focused_window {
+                    Some(last) => {
+                        last.title != current_window.title || last.process != current_window.process
                     }
+                    None => true, // First focus detection
+                };
+
+                if focus_changed
+                    && (!current_window.title.is_empty() || !current_window.process.is_empty())
+                {
+                    println!(
+                        "[EventCapture] Window focus changed to: {} ({})",
+                        current_window.title, current_window.process
+                    );
+
+                    // Flush any pending keystrokes before focus change
+                    {
+                        let mut state_guard = state.write().await;
+                        if let Some(typed_action) = state_guard.flush_keystroke_buffer() {
+                            let _ = app_handle.emit("recording:action", &typed_action);
+                        }
+                    }
+
+                    // Create and emit WindowFocus action
+                    let action = RecordedAction::new(
+                        flow_like_types::create_id(),
+                        ActionType::WindowFocus {
+                            window_title: current_window.title.clone(),
+                            process: current_window.process.clone(),
+                        },
+                    );
+
+                    {
+                        let mut state_guard = state.write().await;
+                        state_guard.add_action(action.clone());
+                    }
+                    let _ = app_handle.emit("recording:action", &action);
+
+                    last_focused_window = Some(current_window);
                 }
             }
 
@@ -943,15 +941,11 @@ impl EventCapture {
                             // Remove the previous single click and replace with double-click
                             {
                                 let mut state_guard = state.write().await;
-                                if let Some(session) = &mut state_guard.session {
-                                    if let Some(last_action) = session.actions.last() {
-                                        if matches!(
-                                            last_action.action_type,
-                                            ActionType::Click { .. }
-                                        ) {
-                                            session.actions.pop();
-                                        }
-                                    }
+                                if let Some(session) = &mut state_guard.session
+                                    && let Some(last_action) = session.actions.last()
+                                    && matches!(last_action.action_type, ActionType::Click { .. })
+                                {
+                                    session.actions.pop();
                                 }
                             }
 
@@ -1228,10 +1222,10 @@ impl EventCapture {
 
             {
                 let mut state_guard = state.write().await;
-                if state_guard.should_flush_keystrokes() {
-                    if let Some(typed_action) = state_guard.flush_keystroke_buffer() {
-                        let _ = app_handle.emit("recording:action", &typed_action);
-                    }
+                if state_guard.should_flush_keystrokes()
+                    && let Some(typed_action) = state_guard.flush_keystroke_buffer()
+                {
+                    let _ = app_handle.emit("recording:action", &typed_action);
                 }
             }
         }

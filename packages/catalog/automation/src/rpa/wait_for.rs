@@ -126,13 +126,13 @@ impl NodeLogic for WaitForTemplateNode {
                 gui.prepare_template_from_file(&template_path, None, MatchMode::Segmented)
                     .map_err(|e| flow_like_types::anyhow!("Failed to prepare template: {}", e))?;
 
-                if let Ok(Some(matches)) = gui.find_image_on_screen(confidence as f32) {
-                    if let Some((x, y, _conf)) = matches.first() {
-                        context.set_pin_value("x", json!(*x as i64)).await?;
-                        context.set_pin_value("y", json!(*y as i64)).await?;
-                        context.activate_exec_pin("exec_found").await?;
-                        return Ok(());
-                    }
+                if let Ok(Some(matches)) = gui.find_image_on_screen(confidence as f32)
+                    && let Some((x, y, _conf)) = matches.first()
+                {
+                    context.set_pin_value("x", json!(*x as i64)).await?;
+                    context.set_pin_value("y", json!(*y as i64)).await?;
+                    context.activate_exec_pin("exec_found").await?;
+                    return Ok(());
                 }
             }
 

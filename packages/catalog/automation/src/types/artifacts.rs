@@ -109,16 +109,11 @@ impl LogEntry {
     }
 }
 
-#[derive(Serialize, Deserialize, JsonSchema, Clone, Debug, PartialEq, Eq)]
+#[derive(Serialize, Deserialize, JsonSchema, Clone, Debug, PartialEq, Eq, Default)]
 pub enum DiagnosticsLevel {
+    #[default]
     Light,
     Full,
-}
-
-impl Default for DiagnosticsLevel {
-    fn default() -> Self {
-        Self::Light
-    }
 }
 
 #[derive(Serialize, Deserialize, JsonSchema, Clone, Debug)]

@@ -168,7 +168,7 @@ impl NodeLogic for MatchFingerprintNode {
                     crate::types::selectors::SelectorKind::Css => By::Css(&selector.value),
                     crate::types::selectors::SelectorKind::Xpath => By::XPath(&selector.value),
                     crate::types::selectors::SelectorKind::TestId => {
-                        By::Css(&format!("[data-testid='{}']", selector.value))
+                        By::Css(format!("[data-testid='{}']", selector.value))
                     }
                     _ => continue,
                 };

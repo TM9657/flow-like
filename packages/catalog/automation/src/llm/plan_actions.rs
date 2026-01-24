@@ -299,10 +299,9 @@ impl NodeLogic for LLMPlanActionsNode {
                 },
                 ..
             }) = content
+                && name == "submit_action_plan"
             {
-                if name == "submit_action_plan" {
-                    result = Some(json::from_value(arguments)?);
-                }
+                result = Some(json::from_value(arguments)?);
             }
         }
 

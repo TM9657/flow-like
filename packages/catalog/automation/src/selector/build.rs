@@ -307,12 +307,12 @@ impl NodeLogic for GetPrimarySelectorNode {
 
         let selector_set: SelectorSet = context.evaluate_pin("selector_set").await?;
 
-        if let Some(&idx) = selector_set.fallback_order.first() {
-            if let Some(selector) = selector_set.selectors.get(idx) {
-                context.set_pin_value("selector", json!(selector)).await?;
-                context.activate_exec_pin("exec_found").await?;
-                return Ok(());
-            }
+        if let Some(&idx) = selector_set.fallback_order.first()
+            && let Some(selector) = selector_set.selectors.get(idx)
+        {
+            context.set_pin_value("selector", json!(selector)).await?;
+            context.activate_exec_pin("exec_found").await?;
+            return Ok(());
         }
 
         context.activate_exec_pin("exec_empty").await?;

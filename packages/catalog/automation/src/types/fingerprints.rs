@@ -85,19 +85,14 @@ impl ElementFingerprint {
     }
 }
 
-#[derive(Serialize, Deserialize, JsonSchema, Clone, Debug, PartialEq, Eq)]
+#[derive(Serialize, Deserialize, JsonSchema, Clone, Debug, PartialEq, Eq, Default)]
 pub enum MatchStrategy {
     Dom,
     Accessibility,
     Vision,
+    #[default]
     Hybrid,
     LlmAssisted,
-}
-
-impl Default for MatchStrategy {
-    fn default() -> Self {
-        Self::Hybrid
-    }
 }
 
 #[derive(Serialize, Deserialize, JsonSchema, Clone, Debug)]
@@ -145,7 +140,7 @@ impl Default for FingerprintMatchOptions {
     }
 }
 
-#[derive(Serialize, Deserialize, JsonSchema, Clone, Debug)]
+#[derive(Serialize, Deserialize, JsonSchema, Clone, Debug, Default)]
 pub struct ContextSignals {
     pub page_url: Option<String>,
     pub page_title: Option<String>,
@@ -155,19 +150,4 @@ pub struct ContextSignals {
     pub screenshot_ref: Option<String>,
     pub cursor_position: Option<(i32, i32)>,
     pub focus_element: Option<String>,
-}
-
-impl Default for ContextSignals {
-    fn default() -> Self {
-        Self {
-            page_url: None,
-            page_title: None,
-            viewport_size: None,
-            dom_snapshot: None,
-            ax_snapshot: None,
-            screenshot_ref: None,
-            cursor_position: None,
-            focus_element: None,
-        }
-    }
 }

@@ -55,17 +55,12 @@ pub enum KeyModifier {
     Meta,
 }
 
-#[derive(Serialize, Deserialize, JsonSchema, Clone, Debug, PartialEq, Eq)]
+#[derive(Serialize, Deserialize, JsonSchema, Clone, Debug, PartialEq, Eq, Default)]
 pub enum MouseButton {
+    #[default]
     Left,
     Right,
     Middle,
-}
-
-impl Default for MouseButton {
-    fn default() -> Self {
-        Self::Left
-    }
 }
 
 #[derive(Serialize, Deserialize, JsonSchema, Clone, Debug)]

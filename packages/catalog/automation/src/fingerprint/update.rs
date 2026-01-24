@@ -91,10 +91,10 @@ impl NodeLogic for UpdateFingerprintNode {
         let name: String = context.evaluate_pin("name").await?;
         let text: String = context.evaluate_pin("text").await?;
 
-        if let Ok(selectors) = context.evaluate_pin::<SelectorSet>("selectors").await {
-            if !selectors.selectors.is_empty() {
-                fingerprint.selectors = selectors;
-            }
+        if let Ok(selectors) = context.evaluate_pin::<SelectorSet>("selectors").await
+            && !selectors.selectors.is_empty()
+        {
+            fingerprint.selectors = selectors;
         }
 
         if !role.is_empty() {

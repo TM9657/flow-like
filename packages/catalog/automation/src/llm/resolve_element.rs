@@ -257,10 +257,9 @@ impl NodeLogic for LLMResolveElementNode {
                 },
                 ..
             }) = content
+                && name == "submit_resolution"
             {
-                if name == "submit_resolution" {
-                    result = Some(json::from_value(arguments)?);
-                }
+                result = Some(json::from_value(arguments)?);
             }
         }
 

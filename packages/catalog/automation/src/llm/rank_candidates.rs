@@ -305,10 +305,9 @@ impl NodeLogic for LLMRankCandidatesNode {
                 },
                 ..
             }) = content
+                && name == "submit_ranking"
             {
-                if name == "submit_ranking" {
-                    result = Some(json::from_value(arguments)?);
-                }
+                result = Some(json::from_value(arguments)?);
             }
         }
 

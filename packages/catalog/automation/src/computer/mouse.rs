@@ -647,16 +647,16 @@ impl NodeLogic for ComputerMouseClickNode {
                         "[MouseClick] Template preparation failed: {}, falling back to coordinates",
                         e
                     );
-                } else if let Ok(Some(matches)) = gui.find_image_on_screen(confidence as f32) {
-                    if !matches.is_empty() {
-                        let (mx, my, conf) = matches[0];
-                        println!(
-                            "[MouseClick] Template matched at ({}, {}) with confidence {}",
-                            mx, my, conf
-                        );
-                        x = mx as i64;
-                        y = my as i64;
-                    }
+                } else if let Ok(Some(matches)) = gui.find_image_on_screen(confidence as f32)
+                    && !matches.is_empty()
+                {
+                    let (mx, my, conf) = matches[0];
+                    println!(
+                        "[MouseClick] Template matched at ({}, {}) with confidence {}",
+                        mx, my, conf
+                    );
+                    x = mx as i64;
+                    y = my as i64;
                 }
             }
         }

@@ -261,10 +261,9 @@ impl NodeLogic for LLMClassifyScreenNode {
                 },
                 ..
             }) = content
+                && name == "submit_classification"
             {
-                if name == "submit_classification" {
-                    result = Some(json::from_value(arguments)?);
-                }
+                result = Some(json::from_value(arguments)?);
             }
         }
 

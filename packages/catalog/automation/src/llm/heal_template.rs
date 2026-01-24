@@ -309,10 +309,9 @@ impl NodeLogic for LLMHealTemplateNode {
                 },
                 ..
             }) = content
+                && name == "submit_healed_template"
             {
-                if name == "submit_healed_template" {
-                    result = Some(json::from_value(arguments)?);
-                }
+                result = Some(json::from_value(arguments)?);
             }
         }
 

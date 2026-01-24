@@ -292,10 +292,9 @@ impl NodeLogic for LLMHealSelectorNode {
                 },
                 ..
             }) = content
+                && name == "submit_healed_selector"
             {
-                if name == "submit_healed_selector" {
-                    result = Some(json::from_value(arguments)?);
-                }
+                result = Some(json::from_value(arguments)?);
             }
         }
 

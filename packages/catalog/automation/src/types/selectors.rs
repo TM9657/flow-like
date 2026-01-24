@@ -1,8 +1,9 @@
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
-#[derive(Serialize, Deserialize, JsonSchema, Clone, Debug, PartialEq, Eq)]
+#[derive(Serialize, Deserialize, JsonSchema, Clone, Debug, PartialEq, Eq, Default)]
 pub enum SelectorKind {
+    #[default]
     Css,
     Xpath,
     Text,
@@ -14,12 +15,6 @@ pub enum SelectorKind {
     AltText,
     Title,
     Image,
-}
-
-impl Default for SelectorKind {
-    fn default() -> Self {
-        Self::Css
-    }
 }
 
 #[derive(Serialize, Deserialize, JsonSchema, Clone, Debug)]
@@ -87,19 +82,10 @@ impl Selector {
     }
 }
 
-#[derive(Serialize, Deserialize, JsonSchema, Clone, Debug)]
+#[derive(Serialize, Deserialize, JsonSchema, Clone, Debug, Default)]
 pub struct SelectorSet {
     pub selectors: Vec<Selector>,
     pub fallback_order: Vec<usize>,
-}
-
-impl Default for SelectorSet {
-    fn default() -> Self {
-        Self {
-            selectors: Vec::new(),
-            fallback_order: Vec::new(),
-        }
-    }
 }
 
 impl SelectorSet {
@@ -196,8 +182,9 @@ impl Default for SelectorBuildOptions {
     }
 }
 
-#[derive(Serialize, Deserialize, JsonSchema, Clone, Debug)]
+#[derive(Serialize, Deserialize, JsonSchema, Clone, Debug, Default)]
 pub enum SelectorSource {
+    #[default]
     Dom,
     Accessibility,
     Role,
@@ -205,10 +192,4 @@ pub enum SelectorSource {
     Xpath,
     Css,
     Image,
-}
-
-impl Default for SelectorSource {
-    fn default() -> Self {
-        Self::Dom
-    }
 }

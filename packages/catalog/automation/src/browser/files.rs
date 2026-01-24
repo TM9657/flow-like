@@ -487,41 +487,40 @@ impl NodeLogic for BrowserWaitForDownloadNode {
                 return Ok(());
             }
 
-            if dir_path.exists() {
-                if let Ok(entries) = std::fs::read_dir(&dir_path) {
-                    for entry in entries.filter_map(|e| e.ok()) {
-                        let path = entry.path();
-                        if path.is_file() && !initial_files.contains(&path) {
-                            let file_name = path.file_name().unwrap_or_default().to_string_lossy();
+            if dir_path.exists()
+                && let Ok(entries) = std::fs::read_dir(&dir_path)
+            {
+                for entry in entries.filter_map(|e| e.ok()) {
+                    let path = entry.path();
+                    if path.is_file() && !initial_files.contains(&path) {
+                        let file_name = path.file_name().unwrap_or_default().to_string_lossy();
 
-                            if file_name.ends_with(".crdownload")
-                                || file_name.ends_with(".part")
-                                || file_name.ends_with(".tmp")
-                            {
-                                continue;
-                            }
+                        if file_name.ends_with(".crdownload")
+                            || file_name.ends_with(".part")
+                            || file_name.ends_with(".tmp")
+                        {
+                            continue;
+                        }
 
-                            let matches = if file_pattern.is_empty() {
-                                true
-                            } else if file_pattern.starts_with('*') {
-                                let suffix = &file_pattern[1..];
-                                file_name.ends_with(suffix)
-                            } else if file_pattern.ends_with('*') {
-                                let prefix = &file_pattern[..file_pattern.len() - 1];
-                                file_name.starts_with(prefix)
-                            } else {
-                                file_name.contains(&file_pattern)
-                            };
+                        let matches = if file_pattern.is_empty() {
+                            true
+                        } else if let Some(suffix) = file_pattern.strip_prefix('*') {
+                            file_name.ends_with(suffix)
+                        } else if file_pattern.ends_with('*') {
+                            let prefix = &file_pattern[..file_pattern.len() - 1];
+                            file_name.starts_with(prefix)
+                        } else {
+                            file_name.contains(&file_pattern)
+                        };
 
-                            if matches {
-                                let result_path = FlowPath::from_pathbuf(path, context).await?;
-                                context.set_pin_value("session_out", json!(session)).await?;
-                                context
-                                    .set_pin_value("downloaded_file", json!(result_path))
-                                    .await?;
-                                context.activate_exec_pin("exec_out").await?;
-                                return Ok(());
-                            }
+                        if matches {
+                            let result_path = FlowPath::from_pathbuf(path, context).await?;
+                            context.set_pin_value("session_out", json!(session)).await?;
+                            context
+                                .set_pin_value("downloaded_file", json!(result_path))
+                                .await?;
+                            context.activate_exec_pin("exec_out").await?;
+                            return Ok(());
                         }
                     }
                 }

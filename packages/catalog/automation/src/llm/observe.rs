@@ -272,10 +272,9 @@ impl NodeLogic for LLMObserveScreenNode {
                 },
                 ..
             }) = content
+                && name == "submit_observation"
             {
-                if name == "submit_observation" {
-                    result = Some(json::from_value(arguments)?);
-                }
+                result = Some(json::from_value(arguments)?);
             }
         }
 
@@ -509,10 +508,9 @@ impl NodeLogic for LLMDescribeElementNode {
                 },
                 ..
             }) = content
+                && name == "submit_element_description"
             {
-                if name == "submit_element_description" {
-                    result = Some(json::from_value(arguments)?);
-                }
+                result = Some(json::from_value(arguments)?);
             }
         }
 

@@ -204,19 +204,19 @@ impl NodeLogic for ClickTemplateNode {
                 Ok(())
             };
 
-        if let Some(matches) = result {
-            if let Some((x, y, _conf)) = matches.first() {
-                let click_x = (*x as i64 + offset_x) as u32;
-                let click_y = (*y as i64 + offset_y) as u32;
+        if let Some(matches) = result
+            && let Some((x, y, _conf)) = matches.first()
+        {
+            let click_x = (*x as i64 + offset_x) as u32;
+            let click_y = (*y as i64 + offset_y) as u32;
 
-                perform_click(&mut gui, click_x, click_y)?;
+            perform_click(&mut gui, click_x, click_y)?;
 
-                context.set_pin_value("found", json!(true)).await?;
-                context.set_pin_value("x", json!(click_x as i64)).await?;
-                context.set_pin_value("y", json!(click_y as i64)).await?;
-                context.activate_exec_pin("exec_out").await?;
-                return Ok(());
-            }
+            context.set_pin_value("found", json!(true)).await?;
+            context.set_pin_value("x", json!(click_x as i64)).await?;
+            context.set_pin_value("y", json!(click_y as i64)).await?;
+            context.activate_exec_pin("exec_out").await?;
+            return Ok(());
         }
 
         // Template not found - try fallback coordinates if provided

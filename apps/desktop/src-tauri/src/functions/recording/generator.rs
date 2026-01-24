@@ -157,10 +157,10 @@ pub async fn generate_add_node_commands(
                 delay_node.coordinates = Some((x_offset, y_offset, 0.0));
 
                 // Set the delay duration (Float type, in milliseconds)
-                if let Some((_, pin)) = delay_node.pins.iter_mut().find(|(_, p)| p.name == "time") {
-                    if let Ok(bytes) = to_vec(&json!(delay_ms as f64)) {
-                        pin.default_value = Some(bytes);
-                    }
+                if let Some((_, pin)) = delay_node.pins.iter_mut().find(|(_, p)| p.name == "time")
+                    && let Ok(bytes) = to_vec(&json!(delay_ms as f64))
+                {
+                    pin.default_value = Some(bytes);
                 }
 
                 let add_delay_cmd = AddNodeCommand::new(delay_node);
@@ -221,10 +221,10 @@ pub async fn generate_add_node_commands(
             if let Ok(mut delay_node) = registry.get_node("delay") {
                 delay_node.coordinates = Some((x_offset, y_offset, 0.0));
 
-                if let Some((_, pin)) = delay_node.pins.iter_mut().find(|(_, p)| p.name == "time") {
-                    if let Ok(bytes) = to_vec(&json!(MIN_DELAY_AFTER_ENTER_MS as f64)) {
-                        pin.default_value = Some(bytes);
-                    }
+                if let Some((_, pin)) = delay_node.pins.iter_mut().find(|(_, p)| p.name == "time")
+                    && let Ok(bytes) = to_vec(&json!(MIN_DELAY_AFTER_ENTER_MS as f64))
+                {
+                    pin.default_value = Some(bytes);
                 }
 
                 let add_delay_cmd = AddNodeCommand::new(delay_node);
@@ -276,7 +276,7 @@ pub async fn generate_add_node_commands(
         let mut template_path_node_id: Option<String> = None;
         let mut template_path_out_pin_id: Option<String> = None;
 
-        let (node_name, extra_pins, uses_rpa_session) = match &action.action_type {
+        let (node_name, extra_pins, _uses_rpa_session) = match &action.action_type {
             ActionType::Click {
                 button,
                 modifiers: _,
@@ -327,10 +327,9 @@ pub async fn generate_add_node_commands(
                                 .pins
                                 .iter_mut()
                                 .find(|(_, p)| p.name == "child_name")
+                                && let Ok(bytes) = to_vec(&json!(screenshot_path))
                             {
-                                if let Ok(bytes) = to_vec(&json!(screenshot_path)) {
-                                    pin.default_value = Some(bytes);
-                                }
+                                pin.default_value = Some(bytes);
                             }
 
                             let child_cmd = AddNodeCommand::new(child_node);
@@ -522,10 +521,10 @@ pub async fn generate_add_node_commands(
         node.coordinates = Some((x_offset, y_offset, 0.0));
 
         for (pin_name, value) in &extra_pins {
-            if let Some((_, pin)) = node.pins.iter_mut().find(|(_, p)| p.name == *pin_name) {
-                if let Ok(bytes) = to_vec(value) {
-                    pin.default_value = Some(bytes);
-                }
+            if let Some((_, pin)) = node.pins.iter_mut().find(|(_, p)| p.name == *pin_name)
+                && let Ok(bytes) = to_vec(value)
+            {
+                pin.default_value = Some(bytes);
             }
         }
 
@@ -648,15 +647,15 @@ pub async fn generate_add_node_commands(
 
         if matches!(&action.action_type, ActionType::Paste { .. }) {
             // Connect previous Copy's text output to this Paste's text input
-            if let Some((copy_node_id, copy_text_pin)) = &last_copy_text_output {
-                if let Some(paste_text_pin) = text_input_pin {
-                    commands.push(GenericCommand::ConnectPin(ConnectPinsCommand::new(
-                        copy_node_id.clone(),
-                        new_node_id.clone(),
-                        copy_text_pin.clone(),
-                        paste_text_pin,
-                    )));
-                }
+            if let Some((copy_node_id, copy_text_pin)) = &last_copy_text_output
+                && let Some(paste_text_pin) = text_input_pin
+            {
+                commands.push(GenericCommand::ConnectPin(ConnectPinsCommand::new(
+                    copy_node_id.clone(),
+                    new_node_id.clone(),
+                    copy_text_pin.clone(),
+                    paste_text_pin,
+                )));
             }
         }
 

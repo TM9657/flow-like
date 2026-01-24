@@ -313,14 +313,13 @@ impl NodeLogic for LLMSuggestNextStepNode {
                 },
                 ..
             }) = content
+                && name == "submit_next_step"
             {
-                if name == "submit_next_step" {
-                    goal_reached = arguments
-                        .get("goal_reached")
-                        .and_then(|v| v.as_bool())
-                        .unwrap_or(false);
-                    result = Some(json::from_value(arguments)?);
-                }
+                goal_reached = arguments
+                    .get("goal_reached")
+                    .and_then(|v| v.as_bool())
+                    .unwrap_or(false);
+                result = Some(json::from_value(arguments)?);
             }
         }
 

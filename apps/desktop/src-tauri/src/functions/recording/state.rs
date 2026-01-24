@@ -94,21 +94,11 @@ pub struct RecordedFingerprint {
     pub bounding_box: Option<(f64, f64, f64, f64)>,
 }
 
-#[derive(Clone, Serialize, Deserialize, Debug)]
+#[derive(Clone, Serialize, Deserialize, Debug, Default)]
 pub struct ActionMetadata {
     pub window_title: Option<String>,
     pub process_name: Option<String>,
     pub monitor_index: Option<usize>,
-}
-
-impl Default for ActionMetadata {
-    fn default() -> Self {
-        Self {
-            window_title: None,
-            process_name: None,
-            monitor_index: None,
-        }
-    }
 }
 
 #[derive(Clone, Serialize, Deserialize, Debug)]
@@ -312,28 +302,25 @@ impl RecordingStateInner {
                 direction: new_dir,
                 amount: new_amount,
             } = &action.action_type
+                && let Some(last_action) = session.actions.last_mut()
+                && let ActionType::Scroll {
+                    direction: last_dir,
+                    amount: last_amount,
+                } = &mut last_action.action_type
             {
-                if let Some(last_action) = session.actions.last_mut() {
-                    if let ActionType::Scroll {
-                        direction: last_dir,
-                        amount: last_amount,
-                    } = &mut last_action.action_type
-                    {
-                        // Only consolidate if same direction AND within time threshold
-                        let time_diff = action
-                            .timestamp
-                            .signed_duration_since(last_action.timestamp)
-                            .num_milliseconds();
-                        if last_dir == new_dir && time_diff < 200 {
-                            *last_amount += new_amount;
-                            // Update coordinates and timestamp to the latest
-                            if action.coordinates.is_some() {
-                                last_action.coordinates = action.coordinates;
-                            }
-                            last_action.timestamp = action.timestamp;
-                            return; // Don't add a new action, we merged into existing
-                        }
+                // Only consolidate if same direction AND within time threshold
+                let time_diff = action
+                    .timestamp
+                    .signed_duration_since(last_action.timestamp)
+                    .num_milliseconds();
+                if last_dir == new_dir && time_diff < 200 {
+                    *last_amount += new_amount;
+                    // Update coordinates and timestamp to the latest
+                    if action.coordinates.is_some() {
+                        last_action.coordinates = action.coordinates;
                     }
+                    last_action.timestamp = action.timestamp;
+                    return; // Don't add a new action, we merged into existing
                 }
             }
 
@@ -342,19 +329,19 @@ impl RecordingStateInner {
     }
 
     pub fn buffer_keystroke(&mut self, ch: char) {
-        if let Some(session) = &self.session {
-            if !session.settings.aggregate_keystrokes {
-                let action = RecordedAction::new(
-                    flow_like_types::create_id(),
-                    ActionType::KeyType {
-                        text: ch.to_string(),
-                    },
-                );
-                if let Some(session) = &mut self.session {
-                    session.actions.push(action);
-                }
-                return;
+        if let Some(session) = &self.session
+            && !session.settings.aggregate_keystrokes
+        {
+            let action = RecordedAction::new(
+                flow_like_types::create_id(),
+                ActionType::KeyType {
+                    text: ch.to_string(),
+                },
+            );
+            if let Some(session) = &mut self.session {
+                session.actions.push(action);
             }
+            return;
         }
 
         self.keystroke_buffer.push(ch);

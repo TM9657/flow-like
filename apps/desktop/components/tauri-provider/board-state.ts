@@ -509,16 +509,18 @@ export class BoardState implements IBoardState {
 		// Check if board requires local execution (computer automation)
 		// and verify RPA permissions before proceeding
 		const board = await this.getBoard(appId, boardId);
-		const { requires_local_execution } = extractOAuthRequirementsFromBoard(board);
+		const { requires_local_execution } =
+			extractOAuthRequirementsFromBoard(board);
 
 		if (requires_local_execution) {
 			try {
-				const permissions = await invoke<{ accessibility: boolean; screen_recording: boolean }>(
-					"check_rpa_permissions"
-				);
+				const permissions = await invoke<{
+					accessibility: boolean;
+					screen_recording: boolean;
+				}>("check_rpa_permissions");
 				if (!permissions.accessibility || !permissions.screen_recording) {
 					const error = new Error(
-						"This workflow requires RPA permissions (Accessibility and Screen Recording) to run computer automation nodes."
+						"This workflow requires RPA permissions (Accessibility and Screen Recording) to run computer automation nodes.",
 					);
 					(error as any).isRpaPermissionError = true;
 					(error as any).permissions = permissions;

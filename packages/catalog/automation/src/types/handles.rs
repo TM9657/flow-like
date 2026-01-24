@@ -8,18 +8,13 @@ use flow_like_types::{Cacheable, create_id};
 #[cfg(feature = "execute")]
 use std::sync::Arc;
 
-#[derive(Serialize, Deserialize, JsonSchema, Clone, Debug)]
+#[derive(Serialize, Deserialize, JsonSchema, Clone, Debug, Default)]
 pub enum BrowserType {
+    #[default]
     Chrome,
     Firefox,
     Edge,
     Safari,
-}
-
-impl Default for BrowserType {
-    fn default() -> Self {
-        Self::Chrome
-    }
 }
 
 #[derive(Serialize, Deserialize, JsonSchema, Clone, Debug)]
@@ -199,15 +194,13 @@ impl AutomationSession {
 
         {
             let mut cache = ctx.cache.write().await;
-            if let Some(wrapper) = cache.get_mut(&self.session_ref) {
-                if let Some(wrapper) = Arc::get_mut(wrapper) {
-                    if let Some(auto_wrapper) = wrapper
-                        .as_any_mut()
-                        .downcast_mut::<AutomationSessionWrapper>()
-                    {
-                        auto_wrapper.browser_driver = Some(driver_arc);
-                    }
-                }
+            if let Some(wrapper) = cache.get_mut(&self.session_ref)
+                && let Some(wrapper) = Arc::get_mut(wrapper)
+                && let Some(auto_wrapper) = wrapper
+                    .as_any_mut()
+                    .downcast_mut::<AutomationSessionWrapper>()
+            {
+                auto_wrapper.browser_driver = Some(driver_arc);
             }
         }
 
@@ -257,15 +250,13 @@ impl AutomationSession {
 
         {
             let mut cache = ctx.cache.write().await;
-            if let Some(wrapper) = cache.get_mut(&self.session_ref) {
-                if let Some(wrapper) = Arc::get_mut(wrapper) {
-                    if let Some(auto_wrapper) = wrapper
-                        .as_any_mut()
-                        .downcast_mut::<AutomationSessionWrapper>()
-                    {
-                        auto_wrapper.current_window_handle = Some(window_handle);
-                    }
-                }
+            if let Some(wrapper) = cache.get_mut(&self.session_ref)
+                && let Some(wrapper) = Arc::get_mut(wrapper)
+                && let Some(auto_wrapper) = wrapper
+                    .as_any_mut()
+                    .downcast_mut::<AutomationSessionWrapper>()
+            {
+                auto_wrapper.current_window_handle = Some(window_handle);
             }
         }
 
@@ -313,15 +304,13 @@ impl AutomationSession {
         // Close browser if attached
         {
             let cache = ctx.cache.read().await;
-            if let Some(wrapper) = cache.get(&self.session_ref) {
-                if let Some(auto_wrapper) =
+            if let Some(wrapper) = cache.get(&self.session_ref)
+                && let Some(auto_wrapper) =
                     wrapper.as_any().downcast_ref::<AutomationSessionWrapper>()
-                {
-                    if let Some(driver) = &auto_wrapper.browser_driver {
-                        let driver_clone = (**driver).clone();
-                        let _ = driver_clone.quit().await;
-                    }
-                }
+                && let Some(driver) = &auto_wrapper.browser_driver
+            {
+                let driver_clone = (**driver).clone();
+                let _ = driver_clone.quit().await;
             }
         }
 

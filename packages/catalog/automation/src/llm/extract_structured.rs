@@ -272,10 +272,9 @@ impl NodeLogic for LLMExtractFromScreenNode {
                 },
                 ..
             }) = content
+                && name == "submit_extraction"
             {
-                if name == "submit_extraction" {
-                    extracted = Some(arguments);
-                }
+                extracted = Some(arguments);
             }
         }
 

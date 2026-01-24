@@ -255,10 +255,9 @@ impl NodeLogic for LLMFindElementNode {
                 },
                 ..
             }) = content
+                && name == "submit_element_location"
             {
-                if name == "submit_element_location" {
-                    result = Some(json::from_value(arguments)?);
-                }
+                result = Some(json::from_value(arguments)?);
             }
         }
 

@@ -346,10 +346,9 @@ impl NodeLogic for LLMDiagnoseAndHealNode {
                 },
                 ..
             }) = content
+                && name == "submit_diagnosis_and_healing"
             {
-                if name == "submit_diagnosis_and_healing" {
-                    result = Some(json::from_value(arguments)?);
-                }
+                result = Some(json::from_value(arguments)?);
             }
         }
 
