@@ -506,6 +506,30 @@ export class BoardState implements IBoardState {
 		cb?: (event: IIntercomEvent[]) => void,
 		skipConsentCheck?: boolean,
 	): Promise<ILogMetadata | undefined> {
+		// Check if board requires local execution (computer automation)
+		// and verify RPA permissions before proceeding
+		const board = await this.getBoard(appId, boardId);
+		const { requires_local_execution } = extractOAuthRequirementsFromBoard(board);
+
+		if (requires_local_execution) {
+			try {
+				const permissions = await invoke<{ accessibility: boolean; screen_recording: boolean }>(
+					"check_rpa_permissions"
+				);
+				if (!permissions.accessibility || !permissions.screen_recording) {
+					const error = new Error(
+						"This workflow requires RPA permissions (Accessibility and Screen Recording) to run computer automation nodes."
+					);
+					(error as any).isRpaPermissionError = true;
+					(error as any).permissions = permissions;
+					throw error;
+				}
+			} catch (e) {
+				if ((e as any).isRpaPermissionError) throw e;
+				console.warn("Failed to check RPA permissions:", e);
+			}
+		}
+
 		const channel = new Channel<IIntercomEvent[]>();
 		let closed = false;
 		let foundRunId = false;
@@ -540,7 +564,6 @@ export class BoardState implements IBoardState {
 					}
 			  >
 			| undefined;
-		const board = await this.getBoard(appId, boardId);
 		const hub = await getHubConfig(this.backend.profile);
 		const oauthResult = await checkOAuthTokens(board, oauthTokenStore, hub, {
 			refreshToken: oauthService.refreshToken.bind(oauthService),

@@ -271,6 +271,7 @@ pub fn run() {
         .manage(state::TauriTrayState(Arc::new(Mutex::new(
             tray::TrayRuntimeState::default(),
         ))))
+        .manage(state::TauriRecordingState::new())
         .plugin(tauri_plugin_http::init())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_deep_link::init())
@@ -670,6 +671,15 @@ pub fn run() {
             functions::registry::registry_check_for_updates,
             functions::registry::registry_load_local,
             functions::registry::registry_init,
+            functions::permissions::check_rpa_permissions,
+            functions::permissions::request_rpa_permission,
+            functions::recording::start_recording,
+            functions::recording::pause_recording,
+            functions::recording::resume_recording,
+            functions::recording::stop_recording,
+            functions::recording::get_recording_status,
+            functions::recording::get_recorded_actions,
+            functions::recording::insert_recording_to_board,
         ]);
 
     #[cfg(desktop)]

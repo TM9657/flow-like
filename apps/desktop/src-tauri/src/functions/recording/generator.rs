@@ -1,0 +1,762 @@
+use flow_like::{
+    flow::board::commands::{
+        GenericCommand, nodes::add_node::AddNodeCommand, pins::connect_pins::ConnectPinsCommand,
+    },
+    state::FlowLikeState,
+};
+use flow_like_types::json::{json, to_vec};
+use flow_like_types::rand::Rng;
+
+use crate::functions::TauriFunctionError;
+
+use super::state::{ActionType, KeyModifier, MouseButton, RecordedAction, ScrollDirection};
+
+/// Options for workflow generation from recorded actions
+#[derive(Clone, Debug)]
+pub struct GeneratorOptions {
+    /// Use pattern matching for clicks when screenshots are available
+    pub use_pattern_matching: bool,
+    /// Confidence threshold for template matching (0.0-1.0)
+    pub template_confidence: f64,
+    /// App ID for constructing screenshot paths
+    pub app_id: Option<String>,
+    /// Board ID for constructing screenshot paths
+    pub board_id: Option<String>,
+    /// Use natural curved mouse movements to avoid bot detection
+    pub bot_detection_evasion: bool,
+}
+
+impl Default for GeneratorOptions {
+    fn default() -> Self {
+        Self {
+            use_pattern_matching: true,
+            template_confidence: 0.8,
+            app_id: None,
+            board_id: None,
+            bot_detection_evasion: false,
+        }
+    }
+}
+
+pub async fn generate_add_node_commands(
+    actions: &[RecordedAction],
+    start_position: (f64, f64),
+    state: &FlowLikeState,
+    options: Option<GeneratorOptions>,
+) -> Result<Vec<GenericCommand>, TauriFunctionError> {
+    let opts = options.unwrap_or_default();
+    let registry = state.node_registry.read().await;
+    let mut commands = Vec::new();
+    let mut x_offset = start_position.0 as f32;
+    let y_offset = start_position.1 as f32;
+    let node_spacing = 300.0_f32;
+
+    let mut prev_exec_pin: Option<(String, String)> = None;
+    let mut session_node_id: Option<String> = None;
+    let mut session_out_pin_id: Option<String> = None;
+
+    // First, add a simple_event node as the trigger
+    let mut event_node = registry
+        .get_node("events_simple")
+        .map_err(|e| TauriFunctionError::new(&format!("events_simple node not found: {}", e)))?;
+    event_node.coordinates = Some((x_offset, y_offset, 0.0));
+
+    let add_event_cmd = AddNodeCommand::new(event_node);
+    let event_node_id = add_event_cmd.node.id.clone();
+    let event_exec_out = add_event_cmd
+        .node
+        .pins
+        .iter()
+        .find(|(_, p)| p.name == "exec_out" && p.pin_type == flow_like::flow::pin::PinType::Output)
+        .map(|(id, _)| id.clone());
+
+    commands.push(GenericCommand::AddNode(add_event_cmd));
+    prev_exec_pin = event_exec_out.map(|pin| (event_node_id.clone(), pin));
+
+    x_offset += node_spacing;
+
+    // Use the unified automation session that supports browser, desktop, and RPA
+    let mut session = registry.get_node("automation_start_session").map_err(|e| {
+        TauriFunctionError::new(&format!("automation_start_session node not found: {}", e))
+    })?;
+    session.coordinates = Some((x_offset, y_offset, 0.0));
+
+    // Create the AddNodeCommand which will generate new IDs for the node and pins
+    let add_session_cmd = AddNodeCommand::new(session.clone());
+
+    // Use the ACTUAL pin IDs from the created command, not the template
+    let actual_session_id = add_session_cmd.node.id.clone();
+    let actual_session_exec_in = add_session_cmd
+        .node
+        .pins
+        .iter()
+        .find(|(_, p)| p.name == "exec_in" && p.pin_type == flow_like::flow::pin::PinType::Input)
+        .map(|(id, _)| id.clone());
+    let actual_session_exec_out = add_session_cmd
+        .node
+        .pins
+        .iter()
+        .find(|(_, p)| p.name == "exec_out" && p.pin_type == flow_like::flow::pin::PinType::Output)
+        .map(|(id, _)| id.clone());
+    let actual_session_handle_out = add_session_cmd
+        .node
+        .pins
+        .iter()
+        .find(|(_, p)| {
+            p.friendly_name == "Session" && p.pin_type == flow_like::flow::pin::PinType::Output
+        })
+        .map(|(id, _)| id.clone());
+
+    commands.push(GenericCommand::AddNode(add_session_cmd));
+
+    // Connect event to session
+    if let (Some((prev_node, prev_pin)), Some(session_exec_in)) =
+        (&prev_exec_pin, &actual_session_exec_in)
+    {
+        commands.push(GenericCommand::ConnectPin(ConnectPinsCommand::new(
+            prev_node.clone(),
+            actual_session_id.clone(),
+            prev_pin.clone(),
+            session_exec_in.clone(),
+        )));
+    }
+
+    session_node_id = Some(actual_session_id.clone());
+    session_out_pin_id = actual_session_handle_out.clone();
+    prev_exec_pin = actual_session_exec_out.map(|pin| (actual_session_id.clone(), pin));
+
+    x_offset += node_spacing;
+
+    // Minimum delay threshold to insert a delay node (milliseconds)
+    const MIN_DELAY_THRESHOLD_MS: i64 = 500;
+    // Minimum delay to insert after Enter key (for page navigation)
+    const MIN_DELAY_AFTER_ENTER_MS: i64 = 300;
+    let mut last_timestamp: Option<chrono::DateTime<chrono::Utc>> = None;
+
+    // Track last Copy node's text output for connecting to subsequent Paste nodes
+    let mut last_copy_text_output: Option<(String, String)> = None; // (node_id, pin_id)
+
+    // Track if last action was an Enter key press (for adding delay before clicks)
+    let mut last_was_enter = false;
+
+    for action in actions {
+        // Calculate delay from previous action
+        let delay_ms = if let Some(prev_ts) = last_timestamp {
+            let diff = action.timestamp.signed_duration_since(prev_ts);
+            diff.num_milliseconds()
+        } else {
+            0
+        };
+        last_timestamp = Some(action.timestamp);
+
+        // Insert delay node if there was a significant pause
+        if delay_ms > MIN_DELAY_THRESHOLD_MS {
+            println!("[Generator] Adding delay node: {}ms", delay_ms);
+
+            if let Ok(mut delay_node) = registry.get_node("delay") {
+                delay_node.coordinates = Some((x_offset, y_offset, 0.0));
+
+                // Set the delay duration (Float type, in milliseconds)
+                if let Some((_, pin)) = delay_node.pins.iter_mut().find(|(_, p)| p.name == "time") {
+                    if let Ok(bytes) = to_vec(&json!(delay_ms as f64)) {
+                        pin.default_value = Some(bytes);
+                    }
+                }
+
+                let add_delay_cmd = AddNodeCommand::new(delay_node);
+                let delay_node_id = add_delay_cmd.node.id.clone();
+
+                let delay_exec_in = add_delay_cmd
+                    .node
+                    .pins
+                    .iter()
+                    .find(|(_, p)| {
+                        p.name == "exec_in" && p.pin_type == flow_like::flow::pin::PinType::Input
+                    })
+                    .map(|(id, _)| id.clone());
+
+                let delay_exec_out = add_delay_cmd
+                    .node
+                    .pins
+                    .iter()
+                    .find(|(_, p)| {
+                        p.name == "exec_out" && p.pin_type == flow_like::flow::pin::PinType::Output
+                    })
+                    .map(|(id, _)| id.clone());
+
+                commands.push(GenericCommand::AddNode(add_delay_cmd));
+
+                // Connect previous node to delay
+                if let (Some((prev_node, prev_pin)), Some(delay_in)) =
+                    (&prev_exec_pin, &delay_exec_in)
+                {
+                    commands.push(GenericCommand::ConnectPin(ConnectPinsCommand::new(
+                        prev_node.clone(),
+                        delay_node_id.clone(),
+                        prev_pin.clone(),
+                        delay_in.clone(),
+                    )));
+                }
+
+                // Update prev_exec_pin to delay's output
+                if let Some(delay_out) = delay_exec_out {
+                    prev_exec_pin = Some((delay_node_id, delay_out));
+                }
+
+                x_offset += node_spacing;
+            }
+        }
+        // If last action was Enter and this is a click, insert a minimum delay for page navigation
+        else if last_was_enter
+            && matches!(
+                action.action_type,
+                ActionType::Click { .. } | ActionType::DoubleClick { .. }
+            )
+        {
+            println!(
+                "[Generator] Adding delay after Enter before click: {}ms",
+                MIN_DELAY_AFTER_ENTER_MS
+            );
+
+            if let Ok(mut delay_node) = registry.get_node("delay") {
+                delay_node.coordinates = Some((x_offset, y_offset, 0.0));
+
+                if let Some((_, pin)) = delay_node.pins.iter_mut().find(|(_, p)| p.name == "time") {
+                    if let Ok(bytes) = to_vec(&json!(MIN_DELAY_AFTER_ENTER_MS as f64)) {
+                        pin.default_value = Some(bytes);
+                    }
+                }
+
+                let add_delay_cmd = AddNodeCommand::new(delay_node);
+                let delay_node_id = add_delay_cmd.node.id.clone();
+
+                let delay_exec_in = add_delay_cmd
+                    .node
+                    .pins
+                    .iter()
+                    .find(|(_, p)| {
+                        p.name == "exec_in" && p.pin_type == flow_like::flow::pin::PinType::Input
+                    })
+                    .map(|(id, _)| id.clone());
+
+                let delay_exec_out = add_delay_cmd
+                    .node
+                    .pins
+                    .iter()
+                    .find(|(_, p)| {
+                        p.name == "exec_out" && p.pin_type == flow_like::flow::pin::PinType::Output
+                    })
+                    .map(|(id, _)| id.clone());
+
+                commands.push(GenericCommand::AddNode(add_delay_cmd));
+
+                if let (Some((prev_node, prev_pin)), Some(delay_in)) =
+                    (&prev_exec_pin, &delay_exec_in)
+                {
+                    commands.push(GenericCommand::ConnectPin(ConnectPinsCommand::new(
+                        prev_node.clone(),
+                        delay_node_id.clone(),
+                        prev_pin.clone(),
+                        delay_in.clone(),
+                    )));
+                }
+
+                if let Some(delay_out) = delay_exec_out {
+                    prev_exec_pin = Some((delay_node_id, delay_out));
+                }
+
+                x_offset += node_spacing;
+            }
+        }
+
+        println!("[Generator] Processing action: {:?}", action.action_type);
+
+        // Track helper nodes needed for pattern matching (path_from_storage_dir, child)
+        let mut helper_commands: Vec<GenericCommand> = Vec::new();
+        let mut template_path_node_id: Option<String> = None;
+        let mut template_path_out_pin_id: Option<String> = None;
+
+        let (node_name, extra_pins, uses_rpa_session) = match &action.action_type {
+            ActionType::Click {
+                button,
+                modifiers: _,
+            } => {
+                let (x, y) = action.coordinates.unwrap_or((0, 0));
+                let button_str = match button {
+                    MouseButton::Left => "Left",
+                    MouseButton::Right => "Right",
+                    MouseButton::Middle => "Middle",
+                };
+
+                // Use pattern matching if enabled and a screenshot is available
+                if opts.use_pattern_matching && action.screenshot_ref.is_some() {
+                    let screenshot_id = action.screenshot_ref.as_ref().unwrap();
+
+                    // Path is relative to storage_dir (from_storage_dir returns board_dir/storage)
+                    // The full path on disk is: apps/{app_id}/boards/{board_id}/storage/recordings/screenshots/{id}.png
+                    // But from storage_dir, we only need: recordings/screenshots/{id}.png
+                    let screenshot_path = format!("recordings/screenshots/{}.png", screenshot_id);
+
+                    // Create path_from_storage_dir node (pure data node, no execution pins)
+                    if let Ok(mut storage_dir_node) = registry.get_node("path_from_storage_dir") {
+                        storage_dir_node.coordinates = Some((x_offset, y_offset - 150.0, 0.0));
+                        let storage_dir_cmd = AddNodeCommand::new(storage_dir_node);
+                        let storage_dir_id = storage_dir_cmd.node.id.clone();
+
+                        let storage_path_out = storage_dir_cmd
+                            .node
+                            .pins
+                            .iter()
+                            .find(|(_, p)| {
+                                p.name == "path"
+                                    && p.pin_type == flow_like::flow::pin::PinType::Output
+                            })
+                            .map(|(id, _)| id.clone());
+
+                        helper_commands.push(GenericCommand::AddNode(storage_dir_cmd));
+
+                        // Create child node to append the screenshot path
+                        if let (Ok(mut child_node), Some(storage_out)) =
+                            (registry.get_node("child"), storage_path_out)
+                        {
+                            child_node.coordinates =
+                                Some((x_offset + 180.0, y_offset - 150.0, 0.0));
+
+                            // Set the child_name (screenshot relative path)
+                            if let Some((_, pin)) = child_node
+                                .pins
+                                .iter_mut()
+                                .find(|(_, p)| p.name == "child_name")
+                            {
+                                if let Ok(bytes) = to_vec(&json!(screenshot_path)) {
+                                    pin.default_value = Some(bytes);
+                                }
+                            }
+
+                            let child_cmd = AddNodeCommand::new(child_node);
+                            let child_node_id = child_cmd.node.id.clone();
+
+                            let child_path_in = child_cmd
+                                .node
+                                .pins
+                                .iter()
+                                .find(|(_, p)| {
+                                    p.name == "parent_path"
+                                        && p.pin_type == flow_like::flow::pin::PinType::Input
+                                })
+                                .map(|(id, _)| id.clone());
+
+                            let child_path_out = child_cmd
+                                .node
+                                .pins
+                                .iter()
+                                .find(|(_, p)| {
+                                    p.name == "path"
+                                        && p.pin_type == flow_like::flow::pin::PinType::Output
+                                })
+                                .map(|(id, _)| id.clone());
+
+                            helper_commands.push(GenericCommand::AddNode(child_cmd));
+
+                            // Connect storage_dir output to child input
+                            if let Some(child_in) = child_path_in {
+                                helper_commands.push(GenericCommand::ConnectPin(
+                                    ConnectPinsCommand::new(
+                                        storage_dir_id,
+                                        child_node_id.clone(),
+                                        storage_out,
+                                        child_in,
+                                    ),
+                                ));
+                            }
+
+                            // Store child node output for connecting to vision_click_template
+                            template_path_node_id = Some(child_node_id);
+                            template_path_out_pin_id = child_path_out;
+                        }
+                    }
+
+                    (
+                        "vision_click_template",
+                        vec![
+                            ("confidence", json!(opts.template_confidence)),
+                            ("click_type", json!(button_str)),
+                            ("fallback_x", json!(x)),
+                            ("fallback_y", json!(y)),
+                        ],
+                        false,
+                    )
+                } else {
+                    // Even without full pattern matching mode, pass the screenshot ref
+                    // so users can enable template matching later if needed
+                    let mut pins = vec![
+                        ("x", json!(x)),
+                        ("y", json!(y)),
+                        ("button", json!(button_str)),
+                    ];
+
+                    if let Some(ref screenshot_id) = action.screenshot_ref {
+                        let screenshot_path =
+                            format!("recordings/screenshots/{}.png", screenshot_id);
+                        pins.push(("screenshot_ref", json!(screenshot_path)));
+                    }
+
+                    // Add natural movement for bot detection evasion
+                    if opts.bot_detection_evasion {
+                        let mut rng = flow_like_types::rand::rng();
+                        pins.push(("natural_move", json!(true)));
+                        pins.push(("move_duration_ms", json!(rng.random_range(150..350))));
+                    }
+
+                    ("computer_mouse_click", pins, false)
+                }
+            }
+            ActionType::DoubleClick { button: _ } => {
+                let (x, y) = action.coordinates.unwrap_or((0, 0));
+                let mut pins = vec![("x", json!(x)), ("y", json!(y))];
+
+                // Add natural movement for bot detection evasion
+                if opts.bot_detection_evasion {
+                    let mut rng = flow_like_types::rand::rng();
+                    pins.push(("natural_move", json!(true)));
+                    pins.push(("move_duration_ms", json!(rng.random_range(150..350))));
+                }
+
+                ("computer_mouse_double_click", pins, false)
+            }
+            ActionType::Drag { start, end } => (
+                "computer_mouse_drag",
+                vec![
+                    ("start_x", json!(start.0)),
+                    ("start_y", json!(start.1)),
+                    ("end_x", json!(end.0)),
+                    ("end_y", json!(end.1)),
+                ],
+                false,
+            ),
+            ActionType::Scroll { direction, amount } => {
+                // Skip scroll events with 0 amount
+                if *amount == 0 {
+                    continue;
+                }
+
+                // Convert pixel delta to scroll lines (rdev gives pixels, enigo expects lines)
+                // Typical scroll line = ~40 pixels, but cap at reasonable values
+                let lines = ((*amount as f32) / 40.0).round().max(1.0).min(20.0) as i32;
+                let (dx, dy) = match direction {
+                    ScrollDirection::Down => (0, -lines),
+                    ScrollDirection::Up => (0, lines),
+                    ScrollDirection::Left => (-lines, 0),
+                    ScrollDirection::Right => (lines, 0),
+                };
+                (
+                    "computer_scroll",
+                    vec![("dx", json!(dx)), ("dy", json!(dy))],
+                    false,
+                )
+            }
+            ActionType::KeyType { text } => {
+                ("computer_key_type", vec![("text", json!(text))], false)
+            }
+            ActionType::KeyPress { key, modifiers } => {
+                let modifier_str = modifiers
+                    .iter()
+                    .map(|m| match m {
+                        KeyModifier::Shift => "shift",
+                        KeyModifier::Control => "ctrl",
+                        KeyModifier::Alt => "alt",
+                        KeyModifier::Meta => "meta",
+                    })
+                    .collect::<Vec<_>>()
+                    .join(",");
+                (
+                    "computer_key_press",
+                    vec![("key", json!(key)), ("modifiers", json!(modifier_str))],
+                    false,
+                )
+            }
+            ActionType::AppLaunch {
+                app_name: _,
+                app_path,
+            } => (
+                "computer_launch_app",
+                vec![("path", json!(app_path))],
+                false,
+            ),
+            ActionType::WindowFocus {
+                window_title: _,
+                process,
+            } => (
+                "computer_focus_window",
+                // Use process name (app name) for more reliable matching
+                // Window titles change with tab/page, but app names stay stable
+                vec![("window_title", json!(process))],
+                false,
+            ),
+            ActionType::Copy {
+                clipboard_content: _,
+            } => {
+                // Copy reads from clipboard - we'll track its output to connect to Paste
+                ("computer_clipboard_get_text", vec![], false)
+            }
+            ActionType::Paste { clipboard_content } => {
+                // For Paste, we write to clipboard
+                // If we have a previous Copy, we'll connect them; otherwise use captured content
+                let text = clipboard_content.clone().unwrap_or_default();
+                (
+                    "computer_clipboard_set_text",
+                    vec![("text", json!(text))],
+                    false,
+                )
+            }
+        };
+
+        println!("[Generator] Mapped to node: {}", node_name);
+        let mut node = match registry.get_node(node_name) {
+            Ok(n) => n,
+            Err(_) => {
+                tracing::warn!("Node {} not found, skipping action", node_name);
+                continue;
+            }
+        };
+        node.coordinates = Some((x_offset, y_offset, 0.0));
+
+        for (pin_name, value) in &extra_pins {
+            if let Some((_, pin)) = node.pins.iter_mut().find(|(_, p)| p.name == *pin_name) {
+                if let Ok(bytes) = to_vec(value) {
+                    pin.default_value = Some(bytes);
+                }
+            }
+        }
+
+        // Create the AddNodeCommand which generates new IDs
+        let add_cmd = AddNodeCommand::new(node);
+        let new_node_id = add_cmd.node.id.clone();
+
+        // Extract pin IDs from the CREATED node with new IDs, not the template
+        let exec_in_pin = add_cmd
+            .node
+            .pins
+            .iter()
+            .find(|(_, p)| {
+                p.name == "exec_in" && p.pin_type == flow_like::flow::pin::PinType::Input
+            })
+            .map(|(id, _)| id.clone());
+
+        let exec_out_pin = add_cmd
+            .node
+            .pins
+            .iter()
+            .find(|(_, p)| {
+                p.name == "exec_out" && p.pin_type == flow_like::flow::pin::PinType::Output
+            })
+            .map(|(id, _)| id.clone());
+
+        let session_in_pin = add_cmd
+            .node
+            .pins
+            .iter()
+            .find(|(_, p)| {
+                (p.friendly_name == "Session" || p.friendly_name == "RPA Session")
+                    && p.pin_type == flow_like::flow::pin::PinType::Input
+            })
+            .map(|(id, _)| id.clone());
+
+        let new_session_out_pin = add_cmd
+            .node
+            .pins
+            .iter()
+            .find(|(_, p)| {
+                (p.friendly_name == "Session" || p.friendly_name == "RPA Session")
+                    && p.pin_type == flow_like::flow::pin::PinType::Output
+            })
+            .map(|(id, _)| id.clone());
+
+        // For vision_click_template, find the template pin to connect FlowPath
+        let template_in_pin = add_cmd
+            .node
+            .pins
+            .iter()
+            .find(|(_, p)| {
+                p.name == "template" && p.pin_type == flow_like::flow::pin::PinType::Input
+            })
+            .map(|(id, _)| id.clone());
+
+        // Extract text pins for Copy/Paste connection before add_cmd is moved
+        let text_output_pin = add_cmd
+            .node
+            .pins
+            .iter()
+            .find(|(_, p)| p.name == "text" && p.pin_type == flow_like::flow::pin::PinType::Output)
+            .map(|(id, _)| id.clone());
+        let text_input_pin = add_cmd
+            .node
+            .pins
+            .iter()
+            .find(|(_, p)| p.name == "text" && p.pin_type == flow_like::flow::pin::PinType::Input)
+            .map(|(id, _)| id.clone());
+
+        // Add helper nodes first (path_from_storage_dir, child) for pattern matching
+        for cmd in helper_commands {
+            commands.push(cmd);
+        }
+
+        // Add the node command BEFORE trying to connect its pins
+        commands.push(GenericCommand::AddNode(add_cmd));
+
+        // Connect template path to vision_click_template if pattern matching
+        if let (Some(path_node), Some(path_out), Some(template_in)) = (
+            &template_path_node_id,
+            &template_path_out_pin_id,
+            &template_in_pin,
+        ) {
+            commands.push(GenericCommand::ConnectPin(ConnectPinsCommand::new(
+                path_node.clone(),
+                new_node_id.clone(),
+                path_out.clone(),
+                template_in.clone(),
+            )));
+        }
+
+        if let (Some((prev_node, prev_pin)), Some(curr_pin)) = (&prev_exec_pin, &exec_in_pin) {
+            commands.push(GenericCommand::ConnectPin(ConnectPinsCommand::new(
+                prev_node.clone(),
+                new_node_id.clone(),
+                prev_pin.clone(),
+                curr_pin.clone(),
+            )));
+        }
+
+        if let (Some(session_node), Some(session_pin), Some(curr_session_pin)) =
+            (&session_node_id, &session_out_pin_id, &session_in_pin)
+        {
+            commands.push(GenericCommand::ConnectPin(ConnectPinsCommand::new(
+                session_node.clone(),
+                new_node_id.clone(),
+                session_pin.clone(),
+                curr_session_pin.clone(),
+            )));
+        }
+
+        // Handle Copy/Paste node connections
+        if matches!(&action.action_type, ActionType::Copy { .. }) {
+            // Track Copy node's text output for later Paste connection
+            if let Some(pin_id) = text_output_pin {
+                last_copy_text_output = Some((new_node_id.clone(), pin_id));
+            }
+        }
+
+        if matches!(&action.action_type, ActionType::Paste { .. }) {
+            // Connect previous Copy's text output to this Paste's text input
+            if let Some((copy_node_id, copy_text_pin)) = &last_copy_text_output {
+                if let Some(paste_text_pin) = text_input_pin {
+                    commands.push(GenericCommand::ConnectPin(ConnectPinsCommand::new(
+                        copy_node_id.clone(),
+                        new_node_id.clone(),
+                        copy_text_pin.clone(),
+                        paste_text_pin,
+                    )));
+                }
+            }
+        }
+
+        if let Some(exec_out) = exec_out_pin {
+            prev_exec_pin = Some((new_node_id.clone(), exec_out));
+        }
+
+        if let Some(new_session_out) = new_session_out_pin {
+            session_node_id = Some(new_node_id.clone());
+            session_out_pin_id = Some(new_session_out);
+        }
+
+        // Track if this was an Enter key press for next iteration
+        last_was_enter = matches!(
+            &action.action_type,
+            ActionType::KeyPress { key, .. } if key == "Enter" || key == "Return"
+        );
+
+        x_offset += node_spacing;
+    }
+
+    Ok(commands)
+}
+
+pub fn action_to_description(action: &RecordedAction) -> String {
+    match &action.action_type {
+        ActionType::Click { button, modifiers } => {
+            let coords = action
+                .coordinates
+                .map(|(x, y)| format!(" at ({}, {})", x, y))
+                .unwrap_or_default();
+            let mods = if modifiers.is_empty() {
+                String::new()
+            } else {
+                format!(" with {:?}", modifiers)
+            };
+            format!("{:?} click{}{}", button, coords, mods)
+        }
+        ActionType::DoubleClick { button } => {
+            let coords = action
+                .coordinates
+                .map(|(x, y)| format!(" at ({}, {})", x, y))
+                .unwrap_or_default();
+            format!("{:?} double-click{}", button, coords)
+        }
+        ActionType::Drag { start, end } => {
+            format!(
+                "Drag from ({}, {}) to ({}, {})",
+                start.0, start.1, end.0, end.1
+            )
+        }
+        ActionType::Scroll { direction, amount } => {
+            format!("Scroll {:?} by {}", direction, amount)
+        }
+        ActionType::KeyType { text } => {
+            let preview = if text.len() > 20 {
+                format!("{}...", &text[..20])
+            } else {
+                text.clone()
+            };
+            format!("Type \"{}\"", preview)
+        }
+        ActionType::KeyPress { key, modifiers } => {
+            if modifiers.is_empty() {
+                format!("Press {}", key)
+            } else {
+                format!("Press {:?}+{}", modifiers, key)
+            }
+        }
+        ActionType::AppLaunch { app_name, .. } => {
+            format!("Launch {}", app_name)
+        }
+        ActionType::WindowFocus { window_title, .. } => {
+            format!("Focus window \"{}\"", window_title)
+        }
+        ActionType::Copy { clipboard_content } => {
+            let preview = clipboard_content
+                .as_ref()
+                .map(|s| {
+                    if s.len() > 20 {
+                        format!("\"{}...\"", &s[..20])
+                    } else {
+                        format!("\"{}\"", s)
+                    }
+                })
+                .unwrap_or_else(|| "(empty)".to_string());
+            format!("Copy {}", preview)
+        }
+        ActionType::Paste { clipboard_content } => {
+            let preview = clipboard_content
+                .as_ref()
+                .map(|s| {
+                    if s.len() > 20 {
+                        format!("\"{}...\"", &s[..20])
+                    } else {
+                        format!("\"{}\"", s)
+                    }
+                })
+                .unwrap_or_else(|| "(empty)".to_string());
+            format!("Paste {}", preview)
+        }
+    }
+}

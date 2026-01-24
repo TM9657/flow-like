@@ -10,6 +10,8 @@ use crate::{
     event_bus::EventBus, profile::UserProfile, settings::Settings, tray::TrayRuntimeState,
 };
 
+pub use crate::functions::recording::state::TauriRecordingState;
+
 #[derive(Clone)]
 pub struct TauriFlowLikeState(pub Arc<FlowLikeState>);
 impl TauriFlowLikeState {

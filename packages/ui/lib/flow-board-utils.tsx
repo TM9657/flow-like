@@ -334,6 +334,7 @@ export function parseBoard(
 	const cache = new Map<string, [IPin, INode | ILayer, boolean]>();
 	const oldNodesMap = new Map<number, any>();
 	const oldEdgesMap = new Map<string, any>();
+	const addedNodeIds = new Set<string>(); // Track which node IDs have been added
 
 	// Compute a hash of all fn_refs to detect changes
 	const fnRefsHash = Object.values(board.nodes)
@@ -348,7 +349,10 @@ export function parseBoard(
 		if (updatedNode) {
 			oldNode.data.node = updatedNode;
 		}
-		if (oldNode.data?.hash) oldNodesMap.set(oldNode.data?.hash, oldNode);
+		// Only add to oldNodesMap if we haven't seen this hash before (prevents duplicate hash collisions)
+		if (oldNode.data?.hash && !oldNodesMap.has(oldNode.data.hash)) {
+			oldNodesMap.set(oldNode.data.hash, oldNode);
+		}
 	}
 
 	for (const edge of oldEdges ?? []) {
@@ -361,6 +365,14 @@ export function parseBoard(
 			cache.set(pin.id, [pin, node, nodeLayer === currentLayer]);
 		}
 		if (nodeLayer !== currentLayer) continue;
+
+		// Skip if this node ID has already been added (prevents duplicates)
+		if (addedNodeIds.has(node.id)) {
+			console.warn(`Duplicate node ID detected: ${node.id}, skipping...`);
+			continue;
+		}
+		addedNodeIds.add(node.id);
+
 		const hash = node.hash ?? -1;
 		const oldNode = hash === -1 ? undefined : oldNodesMap.get(hash);
 		if (oldNode) {

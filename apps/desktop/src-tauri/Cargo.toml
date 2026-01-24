@@ -50,6 +50,7 @@ tauri-plugin-notification = "2.3.1"
 tauri-plugin-dialog = "2.4.0"
 tauri-plugin-deep-link = "2.4.3"
 tauri-plugin-clipboard-manager = "2.3.0"
+arboard = "3.6.1"
 tauri-plugin-http = "2.5.2"
 tauri-plugin-devtools = "2.0.1"
 tauri-plugin-fs = "2.4.2"
@@ -67,15 +68,19 @@ tower = "0.5.2"
 chrono-tz.workspace = true
 mimalloc.workspace = true
 sysinfo = "0.37.2"
+rdev = { version = "0.5"}
+enigo = "0.6.1"
 
 [target."cfg(any(target_os = \"macos\", windows, target_os = \"linux\"))".dependencies]
 tauri-plugin-single-instance = { version = "2.3.4", features = ["deep-link"] }
 tauri-plugin-window-state = "2.4.0"
 tauri-plugin-updater = "2.9.0"
+xcap = "0.8.1"
 
 [target."cfg(target_os = \"macos\")".dependencies]
 cocoa = "0.26"
 macos-app-nap = "0.0.1"
+core-graphics = "0.25"
 
 [profile.release]
 panic = "abort"
