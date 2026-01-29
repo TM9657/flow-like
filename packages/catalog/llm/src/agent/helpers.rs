@@ -1186,20 +1186,22 @@ pub async fn execute_agent_streaming(
 
         use rig::message::{ToolResult as RigToolResult, ToolResultContent, UserContent};
 
+        // Collect all tool results into a single User message
+        // This is required for Gemini API which expects tool results to immediately follow
+        // the assistant's tool call message in a single message
+        let mut tool_result_contents: Vec<UserContent> = Vec::new();
+
         for (tool_id, tool_name, tool_output) in &tool_results {
             let tool_result_str = match tool_output.as_str() {
                 Some(s) => s.to_string(),
                 None => json::to_string(tool_output).unwrap_or_default(),
             };
 
-            let tool_result_msg = rig::message::Message::User {
-                content: OneOrMany::one(UserContent::ToolResult(RigToolResult {
-                    id: tool_id.clone(),
-                    call_id: None,
-                    content: OneOrMany::one(ToolResultContent::text(tool_result_str.clone())),
-                })),
-            };
-            current_history.push(tool_result_msg);
+            tool_result_contents.push(UserContent::ToolResult(RigToolResult {
+                id: tool_id.clone(),
+                call_id: None,
+                content: OneOrMany::one(ToolResultContent::text(tool_result_str.clone())),
+            }));
 
             let tool_msg = HistoryMessage {
                 role: Role::Tool,
@@ -1213,6 +1215,23 @@ pub async fn execute_agent_streaming(
                 annotations: None,
             };
             full_history.push_message(tool_msg);
+        }
+
+        // Add all tool results as a single User message
+        if !tool_result_contents.is_empty() {
+            let combined_tool_results = if tool_result_contents.len() == 1 {
+                OneOrMany::one(tool_result_contents.into_iter().next().unwrap())
+            } else {
+                // For multiple tool results, create a Many variant
+                // This should never fail since we already checked len > 1
+                OneOrMany::many(tool_result_contents)
+                    .expect("tool_result_contents should have at least 2 elements")
+            };
+
+            let tool_result_msg = rig::message::Message::User {
+                content: combined_tool_results,
+            };
+            current_history.push(tool_result_msg);
         }
 
         // Apply context management after adding tool results if infinite context is enabled

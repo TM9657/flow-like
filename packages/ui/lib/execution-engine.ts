@@ -166,6 +166,7 @@ export class ExecutionEngineProvider {
 				stream.isComplete = false;
 				stream.accumulatedEvents = [];
 				stream.lastSentIndex.clear();
+				stream.executionPromise = undefined; // Clear old promise to allow new execution
 				// We keep existing subscribers, but reset their sent index
 				for (const subscriberId of stream.subscribers.keys()) {
 					stream.lastSentIndex.set(subscriberId, 0);

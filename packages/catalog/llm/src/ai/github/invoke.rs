@@ -1,5 +1,8 @@
-/// # Copilot Invoke Nodes
-/// Nodes for sending messages and receiving responses.
+//! Copilot Invoke Nodes
+//!
+//! Nodes for sending messages and receiving responses, with history support
+//! that matches the model invoke node interface.
+
 use super::CopilotSessionHandle;
 use flow_like::flow::{
     execution::context::ExecutionContext,
@@ -7,11 +10,38 @@ use flow_like::flow::{
     pin::PinOptions,
     variable::VariableType,
 };
+use flow_like_model_provider::{
+    history::{History, Role},
+    response::Response,
+    response_chunk::ResponseChunk,
+};
 use flow_like_types::{async_trait, json};
 
-// =============================================================================
-// Send and Wait Node
-// =============================================================================
+/// Convert Flow-Like History to Copilot message format
+#[cfg(feature = "execute")]
+fn history_to_copilot_context(history: &History) -> String {
+    let mut context_parts = vec![];
+
+    for msg in &history.messages {
+        let role = match msg.role {
+            Role::User => "User",
+            Role::Assistant => "Assistant",
+            Role::System => "System",
+            Role::Tool => "Tool",
+            Role::Function => "Function",
+        };
+
+        let content = msg.as_str();
+        context_parts.push(format!("{}: {}", role, content));
+    }
+
+    context_parts.join("\n\n")
+}
+
+/// Create a Response from Copilot response text
+fn create_response(text: &str, model: &str) -> Response {
+    Response::from_text(text, model)
+}
 
 #[crate::register_node]
 #[derive(Default)]
@@ -22,11 +52,11 @@ impl NodeLogic for CopilotSendAndWaitNode {
     fn get_node(&self) -> Node {
         let mut node = Node::new(
             "copilot_send_and_wait",
-            "Copilot Send Message",
-            "Sends a message and waits for complete response",
-            "GitHub/Copilot/Chat",
+            "Send Message",
+            "Sends a message to Copilot and waits for complete response. Supports history input for context.",
+            "AI/GitHub/Copilot/Chat",
         );
-        node.add_icon("/flow/icons/send.svg");
+        node.add_icon("/flow/icons/github.svg");
 
         node.set_scores(
             NodeScores::new()
@@ -52,6 +82,14 @@ impl NodeLogic for CopilotSendAndWaitNode {
 
         node.add_input_pin("prompt", "Prompt", "Message to send", VariableType::String);
 
+        node.add_input_pin(
+            "history",
+            "History",
+            "Optional chat history for context (same format as Model Invoke)",
+            VariableType::Struct,
+        )
+        .set_schema::<History>();
+
         node.add_output_pin(
             "exec_out",
             "Output",
@@ -65,6 +103,15 @@ impl NodeLogic for CopilotSendAndWaitNode {
             "Complete response text",
             VariableType::String,
         );
+
+        node.add_output_pin(
+            "result",
+            "Result",
+            "Response in standard model format (matches Model Invoke)",
+            VariableType::Struct,
+        )
+        .set_schema::<Response>()
+        .set_options(PinOptions::new().set_enforce_schema(true).build());
 
         node.set_long_running(true);
 
@@ -80,6 +127,7 @@ impl NodeLogic for CopilotSendAndWaitNode {
 
         let handle: CopilotSessionHandle = context.evaluate_pin("session").await?;
         let prompt: String = context.evaluate_pin("prompt").await?;
+        let history: Option<History> = context.evaluate_pin("history").await.ok();
 
         let cached = {
             let cache = context.cache.read().await;
@@ -92,17 +140,31 @@ impl NodeLogic for CopilotSendAndWaitNode {
             .downcast_ref::<CachedCopilotSession>()
             .ok_or_else(|| flow_like_types::anyhow!("Failed to downcast cached session"))?;
 
+        let full_prompt = if let Some(hist) = history {
+            let context_str = history_to_copilot_context(&hist);
+            if context_str.is_empty() {
+                prompt
+            } else {
+                format!(
+                    "Context from previous conversation:\n{}\n\nCurrent request:\n{}",
+                    context_str, prompt
+                )
+            }
+        } else {
+            prompt.clone()
+        };
+
         context.log_message(
             &format!(
                 "Sending message: {}...",
-                &prompt.chars().take(50).collect::<String>()
+                &full_prompt.chars().take(50).collect::<String>()
             ),
             LogLevel::Debug,
         );
 
         let response = cached_session
             .session
-            .send_and_wait(prompt.as_str())
+            .send_and_wait(full_prompt.as_str())
             .await
             .map_err(|e| flow_like_types::anyhow!("Failed to send message: {}", e))?;
 
@@ -111,9 +173,12 @@ impl NodeLogic for CopilotSendAndWaitNode {
             LogLevel::Debug,
         );
 
+        let result = create_response(&response, "copilot");
+
         context
             .set_pin_value("response", json::json!(response))
             .await?;
+        context.set_pin_value("result", json::json!(result)).await?;
         context.activate_exec_pin("exec_out").await?;
 
         Ok(())
@@ -127,10 +192,6 @@ impl NodeLogic for CopilotSendAndWaitNode {
     }
 }
 
-// =============================================================================
-// Send Streaming Node
-// =============================================================================
-
 #[crate::register_node]
 #[derive(Default)]
 pub struct CopilotSendStreamingNode {}
@@ -140,11 +201,11 @@ impl NodeLogic for CopilotSendStreamingNode {
     fn get_node(&self) -> Node {
         let mut node = Node::new(
             "copilot_send_streaming",
-            "Copilot Stream Message",
-            "Sends a message and streams the response",
-            "GitHub/Copilot/Chat",
+            "Stream Message",
+            "Sends a message to Copilot and streams the response. Supports history input and matches Model Invoke interface.",
+            "AI/GitHub/Copilot/Chat",
         );
-        node.add_icon("/flow/icons/stream.svg");
+        node.add_icon("/flow/icons/github.svg");
 
         node.set_scores(
             NodeScores::new()
@@ -170,31 +231,50 @@ impl NodeLogic for CopilotSendStreamingNode {
 
         node.add_input_pin("prompt", "Prompt", "Message to send", VariableType::String);
 
+        node.add_input_pin(
+            "history",
+            "History",
+            "Optional chat history for context (same format as Model Invoke)",
+            VariableType::Struct,
+        )
+        .set_schema::<History>();
+
         node.add_output_pin(
-            "on_chunk",
-            "On Chunk",
-            "Fires for each streaming chunk",
+            "on_stream",
+            "On Stream",
+            "Fires for each streaming chunk (matches Model Invoke)",
             VariableType::Execution,
         );
 
         node.add_output_pin(
-            "exec_out",
-            "Complete",
-            "Fires when streaming is complete",
+            "done",
+            "Done",
+            "Fires when streaming is complete (matches Model Invoke)",
             VariableType::Execution,
         );
 
         node.add_output_pin(
             "chunk",
             "Chunk",
-            "Current streaming chunk text",
-            VariableType::String,
-        );
+            "Current streaming chunk (matches Model Invoke ResponseChunk format)",
+            VariableType::Struct,
+        )
+        .set_schema::<ResponseChunk>()
+        .set_options(PinOptions::new().set_enforce_schema(true).build());
+
+        node.add_output_pin(
+            "result",
+            "Result",
+            "Complete response (matches Model Invoke Response format)",
+            VariableType::Struct,
+        )
+        .set_schema::<Response>()
+        .set_options(PinOptions::new().set_enforce_schema(true).build());
 
         node.add_output_pin(
             "full_response",
             "Full Response",
-            "Complete accumulated response",
+            "Complete accumulated response text",
             VariableType::String,
         );
 
@@ -209,11 +289,12 @@ impl NodeLogic for CopilotSendStreamingNode {
         use copilot_sdk::SessionEventData;
         use flow_like::flow::execution::LogLevel;
 
-        context.deactivate_exec_pin("exec_out").await?;
-        context.deactivate_exec_pin("on_chunk").await?;
+        context.deactivate_exec_pin("done").await?;
+        context.deactivate_exec_pin("on_stream").await?;
 
         let handle: CopilotSessionHandle = context.evaluate_pin("session").await?;
         let prompt: String = context.evaluate_pin("prompt").await?;
+        let history: Option<History> = context.evaluate_pin("history").await.ok();
 
         let cached = {
             let cache = context.cache.read().await;
@@ -226,12 +307,26 @@ impl NodeLogic for CopilotSendStreamingNode {
             .downcast_ref::<CachedCopilotSession>()
             .ok_or_else(|| flow_like_types::anyhow!("Failed to downcast cached session"))?;
 
+        let full_prompt = if let Some(hist) = history {
+            let context_str = history_to_copilot_context(&hist);
+            if context_str.is_empty() {
+                prompt
+            } else {
+                format!(
+                    "Context from previous conversation:\n{}\n\nCurrent request:\n{}",
+                    context_str, prompt
+                )
+            }
+        } else {
+            prompt.clone()
+        };
+
         context.log_message("Starting streaming response...", LogLevel::Debug);
 
         let mut events = cached_session.session.subscribe();
         cached_session
             .session
-            .send(prompt.as_str())
+            .send(full_prompt.as_str())
             .await
             .map_err(|e| flow_like_types::anyhow!("Failed to send message: {}", e))?;
 
@@ -242,13 +337,14 @@ impl NodeLogic for CopilotSendStreamingNode {
                 Ok(event) => match &event.data {
                     SessionEventData::AssistantMessageDelta(delta) => {
                         full_response.push_str(&delta.delta_content);
-                        context
-                            .set_pin_value("chunk", json::json!(delta.delta_content))
-                            .await?;
+
+                        let chunk = ResponseChunk::from_text(&delta.delta_content, "copilot");
+
+                        context.set_pin_value("chunk", json::json!(chunk)).await?;
                         context
                             .set_pin_value("full_response", json::json!(full_response))
                             .await?;
-                        context.activate_exec_pin("on_chunk").await?;
+                        context.activate_exec_pin("on_stream").await?;
                     }
                     SessionEventData::AssistantMessage(msg) => {
                         full_response = msg.content.clone();
@@ -268,10 +364,14 @@ impl NodeLogic for CopilotSendStreamingNode {
             }
         }
 
+        let result = create_response(&full_response, "copilot");
+
         context
             .set_pin_value("full_response", json::json!(full_response))
             .await?;
-        context.activate_exec_pin("exec_out").await?;
+        context.set_pin_value("result", json::json!(result)).await?;
+        context.deactivate_exec_pin("on_stream").await?;
+        context.activate_exec_pin("done").await?;
 
         Ok(())
     }
@@ -284,10 +384,6 @@ impl NodeLogic for CopilotSendStreamingNode {
     }
 }
 
-// =============================================================================
-// Abort Node
-// =============================================================================
-
 #[crate::register_node]
 #[derive(Default)]
 pub struct CopilotAbortNode {}
@@ -297,11 +393,11 @@ impl NodeLogic for CopilotAbortNode {
     fn get_node(&self) -> Node {
         let mut node = Node::new(
             "copilot_abort",
-            "Copilot Abort",
+            "Abort",
             "Aborts the current message processing",
-            "GitHub/Copilot/Chat",
+            "AI/GitHub/Copilot/Chat",
         );
-        node.add_icon("/flow/icons/stop.svg");
+        node.add_icon("/flow/icons/github.svg");
 
         node.set_scores(
             NodeScores::new()

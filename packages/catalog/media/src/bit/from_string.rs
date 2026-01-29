@@ -55,7 +55,25 @@ impl NodeLogic for BitFromStringNode {
         context.deactivate_exec_pin("exec_out").await?;
         let bit_id: String = context.evaluate_pin("bit_id").await?;
         let http_client = context.app_state.http_client.clone();
-        let bit = context.profile.find_bit(&bit_id, http_client).await;
+
+        // Parse the bit_id which might be in "hub:id" format
+        // Hub URLs contain "://" so we need to find the last colon after any protocol
+        let bit = if let Some(last_colon) = bit_id.rfind(':') {
+            // Check if this colon is part of a URL scheme (http:// or https://)
+            let before_colon = &bit_id[..last_colon];
+            if before_colon.ends_with("http") || before_colon.ends_with("https") {
+                // No hub:id separator, just a plain ID
+                context.profile.find_bit(&bit_id, http_client).await
+            } else {
+                // Split into hub and id
+                let hub = &bit_id[..last_colon];
+                let id = &bit_id[last_colon + 1..];
+                context.profile.get_bit(id.to_string(), Some(hub.to_string()), http_client).await
+            }
+        } else {
+            // No colon at all, plain bit ID
+            context.profile.find_bit(&bit_id, http_client).await
+        };
 
         if let Ok(bit) = bit {
             context.set_pin_value("output_bit", json!(bit)).await?;

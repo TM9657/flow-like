@@ -468,6 +468,7 @@ export function FlowBoard({
 				const templateNodes = Object.values(templateBoard.nodes);
 				const templateComments = Object.values(templateBoard.comments);
 				const templateLayers = Object.values(templateBoard.layers);
+				const templateVariables = Object.values(templateBoard.variables);
 
 				if (
 					templateNodes.length === 0 &&
@@ -484,6 +485,7 @@ export function FlowBoard({
 					original_nodes: templateNodes,
 					original_comments: templateComments,
 					original_layers: templateLayers,
+					original_variables: templateVariables,
 					new_nodes: [],
 					new_comments: [],
 					new_layers: [],

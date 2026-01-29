@@ -389,6 +389,23 @@ impl Node {
         Some(variable_type)
     }
 
+    pub fn harmonize_value_type(&mut self, pins: Vec<&str>) -> Option<ValueType> {
+        let value_type = match self.pins.iter().find(|(_, pin)| {
+            pins.contains(&pin.name.as_str()) && pin.value_type != ValueType::Normal
+        }) {
+            Some((_, pin)) => pin.value_type.clone(),
+            None => return None,
+        };
+
+        for pin in self.pins.values_mut() {
+            if pins.contains(&pin.name.as_str()) {
+                pin.value_type = value_type.clone();
+            }
+        }
+
+        Some(value_type)
+    }
+
     pub fn match_type(
         &mut self,
         pin_name: &str,

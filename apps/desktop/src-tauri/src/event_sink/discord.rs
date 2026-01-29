@@ -584,16 +584,27 @@ async fn update_discord_message(
     attachments: &[Attachment],
     reasoning_embed: Option<CreateEmbed>,
     last_edit: &mut Instant,
+    edit_count: &mut u32,
 ) -> Result<()> {
     let now = Instant::now();
     let time_since_last_edit = now.duration_since(*last_edit);
 
-    // Rate limit: only edit once per second
-    if time_since_last_edit < Duration::from_secs(1) {
+    // Adaptive rate limiting: Discord's client stops rendering after too many rapid edits
+    // Start at 1.5s, increase to 3s after many edits to prevent client rendering issues
+    let min_interval = if *edit_count < 5 {
+        Duration::from_millis(1500)
+    } else if *edit_count < 10 {
+        Duration::from_millis(2000)
+    } else {
+        Duration::from_millis(3000)
+    };
+
+    if time_since_last_edit < min_interval {
         return Ok(());
     }
 
     *last_edit = now;
+    *edit_count += 1;
 
     // Prepare Discord attachments from our Attachment enum
     let discord_attachments = prepare_discord_attachments(attachments).await;
@@ -710,6 +721,7 @@ async fn fire_discord_event(
         Arc::new(Mutex::new(Instant::now() - Duration::from_secs(2)));
     let collected_attachments: Arc<Mutex<Vec<Attachment>>> = Arc::new(Mutex::new(Vec::new()));
     let reasoning_state: Arc<Mutex<Option<Reasoning>>> = Arc::new(Mutex::new(None));
+    let edit_count: Arc<Mutex<u32>> = Arc::new(Mutex::new(0));
 
     // Clone for final flush
     let context_final = context.clone();
@@ -717,6 +729,7 @@ async fn fire_discord_event(
     let last_edit_final = last_edit.clone();
     let collected_attachments_final = collected_attachments.clone();
     let reasoning_state_final = reasoning_state.clone();
+    let edit_count_final = edit_count.clone();
     let ctx_final = ctx.clone();
     let message_final = message.clone();
 
@@ -731,6 +744,7 @@ async fn fire_discord_event(
             let last_edit = last_edit.clone();
             let collected_attachments = collected_attachments.clone();
             let reasoning = reasoning_state.clone();
+            let edit_count = edit_count.clone();
             let ctx = ctx_clone.clone();
             let message = message_clone.clone();
             Box::pin({
@@ -782,6 +796,7 @@ async fn fire_discord_event(
                             if !content.is_empty() || reasoning_embed.is_some() {
                                 let mut resp_lock = response.lock().await;
                                 let mut last_edit_lock = last_edit.lock().await;
+                                let mut edit_count_lock = edit_count.lock().await;
                                 let attachments = collected_attachments.lock().await;
 
                                 let _ = update_discord_message(
@@ -792,6 +807,7 @@ async fn fire_discord_event(
                                     &attachments,
                                     reasoning_embed,
                                     &mut last_edit_lock,
+                                    &mut edit_count_lock,
                                 )
                                 .await;
                             }
@@ -818,7 +834,8 @@ async fn fire_discord_event(
                             {
                                 let mut resp_lock = response.lock().await;
                                 let mut last_edit_lock = last_edit.lock().await;
-                                *last_edit_lock = Instant::now() - Duration::from_secs(2); // Force update
+                                let mut edit_count_lock = edit_count.lock().await;
+                                *last_edit_lock = Instant::now() - Duration::from_secs(4); // Force update
                                 let attachments = collected_attachments.lock().await;
 
                                 let _ = update_discord_message(
@@ -829,6 +846,7 @@ async fn fire_discord_event(
                                     &attachments,
                                     None, // No embed on final message
                                     &mut last_edit_lock,
+                                    &mut edit_count_lock,
                                 )
                                 .await;
                             }
@@ -879,10 +897,11 @@ async fn fire_discord_event(
         {
             let mut resp_lock = response_final.lock().await;
             let mut last_edit_lock = last_edit_final.lock().await;
+            let mut edit_count_lock = edit_count_final.lock().await;
             let attachments = collected_attachments_final.lock().await;
 
             // Force final update by resetting the last edit time
-            *last_edit_lock = Instant::now() - Duration::from_secs(2);
+            *last_edit_lock = Instant::now() - Duration::from_secs(4);
 
             let _ = update_discord_message(
                 &ctx_final,
@@ -892,6 +911,7 @@ async fn fire_discord_event(
                 &attachments,
                 None, // No embed on final flush
                 &mut last_edit_lock,
+                &mut edit_count_lock,
             )
             .await;
         }

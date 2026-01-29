@@ -11,7 +11,7 @@ import {
 	upsertLayerCommand,
 } from "./command/generic-command";
 import { toastSuccess } from "./messages";
-import type { IGenericCommand, IValueType } from "./schema";
+import type { IGenericCommand, IValueType, IVariable } from "./schema";
 import {
 	type IBoard,
 	type IComment,
@@ -840,6 +840,30 @@ export function handleCopy(
 					: comment.layer,
 		}));
 
+	// Collect variables referenced by the selected nodes
+	const referencedVarIds = new Set<string>();
+	for (const node of selectedNodes) {
+		for (const pin of Object.values(node.pins)) {
+			if (pin.name === "var_ref" && pin.default_value) {
+				try {
+					const varRef =
+						typeof pin.default_value === "string"
+							? JSON.parse(pin.default_value)
+							: pin.default_value;
+					if (typeof varRef === "string") {
+						referencedVarIds.add(varRef);
+					}
+				} catch {
+					// Ignore parse errors
+				}
+			}
+		}
+	}
+
+	const selectedVariables = Object.values(board.variables).filter((v) =>
+		referencedVarIds.has(v.id),
+	);
+
 	try {
 		navigator.clipboard.writeText(
 			JSON.stringify(
@@ -848,6 +872,7 @@ export function handleCopy(
 					comments: selectedComments,
 					cursorPosition,
 					layers: Array.from(foundLayer.values()),
+					variables: selectedVariables,
 				},
 				null,
 				2,
@@ -890,11 +915,13 @@ export async function handlePaste(
 		);
 		const comments: any[] = data.comments;
 		const layers: ILayer[] = data.layers ?? [];
+		const variables: IVariable[] = data.variables ?? [];
 
 		const command = copyPasteCommand({
 			original_comments: comments,
 			original_nodes: nodes,
 			original_layers: layers,
+			original_variables: variables,
 			new_comments: [],
 			new_nodes: [],
 			new_layers: [],

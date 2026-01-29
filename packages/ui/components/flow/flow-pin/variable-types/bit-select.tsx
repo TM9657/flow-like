@@ -17,20 +17,18 @@ import {
 export function BitVariable({
 	pin,
 	value,
-	appId,
 	setValue,
 }: Readonly<{
 	pin: IPin;
 	value: number[] | undefined | null;
-	appId: string;
 	setValue: (value: any) => void;
 }>) {
 	const backend = useBackend();
-	const app = useInvoke(
-		backend.appState.getApp,
-		backend.appState,
-		[appId],
-		!!appId,
+	const profileBits = useInvoke(
+		backend.bitState.getProfileBits,
+		backend.bitState,
+		[],
+		true,
 	);
 
 	return (
@@ -53,10 +51,11 @@ export function BitVariable({
 				<SelectContent>
 					<SelectGroup>
 						<SelectLabel>{pin.friendly_name}</SelectLabel>
-						{app?.data?.bits?.map((option) => {
+						{profileBits?.data?.map((bit) => {
+							const bitId = `${bit.hub}:${bit.id}`;
 							return (
-								<SelectItem key={option} value={option}>
-									<BitRender backend={backend} bitId={option} />
+								<SelectItem key={bitId} value={bitId}>
+									<BitRender backend={backend} bitId={bitId} />
 								</SelectItem>
 							);
 						})}
@@ -71,11 +70,21 @@ function BitRender({
 	backend,
 	bitId,
 }: Readonly<{ backend: IBackendState; bitId?: string }>) {
+	// Parse the bitId format "hub:id" into separate components
+	// Hub can contain colons (e.g., "https://hub.flow-like.com"), so split from the last colon
+	const lastColonIndex = bitId?.lastIndexOf(":");
+	const hub = lastColonIndex !== undefined && lastColonIndex > 0
+		? bitId?.substring(0, lastColonIndex)
+		: undefined;
+	const id = lastColonIndex !== undefined && lastColonIndex > 0
+		? bitId?.substring(lastColonIndex + 1)
+		: bitId;
+
 	const bit = useInvoke(
 		backend.bitState.getBit,
 		backend.bitState,
-		[bitId!],
-		!!bitId,
+		[id!, hub],
+		!!id,
 	);
 
 	if (!bitId) return <span className="truncate m-0">Select a bit</span>;

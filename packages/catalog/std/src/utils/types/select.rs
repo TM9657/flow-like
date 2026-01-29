@@ -79,5 +79,6 @@ impl NodeLogic for SelectNode {
         let _ = node.match_type("b", board.clone(), None, None);
         let _ = node.match_type("result", board, None, None);
         node.harmonize_type(vec!["a", "b", "result"], true);
+        node.harmonize_value_type(vec!["a", "b", "result"]);
     }
 }

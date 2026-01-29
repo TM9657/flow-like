@@ -1,5 +1,7 @@
-/// # Copilot Configuration Nodes
-/// Nodes for advanced session configuration.
+//! Copilot Configuration Nodes
+//!
+//! Nodes for advanced session configuration.
+
 use super::{
     CustomAgentConfig, InfiniteSessionConfig, ProviderConfig, SystemMessageConfig,
     SystemMessageMode,
@@ -12,10 +14,6 @@ use flow_like::flow::{
 };
 use flow_like_types::{async_trait, json};
 
-// =============================================================================
-// Infinite Session Config Node (Pure)
-// =============================================================================
-
 #[crate::register_node]
 #[derive(Default)]
 pub struct CopilotInfiniteSessionNode {}
@@ -25,11 +23,11 @@ impl NodeLogic for CopilotInfiniteSessionNode {
     fn get_node(&self) -> Node {
         let mut node = Node::new(
             "copilot_infinite_session",
-            "Copilot Infinite Session",
+            "Infinite Session Config",
             "Configures infinite session with automatic context compaction",
-            "GitHub/Copilot/Config",
+            "AI/GitHub/Copilot/Config",
         );
-        node.add_icon("/flow/icons/infinity.svg");
+        node.add_icon("/flow/icons/github.svg");
 
         node.set_scores(
             NodeScores::new()
@@ -100,10 +98,6 @@ impl NodeLogic for CopilotInfiniteSessionNode {
     }
 }
 
-// =============================================================================
-// System Message Config Node (Pure)
-// =============================================================================
-
 #[crate::register_node]
 #[derive(Default)]
 pub struct CopilotSystemMessageNode {}
@@ -113,11 +107,11 @@ impl NodeLogic for CopilotSystemMessageNode {
     fn get_node(&self) -> Node {
         let mut node = Node::new(
             "copilot_system_message",
-            "Copilot System Message",
+            "System Message Config",
             "Configures the system message for the session",
-            "GitHub/Copilot/Config",
+            "AI/GitHub/Copilot/Config",
         );
-        node.add_icon("/flow/icons/message.svg");
+        node.add_icon("/flow/icons/github.svg");
 
         node.set_scores(
             NodeScores::new()
@@ -142,6 +136,11 @@ impl NodeLogic for CopilotSystemMessageNode {
             "Mode",
             "Replace or Append to default system message",
             VariableType::String,
+        )
+        .set_options(
+            PinOptions::new()
+                .set_valid_values(vec!["replace".to_string(), "append".to_string()])
+                .build(),
         )
         .set_default_value(Some(json::json!("replace")));
 
@@ -176,10 +175,6 @@ impl NodeLogic for CopilotSystemMessageNode {
     }
 }
 
-// =============================================================================
-// Custom Agent Config Node (Pure)
-// =============================================================================
-
 #[crate::register_node]
 #[derive(Default)]
 pub struct CopilotCustomAgentNode {}
@@ -189,11 +184,11 @@ impl NodeLogic for CopilotCustomAgentNode {
     fn get_node(&self) -> Node {
         let mut node = Node::new(
             "copilot_custom_agent",
-            "Copilot Custom Agent",
+            "Custom Agent Config",
             "Configures a custom agent",
-            "GitHub/Copilot/Config",
+            "AI/GitHub/Copilot/Config",
         );
-        node.add_icon("/flow/icons/robot.svg");
+        node.add_icon("/flow/icons/github.svg");
 
         node.set_scores(
             NodeScores::new()
@@ -277,10 +272,6 @@ impl NodeLogic for CopilotCustomAgentNode {
     }
 }
 
-// =============================================================================
-// Provider Config Node (Pure) - BYOK
-// =============================================================================
-
 #[crate::register_node]
 #[derive(Default)]
 pub struct CopilotProviderConfigNode {}
@@ -290,11 +281,11 @@ impl NodeLogic for CopilotProviderConfigNode {
     fn get_node(&self) -> Node {
         let mut node = Node::new(
             "copilot_provider_config",
-            "Copilot Provider Config",
-            "Configures a custom provider (BYOK - Bring Your Own Key)",
-            "GitHub/Copilot/Config",
+            "Provider Config (BYOK)",
+            "Configures a custom provider (Bring Your Own Key)",
+            "AI/GitHub/Copilot/Config",
         );
-        node.add_icon("/flow/icons/key.svg");
+        node.add_icon("/flow/icons/github.svg");
 
         node.set_scores(
             NodeScores::new()
@@ -310,7 +301,7 @@ impl NodeLogic for CopilotProviderConfigNode {
         node.add_input_pin(
             "base_url",
             "Base URL",
-            "Provider API base URL",
+            "Provider API base URL (e.g., https://api.openai.com/v1)",
             VariableType::String,
         );
 

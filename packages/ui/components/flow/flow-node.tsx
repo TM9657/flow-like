@@ -1018,17 +1018,23 @@ function FlowNode(props: NodeProps<FlowNode>) {
 	}, [props.data.node, props.data.appId, props.data.boardId, flow]);
 
 	const handleCollapse = useCallback(
-		async (x: number, y: number) => {
+		async (_x: number, _y: number) => {
 			if (typeof props.data.version !== "undefined") {
 				return;
 			}
 
 			const selectedNodes = flow.getNodes().filter((node) => node.selected);
-			const flowCords = flow.screenToFlowPosition({
-				x: x,
-				y: y,
-			});
 			if (selectedNodes.length <= 1) return;
+
+			// Calculate bounding box of selected nodes to position the collapsed layer
+			let minX = Infinity;
+			let minY = Infinity;
+			for (const node of selectedNodes) {
+				const x = node.position.x;
+				const y = node.position.y;
+				if (x < minX) minX = x;
+				if (y < minY) minY = y;
+			}
 
 			const nodeIds = selectedNodes.map((node) => {
 				const isNode = node.data.node as INode;
@@ -1046,7 +1052,7 @@ function FlowNode(props: NodeProps<FlowNode>) {
 					nodes: {},
 					pins: {},
 					parent_id: (selectedNodes[0].data.node as INode).layer,
-					coordinates: [flowCords.x, flowCords.y, 0],
+					coordinates: [minX, minY, 0],
 					in_coordinates: undefined,
 					name: "Collapsed",
 					type: ILayerType.Collapsed,

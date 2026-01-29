@@ -89,4 +89,12 @@ export class WebBitState implements IBitState {
 		// In web mode, bits are always "installed" (streamed from server)
 		return true;
 	}
+
+	async getProfileBits(): Promise<IBit[]> {
+		try {
+			return await apiGet<IBit[]>("profile/bits", this.backend.auth);
+		} catch {
+			return [];
+		}
+	}
 }

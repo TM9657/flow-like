@@ -139,13 +139,17 @@ pub async fn prerun_event(
             }
         }
 
-        // Collect required scopes
+        // Collect required scopes - only for providers already registered via oauth_providers
+        // required_oauth_scopes is informational - it documents what scopes a node needs
+        // IF OAuth is used, but shouldn't trigger OAuth by itself
         if let Some(required_scopes) = &node.required_oauth_scopes {
             for (provider_id, scopes) in required_scopes {
-                let entry = oauth_scopes.entry(provider_id.clone()).or_default();
-                for scope in scopes {
-                    if !entry.contains(scope) {
-                        entry.push(scope.clone());
+                // Only add scopes if this provider was already registered by an OAuth provider node
+                if let Some(entry) = oauth_scopes.get_mut(provider_id) {
+                    for scope in scopes {
+                        if !entry.contains(scope) {
+                            entry.push(scope.clone());
+                        }
                     }
                 }
             }

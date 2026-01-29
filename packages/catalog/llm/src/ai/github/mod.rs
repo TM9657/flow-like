@@ -1,3 +1,8 @@
+//! GitHub Copilot integration nodes
+//!
+//! This module provides visual nodes for interacting with GitHub Copilot's AI capabilities
+//! through the copilot-sdk-rust crate.
+
 pub mod client;
 pub mod config;
 pub mod invoke;

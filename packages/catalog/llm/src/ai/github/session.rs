@@ -1,36 +1,38 @@
+//! Copilot Session Nodes
+//!
+//! Nodes for creating, managing, and configuring Copilot sessions.
+
 #[cfg(feature = "execute")]
 use super::CachedCopilotSession;
-/// # Copilot Session Nodes
-/// Nodes for creating and managing Copilot sessions.
 use super::{
     COPILOT_SESSION_PREFIX, CopilotClientHandle, CopilotSessionConfig, CopilotSessionHandle,
+    CopilotToolConfig, CustomAgentConfig, InfiniteSessionConfig, ProviderConfig,
+    SystemMessageConfig, SystemMessageMode,
 };
 use flow_like::flow::{
     execution::context::ExecutionContext,
     node::{Node, NodeLogic, NodeScores},
-    pin::PinOptions,
+    pin::{PinOptions, ValueType},
     variable::VariableType,
 };
 use flow_like_types::{async_trait, json};
+use std::collections::HashMap;
 
-// =============================================================================
-// Session Config Node (Pure)
-// =============================================================================
-
+/// Session builder for constructing complete session configurations
 #[crate::register_node]
 #[derive(Default)]
-pub struct CopilotSessionConfigNode {}
+pub struct CopilotSessionBuilderNode {}
 
 #[async_trait]
-impl NodeLogic for CopilotSessionConfigNode {
+impl NodeLogic for CopilotSessionBuilderNode {
     fn get_node(&self) -> Node {
         let mut node = Node::new(
-            "copilot_session_config",
-            "Copilot Session Config",
-            "Creates a session configuration object",
-            "GitHub/Copilot/Session",
+            "copilot_session_builder",
+            "Session Builder",
+            "Builds a complete Copilot session configuration with all options",
+            "AI/GitHub/Copilot/Session",
         );
-        node.add_icon("/flow/icons/settings.svg");
+        node.add_icon("/flow/icons/github.svg");
 
         node.set_scores(
             NodeScores::new()
@@ -46,7 +48,7 @@ impl NodeLogic for CopilotSessionConfigNode {
         node.add_input_pin(
             "model",
             "Model",
-            "Optional model ID to use",
+            "Optional model ID to use (e.g., gpt-4o)",
             VariableType::String,
         )
         .set_default_value(Some(json::json!("")));
@@ -59,10 +61,88 @@ impl NodeLogic for CopilotSessionConfigNode {
         )
         .set_default_value(Some(json::json!(true)));
 
+        node.add_input_pin(
+            "system_message",
+            "System Message",
+            "Optional system message content",
+            VariableType::String,
+        )
+        .set_default_value(Some(json::json!("")));
+
+        node.add_input_pin(
+            "system_mode",
+            "System Mode",
+            "Replace or Append to default system message",
+            VariableType::String,
+        )
+        .set_options(
+            PinOptions::new()
+                .set_valid_values(vec!["replace".to_string(), "append".to_string()])
+                .build(),
+        )
+        .set_default_value(Some(json::json!("replace")));
+
+        node.add_input_pin(
+            "infinite_enabled",
+            "Infinite Session",
+            "Enable infinite sessions with automatic context compaction",
+            VariableType::Boolean,
+        )
+        .set_default_value(Some(json::json!(true)));
+
+        node.add_input_pin(
+            "background_threshold",
+            "Background Threshold",
+            "Background compaction threshold (0.0-1.0)",
+            VariableType::Float,
+        )
+        .set_default_value(Some(json::json!(0.7)));
+
+        node.add_input_pin(
+            "exhaustion_threshold",
+            "Exhaustion Threshold",
+            "Buffer exhaustion threshold (0.0-1.0)",
+            VariableType::Float,
+        )
+        .set_default_value(Some(json::json!(0.9)));
+
+        node.add_input_pin(
+            "provider",
+            "Provider",
+            "Optional BYOK provider configuration",
+            VariableType::Struct,
+        )
+        .set_schema::<ProviderConfig>();
+
+        node.add_input_pin(
+            "tools",
+            "Tools",
+            "Optional array of tool configurations",
+            VariableType::Struct,
+        )
+        .set_value_type(ValueType::Array)
+        .set_schema::<CopilotToolConfig>();
+
+        node.add_input_pin(
+            "custom_agents",
+            "Custom Agents",
+            "Optional array of custom agent configurations",
+            VariableType::Struct,
+        )
+        .set_value_type(ValueType::Array)
+        .set_schema::<CustomAgentConfig>();
+
+        node.add_input_pin(
+            "mcp_servers",
+            "MCP Servers",
+            "Optional MCP servers configuration (JSON object)",
+            VariableType::Generic,
+        );
+
         node.add_output_pin(
             "config",
             "Config",
-            "Session configuration",
+            "Complete session configuration",
             VariableType::Struct,
         )
         .set_schema::<CopilotSessionConfig>()
@@ -74,21 +154,72 @@ impl NodeLogic for CopilotSessionConfigNode {
     async fn run(&self, context: &mut ExecutionContext) -> flow_like_types::Result<()> {
         let model: String = context.evaluate_pin("model").await.unwrap_or_default();
         let streaming: bool = context.evaluate_pin("streaming").await.unwrap_or(true);
+        let system_message: String = context
+            .evaluate_pin("system_message")
+            .await
+            .unwrap_or_default();
+        let system_mode: String = context
+            .evaluate_pin("system_mode")
+            .await
+            .unwrap_or_else(|_| "replace".to_string());
+        let infinite_enabled: bool = context
+            .evaluate_pin("infinite_enabled")
+            .await
+            .unwrap_or(true);
+        let background_threshold: f64 = context
+            .evaluate_pin("background_threshold")
+            .await
+            .unwrap_or(0.7);
+        let exhaustion_threshold: f64 = context
+            .evaluate_pin("exhaustion_threshold")
+            .await
+            .unwrap_or(0.9);
+        let provider: Option<ProviderConfig> = context.evaluate_pin("provider").await.ok();
+        let tools: Vec<CopilotToolConfig> = context.evaluate_pin("tools").await.unwrap_or_default();
+        let custom_agents: Vec<CustomAgentConfig> =
+            context.evaluate_pin("custom_agents").await.unwrap_or_default();
+        let mcp_servers: HashMap<String, flow_like_types::Value> =
+            context.evaluate_pin("mcp_servers").await.unwrap_or_default();
+
+        let system_msg_config = if system_message.is_empty() {
+            None
+        } else {
+            let mode = match system_mode.to_lowercase().as_str() {
+                "append" => SystemMessageMode::Append,
+                _ => SystemMessageMode::Replace,
+            };
+            Some(SystemMessageConfig {
+                content: system_message,
+                mode,
+            })
+        };
+
+        let infinite_config = if infinite_enabled {
+            Some(InfiniteSessionConfig {
+                enabled: true,
+                background_compaction_threshold: Some(background_threshold),
+                buffer_exhaustion_threshold: Some(exhaustion_threshold),
+            })
+        } else {
+            None
+        };
 
         let config = CopilotSessionConfig {
             model: if model.is_empty() { None } else { Some(model) },
             streaming,
-            ..Default::default()
+            request_permission: None,
+            system_message: system_msg_config,
+            infinite_sessions: infinite_config,
+            mcp_servers,
+            custom_agents,
+            tools,
+            provider,
         };
 
         context.set_pin_value("config", json::json!(config)).await?;
         Ok(())
     }
 }
-
-// =============================================================================
-// Create Session Node
-// =============================================================================
 
 #[crate::register_node]
 #[derive(Default)]
@@ -99,11 +230,11 @@ impl NodeLogic for CopilotCreateSessionNode {
     fn get_node(&self) -> Node {
         let mut node = Node::new(
             "copilot_create_session",
-            "Copilot Create Session",
+            "Create Session",
             "Creates a new Copilot chat session",
-            "GitHub/Copilot/Session",
+            "AI/GitHub/Copilot/Session",
         );
-        node.add_icon("/flow/icons/chat.svg");
+        node.add_icon("/flow/icons/github.svg");
 
         node.set_scores(
             NodeScores::new()
@@ -130,7 +261,7 @@ impl NodeLogic for CopilotCreateSessionNode {
         node.add_input_pin(
             "config",
             "Config",
-            "Optional session configuration",
+            "Session configuration (from Session Builder)",
             VariableType::Struct,
         )
         .set_schema::<CopilotSessionConfig>();
@@ -178,11 +309,83 @@ impl NodeLogic for CopilotCreateSessionNode {
         context.log_message("Creating Copilot session...", LogLevel::Info);
 
         let sdk_config = if let Some(cfg) = config {
-            SessionConfig {
+            let mut session_config = SessionConfig {
                 model: cfg.model,
                 streaming: cfg.streaming,
                 ..Default::default()
+            };
+
+            if let Some(sys_msg) = cfg.system_message {
+                session_config.system_message = Some(copilot_sdk::SystemMessageConfig {
+                    content: Some(sys_msg.content),
+                    mode: Some(match sys_msg.mode {
+                        super::SystemMessageMode::Append => copilot_sdk::SystemMessageMode::Append,
+                        super::SystemMessageMode::Replace => {
+                            copilot_sdk::SystemMessageMode::Replace
+                        }
+                    }),
+                });
             }
+
+            if let Some(infinite) = cfg.infinite_sessions {
+                if infinite.enabled {
+                    session_config.infinite_sessions =
+                        Some(copilot_sdk::InfiniteSessionConfig::enabled());
+                }
+            }
+
+            if let Some(provider) = cfg.provider {
+                session_config.provider = Some(copilot_sdk::ProviderConfig {
+                    base_url: provider.base_url,
+                    api_key: provider.api_key,
+                    provider_type: None,
+                    wire_api: None,
+                    bearer_token: None,
+                    azure: None,
+                });
+                if let Some(model) = provider.model {
+                    session_config.model = Some(model);
+                }
+            }
+
+            if !cfg.tools.is_empty() {
+                session_config.tools = cfg
+                    .tools
+                    .into_iter()
+                    .map(|t| {
+                        copilot_sdk::Tool::new(&t.name)
+                            .description(&t.description)
+                            .schema(t.schema)
+                    })
+                    .collect();
+            }
+
+            if !cfg.custom_agents.is_empty() {
+                session_config.custom_agents = Some(
+                    cfg.custom_agents
+                        .into_iter()
+                        .map(|a| copilot_sdk::CustomAgentConfig {
+                            name: a.name,
+                            prompt: a.prompt,
+                            display_name: a.display_name,
+                            description: a.description,
+                            tools: None,
+                            mcp_servers: if a.mcp_servers.is_empty() {
+                                None
+                            } else {
+                                Some(a.mcp_servers)
+                            },
+                            infer: None,
+                        })
+                        .collect(),
+                );
+            }
+
+            if !cfg.mcp_servers.is_empty() {
+                session_config.mcp_servers = Some(cfg.mcp_servers);
+            }
+
+            session_config
         } else {
             SessionConfig::default()
         };
@@ -228,10 +431,6 @@ impl NodeLogic for CopilotCreateSessionNode {
     }
 }
 
-// =============================================================================
-// Destroy Session Node
-// =============================================================================
-
 #[crate::register_node]
 #[derive(Default)]
 pub struct CopilotDestroySessionNode {}
@@ -241,11 +440,11 @@ impl NodeLogic for CopilotDestroySessionNode {
     fn get_node(&self) -> Node {
         let mut node = Node::new(
             "copilot_destroy_session",
-            "Copilot Destroy Session",
+            "Destroy Session",
             "Destroys a Copilot session",
-            "GitHub/Copilot/Session",
+            "AI/GitHub/Copilot/Session",
         );
-        node.add_icon("/flow/icons/delete.svg");
+        node.add_icon("/flow/icons/github.svg");
 
         node.set_scores(
             NodeScores::new()

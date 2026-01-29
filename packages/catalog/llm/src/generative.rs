@@ -1,4 +1,4 @@
 pub mod agent;
-pub mod copilot;
+pub mod ai;
 pub mod embedding;
 pub mod llm;

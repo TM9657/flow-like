@@ -1,19 +1,16 @@
-/// # Copilot MCP Server Configuration Nodes
-/// Nodes for configuring MCP servers.
+//! Copilot MCP Server Configuration Nodes
+//!
+//! Nodes for configuring MCP servers.
+
 use super::{McpHttpServerConfig, McpLocalServerConfig};
 use flow_like::flow::{
     execution::context::ExecutionContext,
     node::{Node, NodeLogic, NodeScores},
-    pin,
-    pin::PinOptions,
+    pin::{PinOptions, ValueType},
     variable::VariableType,
 };
 use flow_like_types::{async_trait, json};
 use std::collections::HashMap;
-
-// =============================================================================
-// MCP Local Server Config Node (Pure)
-// =============================================================================
 
 #[crate::register_node]
 #[derive(Default)]
@@ -24,11 +21,11 @@ impl NodeLogic for CopilotMcpLocalServerNode {
     fn get_node(&self) -> Node {
         let mut node = Node::new(
             "copilot_mcp_local_server",
-            "Copilot MCP Local Server",
-            "Configures a local/stdio MCP server",
-            "GitHub/Copilot/MCP",
+            "MCP Local Server",
+            "Configures a local/stdio MCP server for tool integration",
+            "AI/GitHub/Copilot/MCP",
         );
-        node.add_icon("/flow/icons/server.svg");
+        node.add_icon("/flow/icons/github.svg");
 
         node.set_scores(
             NodeScores::new()
@@ -54,7 +51,7 @@ impl NodeLogic for CopilotMcpLocalServerNode {
             "Command arguments",
             VariableType::String,
         )
-        .set_value_type(pin::ValueType::Array)
+        .set_value_type(ValueType::Array)
         .set_default_value(Some(json::json!([])));
 
         node.add_input_pin(
@@ -63,7 +60,7 @@ impl NodeLogic for CopilotMcpLocalServerNode {
             "Tool filter (use [\"*\"] for all tools)",
             VariableType::String,
         )
-        .set_value_type(pin::ValueType::Array)
+        .set_value_type(ValueType::Array)
         .set_default_value(Some(json::json!(["*"])));
 
         node.add_input_pin(
@@ -110,10 +107,6 @@ impl NodeLogic for CopilotMcpLocalServerNode {
     }
 }
 
-// =============================================================================
-// MCP HTTP Server Config Node (Pure)
-// =============================================================================
-
 #[crate::register_node]
 #[derive(Default)]
 pub struct CopilotMcpHttpServerNode {}
@@ -123,11 +116,11 @@ impl NodeLogic for CopilotMcpHttpServerNode {
     fn get_node(&self) -> Node {
         let mut node = Node::new(
             "copilot_mcp_http_server",
-            "Copilot MCP HTTP Server",
-            "Configures an HTTP/SSE MCP server",
-            "GitHub/Copilot/MCP",
+            "MCP HTTP Server",
+            "Configures an HTTP/SSE MCP server for remote tool integration",
+            "AI/GitHub/Copilot/MCP",
         );
-        node.add_icon("/flow/icons/cloud.svg");
+        node.add_icon("/flow/icons/github.svg");
 
         node.set_scores(
             NodeScores::new()
@@ -148,7 +141,7 @@ impl NodeLogic for CopilotMcpHttpServerNode {
             "Tool filter (use [\"*\"] for all tools)",
             VariableType::String,
         )
-        .set_value_type(pin::ValueType::Array)
+        .set_value_type(ValueType::Array)
         .set_default_value(Some(json::json!(["*"])));
 
         node.add_input_pin(

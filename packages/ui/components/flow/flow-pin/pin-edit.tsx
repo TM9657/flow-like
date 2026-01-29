@@ -86,7 +86,6 @@ export const PinEdit: FC<PinEditProps> = memo(function PinEdit({
 			<BitVariable
 				pin={pin}
 				value={cachedDefaultValue}
-				appId={appId}
 				setValue={async (value) => {
 					setCachedDefaultValue(value);
 					await saveDefaultValue(value);
