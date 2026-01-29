@@ -54,7 +54,6 @@ model App {
   templates Template[]
   widgets Widget[]
   pages Page[]
-  routes AppRoute[]
   queue JoinQueue[]
   members Membership[]
   comments Comment[]
@@ -99,6 +98,8 @@ model App {
 
   syncs BoardSync[]
   bits String[] @default([])
+  events Event[]
+  sinks EventSink[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -240,42 +241,6 @@ model Page {
   @@index([boardId])
 }
 
-enum RouteTargetType {
-  PAGE
-  EVENT
-}
-
-model AppRoute {
-  id String @id
-
-  app App @relation(fields: [appId], references: [id], onDelete: Cascade)
-  appId String
-
-  path String
-  targetType RouteTargetType
-
-  // For PAGE target
-  pageId String?
-  boardId String?
-  pageVersion String?
-
-  // For EVENT target
-  eventId String?
-
-  isDefault Boolean @default(false)
-  priority Int @default(0)
-
-  label String?
-  icon String?
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  @@unique([appId, path])
-  @@index([appId])
-  @@index([appId, isDefault])
-}
-
 model BoardSync {
   id String @id
 
@@ -291,4 +256,102 @@ model BoardSync {
   updatedAt DateTime @updatedAt
 
   @@unique([appId, boardId])
+}
+
+/// Event model - mirrors the Event structure stored in bucket for fast lookups
+/// The full Event data is kept in the bucket for versioning, this is the DB mirror
+model Event {
+  id String @id
+
+  app   App    @relation(fields: [appId], references: [id], onDelete: Cascade)
+  appId String
+
+  name String
+  description String?
+
+  /// Event type: "chat", "api", "email", "quick_action", etc.
+  eventType String
+
+  /// Whether this event is active
+  active Boolean @default(true)
+
+  /// Priority for ordering events
+  priority Int @default(0)
+
+  /// Board this event triggers (mutually exclusive with pageId for A2UI events)
+  boardId String?
+  /// Board version as semver string "major.minor.patch"
+  boardVersion String?
+  /// Node ID within the board
+  nodeId String?
+
+  /// For A2UI events: default page to render
+  pageId String?
+
+  /// URL route path that maps to this event (e.g., "/", "/dashboard")
+  route String?
+
+  /// Whether this is the default event/route for the app
+  isDefault Boolean @default(false)
+
+  /// Event version as semver string "major.minor.patch"
+  eventVersion String @default("0.0.0")
+
+  /// Variables for this event (JSON blob)
+  variables Json?
+
+  /// Event config (stored as base64 or JSON depending on content)
+  config Json?
+
+  /// Input pins metadata for quick access without loading board
+  inputs Json?
+
+  /// Release notes - can be plain text or URL
+  notes Json?
+
+  /// Canary configuration for A/B testing
+  canary Json?
+
+  sink EventSink?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([appId, route])
+  @@index([appId])
+  @@index([appId, active])
+  @@index([appId, eventType])
+  @@index([appId, isDefault])
+  @@index([boardId])
+  @@index([pageId])
+}
+
+/// Event Sink Registration - tracks which events have active server-side sinks
+/// Most config comes from the Event itself via join - we only store sink-specific data
+model EventSink {
+  id String @id @default(cuid())
+
+  /// The event this sink is for - unique 1:1 mapping
+  eventId String @unique
+  event Event @relation(fields: [eventId], references: [id], onDelete: Cascade)
+
+  /// App the event belongs to (for permission checks and lookups)
+  app   App    @relation(fields: [appId], references: [id], onDelete: Cascade)
+  appId String
+
+  /// Is the sink currently active on the server?
+  active Boolean @default(true)
+
+  /// For HTTP sinks: the unique path to listen on
+  path String?
+
+  /// Auth token for securing HTTP endpoints (optional, auto-generated if not provided)
+  authToken String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([appId, path])
+  @@index([appId])
+  @@index([active])
 }

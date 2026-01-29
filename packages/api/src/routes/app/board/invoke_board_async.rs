@@ -44,6 +44,9 @@ pub struct InvokeBoardAsyncRequest {
     pub token: Option<String>,
     /// OAuth tokens keyed by provider name
     pub oauth_tokens: Option<std::collections::HashMap<String, serde_json::Value>>,
+    /// Runtime-configured variables to override board variables
+    pub runtime_variables:
+        Option<std::collections::HashMap<String, flow_like::flow::variable::Variable>>,
 }
 
 /// Response from async board invocation
@@ -210,6 +213,7 @@ pub async fn invoke_board_async(
         token: params.token,
         oauth_tokens: params.oauth_tokens,
         stream_state: true,
+        runtime_variables: params.runtime_variables,
     };
 
     let response = state

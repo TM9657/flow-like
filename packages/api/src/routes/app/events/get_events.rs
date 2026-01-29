@@ -8,26 +8,21 @@ use axum::{
 };
 use flow_like::flow::event::Event;
 
+use super::db::{filter_event_secrets, get_events_for_app};
+
 #[tracing::instrument(name = "GET /apps/{app_id}/events", skip(state, user))]
 pub async fn get_events(
     State(state): State<AppState>,
     Extension(user): Extension<AppUser>,
     Path(app_id): Path<String>,
 ) -> Result<Json<Vec<Event>>, ApiError> {
-    let permission = ensure_permission!(user, &app_id, &state, RolePermissions::WriteEvents);
-    let sub = permission.sub()?;
+    let _permission = ensure_permission!(user, &app_id, &state, RolePermissions::WriteEvents);
 
-    let app = state.master_app(&sub, &app_id, &state).await?;
-    let events = &app.events;
-    let mut loaded_events = Vec::with_capacity(events.len());
+    // Use database lookup instead of bucket
+    let events = get_events_for_app(&state.db, &app_id).await?;
 
-    for event in events {
-        if let Ok(loaded_event) = Event::load(event, &app, None).await {
-            loaded_events.push(loaded_event);
-        } else {
-            tracing::warn!("Failed to load event: {} in app {}", event, app_id.clone());
-        }
-    }
+    // Filter out secret variable values from all events
+    let events: Vec<Event> = events.into_iter().map(filter_event_secrets).collect();
 
-    Ok(Json(loaded_events))
+    Ok(Json(events))
 }

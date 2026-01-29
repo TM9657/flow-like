@@ -233,7 +233,7 @@ export async function presignSinglePath(
 	return path;
 }
 
-export interface CanvasSettings {
+export interface PresignableCanvasSettings {
 	backgroundColor: string;
 	backgroundImage?: string;
 	padding: string;
@@ -247,9 +247,9 @@ export interface CanvasSettings {
  */
 export async function presignCanvasSettings(
 	appId: string,
-	settings: CanvasSettings,
+	settings: PresignableCanvasSettings,
 	storageState: IStorageState,
-): Promise<CanvasSettings> {
+): Promise<PresignableCanvasSettings> {
 	if (!settings.backgroundImage || !isStoragePrefix(settings.backgroundImage)) {
 		return settings;
 	}

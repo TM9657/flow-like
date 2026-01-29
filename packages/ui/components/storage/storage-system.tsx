@@ -437,9 +437,9 @@ export function StorageSystem({
 				type="file"
 				className="hidden"
 				id="folder-upload"
-				// @ts-ignore
-				webkitdirectory={"true"}
-				directory
+				// @ts-ignore - webkitdirectory and directory are non-standard attributes
+				webkitdirectory=""
+				directory=""
 				multiple
 				onChange={(e) => {
 					if (!e.target.files) return;

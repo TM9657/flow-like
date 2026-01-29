@@ -19,6 +19,17 @@ interface IEventStream {
 	interfaceType?: string;
 }
 
+/**
+ * Callback function for handling incremental saves during streaming.
+ * Called periodically with accumulated events to allow saving intermediate state.
+ * @param events - All accumulated events up to this point
+ * @param isFinal - Whether this is the final save (stream completed)
+ */
+export type OnIncrementalSaveFn = (
+	events: IIntercomEvent[],
+	isFinal: boolean,
+) => void | Promise<void>;
+
 interface IExecuteEventOptions {
 	appId: string;
 	eventId: string;
@@ -29,6 +40,17 @@ interface IExecuteEventOptions {
 	title?: string;
 	interfaceType?: string;
 	skipConsentCheck?: boolean;
+	/**
+	 * Optional callback for incremental saves during streaming.
+	 * Called every `saveIntervalEvents` events and on completion.
+	 * Useful for persisting chat messages to Dexie during long streams.
+	 */
+	onIncrementalSave?: OnIncrementalSaveFn;
+	/**
+	 * Number of events between incremental saves. Defaults to 10.
+	 * Only used if onIncrementalSave is provided.
+	 */
+	saveIntervalEvents?: number;
 }
 
 export type ExecuteEventFn = (
@@ -167,6 +189,10 @@ export class ExecutionEngineProvider {
 			this.executeEventFn ??
 			this.backend.eventState.executeEvent.bind(this.backend.eventState);
 
+		// Track event count for incremental saves
+		const saveInterval = options.saveIntervalEvents ?? 10;
+		let eventsSinceLastSave = 0;
+
 		const executionPromise = executeEventCall(
 			options.appId,
 			options.eventId,
@@ -197,6 +223,20 @@ export class ExecutionEngineProvider {
 						}
 					}
 
+					// Incremental save logic
+					if (options.onIncrementalSave) {
+						eventsSinceLastSave += events.length;
+						if (eventsSinceLastSave >= saveInterval) {
+							eventsSinceLastSave = 0;
+							// Fire and forget - don't block event processing
+							Promise.resolve(
+								options.onIncrementalSave(stream!.accumulatedEvents, false),
+							).catch((err) =>
+								console.error("[ExecutionEngine] Incremental save error:", err),
+							);
+						}
+					}
+
 					this.notifyGlobalListeners();
 				}
 			},
@@ -206,8 +246,17 @@ export class ExecutionEngineProvider {
 		stream.executionPromise = executionPromise;
 
 		executionPromise
-			.then(() => {
+			.then(async () => {
 				stream!.isComplete = true;
+
+				// Final incremental save
+				if (options.onIncrementalSave) {
+					try {
+						await options.onIncrementalSave(stream!.accumulatedEvents, true);
+					} catch (err) {
+						console.error("[ExecutionEngine] Final save error:", err);
+					}
+				}
 
 				// Notify all subscribers of completion
 				for (const subscriber of stream!.subscribers.values()) {
@@ -218,9 +267,18 @@ export class ExecutionEngineProvider {
 
 				this.notifyGlobalListeners();
 			})
-			.catch((error) => {
+			.catch(async (error) => {
 				console.error("Execution error:", error);
 				stream!.isComplete = true;
+
+				// Still do final save on error to preserve partial state
+				if (options.onIncrementalSave && stream!.accumulatedEvents.length > 0) {
+					try {
+						await options.onIncrementalSave(stream!.accumulatedEvents, true);
+					} catch (err) {
+						console.error("[ExecutionEngine] Error save error:", err);
+					}
+				}
 
 				// Notify subscribers of completion
 				for (const subscriber of stream!.subscribers.values()) {

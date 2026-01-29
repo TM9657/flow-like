@@ -9,6 +9,8 @@ use axum::{
 use flow_like::flow::{board::VersionType, event::Event};
 use serde::Deserialize;
 
+use super::db::sync_event_to_db;
+
 #[derive(Deserialize)]
 pub struct EventUpsertBody {
     event: Event,
@@ -39,8 +41,13 @@ pub async fn upsert_event(
             crate::credentials::CredentialsAccess::EditApp,
         )
         .await?;
+
+    // Upsert to bucket (handles versioning)
     let event = app.upsert_event(event, params.version_type, None).await?;
     app.save().await?;
+
+    // Sync to database for fast lookups
+    sync_event_to_db(&state.db, &app_id, &event).await?;
 
     Ok(Json(event))
 }

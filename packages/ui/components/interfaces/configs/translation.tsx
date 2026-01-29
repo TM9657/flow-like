@@ -1,5 +1,6 @@
 "use client";
 import {
+	Badge,
 	type IBoard,
 	type IEvent,
 	type IEventMapping,
@@ -11,8 +12,60 @@ import {
 	SelectItem,
 	SelectTrigger,
 	SelectValue,
+	Tooltip,
+	TooltipContent,
+	TooltipProvider,
+	TooltipTrigger,
 } from "@tm9657/flow-like-ui";
+import { Cloud, Laptop, MonitorSmartphone } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
+
+function SinkAvailabilityBadge({
+	availability,
+	description,
+}: Readonly<{ availability: "local" | "remote" | "both"; description?: string }>) {
+	const config = {
+		local: {
+			icon: Laptop,
+			label: "Local",
+			variant: "secondary" as const,
+		},
+		remote: {
+			icon: Cloud,
+			label: "Remote",
+			variant: "default" as const,
+		},
+		both: {
+			icon: MonitorSmartphone,
+			label: "Both",
+			variant: "outline" as const,
+		},
+	}[availability];
+
+	const Icon = config.icon;
+
+	const badge = (
+		<Badge variant={config.variant} className="text-xs gap-1 ml-2">
+			<Icon className="h-3 w-3" />
+			{config.label}
+		</Badge>
+	);
+
+	if (description) {
+		return (
+			<TooltipProvider>
+				<Tooltip>
+					<TooltipTrigger asChild>{badge}</TooltipTrigger>
+					<TooltipContent>
+						<p>{description}</p>
+					</TooltipContent>
+				</Tooltip>
+			</TooltipProvider>
+		);
+	}
+
+	return badge;
+}
 
 export function EventTypeConfiguration({
 	eventConfig,
@@ -45,6 +98,12 @@ export function EventTypeConfiguration({
 	}, [node?.name, event.event_type]);
 
 	if (foundConfig?.eventTypes.length <= 1) return null;
+
+	const getSinkAvailability = (type: string) => {
+		if (!foundConfig?.withSink?.includes(type)) return null;
+		return foundConfig?.sinkAvailability?.[type] ?? { availability: "local" as const };
+	};
+
 	return (
 		<div className="space-y-3">
 			<Label htmlFor="event_type">Event Type</Label>
@@ -59,11 +118,22 @@ export function EventTypeConfiguration({
 					<SelectValue placeholder="Select event type" />
 				</SelectTrigger>
 				<SelectContent>
-					{foundConfig?.eventTypes.map((type) => (
-						<SelectItem key={type} value={type}>
-							{type.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase())}
-						</SelectItem>
-					))}
+					{foundConfig?.eventTypes.map((type) => {
+						const sinkConfig = getSinkAvailability(type);
+						return (
+							<SelectItem key={type} value={type}>
+								<span className="flex items-center">
+									{type.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase())}
+									{sinkConfig && (
+										<SinkAvailabilityBadge
+											availability={sinkConfig.availability}
+											description={sinkConfig.description}
+										/>
+									)}
+								</span>
+							</SelectItem>
+						);
+					})}
 				</SelectContent>
 			</Select>
 		</div>

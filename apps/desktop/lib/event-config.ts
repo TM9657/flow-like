@@ -9,6 +9,7 @@ import {
 	GenericFormConfig,
 	type IEventMapping,
 	SimpleChatConfig,
+	TelegramConfig,
 	UserMailConfig,
 	WebhookConfig,
 } from "@tm9657/flow-like-ui";
@@ -18,6 +19,7 @@ export const EVENT_CONFIG: IEventMapping = {
 		configInterfaces: {
 			simple_chat: SimpleChatConfig,
 			discord: DiscordConfig,
+			telegram: TelegramConfig,
 		},
 		useInterfaces: {
 			simple_chat: ChatInterface,
@@ -32,6 +34,7 @@ export const EVENT_CONFIG: IEventMapping = {
 				example_messages: [],
 			},
 			discord: {
+				sink_type: "discord",
 				token: "",
 				bot_name: "Flow-Like Bot",
 				bot_description: "",
@@ -42,10 +45,31 @@ export const EVENT_CONFIG: IEventMapping = {
 				respond_to_dms: true,
 				command_prefix: "!",
 			},
+			telegram: {
+				sink_type: "telegram",
+				bot_token: "",
+				bot_name: "Flow-Like Bot",
+				bot_description: "",
+				chat_whitelist: [],
+				chat_blacklist: [],
+				respond_to_mentions: true,
+				respond_to_private: true,
+				command_prefix: "/",
+			},
 		},
 		defaultEventType: "simple_chat",
-		eventTypes: ["simple_chat", "advanced_chat", "discord"],
-		withSink: ["discord"],
+		eventTypes: ["simple_chat", "advanced_chat", "discord", "telegram"],
+		withSink: ["discord", "telegram"],
+		sinkAvailability: {
+			discord: {
+				availability: "local",
+				description: "Requires persistent connection to Discord",
+			},
+			telegram: {
+				availability: "local",
+				description: "Requires persistent connection to Telegram",
+			},
+		},
 	},
 	events_mail: {
 		configInterfaces: {
@@ -55,6 +79,7 @@ export const EVENT_CONFIG: IEventMapping = {
 		eventTypes: ["email"],
 		configs: {
 			email: {
+				sink_type: "email",
 				imap_server: "",
 				imap_port: 993,
 				username: "",
@@ -64,6 +89,12 @@ export const EVENT_CONFIG: IEventMapping = {
 		},
 		useInterfaces: {},
 		withSink: ["email"],
+		sinkAvailability: {
+			email: {
+				availability: "local",
+				description: "Requires IMAP connection (desktop only)",
+			},
+		},
 	},
 	events_generic: {
 		configInterfaces: {
@@ -76,11 +107,13 @@ export const EVENT_CONFIG: IEventMapping = {
 		configs: {
 			generic_form: {},
 			api: {
+				sink_type: "http",
 				method: "GET",
 				path: `/${createId()}`,
 				public_endpoint: false,
 			},
 			deeplink: {
+				sink_type: "deeplink",
 				route: createId(),
 			},
 		},
@@ -88,6 +121,16 @@ export const EVENT_CONFIG: IEventMapping = {
 			generic_form: GenericEventFormInterface,
 		},
 		withSink: ["api", "deeplink"],
+		sinkAvailability: {
+			api: {
+				availability: "both",
+				description: "HTTP endpoint - runs locally or on server",
+			},
+			deeplink: {
+				availability: "local",
+				description: "Deep links only work on desktop",
+			},
+		},
 	},
 	events_simple: {
 		configInterfaces: {
@@ -102,11 +145,27 @@ export const EVENT_CONFIG: IEventMapping = {
 			quick_action: GenericEventFormInterface,
 		},
 		withSink: ["cron", "api", "deeplink"],
+		sinkAvailability: {
+			cron: {
+				availability: "both",
+				description: "Scheduled execution - runs locally or on server",
+			},
+			api: {
+				availability: "both",
+				description: "HTTP endpoint - runs locally or on server",
+			},
+			deeplink: {
+				availability: "local",
+				description: "Deep links only work on desktop",
+			},
+		},
 		configs: {
 			cron: {
+				sink_type: "cron",
 				expression: "* */1 * * *",
 			},
 			deeplink: {
+				sink_type: "deeplink",
 				route: createId(),
 			},
 		},

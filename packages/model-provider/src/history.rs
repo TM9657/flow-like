@@ -283,7 +283,19 @@ impl TryFrom<HistoryMessage> for RigMessage {
                     content,
                 })
             }
-            Role::System | Role::Function | Role::Tool => {
+            Role::Tool | Role::Function => {
+                use rig::message::{ToolResult, ToolResultContent};
+                let text = msg.as_str();
+                let tool_call_id = msg.tool_call_id.or(msg.name.clone()).unwrap_or_default();
+                Ok(RigMessage::User {
+                    content: OneOrMany::one(RigUserContent::ToolResult(ToolResult {
+                        id: tool_call_id,
+                        call_id: None,
+                        content: OneOrMany::one(ToolResultContent::text(text)),
+                    })),
+                })
+            }
+            Role::System => {
                 let text = msg.as_str();
                 Ok(RigMessage::User {
                     content: OneOrMany::one(RigUserContent::Text(RigText { text })),

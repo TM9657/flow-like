@@ -18,6 +18,7 @@ pub struct ProfileBody {
     theme: Option<Value>,
     bit_ids: Option<Vec<String>>,
     apps: Option<Vec<ProfileApp>>,
+    hub: Option<String>,
     hubs: Option<Vec<String>>,
     settings: Option<Settings>,
 }
@@ -99,6 +100,11 @@ pub async fn upsert_profile(
 
     let apps = apps.map(Value::Array);
 
+    let hub = profile_body
+        .hub
+        .or_else(|| profile_body.hubs.as_ref().and_then(|h| h.first().cloned()))
+        .unwrap_or_else(|| "https://api.flow-like.com".to_string());
+
     let new_profile = profile::ActiveModel {
         id: Set(id),
         user_id: Set(sub),
@@ -110,6 +116,7 @@ pub async fn upsert_profile(
         bit_ids: Set(profile_body.bit_ids),
         apps: Set(apps),
         settings: Set(settings),
+        hub: Set(hub),
         hubs: Set(profile_body.hubs),
         created_at: Set(chrono::Utc::now().naive_utc()),
         updated_at: Set(chrono::Utc::now().naive_utc()),

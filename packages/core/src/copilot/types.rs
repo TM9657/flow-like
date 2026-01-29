@@ -74,6 +74,14 @@ pub struct UnifiedCopilotResponse {
     #[serde(default)]
     pub components: Vec<SurfaceComponent>,
 
+    /// Canvas settings for UI components (includes customCss)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub canvas_settings: Option<serde_json::Value>,
+
+    /// Root component ID for UI components
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub root_component_id: Option<String>,
+
     /// Suggested follow-up prompts
     #[serde(default)]
     pub suggestions: Vec<UnifiedSuggestion>,

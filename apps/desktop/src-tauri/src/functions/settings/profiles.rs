@@ -229,6 +229,38 @@ pub async fn upsert_profile(
     Ok(profile.clone())
 }
 
+/// Remap a profile's ID from local to server ID after sync
+#[instrument(skip_all)]
+#[tauri::command(async)]
+pub async fn remap_profile_id(
+    app_handle: AppHandle,
+    local_id: String,
+    server_id: String,
+) -> Result<(), TauriFunctionError> {
+    let settings = TauriSettingsState::construct(&app_handle).await?;
+    let mut settings = settings.lock().await;
+
+    // Get and remove the profile with old ID
+    let mut profile = settings
+        .profiles
+        .remove(&local_id)
+        .ok_or(anyhow::anyhow!("Profile not found"))?;
+
+    // Update the profile's ID
+    profile.hub_profile.id = server_id.clone();
+
+    // Re-insert with new ID
+    settings.profiles.insert(server_id.clone(), profile);
+
+    // Update current_profile if it was pointing to the old ID
+    if settings.current_profile == local_id {
+        settings.current_profile = server_id;
+    }
+
+    settings.serialize();
+    Ok(())
+}
+
 #[instrument(skip_all)]
 #[tauri::command(async)]
 pub async fn delete_profile(

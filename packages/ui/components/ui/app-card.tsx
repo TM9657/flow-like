@@ -217,7 +217,7 @@ function SmallAppCard({
 			<button
 				type="button"
 				onClick={onClick}
-				className={`group cursor-pointer relative flex items-center gap-3 p-3 transition-all duration-200 rounded-xl border border-border/50 bg-card  w-full overflow-hidden ${className}`}
+				className={`group cursor-pointer relative flex items-center gap-3 p-3 transition-all duration-300 rounded-xl border border-border/40 bg-card/80 backdrop-blur-sm hover:border-primary/20 hover:bg-card/95 hover:shadow-md w-full overflow-hidden ${className}`}
 			>
 				{typeof multiSelected !== "undefined" && onClick && (
 					<div className="relative shrink-0 z-10">
@@ -358,7 +358,7 @@ function ExtendedAppCard({
 			<button
 				type="button"
 				onClick={onClick}
-				className={`group cursor-pointer relative flex flex-col transition-all duration-300 rounded-xl border border-border/40 bg-card shadow-sm hover:bg-card/95 w-72 h-[375px] overflow-hidden ${className}`}
+				className={`group cursor-pointer relative flex flex-col transition-all duration-300 rounded-xl border border-border/40 bg-card/80 backdrop-blur-sm shadow-sm hover:shadow-lg hover:border-primary/20 hover:bg-card/95 w-72 h-[375px] overflow-hidden ${className}`}
 			>
 				{typeof multiSelected !== "undefined" && onClick && (
 					<div className="relative shrink-0 z-10">

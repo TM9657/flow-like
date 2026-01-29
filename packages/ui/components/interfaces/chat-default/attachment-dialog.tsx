@@ -15,7 +15,7 @@ import {
 	SortAscIcon,
 	VideoIcon,
 } from "lucide-react";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { humanFileSize } from "../../../lib";
 import {
 	Badge,
@@ -41,6 +41,7 @@ import {
 	TooltipProvider,
 	TooltipTrigger,
 } from "../../ui";
+import { FilePreviewer, canPreview, isCode, isText } from "../../ui/file-previewer";
 import type { ProcessedAttachment } from "./attachment";
 
 const getDisplayFileName = (name: string) => {
@@ -56,6 +57,60 @@ const getDisplayFileName = (name: string) => {
 interface FileDialogProps {
 	files: ProcessedAttachment[];
 	handleFileClick: (file: ProcessedAttachment) => void;
+	open?: boolean;
+	onOpenChange?: (open: boolean) => void;
+	initialSelectedFile?: ProcessedAttachment | null;
+	trigger?: React.ReactNode;
+}
+
+export const canPreviewFile = (file: ProcessedAttachment) => {
+	return canPreview(file.url);
+};
+
+export async function downloadFile(file: ProcessedAttachment): Promise<void> {
+	const isTauriEnv = typeof window !== "undefined" &&
+		!!((window as any).__TAURI__ || (window as any).__TAURI_IPC__ || (window as any).__TAURI_INTERNALS__);
+
+	if (isTauriEnv) {
+		try {
+			const { save } = await import("@tauri-apps/plugin-dialog");
+			const { writeFile } = await import("@tauri-apps/plugin-fs");
+
+			const response = await fetch(file.url);
+			const blob = await response.blob();
+			const arrayBuffer = await blob.arrayBuffer();
+
+			const filePath = await save({
+				defaultPath: file.name,
+				filters: [{ name: "All Files", extensions: ["*"] }],
+			});
+
+			if (filePath) {
+				await writeFile(filePath, new Uint8Array(arrayBuffer));
+			}
+			return;
+		} catch (e) {
+			console.warn("Tauri save failed, falling back to browser download", e);
+		}
+	}
+
+	// Browser fallback - fetch and trigger download
+	try {
+		const response = await fetch(file.url);
+		const blob = await response.blob();
+		const blobUrl = URL.createObjectURL(blob);
+
+		const link = document.createElement("a");
+		link.href = blobUrl;
+		link.download = file.name || "file";
+		document.body.appendChild(link);
+		link.click();
+		document.body.removeChild(link);
+		URL.revokeObjectURL(blobUrl);
+	} catch (e) {
+		// Ultimate fallback - open in new tab
+		window.open(file.url, "_blank", "noopener,noreferrer");
+	}
 }
 
 export const getFileIcon = (type: ProcessedAttachment["type"]) => {
@@ -80,7 +135,12 @@ export const getFileIcon = (type: ProcessedAttachment["type"]) => {
 export function FileDialog({
 	files,
 	handleFileClick,
+	open: controlledOpen,
+	onOpenChange,
+	initialSelectedFile,
+	trigger,
 }: Readonly<FileDialogProps>) {
+	const [internalOpen, setInternalOpen] = useState(false);
 	const [searchQuery, setSearchQuery] = useState("");
 	const [viewMode, setViewMode] = useState<"grid" | "list">("list");
 	const [sortBy, setSortBy] = useState<"name" | "type" | "size">("name");
@@ -89,9 +149,32 @@ export function FileDialog({
 		ProcessedAttachment["type"] | "all"
 	>("all");
 	const [selectedFile, setSelectedFile] = useState<ProcessedAttachment | null>(
-		null,
+		initialSelectedFile ?? null,
 	);
 	const [isPreviewMaximized, setIsPreviewMaximized] = useState(false);
+
+	const isControlled = controlledOpen !== undefined;
+	const isOpen = isControlled ? controlledOpen : internalOpen;
+
+	const handleOpenChange = useCallback(
+		(open: boolean) => {
+			if (!isControlled) {
+				setInternalOpen(open);
+			}
+			onOpenChange?.(open);
+			if (open && initialSelectedFile) {
+				setSelectedFile(initialSelectedFile);
+			}
+		},
+		[isControlled, onOpenChange, initialSelectedFile],
+	);
+
+	// Update selected file when initialSelectedFile changes
+	useEffect(() => {
+		if (initialSelectedFile) {
+			setSelectedFile(initialSelectedFile);
+		}
+	}, [initialSelectedFile]);
 
 	const filteredFiles = useMemo(() => {
 		return files.filter((file) => {
@@ -123,7 +206,7 @@ export function FileDialog({
 	}, [filteredFiles, sortBy, sortOrder]);
 
 	const canPreview = useCallback((file: ProcessedAttachment) => {
-		return ["image", "video", "audio", "pdf"].includes(file.type);
+		return canPreviewFile(file);
 	}, []);
 
 	const fileTypeCount = useMemo(() => {
@@ -145,21 +228,25 @@ export function FileDialog({
 		[selectedFile, canPreview, handleFileClick],
 	);
 
+	const defaultTrigger = (
+		<button className="text-muted-foreground hover:text-foreground transition-colors">
+			<Badge
+				variant="secondary"
+				className="cursor-pointer hover:bg-secondary/80 transition-colors gap-1 text-xs h-6 rounded-full"
+			>
+				<FileText className="w-3 h-3" />
+				{files.length}
+			</Badge>
+		</button>
+	);
+
 	return (
 		<TooltipProvider>
 			<div>
-				<Dialog>
-					<DialogTrigger asChild>
-						<button className="text-muted-foreground hover:text-foreground transition-colors">
-							<Badge
-								variant="secondary"
-								className="cursor-pointer hover:bg-secondary/80 transition-colors gap-1 text-xs h-6 rounded-full"
-							>
-								<FileText className="w-3 h-3" />
-								{files.length}
-							</Badge>
-						</button>
-					</DialogTrigger>
+				<Dialog open={isOpen} onOpenChange={handleOpenChange}>
+					{trigger !== null && (
+						<DialogTrigger asChild>{trigger ?? defaultTrigger}</DialogTrigger>
+					)}
 					<DialogContent className="min-w-[calc(100dvw-5rem)] min-h-[calc(100dvh-5rem)] max-w-[calc(100dvw-5rem)] max-h-[calc(100dvh-5rem)] overflow-hidden flex flex-col">
 						<DialogHeader>
 							<DialogTitle className="flex items-center gap-2">
@@ -396,17 +483,17 @@ export function FileDialog({
 								<ResizablePanelGroup
 									direction="horizontal"
 									autoSaveId="attachment_viewer"
-									className="border rounded-lg flex-grow"
+									className="border rounded-lg flex-1 min-h-0"
 								>
 									<ResizablePanel
-										defaultSize={75}
+										defaultSize={60}
 										className="flex flex-col gap-2 overflow-hidden p-4 bg-background"
 									>
-										<div className="flex flex-col flex-grow overflow-hidden gap-2">
-											<h3 className="font-medium text-sm text-muted-foreground mb-2">
+										<div className="flex flex-col flex-1 min-h-0 gap-2">
+											<h3 className="font-medium text-sm text-muted-foreground mb-2 flex-shrink-0">
 												Files & References
 											</h3>
-											<div className="flex flex-col gap-2 flex-grow overflow-auto">
+											<div className="flex flex-col gap-2 flex-1 min-h-0 overflow-auto">
 												<FileList
 													files={sortedFiles}
 													viewMode={viewMode}
@@ -419,9 +506,12 @@ export function FileDialog({
 										</div>
 									</ResizablePanel>
 									<ResizableHandle className="mx-2" />
-									<ResizablePanel className="flex flex-col gap-2 flex-grow overflow-y-hidden max-h-full h-full p-4 bg-background">
-										<div className="flex flex-col flex-grow overflow-auto max-h-full h-full bg-muted/50 rounded-md border">
-											<div className="p-2 border-b bg-background rounded-t-md flex items-center justify-between">
+									<ResizablePanel
+										defaultSize={40}
+										className="flex flex-col gap-2 p-4 bg-background min-h-0"
+									>
+										<div className="flex flex-col flex-1 min-h-0 bg-muted/50 rounded-md border">
+											<div className="p-2 border-b bg-background rounded-t-md flex items-center justify-between flex-shrink-0">
 												<h3 className="font-medium text-sm">Preview</h3>
 												<Button
 													variant="ghost"
@@ -432,7 +522,7 @@ export function FileDialog({
 													<MaximizeIcon className="h-3 w-3" />
 												</Button>
 											</div>
-											<div className="flex-grow overflow-auto h-full flex flex-row min-h-full">
+											<div className="flex-1 min-h-0 overflow-hidden">
 												<FileDialogPreview
 													key={selectedFile.url}
 													file={selectedFile}
@@ -565,6 +655,11 @@ function FileItem({
 						<p className="max-w-full w-full text-center font-medium text-foreground text-xs leading-tight line-clamp-1">
 							{getDisplayFileName(file.name)}
 						</p>
+						{file.previewText && (
+							<p className="text-xs text-muted-foreground line-clamp-1 w-full text-center">
+								{file.previewText}
+							</p>
+						)}
 						<div className="flex flex-col items-center gap-1">
 							<Badge
 								variant="outline"
@@ -572,6 +667,11 @@ function FileItem({
 							>
 								{file.type}
 							</Badge>
+							{file.pageNumber !== undefined && (
+								<Badge variant="secondary" className="text-xs px-1 py-0 h-4">
+									Page {file.pageNumber}
+								</Badge>
+							)}
 							{file.size && (
 								<Badge variant="secondary" className="text-xs px-1 py-0 h-4">
 									{humanFileSize(file.size)}
@@ -648,6 +748,11 @@ function FileItem({
 						<p className="line-clamp-1 text-start font-medium text-foreground truncate w-full text-sm">
 							{getDisplayFileName(file.name)}
 						</p>
+						{file.previewText && (
+							<p className="text-xs text-muted-foreground line-clamp-1 w-full mt-0.5">
+								{file.previewText}
+							</p>
+						)}
 						<div className="flex items-center gap-1 mt-1">
 							<Badge
 								variant="outline"
@@ -655,6 +760,11 @@ function FileItem({
 							>
 								{file.type}
 							</Badge>
+							{file.pageNumber !== undefined && (
+								<Badge variant="secondary" className="text-xs px-1 py-0 h-4">
+									Page {file.pageNumber}
+								</Badge>
+							)}
 							{file.size && (
 								<Badge variant="secondary" className="text-xs px-1 py-0 h-4">
 									{humanFileSize(file.size)}
@@ -714,7 +824,7 @@ export function FileDialogPreview({ file }: Readonly<FileDialogPreviewProps>) {
 
 	const imageClasses = "max-w-full h-full object-contain rounded-md";
 	const videoClasses = "max-w-full h-full rounded-md";
-	const iframeClasses = "w-full h-full border rounded-md";
+	const showTextPreview = isText(file.url) || isCode(file.url);
 
 	switch (file.type) {
 		case "image":
@@ -749,10 +859,52 @@ export function FileDialogPreview({ file }: Readonly<FileDialogPreviewProps>) {
 					</audio>
 				</div>
 			);
-		case "pdf":
+		case "pdf": {
+			const pdfUrl =
+				file.pageNumber !== undefined
+					? `${file.url}#page=${file.pageNumber}`
+					: file.url;
 			return (
-				<div className={"w-full h-full p-4"}>
-					<iframe src={file.url} className={iframeClasses} title={file.name} />
+				<div className="w-full h-full">
+					<iframe
+						src={pdfUrl}
+						className="w-full h-full border-0"
+						title={file.name}
+					/>
+				</div>
+			);
+		}
+		case "document":
+		case "other":
+			if (showTextPreview) {
+				return (
+					<div className="w-full h-full">
+						<FilePreviewer url={file.url} />
+					</div>
+				);
+			}
+			return (
+				<div
+					className={
+						"flex flex-col items-center justify-center gap-4 h-full p-8"
+					}
+				>
+					{getFileIcon(file.type)}
+					<p className="text-sm text-muted-foreground">
+						Preview not available for this file type
+					</p>
+					<Button
+						variant="outline"
+						onClick={() => handleFileClick(file)}
+						className="gap-2"
+					>
+						{file.isDataUrl ? (
+							<Download className="w-4 h-4" />
+						) : (
+							<ExternalLink className="w-4 h-4" />
+						)}
+						{file.isDataUrl ? "Download" : "Open"}
+					</Button>
 				</div>
 			);
 		default:

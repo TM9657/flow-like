@@ -47,12 +47,14 @@ export interface ModelDetailSheetProps {
 	bit: IBit | null;
 	open: boolean;
 	onOpenChange: (open: boolean) => void;
+	webMode?: boolean;
 }
 
 export function ModelDetailSheet({
 	bit,
 	open,
 	onOpenChange,
+	webMode = false,
 }: Readonly<ModelDetailSheetProps>) {
 	const backend = useBackend();
 	const { hub } = useHub();
@@ -357,24 +359,26 @@ export function ModelDetailSheet({
 
 					{/* Actions */}
 					<div className="flex flex-col gap-2 pt-2">
-						<Button
-							onClick={handleDownload}
-							variant={isInstalled.data ? "destructive" : "default"}
-							className="w-full"
-							disabled={progress !== undefined}
-						>
-							{isInstalled.data ? (
-								<>
-									<TrashIcon className="h-4 w-4 mr-2" />
-									Remove Download
-								</>
-							) : (
-								<>
-									<DownloadCloudIcon className="h-4 w-4 mr-2" />
-									Download ({humanFileSize(bitSize.data ?? 0)})
-								</>
-							)}
-						</Button>
+						{!webMode && !isHosted && (
+							<Button
+								onClick={handleDownload}
+								variant={isInstalled.data ? "destructive" : "default"}
+								className="w-full"
+								disabled={progress !== undefined}
+							>
+								{isInstalled.data ? (
+									<>
+										<TrashIcon className="h-4 w-4 mr-2" />
+										Remove Download
+									</>
+								) : (
+									<>
+										<DownloadCloudIcon className="h-4 w-4 mr-2" />
+										Download ({humanFileSize(bitSize.data ?? 0)})
+									</>
+								)}
+							</Button>
+						)}
 						<Button
 							onClick={handleToggleProfile}
 							variant="outline"

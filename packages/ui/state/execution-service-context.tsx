@@ -435,6 +435,8 @@ export function ExecutionServiceProvider({
 			// Try prerunEvent first if available, otherwise fall back to fetching event + board
 			let varsNeedingValues: IVariable[];
 			let boardId: string;
+			// Determine if execution is remote (server-side) - if so, don't prompt for secrets
+			let isRemote = false;
 
 			if (backend.eventState.prerunEvent) {
 				try {
@@ -443,10 +445,12 @@ export function ExecutionServiceProvider({
 						eventIdStr,
 					);
 					boardId = prerunResult.board_id;
-					// Events execute locally, so include secrets (isRemote = false)
+					// If user can't execute locally, execution is remote (server-side)
+					// In that case, secrets are handled server-side, don't prompt for them
+					isRemote = !prerunResult.can_execute_locally;
 					varsNeedingValues = convertPrerunToVariables(
 						prerunResult.runtime_variables,
-						false,
+						isRemote,
 					);
 				} catch {
 					// Prerun failed, fall back to fetching event + board
@@ -461,7 +465,10 @@ export function ExecutionServiceProvider({
 							event.board_id,
 							version ?? undefined,
 						);
-						varsNeedingValues = getVariablesNeedingPrompt(board, false);
+						// Without prerun info, assume remote if no executeBoardRemote
+						// (web app doesn't have separate local execution)
+						isRemote = !backend.boardState.executeBoardRemote;
+						varsNeedingValues = getVariablesNeedingPrompt(board, isRemote);
 					} catch {
 						// Event or board not found, execute anyway
 						return backend.eventState.executeEvent(
@@ -488,6 +495,7 @@ export function ExecutionServiceProvider({
 						event.board_id,
 						version ?? undefined,
 					);
+					// Without prerun info, assume local execution for desktop
 					varsNeedingValues = getVariablesNeedingPrompt(board, false);
 				} catch {
 					// Event or board not found, execute anyway
@@ -522,11 +530,12 @@ export function ExecutionServiceProvider({
 
 			if (hasAll) {
 				// All variables configured, convert to runtime variables map and execute
-				// Events execute locally, so include secrets
+				// Only include secrets for local execution
+				const includeSecrets = !isRemote;
 				const runtimeVariablesMap = await convertToRuntimeVariablesMap(
 					appId,
 					varsNeedingValues,
-					true,
+					includeSecrets,
 				);
 				const payloadWithVars: IRunPayload = {
 					...payload,
@@ -557,7 +566,7 @@ export function ExecutionServiceProvider({
 					eventId: onEventId,
 					cb,
 					skipConsentCheck,
-					isRemote: false,
+					isRemote,
 					isEvent: true,
 					eventIdStr,
 					resolve,

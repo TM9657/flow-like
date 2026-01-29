@@ -162,11 +162,16 @@ impl Command for CopyPasteCommand {
             new_node.id = new_id.clone();
             new_node.category = blueprint_node.category.clone();
             new_node.docs = blueprint_node.docs.clone();
-            new_node.description = blueprint_node.description.clone();
             new_node.icon = blueprint_node.icon.clone();
             new_node.scores = blueprint_node.scores.clone();
             new_node.start = blueprint_node.start;
             new_node.event_callback = blueprint_node.event_callback;
+
+            // Preserve user-customized friendly_name and description for start nodes (events)
+            let is_start_node = blueprint_node.start.unwrap_or(false);
+            if !is_start_node {
+                new_node.description = blueprint_node.description.clone();
+            }
             new_node.coordinates = Some((
                 new_node.coordinates.unwrap_or((0.0, 0.0, 0.0)).0 + offset.0,
                 new_node.coordinates.unwrap_or((0.0, 0.0, 0.0)).1 + offset.1,
@@ -246,7 +251,10 @@ impl Command for CopyPasteCommand {
                 })
                 .collect();
 
-            new_node.friendly_name = blueprint_node.friendly_name.clone();
+            // Preserve user-customized friendly_name for start nodes (events)
+            if !is_start_node {
+                new_node.friendly_name = blueprint_node.friendly_name.clone();
+            }
             intermediate_nodes.push(new_node);
         }
 

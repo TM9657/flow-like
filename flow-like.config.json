@@ -35,6 +35,18 @@
 		"premium": true,
 		"wasm_registry": true
 	},
+	"supported_sinks": {
+		"http": true,
+		"webhook": true,
+		"cron": true,
+		"mqtt": false,
+		"github": true,
+		"rss": true,
+		"discord": false,
+		"slack": false,
+		"telegram": false,
+		"email": true
+	},
 	"hubs": [],
 	"cdn": "https://cdn.flow-like.com",
 	"domain": "api.alpha.flow-like.com",

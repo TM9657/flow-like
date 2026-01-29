@@ -510,12 +510,22 @@ pub fn run() {
                 println!("EventBus Sink Started");
 
                 while let Some(event) = event_receiver.recv().await {
-                    match event.execute(&handle, flow_like_state.clone(), &hub).await {
-                        Ok(meta) => _ = meta,
-                        Err(e) => {
-                            eprintln!("Error executing event: {:?}", e);
+                    // Spawn each event execution as a separate task for parallel processing
+                    let handle_clone = handle.clone();
+                    let flow_like_state_clone = flow_like_state.clone();
+                    let hub_clone = hub.clone();
+
+                    tokio::spawn(async move {
+                        match event
+                            .execute(&handle_clone, flow_like_state_clone, &hub_clone)
+                            .await
+                        {
+                            Ok(meta) => _ = meta,
+                            Err(e) => {
+                                eprintln!("Error executing event: {:?}", e);
+                            }
                         }
-                    }
+                    });
                 }
 
                 println!("EventBus Sink stopped");
@@ -539,6 +549,7 @@ pub fn run() {
             functions::settings::profiles::get_current_profile,
             functions::settings::profiles::set_current_profile,
             functions::settings::profiles::upsert_profile,
+            functions::settings::profiles::remap_profile_id,
             functions::settings::profiles::delete_profile,
             functions::settings::profiles::add_bit,
             functions::settings::profiles::remove_bit,
@@ -626,6 +637,12 @@ pub fn run() {
             functions::flow::template::get_template_meta,
             functions::flow::template::push_template_meta,
             functions::ai::copilot::copilot_chat,
+            functions::ai::copilot::copilot_sdk_start,
+            functions::ai::copilot::copilot_sdk_stop,
+            functions::ai::copilot::copilot_sdk_is_running,
+            functions::ai::copilot::copilot_sdk_list_models,
+            functions::ai::copilot::copilot_sdk_get_auth_status,
+            functions::ai::copilot::copilot_sdk_create_agent_session,
             functions::a2ui::widget::get_widgets,
             functions::a2ui::widget::get_widget,
             functions::a2ui::widget::create_widget,

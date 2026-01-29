@@ -63,6 +63,9 @@ pub struct InvokeBoardRequest {
     /// Whether to stream node state updates (true for boards, false for events)
     #[serde(default = "default_stream_state")]
     pub stream_state: bool,
+    /// Runtime-configured variables to override board variables
+    pub runtime_variables:
+        Option<std::collections::HashMap<String, flow_like::flow::variable::Variable>>,
 }
 
 fn default_stream_state() -> bool {
@@ -265,6 +268,7 @@ pub async fn invoke_board(
         token: params.token,
         oauth_tokens: params.oauth_tokens,
         stream_state: params.stream_state,
+        runtime_variables: params.runtime_variables,
     };
 
     // For isolated K8s jobs, insert run record and dispatch async

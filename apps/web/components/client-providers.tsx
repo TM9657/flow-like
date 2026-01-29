@@ -1,0 +1,99 @@
+"use client";
+import {
+	ExecutionEngineProviderComponent,
+	ExecutionServiceProvider,
+	PersistQueryClientProvider,
+	QueryClient,
+	ReactFlowProvider,
+} from "@tm9657/flow-like-ui";
+import { ThemeProvider } from "@tm9657/flow-like-ui/components/theme-provider";
+import { Toaster } from "@tm9657/flow-like-ui/components/ui/sonner";
+import { TooltipProvider } from "@tm9657/flow-like-ui/components/ui/tooltip";
+import { NetworkStatusIndicator } from "@tm9657/flow-like-ui/components/ui/network-status-indicator";
+import { useNetworkStatus } from "@tm9657/flow-like-ui/hooks/use-network-status";
+import { createIDBPersister } from "@tm9657/flow-like-ui/lib/persister";
+import { useEffect } from "react";
+import { WebAuthProvider } from "../components/auth-provider";
+import { WebProvider } from "../components/web-provider";
+import { AppSidebar } from "../components/app-sidebar";
+import { OAuthCallbackHandler } from "../components/oauth-callback-handler";
+import { OAuthExecutionProvider } from "../components/oauth-execution-provider";
+import { RuntimeVariablesProviderComponent } from "../components/runtime-variables-provider";
+import { SpotlightWrapper } from "../components/spotlight-wrapper";
+
+const persister = createIDBPersister();
+const queryClient = new QueryClient({
+	defaultOptions: {
+		queries: {
+			networkMode: "always",
+			staleTime: 30 * 1000,
+			gcTime: 7 * 24 * 60 * 60 * 1000,
+			refetchOnWindowFocus: false,
+			refetchOnReconnect: false,
+			refetchOnMount: true,
+			retry: 1,
+			retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 30000),
+		},
+	},
+});
+
+function NetworkAwareProvider({ children }: { children: React.ReactNode }) {
+	const isOnline = useNetworkStatus();
+
+	useEffect(() => {
+		if (isOnline) {
+			console.log("Network reconnected - refetching stale queries");
+			queryClient.refetchQueries({
+				type: "active",
+				stale: true,
+			});
+		}
+	}, [isOnline]);
+
+	return <>{children}</>;
+}
+
+export function ClientProviders({ children }: { children: React.ReactNode }) {
+	return (
+		<ReactFlowProvider>
+			<PersistQueryClientProvider
+				client={queryClient}
+				persistOptions={{
+					persister,
+				}}
+			>
+				<NetworkAwareProvider>
+					<NetworkStatusIndicator />
+					<ThemeProvider
+						attribute="class"
+						defaultTheme="system"
+						enableSystem
+						storageKey="theme"
+						disableTransitionOnChange
+					>
+						<TooltipProvider>
+							<Toaster />
+							<WebProvider>
+								<WebAuthProvider>
+									<OAuthCallbackHandler>
+										<OAuthExecutionProvider>
+											<RuntimeVariablesProviderComponent>
+												<ExecutionServiceProvider>
+													<ExecutionEngineProviderComponent>
+														<SpotlightWrapper>
+															<AppSidebar>{children}</AppSidebar>
+														</SpotlightWrapper>
+													</ExecutionEngineProviderComponent>
+												</ExecutionServiceProvider>
+											</RuntimeVariablesProviderComponent>
+										</OAuthExecutionProvider>
+									</OAuthCallbackHandler>
+								</WebAuthProvider>
+							</WebProvider>
+						</TooltipProvider>
+					</ThemeProvider>
+				</NetworkAwareProvider>
+			</PersistQueryClientProvider>
+		</ReactFlowProvider>
+	);
+}

@@ -12,6 +12,7 @@ pub mod info;
 pub mod oauth;
 pub mod profile;
 pub mod registry;
+pub mod sink;
 pub mod solution;
 pub mod store;
 pub mod tmp;

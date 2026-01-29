@@ -8,6 +8,8 @@ use axum::{
 };
 use flow_like_types::anyhow;
 
+use super::db::delete_event_from_db;
+
 #[tracing::instrument(name = "DELETE /apps/{app_id}/events/{event_id}", skip(state, user))]
 pub async fn delete_event(
     State(state): State<AppState>,
@@ -25,10 +27,20 @@ pub async fn delete_event(
             crate::credentials::CredentialsAccess::EditApp,
         )
         .await?;
+
+    // Delete from bucket
     app.delete_event(&event_id).await.map_err(|e| {
-        tracing::error!("Failed to delete event: {}", e);
+        tracing::error!("Failed to delete event from bucket: {}", e);
         ApiError::internal_error(anyhow!(e))
     })?;
+
+    // Delete from database
+    delete_event_from_db(&state.db, &event_id)
+        .await
+        .map_err(|e| {
+            tracing::error!("Failed to delete event from database: {}", e);
+            ApiError::internal_error(anyhow!(e))
+        })?;
 
     Ok(Json(()))
 }

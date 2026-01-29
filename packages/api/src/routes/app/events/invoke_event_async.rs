@@ -32,6 +32,8 @@ use flow_like_types::{anyhow, create_id};
 use sea_orm::{ActiveModelTrait, ActiveValue::Set};
 use serde::{Deserialize, Serialize};
 
+use super::db::get_event_from_db;
+
 /// Request body for async event invocation
 #[derive(Clone, Debug, Deserialize)]
 pub struct InvokeEventAsyncRequest {
@@ -43,6 +45,9 @@ pub struct InvokeEventAsyncRequest {
     pub token: Option<String>,
     /// OAuth tokens keyed by provider name
     pub oauth_tokens: Option<std::collections::HashMap<String, serde_json::Value>>,
+    /// Runtime-configured variables to override board variables
+    pub runtime_variables:
+        Option<std::collections::HashMap<String, flow_like::flow::variable::Variable>>,
 }
 
 /// Response from async event invocation
@@ -81,9 +86,8 @@ pub async fn invoke_event_async(
     let permission = ensure_permission!(user, &app_id, &state, RolePermissions::ExecuteEvents);
     let sub = permission.sub()?;
 
-    // Get the event to find the associated board + serialize for executor
-    let app = state.master_app(&sub, &app_id, &state).await?;
-    let event = app.get_event(&event_id, None).await?;
+    // Get the event from database
+    let event = get_event_from_db(&state.db, &event_id).await?;
     let board_id = event.board_id.clone();
     let event_json =
         serde_json::to_string(&event).map_err(|e| anyhow!("Failed to serialize event: {}", e))?;
@@ -214,6 +218,7 @@ pub async fn invoke_event_async(
         token: params.token,
         oauth_tokens: params.oauth_tokens,
         stream_state: false,
+        runtime_variables: params.runtime_variables,
     };
 
     let response = state

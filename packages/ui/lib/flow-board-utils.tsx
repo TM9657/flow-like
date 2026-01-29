@@ -364,7 +364,17 @@ export function parseBoard(
 		const hash = node.hash ?? -1;
 		const oldNode = hash === -1 ? undefined : oldNodesMap.get(hash);
 		if (oldNode) {
-			nodes.push(oldNode);
+			// Reuse old node but create new data object to ensure React detects changes
+			// Update the hash to reflect the current node state
+			nodes.push({
+				...oldNode,
+				data: {
+					...oldNode.data,
+					node: node,
+					hash: hash,
+				},
+				selected: selected.has(node.id),
+			});
 		} else {
 			nodes.push({
 				id: node.id,

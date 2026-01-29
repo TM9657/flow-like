@@ -28,7 +28,7 @@ import {
 	Textarea,
 } from "../../ui";
 import { FilePreview, type ProcessedAttachment } from "./attachment";
-import { FileDialog, FileDialogPreview } from "./attachment-dialog";
+import { FileDialog, FileDialogPreview, canPreviewFile, downloadFile } from "./attachment-dialog";
 import type { IAttachment, IMessage } from "./chat-db";
 import { useProcessedAttachments } from "./hooks/use-processed-attachments";
 import { PlanSteps } from "./plan-steps";
@@ -346,15 +346,19 @@ const AttachmentSection = ({
 	onFileClick: (file: ProcessedAttachment) => void;
 	onFullscreen?: (file: ProcessedAttachment) => void;
 }) => {
-	const { visibleAudio, visibleImages, visibleVideo } = useMemo(() => {
+	const { visibleAudio, visibleImages, visibleVideo, visibleDocuments } = useMemo(() => {
 		const audioFiles = files.filter((file) => file.type === "audio");
 		const imageFiles = files.filter((file) => file.type === "image");
 		const videoFiles = files.filter((file) => file.type === "video");
+		const documentFiles = files.filter(
+			(file) => !["audio", "image", "video"].includes(file.type)
+		);
 
 		return {
 			visibleAudio: audioFiles.slice(0, 1),
 			visibleImages: imageFiles.slice(0, 4),
 			visibleVideo: videoFiles.slice(0, 1),
+			visibleDocuments: documentFiles.slice(0, 3),
 		};
 	}, [files]);
 
@@ -400,6 +404,37 @@ const AttachmentSection = ({
 					))}
 				</div>
 			)}
+
+			{visibleDocuments.length > 0 && (
+				<div className="mt-2 flex flex-col gap-2 max-w-md">
+					{visibleDocuments.map((file) => (
+						<button
+							key={file.url}
+							onClick={() => onFileClick(file)}
+							className="flex flex-col gap-1 p-3 rounded-lg border bg-muted/30 hover:bg-muted/50 transition-colors text-left"
+						>
+							<div className="flex items-center gap-2">
+								<Badge variant="outline" className="text-xs capitalize">
+									{file.type}
+								</Badge>
+								<span className="text-sm font-medium truncate flex-1">
+									{file.name}
+								</span>
+								{file.pageNumber !== undefined && (
+									<Badge variant="secondary" className="text-xs">
+										Page {file.pageNumber}
+									</Badge>
+								)}
+							</div>
+							{file.previewText && (
+								<p className="text-xs text-muted-foreground line-clamp-2">
+									{file.previewText}
+								</p>
+							)}
+						</button>
+					))}
+				</div>
+			)}
 		</>
 	);
 };
@@ -416,6 +451,9 @@ export function MessageComponent({
 		useState<ProcessedAttachment | null>(null);
 	const [showFeedbackDialog, setShowFeedbackDialog] = useState(false);
 	const [showEditDialog, setShowEditDialog] = useState(false);
+	const [showFileDialog, setShowFileDialog] = useState(false);
+	const [dialogSelectedFile, setDialogSelectedFile] =
+		useState<ProcessedAttachment | null>(null);
 	const contentRef = useRef<HTMLDivElement>(null);
 
 	const maxCollapsedHeight = "4rem";
@@ -463,19 +501,20 @@ export function MessageComponent({
 		const videoFiles = processedAttachments.filter(
 			(file) => file.type === "video",
 		);
-		const otherFiles = processedAttachments.filter(
+		const documentFiles = processedAttachments.filter(
 			(file) => !["audio", "image", "video"].includes(file.type),
 		);
 
 		const hiddenAudio = audioFiles.slice(1);
 		const hiddenImages = imageFiles.slice(4);
 		const hiddenVideo = videoFiles.slice(1);
+		const hiddenDocuments = documentFiles.slice(3);
 
 		return (
 			hiddenAudio.length +
 			hiddenImages.length +
 			hiddenVideo.length +
-			otherFiles.length
+			hiddenDocuments.length
 		);
 	}, [processedAttachments]);
 
@@ -493,24 +532,13 @@ export function MessageComponent({
 	}, [message.inner, isUser]);
 
 	const handleFileClick = useCallback((file: ProcessedAttachment) => {
-		if (file.isDataUrl) {
-			if (file.type === "image") {
-				const newWindow = window.open();
-				if (newWindow) {
-					newWindow.document.write(
-						`<img src="${file.url}" style="max-width: 100%; height: auto;" />`,
-					);
-				}
-			} else {
-				const link = document.createElement("a");
-				link.href = file.url;
-				link.download = file.name || "file";
-				document.body.appendChild(link);
-				link.click();
-				document.body.removeChild(link);
-			}
+		if (canPreviewFile(file)) {
+			// Open file dialog with this file selected
+			setDialogSelectedFile(file);
+			setShowFileDialog(true);
 		} else {
-			window.open(file.url, "_blank", "noopener,noreferrer");
+			// Download non-previewable files
+			downloadFile(file);
 		}
 	}, []);
 
@@ -709,6 +737,16 @@ export function MessageComponent({
 				initialCanContact={message.ratingSettings?.canContact ?? false}
 				onSubmit={handleFeedbackSubmit}
 			/>
+			{processedAttachments.length > 0 && (
+				<FileDialog
+					files={processedAttachments}
+					handleFileClick={handleFileClick}
+					open={showFileDialog}
+					onOpenChange={setShowFileDialog}
+					initialSelectedFile={dialogSelectedFile}
+					trigger={null}
+				/>
+			)}
 		</>
 	);
 }

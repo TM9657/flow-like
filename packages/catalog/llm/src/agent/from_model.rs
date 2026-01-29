@@ -1,7 +1,7 @@
 /// # Agent from Model Node
 /// Creates an Agent object from a model Bit with basic configuration.
 /// This is the starting point for building an agent in the flow.
-use crate::generative::agent::Agent;
+use crate::generative::agent::{Agent, ContextManagementMode};
 use flow_like::{
     bit::Bit,
     flow::{
@@ -12,6 +12,8 @@ use flow_like::{
     },
 };
 use flow_like_types::{async_trait, json};
+
+const DEFAULT_MAX_CONTEXT_TOKENS: u32 = 32000;
 
 #[crate::register_node]
 #[derive(Default)]
@@ -62,6 +64,30 @@ impl NodeLogic for AgentFromModelNode {
         )
         .set_default_value(Some(json::json!(15)));
 
+        node.add_input_pin(
+            "infinite_context",
+            "Infinite Context",
+            "Enable automatic context window management to prevent overflow",
+            VariableType::Boolean,
+        )
+        .set_default_value(Some(json::json!(false)));
+
+        node.add_input_pin(
+            "context_mode",
+            "Context Mode",
+            "Strategy: 'truncate' (fast, drops old messages) or 'summarize' (LLM compresses history, slower but preserves info)",
+            VariableType::String,
+        )
+        .set_default_value(Some(json::json!("truncate")));
+
+        node.add_input_pin(
+            "max_context_tokens",
+            "Max Context Tokens",
+            "Maximum tokens to retain in context window (default: 32000)",
+            VariableType::Integer,
+        )
+        .set_default_value(Some(json::json!(DEFAULT_MAX_CONTEXT_TOKENS)));
+
         node.add_output_pin(
             "agent_out",
             "Agent",
@@ -77,12 +103,25 @@ impl NodeLogic for AgentFromModelNode {
     async fn run(&self, context: &mut ExecutionContext) -> flow_like_types::Result<()> {
         let model: Bit = context.evaluate_pin("model").await?;
         let max_iter: u64 = context.evaluate_pin("max_iter").await?;
+        let infinite_context: bool = context.evaluate_pin("infinite_context").await?;
+        let context_mode: String = context.evaluate_pin("context_mode").await?;
+        let max_context_tokens: u64 = context.evaluate_pin("max_context_tokens").await?;
 
         let mut agent = Agent::new(model.clone(), max_iter);
 
         // Store model display name
         if let Some(meta) = model.meta.get("en") {
             agent.model_display_name = Some(meta.name.clone());
+        }
+
+        if infinite_context {
+            agent.enable_infinite_context(Some(max_context_tokens as u32));
+
+            let mode = match context_mode.to_lowercase().as_str() {
+                "summarize" | "summary" => ContextManagementMode::Summarize,
+                _ => ContextManagementMode::Truncate,
+            };
+            agent.set_context_management_mode(mode);
         }
 
         context

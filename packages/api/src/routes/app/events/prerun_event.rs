@@ -16,6 +16,8 @@ use flow_like::flow::board::ExecutionMode;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
+use super::db::get_event_from_db;
+
 /// Query parameters for pre-run analysis
 #[derive(Debug, Deserialize)]
 pub struct PrerunEventQuery {
@@ -93,9 +95,8 @@ pub async fn prerun_event(
 
     let version = query.version.as_ref().and_then(|v| parse_version(v));
 
-    // Get the event to find the associated board
-    let app = state.master_app(&sub, &app_id, &state).await?;
-    let event = app.get_event(&event_id, None).await?;
+    // Get the event from database
+    let event = get_event_from_db(&state.db, &event_id).await?;
     let board_id = event.board_id.clone();
 
     // Get the board from the event

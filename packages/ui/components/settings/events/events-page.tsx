@@ -10,6 +10,7 @@ import {
 	CardHeader,
 	CardTitle,
 	Dialog,
+	DialogBody,
 	DialogContent,
 	DialogDescription,
 	DialogHeader,
@@ -512,14 +513,14 @@ export default function EventsPage({
 			</div>
 
 			<Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
-				<DialogContent className="max-w-2xl max-h-[85vh] flex flex-col">
-					<DialogHeader className="shrink-0">
+				<DialogContent className="max-w-2xl">
+					<DialogHeader>
 						<DialogTitle>Create New Event</DialogTitle>
 						<DialogDescription>
 							Configure a new event with its properties and settings
 						</DialogDescription>
 					</DialogHeader>
-					<div className="flex-1 overflow-y-auto min-h-0">
+					<DialogBody>
 						{id && routeCleanupDone && (
 							<EventForm
 								eventConfig={eventMapping}
@@ -534,7 +535,7 @@ export default function EventsPage({
 								onRefreshToken={onRefreshToken}
 							/>
 						)}
-					</div>
+					</DialogBody>
 				</DialogContent>
 			</Dialog>
 

@@ -28,6 +28,8 @@ pub struct AwsRuntimeCredentials {
     pub logs_bucket: String,
     pub region: String,
     pub expiration: Option<chrono::DateTime<chrono::Utc>>,
+    pub content_path_prefix: Option<String>,
+    pub user_content_path_prefix: Option<String>,
 }
 
 #[cfg(feature = "aws")]
@@ -42,6 +44,8 @@ impl From<aws_sdk_sts::types::Credentials> for AwsRuntimeCredentials {
             logs_bucket: std::env::var("LOG_BUCKET").unwrap_or_default(),
             region: std::env::var("AWS_REGION").unwrap_or_else(|_| "us-east-1".to_string()),
             expiration: None,
+            content_path_prefix: None,
+            user_content_path_prefix: None,
         }
     }
 }
@@ -58,6 +62,8 @@ impl AwsRuntimeCredentials {
             logs_bucket: logs_bucket.to_string(),
             region: region.to_string(),
             expiration: None,
+            content_path_prefix: None,
+            user_content_path_prefix: None,
         }
     }
 
@@ -77,6 +83,8 @@ impl AwsRuntimeCredentials {
             logs_bucket,
             region: std::env::var("AWS_REGION").unwrap_or_else(|_| "us-east-1".to_string()),
             expiration: None,
+            content_path_prefix: None,
+            user_content_path_prefix: None,
         }
     }
 
@@ -90,6 +98,8 @@ impl AwsRuntimeCredentials {
             logs_bucket: self.logs_bucket.clone(),
             region: self.region.clone(),
             expiration: None,
+            content_path_prefix: None,
+            user_content_path_prefix: None,
         }
     }
 
@@ -179,6 +189,8 @@ impl AwsRuntimeCredentials {
             logs_bucket: self.logs_bucket.clone(),
             region: self.region.clone(),
             expiration: Some(chrono_expiration),
+            content_path_prefix: Some(apps_prefix),
+            user_content_path_prefix: Some(user_prefix),
         })
     }
 }
@@ -239,11 +251,17 @@ impl RuntimeCredentialsTrait for AwsRuntimeCredentials {
             logs_config,
             region: self.region.clone(),
             expiration: self.expiration,
+            content_path_prefix: self.content_path_prefix.clone(),
+            user_content_path_prefix: self.user_content_path_prefix.clone(),
         })
     }
 
     async fn to_db(&self, app_id: &str) -> Result<ConnectBuilder> {
         self.into_shared_credentials().to_db(app_id).await
+    }
+
+    async fn to_db_scoped(&self, app_id: &str) -> Result<ConnectBuilder> {
+        self.into_shared_credentials().to_db_scoped(app_id).await
     }
 
     #[tracing::instrument(
@@ -796,6 +814,8 @@ mod tests {
             logs_bucket: "logs".to_string(),
             region: "us-east-1".to_string(),
             expiration: None,
+            content_path_prefix: None,
+            user_content_path_prefix: None,
         };
 
         let json = to_string(&creds).expect("Failed to serialize");

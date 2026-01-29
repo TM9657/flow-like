@@ -4,6 +4,7 @@ use crate::{
     error::ApiError,
     middleware::jwt::AppUser,
     permission::role_permission::RolePermissions,
+    routes::app::events::db::get_event_from_db,
     state::AppState,
 };
 use axum::{
@@ -60,10 +61,8 @@ pub async fn create_notification(
         return Err(ApiError::bad_request("event_id is required".to_string()));
     }
 
-    // Resolve event -> board, then verify that the board actually contains a notification node.
-    // This prevents arbitrary clients from spamming notifications for boards that don't opt-in.
-    let app = state.master_app(&caller_sub, &app_id, &state).await?;
-    let event = app.get_event(&params.event_id, None).await.map_err(|e| {
+    // Get event from database
+    let event = get_event_from_db(&state.db, &params.event_id).await.map_err(|e| {
         tracing::warn!(error = %e, event_id = %params.event_id, "Failed to resolve event for notification");
         ApiError::FORBIDDEN
     })?;

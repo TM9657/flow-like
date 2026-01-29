@@ -68,7 +68,11 @@ impl NodeLogic for ListTablesNode {
         let app_id = context_cache.app_id.clone();
 
         let db = if let Some(credentials) = &context.credentials {
-            credentials.to_db(&app_id).await?
+            if user_scoped {
+                credentials.to_db_scoped(&app_id).await?
+            } else {
+                credentials.to_db(&app_id).await?
+            }
         } else if user_scoped {
             let user_dir = context_cache.get_user_dir(false)?;
             let user_dir = user_dir.child("db");

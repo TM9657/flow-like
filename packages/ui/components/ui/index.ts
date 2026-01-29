@@ -27,6 +27,7 @@ export * from "./empty-state";
 export * from "./event-card";
 export * from "./event-form";
 export * from "./file-previewer";
+export * from "./flow-background";
 export * from "./hover-card";
 export * from "./input";
 export * from "./label";

@@ -1,23 +1,6 @@
 "use client";
 
-import {
-	Brain,
-	Code,
-	Coffee,
-	Cpu,
-	Globe,
-	Heart,
-	Hexagon,
-	Lightbulb,
-	Loader2,
-	Rocket,
-	Shield,
-	Sparkles,
-	Star,
-	Wand2,
-	Zap,
-} from "lucide-react";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { cn } from "../../lib";
 
 interface LoadingScreenProps {
@@ -27,102 +10,395 @@ interface LoadingScreenProps {
 }
 
 const loadingMessages = [
-	"Preparing something amazing...",
-	"Initializing awesome...",
-	"Crafting the perfect experience...",
-	"Assembling digital magic...",
-	"Loading brilliance...",
-	"Weaving code into reality...",
-	"Summoning the flow state...",
-	"Materializing innovation...",
-	"Brewing digital excellence...",
-	"Orchestrating perfection...",
+	"Initializing flow engine...",
+	"Connecting neural pathways...",
+	"Syncing data streams...",
+	"Building execution graph...",
+	"Preparing workspace...",
+	"Loading node catalog...",
+	"Establishing connections...",
+	"Compiling workflows...",
 ];
 
-const floatingIcons = [
-	{ Icon: Zap, delay: 0, color: "text-yellow-400", size: "w-6 h-6" },
-	{ Icon: Sparkles, delay: 0.5, color: "text-purple-400", size: "w-5 h-5" },
-	{ Icon: Code, delay: 1, color: "text-blue-400", size: "w-7 h-7" },
-	{ Icon: Rocket, delay: 1.5, color: "text-red-400", size: "w-6 h-6" },
-	{ Icon: Brain, delay: 2, color: "text-green-400", size: "w-5 h-5" },
-	{ Icon: Lightbulb, delay: 2.5, color: "text-orange-400", size: "w-6 h-6" },
-	{ Icon: Star, delay: 3, color: "text-pink-400", size: "w-5 h-5" },
-	{ Icon: Heart, delay: 3.5, color: "text-rose-400", size: "w-6 h-6" },
+interface Node {
+	id: number;
+	x: number;
+	y: number;
+	vx: number;
+	vy: number;
+	radius: number;
+	pulse: number;
+	color: string;
+}
+
+interface Connection {
+	from: number;
+	to: number;
+	progress: number;
+	speed: number;
+	active: boolean;
+}
+
+const NODE_COLORS = [
+	"rgba(59, 130, 246, 0.8)", // blue
+	"rgba(168, 85, 247, 0.8)", // purple
+	"rgba(236, 72, 153, 0.8)", // pink
+	"rgba(34, 197, 94, 0.8)", // green
+	"rgba(251, 146, 60, 0.8)", // orange
 ];
 
-const backgroundIcons = [
-	{ Icon: Hexagon, color: "text-muted-foreground/20", size: "w-12 h-12" },
-	{ Icon: Coffee, color: "text-muted-foreground/15", size: "w-8 h-8" },
-	{ Icon: Cpu, color: "text-muted-foreground/20", size: "w-10 h-10" },
-	{ Icon: Globe, color: "text-muted-foreground/15", size: "w-14 h-14" },
-	{ Icon: Shield, color: "text-muted-foreground/20", size: "w-9 h-9" },
-	{ Icon: Wand2, color: "text-muted-foreground/15", size: "w-11 h-11" },
-];
-
-// Seeded random number generator for deterministic values
 function seededRandom(seed: number) {
 	const x = Math.sin(seed) * 10000;
 	return x - Math.floor(x);
 }
 
+function FlowGraph() {
+	const canvasRef = useRef<HTMLCanvasElement>(null);
+	const containerRef = useRef<HTMLDivElement>(null);
+	const animationRef = useRef<number>(0);
+	const nodesRef = useRef<Node[]>([]);
+	const connectionsRef = useRef<Connection[]>([]);
+	const mouseRef = useRef({ x: -1000, y: -1000 });
+	const [isReady, setIsReady] = useState(false);
+
+	const initializeGraph = useCallback(
+		(width: number, height: number) => {
+			// Ensure we have valid dimensions
+			if (width <= 0 || height <= 0) return;
+
+			const nodeCount = Math.max(15, Math.min(Math.floor((width * height) / 40000), 25));
+			const nodes: Node[] = [];
+
+			for (let i = 0; i < nodeCount; i++) {
+				nodes.push({
+					id: i,
+					x: seededRandom(i * 7 + 1) * width,
+					y: seededRandom(i * 13 + 2) * height,
+					vx: (seededRandom(i * 17 + 3) - 0.5) * 0.5,
+					vy: (seededRandom(i * 23 + 4) - 0.5) * 0.5,
+					radius: 4 + seededRandom(i * 29 + 5) * 5,
+					pulse: seededRandom(i * 31 + 6) * Math.PI * 2,
+					color: NODE_COLORS[i % NODE_COLORS.length],
+				});
+			}
+
+			const connections: Connection[] = [];
+			for (let i = 0; i < nodes.length; i++) {
+				const connectionCount = 1 + Math.floor(seededRandom(i * 37 + 7) * 2);
+				for (let j = 0; j < connectionCount; j++) {
+					const target = Math.floor(
+						seededRandom(i * 41 + j * 43 + 8) * nodes.length,
+					);
+					if (target !== i) {
+						connections.push({
+							from: i,
+							to: target,
+							progress: seededRandom(i * 47 + j * 53 + 9),
+							speed: 0.002 + seededRandom(i * 59 + j * 61 + 10) * 0.003,
+							active: seededRandom(i * 67 + j * 71 + 11) > 0.3,
+						});
+					}
+				}
+			}
+
+			nodesRef.current = nodes;
+			connectionsRef.current = connections;
+			setIsReady(true);
+		},
+		[],
+	);
+
+	useEffect(() => {
+		const canvas = canvasRef.current;
+		const container = containerRef.current;
+		if (!canvas || !container) return;
+
+		const ctx = canvas.getContext("2d");
+		if (!ctx) return;
+
+		const setupCanvas = () => {
+			const rect = container.getBoundingClientRect();
+			const width = rect.width || window.innerWidth;
+			const height = rect.height || window.innerHeight;
+
+			if (width <= 0 || height <= 0) return;
+
+			const dpr = window.devicePixelRatio || 1;
+			canvas.width = width * dpr;
+			canvas.height = height * dpr;
+			canvas.style.width = `${width}px`;
+			canvas.style.height = `${height}px`;
+			ctx.scale(dpr, dpr);
+			initializeGraph(width, height);
+		};
+
+		// Initialize immediately, then also retry on next frame if needed
+		setupCanvas();
+		const initTimeout = requestAnimationFrame(() => {
+			if (nodesRef.current.length === 0) setupCanvas();
+		});
+
+		const handleMouseMove = (e: MouseEvent) => {
+			mouseRef.current = { x: e.clientX, y: e.clientY };
+		};
+
+		const handleResize = () => {
+			setupCanvas();
+		};
+
+		window.addEventListener("resize", handleResize);
+		window.addEventListener("mousemove", handleMouseMove);
+
+		const animate = () => {
+			const rect = container.getBoundingClientRect();
+			const width = rect.width || window.innerWidth;
+			const height = rect.height || window.innerHeight;
+			const nodes = nodesRef.current;
+			const connections = connectionsRef.current;
+			const mouse = mouseRef.current;
+
+			// Skip render if no nodes initialized yet
+			if (nodes.length === 0) {
+				animationRef.current = requestAnimationFrame(animate);
+				return;
+			}
+
+			ctx.clearRect(0, 0, width, height);
+
+			// Update and draw connections
+			for (const conn of connections) {
+				const fromNode = nodes[conn.from];
+				const toNode = nodes[conn.to];
+				if (!fromNode || !toNode) continue;
+
+				const dx = toNode.x - fromNode.x;
+				const dy = toNode.y - fromNode.y;
+				const dist = Math.sqrt(dx * dx + dy * dy);
+
+				if (dist > 300) continue;
+
+				// Draw connection line
+				const alpha = Math.max(0, 1 - dist / 300) * 0.15;
+				ctx.beginPath();
+				ctx.moveTo(fromNode.x, fromNode.y);
+				ctx.lineTo(toNode.x, toNode.y);
+				ctx.strokeStyle = `rgba(148, 163, 184, ${alpha})`;
+				ctx.lineWidth = 1;
+				ctx.stroke();
+
+				// Animate data flow particle
+				if (conn.active) {
+					conn.progress += conn.speed;
+					if (conn.progress > 1) conn.progress = 0;
+
+					const px = fromNode.x + dx * conn.progress;
+					const py = fromNode.y + dy * conn.progress;
+
+					const gradient = ctx.createRadialGradient(px, py, 0, px, py, 6);
+					gradient.addColorStop(0, "rgba(59, 130, 246, 0.8)");
+					gradient.addColorStop(1, "rgba(59, 130, 246, 0)");
+
+					ctx.beginPath();
+					ctx.arc(px, py, 6, 0, Math.PI * 2);
+					ctx.fillStyle = gradient;
+					ctx.fill();
+				}
+			}
+
+			// Update and draw nodes
+			for (const node of nodes) {
+				// Mouse interaction
+				const mdx = mouse.x - node.x;
+				const mdy = mouse.y - node.y;
+				const mouseDist = Math.sqrt(mdx * mdx + mdy * mdy);
+				if (mouseDist < 150 && mouseDist > 0) {
+					const force = (150 - mouseDist) / 150;
+					node.vx -= (mdx / mouseDist) * force * 0.1;
+					node.vy -= (mdy / mouseDist) * force * 0.1;
+				}
+
+				// Update position
+				node.x += node.vx;
+				node.y += node.vy;
+				node.vx *= 0.99;
+				node.vy *= 0.99;
+				node.pulse += 0.02;
+
+				// Bounce off edges
+				if (node.x < 0 || node.x > width) node.vx *= -1;
+				if (node.y < 0 || node.y > height) node.vy *= -1;
+				node.x = Math.max(0, Math.min(width, node.x));
+				node.y = Math.max(0, Math.min(height, node.y));
+
+				// Draw node glow
+				const pulseScale = 1 + Math.sin(node.pulse) * 0.2;
+				const glowRadius = node.radius * 3 * pulseScale;
+
+				const glow = ctx.createRadialGradient(
+					node.x,
+					node.y,
+					0,
+					node.x,
+					node.y,
+					glowRadius,
+				);
+				glow.addColorStop(0, node.color.replace("0.8", "0.3"));
+				glow.addColorStop(1, "transparent");
+
+				ctx.beginPath();
+				ctx.arc(node.x, node.y, glowRadius, 0, Math.PI * 2);
+				ctx.fillStyle = glow;
+				ctx.fill();
+
+				// Draw node core
+				ctx.beginPath();
+				ctx.arc(node.x, node.y, node.radius * pulseScale, 0, Math.PI * 2);
+				ctx.fillStyle = node.color;
+				ctx.fill();
+
+				// Inner highlight
+				ctx.beginPath();
+				ctx.arc(
+					node.x - node.radius * 0.3,
+					node.y - node.radius * 0.3,
+					node.radius * 0.3,
+					0,
+					Math.PI * 2,
+				);
+				ctx.fillStyle = "rgba(255, 255, 255, 0.4)";
+				ctx.fill();
+			}
+
+			animationRef.current = requestAnimationFrame(animate);
+		};
+
+		animate();
+
+		return () => {
+			cancelAnimationFrame(initTimeout);
+			window.removeEventListener("resize", handleResize);
+			window.removeEventListener("mousemove", handleMouseMove);
+			cancelAnimationFrame(animationRef.current);
+		};
+	}, [initializeGraph]);
+
+	return (
+		<div ref={containerRef} className="absolute inset-0">
+			<canvas
+				ref={canvasRef}
+				className="absolute inset-0 pointer-events-none"
+				style={{ opacity: isReady ? 0.8 : 0, transition: "opacity 0.1s ease-in" }}
+			/>
+		</div>
+	);
+}
+
+function PulsingRings({ progress }: { progress: number }) {
+	return (
+		<div className="relative w-32 h-32">
+			{[0, 1, 2].map((i) => (
+				<div
+					key={i}
+					className="absolute inset-0 rounded-full border-2 border-primary/20"
+					style={{
+						animation: `pulse-ring 2s ease-out infinite`,
+						animationDelay: `${i * 0.4}s`,
+					}}
+				/>
+			))}
+
+			{/* Progress ring */}
+			<svg className="absolute inset-0 w-full h-full -rotate-90">
+				<circle
+					cx="64"
+					cy="64"
+					r="58"
+					fill="none"
+					stroke="currentColor"
+					strokeWidth="2"
+					className="text-muted/30"
+				/>
+				<circle
+					cx="64"
+					cy="64"
+					r="58"
+					fill="none"
+					stroke="url(#gradient)"
+					strokeWidth="3"
+					strokeLinecap="round"
+					strokeDasharray={`${2 * Math.PI * 58}`}
+					strokeDashoffset={`${2 * Math.PI * 58 * (1 - progress / 100)}`}
+					className="transition-all duration-500 ease-out"
+				/>
+				<defs>
+					<linearGradient id="gradient" x1="0%" y1="0%" x2="100%" y2="100%">
+						<stop offset="0%" stopColor="rgb(59, 130, 246)" />
+						<stop offset="50%" stopColor="rgb(168, 85, 247)" />
+						<stop offset="100%" stopColor="rgb(236, 72, 153)" />
+					</linearGradient>
+				</defs>
+			</svg>
+
+			{/* Center icon */}
+			<div className="absolute inset-0 flex items-center justify-center">
+				<div className="relative">
+					<div className="w-12 h-12 rounded-xl bg-gradient-to-br from-primary/20 to-primary/5 backdrop-blur-sm border border-primary/20 flex items-center justify-center">
+						<svg
+							className="w-6 h-6 text-primary animate-pulse"
+							viewBox="0 0 24 24"
+							fill="none"
+							stroke="currentColor"
+							strokeWidth="2"
+						>
+							<path d="M12 2L2 7l10 5 10-5-10-5z" />
+							<path d="M2 17l10 5 10-5" />
+							<path d="M2 12l10 5 10-5" />
+						</svg>
+					</div>
+				</div>
+			</div>
+		</div>
+	);
+}
+
 export function LoadingScreen({
-	message = loadingMessages[0],
+	message,
 	progress = 0,
 	className,
 }: Readonly<LoadingScreenProps>) {
-	const [currentMessage, setCurrentMessage] = useState(message);
-	const [dots, setDots] = useState("");
-	const [isMounted, setIsMounted] = useState(false);
-	const [backgroundElements, setBackgroundElements] = useState<
-		Array<{
-			id: number;
-			x: number;
-			y: number;
-			icon: (typeof backgroundIcons)[0];
-			animationDelay: number;
-			animationDuration: number;
-		}>
-	>([]);
-
-	// Generate deterministic particle positions using seeded random
-	const particles = Array.from({ length: 30 }, (_, i) => ({
-		id: i,
-		x: seededRandom(i * 7 + 1) * 100,
-		y: seededRandom(i * 13 + 2) * 100,
-		delay: seededRandom(i * 17 + 3) * 8,
-		duration: 3 + seededRandom(i * 23 + 4) * 2,
-	}));
+	const [currentMessage, setCurrentMessage] = useState(
+		message ?? loadingMessages[0],
+	);
+	const [messageIndex, setMessageIndex] = useState(0);
 
 	useEffect(() => {
-		setIsMounted(true);
+		if (message) {
+			setCurrentMessage(message);
+			return;
+		}
 
-		// Generate random background elements (client-side only)
-		const elements = Array.from({ length: 5 }, (_, i) => ({
-			id: i,
-			x: seededRandom(i * 31 + 5) * 100,
-			y: seededRandom(i * 37 + 6) * 100,
-			icon: backgroundIcons[
-				Math.floor(seededRandom(i * 41 + 7) * backgroundIcons.length)
-			],
-			animationDelay: seededRandom(i * 43 + 8) * 5,
-			animationDuration: 8 + seededRandom(i * 47 + 9) * 4,
-		}));
-		setBackgroundElements(elements);
+		const interval = setInterval(() => {
+			setMessageIndex((prev) => {
+				const next = (prev + 1) % loadingMessages.length;
+				setCurrentMessage(loadingMessages[next]);
+				return next;
+			});
+		}, 2500);
 
-		const messageInterval = setInterval(() => {
-			setCurrentMessage(
-				loadingMessages[Math.floor(Math.random() * loadingMessages.length)],
-			);
-		}, 3000);
+		return () => clearInterval(interval);
+	}, [message]);
 
-		const dotsInterval = setInterval(() => {
-			setDots((prev) => (prev.length >= 3 ? "" : prev + "."));
-		}, 500);
+	const dots = useMemo(() => {
+		const count = Math.floor((Date.now() / 400) % 4);
+		return ".".repeat(count);
+	}, [messageIndex]);
 
-		return () => {
-			clearInterval(messageInterval);
-			clearInterval(dotsInterval);
-		};
+	const [animatedDots, setAnimatedDots] = useState("");
+	useEffect(() => {
+		const interval = setInterval(() => {
+			setAnimatedDots((prev) => (prev.length >= 3 ? "" : prev + "."));
+		}, 400);
+		return () => clearInterval(interval);
 	}, []);
 
 	return (
@@ -132,323 +408,115 @@ export function LoadingScreen({
 				className,
 			)}
 		>
-			{/* Dynamic background gradient */}
-			<div className="absolute inset-0 bg-linear-to-br from-background via-muted/30 to-background animate-gradient-shift" />
-
-			{/* Animated mesh overlay */}
-			<div className="absolute inset-0 opacity-40">
-				<div className="absolute inset-0 bg-[radial-gradient(circle_at_25%_25%,var(--muted)_1px,transparent_1px)] bg-size-[50px_50px] animate-mesh-drift" />
-				<div className="absolute inset-0 bg-[radial-gradient(circle_at_75%_75%,var(--border)_1px,transparent_1px)] bg-size-[80px_80px] animate-mesh-drift-reverse" />
+			{/* Animated gradient background */}
+			<div className="absolute inset-0 bg-gradient-to-br from-background via-background to-background">
+				<div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_left,rgba(59,130,246,0.15),transparent_50%)]" />
+				<div className="absolute inset-0 bg-[radial-gradient(ellipse_at_bottom_right,rgba(168,85,247,0.15),transparent_50%)]" />
+				<div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,rgba(236,72,153,0.08),transparent_60%)] animate-pulse-slow" />
 			</div>
 
-			{/* Floating grid overlay */}
-			<div className="absolute inset-0 bg-[linear-gradient(to_right,var(--border)_1px,transparent_1px),linear-gradient(to_bottom,var(--border)_1px,transparent_1px)] bg-size-[120px_120px] opacity-20 animate-grid-float" />
+			{/* Interactive flow graph */}
+			<FlowGraph />
 
-			{/* Large background geometric shapes */}
-			<div className="absolute inset-0 overflow-hidden">
-				<div className="absolute -top-40 -left-40 w-80 h-80 border border-muted-foreground/10 rounded-full animate-float-massive" />
-				<div className="absolute -bottom-32 -right-32 w-64 h-64 border border-muted-foreground/10 rotate-45 animate-float-massive-reverse" />
-				<div className="absolute top-1/4 -left-20 w-40 h-40 border border-muted-foreground/10 rounded-full animate-pulse-gentle" />
-			</div>
+			{/* Subtle grid overlay */}
+			<div
+				className="absolute inset-0 opacity-[0.03]"
+				style={{
+					backgroundImage: `linear-gradient(rgba(255,255,255,0.1) 1px, transparent 1px),
+                                    linear-gradient(90deg, rgba(255,255,255,0.1) 1px, transparent 1px)`,
+					backgroundSize: "60px 60px",
+				}}
+			/>
 
-			{/* Background icon constellation */}
-			{isMounted &&
-				backgroundElements.map((element) => (
-					<div
-						key={element.id}
-						className="absolute animate-float-background"
-						style={{
-							left: `${element.x}%`,
-							top: `${element.y}%`,
-							animationDelay: `${element.animationDelay}s`,
-							animationDuration: `${element.animationDuration}s`,
-						}}
-					>
-						<element.icon.Icon
-							className={cn(
-								element.icon.size,
-								element.icon.color,
-								"animate-spin-very-slow",
-							)}
-						/>
-					</div>
-				))}
+			{/* Main content */}
+			<div className="relative z-10 flex flex-col items-center gap-8">
+				<PulsingRings progress={progress} />
 
-			{/* Floating colorful icons */}
-			{floatingIcons.map(({ Icon, delay, color, size }, i) => (
-				<div
-					key={`floating-icon-${delay}-${color}-${size}`}
-					className="absolute animate-float-orbital opacity-70 hover:opacity-100 transition-opacity duration-300"
-					style={{
-						left: `${15 + i * 10}%`,
-						top: `${25 + Math.sin(i * 1.2) * 30}%`,
-						animationDelay: `${delay}s`,
-						animationDuration: "10s",
-					}}
-				>
-					<div className="relative">
-						{/* Glow effect */}
-						<div className={cn("absolute inset-0 blur-md opacity-60", color)}>
-							<Icon className={size} />
-						</div>
-						<Icon className={cn(size, color, "relative z-10 drop-shadow-lg")} />
-					</div>
-				</div>
-			))}
-
-			{/* Particle trail effect */}
-			<div className="absolute inset-0">
-				{particles.map((particle) => (
-					<div
-						key={particle.id}
-						className="absolute w-1 h-1 bg-muted-foreground/30 rounded-full animate-particle-trail"
-						style={{
-							left: `${particle.x}%`,
-							top: `${particle.y}%`,
-							animationDelay: `${particle.delay}s`,
-							animationDuration: `${particle.duration}s`,
-						}}
-					/>
-				))}
-			</div>
-
-			{/* Main loading content */}
-			<div className="relative z-10 text-center space-y-2 px-8 max-w-lg">
-				{/* Elegant central loader */}
-				<div className="relative flex flex-col items-center justify-center">
-					<div className="relative">
-						{/* Subtle outer ring */}
-						<div className="absolute inset-0 rounded-full border border-border/50 w-32 h-32 left-1/2 top-1/2 -ml-16 -mt-16 animate-spin-elegant" />
-
-						{/* Inner container */}
-						<div className="relative bg-card/95 backdrop-blur-xs rounded-full p-8 border border-border shadow-lg w-24 h-24">
-							<Loader2 className="w-8 h-8 animate-spin text-foreground mx-auto" />
-						</div>
-
-						{/* Minimal orbiting dots */}
-						<div className="absolute inset-0 animate-spin-slow">
-							{Array.from({ length: 6 }).map((_, i) => (
-								<div
-									key={i}
-									className="absolute w-1.5 h-1.5 bg-muted-foreground rounded-full"
-									style={{
-										top: "50%",
-										left: "50%",
-										transform: `rotate(${i * 60}deg) translateX(40px) translateY(-50%)`,
-									}}
-								/>
-							))}
-						</div>
-					</div>
-				</div>
-
-				{/* Elegant loading message */}
-				<div className="space-y-4 pt-6">
-					<h2 className="text-xl font-semibold text-foreground">
+				{/* Text content */}
+				<div className="text-center space-y-3 max-w-md px-6">
+					<h2 className="text-lg font-medium text-foreground/90 tracking-wide">
 						{currentMessage}
-						{dots}
+						<span className="text-primary">{animatedDots}</span>
 					</h2>
 
-					{/* Clean progress bar */}
 					{progress > 0 && (
-						<div className="w-80 mx-auto space-y-2">
-							<div className="relative w-full bg-muted rounded-full h-1.5 overflow-hidden">
+						<div className="space-y-2">
+							<div className="h-1 w-64 mx-auto bg-muted/50 rounded-full overflow-hidden">
 								<div
-									className="h-full bg-foreground rounded-full transition-all duration-700 ease-out"
+									className="h-full bg-gradient-to-r from-blue-500 via-purple-500 to-pink-500 rounded-full transition-all duration-500 ease-out relative"
 									style={{ width: `${Math.min(progress, 100)}%` }}
-								/>
+								>
+									<div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/30 to-transparent animate-shimmer" />
+								</div>
 							</div>
-							<p className="text-xs text-muted-foreground">
-								{Math.round(progress)}% complete
+							<p className="text-xs text-muted-foreground font-mono">
+								{Math.round(progress)}%
 							</p>
 						</div>
 					)}
+
+					<p className="text-sm text-muted-foreground/70">
+						Setting up your workspace
+					</p>
 				</div>
 
-				{/* Simple subtitle */}
-				<p className="text-muted-foreground">
-					Please wait while we prepare everything
-				</p>
-
-				{/* Minimal loading indicators */}
-				<div className="flex justify-center space-x-1 pt-4">
-					{Array.from({ length: 3 }).map((_, i) => (
+				{/* Animated dots indicator */}
+				<div className="flex gap-1.5">
+					{[0, 1, 2, 3, 4].map((i) => (
 						<div
 							key={i}
-							className="w-1.5 h-1.5 bg-muted-foreground rounded-full animate-bounce-jump"
-							style={{ animationDelay: `${i * 0.15}s` }}
+							className="w-1.5 h-1.5 rounded-full bg-primary/60"
+							style={{
+								animation: "dot-wave 1.4s ease-in-out infinite",
+								animationDelay: `${i * 0.1}s`,
+							}}
 						/>
 					))}
 				</div>
 			</div>
 
 			<style jsx>{`
-                @keyframes bounce-jump {
-                    0%, 20%, 50%, 80%, 100% {
-                        transform: translateY(0);
-                        opacity: 0.6;
-                    }
-                    40% {
-                        transform: translateY(-12px);
-                        opacity: 1;
-                    }
-                    60% {
-                        transform: translateY(-6px);
-                        opacity: 0.8;
-                    }
-                }
+				@keyframes pulse-ring {
+					0% {
+						transform: scale(1);
+						opacity: 0.4;
+					}
+					100% {
+						transform: scale(1.5);
+						opacity: 0;
+					}
+				}
 
-                @keyframes float-orbital {
-                    0%, 100% { transform: translateY(0px) translateX(0px) rotate(0deg); }
-                    25% { transform: translateY(-20px) translateX(15px) rotate(90deg); }
-                    50% { transform: translateY(-40px) translateX(0px) rotate(180deg); }
-                    75% { transform: translateY(-20px) translateX(-15px) rotate(270deg); }
-                }
+				@keyframes dot-wave {
+					0%,
+					60%,
+					100% {
+						transform: translateY(0);
+						opacity: 0.4;
+					}
+					30% {
+						transform: translateY(-6px);
+						opacity: 1;
+					}
+				}
 
-                @keyframes float-background {
-                    0%, 100% { transform: translateY(0px) scale(1); opacity: 0.3; }
-                    50% { transform: translateY(-30px) scale(1.1); opacity: 0.5; }
-                }
+				@keyframes shimmer {
+					0% {
+						transform: translateX(-100%);
+					}
+					100% {
+						transform: translateX(100%);
+					}
+				}
 
-                @keyframes float-massive {
-                    0%, 100% { transform: translateY(0px) translateX(0px) rotate(0deg); }
-                    50% { transform: translateY(-60px) translateX(30px) rotate(180deg); }
-                }
+				.animate-shimmer {
+					animation: shimmer 1.5s ease-in-out infinite;
+				}
 
-                @keyframes float-massive-reverse {
-                    0%, 100% { transform: translateY(0px) translateX(0px) rotate(0deg); }
-                    50% { transform: translateY(60px) translateX(-30px) rotate(-180deg); }
-                }
-
-                @keyframes particle-trail {
-                    0% { transform: translateY(0px) scale(1); opacity: 0; }
-                    50% { transform: translateY(-100px) scale(1.5); opacity: 1; }
-                    100% { transform: translateY(-200px) scale(0.5); opacity: 0; }
-                }
-
-                @keyframes gradient-shift {
-                    0%, 100% { background-position: 0% 50%; }
-                    50% { background-position: 100% 50%; }
-                }
-
-                @keyframes mesh-drift {
-                    0%, 100% { transform: translate(0, 0); }
-                    50% { transform: translate(25px, -25px); }
-                }
-
-                @keyframes mesh-drift-reverse {
-                    0%, 100% { transform: translate(0, 0); }
-                    50% { transform: translate(-20px, 20px); }
-                }
-
-                @keyframes grid-float {
-                    0%, 100% { transform: translate(0, 0); }
-                    50% { transform: translate(15px, -15px); }
-                }
-
-                @keyframes spin-elegant {
-                    from { transform: rotate(0deg); }
-                    to { transform: rotate(360deg); }
-                }
-
-                @keyframes spin-slow {
-                    from { transform: rotate(0deg); }
-                    to { transform: rotate(360deg); }
-                }
-
-                @keyframes spin-reverse {
-                    from { transform: rotate(360deg); }
-                    to { transform: rotate(0deg); }
-                }
-
-                @keyframes spin-very-slow {
-                    from { transform: rotate(0deg); }
-                    to { transform: rotate(360deg); }
-                }
-
-                @keyframes pulse-gentle {
-                    0%, 100% { opacity: 0.3; transform: scale(1); }
-                    50% { opacity: 0.6; transform: scale(1.05); }
-                }
-
-                @keyframes pulse-wave {
-                    0%, 20%, 100% { opacity: 0.3; transform: scale(1); }
-                    50% { opacity: 1; transform: scale(1.2); }
-                }
-
-                @keyframes shimmer {
-                    0% { transform: translateX(-100%); }
-                    100% { transform: translateX(100%); }
-                }
-
-                .animate-bounce-jump {
-                    animation: bounce-jump 1.2s ease-in-out infinite;
-                }
-
-                .animate-float-orbital {
-                    animation: float-orbital 8s ease-in-out infinite;
-                }
-
-                .animate-float-background {
-                    animation: float-background 6s ease-in-out infinite;
-                }
-
-                .animate-float-massive {
-                    animation: float-massive 12s ease-in-out infinite;
-                }
-
-                .animate-float-massive-reverse {
-                    animation: float-massive-reverse 15s ease-in-out infinite;
-                }
-
-                .animate-particle-trail {
-                    animation: particle-trail 4s ease-out infinite;
-                }
-
-                .animate-gradient-shift {
-                    animation: gradient-shift 8s ease infinite;
-                }
-
-                .animate-mesh-drift {
-                    animation: mesh-drift 10s ease-in-out infinite;
-                }
-
-                .animate-mesh-drift-reverse {
-                    animation: mesh-drift-reverse 12s ease-in-out infinite;
-                }
-
-                .animate-grid-float {
-                    animation: grid-float 8s ease-in-out infinite;
-                }
-
-                .animate-spin-elegant {
-                    animation: spin-elegant 15s linear infinite;
-                }
-
-                .animate-spin-slow {
-                    animation: spin-slow 10s linear infinite;
-                }
-
-                .animate-spin-reverse {
-                    animation: spin-reverse 8s linear infinite;
-                }
-
-                .animate-spin-very-slow {
-                    animation: spin-very-slow 20s linear infinite;
-                }
-
-                .animate-pulse-gentle {
-                    animation: pulse-gentle 4s ease-in-out infinite;
-                }
-
-                .animate-pulse-wave {
-                    animation: pulse-wave 1.8s ease-in-out infinite;
-                }
-
-                .animate-shimmer {
-                    animation: shimmer 2s ease-in-out infinite;
-                }
-            `}</style>
+				.animate-pulse-slow {
+					animation: pulse 4s ease-in-out infinite;
+				}
+			`}</style>
 		</div>
 	);
 }

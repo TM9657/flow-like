@@ -30,6 +30,17 @@ export interface IConfigInterfaceProps {
 	onConfigUpdate: (payload: IEventPayload) => void;
 }
 
+/** Where a sink can run */
+export type SinkAvailability = "local" | "remote" | "both";
+
+/** Sink availability configuration */
+export interface ISinkConfig {
+	/** Where this sink can run */
+	availability: SinkAvailability;
+	/** Description for users about execution context */
+	description?: string;
+}
+
 export type IEventMapping = Record<
 	string,
 	{
@@ -45,5 +56,8 @@ export type IEventMapping = Record<
 			(props: IConfigInterfaceProps) => JSX.Element | null
 		>;
 		withSink: string[];
+		/** Sink availability map - if not specified, defaults to "local" */
+		sinkAvailability?: Record<string, ISinkConfig>;
 	}
 >;
+

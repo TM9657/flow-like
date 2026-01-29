@@ -6,12 +6,18 @@ import {
 	ChevronRight,
 	Circle,
 	Clock,
+	History,
 	ListTodo,
 	Loader2,
 	XCircle,
 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { formatDuration } from "../../../lib/date";
+import {
+	Collapsible,
+	CollapsibleContent,
+	CollapsibleTrigger,
+} from "../../ui/collapsible";
 import type { IPlanStep, PlanStepStatus } from "./chat-db";
 import { ReasoningViewer } from "./reasoning-viewer";
 
@@ -19,6 +25,8 @@ interface PlanStepsProps {
 	steps: IPlanStep[];
 	currentStepId?: string;
 }
+
+const VISIBLE_STEPS_COUNT = 3;
 
 function getStatusIcon(status: PlanStepStatus) {
 	switch (status) {
@@ -78,11 +86,93 @@ function getStatusBadge(status: PlanStepStatus) {
 	}
 }
 
+interface StepItemProps {
+	step: IPlanStep;
+	index: number;
+	isActive: boolean;
+	isExpanded: boolean;
+	onToggle: (stepId: string) => void;
+}
+
+function StepItem({ step, index, isActive, isExpanded, onToggle }: StepItemProps) {
+	const hasReasoning = step.reasoning && step.reasoning.trim() !== "";
+	const duration =
+		step.startTime && step.endTime
+			? formatDuration((step.endTime - step.startTime) * 1000)
+			: null;
+
+	return (
+		<div
+			className={`rounded-lg border transition-all ${getStatusColor(step.status, isActive)}`}
+		>
+			<button
+				onClick={() => hasReasoning && onToggle(step.id)}
+				type="button"
+				className={`w-full flex items-start gap-3 p-3 text-left transition-colors ${
+					hasReasoning ? "hover:bg-muted/30 cursor-pointer" : "cursor-default"
+				}`}
+			>
+				<div className="shrink-0 mt-0.5">{getStatusIcon(step.status)}</div>
+				<div className="flex-1 min-w-0">
+					<div className="flex items-start justify-between gap-2 mb-1">
+						<div className="flex-1 min-w-0">
+							<div className="flex items-center gap-2 mb-1">
+								<h4 className="text-sm font-medium">{step.title}</h4>
+								{isActive && (
+									<span className="px-2 py-0.5 text-[10px] rounded-full bg-primary/30 text-primary font-medium animate-pulse">
+										ACTIVE
+									</span>
+								)}
+							</div>
+							{step.description && (
+								<p className="text-xs text-muted-foreground">
+									{step.description}
+								</p>
+							)}
+						</div>
+						<div className="flex items-center gap-2 shrink-0">
+							<span className="text-[10px] text-muted-foreground font-mono">
+								#{index + 1}
+							</span>
+							{getStatusBadge(step.status)}
+						</div>
+					</div>
+					{duration && (
+						<div className="flex items-center gap-1 mt-1">
+							<Clock className="w-3 h-3 text-muted-foreground" />
+							<span className="text-xs text-muted-foreground">{duration}</span>
+						</div>
+					)}
+				</div>
+				{hasReasoning && (
+					<div className="shrink-0 mt-1">
+						{isExpanded ? (
+							<ChevronDown className="w-4 h-4 text-muted-foreground" />
+						) : (
+							<ChevronRight className="w-4 h-4 text-muted-foreground" />
+						)}
+					</div>
+				)}
+			</button>
+			{isExpanded && hasReasoning && (
+				<div className="px-3 pb-3 pt-0">
+					<ReasoningViewer
+						reasoning={step.reasoning!}
+						defaultExpanded={true}
+						compact={true}
+					/>
+				</div>
+			)}
+		</div>
+	);
+}
+
 export function PlanSteps({ steps, currentStepId }: PlanStepsProps) {
 	// Keep current step expanded, but allow all steps to be toggled
 	const [expandedSteps, setExpandedSteps] = useState<Set<string>>(
 		new Set(currentStepId ? [currentStepId] : []),
 	);
+	const [showOlderSteps, setShowOlderSteps] = useState(false);
 
 	// Auto-expand current step when it changes
 	useEffect(() => {
@@ -97,6 +187,19 @@ export function PlanSteps({ steps, currentStepId }: PlanStepsProps) {
 			});
 		}
 	}, [currentStepId]);
+
+	// Split steps into visible (last 3) and older steps
+	const { visibleSteps, olderSteps, olderStepsStartIndex } = useMemo(() => {
+		if (steps.length <= VISIBLE_STEPS_COUNT) {
+			return { visibleSteps: steps, olderSteps: [], olderStepsStartIndex: 0 };
+		}
+		const cutoff = steps.length - VISIBLE_STEPS_COUNT;
+		return {
+			visibleSteps: steps.slice(cutoff),
+			olderSteps: steps.slice(0, cutoff),
+			olderStepsStartIndex: 0,
+		};
+	}, [steps]);
 
 	if (!steps || steps.length === 0) {
 		return null;
@@ -136,89 +239,45 @@ export function PlanSteps({ steps, currentStepId }: PlanStepsProps) {
 				</div>
 			</div>
 			<div className="p-3 space-y-2">
-				{steps.map((step, index) => {
-					const isExpanded = expandedSteps.has(step.id);
-					const isActive = currentStepId === step.id;
-					const hasReasoning = step.reasoning && step.reasoning.trim() !== "";
-					const duration =
-						step.startTime && step.endTime
-							? formatDuration((step.endTime - step.startTime) * 1000)
-							: null;
-
-					return (
-						<div
-							key={step.id}
-							className={`rounded-lg border transition-all ${getStatusColor(
-								step.status,
-								isActive,
-							)}`}
-						>
-							<button
-								onClick={() => hasReasoning && toggleStep(step.id)}
-								className={`w-full flex items-start gap-3 p-3 text-left transition-colors ${
-									hasReasoning
-										? "hover:bg-muted/30 cursor-pointer"
-										: "cursor-default"
-								}`}
-							>
-								<div className="shrink-0 mt-0.5">
-									{getStatusIcon(step.status)}
-								</div>
-								<div className="flex-1 min-w-0">
-									<div className="flex items-start justify-between gap-2 mb-1">
-										<div className="flex-1 min-w-0">
-											<div className="flex items-center gap-2 mb-1">
-												<h4 className="text-sm font-medium">{step.title}</h4>
-												{isActive && (
-													<span className="px-2 py-0.5 text-[10px] rounded-full bg-primary/30 text-primary font-medium animate-pulse">
-														ACTIVE
-													</span>
-												)}
-											</div>
-											{step.description && (
-												<p className="text-xs text-muted-foreground">
-													{step.description}
-												</p>
-											)}
-										</div>
-										<div className="flex items-center gap-2 shrink-0">
-											<span className="text-[10px] text-muted-foreground font-mono">
-												#{index + 1}
-											</span>
-											{getStatusBadge(step.status)}
-										</div>
-									</div>
-									{duration && (
-										<div className="flex items-center gap-1 mt-1">
-											<Clock className="w-3 h-3 text-muted-foreground" />
-											<span className="text-xs text-muted-foreground">
-												{duration}
-											</span>
-										</div>
-									)}
-								</div>
-								{hasReasoning && (
-									<div className="shrink-0 mt-1">
-										{isExpanded ? (
-											<ChevronDown className="w-4 h-4 text-muted-foreground" />
-										) : (
-											<ChevronRight className="w-4 h-4 text-muted-foreground" />
-										)}
-									</div>
-								)}
-							</button>
-							{isExpanded && hasReasoning && (
-								<div className="px-3 pb-3 pt-0">
-									<ReasoningViewer
-										reasoning={step.reasoning!}
-										defaultExpanded={true}
-										compact={true}
+				{/* Collapsible older steps section */}
+				{olderSteps.length > 0 && (
+					<Collapsible open={showOlderSteps} onOpenChange={setShowOlderSteps}>
+						<CollapsibleTrigger className="w-full flex items-center gap-2 p-2 rounded-lg border border-dashed border-muted-foreground/30 hover:bg-muted/30 transition-colors text-left">
+							<History className="w-4 h-4 text-muted-foreground" />
+							<span className="text-xs text-muted-foreground flex-1">
+								{olderSteps.length} earlier step{olderSteps.length !== 1 ? "s" : ""}
+							</span>
+							<ChevronDown
+								className={`w-4 h-4 text-muted-foreground transition-transform ${showOlderSteps ? "rotate-180" : ""}`}
+							/>
+						</CollapsibleTrigger>
+						<CollapsibleContent>
+							<div className="space-y-2 mt-2">
+								{olderSteps.map((step, index) => (
+									<StepItem
+										key={step.id}
+										step={step}
+										index={olderStepsStartIndex + index}
+										isActive={currentStepId === step.id}
+										isExpanded={expandedSteps.has(step.id)}
+										onToggle={toggleStep}
 									/>
-								</div>
-							)}
-						</div>
-					);
-				})}
+								))}
+							</div>
+						</CollapsibleContent>
+					</Collapsible>
+				)}
+				{/* Always visible recent steps */}
+				{visibleSteps.map((step, index) => (
+					<StepItem
+						key={step.id}
+						step={step}
+						index={olderSteps.length + index}
+						isActive={currentStepId === step.id}
+						isExpanded={expandedSteps.has(step.id)}
+						onToggle={toggleStep}
+					/>
+				))}
 			</div>
 		</div>
 	);

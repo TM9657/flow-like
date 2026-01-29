@@ -1035,7 +1035,6 @@ mod tests {
             app_state: Some(state),
             widget_ids: vec![],
             page_ids: vec![],
-            route_mappings: HashMap::new(),
         }
     }
 

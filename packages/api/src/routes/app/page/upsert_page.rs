@@ -57,7 +57,6 @@ pub async fn upsert_page(
             description: Set(page.title.clone()),
             app_id: Set(app_id.to_string()),
             board_id: Set(page.board_id.clone()),
-            route: Set(Some(page.route.clone())),
             version: Set(page.version.map(|v| format!("{}.{}.{}", v.0, v.1, v.2))),
             created_at: Set(chrono::Utc::now().naive_utc()),
             updated_at: Set(chrono::Utc::now().naive_utc()),
@@ -78,7 +77,6 @@ pub async fn upsert_page(
             description: Set(page.title.clone()),
             app_id: Set(app_id.to_string()),
             board_id: Set(page.board_id.clone()),
-            route: Set(Some(page.route.clone())),
             version: Set(page.version.map(|v| format!("{}.{}.{}", v.0, v.1, v.2))),
             updated_at: Set(chrono::Utc::now().naive_utc()),
             ..Default::default()

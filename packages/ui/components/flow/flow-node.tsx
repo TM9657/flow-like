@@ -7,6 +7,7 @@ import {
 	type NodeProps,
 	Position,
 	useReactFlow,
+	useUpdateNodeInternals,
 } from "@xyflow/react";
 import {
 	BanIcon,
@@ -158,6 +159,7 @@ const FlowNodeInner = memo(
 		const div = useRef<HTMLDivElement>(null);
 		const reactFlow = useReactFlow();
 		const { getNode } = useReactFlow();
+		const updateNodeInternals = useUpdateNodeInternals();
 		const remoteSelections = props.data.remoteSelections ?? [];
 		const displayedRemoteSelections = useMemo(
 			() => remoteSelections.slice(0, 3),
@@ -222,14 +224,6 @@ const FlowNodeInner = memo(
 			if (div.current)
 				div.current.style.height = `calc(${height * 15}px + 1.25rem + 0.5rem)`;
 		}, [isReroute, inputPins, outputPins]);
-
-		useEffect(() => {
-			parsePins(Object.values(props.data.node?.pins || []));
-		}, [
-			props.data.node.pins,
-			props.positionAbsoluteX,
-			props.positionAbsoluteY,
-		]);
 
 		// Execution state is now computed directly from the selector above
 
@@ -442,8 +436,18 @@ const FlowNodeInner = memo(
 				setOutputPins(outputPins);
 				setIsExec(isExec);
 			},
-			[props.data.node.pins],
+			[addPin, sortPins, props.data.node],
 		);
+
+		// Parse pins when node pins change
+		useEffect(() => {
+			parsePins(Object.values(props.data.node?.pins || []));
+			// Update React Flow internals when pins change (handles may have changed)
+			updateNodeInternals(props.id);
+		}, [
+			props.data.node.pins,
+			props.id,
+		]);
 
 		function isPinAction(pin: IPin | IPinAction): pin is IPinAction {
 			return typeof (pin as IPinAction).onAction === "function";

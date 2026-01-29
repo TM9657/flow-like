@@ -97,6 +97,18 @@ impl DataFusionContext {
     }
 }
 
+/// Context management strategy for infinite context mode
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, Default, PartialEq)]
+pub enum ContextManagementMode {
+    /// Sliding window truncation - removes oldest messages to fit budget.
+    /// Fast, deterministic, no extra API costs. May lose important early context.
+    #[default]
+    Truncate,
+    /// LLM summarization - compresses old messages into a summary.
+    /// Preserves key information but adds latency and API cost.
+    Summarize,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 pub struct Agent {
     /// The LLM model id backing this agent
@@ -137,6 +149,22 @@ pub struct Agent {
     /// Multiple sessions can be added to give the agent access to different data sources
     #[serde(default)]
     pub datafusion_contexts: Vec<DataFusionContext>,
+
+    /// Enable infinite context mode with automatic context window management.
+    /// When enabled, applies the selected context management strategy.
+    #[serde(default)]
+    pub infinite_context: bool,
+
+    /// Strategy for managing context when it exceeds the token budget.
+    /// - Truncate: Sliding window, removes oldest messages (fast, no extra cost)
+    /// - Summarize: LLM compresses old messages (preserves info, adds latency/cost)
+    #[serde(default)]
+    pub context_management_mode: ContextManagementMode,
+
+    /// Maximum tokens to retain when truncating history in infinite context mode.
+    /// Defaults to 32000 tokens if not specified. Only used when infinite_context is true.
+    #[serde(default)]
+    pub max_context_tokens: Option<u32>,
 }
 
 impl Agent {
@@ -153,6 +181,9 @@ impl Agent {
             thinking_enabled: false,
             history: None,
             datafusion_contexts: Vec::new(),
+            infinite_context: false,
+            context_management_mode: ContextManagementMode::default(),
+            max_context_tokens: None,
         }
     }
 
@@ -181,6 +212,16 @@ impl Agent {
         self.datafusion_contexts.push(context);
     }
 
+    /// Enable infinite context mode with optional token limit
+    pub fn enable_infinite_context(&mut self, max_tokens: Option<u32>) {
+        self.infinite_context = true;
+        self.max_context_tokens = max_tokens;
+    }
+
+    /// Set the context management mode (truncate vs summarize)
+    pub fn set_context_management_mode(&mut self, mode: ContextManagementMode) {
+        self.context_management_mode = mode;
+    }
     /// Set the system prompt
     pub fn set_system_prompt(&mut self, prompt: String) {
         self.system_prompt = Some(prompt);

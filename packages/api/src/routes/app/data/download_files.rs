@@ -28,14 +28,21 @@ pub async fn download_files(
 
     let sub = user.sub()?;
 
-    let project_dir = state
+    // Get scoped credentials first to check the provider type
+    let scoped_creds = state
         .scoped_credentials(
             &sub,
             &app_id,
             crate::credentials::CredentialsAccess::ReadApp,
         )
         .await?;
-    let project_dir = project_dir.to_store(false).await?;
+
+    // Azure SAS tokens cannot generate new signed URLs, so use master credentials for Azure
+    let project_dir = if scoped_creds.as_ref().is_azure() {
+        state.master_credentials().await?.to_store(false).await?
+    } else {
+        scoped_creds.to_store(false).await?
+    };
 
     let mut urls = Vec::with_capacity(payload.prefixes.len());
 

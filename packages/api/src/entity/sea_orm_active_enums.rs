@@ -224,14 +224,6 @@ pub enum UserTier {
     Enterprise,
 }
 #[derive(Debug, Clone, PartialEq, Eq, EnumIter, DeriveActiveEnum, Serialize, Deserialize)]
-#[sea_orm(rs_type = "String", db_type = "Enum", enum_name = "RouteTargetType")]
-pub enum RouteTargetType {
-    #[sea_orm(string_value = "PAGE")]
-    Page,
-    #[sea_orm(string_value = "EVENT")]
-    Event,
-}
-#[derive(Debug, Clone, PartialEq, Eq, EnumIter, DeriveActiveEnum, Serialize, Deserialize)]
 #[sea_orm(rs_type = "String", db_type = "Enum", enum_name = "Visibility")]
 pub enum Visibility {
     #[sea_orm(string_value = "PUBLIC")]

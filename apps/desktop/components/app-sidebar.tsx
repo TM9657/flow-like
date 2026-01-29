@@ -28,6 +28,7 @@ import {
 	DropdownMenuSeparator,
 	DropdownMenuShortcut,
 	DropdownMenuTrigger,
+	FlowBackground,
 	GlobalPermission,
 	IBitTypes,
 	Input,
@@ -137,23 +138,23 @@ const data = {
 				// },
 			],
 		},
-		{
-			title: "Developer",
-			url: "/settings/registry",
-			icon: Code2Icon,
-			isActive: false,
-			permission: false,
-			items: [
-				{
-					title: "Installed",
-					url: "/settings/registry/installed",
-				},
-				{
-					title: "Explore",
-					url: "/settings/registry/explore",
-				},
-			],
-		},
+		// {
+		// 	title: "Developer",
+		// 	url: "/settings/registry",
+		// 	icon: Code2Icon,
+		// 	isActive: false,
+		// 	permission: false,
+		// 	items: [
+		// 		{
+		// 			title: "Installed",
+		// 			url: "/settings/registry/installed",
+		// 		},
+		// 		{
+		// 			title: "Explore",
+		// 			url: "/settings/registry/explore",
+		// 		},
+		// 	],
+		// },
 		// {
 		// 	title: "Documentation",
 		// 	url: "https://docs.flow-like.com/",
@@ -256,8 +257,10 @@ export function AppSidebar({
 			<main className="w-full h-dvh flex flex-col overflow-hidden">
 				<MobileHeaderProvider>
 					<MobileHeader />
-					<SidebarInset className="bg-gradient-to-br from-background via-background to-muted/20 flex flex-col flex-1 min-h-0 h-full overflow-hidden">
-						{children}
+					<SidebarInset className="relative flex flex-col flex-1 min-h-0 h-full overflow-hidden">
+						<FlowBackground intensity="subtle" interactive className="flex flex-col flex-1 min-h-0">
+							{children}
+						</FlowBackground>
 					</SidebarInset>
 				</MobileHeaderProvider>
 			</main>
@@ -1001,7 +1004,13 @@ export function NavUser({
 							<DropdownMenuItem
 								className="gap-2"
 								onClick={async () => {
-									await auth?.signinRedirect();
+									try {
+										console.log("Signing in...");
+										await auth?.signinRedirect();
+										console.log("Sign-in initiated.");
+									} catch (error) {
+										console.error("Sign-in failed:", error);
+									}
 								}}
 							>
 								<LogInIcon className="size-4" />

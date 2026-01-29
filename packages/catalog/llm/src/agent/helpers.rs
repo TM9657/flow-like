@@ -1,4 +1,4 @@
-use crate::generative::agent::Agent;
+use crate::generative::agent::{Agent, ContextManagementMode};
 /// # Agent Execution Helpers
 /// This module contains reusable logic for executing agents with tools and streaming.
 /// Extracted from simple.rs to be shared across multiple agent nodes.
@@ -31,6 +31,8 @@ use rig::message::{AssistantContent, ToolCall as RigToolCall};
 #[cfg(feature = "execute")]
 use rig::streaming::StreamedAssistantContent;
 #[cfg(feature = "execute")]
+use rig::tools::ThinkTool;
+#[cfg(feature = "execute")]
 use rmcp::{
     ServiceExt,
     model::{
@@ -38,6 +40,301 @@ use rmcp::{
     },
 };
 use std::{collections::HashMap, sync::Arc};
+
+const DEFAULT_MAX_CONTEXT_TOKENS: u32 = 32000;
+const CHARS_PER_TOKEN_ESTIMATE: usize = 4;
+
+/// Estimate token count for a message using character-based heuristic.
+/// Most LLMs average ~4 characters per token for English text.
+#[cfg(feature = "execute")]
+fn estimate_message_tokens(msg: &rig::message::Message) -> usize {
+    let char_count: usize = match msg {
+        rig::message::Message::User { content } => content
+            .iter()
+            .map(|c| match c {
+                rig::message::UserContent::Text(t) => t.text.len(),
+                rig::message::UserContent::ToolResult(tr) => tr
+                    .content
+                    .iter()
+                    .map(|trc| match trc {
+                        rig::message::ToolResultContent::Text(t) => t.text.len(),
+                        _ => 50,
+                    })
+                    .sum(),
+                _ => 100,
+            })
+            .sum(),
+        rig::message::Message::Assistant { content, .. } => content
+            .iter()
+            .map(|c| match c {
+                AssistantContent::Text(t) => t.text.len(),
+                AssistantContent::ToolCall(tc) => {
+                    tc.function.name.len() + tc.function.arguments.to_string().len()
+                }
+                _ => 50,
+            })
+            .sum(),
+    };
+    (char_count / CHARS_PER_TOKEN_ESTIMATE).max(1) + 4 // +4 for message overhead
+}
+
+/// Truncate message history using sliding window to fit within token budget.
+/// Preserves most recent messages while keeping tool call/result pairs intact.
+/// Returns (truncated_history, truncated_count) where truncated_count is the number of removed messages.
+#[cfg(feature = "execute")]
+fn truncate_history_to_budget(
+    history: Vec<rig::message::Message>,
+    max_tokens: u32,
+) -> (Vec<rig::message::Message>, usize) {
+    if history.is_empty() {
+        return (history, 0);
+    }
+
+    let total_tokens: usize = history.iter().map(estimate_message_tokens).sum();
+
+    if total_tokens <= max_tokens as usize {
+        return (history, 0);
+    }
+
+    let mut result = Vec::new();
+    let mut current_tokens: usize = 0;
+    let target_tokens = max_tokens as usize;
+
+    // Track tool call IDs to keep pairs together
+    let mut required_tool_ids: std::collections::HashSet<String> = std::collections::HashSet::new();
+
+    // First pass: from end, collect messages until budget
+    for msg in history.iter().rev() {
+        let msg_tokens = estimate_message_tokens(msg);
+
+        // Check for tool results - we need the corresponding tool call
+        if let rig::message::Message::User { content } = msg {
+            for c in content.iter() {
+                if let rig::message::UserContent::ToolResult(tr) = c {
+                    required_tool_ids.insert(tr.id.clone());
+                }
+            }
+        }
+
+        if current_tokens + msg_tokens <= target_tokens {
+            result.push(msg.clone());
+            current_tokens += msg_tokens;
+
+            // Track tool calls so we don't orphan results
+            if let rig::message::Message::Assistant { content, .. } = msg {
+                for c in content.iter() {
+                    if let AssistantContent::ToolCall(tc) = c {
+                        required_tool_ids.remove(&tc.id);
+                    }
+                }
+            }
+        } else if !required_tool_ids.is_empty() {
+            // Include anyway if we have orphaned tool results
+            if let rig::message::Message::Assistant { content, .. } = msg {
+                let has_required = content.iter().any(|c| {
+                    if let AssistantContent::ToolCall(tc) = c {
+                        required_tool_ids.contains(&tc.id)
+                    } else {
+                        false
+                    }
+                });
+                if has_required {
+                    result.push(msg.clone());
+                    current_tokens += msg_tokens;
+                    for c in content.iter() {
+                        if let AssistantContent::ToolCall(tc) = c {
+                            required_tool_ids.remove(&tc.id);
+                        }
+                    }
+                    continue;
+                }
+            }
+            break;
+        } else {
+            break;
+        }
+    }
+
+    result.reverse();
+
+    let truncated_count = history.len() - result.len();
+    (result, truncated_count)
+}
+
+/// Summarize old messages using LLM to compress context while preserving key information.
+/// Returns (updated_history, summarized_count) where summarized_count is messages compressed.
+#[cfg(feature = "execute")]
+async fn summarize_history_to_budget(
+    context: &mut ExecutionContext,
+    agent: &Agent,
+    history: Vec<rig::message::Message>,
+    max_tokens: u32,
+) -> flow_like_types::Result<(Vec<rig::message::Message>, usize)> {
+    if history.is_empty() {
+        return Ok((history, 0));
+    }
+
+    let total_tokens: usize = history.iter().map(estimate_message_tokens).sum();
+
+    if total_tokens <= max_tokens as usize {
+        return Ok((history, 0));
+    }
+
+    // Find the split point: keep recent messages, summarize older ones
+    // We want to keep ~60% budget for recent, ~40% for summary
+    let recent_budget = (max_tokens as usize * 60) / 100;
+    let mut recent_tokens: usize = 0;
+    let mut split_idx = history.len();
+
+    for (idx, msg) in history.iter().enumerate().rev() {
+        let msg_tokens = estimate_message_tokens(msg);
+        if recent_tokens + msg_tokens > recent_budget {
+            split_idx = idx + 1;
+            break;
+        }
+        recent_tokens += msg_tokens;
+    }
+
+    // If split would leave nothing to summarize, fall back to truncation
+    if split_idx <= 1 {
+        return Ok(truncate_history_to_budget(history, max_tokens));
+    }
+
+    let (old_messages, recent_messages) = history.split_at(split_idx);
+
+    if old_messages.is_empty() {
+        return Ok((recent_messages.to_vec(), 0));
+    }
+
+    // Convert old messages to text for summarization
+    let mut conversation_text = String::new();
+    for msg in old_messages {
+        match msg {
+            rig::message::Message::User { content } => {
+                conversation_text.push_str("User: ");
+                for c in content.iter() {
+                    match c {
+                        rig::message::UserContent::Text(t) => {
+                            conversation_text.push_str(&t.text);
+                        }
+                        rig::message::UserContent::ToolResult(tr) => {
+                            conversation_text.push_str(&format!("[Tool Result {}]", tr.id));
+                        }
+                        _ => {}
+                    }
+                }
+                conversation_text.push('\n');
+            }
+            rig::message::Message::Assistant { content, .. } => {
+                conversation_text.push_str("Assistant: ");
+                for c in content.iter() {
+                    match c {
+                        AssistantContent::Text(t) => {
+                            conversation_text.push_str(&t.text);
+                        }
+                        AssistantContent::ToolCall(tc) => {
+                            conversation_text
+                                .push_str(&format!("[Called tool: {}]", tc.function.name));
+                        }
+                        _ => {}
+                    }
+                }
+                conversation_text.push('\n');
+            }
+        }
+    }
+
+    // Use the agent's model to generate a summary
+    let summary_prompt = format!(
+        "Summarize the following conversation history concisely, preserving key facts, decisions, and context that would be important for continuing the conversation. Focus on: user goals, important information shared, actions taken, and outcomes.\n\n---\n{}\n---\n\nProvide a concise summary:",
+        conversation_text
+    );
+
+    let summary = match agent.model.agent(context, &None).await {
+        Ok(agent_builder) => {
+            let summary_agent = agent_builder
+                .preamble(
+                    "You are a conversation summarizer. Be concise but preserve key information.",
+                )
+                .build();
+
+            match summary_agent.completion(summary_prompt, vec![]).await {
+                Ok(request) => match request.send().await {
+                    Ok(response) => {
+                        // Extract text from response.choice
+                        let mut text = String::new();
+                        for content in response.choice {
+                            if let AssistantContent::Text(t) = content {
+                                text.push_str(&t.text);
+                            }
+                        }
+                        if text.is_empty() {
+                            context.log_message(
+                                "Summary response was empty, falling back to truncation",
+                                LogLevel::Warn,
+                            );
+                            return Ok(truncate_history_to_budget(history, max_tokens));
+                        }
+                        text
+                    }
+                    Err(e) => {
+                        context.log_message(
+                            &format!("Failed to get summary response: {}", e),
+                            LogLevel::Warn,
+                        );
+                        // Fall back to truncation
+                        return Ok(truncate_history_to_budget(history, max_tokens));
+                    }
+                },
+                Err(e) => {
+                    context.log_message(
+                        &format!("Failed to create summary completion: {}", e),
+                        LogLevel::Warn,
+                    );
+                    return Ok(truncate_history_to_budget(history, max_tokens));
+                }
+            }
+        }
+        Err(e) => {
+            context.log_message(
+                &format!("Failed to create summary agent: {}", e),
+                LogLevel::Warn,
+            );
+            return Ok(truncate_history_to_budget(history, max_tokens));
+        }
+    };
+
+    // Create a summary message to prepend
+    let summary_msg = rig::message::Message::User {
+        content: OneOrMany::one(rig::message::UserContent::Text(rig::message::Text {
+            text: format!("[Previous conversation summary: {}]", summary),
+        })),
+    };
+
+    // Combine: summary + recent messages
+    let mut result = vec![summary_msg];
+    result.extend(recent_messages.iter().cloned());
+
+    let summarized_count = old_messages.len();
+    Ok((result, summarized_count))
+}
+
+/// Manage context budget using the appropriate strategy (truncate or summarize).
+/// Returns (managed_history, affected_count).
+#[cfg(feature = "execute")]
+async fn manage_context_budget(
+    context: &mut ExecutionContext,
+    agent: &Agent,
+    history: Vec<rig::message::Message>,
+    max_tokens: u32,
+) -> flow_like_types::Result<(Vec<rig::message::Message>, usize)> {
+    match agent.context_management_mode {
+        ContextManagementMode::Summarize => {
+            summarize_history_to_budget(context, agent, history, max_tokens).await
+        }
+        ContextManagementMode::Truncate => Ok(truncate_history_to_budget(history, max_tokens)),
+    }
+}
 
 /// Generate OpenAI function call schema from a referenced function node.
 /// Returns a Tool definition with function name, description, and parameter schema.
@@ -522,9 +819,18 @@ pub async fn execute_agent_streaming(
         for (tools, peer) in tool_iter {
             simple_builder = simple_builder.rmcp_tools(tools, peer);
         }
+        // Add ThinkTool if thinking is enabled for the agent
+        if agent.thinking_enabled {
+            simple_builder = simple_builder.tool(ThinkTool);
+        }
         simple_builder.build()
     } else {
-        agent_builder.build()
+        // No MCP tools, check if we need to add ThinkTool
+        if agent.thinking_enabled {
+            agent_builder.tool(ThinkTool).build()
+        } else {
+            agent_builder.build()
+        }
     };
 
     // Build tool definitions from both:
@@ -564,15 +870,89 @@ pub async fn execute_agent_streaming(
         .extract_prompt_and_history()
         .map_err(|e| anyhow!("Failed to convert history: {e}"))?;
 
-    let mut current_history: Vec<rig::message::Message> = history_msgs
-        .into_iter()
-        .filter(|msg| match msg {
-            rig::message::Message::User { content } => !content
+    // Filter out tool-related messages to start fresh
+    // We need to ensure tool results always follow their corresponding tool calls
+    // The safest approach is to remove all tool-related messages from input history
+    let mut current_history: Vec<rig::message::Message> = Vec::new();
+    let mut pending_tool_call_ids: std::collections::HashSet<String> =
+        std::collections::HashSet::new();
+
+    for msg in history_msgs {
+        match &msg {
+            rig::message::Message::User { content } => {
+                // Check if this is a tool result
+                let has_tool_result = content
+                    .iter()
+                    .any(|c| matches!(c, rig::message::UserContent::ToolResult(_)));
+                if has_tool_result {
+                    // Only include if we have a pending tool call for it
+                    for c in content.iter() {
+                        if let rig::message::UserContent::ToolResult(tr) = c {
+                            if pending_tool_call_ids.remove(&tr.id) {
+                                current_history.push(msg.clone());
+                                break;
+                            }
+                        }
+                    }
+                } else {
+                    current_history.push(msg);
+                }
+            }
+            rig::message::Message::Assistant { content, .. } => {
+                // Check if this message has tool calls
+                let mut has_tool_calls = false;
+                for c in content.iter() {
+                    if let rig::message::AssistantContent::ToolCall(tc) = c {
+                        has_tool_calls = true;
+                        pending_tool_call_ids.insert(tc.id.clone());
+                    }
+                }
+                if has_tool_calls {
+                    current_history.push(msg);
+                } else {
+                    current_history.push(msg);
+                }
+            }
+        }
+    }
+
+    // Remove any trailing assistant messages with tool calls that don't have results
+    // (iterate backwards and remove until we find a non-tool-call message)
+    while let Some(last) = current_history.last() {
+        if let rig::message::Message::Assistant { content, .. } = last {
+            let has_tool_calls = content
                 .iter()
-                .any(|c| matches!(c, rig::message::UserContent::ToolResult(_))),
-            _ => true,
-        })
-        .collect();
+                .any(|c| matches!(c, rig::message::AssistantContent::ToolCall(_)));
+            if has_tool_calls {
+                current_history.pop();
+                continue;
+            }
+        }
+        break;
+    }
+
+    // Apply initial context management if infinite context mode is enabled
+    let max_context_tokens = agent
+        .max_context_tokens
+        .unwrap_or(DEFAULT_MAX_CONTEXT_TOKENS);
+    if agent.infinite_context {
+        let (managed, count) =
+            manage_context_budget(context, agent, current_history, max_context_tokens).await?;
+        current_history = managed;
+        if count > 0 {
+            let mode_name = match agent.context_management_mode {
+                ContextManagementMode::Summarize => "summarized",
+                ContextManagementMode::Truncate => "truncated",
+            };
+            context.log_message(
+                &format!(
+                    "Infinite context: {} {} messages from initial history",
+                    mode_name, count
+                ),
+                LogLevel::Debug,
+            );
+        }
+    }
 
     let mut full_history = history.clone();
     let mut iteration = 0;
@@ -604,6 +984,13 @@ pub async fn execute_agent_streaming(
         let mut response_obj = Response::new();
         response_obj.model = Some(model_display_name.clone());
 
+        // Track tool call deltas to accumulate them into complete tool calls
+        // Key: tool call ID, Value: (name, arguments)
+        let mut tool_call_deltas: HashMap<String, (String, String)> = HashMap::new();
+        // Track IDs of complete tool calls to avoid duplicates
+        let mut complete_tool_call_ids: std::collections::HashSet<String> =
+            std::collections::HashSet::new();
+
         while let Some(item) = stream.next().await {
             let content = item.map_err(|e| anyhow!("Streaming error: {}", e))?;
 
@@ -618,12 +1005,23 @@ pub async fn execute_agent_streaming(
                     let chunk = ResponseChunk::from_tool_call(&tool_call, &model_display_name);
                     response_obj.push_chunk(chunk.clone());
                     stream_state.emit_chunk(context, &chunk).await?;
+                    // Track this ID so we don't duplicate from deltas
+                    complete_tool_call_ids.insert(tool_call.id.clone());
                     response_contents.push(AssistantContent::ToolCall(tool_call));
                 }
                 StreamedAssistantContent::ToolCallDelta { id, content } => {
+                    let entry = tool_call_deltas
+                        .entry(id.clone())
+                        .or_insert((String::new(), String::new()));
                     let delta_str = match &content {
-                        rig::streaming::ToolCallDeltaContent::Name(name) => name.clone(),
-                        rig::streaming::ToolCallDeltaContent::Delta(delta) => delta.clone(),
+                        rig::streaming::ToolCallDeltaContent::Name(name) => {
+                            entry.0.push_str(name);
+                            name.clone()
+                        }
+                        rig::streaming::ToolCallDeltaContent::Delta(delta) => {
+                            entry.1.push_str(delta);
+                            delta.clone()
+                        }
                     };
                     let chunk =
                         ResponseChunk::from_tool_call_delta(&id, &delta_str, &model_display_name);
@@ -653,6 +1051,24 @@ pub async fn execute_agent_streaming(
 
         if let Some(usage) = final_usage {
             response_obj.usage = ResponseUsage::from_rig(usage);
+        }
+
+        // Convert accumulated tool call deltas into complete ToolCall entries
+        // Skip any that we already have as complete tool calls
+        for (id, (name, arguments)) in tool_call_deltas {
+            if !name.is_empty() && !complete_tool_call_ids.contains(&id) {
+                let tool_call = RigToolCall {
+                    id: id.clone(),
+                    call_id: None,
+                    function: rig::message::ToolFunction {
+                        name,
+                        arguments: json::from_str(&arguments).unwrap_or(json::json!({})),
+                    },
+                    signature: None,
+                    additional_params: None,
+                };
+                response_contents.push(AssistantContent::ToolCall(tool_call));
+            }
         }
 
         let assistant_msg = rig::message::Message::Assistant {
@@ -721,6 +1137,18 @@ pub async fn execute_agent_streaming(
                             json::json!({"error": format!("{}", error)})
                         }
                     }
+                } else if name == "think" && agent.thinking_enabled {
+                    // Handle the built-in think tool - extract the thought and wrap in <think> tags
+                    let thought = arguments
+                        .get("thought")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("");
+                    context.log_message(
+                        &format!("Think tool called with thought: {}", thought),
+                        LogLevel::Debug,
+                    );
+                    // Return the thought wrapped in <think> tags for frontend rendering
+                    json::json!(format!("<think>{}</think>", thought))
                 } else {
                     return Err(anyhow!(
                         "Tool '{}' not found in referenced functions or MCP servers",
@@ -785,6 +1213,26 @@ pub async fn execute_agent_streaming(
                 annotations: None,
             };
             full_history.push_message(tool_msg);
+        }
+
+        // Apply context management after adding tool results if infinite context is enabled
+        if agent.infinite_context {
+            let (managed, count) =
+                manage_context_budget(context, agent, current_history, max_context_tokens).await?;
+            current_history = managed;
+            if count > 0 {
+                let mode_name = match agent.context_management_mode {
+                    ContextManagementMode::Summarize => "summarized",
+                    ContextManagementMode::Truncate => "truncated",
+                };
+                context.log_message(
+                    &format!(
+                        "Infinite context: {} {} messages at iteration {}",
+                        mode_name, count, iteration
+                    ),
+                    LogLevel::Debug,
+                );
+            }
         }
 
         iteration += 1;

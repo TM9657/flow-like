@@ -3,7 +3,6 @@
 pub mod prelude;
 
 pub mod app;
-pub mod app_route;
 pub mod bit;
 pub mod bit_cache;
 pub mod bit_tree_cache;
@@ -12,6 +11,8 @@ pub mod comment;
 pub mod course;
 pub mod course_connection;
 pub mod error_report;
+pub mod event;
+pub mod event_sink;
 pub mod execution_event;
 pub mod execution_run;
 pub mod execution_usage_tracking;

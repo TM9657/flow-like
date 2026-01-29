@@ -47,6 +47,8 @@ impl ToProto<flow_like_types::proto::Event> for Event {
             event_type: self.event_type.clone(),
             default_page_id: self.default_page_id.clone(),
             inputs: self.inputs.iter().map(|i| i.to_proto()).collect(),
+            route: self.route.clone(),
+            is_default: self.is_default,
         }
     }
 }
@@ -147,6 +149,8 @@ impl FromProto<flow_like_types::proto::Event> for Event {
                 .into_iter()
                 .map(EventInput::from_proto)
                 .collect(),
+            route: proto.route,
+            is_default: proto.is_default,
         }
     }
 }

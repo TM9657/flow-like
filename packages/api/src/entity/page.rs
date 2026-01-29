@@ -17,8 +17,6 @@ pub struct Model {
     #[sea_orm(column_name = "boardId", column_type = "Text", nullable)]
     pub board_id: Option<String>,
     #[sea_orm(column_type = "Text", nullable)]
-    pub route: Option<String>,
-    #[sea_orm(column_type = "Text", nullable)]
     pub version: Option<String>,
     #[sea_orm(column_name = "createdAt")]
     pub created_at: DateTime,

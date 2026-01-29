@@ -1,7 +1,6 @@
 use crate::{functions::TauriFunctionError, state::TauriFlowLikeState};
 use flow_like::app::App;
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 use tauri::AppHandle;
 
 /// Simple route mapping entry for frontend consumption
@@ -12,7 +11,7 @@ pub struct RouteMapping {
     pub event_id: String,
 }
 
-/// Get all route mappings for an app
+/// Get all route mappings for an app (derived from events with routes)
 #[tauri::command(async)]
 pub async fn get_app_routes(
     handler: AppHandle,
@@ -23,11 +22,17 @@ pub async fn get_app_routes(
         .await
         .map_err(|e| TauriFunctionError::new(&format!("Failed to load app: {}", e)))?;
 
-    let mut routes: Vec<RouteMapping> = app
-        .route_mappings
-        .into_iter()
-        .map(|(path, event_id)| RouteMapping { path, event_id })
-        .collect();
+    let mut routes = Vec::new();
+    for event_id in &app.events {
+        if let Ok(event) = app.get_event(event_id, None).await {
+            if let Some(route) = &event.route {
+                routes.push(RouteMapping {
+                    path: route.clone(),
+                    event_id: event.id.clone(),
+                });
+            }
+        }
+    }
 
     // Sort by path for consistency
     routes.sort_by(|a, b| a.path.cmp(&b.path));
@@ -46,22 +51,50 @@ pub async fn get_app_route_by_path(
         .await
         .map_err(|e| TauriFunctionError::new(&format!("Failed to load app: {}", e)))?;
 
-    Ok(app.route_mappings.get(&path).map(|event_id| RouteMapping {
-        path: path.clone(),
-        event_id: event_id.clone(),
-    }))
+    for event_id in &app.events {
+        if let Ok(event) = app.get_event(event_id, None).await {
+            if event.route.as_deref() == Some(&path) {
+                return Ok(Some(RouteMapping {
+                    path,
+                    event_id: event.id,
+                }));
+            }
+        }
+    }
+
+    Ok(None)
 }
 
-/// Get the default route (path = "/")
+/// Get the default route (event with is_default=true or route="/")
 #[tauri::command(async)]
 pub async fn get_default_app_route(
     handler: AppHandle,
     app_id: String,
 ) -> Result<Option<RouteMapping>, TauriFunctionError> {
+    let flow_like_state = TauriFlowLikeState::construct(&handler).await?;
+    let app = App::load(app_id.clone(), flow_like_state)
+        .await
+        .map_err(|e| TauriFunctionError::new(&format!("Failed to load app: {}", e)))?;
+
+    // First try to find event with is_default=true
+    for event_id in &app.events {
+        if let Ok(event) = app.get_event(event_id, None).await {
+            if event.is_default {
+                if let Some(route) = &event.route {
+                    return Ok(Some(RouteMapping {
+                        path: route.clone(),
+                        event_id: event.id,
+                    }));
+                }
+            }
+        }
+    }
+
+    // Fall back to route="/"
     get_app_route_by_path(handler, app_id, "/".to_string()).await
 }
 
-/// Set a route mapping (path -> event_id)
+/// Set a route on an event
 #[tauri::command(async)]
 pub async fn set_app_route(
     handler: AppHandle,
@@ -74,24 +107,35 @@ pub async fn set_app_route(
         .await
         .map_err(|e| TauriFunctionError::new(&format!("Failed to load app: {}", e)))?;
 
-    if let Some(existing_event_id) = app.route_mappings.get(&path)
-        && existing_event_id != &event_id
-    {
-        return Err(TauriFunctionError::new(&format!(
-            "Route path already in use: {}",
-            path
-        )));
+    // Check if another event already has this route
+    for eid in &app.events {
+        if eid != &event_id {
+            if let Ok(e) = app.get_event(eid, None).await {
+                if e.route.as_deref() == Some(&path) {
+                    return Err(TauriFunctionError::new(&format!(
+                        "Route path already in use by event {}: {}",
+                        eid, path
+                    )));
+                }
+            }
+        }
     }
 
-    app.route_mappings.insert(path.clone(), event_id.clone());
-    app.save()
+    // Update the event's route
+    let mut event = app
+        .get_event(&event_id, None)
         .await
-        .map_err(|e| TauriFunctionError::new(&format!("Failed to save app: {}", e)))?;
+        .map_err(|e| TauriFunctionError::new(&format!("Event not found: {}", e)))?;
+
+    event.route = Some(path.clone());
+    app.upsert_event(event, None, None)
+        .await
+        .map_err(|e| TauriFunctionError::new(&format!("Failed to save event: {}", e)))?;
 
     Ok(RouteMapping { path, event_id })
 }
 
-/// Delete a route mapping by path
+/// Delete a route mapping by path (clears route from the event)
 #[tauri::command(async)]
 pub async fn delete_app_route_by_path(
     handler: AppHandle,
@@ -103,18 +147,23 @@ pub async fn delete_app_route_by_path(
         .await
         .map_err(|e| TauriFunctionError::new(&format!("Failed to load app: {}", e)))?;
 
-    if app.route_mappings.remove(&path).is_none() {
-        return Err(TauriFunctionError::new("Route not found"));
+    // Find and clear the route from the event
+    for event_id in app.events.clone() {
+        if let Ok(mut event) = app.get_event(&event_id, None).await {
+            if event.route.as_deref() == Some(&path) {
+                event.route = None;
+                app.upsert_event(event, None, None).await.map_err(|e| {
+                    TauriFunctionError::new(&format!("Failed to save event: {}", e))
+                })?;
+                return Ok(());
+            }
+        }
     }
 
-    app.save()
-        .await
-        .map_err(|e| TauriFunctionError::new(&format!("Failed to save app: {}", e)))?;
-
-    Ok(())
+    Err(TauriFunctionError::new("Route not found"))
 }
 
-/// Delete a route mapping by event ID
+/// Delete a route mapping by event ID (clears route from the event)
 #[tauri::command(async)]
 pub async fn delete_app_route_by_event(
     handler: AppHandle,
@@ -126,44 +175,53 @@ pub async fn delete_app_route_by_event(
         .await
         .map_err(|e| TauriFunctionError::new(&format!("Failed to load app: {}", e)))?;
 
-    let path_to_remove: Option<String> = app
-        .route_mappings
-        .iter()
-        .find(|(_, eid)| *eid == &event_id)
-        .map(|(path, _)| path.clone());
+    let mut event = app
+        .get_event(&event_id, None)
+        .await
+        .map_err(|e| TauriFunctionError::new(&format!("Event not found: {}", e)))?;
 
-    if let Some(path) = path_to_remove {
-        app.route_mappings.remove(&path);
-        app.save()
+    if event.route.is_some() {
+        event.route = None;
+        app.upsert_event(event, None, None)
             .await
-            .map_err(|e| TauriFunctionError::new(&format!("Failed to save app: {}", e)))?;
+            .map_err(|e| TauriFunctionError::new(&format!("Failed to save event: {}", e)))?;
     }
 
     Ok(())
 }
 
-/// Update route mappings in bulk (replaces all existing mappings)
+/// Update routes in bulk - sets routes on events
 #[tauri::command(async)]
 pub async fn set_app_routes(
     handler: AppHandle,
     app_id: String,
-    routes: HashMap<String, String>,
+    routes: Vec<RouteMapping>,
 ) -> Result<Vec<RouteMapping>, TauriFunctionError> {
     let flow_like_state = TauriFlowLikeState::construct(&handler).await?;
     let mut app = App::load(app_id.clone(), flow_like_state)
         .await
         .map_err(|e| TauriFunctionError::new(&format!("Failed to load app: {}", e)))?;
 
-    app.route_mappings = routes;
-    app.save()
-        .await
-        .map_err(|e| TauriFunctionError::new(&format!("Failed to save app: {}", e)))?;
+    // First clear all existing routes
+    for event_id in app.events.clone() {
+        if let Ok(mut event) = app.get_event(&event_id, None).await {
+            if event.route.is_some() {
+                event.route = None;
+                app.upsert_event(event, None, None).await.ok();
+            }
+        }
+    }
 
-    let result: Vec<RouteMapping> = app
-        .route_mappings
-        .into_iter()
-        .map(|(path, event_id)| RouteMapping { path, event_id })
-        .collect();
+    // Set new routes
+    let mut result = Vec::new();
+    for mapping in routes {
+        if let Ok(mut event) = app.get_event(&mapping.event_id, None).await {
+            event.route = Some(mapping.path.clone());
+            if app.upsert_event(event, None, None).await.is_ok() {
+                result.push(mapping);
+            }
+        }
+    }
 
     Ok(result)
 }

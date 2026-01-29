@@ -273,7 +273,7 @@ impl AppUser {
     ) -> Result<AppPermissionResponse, ApiError> {
         let sub = self.sub();
         if let Ok(sub) = sub {
-            let cached_permission = state.permission_cache.get(&sub);
+            let cached_permission = state.check_permission(&sub, app_id);
 
             if let Some(role_model) = cached_permission {
                 let permissions = RolePermissions::from_bits(role_model.permissions)
@@ -304,9 +304,7 @@ impl AppUser {
             let permissions = RolePermissions::from_bits(role_model.permissions)
                 .ok_or_else(|| anyhow!("Invalid role permission bits"))?;
 
-            state
-                .permission_cache
-                .insert(sub.clone(), Arc::new(role_model.clone()));
+            state.put_permission(&sub, app_id, Arc::new(role_model.clone()));
 
             return Ok(AppPermissionResponse {
                 state: state.clone(),

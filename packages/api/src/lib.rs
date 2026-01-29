@@ -65,6 +65,7 @@ pub fn construct_router(state: Arc<State>) -> Router {
         .nest("/solution", routes::solution::routes())
         .nest("/execution", routes::execution::routes())
         .nest("/registry", routes::registry::routes())
+        .nest("/sink", routes::sink::routes())
         .route("/webhook/stripe", post(routes::webhook::stripe_webhook))
         .with_state(state.clone())
         .route("/version", get(|| async { "0.0.0" }))

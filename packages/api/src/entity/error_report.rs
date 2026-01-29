@@ -19,7 +19,7 @@ pub struct Model {
     pub path: String,
 
     #[sea_orm(column_name = "statusCode")]
-    pub status_code: i64,
+    pub status_code: i32,
 
     #[sea_orm(column_name = "publicCode", column_type = "Text")]
     pub public_code: String,

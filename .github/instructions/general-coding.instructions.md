@@ -14,3 +14,6 @@ applyTo: "**"
 
 ## NEVER RETURN DIFF MODE CODE SNIPPETS
 I cant copy paste them if they make sense.. better return drop in replacements
+
+## Subagents
+whenever a task can be worked on in parallel, first create a todo list, either in todo/*.md or in memory and then feel free to create subagents to work on the individual tasks in parallel.

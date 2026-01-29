@@ -16,11 +16,13 @@ export function useHub() {
 
 	const fetchHub = useCallback(async () => {
 		if (!profile.data?.hub) return;
-		const protocol = (profile.data?.secure ?? true) ? "https" : "http";
-		const hubData = await fetch(
-			`${protocol}://${profile.data?.hub}/api/v1`,
-			{},
-		);
+		let hubUrl = profile.data.hub;
+		// If hub doesn't already have a protocol, add one
+		if (!hubUrl.startsWith("http://") && !hubUrl.startsWith("https://")) {
+			const protocol = (profile.data?.secure ?? true) ? "https" : "http";
+			hubUrl = `${protocol}://${hubUrl}`;
+		}
+		const hubData = await fetch(`${hubUrl}/api/v1`, {});
 		const hubJson: IHub = await hubData.json();
 		setHub(hubJson);
 	}, [profile.data?.hub]);

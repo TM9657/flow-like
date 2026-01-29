@@ -974,7 +974,7 @@ function PageInterfaceInner({
 	const customCss = page?.canvasSettings?.customCss;
 
 	return (
-		<div className="h-full w-full overflow-hidden bg-background">
+		<div className="h-full w-full overflow-auto bg-background">
 			{customCss && (
 				<style
 					{...createSanitizedStyleProps(
@@ -984,14 +984,14 @@ function PageInterfaceInner({
 			)}
 			<div
 				data-page-id={pageContainerId}
-				className="h-full flex flex-col"
+				className="min-h-full flex flex-col"
 				style={canvasStyle}
 			>
 				<DataProvider initialData={[]}>
 					<A2UIRenderer
 						surface={surface}
 						widgetRefs={page?.widgetRefs}
-						className="h-full w-full flex-1 overflow-hidden"
+						className="w-full flex-1"
 						appId={appId}
 						boardId={routeEvent?.board_id}
 						onA2UIMessage={handleA2UIMessage}

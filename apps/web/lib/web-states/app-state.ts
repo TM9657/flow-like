@@ -1,0 +1,159 @@
+import { createId } from "@paralleldrive/cuid2";
+import type {
+	IApp,
+	IAppCategory,
+	IAppState,
+	IAppVisibility,
+	IBoard,
+	IMetadata,
+} from "@tm9657/flow-like-ui";
+import type { IAppSearchSort } from "@tm9657/flow-like-ui/lib/schema/app/app-search-query";
+import type { IMediaItem } from "@tm9657/flow-like-ui/state/backend-state/app-state";
+import { apiDelete, apiFetch, apiGet, apiPatch, apiPost, apiPut, type WebBackendRef } from "./api-utils";
+
+export class WebAppState implements IAppState {
+	constructor(private readonly backend: WebBackendRef) {}
+
+	async createApp(
+		metadata: IMetadata,
+		bits: string[],
+		online: boolean,
+		template?: IBoard,
+	): Promise<IApp> {
+		const app = await apiPut<IApp>(
+			"apps/new",
+			{ meta: metadata, bits },
+			this.backend.auth,
+		);
+		return app;
+	}
+
+	async deleteApp(appId: string): Promise<void> {
+		await apiDelete(`apps/${appId}`, this.backend.auth);
+	}
+
+	async searchApps(
+		id?: string,
+		query?: string,
+		language?: string,
+		category?: IAppCategory,
+		author?: string,
+		sort?: IAppSearchSort,
+		tag?: string,
+		offset?: number,
+		limit?: number,
+	): Promise<[IApp, IMetadata | undefined][]> {
+		const params = new URLSearchParams();
+		if (id) params.set("id", id);
+		if (query) params.set("query", query);
+		if (language) params.set("language", language);
+		if (category) params.set("category", category);
+		if (author) params.set("author", author);
+		if (sort) params.set("sort", sort);
+		if (tag) params.set("tag", tag);
+		if (offset !== undefined) params.set("offset", offset.toString());
+		if (limit !== undefined) params.set("limit", limit.toString());
+
+		if (params.toString() === "") {
+			return this.getApps();
+		}
+
+		try {
+			return await apiGet<[IApp, IMetadata | undefined][]>(
+				`apps/search?${params}`,
+				this.backend.auth,
+			);
+		} catch {
+			return [];
+		}
+	}
+
+	async getApps(): Promise<[IApp, IMetadata | undefined][]> {
+		try {
+			return await apiGet<[IApp, IMetadata | undefined][]>(
+				"apps",
+				this.backend.auth,
+			);
+		} catch {
+			return [];
+		}
+	}
+
+	async getApp(appId: string): Promise<IApp> {
+		return apiGet<IApp>(`apps/${appId}`, this.backend.auth);
+	}
+
+	async updateApp(app: IApp): Promise<void> {
+		await apiPut(`apps/${app.id}`, { app }, this.backend.auth);
+	}
+
+	async getAppMeta(appId: string, language?: string): Promise<IMetadata> {
+		const params = language ? `?language=${language}` : "";
+		return apiGet<IMetadata>(`apps/${appId}/meta${params}`, this.backend.auth);
+	}
+
+	async pushAppMeta(
+		appId: string,
+		metadata: IMetadata,
+		language?: string,
+	): Promise<void> {
+		const params = language ? `?language=${language}` : "?language=en";
+		await apiPut(`apps/${appId}/meta${params}`, metadata, this.backend.auth);
+	}
+
+	async pushAppMedia(
+		appId: string,
+		item: IMediaItem,
+		file: File,
+		language?: string,
+	): Promise<void> {
+		const extension = file.name.split(".").pop();
+		const params = new URLSearchParams();
+		params.set("item", item);
+		params.set("extension", extension ?? "");
+		if (language) params.set("language", language);
+
+		// Step 1: Get signed URL from backend
+		const { signed_url } = await apiPut<{ signed_url: string }>(
+			`apps/${appId}/meta/media?${params}`,
+			undefined,
+			this.backend.auth,
+		);
+
+		// Step 2: Upload file directly to signed URL
+		const headers: HeadersInit = {
+			"Content-Type": file.type,
+		};
+
+		// Azure Blob Storage requires x-ms-blob-type header
+		if (signed_url.includes(".blob.core.windows.net")) {
+			headers["x-ms-blob-type"] = "BlockBlob";
+		}
+
+		const response = await fetch(signed_url, {
+			method: "PUT",
+			body: file,
+			headers,
+		});
+
+		if (!response.ok) {
+			throw new Error(`Failed to upload media: ${response.statusText}`);
+		}
+	}
+
+	async changeAppVisibility(appId: string, visibility: IAppVisibility): Promise<void> {
+		await apiPatch(
+			`apps/${appId}/visibility`,
+			{ visibility },
+			this.backend.auth,
+		);
+	}
+
+	async requestJoinApp(appId: string, comment?: string): Promise<void> {
+		await apiPut(
+			`apps/${appId}/team/queue`,
+			{ comment },
+			this.backend.auth,
+		);
+	}
+}

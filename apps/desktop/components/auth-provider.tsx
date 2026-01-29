@@ -27,6 +27,7 @@ export class OIDCTokenProvider implements TokenProvider {
 	async getTokens(options?: {
 		forceRefresh?: boolean;
 	}): Promise<AuthTokens | null> {
+		console.warn("Getting tokens from OIDCTokenProvider...");
 		const user = await this.userManager.getUser();
 		if (!user?.access_token || !user?.id_token) {
 			return null;
@@ -82,8 +83,12 @@ export function DesktopAuthProvider({
 	);
 
 	useEffect(() => {
-		if (!currentProfile.data) return;
+		if (!currentProfile.data) {
+			console.warn("[DESKTOPAUTH] No profile data available yet.");
+			return;
+		}
 		(async () => {
+			console.log("[DESKTOPAUTH] Fetching OpenID configuration!!!");
 			const response = await get<any>(currentProfile.data, "auth/openid");
 			if (response) {
 				if (process.env.NEXT_PUBLIC_REDIRECT_URL)

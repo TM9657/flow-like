@@ -48,6 +48,8 @@ pub struct R2RuntimeCredentials {
     pub endpoint: String,
     pub account_id: String,
     pub expiration: Option<chrono::DateTime<chrono::Utc>>,
+    pub content_path_prefix: Option<String>,
+    pub user_content_path_prefix: Option<String>,
 }
 
 impl R2RuntimeCredentials {
@@ -74,6 +76,8 @@ impl R2RuntimeCredentials {
                 .unwrap_or_default(),
             account_id: std::env::var("R2_ACCOUNT_ID").unwrap_or_default(),
             expiration: None,
+            content_path_prefix: None,
+            user_content_path_prefix: None,
         }
     }
 
@@ -92,6 +96,8 @@ impl R2RuntimeCredentials {
             endpoint: self.endpoint.clone(),
             account_id: self.account_id.clone(),
             expiration: None,
+            content_path_prefix: None,
+            user_content_path_prefix: None,
         }
     }
 
@@ -187,6 +193,8 @@ impl R2RuntimeCredentials {
             endpoint: self.endpoint.clone(),
             account_id: self.account_id.clone(),
             expiration: Some(chrono_expiration),
+            content_path_prefix: Some(format!("apps/{}", app_id)),
+            user_content_path_prefix: Some(format!("users/{}/apps/{}", sub, app_id)),
         })
     }
 
@@ -264,11 +272,17 @@ impl RuntimeCredentialsTrait for R2RuntimeCredentials {
             logs_config: r2_config,
             region: "auto".to_string(), // R2 uses "auto" region
             expiration: self.expiration,
+            content_path_prefix: self.content_path_prefix.clone(),
+            user_content_path_prefix: self.user_content_path_prefix.clone(),
         })
     }
 
     async fn to_db(&self, app_id: &str) -> Result<ConnectBuilder> {
         self.into_shared_credentials().to_db(app_id).await
+    }
+
+    async fn to_db_scoped(&self, app_id: &str) -> Result<ConnectBuilder> {
+        self.into_shared_credentials().to_db_scoped(app_id).await
     }
 
     #[tracing::instrument(

@@ -37,6 +37,42 @@ static TOTALS_RE: Lazy<regex::Regex> =
     Lazy::new(|| regex::Regex::new(r"(?i)^\s*(total|summe|subtotal|gesamt)\b").unwrap());
 
 #[cfg(feature = "execute")]
+const MAX_SUPPORTED_ROWS: usize = 10_000_000;
+#[cfg(feature = "execute")]
+const MAX_SUPPORTED_COLS: usize = 50_000;
+#[cfg(feature = "execute")]
+const MIN_VALID_GRID_SIZE: usize = 1;
+
+#[cfg(feature = "execute")]
+#[inline]
+fn safe_grid_get(grid: &[Vec<String>], r: usize, c: usize) -> &str {
+    grid.get(r)
+        .and_then(|row| row.get(c))
+        .map(|s| s.as_str())
+        .unwrap_or("")
+}
+
+#[cfg(feature = "execute")]
+fn validate_grid_dimensions(height: usize, width: usize) -> Result<()> {
+    if height == 0 || width == 0 {
+        return Err(Error::msg("Grid has zero dimensions"));
+    }
+    if height > MAX_SUPPORTED_ROWS {
+        return Err(Error::msg(format!(
+            "Grid height {} exceeds maximum supported {}",
+            height, MAX_SUPPORTED_ROWS
+        )));
+    }
+    if width > MAX_SUPPORTED_COLS {
+        return Err(Error::msg(format!(
+            "Grid width {} exceeds maximum supported {}",
+            width, MAX_SUPPORTED_COLS
+        )));
+    }
+    Ok(())
+}
+
+#[cfg(feature = "execute")]
 fn build_occupancy(grid: &Vec<Vec<String>>) -> Vec<Vec<bool>> {
     grid.iter()
         .map(|row| row.iter().map(|s| !s.trim().is_empty()).collect())
@@ -172,15 +208,31 @@ pub fn extract_tables(
     sheet_name: &str,
     cfg_in: &ExtractConfig,
 ) -> Result<Vec<Table>> {
+    if data.is_empty() {
+        return Err(Error::msg("Input data is empty"));
+    }
+    if sheet_name.trim().is_empty() {
+        return Err(Error::msg("Sheet name cannot be empty"));
+    }
+
     let cursor = Cursor::new(data);
     let mut wb = open_workbook_auto_from_rs(cursor.clone())
-        .with_context(|| format!("Opening workbook {:?}", cursor.get_ref()))?;
-    let range: Range<Data> = wb.worksheet_range(sheet_name)?;
+        .with_context(|| "Opening workbook failed - file may be corrupted or unsupported format")?;
+
+    let range: Range<Data> = wb
+        .worksheet_range(sheet_name)
+        .with_context(|| format!("Sheet '{}' not found or unreadable", sheet_name))?;
 
     let height = range.get_size().0;
     let width = range.get_size().1;
-    let cell_count = height.saturating_mul(width);
 
+    if height < MIN_VALID_GRID_SIZE || width < MIN_VALID_GRID_SIZE {
+        return Ok(Vec::new());
+    }
+
+    validate_grid_dimensions(height, width)?;
+
+    let cell_count = height.saturating_mul(width);
     let huge_mode = cell_count >= cfg_in.huge_cells_threshold;
 
     let mut cfg = cfg_in.clone();
@@ -190,19 +242,30 @@ pub fn extract_tables(
         cfg.group_similar_headers = false;
         cfg.allow_internal_blank_rows = 0;
         cfg.allow_internal_blank_cols = 0;
-        cfg.gap_break_rows = usize::MAX; // disable segmentation
+        cfg.gap_break_rows = usize::MAX;
         cfg.gap_break_cols = usize::MAX;
         cfg.schema_sample_rows = cfg.huge_schema_sample_rows;
     }
 
     let (grid_raw, height, width) = read_sheet_grid_capped(range, cfg.huge_cap_rows, huge_mode)?;
+
+    if height == 0 || width == 0 {
+        return Ok(Vec::new());
+    }
+
     let cell_count = height.saturating_mul(width);
     let merges = if cfg.enable_merges && cell_count <= cfg.max_merge_map_cells {
-        read_merged_cells(cursor, sheet_name)
-            .with_context(|| "Reading merged cells with umya-spreadsheet failed")?
+        read_merged_cells(cursor, sheet_name).unwrap_or_else(|e| {
+            eprintln!(
+                "WARN: Failed to read merged cells, continuing without: {}",
+                e
+            );
+            Vec::new()
+        })
     } else {
         Vec::new()
     };
+
     let merge_map = if !merges.is_empty() {
         build_merge_map(height, width, &merges)
     } else {
@@ -212,30 +275,60 @@ pub fn extract_tables(
     let mut grid = apply_merges(grid_raw, &merges);
 
     let rects_coarse = segment_rectangles(&grid, height, width, &cfg);
-    let mut rects: Vec<Rect> = Vec::new();
+    let mut rects: Vec<Rect> = Vec::with_capacity(rects_coarse.len() * 2);
     for r in rects_coarse {
-        let parts = split_rect_by_connectivity(&grid, &r, &cfg);
-        rects.extend(parts);
+        if let Some(validated) = validate_rect(&r, height, width) {
+            let parts = split_rect_by_connectivity(&grid, &validated, &cfg);
+            rects.extend(parts);
+        }
     }
 
-    // Build tables
-    let mut built: Vec<TableWithRect> = Vec::new();
+    let mut built: Vec<TableWithRect> = Vec::with_capacity(rects.len());
     for rect in rects {
-        if count_nonempty_in_rect(&grid, &rect) < cfg.min_table_cells {
+        let nonempty = count_nonempty_in_rect(&grid, &rect);
+        if nonempty < cfg.min_table_cells {
             continue;
         }
-        let table = build_table_from_rect(&mut grid, &rect, &cfg, &merge_map);
-        built.push(TableWithRect { rect, table });
+        match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            build_table_from_rect(&mut grid, &rect, &cfg, &merge_map)
+        })) {
+            Ok(table) if !table.headers.is_empty() || !table.rows.is_empty() => {
+                built.push(TableWithRect { rect, table });
+            }
+            Ok(_) => {}
+            Err(_) => {
+                eprintln!("WARN: Failed to build table from rect {:?}, skipping", rect);
+            }
+        }
     }
 
-    // Stitch (skipped in huge mode by knobs above)
     let stitched = stitch_tables(&grid, built, &cfg);
     let grouped = if cfg.group_similar_headers {
         group_tables_by_header_similarity(stitched, &cfg)
     } else {
         stitched
     };
-    Ok(grouped.into_iter().map(|t| t.table).collect())
+
+    let tables: Vec<Table> = grouped
+        .into_iter()
+        .map(|t| t.table)
+        .filter(|t| !t.headers.is_empty() || !t.rows.is_empty())
+        .collect();
+
+    Ok(tables)
+}
+
+#[cfg(feature = "execute")]
+fn validate_rect(rect: &Rect, height: usize, width: usize) -> Option<Rect> {
+    if rect.r1 < rect.r0 || rect.c1 < rect.c0 {
+        return None;
+    }
+    Some(Rect {
+        r0: rect.r0.min(height.saturating_sub(1)),
+        c0: rect.c0.min(width.saturating_sub(1)),
+        r1: rect.r1.min(height.saturating_sub(1)),
+        c1: rect.c1.min(width.saturating_sub(1)),
+    })
 }
 
 /// ============================ Types ============================
@@ -267,16 +360,23 @@ fn read_sheet_grid_capped(
     let mut height = range.get_size().0;
     let width = range.get_size().1;
 
+    if height == 0 || width == 0 {
+        return Ok((Vec::new(), 0, 0));
+    }
+
     if huge_mode && cap_rows > 0 {
         height = height.min(cap_rows);
     }
 
+    height = height.min(MAX_SUPPORTED_ROWS);
+    let width = width.min(MAX_SUPPORTED_COLS);
+
     let mut grid = vec![vec![String::new(); width]; height];
-    // In huge mode, skip ISO conversion (hot).
     let is_1904 = false;
 
     for (r, row) in range.rows().take(height).enumerate() {
-        for (c, cell) in row.iter().enumerate() {
+        let row_len = row.len().min(width);
+        for (c, cell) in row.iter().take(row_len).enumerate() {
             grid[r][c] = if huge_mode {
                 data_to_string(cell)
             } else {
@@ -673,12 +773,30 @@ fn density(nz: usize, total: usize) -> f32 {
 }
 
 #[cfg(feature = "execute")]
-fn count_nonempty_in_rect(grid: &Vec<Vec<String>>, rect: &Rect) -> usize {
+fn count_nonempty_in_rect(grid: &[Vec<String>], rect: &Rect) -> usize {
+    let height = grid.len();
+    if height == 0 {
+        return 0;
+    }
+    let width = grid.get(0).map(|r| r.len()).unwrap_or(0);
+    if width == 0 {
+        return 0;
+    }
+
+    let r0 = rect.r0.min(height.saturating_sub(1));
+    let r1 = rect.r1.min(height.saturating_sub(1));
+    let c0 = rect.c0.min(width.saturating_sub(1));
+    let c1 = rect.c1.min(width.saturating_sub(1));
+
     let mut n = 0;
-    for r in rect.r0..=rect.r1 {
-        for c in rect.c0..=rect.c1 {
-            if !grid[r][c].trim().is_empty() {
-                n += 1;
+    for r in r0..=r1 {
+        if let Some(row) = grid.get(r) {
+            for c in c0..=c1 {
+                if let Some(cell) = row.get(c) {
+                    if !cell.trim().is_empty() {
+                        n += 1;
+                    }
+                }
             }
         }
     }
@@ -1869,8 +1987,13 @@ impl NodeLogic for ExtractExcelTablesNode {
             .set_schema::<FlowPath>()
             .set_options(PinOptions::new().set_enforce_schema(true).build());
 
-        node.add_input_pin("sheet", "Sheet", "Worksheet name", VariableType::String)
-            .set_default_value(Some(json!("Sheet1")));
+        node.add_input_pin(
+            "sheet",
+            "Sheet",
+            "Worksheet name (optional - if empty, extracts from all sheets)",
+            VariableType::String,
+        )
+        .set_default_value(Some(json!("")));
 
         node.add_input_pin(
             "extract_config",
@@ -1900,31 +2023,50 @@ impl NodeLogic for ExtractExcelTablesNode {
         context.deactivate_exec_pin("exec_out").await?;
 
         let flow_path: FlowPath = context.evaluate_pin("file").await?;
-        let sheet: String = context.evaluate_pin("sheet").await?;
-        let extract_config: ExtractConfig = context.evaluate_pin("extract_config").await?; // keep access so value flows
+        let sheet_input: String = context.evaluate_pin("sheet").await?;
+        let extract_config: ExtractConfig = context.evaluate_pin("extract_config").await?;
 
         let file_buffer = flow_path.get(context, false).await?;
+        let file_buffer_clone = file_buffer.clone();
+
+        // Determine which sheets to process
+        let sheets_to_process: Vec<String> = if sheet_input.trim().is_empty() {
+            tokio::task::spawn_blocking(move || -> Result<Vec<String>> {
+                let cursor = Cursor::new(&file_buffer_clone);
+                let wb = open_workbook_auto_from_rs(cursor)?;
+                Ok(wb.sheet_names().to_vec())
+            })
+            .await??
+        } else {
+            vec![sheet_input]
+        };
+
         let cfg_clone = extract_config.clone();
-        let sheet_clone = sheet.clone();
         let flow_path_clone = flow_path.clone();
 
         let csv_tables: Vec<CSVTable> =
             tokio::task::spawn_blocking(move || -> Result<Vec<CSVTable>> {
-                let tables = extract_tables(file_buffer, &sheet_clone, &cfg_clone)
-                    .map_err(|e| Error::msg(format!("Extraction failed: {e}")))?;
-                let mut out = Vec::with_capacity(tables.len());
-                for t in tables {
-                    let headers = t.headers.clone();
-                    let mut rows_json: Vec<Vec<flow_like_types::Value>> =
-                        Vec::with_capacity(t.rows.len());
-                    for r in t.rows {
-                        rows_json.push(r.into_iter().map(|s| json!(s)).collect());
+                let mut out = Vec::new();
+                for (sheet_idx, sheet_name) in sheets_to_process.iter().enumerate() {
+                    let tables = match extract_tables(file_buffer.clone(), sheet_name, &cfg_clone) {
+                        Ok(t) => t,
+                        Err(e) => {
+                            eprintln!("WARN: Failed to extract from sheet '{}': {}", sheet_name, e);
+                            continue;
+                        }
+                    };
+                    for (table_idx, t) in tables.into_iter().enumerate() {
+                        let headers = t.headers.clone();
+                        let mut rows_json: Vec<Vec<flow_like_types::Value>> =
+                            Vec::with_capacity(t.rows.len());
+                        for r in t.rows {
+                            rows_json.push(r.into_iter().map(|s| json!(s)).collect());
+                        }
+                        let mut csv_table =
+                            CSVTable::new(headers, rows_json, Some(flow_path_clone.clone()));
+                        csv_table.name = Some(format!("{}_{}", sheet_name, table_idx + 1));
+                        out.push(csv_table);
                     }
-                    out.push(CSVTable::new(
-                        headers,
-                        rows_json,
-                        Some(flow_path_clone.clone()),
-                    ));
                 }
                 Ok(out)
             })

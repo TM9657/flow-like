@@ -10,6 +10,7 @@ import {
 } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
+	type MutableRefObject,
 	type RefObject,
 	memo,
 	useCallback,
@@ -211,25 +212,90 @@ async function handleStreamCompletion(
 	executionEngine: any,
 	streamId: string,
 	subscriberId: string,
-	tmpLocalState?: any,
-	tmpGlobalState?: any,
+	processedCompletedStreams: MutableRefObject<Set<string>>,
+	events: any[],
+	intermediateResponse: Response,
+	attachments: Map<string, IAttachment>,
+	appId: string,
+	eventId: string,
+	sessionId: string,
+	initialLocalState?: any,
+	initialGlobalState?: any,
 ) {
-	if (tmpLocalState) {
-		await chatDb.localStage.put(tmpLocalState);
+	if (processedCompletedStreams.current.has(streamId)) {
+		return;
 	}
 
-	if (tmpGlobalState) {
-		await chatDb.globalState.put(tmpGlobalState);
+	const result = processChatEvents(events, {
+		intermediateResponse,
+		responseMessage,
+		attachments,
+		tmpLocalState: initialLocalState ?? null,
+		tmpGlobalState: initialGlobalState ?? null,
+		done: false,
+		appId,
+		eventId,
+		sessionId,
+	});
+
+	processedCompletedStreams.current.add(streamId);
+
+	if (result.tmpLocalState) {
+		await chatDb.localStage.put(result.tmpLocalState);
 	}
 
-	// Clear the streaming message BEFORE writing to Dexie to prevent duplicates
+	if (result.tmpGlobalState) {
+		await chatDb.globalState.put(result.tmpGlobalState);
+	}
+
+	// Write to Dexie FIRST to ensure the message is persisted before clearing streaming state
+	// This prevents the message from briefly disappearing
+	await chatDb.messages.put(result.responseMessage);
+
+	// Clear the streaming message AFTER writing to Dexie
+	// The useLiveQuery will pick up the new message from DB
 	chatRef.current?.clearCurrentMessageUpdate();
-
-	await chatDb.messages.put(responseMessage);
 
 	chatRef.current?.scrollToBottom();
 
 	executionEngine.unsubscribeFromEventStream(streamId, subscriberId);
+}
+
+/**
+ * Creates an incremental save function for chat message streaming.
+ * This function saves the current message state to Dexie periodically.
+ * The message object is expected to be updated by the subscriber before this is called.
+ *
+ * Note: The final completion is handled by handleStreamCompletion, so this function
+ * only saves intermediate state. The isFinal flag is used only for logging.
+ *
+ * @param responseMessage - The message object (modified by subscriber)
+ * @param localStateRef - Reference to current local state (updated by subscriber)
+ * @param globalStateRef - Reference to current global state (updated by subscriber)
+ */
+function createChatIncrementalSaver(
+	responseMessage: IMessage,
+	localStateRef: { current: any },
+	globalStateRef: { current: any },
+): (events: any[], isFinal: boolean) => Promise<void> {
+	return async (_events: any[], isFinal: boolean) => {
+		// Save the message in its current state (already updated by subscriber)
+		await chatDb.messages.put(responseMessage);
+
+		// Save local/global state if present
+		if (localStateRef.current) {
+			await chatDb.localStage.put(localStateRef.current);
+		}
+		if (globalStateRef.current) {
+			await chatDb.globalState.put(globalStateRef.current);
+		}
+
+		// Note: We don't clear streaming state here - that's handled by handleStreamCompletion
+		// which also does proper cleanup (unsubscribe, etc.)
+		if (isFinal) {
+			console.log("[Chat] Incremental save completed (final)");
+		}
+	};
 }
 
 export const ChatInterfaceMemoized = memo(function ChatInterface({
@@ -249,6 +315,7 @@ export const ChatInterfaceMemoized = memo(function ChatInterface({
 	const chatRef = useRef<IChatRef>(null);
 	const activeSubscriptions = useRef<string[]>([]);
 	const processedCompletedStreams = useRef<Set<string>>(new Set());
+	const reconnectSubscribed = useRef<Set<string>>(new Set());
 	const [isSendingFromWelcome, setIsSendingFromWelcome] = useState(false);
 	const lastNavigateToRef = useRef<string | null>(null);
 
@@ -600,6 +667,12 @@ export const ChatInterfaceMemoized = memo(function ChatInterface({
 			return;
 		}
 
+		// Skip if we've already subscribed with this reconnect subscriber
+		// This prevents duplicates when the effect re-runs due to messages changes
+		if (reconnectSubscribed.current.has(subscriberId)) {
+			return;
+		}
+
 		const responseMessage: IMessage = {
 			id: createId(),
 			sessionId: sessionIdParameter,
@@ -621,30 +694,25 @@ export const ChatInterfaceMemoized = memo(function ChatInterface({
 		// If stream is already complete, save to IndexedDB directly
 		// (chatRef may not be mounted yet since Chat only renders when messages exist)
 		if (executionEngine.isStreamComplete(streamId)) {
-			// Mark as processed before saving to prevent duplicate processing
-			processedCompletedStreams.current.add(streamId);
-
 			const accumulatedEvents = executionEngine.getAccumulatedEvents(streamId);
 			if (accumulatedEvents.length > 0) {
 				handleNavigationEvents(accumulatedEvents);
-
-				// Pass done: false so that chat_stream_partial and chat_stream events are processed
-				// to extract the message content from the accumulated events
-				const result = processChatEvents(accumulatedEvents, {
-					intermediateResponse,
+				void handleStreamCompletion(
 					responseMessage,
+					chatRef,
+					executionEngine,
+					streamId,
+					subscriberId,
+					processedCompletedStreams,
+					accumulatedEvents,
+					intermediateResponse,
 					attachments,
-					tmpLocalState: null,
-					tmpGlobalState: null,
-					done: false,
 					appId,
-					eventId: event.id,
-					sessionId: sessionIdParameter,
-				});
-
-				// Save directly to IndexedDB - useLiveQuery will pick it up
-				chatDb.messages.put(result.responseMessage);
-				executionEngine.unsubscribeFromEventStream(streamId, subscriberId);
+					event.id,
+					sessionIdParameter,
+					null,
+					null,
+				);
 			}
 			return;
 		}
@@ -652,6 +720,9 @@ export const ChatInterfaceMemoized = memo(function ChatInterface({
 		// For active streams, wait for Chat component to be mounted (messages.length > 0)
 		// before subscribing, since we need chatRef to push updates
 		if (messages.length === 0) return;
+
+		// Mark this subscriber as active before subscribing
+		reconnectSubscribed.current.add(subscriberId);
 
 		// For active streams, subscribe to receive events
 		executionEngine.subscribeToEventStream(
@@ -683,19 +754,30 @@ export const ChatInterfaceMemoized = memo(function ChatInterface({
 			},
 			async (events) => {
 				handleNavigationEvents(events);
-
 				await handleStreamCompletion(
 					responseMessage,
 					chatRef,
 					executionEngine,
 					streamId,
 					subscriberId,
+					processedCompletedStreams,
+					events,
+					intermediateResponse,
+					attachments,
+					appId,
+					event.id,
+					sessionIdParameter,
+					null,
+					null,
 				);
+				// Clean up the reconnect subscriber tracking after completion
+				reconnectSubscribed.current.delete(subscriberId);
 			},
 		);
 
 		return () => {
 			executionEngine.unsubscribeFromEventStream(streamId, subscriberId);
+			reconnectSubscribed.current.delete(subscriberId);
 		};
 	}, [
 		sessionIdParameter,
@@ -811,9 +893,21 @@ export const ChatInterfaceMemoized = memo(function ChatInterface({
 			let done = false;
 			const attachments: Map<string, IAttachment> = new Map();
 
+			// Refs for incremental save to access current state
+			const localStateRef = { current: tmpLocalState };
+			const globalStateRef = { current: tmpGlobalState };
+
 			const streamId = sessionIdParameter;
 			const subscriberId = `chat-${responseMessage.id}`;
 			activeSubscriptions.current.push(subscriberId);
+
+			// Create incremental save function for robust message persistence
+			// This saves the message every N events to prevent data loss
+			const incrementalSave = createChatIncrementalSaver(
+				responseMessage,
+				localStateRef,
+				globalStateRef,
+			);
 
 			// Start execution first to reset the stream state
 			const executionPromise = executionEngine.executeEvent(streamId, {
@@ -829,6 +923,9 @@ export const ChatInterfaceMemoized = memo(function ChatInterface({
 				title: event.name || "Chat",
 				interfaceType: "chat",
 				skipConsentCheck,
+				// Save to Dexie every 10 events and on completion for robustness
+				onIncrementalSave: incrementalSave,
+				saveIntervalEvents: 10,
 			});
 			executionEngine.subscribeToEventStream(
 				streamId,
@@ -853,6 +950,13 @@ export const ChatInterfaceMemoized = memo(function ChatInterface({
 					tmpGlobalState = result.tmpGlobalState;
 					done = result.done;
 
+					// Update refs for incremental save to access
+					localStateRef.current = result.tmpLocalState;
+					globalStateRef.current = result.tmpGlobalState;
+
+					// Update responseMessage in place for incremental save
+					Object.assign(responseMessage, result.responseMessage);
+
 					if (result.shouldUpdate) {
 						chatRef.current?.pushCurrentMessageUpdate({
 							...result.responseMessage,
@@ -870,6 +974,13 @@ export const ChatInterfaceMemoized = memo(function ChatInterface({
 							executionEngine,
 							streamId,
 							subscriberId,
+							processedCompletedStreams,
+							events,
+							intermediateResponse,
+							attachments,
+							appId,
+							event.id,
+							sessionIdParameter,
 							tmpLocalState,
 							tmpGlobalState,
 						);

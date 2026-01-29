@@ -363,5 +363,89 @@ function ProfileSyncer() {
 		}
 	}, [profile.data, backend]);
 
+	// Sync profiles to backend when authenticated
+	useEffect(() => {
+		if (!(backend instanceof TauriBackend)) return;
+		if (!backend.auth?.isAuthenticated || !backend.profile) return;
+
+		const syncProfiles = async () => {
+			try {
+				// Get all local profiles
+				const localProfiles = await invoke<Record<string, { hub_profile: IProfile }>>("get_profiles");
+				if (!localProfiles || Object.keys(localProfiles).length === 0) return;
+
+				// Get app visibility info to filter out offline-only apps
+				const visibilityRecords = await appsDB.visibility.toArray();
+				const offlineAppIds = new Set(
+					visibilityRecords
+						.filter(v => v.visibility === IAppVisibility.Offline)
+						.map(v => v.appId)
+				);
+
+				// Prepare profiles for sync, filtering out offline-only apps
+				const profilesToSync = Object.values(localProfiles).map(p => {
+					const hubProfile = p.hub_profile;
+					const filteredApps = hubProfile.apps?.filter(
+						app => !offlineAppIds.has(app.app_id)
+					);
+					return {
+						id: hubProfile.id,
+						name: hubProfile.name,
+						description: hubProfile.description,
+						interests: hubProfile.interests,
+						tags: hubProfile.tags,
+						theme: hubProfile.theme,
+						bit_ids: hubProfile.bits,
+						apps: filteredApps,
+						hubs: hubProfile.hubs,
+						settings: hubProfile.settings,
+						createdAt: hubProfile.created,
+						updatedAt: hubProfile.updated,
+					};
+				});
+
+				if (profilesToSync.length === 0) return;
+
+				// Sync to backend
+				const baseUrl = backend.profile?.hub ?? process.env.NEXT_PUBLIC_API_URL ?? "api.flow-like.com";
+				const protocol = backend.profile?.secure === false ? "http" : "https";
+				const url = baseUrl.startsWith("http")
+					? `${baseUrl}/api/v1/profile/sync`
+					: `${protocol}://${baseUrl}/api/v1/profile/sync`;
+
+				const token = backend.auth?.user?.id_token;
+				if (!token) return;
+
+				const response = await fetch(url, {
+					method: "POST",
+					headers: {
+						"Content-Type": "application/json",
+						"Authorization": `Bearer ${token}`,
+					},
+					body: JSON.stringify(profilesToSync),
+				});
+
+				if (!response.ok) return;
+
+				// Handle ID remapping for newly created profiles
+				const result = await response.json() as {
+					synced: string[];
+					created: Array<{ local_id: string; server_id: string }>;
+					updated: string[];
+					skipped: string[];
+				};
+
+				// Remap local profile IDs to server-assigned IDs
+				for (const { local_id, server_id } of result.created) {
+					await invoke("remap_profile_id", { localId: local_id, serverId: server_id });
+				}
+			} catch (error) {
+				console.warn("Failed to sync profiles to backend:", error);
+			}
+		};
+
+		syncProfiles();
+	}, [backend, backend instanceof TauriBackend && backend.auth?.isAuthenticated]);
+
 	return null;
 }

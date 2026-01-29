@@ -13,6 +13,7 @@ execute = [
     "dep:rig-core",
     "dep:rmcp",
     "dep:jsonschema",
+    "dep:copilot-sdk",
 ]
 
 [dependencies]
@@ -35,4 +36,5 @@ async-trait.workspace = true
 rig-core = { workspace = true, optional = true }
 rmcp = { workspace = true, optional = true }
 jsonschema = { workspace = true, optional = true }
+copilot-sdk = { workspace = true, optional = true }
 regex.workspace = true

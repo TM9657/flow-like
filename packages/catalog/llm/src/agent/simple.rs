@@ -1,4 +1,4 @@
-use crate::generative::agent::Agent;
+use crate::generative::agent::{Agent, ContextManagementMode};
 /// # Simple Agent Node
 /// This is an LLM-controlled while loop over an arbitrary number of flow-leafes with back-propagation of leaf outputs into the agent.
 /// Uses Rig's agent system with dynamic tools for executing Flow-Like subcontexts.
@@ -43,6 +43,15 @@ impl SimpleAgentNode {
         let max_iterations: u64 = context.evaluate_pin("max_iter").await?;
         let model_bit = context.evaluate_pin::<Bit>("model").await?;
         let history = context.evaluate_pin::<History>("history").await?;
+        let infinite_context: bool = context.evaluate_pin("infinite_context").await?;
+        let max_context_tokens: u64 = context.evaluate_pin("max_context_tokens").await?;
+        let context_mode: String = context.evaluate_pin("context_mode").await?;
+
+        // Parse context management mode
+        let mode = match context_mode.to_lowercase().as_str() {
+            "summarize" | "summary" => ContextManagementMode::Summarize,
+            _ => ContextManagementMode::Truncate,
+        };
 
         // Get referenced functions and store as function refs
         let referenced_functions = context.get_referenced_functions().await?;
@@ -53,6 +62,12 @@ impl SimpleAgentNode {
         // Set model display name from bit metadata
         if let Some(meta) = model_bit.meta.get("name") {
             agent.model_display_name = Some(meta.name.clone());
+        }
+
+        // Enable infinite context mode if requested
+        if infinite_context {
+            agent.enable_infinite_context(Some(max_context_tokens as u32));
+            agent.set_context_management_mode(mode);
         }
 
         // Store function references - tools will be generated at execution time
@@ -146,6 +161,30 @@ impl NodeLogic for SimpleAgentNode {
             VariableType::Integer,
         )
         .set_default_value(Some(json::json!(15)));
+
+        node.add_input_pin(
+            "infinite_context",
+            "Infinite Context",
+            "Enable automatic context window management to prevent overflow",
+            VariableType::Boolean,
+        )
+        .set_default_value(Some(json::json!(false)));
+
+        node.add_input_pin(
+            "max_context_tokens",
+            "Max Tokens",
+            "Maximum tokens to retain when truncating (default: 32000)",
+            VariableType::Integer,
+        )
+        .set_default_value(Some(json::json!(32000)));
+
+        node.add_input_pin(
+            "context_mode",
+            "Context Mode",
+            "How to handle context overflow: 'truncate' (drop old messages) or 'summarize' (LLM compresses history)",
+            VariableType::String,
+        )
+        .set_default_value(Some(json::json!("truncate")));
 
         node.add_output_pin(
             "on_stream",

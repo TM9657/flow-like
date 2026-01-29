@@ -45,6 +45,10 @@ message Event {
   optional string default_page_id = 18;
   // Input pins copied from the node at publish time
   repeated EventInput inputs = 19;
+  // URL route path that maps to this event (e.g., "/", "/dashboard")
+  optional string route = 20;
+  // Whether this is the default event/route for the app (shown at "/")
+  bool is_default = 21;
 }
 
 // Simplified input pin metadata for events

@@ -109,7 +109,17 @@ const capabilityIcons: Record<string, CapabilityInfo> = {
 	speed: { icon: Zap, label: "Speed", color: "text-amber-500" },
 };
 
-export function AIModelPage() {
+const LLM_LIKE_TYPES = new Set([IBitTypes.Llm, IBitTypes.Vlm]);
+
+function isHostedModel(bit: IBit): boolean {
+	return (bit.size ?? 0) === 0 || !bit.download_link;
+}
+
+interface AIModelPageProps {
+	webMode?: boolean;
+}
+
+export function AIModelPage({ webMode = false }: AIModelPageProps) {
 	const backend = useBackend();
 	const profile = useInvoke(
 		backend.userState.getProfile,
@@ -271,7 +281,7 @@ export function AIModelPage() {
 	}, [foundBits.data]);
 
 	const profileBitIds = useMemo(() => {
-		return new Set(profile.data?.bits.map((id) => id.split(":").pop()) ?? []);
+		return new Set(profile.data?.bits?.map((id) => id.split(":").pop()) ?? []);
 	}, [profile.data]);
 
 	const filteredModels = useMemo(() => {
@@ -280,6 +290,16 @@ export function AIModelPage() {
 			: (foundBits.data ?? []);
 		models = models.filter((bit) => !blacklist.has(bit.id));
 		models = models.filter((bit) => bit.meta?.en !== undefined);
+
+		// In web mode, filter LLM/VLM to only show hosted models
+		if (webMode) {
+			models = models.filter((bit) => {
+				if (LLM_LIKE_TYPES.has(bit.type)) {
+					return isHostedModel(bit);
+				}
+				return true;
+			});
+		}
 
 		if (inputModalities.size < 2 || outputModalities.size < 2) {
 			models = models.filter((m) => {
@@ -383,6 +403,7 @@ export function AIModelPage() {
 		blacklist,
 		sortBy,
 		capabilityFilters,
+		webMode,
 	]);
 
 	const modalityCounts = useMemo(() => {
@@ -521,13 +542,15 @@ export function AIModelPage() {
 								iconColor="text-primary"
 								label="In Profile"
 							/>
-							<FilterCheckbox
-								checked={showDownloadedOnly}
-								onCheckedChange={(c) => setShowDownloadedOnly(!!c)}
-								icon={PackageCheck}
-								iconColor="text-emerald-500"
-								label="Downloaded"
-							/>
+							{!webMode && (
+								<FilterCheckbox
+									checked={showDownloadedOnly}
+									onCheckedChange={(c) => setShowDownloadedOnly(!!c)}
+									icon={PackageCheck}
+									iconColor="text-emerald-500"
+									label="Downloaded"
+								/>
+							)}
 						</FilterSection>
 
 						{providers.length > 0 && (
@@ -800,6 +823,7 @@ export function AIModelPage() {
 				bit={selectedModel}
 				open={selectedModel !== null}
 				onOpenChange={(open) => !open && setSelectedModel(null)}
+				webMode={webMode}
 			/>
 		</main>
 	);

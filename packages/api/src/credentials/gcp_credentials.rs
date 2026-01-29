@@ -40,6 +40,8 @@ pub struct GcpRuntimeCredentials {
     /// Whether write operations are allowed
     pub write_access: bool,
     pub expiration: Option<chrono::DateTime<chrono::Utc>>,
+    pub content_path_prefix: Option<String>,
+    pub user_content_path_prefix: Option<String>,
 }
 
 #[cfg(feature = "gcp")]
@@ -54,6 +56,8 @@ impl GcpRuntimeCredentials {
             allowed_prefixes: Vec::new(),
             write_access: true,
             expiration: None,
+            content_path_prefix: None,
+            user_content_path_prefix: None,
         }
     }
 
@@ -75,6 +79,8 @@ impl GcpRuntimeCredentials {
             allowed_prefixes: Vec::new(),
             write_access: true,
             expiration: None,
+            content_path_prefix: None,
+            user_content_path_prefix: None,
         }
     }
 
@@ -90,6 +96,8 @@ impl GcpRuntimeCredentials {
             allowed_prefixes: Vec::new(),
             write_access: true,
             expiration: None,
+            content_path_prefix: None,
+            user_content_path_prefix: None,
         }
     }
 
@@ -169,6 +177,8 @@ impl GcpRuntimeCredentials {
             allowed_prefixes,
             write_access,
             expiration: Some(chrono_expiration),
+            content_path_prefix: Some(format!("apps/{}", app_id)),
+            user_content_path_prefix: Some(format!("users/{}/apps/{}", sub, app_id)),
         })
     }
 
@@ -242,9 +252,12 @@ impl GcpRuntimeCredentials {
             access_token: Some(access_token),
             meta_bucket: self.meta_bucket.clone(),
             content_bucket: self.content_bucket.clone(),
+            logs_bucket: self.logs_bucket.clone(),
             allowed_prefixes,
             write_access,
             expiration: Some(chrono_expiration),
+            content_path_prefix: Some(format!("apps/{}", app_id)),
+            user_content_path_prefix: Some(format!("users/{}/apps/{}", sub, app_id)),
         })
     }
 }
@@ -485,11 +498,17 @@ impl RuntimeCredentialsTrait for GcpRuntimeCredentials {
             allowed_prefixes: self.allowed_prefixes.clone(),
             write_access: self.write_access,
             expiration: self.expiration,
+            content_path_prefix: self.content_path_prefix.clone(),
+            user_content_path_prefix: self.user_content_path_prefix.clone(),
         })
     }
 
     async fn to_db(&self, app_id: &str) -> Result<ConnectBuilder> {
         self.into_shared_credentials().to_db(app_id).await
+    }
+
+    async fn to_db_scoped(&self, app_id: &str) -> Result<ConnectBuilder> {
+        self.into_shared_credentials().to_db_scoped(app_id).await
     }
 
     #[tracing::instrument(

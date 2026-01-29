@@ -330,6 +330,7 @@ export async function fetcher<T>(
 	}
 
 	const url = constructUrl(profile, path);
+	console.log("[API DEBUG] Fetching URL:", url);
 	try {
 		const response = await tauriFetch(url, {
 			...options,
@@ -342,7 +343,10 @@ export async function fetcher<T>(
 			priority: "high",
 		});
 
+		console.log("[API DEBUG] Response received:", response);
+
 		if (!response.ok) {
+			console.warn(`Error fetching ${path}:`, response);
 			if (response.status === 401 && auth) {
 				auth?.startSilentRenew();
 			}
@@ -351,7 +355,9 @@ export async function fetcher<T>(
 			throw new Error(`Error fetching data: ${response.statusText}`);
 		}
 
+		console.log("[API DEBUG] Response OK, parsing JSON...");
 		const json = await response.json();
+		console.log("[API DEBUG] JSON parsed successfully.");
 		console.groupCollapsed(`API Request: ${path}`);
 		console.dir(json, { depth: null });
 		console.groupEnd();

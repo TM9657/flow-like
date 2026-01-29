@@ -6,6 +6,7 @@ import {
 	Bookmark,
 	Cable,
 	Database,
+	ExternalLink,
 	FolderClosed,
 	Globe,
 	Loader2,
@@ -17,6 +18,7 @@ import {
 	WifiOff,
 	Workflow,
 } from "lucide-react";
+import { isTauri } from "../lib/platform";
 import { useCallback, useState } from "react";
 import { Avatar, AvatarFallback, AvatarImage } from "./ui/avatar";
 import { Button } from "./ui/button";
@@ -433,16 +435,38 @@ export function Shortcuts<TBackend, TAppMetadata>({
 											)}
 										</Label>
 									</div>
-									<div className="flex items-center space-x-2">
-										<RadioGroupItem value="offline" id="offline" />
-										<Label
-											htmlFor="offline"
-											className="flex items-center gap-2 font-normal cursor-pointer"
-										>
-											<WifiOff className="h-4 w-4" />
-											Offline - Local only
-										</Label>
-									</div>
+										{isTauri() ? (
+											<div className="flex items-center space-x-2">
+												<RadioGroupItem value="offline" id="offline" />
+												<Label
+													htmlFor="offline"
+													className="flex items-center gap-2 font-normal cursor-pointer"
+												>
+													<WifiOff className="h-4 w-4" />
+													Offline - Local only
+												</Label>
+											</div>
+										) : (
+											<div className="flex items-center space-x-2 opacity-50">
+												<RadioGroupItem value="offline" id="offline" disabled />
+												<Label
+													htmlFor="offline"
+													className="flex items-center gap-2 font-normal cursor-not-allowed"
+												>
+													<WifiOff className="h-4 w-4" />
+													Offline - Local only
+													<a
+														href="https://flow-like.com/download"
+														target="_blank"
+														rel="noopener noreferrer"
+														className="text-xs text-primary hover:underline flex items-center gap-1 ml-1"
+														onClick={(e) => e.stopPropagation()}
+													>
+														(Get Studio <ExternalLink className="h-3 w-3" />)
+													</a>
+												</Label>
+											</div>
+										)}
 								</RadioGroup>
 							</div>
 						</div>

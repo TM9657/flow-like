@@ -4,7 +4,7 @@
 	"version": "0.0.2",
 	"type": "module",
 	"scripts": {
-		"start_services": "docker compose up -d",
+		"start_services": "cd .. && docker compose up -d",
 		"dev": "bun run start_services && cargo watch -x run",
 		"dev:nightly": "bun run start_services && RUSTFLAGS='-Z threads=8' cargo +nightly watch -x run",
 		"dev:zero-downtime": "systemfd --no-pid -s http::3000 -- cargo watch -x run",

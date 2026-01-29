@@ -249,6 +249,10 @@ pub struct DispatchRequest {
     /// Whether to stream node state updates
     #[serde(default)]
     pub stream_state: bool,
+    /// Runtime-configured variables to override board variables
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub runtime_variables:
+        Option<std::collections::HashMap<String, flow_like::flow::variable::Variable>>,
 }
 
 /// Response from dispatch
@@ -826,5 +830,6 @@ fn build_executor_payload(job_id: &str, request: &DispatchRequest) -> serde_json
         "token": request.token,
         "oauth_tokens": request.oauth_tokens,
         "stream_state": request.stream_state,
+        "runtime_variables": request.runtime_variables,
     })
 }

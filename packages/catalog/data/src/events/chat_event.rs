@@ -20,6 +20,7 @@ use flow_like_types::{
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
+pub mod attachment_from_path;
 pub mod attachment_from_url;
 pub mod attachment_to_url;
 pub mod push_attachment;

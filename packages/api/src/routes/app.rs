@@ -17,7 +17,6 @@ pub mod meta;
 pub mod notifications;
 pub mod page;
 pub mod roles;
-pub mod route;
 pub mod team;
 pub mod template;
 pub mod widget;
@@ -44,7 +43,6 @@ pub fn routes() -> Router<AppState> {
         .nest("/{app_id}/templates", template::routes())
         .nest("/{app_id}/widgets", widget::routes())
         .nest("/{app_id}/pages", page::routes())
-        .nest("/{app_id}/routes", route::routes())
         .nest("/{app_id}/board", board::routes())
         .nest("/{app_id}/meta", meta::routes())
         .nest("/{app_id}/roles", roles::routes())
@@ -296,7 +294,6 @@ impl From<app::Model> for flow_like::app::App {
             app_state: None,
             widget_ids: vec![],
             page_ids: vec![],
-            route_mappings: HashMap::new(),
         }
     }
 }

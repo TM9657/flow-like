@@ -3,9 +3,14 @@
 //! This module provides the A2UICopilot struct which enables natural language
 //! UI generation using the A2UI component system.
 
+pub mod component_docs;
 mod tools;
 mod types;
 
+pub use component_docs::{
+    CHART_DOCUMENTATION, COMPONENT_CATALOG, GAME_COMPONENT_DOCUMENTATION, ML_VISION_DOCUMENTATION,
+    STYLE_GUIDE, get_documentation_section, get_full_documentation,
+};
 pub use tools::*;
 pub use types::*;
 

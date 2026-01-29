@@ -58,6 +58,10 @@ pub enum Relation {
     Comment,
     #[sea_orm(has_many = "super::course_connection::Entity")]
     CourseConnection,
+    #[sea_orm(has_many = "super::event::Entity")]
+    Event,
+    #[sea_orm(has_many = "super::event_sink::Entity")]
+    EventSink,
     #[sea_orm(has_many = "super::execution_usage_tracking::Entity")]
     ExecutionUsageTracking,
     #[sea_orm(has_many = "super::feedback::Entity")]
@@ -117,6 +121,18 @@ impl Related<super::comment::Entity> for Entity {
 impl Related<super::course_connection::Entity> for Entity {
     fn to() -> RelationDef {
         Relation::CourseConnection.def()
+    }
+}
+
+impl Related<super::event::Entity> for Entity {
+    fn to() -> RelationDef {
+        Relation::Event.def()
+    }
+}
+
+impl Related<super::event_sink::Entity> for Entity {
+    fn to() -> RelationDef {
+        Relation::EventSink.def()
     }
 }
 

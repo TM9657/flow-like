@@ -366,7 +366,7 @@ export function EventForm({
 	);
 
 	return (
-		<form onSubmit={handleSubmit} className="space-y-6">
+		<form onSubmit={handleSubmit} className="space-y-6 pb-4">
 			{/* Basic Information */}
 			<div className="space-y-4">
 				<div className="space-y-2">

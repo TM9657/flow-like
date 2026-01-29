@@ -80,23 +80,28 @@ pub async fn get_with_dependencies(
         return Ok(Json(bits));
     }
 
+    // Capture original dependency_tree_hash before conversion (it might be None in DB)
+    let original_dependency_tree_hash = bit_model.dependency_tree_hash.clone();
     let converted_bit: Bit = bit_model.into();
     let bits = fetch_dependencies(&converted_bit, &state).await?;
 
-    bit_tree_cache::Entity::insert(bit_tree_cache::ActiveModel {
-        dependency_tree_hash: Set(converted_bit.dependency_tree_hash.clone()),
-        created_at: Set(chrono::Utc::now().naive_utc()),
-        updated_at: Set(chrono::Utc::now().naive_utc()),
-    })
-    .on_conflict(
-        OnConflict::column(bit_tree_cache::Column::DependencyTreeHash)
-            .update_column(bit_tree_cache::Column::UpdatedAt)
-            .to_owned(),
-    )
-    .exec_with_returning(&state.db)
-    .await?;
+    // Only insert into cache if the bit has a real dependency_tree_hash in the database
+    if let Some(ref dep_hash) = original_dependency_tree_hash {
+        bit_tree_cache::Entity::insert(bit_tree_cache::ActiveModel {
+            dependency_tree_hash: Set(dep_hash.clone()),
+            created_at: Set(chrono::Utc::now().naive_utc()),
+            updated_at: Set(chrono::Utc::now().naive_utc()),
+        })
+        .on_conflict(
+            OnConflict::column(bit_tree_cache::Column::DependencyTreeHash)
+                .update_column(bit_tree_cache::Column::UpdatedAt)
+                .to_owned(),
+        )
+        .exec_with_returning(&state.db)
+        .await?;
 
-    insert_bit_cache(&state, &bits, &converted_bit.dependency_tree_hash).await?;
+        insert_bit_cache(&state, &bits, dep_hash).await?;
+    }
 
     state.set_cache(cache_key, &bits);
 

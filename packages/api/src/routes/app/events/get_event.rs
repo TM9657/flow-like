@@ -10,6 +10,8 @@ use flow_like::flow::event::Event;
 use flow_like_types::anyhow;
 use serde::Deserialize;
 
+use super::db::{filter_event_secrets, get_event_from_db};
+
 #[derive(Deserialize, Debug)]
 pub struct VersionQuery {
     /// expected format: "MAJOR_MINOR_PATCH", e.g. "1_0_3"
@@ -43,8 +45,18 @@ pub async fn get_event(
         None
     };
 
-    let app = state.master_app(&sub, &app_id, &state).await?;
-    let event = app.get_event(&event_id, version_opt).await?;
+    // For current version, use database lookup
+    // For historical versions, fall back to bucket
+    let event = if version_opt.is_none() {
+        get_event_from_db(&state.db, &event_id).await?
+    } else {
+        let app = state.master_app(&sub, &app_id, &state).await?;
+        app.get_event(&event_id, version_opt).await?
+    };
+
+    // Filter out secret variable values - clients don't need them
+    // (secrets are only used server-side during remote execution)
+    let event = filter_event_secrets(event);
 
     Ok(Json(event))
 }
