@@ -537,6 +537,7 @@ async fn prepare_message_payload(
 }
 
 /// Create a Discord embed for reasoning/plan steps
+/// Discord embed limits: 6000 total chars, 1024 per field, 25 fields max
 fn create_reasoning_embed(reasoning: &Reasoning) -> Option<CreateEmbed> {
     if reasoning.plan.is_empty() && reasoning.current_message.is_empty() {
         return None;
@@ -546,31 +547,82 @@ fn create_reasoning_embed(reasoning: &Reasoning) -> Option<CreateEmbed> {
         .title("🧠 Thinking...")
         .colour(Colour::from_rgb(255, 191, 0)); // Amber color
 
-    for (step_id, step_text) in &reasoning.plan {
-        let is_current = *step_id == reasoning.current_step;
-        let is_completed = *step_id < reasoning.current_step;
+    let current_step = reasoning.current_step;
+    let total_steps = reasoning.plan.len();
 
-        let status = if is_completed {
-            "✅"
-        } else if is_current {
-            "🔄"
-        } else {
-            "⏳"
-        };
+    // Count completed steps
+    let completed_count = reasoning
+        .plan
+        .iter()
+        .filter(|(id, _)| *id < current_step)
+        .count();
 
-        let mut value = step_text.clone();
-
-        // Add current message under the active step
-        if is_current && !reasoning.current_message.is_empty() {
-            let truncated = if reasoning.current_message.len() > 200 {
-                format!("{}...", &reasoning.current_message[..197])
-            } else {
-                reasoning.current_message.clone()
-            };
-            value = format!("{}\n> *{}*", value, truncated);
+    // If we have many completed steps, show a summary instead
+    if completed_count > 2 {
+        embed = embed.field(
+            format!("✅ {} steps completed", completed_count),
+            "─".repeat(20),
+            false,
+        );
+    } else {
+        // Show individual completed steps (max 2)
+        for (step_id, step_text) in &reasoning.plan {
+            if *step_id < current_step {
+                let truncated = if step_text.len() > 60 {
+                    format!("{}...", &step_text[..57])
+                } else {
+                    step_text.clone()
+                };
+                embed = embed.field(format!("✅ Step {}", step_id), truncated, false);
+            }
         }
+    }
 
-        embed = embed.field(format!("{} Step {}", status, step_id), value, false);
+    // Show current step with full detail
+    for (step_id, step_text) in &reasoning.plan {
+        if *step_id == current_step {
+            let mut value = if step_text.len() > 200 {
+                format!("{}...", &step_text[..197])
+            } else {
+                step_text.clone()
+            };
+
+            // Add current message under the active step
+            if !reasoning.current_message.is_empty() {
+                let truncated = if reasoning.current_message.len() > 150 {
+                    format!("{}...", &reasoning.current_message[..147])
+                } else {
+                    reasoning.current_message.clone()
+                };
+                value = format!("{}\n> *{}*", value, truncated);
+            }
+
+            embed = embed.field(format!("🔄 Step {}", step_id), value, false);
+        }
+    }
+
+    // Show only next 2 upcoming steps briefly
+    let mut upcoming_shown = 0;
+    for (step_id, step_text) in &reasoning.plan {
+        if *step_id > current_step && upcoming_shown < 2 {
+            let truncated = if step_text.len() > 50 {
+                format!("{}...", &step_text[..47])
+            } else {
+                step_text.clone()
+            };
+            embed = embed.field(format!("⏳ Step {}", step_id), truncated, false);
+            upcoming_shown += 1;
+        }
+    }
+
+    // If there are more upcoming steps, show count
+    let remaining = total_steps.saturating_sub(current_step as usize + upcoming_shown);
+    if remaining > 0 {
+        embed = embed.field(
+            format!("⏳ +{} more steps", remaining),
+            "─".repeat(10),
+            false,
+        );
     }
 
     Some(embed)
