@@ -32,6 +32,9 @@ pub struct SinkResponse {
     pub active: bool,
     pub path: Option<String>,
     pub has_auth_token: bool,
+    /// Webhook secret for Telegram verification (only returned for telegram sinks)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub webhook_secret: Option<String>,
     pub created_at: String,
     pub updated_at: String,
     /// Event info (fetched from app)
@@ -52,6 +55,7 @@ impl From<event_sink::Model> for SinkResponse {
             active: model.active,
             path: model.path,
             has_auth_token: model.auth_token.is_some(),
+            webhook_secret: model.webhook_secret,
             created_at: model.created_at.to_string(),
             updated_at: model.updated_at.to_string(),
             event_name: None,

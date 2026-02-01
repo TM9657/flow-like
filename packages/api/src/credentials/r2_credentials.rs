@@ -54,7 +54,9 @@ pub struct R2RuntimeCredentials {
 
 impl R2RuntimeCredentials {
     pub fn from_env() -> Self {
-        let logs_bucket = std::env::var("LOG_BUCKET").unwrap_or_default();
+        let logs_bucket = std::env::var("LOG_BUCKET")
+        .or_else(|_| std::env::var("LOGS_BUCKET"))
+        .unwrap_or_default();
         if logs_bucket.is_empty() {
             tracing::warn!(
                 "LOG_BUCKET environment variable is not set - logs will not be persisted"
@@ -68,8 +70,12 @@ impl R2RuntimeCredentials {
                 .or_else(|_| std::env::var("AWS_SECRET_ACCESS_KEY"))
                 .ok(),
             session_token: None,
-            meta_bucket: std::env::var("META_BUCKET_NAME").unwrap_or_default(),
-            content_bucket: std::env::var("CONTENT_BUCKET_NAME").unwrap_or_default(),
+            meta_bucket: std::env::var("META_BUCKET")
+            .or_else(|_| std::env::var("META_BUCKET_NAME"))
+            .unwrap_or_default(),
+            content_bucket: std::env::var("CONTENT_BUCKET")
+            .or_else(|_| std::env::var("CONTENT_BUCKET_NAME"))
+            .unwrap_or_default(),
             logs_bucket,
             endpoint: std::env::var("R2_ENDPOINT")
                 .or_else(|_| std::env::var("AWS_ENDPOINT"))

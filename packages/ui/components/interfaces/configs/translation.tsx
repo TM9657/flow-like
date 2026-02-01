@@ -17,8 +17,62 @@ import {
 	TooltipProvider,
 	TooltipTrigger,
 } from "@tm9657/flow-like-ui";
+import type { IHub, ISupportedSinks } from "@tm9657/flow-like-ui/lib/schema/hub/hub";
 import { Cloud, Laptop, MonitorSmartphone } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
+
+/** Map event types to their corresponding sink type for hub lookup */
+const EVENT_TYPE_TO_SINK_MAP: Record<string, keyof ISupportedSinks> = {
+	http: "http",
+	webhook: "webhook",
+	cron: "cron",
+	telegram: "telegram",
+	discord: "discord",
+	slack: "slack",
+	email: "email",
+	mqtt: "mqtt",
+	github: "github",
+	rss: "rss",
+};
+
+/**
+ * Determines sink availability based on hub configuration and local capabilities.
+ * If hub has supported_sinks, use that to determine remote availability.
+ * Local availability is always true if canExecuteLocally is true.
+ */
+function computeSinkAvailability(
+	eventType: string,
+	hub?: IHub | null,
+	canExecuteLocally?: boolean,
+): { availability: "local" | "remote" | "both"; description?: string } | null {
+	const sinkType = EVENT_TYPE_TO_SINK_MAP[eventType];
+	if (!sinkType) return null;
+
+	const supportsRemote = hub?.supported_sinks?.[sinkType] === true;
+	const supportsLocal = canExecuteLocally ?? false;
+
+	if (supportsRemote && supportsLocal) {
+		return {
+			availability: "both",
+			description: "Can run locally or on remote server",
+		};
+	}
+	if (supportsRemote) {
+		return {
+			availability: "remote",
+			description: "Runs on remote server only",
+		};
+	}
+	if (supportsLocal) {
+		return {
+			availability: "local",
+			description: "Runs locally only (desktop app)",
+		};
+	}
+
+	// If neither is available, this sink type is not supported
+	return null;
+}
 
 function SinkAvailabilityBadge({
 	availability,
@@ -73,12 +127,18 @@ export function EventTypeConfiguration({
 	event,
 	disabled,
 	onUpdate,
+	hub,
+	canExecuteLocally,
 }: Readonly<{
 	eventConfig: IEventMapping;
 	node: INode;
 	disabled: boolean;
 	event: IEvent;
 	onUpdate: (type: string, config: Partial<IEventPayload>) => void;
+	/** Hub configuration for determining remote sink availability */
+	hub?: IHub | null;
+	/** Whether local execution is available (desktop app) */
+	canExecuteLocally?: boolean;
 }>) {
 	const foundConfig = eventConfig[node?.name];
 
@@ -99,9 +159,21 @@ export function EventTypeConfiguration({
 
 	if (foundConfig?.eventTypes.length <= 1) return null;
 
+	// Filter event types to only those that have at least one available sink
+	const availableEventTypes = foundConfig?.eventTypes.filter((type) => {
+		// If this event type has a sink requirement, check availability
+		if (foundConfig?.withSink?.includes(type)) {
+			const sinkConfig = computeSinkAvailability(type, hub, canExecuteLocally);
+			return sinkConfig !== null;
+		}
+		// Event types without sinks are always available
+		return true;
+	});
+
 	const getSinkAvailability = (type: string) => {
 		if (!foundConfig?.withSink?.includes(type)) return null;
-		return foundConfig?.sinkAvailability?.[type] ?? { availability: "local" as const };
+		// Use dynamic computation based on hub config instead of static mapping
+		return computeSinkAvailability(type, hub, canExecuteLocally);
 	};
 
 	return (
@@ -118,7 +190,7 @@ export function EventTypeConfiguration({
 					<SelectValue placeholder="Select event type" />
 				</SelectTrigger>
 				<SelectContent>
-					{foundConfig?.eventTypes.map((type) => {
+					{availableEventTypes?.map((type) => {
 						const sinkConfig = getSinkAvailability(type);
 						return (
 							<SelectItem key={type} value={type}>
@@ -149,6 +221,8 @@ export function EventTranslation({
 	nodeId,
 	config,
 	onUpdate,
+	hub,
+	eventId,
 }: Readonly<{
 	appId: string;
 	eventConfig: IEventMapping;
@@ -158,6 +232,8 @@ export function EventTranslation({
 	board: IBoard;
 	nodeId?: string;
 	onUpdate: (payload: Partial<IEventPayload>) => void;
+	hub?: IHub | null;
+	eventId?: string;
 }>) {
 	const [intermediateConfig, setIntermediateConfig] =
 		useState<Partial<IEventPayload>>(config);
@@ -180,6 +256,8 @@ export function EventTranslation({
 			config: intermediateConfig,
 			node: node,
 			nodeId: nodeId ?? "",
+			hub,
+			eventId,
 			onConfigUpdate: (payload: Partial<IEventPayload>) => {
 				setIntermediateConfig(payload);
 				if (onUpdate) {
@@ -195,6 +273,8 @@ export function EventTranslation({
 			node,
 			nodeId,
 			onUpdate,
+			hub,
+			eventId,
 		],
 	);
 

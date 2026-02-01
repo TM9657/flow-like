@@ -2,7 +2,9 @@
 //!
 //! Provides endpoints for:
 //! - Sink activation/deactivation (user can only toggle active state)
-//! - HTTP sink triggers
+//! - HTTP sink triggers (/sink/trigger/http/{app_id}/{path})
+//! - Telegram webhook triggers (/sink/trigger/telegram/{event_id})
+//! - Discord interactions webhook triggers (/sink/trigger/discord/{event_id})
 //! - Listing all active sinks for user's apps
 //!
 //! Note: Sink config comes from the Event itself. We only store sink-specific
@@ -31,8 +33,24 @@ pub fn routes() -> Router<AppState> {
         .route("/{event_id}", patch(management::update_sink))
         .route("/{event_id}/toggle", post(management::toggle_sink))
         // HTTP sink trigger - matches any method and path after app_id
-        .route("/trigger/{app_id}/{*path}", get(trigger::http_trigger))
-        .route("/trigger/{app_id}/{*path}", post(trigger::http_trigger))
-        .route("/trigger/{app_id}/{*path}", patch(trigger::http_trigger))
-        .route("/trigger/{app_id}/{*path}", delete(trigger::http_trigger))
+        .route("/trigger/http/{app_id}/{*path}", get(trigger::http_trigger))
+        .route("/trigger/http/{app_id}/{*path}", post(trigger::http_trigger))
+        .route(
+            "/trigger/http/{app_id}/{*path}",
+            patch(trigger::http_trigger),
+        )
+        .route(
+            "/trigger/http/{app_id}/{*path}",
+            delete(trigger::http_trigger),
+        )
+        // Telegram webhook trigger - async execution with secret token verification
+        .route(
+            "/trigger/telegram/{event_id}",
+            post(trigger::telegram_trigger),
+        )
+        // Discord interactions webhook trigger - async execution with Ed25519 signature verification
+        .route(
+            "/trigger/discord/{event_id}",
+            post(trigger::discord_trigger),
+        )
 }

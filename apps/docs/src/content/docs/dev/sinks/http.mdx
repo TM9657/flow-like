@@ -1,0 +1,156 @@
+---
+title: HTTP Sink
+description: Configure HTTP webhooks to trigger workflow executions
+sidebar:
+  order: 2
+---
+
+The HTTP sink allows you to trigger workflow executions via standard HTTP requests. This is the most flexible sink type, supporting any HTTP method and custom paths.
+
+## Endpoint Format
+
+```
+POST/GET/PATCH/DELETE /sink/trigger/http/{app_id}/{path}
+```
+
+- `app_id`: Your application's unique identifier
+- `path`: Custom path you configure (must start with `/`)
+
+## Configuration Options
+
+| Field | Type | Description | Required |
+|-------|------|-------------|----------|
+| `path` | string | URL path for the endpoint (e.g., `/webhook`) | Yes |
+| `method` | string | HTTP method (POST, GET, etc.) | Yes |
+| `auth_token` | string | Optional Bearer token for authentication | No |
+
+## Local Mode
+
+When running locally, the desktop app exposes an HTTP server on port **9657**:
+
+```
+http://localhost:9657/{app_id}{path}
+```
+
+### Example Request
+
+```bash
+curl -X POST "http://localhost:9657/app_abc123/webhook" \
+  -H "Content-Type: application/json" \
+  -d '{"event": "test", "data": {"key": "value"}}'
+```
+
+## Remote Mode
+
+When deployed to a server, the endpoint is publicly accessible:
+
+```
+https://your-domain.com/sink/trigger/http/{app_id}{path}
+```
+
+### Example Request
+
+```bash
+curl -X POST "https://your-domain.com/sink/trigger/http/app_abc123/webhook" \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer your-auth-token" \
+  -d '{"event": "test", "data": {"key": "value"}}'
+```
+
+## Authentication
+
+### Bearer Token
+
+If you configure an `auth_token`, all requests must include it in the `Authorization` header:
+
+```bash
+curl -X POST "https://your-domain.com/sink/trigger/http/app_abc123/webhook" \
+  -H "Authorization: Bearer your-secret-token" \
+  -d '{"data": "payload"}'
+```
+
+Requests without the correct token will receive a `401 Unauthorized` response.
+
+### No Authentication
+
+If no `auth_token` is set, the endpoint is publicly accessible. Use this for:
+- Webhooks from third-party services that can't add custom headers
+- Development/testing environments
+
+:::caution
+For production deployments, always use authentication when possible.
+:::
+
+## Response Format
+
+The HTTP sink returns a streaming response with execution progress:
+
+```
+HTTP/1.1 200 OK
+Content-Type: text/event-stream
+
+data: {"type":"progress","run_id":"run_xyz","progress":25}
+
+data: {"type":"progress","run_id":"run_xyz","progress":50}
+
+data: {"type":"progress","run_id":"run_xyz","progress":100}
+
+data: {"type":"complete","run_id":"run_xyz","output":{...}}
+```
+
+For non-streaming clients, the final result is included in the last event.
+
+## Use Cases
+
+### Webhook Receiver
+
+Receive webhooks from external services like GitHub, Stripe, or Slack:
+
+```json
+{
+  "path": "/github-webhook",
+  "method": "POST",
+  "auth_token": null
+}
+```
+
+### API Endpoint
+
+Create a custom API endpoint for your application:
+
+```json
+{
+  "path": "/api/v1/process",
+  "method": "POST",
+  "auth_token": "secret-api-key"
+}
+```
+
+### Form Handler
+
+Handle form submissions from a website:
+
+```json
+{
+  "path": "/submit-form",
+  "method": "POST",
+  "auth_token": null
+}
+```
+
+## Error Handling
+
+| Status Code | Description |
+|-------------|-------------|
+| `200 OK` | Request accepted, execution started |
+| `401 Unauthorized` | Invalid or missing auth token |
+| `404 Not Found` | No matching sink found for path |
+| `500 Internal Server Error` | Execution dispatch failed |
+
+## Best Practices
+
+1. **Use descriptive paths**: `/webhook/github/issues` is better than `/hook1`
+2. **Enable authentication** for production endpoints
+3. **Use HTTPS** in production for encrypted communication
+4. **Monitor execution logs** to track incoming requests
+5. **Set up rate limiting** at the infrastructure level if needed

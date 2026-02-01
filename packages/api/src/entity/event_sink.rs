@@ -24,6 +24,9 @@ pub struct Model {
     /// Auth token for securing HTTP endpoints
     #[sea_orm(column_name = "authToken", column_type = "Text", nullable)]
     pub auth_token: Option<String>,
+    /// Secret token for Telegram webhook verification (X-Telegram-Bot-Api-Secret-Token header)
+    #[sea_orm(column_name = "webhookSecret", column_type = "Text", nullable)]
+    pub webhook_secret: Option<String>,
     #[sea_orm(column_name = "createdAt")]
     pub created_at: DateTime,
     #[sea_orm(column_name = "updatedAt")]

@@ -1,17 +1,20 @@
 "use client";
 
-import { ExternalLink, Info } from "lucide-react";
-import { useState } from "react";
+import { Cloud, ExternalLink, Info, Laptop } from "lucide-react";
+import { useMemo, useState } from "react";
 import {
 	Accordion,
 	AccordionContent,
 	AccordionItem,
 	AccordionTrigger,
 } from "../../ui/accordion";
+import { Alert, AlertDescription, AlertTitle } from "../../ui/alert";
 import { Badge } from "../../ui/badge";
 import { Button } from "../../ui/button";
+import { Input } from "../../ui/input";
 import { Label } from "../../ui/label";
 import { Switch } from "../../ui/switch";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "../../ui/tabs";
 import type { IConfigInterfaceProps } from "../interfaces";
 
 const GATEWAY_INTENTS = [
@@ -118,8 +121,11 @@ export function DiscordConfig({
 	isEditing,
 	config,
 	onConfigUpdate,
+	hub,
+	eventId,
 }: IConfigInterfaceProps) {
 	const [copiedCode, setCopiedCode] = useState<string | null>(null);
+	const [showPublicKey, setShowPublicKey] = useState(false);
 
 	const setValue = (key: string, value: any) => {
 		if (onConfigUpdate) {
@@ -133,6 +139,7 @@ export function DiscordConfig({
 	const token = config?.token ?? "";
 	const botName = config?.bot_name ?? "My Discord Bot";
 	const botDescription = config?.bot_description ?? "";
+	const publicKey = (config?.webhook_secret as string) ?? ""; // Discord public key stored in webhook_secret
 	const selectedIntents: string[] = config?.intents ?? [
 		"Guilds",
 		"GuildMessages",
@@ -143,6 +150,14 @@ export function DiscordConfig({
 	const respondToMentions = config?.respond_to_mentions ?? true;
 	const respondToDMs = config?.respond_to_dms ?? true;
 	const commandPrefix = config?.command_prefix ?? "!";
+
+	// Compute webhook URLs
+	const supportsRemote = hub?.supported_sinks?.discord === true;
+	const remoteWebhookUrl = useMemo(() => {
+		if (!hub?.domain || !eventId) return null;
+		const protocol = hub.environment === "Development" ? "http" : "https";
+		return `${protocol}://${hub.domain}/sink/trigger/discord/${eventId}`;
+	}, [hub?.domain, hub?.environment, eventId]);
 
 	const copyToClipboard = (text: string, id: string) => {
 		navigator.clipboard.writeText(text);
@@ -219,6 +234,130 @@ export function DiscordConfig({
 					</a>
 				</p>
 			</div>
+
+			{/* Interactions Webhook Setup - shown when remote is supported */}
+			{(supportsRemote || true) && (
+				<Accordion type="single" collapsible defaultValue="webhook">
+					<AccordionItem value="webhook" className="border rounded-lg px-4">
+						<AccordionTrigger className="hover:no-underline">
+							<div className="flex items-center gap-2">
+								<Cloud className="h-4 w-4" />
+								<span>Interactions Webhook Setup</span>
+								{supportsRemote && remoteWebhookUrl && (
+									<Badge variant="default" className="ml-2">Remote Available</Badge>
+								)}
+							</div>
+						</AccordionTrigger>
+						<AccordionContent className="space-y-4 pt-2">
+							{supportsRemote && remoteWebhookUrl ? (
+								<Tabs defaultValue="remote" className="w-full">
+									<TabsList className="grid w-full grid-cols-2">
+										<TabsTrigger value="remote">
+											<Cloud className="h-3 w-3 mr-1" />
+											Remote (Server)
+										</TabsTrigger>
+										<TabsTrigger value="local">
+											<Laptop className="h-3 w-3 mr-1" />
+											Local (Desktop)
+										</TabsTrigger>
+									</TabsList>
+									<TabsContent value="remote" className="space-y-4 pt-2">
+										{/* Public Key */}
+										<div className="space-y-2">
+											<Label>Application Public Key</Label>
+											<div className="flex gap-2">
+												<Input
+													type={showPublicKey ? "text" : "password"}
+													value={publicKey}
+													onChange={(e) => setValue("webhook_secret", e.target.value)}
+													placeholder="Discord application public key"
+													disabled={!isEditing}
+													className="font-mono text-xs"
+												/>
+												<Button
+													type="button"
+													variant="ghost"
+													size="sm"
+													onClick={() => setShowPublicKey(!showPublicKey)}
+												>
+													{showPublicKey ? "Hide" : "Show"}
+												</Button>
+											</div>
+											<p className="text-xs text-muted-foreground">
+												Find this in your Discord Developer Portal under General Information → Public Key
+											</p>
+										</div>
+
+										{/* Webhook URL */}
+										<div className="space-y-2">
+											<Label>Interactions Endpoint URL</Label>
+											<div className="relative">
+												<div className="flex h-auto min-h-10 w-full rounded-md border border-input bg-muted px-3 py-2 text-sm font-mono break-all">
+													{remoteWebhookUrl}
+												</div>
+												<Button
+													type="button"
+													variant="ghost"
+													size="sm"
+													className="absolute right-1 top-1 h-8"
+													onClick={() => navigator.clipboard.writeText(remoteWebhookUrl)}
+												>
+													Copy
+												</Button>
+											</div>
+										</div>
+
+										{/* Setup Instructions */}
+										<Alert>
+											<AlertTitle>Setup Instructions</AlertTitle>
+											<AlertDescription className="space-y-3">
+												<ol className="text-xs list-decimal list-inside space-y-2">
+													<li>Go to the <a href="https://discord.com/developers/applications" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">Discord Developer Portal</a></li>
+													<li>Select your application</li>
+													<li>Copy the <strong>Public Key</strong> from General Information and paste it above</li>
+													<li>Go to General Information → Interactions Endpoint URL</li>
+													<li>Paste the Interactions Endpoint URL shown above</li>
+													<li>Discord will verify the endpoint - make sure the sink is active</li>
+												</ol>
+												<p className="text-xs text-muted-foreground mt-2">
+													<strong>Note:</strong> Discord verifies signatures using Ed25519. The public key is used to verify incoming webhook requests.
+												</p>
+											</AlertDescription>
+										</Alert>
+									</TabsContent>
+									<TabsContent value="local" className="space-y-4 pt-2">
+										<Alert>
+											<AlertTitle>Local Setup (Gateway Mode)</AlertTitle>
+											<AlertDescription className="space-y-3">
+												<p className="text-xs">
+													When running locally (desktop app), the bot connects via <strong>Discord Gateway</strong> (WebSocket) instead of webhooks.
+													No Interactions Endpoint URL setup is required - the bot will automatically connect when the event is activated.
+												</p>
+												<p className="text-xs">
+													<strong>Note:</strong> If you previously set an Interactions Endpoint URL in the Developer Portal, you can leave it - the local bot will use Gateway connection regardless.
+												</p>
+											</AlertDescription>
+										</Alert>
+									</TabsContent>
+								</Tabs>
+							) : (
+								<Alert>
+									<AlertTitle>Local Setup (Gateway Mode)</AlertTitle>
+									<AlertDescription className="space-y-3">
+										<p className="text-xs">
+											The bot uses <strong>Discord Gateway</strong> (WebSocket) mode when running locally.
+											No webhook setup is required - the bot will automatically connect when the event is activated.
+										</p>
+										<p className="text-xs text-muted-foreground">
+											Remote webhook mode is not available for this hub configuration.
+										</p>
+									</AlertDescription>
+								</Alert>
+							)}
+						</AccordionContent>
+					</AccordionItem>
+				</Accordion>
+			)}
 
 			{/* Bot Metadata */}
 			<div className="space-y-3">

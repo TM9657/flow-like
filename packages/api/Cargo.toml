@@ -42,6 +42,9 @@ p256 = "0.13.2"
 async-trait.workspace = true
 thiserror.workspace = true
 parking_lot = "0.12"
+hex = "0.4.3"
+ipnetwork = "0.21.1"
+ed25519-dalek = "2.2"
 
 # ---- AWS dependencies ----
 aws-config = {workspace = true, optional=true}

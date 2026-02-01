@@ -1,0 +1,215 @@
+---
+title: Telegram Sink
+description: Receive Telegram bot messages to trigger workflow executions
+sidebar:
+  order: 3
+---
+
+The Telegram sink allows your workflows to be triggered by messages sent to a Telegram bot. It supports both long polling (local) and webhook (remote) modes.
+
+## How It Works
+
+### Local Mode (Long Polling)
+
+When running the desktop app, Flow-Like uses Telegram's [getUpdates](https://core.telegram.org/bots/api#getupdates) API to poll for new messages:
+
+```
+┌──────────────┐     getUpdates      ┌──────────────┐
+│   Flow-Like  │◄───────────────────►│   Telegram   │
+│   Desktop    │     (polling)       │    Servers   │
+└──────────────┘                     └──────────────┘
+```
+
+**Advantages:**
+- Works behind firewalls/NAT
+- No public URL required
+- Simple setup
+
+**Limitations:**
+- Slight delay due to polling interval
+- Must keep the app running
+
+### Remote Mode (Webhook)
+
+When deployed to a server, Telegram sends updates directly via webhook:
+
+```
+┌──────────────┐                     ┌──────────────┐
+│   Flow-Like  │◄────────────────────│   Telegram   │
+│    Server    │     (webhook)       │    Servers   │
+└──────────────┘                     └──────────────┘
+```
+
+**Advantages:**
+- Instant message delivery
+- More efficient (no polling)
+- Works 24/7
+
+## Endpoint Format (Remote)
+
+```
+POST /sink/trigger/telegram/{event_id}
+```
+
+## Configuration Options
+
+| Field | Type | Description | Required |
+|-------|------|-------------|----------|
+| `token` | string | Bot token from @BotFather | Yes |
+| `webhook_secret` | string | Secret token for webhook verification | Recommended |
+| `bot_name` | string | Display name for the bot | No |
+| `respond_to_mentions` | boolean | Respond to @mentions in groups | No |
+| `respond_to_private` | boolean | Respond to private messages | No |
+| `command_prefix` | string | Command prefix (default: `/`) | No |
+| `chat_whitelist` | string[] | Only accept from these chat IDs | No |
+| `chat_blacklist` | string[] | Ignore these chat IDs | No |
+
+## Setting Up a Telegram Bot
+
+1. Open Telegram and search for [@BotFather](https://t.me/BotFather)
+2. Send `/newbot` and follow the prompts
+3. Copy the bot token (looks like `123456789:ABCdefGHIjklMNOpqrsTUVwxyz`)
+4. Paste the token in the Flow-Like configuration
+
+## Webhook Setup (Remote Mode)
+
+### 1. Configure the Webhook Secret
+
+Generate a secret token (64 hex characters recommended):
+
+```bash
+openssl rand -hex 32
+```
+
+Save this in the `webhook_secret` field of your event configuration.
+
+### 2. Get Your Webhook URL
+
+The URL format is:
+```
+https://your-domain.com/sink/trigger/telegram/{event_id}
+```
+
+### 3. Register the Webhook with Telegram
+
+```bash
+curl -X POST "https://api.telegram.org/bot<YOUR_BOT_TOKEN>/setWebhook" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "url": "https://your-domain.com/sink/trigger/telegram/evt_abc123",
+    "secret_token": "your-webhook-secret"
+  }'
+```
+
+### 4. Verify the Webhook
+
+Check that it's registered:
+
+```bash
+curl "https://api.telegram.org/bot<YOUR_BOT_TOKEN>/getWebhookInfo"
+```
+
+## Switching Between Modes
+
+### To Switch to Local Mode
+
+If you previously set a webhook and want to use local polling:
+
+```bash
+curl -X POST "https://api.telegram.org/bot<YOUR_BOT_TOKEN>/deleteWebhook"
+```
+
+### To Switch to Remote Mode
+
+Set the webhook as described above.
+
+## Security
+
+### Webhook Secret Token
+
+Telegram sends the secret token in the `X-Telegram-Bot-Api-Secret-Token` header. Flow-Like verifies this header matches your configured secret.
+
+### IP Verification
+
+In production, Flow-Like verifies that webhook requests come from Telegram's IP ranges:
+- `149.154.160.0/20`
+- `91.108.4.0/22`
+
+This verification is disabled in development mode (when `API_BASE_URL` contains `localhost`).
+
+## Payload Format
+
+Telegram sends updates in this format:
+
+```json
+{
+  "update_id": 123456789,
+  "message": {
+    "message_id": 1,
+    "from": {
+      "id": 123456,
+      "first_name": "John",
+      "username": "johndoe"
+    },
+    "chat": {
+      "id": 123456,
+      "type": "private"
+    },
+    "date": 1234567890,
+    "text": "/start hello"
+  }
+}
+```
+
+## Chat Filtering
+
+### Whitelist Mode
+
+Only process messages from specific chats:
+
+```json
+{
+  "chat_whitelist": ["123456789", "-100987654321"]
+}
+```
+
+### Blacklist Mode
+
+Ignore messages from specific chats:
+
+```json
+{
+  "chat_blacklist": ["-100spam_group"]
+}
+```
+
+## Response Format
+
+The sink returns a response immediately to acknowledge receipt:
+
+```json
+{
+  "triggered": true,
+  "run_id": "run_xyz123",
+  "message": "Webhook received and processing"
+}
+```
+
+The actual workflow execution happens asynchronously.
+
+## Error Handling
+
+| Status Code | Description |
+|-------------|-------------|
+| `200 OK` | Webhook received, execution dispatched |
+| `401 Unauthorized` | Invalid or missing secret token |
+| `403 Forbidden` | Request from non-Telegram IP |
+| `404 Not Found` | No matching sink found |
+
+## Best Practices
+
+1. **Always use a webhook secret** in production
+2. **Set up chat filtering** to prevent abuse
+3. **Use private groups** for sensitive workflows
+4. **Monitor bot usage** through Telegram's BotFather stats
+5. **Keep the bot token secure** - never commit it to version control

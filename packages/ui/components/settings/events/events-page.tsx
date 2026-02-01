@@ -1151,6 +1151,8 @@ function EventConfiguration({
 									onUpdate={(type) => {
 										handleInputChange("event_type", type);
 									}}
+									hub={hub}
+									canExecuteLocally={!isOffline}
 								/>
 							)}
 						</div>
@@ -1779,6 +1781,8 @@ function EventConfiguration({
 									config={parseUint8ArrayToJson(event.config ?? []) ?? {}}
 									board={board.data}
 									nodeId={formData.node_id}
+									hub={hub}
+									eventId={event.id}
 									onUpdate={(config) => {
 										console.dir(config);
 										if (!isEditing) setIsEditing(true);

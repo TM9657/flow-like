@@ -1,5 +1,6 @@
 import type { JSX, ReactElement, RefObject } from "react";
 import type { IEvent, IEventPayload, INode } from "../../lib";
+import type { IHub } from "../../lib/schema/hub/hub";
 
 export interface IToolBarActions {
 	pushToolbarElements: (elements: ReactElement[]) => void;
@@ -28,6 +29,10 @@ export interface IConfigInterfaceProps {
 	node: INode;
 	config: Partial<IEventPayload>;
 	onConfigUpdate: (payload: IEventPayload) => void;
+	/** Hub configuration for determining remote endpoints */
+	hub?: IHub | null;
+	/** Event ID for constructing webhook URLs */
+	eventId?: string;
 }
 
 /** Where a sink can run */
