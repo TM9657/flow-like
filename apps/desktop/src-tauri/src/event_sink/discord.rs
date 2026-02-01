@@ -518,18 +518,18 @@ async fn prepare_message_payload(
         .collect();
 
     serde_json::json!({
-        "user": {
-            "sub": msg.author.id.to_string(),
-            "name": msg.author.name,
-            "discriminator": msg.author.discriminator,
-            "bot": msg.author.bot,
-        },
         "local_session": {
             "bot_token": bot_token,
             "bot_user_id": bot_user_id.map(|id| id.to_string()),
             "guild_id": msg.guild_id.map(|id| id.to_string()),
             "message_id": msg.id.to_string(),
             "channel_id": msg.channel_id.to_string(),
+            "user": {
+                "id": msg.author.id.to_string(),
+                "name": msg.author.name,
+                "discriminator": msg.author.discriminator,
+                "bot": msg.author.bot,
+            },
         },
         "messages": messages,
         "attachments": other_attachments,

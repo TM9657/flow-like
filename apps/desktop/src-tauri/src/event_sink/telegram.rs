@@ -417,11 +417,6 @@ async fn prepare_message_payload(
     }
 
     serde_json::json!({
-        "user": {
-            "sub": user_id,
-            "name": user_name,
-            "bot": from.map(|u| u.is_bot),
-        },
         "local_session": {
             "bot_token": bot.token(),
             "bot_username": bot_username.unwrap_or(""),
@@ -430,6 +425,12 @@ async fn prepare_message_payload(
             "message_id": msg.id.to_string(),
             "chat_title": msg.chat.title().unwrap_or(""),
             "reply_to_message_id": msg.reply_to_message().map(|m| m.id.to_string()),
+            "user": {
+                "id": user_id,
+                "name": user_name,
+                "username": from.and_then(|u| u.username.clone()),
+                "is_bot": from.map(|u| u.is_bot).unwrap_or(false),
+            },
         },
         "messages": messages,
         "attachments": attachments,

@@ -14,6 +14,15 @@ use std::sync::Arc;
 use teloxide::prelude::*;
 use teloxide::types::ChatId;
 
+/// Telegram user information
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, Default)]
+pub struct TelegramUser {
+    pub id: String,
+    pub name: String,
+    pub username: Option<String>,
+    pub is_bot: bool,
+}
+
 /// Telegram session data stored in global_session
 /// Contains all information needed to reconstruct a Telegram bot client
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
@@ -24,6 +33,8 @@ pub struct TelegramSessionData {
     pub chat_type: String,
     pub chat_title: Option<String>,
     pub bot_username: Option<String>,
+    #[serde(default)]
+    pub user: Option<TelegramUser>,
 }
 
 /// A typed Telegram session with a reference to the cached bot
@@ -35,6 +46,8 @@ pub struct TelegramSession {
     pub chat_type: String,
     pub chat_title: Option<String>,
     pub bot_username: Option<String>,
+    #[serde(default)]
+    pub user: Option<TelegramUser>,
 }
 
 impl TelegramSession {
@@ -176,6 +189,7 @@ impl NodeLogic for ToTelegramSessionNode {
             chat_type: session_data.chat_type,
             chat_title: session_data.chat_title,
             bot_username: session_data.bot_username,
+            user: session_data.user,
         };
 
         context.set_pin_value("session", json!(session)).await?;

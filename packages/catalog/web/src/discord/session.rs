@@ -13,6 +13,15 @@ use serenity::all::{ChannelId, GuildId, Http, MessageId, UserId};
 use std::any::Any;
 use std::sync::Arc;
 
+/// Discord user information
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, Default)]
+pub struct DiscordUser {
+    pub id: String,
+    pub name: String,
+    pub discriminator: Option<u16>,
+    pub bot: bool,
+}
+
 /// Discord session data stored in global_session
 /// Contains all information needed to reconstruct a Discord HTTP client
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
@@ -22,6 +31,8 @@ pub struct DiscordSessionData {
     pub channel_id: String,
     pub message_id: String,
     pub bot_user_id: Option<String>,
+    #[serde(default)]
+    pub user: Option<DiscordUser>,
 }
 
 /// A typed Discord session with a reference to the cached client
@@ -32,6 +43,8 @@ pub struct DiscordSession {
     pub channel_id: String,
     pub message_id: String,
     pub bot_user_id: Option<String>,
+    #[serde(default)]
+    pub user: Option<DiscordUser>,
 }
 
 impl DiscordSession {
@@ -179,6 +192,7 @@ impl NodeLogic for ToDiscordSessionNode {
             channel_id: session_data.channel_id,
             message_id: session_data.message_id,
             bot_user_id: session_data.bot_user_id,
+            user: session_data.user,
         };
 
         context.set_pin_value("session", json!(session)).await?;
