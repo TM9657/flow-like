@@ -39,8 +39,12 @@ impl From<aws_sdk_sts::types::Credentials> for AwsRuntimeCredentials {
             access_key_id: Some(credentials.access_key_id),
             secret_access_key: Some(credentials.secret_access_key),
             session_token: Some(credentials.session_token),
-            meta_bucket: std::env::var("META_BUCKET_NAME").unwrap_or_default(),
-            content_bucket: std::env::var("CONTENT_BUCKET_NAME").unwrap_or_default(),
+            meta_bucket: std::env::var("META_BUCKET")
+                .or_else(|_| std::env::var("META_BUCKET_NAME"))
+                .unwrap_or_default(),
+            content_bucket: std::env::var("CONTENT_BUCKET")
+                .or_else(|_| std::env::var("CONTENT_BUCKET_NAME"))
+                .unwrap_or_default(),
             logs_bucket: std::env::var("LOG_BUCKET").unwrap_or_default(),
             region: std::env::var("AWS_REGION").unwrap_or_else(|_| "us-east-1".to_string()),
             expiration: None,
@@ -78,8 +82,12 @@ impl AwsRuntimeCredentials {
             access_key_id: std::env::var("AWS_ACCESS_KEY_ID").ok(),
             secret_access_key: std::env::var("AWS_SECRET_ACCESS_KEY").ok(),
             session_token: std::env::var("AWS_SESSION_TOKEN").ok(),
-            meta_bucket: std::env::var("META_BUCKET_NAME").unwrap_or_default(),
-            content_bucket: std::env::var("CONTENT_BUCKET_NAME").unwrap_or_default(),
+            meta_bucket: std::env::var("META_BUCKET")
+                .or_else(|_| std::env::var("META_BUCKET_NAME"))
+                .unwrap_or_default(),
+            content_bucket: std::env::var("CONTENT_BUCKET")
+                .or_else(|_| std::env::var("CONTENT_BUCKET_NAME"))
+                .unwrap_or_default(),
             logs_bucket,
             region: std::env::var("AWS_REGION").unwrap_or_else(|_| "us-east-1".to_string()),
             expiration: None,
@@ -738,11 +746,11 @@ mod tests {
         );
         assert!(
             !creds.meta_bucket.is_empty(),
-            "META_BUCKET_NAME must be set"
+            "META_BUCKET or META_BUCKET_NAME must be set"
         );
         assert!(
             !creds.content_bucket.is_empty(),
-            "CONTENT_BUCKET_NAME must be set"
+            "CONTENT_BUCKET or CONTENT_BUCKET_NAME must be set"
         );
     }
 
