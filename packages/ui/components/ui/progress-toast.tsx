@@ -1,7 +1,6 @@
 "use client";
 
 import { toast } from "sonner";
-import { Progress } from "./progress";
 
 export interface ProgressToastData {
 	id: string;
@@ -19,18 +18,24 @@ function ProgressBarDescription({ progress }: { progress?: number }) {
 		progress !== undefined ? Math.max(0, Math.min(100, progress)) : 0;
 
 	return (
-		<div className="flex items-center gap-2 w-full mt-1">
-			{isIndeterminate ? (
-				<div className="relative h-1.5 w-full overflow-hidden rounded-full bg-primary/20">
+		<div className="mt-1" style={{ width: "100%" }}>
+			<div
+				className="relative h-1.5 overflow-hidden rounded-full bg-primary/20"
+				style={{ width: "100%" }}
+			>
+				{isIndeterminate ? (
 					<div className="absolute h-full w-1/3 animate-[indeterminate_1.5s_ease-in-out_infinite] rounded-full bg-primary" />
-				</div>
-			) : (
-				<>
-					<Progress value={clampedProgress} className="h-1.5 flex-1" />
-					<span className="text-xs text-muted-foreground w-8 text-right">
-						{clampedProgress}%
-					</span>
-				</>
+				) : (
+					<div
+						className="h-full rounded-full bg-primary transition-all"
+						style={{ width: `${clampedProgress}%` }}
+					/>
+				)}
+			</div>
+			{!isIndeterminate && (
+				<span className="block text-right text-xs text-muted-foreground mt-1">
+					{clampedProgress}%
+				</span>
 			)}
 		</div>
 	);
