@@ -1,7 +1,7 @@
 ---
 import "@tm9657/flow-like-ui/global.css";
 import PostHog from "../posthog.astro";
-import { BlogHeader } from "../blog-header";
+import { Header } from "../header";
 import { BlogFooter } from "../blog-footer";
 
 import CompareHero from "./CompareHero.astro";
@@ -71,7 +71,7 @@ const cover = "/og.png";
   <body class="bg-background text-foreground antialiased overflow-x-hidden max-w-full"
         style="overflow-y: auto !important;"
   >
-    <BlogHeader client:load />
+    <Header client:load />
 
     <main class="pt-16">
       <CompareHero t={t} />

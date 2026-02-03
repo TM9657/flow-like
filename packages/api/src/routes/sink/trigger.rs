@@ -1116,7 +1116,7 @@ fn validate_sink_trigger_jwt(token: &str) -> Result<SinkTriggerClaims, ApiError>
 /// Check if a sink token has been revoked
 async fn is_token_revoked(db: &sea_orm::DatabaseConnection, jti: &str) -> Result<bool, ApiError> {
     use crate::entity::sink_token;
-    use sea_orm::{ColumnTrait, EntityTrait, QueryFilter};
+    use sea_orm::EntityTrait;
 
     let token = sink_token::Entity::find_by_id(jti)
         .one(db)

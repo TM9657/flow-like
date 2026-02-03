@@ -201,6 +201,13 @@ posthog.init('phc_hxGZEJaPqyCNzqqfrYyuUDCUSpcc7RSbwh07t4xtfrE', { api_host:'http
 									],
 								},
 								{
+									label: "Business Intelligence",
+									collapsed: true,
+									items: [
+										{ label: "Overview", slug: "topics/business-intelligence/overview" },
+									],
+								},
+								{
 									label: "Coming From",
 									collapsed: true,
 									items: [

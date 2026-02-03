@@ -1,0 +1,100 @@
+---
+import { tCommon } from "../../i18n/locales/pages/common";
+
+interface Props {
+  lang: string;
+}
+
+const { lang } = Astro.props;
+const t = (key: string) => tCommon(lang, key);
+---
+
+<section class="relative py-20 md:py-32 overflow-hidden">
+  <!-- Animated background -->
+  <div class="absolute inset-0 -z-10">
+    <div class="absolute inset-0 bg-[radial-gradient(ellipse_80%_80%_at_50%_-20%,rgba(var(--primary-rgb,120,119,198),0.15),transparent)]"></div>
+    <div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-primary/5 rounded-full blur-[120px] animate-pulse"></div>
+    <div class="absolute top-0 right-0 w-[400px] h-[400px] bg-gradient-to-br from-violet-500/10 to-transparent rounded-full blur-3xl animate-blob"></div>
+    <div class="absolute bottom-0 left-0 w-[300px] h-[300px] bg-gradient-to-tr from-cyan-500/10 to-transparent rounded-full blur-3xl animate-blob animation-delay-2000"></div>
+    <!-- Grid pattern -->
+    <div class="absolute inset-0 bg-[linear-gradient(to_right,rgba(128,128,128,0.03)_1px,transparent_1px),linear-gradient(to_bottom,rgba(128,128,128,0.03)_1px,transparent_1px)] bg-[size:64px_64px]"></div>
+  </div>
+
+  <div class="max-w-5xl mx-auto px-4 text-center">
+    <!-- Floating badge with glow -->
+    <div class="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-gradient-to-r from-primary/20 via-primary/10 to-primary/20 backdrop-blur-sm border border-primary/20 text-primary text-sm font-medium mb-8 shadow-[0_0_20px_rgba(var(--primary-rgb,120,119,198),0.3)] animate-float">
+      <span class="relative flex h-2 w-2">
+        <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary opacity-75"></span>
+        <span class="relative inline-flex rounded-full h-2 w-2 bg-primary"></span>
+      </span>
+      {t("pricing.badge")}
+    </div>
+
+    <!-- Gradient text heading -->
+    <h1 class="text-5xl md:text-6xl lg:text-7xl font-bold tracking-tight mb-8">
+      <span class="bg-clip-text text-transparent bg-gradient-to-b from-foreground to-foreground/70">
+        {t("pricing.title")}
+      </span>
+      <br />
+      <span class="bg-clip-text text-transparent bg-gradient-to-r from-primary via-violet-500 to-cyan-500 animate-gradient-x">
+        {t("pricing.titleHighlight")}
+      </span>
+    </h1>
+
+    <p class="text-lg md:text-xl text-muted-foreground max-w-2xl mx-auto mb-12 leading-relaxed">
+      {t("pricing.description")}
+    </p>
+
+    <!-- Feature pills with hover effects -->
+    <div class="flex flex-wrap items-center justify-center gap-3">
+      <div class="group flex items-center gap-2.5 px-4 py-2.5 rounded-xl bg-card/50 backdrop-blur-sm border border-border/50 hover:border-emerald-500/50 hover:bg-emerald-500/5 transition-all duration-300 cursor-default">
+        <div class="p-1 rounded-lg bg-emerald-500/10 group-hover:bg-emerald-500/20 transition-colors">
+          <svg class="w-4 h-4 text-emerald-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7" />
+          </svg>
+        </div>
+        <span class="text-sm font-medium">{t("pricing.feature.unlimitedUsers")}</span>
+      </div>
+      <div class="group flex items-center gap-2.5 px-4 py-2.5 rounded-xl bg-card/50 backdrop-blur-sm border border-border/50 hover:border-emerald-500/50 hover:bg-emerald-500/5 transition-all duration-300 cursor-default">
+        <div class="p-1 rounded-lg bg-emerald-500/10 group-hover:bg-emerald-500/20 transition-colors">
+          <svg class="w-4 h-4 text-emerald-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7" />
+          </svg>
+        </div>
+        <span class="text-sm font-medium">{t("pricing.feature.selfHostable")}</span>
+      </div>
+      <div class="group flex items-center gap-2.5 px-4 py-2.5 rounded-xl bg-card/50 backdrop-blur-sm border border-border/50 hover:border-emerald-500/50 hover:bg-emerald-500/5 transition-all duration-300 cursor-default">
+        <div class="p-1 rounded-lg bg-emerald-500/10 group-hover:bg-emerald-500/20 transition-colors">
+          <svg class="w-4 h-4 text-emerald-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7" />
+          </svg>
+        </div>
+        <span class="text-sm font-medium">{t("pricing.feature.noVendorLockIn")}</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<style>
+  @keyframes float {
+    0%, 100% { transform: translateY(0px); }
+    50% { transform: translateY(-10px); }
+  }
+  @keyframes blob {
+    0%, 100% { transform: translate(0, 0) scale(1); }
+    25% { transform: translate(20px, -20px) scale(1.1); }
+    50% { transform: translate(-20px, 20px) scale(0.9); }
+    75% { transform: translate(20px, 20px) scale(1.05); }
+  }
+  @keyframes gradient-x {
+    0%, 100% { background-position: 0% 50%; }
+    50% { background-position: 100% 50%; }
+  }
+  .animate-float { animation: float 6s ease-in-out infinite; }
+  .animate-blob { animation: blob 20s ease-in-out infinite; }
+  .animate-gradient-x {
+    background-size: 200% 200%;
+    animation: gradient-x 8s ease infinite;
+  }
+  .animation-delay-2000 { animation-delay: 2s; }
+</style>

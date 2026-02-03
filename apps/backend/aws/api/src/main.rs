@@ -13,8 +13,12 @@ use tracing_subscriber::prelude::*;
 async fn main() -> Result<(), Error> {
     let sentry_endpoint = std::env::var("SENTRY_ENDPOINT").unwrap_or_default();
 
+    let env_filter = flow_like_api::warn_env_filter();
+
     let _sentry_guard = if sentry_endpoint.is_empty() {
-        tracing::init_default_subscriber();
+        tracing_subscriber::registry()
+            .with(tracing_subscriber::fmt::layer().with_filter(env_filter))
+            .init();
         None
     } else {
         let guard = sentry::init((
@@ -26,7 +30,7 @@ async fn main() -> Result<(), Error> {
             },
         ));
         tracing_subscriber::registry()
-            .with(tracing_subscriber::fmt::layer())
+            .with(tracing_subscriber::fmt::layer().with_filter(env_filter))
             .with(sentry_tracing::layer())
             .init();
         Some(guard)

@@ -19,7 +19,7 @@ use flow_like::{
     state::{FlowLikeConfig, FlowLikeState},
     utils::http::HTTPClient,
 };
-use flow_like_catalog::get_catalog;
+use flow_like_catalog::{get_catalog, initialize as initialize_catalog};
 use flow_like_types::{sync::Mutex, tokio::time::interval};
 use settings::Settings;
 use state::TauriFlowLikeState;
@@ -116,6 +116,9 @@ pub fn run() {
     #[cfg(all(target_os = "ios", not(debug_assertions)))]
     ios_release_logging::init();
     disable_app_nap();
+
+    // Initialize catalog runtime (ONNX execution providers, etc.)
+    initialize_catalog();
 
     let mut settings_state = Settings::new();
     let project_dir = settings_state.project_dir.clone();

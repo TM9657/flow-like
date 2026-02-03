@@ -1,7 +1,7 @@
 ---
 import "@tm9657/flow-like-ui/global.css";
 import { BlogFooter } from "../components/blog-footer";
-import { BlogHeader } from "../components/blog-header";
+import { Header } from "../components/header";
 import PostHog from "../components/posthog.astro";
 
 interface Props {
@@ -46,11 +46,11 @@ const desc = description ?? "Legal information for Flow-Like";
 
 		<PostHog />
 	</head>
-	<body class="min-h-screen bg-background text-foreground overflow-y-auto overflow-x-hidden">
+	<body class="min-h-screen bg-background text-foreground overflow-y-auto overflow-x-hidden pt-16">
 		<!-- Subtle dot pattern background -->
 		<div class="pointer-events-none fixed inset-0 h-full w-full bg-[radial-gradient(#27272a_1px,transparent_1px)] [background-size:24px_24px] opacity-30 -z-[100]"/>
 
-		<BlogHeader client:load/>
+		<Header client:load/>
 
 		<main class="relative">
 			<!-- Hero section -->

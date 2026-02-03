@@ -18,7 +18,10 @@ import {
 	Tooltip,
 	TooltipContent,
 	TooltipTrigger,
+	useQuery,
 } from "@tm9657/flow-like-ui";
+import type { ISettingsProfile } from "@tm9657/flow-like-ui/types";
+import { useTauriInvoke } from "../../../components/useInvoke";
 import { ResponsiveBar } from "@nivo/bar";
 import { ResponsivePie } from "@nivo/pie";
 import { ResponsiveTreeMap } from "@nivo/treemap";
@@ -26,9 +29,10 @@ import {
 	BarChart3,
 	Boxes,
 	ExternalLink,
-	GitBranch,
-	Hash,
+	GitBranchIcon,
+	HashIcon,
 	Layers,
+	Loader2,
 	type LucideIcon,
 	MessageSquare,
 	RefreshCw,
@@ -38,7 +42,7 @@ import {
 	Workflow,
 } from "lucide-react";
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useMemo } from "react";
 
 interface NodeUsage {
 	name: string;
@@ -56,6 +60,7 @@ interface BoardRef {
 
 interface NodePattern {
 	nodes: string[];
+	edges: [string, string][];
 	edge_count: number;
 	occurrences: number;
 	boards: BoardRef[];
@@ -181,6 +186,7 @@ function NodeUsageBarChart({ nodes }: Readonly<{ nodes: NodeUsage[] }>) {
 				}}
 				labelSkipWidth={12}
 				labelSkipHeight={12}
+				labelTextColor="hsl(var(--primary-foreground))"
 				theme={{
 					text: { fill: "hsl(var(--foreground))" },
 					axis: {
@@ -188,6 +194,7 @@ function NodeUsageBarChart({ nodes }: Readonly<{ nodes: NodeUsage[] }>) {
 						legend: { text: { fill: "hsl(var(--foreground))" } },
 					},
 					grid: { line: { stroke: "hsl(var(--border))" } },
+					labels: { text: { fill: "hsl(var(--foreground))" } },
 					tooltip: {
 						container: {
 							background: "hsl(var(--popover))",
@@ -233,8 +240,10 @@ function CategoryPieChart({ categories }: Readonly<{ categories: CategoryStats[]
 				arcLinkLabelsThickness={2}
 				arcLinkLabelsColor={{ from: "color" }}
 				arcLabelsSkipAngle={10}
+				arcLabelsTextColor={{ from: "color", modifiers: [["darker", 2]] }}
 				theme={{
 					text: { fill: "hsl(var(--foreground))" },
+					labels: { text: { fill: "hsl(var(--foreground))" } },
 					tooltip: {
 						container: {
 							background: "hsl(var(--popover))",
@@ -286,8 +295,10 @@ function BoardComplexityTreeMap({ boards }: Readonly<{ boards: BoardSummary[] }>
 				parentLabelTextColor={{ from: "color", modifiers: [["darker", 2]] }}
 				colors={{ scheme: "blues" }}
 				borderColor={{ from: "color", modifiers: [["darker", 0.3]] }}
+				labelTextColor={{ from: "color", modifiers: [["darker", 2]] }}
 				theme={{
 					text: { fill: "hsl(var(--foreground))" },
+					labels: { text: { fill: "hsl(var(--foreground))" } },
 					tooltip: {
 						container: {
 							background: "hsl(var(--popover))",
@@ -306,6 +317,122 @@ function BoardComplexityTreeMap({ boards }: Readonly<{ boards: BoardSummary[] }>
 					</div>
 				)}
 			/>
+		</div>
+	);
+}
+
+function PatternSchematic({ pattern }: Readonly<{ pattern: NodePattern }>) {
+	const nodePositions = useMemo(() => {
+		const nodeCount = pattern.nodes.length;
+		const width = 100;
+		const height = 100;
+		const padding = 12;
+		const nodeRadius = 4;
+
+		if (nodeCount === 1) {
+			return [{ x: width / 2, y: height / 2 }];
+		}
+
+		if (nodeCount === 2) {
+			return [
+				{ x: padding + nodeRadius, y: height / 2 },
+				{ x: width - padding - nodeRadius, y: height / 2 },
+			];
+		}
+
+		const radius = Math.min(width, height) / 2 - padding - nodeRadius;
+		const centerX = width / 2;
+		const centerY = height / 2;
+
+		return pattern.nodes.map((_, i) => {
+			const angle = (2 * Math.PI * i) / nodeCount - Math.PI / 2;
+			return {
+				x: centerX + radius * Math.cos(angle),
+				y: centerY + radius * Math.sin(angle),
+			};
+		});
+	}, [pattern.nodes]);
+
+	const edgeLines = useMemo(() => {
+		const nodeIndexMap: Record<string, number[]> = {};
+		pattern.nodes.forEach((name, idx) => {
+			if (!nodeIndexMap[name]) nodeIndexMap[name] = [];
+			nodeIndexMap[name].push(idx);
+		});
+
+		const lines: { x1: number; y1: number; x2: number; y2: number }[] = [];
+		const usedEdges = new Set<string>();
+
+		for (const [source, target] of pattern.edges) {
+			const sourceIndices = nodeIndexMap[source] || [];
+			const targetIndices = nodeIndexMap[target] || [];
+
+			for (const si of sourceIndices) {
+				for (const ti of targetIndices) {
+					if (si !== ti) {
+						const edgeKey = si < ti ? `${si}-${ti}` : `${ti}-${si}`;
+						if (!usedEdges.has(edgeKey)) {
+							usedEdges.add(edgeKey);
+							const from = nodePositions[si];
+							const to = nodePositions[ti];
+							if (from && to) {
+								lines.push({ x1: from.x, y1: from.y, x2: to.x, y2: to.y });
+							}
+							break;
+						}
+					}
+				}
+				if (usedEdges.size >= pattern.edge_count) break;
+			}
+			if (usedEdges.size >= pattern.edge_count) break;
+		}
+
+		return lines;
+	}, [pattern, nodePositions]);
+
+	return (
+		<div className="flex gap-3 p-3 rounded-lg border bg-muted/20">
+			<div className="shrink-0">
+				<svg
+					viewBox="0 0 100 100"
+					className="w-20 h-20 rounded-md bg-background/60 border"
+				>
+					{edgeLines.map((line, i) => (
+						<line
+							key={`edge-${i}`}
+							x1={line.x1}
+							y1={line.y1}
+							x2={line.x2}
+							y2={line.y2}
+							className="stroke-muted-foreground/60"
+							strokeWidth="1.5"
+						/>
+					))}
+					{nodePositions.map((pos, i) => (
+						<circle
+							key={`node-${i}`}
+							cx={pos.x}
+							cy={pos.y}
+							r={4}
+							className="fill-primary stroke-primary-foreground"
+							strokeWidth="1"
+						/>
+					))}
+				</svg>
+			</div>
+			<div className="flex-1 min-w-0">
+				<div className="flex flex-wrap gap-1.5">
+					{pattern.nodes.map((nodeName, i) => (
+						<Badge
+							key={`${nodeName}-${i}`}
+							variant="secondary"
+							className="text-xs font-mono truncate max-w-32"
+						>
+							{nodeName}
+						</Badge>
+					))}
+				</div>
+			</div>
 		</div>
 	);
 }
@@ -339,18 +466,7 @@ function PatternCard({
 				</div>
 			</CardHeader>
 			<CardContent className="space-y-3">
-				<div className="flex flex-wrap gap-1.5">
-					{pattern.nodes.map((node, i) => (
-						<span key={`${node}-${i}`} className="inline-flex items-center">
-							<Badge variant="outline" className="font-mono text-xs bg-muted/50">
-								{node}
-							</Badge>
-							{i < pattern.nodes.length - 1 && (
-								<GitBranch className="h-3 w-3 mx-1 text-muted-foreground" />
-							)}
-						</span>
-					))}
-				</div>
+				<PatternSchematic pattern={pattern} />
 				<div className="pt-2 border-t">
 					<div className="flex items-center gap-1 flex-wrap">
 						<span className="text-xs text-muted-foreground mr-1">
@@ -478,29 +594,31 @@ function EmptyState({ onRefresh }: Readonly<{ onRefresh: () => void }>) {
 }
 
 export default function StatisticsPage() {
-	const [statistics, setStatistics] = useState<BoardStatistics | null>(null);
-	const [loading, setLoading] = useState(true);
-	const [error, setError] = useState<string | null>(null);
+	const currentProfile = useTauriInvoke<ISettingsProfile>(
+		"get_settings_profile",
+		{},
+	);
 
-	const loadStatistics = useCallback(async () => {
-		setLoading(true);
-		setError(null);
-		try {
+	const profileId = currentProfile.data?.hub_profile?.id;
+
+	const {
+		data: statistics,
+		isLoading,
+		isFetching,
+		isError,
+		error,
+		refetch,
+	} = useQuery<BoardStatistics>({
+		queryKey: ["board_statistics", profileId],
+		queryFn: async () => {
 			const stats = await invoke<BoardStatistics>("get_board_statistics");
-			setStatistics(stats);
-		} catch (e) {
-			console.error("Failed to load statistics:", e);
-			setError(e instanceof Error ? e.message : "Failed to load statistics");
-		} finally {
-			setLoading(false);
-		}
-	}, []);
+			return stats;
+		},
+		enabled: !!profileId,
+		staleTime: 5 * 60 * 1000, // 5 minutes
+	});
 
-	useEffect(() => {
-		loadStatistics();
-	}, [loadStatistics]);
-
-	if (loading) {
+	if (isLoading || currentProfile.isLoading) {
 		return (
 			<div className="container mx-auto p-6 max-w-7xl">
 				<div className="flex items-center justify-between mb-6">
@@ -516,7 +634,7 @@ export default function StatisticsPage() {
 		);
 	}
 
-	if (error) {
+	if (isError) {
 		return (
 			<div className="container mx-auto p-6 max-w-7xl">
 				<Card>
@@ -524,9 +642,11 @@ export default function StatisticsPage() {
 						<h3 className="text-lg font-semibold mb-2 text-destructive">
 							Error loading statistics
 						</h3>
-						<p className="text-sm text-muted-foreground mb-4">{error}</p>
+						<p className="text-sm text-muted-foreground mb-4">
+							{error instanceof Error ? error.message : "Failed to load statistics"}
+						</p>
 						<Button
-							onClick={loadStatistics}
+							onClick={() => refetch()}
 							variant="outline"
 							className="gap-2"
 						>
@@ -550,7 +670,7 @@ export default function StatisticsPage() {
 						</p>
 					</div>
 				</div>
-				<EmptyState onRefresh={loadStatistics} />
+				<EmptyState onRefresh={() => refetch()} />
 			</div>
 		);
 	}
@@ -563,6 +683,9 @@ export default function StatisticsPage() {
 						<h1 className="text-2xl font-bold flex items-center gap-2">
 							<Sparkles className="h-6 w-6 text-primary" />
 							Board Statistics
+							{isFetching && (
+								<Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+							)}
 						</h1>
 						<p className="text-muted-foreground">
 							Insights from {statistics.total_boards} local board
@@ -570,12 +693,12 @@ export default function StatisticsPage() {
 						</p>
 					</div>
 					<Button
-						onClick={loadStatistics}
+						onClick={() => refetch()}
 						variant="outline"
 						className="gap-2"
-						disabled={loading}
+						disabled={isFetching}
 					>
-						<RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
+						<RefreshCw className={`h-4 w-4 ${isFetching ? "animate-spin" : ""}`} />
 						Refresh
 					</Button>
 				</div>
@@ -596,7 +719,7 @@ export default function StatisticsPage() {
 					<StatCard
 						title="Total Connections"
 						value={statistics.total_connections}
-						icon={GitBranch}
+						icon={GitBranchIcon}
 						description={`~${statistics.avg_connections_per_board.toFixed(1)} per board`}
 					/>
 					<StatCard
@@ -620,7 +743,7 @@ export default function StatisticsPage() {
 					<StatCard
 						title="Node Categories"
 						value={statistics.category_stats.length}
-						icon={Hash}
+						icon={HashIcon}
 					/>
 					<StatCard
 						title="Unique Nodes"

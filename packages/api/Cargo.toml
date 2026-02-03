@@ -26,6 +26,7 @@ jsonwebtoken.workspace = true
 hyper.workspace = true
 hyper-util.workspace = true
 tracing.workspace = true
+tracing-subscriber = { workspace = true, features = ["env-filter"] }
 tower-http.workspace = true
 chrono.workspace = true
 oasgen = {version="0.25.0", features = ["axum"]}
@@ -52,6 +53,7 @@ aws-sdk-sts = {workspace = true, optional=true}
 aws-sdk-sesv2 = {workspace = true, optional=true}
 aws-sdk-lambda = {workspace = true, optional=true}
 aws-sdk-sqs = {workspace = true, optional=true}
+aws_lambda_events = { workspace = true, features = ["apigw"], optional = true }
 # -----
 
 # ----- Azure dependencies ----

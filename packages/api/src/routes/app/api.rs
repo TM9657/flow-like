@@ -1,7 +1,7 @@
 use crate::state::AppState;
 use axum::{
     Router,
-    routing::{delete, get, put},
+    routing::{delete, put},
 };
 
 mod create_api_key;

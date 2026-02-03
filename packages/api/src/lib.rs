@@ -16,6 +16,7 @@ use tower_http::{
     cors::CorsLayer,
     decompression::RequestDecompressionLayer,
 };
+use tracing_subscriber::EnvFilter;
 
 pub mod entity;
 mod middleware;
@@ -45,6 +46,18 @@ pub mod auth {
 }
 
 pub use sea_orm;
+
+pub fn warn_env_filter() -> EnvFilter {
+    EnvFilter::try_from_default_env().unwrap_or_else(|_| {
+        EnvFilter::new("warn")
+            .add_directive("hyper=warn".parse().unwrap())
+            .add_directive("hyper_util=warn".parse().unwrap())
+            .add_directive("rustls=warn".parse().unwrap())
+            .add_directive("tokio=warn".parse().unwrap())
+            .add_directive("h2=warn".parse().unwrap())
+            .add_directive("tower=warn".parse().unwrap())
+    })
+}
 
 pub fn construct_router(state: Arc<State>) -> Router {
     let router = Router::new()

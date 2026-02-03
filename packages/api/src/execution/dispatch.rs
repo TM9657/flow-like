@@ -253,7 +253,7 @@ pub struct DispatchRequest {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub runtime_variables:
         Option<std::collections::HashMap<String, flow_like::flow::variable::Variable>>,
-    /// User execution context (role, permissions, attributes)
+    /// User execution context for permission checks during execution
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub user_context: Option<flow_like::flow::execution::UserExecutionContext>,
 }
@@ -352,6 +352,11 @@ impl Dispatcher {
             #[cfg(feature = "redis")]
             redis_client: None,
         }
+    }
+
+    /// Get the configured sync/streaming backend type
+    pub fn backend(&self) -> ExecutionBackend {
+        self.config.backend.clone()
     }
 
     /// Dispatch an execution request to the configured sync/streaming backend (EXECUTION_BACKEND)
@@ -522,8 +527,10 @@ impl Dispatcher {
             .ok_or_else(|| DispatchError::Configuration("Lambda client not initialized".into()))?;
 
         let body = build_executor_payload(job_id, request);
-        let payload =
-            serde_json::to_vec(&body).map_err(|e| DispatchError::Serialization(e.to_string()))?;
+        // Wrap in API Gateway v2 event format for lambda_http compatibility
+        let apigw_event = wrap_as_apigw_v2_event("/execute", body);
+        let payload = serde_json::to_vec(&apigw_event)
+            .map_err(|e| DispatchError::Serialization(e.to_string()))?;
 
         client
             .invoke()
@@ -560,8 +567,10 @@ impl Dispatcher {
             .ok_or_else(|| DispatchError::Configuration("Lambda client not initialized".into()))?;
 
         let body = build_executor_payload(job_id, request);
-        let payload =
-            serde_json::to_vec(&body).map_err(|e| DispatchError::Serialization(e.to_string()))?;
+        // Wrap in API Gateway v2 event format for lambda_http compatibility
+        let apigw_event = wrap_as_apigw_v2_event("/execute/sse", body);
+        let payload = serde_json::to_vec(&apigw_event)
+            .map_err(|e| DispatchError::Serialization(e.to_string()))?;
 
         let response = client
             .invoke_with_response_stream()
@@ -685,15 +694,11 @@ impl Dispatcher {
         let message_body = serde_json::to_string(&body)
             .map_err(|e| DispatchError::Serialization(e.to_string()))?;
 
-        // Fair queueing: Use app_id as message group ID so each app/tenant
-        // gets fair processing. SQS FIFO queues process one message per group
-        // at a time, allowing parallel processing across different apps while
-        // maintaining order within each app's messages.
         client
             .send_message()
             .queue_url(queue_url)
             .message_body(&message_body)
-            .message_group_id(&request.app_id)
+            .message_group_id(&request.app_id) // FIFO queue support - group by app
             .message_deduplication_id(job_id)
             .send()
             .await
@@ -838,6 +843,61 @@ fn build_executor_payload(job_id: &str, request: &DispatchRequest) -> serde_json
         "oauth_tokens": request.oauth_tokens,
         "stream_state": request.stream_state,
         "runtime_variables": request.runtime_variables,
-        "user_context": request.user_context,
     })
+}
+
+/// Wrap executor payload in API Gateway v2 HTTP event format.
+/// This is required when invoking Lambda functions that use `lambda_http`
+/// (which expects API Gateway / Function URL event structure) via direct
+/// Lambda SDK invocation rather than HTTP.
+#[cfg(feature = "lambda")]
+fn wrap_as_apigw_v2_event(path: &str, body: serde_json::Value) -> serde_json::Value {
+    use aws_lambda_events::apigw::{
+        ApiGatewayV2httpRequest, ApiGatewayV2httpRequestContext,
+        ApiGatewayV2httpRequestContextHttpDescription,
+    };
+    use hyper::http::{header::CONTENT_TYPE, HeaderMap, Method};
+
+    let body_string = serde_json::to_string(&body).unwrap_or_default();
+    let body_base64 =
+        base64::Engine::encode(&base64::engine::general_purpose::STANDARD, &body_string);
+
+    let mut headers = HeaderMap::new();
+    headers.insert(CONTENT_TYPE, "application/json".parse().unwrap());
+
+    let now = chrono::Utc::now();
+
+    // Build the HTTP description for request context
+    let mut http_desc = ApiGatewayV2httpRequestContextHttpDescription::default();
+    http_desc.method = Method::POST;
+    http_desc.path = Some(path.to_string());
+    http_desc.protocol = Some("HTTP/1.1".to_string());
+    http_desc.source_ip = Some("127.0.0.1".to_string());
+    http_desc.user_agent = Some("flow-like-api/1.0".to_string());
+
+    // Build the request context
+    let mut request_context = ApiGatewayV2httpRequestContext::default();
+    request_context.account_id = Some("anonymous".to_string());
+    request_context.apiid = Some("lambda-invoke".to_string());
+    request_context.domain_name = Some("lambda.internal".to_string());
+    request_context.domain_prefix = Some("lambda-invoke".to_string());
+    request_context.http = http_desc;
+    request_context.request_id = Some(flow_like_types::create_id());
+    request_context.route_key = Some("$default".to_string());
+    request_context.stage = Some("$default".to_string());
+    request_context.time = Some(now.format("%d/%b/%Y:%H:%M:%S %z").to_string());
+    request_context.time_epoch = now.timestamp_millis();
+
+    // Build the full request
+    let mut request = ApiGatewayV2httpRequest::default();
+    request.version = Some("2.0".to_string());
+    request.route_key = Some("$default".to_string());
+    request.raw_path = Some(path.to_string());
+    request.raw_query_string = Some(String::new());
+    request.headers = headers;
+    request.request_context = request_context;
+    request.body = Some(body_base64);
+    request.is_base64_encoded = true;
+
+    serde_json::to_value(&request).expect("Failed to serialize API Gateway event")
 }

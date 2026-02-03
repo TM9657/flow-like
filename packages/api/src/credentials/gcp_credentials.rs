@@ -124,7 +124,7 @@ impl GcpRuntimeCredentials {
 
         let apps_prefix = format!("apps/{}", app_id);
         let user_prefix = format!("users/{}/apps/{}", sub, app_id);
-        let log_prefix = format!("logs/runs/{}", app_id);
+        let log_prefix = format!("runs/{}", app_id);
         let temporary_user_prefix = format!("tmp/user/{}/apps/{}", sub, app_id);
         let temporary_global_prefix = format!("tmp/global/apps/{}", app_id);
 
@@ -203,7 +203,7 @@ impl GcpRuntimeCredentials {
 
         let apps_prefix = format!("apps/{}", app_id);
         let user_prefix = format!("users/{}/apps/{}", sub, app_id);
-        let log_prefix = format!("logs/runs/{}", app_id);
+        let log_prefix = format!("runs/{}", app_id);
         let temporary_user_prefix = format!("tmp/user/{}/apps/{}", sub, app_id);
         let temporary_global_prefix = format!("tmp/global/apps/{}", app_id);
 
@@ -1006,7 +1006,7 @@ mod tests {
     fn test_credentials_access_modes() {
         let apps_prefix = format!("apps/{}", TEST_APP_ID);
         let user_prefix = format!("users/{}/apps/{}", TEST_SUB, TEST_APP_ID);
-        let log_prefix = format!("logs/runs/{}", TEST_APP_ID);
+        let log_prefix = format!("runs/{}", TEST_APP_ID);
         let tmp_user_prefix = format!("tmp/user/{}/apps/{}", TEST_SUB, TEST_APP_ID);
         let tmp_global_prefix = format!("tmp/global/apps/{}", TEST_APP_ID);
 

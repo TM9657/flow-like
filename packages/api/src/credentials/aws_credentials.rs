@@ -135,7 +135,7 @@ impl AwsRuntimeCredentials {
 
         let apps_prefix = format!("apps/{}", app_id);
         let user_prefix = format!("users/{}/apps/{}", sub, app_id);
-        let log_prefix = format!("logs/runs/{}", app_id);
+        let runs_prefix = format!("runs/{}", app_id);
         let temporary_user_prefix = format!("tmp/user/{}/apps/{}", sub, app_id);
         let temporary_global_prefix = format!("tmp/global/apps/{}", app_id);
 
@@ -146,14 +146,14 @@ impl AwsRuntimeCredentials {
                 self,
                 &apps_prefix,
                 &user_prefix,
-                &log_prefix,
+                &runs_prefix,
                 &temporary_user_prefix,
             ),
             CredentialsAccess::InvokeRead => invoke_read_policy(
                 self,
                 &apps_prefix,
                 &user_prefix,
-                &log_prefix,
+                &runs_prefix,
                 &temporary_user_prefix,
                 &temporary_global_prefix,
             ),
@@ -161,11 +161,11 @@ impl AwsRuntimeCredentials {
                 self,
                 &apps_prefix,
                 &user_prefix,
-                &log_prefix,
+                &runs_prefix,
                 &temporary_user_prefix,
                 &temporary_global_prefix,
             ),
-            CredentialsAccess::ReadLogs => read_logs_policy(self, &log_prefix),
+            CredentialsAccess::ReadLogs => read_logs_policy(self, &runs_prefix),
         };
 
         let policy = to_string(&policy)
@@ -352,7 +352,7 @@ fn invoke_read_write_policy(
     credentials: &AwsRuntimeCredentials,
     apps_prefix: &str,
     user_prefix: &str,
-    log_prefix: &str,
+    runs_prefix: &str,
     temporary_user_prefix: &str,
     temporary_global_prefix: &str,
 ) -> flow_like_types::Value {
@@ -373,7 +373,7 @@ fn invoke_read_write_policy(
                     "s3:prefix": [
                         format!("{}/*", apps_prefix),
                         format!("{}/*", user_prefix),
-                        format!("{}/*", log_prefix),
+                        format!("{}/*", runs_prefix),
                         format!("{}/*", temporary_user_prefix),
                         format!("{}/*", temporary_global_prefix)
                     ]
@@ -390,6 +390,7 @@ fn invoke_read_write_policy(
             "Resource": [
                 format!("arn:aws:s3:::{}/{}/*", credentials.content_bucket, apps_prefix),
                 format!("arn:aws:s3:::{}/{}/*", credentials.content_bucket, user_prefix),
+                format!("arn:aws:s3:::{}/{}/*", credentials.content_bucket, runs_prefix),
                 format!("arn:aws:s3:::{}/{}/*", credentials.content_bucket, temporary_user_prefix),
                 format!("arn:aws:s3:::{}/{}/*", credentials.content_bucket, temporary_global_prefix),
             ],
@@ -401,16 +402,6 @@ fn invoke_read_write_policy(
             ],
             "Resource": [
                 format!("arn:aws:s3express:::{}/{}/*", credentials.meta_bucket, apps_prefix),
-            ],
-          },
-          {
-            "Effect": "Allow",
-            "Action": [
-                "s3:GetObject",
-                "s3:PutObject",
-            ],
-            "Resource": [
-                format!("arn:aws:s3:::{}/{}/*", credentials.content_bucket, log_prefix),
             ],
           },
           {
@@ -432,7 +423,7 @@ fn invoke_read_policy(
     credentials: &AwsRuntimeCredentials,
     apps_prefix: &str,
     user_prefix: &str,
-    log_prefix: &str,
+    runs_prefix: &str,
     temporary_user_prefix: &str,
     temporary_global_prefix: &str,
 ) -> flow_like_types::Value {
@@ -453,7 +444,7 @@ fn invoke_read_policy(
                     "s3:prefix": [
                         format!("{}/*", apps_prefix),
                         format!("{}/*", user_prefix),
-                        format!("{}/*", log_prefix),
+                        format!("{}/*", runs_prefix),
                         format!("{}/*", temporary_user_prefix),
                         format!("{}/*", temporary_global_prefix)
                     ]
@@ -467,6 +458,7 @@ fn invoke_read_policy(
             ],
             "Resource": [
                 format!("arn:aws:s3:::{}/{}/*", credentials.content_bucket, apps_prefix),
+                format!("arn:aws:s3:::{}/{}/*", credentials.content_bucket, runs_prefix),
                 format!("arn:aws:s3:::{}/{}/*", credentials.content_bucket, temporary_global_prefix),
                 format!("arn:aws:s3express:::{}/{}/*", credentials.meta_bucket, apps_prefix),
             ],
@@ -481,16 +473,6 @@ fn invoke_read_policy(
             "Resource": [
                 format!("arn:aws:s3:::{}/{}/*", credentials.content_bucket, user_prefix),
                 format!("arn:aws:s3:::{}/{}/*", credentials.content_bucket, temporary_user_prefix),
-            ],
-          },
-          {
-            "Effect": "Allow",
-            "Action": [
-                "s3:GetObject",
-                "s3:PutObject",
-            ],
-            "Resource": [
-                format!("arn:aws:s3:::{}/{}/*", credentials.content_bucket, log_prefix),
             ],
           },
           {
@@ -512,7 +494,7 @@ fn invoke_none_policy(
     credentials: &AwsRuntimeCredentials,
     apps_prefix: &str,
     user_prefix: &str,
-    log_prefix: &str,
+    runs_prefix: &str,
     temporary_user_prefix: &str,
 ) -> flow_like_types::Value {
     let policy = json!({
@@ -563,7 +545,7 @@ fn invoke_none_policy(
                 "s3:PutObject",
             ],
             "Resource": [
-                format!("arn:aws:s3:::{}/{}/*", credentials.content_bucket, log_prefix),
+                format!("arn:aws:s3:::{}/{}/*", credentials.content_bucket, runs_prefix),
             ],
           },
           {
@@ -683,7 +665,7 @@ fn read_app_policy(
 
 fn read_logs_policy(
     credentials: &AwsRuntimeCredentials,
-    log_prefix: &str,
+    runs_prefix: &str,
 ) -> flow_like_types::Value {
     let policy = json!({
         "Version": "2012-10-17",
@@ -699,7 +681,7 @@ fn read_logs_policy(
             "Condition": {
                 "StringLike": {
                     "s3:prefix": [
-                        format!("{}/*", log_prefix),
+                        format!("{}/*", runs_prefix),
                     ]
                 }
             }
@@ -710,7 +692,7 @@ fn read_logs_policy(
                 "s3:GetObject",
             ],
             "Resource": [
-                format!("arn:aws:s3:::{}/{}/*", credentials.content_bucket, log_prefix),
+                format!("arn:aws:s3:::{}/{}/*", credentials.content_bucket, runs_prefix),
             ],
           }
         ],

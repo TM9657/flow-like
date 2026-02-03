@@ -453,7 +453,7 @@ function Profiles() {
 	const backend = useBackend();
 	const invalidate = useInvalidateInvoke();
 	const { isMobile } = useSidebar();
-	const profiles = useTauriInvoke<ISettingsProfile[]>("get_profiles", {});
+	const profiles = useTauriInvoke<Record<string, ISettingsProfile>>("get_profiles", {});
 	const currentProfile = useInvoke(
 		backend.userState.getSettingsProfile,
 		backend.userState,
@@ -676,7 +676,7 @@ function NavMain({
 													if (e.button === 1) {
 														e.preventDefault();
 														try {
-															const _view = new WebviewWindow(
+															const webview = new WebviewWindow(
 																`sidebar-${createId()}`,
 																{
 																	url: item.url,
@@ -688,6 +688,13 @@ function NavMain({
 																	height: 800,
 																},
 															);
+															// Listen for webview creation errors
+															webview.once("tauri://error", (error) => {
+																console.error(
+																	"Failed to open new window:",
+																	error,
+																);
+															});
 														} catch (error) {
 															console.error(
 																"Failed to open new window:",

@@ -6,6 +6,7 @@ edition = "2024"
 [dependencies]
 aws_lambda_events = { version = "0.16.0", default-features = false, features = ["sqs"] }
 flow-like.workspace = true
+flow-like-catalog = { workspace = true, features = ["execute"] }
 flow-like-types.workspace = true
 flow-like-executor = { workspace = true, features = ["all-execute"] }
 mimalloc.workspace = true
@@ -13,6 +14,9 @@ lambda_runtime = {version="0.14.1", features = ["anyhow"]}
 tracing.workspace = true
 serde = { workspace = true, features = ["derive"] }
 serde_json.workspace = true
+tracing-subscriber.workspace = true
+sentry.workspace = true
+sentry-tracing.workspace = true
 
 [profile.release]
 opt-level = "z"

@@ -16,6 +16,7 @@
 static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
 
 use axum::routing::get;
+use flow_like_catalog::initialize as initialize_catalog;
 use flow_like_executor::{ExecutorState, executor_router};
 
 mod metrics;
@@ -23,6 +24,9 @@ mod metrics;
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     metrics::init_telemetry();
+
+    // Initialize catalog runtime (ONNX execution providers, etc.)
+    initialize_catalog();
 
     let server_mode = std::env::var("EXECUTOR_SERVER_MODE")
         .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))

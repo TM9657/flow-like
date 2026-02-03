@@ -10,6 +10,7 @@ use axum::{
 };
 use flow_like::credentials::SharedCredentials;
 use flow_like_api::execution::{QueueConfig, QueueWorker, QueuedJob};
+use flow_like_catalog::initialize as initialize_catalog;
 use flow_like_executor::{
     execute, executor_router, ExecutionRequest, ExecutorConfig, ExecutorState,
 };
@@ -56,6 +57,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     metrics::init_telemetry();
 
     tracing::info!("Starting Flow-Like Docker Compose Runtime");
+
+    // Initialize catalog runtime (ONNX execution providers, etc.)
+    initialize_catalog();
 
     let config = config::Config::from_env()?;
     tracing::info!(

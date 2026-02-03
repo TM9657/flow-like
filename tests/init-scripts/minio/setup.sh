@@ -17,7 +17,7 @@ echo "" | mc pipe myminio/flowlike-content/apps/test-app-123/.keep
 echo "" | mc pipe myminio/flowlike-content/users/user-abc/apps/test-app-123/.keep
 echo "" | mc pipe myminio/flowlike-content/tmp/user/user-abc/apps/test-app-123/.keep
 echo "" | mc pipe myminio/flowlike-content/tmp/global/apps/test-app-123/.keep
-echo "" | mc pipe myminio/flowlike-logs/logs/runs/test-app-123/.keep
+echo "" | mc pipe myminio/flowlike-logs/runs/test-app-123/.keep
 
 echo "Creating scoped user policy..."
 cat > /tmp/scoped-policy.json << 'EOF'
@@ -52,7 +52,7 @@ cat > /tmp/scoped-policy.json << 'EOF'
     {
       "Effect": "Allow",
       "Action": ["s3:GetObject", "s3:PutObject"],
-      "Resource": ["arn:aws:s3:::flowlike-logs/logs/runs/test-app-123/*"]
+      "Resource": ["arn:aws:s3:::flowlike-logs/runs/test-app-123/*"]
     }
   ]
 }

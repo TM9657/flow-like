@@ -72,6 +72,7 @@ sysinfo = "0.37.2"
 copilot-sdk.workspace = true
 once_cell = "1.21.3"
 tokio.workspace = true
+rayon = "1.11.0"
 
 [target."cfg(any(target_os = \"macos\", windows, target_os = \"linux\"))".dependencies]
 tauri-plugin-single-instance = { version = "2.3.7", features = ["deep-link"] }

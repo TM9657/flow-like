@@ -1,6 +1,6 @@
 ---
 import "@tm9657/flow-like-ui/global.css";
-import { BlogHeader } from "../components/blog-header";
+import { Header } from "../components/header";
 import LanguageDetect from "../components/language-detect.astro";
 
 import AmbientGlow from "../components/ambient-glow.astro";
@@ -252,7 +252,7 @@ const ldWebPage = {
     </script>
     <main id="content" class="w-full">
       <AmbientGlow />
-      <BlogHeader client:load/>
+      <Header client:load/>
       <Hero client:load/>
 
       <!-- Enterprise Stack - what you get -->

@@ -2,7 +2,7 @@
 import "@tm9657/flow-like-ui/global.css";
 import PostHog from "../components/posthog.astro";
 import { SolutionTracker } from "../components/solution-tracker";
-import { BlogHeader } from "../components/blog-header";
+import { Header } from "../components/header";
 import { BlogFooter } from "../components/blog-footer";
 
 const site = Astro.site ?? import.meta.env.SITE ?? "https://flow-like.com";
@@ -55,7 +55,7 @@ const cover = "/og.png";
   <body class="bg-background text-foreground antialiased overflow-x-hidden max-w-full"
         style="overflow-y: auto !important;"
   >
-    <BlogHeader client:load />
+    <Header client:load />
 
     <main class="pt-24 pb-16 min-h-screen">
       <!-- Decorative background -->

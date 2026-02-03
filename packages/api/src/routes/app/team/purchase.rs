@@ -8,7 +8,6 @@ use axum::{
     Extension, Json,
     extract::{Path, State},
 };
-use flow_like::app::{AppStatus, AppVisibility};
 use flow_like_types::anyhow;
 use sea_orm::{ColumnTrait, EntityTrait, QueryFilter};
 use serde::{Deserialize, Serialize};

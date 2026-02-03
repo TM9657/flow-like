@@ -5,13 +5,10 @@ import {
 	Card,
 	CardContent,
 	CardHeader,
-	type ISettingsProfile,
 } from "@tm9657/flow-like-ui";
 import { PartyPopper } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useCallback } from "react";
 import Crossfire from "react-canvas-confetti/dist/presets/crossfire";
-import { useTauriInvoke } from "../../../components/useInvoke";
 
 const CongratsHeader = () => (
 	<CardHeader className="text-center space-y-2">
@@ -33,12 +30,6 @@ const FinishSetupButton: React.FC<{ onFinish: () => void }> = ({
 
 export default function DonePage() {
 	const router = useRouter();
-	const profiles = useTauriInvoke<ISettingsProfile[]>("get_profiles", {});
-
-	const onFinish = useCallback(async () => {
-		await profiles.refetch();
-		router.push("/");
-	}, [router]);
 
 	return (
 		<main className="relative min-h-dvh w-full overflow-hidden z-10">
@@ -48,9 +39,7 @@ export default function DonePage() {
 					<CardContent className="pt-6">
 						<CongratsHeader />
 						<FinishSetupButton
-							onFinish={async () => {
-								await onFinish();
-							}}
+							onFinish={() => router.push("/library")}
 						/>
 					</CardContent>
 				</Card>

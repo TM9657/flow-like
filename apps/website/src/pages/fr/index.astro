@@ -1,6 +1,6 @@
 ---
 import "@tm9657/flow-like-ui/global.css";
-import { BlogHeader } from "../../components/blog-header";
+import { Header } from "../../components/header";
 
 import AmbientGlow from "../../components/ambient-glow.astro";
 import SoftSeam from "../../components/soft-seam.astro";
@@ -146,7 +146,7 @@ const alternateLinks = [
   <body class="bg-background text-foreground antialiased selection:bg-primary/30 overflow-x-hidden max-w-full">
     <main id="content" class="w-full">
       <AmbientGlow />
-      <BlogHeader client:load/>
+      <Header client:load/>
       <Hero lang={lang} />
 
       <EnterpriseStack lang={lang} />

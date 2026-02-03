@@ -4,6 +4,7 @@ use crate::{
 };
 use flow_like::{app::App, flow::board::Board};
 use flow_like_types::tokio::task::JoinSet;
+use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeSet, HashMap, HashSet};
 use tauri::AppHandle;
@@ -35,6 +36,7 @@ pub struct BoardRef {
 #[derive(Serialize, Deserialize, Clone, Debug, Default)]
 pub struct NodePattern {
     pub nodes: Vec<String>,
+    pub edges: Vec<(String, String)>,
     pub edge_count: u32,
     pub occurrences: u32,
     pub boards: Vec<BoardRef>,
@@ -95,10 +97,16 @@ impl BoardGraph {
         let mut node_types = HashMap::new();
         let mut adjacency: HashMap<String, HashSet<String>> = HashMap::new();
         let mut pin_to_node: HashMap<String, String> = HashMap::new();
+        let mut reroute_nodes: HashSet<String> = HashSet::new();
 
+        // First pass: identify reroute nodes and build pin-to-node mapping
         for (node_id, node) in &board.nodes {
-            node_types.insert(node_id.clone(), node.name.clone());
-            adjacency.entry(node_id.clone()).or_default();
+            if node.name == "reroute" {
+                reroute_nodes.insert(node_id.clone());
+            } else {
+                node_types.insert(node_id.clone(), node.name.clone());
+                adjacency.entry(node_id.clone()).or_default();
+            }
             for pin_id in node.pins.keys() {
                 pin_to_node.insert(pin_id.clone(), node_id.clone());
             }
@@ -106,29 +114,93 @@ impl BoardGraph {
 
         for layer in board.layers.values() {
             for (node_id, node) in &layer.nodes {
-                node_types.insert(node_id.clone(), node.name.clone());
-                adjacency.entry(node_id.clone()).or_default();
+                if node.name == "reroute" {
+                    reroute_nodes.insert(node_id.clone());
+                } else {
+                    node_types.insert(node_id.clone(), node.name.clone());
+                    adjacency.entry(node_id.clone()).or_default();
+                }
                 for pin_id in node.pins.keys() {
                     pin_to_node.insert(pin_id.clone(), node_id.clone());
                 }
             }
         }
 
+        // Helper to resolve through reroute chains to find actual connected nodes
+        let resolve_through_reroutes = |start_node_id: &str,
+                                        visited: &mut HashSet<String>,
+                                        board: &Board|
+         -> Vec<String> {
+            let mut result = Vec::new();
+            let mut stack = vec![start_node_id.to_string()];
+
+            while let Some(current_id) = stack.pop() {
+                if !visited.insert(current_id.clone()) {
+                    continue;
+                }
+
+                // Find the node (in main nodes or layers)
+                let node = board.nodes.get(&current_id).or_else(|| {
+                    board
+                        .layers
+                        .values()
+                        .find_map(|l| l.nodes.get(&current_id))
+                });
+
+                if let Some(node) = node {
+                    for pin in node.pins.values() {
+                        for connected_pin_id in &pin.connected_to {
+                            if let Some(connected_node_id) = pin_to_node.get(connected_pin_id) {
+                                if reroute_nodes.contains(connected_node_id) {
+                                    stack.push(connected_node_id.clone());
+                                } else if connected_node_id != start_node_id {
+                                    result.push(connected_node_id.clone());
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            result
+        };
+
+        // Build adjacency for non-reroute nodes, bridging through reroutes
         for node in board.nodes.values() {
+            if reroute_nodes.contains(&node.id) {
+                continue;
+            }
+
             for pin in node.pins.values() {
                 for connected_pin_id in &pin.connected_to {
                     if let Some(other_node_id) = pin_to_node.get(connected_pin_id) {
-                        if let Some(this_node_id) = pin_to_node.get(&pin.id) {
-                            if this_node_id != other_node_id {
-                                adjacency
-                                    .entry(this_node_id.clone())
-                                    .or_default()
-                                    .insert(other_node_id.clone());
-                                adjacency
-                                    .entry(other_node_id.clone())
-                                    .or_default()
-                                    .insert(this_node_id.clone());
+                        if reroute_nodes.contains(other_node_id) {
+                            // Resolve through reroute chain
+                            let mut visited = HashSet::new();
+                            visited.insert(node.id.clone());
+                            let bridged =
+                                resolve_through_reroutes(other_node_id, &mut visited, board);
+                            for target_id in bridged {
+                                if target_id != node.id {
+                                    adjacency
+                                        .entry(node.id.clone())
+                                        .or_default()
+                                        .insert(target_id.clone());
+                                    adjacency
+                                        .entry(target_id)
+                                        .or_default()
+                                        .insert(node.id.clone());
+                                }
                             }
+                        } else if other_node_id != &node.id {
+                            adjacency
+                                .entry(node.id.clone())
+                                .or_default()
+                                .insert(other_node_id.clone());
+                            adjacency
+                                .entry(other_node_id.clone())
+                                .or_default()
+                                .insert(node.id.clone());
                         }
                     }
                 }
@@ -137,20 +209,39 @@ impl BoardGraph {
 
         for layer in board.layers.values() {
             for node in layer.nodes.values() {
+                if reroute_nodes.contains(&node.id) {
+                    continue;
+                }
+
                 for pin in node.pins.values() {
                     for connected_pin_id in &pin.connected_to {
                         if let Some(other_node_id) = pin_to_node.get(connected_pin_id) {
-                            if let Some(this_node_id) = pin_to_node.get(&pin.id) {
-                                if this_node_id != other_node_id {
-                                    adjacency
-                                        .entry(this_node_id.clone())
-                                        .or_default()
-                                        .insert(other_node_id.clone());
-                                    adjacency
-                                        .entry(other_node_id.clone())
-                                        .or_default()
-                                        .insert(this_node_id.clone());
+                            if reroute_nodes.contains(other_node_id) {
+                                let mut visited = HashSet::new();
+                                visited.insert(node.id.clone());
+                                let bridged =
+                                    resolve_through_reroutes(other_node_id, &mut visited, board);
+                                for target_id in bridged {
+                                    if target_id != node.id {
+                                        adjacency
+                                            .entry(node.id.clone())
+                                            .or_default()
+                                            .insert(target_id.clone());
+                                        adjacency
+                                            .entry(target_id)
+                                            .or_default()
+                                            .insert(node.id.clone());
+                                    }
                                 }
+                            } else if other_node_id != &node.id {
+                                adjacency
+                                    .entry(node.id.clone())
+                                    .or_default()
+                                    .insert(other_node_id.clone());
+                                adjacency
+                                    .entry(other_node_id.clone())
+                                    .or_default()
+                                    .insert(node.id.clone());
                             }
                         }
                     }
@@ -168,14 +259,16 @@ impl BoardGraph {
     }
 
     fn extract_patterns(&self, max_size: usize) -> Vec<PatternSignature> {
-        let mut patterns = Vec::new();
         let node_ids: Vec<&String> = self.node_types.keys().collect();
 
-        for start_node in &node_ids {
-            self.grow_pattern_from(start_node, max_size, &mut patterns);
-        }
-
-        patterns
+        node_ids
+            .par_iter()
+            .flat_map(|start_node| {
+                let mut patterns = Vec::new();
+                self.grow_pattern_from(start_node, max_size, &mut patterns);
+                patterns
+            })
+            .collect()
     }
 
     fn grow_pattern_from(
@@ -316,43 +409,68 @@ impl PatternSignature {
 }
 
 fn mine_patterns(boards: &[BoardGraph], max_pattern_size: usize) -> (Vec<NodePattern>, Vec<NodePattern>) {
-    let mut pattern_counts: HashMap<String, (PatternSignature, u32, HashMap<String, BoardRef>)> =
-        HashMap::new();
+    // Extract patterns from all boards in parallel
+    let board_patterns: Vec<(String, String, String, HashSet<String>)> = boards
+        .par_iter()
+        .flat_map(|board| {
+            let patterns = board.extract_patterns(max_pattern_size);
+            let unique_keys: HashSet<String> = patterns.iter().map(|p| p.to_canonical_key()).collect();
 
-    for board in boards {
-        let board_patterns = board.extract_patterns(max_pattern_size);
+            unique_keys
+                .into_iter()
+                .filter_map(|key| {
+                    patterns
+                        .iter()
+                        .find(|p| p.to_canonical_key() == key)
+                        .map(|_| (board.board_id.clone(), board.board_name.clone(), board.app_id.clone(), HashSet::from([key])))
+                })
+                .collect::<Vec<_>>()
+        })
+        .collect();
 
-        let unique_patterns: HashSet<String> =
-            board_patterns.iter().map(|p| p.to_canonical_key()).collect();
+    // Build pattern signature lookup from all boards
+    let sig_lookup: HashMap<String, PatternSignature> = boards
+        .par_iter()
+        .flat_map(|board| {
+            board
+                .extract_patterns(max_pattern_size)
+                .into_iter()
+                .map(|p| (p.to_canonical_key(), p))
+                .collect::<Vec<_>>()
+        })
+        .collect::<HashMap<_, _>>();
 
-        for key in unique_patterns {
-            if let Some(sig) = board_patterns.iter().find(|p| p.to_canonical_key() == key) {
+    // Aggregate pattern counts
+    let mut pattern_counts: HashMap<String, (PatternSignature, u32, HashMap<String, BoardRef>)> = HashMap::new();
+
+    for (board_id, board_name, app_id, keys) in board_patterns {
+        for key in keys {
+            if let Some(sig) = sig_lookup.get(&key) {
                 let entry = pattern_counts
                     .entry(key)
                     .or_insert_with(|| (sig.clone(), 0, HashMap::new()));
                 entry.1 += 1;
-                entry.2.insert(board.board_id.clone(), BoardRef {
-                    id: board.board_id.clone(),
-                    name: board.board_name.clone(),
-                    app_id: board.app_id.clone(),
+                entry.2.insert(board_id.clone(), BoardRef {
+                    id: board_id.clone(),
+                    name: board_name.clone(),
+                    app_id: app_id.clone(),
                 });
             }
         }
     }
 
     let patterns: Vec<NodePattern> = pattern_counts
-        .into_iter()
+        .into_par_iter()
         .filter(|(_, (sig, count, _))| *count >= 2 && sig.node_types.len() >= 2)
         .map(|(_, (sig, occurrences, boards))| {
             let size = sig.node_types.len() as f32;
             let board_count = boards.len() as f32;
-            // Rarity score: prefers large rare patterns
             let rarity_score = (size * size) * (1.0 + board_count).ln() / (occurrences as f32).sqrt();
-            // Frequency score: prefers common patterns (size matters less)
             let frequency_score = size * (occurrences as f32) * (1.0 + board_count).ln();
 
             NodePattern {
                 nodes: sig.node_types,
+                edges: sig.edge_types,
                 edge_count: sig.edge_count,
                 occurrences,
                 boards: boards.into_values().collect(),
@@ -364,12 +482,12 @@ fn mine_patterns(boards: &[BoardGraph], max_pattern_size: usize) -> (Vec<NodePat
 
     // Sort by rarity (rare large patterns first)
     let mut rare_patterns = patterns.clone();
-    rare_patterns.sort_by(|a, b| b.rarity_score.partial_cmp(&a.rarity_score).unwrap_or(std::cmp::Ordering::Equal));
+    rare_patterns.par_sort_by(|a, b| b.rarity_score.partial_cmp(&a.rarity_score).unwrap_or(std::cmp::Ordering::Equal));
     let rare_patterns = filter_redundant_patterns(rare_patterns, 20);
 
     // Sort by frequency (common patterns first)
     let mut common_patterns = patterns;
-    common_patterns.sort_by(|a, b| b.frequency_score.partial_cmp(&a.frequency_score).unwrap_or(std::cmp::Ordering::Equal));
+    common_patterns.par_sort_by(|a, b| b.frequency_score.partial_cmp(&a.frequency_score).unwrap_or(std::cmp::Ordering::Equal));
     let common_patterns = filter_redundant_patterns(common_patterns, 20);
 
     (rare_patterns, common_patterns)
@@ -399,8 +517,13 @@ fn filter_redundant_patterns(patterns: Vec<NodePattern>, max_count: usize) -> Ve
 fn analyze_board(board: &Board, app_id: &str) -> (BoardSummary, HashMap<String, (String, String, String)>, u32) {
     let mut node_usage: HashMap<String, (String, String, String)> = HashMap::new();
     let mut connection_count = 0u32;
+    let mut non_reroute_node_count = 0u32;
 
     for node in board.nodes.values() {
+        if node.name == "reroute" {
+            continue;
+        }
+        non_reroute_node_count += 1;
         node_usage
             .entry(node.name.clone())
             .or_insert((node.name.clone(), node.friendly_name.clone(), node.category.clone()));
@@ -412,6 +535,10 @@ fn analyze_board(board: &Board, app_id: &str) -> (BoardSummary, HashMap<String, 
 
     for layer in board.layers.values() {
         for node in layer.nodes.values() {
+            if node.name == "reroute" {
+                continue;
+            }
+            non_reroute_node_count += 1;
             node_usage
                 .entry(node.name.clone())
                 .or_insert((node.name.clone(), node.friendly_name.clone(), node.category.clone()));
@@ -428,8 +555,7 @@ fn analyze_board(board: &Board, app_id: &str) -> (BoardSummary, HashMap<String, 
         id: board.id.clone(),
         app_id: app_id.to_string(),
         name: board.name.clone(),
-        node_count: board.nodes.len() as u32
-            + board.layers.values().map(|l| l.nodes.len() as u32).sum::<u32>(),
+        node_count: non_reroute_node_count,
         connection_count,
         variable_count: board.variables.len() as u32,
         layer_count: board.layers.len() as u32,
@@ -538,7 +664,7 @@ pub async fn get_board_statistics(
 
     let graphs: Vec<BoardGraph> = all_results.into_iter().map(|r| r.graph).collect();
     let (rare, common) = flow_like_types::tokio::task::spawn_blocking(move || {
-        mine_patterns(&graphs, 8)
+        mine_patterns(&graphs, 6)
     })
     .await
     .map_err(|e| TauriFunctionError::new(&format!("Mining task failed: {e}")))?;

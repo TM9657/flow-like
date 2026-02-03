@@ -5,6 +5,7 @@ static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
 use dotenv::dotenv;
 use flow_like::credentials::SharedCredentials;
 use flow_like_api::execution::{QueueConfig, QueueWorker, QueuedJob};
+use flow_like_catalog::initialize as initialize_catalog;
 use flow_like_executor::{
     execute, executor_router, ExecutionRequest, ExecutorConfig, ExecutorState,
 };
@@ -22,6 +23,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .init();
 
     tracing::info!("Starting Flow-Like Local Development Runtime");
+
+    // Initialize catalog runtime (ONNX execution providers, etc.)
+    initialize_catalog();
 
     let config = config::Config::from_env()?;
     tracing::info!(

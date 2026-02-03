@@ -83,6 +83,7 @@ flow-like-catalog-llm.workspace = true
 flow-like-catalog-processing.workspace = true
 flow-like-catalog-geo.workspace = true
 mimalloc = { workspace = true, optional = true }
+tracing.workspace = true
 
 [dev-dependencies]
 criterion = { version = "0.7", features = ["html_reports", "async_tokio"] }

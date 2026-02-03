@@ -1,6 +1,6 @@
 ---
 import "@tm9657/flow-like-ui/global.css";
-import { BlogHeader } from "../components/blog-header";
+import { Header } from "../components/header";
 
 import AmbientGlow from "../components/ambient-glow.astro";
 import SoftSeam from "../components/soft-seam.astro";
@@ -228,9 +228,9 @@ const alternateLinks = Object.keys(languages).map(l => ({
     class="bg-background text-foreground antialiased selection:bg-primary/30 selection:text-primary-foreground overflow-x-hidden max-w-full
             bg-[radial-gradient(var(--muted)_1px,transparent_1px)] [background-size:16px_16px]"
   >
-    <main id="content" class="w-full">
+    <main id="content" class="w-full pt-16">
       <AmbientGlow />
-      <BlogHeader client:load/>
+      <Header client:load/>
 
       <!-- Language-specific hero -->
       <slot name="hero" />
