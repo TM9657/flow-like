@@ -137,11 +137,10 @@ impl Command for CopyPasteCommand {
 
         // Second pass: translate parent_ids now that all layer IDs are known
         for layer in intermediate_layers.iter_mut() {
-            if let Some(parent_id) = &layer.parent_id {
-                if let Some(new_parent_id) = layer_translation.get(parent_id) {
+            if let Some(parent_id) = &layer.parent_id
+                && let Some(new_parent_id) = layer_translation.get(parent_id) {
                     layer.parent_id = Some(new_parent_id.clone());
                 }
-            }
             // Don't insert yet - pin connections need to be translated first in the final pass
         }
 

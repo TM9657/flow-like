@@ -116,8 +116,8 @@ fn do_initialize_ort() -> ExecutionProviderInfo {
     use tracing::info;
 
     let mut active_providers = Vec::new();
-    let mut warnings = Vec::new();
-    let mut eps: Vec<ort::execution_providers::ExecutionProviderDispatch> = Vec::new();
+    let warnings = Vec::new();
+    let eps: Vec<ort::execution_providers::ExecutionProviderDispatch> = Vec::new();
 
     // Try to register EPs in order of preference
     // TensorRT > CUDA > CoreML > DirectML > XNNPACK > CPU

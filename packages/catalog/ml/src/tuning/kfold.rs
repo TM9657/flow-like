@@ -22,7 +22,6 @@ use flow_like_types::{Result, async_trait, json::json};
 use futures::TryStreamExt;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
-use std::sync::Arc;
 
 /// Output schema for K-Fold generator
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]

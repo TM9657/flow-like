@@ -420,11 +420,10 @@ pub(crate) async fn verify_sales_access(
     }
 
     // Check if user has owner role
-    if let Some(owner_role_id) = &app.owner_role_id {
-        if &membership.role_id == owner_role_id {
+    if let Some(owner_role_id) = &app.owner_role_id
+        && &membership.role_id == owner_role_id {
             return Ok(());
         }
-    }
 
     // Check if role has sales permission (for future extensibility)
     let role = role::Entity::find_by_id(&membership.role_id)

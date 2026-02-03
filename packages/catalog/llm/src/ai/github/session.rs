@@ -327,12 +327,11 @@ impl NodeLogic for CopilotCreateSessionNode {
                 });
             }
 
-            if let Some(infinite) = cfg.infinite_sessions {
-                if infinite.enabled {
+            if let Some(infinite) = cfg.infinite_sessions
+                && infinite.enabled {
                     session_config.infinite_sessions =
                         Some(copilot_sdk::InfiniteSessionConfig::enabled());
                 }
-            }
 
             if let Some(provider) = cfg.provider {
                 session_config.provider = Some(copilot_sdk::ProviderConfig {
@@ -492,16 +491,14 @@ impl NodeLogic for CopilotDestroySessionNode {
             cache.get(&handle.cache_key).cloned()
         };
 
-        if let Some(cached) = cached {
-            if let Some(cached_session) = cached.as_any().downcast_ref::<CachedCopilotSession>() {
-                if let Err(e) = cached_session.session.destroy().await {
+        if let Some(cached) = cached
+            && let Some(cached_session) = cached.as_any().downcast_ref::<CachedCopilotSession>()
+                && let Err(e) = cached_session.session.destroy().await {
                     context.log_message(
                         &format!("Warning: Failed to destroy session: {}", e),
                         LogLevel::Warn,
                     );
                 }
-            }
-        }
 
         context.cache.write().await.remove(&handle.cache_key);
         context.log_message("Session destroyed", LogLevel::Info);

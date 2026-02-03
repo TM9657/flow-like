@@ -131,12 +131,11 @@ impl NodeLogic for SendPhotoNode {
             request = request.caption(cap).parse_mode(ParseMode::MarkdownV2);
         }
 
-        if let Some(reply_id) = reply_to {
-            if let Ok(msg_id) = reply_id.parse::<i32>() {
+        if let Some(reply_id) = reply_to
+            && let Ok(msg_id) = reply_id.parse::<i32>() {
                 request = request
                     .reply_parameters(ReplyParameters::new(teloxide::types::MessageId(msg_id)));
             }
-        }
 
         let sent = request.await?;
 
@@ -934,12 +933,11 @@ impl NodeLogic for SendPhotoFromFileNode {
             request = request.caption(cap).parse_mode(ParseMode::MarkdownV2);
         }
 
-        if let Some(reply_id) = reply_to {
-            if let Ok(msg_id) = reply_id.parse::<i32>() {
+        if let Some(reply_id) = reply_to
+            && let Ok(msg_id) = reply_id.parse::<i32>() {
                 request = request
                     .reply_parameters(ReplyParameters::new(teloxide::types::MessageId(msg_id)));
             }
-        }
 
         let sent = request.await?;
 

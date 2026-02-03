@@ -379,11 +379,10 @@ impl NodeLogic for BanChatMemberNode {
 
         let mut request = bot.bot.ban_chat_member(chat_id, UserId(user_id as u64));
 
-        if until_date > 0 {
-            if let Some(dt) = chrono::DateTime::from_timestamp(until_date, 0) {
+        if until_date > 0
+            && let Some(dt) = chrono::DateTime::from_timestamp(until_date, 0) {
                 request = request.until_date(dt);
             }
-        }
 
         request = request.revoke_messages(revoke_messages);
 
@@ -642,11 +641,10 @@ impl NodeLogic for RestrictChatMemberNode {
             bot.bot
                 .restrict_chat_member(chat_id, UserId(user_id as u64), permissions);
 
-        if until_date > 0 {
-            if let Some(dt) = chrono::DateTime::from_timestamp(until_date, 0) {
+        if until_date > 0
+            && let Some(dt) = chrono::DateTime::from_timestamp(until_date, 0) {
                 request = request.until_date(dt);
             }
-        }
 
         let result = request.await;
 

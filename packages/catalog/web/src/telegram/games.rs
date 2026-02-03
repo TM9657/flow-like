@@ -145,12 +145,11 @@ impl NodeLogic for SendGameNode {
             .disable_notification(disable_notification)
             .protect_content(protect_content);
 
-        if let Some(reply_id) = reply_to {
-            if let Ok(msg_id) = reply_id.parse::<i32>() {
+        if let Some(reply_id) = reply_to
+            && let Ok(msg_id) = reply_id.parse::<i32>() {
                 request = request
                     .reply_parameters(teloxide::types::ReplyParameters::new(MessageId(msg_id)));
             }
-        }
 
         let sent = request.await?;
 
@@ -313,7 +312,7 @@ impl NodeLogic for SetGameScoreNode {
                 .map_err(|_| flow_like_types::anyhow!("Invalid message_id format"))?;
 
             // Note: set_game_score expects chat_id as u32
-            let chat_id_u32 = chat_id.0.abs() as u32;
+            let chat_id_u32 = chat_id.0.unsigned_abs() as u32;
 
             bot.bot
                 .set_game_score(

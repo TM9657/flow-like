@@ -216,14 +216,13 @@ impl NodeLogic for SendAndWaitNode {
                             continue;
                         }
 
-                        if let Some(expected_user) = filter_user {
-                            if msg.author.id.get() != expected_user {
+                        if let Some(expected_user) = filter_user
+                            && msg.author.id.get() != expected_user {
                                 continue;
                             }
-                        }
 
-                        if let Some(ref reply) = msg.referenced_message {
-                            if reply.id == sent_id {
+                        if let Some(ref reply) = msg.referenced_message
+                            && reply.id == sent_id {
                                 let user_reply = UserReply {
                                     message_id: msg.id.to_string(),
                                     channel_id: channel_id.to_string(),
@@ -237,7 +236,6 @@ impl NodeLogic for SendAndWaitNode {
                                 *result_guard = Some(user_reply);
                                 return;
                             }
-                        }
                     }
                 }
             }
@@ -422,11 +420,10 @@ impl NodeLogic for WaitForMessageNode {
                             continue;
                         }
 
-                        if let Some(expected_user) = filter_user {
-                            if msg.author.id.get() != expected_user {
+                        if let Some(expected_user) = filter_user
+                            && msg.author.id.get() != expected_user {
                                 continue;
                             }
-                        }
 
                         let user_reply = UserReply {
                             message_id: msg.id.to_string(),

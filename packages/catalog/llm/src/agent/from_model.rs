@@ -106,9 +106,9 @@ impl NodeLogic for AgentFromModelNode {
     async fn run(&self, context: &mut ExecutionContext) -> flow_like_types::Result<()> {
         let model: Bit = context.evaluate_pin("model").await?;
         let max_iter: u64 = context.evaluate_pin("max_iter").await?;
-        let infinite_context: bool = context.evaluate_pin("infinite_context").await.unwrap_or_else(|_| true);
+        let infinite_context: bool = context.evaluate_pin("infinite_context").await.unwrap_or(true);
         let context_mode: String = context.evaluate_pin("context_mode").await.unwrap_or_else(|_| "summarize".to_string());
-        let max_context_tokens: u64 = context.evaluate_pin("max_context_tokens").await.unwrap_or_else(|_| DEFAULT_MAX_CONTEXT_TOKENS as u64);
+        let max_context_tokens: u64 = context.evaluate_pin("max_context_tokens").await.unwrap_or(DEFAULT_MAX_CONTEXT_TOKENS as u64);
 
         let mut agent = Agent::new(model.clone(), max_iter);
 

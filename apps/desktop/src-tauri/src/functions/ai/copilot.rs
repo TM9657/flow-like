@@ -240,8 +240,8 @@ pub async fn copilot_chat(
     channel: Channel<String>,
 ) -> Result<UnifiedCopilotResponse, String> {
     // Check if using Copilot SDK (model_id starts with "copilot:")
-    if let Some(ref id) = model_id {
-        if let Some(copilot_model) = id.strip_prefix("copilot:") {
+    if let Some(ref id) = model_id
+        && let Some(copilot_model) = id.strip_prefix("copilot:") {
             return copilot_sdk_chat_internal(
                 copilot_model,
                 scope,
@@ -254,7 +254,6 @@ pub async fn copilot_chat(
             )
             .await;
         }
-    }
 
     println!(
         "[copilot_chat] Called with scope: {:?}, run_context: {:?}",
@@ -387,9 +386,9 @@ async fn copilot_sdk_chat_internal(
     };
 
     // Add current UI surface context for Frontend/Both scopes
-    if matches!(scope, CopilotScope::Frontend | CopilotScope::Both) {
-        if let Some(components) = current_surface {
-            if !components.is_empty() {
+    if matches!(scope, CopilotScope::Frontend | CopilotScope::Both)
+        && let Some(components) = current_surface
+            && !components.is_empty() {
                 let components_json =
                     serde_json::to_string_pretty(components).unwrap_or_else(|_| "[]".to_string());
                 system_content.push_str(&format!(
@@ -397,8 +396,6 @@ async fn copilot_sdk_chat_internal(
                     components_json
                 ));
             }
-        }
-    }
 
     // Add conversation history
     if !context_parts.is_empty() {
@@ -485,14 +482,14 @@ async fn copilot_sdk_chat_internal(
                     let _ = channel.send(tool_msg);
                 }
                 SessionEventData::ToolExecutionComplete(tool_complete) => {
-                    if let Some(ref result) = tool_complete.result {
-                        if let Ok(parsed) =
+                    if let Some(ref result) = tool_complete.result
+                        && let Ok(parsed) =
                             serde_json::from_str::<serde_json::Value>(&result.content)
                         {
                             // Extract commands from emit_commands tool (status: "queued")
-                            if parsed.get("status").and_then(|s| s.as_str()) == Some("queued") {
-                                if let Some(cmds) = parsed.get("commands") {
-                                    if let Ok(commands) =
+                            if parsed.get("status").and_then(|s| s.as_str()) == Some("queued")
+                                && let Some(cmds) = parsed.get("commands")
+                                    && let Ok(commands) =
                                         serde_json::from_value::<Vec<BoardCommand>>(cmds.clone())
                                     {
                                         let cmd_event = format!(
@@ -502,8 +499,6 @@ async fn copilot_sdk_chat_internal(
                                         let _ = channel.send(cmd_event);
                                         extracted_commands.extend(commands);
                                     }
-                                }
-                            }
                             // Extract components from emit_ui tool (status: "rendered")
                             if parsed.get("status").and_then(|s| s.as_str()) == Some("rendered") {
                                 // Extract canvasSettings
@@ -517,8 +512,8 @@ async fn copilot_sdk_chat_internal(
                                     extracted_root_component_id = Some(root_id.to_string());
                                 }
                                 // Extract components
-                                if let Some(comps) = parsed.get("components") {
-                                    if let Ok(components) =
+                                if let Some(comps) = parsed.get("components")
+                                    && let Ok(components) =
                                         serde_json::from_value::<Vec<SurfaceComponent>>(
                                             comps.clone(),
                                         )
@@ -539,10 +534,8 @@ async fn copilot_sdk_chat_internal(
                                         }
                                         extracted_components.extend(components);
                                     }
-                                }
                             }
                         }
-                    }
 
                     // Send tool completion event to frontend
                     let status = if tool_complete.success {

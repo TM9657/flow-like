@@ -780,7 +780,7 @@ async fn fire_discord_event(
     let response_final = response.clone();
     let last_edit_final = last_edit.clone();
     let collected_attachments_final = collected_attachments.clone();
-    let reasoning_state_final = reasoning_state.clone();
+    let _reasoning_state_final = reasoning_state.clone();
     let edit_count_final = edit_count.clone();
     let ctx_final = ctx.clone();
     let message_final = message.clone();

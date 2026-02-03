@@ -273,7 +273,7 @@ pub async fn sync_event_with_sink_tokens(
     };
 
     // Encrypt PAT if provided
-    let pat_encrypted = pat.map(|p| encrypt_token(p));
+    let pat_encrypted = pat.map(encrypt_token);
 
     // Encrypt OAuth tokens if provided
     let oauth_tokens_encrypted = oauth_tokens.and_then(|tokens| {

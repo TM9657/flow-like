@@ -8,8 +8,6 @@ use flow_like::flow::{
     variable::VariableType,
 };
 use flow_like_types::{async_trait, json::json};
-use schemars::JsonSchema;
-use serde::{Deserialize, Serialize};
 use serenity::all::ReactionType;
 
 // ============================================================================

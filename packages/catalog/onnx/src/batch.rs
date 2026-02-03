@@ -15,7 +15,7 @@ use flow_like_model_provider::ml::{
 };
 #[cfg(feature = "execute")]
 use flow_like_types::image::{GenericImageView, imageops::FilterType};
-use flow_like_types::{Result, Value, anyhow, async_trait, json::json};
+use flow_like_types::{Result, Value, async_trait, json::json};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
@@ -148,8 +148,8 @@ impl NodeLogic for BatchImageInferenceNode {
                 let outputs = session.run(inputs![input_value])?;
 
                 // Extract results
-                if let Some((_, tensor)) = outputs.iter().next() {
-                    if let Ok(data) = tensor.try_extract_array::<f32>() {
+                if let Some((_, tensor)) = outputs.iter().next()
+                    && let Ok(data) = tensor.try_extract_array::<f32>() {
                         let shape = data.shape();
 
                         // Split batch results
@@ -162,7 +162,6 @@ impl NodeLogic for BatchImageInferenceNode {
                             all_results.push(json!(result));
                         }
                     }
-                }
             }
 
             let elapsed = start_time.elapsed();

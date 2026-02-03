@@ -49,13 +49,12 @@ impl InMemoryScheduler {
             .filter(|s| s.active)
             .filter(|s| {
                 // Parse cron and check if it should run now
-                if let Ok(schedule) = cron::Schedule::from_str(&s.cron_expression) {
-                    if let Some(next) = schedule.upcoming(chrono::Utc).next() {
+                if let Ok(schedule) = cron::Schedule::from_str(&s.cron_expression)
+                    && let Some(next) = schedule.upcoming(chrono::Utc).next() {
                         // Check if next trigger is within the last minute (for minute-level cron)
                         let diff = next.signed_duration_since(now);
                         return diff.num_seconds().abs() < 60;
                     }
-                }
                 false
             })
             .map(|s| s.event_id.clone())

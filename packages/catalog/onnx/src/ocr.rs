@@ -15,7 +15,7 @@ use flow_like_model_provider::ml::{
 };
 #[cfg(feature = "execute")]
 use flow_like_types::image::{GenericImageView, imageops::FilterType};
-use flow_like_types::{Result, anyhow, async_trait, json::json};
+use flow_like_types::{Result, async_trait, json::json};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
@@ -146,8 +146,8 @@ impl NodeLogic for TextDetectionNode {
             let mut regions: Vec<TextRegion> = Vec::new();
 
             // Try to extract score map from first output
-            if let Some((_, tensor)) = outputs.iter().next() {
-                if let Ok(scores) = tensor.try_extract_array::<f32>() {
+            if let Some((_, tensor)) = outputs.iter().next()
+                && let Ok(scores) = tensor.try_extract_array::<f32>() {
                     let shape = scores.shape();
 
                     // Simple connected component analysis on score map
@@ -234,7 +234,6 @@ impl NodeLogic for TextDetectionNode {
                         }
                     }
                 }
-            }
 
             let count = regions.len() as i64;
             context.set_pin_value("regions", json!(regions)).await?;
@@ -340,8 +339,8 @@ impl NodeLogic for TextRecognitionNode {
             let mut char_confidences = Vec::new();
             let mut prev_idx: Option<usize> = None;
 
-            if let Some((_, tensor)) = outputs.iter().next() {
-                if let Ok(logits) = tensor.try_extract_array::<f32>() {
+            if let Some((_, tensor)) = outputs.iter().next()
+                && let Ok(logits) = tensor.try_extract_array::<f32>() {
                     let shape = logits.shape();
 
                     // Expect shape [1, T, num_classes] or [T, num_classes]
@@ -370,18 +369,16 @@ impl NodeLogic for TextRecognitionNode {
 
                         // CTC blank is usually 0 or last class
                         let blank_idx = 0;
-                        if max_idx != blank_idx && Some(max_idx) != prev_idx {
-                            if let Some(ch) = chars.get(max_idx.saturating_sub(1)) {
+                        if max_idx != blank_idx && Some(max_idx) != prev_idx
+                            && let Some(ch) = chars.get(max_idx.saturating_sub(1)) {
                                 text.push(*ch);
                                 // Softmax for confidence
                                 let conf = (max_val).exp();
                                 char_confidences.push(conf);
                             }
-                        }
                         prev_idx = Some(max_idx);
                     }
                 }
-            }
 
             let avg_conf = if char_confidences.is_empty() {
                 0.0

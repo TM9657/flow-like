@@ -42,11 +42,10 @@ fn is_telegram_ip(ip: &std::net::IpAddr) -> bool {
     };
 
     for range in TELEGRAM_IP_RANGES {
-        if let Ok(network) = range.parse::<IpNetwork>() {
-            if network.contains(std::net::IpAddr::V4(*ipv4)) {
+        if let Ok(network) = range.parse::<IpNetwork>()
+            && network.contains(std::net::IpAddr::V4(*ipv4)) {
                 return true;
             }
-        }
     }
     false
 }
@@ -1172,12 +1171,11 @@ pub async fn service_trigger(
     let claims = validate_sink_trigger_jwt(token)?;
 
     // Check if token has been revoked (if jti is present)
-    if let Some(ref jti) = claims.jti {
-        if is_token_revoked(&state.db, jti).await? {
+    if let Some(ref jti) = claims.jti
+        && is_token_revoked(&state.db, jti).await? {
             tracing::warn!(jti = %jti, "Attempted use of revoked sink token");
             return Err(ApiError::unauthorized("Token has been revoked"));
         }
-    }
 
     // Check if this JWT is allowed to trigger this sink type
     if !claims.sink_types.contains(&request.sink_type) {
@@ -1218,14 +1216,13 @@ pub async fn service_trigger(
     }
 
     // Check app_id restriction if present in token
-    if let Some(ref allowed_apps) = claims.app_ids {
-        if !allowed_apps.contains(&sink.app_id) {
+    if let Some(ref allowed_apps) = claims.app_ids
+        && !allowed_apps.contains(&sink.app_id) {
             return Err(ApiError::forbidden(format!(
                 "Token not authorized for app: {}",
                 sink.app_id
             )));
         }
-    }
 
     // Get the event to access its config for additional payload
     let event = get_event_from_db(&state.db, &request.event_id)

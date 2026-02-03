@@ -205,17 +205,15 @@ impl NodeLogic for CreateChatInviteLinkNode {
 
         let mut request = bot.bot.create_chat_invite_link(chat_id);
 
-        if let Some(n) = name {
-            if !n.is_empty() {
+        if let Some(n) = name
+            && !n.is_empty() {
                 request = request.name(n);
             }
-        }
 
-        if expire_date > 0 {
-            if let Some(dt) = chrono::DateTime::from_timestamp(expire_date, 0) {
+        if expire_date > 0
+            && let Some(dt) = chrono::DateTime::from_timestamp(expire_date, 0) {
                 request = request.expire_date(dt);
             }
-        }
 
         if member_limit > 0 {
             request = request.member_limit(member_limit as u32);
@@ -360,17 +358,15 @@ impl NodeLogic for EditChatInviteLinkNode {
 
         let mut request = bot.bot.edit_chat_invite_link(chat_id, invite_link);
 
-        if let Some(n) = name {
-            if !n.is_empty() {
+        if let Some(n) = name
+            && !n.is_empty() {
                 request = request.name(n);
             }
-        }
 
-        if expire_date > 0 {
-            if let Some(dt) = chrono::DateTime::from_timestamp(expire_date, 0) {
+        if expire_date > 0
+            && let Some(dt) = chrono::DateTime::from_timestamp(expire_date, 0) {
                 request = request.expire_date(dt);
             }
-        }
 
         if member_limit > 0 {
             request = request.member_limit(member_limit as u32);

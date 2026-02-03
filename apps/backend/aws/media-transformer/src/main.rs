@@ -1,4 +1,4 @@
-use lambda_runtime::{run, service_fn, tracing, Error};
+use lambda_runtime::{run, service_fn, Error};
 
 mod event_handler;
 use event_handler::function_handler;

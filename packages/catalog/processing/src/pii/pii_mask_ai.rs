@@ -140,14 +140,13 @@ impl Tool for PiiMaskTool {
 
         // Verify masked_text doesn't contain the original values
         for detection in detections {
-            if let Some(original) = detection.get("original").and_then(|v| v.as_str()) {
-                if !original.is_empty() && masked_text.contains(original) {
+            if let Some(original) = detection.get("original").and_then(|v| v.as_str())
+                && !original.is_empty() && masked_text.contains(original) {
                     return Err(PiiMaskError(format!(
                         "Masked text still contains original PII: {}",
                         original
                     )));
                 }
-            }
         }
 
         Ok(args)
@@ -392,8 +391,7 @@ IMPORTANT:
 
         let detections = args
             .get("detections")
-            .and_then(|v| v.as_array())
-            .map(|arr| arr.clone())
+            .and_then(|v| v.as_array()).cloned()
             .unwrap_or_default();
 
         context.log_message(

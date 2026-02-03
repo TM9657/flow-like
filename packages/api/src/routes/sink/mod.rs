@@ -21,11 +21,6 @@ mod management;
 pub mod service;
 mod trigger;
 
-/// Re-export the trigger types and utility for programmatic use (Lambda handlers, SQS, etc.)
-pub use trigger::{
-    CronScheduleInfo, ServiceTriggerRequest, ServiceTriggerResponse, SinkConfigInfo,
-    SinkTriggerClaims, TriggerEventInput, TriggerResponse, trigger_event,
-};
 
 pub fn routes() -> Router<AppState> {
     Router::new()

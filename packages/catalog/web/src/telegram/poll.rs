@@ -177,7 +177,7 @@ impl NodeLogic for SendPollWithRefNode {
         let chat_id = session.chat_id()?;
 
         let poll_options: Vec<InputPollOption> =
-            options.iter().map(|o| InputPollOption::new(o)).collect();
+            options.iter().map(InputPollOption::new).collect();
 
         let sent = bot
             .bot
@@ -477,7 +477,7 @@ impl NodeLogic for SendQuizNode {
         let chat_id = session.chat_id()?;
 
         let poll_options: Vec<InputPollOption> =
-            options.iter().map(|o| InputPollOption::new(o)).collect();
+            options.iter().map(InputPollOption::new).collect();
 
         let mut request = bot
             .bot

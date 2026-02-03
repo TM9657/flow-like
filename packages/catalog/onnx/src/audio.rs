@@ -9,7 +9,7 @@ use flow_like::flow::{
 };
 #[cfg(feature = "execute")]
 use flow_like_model_provider::ml::{
-    ndarray::{Array1, Array2, Array3},
+    ndarray::{Array1, Array2},
     ort::{inputs, value::Value},
 };
 use flow_like_types::{Result, anyhow, async_trait, json::json};
@@ -303,11 +303,10 @@ impl NodeLogic for VoiceActivityDetectionNode {
                     outputs.get("output"),
                     outputs.get("stateN")
                 ) {
-                    if let Ok(prob) = prob_tensor.try_extract_array::<f32>() {
-                        if !prob.is_empty() {
+                    if let Ok(prob) = prob_tensor.try_extract_array::<f32>()
+                        && !prob.is_empty() {
                             probabilities.push(prob[[0, 0]]);
                         }
-                    }
 
                     if let Ok(new_state) = state_tensor.try_extract_array::<f32>() {
                         for i in 0..2 {

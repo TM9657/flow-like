@@ -778,7 +778,7 @@ fn count_nonempty_in_rect(grid: &[Vec<String>], rect: &Rect) -> usize {
     if height == 0 {
         return 0;
     }
-    let width = grid.get(0).map(|r| r.len()).unwrap_or(0);
+    let width = grid.first().map(|r| r.len()).unwrap_or(0);
     if width == 0 {
         return 0;
     }
@@ -792,11 +792,10 @@ fn count_nonempty_in_rect(grid: &[Vec<String>], rect: &Rect) -> usize {
     for r in r0..=r1 {
         if let Some(row) = grid.get(r) {
             for c in c0..=c1 {
-                if let Some(cell) = row.get(c) {
-                    if !cell.trim().is_empty() {
+                if let Some(cell) = row.get(c)
+                    && !cell.trim().is_empty() {
                         n += 1;
                     }
-                }
             }
         }
     }
@@ -2047,7 +2046,7 @@ impl NodeLogic for ExtractExcelTablesNode {
         let csv_tables: Vec<CSVTable> =
             tokio::task::spawn_blocking(move || -> Result<Vec<CSVTable>> {
                 let mut out = Vec::new();
-                for (sheet_idx, sheet_name) in sheets_to_process.iter().enumerate() {
+                for (_sheet_idx, sheet_name) in sheets_to_process.iter().enumerate() {
                     let tables = match extract_tables(file_buffer.clone(), sheet_name, &cfg_clone) {
                         Ok(t) => t,
                         Err(e) => {

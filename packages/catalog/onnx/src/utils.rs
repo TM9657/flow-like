@@ -10,7 +10,7 @@ use flow_like::flow::{
 use flow_like_catalog_core::FlowPath;
 #[cfg(feature = "execute")]
 use flow_like_model_provider::ml::ort::session::Session;
-use flow_like_types::{Result, anyhow, async_trait, json::json};
+use flow_like_types::{Result, async_trait, json::json};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
@@ -123,7 +123,7 @@ impl NodeLogic for ModelInfoNode {
 
             let inputs: Vec<TensorInfo> = session.inputs.iter().map(|i| {
                 let shape = i.input_type.tensor_shape()
-                    .map(|s| s.iter().map(|&d| d as i64).collect())
+                    .map(|s| s.iter().map(|&d| d).collect())
                     .unwrap_or_default();
                 TensorInfo {
                     name: i.name.clone(),
@@ -134,7 +134,7 @@ impl NodeLogic for ModelInfoNode {
 
             let outputs: Vec<TensorInfo> = session.outputs.iter().map(|o| {
                 let shape = o.output_type.tensor_shape()
-                    .map(|s| s.iter().map(|&d| d as i64).collect())
+                    .map(|s| s.iter().map(|&d| d).collect())
                     .unwrap_or_default();
                 TensorInfo {
                     name: o.name.clone(),
@@ -318,7 +318,7 @@ impl NodeLogic for SessionInfoNode {
 
             let inputs: Vec<TensorInfo> = session_guard.session.inputs.iter().map(|i| {
                 let shape = i.input_type.tensor_shape()
-                    .map(|s| s.iter().map(|&d| d as i64).collect())
+                    .map(|s| s.iter().map(|&d| d).collect())
                     .unwrap_or_default();
                 TensorInfo {
                     name: i.name.clone(),
@@ -329,7 +329,7 @@ impl NodeLogic for SessionInfoNode {
 
             let outputs: Vec<TensorInfo> = session_guard.session.outputs.iter().map(|o| {
                 let shape = o.output_type.tensor_shape()
-                    .map(|s| s.iter().map(|&d| d as i64).collect())
+                    .map(|s| s.iter().map(|&d| d).collect())
                     .unwrap_or_default();
                 TensorInfo {
                     name: o.name.clone(),

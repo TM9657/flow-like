@@ -437,8 +437,8 @@ impl NodeLogic for NerNode {
 
             let input_ids: Vec<i64> = encoding.get_ids().iter().map(|&id| id as i64).collect();
             let attention_mask: Vec<i64> = encoding.get_attention_mask().iter().map(|&m| m as i64).collect();
-            let tokens: Vec<String> = encoding.get_tokens().iter().cloned().collect();
-            let offsets: Vec<(usize, usize)> = encoding.get_offsets().iter().cloned().collect();
+            let tokens: Vec<String> = encoding.get_tokens().to_vec();
+            let offsets: Vec<(usize, usize)> = encoding.get_offsets().to_vec();
             let special_tokens_mask: Vec<u32> = encoding.get_special_tokens_mask().to_vec();
 
             // Truncate if needed

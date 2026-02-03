@@ -305,14 +305,13 @@ impl NodeLogic for DepthToPointCloudNode {
 
             for y in 0..depth_map.height {
                 for x in 0..depth_map.width {
-                    if let Some(d) = depth_map.get_depth(x, y) {
-                        if d > 0.01 {
+                    if let Some(d) = depth_map.get_depth(x, y)
+                        && d > 0.01 {
                             let z = d as f64 * scale;
                             let px = (x as f64 - cx) * z / focal_length;
                             let py = (y as f64 - cy) * z / focal_length;
                             points.push([px, py, z]);
                         }
-                    }
                 }
             }
 

@@ -156,7 +156,7 @@ impl NodeLogic for GridSearchNode {
         let start_time = Instant::now();
 
         // Load data
-        let (records, classes, records_col, targets_col) = match source.as_str() {
+        let (records, classes, _records_col, _targets_col) = match source.as_str() {
             "Database" => {
                 let database: NodeDBConnection = context.evaluate_pin("database").await?;
                 let records_col: String = context.evaluate_pin("records").await?;

@@ -123,12 +123,11 @@ impl NodeLogic for SendMessageNode {
             .parse_mode(ParseMode::MarkdownV2)
             .disable_notification(silent);
 
-        if let Some(reply_id) = reply_to {
-            if let Ok(msg_id) = reply_id.parse::<i32>() {
+        if let Some(reply_id) = reply_to
+            && let Ok(msg_id) = reply_id.parse::<i32>() {
                 request = request
                     .reply_parameters(ReplyParameters::new(teloxide::types::MessageId(msg_id)));
             }
-        }
 
         let sent = request.await?;
 
@@ -1121,11 +1120,10 @@ impl NodeLogic for SendVideoNoteNode {
         if let Some(l) = length {
             request = request.length(l as u32);
         }
-        if let Some(thumb_url) = thumbnail {
-            if let Ok(url) = thumb_url.parse() {
+        if let Some(thumb_url) = thumbnail
+            && let Ok(url) = thumb_url.parse() {
                 request = request.thumbnail(InputFile::url(url));
             }
-        }
 
         let sent = request.await?;
 

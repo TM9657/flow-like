@@ -441,14 +441,13 @@ impl NodeLogic for SendAndWaitNode {
                                 continue;
                             }
 
-                            if let Some(reply_to) = msg.reply_to_message() {
-                                if reply_to.id.0 == message_id {
+                            if let Some(reply_to) = msg.reply_to_message()
+                                && reply_to.id.0 == message_id {
                                     let reply = UserReply::from(&msg);
                                     let mut result_guard = result_clone.lock().await;
                                     *result_guard = Some(reply);
                                     return;
                                 }
-                            }
                         }
                     }
                 }
@@ -633,11 +632,10 @@ impl NodeLogic for WaitForCallbackNode {
                         if let teloxide::types::UpdateKind::CallbackQuery(callback) = update.kind {
                             let msg_chat_id = callback.message.as_ref().map(|m| m.chat().id.0);
 
-                            if let Some(cid) = msg_chat_id {
-                                if cid != chat_id.0 {
+                            if let Some(cid) = msg_chat_id
+                                && cid != chat_id.0 {
                                     continue;
                                 }
-                            }
 
                             if let Some(expected_msg_id) = message_id_filter {
                                 let actual_msg_id =
@@ -978,8 +976,8 @@ impl NodeLogic for ConfirmationDialogNode {
                                 continue;
                             }
 
-                            if let Some(data) = callback.data {
-                                if data == "confirm" || data == "cancel" {
+                            if let Some(data) = callback.data
+                                && (data == "confirm" || data == "cancel") {
                                     let _ =
                                         bot_clone.answer_callback_query(callback.id.clone()).await;
 
@@ -987,7 +985,6 @@ impl NodeLogic for ConfirmationDialogNode {
                                     *result_guard = Some(data);
                                     return;
                                 }
-                            }
                         }
                     }
                 }

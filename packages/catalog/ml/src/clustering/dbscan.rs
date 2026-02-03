@@ -23,8 +23,6 @@ use flow_like_types::{Result, Value, async_trait, json::json};
 #[cfg(feature = "execute")]
 use linfa::DatasetBase;
 #[cfg(feature = "execute")]
-use linfa::ParamGuard;
-#[cfg(feature = "execute")]
 use linfa::prelude::Transformer;
 #[cfg(feature = "execute")]
 use linfa_clustering::Dbscan;

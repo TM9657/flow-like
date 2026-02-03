@@ -90,13 +90,12 @@ pub async fn sync_sink(
             let cron_changed = old_cron != config.cron_expression;
             let type_changed = old_sink_type != config.sink_type;
 
-            if cron_changed || type_changed {
-                if let Some(ref cron_expr) = config.cron_expression {
+            if (cron_changed || type_changed)
+                && let Some(ref cron_expr) = config.cron_expression {
                     // Update or create the schedule
                     update_external_scheduler(state, &config.event_id, cron_expr, old_active)
                         .await?;
                 }
-            }
         } else if old_sink_type == sink_types::CRON && config.sink_type != sink_types::CRON {
             // Type changed from cron to something else - delete the schedule
             delete_external_schedule(state, &config.event_id).await?;
@@ -127,11 +126,10 @@ pub async fn sync_sink(
         let created = active_model.insert(db).await?;
 
         // Create schedule in external system for cron sinks
-        if config.sink_type == sink_types::CRON {
-            if let Some(ref cron_expr) = config.cron_expression {
+        if config.sink_type == sink_types::CRON
+            && let Some(ref cron_expr) = config.cron_expression {
                 create_external_schedule(state, &config.event_id, cron_expr).await?;
             }
-        }
 
         created
     };

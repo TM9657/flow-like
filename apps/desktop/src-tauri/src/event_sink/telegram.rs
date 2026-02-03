@@ -239,17 +239,15 @@ fn should_process_message(
         return true;
     }
 
-    if handler.respond_to_mentions {
-        if let Some(username) = bot_username {
-            if text.contains(&format!("@{}", username)) {
+    if handler.respond_to_mentions
+        && let Some(username) = bot_username
+            && text.contains(&format!("@{}", username)) {
                 println!(
                     "🔍 [TELEGRAM] Message mentions bot @{}, processing",
                     username
                 );
                 return true;
             }
-        }
-    }
 
     println!("🔍 [TELEGRAM] Message does not match criteria, skipping");
     false
@@ -284,8 +282,8 @@ async fn prepare_message_payload(
     if let MessageKind::Common(common) = &msg.kind {
         match &common.media_kind {
             MediaKind::Photo(photo) => {
-                if let Some(largest) = photo.photo.last() {
-                    if let Ok(file) = bot.get_file(largest.file.id.clone()).await {
+                if let Some(largest) = photo.photo.last()
+                    && let Ok(file) = bot.get_file(largest.file.id.clone()).await {
                         let url = format!(
                             "https://api.telegram.org/file/bot{}/{}",
                             bot.token(),
@@ -296,12 +294,11 @@ async fn prepare_message_payload(
                             "image_url": { "url": url }
                         }));
                     }
-                }
             }
             MediaKind::Document(doc) => {
-                if let Some(mime) = &doc.document.mime_type {
-                    if mime.type_().as_str() == "image" {
-                        if let Ok(file) = bot.get_file(doc.document.file.id.clone()).await {
+                if let Some(mime) = &doc.document.mime_type
+                    && mime.type_().as_str() == "image"
+                        && let Ok(file) = bot.get_file(doc.document.file.id.clone()).await {
                             let url = format!(
                                 "https://api.telegram.org/file/bot{}/{}",
                                 bot.token(),
@@ -312,8 +309,6 @@ async fn prepare_message_payload(
                                 "image_url": { "url": url }
                             }));
                         }
-                    }
-                }
             }
             _ => {}
         }
@@ -358,10 +353,10 @@ async fn prepare_message_payload(
             })];
 
             // Check for images in reply
-            if let MessageKind::Common(common) = &reply_msg.kind {
-                if let MediaKind::Photo(photo) = &common.media_kind {
-                    if let Some(largest) = photo.photo.last() {
-                        if let Ok(file) = bot.get_file(largest.file.id.clone()).await {
+            if let MessageKind::Common(common) = &reply_msg.kind
+                && let MediaKind::Photo(photo) = &common.media_kind
+                    && let Some(largest) = photo.photo.last()
+                        && let Ok(file) = bot.get_file(largest.file.id.clone()).await {
                             let url = format!(
                                 "https://api.telegram.org/file/bot{}/{}",
                                 bot.token(),
@@ -372,9 +367,6 @@ async fn prepare_message_payload(
                                 "image_url": { "url": url }
                             }));
                         }
-                    }
-                }
-            }
 
             reply_chain.push(serde_json::json!({
                 "role": if is_bot { "assistant" } else { "user" },
@@ -399,11 +391,11 @@ async fn prepare_message_payload(
     }));
 
     let mut attachments: Vec<String> = Vec::new();
-    if let MessageKind::Common(common) = &msg.kind {
-        if let MediaKind::Document(doc) = &common.media_kind {
-            if let Some(mime) = &doc.document.mime_type {
-                if mime.type_().as_str() != "image" {
-                    if let Ok(file) = bot.get_file(doc.document.file.id.clone()).await {
+    if let MessageKind::Common(common) = &msg.kind
+        && let MediaKind::Document(doc) = &common.media_kind
+            && let Some(mime) = &doc.document.mime_type
+                && mime.type_().as_str() != "image"
+                    && let Ok(file) = bot.get_file(doc.document.file.id.clone()).await {
                         let url = format!(
                             "https://api.telegram.org/file/bot{}/{}",
                             bot.token(),
@@ -411,10 +403,6 @@ async fn prepare_message_payload(
                         );
                         attachments.push(url);
                     }
-                }
-            }
-        }
-    }
 
     serde_json::json!({
         "local_session": {
@@ -674,7 +662,7 @@ async fn fire_telegram_event(
     let response_final = response.clone();
     let last_edit_final = last_edit.clone();
     let collected_attachments_final = collected_attachments.clone();
-    let reasoning_state_final = reasoning_state.clone();
+    let _reasoning_state_final = reasoning_state.clone();
     let bot_final = bot.clone();
     let chat_id = msg.chat.id;
     let reply_to = msg.id.0;
@@ -735,7 +723,7 @@ async fn fire_telegram_event(
                                 let reasoning_lock = reasoning.lock().await;
                                 let reasoning_html = reasoning_lock
                                     .as_ref()
-                                    .map(|r| format_reasoning_for_telegram(r));
+                                    .map(format_reasoning_for_telegram);
 
                                 (content, reasoning_html)
                             };

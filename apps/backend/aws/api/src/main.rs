@@ -5,7 +5,7 @@ use flow_like_api::construct_router;
 use flow_like_catalog::get_catalog;
 use flow_like_storage::object_store::aws::AmazonS3Builder;
 use flow_like_types::tokio;
-use lambda_http::{Error, run_with_streaming_response, tracing};
+use lambda_http::{Error, run_with_streaming_response};
 use std::sync::Arc;
 use tracing_subscriber::prelude::*;
 

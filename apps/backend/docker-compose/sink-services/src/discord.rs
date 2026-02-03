@@ -4,11 +4,11 @@
 //! token and event handlers. Bots are synced from the API and managed dynamically.
 
 use crate::api_client::{ApiClient, BotConfig, BotHandler};
-use crate::storage::{DiscordBotState, DiscordConfigState, RedisStorage};
+use crate::storage::{DiscordConfigState, RedisStorage};
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
-use tracing::{debug, error, info, warn};
+use tracing::{info, warn};
 
 #[cfg(feature = "discord")]
 use serenity::{
@@ -115,7 +115,7 @@ impl DiscordBotManager {
         let handlers: Vec<DiscordEventHandler> = config
             .handlers
             .iter()
-            .filter_map(|h| Self::parse_handler(h))
+            .filter_map(Self::parse_handler)
             .collect();
 
         let mut bot_handlers = self.bot_handlers.write().await;

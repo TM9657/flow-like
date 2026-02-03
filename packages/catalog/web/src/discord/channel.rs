@@ -10,7 +10,6 @@ use flow_like::flow::{
 use flow_like_types::{async_trait, json::json};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
-use serenity::all::ChannelType;
 use serenity::builder::CreateThread;
 
 /// Discord channel information
