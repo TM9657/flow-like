@@ -16,6 +16,11 @@ execute = [
     "dep:linfa-linear",
     "dep:linfa-reduction",
     "dep:linfa-svm",
+    "dep:linfa-bayes",
+    "dep:linfa-trees",
+    "dep:fory",
+    "dep:fory-core",
+    "dep:rmp-serde",
 ]
 
 [dependencies]
@@ -44,3 +49,10 @@ linfa-nn = { version = "0.8.0", features = ["serde"], optional = true }
 linfa-linear = { version = "0.8.0", features = ["serde"], optional = true }
 linfa-reduction = { version = "0.8.0", features = ["serde"], optional = true }
 linfa-svm = { version = "0.8.0", features = ["serde"], optional = true }
+linfa-bayes = { version = "0.8.1", features = ["serde"], optional = true }
+linfa-trees = { version = "0.8.1", features = ["serde"], optional = true }
+
+# Binary serialization - schema-safe, fast, cross-language
+fory = { version = "0.14.1", optional = true }
+fory-core = { version = "0.14.1", optional = true }
+rmp-serde = { version = "1.3", optional = true }

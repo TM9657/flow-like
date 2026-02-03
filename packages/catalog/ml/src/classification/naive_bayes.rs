@@ -1,11 +1,13 @@
-//! Node for Fitting a **DBSCAN Density-Based Clustering Model**
+//! Node for Fitting Gaussian Naive Bayes Classifier
 //!
-//! This node loads a dataset (currently from a database source), transforms it into
-//! a clustering dataset, and fits DBSCAN clustering using the [`linfa`] crate.
-//! Unlike KMeans, DBSCAN doesn't produce a reusable model - it assigns labels directly.
+//! This node loads a dataset, transforms it into a classification dataset,
+//! and fits a Gaussian Naive Bayes model using the [`linfa_bayes`] crate.
 
+use crate::ml::NodeMLModel;
 #[cfg(feature = "execute")]
-use crate::ml::{MAX_ML_PREDICTION_RECORDS, values_to_array2_f64};
+use crate::ml::{
+    MAX_ML_PREDICTION_RECORDS, MLModel, ModelWithMeta, values_to_array1_target, values_to_array2_f64,
+};
 use flow_like::flow::{
     board::Board,
     execution::{LogLevel, context::ExecutionContext},
@@ -23,33 +25,31 @@ use flow_like_types::{Result, Value, async_trait, json::json};
 #[cfg(feature = "execute")]
 use linfa::DatasetBase;
 #[cfg(feature = "execute")]
-use linfa::ParamGuard;
+use linfa::traits::Fit;
 #[cfg(feature = "execute")]
-use linfa::prelude::Transformer;
-#[cfg(feature = "execute")]
-use linfa_clustering::Dbscan;
+use linfa_bayes::GaussianNb;
 #[cfg(feature = "execute")]
 use std::collections::HashSet;
 use std::sync::Arc;
 
 #[crate::register_node]
 #[derive(Default)]
-pub struct FitDbscanNode {}
+pub struct FitNaiveBayesNode {}
 
-impl FitDbscanNode {
+impl FitNaiveBayesNode {
     pub fn new() -> Self {
-        FitDbscanNode {}
+        FitNaiveBayesNode {}
     }
 }
 
 #[async_trait]
-impl NodeLogic for FitDbscanNode {
+impl NodeLogic for FitNaiveBayesNode {
     fn get_node(&self) -> Node {
         let mut node = Node::new(
-            "fit_dbscan",
-            "Train Clustering (DBSCAN)",
-            "Fit/Train DBSCAN Density-Based Clustering",
-            "AI/ML/Clustering",
+            "fit_naive_bayes",
+            "Train Classifier (Naive Bayes)",
+            "Fit/Train a Gaussian Naive Bayes classifier. Native multi-class support - no need for One-vs-All.",
+            "AI/ML/Classification",
         );
         node.add_icon("/flow/icons/chart-network.svg");
 
@@ -57,37 +57,19 @@ impl NodeLogic for FitDbscanNode {
             NodeScores::new()
                 .set_privacy(6)
                 .set_security(6)
-                .set_performance(5)
+                .set_performance(8) // Faster than SVM
                 .set_governance(6)
                 .set_reliability(7)
-                .set_cost(7)
+                .set_cost(8) // Lower computational cost
                 .build(),
         );
 
         node.add_input_pin(
             "exec_in",
             "Input",
-            "Execution trigger that begins clustering",
+            "Execution trigger that begins Naive Bayes training",
             VariableType::Execution,
         );
-
-        node.add_input_pin(
-            "epsilon",
-            "Epsilon",
-            "Maximum distance between points in the same cluster",
-            VariableType::Float,
-        )
-        .set_options(PinOptions::new().set_range((0.01, 10.0)).build())
-        .set_default_value(Some(json!(0.5)));
-
-        node.add_input_pin(
-            "min_points",
-            "Min Points",
-            "Minimum points required to form a dense region",
-            VariableType::Integer,
-        )
-        .set_options(PinOptions::new().set_range((1., 100.)).build())
-        .set_default_value(Some(json!(5)));
 
         node.add_input_pin(
             "source",
@@ -105,23 +87,18 @@ impl NodeLogic for FitDbscanNode {
         node.add_output_pin(
             "exec_out",
             "Done",
-            "Activated once clustering completes",
+            "Activated once training completes",
             VariableType::Execution,
         );
 
         node.add_output_pin(
-            "n_clusters",
-            "Clusters",
-            "Number of clusters found (excluding noise)",
-            VariableType::Integer,
-        );
-
-        node.add_output_pin(
-            "n_noise",
-            "Noise Points",
-            "Number of points classified as noise",
-            VariableType::Integer,
-        );
+            "model",
+            "Model",
+            "Thread-safe handle to the trained Naive Bayes classifier",
+            VariableType::Struct,
+        )
+        .set_schema::<NodeMLModel>()
+        .set_options(PinOptions::new().set_enforce_schema(true).build());
 
         node
     }
@@ -130,14 +107,13 @@ impl NodeLogic for FitDbscanNode {
     async fn run(&self, context: &mut ExecutionContext) -> Result<()> {
         context.deactivate_exec_pin("exec_out").await?;
         let source: String = context.evaluate_pin("source").await?;
-        let epsilon: f64 = context.evaluate_pin("epsilon").await?;
-        let min_points: usize = context.evaluate_pin("min_points").await?;
 
         let t0 = std::time::Instant::now();
-        let array = match source.as_str() {
+        let (ds, classes) = match source.as_str() {
             "Database" => {
                 let database: NodeDBConnection = context.evaluate_pin("database").await?;
                 let records_col: String = context.evaluate_pin("records").await?;
+                let targets_col: String = context.evaluate_pin("targets").await?;
 
                 let records = {
                     let database = database.load(context).await?.db.clone();
@@ -151,64 +127,50 @@ impl NodeLogic for FitDbscanNode {
                             records_col
                         )));
                     }
+                    if !existing_cols.contains(&targets_col) {
+                        return Err(anyhow!(format!(
+                            "Database doesn't contain target col `{}`!",
+                            targets_col
+                        )));
+                    }
                     database
                         .filter(
                             "true",
-                            Some(vec![records_col.to_string()]),
+                            Some(vec![records_col.to_string(), targets_col.to_string()]),
                             MAX_ML_PREDICTION_RECORDS,
                             0,
                         )
                         .await?
                 };
                 context.log_message(
-                    &format!("Loaded {} records from database", records.len()),
+                    &format!("Got {} records for training", records.len()),
                     LogLevel::Debug,
                 );
 
-                values_to_array2_f64(&records, &records_col)?
+                let train_array = values_to_array2_f64(&records, &records_col)?;
+                let (target_array, classes) = values_to_array1_target(&records, &targets_col)?;
+                (
+                    DatasetBase::from(train_array).with_targets(target_array),
+                    classes,
+                )
             }
-            _ => return Err(anyhow!("Datasource Not Implemented")),
+            _ => return Err(anyhow!("Datasource Not Implemented!")),
         };
         let elapsed = t0.elapsed();
         context.log_message(&format!("Preprocess data: {elapsed:?}"), LogLevel::Debug);
 
         let t0 = std::time::Instant::now();
-        // DBSCAN works on raw arrays, not DatasetBase
-        let dataset = DatasetBase::from(array);
-        let result = Dbscan::params(min_points)
-            .tolerance(epsilon)
-            .transform(dataset)?;
-        // DBSCAN returns a DatasetBase where targets are the cluster labels
-        let labels = result.targets;
+        let params = GaussianNb::params();
+        let nb_model = params.fit(&ds)?;
         let elapsed = t0.elapsed();
-        context.log_message(&format!("DBSCAN clustering: {elapsed:?}"), LogLevel::Debug);
+        context.log_message(&format!("Fit model: {elapsed:?}"), LogLevel::Debug);
 
-        let mut cluster_ids: HashSet<usize> = HashSet::new();
-        let mut noise_count: i64 = 0;
-
-        for label in labels.iter() {
-            match label {
-                Some(cluster_id) => {
-                    cluster_ids.insert(*cluster_id);
-                }
-                None => {
-                    noise_count += 1;
-                }
-            }
-        }
-
-        let n_clusters = cluster_ids.len() as i64;
-
-        context.log_message(
-            &format!(
-                "DBSCAN found {} clusters and {} noise points",
-                n_clusters, noise_count
-            ),
-            LogLevel::Info,
-        );
-
-        context.set_pin_value("n_clusters", json!(n_clusters)).await?;
-        context.set_pin_value("n_noise", json!(noise_count)).await?;
+        let model = MLModel::GaussianNaiveBayes(ModelWithMeta {
+            model: nb_model,
+            classes,
+        });
+        let node_model = NodeMLModel::new(context, model).await;
+        context.set_pin_value("model", json!(node_model)).await?;
         context.activate_exec_pin("exec_out").await?;
         Ok(())
     }
@@ -246,10 +208,18 @@ impl NodeLogic for FitDbscanNode {
                 node.add_input_pin(
                     "records",
                     "Train Col",
-                    "Column containing the feature vectors to cluster",
+                    "Column Containing the Values to Train on",
                     VariableType::String,
                 )
                 .set_default_value(Some(json!("vector")));
+            }
+            if node.get_pin_by_name("targets").is_none() {
+                node.add_input_pin(
+                    "targets",
+                    "Target Col",
+                    "Column Containing the Target Values to Fit the Classifier on",
+                    VariableType::String,
+                );
             }
         } else {
             node.error = Some("Datasource Not Implemented".to_string());

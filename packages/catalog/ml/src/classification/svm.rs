@@ -6,7 +6,7 @@
 use crate::ml::NodeMLModel;
 #[cfg(feature = "execute")]
 use crate::ml::{
-    MAX_ML_PREDICTION_RECORDS, MLModel, ModelWithMeta, values_to_array1_usize, values_to_array2_f64,
+    MAX_ML_PREDICTION_RECORDS, MLModel, ModelWithMeta, values_to_array1_target, values_to_array2_f64,
 };
 use flow_like::flow::{
     board::Board,
@@ -154,7 +154,7 @@ impl NodeLogic for FitSVMMultiClassNode {
                 );
 
                 let train_array = values_to_array2_f64(&records, &records_col)?;
-                let (target_array, classes) = values_to_array1_usize(&records, &targets_col)?;
+                let (target_array, classes) = values_to_array1_target(&records, &targets_col)?;
                 (
                     DatasetBase::from(train_array).with_targets(target_array),
                     classes,
@@ -179,7 +179,7 @@ impl NodeLogic for FitSVMMultiClassNode {
         // set outputs
         let model = MLModel::SVMMultiClass(ModelWithMeta {
             model: svm_models,
-            classes: Some(classes),
+            classes,
         });
         let node_model = NodeMLModel::new(context, model).await;
         context.set_pin_value("model", json!(node_model)).await?;

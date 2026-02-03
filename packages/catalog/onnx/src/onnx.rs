@@ -11,19 +11,44 @@ use serde::{Deserialize, Serialize};
 #[cfg(feature = "execute")]
 use std::sync::Arc;
 
+/// ONNX Audio Processing Nodes (VAD, Speech)
+pub mod audio;
+/// ONNX Batch Inference Nodes
+pub mod batch;
 /// ONNX Image Classification Nodes
 pub mod classification;
+/// ONNX Depth Estimation Nodes
+pub mod depth;
 /// ONNX Image Object Detection Nodes
 pub mod detection;
+/// Execution Provider configuration with graceful fallback
+pub mod execution_providers;
+/// ONNX Face Detection and Recognition Nodes
+pub mod face;
 /// ONNX Image Feature Extractor Nodes
 pub mod feature;
 /// ONNX Model Loader Nodes
 pub mod load;
+/// ONNX Named Entity Recognition (NER) Nodes
+pub mod ner;
+/// ONNX OCR (Text Detection/Recognition) Nodes
+pub mod ocr;
+/// ONNX Pose Estimation Nodes
+pub mod pose;
+/// ONNX Semantic/Instance Segmentation Nodes
+pub mod segmentation;
+/// ONNX Model Utility Nodes
+pub mod utils;
 
+pub use execution_providers::{initialize_ort, is_initialized, get_ep_info};
+
+/// Model provider type for automatic inference routing
 pub enum Provider {
     DfineLike(detection::DfineLike),
     YoloLike(detection::YoloLike),
     TimmLike(classification::TimmLike),
+    /// Generic provider for models that don't match known patterns
+    Generic,
 }
 
 #[derive(Serialize, Deserialize, JsonSchema, Clone, Debug)]
@@ -38,6 +63,10 @@ pub struct NodeOnnxSession {
 pub struct SessionWithMeta {
     pub session: Session,
     pub provider: Provider,
+    /// The execution providers that are actually active
+    pub ep_active: Vec<String>,
+    /// Whether GPU/NPU acceleration is active
+    pub accelerated: bool,
 }
 
 /// ONNX Runtime Session Wrapper
