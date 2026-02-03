@@ -4,9 +4,10 @@
 //! - `trigger_event` - Utility function for programmatic event triggering (Lambda, SQS, etc.)
 //! - `http_trigger` - HTTP endpoint for HTTP sinks
 //! - `telegram_trigger` - Telegram webhook endpoint with secret token & IP verification
+//! - `service_trigger` - Service-to-service trigger for internal services (cron, discord bot, etc.)
 
 use crate::{
-    entity::{event_sink, execution_run},
+    entity::{event, event_sink, execution_run},
     error::ApiError,
     execution::{
         DispatchRequest, ExecutionJwtParams, TokenType, is_jwt_configured, proxy_sse_response,
@@ -50,6 +51,29 @@ fn is_telegram_ip(ip: &std::net::IpAddr) -> bool {
     false
 }
 
+/// Merge two JSON payloads: base payload from event config + override payload from request.
+/// Request payload values take precedence over event config values.
+/// If both are objects, they are deep-merged. Otherwise, request payload wins entirely.
+fn merge_payloads(
+    base: Option<serde_json::Value>,
+    override_payload: Option<serde_json::Value>,
+) -> Option<serde_json::Value> {
+    match (base, override_payload) {
+        (None, None) => None,
+        (Some(base), None) => Some(base),
+        (None, Some(over)) => Some(over),
+        (Some(serde_json::Value::Object(mut base_map)), Some(serde_json::Value::Object(over_map))) => {
+            // Deep merge objects: override values take precedence
+            for (key, value) in over_map {
+                base_map.insert(key, value);
+            }
+            Some(serde_json::Value::Object(base_map))
+        }
+        // If either is not an object, override wins entirely
+        (_, Some(over)) => Some(over),
+    }
+}
+
 /// Input for programmatic event triggering
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TriggerEventInput {
@@ -73,6 +97,9 @@ pub struct TriggerResponse {
 ///
 /// Use this in Lambda handlers, SQS processors, cron job workers, etc.
 ///
+/// If the sink has stored PAT and/or OAuth tokens, they will be decrypted and
+/// passed to the executor, enabling access to models and personal files.
+///
 /// # Example
 /// ```ignore
 /// // In a Lambda handler
@@ -86,6 +113,8 @@ pub async fn trigger_event(
     state: &AppState,
     input: TriggerEventInput,
 ) -> FlResult<TriggerResponse> {
+    use crate::routes::app::events::db::decrypt_token;
+
     // Look up sink by event_id
     let sink = event_sink::Entity::find()
         .filter(event_sink::Column::EventId.eq(&input.event_id))
@@ -139,6 +168,19 @@ pub async fn trigger_event(
         ttl_seconds: Some(24 * 60 * 60),
     })?;
 
+    // Decrypt PAT from sink if available
+    let token = sink
+        .pat_encrypted
+        .as_ref()
+        .and_then(|encrypted| decrypt_token(encrypted));
+
+    // Decrypt OAuth tokens from sink if available
+    let oauth_tokens: Option<std::collections::HashMap<String, serde_json::Value>> = sink
+        .oauth_tokens_encrypted
+        .as_ref()
+        .and_then(|encrypted| decrypt_token(encrypted))
+        .and_then(|json| serde_json::from_str(&json).ok());
+
     // Build dispatch request
     let request = DispatchRequest {
         run_id: run_id.clone(),
@@ -152,10 +194,11 @@ pub async fn trigger_event(
         credentials_json,
         jwt: executor_jwt,
         callback_url,
-        token: None, // No PAT for system triggers
-        oauth_tokens: None,
+        token, // PAT from sink (if configured)
+        oauth_tokens, // OAuth tokens from sink (if configured)
         stream_state: false,
         runtime_variables: None,
+        user_context: None, // Sink triggers don't have user context
     };
 
     // Create run record
@@ -213,6 +256,8 @@ pub async fn http_trigger(
     headers: HeaderMap,
     body: Body,
 ) -> Result<Response, ApiError> {
+    use crate::routes::app::events::db::decrypt_token;
+
     // Normalize path
     let normalized_path = if path.starts_with('/') {
         path
@@ -355,6 +400,19 @@ pub async fn http_trigger(
     })
     .map_err(|e| ApiError::internal_error(anyhow!("Failed to sign JWT: {}", e)))?;
 
+    // Decrypt PAT from sink if available
+    let token = sink
+        .pat_encrypted
+        .as_ref()
+        .and_then(|encrypted| decrypt_token(encrypted));
+
+    // Decrypt OAuth tokens from sink if available
+    let oauth_tokens: Option<std::collections::HashMap<String, serde_json::Value>> = sink
+        .oauth_tokens_encrypted
+        .as_ref()
+        .and_then(|encrypted| decrypt_token(encrypted))
+        .and_then(|json| serde_json::from_str(&json).ok());
+
     // Build dispatch request
     let request = DispatchRequest {
         run_id: run_id.clone(),
@@ -368,10 +426,11 @@ pub async fn http_trigger(
         credentials_json,
         jwt: executor_jwt,
         callback_url,
-        token: None,
-        oauth_tokens: None,
+        token, // PAT from sink (if configured)
+        oauth_tokens, // OAuth tokens from sink (if configured)
         stream_state: false,
         runtime_variables: None,
+        user_context: None, // HTTP sink triggers don't have user context
     };
 
     // Create run record
@@ -458,6 +517,8 @@ pub async fn telegram_trigger(
     ConnectInfo(connect_info): ConnectInfo<SocketAddr>,
     body: Body,
 ) -> Result<Response, ApiError> {
+    use crate::routes::app::events::db::decrypt_token;
+
     let client_ip = connect_info.ip();
 
     tracing::info!(
@@ -613,6 +674,19 @@ pub async fn telegram_trigger(
     })
     .map_err(|e| ApiError::internal_error(anyhow!("Failed to sign JWT: {}", e)))?;
 
+    // Decrypt PAT from sink if available
+    let token = sink
+        .pat_encrypted
+        .as_ref()
+        .and_then(|encrypted| decrypt_token(encrypted));
+
+    // Decrypt OAuth tokens from sink if available
+    let oauth_tokens: Option<std::collections::HashMap<String, serde_json::Value>> = sink
+        .oauth_tokens_encrypted
+        .as_ref()
+        .and_then(|encrypted| decrypt_token(encrypted))
+        .and_then(|json| serde_json::from_str(&json).ok());
+
     // Build dispatch request (async - no streaming)
     let request = DispatchRequest {
         run_id: run_id.clone(),
@@ -626,10 +700,11 @@ pub async fn telegram_trigger(
         credentials_json,
         jwt: executor_jwt,
         callback_url,
-        token: None,
-        oauth_tokens: None,
+        token, // PAT from sink (if configured)
+        oauth_tokens, // OAuth tokens from sink (if configured)
         stream_state: false,
         runtime_variables: None,
+        user_context: None, // Telegram webhook triggers don't have user context
     };
 
     // Create run record
@@ -745,6 +820,8 @@ pub async fn discord_trigger(
     headers: HeaderMap,
     body: Body,
 ) -> Result<Response, ApiError> {
+    use crate::routes::app::events::db::decrypt_token;
+
     tracing::info!("Discord webhook trigger for event {}", event_id);
 
     // Read body first (needed for signature verification)
@@ -882,6 +959,19 @@ pub async fn discord_trigger(
     })
     .map_err(|e| ApiError::internal_error(anyhow!("Failed to sign JWT: {}", e)))?;
 
+    // Decrypt PAT from sink if available
+    let token = sink
+        .pat_encrypted
+        .as_ref()
+        .and_then(|encrypted| decrypt_token(encrypted));
+
+    // Decrypt OAuth tokens from sink if available
+    let oauth_tokens: Option<std::collections::HashMap<String, serde_json::Value>> = sink
+        .oauth_tokens_encrypted
+        .as_ref()
+        .and_then(|encrypted| decrypt_token(encrypted))
+        .and_then(|json| serde_json::from_str(&json).ok());
+
     // Build dispatch request (async - no streaming)
     let request = DispatchRequest {
         run_id: run_id.clone(),
@@ -895,10 +985,11 @@ pub async fn discord_trigger(
         credentials_json,
         jwt: executor_jwt,
         callback_url,
-        token: None,
-        oauth_tokens: None,
+        token, // PAT from sink (if configured)
+        oauth_tokens, // OAuth tokens from sink (if configured)
         stream_state: false,
         runtime_variables: None,
+        user_context: None, // Discord webhook triggers don't have user context
     };
 
     // Create run record
@@ -952,4 +1043,385 @@ pub async fn discord_trigger(
         })),
     )
         .into_response())
+}
+
+/// JWT claims for sink trigger service tokens
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SinkTriggerClaims {
+    /// Subject - always "sink-trigger"
+    pub sub: String,
+    /// Issuer - always "flow-like"
+    pub iss: String,
+    /// JWT ID - unique identifier for revocation checking
+    #[serde(default)]
+    pub jti: Option<String>,
+    /// Which sink types this token can trigger
+    pub sink_types: Vec<String>,
+    /// Optional: restrict to specific app IDs
+    #[serde(default)]
+    pub app_ids: Option<Vec<String>>,
+    /// Issued at timestamp
+    pub iat: usize,
+    /// Expiration timestamp (optional - can be very long-lived)
+    #[serde(default)]
+    pub exp: Option<usize>,
+}
+
+/// Request body for service-to-service trigger
+#[derive(Debug, Deserialize)]
+pub struct ServiceTriggerRequest {
+    /// The event ID to trigger
+    pub event_id: String,
+    /// The sink type (must match token's allowed sink_types)
+    pub sink_type: String,
+    /// Optional payload
+    #[serde(default)]
+    pub payload: Option<serde_json::Value>,
+}
+
+/// Response from service trigger
+#[derive(Debug, Serialize)]
+pub struct ServiceTriggerResponse {
+    pub success: bool,
+    pub run_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error: Option<String>,
+}
+
+/// Validate a sink trigger JWT and extract claims (without DB check)
+fn validate_sink_trigger_jwt(token: &str) -> Result<SinkTriggerClaims, ApiError> {
+    let secret = std::env::var("SINK_SECRET").map_err(|_| {
+        ApiError::internal_error(anyhow!("SINK_SECRET not configured"))
+    })?;
+
+    let validation = jsonwebtoken::Validation::new(jsonwebtoken::Algorithm::HS256);
+    let key = jsonwebtoken::DecodingKey::from_secret(secret.as_bytes());
+
+    let token_data = jsonwebtoken::decode::<SinkTriggerClaims>(token, &key, &validation)
+        .map_err(|e| ApiError::unauthorized(format!("Invalid sink trigger token: {}", e)))?;
+
+    // Verify subject
+    if token_data.claims.sub != "sink-trigger" {
+        return Err(ApiError::unauthorized("Invalid token subject"));
+    }
+
+    // Verify issuer
+    if token_data.claims.iss != "flow-like" {
+        return Err(ApiError::unauthorized("Invalid token issuer"));
+    }
+
+    Ok(token_data.claims)
+}
+
+/// Check if a sink token has been revoked
+async fn is_token_revoked(db: &sea_orm::DatabaseConnection, jti: &str) -> Result<bool, ApiError> {
+    use crate::entity::sink_token;
+    use sea_orm::{ColumnTrait, EntityTrait, QueryFilter};
+
+    let token = sink_token::Entity::find_by_id(jti)
+        .one(db)
+        .await
+        .map_err(|e| ApiError::internal_error(anyhow!("Database error: {}", e)))?;
+
+    match token {
+        Some(t) => Ok(t.revoked),
+        // If token not found in DB, it's either an old token (pre-registration system)
+        // or an invalid jti. We allow it for backward compatibility but log a warning.
+        None => {
+            tracing::warn!(jti = %jti, "Token jti not found in database - allowing for backward compatibility");
+            Ok(false)
+        }
+    }
+}
+
+/// POST /sink/trigger/async
+///
+/// Service-to-service trigger endpoint for internal sink services (cron, discord bot, telegram bot, etc.)
+///
+/// Authentication: Bearer token with scoped sink trigger JWT
+///
+/// The JWT must include:
+/// - `sub`: "sink-trigger"
+/// - `iss`: "flow-like"
+/// - `jti`: JWT ID for revocation checking (optional for backward compatibility)
+/// - `sink_types`: Array of allowed sink types (e.g., ["cron"] or ["discord"])
+///
+/// Security: Each service gets a JWT scoped to only its sink type:
+/// - Cron service gets JWT with `sink_types: ["cron"]`
+/// - Discord bot gets JWT with `sink_types: ["discord"]`
+/// - Telegram bot gets JWT with `sink_types: ["telegram"]`
+///
+/// If a service is compromised, it can only trigger events of its own type.
+/// Tokens can be individually revoked via /admin/sinks/{jti}.
+#[tracing::instrument(name = "POST /sink/trigger/async", skip(state, headers))]
+pub async fn service_trigger(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Json(request): Json<ServiceTriggerRequest>,
+) -> Result<Json<ServiceTriggerResponse>, ApiError> {
+    // Extract and validate Bearer token
+    let auth_header = headers
+        .get("authorization")
+        .and_then(|h| h.to_str().ok())
+        .ok_or_else(|| ApiError::unauthorized("Missing Authorization header"))?;
+
+    let token = auth_header
+        .strip_prefix("Bearer ")
+        .ok_or_else(|| ApiError::unauthorized("Invalid Authorization header format"))?;
+
+    let claims = validate_sink_trigger_jwt(token)?;
+
+    // Check if token has been revoked (if jti is present)
+    if let Some(ref jti) = claims.jti {
+        if is_token_revoked(&state.db, jti).await? {
+            tracing::warn!(jti = %jti, "Attempted use of revoked sink token");
+            return Err(ApiError::unauthorized("Token has been revoked"));
+        }
+    }
+
+    // Check if this JWT is allowed to trigger this sink type
+    if !claims.sink_types.contains(&request.sink_type) {
+        tracing::warn!(
+            requested_type = %request.sink_type,
+            allowed_types = ?claims.sink_types,
+            "Token not authorized for sink type"
+        );
+        return Err(ApiError::forbidden(format!(
+            "Token not authorized for sink type: {}",
+            request.sink_type
+        )));
+    }
+
+    // Get the event sink from database
+    let sink = event_sink::Entity::find()
+        .filter(event_sink::Column::EventId.eq(&request.event_id))
+        .filter(event_sink::Column::Active.eq(true))
+        .one(&state.db)
+        .await
+        .map_err(|e| ApiError::internal_error(anyhow!("Database error: {}", e)))?
+        .ok_or_else(|| {
+            ApiError::not_found(format!("No active sink found for event {}", request.event_id))
+        })?;
+
+    // Verify sink type matches
+    if sink.sink_type != request.sink_type {
+        tracing::warn!(
+            event_id = %request.event_id,
+            expected_type = %sink.sink_type,
+            requested_type = %request.sink_type,
+            "Sink type mismatch"
+        );
+        return Err(ApiError::bad_request(format!(
+            "Sink type mismatch: event {} is of type {}, not {}",
+            request.event_id, sink.sink_type, request.sink_type
+        )));
+    }
+
+    // Check app_id restriction if present in token
+    if let Some(ref allowed_apps) = claims.app_ids {
+        if !allowed_apps.contains(&sink.app_id) {
+            return Err(ApiError::forbidden(format!(
+                "Token not authorized for app: {}",
+                sink.app_id
+            )));
+        }
+    }
+
+    // Get the event to access its config for additional payload
+    let event = get_event_from_db(&state.db, &request.event_id)
+        .await
+        .map_err(|e| ApiError::internal_error(anyhow!("Failed to get event: {}", e)))?;
+
+    // Merge payloads: event config payload (base) + request payload (override)
+    // event.config is stored as JSON bytes (Vec<u8>) in the database
+    let event_payload: Option<serde_json::Value> = if event.config.is_empty() {
+        None
+    } else {
+        serde_json::from_slice::<serde_json::Value>(&event.config)
+            .ok()
+            .and_then(|config| config.get("payload").cloned())
+    };
+    let merged_payload = merge_payloads(event_payload, request.payload);
+
+    tracing::info!(
+        event_id = %request.event_id,
+        sink_type = %request.sink_type,
+        app_id = %sink.app_id,
+        "Service trigger: triggering event"
+    );
+
+    // Use the existing trigger_event utility
+    match trigger_event(
+        &state,
+        TriggerEventInput {
+            event_id: request.event_id.clone(),
+            payload: merged_payload,
+            user_id: Some(format!("service:{}", request.sink_type)),
+        },
+    )
+    .await
+    {
+        Ok(result) => Ok(Json(ServiceTriggerResponse {
+            success: result.triggered,
+            run_id: result.run_id,
+            error: if result.triggered {
+                None
+            } else {
+                Some(result.message)
+            },
+        })),
+        Err(e) => {
+            tracing::error!(error = %e, "Service trigger failed");
+            Ok(Json(ServiceTriggerResponse {
+                success: false,
+                run_id: None,
+                error: Some(e.to_string()),
+            }))
+        }
+    }
+}
+
+/// GET /sink/schedules
+///
+/// List all active cron schedules. Used by docker-compose sink service
+/// to sync its in-memory scheduler with the database.
+#[tracing::instrument(name = "GET /sink/schedules", skip(state, headers))]
+pub async fn list_cron_schedules(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+) -> Result<Json<Vec<CronScheduleInfo>>, ApiError> {
+    // Extract and validate Bearer token
+    let auth_header = headers
+        .get("authorization")
+        .and_then(|h| h.to_str().ok())
+        .ok_or_else(|| ApiError::unauthorized("Missing Authorization header"))?;
+
+    let token = auth_header
+        .strip_prefix("Bearer ")
+        .ok_or_else(|| ApiError::unauthorized("Invalid Authorization header format"))?;
+
+    let claims = validate_sink_trigger_jwt(token)?;
+
+    // Only allow tokens with cron access to list schedules
+    if !claims.sink_types.contains(&"cron".to_string()) {
+        return Err(ApiError::forbidden(
+            "Token not authorized to list cron schedules",
+        ));
+    }
+
+    // Get all active cron sinks
+    let sinks = event_sink::Entity::find()
+        .filter(event_sink::Column::SinkType.eq("cron"))
+        .filter(event_sink::Column::Active.eq(true))
+        .all(&state.db)
+        .await
+        .map_err(|e| ApiError::internal_error(anyhow!("Database error: {}", e)))?;
+
+    let schedules: Vec<CronScheduleInfo> = sinks
+        .into_iter()
+        .filter_map(|s| {
+            s.cron_expression.map(|expr| CronScheduleInfo {
+                event_id: s.event_id,
+                cron_expression: expr,
+                app_id: s.app_id,
+            })
+        })
+        .collect();
+
+    Ok(Json(schedules))
+}
+
+/// Cron schedule info returned by list_cron_schedules
+#[derive(Debug, Serialize)]
+pub struct CronScheduleInfo {
+    pub event_id: String,
+    pub cron_expression: String,
+    pub app_id: String,
+}
+
+/// Sink config info returned by list_sink_configs
+#[derive(Debug, Serialize)]
+pub struct SinkConfigInfo {
+    pub event_id: String,
+    pub app_id: String,
+    pub sink_type: String,
+    pub active: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub config: Option<serde_json::Value>,
+}
+
+/// Query parameters for list_sink_configs
+#[derive(Debug, Deserialize)]
+pub struct SinkConfigsQuery {
+    pub sink_type: String,
+}
+
+/// GET /sink/configs?sink_type=discord
+///
+/// List all active sink configs for a specific sink type.
+/// Used by sink services (Discord bot, Telegram bot) to sync their configs.
+#[tracing::instrument(name = "GET /sink/configs", skip(state, headers))]
+pub async fn list_sink_configs(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    axum::extract::Query(query): axum::extract::Query<SinkConfigsQuery>,
+) -> Result<Json<Vec<SinkConfigInfo>>, ApiError> {
+    // Extract and validate Bearer token
+    let auth_header = headers
+        .get("authorization")
+        .and_then(|h| h.to_str().ok())
+        .ok_or_else(|| ApiError::unauthorized("Missing Authorization header"))?;
+
+    let token = auth_header
+        .strip_prefix("Bearer ")
+        .ok_or_else(|| ApiError::unauthorized("Invalid Authorization header format"))?;
+
+    let claims = validate_sink_trigger_jwt(token)?;
+
+    // Only allow tokens with access to the requested sink type
+    if !claims.sink_types.contains(&query.sink_type) && !claims.sink_types.contains(&"*".to_string()) {
+        return Err(ApiError::forbidden(format!(
+            "Token not authorized for sink type: {}",
+            query.sink_type
+        )));
+    }
+
+    // Get all active sinks of the requested type
+    let sinks = event_sink::Entity::find()
+        .filter(event_sink::Column::SinkType.eq(&query.sink_type))
+        .filter(event_sink::Column::Active.eq(true))
+        .all(&state.db)
+        .await
+        .map_err(|e| ApiError::internal_error(anyhow!("Database error: {}", e)))?;
+
+    // Fetch events to get config data
+    let event_ids: Vec<String> = sinks.iter().map(|s| s.event_id.clone()).collect();
+    let events = event::Entity::find()
+        .filter(event::Column::Id.is_in(event_ids))
+        .all(&state.db)
+        .await
+        .map_err(|e| ApiError::internal_error(anyhow!("Database error: {}", e)))?;
+
+    let event_configs: std::collections::HashMap<String, serde_json::Value> = events
+        .into_iter()
+        .filter_map(|e| {
+            e.config.map(|c| (e.id, c))
+        })
+        .collect();
+
+    let configs: Vec<SinkConfigInfo> = sinks
+        .into_iter()
+        .map(|s| {
+            let config = event_configs.get(&s.event_id).cloned();
+            SinkConfigInfo {
+                event_id: s.event_id,
+                app_id: s.app_id,
+                sink_type: s.sink_type,
+                active: s.active,
+                config,
+            }
+        })
+        .collect();
+
+    Ok(Json(configs))
 }

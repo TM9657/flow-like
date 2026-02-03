@@ -19,6 +19,10 @@ import {
 	IJwks,
 	IRealtimeAccess,
 	checkOAuthTokens,
+	ICommentType,
+	showProgressToast,
+	finishAllProgressToasts,
+	type ProgressToastData,
 } from "@tm9657/flow-like-ui";
 import type {
 	CopilotScope,
@@ -85,6 +89,12 @@ function handleToastEvent(event: IIntercomEvent): void {
 	}
 }
 
+function handleProgressEvent(event: IIntercomEvent): void {
+	const payload = event.payload as ProgressToastData;
+	if (!payload?.id) return;
+	showProgressToast(payload);
+}
+
 export class WebBoardState implements IBoardState {
 	constructor(private readonly backend: WebBackendRef) {}
 
@@ -113,10 +123,95 @@ export class WebBoardState implements IBoardState {
 		version?: [number, number, number],
 	): Promise<IBoard> {
 		const params = version ? `?version=${version.join(".")}` : "";
-		return apiGet<IBoard>(
+		const board = await apiGet<IBoard>(
 			`apps/${appId}/board/${boardId}${params}`,
 			this.backend.auth,
 		);
+
+		// Presign media comments (Image/Video)
+		await this.presignMediaComments(appId, boardId, board);
+
+		return board;
+	}
+
+	private async presignMediaComments(
+		appId: string,
+		boardId: string,
+		board: IBoard,
+	): Promise<void> {
+		const mediaComments = Object.values(board.comments).filter(
+			(comment) =>
+				comment.comment_type === ICommentType.Image ||
+				comment.comment_type === ICommentType.Video,
+		);
+
+		if (mediaComments.length === 0) return;
+
+		// Build full storage paths for media files (apps/{appId}/upload/boards/{boardId}/{filename})
+		const buildFullPath = (filename: string) =>
+			`apps/${appId}/upload/boards/${boardId}/${filename}`;
+
+		const prefixes = mediaComments.map((comment) => buildFullPath(comment.content));
+
+		try {
+			const results = await apiPost<{ prefix: string; url?: string; error?: string }[]>(
+				`apps/${appId}/data/download`,
+				{ prefixes },
+				this.backend.auth,
+			);
+
+			// Map presigned URLs back to comments
+			const urlMap = new Map(
+				results
+					.filter((r) => r.url)
+					.map((r) => [r.prefix, r.url as string]),
+			);
+
+			for (const comment of mediaComments) {
+				const prefix = buildFullPath(comment.content);
+				const url = urlMap.get(prefix);
+				if (url) {
+					(comment as any).presigned_url = url;
+				}
+			}
+
+			// Also presign layer comments
+			for (const layer of Object.values(board.layers)) {
+				const layerMediaComments = Object.values(layer.comments).filter(
+					(comment) =>
+						comment.comment_type === ICommentType.Image ||
+						comment.comment_type === ICommentType.Video,
+				);
+
+				if (layerMediaComments.length === 0) continue;
+
+				const layerPrefixes = layerMediaComments.map((comment) =>
+					buildFullPath(comment.content),
+				);
+
+				const layerResults = await apiPost<{ prefix: string; url?: string; error?: string }[]>(
+					`apps/${appId}/data/download`,
+					{ prefixes: layerPrefixes },
+					this.backend.auth,
+				);
+
+				const layerUrlMap = new Map(
+					layerResults
+						.filter((r) => r.url)
+						.map((r) => [r.prefix, r.url as string]),
+				);
+
+				for (const comment of layerMediaComments) {
+					const prefix = buildFullPath(comment.content);
+					const url = layerUrlMap.get(prefix);
+					if (url) {
+						(comment as any).presigned_url = url;
+					}
+				}
+			}
+		} catch (error) {
+			console.warn("Failed to presign media comments:", error);
+		}
 	}
 
 	async getRealtimeAccess(appId: string, boardId: string): Promise<IRealtimeAccess> {
@@ -283,94 +378,117 @@ export class WebBoardState implements IBoardState {
 			tokenProviders: oauthTokens ? Object.keys(oauthTokens) : [],
 		});
 
-		const response = await fetch(url, {
-			method: "POST",
-			headers,
-			body: JSON.stringify({
-				node_id: payload.id,
-				payload: payload.payload,
-				stream_state: streamState ?? true,
-				token: this.backend.auth?.user?.access_token,
-				oauth_tokens: oauthTokens,
-				runtime_variables: payload.runtime_variables,
-			}),
-		});
+		let executionFinished = false;
+		try {
+			const response = await fetch(url, {
+				method: "POST",
+				headers,
+				body: JSON.stringify({
+					node_id: payload.id,
+					payload: payload.payload,
+					stream_state: streamState ?? true,
+					token: this.backend.auth?.user?.access_token,
+					oauth_tokens: oauthTokens,
+					runtime_variables: payload.runtime_variables,
+				}),
+			});
 
-		if (!response.ok) {
-			throw new Error(`Execution failed: ${response.status}`);
-		}
+			if (!response.ok) {
+				throw new Error(`Execution failed: ${response.status}`);
+			}
 
-		let foundRunId = false;
+			let foundRunId = false;
 
-		if (streamState && response.body) {
-			const reader = response.body.getReader();
-			const decoder = new TextDecoder();
-			let buffer = "";
+			if (streamState && response.body) {
+				const reader = response.body.getReader();
+				const decoder = new TextDecoder();
+				let buffer = "";
 
-			while (true) {
-				const { done, value } = await reader.read();
-				if (done) break;
+				while (true) {
+					const { done, value } = await reader.read();
+					if (done) break;
 
-				buffer += decoder.decode(value, { stream: true });
+					buffer += decoder.decode(value, { stream: true });
 
-				// Parse SSE events properly - they're separated by double newlines
-				const parts = buffer.split("\n\n");
-				buffer = parts.pop() ?? "";
+					// Parse SSE events properly - they're separated by double newlines
+					const parts = buffer.split("\n\n");
+					buffer = parts.pop() ?? "";
 
-				for (const part of parts) {
-					if (!part.trim()) continue;
+					for (const part of parts) {
+						if (!part.trim()) continue;
 
-					// Parse SSE format: "event: xxx\ndata: {...}"
-					let eventName = "message";
-					let eventData = "";
+						// Parse SSE format: "event: xxx\ndata: {...}"
+						let eventName = "message";
+						let eventData = "";
 
-					for (const line of part.split("\n")) {
-						if (line.startsWith("event:")) {
-							eventName = line.slice(6).trim();
-						} else if (line.startsWith("data:")) {
-							eventData = line.slice(5).trim();
-						} else if (line.startsWith(":")) {
-							// Comment/keep-alive, ignore
-							continue;
-						}
-					}
-
-					if (!eventData || eventData === "keep-alive") continue;
-
-					try {
-						const event = JSON.parse(eventData) as IIntercomEvent;
-
-						// Handle run_initiated event to get run ID
-						if (!foundRunId && eventId && event.event_type === "run_initiated") {
-							const runId = event.payload?.run_id;
-							if (runId) {
-								eventId(runId);
-								foundRunId = true;
+						for (const line of part.split("\n")) {
+							if (line.startsWith("event:")) {
+								eventName = line.slice(6).trim();
+							} else if (line.startsWith("data:")) {
+								eventData = line.slice(5).trim();
+							} else if (line.startsWith(":")) {
+								// Comment/keep-alive, ignore
+								continue;
 							}
 						}
 
-						// Handle toast events globally
-						if (event.event_type === "toast") {
-							handleToastEvent(event);
-						}
+						if (!eventData || eventData === "keep-alive") continue;
 
-						// Forward event to callback as array (consistent with local execution)
-						if (cb) cb([event]);
+						try {
+							const event = JSON.parse(eventData) as IIntercomEvent;
 
-						// Check for terminal events
-						if (eventName === "done" || eventName === "completed" ||
-							event.event_type === "completed" || event.event_type === "error") {
-							break;
+							// Handle run_initiated event to get run ID
+							if (!foundRunId && eventId && event.event_type === "run_initiated") {
+								const runId = event.payload?.run_id;
+								if (runId) {
+									eventId(runId);
+									foundRunId = true;
+								}
+							}
+
+							// Handle toast events globally
+							if (event.event_type === "toast") {
+								handleToastEvent(event);
+							}
+
+							// Handle progress events globally
+							if (event.event_type === "progress") {
+								handleProgressEvent(event);
+							}
+
+							// Forward event to callback as array (consistent with local execution)
+							if (cb) cb([event]);
+
+							// Check for terminal events
+							if (eventName === "done" || eventName === "completed" ||
+								event.event_type === "completed") {
+								executionFinished = true;
+								finishAllProgressToasts(true);
+								break;
+							}
+							if (event.event_type === "error") {
+								executionFinished = true;
+								finishAllProgressToasts(false);
+								break;
+							}
+						} catch {
+							// Ignore parse errors
 						}
-					} catch {
-						// Ignore parse errors
 					}
 				}
 			}
-		}
 
-		// Full metadata will be fetched separately by the caller
-		return undefined;
+			// Ensure progress toasts are finished when stream ends
+			if (!executionFinished) {
+				finishAllProgressToasts(true);
+			}
+
+			// Full metadata will be fetched separately by the caller
+			return undefined;
+		} catch (error) {
+			finishAllProgressToasts(false);
+			throw error;
+		}
 	}
 
 	async listRuns(

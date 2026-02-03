@@ -51,6 +51,7 @@ import {
 	CopyIcon,
 	CrownIcon,
 	DatabaseIcon,
+	DollarSignIcon,
 	DownloadIcon,
 	EyeIcon,
 	EyeOffIcon,
@@ -155,6 +156,14 @@ const navigationItems = [
 		],
 	},
 	{
+		href: "/library/config/sales",
+		label: "Sales",
+		icon: DollarSignIcon,
+		description: "Track sales, manage pricing and discounts",
+		visibilities: [IAppVisibility.Public, IAppVisibility.PublicRequestAccess],
+		requiresPaid: true,
+	},
+	{
 		href: "/library/config/analytics",
 		label: "Analytics",
 		icon: ChartAreaIcon,
@@ -207,6 +216,15 @@ export default function Id({
 	const [showPassword, setShowPassword] = useState(false);
 	const [exporting, setExporting] = useState(false);
 	const [mobileNavOpen, setMobileNavOpen] = useState(false);
+
+	// Use local visibility if available, otherwise fall back to app.data.visibility
+	const effectiveVisibility = useMemo(
+		() =>
+			online?.visibility !== IAppVisibility.Offline
+				? online?.visibility
+				: (app.data?.visibility ?? IAppVisibility.Offline),
+		[online?.visibility, app.data?.visibility],
+	);
 
 	// Lock page scroll on desktop (md+) so only the right card scrolls
 	useEffect(() => {
@@ -483,15 +501,17 @@ export default function Id({
 						<ScrollArea className="max-h-[70vh]">
 							<nav
 								className="flex flex-col gap-1 p-3"
-								key={id + (online?.visibility ?? "")}
+								key={id + (effectiveVisibility ?? "")}
 							>
 								{navigationItems
 									.filter(
 										(item) =>
-											!item.visibilities ||
-											item.visibilities.includes(
-												online?.visibility ?? IAppVisibility.Offline,
-											),
+											(!item.visibilities ||
+												item.visibilities.includes(
+													effectiveVisibility ?? IAppVisibility.Offline,
+												)) &&
+											(!item.requiresPaid ||
+												(app.data?.price != null && app.data.price > 0)),
 									)
 									.map((item) => {
 										const Icon = item.icon;
@@ -520,7 +540,7 @@ export default function Id({
 										);
 									})}
 
-								{(online?.visibility ?? IAppVisibility.Private) ===
+								{(effectiveVisibility ?? IAppVisibility.Private) ===
 									IAppVisibility.Offline && (
 									<Button
 										variant="ghost"
@@ -760,15 +780,17 @@ export default function Id({
 									</div>
 									<nav
 										className="flex flex-col gap-1 pb-4"
-										key={id + (online?.visibility ?? "")}
+										key={id + (effectiveVisibility ?? "")}
 									>
 										{navigationItems
 											.filter(
 												(item) =>
-													!item.visibilities ||
-													item.visibilities.includes(
-														online?.visibility ?? IAppVisibility.Offline,
-													),
+													(!item.visibilities ||
+														item.visibilities.includes(
+															effectiveVisibility ?? IAppVisibility.Offline,
+														)) &&
+													(!item.requiresPaid ||
+														(app.data?.price != null && app.data.price > 0)),
 											)
 											.map((item) => {
 												const Icon = item.icon;
@@ -814,7 +836,7 @@ export default function Id({
 													</Tooltip>
 												);
 											})}
-										{(online?.visibility ?? IAppVisibility.Private) ===
+										{(effectiveVisibility ?? IAppVisibility.Private) ===
 											IAppVisibility.Offline && (
 											<Tooltip key="export" delayDuration={300}>
 												<TooltipTrigger asChild>

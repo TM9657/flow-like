@@ -214,6 +214,7 @@ pub async fn invoke_board_async(
         oauth_tokens: params.oauth_tokens,
         stream_state: true,
         runtime_variables: params.runtime_variables,
+        user_context: Some(permission.to_user_context()),
     };
 
     let response = state

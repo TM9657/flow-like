@@ -744,20 +744,27 @@ export function parseBoard(
 			continue;
 		}
 
+		// Use mediaNode for Image/Video comment types, commentNode for Text
+		const isMedia =
+			comment.comment_type === ICommentType.Image ||
+			comment.comment_type === ICommentType.Video;
+
 		nodes.push({
 			id: comment.id,
-			type: "commentNode",
+			type: isMedia ? "mediaNode" : "commentNode",
 			position: { x: comment.coordinates[0], y: comment.coordinates[1] },
-			width: comment.width ?? 200,
-			height: comment.height ?? 80,
+			width: comment.width ?? (isMedia ? 400 : 200),
+			height: comment.height ?? (isMedia ? 300 : 80),
 			zIndex: comment.z_index ?? 1,
 			draggable: !(comment.is_locked ?? false),
 			data: {
 				label: comment.id,
 				boardId: board.id,
+				appId: appId,
 				hash: hash,
 				boardRef: boardRef,
 				comment: { ...comment, is_locked: comment.is_locked ?? false },
+				presignedUrl: comment.presigned_url,
 				onUpsert: async (comment: IComment) => {
 					const command = upsertCommentCommand({
 						comment: comment,

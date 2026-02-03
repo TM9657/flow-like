@@ -8,7 +8,7 @@ import {
 	useInvoke,
 } from "@tm9657/flow-like-ui";
 import type { AppRouterInstance } from "next/dist/shared/lib/app-router-context.shared-runtime";
-import { useCallback, useMemo } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { toast } from "sonner";
 
 export function useStoreData(
@@ -16,6 +16,7 @@ export function useStoreData(
 	router: AppRouterInstance,
 ) {
 	const backend = useBackend();
+	const [isPurchasing, setIsPurchasing] = useState(false);
 
 	const apps = useInvoke(backend.appState.getApps, backend.appState, []);
 	const app = useInvoke<IApp, [appId: string]>(
@@ -49,10 +50,34 @@ export function useStoreData(
 		router.push(`/library/config?id=${id}`);
 	}, [id, router]);
 
-	const onBuy = useCallback(() => {
-		if (!id) return;
-		toast.info("Purchase flow coming soon.");
-	}, [id]);
+	const onBuy = useCallback(async () => {
+		if (!id || isPurchasing) return;
+
+		setIsPurchasing(true);
+		try {
+			const result = await backend.appState.purchaseApp(id);
+
+			if (result.alreadyMember) {
+				toast.info("You already own this app!");
+				await apps.refetch?.();
+				router.push(`/use?id=${id}`);
+				return;
+			}
+
+			if (result.checkoutUrl) {
+				// Open checkout in new tab (web)
+				window.open(result.checkoutUrl, "_blank");
+				toast.info("Opening checkout in a new tab...");
+			} else {
+				toast.error("Unable to start purchase. Please try again.");
+			}
+		} catch (e) {
+			console.error("Purchase error:", e);
+			toast.error("Failed to start purchase. Please try again later.");
+		} finally {
+			setIsPurchasing(false);
+		}
+	}, [id, isPurchasing, backend.appState, apps, router]);
 
 	const onJoinOrRequest = useCallback(async () => {
 		const data = app.data;
@@ -111,6 +136,7 @@ export function useStoreData(
 		app,
 		meta,
 		isMember,
+		isPurchasing,
 		coverUrl,
 		iconUrl,
 		appName,

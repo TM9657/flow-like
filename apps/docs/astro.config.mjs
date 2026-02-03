@@ -69,6 +69,7 @@ posthog.init('phc_hxGZEJaPqyCNzqqfrYyuUDCUSpcc7RSbwh07t4xtfrE', { api_host:'http
 			lastUpdated: true,
 			tableOfContents: { minHeadingLevel: 2, maxHeadingLevel: 4 },
 			sidebar: [
+				// ===== EVERYONE =====
 				{
 					label: "Getting Started",
 					items: [
@@ -82,40 +83,131 @@ posthog.init('phc_hxGZEJaPqyCNzqqfrYyuUDCUSpcc7RSbwh07t4xtfrE', { api_host:'http
 						{ label: "Get Support", slug: "start/support" },
 					],
 				},
+				// ===== APP BUILDERS =====
 				{
-					label: "Studio",
+					label: "Building Apps",
 					items: [
-						{ label: "Overview", slug: "studio/overview" },
-						{ label: "Working with Nodes", slug: "studio/nodes" },
-						{ label: "Connecting Pins", slug: "studio/connecting" },
-						{ label: "Layers & Organization", slug: "studio/layers" },
-						{ label: "Variables", slug: "studio/variables" },
-						{ label: "Local-Only Execution", slug: "studio/local-execution" },
-						{ label: "Logging & Debugging", slug: "studio/logging" },
-						{ label: "Version Control", slug: "studio/versioning" },
+						{
+							label: "Studio",
+							collapsed: false,
+							items: [
+								{ label: "Overview", slug: "studio/overview" },
+								{ label: "FlowPilot AI", slug: "studio/flowpilot" },
+								{ label: "Working with Nodes", slug: "studio/nodes" },
+								{ label: "Connecting Pins", slug: "studio/connecting" },
+								{ label: "Layers & Organization", slug: "studio/layers" },
+								{ label: "Variables", slug: "studio/variables" },
+								{ label: "Local-Only Execution", slug: "studio/local-execution" },
+								{ label: "Logging & Debugging", slug: "studio/logging" },
+								{ label: "Version Control", slug: "studio/versioning" },
+							],
+						},
+						{
+							label: "Apps",
+							collapsed: true,
+							items: [
+								{ label: "Overview", slug: "apps/overview" },
+								{ label: "Creating Apps", slug: "apps/create" },
+								{ label: "Boards & Flows", slug: "apps/boards" },
+								{ label: "Runtime Variables", slug: "apps/runtime-variables" },
+								{ label: "Pages", slug: "apps/pages" },
+								{ label: "Routes", slug: "apps/routes" },
+								{ label: "Widgets", slug: "apps/widgets" },
+								{ label: "Chat UI", slug: "apps/chat-ui" },
+								{ label: "Custom UI (A2UI)", slug: "apps/a2ui" },
+								{ label: "Events", slug: "apps/events" },
+								{ label: "Templates", slug: "apps/templates" },
+								{ label: "Storage", slug: "apps/storage" },
+								{ label: "Sharing", slug: "apps/share" },
+								{ label: "Offline & Online", slug: "apps/offline-online" },
+							],
+						},
+						{
+							label: "Packages & Extensions",
+							collapsed: true,
+							items: [
+								{ label: "Package Store", slug: "start/packages-store" },
+								{ label: "Package Library", slug: "start/packages-library" },
+							],
+						},
+						{
+							label: "Node Catalog",
+							collapsed: true,
+							items: [
+								{ label: "Overview", slug: "nodes/overview" },
+								{
+									label: "AI & LLM",
+									collapsed: true,
+									autogenerate: { directory: "nodes/AI" },
+								},
+								{
+									label: "Control Flow",
+									collapsed: true,
+									autogenerate: { directory: "nodes/Control" },
+								},
+								{
+									label: "Database",
+									collapsed: true,
+									autogenerate: { directory: "nodes/Database" },
+								},
+								{
+									label: "Events",
+									collapsed: true,
+									autogenerate: { directory: "nodes/Events" },
+								},
+								{
+									label: "Image Processing",
+									collapsed: true,
+									autogenerate: { directory: "nodes/Image" },
+								},
+								{
+									label: "Logging",
+									collapsed: true,
+									autogenerate: { directory: "nodes/Logging" },
+								},
+								{
+									label: "Math",
+									collapsed: true,
+									autogenerate: { directory: "nodes/Math" },
+								},
+								{
+									label: "Storage",
+									collapsed: true,
+									autogenerate: { directory: "nodes/Storage" },
+								},
+								{
+									label: "Data Structures",
+									collapsed: true,
+									autogenerate: { directory: "nodes/Structs" },
+								},
+								{
+									label: "Utilities",
+									collapsed: true,
+									autogenerate: { directory: "nodes/Utils" },
+								},
+								{
+									label: "Variables",
+									collapsed: true,
+									autogenerate: { directory: "nodes/Variable" },
+								},
+								{
+									label: "Web & HTTP",
+									collapsed: true,
+									autogenerate: { directory: "nodes/Web" },
+								},
+								{
+									label: "Bit Operations",
+									collapsed: true,
+									autogenerate: { directory: "nodes/Bit" },
+								},
+							],
+						},
 					],
 				},
-				{
-					label: "Apps",
-					items: [
-						{ label: "Overview", slug: "apps/overview" },
-						{ label: "Creating Apps", slug: "apps/create" },
-						{ label: "Boards & Flows", slug: "apps/boards" },
-						{ label: "Runtime Variables", slug: "apps/runtime-variables" },
-						{ label: "Pages", slug: "apps/pages" },
-						{ label: "Routes", slug: "apps/routes" },
-						{ label: "Widgets", slug: "apps/widgets" },
-						{ label: "Chat UI", slug: "apps/chat-ui" },
-						{ label: "Custom UI (A2UI)", slug: "apps/a2ui" },
-						{ label: "Events", slug: "apps/events" },
-						{ label: "Templates", slug: "apps/templates" },
-						{ label: "Storage", slug: "apps/storage" },
-						{ label: "Sharing", slug: "apps/share" },
-						{ label: "Offline & Online", slug: "apps/offline-online" },
-					],
-				},
+				// ===== DEVOPS / ADMINS =====
 				{
 					label: "Self Hosting",
+					badge: { text: "DevOps", variant: "caution" },
 					items: [
 						{ label: "Overview", slug: "self-hosting/overview" },
 						{
@@ -135,23 +227,27 @@ posthog.init('phc_hxGZEJaPqyCNzqqfrYyuUDCUSpcc7RSbwh07t4xtfrE', { api_host:'http
 						},
 					],
 				},
+				// ===== EXTENSION DEVELOPERS (WASM) =====
 				{
-					label: "For Developers",
+					label: "Extending Flow-Like",
+					badge: { text: "Devs", variant: "success" },
 					items: [
-						{ label: "Architecture", slug: "dev/architecture" },
-						{ label: "Building from Source", slug: "dev/build" },
-						{ label: "Contributing", slug: "dev/contribute" },
-						{ label: "Writing Custom Nodes", slug: "dev/writing-nodes" },
-						{ label: "Rust SDK", slug: "dev/rust" },
-						{ label: "Storage Providers", slug: "dev/storage-providers" },
-						{ label: "Customization", slug: "dev/customizing" },
+						{ label: "WASM Nodes Overview", slug: "dev/wasm-nodes/overview" },
+						{ label: "Manifest Format", slug: "dev/wasm-nodes/manifest" },
+						{ label: "Publishing to Registry", slug: "dev/wasm-nodes/registry" },
 						{
-							label: "WASM Nodes",
+							label: "Language SDKs",
 							collapsed: true,
-							autogenerate: { directory: "dev/wasm-nodes" },
+							items: [
+								{ label: "Rust", slug: "dev/wasm-nodes/rust" },
+								{ label: "TypeScript", slug: "dev/wasm-nodes/typescript" },
+								{ label: "Python", slug: "dev/wasm-nodes/python" },
+								{ label: "Go", slug: "dev/wasm-nodes/go" },
+								{ label: "C++", slug: "dev/wasm-nodes/cpp" },
+							],
 						},
 						{
-							label: "A2UI",
+							label: "A2UI Development",
 							collapsed: true,
 							autogenerate: { directory: "dev/a2ui" },
 						},
@@ -162,89 +258,38 @@ posthog.init('phc_hxGZEJaPqyCNzqqfrYyuUDCUSpcc7RSbwh07t4xtfrE', { api_host:'http
 						},
 					],
 				},
+				// ===== CORE CONTRIBUTORS =====
 				{
-					label: "For Enterprises",
+					label: "Contributing",
+					badge: { text: "Core", variant: "danger" },
+					items: [
+						{ label: "Architecture", slug: "dev/architecture" },
+						{ label: "Building from Source", slug: "dev/build" },
+						{ label: "Contributing Guide", slug: "dev/contribute" },
+						{ label: "Writing Native Nodes", slug: "dev/writing-nodes" },
+						{ label: "Rust SDK", slug: "dev/rust" },
+						{ label: "Storage Providers", slug: "dev/storage-providers" },
+						{ label: "Customization", slug: "dev/customizing" },
+						{ label: "Translations", slug: "dev/translations" },
+					],
+				},
+				// ===== ENTERPRISE =====
+				{
+					label: "Enterprise",
+					collapsed: true,
 					autogenerate: { directory: "enterprise" },
 				},
+				// ===== REFERENCE =====
 				{
 					label: "Reference",
+					collapsed: true,
 					items: [
 						{ label: "Benchmarks", slug: "reference/benchmarks" },
+						{ label: "Markdown Formatting", slug: "reference/markdown-formatting" },
 						{ label: "A2UI Components", slug: "reference/a2ui-components" },
 						{ label: "Widget Builder", slug: "reference/widget-builder" },
 						{ label: "FlowPilot UI", slug: "reference/flowpilot-ui" },
 						{ label: "A2UI Migration", slug: "reference/a2ui-migration" },
-					],
-				},
-				{
-					label: "Node Catalog",
-					items: [
-						{ label: "Overview", slug: "nodes/overview" },
-						{
-							label: "AI & LLM",
-							collapsed: true,
-							autogenerate: { directory: "nodes/AI" },
-						},
-						{
-							label: "Control Flow",
-							collapsed: true,
-							autogenerate: { directory: "nodes/Control" },
-						},
-						{
-							label: "Database",
-							collapsed: true,
-							autogenerate: { directory: "nodes/Database" },
-						},
-						{
-							label: "Events",
-							collapsed: true,
-							autogenerate: { directory: "nodes/Events" },
-						},
-						{
-							label: "Image Processing",
-							collapsed: true,
-							autogenerate: { directory: "nodes/Image" },
-						},
-						{
-							label: "Logging",
-							collapsed: true,
-							autogenerate: { directory: "nodes/Logging" },
-						},
-						{
-							label: "Math",
-							collapsed: true,
-							autogenerate: { directory: "nodes/Math" },
-						},
-						{
-							label: "Storage",
-							collapsed: true,
-							autogenerate: { directory: "nodes/Storage" },
-						},
-						{
-							label: "Data Structures",
-							collapsed: true,
-							autogenerate: { directory: "nodes/Structs" },
-						},
-						{
-							label: "Utilities",
-							collapsed: true,
-							autogenerate: { directory: "nodes/Utils" },
-						},
-						{
-							label: "Variables",
-							collapsed: true,
-							autogenerate: { directory: "nodes/Variable" },
-						},
-						{
-							label: "Web & HTTP",
-							collapsed: true,
-							autogenerate: { directory: "nodes/Web" },
-						},
-						{
-							label: "Bit Operations",
-							collapsed: true,
-							autogenerate: { directory: "nodes/Bit" },
-						},
 					],
 				},
 			],

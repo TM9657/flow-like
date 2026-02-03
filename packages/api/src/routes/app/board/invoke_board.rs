@@ -269,6 +269,7 @@ pub async fn invoke_board(
         oauth_tokens: params.oauth_tokens,
         stream_state: params.stream_state,
         runtime_variables: params.runtime_variables,
+        user_context: Some(permission.to_user_context()),
     };
 
     // For isolated K8s jobs, insert run record and dispatch async

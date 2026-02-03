@@ -8,13 +8,20 @@ use axum::{
 };
 use flow_like::flow::{board::VersionType, event::Event};
 use serde::Deserialize;
+use std::collections::HashMap;
 
-use super::db::sync_event_to_db;
+use super::db::sync_event_with_sink_tokens;
 
 #[derive(Deserialize)]
 pub struct EventUpsertBody {
     event: Event,
     version_type: Option<VersionType>,
+    /// Optional PAT to store with the sink (enables model/file access in triggered flows)
+    #[serde(default)]
+    pat: Option<String>,
+    /// Optional OAuth tokens to store with the sink (provider-specific access)
+    #[serde(default)]
+    oauth_tokens: Option<HashMap<String, serde_json::Value>>,
 }
 
 #[tracing::instrument(
@@ -46,8 +53,17 @@ pub async fn upsert_event(
     let event = app.upsert_event(event, params.version_type, None).await?;
     app.save().await?;
 
-    // Sync to database for fast lookups
-    sync_event_to_db(&state.db, &app_id, &event).await?;
+    // Sync to database for fast lookups (also creates/updates sink and external scheduler)
+    // Pass optional PAT and OAuth tokens for sink storage
+    sync_event_with_sink_tokens(
+        &state.db,
+        &state,
+        &app_id,
+        &event,
+        params.pat.as_deref(),
+        params.oauth_tokens.as_ref(),
+    )
+    .await?;
 
     Ok(Json(event))
 }

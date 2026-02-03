@@ -224,6 +224,51 @@ services:
       - flowlike
 
   # =============================================================================
+  # Sink Services (Cron Scheduler, Discord, Telegram bots)
+  # =============================================================================
+  sink-services:
+    build:
+      context: ../../..
+      dockerfile: apps/backend/docker-compose/sink-services/Dockerfile
+    depends_on:
+      api:
+        condition: service_healthy
+    environment:
+      RUST_LOG: ${RUST_LOG:-info,docker_compose_sink_services=debug}
+      API_BASE_URL: http://api:8080
+      SINK_TRIGGER_JWT: ${SINK_TRIGGER_JWT:-}
+      CONFIG_PATH: /app/flow-like.config.json
+    volumes:
+      - ./flow-like.config.json:/app/flow-like.config.json:ro
+    restart: unless-stopped
+    networks:
+      - flowlike
+
+  # =============================================================================
+  # Web Application (Next.js Static Export)
+  # =============================================================================
+  web:
+    build:
+      context: ../../..
+      dockerfile: apps/backend/docker-compose/web/Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:8080}
+        NEXT_PUBLIC_REDIRECT_URL: ${NEXT_PUBLIC_REDIRECT_URL:-http://localhost:3001/callback}
+        NEXT_PUBLIC_REDIRECT_LOGOUT_URL: ${NEXT_PUBLIC_REDIRECT_LOGOUT_URL:-http://localhost:3001/}
+    depends_on:
+      api:
+        condition: service_healthy
+    ports:
+      - "${WEB_PORT:-3001}:3001"
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:3001/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - flowlike
+
+  # =============================================================================
   # Monitoring Stack (Optional - set MONITORING_ENABLED=true)
   # =============================================================================
   prometheus:

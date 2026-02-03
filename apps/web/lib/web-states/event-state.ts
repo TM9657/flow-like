@@ -10,6 +10,9 @@ import {
 	type IRunPayload,
 	type IVersionType,
 	checkOAuthTokens,
+	showProgressToast,
+	finishAllProgressToasts,
+	type ProgressToastData,
 } from "@tm9657/flow-like-ui";
 import type { IOAuthCheckResult } from "@tm9657/flow-like-ui/state/backend-state/event-state";
 import type { IPrerunEventResponse } from "@tm9657/flow-like-ui/state/backend-state/types";
@@ -69,6 +72,12 @@ function handleToastEvent(event: IIntercomEvent): void {
 		default:
 			toast.info(payload.message);
 	}
+}
+
+function handleProgressEvent(event: IIntercomEvent): void {
+	const payload = event.payload as ProgressToastData;
+	if (!payload?.id) return;
+	showProgressToast(payload);
 }
 
 export class WebEventState implements IEventState {
@@ -318,93 +327,116 @@ export class WebEventState implements IEventState {
 			tokenProviders: oauthTokens ? Object.keys(oauthTokens) : [],
 		});
 
-		const response = await fetch(url, {
-			method: "POST",
-			headers,
-			body: JSON.stringify({
-				payload: payload.payload,
-				token: this.backend.auth?.user?.access_token,
-				oauth_tokens: oauthTokens,
-				runtime_variables: payload.runtime_variables,
-			}),
-		});
+		let executionFinished = false;
+		try {
+			const response = await fetch(url, {
+				method: "POST",
+				headers,
+				body: JSON.stringify({
+					payload: payload.payload,
+					token: this.backend.auth?.user?.access_token,
+					oauth_tokens: oauthTokens,
+					runtime_variables: payload.runtime_variables,
+				}),
+			});
 
-		if (!response.ok) {
-			throw new Error(`Event execution failed: ${response.status}`);
-		}
+			if (!response.ok) {
+				throw new Error(`Event execution failed: ${response.status}`);
+			}
 
-		// Always consume the SSE stream - the API always returns one
-		if (response.body) {
-			const reader = response.body.getReader();
-			const decoder = new TextDecoder();
-			let buffer = "";
-			let foundRunId = false;
+			// Always consume the SSE stream - the API always returns one
+			if (response.body) {
+				const reader = response.body.getReader();
+				const decoder = new TextDecoder();
+				let buffer = "";
+				let foundRunId = false;
 
-			while (true) {
-				const { done, value } = await reader.read();
-				if (done) break;
+				while (true) {
+					const { done, value } = await reader.read();
+					if (done) break;
 
-				buffer += decoder.decode(value, { stream: true });
+					buffer += decoder.decode(value, { stream: true });
 
-				// SSE events are separated by double newlines
-				const parts = buffer.split("\n\n");
-				buffer = parts.pop() ?? "";
+					// SSE events are separated by double newlines
+					const parts = buffer.split("\n\n");
+					buffer = parts.pop() ?? "";
 
-				for (const part of parts) {
-					if (!part.trim()) continue;
+					for (const part of parts) {
+						if (!part.trim()) continue;
 
-					// Parse SSE format: "event: xxx\ndata: {...}"
-					let eventName = "message";
-					let eventData = "";
+						// Parse SSE format: "event: xxx\ndata: {...}"
+						let eventName = "message";
+						let eventData = "";
 
-					for (const line of part.split("\n")) {
-						if (line.startsWith("event:")) {
-							eventName = line.slice(6).trim();
-						} else if (line.startsWith("data:")) {
-							eventData = line.slice(5).trim();
-						} else if (line.startsWith(":")) {
-							// Comment/keep-alive, ignore
-							continue;
-						}
-					}
-
-					if (!eventData || eventData === "keep-alive") continue;
-
-					try {
-						const event = JSON.parse(eventData) as IIntercomEvent;
-
-						// Handle run_initiated to get run ID
-						if (!foundRunId && onEventId && event.event_type === "run_initiated") {
-							const runId = (event.payload as { run_id?: string })?.run_id;
-							if (runId) {
-								onEventId(runId);
-								foundRunId = true;
+						for (const line of part.split("\n")) {
+							if (line.startsWith("event:")) {
+								eventName = line.slice(6).trim();
+							} else if (line.startsWith("data:")) {
+								eventData = line.slice(5).trim();
+							} else if (line.startsWith(":")) {
+								// Comment/keep-alive, ignore
+								continue;
 							}
 						}
 
-						// Handle toast events
-						if (event.event_type === "toast") {
-							handleToastEvent(event);
-						}
+						if (!eventData || eventData === "keep-alive") continue;
 
-						// Forward event to callback
-						if (cb) {
-							cb([event]);
-						}
+						try {
+							const event = JSON.parse(eventData) as IIntercomEvent;
 
-						// Check for terminal events
-						if (eventName === "done" || eventName === "completed" ||
-							event.event_type === "completed" || event.event_type === "error") {
-							break;
+							// Handle run_initiated to get run ID
+							if (!foundRunId && onEventId && event.event_type === "run_initiated") {
+								const runId = (event.payload as { run_id?: string })?.run_id;
+								if (runId) {
+									onEventId(runId);
+									foundRunId = true;
+								}
+							}
+
+							// Handle toast events
+							if (event.event_type === "toast") {
+								handleToastEvent(event);
+							}
+
+							// Handle progress events
+							if (event.event_type === "progress") {
+								handleProgressEvent(event);
+							}
+
+							// Forward event to callback
+							if (cb) {
+								cb([event]);
+							}
+
+							// Check for terminal events
+							if (eventName === "done" || eventName === "completed" ||
+								event.event_type === "completed") {
+								executionFinished = true;
+								finishAllProgressToasts(true);
+								break;
+							}
+							if (event.event_type === "error") {
+								executionFinished = true;
+								finishAllProgressToasts(false);
+								break;
+							}
+						} catch {
+							// Ignore parse errors
 						}
-					} catch {
-						// Ignore parse errors
 					}
 				}
 			}
-		}
 
-		return undefined;
+			// Ensure progress toasts are finished when stream ends
+			if (!executionFinished) {
+				finishAllProgressToasts(true);
+			}
+
+			return undefined;
+		} catch (error) {
+			finishAllProgressToasts(false);
+			throw error;
+		}
 	}
 
 	async cancelExecution(runId: string): Promise<void> {

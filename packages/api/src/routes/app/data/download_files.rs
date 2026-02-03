@@ -47,9 +47,41 @@ pub async fn download_files(
     let mut urls = Vec::with_capacity(payload.prefixes.len());
 
     for prefix in payload.prefixes.iter().take(MAX_PREFIXES) {
-        let upload_dir = flow_like_storage::Path::from(String::from(prefix));
+        // Sanitize the path to prevent accessing other apps' files
+        // Handle both full paths (apps/{app_id}/upload/...) and relative paths (boards/...)
+        let download_path = if prefix.starts_with("apps/") {
+            // Full path: extract segments after apps/{any_app_id}/upload/ and reconstruct with actual app_id
+            // This prevents users from accessing other apps' files by manipulating the path
+            let segments: Vec<&str> = prefix.split('/').collect();
+            if segments.len() > 3 {
+                // Skip "apps", the (potentially malicious) app_id, and "upload", keep the rest
+                let relative_segments = &segments[3..];
+                let mut path = flow_like_storage::Path::from("apps")
+                    .child(app_id.as_str())
+                    .child("upload");
+                for segment in relative_segments {
+                    if !segment.is_empty() {
+                        path = path.child(*segment);
+                    }
+                }
+                path
+            } else {
+                // Malformed full path, construct safe default
+                flow_like_storage::Path::from("apps").child(app_id.as_str()).child("upload")
+            }
+        } else {
+            // Relative path: construct full path with app_id/upload prefix
+            let mut path = flow_like_storage::Path::from("apps").child(app_id.as_str()).child("upload");
+            for segment in prefix.split('/') {
+                if !segment.is_empty() {
+                    path = path.child(segment);
+                }
+            }
+            path
+        };
+
         let signed_url = match project_dir
-            .sign("GET", &upload_dir, Duration::from_secs(60 * 60 * 24))
+            .sign("GET", &download_path, Duration::from_secs(60 * 60 * 24))
             .await
         {
             Ok(url) => url,

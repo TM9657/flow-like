@@ -129,6 +129,10 @@ async fn execute_internal(
         oauth_tokens.unwrap_or_default().into_iter().collect(),
     )
     .await?;
+
+    // Set offline user context for desktop app (always admin/owner)
+    internal_run.set_offline_user_context();
+
     let run_id = internal_run.run.lock().await.id.clone();
 
     let _send_result = buffered_sender

@@ -67,6 +67,22 @@ app.kubernetes.io/component: api
 {{- end }}
 
 {{/*
+Web Service labels
+*/}}
+{{- define "flow-like.web.labels" -}}
+{{ include "flow-like.labels" . }}
+app.kubernetes.io/component: web
+{{- end }}
+
+{{/*
+Web Service selector labels
+*/}}
+{{- define "flow-like.web.selectorLabels" -}}
+{{ include "flow-like.selectorLabels" . }}
+app.kubernetes.io/component: web
+{{- end }}
+
+{{/*
 Executor labels
 */}}
 {{- define "flow-like.executor.labels" -}}

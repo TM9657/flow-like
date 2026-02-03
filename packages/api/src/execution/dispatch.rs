@@ -253,6 +253,9 @@ pub struct DispatchRequest {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub runtime_variables:
         Option<std::collections::HashMap<String, flow_like::flow::variable::Variable>>,
+    /// User execution context (role, permissions, attributes)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub user_context: Option<flow_like::flow::execution::UserExecutionContext>,
 }
 
 /// Response from dispatch
@@ -682,11 +685,15 @@ impl Dispatcher {
         let message_body = serde_json::to_string(&body)
             .map_err(|e| DispatchError::Serialization(e.to_string()))?;
 
+        // Fair queueing: Use app_id as message group ID so each app/tenant
+        // gets fair processing. SQS FIFO queues process one message per group
+        // at a time, allowing parallel processing across different apps while
+        // maintaining order within each app's messages.
         client
             .send_message()
             .queue_url(queue_url)
             .message_body(&message_body)
-            .message_group_id(&request.app_id) // FIFO queue support - group by app
+            .message_group_id(&request.app_id)
             .message_deduplication_id(job_id)
             .send()
             .await
@@ -831,5 +838,6 @@ fn build_executor_payload(job_id: &str, request: &DispatchRequest) -> serde_json
         "oauth_tokens": request.oauth_tokens,
         "stream_state": request.stream_state,
         "runtime_variables": request.runtime_variables,
+        "user_context": request.user_context,
     })
 }

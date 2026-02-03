@@ -14,4 +14,5 @@ pub mod md;
 pub mod set;
 pub mod string;
 pub mod types;
+pub mod user;
 pub mod vector;

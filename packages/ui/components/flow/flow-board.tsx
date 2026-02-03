@@ -9,6 +9,8 @@ import {
 	Controls,
 	type Edge,
 	type FinalConnectionState,
+	getNodesBounds,
+	getViewportForBounds,
 	type InternalNode,
 	type IsValidConnection,
 	MiniMap,
@@ -16,6 +18,7 @@ import {
 	type OnEdgesChange,
 	type OnNodesChange,
 	type OnSelectionChangeFunc,
+	Panel,
 	ReactFlow,
 	type ReactFlowInstance,
 	addEdge,
@@ -26,11 +29,14 @@ import {
 	useKeyPress,
 	useNodesState,
 	useReactFlow,
+	ControlButton,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import { useMediaQuery } from "@uidotdev/usehooks";
 import {
 	ArrowBigLeftDashIcon,
+	CameraIcon,
+	CheckIcon,
 	FileTextIcon,
 	HistoryIcon,
 	LayoutTemplateIcon,
@@ -38,6 +44,7 @@ import {
 	PlayCircleIcon,
 	ScrollIcon,
 	SearchIcon,
+	ShareIcon,
 	SparklesIcon,
 	SquareChevronUpIcon,
 	VariableIcon,
@@ -68,6 +75,8 @@ import {
 } from "../..";
 import { BoardActivityIndicator } from "../../components/flow/board-activity-indicator";
 import { CommentNode } from "../../components/flow/comment-node";
+import { MediaNode } from "../../components/flow/media-node";
+import { UploadPlaceholderNode } from "../../components/flow/upload-placeholder-node";
 import { FlowContextMenu } from "../../components/flow/flow-context-menu";
 import { FlowDock } from "../../components/flow/flow-dock";
 import { FlowNode } from "../../components/flow/flow-node";
@@ -92,6 +101,7 @@ import { useFlowPanels } from "../../hooks/use-flow-panels";
 import { useInvoke } from "../../hooks/use-invoke";
 import { useKeyboardShortcuts } from "../../hooks/use-keyboard-shortcuts";
 import { useLayerNavigation } from "../../hooks/use-layer-navigation";
+import { useMediaUpload } from "../../hooks/use-media-upload";
 import { useRealtimeCollaboration } from "../../hooks/use-realtime-collaboration";
 import { useViewportManager } from "../../hooks/use-viewport-manager";
 import {
@@ -120,7 +130,7 @@ import {
 	isValidConnection,
 	parseBoard,
 } from "../../lib/flow-board-utils";
-import { toastError } from "../../lib/messages";
+import { toastError, toastSuccess } from "../../lib/messages";
 import { isTauri } from "../../lib/platform";
 import { getRuntimeConfiguredVariables } from "../../lib/runtime-vars-utils";
 import { IAppVisibility } from "../../lib/schema/app/app";
@@ -212,7 +222,7 @@ export function FlowBoard({
 	);
 	const app = useInvoke(backend.appState.getApp, backend.appState, [appId]);
 	const { addRun, removeRun, pushUpdate } = useRunExecutionStore();
-	const { screenToFlowPosition, getViewport, setViewport, fitView } =
+	const { screenToFlowPosition, getViewport, setViewport, fitView, getNodes } =
 		useReactFlow();
 
 	const [nodes, setNodes] = useNodesState<any>([]);
@@ -410,6 +420,17 @@ export function FlowBoard({
 			layerPath,
 			screenToFlowPosition,
 			commandAwarenessRef,
+			setNodes,
+		});
+
+	// Media upload for images/videos on the board
+	const { handleMediaPaste } =
+		useMediaUpload({
+			appId,
+			boardId,
+			backend,
+			executeCommand,
+			currentLayer,
 			setNodes,
 		});
 
@@ -956,6 +977,12 @@ export function FlowBoard({
 				x: mousePosition.x,
 				y: mousePosition.y,
 			});
+
+			// Try to handle media paste first (images/videos)
+			const wasMediaPaste = await handleMediaPaste(event, currentCursorPosition);
+			if (wasMediaPaste) return;
+
+			// Fall back to regular paste handling
 			await handlePaste(
 				event,
 				currentCursorPosition,
@@ -964,7 +991,7 @@ export function FlowBoard({
 				currentLayer,
 			);
 		},
-		[boardId, mousePosition, executeCommand, currentLayer, version],
+		[boardId, mousePosition, executeCommand, currentLayer, version, handleMediaPaste],
 	);
 
 	const handleCopyCB = useCallback(
@@ -1232,6 +1259,8 @@ export function FlowBoard({
 		() => ({
 			flowNode: FlowNode,
 			commentNode: CommentNode,
+			mediaNode: MediaNode,
+			uploadPlaceholderNode: UploadPlaceholderNode,
 			layerNode: LayerNode,
 			layerInnerNode: LayerInnerNode,
 			node: FlowNode,
@@ -1566,6 +1595,77 @@ export function FlowBoard({
 			version,
 		],
 	);
+
+	const onScreenshot = useCallback(async () => {
+		const viewportEl = document.querySelector(
+			".react-flow__viewport",
+		) as HTMLElement | null;
+		if (!viewportEl) return;
+
+		const nodes = getNodes();
+		if (nodes.length === 0) {
+			toastError("No nodes to capture", <XIcon />);
+			return;
+		}
+
+		const nodesBounds = getNodesBounds(nodes);
+		const padding = 50;
+		const imageWidth = Math.min(4096, nodesBounds.width + padding * 2);
+		const imageHeight = Math.min(4096, nodesBounds.height + padding * 2);
+
+		const viewport = getViewportForBounds(
+			nodesBounds,
+			imageWidth,
+			imageHeight,
+			0.5,
+			2,
+			padding,
+		);
+
+		const { toPng } = await import("html-to-image");
+
+		try {
+			const dataUrl = await toPng(viewportEl, {
+				backgroundColor: "transparent",
+				width: imageWidth,
+				height: imageHeight,
+				style: {
+					width: `${imageWidth}px`,
+					height: `${imageHeight}px`,
+					transform: `translate(${viewport.x}px, ${viewport.y}px) scale(${viewport.zoom})`,
+				},
+				// Skip images that fail to load (cross-origin issues)
+				filter: (node) => {
+					// Skip video elements as they can't be captured
+					if (node instanceof HTMLVideoElement) return false;
+					return true;
+				},
+				// Handle image fetch errors gracefully
+				skipFonts: true,
+				imagePlaceholder:
+					"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==",
+			});
+
+			const response = await fetch(dataUrl);
+			const blob = await response.blob();
+
+			try {
+				await navigator.clipboard.write([
+					new ClipboardItem({ "image/png": blob }),
+				]);
+				toastSuccess("Screenshot copied to clipboard", <CheckIcon />);
+			} catch {
+				const link = document.createElement("a");
+				link.download = "flow-screenshot.png";
+				link.href = dataUrl;
+				link.click();
+				toastSuccess("Screenshot downloaded", <CheckIcon />);
+			}
+		} catch (error) {
+			console.error("Screenshot failed:", error);
+			toastError("Failed to capture screenshot", <XIcon />);
+		}
+	}, [getNodes]);
 
 	const onReconnectEnd = useCallback(
 		async (event: any, edge: any) => {
@@ -1985,6 +2085,7 @@ export function FlowBoard({
 								board={board.data}
 								droppedPin={droppedPin}
 								onCommentPlace={onCommentPlace}
+
 								refs={board.data?.refs || {}}
 								onClose={() => setDroppedPin(undefined)}
 								nodes={catalog.data ?? []}
@@ -2105,7 +2206,11 @@ export function FlowBoard({
 										fitView
 										proOptions={{ hideAttribution: true }}
 									>
-										<Controls />
+										<Controls>
+											<ControlButton onClick={onScreenshot}>
+          <ShareIcon className="size-4" />
+        </ControlButton>
+											</Controls>
 										<MiniMap
 											pannable
 											zoomable

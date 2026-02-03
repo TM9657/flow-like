@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { cn } from "../../lib";
 
 interface LoadingScreenProps {
@@ -10,14 +10,14 @@ interface LoadingScreenProps {
 }
 
 const loadingMessages = [
-	"Initializing flow engine...",
-	"Connecting neural pathways...",
-	"Syncing data streams...",
-	"Building execution graph...",
-	"Preparing workspace...",
-	"Loading node catalog...",
-	"Establishing connections...",
-	"Compiling workflows...",
+	"Initializing flow engine",
+	"Connecting neural pathways",
+	"Syncing data streams",
+	"Building execution graph",
+	"Preparing workspace",
+	"Loading node catalog",
+	"Establishing connections",
+	"Compiling workflows",
 ];
 
 interface Node {
@@ -50,6 +50,169 @@ const NODE_COLORS = [
 function seededRandom(seed: number) {
 	const x = Math.sin(seed) * 10000;
 	return x - Math.floor(x);
+}
+
+function MorphingBlob({ delay = 0, className }: { delay?: number; className?: string }) {
+	return (
+		<div
+			className={cn("absolute rounded-full blur-3xl opacity-30 animate-morph", className)}
+			style={{
+				animationDelay: `${delay}s`,
+			}}
+		/>
+	);
+}
+
+function FloatingParticle({ index }: { index: number }) {
+	const style = {
+		left: `${seededRandom(index * 7) * 100}%`,
+		animationDelay: `${seededRandom(index * 13) * 5}s`,
+		animationDuration: `${8 + seededRandom(index * 17) * 7}s`,
+	};
+
+	return (
+		<div
+			className="absolute w-1 h-1 rounded-full bg-primary/40 animate-float-up"
+			style={style}
+		/>
+	);
+}
+
+function GlowingOrb() {
+	return (
+		<div className="relative w-40 h-40 flex items-center justify-center">
+			{/* Outer glow rings */}
+			<div className="absolute inset-0 rounded-full bg-gradient-to-r from-blue-500/20 via-purple-500/20 to-pink-500/20 animate-spin-slow blur-xl" />
+			<div className="absolute inset-2 rounded-full bg-gradient-to-r from-pink-500/15 via-blue-500/15 to-purple-500/15 animate-spin-reverse blur-lg" />
+
+			{/* Orbiting particles */}
+			{[...Array(3)].map((_, i) => (
+				<div
+					key={i}
+					className="absolute w-2 h-2 rounded-full bg-primary animate-orbit"
+					style={{
+						animationDelay: `${i * -2}s`,
+						animationDuration: "6s",
+					}}
+				/>
+			))}
+
+			{/* Main container */}
+			<div className="relative w-28 h-28 rounded-2xl bg-gradient-to-br from-background/80 to-background/40 backdrop-blur-xl border border-white/10 shadow-2xl flex items-center justify-center overflow-hidden group">
+				{/* Inner gradient animation */}
+				<div className="absolute inset-0 bg-gradient-to-br from-blue-500/10 via-purple-500/10 to-pink-500/10 animate-gradient" />
+
+				{/* Shimmer effect */}
+				<div className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity">
+					<div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/10 to-transparent -translate-x-full animate-shimmer-slow" />
+				</div>
+
+				{/* Flow icon */}
+				<svg
+					className="w-12 h-12 text-primary relative z-10"
+					viewBox="0 0 24 24"
+					fill="none"
+				>
+					{/* Animated flow paths */}
+					<path
+						d="M4 8h4a4 4 0 0 1 4 4v0a4 4 0 0 0 4 4h4"
+						stroke="currentColor"
+						strokeWidth="2"
+						strokeLinecap="round"
+						className="animate-dash"
+						style={{ strokeDasharray: "60", strokeDashoffset: "60" }}
+					/>
+					<path
+						d="M4 16h4a4 4 0 0 0 4-4v0a4 4 0 0 1 4-4h4"
+						stroke="currentColor"
+						strokeWidth="2"
+						strokeLinecap="round"
+						className="animate-dash-reverse"
+						style={{ strokeDasharray: "60", strokeDashoffset: "60" }}
+					/>
+					{/* Node dots */}
+					<circle cx="4" cy="8" r="2" fill="currentColor" className="animate-pulse" />
+					<circle cx="4" cy="16" r="2" fill="currentColor" className="animate-pulse" style={{ animationDelay: "0.2s" }} />
+					<circle cx="12" cy="12" r="2.5" fill="currentColor" className="animate-pulse" style={{ animationDelay: "0.4s" }} />
+					<circle cx="20" cy="8" r="2" fill="currentColor" className="animate-pulse" style={{ animationDelay: "0.6s" }} />
+					<circle cx="20" cy="16" r="2" fill="currentColor" className="animate-pulse" style={{ animationDelay: "0.8s" }} />
+				</svg>
+			</div>
+
+			{/* Corner accents */}
+			<div className="absolute top-4 left-4 w-8 h-8 border-l-2 border-t-2 border-primary/30 rounded-tl-lg animate-pulse" />
+			<div className="absolute bottom-4 right-4 w-8 h-8 border-r-2 border-b-2 border-primary/30 rounded-br-lg animate-pulse" style={{ animationDelay: "0.5s" }} />
+		</div>
+	);
+}
+
+function ModernProgressBar({ progress }: { progress: number }) {
+	return (
+		<div className="w-72 space-y-3">
+			<div className="relative h-1.5 bg-muted/30 rounded-full overflow-hidden backdrop-blur-sm">
+				{/* Background glow */}
+				<div
+					className="absolute inset-y-0 left-0 bg-gradient-to-r from-blue-500/50 via-purple-500/50 to-pink-500/50 blur-sm transition-all duration-700 ease-out"
+					style={{ width: `${Math.min(progress, 100)}%` }}
+				/>
+				{/* Main bar */}
+				<div
+					className="absolute inset-y-0 left-0 bg-gradient-to-r from-blue-500 via-purple-500 to-pink-500 rounded-full transition-all duration-700 ease-out"
+					style={{ width: `${Math.min(progress, 100)}%` }}
+				>
+					{/* Animated highlight */}
+					<div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/40 to-transparent animate-progress-shine" />
+				</div>
+				{/* Leading glow dot */}
+				{progress > 0 && progress < 100 && (
+					<div
+						className="absolute top-1/2 -translate-y-1/2 w-3 h-3 -ml-1.5 bg-white rounded-full shadow-lg shadow-purple-500/50 transition-all duration-700 ease-out"
+						style={{ left: `${Math.min(progress, 100)}%` }}
+					>
+						<div className="absolute inset-0 rounded-full bg-white animate-ping opacity-75" />
+					</div>
+				)}
+			</div>
+			<div className="flex justify-between items-center text-xs">
+				<span className="text-muted-foreground/60 font-medium">Loading</span>
+				<span className="text-primary font-mono font-semibold">{Math.round(progress)}%</span>
+			</div>
+		</div>
+	);
+}
+
+function TypewriterText({ text, className }: { text: string; className?: string }) {
+	const [displayText, setDisplayText] = useState("");
+	const [showCursor, setShowCursor] = useState(true);
+
+	useEffect(() => {
+		setDisplayText("");
+		let index = 0;
+		const interval = setInterval(() => {
+			if (index < text.length) {
+				setDisplayText(text.slice(0, index + 1));
+				index++;
+			} else {
+				clearInterval(interval);
+			}
+		}, 30);
+
+		return () => clearInterval(interval);
+	}, [text]);
+
+	useEffect(() => {
+		const cursorInterval = setInterval(() => {
+			setShowCursor(prev => !prev);
+		}, 530);
+		return () => clearInterval(cursorInterval);
+	}, []);
+
+	return (
+		<span className={className}>
+			{displayText}
+			<span className={cn("ml-0.5 text-primary", showCursor ? "opacity-100" : "opacity-0")}>|</span>
+		</span>
+	);
 }
 
 function FlowGraph() {
@@ -295,68 +458,8 @@ function FlowGraph() {
 
 function PulsingRings({ progress }: { progress: number }) {
 	return (
-		<div className="relative w-32 h-32">
-			{[0, 1, 2].map((i) => (
-				<div
-					key={i}
-					className="absolute inset-0 rounded-full border-2 border-primary/20"
-					style={{
-						animation: `pulse-ring 2s ease-out infinite`,
-						animationDelay: `${i * 0.4}s`,
-					}}
-				/>
-			))}
-
-			{/* Progress ring */}
-			<svg className="absolute inset-0 w-full h-full -rotate-90">
-				<circle
-					cx="64"
-					cy="64"
-					r="58"
-					fill="none"
-					stroke="currentColor"
-					strokeWidth="2"
-					className="text-muted/30"
-				/>
-				<circle
-					cx="64"
-					cy="64"
-					r="58"
-					fill="none"
-					stroke="url(#gradient)"
-					strokeWidth="3"
-					strokeLinecap="round"
-					strokeDasharray={`${2 * Math.PI * 58}`}
-					strokeDashoffset={`${2 * Math.PI * 58 * (1 - progress / 100)}`}
-					className="transition-all duration-500 ease-out"
-				/>
-				<defs>
-					<linearGradient id="gradient" x1="0%" y1="0%" x2="100%" y2="100%">
-						<stop offset="0%" stopColor="rgb(59, 130, 246)" />
-						<stop offset="50%" stopColor="rgb(168, 85, 247)" />
-						<stop offset="100%" stopColor="rgb(236, 72, 153)" />
-					</linearGradient>
-				</defs>
-			</svg>
-
-			{/* Center icon */}
-			<div className="absolute inset-0 flex items-center justify-center">
-				<div className="relative">
-					<div className="w-12 h-12 rounded-xl bg-gradient-to-br from-primary/20 to-primary/5 backdrop-blur-sm border border-primary/20 flex items-center justify-center">
-						<svg
-							className="w-6 h-6 text-primary animate-pulse"
-							viewBox="0 0 24 24"
-							fill="none"
-							stroke="currentColor"
-							strokeWidth="2"
-						>
-							<path d="M12 2L2 7l10 5 10-5-10-5z" />
-							<path d="M2 17l10 5 10-5" />
-							<path d="M2 12l10 5 10-5" />
-						</svg>
-					</div>
-				</div>
-			</div>
+		<div className="relative w-32 h-32 hidden">
+			{/* Hidden - replaced by GlowingOrb */}
 		</div>
 	);
 }
@@ -383,23 +486,10 @@ export function LoadingScreen({
 				setCurrentMessage(loadingMessages[next]);
 				return next;
 			});
-		}, 2500);
+		}, 3000);
 
 		return () => clearInterval(interval);
 	}, [message]);
-
-	const dots = useMemo(() => {
-		const count = Math.floor((Date.now() / 400) % 4);
-		return ".".repeat(count);
-	}, [messageIndex]);
-
-	const [animatedDots, setAnimatedDots] = useState("");
-	useEffect(() => {
-		const interval = setInterval(() => {
-			setAnimatedDots((prev) => (prev.length >= 3 ? "" : prev + "."));
-		}, 400);
-		return () => clearInterval(interval);
-	}, []);
 
 	return (
 		<div
@@ -415,12 +505,33 @@ export function LoadingScreen({
 				<div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,rgba(236,72,153,0.08),transparent_60%)] animate-pulse-slow" />
 			</div>
 
+			{/* Morphing blobs */}
+			<MorphingBlob
+				delay={0}
+				className="w-96 h-96 -top-48 -left-48 bg-gradient-to-br from-blue-500/30 to-purple-500/30"
+			/>
+			<MorphingBlob
+				delay={2}
+				className="w-80 h-80 -bottom-40 -right-40 bg-gradient-to-br from-purple-500/30 to-pink-500/30"
+			/>
+			<MorphingBlob
+				delay={4}
+				className="w-64 h-64 top-1/3 -right-32 bg-gradient-to-br from-pink-500/20 to-orange-500/20"
+			/>
+
 			{/* Interactive flow graph */}
 			<FlowGraph />
 
+			{/* Floating particles */}
+			<div className="absolute inset-0 overflow-hidden pointer-events-none">
+				{[...Array(20)].map((_, i) => (
+					<FloatingParticle key={i} index={i} />
+				))}
+			</div>
+
 			{/* Subtle grid overlay */}
 			<div
-				className="absolute inset-0 opacity-[0.03]"
+				className="absolute inset-0 opacity-[0.02]"
 				style={{
 					backgroundImage: `linear-gradient(rgba(255,255,255,0.1) 1px, transparent 1px),
                                     linear-gradient(90deg, rgba(255,255,255,0.1) 1px, transparent 1px)`,
@@ -428,54 +539,208 @@ export function LoadingScreen({
 				}}
 			/>
 
-			{/* Main content */}
-			<div className="relative z-10 flex flex-col items-center gap-8">
-				<PulsingRings progress={progress} />
+			{/* Vignette effect */}
+			<div className="absolute inset-0 bg-[radial-gradient(circle_at_center,transparent_0%,rgba(0,0,0,0.3)_100%)] pointer-events-none" />
 
-				{/* Text content */}
-				<div className="text-center space-y-3 max-w-md px-6">
-					<h2 className="text-lg font-medium text-foreground/90 tracking-wide">
-						{currentMessage}
-						<span className="text-primary">{animatedDots}</span>
-					</h2>
+			{/* Main content */}
+			<div
+				className="relative z-10 flex flex-col items-center gap-10 animate-fade-in"
+			>
+				<GlowingOrb />
+
+				{/* Text content with glassmorphism */}
+				<div className="text-center space-y-6 max-w-md px-6">
+					<div className="relative">
+						<h2 className="text-xl font-medium text-foreground/90 tracking-wide h-7 overflow-hidden">
+							<TypewriterText text={currentMessage} />
+						</h2>
+					</div>
 
 					{progress > 0 && (
-						<div className="space-y-2">
-							<div className="h-1 w-64 mx-auto bg-muted/50 rounded-full overflow-hidden">
-								<div
-									className="h-full bg-gradient-to-r from-blue-500 via-purple-500 to-pink-500 rounded-full transition-all duration-500 ease-out relative"
-									style={{ width: `${Math.min(progress, 100)}%` }}
-								>
-									<div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/30 to-transparent animate-shimmer" />
-								</div>
-							</div>
-							<p className="text-xs text-muted-foreground font-mono">
-								{Math.round(progress)}%
-							</p>
+						<div className="animate-fade-in-delay">
+							<ModernProgressBar progress={progress} />
 						</div>
 					)}
 
-					<p className="text-sm text-muted-foreground/70">
-						Setting up your workspace
+					<p className="text-sm text-muted-foreground/50 font-light">
+						Preparing your creative workspace
 					</p>
 				</div>
 
-				{/* Animated dots indicator */}
-				<div className="flex gap-1.5">
-					{[0, 1, 2, 3, 4].map((i) => (
+				{/* Animated wave dots */}
+				<div className="flex gap-2">
+					{[...Array(5)].map((_, i) => (
 						<div
 							key={i}
-							className="w-1.5 h-1.5 rounded-full bg-primary/60"
+							className="w-2 h-2 rounded-full bg-gradient-to-br from-primary to-primary/60"
 							style={{
-								animation: "dot-wave 1.4s ease-in-out infinite",
-								animationDelay: `${i * 0.1}s`,
+								animation: "wave-dot 1.4s ease-in-out infinite",
+								animationDelay: `${i * 0.12}s`,
 							}}
 						/>
 					))}
 				</div>
 			</div>
 
-			<style jsx>{`
+			<style>{`
+				@keyframes morph {
+					0%, 100% {
+						border-radius: 60% 40% 30% 70% / 60% 30% 70% 40%;
+						transform: rotate(0deg) scale(1);
+					}
+					25% {
+						border-radius: 30% 60% 70% 40% / 50% 60% 30% 60%;
+					}
+					50% {
+						border-radius: 50% 60% 30% 60% / 30% 40% 70% 50%;
+						transform: rotate(180deg) scale(1.1);
+					}
+					75% {
+						border-radius: 60% 30% 50% 40% / 60% 50% 30% 70%;
+					}
+				}
+
+				.animate-morph {
+					animation: morph 15s ease-in-out infinite;
+				}
+
+				@keyframes float-up {
+					0% {
+						transform: translateY(100vh) rotate(0deg);
+						opacity: 0;
+					}
+					10% {
+						opacity: 1;
+					}
+					90% {
+						opacity: 1;
+					}
+					100% {
+						transform: translateY(-100vh) rotate(360deg);
+						opacity: 0;
+					}
+				}
+
+				.animate-float-up {
+					animation: float-up linear infinite;
+				}
+
+				@keyframes orbit {
+					from {
+						transform: rotate(0deg) translateX(70px) rotate(0deg);
+					}
+					to {
+						transform: rotate(360deg) translateX(70px) rotate(-360deg);
+					}
+				}
+
+				.animate-orbit {
+					animation: orbit 6s linear infinite;
+				}
+
+				@keyframes spin-slow {
+					from { transform: rotate(0deg); }
+					to { transform: rotate(360deg); }
+				}
+
+				.animate-spin-slow {
+					animation: spin-slow 20s linear infinite;
+				}
+
+				.animate-spin-reverse {
+					animation: spin-slow 15s linear infinite reverse;
+				}
+
+				@keyframes gradient {
+					0%, 100% {
+						opacity: 0.5;
+					}
+					50% {
+						opacity: 1;
+					}
+				}
+
+				.animate-gradient {
+					animation: gradient 3s ease-in-out infinite;
+				}
+
+				@keyframes dash {
+					0% {
+						stroke-dashoffset: 60;
+					}
+					50% {
+						stroke-dashoffset: 0;
+					}
+					100% {
+						stroke-dashoffset: -60;
+					}
+				}
+
+				.animate-dash {
+					animation: dash 3s ease-in-out infinite;
+				}
+
+				.animate-dash-reverse {
+					animation: dash 3s ease-in-out infinite reverse;
+				}
+
+				@keyframes shimmer-slow {
+					0% {
+						transform: translateX(-100%);
+					}
+					100% {
+						transform: translateX(200%);
+					}
+				}
+
+				.animate-shimmer-slow {
+					animation: shimmer-slow 3s ease-in-out infinite;
+				}
+
+				@keyframes progress-shine {
+					0% {
+						transform: translateX(-100%) skewX(-15deg);
+					}
+					100% {
+						transform: translateX(300%) skewX(-15deg);
+					}
+				}
+
+				.animate-progress-shine {
+					animation: progress-shine 2s ease-in-out infinite;
+				}
+
+				@keyframes wave-dot {
+					0%, 60%, 100% {
+						transform: translateY(0) scale(1);
+						opacity: 0.4;
+					}
+					30% {
+						transform: translateY(-12px) scale(1.2);
+						opacity: 1;
+					}
+				}
+
+				@keyframes fade-in {
+					from {
+						opacity: 0;
+						transform: translateY(10px);
+					}
+					to {
+						opacity: 1;
+						transform: translateY(0);
+					}
+				}
+
+				.animate-fade-in {
+					animation: fade-in 0.5s ease-out forwards;
+				}
+
+				.animate-fade-in-delay {
+					animation: fade-in 0.5s ease-out 0.2s forwards;
+					opacity: 0;
+				}
+
 				@keyframes pulse-ring {
 					0% {
 						transform: scale(1);
@@ -485,32 +750,6 @@ export function LoadingScreen({
 						transform: scale(1.5);
 						opacity: 0;
 					}
-				}
-
-				@keyframes dot-wave {
-					0%,
-					60%,
-					100% {
-						transform: translateY(0);
-						opacity: 0.4;
-					}
-					30% {
-						transform: translateY(-6px);
-						opacity: 1;
-					}
-				}
-
-				@keyframes shimmer {
-					0% {
-						transform: translateX(-100%);
-					}
-					100% {
-						transform: translateX(100%);
-					}
-				}
-
-				.animate-shimmer {
-					animation: shimmer 1.5s ease-in-out infinite;
 				}
 
 				.animate-pulse-slow {

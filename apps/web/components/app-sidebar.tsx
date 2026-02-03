@@ -69,6 +69,7 @@ import {
 	ExternalLinkIcon,
 	HeartIcon,
 	KeyIcon,
+	KeyRoundIcon,
 	LayoutDashboardIcon,
 	LibraryIcon,
 	LogInIcon,
@@ -226,6 +227,19 @@ const data = {
 					title: "Manage Requests",
 					url: "/admin/solutions",
 					permission: GlobalPermission.WriteSolutions,
+				},
+			],
+		},
+		{
+			title: "Sinks",
+			url: "/admin/sinks",
+			icon: KeyRoundIcon,
+			permission: true,
+			items: [
+				{
+					title: "Service Tokens",
+					url: "/admin/sinks",
+					permission: GlobalPermission.Admin,
 				},
 			],
 		},

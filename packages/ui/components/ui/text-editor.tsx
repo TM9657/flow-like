@@ -11,6 +11,7 @@ import remarkMath from "remark-math";
 import { BaseEditorKit } from "../editor/editor-base-kit";
 import { EditorKit } from "../editor/editor-kit";
 import { remarkFocusNodes } from "../editor/plugins/remark-focus-nodes";
+import { remarkUserMention } from "../editor/plugins/remark-user-mention";
 import { Editor, EditorContainer } from "../editor/ui/editor";
 
 /**
@@ -49,9 +50,9 @@ const splitMarkdownPreservingCodeBlocks = (markdown: string): string[] => {
 };
 
 /**
- * Post-process Plate nodes to convert focus:// and invalid:// links to focus_node elements
+ * Post-process Plate nodes to convert focus://, invalid://, and user:// links to custom elements
  */
-const transformFocusLinks = (nodes: any[]): any[] => {
+const transformSpecialLinks = (nodes: any[]): any[] => {
 	return nodes.map((node) => {
 		// If this is a link with focus:// url, convert to focus_node
 		if (
@@ -89,11 +90,24 @@ const transformFocusLinks = (nodes: any[]): any[] => {
 				children: [{ text: "" }],
 			};
 		}
+		// If this is a link with user:// url, convert to user_mention
+		if (
+			node.type === "a" &&
+			typeof node.url === "string" &&
+			node.url.startsWith("user://")
+		) {
+			const sub = node.url.replace("user://", "");
+			return {
+				type: "user_mention",
+				sub,
+				children: [{ text: "" }],
+			};
+		}
 		// Recursively process children
 		if (node.children && Array.isArray(node.children)) {
 			return {
 				...node,
-				children: transformFocusLinks(node.children),
+				children: transformSpecialLinks(node.children),
 			};
 		}
 		return node;
@@ -116,7 +130,7 @@ export const safeDeserialize = (
 			const jsonString = data.substring(PLATE_JSON_PREFIX.length);
 			const nodes = JSON.parse(jsonString);
 			if (Array.isArray(nodes) && nodes.length > 0) {
-				return transformFocusLinks(nodes);
+				return transformSpecialLinks(nodes);
 			}
 		} catch (error) {
 			console.error(
@@ -132,7 +146,7 @@ export const safeDeserialize = (
 		try {
 			// Assuming editor.api.deserialize is a custom function, potentially JSON.parse
 			const nodes = editor.api.deserialize(data);
-			if (nodes.length > 0) return transformFocusLinks(nodes);
+			if (nodes.length > 0) return transformSpecialLinks(nodes);
 			return [{ type: "p", children: [{ text: data }] }];
 		} catch {
 			return [{ type: "p", children: [{ text: data }] }];
@@ -142,7 +156,7 @@ export const safeDeserialize = (
 	// 3. Handle initial markdown content.
 	try {
 		const nodes = editor.api.markdown.deserialize(data, { remarkPlugins });
-		if (nodes.length > 0) return transformFocusLinks(nodes);
+		if (nodes.length > 0) return transformSpecialLinks(nodes);
 		return [{ type: "p", children: [{ text: "" }] }];
 	} catch (error) {
 		console.error(
@@ -160,7 +174,7 @@ export const safeDeserialize = (
 			}
 		});
 
-		if (nodes.length > 0) return transformFocusLinks(nodes);
+		if (nodes.length > 0) return transformSpecialLinks(nodes);
 		return [{ type: "p", children: [{ text: data }] }];
 	}
 };
@@ -185,6 +199,7 @@ function TextEditorInner({
 			remarkMention,
 			remarkEmoji as any,
 			remarkFocusNodes,
+			remarkUserMention,
 		],
 		[],
 	);
@@ -232,16 +247,18 @@ function TextEditorStatic({
 	isMarkdown,
 	minimal = false,
 	onFocusNode,
+	onUserMention,
 }: Readonly<{
 	initialContent: string;
 	isMarkdown?: boolean;
 	minimal?: boolean;
 	onFocusNode?: (nodeId: string) => void;
+	onUserMention?: (sub: string) => void;
 }>) {
 	const remarkPlugins = useMemo(
 		() =>
 			minimal
-				? [remarkGfm, remarkBreaks, remarkFocusNodes]
+				? [remarkGfm, remarkBreaks, remarkFocusNodes, remarkUserMention]
 				: [
 						remarkMath,
 						remarkGfm,
@@ -250,6 +267,7 @@ function TextEditorStatic({
 						remarkMention,
 						remarkEmoji as any,
 						remarkFocusNodes,
+						remarkUserMention,
 					],
 		[minimal],
 	);
@@ -321,6 +339,14 @@ function TextEditorStatic({
 						onFocusNode(nodeId);
 					}
 				}
+				const userMentionSpan = target.closest("[data-user-mention-sub]");
+				if (userMentionSpan && onUserMention) {
+					e.preventDefault();
+					const sub = userMentionSpan.getAttribute("data-user-mention-sub");
+					if (sub) {
+						onUserMention(sub);
+					}
+				}
 			}}
 		>
 			<PlateStatic editor={editor} className="py-0" />
@@ -335,6 +361,7 @@ type TextEditorProps = {
 	editable?: boolean;
 	minimal?: boolean;
 	onFocusNode?: (nodeId: string) => void;
+	onUserMention?: (sub: string) => void;
 };
 
 export const TextEditor = memo(function TextEditor({
@@ -344,6 +371,7 @@ export const TextEditor = memo(function TextEditor({
 	editable = false,
 	minimal = false,
 	onFocusNode,
+	onUserMention,
 }: Readonly<TextEditorProps>) {
 	if (editable && onChange) {
 		return (
@@ -363,6 +391,7 @@ export const TextEditor = memo(function TextEditor({
 			isMarkdown={isMarkdown}
 			minimal={minimal}
 			onFocusNode={onFocusNode}
+			onUserMention={onUserMention}
 		/>
 	);
 });

@@ -1,4 +1,5 @@
 export { WebAppState } from "./app-state";
+export { WebApiKeyState } from "./api-key-state";
 export { WebBitState } from "./bit-state";
 export { WebUserState } from "./user-state";
 export { WebBoardState } from "./board-state";

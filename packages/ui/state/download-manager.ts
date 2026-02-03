@@ -13,10 +13,12 @@ function getManagerSingleton(): DownloadManager {
 }
 
 type ProgressListener = (dl: Download) => void;
+export type DownloadCompleteListener = (bit: IBit, downloadedBits: IBit[]) => void;
 
 export class DownloadManager {
 	private readonly downloads = new Map<string, Download>();
 	private readonly listeners = new Map<string, Set<ProgressListener>>();
+	private readonly completionListeners = new Set<DownloadCompleteListener>();
 	private readonly pending = new Map<string, Download>();
 	private readonly lastEmit = new Map<string, number>();
 	private readonly timers = new Map<string, number>();
@@ -35,6 +37,21 @@ export class DownloadManager {
 			window.addEventListener("beforeunload", this.beforeUnloadBound, {
 				once: true,
 			});
+		}
+	}
+
+	public onComplete(listener: DownloadCompleteListener): () => void {
+		this.completionListeners.add(listener);
+		return () => {
+			this.completionListeners.delete(listener);
+		};
+	}
+
+	private notifyComplete(bit: IBit, downloadedBits: IBit[]) {
+		for (const listener of this.completionListeners) {
+			try {
+				listener(bit, downloadedBits);
+			} catch {}
 		}
 	}
 
@@ -116,6 +133,7 @@ export class DownloadManager {
 					cb(virtualDownload);
 				} catch {}
 			}
+			// Virtual bits don't need completion notification as they weren't actually downloaded
 			return [bit];
 		}
 
@@ -149,7 +167,10 @@ export class DownloadManager {
 
 		const promise = pack
 			.download(wrappedCb)
-			.then((bits) => bits)
+			.then((bits) => {
+				this.notifyComplete(bit, bits);
+				return bits;
+			})
 			.finally(() => {
 				off?.();
 				this.inFlight.delete(key);
@@ -282,6 +303,7 @@ interface IDownloadManager {
 	setDownloadBackend: (backend: IBackendState) => void;
 	download: (bit: IBit, cb?: (dl: Download) => void) => Promise<IBit[]>;
 	onProgress: (hash: string, cb: (dl: Download) => void) => () => void;
+	onComplete: (cb: DownloadCompleteListener) => () => void;
 	isQueued: (hash: string) => boolean;
 	getLatestPct: (hash: string) => number | undefined;
 }
@@ -300,6 +322,10 @@ const createStore = () =>
 		onProgress: (hash: string, cb: (dl: Download) => void) => {
 			const { manager } = get();
 			return manager.onProgress(hash, cb);
+		},
+		onComplete: (cb: DownloadCompleteListener) => {
+			const { manager } = get();
+			return manager.onComplete(cb);
 		},
 		isQueued: (hash: string) => {
 			const { manager } = get();

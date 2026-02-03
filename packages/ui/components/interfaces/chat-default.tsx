@@ -82,6 +82,44 @@ async function prepareAttachments(
 	return { imageAttachments, otherAttachments };
 }
 
+/**
+ * Deduplicates consecutive messages with the same role.
+ * Keeps the message with more content when there are consecutive same-role messages.
+ * This prevents showing duplicate user/assistant messages after reconnection or streaming.
+ */
+function deduplicateConsecutiveMessages(messages: IMessage[]): IMessage[] {
+	if (messages.length <= 1) return messages;
+
+	const result: IMessage[] = [];
+	for (const message of messages) {
+		const lastMessage = result[result.length - 1];
+
+		// If no previous message or different role, just add it
+		if (!lastMessage || lastMessage.inner.role !== message.inner.role) {
+			result.push(message);
+			continue;
+		}
+
+		// Same role as previous - keep the one with more content
+		const lastContent =
+			typeof lastMessage.inner.content === "string"
+				? lastMessage.inner.content
+				: JSON.stringify(lastMessage.inner.content);
+		const currentContent =
+			typeof message.inner.content === "string"
+				? message.inner.content
+				: JSON.stringify(message.inner.content);
+
+		if (currentContent.length > lastContent.length) {
+			// Replace last message with current (has more content)
+			result[result.length - 1] = message;
+		}
+		// Otherwise keep the existing one (already has more or equal content)
+	}
+
+	return result;
+}
+
 function createHistoryMessage(
 	content: string,
 	imageAttachments: IAttachment[],
@@ -420,14 +458,13 @@ export const ChatInterfaceMemoized = memo(function ChatInterface({
 		};
 	}, [sessionIdParameter, executionEngine]);
 
-	const messages = useLiveQuery(
-		() =>
-			chatDb.messages
-				.where("sessionId")
-				.equals(sessionIdParameter)
-				.sortBy("timestamp"),
-		[sessionIdParameter],
-	);
+	const messages = useLiveQuery(async () => {
+		const rawMessages = await chatDb.messages
+			.where("sessionId")
+			.equals(sessionIdParameter)
+			.sortBy("timestamp");
+		return deduplicateConsecutiveMessages(rawMessages);
+	}, [sessionIdParameter]);
 
 	const localState = useLiveQuery(
 		() =>

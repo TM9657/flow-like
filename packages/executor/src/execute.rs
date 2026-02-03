@@ -236,6 +236,11 @@ pub async fn execute(
     .await
     .map_err(|e| ExecutorError::RunInit(e.to_string()))?;
 
+    // Set user context if provided
+    if let Some(user_context) = request.user_context.clone() {
+        run.set_user_context(user_context);
+    }
+
     // Execute with timeout
     let execution_result = tokio::time::timeout(config.execution_timeout(), async {
         run.execute(state.clone()).await

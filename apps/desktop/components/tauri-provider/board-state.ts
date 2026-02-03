@@ -26,6 +26,10 @@ import {
 	extractOAuthRequirementsFromBoard,
 	injectDataFunction,
 	isEqual,
+	ICommentType,
+	showProgressToast,
+	finishAllProgressToasts,
+	type ProgressToastData,
 } from "@tm9657/flow-like-ui";
 import type { IJwks, IRealtimeAccess } from "@tm9657/flow-like-ui";
 import type { SurfaceComponent } from "@tm9657/flow-like-ui/components/a2ui/types";
@@ -67,6 +71,37 @@ async function getHubConfig(profile?: { hub?: string }): Promise<
 		});
 
 	return hubCachePromise;
+}
+
+// Toast and Progress event handling for remote execution
+interface ToastEventPayload {
+	message: string;
+	level: "success" | "error" | "info" | "warning";
+}
+
+function handleToastEvent(event: IIntercomEvent): void {
+	const payload = event.payload as ToastEventPayload;
+	if (!payload?.message) return;
+
+	switch (payload.level) {
+		case "success":
+			toast.success(payload.message);
+			break;
+		case "error":
+			toast.error(payload.message);
+			break;
+		case "warning":
+			toast.warning(payload.message);
+			break;
+		default:
+			toast.info(payload.message);
+	}
+}
+
+function handleProgressEvent(event: IIntercomEvent): void {
+	const payload = event.payload as ProgressToastData;
+	if (!payload?.id) return;
+	showProgressToast(payload);
 }
 
 const getDeepDifferences = (
@@ -224,6 +259,9 @@ export class BoardState implements IBoardState {
 
 		const isOffline = await this.backend.isOffline(appId);
 
+		// Presign media comments for display
+		await this.presignMediaComments(appId, boardId, board, isOffline);
+
 		if (
 			isOffline ||
 			!this.backend.profile ||
@@ -351,6 +389,115 @@ export class BoardState implements IBoardState {
 			this.backend.auth,
 		);
 		return jwks;
+	}
+
+	private async presignMediaComments(
+		appId: string,
+		boardId: string,
+		board: IBoard,
+		isOffline: boolean,
+	): Promise<void> {
+		const mediaComments = Object.values(board.comments).filter(
+			(comment) =>
+				comment.comment_type === ICommentType.Image ||
+				comment.comment_type === ICommentType.Video,
+		);
+
+		// Collect layer media comments as well
+		const layerMediaComments: { comment: any; layer: any }[] = [];
+		for (const layer of Object.values(board.layers)) {
+			for (const comment of Object.values(layer.comments)) {
+				if (
+					comment.comment_type === ICommentType.Image ||
+					comment.comment_type === ICommentType.Video
+				) {
+					layerMediaComments.push({ comment, layer });
+				}
+			}
+		}
+
+		if (mediaComments.length === 0 && layerMediaComments.length === 0) return;
+
+		if (isOffline) {
+			// For offline mode, use Tauri's storage_get to get file URLs
+			try {
+				const prefixes = [
+					...mediaComments.map((c) => `boards/${boardId}/${c.content}`),
+					...layerMediaComments.map(
+						({ comment }) => `boards/${boardId}/${comment.content}`,
+					),
+				];
+
+				const results = await invoke<{ prefix: string; url?: string }[]>(
+					"storage_get",
+					{ appId, prefixes },
+				);
+
+				const urlMap = new Map(
+					results.filter((r) => r.url).map((r) => [r.prefix, r.url as string]),
+				);
+
+				for (const comment of mediaComments) {
+					const prefix = `boards/${boardId}/${comment.content}`;
+					const url = urlMap.get(prefix);
+					if (url) {
+						(comment as any).presigned_url = url;
+					}
+				}
+
+				for (const { comment } of layerMediaComments) {
+					const prefix = `boards/${boardId}/${comment.content}`;
+					const url = urlMap.get(prefix);
+					if (url) {
+						(comment as any).presigned_url = url;
+					}
+				}
+			} catch (error) {
+				console.warn("Failed to presign media comments (offline):", error);
+			}
+		} else if (this.backend.profile && this.backend.auth) {
+			// For online mode, use the API to get presigned URLs
+			try {
+				const prefixes = [
+					...mediaComments.map((c) => `boards/${boardId}/${c.content}`),
+					...layerMediaComments.map(
+						({ comment }) => `boards/${boardId}/${comment.content}`,
+					),
+				];
+
+				const results = await fetcher<{ prefix: string; url?: string }[]>(
+					this.backend.profile,
+					`apps/${appId}/data/download`,
+					{
+						method: "POST",
+						body: JSON.stringify({ prefixes }),
+					},
+					this.backend.auth,
+				);
+
+				const urlMap = new Map(
+					results.filter((r) => r.url).map((r) => [r.prefix, r.url as string]),
+				);
+
+				for (const comment of mediaComments) {
+					const prefix = `boards/${boardId}/${comment.content}`;
+					const url = urlMap.get(prefix);
+					if (url) {
+						(comment as any).presigned_url = url;
+					}
+				}
+
+				for (const { comment } of layerMediaComments) {
+					const prefix = `boards/${boardId}/${comment.content}`;
+					const url = urlMap.get(prefix);
+					if (url) {
+						(comment as any).presigned_url = url;
+					}
+				}
+			} catch (error) {
+				console.warn("Failed to presign media comments (online):", error);
+			}
+		}
 	}
 
 	async createBoardVersion(
@@ -630,18 +777,26 @@ export class BoardState implements IBoardState {
 			access: this.backend.auth?.user?.access_token,
 		});
 
-		const metadata: ILogMetadata | undefined = await invoke("execute_board", {
-			appId: appId,
-			boardId: boardId,
-			payload: payload,
-			events: channel,
-			streamState: streamState,
-			credentials,
-			token,
-			oauthTokens,
-		});
+		let metadata: ILogMetadata | undefined;
+		try {
+			metadata = await invoke("execute_board", {
+				appId: appId,
+				boardId: boardId,
+				payload: payload,
+				events: channel,
+				streamState: streamState,
+				credentials,
+				token,
+				oauthTokens,
+			});
 
-		closed = true;
+			closed = true;
+			finishAllProgressToasts(true);
+		} catch (error) {
+			closed = true;
+			finishAllProgressToasts(false);
+			throw error;
+		}
 
 		return metadata;
 	}
@@ -690,6 +845,23 @@ export class BoardState implements IBoardState {
 					}
 				}
 
+				// Handle toast events globally
+				if (event.event_type === "toast") {
+					handleToastEvent(event);
+				}
+
+				// Handle progress events globally
+				if (event.event_type === "progress") {
+					handleProgressEvent(event);
+				}
+
+				// Check for terminal events and finish progress toasts
+				if (event.event_type === "completed") {
+					finishAllProgressToasts(true);
+				} else if (event.event_type === "error") {
+					finishAllProgressToasts(false);
+				}
+
 				// Forward event to callback as array (consistent with local execution)
 				if (cb) cb([event]);
 				else {
@@ -699,6 +871,7 @@ export class BoardState implements IBoardState {
 		);
 
 		closed = true;
+		finishAllProgressToasts(true);
 		// Full metadata will be fetched separately by the caller
 		return undefined;
 	}

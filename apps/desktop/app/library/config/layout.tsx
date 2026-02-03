@@ -51,6 +51,7 @@ import {
 	CopyIcon,
 	CrownIcon,
 	DatabaseIcon,
+	DollarSignIcon,
 	DownloadIcon,
 	EyeIcon,
 	EyeOffIcon,
@@ -153,6 +154,14 @@ const navigationItems = [
 			IAppVisibility.Prototype,
 			IAppVisibility.PublicRequestAccess,
 		],
+	},
+	{
+		href: "/library/config/sales",
+		label: "Sales",
+		icon: DollarSignIcon,
+		description: "Track sales, manage pricing and discounts",
+		visibilities: [IAppVisibility.Public, IAppVisibility.PublicRequestAccess],
+		requiresPaid: true,
 	},
 	{
 		href: "/library/config/analytics",
@@ -502,10 +511,12 @@ export default function Id({
 								{navigationItems
 									.filter(
 										(item) =>
-											!item.visibilities ||
-											item.visibilities.includes(
-												online?.visibility ?? IAppVisibility.Offline,
-											),
+											(!item.visibilities ||
+												item.visibilities.includes(
+													online?.visibility ?? IAppVisibility.Offline,
+												)) &&
+											(!item.requiresPaid ||
+												(app.data?.price != null && app.data.price > 0)),
 									)
 									.map((item) => {
 										const Icon = item.icon;
@@ -779,10 +790,12 @@ export default function Id({
 										{navigationItems
 											.filter(
 												(item) =>
-													!item.visibilities ||
-													item.visibilities.includes(
-														online?.visibility ?? IAppVisibility.Offline,
-													),
+													(!item.visibilities ||
+														item.visibilities.includes(
+															online?.visibility ?? IAppVisibility.Offline,
+														)) &&
+													(!item.requiresPaid ||
+														(app.data?.price != null && app.data.price > 0)),
 											)
 											.map((item) => {
 												const Icon = item.icon;

@@ -12,6 +12,7 @@ pub mod get_team;
 pub mod invite_user;
 pub mod join_invite_link;
 pub mod manage_join_request;
+pub mod purchase;
 pub mod remove_invite_link;
 pub mod remove_user;
 pub mod request_join;
@@ -41,5 +42,6 @@ pub fn routes() -> Router<AppState> {
                 .delete(manage_join_request::reject_join_request),
         )
         .route("/invite", put(invite_user::invite_user))
+        .route("/purchase", post(purchase::purchase))
         .route("/{sub}", delete(remove_user::remove_user))
 }

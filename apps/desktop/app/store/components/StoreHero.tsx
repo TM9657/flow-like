@@ -5,11 +5,13 @@ import {
 	AvatarImage,
 	Badge,
 	type IAppVisibility,
+	ShareButton,
 } from "@tm9657/flow-like-ui";
 import { Heart, Star } from "lucide-react";
 import { visibilityIcon, visibilityLabel } from "./Visibility";
 
 export function StoreHero({
+	appId,
 	coverUrl,
 	iconUrl,
 	appName,
@@ -22,6 +24,7 @@ export function StoreHero({
 	visibility,
 	authors,
 }: Readonly<{
+	appId: string;
 	coverUrl: string;
 	iconUrl: string;
 	appName: string;
@@ -112,6 +115,12 @@ export function StoreHero({
 									By {authors.join(", ")}
 								</div>
 							) : null}
+							<ShareButton
+								appId={appId}
+								appName={appName}
+								variant="outline"
+								className="ml-auto"
+							/>
 						</div>
 					</div>
 				</div>

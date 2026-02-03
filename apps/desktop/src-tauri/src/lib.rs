@@ -277,6 +277,7 @@ pub fn run() {
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_clipboard_manager::init())
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_notification::init())
         .setup(move |app| {
             #[cfg(desktop)]
             if let Err(e) = app
@@ -687,6 +688,7 @@ pub fn run() {
             functions::registry::registry_check_for_updates,
             functions::registry::registry_load_local,
             functions::registry::registry_init,
+            functions::statistics::get_board_statistics,
         ]);
 
     #[cfg(desktop)]

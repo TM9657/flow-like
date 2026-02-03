@@ -5,6 +5,7 @@
 //! - HTTP sink triggers (/sink/trigger/http/{app_id}/{path})
 //! - Telegram webhook triggers (/sink/trigger/telegram/{event_id})
 //! - Discord interactions webhook triggers (/sink/trigger/discord/{event_id})
+//! - Service-to-service triggers (/sink/trigger/async) - for cron, discord bot, telegram bot
 //! - Listing all active sinks for user's apps
 //!
 //! Note: Sink config comes from the Event itself. We only store sink-specific
@@ -17,10 +18,14 @@ use axum::{
 };
 
 mod management;
+pub mod service;
 mod trigger;
 
 /// Re-export the trigger types and utility for programmatic use (Lambda handlers, SQS, etc.)
-pub use trigger::{TriggerEventInput, TriggerResponse, trigger_event};
+pub use trigger::{
+    CronScheduleInfo, ServiceTriggerRequest, ServiceTriggerResponse, SinkConfigInfo,
+    SinkTriggerClaims, TriggerEventInput, TriggerResponse, trigger_event,
+};
 
 pub fn routes() -> Router<AppState> {
     Router::new()
@@ -32,6 +37,12 @@ pub fn routes() -> Router<AppState> {
         .route("/{event_id}", get(management::get_sink))
         .route("/{event_id}", patch(management::update_sink))
         .route("/{event_id}/toggle", post(management::toggle_sink))
+        // Service-to-service trigger (for internal sink services: cron, discord bot, telegram bot)
+        .route("/trigger/async", post(trigger::service_trigger))
+        // List cron schedules (for docker-compose sink service to sync)
+        .route("/schedules", get(trigger::list_cron_schedules))
+        // List sink configs by type (for discord/telegram bots to sync)
+        .route("/configs", get(trigger::list_sink_configs))
         // HTTP sink trigger - matches any method and path after app_id
         .route("/trigger/http/{app_id}/{*path}", get(trigger::http_trigger))
         .route("/trigger/http/{app_id}/{*path}", post(trigger::http_trigger))

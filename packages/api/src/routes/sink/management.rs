@@ -245,13 +245,14 @@ pub async fn update_sink(
 }
 
 /// POST /sink/{event_id}/toggle
-/// Toggle sink active state
+/// Toggle sink active state (also updates external scheduler for cron sinks)
 #[tracing::instrument(name = "POST /sink/{event_id}/toggle", skip(state, user))]
 pub async fn toggle_sink(
     State(state): State<AppState>,
     Extension(user): Extension<AppUser>,
     Path(event_id): Path<String>,
 ) -> Result<Json<SinkResponse>, ApiError> {
+    // First verify the sink exists and user has permission
     let sink = event_sink::Entity::find()
         .filter(event_sink::Column::EventId.eq(&event_id))
         .one(&state.db)
@@ -261,13 +262,8 @@ pub async fn toggle_sink(
 
     let _permission = ensure_permission!(user, &sink.app_id, &state, RolePermissions::WriteEvents);
 
-    let new_active = !sink.active;
-    let mut active_model: event_sink::ActiveModel = sink.into();
-    active_model.active = Set(new_active);
-    active_model.updated_at = Set(chrono::Utc::now().naive_utc());
-
-    let updated = active_model
-        .update(&state.db)
+    // Use service module to toggle (handles external scheduler sync)
+    let updated = super::service::toggle_sink_active(&state.db, &state, &event_id)
         .await
         .map_err(|e| ApiError::internal_error(anyhow!("Failed to toggle sink: {}", e)))?;
 

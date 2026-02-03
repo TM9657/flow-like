@@ -1,17 +1,78 @@
-use crate::{entity::profile, error::ApiError, middleware::jwt::AppUser, state::AppState};
+use crate::{
+    entity::profile, error::ApiError, middleware::jwt::AppUser,
+    routes::profile::sign_profile_image, state::AppState,
+};
 use axum::{Extension, Json, extract::State};
 use sea_orm::{ColumnTrait, EntityTrait, QueryFilter};
+use serde::Serialize;
+
+/// Profile response with signed image URLs in icon/thumbnail fields
+#[derive(Debug, Clone, Serialize)]
+pub struct ProfileResponse {
+    pub id: String,
+    pub user_id: String,
+    pub name: String,
+    pub description: Option<String>,
+    /// Signed URL for icon (constructed from stored CUID)
+    pub icon: Option<String>,
+    /// Signed URL for thumbnail (constructed from stored CUID)
+    pub thumbnail: Option<String>,
+    pub interests: Option<Vec<String>>,
+    pub tags: Option<Vec<String>>,
+    pub theme: Option<serde_json::Value>,
+    pub bit_ids: Option<Vec<String>>,
+    pub apps: Option<serde_json::Value>,
+    pub settings: Option<serde_json::Value>,
+    pub hub: String,
+    pub hubs: Option<Vec<String>>,
+    pub created_at: chrono::NaiveDateTime,
+    pub updated_at: chrono::NaiveDateTime,
+}
 
 #[tracing::instrument(name = "GET /profile", skip(state, user))]
 pub async fn get_profiles(
     State(state): State<AppState>,
     Extension(user): Extension<AppUser>,
-) -> Result<Json<Vec<profile::Model>>, ApiError> {
+) -> Result<Json<Vec<ProfileResponse>>, ApiError> {
     let sub = user.sub()?;
     let profiles = profile::Entity::find()
         .filter(profile::Column::UserId.eq(sub))
         .all(&state.db)
         .await?;
 
-    Ok(Json(profiles))
+    let mut result = Vec::with_capacity(profiles.len());
+    for p in profiles {
+        let icon = if let Some(icon_id) = &p.icon {
+            sign_profile_image(&p.id, icon_id, &state).await.ok()
+        } else {
+            None
+        };
+
+        let thumbnail = if let Some(thumb_id) = &p.thumbnail {
+            sign_profile_image(&p.id, thumb_id, &state).await.ok()
+        } else {
+            None
+        };
+
+        result.push(ProfileResponse {
+            id: p.id,
+            user_id: p.user_id,
+            name: p.name,
+            description: p.description,
+            icon,
+            thumbnail,
+            interests: p.interests,
+            tags: p.tags,
+            theme: p.theme,
+            bit_ids: p.bit_ids,
+            apps: p.apps,
+            settings: p.settings,
+            hub: p.hub,
+            hubs: p.hubs,
+            created_at: p.created_at,
+            updated_at: p.updated_at,
+        });
+    }
+
+    Ok(Json(result))
 }

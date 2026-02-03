@@ -6,10 +6,12 @@ import type {
 	IAppVisibility,
 	IBoard,
 	IMetadata,
+	IPurchaseResponse,
 } from "@tm9657/flow-like-ui";
+import { IExecutionStage, ILogLevel } from "@tm9657/flow-like-ui";
 import type { IAppSearchSort } from "@tm9657/flow-like-ui/lib/schema/app/app-search-query";
 import type { IMediaItem } from "@tm9657/flow-like-ui/state/backend-state/app-state";
-import { apiDelete, apiFetch, apiGet, apiPatch, apiPost, apiPut, type WebBackendRef } from "./api-utils";
+import { apiDelete, apiGet, apiPatch, apiPost, apiPut, type WebBackendRef } from "./api-utils";
 
 export class WebAppState implements IAppState {
 	constructor(private readonly backend: WebBackendRef) {}
@@ -25,6 +27,22 @@ export class WebAppState implements IAppState {
 			{ meta: metadata, bits },
 			this.backend.auth,
 		);
+
+		// Create an initial board for the app (matching desktop behavior)
+		const boardId = createId();
+		await apiPut(
+			`apps/${app.id}/board/${boardId}`,
+			{
+				name: template?.name ?? "Initial Board",
+				description: template?.description ?? "A blank canvas ready for your ideas",
+				log_level: template?.log_level ?? ILogLevel.Debug,
+				stage: IExecutionStage.Dev,
+				execution_mode: template?.execution_mode,
+				template,
+			},
+			this.backend.auth,
+		);
+
 		return app;
 	}
 
@@ -153,6 +171,14 @@ export class WebAppState implements IAppState {
 		await apiPut(
 			`apps/${appId}/team/queue`,
 			{ comment },
+			this.backend.auth,
+		);
+	}
+
+	async purchaseApp(appId: string): Promise<IPurchaseResponse> {
+		return apiPost<IPurchaseResponse>(
+			`apps/${appId}/team/purchase`,
+			{},
 			this.backend.auth,
 		);
 	}

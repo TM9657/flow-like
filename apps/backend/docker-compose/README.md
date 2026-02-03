@@ -37,6 +37,7 @@ Full step-by-step documentation: **[docs.flow-like.com/self-hosting/docker-compo
 | Service | Port | Description |
 |---------|------|-------------|
 | api | 8080 | Flow-Like API |
+| web | 3001 | Web application |
 | runtime | 9000 | Execution runtime |
 | postgres | 5432 | Database |
 | redis | 6379 | Job queue |

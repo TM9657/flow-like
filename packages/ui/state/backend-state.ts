@@ -2,13 +2,15 @@ import { create } from "zustand";
 
 import type { IProfile } from "../types";
 import type { IAIState } from "./backend-state/ai-state";
+import type { IApiKeyState } from "./backend-state/api-key-state";
 import type { IApiState } from "./backend-state/api-state";
-import type { IAppState } from "./backend-state/app-state";
+import type { IAppState, IPurchaseResponse } from "./backend-state/app-state";
 import type { IBitState } from "./backend-state/bit-state";
 import type { IBoardState } from "./backend-state/board-state";
 import type { IDatabaseState } from "./backend-state/db-state";
 import {
 	EmptyAIState,
+	EmptyApiKeyState,
 	EmptyApiState,
 	EmptyAppState,
 	EmptyBitState,
@@ -29,6 +31,7 @@ import type { IPageState } from "./backend-state/page-state";
 import type { IRegistryState } from "./backend-state/registry-state";
 import type { IRoleState } from "./backend-state/role-state";
 import type { IAppRouteState } from "./backend-state/route-state";
+import type { ISalesState } from "./backend-state/sales-state";
 import type {
 	IEventRegistration,
 	ISinkState,
@@ -39,14 +42,19 @@ import type { ITemplateState } from "./backend-state/template-state";
 import type { IUserState } from "./backend-state/user-state";
 import type { IWidgetState } from "./backend-state/widget-state";
 
+export * from "./backend-state/api-key-state";
+export * from "./backend-state/api-key-state";
 export * from "./backend-state/api-state";
 export * from "./backend-state/empty-states/index";
 export * from "./backend-state/registry-state";
 export * from "./backend-state/idb-route-state";
+export * from "./backend-state/sales-state";
 export type {
 	IAIState,
+	IApiKeyState,
 	IApiState,
 	IAppState,
+	IPurchaseResponse,
 	IAppRouteState,
 	IBitState,
 	IBoardState,
@@ -120,6 +128,7 @@ export interface ICapabilities {
 export interface IBackendState {
 	appState: IAppState;
 	apiState: IApiState;
+	apiKeyState: IApiKeyState;
 	bitState: IBitState;
 	boardState: IBoardState;
 	userState: IUserState;
@@ -137,6 +146,8 @@ export interface IBackendState {
 	registryState: IRegistryState;
 	/** Sink state for managing active event sinks (desktop only) */
 	sinkState?: ISinkState;
+	/** Sales state for managing app sales and discounts (online apps only) */
+	salesState?: ISalesState;
 
 	/** Optional runtime profile (desktop/mobile providers populate this). */
 	profile?: IProfile;
@@ -158,6 +169,7 @@ export const useBackendStore = create<BackendStoreState>((set) => ({
 const serverBackend: IBackendState = {
 	appState: new EmptyAppState(),
 	apiState: new EmptyApiState(),
+	apiKeyState: new EmptyApiKeyState(),
 	bitState: new EmptyBitState(),
 	boardState: new EmptyBoardState(),
 	userState: new EmptyUserState(),

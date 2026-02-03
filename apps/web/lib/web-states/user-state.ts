@@ -223,12 +223,14 @@ export class WebUserState implements IUserState {
 
 	async getProfiles(): Promise<IProfile[]> {
 		const apiProfiles = await apiGet<ApiProfile[]>("profile", this.backend.auth);
+		console.log("getProfiles API response:", apiProfiles);
 		if (!apiProfiles || apiProfiles.length === 0) return [];
 		return apiProfiles.map(transformApiProfile);
 	}
 
 	async getAllSettingsProfiles(): Promise<ISettingsProfile[]> {
 		const profiles = await this.getProfiles();
+		console.log("getAllSettingsProfiles - profiles count:", profiles.length);
 		return profiles.map(profile => ({
 			hub_profile: profile,
 			execution_settings: {

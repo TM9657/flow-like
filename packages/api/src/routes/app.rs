@@ -8,6 +8,7 @@ use axum::{
 
 pub mod internal;
 
+pub mod api;
 pub mod board;
 pub mod data;
 pub mod db;
@@ -17,6 +18,7 @@ pub mod meta;
 pub mod notifications;
 pub mod page;
 pub mod roles;
+pub mod sales;
 pub mod team;
 pub mod template;
 pub mod widget;
@@ -47,10 +49,12 @@ pub fn routes() -> Router<AppState> {
         .nest("/{app_id}/meta", meta::routes())
         .nest("/{app_id}/roles", roles::routes())
         .nest("/{app_id}/team", team::routes())
+        .nest("/{app_id}/sales", sales::routes())
         .nest("/{app_id}/events", events::routes())
         .nest("/{app_id}/data", data::routes())
         .nest("/{app_id}/invoke", invoke::routes())
         .nest("/{app_id}/db", db::routes())
+        .nest("/{app_id}/api", api::routes())
 }
 
 #[macro_export]

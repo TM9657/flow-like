@@ -12,6 +12,11 @@ license-file = "LICENSE"
 name = "flow_like_sinks"
 crate-type = ["lib"]
 
+[features]
+default = []
+aws = ["dep:aws-sdk-scheduler", "dep:aws-config"]
+kubernetes = ["dep:kube", "dep:k8s-openapi"]
+
 [dependencies]
 flow-like-types.workspace = true
 serde = { workspace = true, features = ["derive"] }
@@ -19,3 +24,16 @@ serde_json.workspace = true
 async-trait.workspace = true
 thiserror.workspace = true
 tracing.workspace = true
+chrono.workspace = true
+parking_lot = "0.12"
+cron = "0.15"
+tokio = { workspace = true, features = ["sync"] }
+
+# AWS SDK (optional)
+aws-sdk-scheduler = { version = "1.59", optional = true }
+aws-config = { version = "1.6", optional = true }
+
+# Kubernetes (optional)
+kube = { version = "0.99", default-features = false, features = ["client", "rustls-tls"], optional = true }
+k8s-openapi = { workspace = true, optional = true }
+

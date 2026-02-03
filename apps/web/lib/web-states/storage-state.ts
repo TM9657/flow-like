@@ -101,13 +101,19 @@ export class WebStorageState implements IStorageState {
 						completedFiles++;
 						resolve();
 					} else {
-						reject(new Error(`Upload failed: ${xhr.status}`));
+						reject(new Error(`Upload failed with status ${xhr.status}: ${xhr.statusText}`));
 					}
 				});
 
-				xhr.addEventListener("error", () => reject(new Error("Upload failed")));
+				xhr.addEventListener("error", () => {
+					// Network error - could be CORS, connection refused, etc.
+					reject(new Error(`Upload failed: Network error (possible CORS issue)`));
+				});
 
 				xhr.open("PUT", signedUrl);
+
+				// Set Content-Type header - required for cloud storage providers
+				xhr.setRequestHeader("Content-Type", file.type || "application/octet-stream");
 
 				// Azure Blob Storage requires x-ms-blob-type header
 				// This header is ignored by other providers (S3, GCS) so it's safe to always set

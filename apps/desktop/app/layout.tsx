@@ -43,6 +43,8 @@ import {
 import { useEffect } from "react";
 import { AppSidebar } from "../components/app-sidebar";
 import { DesktopAuthProvider } from "../components/auth-provider";
+import { DeeplinkNavigationHandler } from "../components/deeplink-navigation-handler";
+import DownloadNotificationProvider from "../components/download-notification-provider";
 import GlobalAnchorHandler from "../components/global-anchor-component";
 import NotificationProvider from "../components/notification-provider";
 import { OAuthCallbackHandler } from "../components/oauth-callback-handler";
@@ -180,24 +182,27 @@ export default function RootLayout({
 										<Toaster />
 										<ToastProvider />
 										<TauriProvider>
-											<OAuthCallbackHandler>
-												<OAuthExecutionProvider>
-													<DesktopAuthProvider>
-														<NotificationProvider />
-														<RuntimeVariablesProviderComponent>
-															<ExecutionServiceProvider>
-																<ExecutionEngineProviderComponent>
-																	<SpotlightWrapper>
-																		<PostHogPageView />
-																		<ThemeLoader />
-																		<AppSidebar>{children}</AppSidebar>
-																	</SpotlightWrapper>
-																</ExecutionEngineProviderComponent>
-															</ExecutionServiceProvider>
-														</RuntimeVariablesProviderComponent>
-													</DesktopAuthProvider>
-												</OAuthExecutionProvider>
-											</OAuthCallbackHandler>
+											<DownloadNotificationProvider />
+											<DeeplinkNavigationHandler>
+												<OAuthCallbackHandler>
+													<OAuthExecutionProvider>
+														<DesktopAuthProvider>
+															<NotificationProvider />
+															<RuntimeVariablesProviderComponent>
+																<ExecutionServiceProvider>
+																	<ExecutionEngineProviderComponent>
+																		<SpotlightWrapper>
+																			<PostHogPageView />
+																			<ThemeLoader />
+																			<AppSidebar>{children}</AppSidebar>
+																		</SpotlightWrapper>
+																	</ExecutionEngineProviderComponent>
+																</ExecutionServiceProvider>
+															</RuntimeVariablesProviderComponent>
+														</DesktopAuthProvider>
+													</OAuthExecutionProvider>
+												</OAuthCallbackHandler>
+											</DeeplinkNavigationHandler>
 										</TauriProvider>
 									</TooltipProvider>
 								</ThemeProvider>

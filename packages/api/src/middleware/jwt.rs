@@ -140,6 +140,37 @@ impl AppPermissionResponse {
     pub fn identifier(&self) -> String {
         self.identifier.clone()
     }
+
+    /// Convert to UserExecutionContext for execution
+    pub fn to_user_context(&self) -> flow_like::flow::execution::UserExecutionContext {
+        use flow_like::flow::execution::{RoleContext, UserExecutionContext};
+
+        let role_context = RoleContext {
+            id: self.role.id.clone(),
+            name: self.role.name.clone(),
+            permissions: self.role.permissions,
+            attributes: self.role.attributes.clone().unwrap_or_default(),
+            custom_attributes: std::collections::HashMap::new(),
+        };
+
+        // Check if this is a technical user (API key) - sub is None for API keys
+        let is_technical_user = self.sub.is_none();
+
+        if is_technical_user {
+            // For API keys, use the technical user constructor with key_id
+            UserExecutionContext::technical(
+                self.identifier.clone(),
+                self.role.id.clone(),
+                self.role.name.clone(),
+                self.role.permissions,
+                self.role.attributes.clone().unwrap_or_default(),
+                std::collections::HashMap::new(),
+            )
+        } else {
+            let sub = self.sub.clone().unwrap_or_default();
+            UserExecutionContext::new(sub).with_role(role_context)
+        }
+    }
 }
 
 impl AppUser {
@@ -515,9 +546,41 @@ pub async fn jwt_middleware(
             }
         }
 
-        // Cache miss - lookup API key
+        // Cache miss - parse and validate API key
+        // Format: flk_{app_id}.{key_id}.{secret}
+        if !api_key_str.starts_with("flk_") {
+            state.auth_cache.insert(cache_key, CachedAuth::Invalid);
+            request
+                .extensions_mut()
+                .insert::<AppUser>(AppUser::Unauthorized);
+            return Ok(next.run(request).await);
+        }
+
+        let key_parts = &api_key_str[4..];
+        let parts: Vec<&str> = key_parts.split('.').collect();
+        if parts.len() != 3 {
+            state.auth_cache.insert(cache_key, CachedAuth::Invalid);
+            request
+                .extensions_mut()
+                .insert::<AppUser>(AppUser::Unauthorized);
+            return Ok(next.run(request).await);
+        }
+
+        let _app_id_from_key = parts[0];
+        let key_id = parts[1];
+        let key_secret = parts[2];
+
+        // Hash the secret for lookup
+        let mut hasher = blake3::Hasher::new();
+        hasher.update(key_secret.as_bytes());
+        let secret_hash = hasher.finalize().to_hex().to_string().to_lowercase();
+
         let db_app = TechnicalUser::find()
-            .filter(technical_user::Column::Key.eq(api_key_str))
+            .filter(
+                technical_user::Column::Id
+                    .eq(key_id)
+                    .and(technical_user::Column::Key.eq(secret_hash)),
+            )
             .one(&state.db)
             .await?;
 

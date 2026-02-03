@@ -355,9 +355,7 @@ export async function fetcher<T>(
 			throw new Error(`Error fetching data: ${response.statusText}`);
 		}
 
-		console.log("[API DEBUG] Response OK, parsing JSON...");
 		const json = await response.json();
-		console.log("[API DEBUG] JSON parsed successfully.");
 		console.groupCollapsed(`API Request: ${path}`);
 		console.dir(json, { depth: null });
 		console.groupEnd();

@@ -20,6 +20,7 @@ import { BaseSuggestionKit } from "./plugins/suggestion-base-kit";
 import { BaseTableKit } from "./plugins/table-base-kit";
 import { BaseTocKit } from "./plugins/toc-base-kit";
 import { BaseToggleKit } from "./plugins/toggle-base-kit";
+import { BaseUserMentionKit } from "./plugins/user-mention-base-kit";
 
 export const BaseEditorKit = [
 	...BaseBasicBlocksKit,
@@ -35,6 +36,7 @@ export const BaseEditorKit = [
 	...BaseLinkKit,
 	...BaseMentionKit,
 	...BaseFocusNodeKit,
+	...BaseUserMentionKit,
 	...BaseBasicMarksKit,
 	...BaseFontKit,
 	...BaseListKit,

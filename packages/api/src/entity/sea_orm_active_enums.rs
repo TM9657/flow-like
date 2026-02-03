@@ -287,3 +287,33 @@ pub enum NotificationType {
     #[sea_orm(string_value = "SYSTEM")]
     System,
 }
+
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, EnumIter, DeriveActiveEnum, Serialize, Deserialize, Default,
+)]
+#[sea_orm(rs_type = "String", db_type = "Enum", enum_name = "PurchaseStatus")]
+pub enum PurchaseStatus {
+    #[default]
+    #[sea_orm(string_value = "PENDING")]
+    Pending,
+    #[sea_orm(string_value = "COMPLETED")]
+    Completed,
+    #[sea_orm(string_value = "REFUNDED")]
+    Refunded,
+    #[sea_orm(string_value = "PARTIALLY_REFUNDED")]
+    PartiallyRefunded,
+    #[sea_orm(string_value = "FAILED")]
+    Failed,
+}
+
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, EnumIter, DeriveActiveEnum, Serialize, Deserialize, Default,
+)]
+#[sea_orm(rs_type = "String", db_type = "Enum", enum_name = "DiscountType")]
+pub enum DiscountType {
+    #[default]
+    #[sea_orm(string_value = "PERCENTAGE")]
+    Percentage,
+    #[sea_orm(string_value = "FIXED_AMOUNT")]
+    FixedAmount,
+}

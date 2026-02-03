@@ -269,11 +269,14 @@ export default function Page() {
 					{isLoading ? (
 						<SinksLoadingSkeleton />
 					) : sinks.length === 0 ? (
-						<EmptyState
-							icons={[Zap, Clock, Globe]}
-							title="No active sinks"
-							description="Sinks are created when you configure events with triggers like HTTP endpoints, cron jobs, or webhooks. Configure an event to get started."
-						/>
+						<div className="flex-1 flex justify-center w-full">
+							<EmptyState
+								icons={[Zap, Clock, Globe]}
+								title="No active sinks"
+								className="flex-1 w-full max-w-full"
+								description="Sinks are created when you configure events with triggers like HTTP endpoints, cron jobs, or webhooks. Configure an event to get started."
+							/>
+						</div>
 					) : (
 						<SinksTable
 							sinks={sinks}

@@ -6,3 +6,4 @@ export * from "./use-spotlight";
 export * from "./use-flow-board-spotlight";
 export * from "./use-widget-resolver";
 export * from "./use-copilot-sdk";
+export * from "./use-media-upload";

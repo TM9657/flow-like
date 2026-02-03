@@ -221,12 +221,222 @@ pub async fn sync_event_to_db(
     Ok(())
 }
 
+/// Sync an event and its sink to the database
+///
+/// This is the main entry point for event creation/updates.
+/// It syncs the event to the database and also creates/updates the associated sink,
+/// including any external scheduler for cron events.
+pub async fn sync_event_with_sink(
+    db: &DatabaseConnection,
+    state: &crate::state::AppState,
+    app_id: &str,
+    event: &CoreEvent,
+) -> flow_like_types::Result<()> {
+    sync_event_with_sink_tokens(db, state, app_id, event, None, None).await
+}
+
+/// Sync an event and its sink to the database, with optional PAT and OAuth tokens
+///
+/// This is the main entry point for event creation/updates when tokens are provided.
+/// It syncs the event to the database and also creates/updates the associated sink,
+/// including any external scheduler for cron events.
+///
+/// If `pat` or `oauth_tokens` are provided, they will be encrypted and stored with the sink.
+/// This enables triggered flows to access models and personal files.
+pub async fn sync_event_with_sink_tokens(
+    db: &DatabaseConnection,
+    state: &crate::state::AppState,
+    app_id: &str,
+    event: &CoreEvent,
+    pat: Option<&str>,
+    oauth_tokens: Option<&std::collections::HashMap<String, serde_json::Value>>,
+) -> flow_like_types::Result<()> {
+    use crate::routes::sink::service::{SinkConfig, sink_type_from_event_type, sync_sink};
+
+    // First sync the event
+    sync_event_to_db(db, app_id, event).await?;
+
+    // Derive sink configuration from event
+    let sink_type = sink_type_from_event_type(&event.event_type);
+
+    // Extract cron expression from event config if it's a cron event
+    let cron_expression = if event.event_type == "cron" {
+        extract_cron_expression(&event.config)
+    } else {
+        None
+    };
+
+    let cron_timezone = if event.event_type == "cron" {
+        extract_cron_timezone(&event.config)
+    } else {
+        None
+    };
+
+    // Encrypt PAT if provided
+    let pat_encrypted = pat.map(|p| encrypt_token(p));
+
+    // Encrypt OAuth tokens if provided
+    let oauth_tokens_encrypted = oauth_tokens.and_then(|tokens| {
+        serde_json::to_string(tokens)
+            .ok()
+            .map(|json| encrypt_token(&json))
+    });
+
+    // Sync the sink (creates if not exists, updates if exists)
+    sync_sink(
+        db,
+        state,
+        SinkConfig {
+            event_id: event.id.clone(),
+            app_id: app_id.to_string(),
+            sink_type: sink_type.to_string(),
+            path: event.route.clone(),
+            auth_token: None, // Auth token is set separately
+            webhook_secret: None, // Webhook secret is set separately
+            cron_expression,
+            cron_timezone,
+            pat_encrypted,
+            oauth_tokens_encrypted,
+        },
+    )
+    .await?;
+
+    Ok(())
+}
+
+/// Lazily initialized encryption key derived from SINK_TOKEN_ENCRYPTION_KEY env var
+static ENCRYPTION_KEY: std::sync::LazyLock<[u8; 32]> = std::sync::LazyLock::new(|| {
+    let key_material = std::env::var("SINK_TOKEN_ENCRYPTION_KEY").unwrap_or_else(|_| {
+        tracing::warn!(
+            "SINK_TOKEN_ENCRYPTION_KEY not set - using insecure development key. \
+            Set SINK_TOKEN_ENCRYPTION_KEY in production!"
+        );
+        "flow-like-dev-encryption-key-DO-NOT-USE-IN-PRODUCTION".to_string()
+    });
+    *blake3::hash(key_material.as_bytes()).as_bytes()
+});
+
+fn get_encryption_key() -> &'static [u8; 32] {
+    &ENCRYPTION_KEY
+}
+
+/// Encrypt a token using AES-256-GCM
+/// Returns base64-encoded ciphertext with prepended nonce
+fn encrypt_token(token: &str) -> String {
+    use aes_gcm::{
+        Aes256Gcm, KeyInit, Nonce,
+        aead::Aead,
+    };
+    use base64::Engine;
+
+    let key = get_encryption_key();
+    let cipher = Aes256Gcm::new_from_slice(key).expect("Invalid key length");
+
+    // Generate random 12-byte nonce
+    let mut nonce_bytes = [0u8; 12];
+    getrandom::fill(&mut nonce_bytes).expect("Failed to generate random nonce");
+    let nonce = Nonce::from_slice(&nonce_bytes);
+
+    // Encrypt
+    let ciphertext = cipher
+        .encrypt(nonce, token.as_bytes())
+        .expect("Encryption failed");
+
+    // Prepend nonce to ciphertext and base64 encode
+    let mut combined = nonce_bytes.to_vec();
+    combined.extend(ciphertext);
+    base64::engine::general_purpose::STANDARD.encode(combined)
+}
+
+/// Decrypt a token using AES-256-GCM
+/// Expects base64-encoded ciphertext with prepended nonce
+pub fn decrypt_token(encrypted: &str) -> Option<String> {
+    use aes_gcm::{
+        Aes256Gcm, KeyInit, Nonce,
+        aead::Aead,
+    };
+    use base64::Engine;
+
+    let key = get_encryption_key();
+    let cipher = Aes256Gcm::new_from_slice(key).ok()?;
+
+    // Decode base64
+    let combined = base64::engine::general_purpose::STANDARD
+        .decode(encrypted)
+        .ok()?;
+
+    // Split nonce (12 bytes) and ciphertext
+    if combined.len() < 12 {
+        return None;
+    }
+    let (nonce_bytes, ciphertext) = combined.split_at(12);
+    let nonce = Nonce::from_slice(nonce_bytes);
+
+    // Decrypt
+    let plaintext = cipher.decrypt(nonce, ciphertext).ok()?;
+    String::from_utf8(plaintext).ok()
+}
+
+/// Extract cron expression from event config bytes
+fn extract_cron_expression(config: &[u8]) -> Option<String> {
+    if config.is_empty() {
+        return None;
+    }
+
+    // Try to parse as JSON
+    let value: serde_json::Value = serde_json::from_slice(config).ok()?;
+
+    // Look for common cron expression field names
+    value
+        .get("cron_expression")
+        .or_else(|| value.get("cronExpression"))
+        .or_else(|| value.get("cron"))
+        .or_else(|| value.get("schedule"))
+        .or_else(|| value.get("expression"))
+        .and_then(|v| v.as_str())
+        .map(|s| s.to_string())
+}
+
+/// Extract cron timezone from event config bytes
+fn extract_cron_timezone(config: &[u8]) -> Option<String> {
+    if config.is_empty() {
+        return None;
+    }
+
+    let value: serde_json::Value = serde_json::from_slice(config).ok()?;
+
+    value
+        .get("timezone")
+        .or_else(|| value.get("tz"))
+        .or_else(|| value.get("cron_timezone"))
+        .or_else(|| value.get("cronTimezone"))
+        .and_then(|v| v.as_str())
+        .map(|s| s.to_string())
+}
+
 /// Delete an event from the database
 pub async fn delete_event_from_db(
     db: &DatabaseConnection,
     event_id: &str,
 ) -> flow_like_types::Result<()> {
     event::Entity::delete_by_id(event_id).exec(db).await?;
+    Ok(())
+}
+
+/// Delete an event and its sink from the database (and external scheduler)
+pub async fn delete_event_with_sink(
+    db: &DatabaseConnection,
+    state: &crate::state::AppState,
+    event_id: &str,
+) -> flow_like_types::Result<()> {
+    use crate::routes::sink::service::delete_sink;
+
+    // Delete sink first (handles external scheduler cleanup)
+    delete_sink(db, state, event_id).await?;
+
+    // Then delete the event
+    delete_event_from_db(db, event_id).await?;
+
     Ok(())
 }
 

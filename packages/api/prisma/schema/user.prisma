@@ -46,6 +46,7 @@ model User {
     notifications               Notification[]
     authoredWasmPackages        WasmPackageAuthor[]
     wasmPackageReviews          WasmPackageReview[]
+    purchases                   AppPurchase[]
 
     status UserStatus @default(ACTIVE)
     tier   UserTier   @default(FREE)

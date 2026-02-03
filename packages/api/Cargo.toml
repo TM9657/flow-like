@@ -89,7 +89,7 @@ aws-sdk-s3 = { version = "1", optional = true }
 
 [features]
 default = ["aws", "cognito", "ses", "smtp", "sendgrid"]
-aws = ["aws-config", "aws-sdk-sts"]
+aws = ["aws-config", "aws-sdk-sts", "flow-like-sinks/aws"]
 azure = ["hmac", "sha2", "urlencoding"]
 gcp = ["sha2", "rsa", "urlencoding"]
 r2 = []  # Cloudflare R2 with proprietary temp credentials API
@@ -98,7 +98,7 @@ ses = ["aws-sdk-sesv2", "aws-config"]
 smtp = ["lettre"]
 sendgrid = []
 local = []
-kubernetes = ["kube", "k8s-openapi"]
+kubernetes = ["kube", "k8s-openapi", "flow-like-sinks/kubernetes"]
 lambda = ["aws-config", "aws-sdk-lambda"]
 sqs = ["aws-config", "aws-sdk-sqs"]
 # State store backends

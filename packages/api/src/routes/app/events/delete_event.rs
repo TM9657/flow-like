@@ -8,7 +8,7 @@ use axum::{
 };
 use flow_like_types::anyhow;
 
-use super::db::delete_event_from_db;
+use super::db::delete_event_with_sink;
 
 #[tracing::instrument(name = "DELETE /apps/{app_id}/events/{event_id}", skip(state, user))]
 pub async fn delete_event(
@@ -34,8 +34,8 @@ pub async fn delete_event(
         ApiError::internal_error(anyhow!(e))
     })?;
 
-    // Delete from database
-    delete_event_from_db(&state.db, &event_id)
+    // Delete from database and external schedulers
+    delete_event_with_sink(&state.db, &state, &event_id)
         .await
         .map_err(|e| {
             tracing::error!("Failed to delete event from database: {}", e);

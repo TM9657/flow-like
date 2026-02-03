@@ -69,6 +69,8 @@ pub struct State {
     pub auth_cache: moka::sync::Cache<String, CachedAuth>,
     /// WASM package registry (optional)
     pub wasm_registry: Option<Arc<ServerRegistry>>,
+    /// Sink scheduler for cron events (AWS EventBridge, K8s CronJobs, or in-memory)
+    pub sink_scheduler: Option<Arc<dyn flow_like_sinks::SchedulerBackend>>,
 }
 
 impl State {
@@ -155,6 +157,58 @@ impl State {
             None
         };
 
+        // Initialize sink scheduler based on environment
+        // Priority: AWS EventBridge > Kubernetes > None (sink-service polls /schedules)
+        let sink_scheduler: Option<Arc<dyn flow_like_sinks::SchedulerBackend>> = {
+            let scheduler_provider = std::env::var("SINK_SCHEDULER_PROVIDER")
+                .ok()
+                .map(|s| flow_like_sinks::scheduler::SchedulerProvider::from_str(&s));
+
+            match scheduler_provider {
+                Some(flow_like_sinks::scheduler::SchedulerProvider::Aws) => {
+                    #[cfg(feature = "aws")]
+                    {
+                        let scheduler = flow_like_sinks::scheduler::AwsEventBridgeScheduler::from_env().await;
+                        tracing::info!("Initialized AWS EventBridge sink scheduler");
+                        Some(Arc::new(scheduler) as Arc<dyn flow_like_sinks::SchedulerBackend>)
+                    }
+                    #[cfg(not(feature = "aws"))]
+                    {
+                        tracing::warn!("AWS scheduler requested but aws feature not enabled");
+                        None
+                    }
+                }
+                Some(flow_like_sinks::scheduler::SchedulerProvider::Kubernetes) => {
+                    #[cfg(feature = "kubernetes")]
+                    {
+                        match flow_like_sinks::scheduler::KubernetesScheduler::from_env().await {
+                            Ok(scheduler) => {
+                                tracing::info!("Initialized Kubernetes CronJob sink scheduler");
+                                Some(Arc::new(scheduler) as Arc<dyn flow_like_sinks::SchedulerBackend>)
+                            }
+                            Err(e) => {
+                                tracing::warn!("Failed to initialize K8s scheduler: {}", e);
+                                None
+                            }
+                        }
+                    }
+                    #[cfg(not(feature = "kubernetes"))]
+                    {
+                        tracing::warn!("Kubernetes scheduler requested but kubernetes feature not enabled");
+                        None
+                    }
+                }
+                Some(flow_like_sinks::scheduler::SchedulerProvider::Memory) => {
+                    tracing::info!("Using in-memory sink scheduler");
+                    Some(Arc::new(flow_like_sinks::scheduler::InMemoryScheduler::new()) as Arc<dyn flow_like_sinks::SchedulerBackend>)
+                }
+                None => {
+                    tracing::debug!("No sink scheduler configured (SINK_SCHEDULER_PROVIDER not set)");
+                    None
+                }
+            }
+        };
+
         Self {
             platform_config,
             db,
@@ -186,6 +240,7 @@ impl State {
                 .time_to_live(Duration::from_secs(240))
                 .build(),
             wasm_registry,
+            sink_scheduler,
         }
     }
 

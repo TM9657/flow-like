@@ -46,6 +46,9 @@ pub mod internal_node;
 pub mod internal_pin;
 pub mod log;
 pub mod trace;
+pub mod user_context;
+
+pub use user_context::{RoleContext, UserExecutionContext};
 
 const USE_DEPENDENCY_GRAPH: bool = false;
 const RUN_LOCK_TIMEOUT: Duration = Duration::from_secs(3);
@@ -546,6 +549,8 @@ pub struct InternalRun {
     pub credentials: Option<Arc<SharedCredentials>>,
     pub token: Option<String>,
     pub oauth_tokens: Arc<AHashMap<String, OAuthToken>>,
+    /// User context for this execution
+    pub user_context: Option<UserExecutionContext>,
 
     stack: Arc<RunStack>,
     concurrency_limit: u64,
@@ -864,6 +869,7 @@ impl InternalRun {
             log_level: board.log_level,
             profile: Arc::new(profile.clone()),
             completion_callbacks: Arc::new(RwLock::new(vec![])),
+            user_context: None,
             // Cached immutable fields from Run
             meta: RunMeta {
                 run_id: run_id.clone(),
@@ -876,6 +882,21 @@ impl InternalRun {
             },
             board: board.clone(),
         })
+    }
+
+    /// Set the user execution context for this run
+    pub fn set_user_context(&mut self, user_context: UserExecutionContext) {
+        self.user_context = Some(user_context);
+    }
+
+    /// Set the user execution context for offline/local execution
+    pub fn set_offline_user_context(&mut self) {
+        self.user_context = Some(UserExecutionContext::offline());
+    }
+
+    /// Get the user execution context if available
+    pub fn user_context(&self) -> Option<&UserExecutionContext> {
+        self.user_context.as_ref()
     }
 
     // Reuse the same run, but reset the states
@@ -928,6 +949,7 @@ impl InternalRun {
         let concurrency_limit = self.concurrency_limit;
         let callback = self.callback.clone();
         let meta = self.meta.clone();
+        let user_context = self.user_context.clone();
 
         let new_stack = futures::stream::iter(stack.stack.clone())
             .map(|target| {
@@ -945,6 +967,7 @@ impl InternalRun {
                 let token = self.token.clone();
                 let nodes = self.nodes.clone();
                 let oauth_tokens = self.oauth_tokens.clone();
+                let user_context = user_context.clone();
 
                 async move {
                     step_core(
@@ -965,6 +988,7 @@ impl InternalRun {
                         credentials,
                         token,
                         oauth_tokens,
+                        user_context,
                     )
                     .await
                 }
@@ -1016,6 +1040,7 @@ impl InternalRun {
             self.credentials.clone(),
             self.token.clone(),
             self.oauth_tokens.clone(),
+            self.user_context.clone(),
         )
         .await;
 
@@ -1385,6 +1410,7 @@ async fn step_core(
     credentials: Option<Arc<SharedCredentials>>,
     token: Option<String>,
     oauth_tokens: Arc<AHashMap<String, OAuthToken>>,
+    user_context: Option<UserExecutionContext>,
 ) -> flow_like_types::Result<Vec<ExecutionTarget>> {
     // Check Node State and Validate Execution Count (to stop infinite loops)
     {
@@ -1414,6 +1440,7 @@ async fn step_core(
         oauth_tokens,
     )
     .await;
+    context.user_context = user_context;
     context.started_by = if target.through_pins.is_empty() {
         None
     } else {

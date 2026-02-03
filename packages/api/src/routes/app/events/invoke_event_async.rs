@@ -219,6 +219,7 @@ pub async fn invoke_event_async(
         oauth_tokens: params.oauth_tokens,
         stream_state: false,
         runtime_variables: params.runtime_variables,
+        user_context: Some(permission.to_user_context()),
     };
 
     let response = state

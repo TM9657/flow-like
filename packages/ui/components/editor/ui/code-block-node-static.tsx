@@ -11,10 +11,36 @@ import {
 } from "platejs";
 import * as React from "react";
 import { Button } from "../../..";
+import { ChartCodeBlock } from "./chart-code-block";
+
+const CHART_LANGUAGES = ["nivo", "plotly"] as const;
+type ChartLanguage = (typeof CHART_LANGUAGES)[number];
+
+function isChartLanguage(lang: string | undefined): lang is ChartLanguage {
+	return CHART_LANGUAGES.includes(lang as ChartLanguage);
+}
 
 export function CodeBlockElementStatic(
 	props: SlateElementProps<TCodeBlockElement>,
 ) {
+	const lang = props.element.lang;
+	const content = getCodeBlockText(props.element);
+
+	// Render chart for nivo/plotly languages
+	if (isChartLanguage(lang)) {
+		return (
+			<SlateElement className="codeblock py-1" {...props}>
+				<ChartCodeBlock
+					content={content}
+					language={lang}
+					className="rounded-md overflow-hidden"
+				/>
+				{/* Hidden children for Slate structure */}
+				<div className="hidden">{props.children}</div>
+			</SlateElement>
+		);
+	}
+
 	return (
 		<SlateElement className="codeblock py-1" {...props}>
 			<div className="relative rounded-md bg-muted/50">
@@ -30,7 +56,7 @@ export function CodeBlockElementStatic(
 						size="icon"
 						variant="ghost"
 						className="size-6 gap-1 text-xs text-muted-foreground"
-						value={() => getCodeBlockText(props.element)}
+						value={() => content}
 					/>
 				</div>
 			</div>

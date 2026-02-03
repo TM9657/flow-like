@@ -89,6 +89,7 @@ export type {
 export * from "./profile/profile";
 export * from "./app/app";
 export * from "./solution/solution";
+export * from "./sink";
 
 // A2UI Copilot types
 export * from "./a2ui/copilot";

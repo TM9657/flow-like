@@ -1,6 +1,7 @@
 "use client";
 
 import {
+	type IApiKeyState,
 	type IApiState,
 	type IAppRouteState,
 	type IAppState,
@@ -16,6 +17,7 @@ import {
 	type IProfile,
 	type IRegistryState,
 	type IRoleState,
+	type ISalesState,
 	type ISinkState,
 	type IStorageState,
 	type ITeamState,
@@ -34,6 +36,7 @@ import type { QueryClient } from "@tanstack/react-query";
 
 import {
 	WebAIState,
+	WebApiKeyState,
 	WebApiState,
 	WebAppState,
 	WebBitState,
@@ -53,10 +56,12 @@ import {
 	WebWidgetState,
 } from "@/lib/web-states";
 import type { WebBackendRef } from "@/lib/web-states/api-utils";
+import { WebSalesState } from "@/lib/web-states/sales-state";
 
 export class WebBackend implements IBackendState {
 	appState: IAppState;
 	apiState: IApiState;
+	apiKeyState: IApiKeyState;
 	bitState: IBitState;
 	boardState: IBoardState;
 	eventState: IEventState;
@@ -73,6 +78,7 @@ export class WebBackend implements IBackendState {
 	pageState: IPageState;
 	registryState: IRegistryState;
 	sinkState: ISinkState;
+	salesState: ISalesState;
 
 	private backendRef: WebBackendRef;
 
@@ -85,6 +91,7 @@ export class WebBackend implements IBackendState {
 		this.backendRef = { profile, auth, queryClient };
 
 		this.apiState = new WebApiState(this.backendRef);
+		this.apiKeyState = new WebApiKeyState(this.backendRef);
 		this.appState = new WebAppState(this.backendRef);
 		this.bitState = new WebBitState(this.backendRef);
 		this.boardState = new WebBoardState(this.backendRef);
@@ -102,6 +109,7 @@ export class WebBackend implements IBackendState {
 		this.pageState = new WebPageState(this.backendRef);
 		this.registryState = new WebRegistryState(this.backendRef);
 		this.sinkState = new WebSinkState(this.backendRef);
+		this.salesState = new WebSalesState(this.backendRef);
 	}
 
 	capabilities(): ICapabilities {
@@ -164,9 +172,6 @@ export class WebBackend implements IBackendState {
 		totalFiles: number,
 		onProgress?: (progress: number) => void,
 	): Promise<void> {
-		const formData = new FormData();
-		formData.append("file", file);
-
 		await new Promise<void>((resolve, reject) => {
 			const xhr = new XMLHttpRequest();
 
@@ -183,12 +188,12 @@ export class WebBackend implements IBackendState {
 				if (xhr.status >= 200 && xhr.status < 300) {
 					resolve();
 				} else {
-					reject(new Error(`Upload failed with status: ${xhr.status}`));
+					reject(new Error(`Upload failed with status ${xhr.status}: ${xhr.statusText}`));
 				}
 			});
 
 			xhr.addEventListener("error", () => {
-				reject(new Error("Upload failed"));
+				reject(new Error("Upload failed: Network error (possible CORS issue)"));
 			});
 
 			xhr.open("PUT", signedUrl);
@@ -196,6 +201,12 @@ export class WebBackend implements IBackendState {
 				"Content-Type",
 				file.type || "application/octet-stream",
 			);
+
+			// Azure Blob Storage requires x-ms-blob-type header
+			if (signedUrl.includes(".blob.core.windows.net")) {
+				xhr.setRequestHeader("x-ms-blob-type", "BlockBlob");
+			}
+
 			xhr.send(file);
 		});
 

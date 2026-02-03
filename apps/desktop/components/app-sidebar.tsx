@@ -60,17 +60,18 @@ import {
 import type { ISettingsProfile } from "@tm9657/flow-like-ui/types";
 import {
 	BadgeCheck,
+	BarChart3,
 	BellIcon,
 	BookOpenIcon,
 	BugIcon,
 	ChevronRight,
 	ChevronsUpDown,
-	Code2Icon,
 	CreditCard,
 	Edit3Icon,
 	ExternalLinkIcon,
 	HeartIcon,
 	KeyIcon,
+	KeyRoundIcon,
 	LayoutDashboardIcon,
 	LibraryIcon,
 	LogInIcon,
@@ -233,6 +234,19 @@ const data = {
 				},
 			],
 		},
+		{
+			title: "Sinks",
+			url: "/admin/sinks",
+			icon: KeyRoundIcon,
+			permission: true,
+			items: [
+				{
+					title: "Service Tokens",
+					url: "/admin/sinks",
+					permission: GlobalPermission.Admin,
+				},
+			],
+		},
 	],
 };
 
@@ -258,7 +272,11 @@ export function AppSidebar({
 				<MobileHeaderProvider>
 					<MobileHeader />
 					<SidebarInset className="relative flex flex-col flex-1 min-h-0 h-full overflow-hidden">
-						<FlowBackground intensity="subtle" interactive className="flex flex-col flex-1 min-h-0">
+						<FlowBackground
+							intensity="subtle"
+							interactive
+							className="flex flex-col flex-1 min-h-0"
+						>
 							{children}
 						</FlowBackground>
 					</SidebarInset>
@@ -985,6 +1003,12 @@ export function NavUser({
 										<DropdownMenuItem className="gap-2 p-2">
 											<ZapIcon className="size-4" />
 											Active Sinks
+										</DropdownMenuItem>
+									</a>
+									<a href="/settings/statistics">
+										<DropdownMenuItem className="gap-2 p-2">
+											<BarChart3 className="size-4" />
+											Board Statistics
 										</DropdownMenuItem>
 									</a>
 								</DropdownMenuGroup>

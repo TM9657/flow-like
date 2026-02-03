@@ -1,4 +1,5 @@
 use flow_like::credentials::SharedCredentials;
+use flow_like::flow::execution::UserExecutionContext;
 use flow_like::flow::variable::Variable;
 use flow_like_types::OAuthTokenInput;
 use serde::{Deserialize, Serialize};
@@ -42,6 +43,9 @@ pub struct ExecutionRequest {
     /// Runtime-configured variables to override board variables
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub runtime_variables: Option<HashMap<String, Variable>>,
+    /// User execution context (role, permissions, attributes)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub user_context: Option<UserExecutionContext>,
 }
 
 /// Result of an execution

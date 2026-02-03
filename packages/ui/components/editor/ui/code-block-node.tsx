@@ -3,7 +3,7 @@
 import * as React from "react";
 
 import { formatCodeBlock, isLangSupported } from "@platejs/code-block";
-import { BracesIcon, Check, CheckIcon, CopyIcon } from "lucide-react";
+import { BracesIcon, Check, CheckIcon, CodeIcon, CopyIcon, LineChartIcon } from "lucide-react";
 import { NodeApi, type TCodeBlockElement, type TCodeSyntaxLeaf } from "platejs";
 import {
 	PlateElement,
@@ -28,9 +28,72 @@ import {
 	PopoverTrigger,
 } from "../../..";
 import { cn } from "../../../lib/utils";
+import { ChartCodeBlock } from "./chart-code-block";
+
+const CHART_LANGUAGES = ["nivo", "plotly"] as const;
+type ChartLanguage = (typeof CHART_LANGUAGES)[number];
+
+function isChartLanguage(lang: string | undefined): lang is ChartLanguage {
+	return CHART_LANGUAGES.includes(lang as ChartLanguage);
+}
 
 export function CodeBlockElement(props: PlateElementProps<TCodeBlockElement>) {
 	const { editor, element } = props;
+	const [showChart, setShowChart] = React.useState(true);
+	const lang = element.lang;
+	const content = NodeApi.string(element);
+	const isChart = isChartLanguage(lang);
+
+	// For chart blocks, show toggle between chart preview and code editor
+	if (isChart) {
+		return (
+			<PlateElement className="codeblock py-1" {...props}>
+				<div className="relative rounded-md bg-muted/50">
+					{showChart ? (
+						<div className="min-h-50">
+							<ChartCodeBlock
+								content={content}
+								language={lang}
+								className="rounded-md"
+							/>
+						</div>
+					) : (
+						<pre className="overflow-x-auto p-8 pr-4 font-mono text-sm leading-[normal] [tab-size:2] print:break-inside-avoid">
+							<code>{props.children}</code>
+						</pre>
+					)}
+
+					<div
+						className="absolute top-1 right-1 z-10 flex gap-0.5 select-none"
+						contentEditable={false}
+					>
+						<Button
+							size="icon"
+							variant="ghost"
+							className="size-6 text-xs"
+							onClick={() => setShowChart(!showChart)}
+							title={showChart ? "Edit code" : "Show chart"}
+						>
+							{showChart ? (
+								<CodeIcon className="size-3.5! text-muted-foreground" />
+							) : (
+								<LineChartIcon className="size-3.5! text-muted-foreground" />
+							)}
+						</Button>
+
+						<CodeBlockCombobox />
+
+						<CopyButton
+							size="icon"
+							variant="ghost"
+							className="size-6 gap-1 text-xs text-muted-foreground"
+							value={() => content}
+						/>
+					</div>
+				</div>
+			</PlateElement>
+		);
+	}
 
 	return (
 		<PlateElement className="codeblock py-1" {...props}>
@@ -196,6 +259,10 @@ export function CodeSyntaxLeaf(props: PlateLeafProps<TCodeSyntaxLeaf>) {
 const languages: { label: string; value: string }[] = [
 	{ label: "Auto", value: "auto" },
 	{ label: "Plain Text", value: "plaintext" },
+	// Chart languages (render as interactive charts)
+	{ label: "📊 Nivo Chart", value: "nivo" },
+	{ label: "📈 Plotly Chart", value: "plotly" },
+	// Programming languages
 	{ label: "ABAP", value: "abap" },
 	{ label: "Agda", value: "agda" },
 	{ label: "Arduino", value: "arduino" },

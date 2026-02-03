@@ -8,3 +8,5 @@ export * from "./model-catalog";
 export * from "./app-general";
 export * from "./visibility-status";
 export * from "./profile";
+export * from "./sinks";
+export * from "./sales";

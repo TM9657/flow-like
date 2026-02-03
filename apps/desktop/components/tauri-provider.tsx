@@ -1,8 +1,11 @@
 "use client";
 import { invoke } from "@tauri-apps/api/core";
+import { fetch as tauriFetch } from "@tauri-apps/plugin-http";
+import { readFile } from "@tauri-apps/plugin-fs";
 
 import { createId } from "@paralleldrive/cuid2";
 import {
+	type IApiKeyState,
 	type IApiState,
 	type IAppRouteState,
 	type IAppState,
@@ -20,6 +23,7 @@ import {
 	type IProfile,
 	type IRegistryState,
 	type IRoleState,
+	type ISalesState,
 	type ISinkState,
 	type IStorageState,
 	type ITeamState,
@@ -41,6 +45,7 @@ import { useCallback, useEffect, useRef, useTransition } from "react";
 import type { AuthContextProps } from "react-oidc-context";
 import { appsDB } from "../lib/apps-db";
 import { AiState } from "./tauri-provider/ai-state";
+import { ApiKeyState } from "./tauri-provider/api-key-state";
 import { TauriApiState } from "./tauri-provider/api-state";
 import { AppState } from "./tauri-provider/app-state";
 import { BitState } from "./tauri-provider/bit-state";
@@ -52,6 +57,7 @@ import { PageState } from "./tauri-provider/page-state";
 import { RegistryState } from "./tauri-provider/registry-state";
 import { RoleState } from "./tauri-provider/role-state";
 import { RouteState } from "./tauri-provider/route-state";
+import { SalesState } from "./tauri-provider/sales-state";
 import { SinkState } from "./tauri-provider/sink-state";
 import { StorageState } from "./tauri-provider/storage-state";
 import { TeamState } from "./tauri-provider/team-state";
@@ -70,6 +76,7 @@ declare global {
 export class TauriBackend implements IBackendState {
 	appState: IAppState;
 	apiState: IApiState;
+	apiKeyState: IApiKeyState;
 	bitState: IBitState;
 	boardState: IBoardState;
 	eventState: IEventState;
@@ -86,6 +93,7 @@ export class TauriBackend implements IBackendState {
 	pageState: IPageState;
 	registryState: IRegistryState;
 	sinkState: ISinkState;
+	salesState: ISalesState;
 
 	private _apiState: TauriApiState;
 
@@ -97,6 +105,7 @@ export class TauriBackend implements IBackendState {
 	) {
 		this._apiState = new TauriApiState();
 		this.apiState = this._apiState;
+		this.apiKeyState = new ApiKeyState(this);
 		this.appState = new AppState(this);
 		this.bitState = new BitState(this);
 		this.boardState = new BoardState(this);
@@ -114,6 +123,7 @@ export class TauriBackend implements IBackendState {
 		this.pageState = new PageState(this);
 		this.registryState = new RegistryState(this);
 		this.sinkState = new SinkState();
+		this.salesState = new SalesState(this);
 	}
 
 	capabilities(): ICapabilities {
@@ -194,9 +204,6 @@ export class TauriBackend implements IBackendState {
 		totalFiles: number,
 		onProgress?: (progress: number) => void,
 	): Promise<void> {
-		const formData = new FormData();
-		formData.append("file", file);
-
 		await new Promise<void>((resolve, reject) => {
 			const xhr = new XMLHttpRequest();
 
@@ -213,12 +220,12 @@ export class TauriBackend implements IBackendState {
 				if (xhr.status >= 200 && xhr.status < 300) {
 					resolve();
 				} else {
-					reject(new Error(`Upload failed with status: ${xhr.status}`));
+					reject(new Error(`Upload failed with status ${xhr.status}: ${xhr.statusText}`));
 				}
 			});
 
 			xhr.addEventListener("error", () => {
-				reject(new Error("Upload failed"));
+				reject(new Error("Upload failed: Network error (possible CORS issue)"));
 			});
 
 			xhr.open("PUT", signedUrl);
@@ -226,6 +233,12 @@ export class TauriBackend implements IBackendState {
 				"Content-Type",
 				file.type || "application/octet-stream",
 			);
+
+			// Azure Blob Storage requires x-ms-blob-type header
+			if (signedUrl.includes(".blob.core.windows.net")) {
+				xhr.setRequestHeader("x-ms-blob-type", "BlockBlob");
+			}
+
 			xhr.send(file);
 		});
 
@@ -357,6 +370,11 @@ function ProfileSyncer() {
 		true,
 	);
 
+	// Extract auth state for dependency tracking
+	const isAuthenticated = backend instanceof TauriBackend && backend.auth?.isAuthenticated;
+	const accessToken = backend instanceof TauriBackend ? backend.auth?.user?.access_token : undefined;
+	const hubUrl = profile.data?.hub;
+
 	useEffect(() => {
 		if (profile.data && backend instanceof TauriBackend) {
 			backend.pushProfile(profile.data);
@@ -366,15 +384,58 @@ function ProfileSyncer() {
 	// Sync profiles to backend when authenticated
 	useEffect(() => {
 		if (!(backend instanceof TauriBackend)) return;
-		if (!backend.auth?.isAuthenticated || !backend.profile) return;
+		if (!isAuthenticated || !hubUrl || !accessToken) return;
+
+		const isLocalPath = (path?: string | null): boolean => {
+			if (!path) return false;
+			return !path.startsWith("http://") && !path.startsWith("https://");
+		};
+
+		const getExtension = (path: string): string => {
+			const ext = path.split(".").pop()?.toLowerCase() ?? "png";
+			// Normalize common extensions
+			if (ext === "jpeg") return "jpg";
+			return ext;
+		};
+
+		const getContentType = (ext: string): string => {
+			switch (ext) {
+				case "webp": return "image/webp";
+				case "jpg": case "jpeg": return "image/jpeg";
+				case "gif": return "image/gif";
+				case "svg": return "image/svg+xml";
+				default: return "image/png";
+			}
+		};
+
+		const uploadToSignedUrl = async (
+			localPath: string,
+			signedUrl: string,
+		): Promise<boolean> => {
+			try {
+				const fileData = await readFile(localPath);
+				const ext = getExtension(localPath);
+				const uploadResponse = await tauriFetch(signedUrl, {
+					method: "PUT",
+					headers: {
+						"Content-Type": getContentType(ext),
+					},
+					body: fileData,
+				});
+				return uploadResponse.ok;
+			} catch (error) {
+				console.warn("Failed to upload to signed URL:", error);
+				return false;
+			}
+		};
 
 		const syncProfiles = async () => {
 			try {
-				// Get all local profiles
+				console.log("Starting profile sync...");
 				const localProfiles = await invoke<Record<string, { hub_profile: IProfile }>>("get_profiles");
+				console.log("Local profiles:", Object.keys(localProfiles || {}).length);
 				if (!localProfiles || Object.keys(localProfiles).length === 0) return;
 
-				// Get app visibility info to filter out offline-only apps
 				const visibilityRecords = await appsDB.visibility.toArray();
 				const offlineAppIds = new Set(
 					visibilityRecords
@@ -382,16 +443,33 @@ function ProfileSyncer() {
 						.map(v => v.appId)
 				);
 
-				// Prepare profiles for sync, filtering out offline-only apps
+				const baseUrl = hubUrl ?? process.env.NEXT_PUBLIC_API_URL ?? "api.flow-like.com";
+				const protocol = profile.data?.secure === false ? "http" : "https";
+
+				// Build profile data with upload extensions
+				const profilesWithLocalImages: Map<string, { icon?: string; thumbnail?: string }> = new Map();
 				const profilesToSync = Object.values(localProfiles).map(p => {
 					const hubProfile = p.hub_profile;
 					const filteredApps = hubProfile.apps?.filter(
 						app => !offlineAppIds.has(app.app_id)
 					);
+
+					const hasLocalIcon = isLocalPath(hubProfile.icon);
+					const hasLocalThumbnail = isLocalPath(hubProfile.thumbnail);
+
+					if ((hasLocalIcon || hasLocalThumbnail) && hubProfile.id) {
+						profilesWithLocalImages.set(hubProfile.id, {
+							icon: hasLocalIcon ? hubProfile.icon! : undefined,
+							thumbnail: hasLocalThumbnail ? hubProfile.thumbnail! : undefined,
+						});
+					}
+
 					return {
 						id: hubProfile.id,
 						name: hubProfile.name,
 						description: hubProfile.description,
+						icon_upload_ext: hasLocalIcon ? getExtension(hubProfile.icon!) : undefined,
+						thumbnail_upload_ext: hasLocalThumbnail ? getExtension(hubProfile.thumbnail!) : undefined,
 						interests: hubProfile.interests,
 						tags: hubProfile.tags,
 						theme: hubProfile.theme,
@@ -404,36 +482,72 @@ function ProfileSyncer() {
 					};
 				});
 
+				console.log("Profiles to sync:", profilesToSync.length, profilesToSync.map(p => p.name));
 				if (profilesToSync.length === 0) return;
 
-				// Sync to backend
-				const baseUrl = backend.profile?.hub ?? process.env.NEXT_PUBLIC_API_URL ?? "api.flow-like.com";
-				const protocol = backend.profile?.secure === false ? "http" : "https";
 				const url = baseUrl.startsWith("http")
 					? `${baseUrl}/api/v1/profile/sync`
 					: `${protocol}://${baseUrl}/api/v1/profile/sync`;
 
-				const token = backend.auth?.user?.id_token;
-				if (!token) return;
+				console.log("Syncing to URL:", url);
 
-				const response = await fetch(url, {
+				const response = await tauriFetch(url, {
 					method: "POST",
 					headers: {
 						"Content-Type": "application/json",
-						"Authorization": `Bearer ${token}`,
+						"Authorization": `Bearer ${accessToken}`,
 					},
 					body: JSON.stringify(profilesToSync),
 				});
 
-				if (!response.ok) return;
+				if (!response.ok) {
+					console.warn("Profile sync failed:", response.status, await response.text());
+					return;
+				}
 
-				// Handle ID remapping for newly created profiles
-				const result = await response.json() as {
+				type SyncResult = {
 					synced: string[];
-					created: Array<{ local_id: string; server_id: string }>;
-					updated: string[];
+					created: Array<{
+						local_id: string;
+						server_id: string;
+						icon_upload_url?: string;
+						thumbnail_upload_url?: string;
+					}>;
+					updated: Array<{
+						id: string;
+						icon_upload_url?: string;
+						thumbnail_upload_url?: string;
+					}>;
 					skipped: string[];
 				};
+
+				const result = await response.json() as SyncResult;
+				console.log("Profile sync result:", result);
+
+				// Upload images to the signed URLs returned by server
+				for (const created of result.created) {
+					const localImages = profilesWithLocalImages.get(created.local_id);
+					if (localImages?.icon && created.icon_upload_url) {
+						console.log("Uploading icon for new profile:", created.local_id);
+						await uploadToSignedUrl(localImages.icon, created.icon_upload_url);
+					}
+					if (localImages?.thumbnail && created.thumbnail_upload_url) {
+						console.log("Uploading thumbnail for new profile:", created.local_id);
+						await uploadToSignedUrl(localImages.thumbnail, created.thumbnail_upload_url);
+					}
+				}
+
+				for (const updated of result.updated) {
+					const localImages = profilesWithLocalImages.get(updated.id);
+					if (localImages?.icon && updated.icon_upload_url) {
+						console.log("Uploading icon for updated profile:", updated.id);
+						await uploadToSignedUrl(localImages.icon, updated.icon_upload_url);
+					}
+					if (localImages?.thumbnail && updated.thumbnail_upload_url) {
+						console.log("Uploading thumbnail for updated profile:", updated.id);
+						await uploadToSignedUrl(localImages.thumbnail, updated.thumbnail_upload_url);
+					}
+				}
 
 				// Remap local profile IDs to server-assigned IDs
 				for (const { local_id, server_id } of result.created) {
@@ -445,7 +559,7 @@ function ProfileSyncer() {
 		};
 
 		syncProfiles();
-	}, [backend, backend instanceof TauriBackend && backend.auth?.isAuthenticated]);
+	}, [backend, isAuthenticated, accessToken, hubUrl, profile.data?.secure]);
 
 	return null;
 }

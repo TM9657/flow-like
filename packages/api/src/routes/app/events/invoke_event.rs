@@ -265,6 +265,7 @@ pub async fn invoke_event(
         oauth_tokens: params.oauth_tokens,
         stream_state: false,
         runtime_variables: params.runtime_variables,
+        user_context: Some(permission.to_user_context()),
     };
 
     // For isolated K8s jobs, insert run record and dispatch async

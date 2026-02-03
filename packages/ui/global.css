@@ -438,6 +438,15 @@
 		}
 	}
 
+	@keyframes indeterminate {
+		0% {
+			transform: translateX(-100%);
+		}
+		100% {
+			transform: translateX(300%);
+		}
+	}
+
 	@keyframes float-orb {
 		0%, 100% {
 			transform: translate(-50%, -50%) translateY(0) translateX(0);

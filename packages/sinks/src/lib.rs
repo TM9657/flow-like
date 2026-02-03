@@ -26,9 +26,12 @@ mod traits;
 mod types;
 
 pub mod http;
+pub mod scheduler;
 
 pub use config::{
     CronSinkConfig, HttpSinkConfig, MqttSinkConfig, RssSinkConfig, SinkConfig, WebhookSinkConfig,
 };
+pub use scheduler::{ScheduleInfo, SchedulerBackend, SchedulerError, SchedulerResult};
 pub use traits::{Executor, SinkContext, SinkError, SinkResult, SinkTrait, TriggerResponse};
 pub use types::{SinkAvailability, SinkExecution, SinkRegistration, SinkType};
+

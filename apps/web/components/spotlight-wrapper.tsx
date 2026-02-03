@@ -1,7 +1,6 @@
 "use client";
 
 import {
-	IBitTypes,
 	type ProjectQuickLink,
 	type SpotlightItem,
 	SpotlightProvider,
@@ -416,7 +415,7 @@ export function SpotlightWrapper({ children }: SpotlightWrapperProps) {
 				}
 
 				const boards = await backend.boardState.getBoards(app.id);
-				const boardId = boards?.[0]?.[0] || "";
+				const boardId = boards?.[0]?.id || "";
 
 				toast.success(`Project "${name}" created! 🎉`);
 

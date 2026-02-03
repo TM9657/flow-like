@@ -3,6 +3,9 @@
 pub mod prelude;
 
 pub mod app;
+pub mod app_discount;
+pub mod app_purchase;
+pub mod app_sales_daily;
 pub mod bit;
 pub mod bit_cache;
 pub mod bit_tree_cache;
@@ -33,6 +36,7 @@ pub mod publication_log;
 pub mod publication_request;
 pub mod role;
 pub mod sea_orm_active_enums;
+pub mod sink_token;
 pub mod solution_log;
 pub mod solution_request;
 pub mod stripe_event;

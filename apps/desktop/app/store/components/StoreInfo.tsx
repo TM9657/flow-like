@@ -92,6 +92,7 @@ export function DetailsCard({
 	onSettings,
 	onJoinOrRequest,
 	onBuy,
+	isPurchasing = false,
 }: Readonly<{
 	app: IApp;
 	meta: IMetadata;
@@ -103,6 +104,7 @@ export function DetailsCard({
 	onSettings: () => void;
 	onJoinOrRequest: () => Promise<void> | void;
 	onBuy: () => void;
+	isPurchasing?: boolean;
 }>) {
 	const stats = [
 		{
@@ -155,9 +157,16 @@ export function DetailsCard({
 								<Button
 									variant="secondary"
 									onClick={onBuy}
+									disabled={isPurchasing}
 									className="flex-1 md:flex-none md:min-w-[160px]"
 								>
-									<ShoppingCart className="h-4 w-4 mr-2" /> Buy {priceLabel}
+									{isPurchasing ? (
+										<>Processing...</>
+									) : (
+										<>
+											<ShoppingCart className="h-4 w-4 mr-2" /> Buy {priceLabel}
+										</>
+									)}
 								</Button>
 							</>
 						) : visibility === IAppVisibility.Public ? (

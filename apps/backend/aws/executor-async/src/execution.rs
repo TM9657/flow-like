@@ -30,6 +30,8 @@ struct DispatchPayload {
     #[serde(default)]
     runtime_variables:
         Option<std::collections::HashMap<String, flow_like::flow::variable::Variable>>,
+    #[serde(default)]
+    user_context: Option<flow_like::flow::execution::UserExecutionContext>,
 }
 
 #[instrument(skip(body), fields(job_id, run_id, app_id))]
@@ -66,6 +68,7 @@ pub async fn execute(body: &str) -> flow_like_types::Result<()> {
         oauth_tokens: payload.oauth_tokens,
         stream_state: payload.stream_state,
         runtime_variables: payload.runtime_variables,
+        user_context: payload.user_context,
     };
 
     let config = ExecutorConfig::from_env();
