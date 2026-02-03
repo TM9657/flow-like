@@ -131,6 +131,89 @@ posthog.init('phc_hxGZEJaPqyCNzqqfrYyuUDCUSpcc7RSbwh07t4xtfrE', { api_host:'http
 							],
 						},
 						{
+							label: "By Topic",
+							collapsed: false,
+							items: [
+								{
+									label: "GenAI",
+									collapsed: true,
+									items: [
+										{ label: "Overview", slug: "topics/genai/overview" },
+										{ label: "AI Models & Setup", slug: "topics/genai/models" },
+										{ label: "Chat & Conversations", slug: "topics/genai/chat" },
+										{ label: "RAG & Knowledge Bases", slug: "topics/genai/rag" },
+										{ label: "AI Agents", slug: "topics/genai/agents" },
+										{ label: "Extraction & Structured Output", slug: "topics/genai/extraction" },
+									],
+								},
+								{
+									label: "Data Science",
+									collapsed: true,
+									items: [
+										{ label: "Overview", slug: "topics/datascience/overview" },
+										{ label: "Data Loading & Storage", slug: "topics/datascience/loading" },
+										{ label: "DataFusion & SQL", slug: "topics/datascience/datafusion" },
+										{ label: "Machine Learning", slug: "topics/datascience/ml" },
+										{ label: "Data Visualization", slug: "topics/datascience/visualization" },
+										{ label: "AI-Powered Analysis", slug: "topics/datascience/ai-analysis" },
+									],
+								},
+								{
+									label: "Internal Tools",
+									collapsed: true,
+									items: [
+										{ label: "Overview", slug: "topics/internal-tools/overview" },
+									],
+								},
+								{
+									label: "Desktop Automation",
+									collapsed: true,
+									items: [
+										{ label: "Overview", slug: "topics/desktop-automation/overview" },
+									],
+								},
+								{
+									label: "Document Processing",
+									collapsed: true,
+									items: [
+										{ label: "Overview", slug: "topics/document-processing/overview" },
+									],
+								},
+								{
+									label: "API Integrations",
+									collapsed: true,
+									items: [
+										{ label: "Overview", slug: "topics/api-integrations/overview" },
+									],
+								},
+								{
+									label: "Chatbots",
+									collapsed: true,
+									items: [
+										{ label: "Overview", slug: "topics/chatbots/overview" },
+									],
+								},
+								{
+									label: "Data Pipelines",
+									collapsed: true,
+									items: [
+										{ label: "Overview", slug: "topics/data-pipelines/overview" },
+									],
+								},
+								{
+									label: "Coming From",
+									collapsed: true,
+									items: [
+										{ label: "UiPath", slug: "topics/coming-from/uipath" },
+										{ label: "LangChain", slug: "topics/coming-from/langchain" },
+										{ label: "Developers", slug: "topics/coming-from/developers" },
+										{ label: "n8n", slug: "topics/coming-from/n8n" },
+										{ label: "Unreal Blueprints", slug: "topics/coming-from/unreal" },
+									],
+								},
+							],
+						},
+						{
 							label: "Node Catalog",
 							collapsed: true,
 							items: [
