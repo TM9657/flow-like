@@ -3,9 +3,9 @@
 import { type Event, type UnlistenFn, listen } from "@tauri-apps/api/event";
 import type { IIntercomEvent } from "@tm9657/flow-like-ui";
 import {
-	showProgressToast,
-	finishAllProgressToasts,
 	type ProgressToastData,
+	finishAllProgressToasts,
+	showProgressToast,
 } from "@tm9657/flow-like-ui";
 import { useEffect } from "react";
 import { toast } from "sonner";
@@ -62,7 +62,12 @@ export default function ToastProvider() {
 			},
 		);
 
-		subscriptions.push(unlistenToast, unlistenProgress, unlistenCompleted, unlistenError);
+		subscriptions.push(
+			unlistenToast,
+			unlistenProgress,
+			unlistenCompleted,
+			unlistenError,
+		);
 
 		return () => {
 			(async () => {

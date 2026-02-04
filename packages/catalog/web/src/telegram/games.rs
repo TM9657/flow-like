@@ -146,10 +146,11 @@ impl NodeLogic for SendGameNode {
             .protect_content(protect_content);
 
         if let Some(reply_id) = reply_to
-            && let Ok(msg_id) = reply_id.parse::<i32>() {
-                request = request
-                    .reply_parameters(teloxide::types::ReplyParameters::new(MessageId(msg_id)));
-            }
+            && let Ok(msg_id) = reply_id.parse::<i32>()
+        {
+            request =
+                request.reply_parameters(teloxide::types::ReplyParameters::new(MessageId(msg_id)));
+        }
 
         let sent = request.await?;
 

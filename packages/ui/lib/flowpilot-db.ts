@@ -156,7 +156,8 @@ export async function addMessage(
 			message.content
 		) {
 			updates.title =
-				message.content.slice(0, 50) + (message.content.length > 50 ? "..." : "");
+				message.content.slice(0, 50) +
+				(message.content.length > 50 ? "..." : "");
 		}
 
 		await flowpilotDB.conversations.update(conversationId, updates);

@@ -25,11 +25,7 @@ import {
 } from "../ui/select";
 import { Tooltip, TooltipContent, TooltipTrigger } from "../ui/tooltip";
 
-import type {
-	AIProvider,
-	CopilotAuthStatus,
-	CopilotModel,
-} from "./types";
+import type { AIProvider, CopilotAuthStatus, CopilotModel } from "./types";
 
 interface ProviderSelectorProps {
 	provider: AIProvider;
@@ -150,11 +146,12 @@ export const ProviderSelector = memo(function ProviderSelector({
 						{copilotRunning ? (
 							<div>
 								<div className="font-medium">GitHub Copilot Connected</div>
-								{copilotAuthStatus?.authenticated && copilotAuthStatus.login && (
-									<div className="text-muted-foreground mt-0.5">
-										Signed in as {copilotAuthStatus.login}
-									</div>
-								)}
+								{copilotAuthStatus?.authenticated &&
+									copilotAuthStatus.login && (
+										<div className="text-muted-foreground mt-0.5">
+											Signed in as {copilotAuthStatus.login}
+										</div>
+									)}
 							</div>
 						) : isTauriEnv ? (
 							"Use GitHub Copilot (local)"

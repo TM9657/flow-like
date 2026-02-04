@@ -1,11 +1,15 @@
 import type { IMetadata, IWidgetState } from "@tm9657/flow-like-ui";
-import type { IWidget, Version, VersionType } from "@tm9657/flow-like-ui/state/backend-state/widget-state";
+import type {
+	IWidget,
+	Version,
+	VersionType,
+} from "@tm9657/flow-like-ui/state/backend-state/widget-state";
 import {
+	type WebBackendRef,
 	apiDelete,
 	apiGet,
 	apiPost,
 	apiPut,
-	type WebBackendRef,
 } from "./api-utils";
 
 export class WebWidgetState implements IWidgetState {
@@ -76,10 +80,7 @@ export class WebWidgetState implements IWidgetState {
 	}
 
 	async deleteWidget(appId: string, widgetId: string): Promise<void> {
-		await apiDelete(
-			`apps/${appId}/widgets/${widgetId}`,
-			this.backend.auth,
-		);
+		await apiDelete(`apps/${appId}/widgets/${widgetId}`, this.backend.auth);
 	}
 
 	async createWidgetVersion(

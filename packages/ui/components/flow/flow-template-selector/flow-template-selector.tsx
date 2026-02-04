@@ -112,7 +112,13 @@ export function FlowTemplateSelector({
 		if (result.length < 5) {
 			for (const template of allTemplates) {
 				if (result.length >= 5) break;
-				if (!result.some(t => t.appId === template.appId && t.templateId === template.templateId)) {
+				if (
+					!result.some(
+						(t) =>
+							t.appId === template.appId &&
+							t.templateId === template.templateId,
+					)
+				) {
 					result.push(template);
 				}
 			}
@@ -302,7 +308,9 @@ export function FlowTemplateSelector({
 											key={`${template.appId}-${template.templateId}`}
 											template={template}
 											appIcon={appMeta?.icon}
-											appName={appsWithTemplates.length > 1 ? appMeta?.name : undefined}
+											appName={
+												appsWithTemplates.length > 1 ? appMeta?.name : undefined
+											}
 											onClick={() => openPreview(template)}
 										/>
 									);
@@ -467,7 +475,9 @@ export function FlowTemplateSelector({
 													template={template}
 													appIcon={appMeta?.icon}
 													appThumbnail={appMeta?.thumbnail}
-													appName={!selectedCategory ? appMeta?.name : undefined}
+													appName={
+														!selectedCategory ? appMeta?.name : undefined
+													}
 													isSelected={isSelected}
 													onClick={() => setBrowserPreview(template)}
 												/>
@@ -486,7 +496,9 @@ export function FlowTemplateSelector({
 													key={`${template.appId}-${template.templateId}`}
 													template={template}
 													appIcon={appMeta?.icon}
-													appName={!selectedCategory ? appMeta?.name : undefined}
+													appName={
+														!selectedCategory ? appMeta?.name : undefined
+													}
 													isSelected={isSelected}
 													onClick={() => setBrowserPreview(template)}
 												/>
@@ -930,7 +942,10 @@ function BrowserTemplateCard({
 				{/* App name badge */}
 				{appName && (
 					<div className="absolute top-2 left-2">
-						<Badge variant="secondary" className="text-[10px] bg-background/90 backdrop-blur-sm">
+						<Badge
+							variant="secondary"
+							className="text-[10px] bg-background/90 backdrop-blur-sm"
+						>
 							{appName}
 						</Badge>
 					</div>
@@ -1005,7 +1020,10 @@ function BrowserTemplateRow({
 						{template.metadata?.name || template.templateId}
 					</p>
 					{appName && (
-						<Badge variant="outline" className="text-[10px] px-1.5 py-0 shrink-0">
+						<Badge
+							variant="outline"
+							className="text-[10px] px-1.5 py-0 shrink-0"
+						>
 							{appName}
 						</Badge>
 					)}

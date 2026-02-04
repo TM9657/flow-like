@@ -44,8 +44,14 @@ async fn main() -> ExitCode {
         }
     };
 
-    let url = format!("{}/api/v1/sink/trigger/async", api_base_url.trim_end_matches('/'));
-    let body = TriggerRequest { event_id: event_id.clone(), sink_type };
+    let url = format!(
+        "{}/api/v1/sink/trigger/async",
+        api_base_url.trim_end_matches('/')
+    );
+    let body = TriggerRequest {
+        event_id: event_id.clone(),
+        sink_type,
+    };
 
     tracing::info!(event_id = %event_id, url = %url, "Triggering sink event");
 

@@ -2,7 +2,7 @@
 //!
 //! Helper utilities for Copilot integration.
 
-use super::{CopilotClientHandle};
+use super::CopilotClientHandle;
 use flow_like::flow::{
     execution::context::ExecutionContext,
     node::{Node, NodeLogic, NodeScores},
@@ -44,7 +44,12 @@ impl NodeLogic for CopilotGetVersionNode {
             VariableType::Struct,
         );
 
-        node.add_output_pin("version", "Version", "CLI version string", VariableType::String);
+        node.add_output_pin(
+            "version",
+            "Version",
+            "CLI version string",
+            VariableType::String,
+        );
 
         node
     }
@@ -59,19 +64,22 @@ impl NodeLogic for CopilotGetVersionNode {
             let cache = context.cache.read().await;
             cache.get(&handle.cache_key).cloned()
         };
-        let cached = cached.ok_or_else(|| {
-            flow_like_types::anyhow!("Copilot client not found in cache")
-        })?;
+        let cached =
+            cached.ok_or_else(|| flow_like_types::anyhow!("Copilot client not found in cache"))?;
         let cached_client = cached
             .as_any()
             .downcast_ref::<CachedCopilotClient>()
             .ok_or_else(|| flow_like_types::anyhow!("Failed to downcast cached client"))?;
 
-        let status = cached_client.client.get_status().await.map_err(|e| {
-            flow_like_types::anyhow!("Failed to get status: {}", e)
-        })?;
+        let status = cached_client
+            .client
+            .get_status()
+            .await
+            .map_err(|e| flow_like_types::anyhow!("Failed to get status: {}", e))?;
 
-        context.set_pin_value("version", json::json!(status.version)).await?;
+        context
+            .set_pin_value("version", json::json!(status.version))
+            .await?;
         Ok(())
     }
 
@@ -137,20 +145,23 @@ impl NodeLogic for CopilotGetModelsNode {
             let cache = context.cache.read().await;
             cache.get(&handle.cache_key).cloned()
         };
-        let cached = cached.ok_or_else(|| {
-            flow_like_types::anyhow!("Copilot client not found in cache")
-        })?;
+        let cached =
+            cached.ok_or_else(|| flow_like_types::anyhow!("Copilot client not found in cache"))?;
         let cached_client = cached
             .as_any()
             .downcast_ref::<CachedCopilotClient>()
             .ok_or_else(|| flow_like_types::anyhow!("Failed to downcast cached client"))?;
 
-        let models = cached_client.client.list_models().await.map_err(|e| {
-            flow_like_types::anyhow!("Failed to list models: {}", e)
-        })?;
+        let models = cached_client
+            .client
+            .list_models()
+            .await
+            .map_err(|e| flow_like_types::anyhow!("Failed to list models: {}", e))?;
 
         let model_names: Vec<String> = models.into_iter().map(|m| m.name.clone()).collect();
-        context.set_pin_value("models", json::json!(model_names)).await?;
+        context
+            .set_pin_value("models", json::json!(model_names))
+            .await?;
         Ok(())
     }
 
@@ -222,20 +233,28 @@ impl NodeLogic for CopilotGetAuthStatusNode {
             let cache = context.cache.read().await;
             cache.get(&handle.cache_key).cloned()
         };
-        let cached = cached.ok_or_else(|| {
-            flow_like_types::anyhow!("Copilot client not found in cache")
-        })?;
+        let cached =
+            cached.ok_or_else(|| flow_like_types::anyhow!("Copilot client not found in cache"))?;
         let cached_client = cached
             .as_any()
             .downcast_ref::<CachedCopilotClient>()
             .ok_or_else(|| flow_like_types::anyhow!("Failed to downcast cached client"))?;
 
-        let auth_status = cached_client.client.get_auth_status().await.map_err(|e| {
-            flow_like_types::anyhow!("Failed to get auth status: {}", e)
-        })?;
+        let auth_status = cached_client
+            .client
+            .get_auth_status()
+            .await
+            .map_err(|e| flow_like_types::anyhow!("Failed to get auth status: {}", e))?;
 
-        context.set_pin_value("is_authenticated", json::json!(auth_status.is_authenticated)).await?;
-        context.set_pin_value("login", json::json!(auth_status.login.unwrap_or_default())).await?;
+        context
+            .set_pin_value(
+                "is_authenticated",
+                json::json!(auth_status.is_authenticated),
+            )
+            .await?;
+        context
+            .set_pin_value("login", json::json!(auth_status.login.unwrap_or_default()))
+            .await?;
         Ok(())
     }
 
@@ -287,7 +306,12 @@ impl NodeLogic for CopilotClientStatusNode {
             VariableType::Boolean,
         );
 
-        node.add_output_pin("client_id", "Client ID", "Client identifier", VariableType::String);
+        node.add_output_pin(
+            "client_id",
+            "Client ID",
+            "Client identifier",
+            VariableType::String,
+        );
 
         node
     }
@@ -300,8 +324,12 @@ impl NodeLogic for CopilotClientStatusNode {
             cache.get(&handle.cache_key).is_some()
         };
 
-        context.set_pin_value("is_connected", json::json!(is_connected)).await?;
-        context.set_pin_value("client_id", json::json!(handle.cache_key)).await?;
+        context
+            .set_pin_value("is_connected", json::json!(is_connected))
+            .await?;
+        context
+            .set_pin_value("client_id", json::json!(handle.cache_key))
+            .await?;
         Ok(())
     }
 }

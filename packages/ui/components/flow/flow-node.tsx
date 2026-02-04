@@ -444,10 +444,7 @@ const FlowNodeInner = memo(
 			parsePins(Object.values(props.data.node?.pins || []));
 			// Update React Flow internals when pins change (handles may have changed)
 			updateNodeInternals(props.id);
-		}, [
-			props.data.node.pins,
-			props.id,
-		]);
+		}, [props.data.node.pins, props.id]);
 
 		function isPinAction(pin: IPin | IPinAction): pin is IPinAction {
 			return typeof (pin as IPinAction).onAction === "function";
@@ -1027,8 +1024,8 @@ function FlowNode(props: NodeProps<FlowNode>) {
 			if (selectedNodes.length <= 1) return;
 
 			// Calculate bounding box of selected nodes to position the collapsed layer
-			let minX = Infinity;
-			let minY = Infinity;
+			let minX = Number.POSITIVE_INFINITY;
+			let minY = Number.POSITIVE_INFINITY;
 			for (const node of selectedNodes) {
 				const x = node.position.x;
 				const y = node.position.y;

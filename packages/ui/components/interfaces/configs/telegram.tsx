@@ -1,6 +1,15 @@
 "use client";
 
-import { Cloud, ExternalLink, Info, Laptop, Loader2, Plus, RefreshCw, X } from "lucide-react";
+import {
+	Cloud,
+	ExternalLink,
+	Info,
+	Laptop,
+	Loader2,
+	Plus,
+	RefreshCw,
+	X,
+} from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
 	Accordion,
@@ -61,10 +70,8 @@ export function TelegramConfig({
 	const botToken = (config?.bot_token as string) ?? "";
 	const botName = (config?.bot_name as string) ?? "My Telegram Bot";
 	const botDescription = (config?.bot_description as string) ?? "";
-	const chatWhitelist: string[] =
-		(config?.chat_whitelist as string[]) ?? [];
-	const chatBlacklist: string[] =
-		(config?.chat_blacklist as string[]) ?? [];
+	const chatWhitelist: string[] = (config?.chat_whitelist as string[]) ?? [];
+	const chatBlacklist: string[] = (config?.chat_blacklist as string[]) ?? [];
 	const respondToMentions = (config?.respond_to_mentions as boolean) ?? true;
 	const respondToPrivate = (config?.respond_to_private as boolean) ?? true;
 	const commandPrefix = (config?.command_prefix as string) ?? "/";
@@ -82,7 +89,9 @@ export function TelegramConfig({
 	const generateWebhookSecret = () => {
 		const array = new Uint8Array(32);
 		crypto.getRandomValues(array);
-		const secret = Array.from(array, (byte) => byte.toString(16).padStart(2, "0")).join("");
+		const secret = Array.from(array, (byte) =>
+			byte.toString(16).padStart(2, "0"),
+		).join("");
 		setValue("webhook_secret", secret);
 	};
 
@@ -94,24 +103,37 @@ export function TelegramConfig({
 	}, [isEditing, supportsRemote, webhookSecret, remoteWebhookUrl]);
 
 	// Telegram API helper - uses proxy endpoint to avoid CORS
-	const telegramApi = useCallback(async <T,>(method: string, params?: Record<string, unknown>): Promise<TelegramApiResponse<T>> => {
-		if (!botToken) {
-			return { ok: false, description: "Bot token is required" };
-		}
+	const telegramApi = useCallback(
+		async <T,>(
+			method: string,
+			params?: Record<string, unknown>,
+		): Promise<TelegramApiResponse<T>> => {
+			if (!botToken) {
+				return { ok: false, description: "Bot token is required" };
+			}
 
-		try {
-			// Try direct API first (works in desktop app / Tauri)
-			const response = await fetch(`https://api.telegram.org/bot${botToken}/${method}`, {
-				method: "POST",
-				headers: { "Content-Type": "application/json" },
-				body: params ? JSON.stringify(params) : undefined,
-			});
-			return await response.json();
-		} catch {
-			// If CORS fails, we need to show manual instructions
-			return { ok: false, description: "CORS blocked - use the manual commands below or run from desktop app" };
-		}
-	}, [botToken]);
+			try {
+				// Try direct API first (works in desktop app / Tauri)
+				const response = await fetch(
+					`https://api.telegram.org/bot${botToken}/${method}`,
+					{
+						method: "POST",
+						headers: { "Content-Type": "application/json" },
+						body: params ? JSON.stringify(params) : undefined,
+					},
+				);
+				return await response.json();
+			} catch {
+				// If CORS fails, we need to show manual instructions
+				return {
+					ok: false,
+					description:
+						"CORS blocked - use the manual commands below or run from desktop app",
+				};
+			}
+		},
+		[botToken],
+	);
 
 	// Check webhook status
 	const checkWebhookStatus = useCallback(async () => {
@@ -140,7 +162,9 @@ export function TelegramConfig({
 		if (!secret) {
 			const array = new Uint8Array(32);
 			crypto.getRandomValues(array);
-			secret = Array.from(array, (byte) => byte.toString(16).padStart(2, "0")).join("");
+			secret = Array.from(array, (byte) =>
+				byte.toString(16).padStart(2, "0"),
+			).join("");
 			setValue("webhook_secret", secret);
 		}
 
@@ -161,7 +185,14 @@ export function TelegramConfig({
 		}
 
 		setWebhookLoading(false);
-	}, [botToken, remoteWebhookUrl, webhookSecret, telegramApi, checkWebhookStatus, setValue]);
+	}, [
+		botToken,
+		remoteWebhookUrl,
+		webhookSecret,
+		telegramApi,
+		checkWebhookStatus,
+		setValue,
+	]);
 
 	// Delete webhook for local mode
 	const deleteWebhook = useCallback(async () => {
@@ -261,7 +292,10 @@ export function TelegramConfig({
 								<Cloud className="h-4 w-4" />
 								<span>Webhook Setup</span>
 								{webhookStatus && (
-									<Badge variant={webhookStatus.url ? "default" : "secondary"} className="ml-2">
+									<Badge
+										variant={webhookStatus.url ? "default" : "secondary"}
+										className="ml-2"
+									>
 										{webhookStatus.url ? "Webhook Active" : "Polling Mode"}
 									</Badge>
 								)}
@@ -293,33 +327,47 @@ export function TelegramConfig({
 												{webhookStatus.url ? (
 													<>
 														<Cloud className="h-4 w-4 text-green-500" />
-														<span className="text-green-600 dark:text-green-400 font-medium">Remote (Webhook)</span>
+														<span className="text-green-600 dark:text-green-400 font-medium">
+															Remote (Webhook)
+														</span>
 													</>
 												) : (
 													<>
 														<Laptop className="h-4 w-4 text-blue-500" />
-														<span className="text-blue-600 dark:text-blue-400 font-medium">Local (Polling)</span>
+														<span className="text-blue-600 dark:text-blue-400 font-medium">
+															Local (Polling)
+														</span>
 													</>
 												)}
 											</div>
 											{webhookStatus.url && (
-												<p className="text-xs text-muted-foreground font-mono break-all">{webhookStatus.url}</p>
+												<p className="text-xs text-muted-foreground font-mono break-all">
+													{webhookStatus.url}
+												</p>
 											)}
 											{webhookStatus.pending_update_count > 0 && (
-												<p className="text-xs text-amber-600">{webhookStatus.pending_update_count} pending updates</p>
+												<p className="text-xs text-amber-600">
+													{webhookStatus.pending_update_count} pending updates
+												</p>
 											)}
 											{webhookStatus.last_error_message && (
-												<p className="text-xs text-red-600">Last error: {webhookStatus.last_error_message}</p>
+												<p className="text-xs text-red-600">
+													Last error: {webhookStatus.last_error_message}
+												</p>
 											)}
 										</div>
 									) : webhookLoading ? (
-										<div className="text-sm text-muted-foreground">Checking status...</div>
+										<div className="text-sm text-muted-foreground">
+											Checking status...
+										</div>
 									) : null}
 
 									{/* Success/Error Messages */}
 									{webhookSuccess && (
 										<Alert>
-											<AlertDescription className="text-green-600">{webhookSuccess}</AlertDescription>
+											<AlertDescription className="text-green-600">
+												{webhookSuccess}
+											</AlertDescription>
 										</Alert>
 									)}
 									{webhookError && (
@@ -350,7 +398,9 @@ export function TelegramConfig({
 												<Input
 													type={showSecret ? "text" : "password"}
 													value={webhookSecret}
-													onChange={(e) => setValue("webhook_secret", e.target.value)}
+													onChange={(e) =>
+														setValue("webhook_secret", e.target.value)
+													}
 													placeholder="Webhook verification secret"
 													disabled={!isEditing}
 													className="font-mono text-xs"
@@ -374,7 +424,8 @@ export function TelegramConfig({
 												)}
 											</div>
 											<p className="text-xs text-muted-foreground">
-												This secret is sent by Telegram in the <code>X-Telegram-Bot-Api-Secret-Token</code> header.
+												This secret is sent by Telegram in the{" "}
+												<code>X-Telegram-Bot-Api-Secret-Token</code> header.
 											</p>
 										</div>
 
@@ -390,7 +441,9 @@ export function TelegramConfig({
 													variant="ghost"
 													size="sm"
 													className="absolute right-1 top-1 h-8"
-													onClick={() => navigator.clipboard.writeText(remoteWebhookUrl)}
+													onClick={() =>
+														navigator.clipboard.writeText(remoteWebhookUrl)
+													}
 												>
 													Copy
 												</Button>
@@ -424,10 +477,11 @@ export function TelegramConfig({
 													<Alert>
 														<AlertDescription className="space-y-3">
 															<p className="text-xs">
-																Configure your Telegram bot webhook using this command:
+																Configure your Telegram bot webhook using this
+																command:
 															</p>
 															<pre className="text-xs bg-muted p-3 rounded-md overflow-x-auto">
-{`curl -X POST "https://api.telegram.org/bot${botToken || "<YOUR_BOT_TOKEN>"}/setWebhook" \\
+																{`curl -X POST "https://api.telegram.org/bot${botToken || "<YOUR_BOT_TOKEN>"}/setWebhook" \\
   -H "Content-Type: application/json" \\
   -d '{
     "url": "${remoteWebhookUrl}",
@@ -453,8 +507,9 @@ export function TelegramConfig({
 									</TabsContent>
 									<TabsContent value="local" className="space-y-4 pt-2">
 										<p className="text-sm text-muted-foreground">
-											When running locally (desktop app), the bot uses <strong>long polling</strong> instead of webhooks.
-											No additional setup is required.
+											When running locally (desktop app), the bot uses{" "}
+											<strong>long polling</strong> instead of webhooks. No
+											additional setup is required.
 										</p>
 
 										{/* Quick Setup Button */}
@@ -486,7 +541,7 @@ export function TelegramConfig({
 																Delete the webhook to enable polling mode:
 															</p>
 															<pre className="text-xs bg-muted p-3 rounded-md overflow-x-auto">
-{`curl -X POST "https://api.telegram.org/bot${botToken || "<YOUR_BOT_TOKEN>"}/deleteWebhook"`}
+																{`curl -X POST "https://api.telegram.org/bot${botToken || "<YOUR_BOT_TOKEN>"}/deleteWebhook"`}
 															</pre>
 															<Button
 																type="button"
@@ -511,11 +566,14 @@ export function TelegramConfig({
 									<AlertTitle>Local Setup (Polling Mode)</AlertTitle>
 									<AlertDescription className="space-y-3">
 										<p className="text-xs">
-											The bot uses <strong>long polling</strong> mode when running locally.
-											No webhook setup is required - the bot will automatically start polling when the event is activated.
+											The bot uses <strong>long polling</strong> mode when
+											running locally. No webhook setup is required - the bot
+											will automatically start polling when the event is
+											activated.
 										</p>
 										<p className="text-xs text-muted-foreground">
-											Remote webhook mode is not available for this hub configuration.
+											Remote webhook mode is not available for this hub
+											configuration.
 										</p>
 									</AlertDescription>
 								</Alert>
@@ -752,8 +810,8 @@ export function TelegramConfig({
 						</div>
 
 						<p className="text-xs text-muted-foreground bg-muted p-2 rounded">
-							<strong>Tip:</strong> To get a chat ID, forward a message from
-							the chat to @userinfobot or use the Telegram API.
+							<strong>Tip:</strong> To get a chat ID, forward a message from the
+							chat to @userinfobot or use the Telegram API.
 						</p>
 					</AccordionContent>
 				</AccordionItem>

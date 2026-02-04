@@ -513,9 +513,7 @@ export function SpotlightDialog({
 				showCloseButton={false}
 			>
 				<FloatingOrbs count={4} className="opacity-50" />
-				<div className="relative z-10">
-					{renderModeContent()}
-				</div>
+				<div className="relative z-10">{renderModeContent()}</div>
 			</DialogContent>
 		</Dialog>
 	);

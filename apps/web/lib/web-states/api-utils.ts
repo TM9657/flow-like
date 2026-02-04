@@ -1,6 +1,6 @@
+import type { QueryClient } from "@tanstack/react-query";
 import type { IProfile } from "@tm9657/flow-like-ui";
 import type { AuthContextProps } from "react-oidc-context";
-import type { QueryClient } from "@tanstack/react-query";
 
 export interface WebBackendRef {
 	profile?: IProfile;
@@ -120,10 +120,12 @@ export async function apiDelete<T>(
 		path,
 		{
 			method: "DELETE",
-			...(body ? {
-				headers: { "Content-Type": "application/json" },
-				body: JSON.stringify(body),
-			} : {}),
+			...(body
+				? {
+						headers: { "Content-Type": "application/json" },
+						body: JSON.stringify(body),
+					}
+				: {}),
 		},
 		auth,
 	);

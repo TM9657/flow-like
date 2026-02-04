@@ -1,5 +1,10 @@
-import type { IBoard, IMetadata, ITemplateState, IVersionType } from "@tm9657/flow-like-ui";
-import { apiDelete, apiGet, apiPut, type WebBackendRef } from "./api-utils";
+import type {
+	IBoard,
+	IMetadata,
+	ITemplateState,
+	IVersionType,
+} from "@tm9657/flow-like-ui";
+import { type WebBackendRef, apiDelete, apiGet, apiPut } from "./api-utils";
 
 export class WebTemplateState implements ITemplateState {
 	constructor(private readonly backend: WebBackendRef) {}
@@ -55,10 +60,7 @@ export class WebTemplateState implements ITemplateState {
 	}
 
 	async deleteTemplate(appId: string, templateId: string): Promise<void> {
-		await apiDelete(
-			`apps/${appId}/templates/${templateId}`,
-			this.backend.auth,
-		);
+		await apiDelete(`apps/${appId}/templates/${templateId}`, this.backend.auth);
 	}
 
 	async getTemplateMeta(

@@ -6,11 +6,8 @@
 //! The token is scoped to a specific sink type and tracked in the database for revocation.
 
 use crate::{
-    entity::sink_token,
-    error::ApiError,
-    middleware::jwt::AppUser,
-    permission::global_permission::GlobalPermission,
-    state::AppState,
+    entity::sink_token, error::ApiError, middleware::jwt::AppUser,
+    permission::global_permission::GlobalPermission, state::AppState,
 };
 use axum::{Extension, Json, extract::State};
 use flow_like_types::{anyhow, create_id};
@@ -20,14 +17,7 @@ use serde::{Deserialize, Serialize};
 
 /// Allowed sink types that can be registered
 const ALLOWED_SINK_TYPES: &[&str] = &[
-    "cron",
-    "discord",
-    "telegram",
-    "github",
-    "rss",
-    "mqtt",
-    "email",
-    "http",
+    "cron", "discord", "telegram", "github", "rss", "mqtt", "email", "http",
 ];
 
 #[derive(Debug, Deserialize)]
@@ -93,7 +83,8 @@ pub async fn register_sink(
     Json(request): Json<RegisterSinkRequest>,
 ) -> Result<Json<RegisterSinkResponse>, ApiError> {
     // Require admin permission
-    user.check_global_permission(&state, GlobalPermission::Admin).await?;
+    user.check_global_permission(&state, GlobalPermission::Admin)
+        .await?;
 
     // Validate sink type
     let sink_type = request.sink_type.to_lowercase();
@@ -106,9 +97,8 @@ pub async fn register_sink(
     }
 
     // Get the signing secret
-    let secret = std::env::var("SINK_SECRET").map_err(|_| {
-        ApiError::internal_error(anyhow!("SINK_SECRET not configured"))
-    })?;
+    let secret = std::env::var("SINK_SECRET")
+        .map_err(|_| ApiError::internal_error(anyhow!("SINK_SECRET not configured")))?;
 
     // Generate unique JTI
     let jti = format!("sink_{}", create_id());
@@ -145,9 +135,10 @@ pub async fn register_sink(
         updated_at: Set(now_dt),
     };
 
-    sink_token.insert(&state.db).await.map_err(|e| {
-        ApiError::internal_error(anyhow!("Failed to store sink token: {}", e))
-    })?;
+    sink_token
+        .insert(&state.db)
+        .await
+        .map_err(|e| ApiError::internal_error(anyhow!("Failed to store sink token: {}", e)))?;
 
     tracing::info!(jti = %jti, sink_type = %sink_type, "Registered new sink token");
 

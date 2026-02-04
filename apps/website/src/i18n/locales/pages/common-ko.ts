@@ -69,7 +69,8 @@ export const koCommon = {
 	"pricing.badge": "간단하고 투명한 가격",
 	"pricing.title": "무료로 시작하고,",
 	"pricing.titleHighlight": "성장에 따라 확장",
-	"pricing.description": "사용자별 라이선스 없음. 숨겨진 비용 없음. 어디서나 배포 — 클라우드, 온프레미스, 또는 에어갭 환경. 자동화 인프라를 소유하세요.",
+	"pricing.description":
+		"사용자별 라이선스 없음. 숨겨진 비용 없음. 어디서나 배포 — 클라우드, 온프레미스, 또는 에어갭 환경. 자동화 인프라를 소유하세요.",
 	"pricing.feature.unlimitedUsers": "무제한 사용자",
 	"pricing.feature.selfHostable": "자체 호스팅 가능",
 	"pricing.feature.noVendorLockIn": "벤더 락인 없음",
@@ -91,16 +92,20 @@ export const koCommon = {
 	"pricing.tier.or": "또는",
 	"pricing.tier.yearlySavings": "약 17% 절약",
 	"pricing.tier.free.description": "Flow-Like 체험 및 개인 프로젝트에 적합",
-	"pricing.tier.premium.description": "자동화에 진지하게 임하는 개인 및 소규모 팀용",
-	"pricing.tier.pro.description": "더 많은 리소스가 필요한 성장하는 팀 및 기업용",
-	"pricing.tier.enterprise.description": "고급 보안 및 컴플라이언스 요구사항이 있는 조직용",
+	"pricing.tier.premium.description":
+		"자동화에 진지하게 임하는 개인 및 소규모 팀용",
+	"pricing.tier.pro.description":
+		"더 많은 리소스가 필요한 성장하는 팀 및 기업용",
+	"pricing.tier.enterprise.description":
+		"고급 보안 및 컴플라이언스 요구사항이 있는 조직용",
 	"pricing.tier.popular": "가장 인기",
 
 	// Pricing Studio Section
 	"pricing.studio.badge": "100% 영구 무료",
 	"pricing.studio.title": "Flow-Like Studio는",
 	"pricing.studio.titleHighlight": "완전 무료",
-	"pricing.studio.description": "데스크톱이나 모바일 기기에서 워크플로우를 로컬로 구축, 실행, 자동화하세요 — 구독 필요 없음. 프리미엄 플랜은 클라우드 기능을 추가하며, 로컬 기능이 아닙니다.",
+	"pricing.studio.description":
+		"데스크톱이나 모바일 기기에서 워크플로우를 로컬로 구축, 실행, 자동화하세요 — 구독 필요 없음. 프리미엄 플랜은 클라우드 기능을 추가하며, 로컬 기능이 아닙니다.",
 	"pricing.studio.desktop": "데스크톱 앱",
 	"pricing.studio.desktopPlatforms": "Windows, macOS & Linux",
 	"pricing.studio.mobile": "모바일 앱",
@@ -112,7 +117,8 @@ export const koCommon = {
 	"pricing.studio.visualBuilder": "비주얼 워크플로우 빌더",
 	"pricing.studio.visualBuilderDesc": "드래그 앤 드롭 • 노코드",
 	"pricing.studio.downloadCta": "무료 Studio 다운로드",
-	"pricing.studio.inAppNote": "프리미엄 플랜은 Studio 앱에서 직접 구매 — 웹사이트 결제 불필요",
+	"pricing.studio.inAppNote":
+		"프리미엄 플랜은 Studio 앱에서 직접 구매 — 웹사이트 결제 불필요",
 
 	// Pricing Features
 	"pricing.feature.projects.10": "10개 개인 프로젝트",
@@ -169,26 +175,36 @@ export const koCommon = {
 	"pricing.faq.title": "자주 묻는 질문",
 	"pricing.faq.subtitle": "가격에 대해 알아야 할 모든 것",
 	"pricing.faq.q1": "플랜 한도를 초과하면 어떻게 되나요?",
-	"pricing.faq.a1": "한도에 근접하면 알려드립니다. 언제든지 업그레이드할 수 있으며, 워크플로우를 갑자기 중단하지 않습니다. 클라우드 실행 추가 사용량은 종량제로 청구됩니다.",
+	"pricing.faq.a1":
+		"한도에 근접하면 알려드립니다. 언제든지 업그레이드할 수 있으며, 워크플로우를 갑자기 중단하지 않습니다. 클라우드 실행 추가 사용량은 종량제로 청구됩니다.",
 	"pricing.faq.q2": "Flow-Like를 자체 호스팅할 수 있나요?",
-	"pricing.faq.a2": "네! Flow-Like는 완전히 자체 호스팅 가능합니다. 자체 인프라, 온프레미스, 에어갭 환경에서 실행할 수 있습니다. 데스크톱 앱은 완전히 오프라인으로 작동합니다.",
+	"pricing.faq.a2":
+		"네! Flow-Like는 완전히 자체 호스팅 가능합니다. 자체 인프라, 온프레미스, 에어갭 환경에서 실행할 수 있습니다. 데스크톱 앱은 완전히 오프라인으로 작동합니다.",
 	"pricing.faq.q3": "사용자별 요금이 있나요?",
-	"pricing.faq.a3": "아니요. 자동화는 전체 조직이 접근할 수 있어야 한다고 생각합니다. 모든 플랜은 무제한 사용자를 지원합니다. 사용량(클라우드 기능)에 따라만 지불하고, 직원 수로는 지불하지 않습니다.",
+	"pricing.faq.a3":
+		"아니요. 자동화는 전체 조직이 접근할 수 있어야 한다고 생각합니다. 모든 플랜은 무제한 사용자를 지원합니다. 사용량(클라우드 기능)에 따라만 지불하고, 직원 수로는 지불하지 않습니다.",
 	"pricing.faq.q4": "AI 모델 접근에는 무엇이 포함되나요?",
-	"pricing.faq.a4": "AI 모델 접근에는 FlowPilot(AI 어시스턴트), 지능형 워크플로우 제안, 호스팅된 모델을 통한 자연어 자동화 등의 기능이 포함됩니다.",
+	"pricing.faq.a4":
+		"AI 모델 접근에는 FlowPilot(AI 어시스턴트), 지능형 워크플로우 제안, 호스팅된 모델을 통한 자연어 자동화 등의 기능이 포함됩니다.",
 	"pricing.faq.q5": "스타트업이나 비영리 단체 할인이 있나요?",
-	"pricing.faq.a5": "네! 등록된 비영리 단체, 교육 기관, 초기 단계 스타트업에 상당한 할인을 제공합니다. 자세한 내용은 hello@flow-like.com으로 문의해 주세요.",
+	"pricing.faq.a5":
+		"네! 등록된 비영리 단체, 교육 기관, 초기 단계 스타트업에 상당한 할인을 제공합니다. 자세한 내용은 hello@flow-like.com으로 문의해 주세요.",
 	"pricing.faq.q6": "로컬 실행과 클라우드 실행의 차이점은 무엇인가요?",
-	"pricing.faq.a6": "로컬 실행은 워크플로우를 내 컴퓨터에서 실행합니다 — 모든 플랜에서 완전 무료이며 무제한입니다. 클라우드 실행은 워크플로우를 당사 인프라에서 실행하여 예약 실행, 웹훅, 24시간 가용성을 지원합니다.",
+	"pricing.faq.a6":
+		"로컬 실행은 워크플로우를 내 컴퓨터에서 실행합니다 — 모든 플랜에서 완전 무료이며 무제한입니다. 클라우드 실행은 워크플로우를 당사 인프라에서 실행하여 예약 실행, 웹훅, 24시간 가용성을 지원합니다.",
 	"pricing.faq.q7": "언제든지 취소할 수 있나요?",
-	"pricing.faq.a7": "물론입니다. 계약 없음, 취소 수수료 없음. 취소하면 청구 기간 끝까지 접근을 유지하고, 이후 자동으로 무료로 다운그레이드됩니다.",
+	"pricing.faq.a7":
+		"물론입니다. 계약 없음, 취소 수수료 없음. 취소하면 청구 기간 끝까지 접근을 유지하고, 이후 자동으로 무료로 다운그레이드됩니다.",
 	"pricing.faq.q8": "엔터프라이즈 컴플라이언스 요구사항은 어떻게 되나요?",
-	"pricing.faq.a8": "엔터프라이즈 플랜에는 SOC 2 컴플라이언스 문서, GDPR 데이터 처리 계약, 맞춤 보존 정책, 감사 로그, SSO/SAML 통합이 포함됩니다.",
+	"pricing.faq.a8":
+		"엔터프라이즈 플랜에는 SOC 2 컴플라이언스 문서, GDPR 데이터 처리 계약, 맞춤 보존 정책, 감사 로그, SSO/SAML 통합이 포함됩니다.",
 
 	// Pricing CTA Section
 	"pricing.ctaSection.title": "맞춤 솔루션이 필요하신가요?",
-	"pricing.ctaSection.description": "24시간 이내에 비즈니스를 위한 완전히 맞춤화된 자동화 솔루션을 받으세요. 귀하의 정확한 요구에 맞게 프로덕션 레디 워크플로우를 설계, 구축, 배포합니다.",
+	"pricing.ctaSection.description":
+		"24시간 이내에 비즈니스를 위한 완전히 맞춤화된 자동화 솔루션을 받으세요. 귀하의 정확한 요구에 맞게 프로덕션 레디 워크플로우를 설계, 구축, 배포합니다.",
 	"pricing.ctaSection.24h": "24시간 솔루션",
 	"pricing.ctaSection.enterprise": "엔터프라이즈 영업팀 문의",
-	"pricing.ctaSection.startingAt": "€1,999부터 · 전체 소스코드 소유권 · 어디서나 배포",
+	"pricing.ctaSection.startingAt":
+		"€1,999부터 · 전체 소스코드 소유권 · 어디서나 배포",
 };

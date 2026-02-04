@@ -11,8 +11,8 @@ use axum::{
 use flow_like_types::anyhow;
 use sea_orm::{ColumnTrait, EntityTrait, QueryFilter};
 use serde::{Deserialize, Serialize};
-use stripe::CustomerId;
 use std::collections::HashMap;
+use stripe::CustomerId;
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct PurchaseParams {
@@ -72,7 +72,12 @@ pub async fn purchase(
         .ok_or(ApiError::NOT_FOUND)?;
 
     // Verify app has a price
-    if app.price <= 0 || !matches!(app.visibility, Visibility::Public | Visibility::PublicRequestAccess) {
+    if app.price <= 0
+        || !matches!(
+            app.visibility,
+            Visibility::Public | Visibility::PublicRequestAccess
+        )
+    {
         tracing::warn!(
             user_id = %sub,
             app_id = %app_id,
@@ -95,9 +100,9 @@ pub async fn purchase(
         .and_then(|u| u.stripe_id)
         .ok_or(anyhow!("User does not have a Stripe customer ID"))?;
 
-    let customer_id: CustomerId = stripe_id.parse().map_err(|e| {
-        anyhow!("Invalid Stripe customer ID for user {}: {}", sub, e)
-    })?;
+    let customer_id: CustomerId = stripe_id
+        .parse()
+        .map_err(|e| anyhow!("Invalid Stripe customer ID for user {}: {}", sub, e))?;
 
     // Get app metadata for display name (try to fetch from database)
     let app_name = meta::Entity::find()
@@ -109,19 +114,14 @@ pub async fn purchase(
         .unwrap_or_else(|| format!("App {}", &app_id[..8.min(app_id.len())]));
 
     // Build URLs
-    let frontend_url = std::env::var("FRONTEND_URL").unwrap_or_else(|_| "https://app.flow-like.com".to_string());
-    let success_url = params.success_url.unwrap_or_else(|| {
-        format!(
-            "{}/store?id={}&purchase=success",
-            frontend_url, app_id
-        )
-    });
-    let cancel_url = params.cancel_url.unwrap_or_else(|| {
-        format!(
-            "{}/store?id={}&purchase=canceled",
-            frontend_url, app_id
-        )
-    });
+    let frontend_url =
+        std::env::var("FRONTEND_URL").unwrap_or_else(|_| "https://app.flow-like.com".to_string());
+    let success_url = params
+        .success_url
+        .unwrap_or_else(|| format!("{}/store?id={}&purchase=success", frontend_url, app_id));
+    let cancel_url = params
+        .cancel_url
+        .unwrap_or_else(|| format!("{}/store?id={}&purchase=canceled", frontend_url, app_id));
 
     // Build metadata for webhook processing
     let mut metadata = HashMap::new();
@@ -146,13 +146,11 @@ pub async fn purchase(
     let line_item = stripe::CreateCheckoutSessionLineItems {
         price_data: Some(stripe::CreateCheckoutSessionLineItemsPriceData {
             currency: stripe::Currency::EUR,
-            product_data: Some(
-                stripe::CreateCheckoutSessionLineItemsPriceDataProductData {
-                    name: app_name.clone(),
-                    description: Some(format!("One-time purchase of {}", app_name)),
-                    ..Default::default()
-                },
-            ),
+            product_data: Some(stripe::CreateCheckoutSessionLineItemsPriceDataProductData {
+                name: app_name.clone(),
+                description: Some(format!("One-time purchase of {}", app_name)),
+                ..Default::default()
+            }),
             unit_amount: Some(app.price),
             ..Default::default()
         }),

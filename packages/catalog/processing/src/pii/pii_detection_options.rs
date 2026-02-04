@@ -226,7 +226,10 @@ impl NodeLogic for PiiDetectionOptionsNode {
             postcode_de: context.evaluate_pin("postcode_de").await.unwrap_or(true),
             passport: context.evaluate_pin("passport").await.unwrap_or(true),
             vat_eu: context.evaluate_pin("vat_eu").await.unwrap_or(true),
-            drivers_license: context.evaluate_pin("drivers_license").await.unwrap_or(true),
+            drivers_license: context
+                .evaluate_pin("drivers_license")
+                .await
+                .unwrap_or(true),
             ahv_swiss: context.evaluate_pin("ahv_swiss").await.unwrap_or(true),
             svnr_austria: context.evaluate_pin("svnr_austria").await.unwrap_or(true),
         };

@@ -142,7 +142,9 @@ impl NodeLogic for GetModelInfoNode {
                     model_type: "GaussianNaiveBayes".to_string(),
                     description: format!(
                         "Gaussian Naive Bayes classifier{}",
-                        n_classes.map(|n| format!(" with {} classes", n)).unwrap_or_default()
+                        n_classes
+                            .map(|n| format!(" with {} classes", n))
+                            .unwrap_or_default()
                     ),
                     n_classes,
                     class_names,
@@ -159,7 +161,9 @@ impl NodeLogic for GetModelInfoNode {
                     model_type: "DecisionTree".to_string(),
                     description: format!(
                         "Decision Tree classifier{}",
-                        n_classes.map(|n| format!(" with {} classes", n)).unwrap_or_default()
+                        n_classes
+                            .map(|n| format!(" with {} classes", n))
+                            .unwrap_or_default()
                     ),
                     n_classes,
                     class_names,
@@ -171,7 +175,9 @@ impl NodeLogic for GetModelInfoNode {
 
         let model_type = info.model_type.clone();
         context.set_pin_value("info", json!(info)).await?;
-        context.set_pin_value("model_type", json!(model_type)).await?;
+        context
+            .set_pin_value("model_type", json!(model_type))
+            .await?;
         context.activate_exec_pin("exec_out").await?;
         Ok(())
     }

@@ -2,7 +2,7 @@
 
 import { listen } from "@tauri-apps/api/event";
 import { useRouter } from "next/navigation";
-import { useEffect, type ReactNode } from "react";
+import { type ReactNode, useEffect } from "react";
 
 interface DeeplinkStorePayload {
 	appId: string | null;

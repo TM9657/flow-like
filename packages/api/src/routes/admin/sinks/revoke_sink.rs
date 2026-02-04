@@ -6,13 +6,13 @@
 //! accepted for triggering events.
 
 use crate::{
-    entity::sink_token,
-    error::ApiError,
-    middleware::jwt::AppUser,
-    permission::global_permission::GlobalPermission,
-    state::AppState,
+    entity::sink_token, error::ApiError, middleware::jwt::AppUser,
+    permission::global_permission::GlobalPermission, state::AppState,
 };
-use axum::{Extension, Json, extract::{Path, State}};
+use axum::{
+    Extension, Json,
+    extract::{Path, State},
+};
 use flow_like_types::anyhow;
 use sea_orm::{ActiveModelTrait, EntityTrait, Set};
 use serde::Serialize;
@@ -46,7 +46,8 @@ pub async fn revoke_sink(
     Path(jti): Path<String>,
 ) -> Result<Json<RevokeSinkResponse>, ApiError> {
     // Require admin permission
-    user.check_global_permission(&state, GlobalPermission::Admin).await?;
+    user.check_global_permission(&state, GlobalPermission::Admin)
+        .await?;
 
     // Find the token
     let token = sink_token::Entity::find_by_id(&jti)
@@ -75,9 +76,10 @@ pub async fn revoke_sink(
     active_model.revoked_by = Set(revoked_by.clone());
     active_model.updated_at = Set(now);
 
-    active_model.update(&state.db).await.map_err(|e| {
-        ApiError::internal_error(anyhow!("Failed to revoke token: {}", e))
-    })?;
+    active_model
+        .update(&state.db)
+        .await
+        .map_err(|e| ApiError::internal_error(anyhow!("Failed to revoke token: {}", e)))?;
 
     tracing::info!(jti = %jti, revoked_by = ?revoked_by, "Revoked sink token");
 

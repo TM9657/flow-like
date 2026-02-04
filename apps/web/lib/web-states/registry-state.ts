@@ -6,7 +6,7 @@ import type {
 	SearchFilters,
 	SearchResults,
 } from "@tm9657/flow-like-ui/lib/schema/wasm";
-import { apiGet, apiPost, apiDelete, type WebBackendRef } from "./api-utils";
+import { type WebBackendRef, apiDelete, apiGet, apiPost } from "./api-utils";
 
 export class WebRegistryState implements IRegistryState {
 	constructor(private readonly backend: WebBackendRef) {}
@@ -38,7 +38,10 @@ export class WebRegistryState implements IRegistryState {
 		}
 	}
 
-	async installPackage(packageId: string, version?: string): Promise<CachedPackage> {
+	async installPackage(
+		packageId: string,
+		version?: string,
+	): Promise<CachedPackage> {
 		const params = version ? `?version=${version}` : "";
 		return apiPost<CachedPackage>(
 			`registry/packages/${packageId}/install${params}`,
@@ -48,10 +51,7 @@ export class WebRegistryState implements IRegistryState {
 	}
 
 	async uninstallPackage(packageId: string): Promise<void> {
-		await apiDelete(
-			`registry/packages/${packageId}`,
-			this.backend.auth,
-		);
+		await apiDelete(`registry/packages/${packageId}`, this.backend.auth);
 	}
 
 	async getInstalledPackages(): Promise<InstalledPackage[]> {
@@ -89,7 +89,10 @@ export class WebRegistryState implements IRegistryState {
 		}
 	}
 
-	async updatePackage(packageId: string, version?: string): Promise<CachedPackage> {
+	async updatePackage(
+		packageId: string,
+		version?: string,
+	): Promise<CachedPackage> {
 		const params = version ? `?version=${version}` : "";
 		return apiPost<CachedPackage>(
 			`registry/packages/${packageId}/update${params}`,

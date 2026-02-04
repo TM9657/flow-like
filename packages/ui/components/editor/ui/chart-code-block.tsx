@@ -1,8 +1,8 @@
 "use client";
 
-import { lazy, Suspense, useMemo, useState } from "react";
+import { Suspense, lazy, useMemo, useState } from "react";
 import { cn } from "../../../lib/utils";
-import { parseChartData, type ChartInput, type ChartMode } from "./chart-data-parser";
+import { type ChartInput, parseChartData } from "./chart-data-parser";
 
 // Lazy load chart components to avoid bundle bloat
 const PlotlyChartPreview = lazy(() => import("./chart-plotly-preview"));
@@ -55,7 +55,11 @@ function ChartErrorFallback({ error }: { error: string }) {
  *    }
  *    ```
  */
-export function ChartCodeBlock({ content, language, className }: ChartCodeBlockProps) {
+export function ChartCodeBlock({
+	content,
+	language,
+	className,
+}: ChartCodeBlockProps) {
 	const [showSource, setShowSource] = useState(false);
 
 	const chartInput = useMemo<ChartInput | null>(() => {

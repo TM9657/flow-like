@@ -1,5 +1,6 @@
 "use client";
 
+import type { QueryClient } from "@tanstack/react-query";
 import {
 	type IApiKeyState,
 	type IApiState,
@@ -32,7 +33,6 @@ import type { ICommandSync } from "@tm9657/flow-like-ui/lib";
 import type { IAIState } from "@tm9657/flow-like-ui/state/backend-state/ai-state";
 import { useEffect } from "react";
 import type { AuthContextProps } from "react-oidc-context";
-import type { QueryClient } from "@tanstack/react-query";
 
 import {
 	WebAIState,
@@ -188,7 +188,11 @@ export class WebBackend implements IBackendState {
 				if (xhr.status >= 200 && xhr.status < 300) {
 					resolve();
 				} else {
-					reject(new Error(`Upload failed with status ${xhr.status}: ${xhr.statusText}`));
+					reject(
+						new Error(
+							`Upload failed with status ${xhr.status}: ${xhr.statusText}`,
+						),
+					);
 				}
 			});
 

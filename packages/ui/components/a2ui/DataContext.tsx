@@ -186,13 +186,18 @@ const defaultContextValue: DataContextValue = {
 	set: () => {},
 	setByPath: () => {},
 	resolve: (boundValue, defaultValue) => {
-		if (boundValue === null || boundValue === undefined) return defaultValue ?? boundValue;
+		if (boundValue === null || boundValue === undefined)
+			return defaultValue ?? boundValue;
 		if (typeof boundValue !== "object") return boundValue;
 		if ("literalString" in boundValue) return boundValue.literalString;
 		if ("literalNumber" in boundValue) return boundValue.literalNumber;
 		if ("literalBool" in boundValue) return boundValue.literalBool;
 		if ("literalJson" in boundValue) {
-			try { return JSON.parse(boundValue.literalJson as string); } catch { return defaultValue; }
+			try {
+				return JSON.parse(boundValue.literalJson as string);
+			} catch {
+				return defaultValue;
+			}
 		}
 		return defaultValue;
 	},

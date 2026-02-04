@@ -1,5 +1,5 @@
 use super::{
-    list_issues::{parse_issue, GitHubIssue},
+    list_issues::{GitHubIssue, parse_issue},
     provider::{GITHUB_PROVIDER_ID, GitHubProvider},
 };
 use flow_like::flow::{
@@ -42,8 +42,13 @@ impl NodeLogic for SearchGitHubIssuesNode {
         .set_schema::<GitHubProvider>()
         .set_options(PinOptions::new().set_enforce_schema(true).build());
 
-        node.add_input_pin("owner", "Owner", "Repository owner (optional)", VariableType::String)
-            .set_default_value(Some(json!("")));
+        node.add_input_pin(
+            "owner",
+            "Owner",
+            "Repository owner (optional)",
+            VariableType::String,
+        )
+        .set_default_value(Some(json!("")));
 
         node.add_input_pin(
             "repo",

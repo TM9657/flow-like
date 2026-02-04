@@ -127,43 +127,39 @@ impl BoardGraph {
         }
 
         // Helper to resolve through reroute chains to find actual connected nodes
-        let resolve_through_reroutes = |start_node_id: &str,
-                                        visited: &mut HashSet<String>,
-                                        board: &Board|
-         -> Vec<String> {
-            let mut result = Vec::new();
-            let mut stack = vec![start_node_id.to_string()];
+        let resolve_through_reroutes =
+            |start_node_id: &str, visited: &mut HashSet<String>, board: &Board| -> Vec<String> {
+                let mut result = Vec::new();
+                let mut stack = vec![start_node_id.to_string()];
 
-            while let Some(current_id) = stack.pop() {
-                if !visited.insert(current_id.clone()) {
-                    continue;
-                }
+                while let Some(current_id) = stack.pop() {
+                    if !visited.insert(current_id.clone()) {
+                        continue;
+                    }
 
-                // Find the node (in main nodes or layers)
-                let node = board.nodes.get(&current_id).or_else(|| {
-                    board
-                        .layers
-                        .values()
-                        .find_map(|l| l.nodes.get(&current_id))
-                });
+                    // Find the node (in main nodes or layers)
+                    let node = board
+                        .nodes
+                        .get(&current_id)
+                        .or_else(|| board.layers.values().find_map(|l| l.nodes.get(&current_id)));
 
-                if let Some(node) = node {
-                    for pin in node.pins.values() {
-                        for connected_pin_id in &pin.connected_to {
-                            if let Some(connected_node_id) = pin_to_node.get(connected_pin_id) {
-                                if reroute_nodes.contains(connected_node_id) {
-                                    stack.push(connected_node_id.clone());
-                                } else if connected_node_id != start_node_id {
-                                    result.push(connected_node_id.clone());
+                    if let Some(node) = node {
+                        for pin in node.pins.values() {
+                            for connected_pin_id in &pin.connected_to {
+                                if let Some(connected_node_id) = pin_to_node.get(connected_pin_id) {
+                                    if reroute_nodes.contains(connected_node_id) {
+                                        stack.push(connected_node_id.clone());
+                                    } else if connected_node_id != start_node_id {
+                                        result.push(connected_node_id.clone());
+                                    }
                                 }
                             }
                         }
                     }
                 }
-            }
 
-            result
-        };
+                result
+            };
 
         // Build adjacency for non-reroute nodes, bridging through reroutes
         for node in board.nodes.values() {
@@ -408,13 +404,17 @@ impl PatternSignature {
     }
 }
 
-fn mine_patterns(boards: &[BoardGraph], max_pattern_size: usize) -> (Vec<NodePattern>, Vec<NodePattern>) {
+fn mine_patterns(
+    boards: &[BoardGraph],
+    max_pattern_size: usize,
+) -> (Vec<NodePattern>, Vec<NodePattern>) {
     // Extract patterns from all boards in parallel
     let board_patterns: Vec<(String, String, String, HashSet<String>)> = boards
         .par_iter()
         .flat_map(|board| {
             let patterns = board.extract_patterns(max_pattern_size);
-            let unique_keys: HashSet<String> = patterns.iter().map(|p| p.to_canonical_key()).collect();
+            let unique_keys: HashSet<String> =
+                patterns.iter().map(|p| p.to_canonical_key()).collect();
 
             unique_keys
                 .into_iter()
@@ -422,7 +422,14 @@ fn mine_patterns(boards: &[BoardGraph], max_pattern_size: usize) -> (Vec<NodePat
                     patterns
                         .iter()
                         .find(|p| p.to_canonical_key() == key)
-                        .map(|_| (board.board_id.clone(), board.board_name.clone(), board.app_id.clone(), HashSet::from([key])))
+                        .map(|_| {
+                            (
+                                board.board_id.clone(),
+                                board.board_name.clone(),
+                                board.app_id.clone(),
+                                HashSet::from([key]),
+                            )
+                        })
                 })
                 .collect::<Vec<_>>()
         })
@@ -441,7 +448,8 @@ fn mine_patterns(boards: &[BoardGraph], max_pattern_size: usize) -> (Vec<NodePat
         .collect::<HashMap<_, _>>();
 
     // Aggregate pattern counts
-    let mut pattern_counts: HashMap<String, (PatternSignature, u32, HashMap<String, BoardRef>)> = HashMap::new();
+    let mut pattern_counts: HashMap<String, (PatternSignature, u32, HashMap<String, BoardRef>)> =
+        HashMap::new();
 
     for (board_id, board_name, app_id, keys) in board_patterns {
         for key in keys {
@@ -450,11 +458,14 @@ fn mine_patterns(boards: &[BoardGraph], max_pattern_size: usize) -> (Vec<NodePat
                     .entry(key)
                     .or_insert_with(|| (sig.clone(), 0, HashMap::new()));
                 entry.1 += 1;
-                entry.2.insert(board_id.clone(), BoardRef {
-                    id: board_id.clone(),
-                    name: board_name.clone(),
-                    app_id: app_id.clone(),
-                });
+                entry.2.insert(
+                    board_id.clone(),
+                    BoardRef {
+                        id: board_id.clone(),
+                        name: board_name.clone(),
+                        app_id: app_id.clone(),
+                    },
+                );
             }
         }
     }
@@ -465,7 +476,8 @@ fn mine_patterns(boards: &[BoardGraph], max_pattern_size: usize) -> (Vec<NodePat
         .map(|(_, (sig, occurrences, boards))| {
             let size = sig.node_types.len() as f32;
             let board_count = boards.len() as f32;
-            let rarity_score = (size * size) * (1.0 + board_count).ln() / (occurrences as f32).sqrt();
+            let rarity_score =
+                (size * size) * (1.0 + board_count).ln() / (occurrences as f32).sqrt();
             let frequency_score = size * (occurrences as f32) * (1.0 + board_count).ln();
 
             NodePattern {
@@ -482,12 +494,20 @@ fn mine_patterns(boards: &[BoardGraph], max_pattern_size: usize) -> (Vec<NodePat
 
     // Sort by rarity (rare large patterns first)
     let mut rare_patterns = patterns.clone();
-    rare_patterns.par_sort_by(|a, b| b.rarity_score.partial_cmp(&a.rarity_score).unwrap_or(std::cmp::Ordering::Equal));
+    rare_patterns.par_sort_by(|a, b| {
+        b.rarity_score
+            .partial_cmp(&a.rarity_score)
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
     let rare_patterns = filter_redundant_patterns(rare_patterns, 20);
 
     // Sort by frequency (common patterns first)
     let mut common_patterns = patterns;
-    common_patterns.par_sort_by(|a, b| b.frequency_score.partial_cmp(&a.frequency_score).unwrap_or(std::cmp::Ordering::Equal));
+    common_patterns.par_sort_by(|a, b| {
+        b.frequency_score
+            .partial_cmp(&a.frequency_score)
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
     let common_patterns = filter_redundant_patterns(common_patterns, 20);
 
     (rare_patterns, common_patterns)
@@ -514,7 +534,10 @@ fn filter_redundant_patterns(patterns: Vec<NodePattern>, max_count: usize) -> Ve
     result
 }
 
-fn analyze_board(board: &Board, app_id: &str) -> (BoardSummary, HashMap<String, (String, String, String)>, u32) {
+fn analyze_board(
+    board: &Board,
+    app_id: &str,
+) -> (BoardSummary, HashMap<String, (String, String, String)>, u32) {
     let mut node_usage: HashMap<String, (String, String, String)> = HashMap::new();
     let mut connection_count = 0u32;
     let mut non_reroute_node_count = 0u32;
@@ -524,9 +547,11 @@ fn analyze_board(board: &Board, app_id: &str) -> (BoardSummary, HashMap<String, 
             continue;
         }
         non_reroute_node_count += 1;
-        node_usage
-            .entry(node.name.clone())
-            .or_insert((node.name.clone(), node.friendly_name.clone(), node.category.clone()));
+        node_usage.entry(node.name.clone()).or_insert((
+            node.name.clone(),
+            node.friendly_name.clone(),
+            node.category.clone(),
+        ));
 
         for pin in node.pins.values() {
             connection_count += pin.connected_to.len() as u32;
@@ -539,9 +564,11 @@ fn analyze_board(board: &Board, app_id: &str) -> (BoardSummary, HashMap<String, 
                 continue;
             }
             non_reroute_node_count += 1;
-            node_usage
-                .entry(node.name.clone())
-                .or_insert((node.name.clone(), node.friendly_name.clone(), node.category.clone()));
+            node_usage.entry(node.name.clone()).or_insert((
+                node.name.clone(),
+                node.friendly_name.clone(),
+                node.category.clone(),
+            ));
 
             for pin in node.pins.values() {
                 connection_count += pin.connected_to.len() as u32;
@@ -626,15 +653,13 @@ pub async fn get_board_statistics(
         stats.total_comments += summary.comment_count;
 
         for (name, (node_name, friendly_name, category)) in &result.node_usages {
-            let entry = global_node_usage
-                .entry(name.clone())
-                .or_insert(NodeUsage {
-                    name: node_name.clone(),
-                    friendly_name: friendly_name.clone(),
-                    category: category.clone(),
-                    count: 0,
-                    boards: Vec::new(),
-                });
+            let entry = global_node_usage.entry(name.clone()).or_insert(NodeUsage {
+                name: node_name.clone(),
+                friendly_name: friendly_name.clone(),
+                category: category.clone(),
+                count: 0,
+                boards: Vec::new(),
+            });
             entry.count += 1;
             if !entry.boards.contains(&summary.name) {
                 entry.boards.push(summary.name.clone());
@@ -663,11 +688,10 @@ pub async fn get_board_statistics(
     };
 
     let graphs: Vec<BoardGraph> = all_results.into_iter().map(|r| r.graph).collect();
-    let (rare, common) = flow_like_types::tokio::task::spawn_blocking(move || {
-        mine_patterns(&graphs, 6)
-    })
-    .await
-    .map_err(|e| TauriFunctionError::new(&format!("Mining task failed: {e}")))?;
+    let (rare, common) =
+        flow_like_types::tokio::task::spawn_blocking(move || mine_patterns(&graphs, 6))
+            .await
+            .map_err(|e| TauriFunctionError::new(&format!("Mining task failed: {e}")))?;
 
     stats.rare_patterns = rare;
     stats.common_patterns = common;
@@ -684,9 +708,13 @@ pub async fn get_board_statistics(
             unique_nodes: unique.len() as u32,
         })
         .collect();
-    stats.category_stats.sort_by(|a, b| b.node_count.cmp(&a.node_count));
+    stats
+        .category_stats
+        .sort_by(|a, b| b.node_count.cmp(&a.node_count));
 
-    stats.board_summaries.sort_by(|a, b| b.node_count.cmp(&a.node_count));
+    stats
+        .board_summaries
+        .sort_by(|a, b| b.node_count.cmp(&a.node_count));
 
     Ok(stats)
 }

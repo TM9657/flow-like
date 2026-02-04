@@ -43,11 +43,7 @@ pub trait Segmentation {
     ) -> Result<SegmentationMask, Error>;
 
     /// End-to-End Inference
-    fn run(
-        &self,
-        session: &mut Session,
-        img: &DynamicImage,
-    ) -> Result<SegmentationMask, Error>;
+    fn run(&self, session: &mut Session, img: &DynamicImage) -> Result<SegmentationMask, Error>;
 }
 
 /// UNet-like segmentation model provider
@@ -121,7 +117,8 @@ impl Segmentation for UNetLike {
             // [B, H, W] - already class indices
             let h = shape[1] as u32;
             let w = shape[2] as u32;
-            let data: Vec<u8> = output.slice(s![0, .., ..])
+            let data: Vec<u8> = output
+                .slice(s![0, .., ..])
                 .iter()
                 .map(|&v| v as u8)
                 .collect();
@@ -131,11 +128,18 @@ impl Segmentation for UNetLike {
         };
 
         // Resize mask to original image size if needed
-        let (final_width, final_height, final_data) = if mask_width != original_width || mask_height != original_height {
-            resize_mask(&data, mask_width, mask_height, original_width, original_height)
-        } else {
-            (mask_width, mask_height, data)
-        };
+        let (final_width, final_height, final_data) =
+            if mask_width != original_width || mask_height != original_height {
+                resize_mask(
+                    &data,
+                    mask_width,
+                    mask_height,
+                    original_width,
+                    original_height,
+                )
+            } else {
+                (mask_width, mask_height, data)
+            };
 
         Ok(SegmentationMask {
             width: final_width,
@@ -146,11 +150,7 @@ impl Segmentation for UNetLike {
         })
     }
 
-    fn run(
-        &self,
-        session: &mut Session,
-        img: &DynamicImage,
-    ) -> Result<SegmentationMask, Error> {
+    fn run(&self, session: &mut Session, img: &DynamicImage) -> Result<SegmentationMask, Error> {
         let (original_width, original_height) = img.dimensions();
         let inputs = self.make_inputs(img)?;
         let outputs = session.run(inputs)?;
@@ -207,12 +207,14 @@ impl Segmentation for DeepLabLike {
         let h = shape[1] as u32;
         let w = shape[2] as u32;
 
-        let data: Vec<u8> = output.slice(s![0, .., ..])
+        let data: Vec<u8> = output
+            .slice(s![0, .., ..])
             .iter()
             .map(|&v| v as u8)
             .collect();
 
-        let (final_width, final_height, final_data) = if w != original_width || h != original_height {
+        let (final_width, final_height, final_data) = if w != original_width || h != original_height
+        {
             resize_mask(&data, w, h, original_width, original_height)
         } else {
             (w, h, data)
@@ -227,11 +229,7 @@ impl Segmentation for DeepLabLike {
         })
     }
 
-    fn run(
-        &self,
-        session: &mut Session,
-        img: &DynamicImage,
-    ) -> Result<SegmentationMask, Error> {
+    fn run(&self, session: &mut Session, img: &DynamicImage) -> Result<SegmentationMask, Error> {
         let (original_width, original_height) = img.dimensions();
         let inputs = self.make_inputs(img)?;
         let outputs = session.run(inputs)?;
@@ -392,26 +390,33 @@ impl NodeLogic for SemanticSegmentationNode {
                 let mut session_guard = session.lock().await;
 
                 // Determine input shape from session
-                let (input_width, input_height) = if let Some(input) = session_guard.session.inputs.first() {
-                    if let Some(dims) = input.input_type.tensor_shape() {
-                        let d = dims.len();
-                        if d >= 2 {
-                            (dims[d - 1] as u32, dims[d - 2] as u32)
+                let (input_width, input_height) =
+                    if let Some(input) = session_guard.session.inputs.first() {
+                        if let Some(dims) = input.input_type.tensor_shape() {
+                            let d = dims.len();
+                            if d >= 2 {
+                                (dims[d - 1] as u32, dims[d - 2] as u32)
+                            } else {
+                                (512, 512)
+                            }
                         } else {
                             (512, 512)
                         }
                     } else {
                         (512, 512)
-                    }
-                } else {
-                    (512, 512)
-                };
+                    };
 
                 // Determine input/output names
-                let input_name = session_guard.session.inputs.first()
+                let input_name = session_guard
+                    .session
+                    .inputs
+                    .first()
                     .map(|i| i.name.clone())
                     .unwrap_or_else(|| "input".to_string());
-                let output_name = session_guard.session.outputs.first()
+                let output_name = session_guard
+                    .session
+                    .outputs
+                    .first()
                     .map(|o| o.name.clone())
                     .unwrap_or_else(|| "output".to_string());
 

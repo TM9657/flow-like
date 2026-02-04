@@ -107,7 +107,12 @@ impl EntityLabel {
     pub fn entity_type(&self) -> Option<&str> {
         match self {
             Self::O => None,
-            Self::Begin(t) | Self::Inside(t) | Self::End(t) | Self::Single(t) | Self::Last(t) | Self::Unit(t) => Some(t),
+            Self::Begin(t)
+            | Self::Inside(t)
+            | Self::End(t)
+            | Self::Single(t)
+            | Self::Last(t)
+            | Self::Unit(t) => Some(t),
         }
     }
 
@@ -123,7 +128,10 @@ impl EntityLabel {
 
     /// Check if this ends an entity
     pub fn is_ending(&self) -> bool {
-        matches!(self, Self::End(_) | Self::Last(_) | Self::Single(_) | Self::Unit(_))
+        matches!(
+            self,
+            Self::End(_) | Self::Last(_) | Self::Single(_) | Self::Unit(_)
+        )
     }
 }
 
@@ -186,15 +194,14 @@ pub fn merge_entities(
 
     for (i, (token, label)) in tokens.iter().zip(labels.iter()).enumerate() {
         let conf = confidences.get(i).copied().unwrap_or(0.0);
-        let (char_start, char_end) = offsets
-            .and_then(|o| o.get(i))
-            .copied()
-            .unwrap_or((0, 0));
+        let (char_start, char_end) = offsets.and_then(|o| o.get(i)).copied().unwrap_or((0, 0));
 
         match label {
             EntityLabel::O => {
                 // Finalize current entity if any
-                if let Some((toks, etype, start_tok, start_c, end_c, sum_conf, count)) = current_entity.take() {
+                if let Some((toks, etype, start_tok, start_c, end_c, sum_conf, count)) =
+                    current_entity.take()
+                {
                     let text = reconstruct_text(&toks, start_c, end_c, original_text);
                     entities.push(NamedEntity {
                         text,
@@ -209,7 +216,9 @@ pub fn merge_entities(
             }
             _ if label.is_single() => {
                 // Finalize any previous entity
-                if let Some((toks, etype, start_tok, start_c, end_c, sum_conf, count)) = current_entity.take() {
+                if let Some((toks, etype, start_tok, start_c, end_c, sum_conf, count)) =
+                    current_entity.take()
+                {
                     let text = reconstruct_text(&toks, start_c, end_c, original_text);
                     entities.push(NamedEntity {
                         text,
@@ -223,7 +232,8 @@ pub fn merge_entities(
                 }
                 // Add single-token entity
                 if let Some(etype) = label.entity_type() {
-                    let text = reconstruct_text(&[token.clone()], char_start, char_end, original_text);
+                    let text =
+                        reconstruct_text(&[token.clone()], char_start, char_end, original_text);
                     entities.push(NamedEntity {
                         text,
                         entity_type: etype.to_string(),
@@ -237,7 +247,9 @@ pub fn merge_entities(
             }
             _ if label.is_beginning() => {
                 // Finalize previous entity
-                if let Some((toks, etype, start_tok, start_c, end_c, sum_conf, count)) = current_entity.take() {
+                if let Some((toks, etype, start_tok, start_c, end_c, sum_conf, count)) =
+                    current_entity.take()
+                {
                     let text = reconstruct_text(&toks, start_c, end_c, original_text);
                     entities.push(NamedEntity {
                         text,
@@ -251,12 +263,29 @@ pub fn merge_entities(
                 }
                 // Start new entity
                 if let Some(etype) = label.entity_type() {
-                    current_entity = Some((vec![token.clone()], etype.to_string(), i, char_start, char_end, conf, 1));
+                    current_entity = Some((
+                        vec![token.clone()],
+                        etype.to_string(),
+                        i,
+                        char_start,
+                        char_end,
+                        conf,
+                        1,
+                    ));
                 }
             }
             _ => {
                 // Inside/End/Last - extend or start entity
-                if let Some((ref mut toks, ref etype, _, _, ref mut end_c, ref mut sum_conf, ref mut count)) = current_entity {
+                if let Some((
+                    ref mut toks,
+                    ref etype,
+                    _,
+                    _,
+                    ref mut end_c,
+                    ref mut sum_conf,
+                    ref mut count,
+                )) = current_entity
+                {
                     if label.entity_type() == Some(etype.as_str()) {
                         toks.push(token.clone());
                         *end_c = char_end;
@@ -265,7 +294,8 @@ pub fn merge_entities(
 
                         // If this is an ending tag, finalize
                         if label.is_ending() {
-                            let (toks, etype, start_tok, start_c, end_c, sum_conf, count) = current_entity.take().unwrap();
+                            let (toks, etype, start_tok, start_c, end_c, sum_conf, count) =
+                                current_entity.take().unwrap();
                             let text = reconstruct_text(&toks, start_c, end_c, original_text);
                             entities.push(NamedEntity {
                                 text,
@@ -279,7 +309,8 @@ pub fn merge_entities(
                         }
                     } else {
                         // Type mismatch, finalize current and start new
-                        let (toks, etype, start_tok, start_c, end_c, sum_conf, count) = current_entity.take().unwrap();
+                        let (toks, etype, start_tok, start_c, end_c, sum_conf, count) =
+                            current_entity.take().unwrap();
                         let text = reconstruct_text(&toks, start_c, end_c, original_text);
                         entities.push(NamedEntity {
                             text,
@@ -291,12 +322,28 @@ pub fn merge_entities(
                             confidence: sum_conf / count as f32,
                         });
                         if let Some(etype) = label.entity_type() {
-                            current_entity = Some((vec![token.clone()], etype.to_string(), i, char_start, char_end, conf, 1));
+                            current_entity = Some((
+                                vec![token.clone()],
+                                etype.to_string(),
+                                i,
+                                char_start,
+                                char_end,
+                                conf,
+                                1,
+                            ));
                         }
                     }
                 } else if let Some(etype) = label.entity_type() {
                     // No current entity but got I/E tag - start new (robustness)
-                    current_entity = Some((vec![token.clone()], etype.to_string(), i, char_start, char_end, conf, 1));
+                    current_entity = Some((
+                        vec![token.clone()],
+                        etype.to_string(),
+                        i,
+                        char_start,
+                        char_end,
+                        conf,
+                        1,
+                    ));
                 }
             }
         }
@@ -320,7 +367,12 @@ pub fn merge_entities(
 }
 
 /// Reconstruct entity text from tokens or original text
-fn reconstruct_text(tokens: &[String], start_char: usize, end_char: usize, original_text: &str) -> String {
+fn reconstruct_text(
+    tokens: &[String],
+    start_char: usize,
+    end_char: usize,
+    original_text: &str,
+) -> String {
     if start_char < end_char && end_char <= original_text.len() {
         // Use original text span for accurate reconstruction
         original_text[start_char..end_char].to_string()
@@ -357,52 +409,97 @@ impl NodeLogic for NerNode {
 
         node.add_icon("/flow/icons/type.svg");
 
-        node.add_input_pin("exec_in", "Input", "Initiate Execution", VariableType::Execution);
+        node.add_input_pin(
+            "exec_in",
+            "Input",
+            "Initiate Execution",
+            VariableType::Execution,
+        );
 
-        node.add_input_pin("model", "Model", "ONNX NER Model Session", VariableType::Struct)
-            .set_schema::<NodeOnnxSession>()
-            .set_options(PinOptions::new().set_enforce_schema(true).build());
+        node.add_input_pin(
+            "model",
+            "Model",
+            "ONNX NER Model Session",
+            VariableType::Struct,
+        )
+        .set_schema::<NodeOnnxSession>()
+        .set_options(PinOptions::new().set_enforce_schema(true).build());
 
         node.add_input_pin("tokenizer", "Tokenizer", "HuggingFace tokenizer.json file for BERT/RoBERTa tokenization. Download from the same model repository.", VariableType::Struct)
             .set_schema::<FlowPath>()
             .set_options(PinOptions::new().set_enforce_schema(true).build());
 
-        node.add_input_pin("text", "Text", "Input text to analyze for named entities", VariableType::String);
+        node.add_input_pin(
+            "text",
+            "Text",
+            "Input text to analyze for named entities",
+            VariableType::String,
+        );
 
         node.add_input_pin("labels", "Labels", "Entity label names in model output order (e.g. ['O', 'B-PER', 'I-PER', 'B-ORG', ...]). If empty, uses CoNLL-2003 default.", VariableType::String)
             .set_value_type(ValueType::Array);
 
-        node.add_input_pin("scheme", "Tagging Scheme", "Tagging scheme: BIO, BIOES, IOB, or BILOU", VariableType::Struct)
-            .set_schema::<TaggingScheme>()
-            .set_options(
-                PinOptions::new()
-                    .set_valid_values(vec![
-                        "BIO".to_string(),
-                        "BIOES".to_string(),
-                        "IOB".to_string(),
-                        "BILOU".to_string(),
-                    ])
-                    .build(),
-            )
-            .set_default_value(Some(json!(TaggingScheme::BIO)));
+        node.add_input_pin(
+            "scheme",
+            "Tagging Scheme",
+            "Tagging scheme: BIO, BIOES, IOB, or BILOU",
+            VariableType::Struct,
+        )
+        .set_schema::<TaggingScheme>()
+        .set_options(
+            PinOptions::new()
+                .set_valid_values(vec![
+                    "BIO".to_string(),
+                    "BIOES".to_string(),
+                    "IOB".to_string(),
+                    "BILOU".to_string(),
+                ])
+                .build(),
+        )
+        .set_default_value(Some(json!(TaggingScheme::BIO)));
 
-        node.add_input_pin("threshold", "Threshold", "Minimum confidence threshold for entity extraction (0.0-1.0)", VariableType::Float)
-            .set_default_value(Some(json!(0.5)))
-            .set_options(PinOptions::new().set_range((0.0, 1.0)).build());
+        node.add_input_pin(
+            "threshold",
+            "Threshold",
+            "Minimum confidence threshold for entity extraction (0.0-1.0)",
+            VariableType::Float,
+        )
+        .set_default_value(Some(json!(0.5)))
+        .set_options(PinOptions::new().set_range((0.0, 1.0)).build());
 
-        node.add_input_pin("max_length", "Max Length", "Maximum sequence length for tokenization (default: 512)", VariableType::Integer)
-            .set_default_value(Some(json!(512)));
+        node.add_input_pin(
+            "max_length",
+            "Max Length",
+            "Maximum sequence length for tokenization (default: 512)",
+            VariableType::Integer,
+        )
+        .set_default_value(Some(json!(512)));
 
         node.add_output_pin("exec_out", "Output", "Done", VariableType::Execution);
 
-        node.add_output_pin("result", "Result", "Full NER result with entities and token predictions", VariableType::Struct)
-            .set_schema::<NerResult>();
+        node.add_output_pin(
+            "result",
+            "Result",
+            "Full NER result with entities and token predictions",
+            VariableType::Struct,
+        )
+        .set_schema::<NerResult>();
 
-        node.add_output_pin("entities", "Entities", "Extracted named entities as array", VariableType::Struct)
-            .set_schema::<NamedEntity>()
-            .set_value_type(ValueType::Array);
+        node.add_output_pin(
+            "entities",
+            "Entities",
+            "Extracted named entities as array",
+            VariableType::Struct,
+        )
+        .set_schema::<NamedEntity>()
+        .set_value_type(ValueType::Array);
 
-        node.add_output_pin("entity_count", "Count", "Number of entities found", VariableType::Integer);
+        node.add_output_pin(
+            "entity_count",
+            "Count",
+            "Number of entities found",
+            VariableType::Integer,
+        );
 
         node
     }
@@ -418,7 +515,8 @@ impl NodeLogic for NerNode {
             let model_ref: NodeOnnxSession = context.evaluate_pin("model").await?;
             let tokenizer_path: FlowPath = context.evaluate_pin("tokenizer").await?;
             let text: String = context.evaluate_pin("text").await?;
-            let labels_input: Vec<String> = context.evaluate_pin("labels").await.unwrap_or_default();
+            let labels_input: Vec<String> =
+                context.evaluate_pin("labels").await.unwrap_or_default();
             let _scheme: TaggingScheme = context.evaluate_pin("scheme").await.unwrap_or_default();
             let threshold: f64 = context.evaluate_pin("threshold").await.unwrap_or(0.5);
             let max_length: i64 = context.evaluate_pin("max_length").await.unwrap_or(512);
@@ -436,7 +534,11 @@ impl NodeLogic for NerNode {
                 .map_err(|e| anyhow!("Tokenization failed: {}", e))?;
 
             let input_ids: Vec<i64> = encoding.get_ids().iter().map(|&id| id as i64).collect();
-            let attention_mask: Vec<i64> = encoding.get_attention_mask().iter().map(|&m| m as i64).collect();
+            let attention_mask: Vec<i64> = encoding
+                .get_attention_mask()
+                .iter()
+                .map(|&m| m as i64)
+                .collect();
             let tokens: Vec<String> = encoding.get_tokens().to_vec();
             let offsets: Vec<(usize, usize)> = encoding.get_offsets().to_vec();
             let special_tokens_mask: Vec<u32> = encoding.get_special_tokens_mask().to_vec();
@@ -465,7 +567,8 @@ impl NodeLogic for NerNode {
             // Run inference
             let outputs = if has_token_type_ids {
                 let token_type_ids: Vec<i64> = vec![0i64; seq_len];
-                let token_type_ids_arr = Array2::from_shape_vec((batch_size, seq_len), token_type_ids)?;
+                let token_type_ids_arr =
+                    Array2::from_shape_vec((batch_size, seq_len), token_type_ids)?;
                 let token_type_ids_value = Value::from_array(token_type_ids_arr)?;
                 session.run(inputs![
                     "input_ids" => input_ids_value,
@@ -480,7 +583,8 @@ impl NodeLogic for NerNode {
             };
 
             // Get logits - try common output names
-            let logits_key = outputs.keys()
+            let logits_key = outputs
+                .keys()
                 .find(|k| k.contains("logits") || k.contains("output"))
                 .or_else(|| outputs.keys().next())
                 .ok_or_else(|| anyhow!("No output from NER model"))?;
@@ -493,10 +597,14 @@ impl NodeLogic for NerNode {
                 // CoNLL-2003 default labels (common for BERT-base-NER)
                 vec![
                     "O".to_string(),
-                    "B-MISC".to_string(), "I-MISC".to_string(),
-                    "B-PER".to_string(), "I-PER".to_string(),
-                    "B-ORG".to_string(), "I-ORG".to_string(),
-                    "B-LOC".to_string(), "I-LOC".to_string(),
+                    "B-MISC".to_string(),
+                    "I-MISC".to_string(),
+                    "B-PER".to_string(),
+                    "I-PER".to_string(),
+                    "B-ORG".to_string(),
+                    "I-ORG".to_string(),
+                    "B-LOC".to_string(),
+                    "I-LOC".to_string(),
                 ]
             };
 
@@ -573,7 +681,9 @@ impl NodeLogic for NerNode {
 
             context.set_pin_value("result", json!(result)).await?;
             context.set_pin_value("entities", json!(entities)).await?;
-            context.set_pin_value("entity_count", json!(entity_count)).await?;
+            context
+                .set_pin_value("entity_count", json!(entity_count))
+                .await?;
             context.activate_exec_pin("exec_out").await?;
         }
 
@@ -633,7 +743,13 @@ mod tests {
         let confidences = vec![0.95, 0.92, 0.1, 0.1, 0.88];
         let offsets = vec![(0, 4), (5, 10), (11, 16), (17, 19), (20, 26)];
 
-        let entities = merge_entities(&tokens, &labels, &confidences, Some(&offsets), "John Smith works at Google");
+        let entities = merge_entities(
+            &tokens,
+            &labels,
+            &confidences,
+            Some(&offsets),
+            "John Smith works at Google",
+        );
 
         assert_eq!(entities.len(), 2);
         assert_eq!(entities[0].text, "John Smith");
@@ -660,8 +776,14 @@ mod tests {
 
     #[test]
     fn test_entity_type_extraction() {
-        assert_eq!(EntityLabel::Begin("PER".to_string()).entity_type(), Some("PER"));
-        assert_eq!(EntityLabel::Inside("ORG".to_string()).entity_type(), Some("ORG"));
+        assert_eq!(
+            EntityLabel::Begin("PER".to_string()).entity_type(),
+            Some("PER")
+        );
+        assert_eq!(
+            EntityLabel::Inside("ORG".to_string()).entity_type(),
+            Some("ORG")
+        );
         assert_eq!(EntityLabel::O.entity_type(), None);
     }
 

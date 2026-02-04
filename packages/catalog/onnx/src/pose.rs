@@ -7,8 +7,8 @@ use flow_like::flow::{
     variable::VariableType,
 };
 use flow_like_catalog_core::{
-    Keypoint, NodeImage, PoseDetection, SkeletonConnection,
-    COCO_KEYPOINT_NAMES, COCO_SKELETON_CONNECTIONS,
+    COCO_KEYPOINT_NAMES, COCO_SKELETON_CONNECTIONS, Keypoint, NodeImage, PoseDetection,
+    SkeletonConnection,
 };
 #[cfg(feature = "execute")]
 use flow_like_model_provider::ml::{
@@ -177,7 +177,9 @@ impl PoseEstimation for YoloPoseLike {
 
         // Sort by confidence
         poses.sort_unstable_by(|a, b| {
-            b.score.partial_cmp(&a.score).unwrap_or(std::cmp::Ordering::Equal)
+            b.score
+                .partial_cmp(&a.score)
+                .unwrap_or(std::cmp::Ordering::Equal)
         });
 
         Ok(poses)
@@ -270,10 +272,12 @@ impl PoseEstimation for MoveNetLike {
                 });
             }
 
-            let avg_conf: f32 = keypoints.iter()
+            let avg_conf: f32 = keypoints
+                .iter()
                 .filter(|k| k.confidence >= conf_threshold)
                 .map(|k| k.confidence)
-                .sum::<f32>() / 17.0;
+                .sum::<f32>()
+                / 17.0;
 
             if avg_conf > 0.0 {
                 let connections: Vec<SkeletonConnection> = COCO_SKELETON_CONNECTIONS
@@ -423,20 +427,21 @@ impl NodeLogic for PoseEstimationNode {
                 let mut session_guard = session.lock().await;
 
                 // Determine input shape from session
-                let (input_width, input_height) = if let Some(input) = session_guard.session.inputs.first() {
-                    if let Some(dims) = input.input_type.tensor_shape() {
-                        let d = dims.len();
-                        if d >= 2 {
-                            (dims[d - 1] as u32, dims[d - 2] as u32)
+                let (input_width, input_height) =
+                    if let Some(input) = session_guard.session.inputs.first() {
+                        if let Some(dims) = input.input_type.tensor_shape() {
+                            let d = dims.len();
+                            if d >= 2 {
+                                (dims[d - 1] as u32, dims[d - 2] as u32)
+                            } else {
+                                (640, 640)
+                            }
                         } else {
                             (640, 640)
                         }
                     } else {
                         (640, 640)
-                    }
-                } else {
-                    (640, 640)
-                };
+                    };
 
                 // Use YoloPoseLike as default provider
                 let provider = YoloPoseLike {
@@ -534,8 +539,12 @@ impl NodeLogic for ExtractKeypointNode {
         if let Some(kp) = pose.get_keypoint(idx as u32) {
             context.set_pin_value("x", json!(kp.x)).await?;
             context.set_pin_value("y", json!(kp.y)).await?;
-            context.set_pin_value("confidence", json!(kp.confidence)).await?;
-            context.set_pin_value("name", json!(kp.name.clone().unwrap_or_default())).await?;
+            context
+                .set_pin_value("confidence", json!(kp.confidence))
+                .await?;
+            context
+                .set_pin_value("name", json!(kp.name.clone().unwrap_or_default()))
+                .await?;
             context.set_pin_value("found", json!(true)).await?;
         } else {
             context.set_pin_value("x", json!(0.0)).await?;

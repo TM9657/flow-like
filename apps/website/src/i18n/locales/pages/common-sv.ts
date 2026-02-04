@@ -72,7 +72,8 @@ export const svCommon = {
 	"pricing.badge": "Enkel, transparent prissättning",
 	"pricing.title": "Börja gratis,",
 	"pricing.titleHighlight": "skala i takt med tillväxten",
-	"pricing.description": "Ingen licensiering per användare. Inga dolda avgifter. Distribuera var som helst — moln, on-premise eller air-gapped. Äg din automatiseringsinfrastruktur.",
+	"pricing.description":
+		"Ingen licensiering per användare. Inga dolda avgifter. Distribuera var som helst — moln, on-premise eller air-gapped. Äg din automatiseringsinfrastruktur.",
 	"pricing.feature.unlimitedUsers": "Obegränsade användare",
 	"pricing.feature.selfHostable": "Självhostad",
 	"pricing.feature.noVendorLockIn": "Ingen leverantörslåsning",
@@ -93,17 +94,22 @@ export const svCommon = {
 	"pricing.tier.perYear": "/år",
 	"pricing.tier.or": "eller",
 	"pricing.tier.yearlySavings": "Spara ~17%",
-	"pricing.tier.free.description": "Perfekt för att testa Flow-Like och personliga projekt",
-	"pricing.tier.premium.description": "För individer och små team som tar automatisering på allvar",
-	"pricing.tier.pro.description": "För växande team och företag som behöver mer kraft",
-	"pricing.tier.enterprise.description": "För organisationer med avancerade säkerhets- och efterlevnadskrav",
+	"pricing.tier.free.description":
+		"Perfekt för att testa Flow-Like och personliga projekt",
+	"pricing.tier.premium.description":
+		"För individer och små team som tar automatisering på allvar",
+	"pricing.tier.pro.description":
+		"För växande team och företag som behöver mer kraft",
+	"pricing.tier.enterprise.description":
+		"För organisationer med avancerade säkerhets- och efterlevnadskrav",
 	"pricing.tier.popular": "Populärast",
 
 	// Pricing Studio Section
 	"pricing.studio.badge": "100% Gratis för alltid",
 	"pricing.studio.title": "Flow-Like Studio är",
 	"pricing.studio.titleHighlight": "helt gratis",
-	"pricing.studio.description": "Bygg, kör och automatisera workflows lokalt på din dator eller mobila enhet — inget abonnemang krävs. Premium-planer lägger till molnfunktioner, inte lokala funktioner.",
+	"pricing.studio.description":
+		"Bygg, kör och automatisera workflows lokalt på din dator eller mobila enhet — inget abonnemang krävs. Premium-planer lägger till molnfunktioner, inte lokala funktioner.",
 	"pricing.studio.desktop": "Skrivbordsapp",
 	"pricing.studio.desktopPlatforms": "Windows, macOS & Linux",
 	"pricing.studio.mobile": "Mobilapp",
@@ -115,7 +121,8 @@ export const svCommon = {
 	"pricing.studio.visualBuilder": "Visuell Arbetsflödesbyggare",
 	"pricing.studio.visualBuilderDesc": "Dra och Släpp • Ingen Kod",
 	"pricing.studio.downloadCta": "Ladda ner Gratis Studio",
-	"pricing.studio.inAppNote": "Premium-planer köps direkt i Studio-appen — ingen webbplatsbetalning behövs",
+	"pricing.studio.inAppNote":
+		"Premium-planer köps direkt i Studio-appen — ingen webbplatsbetalning behövs",
 
 	// Pricing Features
 	"pricing.feature.projects.10": "10 privata projekt",
@@ -172,26 +179,37 @@ export const svCommon = {
 	"pricing.faq.title": "Vanliga frågor",
 	"pricing.faq.subtitle": "Allt du behöver veta om vår prissättning",
 	"pricing.faq.q1": "Vad händer när jag överskrider mina plangränser?",
-	"pricing.faq.a1": "Vi meddelar dig när du närmar dig dina gränser. Du kan uppgradera när som helst och vi kommer inte plötsligt stoppa dina workflows. För molnkörningar faktureras extra användning per förbrukning.",
+	"pricing.faq.a1":
+		"Vi meddelar dig när du närmar dig dina gränser. Du kan uppgradera när som helst och vi kommer inte plötsligt stoppa dina workflows. För molnkörningar faktureras extra användning per förbrukning.",
 	"pricing.faq.q2": "Kan jag självhosta Flow-Like?",
-	"pricing.faq.a2": "Ja! Flow-Like är fullt självhostad. Du kan köra det på din egen infrastruktur, on-premise eller i air-gapped-miljöer. Skrivbordsappen fungerar helt offline.",
+	"pricing.faq.a2":
+		"Ja! Flow-Like är fullt självhostad. Du kan köra det på din egen infrastruktur, on-premise eller i air-gapped-miljöer. Skrivbordsappen fungerar helt offline.",
 	"pricing.faq.q3": "Finns det prissättning per användare?",
-	"pricing.faq.a3": "Nej. Vi tror att automatisering ska vara tillgänglig för hela din organisation. Alla planer stöder obegränsade användare. Du betalar endast baserat på användning (molnfunktioner), inte per antal anställda.",
+	"pricing.faq.a3":
+		"Nej. Vi tror att automatisering ska vara tillgänglig för hela din organisation. Alla planer stöder obegränsade användare. Du betalar endast baserat på användning (molnfunktioner), inte per antal anställda.",
 	"pricing.faq.q4": "Vad ingår i AI-modellåtkomst?",
-	"pricing.faq.a4": "AI-modellåtkomst omfattar funktioner som FlowPilot (vår AI-assistent), intelligenta workflow-förslag och automatisering på naturligt språk via våra värdmodeller.",
-	"pricing.faq.q5": "Erbjuder ni rabatter för startups eller ideella organisationer?",
-	"pricing.faq.a5": "Ja! Vi erbjuder betydande rabatter för registrerade ideella organisationer, utbildningsinstitutioner och startups i tidigt skede. Kontakta oss på hello@flow-like.com för mer information.",
+	"pricing.faq.a4":
+		"AI-modellåtkomst omfattar funktioner som FlowPilot (vår AI-assistent), intelligenta workflow-förslag och automatisering på naturligt språk via våra värdmodeller.",
+	"pricing.faq.q5":
+		"Erbjuder ni rabatter för startups eller ideella organisationer?",
+	"pricing.faq.a5":
+		"Ja! Vi erbjuder betydande rabatter för registrerade ideella organisationer, utbildningsinstitutioner och startups i tidigt skede. Kontakta oss på hello@flow-like.com för mer information.",
 	"pricing.faq.q6": "Vad är skillnaden mellan lokal och molnkörning?",
-	"pricing.faq.a6": "Lokal körning kör workflows på din maskin — helt gratis och obegränsad på alla planer. Molnkörning kör workflows på vår infrastruktur, vilket möjliggör schemalagda körningar, webhooks och dygnet-runt-tillgänglighet.",
+	"pricing.faq.a6":
+		"Lokal körning kör workflows på din maskin — helt gratis och obegränsad på alla planer. Molnkörning kör workflows på vår infrastruktur, vilket möjliggör schemalagda körningar, webhooks och dygnet-runt-tillgänglighet.",
 	"pricing.faq.q7": "Kan jag säga upp när som helst?",
-	"pricing.faq.a7": "Absolut. Inga kontrakt, inga uppsägningsavgifter. Om du säger upp behåller du åtkomst till slutet av din faktureringsperiod, sedan nedgraderas du automatiskt till Gratis.",
+	"pricing.faq.a7":
+		"Absolut. Inga kontrakt, inga uppsägningsavgifter. Om du säger upp behåller du åtkomst till slutet av din faktureringsperiod, sedan nedgraderas du automatiskt till Gratis.",
 	"pricing.faq.q8": "Hur är det med enterprise-efterlevnadskrav?",
-	"pricing.faq.a8": "Enterprise-planer inkluderar SOC 2-efterlevnadsdokumentation, GDPR-databehandlingsavtal, anpassade lagringspolicyer, granskningsloggar och SSO/SAML-integration.",
+	"pricing.faq.a8":
+		"Enterprise-planer inkluderar SOC 2-efterlevnadsdokumentation, GDPR-databehandlingsavtal, anpassade lagringspolicyer, granskningsloggar och SSO/SAML-integration.",
 
 	// Pricing CTA Section
 	"pricing.ctaSection.title": "Behöver du en anpassad lösning?",
-	"pricing.ctaSection.description": "Få en helt skräddarsydd automatiseringslösning för ditt företag på bara 24 timmar. Vi designar, bygger och distribuerar ett produktionsfärdigt workflow anpassat till dina exakta behov.",
+	"pricing.ctaSection.description":
+		"Få en helt skräddarsydd automatiseringslösning för ditt företag på bara 24 timmar. Vi designar, bygger och distribuerar ett produktionsfärdigt workflow anpassat till dina exakta behov.",
 	"pricing.ctaSection.24h": "24-timmarslösning",
 	"pricing.ctaSection.enterprise": "Kontakta enterprise-försäljning",
-	"pricing.ctaSection.startingAt": "Från €1 999 · Fullständigt ägande av källkod · Distribuera var som helst",
+	"pricing.ctaSection.startingAt":
+		"Från €1 999 · Fullständigt ägande av källkod · Distribuera var som helst",
 };

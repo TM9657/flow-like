@@ -11,11 +11,7 @@ use flow_like_catalog_core::NodeImage;
 #[cfg(feature = "execute")]
 use flow_like_model_provider::ml::{
     ndarray::{Array3, Axis},
-    ort::{
-        inputs,
-        session::Session,
-        value::Value,
-    },
+    ort::{inputs, session::Session, value::Value},
 };
 #[cfg(feature = "execute")]
 use flow_like_types::{
@@ -48,7 +44,12 @@ impl FeatureVector {
             return 0.0;
         }
 
-        let dot: f32 = self.values.iter().zip(&other.values).map(|(a, b)| a * b).sum();
+        let dot: f32 = self
+            .values
+            .iter()
+            .zip(&other.values)
+            .map(|(a, b)| a * b)
+            .sum();
         let norm_a: f32 = self.values.iter().map(|x| x * x).sum::<f32>().sqrt();
         let norm_b: f32 = other.values.iter().map(|x| x * x).sum::<f32>().sqrt();
 
@@ -207,25 +208,32 @@ impl NodeLogic for FeatureExtractionNode {
                 let mut session_guard = session.lock().await;
 
                 // Determine input shape from session
-                let (input_width, input_height) = if let Some(input) = session_guard.session.inputs.first() {
-                    if let Some(dims) = input.input_type.tensor_shape() {
-                        let d = dims.len();
-                        if d >= 2 {
-                            (dims[d - 1] as u32, dims[d - 2] as u32)
+                let (input_width, input_height) =
+                    if let Some(input) = session_guard.session.inputs.first() {
+                        if let Some(dims) = input.input_type.tensor_shape() {
+                            let d = dims.len();
+                            if d >= 2 {
+                                (dims[d - 1] as u32, dims[d - 2] as u32)
+                            } else {
+                                (224, 224)
+                            }
                         } else {
                             (224, 224)
                         }
                     } else {
                         (224, 224)
-                    }
-                } else {
-                    (224, 224)
-                };
+                    };
 
-                let input_name = session_guard.session.inputs.first()
+                let input_name = session_guard
+                    .session
+                    .inputs
+                    .first()
                     .map(|i| i.name.clone())
                     .unwrap_or_else(|| "input".to_string());
-                let output_name = session_guard.session.outputs.first()
+                let output_name = session_guard
+                    .session
+                    .outputs
+                    .first()
                     .map(|o| o.name.clone())
                     .unwrap_or_else(|| "output".to_string());
 
@@ -245,7 +253,9 @@ impl NodeLogic for FeatureExtractionNode {
 
             let dimensions = features.dimensions;
             context.set_pin_value("features", json!(features)).await?;
-            context.set_pin_value("dimensions", json!(dimensions)).await?;
+            context
+                .set_pin_value("dimensions", json!(dimensions))
+                .await?;
             context.activate_exec_pin("exec_out").await?;
             Ok(())
         }
@@ -323,7 +333,9 @@ impl NodeLogic for FeatureSimilarityNode {
         let cosine = features_a.cosine_similarity(&features_b);
         let l2 = features_a.l2_distance(&features_b);
 
-        context.set_pin_value("cosine_similarity", json!(cosine)).await?;
+        context
+            .set_pin_value("cosine_similarity", json!(cosine))
+            .await?;
         context.set_pin_value("l2_distance", json!(l2)).await?;
         Ok(())
     }

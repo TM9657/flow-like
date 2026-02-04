@@ -28,7 +28,12 @@ import {
 	Textarea,
 } from "../../ui";
 import { FilePreview, type ProcessedAttachment } from "./attachment";
-import { FileDialog, FileDialogPreview, canPreviewFile, downloadFile } from "./attachment-dialog";
+import {
+	FileDialog,
+	FileDialogPreview,
+	canPreviewFile,
+	downloadFile,
+} from "./attachment-dialog";
 import type { IAttachment, IMessage } from "./chat-db";
 import { useProcessedAttachments } from "./hooks/use-processed-attachments";
 import { PlanSteps } from "./plan-steps";
@@ -346,21 +351,22 @@ const AttachmentSection = ({
 	onFileClick: (file: ProcessedAttachment) => void;
 	onFullscreen?: (file: ProcessedAttachment) => void;
 }) => {
-	const { visibleAudio, visibleImages, visibleVideo, visibleDocuments } = useMemo(() => {
-		const audioFiles = files.filter((file) => file.type === "audio");
-		const imageFiles = files.filter((file) => file.type === "image");
-		const videoFiles = files.filter((file) => file.type === "video");
-		const documentFiles = files.filter(
-			(file) => !["audio", "image", "video"].includes(file.type)
-		);
+	const { visibleAudio, visibleImages, visibleVideo, visibleDocuments } =
+		useMemo(() => {
+			const audioFiles = files.filter((file) => file.type === "audio");
+			const imageFiles = files.filter((file) => file.type === "image");
+			const videoFiles = files.filter((file) => file.type === "video");
+			const documentFiles = files.filter(
+				(file) => !["audio", "image", "video"].includes(file.type),
+			);
 
-		return {
-			visibleAudio: audioFiles.slice(0, 1),
-			visibleImages: imageFiles.slice(0, 4),
-			visibleVideo: videoFiles.slice(0, 1),
-			visibleDocuments: documentFiles.slice(0, 3),
-		};
-	}, [files]);
+			return {
+				visibleAudio: audioFiles.slice(0, 1),
+				visibleImages: imageFiles.slice(0, 4),
+				visibleVideo: videoFiles.slice(0, 1),
+				visibleDocuments: documentFiles.slice(0, 3),
+			};
+		}, [files]);
 
 	const getImageGridClassName = useCallback((count: number) => {
 		if (count === 1) return "grid-cols-1";

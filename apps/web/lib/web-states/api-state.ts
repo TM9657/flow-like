@@ -1,6 +1,6 @@
 import type { IApiState } from "@tm9657/flow-like-ui";
 import type { IProfile } from "@tm9657/flow-like-ui/types";
-import { getApiBaseUrl, type WebBackendRef } from "./api-utils";
+import { type WebBackendRef, getApiBaseUrl } from "./api-utils";
 
 export class WebApiState implements IApiState {
 	constructor(private readonly backend: WebBackendRef) {}
@@ -22,12 +22,17 @@ export class WebApiState implements IApiState {
 			"Content-Type": "application/json",
 		};
 		if (this.backend.auth?.user?.access_token) {
-			headers["Authorization"] = `Bearer ${this.backend.auth.user.access_token}`;
+			headers["Authorization"] =
+				`Bearer ${this.backend.auth.user.access_token}`;
 		}
 		return headers;
 	}
 
-	async fetch<T>(profile: IProfile, path: string, options?: RequestInit): Promise<T> {
+	async fetch<T>(
+		profile: IProfile,
+		path: string,
+		options?: RequestInit,
+	): Promise<T> {
 		const url = this.constructUrl(profile, path);
 		const response = await fetch(url, {
 			...options,

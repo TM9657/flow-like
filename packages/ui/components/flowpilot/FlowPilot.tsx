@@ -3,7 +3,6 @@
 import { AnimatePresence, motion } from "framer-motion";
 import {
 	ArrowDown,
-	BotIcon,
 	CameraIcon,
 	CheckCircle2,
 	ChevronDownIcon,
@@ -18,19 +17,18 @@ import {
 } from "lucide-react";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 
-import { useInvoke, useCopilotSDK } from "../../hooks";
+import { useCopilotSDK, useInvoke } from "../../hooks";
 import { IBitTypes } from "../../lib";
-import { isTauri } from "../../lib/platform";
-import { cn } from "../../lib/utils";
-import { useBackend } from "../../state/backend-state";
 import {
 	type IFlowPilotConversation,
-	createConversation,
 	addMessage,
-	updateMessage,
+	createConversation,
 	getMessages,
 	updateConversation,
+	updateMessage,
 } from "../../lib/flowpilot-db";
+import { cn } from "../../lib/utils";
+import { useBackend } from "../../state/backend-state";
 
 import { Button } from "../ui/button";
 import {
@@ -40,13 +38,6 @@ import {
 	DropdownMenuTrigger,
 } from "../ui/dropdown-menu";
 import { ScrollArea } from "../ui/scroll-area";
-import {
-	Select,
-	SelectContent,
-	SelectItem,
-	SelectTrigger,
-	SelectValue,
-} from "../ui/select";
 import { Tooltip, TooltipContent, TooltipTrigger } from "../ui/tooltip";
 
 import { ContextNodes } from "./ContextNodes";
@@ -55,11 +46,11 @@ import { MessageContent } from "./MessageContent";
 import { PendingCommandsView } from "./PendingCommandsView";
 import { PendingComponentsView } from "./PendingComponentsView";
 import { PlanStepsView } from "./PlanStepsView";
-import { ProviderSelector, ModelSelector } from "./ProviderSelector";
+import { ModelSelector, ProviderSelector } from "./ProviderSelector";
 import { StatusPill } from "./StatusPill";
 import type {
-	AgentMode,
 	AIProvider,
+	AgentMode,
 	AttachedImage,
 	CopilotMessage,
 	FlowPilotProps,
@@ -531,7 +522,8 @@ export function FlowPilot({
 						role: "user",
 						content: currentInput,
 						images: currentImages.length > 0 ? currentImages : undefined,
-						contextNodeIds: currentContextNodes.length > 0 ? currentContextNodes : undefined,
+						contextNodeIds:
+							currentContextNodes.length > 0 ? currentContextNodes : undefined,
 					});
 					// Update conversation title if this is the first message
 					if (messages.length === 0) {
@@ -599,8 +591,8 @@ export function FlowPilot({
 					tagBuffer = "";
 
 					// Check if we have an incomplete XML tag at the end
-					const lastOpenTag = token.lastIndexOf('<');
-					if (lastOpenTag !== -1 && !token.slice(lastOpenTag).includes('>')) {
+					const lastOpenTag = token.lastIndexOf("<");
+					if (lastOpenTag !== -1 && !token.slice(lastOpenTag).includes(">")) {
 						// Incomplete tag - buffer it for next token
 						tagBuffer = token.slice(lastOpenTag);
 						token = token.slice(0, lastOpenTag);
@@ -624,11 +616,20 @@ export function FlowPilot({
 							const eventData = JSON.parse(toolStartMatch[1]);
 							setCurrentToolCall(eventData.tool);
 							// Update loading phase based on tool name
-							if (eventData.tool?.includes("search") || eventData.tool?.includes("catalog")) {
+							if (
+								eventData.tool?.includes("search") ||
+								eventData.tool?.includes("catalog")
+							) {
 								setLoadingPhase("searching");
-							} else if (eventData.tool === "get_node_details" || eventData.tool === "list_board_nodes") {
+							} else if (
+								eventData.tool === "get_node_details" ||
+								eventData.tool === "list_board_nodes"
+							) {
 								setLoadingPhase("reasoning");
-							} else if (eventData.tool === "emit_commands" || eventData.tool === "emit_ui") {
+							} else if (
+								eventData.tool === "emit_commands" ||
+								eventData.tool === "emit_ui"
+							) {
 								setLoadingPhase("generating");
 							} else if (eventData.tool === "get_unconfigured_nodes") {
 								setLoadingPhase("searching");
@@ -640,9 +641,7 @@ export function FlowPilot({
 					}
 
 					// Parse tool end events (Copilot SDK)
-					const toolEndMatch = token.match(
-						/<tool_end>([\s\S]*?)<\/tool_end>/,
-					);
+					const toolEndMatch = token.match(/<tool_end>([\s\S]*?)<\/tool_end>/);
 					if (toolEndMatch) {
 						try {
 							const eventData = JSON.parse(toolEndMatch[1]);
@@ -740,7 +739,10 @@ export function FlowPilot({
 							// Invalid JSON in commands
 						}
 						// Remove the commands tag from the token but keep any surrounding text
-						const cleanedToken = token.replace(/<commands>[\s\S]*?<\/commands>/g, '');
+						const cleanedToken = token.replace(
+							/<commands>[\s\S]*?<\/commands>/g,
+							"",
+						);
 						if (!cleanedToken.trim()) return;
 						// Continue with the cleaned token
 						currentMessageContent += cleanedToken;
@@ -749,7 +751,9 @@ export function FlowPilot({
 					}
 
 					// Parse component blocks from Copilot SDK emit_ui tool
-					const componentsMatch = token.match(/<components>([\s\S]*?)<\/components>/);
+					const componentsMatch = token.match(
+						/<components>([\s\S]*?)<\/components>/,
+					);
 					if (componentsMatch) {
 						try {
 							const components = JSON.parse(componentsMatch[1]);
@@ -760,7 +764,10 @@ export function FlowPilot({
 							// Invalid JSON in components
 						}
 						// Remove the components tag from the token but keep any surrounding text
-						const cleanedToken = token.replace(/<components>[\s\S]*?<\/components>/g, '');
+						const cleanedToken = token.replace(
+							/<components>[\s\S]*?<\/components>/g,
+							"",
+						);
 						if (!cleanedToken.trim()) return;
 						currentMessageContent += cleanedToken;
 						flushMessageContent();
@@ -768,7 +775,9 @@ export function FlowPilot({
 					}
 
 					// Parse canvas_settings blocks from Copilot SDK emit_ui tool
-					const canvasSettingsMatch = token.match(/<canvas_settings>([\s\S]*?)<\/canvas_settings>/);
+					const canvasSettingsMatch = token.match(
+						/<canvas_settings>([\s\S]*?)<\/canvas_settings>/,
+					);
 					if (canvasSettingsMatch) {
 						try {
 							const settings = JSON.parse(canvasSettingsMatch[1]);
@@ -777,7 +786,10 @@ export function FlowPilot({
 							// Invalid JSON in canvas settings
 						}
 						// Remove the tag and continue
-						const cleanedToken = token.replace(/<canvas_settings>[\s\S]*?<\/canvas_settings>/g, '');
+						const cleanedToken = token.replace(
+							/<canvas_settings>[\s\S]*?<\/canvas_settings>/g,
+							"",
+						);
 						if (!cleanedToken.trim()) return;
 						currentMessageContent += cleanedToken;
 						flushMessageContent();
@@ -1445,8 +1457,7 @@ const Header = memo(function Header({
 	selectedModelId,
 	setSelectedModelId,
 }: HeaderProps) {
-	const currentModels =
-		provider === "copilot" ? copilotSDK.models : bitsModels;
+	const currentModels = provider === "copilot" ? copilotSDK.models : bitsModels;
 
 	return (
 		<div className="relative overflow-hidden shrink-0">

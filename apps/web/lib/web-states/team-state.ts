@@ -1,11 +1,26 @@
 import type { ITeamState } from "@tm9657/flow-like-ui";
-import type { IInvite, IInviteLink, IJoinRequest, IMember } from "@tm9657/flow-like-ui/state/backend-state/types";
-import { apiDelete, apiGet, apiPost, apiPut, type WebBackendRef } from "./api-utils";
+import type {
+	IInvite,
+	IInviteLink,
+	IJoinRequest,
+	IMember,
+} from "@tm9657/flow-like-ui/state/backend-state/types";
+import {
+	type WebBackendRef,
+	apiDelete,
+	apiGet,
+	apiPost,
+	apiPut,
+} from "./api-utils";
 
 export class WebTeamState implements ITeamState {
 	constructor(private readonly backend: WebBackendRef) {}
 
-	async createInviteLink(appId: string, name: string, maxUses: number): Promise<void> {
+	async createInviteLink(
+		appId: string,
+		name: string,
+		maxUses: number,
+	): Promise<void> {
 		await apiPut(
 			`apps/${appId}/team/link`,
 			{ name, max_uses: maxUses },
@@ -25,10 +40,7 @@ export class WebTeamState implements ITeamState {
 	}
 
 	async removeInviteLink(appId: string, linkId: string): Promise<void> {
-		await apiDelete(
-			`apps/${appId}/team/link/${linkId}`,
-			this.backend.auth,
-		);
+		await apiDelete(`apps/${appId}/team/link/${linkId}`, this.backend.auth);
 	}
 
 	async joinInviteLink(appId: string, token: string): Promise<void> {
@@ -40,11 +52,7 @@ export class WebTeamState implements ITeamState {
 	}
 
 	async requestJoin(appId: string, comment: string): Promise<void> {
-		await apiPut(
-			`apps/${appId}/team/queue`,
-			{ comment },
-			this.backend.auth,
-		);
+		await apiPut(`apps/${appId}/team/queue`, { comment }, this.backend.auth);
 	}
 
 	async getJoinRequests(
@@ -75,13 +83,14 @@ export class WebTeamState implements ITeamState {
 	}
 
 	async rejectJoinRequest(appId: string, requestId: string): Promise<void> {
-		await apiDelete(
-			`apps/${appId}/team/queue/${requestId}`,
-			this.backend.auth,
-		);
+		await apiDelete(`apps/${appId}/team/queue/${requestId}`, this.backend.auth);
 	}
 
-	async getTeam(appId: string, offset?: number, limit?: number): Promise<IMember[]> {
+	async getTeam(
+		appId: string,
+		offset?: number,
+		limit?: number,
+	): Promise<IMember[]> {
 		const params = new URLSearchParams();
 		if (offset !== undefined) params.set("offset", offset.toString());
 		if (limit !== undefined) params.set("limit", limit.toString());
@@ -127,7 +136,11 @@ export class WebTeamState implements ITeamState {
 		);
 	}
 
-	async inviteUser(appId: string, user_id: string, message: string): Promise<void> {
+	async inviteUser(
+		appId: string,
+		user_id: string,
+		message: string,
+	): Promise<void> {
 		await apiPut(
 			`apps/${appId}/team/invite`,
 			{ user_id, message },
@@ -136,9 +149,6 @@ export class WebTeamState implements ITeamState {
 	}
 
 	async removeUser(appId: string, user_id: string): Promise<void> {
-		await apiDelete(
-			`apps/${appId}/team/${user_id}`,
-			this.backend.auth,
-		);
+		await apiDelete(`apps/${appId}/team/${user_id}`, this.backend.auth);
 	}
 }

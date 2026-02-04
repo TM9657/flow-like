@@ -25,12 +25,13 @@ pub async fn get_app_routes(
     let mut routes = Vec::new();
     for event_id in &app.events {
         if let Ok(event) = app.get_event(event_id, None).await
-            && let Some(route) = &event.route {
-                routes.push(RouteMapping {
-                    path: route.clone(),
-                    event_id: event.id.clone(),
-                });
-            }
+            && let Some(route) = &event.route
+        {
+            routes.push(RouteMapping {
+                path: route.clone(),
+                event_id: event.id.clone(),
+            });
+        }
     }
 
     // Sort by path for consistency
@@ -52,12 +53,13 @@ pub async fn get_app_route_by_path(
 
     for event_id in &app.events {
         if let Ok(event) = app.get_event(event_id, None).await
-            && event.route.as_deref() == Some(&path) {
-                return Ok(Some(RouteMapping {
-                    path,
-                    event_id: event.id,
-                }));
-            }
+            && event.route.as_deref() == Some(&path)
+        {
+            return Ok(Some(RouteMapping {
+                path,
+                event_id: event.id,
+            }));
+        }
     }
 
     Ok(None)
@@ -78,12 +80,13 @@ pub async fn get_default_app_route(
     for event_id in &app.events {
         if let Ok(event) = app.get_event(event_id, None).await
             && event.is_default
-                && let Some(route) = &event.route {
-                    return Ok(Some(RouteMapping {
-                        path: route.clone(),
-                        event_id: event.id,
-                    }));
-                }
+            && let Some(route) = &event.route
+        {
+            return Ok(Some(RouteMapping {
+                path: route.clone(),
+                event_id: event.id,
+            }));
+        }
     }
 
     // Fall back to route="/"
@@ -107,12 +110,13 @@ pub async fn set_app_route(
     for eid in &app.events {
         if eid != &event_id
             && let Ok(e) = app.get_event(eid, None).await
-                && e.route.as_deref() == Some(&path) {
-                    return Err(TauriFunctionError::new(&format!(
-                        "Route path already in use by event {}: {}",
-                        eid, path
-                    )));
-                }
+            && e.route.as_deref() == Some(&path)
+        {
+            return Err(TauriFunctionError::new(&format!(
+                "Route path already in use by event {}: {}",
+                eid, path
+            )));
+        }
     }
 
     // Update the event's route
@@ -144,13 +148,14 @@ pub async fn delete_app_route_by_path(
     // Find and clear the route from the event
     for event_id in app.events.clone() {
         if let Ok(mut event) = app.get_event(&event_id, None).await
-            && event.route.as_deref() == Some(&path) {
-                event.route = None;
-                app.upsert_event(event, None, None).await.map_err(|e| {
-                    TauriFunctionError::new(&format!("Failed to save event: {}", e))
-                })?;
-                return Ok(());
-            }
+            && event.route.as_deref() == Some(&path)
+        {
+            event.route = None;
+            app.upsert_event(event, None, None)
+                .await
+                .map_err(|e| TauriFunctionError::new(&format!("Failed to save event: {}", e)))?;
+            return Ok(());
+        }
     }
 
     Err(TauriFunctionError::new("Route not found"))
@@ -198,10 +203,11 @@ pub async fn set_app_routes(
     // First clear all existing routes
     for event_id in app.events.clone() {
         if let Ok(mut event) = app.get_event(&event_id, None).await
-            && event.route.is_some() {
-                event.route = None;
-                app.upsert_event(event, None, None).await.ok();
-            }
+            && event.route.is_some()
+        {
+            event.route = None;
+            app.upsert_event(event, None, None).await.ok();
+        }
     }
 
     // Set new routes

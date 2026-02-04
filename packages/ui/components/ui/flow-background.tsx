@@ -64,7 +64,10 @@ function FlowCanvas({
 			if (width <= 0 || height <= 0) return;
 
 			const baseCount = Math.min(Math.floor((width * height) / 35000), 15);
-			const nodeCount = Math.max(5, Math.floor(baseCount * nodeCountMultiplier));
+			const nodeCount = Math.max(
+				5,
+				Math.floor(baseCount * nodeCountMultiplier),
+			);
 			const nodes: Node[] = [];
 
 			for (let i = 0; i < nodeCount; i++) {
@@ -381,7 +384,13 @@ interface FloatingOrbsProps {
 export function FloatingOrbs({
 	className,
 	count = 5,
-	colors = ["bg-blue-500/20", "bg-purple-500/20", "bg-pink-500/20", "bg-green-500/20", "bg-orange-500/20"],
+	colors = [
+		"bg-blue-500/20",
+		"bg-purple-500/20",
+		"bg-pink-500/20",
+		"bg-green-500/20",
+		"bg-orange-500/20",
+	],
 }: FloatingOrbsProps) {
 	const orbs = Array.from({ length: count }, (_, i) => {
 		const size = 40 + seededRandom(i * 7) * 60;
@@ -402,14 +411,17 @@ export function FloatingOrbs({
 	});
 
 	return (
-		<div className={cn("absolute inset-0 overflow-hidden pointer-events-none", className)} aria-hidden="true">
+		<div
+			className={cn(
+				"absolute inset-0 overflow-hidden pointer-events-none",
+				className,
+			)}
+			aria-hidden="true"
+		>
 			{orbs.map((orb) => (
 				<div
 					key={orb.id}
-					className={cn(
-						"absolute rounded-full blur-2xl",
-						orb.color,
-					)}
+					className={cn("absolute rounded-full blur-2xl", orb.color)}
 					style={{
 						width: orb.size,
 						height: orb.size,

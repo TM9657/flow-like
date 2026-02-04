@@ -67,11 +67,15 @@ pub async fn download_files(
                 path
             } else {
                 // Malformed full path, construct safe default
-                flow_like_storage::Path::from("apps").child(app_id.as_str()).child("upload")
+                flow_like_storage::Path::from("apps")
+                    .child(app_id.as_str())
+                    .child("upload")
             }
         } else {
             // Relative path: construct full path with app_id/upload prefix
-            let mut path = flow_like_storage::Path::from("apps").child(app_id.as_str()).child("upload");
+            let mut path = flow_like_storage::Path::from("apps")
+                .child(app_id.as_str())
+                .child("upload");
             for segment in prefix.split('/') {
                 if !segment.is_empty() {
                     path = path.child(segment);

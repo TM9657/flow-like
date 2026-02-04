@@ -3,7 +3,14 @@
 import * as React from "react";
 
 import { formatCodeBlock, isLangSupported } from "@platejs/code-block";
-import { BracesIcon, Check, CheckIcon, CodeIcon, CopyIcon, LineChartIcon } from "lucide-react";
+import {
+	BracesIcon,
+	Check,
+	CheckIcon,
+	CodeIcon,
+	CopyIcon,
+	LineChartIcon,
+} from "lucide-react";
 import { NodeApi, type TCodeBlockElement, type TCodeSyntaxLeaf } from "platejs";
 import {
 	PlateElement,

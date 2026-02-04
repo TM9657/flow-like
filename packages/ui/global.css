@@ -448,7 +448,8 @@
 	}
 
 	@keyframes float-orb {
-		0%, 100% {
+		0%,
+		100% {
 			transform: translate(-50%, -50%) translateY(0) translateX(0);
 		}
 		25% {

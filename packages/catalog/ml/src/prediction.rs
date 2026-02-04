@@ -126,7 +126,11 @@ impl NodeLogic for MLPredictNode {
                 let records_col: String = context.evaluate_pin("records").await?;
                 let predictions_col: String = context.evaluate_pin("predictions_col").await?;
                 let batch_size: i64 = context.evaluate_pin("batch_size").await.unwrap_or(5000);
-                let batch_size = if batch_size <= 0 { usize::MAX } else { batch_size as usize };
+                let batch_size = if batch_size <= 0 {
+                    usize::MAX
+                } else {
+                    batch_size as usize
+                };
 
                 // fetch database
                 let database = node_database.load(context).await?.db.clone();
@@ -171,25 +175,41 @@ impl NodeLogic for MLPredictNode {
                         break; // no more records
                     }
                     context.log_message(
-                        &format!("Batch {}: fetched {} records (offset {})", offset / batch_size.min(batch_count), batch_count, offset),
+                        &format!(
+                            "Batch {}: fetched {} records (offset {})",
+                            offset / batch_size.min(batch_count),
+                            batch_count,
+                            offset
+                        ),
                         LogLevel::Debug,
                     );
-                    context.log_message(&format!("Fetch records (db): {:?}", t0.elapsed()), LogLevel::Debug);
+                    context.log_message(
+                        &format!("Fetch records (db): {:?}", t0.elapsed()),
+                        LogLevel::Debug,
+                    );
 
                     // predict on batch
                     let t0 = std::time::Instant::now();
                     {
                         let model_guard = model.lock().await;
-                        model_guard.predict_on_values(&mut records, &records_col, &predictions_col)?;
+                        model_guard.predict_on_values(
+                            &mut records,
+                            &records_col,
+                            &predictions_col,
+                        )?;
                     }
-                    context.log_message(&format!("Predict batch: {:?}", t0.elapsed()), LogLevel::Debug);
+                    context.log_message(
+                        &format!("Predict batch: {:?}", t0.elapsed()),
+                        LogLevel::Debug,
+                    );
 
                     // upsert batch
                     let t0 = std::time::Instant::now();
                     {
                         let mut database = database.write().await;
                         if !column_added {
-                            let probe = records.first().ok_or_else(|| anyhow!("Got No Records!"))?;
+                            let probe =
+                                records.first().ok_or_else(|| anyhow!("Got No Records!"))?;
                             let new_field = make_new_field(probe, &predictions_col)?;
                             let schema = Schema::new(vec![new_field]);
                             database
@@ -203,7 +223,10 @@ impl NodeLogic for MLPredictNode {
                         }
                         database.upsert(records, records_col.clone()).await?;
                     }
-                    context.log_message(&format!("Upsert batch: {:?}", t0.elapsed()), LogLevel::Debug);
+                    context.log_message(
+                        &format!("Upsert batch: {:?}", t0.elapsed()),
+                        LogLevel::Debug,
+                    );
 
                     total_processed += batch_count;
                     offset += batch_count;

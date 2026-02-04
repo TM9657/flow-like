@@ -1,9 +1,4 @@
-use crate::{
-    entity::app,
-    error::ApiError,
-    middleware::jwt::AppUser,
-    state::AppState,
-};
+use crate::{entity::app, error::ApiError, middleware::jwt::AppUser, state::AppState};
 use axum::{
     Extension, Json,
     extract::{Path, State},
@@ -40,7 +35,9 @@ pub async fn update_price(
     verify_sales_access(&state, &sub, &app_id).await?;
 
     if body.price < 0 {
-        return Err(ApiError::bad_request("Price cannot be negative".to_string()));
+        return Err(ApiError::bad_request(
+            "Price cannot be negative".to_string(),
+        ));
     }
 
     let existing = app::Entity::find_by_id(&app_id)

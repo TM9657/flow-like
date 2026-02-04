@@ -1,6 +1,6 @@
 "use client";
 
-import { Check, Copy, ExternalLink, Link2, Monitor, Share2 } from "lucide-react";
+import { Check, Copy, Link2, Monitor, Share2 } from "lucide-react";
 import { useCallback, useState } from "react";
 import { toast } from "sonner";
 import { cn } from "../../lib/utils";
@@ -57,19 +57,16 @@ export function ShareButton({
 }: ShareButtonProps) {
 	const [copied, setCopied] = useState<string | null>(null);
 
-	const copyToClipboard = useCallback(
-		async (text: string, type: string) => {
-			try {
-				await navigator.clipboard.writeText(text);
-				setCopied(type);
-				toast.success("Link copied to clipboard!");
-				setTimeout(() => setCopied(null), 2000);
-			} catch {
-				toast.error("Failed to copy link");
-			}
-		},
-		[],
-	);
+	const copyToClipboard = useCallback(async (text: string, type: string) => {
+		try {
+			await navigator.clipboard.writeText(text);
+			setCopied(type);
+			toast.success("Link copied to clipboard!");
+			setTimeout(() => setCopied(null), 2000);
+		} catch {
+			toast.error("Failed to copy link");
+		}
+	}, []);
 
 	const handleShare = useCallback(async () => {
 		const webUrl = generateWebUrl(webBaseUrl, appId);

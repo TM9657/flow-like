@@ -72,7 +72,8 @@ export const frCommon = {
 	"pricing.badge": "Tarification simple et transparente",
 	"pricing.title": "Commencez gratuitement,",
 	"pricing.titleHighlight": "évoluez selon vos besoins",
-	"pricing.description": "Pas de licence par utilisateur. Pas de frais cachés. Déployez n'importe où — cloud, sur site ou air-gapped. Possédez votre infrastructure d'automatisation.",
+	"pricing.description":
+		"Pas de licence par utilisateur. Pas de frais cachés. Déployez n'importe où — cloud, sur site ou air-gapped. Possédez votre infrastructure d'automatisation.",
 	"pricing.feature.unlimitedUsers": "Utilisateurs illimités",
 	"pricing.feature.selfHostable": "Auto-hébergeable",
 	"pricing.feature.noVendorLockIn": "Pas de dépendance fournisseur",
@@ -93,17 +94,22 @@ export const frCommon = {
 	"pricing.tier.perYear": "/an",
 	"pricing.tier.or": "ou",
 	"pricing.tier.yearlySavings": "Économisez ~17%",
-	"pricing.tier.free.description": "Parfait pour essayer Flow-Like et les projets personnels",
-	"pricing.tier.premium.description": "Pour les individus et petites équipes sérieux sur l'automatisation",
-	"pricing.tier.pro.description": "Pour les équipes en croissance et entreprises qui ont besoin de plus de puissance",
-	"pricing.tier.enterprise.description": "Pour les organisations avec des besoins avancés de sécurité et conformité",
+	"pricing.tier.free.description":
+		"Parfait pour essayer Flow-Like et les projets personnels",
+	"pricing.tier.premium.description":
+		"Pour les individus et petites équipes sérieux sur l'automatisation",
+	"pricing.tier.pro.description":
+		"Pour les équipes en croissance et entreprises qui ont besoin de plus de puissance",
+	"pricing.tier.enterprise.description":
+		"Pour les organisations avec des besoins avancés de sécurité et conformité",
 	"pricing.tier.popular": "Le plus populaire",
 
 	// Pricing Studio Section
 	"pricing.studio.badge": "100% Gratuit pour toujours",
 	"pricing.studio.title": "Flow-Like Studio est",
 	"pricing.studio.titleHighlight": "entièrement gratuit",
-	"pricing.studio.description": "Créez, exécutez et automatisez des workflows localement sur votre ordinateur ou appareil mobile — aucun abonnement requis. Les forfaits premium ajoutent des fonctionnalités cloud, pas des capacités locales.",
+	"pricing.studio.description":
+		"Créez, exécutez et automatisez des workflows localement sur votre ordinateur ou appareil mobile — aucun abonnement requis. Les forfaits premium ajoutent des fonctionnalités cloud, pas des capacités locales.",
 	"pricing.studio.desktop": "Application Bureau",
 	"pricing.studio.desktopPlatforms": "Windows, macOS et Linux",
 	"pricing.studio.mobile": "Application Mobile",
@@ -115,7 +121,8 @@ export const frCommon = {
 	"pricing.studio.visualBuilder": "Constructeur Visuel de Workflows",
 	"pricing.studio.visualBuilderDesc": "Glisser-Déposer • Sans Code",
 	"pricing.studio.downloadCta": "Télécharger Studio Gratuit",
-	"pricing.studio.inAppNote": "Les forfaits premium s'achètent directement dans l'application Studio — pas de paiement sur le site",
+	"pricing.studio.inAppNote":
+		"Les forfaits premium s'achètent directement dans l'application Studio — pas de paiement sur le site",
 
 	// Pricing Features
 	"pricing.feature.projects.10": "10 projets privés",
@@ -171,27 +178,40 @@ export const frCommon = {
 	// Pricing FAQ
 	"pricing.faq.title": "Questions fréquentes",
 	"pricing.faq.subtitle": "Tout ce que vous devez savoir sur nos tarifs",
-	"pricing.faq.q1": "Que se passe-t-il quand je dépasse les limites de mon plan ?",
-	"pricing.faq.a1": "Nous vous notifierons quand vous approchez de vos limites. Vous pouvez mettre à niveau à tout moment et nous ne couperons pas soudainement vos workflows. Pour les exécutions cloud, l'utilisation supplémentaire est facturée à l'usage.",
+	"pricing.faq.q1":
+		"Que se passe-t-il quand je dépasse les limites de mon plan ?",
+	"pricing.faq.a1":
+		"Nous vous notifierons quand vous approchez de vos limites. Vous pouvez mettre à niveau à tout moment et nous ne couperons pas soudainement vos workflows. Pour les exécutions cloud, l'utilisation supplémentaire est facturée à l'usage.",
 	"pricing.faq.q2": "Puis-je auto-héberger Flow-Like ?",
-	"pricing.faq.a2": "Oui ! Flow-Like est entièrement auto-hébergeable. Vous pouvez l'exécuter sur votre propre infrastructure, sur site ou dans des environnements air-gapped. L'application de bureau fonctionne entièrement hors ligne.",
+	"pricing.faq.a2":
+		"Oui ! Flow-Like est entièrement auto-hébergeable. Vous pouvez l'exécuter sur votre propre infrastructure, sur site ou dans des environnements air-gapped. L'application de bureau fonctionne entièrement hors ligne.",
 	"pricing.faq.q3": "Y a-t-il une tarification par utilisateur ?",
-	"pricing.faq.a3": "Non. Nous croyons que l'automatisation devrait être accessible à toute votre organisation. Tous les plans supportent des utilisateurs illimités. Vous ne payez que selon l'utilisation (fonctionnalités cloud), pas par nombre d'employés.",
+	"pricing.faq.a3":
+		"Non. Nous croyons que l'automatisation devrait être accessible à toute votre organisation. Tous les plans supportent des utilisateurs illimités. Vous ne payez que selon l'utilisation (fonctionnalités cloud), pas par nombre d'employés.",
 	"pricing.faq.q4": "Qu'est-ce qui est inclus dans l'accès aux modèles IA ?",
-	"pricing.faq.a4": "L'accès aux modèles IA couvre des fonctionnalités comme FlowPilot (notre assistant IA), les suggestions intelligentes de workflows et l'automatisation en langage naturel via nos modèles hébergés.",
-	"pricing.faq.q5": "Offrez-vous des réductions pour les startups ou les organisations à but non lucratif ?",
-	"pricing.faq.a5": "Oui ! Nous offrons des réductions significatives pour les organisations à but non lucratif enregistrées, les établissements d'enseignement et les startups en phase de démarrage. Contactez-nous à hello@flow-like.com pour en savoir plus.",
-	"pricing.faq.q6": "Quelle est la différence entre l'exécution locale et cloud ?",
-	"pricing.faq.a6": "L'exécution locale exécute les workflows sur votre machine — entièrement gratuite et illimitée sur tous les plans. L'exécution cloud exécute les workflows sur notre infrastructure, permettant des exécutions planifiées, webhooks et disponibilité 24/7.",
+	"pricing.faq.a4":
+		"L'accès aux modèles IA couvre des fonctionnalités comme FlowPilot (notre assistant IA), les suggestions intelligentes de workflows et l'automatisation en langage naturel via nos modèles hébergés.",
+	"pricing.faq.q5":
+		"Offrez-vous des réductions pour les startups ou les organisations à but non lucratif ?",
+	"pricing.faq.a5":
+		"Oui ! Nous offrons des réductions significatives pour les organisations à but non lucratif enregistrées, les établissements d'enseignement et les startups en phase de démarrage. Contactez-nous à hello@flow-like.com pour en savoir plus.",
+	"pricing.faq.q6":
+		"Quelle est la différence entre l'exécution locale et cloud ?",
+	"pricing.faq.a6":
+		"L'exécution locale exécute les workflows sur votre machine — entièrement gratuite et illimitée sur tous les plans. L'exécution cloud exécute les workflows sur notre infrastructure, permettant des exécutions planifiées, webhooks et disponibilité 24/7.",
 	"pricing.faq.q7": "Puis-je annuler à tout moment ?",
-	"pricing.faq.a7": "Absolument. Pas de contrats, pas de frais d'annulation. Si vous annulez, vous conserverez l'accès jusqu'à la fin de votre période de facturation, puis passerez automatiquement à Gratuit.",
+	"pricing.faq.a7":
+		"Absolument. Pas de contrats, pas de frais d'annulation. Si vous annulez, vous conserverez l'accès jusqu'à la fin de votre période de facturation, puis passerez automatiquement à Gratuit.",
 	"pricing.faq.q8": "Qu'en est-il des exigences de conformité d'entreprise ?",
-	"pricing.faq.a8": "Les plans entreprise incluent la documentation de conformité SOC 2, les accords de traitement des données RGPD, les politiques de rétention personnalisées, les journaux d'audit et l'intégration SSO/SAML.",
+	"pricing.faq.a8":
+		"Les plans entreprise incluent la documentation de conformité SOC 2, les accords de traitement des données RGPD, les politiques de rétention personnalisées, les journaux d'audit et l'intégration SSO/SAML.",
 
 	// Pricing CTA Section
 	"pricing.ctaSection.title": "Besoin d'une solution personnalisée ?",
-	"pricing.ctaSection.description": "Obtenez une solution d'automatisation entièrement personnalisée pour votre entreprise en seulement 24 heures. Nous concevrons, construirons et déploierons un workflow prêt pour la production adapté à vos besoins exacts.",
+	"pricing.ctaSection.description":
+		"Obtenez une solution d'automatisation entièrement personnalisée pour votre entreprise en seulement 24 heures. Nous concevrons, construirons et déploierons un workflow prêt pour la production adapté à vos besoins exacts.",
 	"pricing.ctaSection.24h": "Solution 24 heures",
 	"pricing.ctaSection.enterprise": "Contacter les ventes entreprise",
-	"pricing.ctaSection.startingAt": "À partir de 1 999 € · Propriété complète du code · Déployez n'importe où",
+	"pricing.ctaSection.startingAt":
+		"À partir de 1 999 € · Propriété complète du code · Déployez n'importe où",
 };

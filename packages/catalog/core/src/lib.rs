@@ -60,7 +60,9 @@ pub use types::bounding_box::BoundingBox;
 pub use types::class_prediction::ClassPrediction;
 pub use types::db_connection::{CachedDB, NodeDBConnection};
 pub use types::flow_path::{FlowPath, FlowPathRuntime, FlowPathStore};
-pub use types::keypoint::{Keypoint, PoseDetection, SkeletonConnection, COCO_KEYPOINT_NAMES, COCO_SKELETON_CONNECTIONS};
+pub use types::keypoint::{
+    COCO_KEYPOINT_NAMES, COCO_SKELETON_CONNECTIONS, Keypoint, PoseDetection, SkeletonConnection,
+};
 pub use types::node_image::{NodeImage, NodeImageWrapper};
 pub use types::segmentation_mask::{InstanceSegmentation, SegmentationMask};
 

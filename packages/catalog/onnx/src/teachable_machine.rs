@@ -5,10 +5,7 @@ use flow_like::flow::{
     variable::VariableType,
 };
 use flow_like_catalog_core::{ClassPrediction, FlowPath, NodeImage};
-use flow_like_types::{
-    Result, async_trait,
-    json::json,
-};
+use flow_like_types::{Result, async_trait, json::json};
 #[cfg(feature = "execute")]
 use flow_like_types::{
     image::{RgbImage, imageops, imageops::FilterType},

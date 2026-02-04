@@ -121,27 +121,39 @@ impl NodeLogic for ModelInfoNode {
             let bytes = path.get(context, false).await?;
             let session = Session::builder()?.commit_from_memory(&bytes)?;
 
-            let inputs: Vec<TensorInfo> = session.inputs.iter().map(|i| {
-                let shape = i.input_type.tensor_shape()
-                    .map(|s| s.iter().map(|&d| d).collect())
-                    .unwrap_or_default();
-                TensorInfo {
-                    name: i.name.clone(),
-                    shape,
-                    dtype: format!("{:?}", i.input_type),
-                }
-            }).collect();
+            let inputs: Vec<TensorInfo> = session
+                .inputs
+                .iter()
+                .map(|i| {
+                    let shape = i
+                        .input_type
+                        .tensor_shape()
+                        .map(|s| s.iter().map(|&d| d).collect())
+                        .unwrap_or_default();
+                    TensorInfo {
+                        name: i.name.clone(),
+                        shape,
+                        dtype: format!("{:?}", i.input_type),
+                    }
+                })
+                .collect();
 
-            let outputs: Vec<TensorInfo> = session.outputs.iter().map(|o| {
-                let shape = o.output_type.tensor_shape()
-                    .map(|s| s.iter().map(|&d| d).collect())
-                    .unwrap_or_default();
-                TensorInfo {
-                    name: o.name.clone(),
-                    shape,
-                    dtype: format!("{:?}", o.output_type),
-                }
-            }).collect();
+            let outputs: Vec<TensorInfo> = session
+                .outputs
+                .iter()
+                .map(|o| {
+                    let shape = o
+                        .output_type
+                        .tensor_shape()
+                        .map(|s| s.iter().map(|&d| d).collect())
+                        .unwrap_or_default();
+                    TensorInfo {
+                        name: o.name.clone(),
+                        shape,
+                        dtype: format!("{:?}", o.output_type),
+                    }
+                })
+                .collect();
 
             let metadata = ModelMetadata {
                 inputs: inputs.clone(),
@@ -198,9 +210,14 @@ impl NodeLogic for UnloadOnnxNode {
             VariableType::Execution,
         );
 
-        node.add_input_pin("model", "Model", "ONNX Model Session to unload", VariableType::Struct)
-            .set_schema::<NodeOnnxSession>()
-            .set_options(PinOptions::new().set_enforce_schema(true).build());
+        node.add_input_pin(
+            "model",
+            "Model",
+            "ONNX Model Session to unload",
+            VariableType::Struct,
+        )
+        .set_schema::<NodeOnnxSession>()
+        .set_options(PinOptions::new().set_enforce_schema(true).build());
 
         node.add_output_pin(
             "exec_out",
@@ -228,7 +245,11 @@ impl NodeLogic for UnloadOnnxNode {
             let node_session: NodeOnnxSession = context.evaluate_pin("model").await?;
 
             // Remove from cache
-            let removed = context.cache.write().await.remove(&node_session.session_ref);
+            let removed = context
+                .cache
+                .write()
+                .await
+                .remove(&node_session.session_ref);
             let success = removed.is_some();
 
             context.set_pin_value("success", json!(success)).await?;
@@ -316,35 +337,61 @@ impl NodeLogic for SessionInfoNode {
             let session = node_session.get_session(context).await?;
             let session_guard = session.lock().await;
 
-            let inputs: Vec<TensorInfo> = session_guard.session.inputs.iter().map(|i| {
-                let shape = i.input_type.tensor_shape()
-                    .map(|s| s.iter().map(|&d| d).collect())
-                    .unwrap_or_default();
-                TensorInfo {
-                    name: i.name.clone(),
-                    shape,
-                    dtype: format!("{:?}", i.input_type),
-                }
-            }).collect();
+            let inputs: Vec<TensorInfo> = session_guard
+                .session
+                .inputs
+                .iter()
+                .map(|i| {
+                    let shape = i
+                        .input_type
+                        .tensor_shape()
+                        .map(|s| s.iter().map(|&d| d).collect())
+                        .unwrap_or_default();
+                    TensorInfo {
+                        name: i.name.clone(),
+                        shape,
+                        dtype: format!("{:?}", i.input_type),
+                    }
+                })
+                .collect();
 
-            let outputs: Vec<TensorInfo> = session_guard.session.outputs.iter().map(|o| {
-                let shape = o.output_type.tensor_shape()
-                    .map(|s| s.iter().map(|&d| d).collect())
-                    .unwrap_or_default();
-                TensorInfo {
-                    name: o.name.clone(),
-                    shape,
-                    dtype: format!("{:?}", o.output_type),
-                }
-            }).collect();
+            let outputs: Vec<TensorInfo> = session_guard
+                .session
+                .outputs
+                .iter()
+                .map(|o| {
+                    let shape = o
+                        .output_type
+                        .tensor_shape()
+                        .map(|s| s.iter().map(|&d| d).collect())
+                        .unwrap_or_default();
+                    TensorInfo {
+                        name: o.name.clone(),
+                        shape,
+                        dtype: format!("{:?}", o.output_type),
+                    }
+                })
+                .collect();
 
-            let input_names: String = inputs.iter().map(|i| i.name.as_str()).collect::<Vec<_>>().join(", ");
-            let output_names: String = outputs.iter().map(|o| o.name.as_str()).collect::<Vec<_>>().join(", ");
+            let input_names: String = inputs
+                .iter()
+                .map(|i| i.name.as_str())
+                .collect::<Vec<_>>()
+                .join(", ");
+            let output_names: String = outputs
+                .iter()
+                .map(|o| o.name.as_str())
+                .collect::<Vec<_>>()
+                .join(", ");
 
             context.set_pin_value("inputs", json!(inputs)).await?;
             context.set_pin_value("outputs", json!(outputs)).await?;
-            context.set_pin_value("input_names", json!(input_names)).await?;
-            context.set_pin_value("output_names", json!(output_names)).await?;
+            context
+                .set_pin_value("input_names", json!(input_names))
+                .await?;
+            context
+                .set_pin_value("output_names", json!(output_names))
+                .await?;
             Ok(())
         }
 

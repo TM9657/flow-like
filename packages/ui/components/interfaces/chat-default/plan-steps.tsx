@@ -94,7 +94,13 @@ interface StepItemProps {
 	onToggle: (stepId: string) => void;
 }
 
-function StepItem({ step, index, isActive, isExpanded, onToggle }: StepItemProps) {
+function StepItem({
+	step,
+	index,
+	isActive,
+	isExpanded,
+	onToggle,
+}: StepItemProps) {
 	const hasReasoning = step.reasoning && step.reasoning.trim() !== "";
 	const duration =
 		step.startTime && step.endTime
@@ -245,7 +251,8 @@ export function PlanSteps({ steps, currentStepId }: PlanStepsProps) {
 						<CollapsibleTrigger className="w-full flex items-center gap-2 p-2 rounded-lg border border-dashed border-muted-foreground/30 hover:bg-muted/30 transition-colors text-left">
 							<History className="w-4 h-4 text-muted-foreground" />
 							<span className="text-xs text-muted-foreground flex-1">
-								{olderSteps.length} earlier step{olderSteps.length !== 1 ? "s" : ""}
+								{olderSteps.length} earlier step
+								{olderSteps.length !== 1 ? "s" : ""}
 							</span>
 							<ChevronDown
 								className={`w-4 h-4 text-muted-foreground transition-transform ${showOlderSteps ? "rotate-180" : ""}`}

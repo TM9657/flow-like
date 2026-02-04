@@ -5,12 +5,12 @@
 #[cfg(test)]
 mod tests {
     use crate::ml::{
-        make_new_field, values_to_array1_f64, values_to_array1_target, values_to_array1_usize,
-        values_to_array2_f64, AccuracyMetrics, ConfusionMatrixResult, GridSearchEntry,
-        GridSearchResult, KMeansCentroids, LinearCoefficients, ParameterSpec, RegressionMetrics,
+        AccuracyMetrics, ConfusionMatrixResult, GridSearchEntry, GridSearchResult, KMeansCentroids,
+        LinearCoefficients, ParameterSpec, RegressionMetrics, make_new_field, values_to_array1_f64,
+        values_to_array1_target, values_to_array1_usize, values_to_array2_f64,
     };
-    use flow_like_types::json::{self, json};
     use flow_like_types::Value;
+    use flow_like_types::json::{self, json};
     use std::collections::HashMap;
 
     // ============================================================================
@@ -457,11 +457,8 @@ mod execute_tests {
 
     #[test]
     fn test_fory_is_smaller_than_json() {
-        let data = Array2::from_shape_vec(
-            (100, 10),
-            (0..1000).map(|i| i as f64 * 0.01).collect(),
-        )
-        .unwrap();
+        let data = Array2::from_shape_vec((100, 10), (0..1000).map(|i| i as f64 * 0.01).collect())
+            .unwrap();
 
         let dataset = linfa::DatasetBase::from(data);
         let model = KMeans::params(5).fit(&dataset).unwrap();
@@ -506,11 +503,8 @@ mod execute_tests {
 
     #[test]
     fn test_kmeans_predict_on_values() {
-        let data = Array2::from_shape_vec(
-            (4, 2),
-            vec![0.0, 0.0, 0.1, 0.1, 10.0, 10.0, 10.1, 10.1],
-        )
-        .unwrap();
+        let data = Array2::from_shape_vec((4, 2), vec![0.0, 0.0, 0.1, 0.1, 10.0, 10.0, 10.1, 10.1])
+            .unwrap();
 
         let dataset = linfa::DatasetBase::from(data);
         let model = KMeans::params(2).fit(&dataset).unwrap();
@@ -543,7 +537,9 @@ mod execute_tests {
     fn test_kmeans_predict_on_values_multiple_rows() {
         let data = Array2::from_shape_vec(
             (6, 2),
-            vec![0.0, 0.0, 0.1, 0.1, 0.2, 0.2, 10.0, 10.0, 10.1, 10.1, 10.2, 10.2],
+            vec![
+                0.0, 0.0, 0.1, 0.1, 0.2, 0.2, 10.0, 10.0, 10.1, 10.1, 10.2, 10.2,
+            ],
         )
         .unwrap();
 

@@ -279,7 +279,9 @@ export class UserState implements IUserState {
 	}
 	async getProfiles(): Promise<IProfile[]> {
 		const profiles: ISettingsProfile[] = await invoke("get_profiles");
-		return profiles.map(p => p.hub_profile).filter((p): p is IProfile => p !== undefined);
+		return profiles
+			.map((p) => p.hub_profile)
+			.filter((p): p is IProfile => p !== undefined);
 	}
 	async getSettingsProfile(): Promise<ISettingsProfile> {
 		const profile: ISettingsProfile = await invoke("get_current_profile");

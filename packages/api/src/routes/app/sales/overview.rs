@@ -106,9 +106,7 @@ pub async fn get_sales_overview(
     let total_purchases = purchases.len() as i64;
     let completed_purchases: Vec<_> = purchases
         .iter()
-        .filter(|p| {
-            p.status == crate::entity::sea_orm_active_enums::PurchaseStatus::Completed
-        })
+        .filter(|p| p.status == crate::entity::sea_orm_active_enums::PurchaseStatus::Completed)
         .collect();
 
     let total_revenue: i64 = completed_purchases.iter().map(|p| p.price_paid).sum();
@@ -154,7 +152,11 @@ pub async fn get_sales_overview(
 
     let period_purchases: Vec<_> = completed_purchases
         .iter()
-        .filter(|p| p.completed_at.map(|d| d.date() >= thirty_days_ago).unwrap_or(false))
+        .filter(|p| {
+            p.completed_at
+                .map(|d| d.date() >= thirty_days_ago)
+                .unwrap_or(false)
+        })
         .collect();
     let period_revenue: i64 = period_purchases.iter().map(|p| p.price_paid).sum();
     let period_purchase_count = period_purchases.len() as i64;
@@ -341,9 +343,7 @@ async fn compute_daily_stats_from_purchases(
 
         let completed: Vec<_> = day_purchases
             .iter()
-            .filter(|p| {
-                p.status == crate::entity::sea_orm_active_enums::PurchaseStatus::Completed
-            })
+            .filter(|p| p.status == crate::entity::sea_orm_active_enums::PurchaseStatus::Completed)
             .collect();
 
         let refunded: Vec<_> = day_purchases
@@ -421,9 +421,10 @@ pub(crate) async fn verify_sales_access(
 
     // Check if user has owner role
     if let Some(owner_role_id) = &app.owner_role_id
-        && &membership.role_id == owner_role_id {
-            return Ok(());
-        }
+        && &membership.role_id == owner_role_id
+    {
+        return Ok(());
+    }
 
     // Check if role has sales permission (for future extensibility)
     let role = role::Entity::find_by_id(&membership.role_id)

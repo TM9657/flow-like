@@ -73,7 +73,10 @@ export function HttpConfig({
 	const pathError =
 		path && !path.startsWith("/") ? "Path must start with '/'" : null;
 
-	const CurlExample = ({ url, withAuth }: { url: string; withAuth: boolean }) => (
+	const CurlExample = ({
+		url,
+		withAuth,
+	}: { url: string; withAuth: boolean }) => (
 		<pre className="mt-2 overflow-x-auto text-xs bg-muted p-3 rounded-md">
 			{withAuth
 				? `curl -X ${method} "${url}" \\\n  -H "Authorization: Bearer ${authToken}"`
@@ -183,7 +186,10 @@ export function HttpConfig({
 						<TabsContent value="local" className="space-y-3">
 							<div className="relative">
 								<div className="flex h-auto min-h-10 w-full rounded-md border border-input bg-muted px-3 py-2 text-sm items-center font-mono break-all">
-									<Badge variant="secondary" className="mr-2 font-mono shrink-0">
+									<Badge
+										variant="secondary"
+										className="mr-2 font-mono shrink-0"
+									>
 										{method}
 									</Badge>
 									{localUrl}
@@ -199,7 +205,8 @@ export function HttpConfig({
 								</Button>
 							</div>
 							<p className="text-xs text-muted-foreground">
-								Local endpoint for desktop app execution. Only available when the app is running.
+								Local endpoint for desktop app execution. Only available when
+								the app is running.
 							</p>
 							<Alert>
 								<AlertTitle>Example Request</AlertTitle>
@@ -229,7 +236,8 @@ export function HttpConfig({
 							</Button>
 						</div>
 						<p className="text-xs text-muted-foreground">
-							Local endpoint for desktop app execution. Only available when the app is running.
+							Local endpoint for desktop app execution. Only available when the
+							app is running.
 						</p>
 						<Alert>
 							<AlertTitle>Example Request</AlertTitle>

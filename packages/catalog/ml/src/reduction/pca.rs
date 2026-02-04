@@ -24,9 +24,9 @@ use flow_like_storage::lancedb::table::NewColumnTransform;
 use flow_like_types::anyhow;
 use flow_like_types::{Result, Value, async_trait, json::json};
 #[cfg(feature = "execute")]
-use linfa::traits::{Fit, Predict};
-#[cfg(feature = "execute")]
 use linfa::DatasetBase;
+#[cfg(feature = "execute")]
+use linfa::traits::{Fit, Predict};
 #[cfg(feature = "execute")]
 use linfa_reduction::Pca;
 #[cfg(feature = "execute")]
@@ -215,7 +215,9 @@ impl NodeLogic for FitPcaNode {
                             LogLevel::Debug,
                         );
                     }
-                    database.upsert(updated_records, records_col.clone()).await?;
+                    database
+                        .upsert(updated_records, records_col.clone())
+                        .await?;
                 }
                 context.log_message(
                     &format!("Upsert records: {:?}", t0.elapsed()),

@@ -1,5 +1,8 @@
 "use client";
 
+import { ResponsiveBar } from "@nivo/bar";
+import { ResponsivePie } from "@nivo/pie";
+import { ResponsiveTreeMap } from "@nivo/treemap";
 import { invoke } from "@tauri-apps/api/core";
 import {
 	Badge,
@@ -21,10 +24,6 @@ import {
 	useQuery,
 } from "@tm9657/flow-like-ui";
 import type { ISettingsProfile } from "@tm9657/flow-like-ui/types";
-import { useTauriInvoke } from "../../../components/useInvoke";
-import { ResponsiveBar } from "@nivo/bar";
-import { ResponsivePie } from "@nivo/pie";
-import { ResponsiveTreeMap } from "@nivo/treemap";
 import {
 	BarChart3,
 	Boxes,
@@ -43,6 +42,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { useMemo } from "react";
+import { useTauriInvoke } from "../../../components/useInvoke";
 
 interface NodeUsage {
 	name: string;
@@ -209,7 +209,9 @@ function NodeUsageBarChart({ nodes }: Readonly<{ nodes: NodeUsage[] }>) {
 	);
 }
 
-function CategoryPieChart({ categories }: Readonly<{ categories: CategoryStats[] }>) {
+function CategoryPieChart({
+	categories,
+}: Readonly<{ categories: CategoryStats[] }>) {
 	const data = useMemo(
 		() =>
 			categories
@@ -266,7 +268,9 @@ function CategoryPieChart({ categories }: Readonly<{ categories: CategoryStats[]
 	);
 }
 
-function BoardComplexityTreeMap({ boards }: Readonly<{ boards: BoardSummary[] }>) {
+function BoardComplexityTreeMap({
+	boards,
+}: Readonly<{ boards: BoardSummary[] }>) {
 	const data = useMemo(
 		() => ({
 			name: "Boards",
@@ -446,7 +450,8 @@ function PatternCard({
 	index: number;
 	scoreType: "rarity" | "frequency";
 }>) {
-	const score = scoreType === "rarity" ? pattern.rarity_score : pattern.frequency_score;
+	const score =
+		scoreType === "rarity" ? pattern.rarity_score : pattern.frequency_score;
 	const scoreLabel = scoreType === "rarity" ? "Rarity" : "Frequency";
 
 	return (
@@ -643,7 +648,9 @@ export default function StatisticsPage() {
 							Error loading statistics
 						</h3>
 						<p className="text-sm text-muted-foreground mb-4">
-							{error instanceof Error ? error.message : "Failed to load statistics"}
+							{error instanceof Error
+								? error.message
+								: "Failed to load statistics"}
 						</p>
 						<Button
 							onClick={() => refetch()}
@@ -698,7 +705,9 @@ export default function StatisticsPage() {
 						className="gap-2"
 						disabled={isFetching}
 					>
-						<RefreshCw className={`h-4 w-4 ${isFetching ? "animate-spin" : ""}`} />
+						<RefreshCw
+							className={`h-4 w-4 ${isFetching ? "animate-spin" : ""}`}
+						/>
 						Refresh
 					</Button>
 				</div>
@@ -852,7 +861,7 @@ export default function StatisticsPage() {
 								</CardHeader>
 								<CardContent>
 									{statistics.common_patterns.length > 0 ? (
-								<ScrollArea className="h-150 pr-4">
+										<ScrollArea className="h-150 pr-4">
 											<div className="space-y-3">
 												{statistics.common_patterns.map((pattern, i) => (
 													<PatternCard
@@ -883,7 +892,7 @@ export default function StatisticsPage() {
 								</CardHeader>
 								<CardContent>
 									{statistics.rare_patterns.length > 0 ? (
-								<ScrollArea className="h-150 pr-4">
+										<ScrollArea className="h-150 pr-4">
 											<div className="space-y-3">
 												{statistics.rare_patterns.map((pattern, i) => (
 													<PatternCard

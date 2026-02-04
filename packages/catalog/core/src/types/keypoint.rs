@@ -53,7 +53,9 @@ impl PoseDetection {
 
     /// Get keypoint by name
     pub fn get_keypoint_by_name(&self, name: &str) -> Option<&Keypoint> {
-        self.keypoints.iter().find(|k| k.name.as_deref() == Some(name))
+        self.keypoints
+            .iter()
+            .find(|k| k.name.as_deref() == Some(name))
     }
 
     /// Get all visible keypoints above confidence threshold

@@ -23,11 +23,23 @@ interface SinkTriggerClaims {
 	exp?: number;
 }
 
-const SINK_TYPES = ["cron", "discord", "telegram", "github", "rss", "mqtt", "email"] as const;
+const SINK_TYPES = [
+	"cron",
+	"discord",
+	"telegram",
+	"github",
+	"rss",
+	"mqtt",
+	"email",
+] as const;
 
 type SinkType = (typeof SINK_TYPES)[number];
 
-async function generateJwt(sinkTypes: string[], secret: string, expiresIn?: string): Promise<string> {
+async function generateJwt(
+	sinkTypes: string[],
+	secret: string,
+	expiresIn?: string,
+): Promise<string> {
 	const encoder = new TextEncoder();
 	const secretKey = encoder.encode(secret);
 
@@ -37,7 +49,9 @@ async function generateJwt(sinkTypes: string[], secret: string, expiresIn?: stri
 		sink_types: sinkTypes,
 	};
 
-	let builder = new jose.SignJWT(claims as jose.JWTPayload).setProtectedHeader({ alg: "HS256" }).setIssuedAt();
+	let builder = new jose.SignJWT(claims as jose.JWTPayload)
+		.setProtectedHeader({ alg: "HS256" })
+		.setIssuedAt();
 
 	if (expiresIn) {
 		builder = builder.setExpirationTime(expiresIn);

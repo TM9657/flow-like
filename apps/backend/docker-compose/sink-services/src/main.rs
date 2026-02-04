@@ -54,7 +54,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     };
 
-    info!("Loaded config: cron={}, discord={}, telegram={}",
+    info!(
+        "Loaded config: cron={}, discord={}, telegram={}",
         config.supported_sinks.cron,
         config.supported_sinks.discord,
         config.supported_sinks.telegram
@@ -75,7 +76,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             Some(Arc::new(s))
         }
         Err(e) => {
-            warn!("Failed to connect to Redis: {} - running without persistence", e);
+            warn!(
+                "Failed to connect to Redis: {} - running without persistence",
+                e
+            );
             None
         }
     };
@@ -119,7 +123,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         let api_client_telegram = Arc::clone(&api_client);
         let storage_telegram = storage.clone();
         handles.push(tokio::spawn(async move {
-            if let Err(e) = telegram::start_telegram_bot(api_client_telegram, storage_telegram).await {
+            if let Err(e) =
+                telegram::start_telegram_bot(api_client_telegram, storage_telegram).await
+            {
                 error!("Telegram bot error: {}", e);
             }
         }));

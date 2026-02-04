@@ -108,7 +108,11 @@ impl DiscordBotManager {
             }
         }
 
-        Ok(SyncResult { started, stopped, updated })
+        Ok(SyncResult {
+            started,
+            stopped,
+            updated,
+        })
     }
 
     async fn update_handlers(&self, config: &BotConfig) {
@@ -164,7 +168,10 @@ impl DiscordBotManager {
     }
 
     #[cfg(feature = "discord")]
-    async fn start_bot(&self, config: &BotConfig) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    async fn start_bot(
+        &self,
+        config: &BotConfig,
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         let token_hash = RedisStorage::hash_token(&config.token);
         let bot_id = config.bot_id.clone();
 
@@ -250,7 +257,10 @@ impl DiscordBotManager {
     }
 
     #[cfg(not(feature = "discord"))]
-    async fn start_bot(&self, _config: &BotConfig) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    async fn start_bot(
+        &self,
+        _config: &BotConfig,
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         warn!("Discord feature not enabled");
         Ok(())
     }

@@ -1,10 +1,5 @@
 "use client";
-import {
-	HomeSwimlanes,
-	Skeleton,
-	useBackend,
-} from "@tm9657/flow-like-ui";
-import type { ISettingsProfile } from "@tm9657/flow-like-ui/types";
+import { HomeSwimlanes, Skeleton, useBackend } from "@tm9657/flow-like-ui";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 

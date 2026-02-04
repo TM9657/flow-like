@@ -98,7 +98,11 @@ impl TelegramBotManager {
             }
         }
 
-        Ok(SyncResult { started, stopped, updated })
+        Ok(SyncResult {
+            started,
+            stopped,
+            updated,
+        })
     }
 
     async fn update_handlers(&self, config: &BotConfig) {
@@ -139,7 +143,10 @@ impl TelegramBotManager {
     }
 
     #[cfg(feature = "telegram")]
-    async fn start_bot(&self, config: &BotConfig) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    async fn start_bot(
+        &self,
+        config: &BotConfig,
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         let token_hash = RedisStorage::hash_token(&config.token);
         let bot_id = config.bot_id.clone();
 
@@ -216,7 +223,10 @@ impl TelegramBotManager {
     }
 
     #[cfg(not(feature = "telegram"))]
-    async fn start_bot(&self, _config: &BotConfig) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    async fn start_bot(
+        &self,
+        _config: &BotConfig,
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         warn!("Telegram feature not enabled");
         Ok(())
     }
@@ -310,21 +320,18 @@ async fn run_telegram_bot(
     let api_client_clone = api_client.clone();
     let handlers_clone = handlers.clone();
 
-    let handler = Update::filter_message().endpoint(
-        move |_bot: Bot, msg: Message| {
-            let bot_id = bot_id_clone.clone();
-            let api_client = api_client_clone.clone();
-            let handlers = handlers_clone.clone();
+    let handler = Update::filter_message().endpoint(move |_bot: Bot, msg: Message| {
+        let bot_id = bot_id_clone.clone();
+        let api_client = api_client_clone.clone();
+        let handlers = handlers_clone.clone();
 
-            async move {
-                handle_telegram_message(&bot_id, &api_client, &handlers, &msg).await;
-                respond(())
-            }
-        },
-    );
+        async move {
+            handle_telegram_message(&bot_id, &api_client, &handlers, &msg).await;
+            respond(())
+        }
+    });
 
-    let mut dispatcher = Dispatcher::builder(bot, handler)
-        .build();
+    let mut dispatcher = Dispatcher::builder(bot, handler).build();
 
     // Get shutdown token before dispatching
     let shutdown_token = dispatcher.shutdown_token();

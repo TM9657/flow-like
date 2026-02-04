@@ -2,7 +2,6 @@
 
 import {
 	type InstalledPackage,
-	type PackageUpdate,
 	useBackend,
 	useMutation,
 	useQuery,

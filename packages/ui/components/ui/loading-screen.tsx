@@ -52,10 +52,16 @@ function seededRandom(seed: number) {
 	return x - Math.floor(x);
 }
 
-function MorphingBlob({ delay = 0, className }: { delay?: number; className?: string }) {
+function MorphingBlob({
+	delay = 0,
+	className,
+}: { delay?: number; className?: string }) {
 	return (
 		<div
-			className={cn("absolute rounded-full blur-3xl opacity-30 animate-morph", className)}
+			className={cn(
+				"absolute rounded-full blur-3xl opacity-30 animate-morph",
+				className,
+			)}
 			style={{
 				animationDelay: `${delay}s`,
 			}}
@@ -131,17 +137,54 @@ function GlowingOrb() {
 						style={{ strokeDasharray: "60", strokeDashoffset: "60" }}
 					/>
 					{/* Node dots */}
-					<circle cx="4" cy="8" r="2" fill="currentColor" className="animate-pulse" />
-					<circle cx="4" cy="16" r="2" fill="currentColor" className="animate-pulse" style={{ animationDelay: "0.2s" }} />
-					<circle cx="12" cy="12" r="2.5" fill="currentColor" className="animate-pulse" style={{ animationDelay: "0.4s" }} />
-					<circle cx="20" cy="8" r="2" fill="currentColor" className="animate-pulse" style={{ animationDelay: "0.6s" }} />
-					<circle cx="20" cy="16" r="2" fill="currentColor" className="animate-pulse" style={{ animationDelay: "0.8s" }} />
+					<circle
+						cx="4"
+						cy="8"
+						r="2"
+						fill="currentColor"
+						className="animate-pulse"
+					/>
+					<circle
+						cx="4"
+						cy="16"
+						r="2"
+						fill="currentColor"
+						className="animate-pulse"
+						style={{ animationDelay: "0.2s" }}
+					/>
+					<circle
+						cx="12"
+						cy="12"
+						r="2.5"
+						fill="currentColor"
+						className="animate-pulse"
+						style={{ animationDelay: "0.4s" }}
+					/>
+					<circle
+						cx="20"
+						cy="8"
+						r="2"
+						fill="currentColor"
+						className="animate-pulse"
+						style={{ animationDelay: "0.6s" }}
+					/>
+					<circle
+						cx="20"
+						cy="16"
+						r="2"
+						fill="currentColor"
+						className="animate-pulse"
+						style={{ animationDelay: "0.8s" }}
+					/>
 				</svg>
 			</div>
 
 			{/* Corner accents */}
 			<div className="absolute top-4 left-4 w-8 h-8 border-l-2 border-t-2 border-primary/30 rounded-tl-lg animate-pulse" />
-			<div className="absolute bottom-4 right-4 w-8 h-8 border-r-2 border-b-2 border-primary/30 rounded-br-lg animate-pulse" style={{ animationDelay: "0.5s" }} />
+			<div
+				className="absolute bottom-4 right-4 w-8 h-8 border-r-2 border-b-2 border-primary/30 rounded-br-lg animate-pulse"
+				style={{ animationDelay: "0.5s" }}
+			/>
 		</div>
 	);
 }
@@ -175,13 +218,18 @@ function ModernProgressBar({ progress }: { progress: number }) {
 			</div>
 			<div className="flex justify-between items-center text-xs">
 				<span className="text-muted-foreground/60 font-medium">Loading</span>
-				<span className="text-primary font-mono font-semibold">{Math.round(progress)}%</span>
+				<span className="text-primary font-mono font-semibold">
+					{Math.round(progress)}%
+				</span>
 			</div>
 		</div>
 	);
 }
 
-function TypewriterText({ text, className }: { text: string; className?: string }) {
+function TypewriterText({
+	text,
+	className,
+}: { text: string; className?: string }) {
 	const [displayText, setDisplayText] = useState("");
 	const [showCursor, setShowCursor] = useState(true);
 
@@ -202,7 +250,7 @@ function TypewriterText({ text, className }: { text: string; className?: string 
 
 	useEffect(() => {
 		const cursorInterval = setInterval(() => {
-			setShowCursor(prev => !prev);
+			setShowCursor((prev) => !prev);
 		}, 530);
 		return () => clearInterval(cursorInterval);
 	}, []);
@@ -210,7 +258,14 @@ function TypewriterText({ text, className }: { text: string; className?: string 
 	return (
 		<span className={className}>
 			{displayText}
-			<span className={cn("ml-0.5 text-primary", showCursor ? "opacity-100" : "opacity-0")}>|</span>
+			<span
+				className={cn(
+					"ml-0.5 text-primary",
+					showCursor ? "opacity-100" : "opacity-0",
+				)}
+			>
+				|
+			</span>
 		</span>
 	);
 }
@@ -224,52 +279,52 @@ function FlowGraph() {
 	const mouseRef = useRef({ x: -1000, y: -1000 });
 	const [isReady, setIsReady] = useState(false);
 
-	const initializeGraph = useCallback(
-		(width: number, height: number) => {
-			// Ensure we have valid dimensions
-			if (width <= 0 || height <= 0) return;
+	const initializeGraph = useCallback((width: number, height: number) => {
+		// Ensure we have valid dimensions
+		if (width <= 0 || height <= 0) return;
 
-			const nodeCount = Math.max(15, Math.min(Math.floor((width * height) / 40000), 25));
-			const nodes: Node[] = [];
+		const nodeCount = Math.max(
+			15,
+			Math.min(Math.floor((width * height) / 40000), 25),
+		);
+		const nodes: Node[] = [];
 
-			for (let i = 0; i < nodeCount; i++) {
-				nodes.push({
-					id: i,
-					x: seededRandom(i * 7 + 1) * width,
-					y: seededRandom(i * 13 + 2) * height,
-					vx: (seededRandom(i * 17 + 3) - 0.5) * 0.5,
-					vy: (seededRandom(i * 23 + 4) - 0.5) * 0.5,
-					radius: 4 + seededRandom(i * 29 + 5) * 5,
-					pulse: seededRandom(i * 31 + 6) * Math.PI * 2,
-					color: NODE_COLORS[i % NODE_COLORS.length],
-				});
-			}
+		for (let i = 0; i < nodeCount; i++) {
+			nodes.push({
+				id: i,
+				x: seededRandom(i * 7 + 1) * width,
+				y: seededRandom(i * 13 + 2) * height,
+				vx: (seededRandom(i * 17 + 3) - 0.5) * 0.5,
+				vy: (seededRandom(i * 23 + 4) - 0.5) * 0.5,
+				radius: 4 + seededRandom(i * 29 + 5) * 5,
+				pulse: seededRandom(i * 31 + 6) * Math.PI * 2,
+				color: NODE_COLORS[i % NODE_COLORS.length],
+			});
+		}
 
-			const connections: Connection[] = [];
-			for (let i = 0; i < nodes.length; i++) {
-				const connectionCount = 1 + Math.floor(seededRandom(i * 37 + 7) * 2);
-				for (let j = 0; j < connectionCount; j++) {
-					const target = Math.floor(
-						seededRandom(i * 41 + j * 43 + 8) * nodes.length,
-					);
-					if (target !== i) {
-						connections.push({
-							from: i,
-							to: target,
-							progress: seededRandom(i * 47 + j * 53 + 9),
-							speed: 0.002 + seededRandom(i * 59 + j * 61 + 10) * 0.003,
-							active: seededRandom(i * 67 + j * 71 + 11) > 0.3,
-						});
-					}
+		const connections: Connection[] = [];
+		for (let i = 0; i < nodes.length; i++) {
+			const connectionCount = 1 + Math.floor(seededRandom(i * 37 + 7) * 2);
+			for (let j = 0; j < connectionCount; j++) {
+				const target = Math.floor(
+					seededRandom(i * 41 + j * 43 + 8) * nodes.length,
+				);
+				if (target !== i) {
+					connections.push({
+						from: i,
+						to: target,
+						progress: seededRandom(i * 47 + j * 53 + 9),
+						speed: 0.002 + seededRandom(i * 59 + j * 61 + 10) * 0.003,
+						active: seededRandom(i * 67 + j * 71 + 11) > 0.3,
+					});
 				}
 			}
+		}
 
-			nodesRef.current = nodes;
-			connectionsRef.current = connections;
-			setIsReady(true);
-		},
-		[],
-	);
+		nodesRef.current = nodes;
+		connectionsRef.current = connections;
+		setIsReady(true);
+	}, []);
 
 	useEffect(() => {
 		const canvas = canvasRef.current;
@@ -450,7 +505,10 @@ function FlowGraph() {
 			<canvas
 				ref={canvasRef}
 				className="absolute inset-0 pointer-events-none"
-				style={{ opacity: isReady ? 0.8 : 0, transition: "opacity 0.1s ease-in" }}
+				style={{
+					opacity: isReady ? 0.8 : 0,
+					transition: "opacity 0.1s ease-in",
+				}}
 			/>
 		</div>
 	);
@@ -543,9 +601,7 @@ export function LoadingScreen({
 			<div className="absolute inset-0 bg-[radial-gradient(circle_at_center,transparent_0%,rgba(0,0,0,0.3)_100%)] pointer-events-none" />
 
 			{/* Main content */}
-			<div
-				className="relative z-10 flex flex-col items-center gap-10 animate-fade-in"
-			>
+			<div className="relative z-10 flex flex-col items-center gap-10 animate-fade-in">
 				<GlowingOrb />
 
 				{/* Text content with glassmorphism */}

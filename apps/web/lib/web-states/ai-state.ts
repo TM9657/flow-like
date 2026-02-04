@@ -1,5 +1,10 @@
-import type { IAIState, IHistoryMessage, IResponse, IResponseChunk } from "@tm9657/flow-like-ui";
-import { getApiBaseUrl, type WebBackendRef } from "./api-utils";
+import type {
+	IAIState,
+	IHistoryMessage,
+	IResponse,
+	IResponseChunk,
+} from "@tm9657/flow-like-ui";
+import { type WebBackendRef, getApiBaseUrl } from "./api-utils";
 
 export class WebAIState implements IAIState {
 	constructor(private readonly backend: WebBackendRef) {}
@@ -12,10 +17,11 @@ export class WebAIState implements IAIState {
 
 		const headers: HeadersInit = {
 			"Content-Type": "application/json",
-			"Accept": "text/event-stream",
+			Accept: "text/event-stream",
 		};
 		if (this.backend.auth?.user?.access_token) {
-			headers["Authorization"] = `Bearer ${this.backend.auth.user.access_token}`;
+			headers["Authorization"] =
+				`Bearer ${this.backend.auth.user.access_token}`;
 		}
 
 		const response = await fetch(url, {
@@ -73,7 +79,8 @@ export class WebAIState implements IAIState {
 			"Content-Type": "application/json",
 		};
 		if (this.backend.auth?.user?.access_token) {
-			headers["Authorization"] = `Bearer ${this.backend.auth.user.access_token}`;
+			headers["Authorization"] =
+				`Bearer ${this.backend.auth.user.access_token}`;
 		}
 
 		const response = await fetch(url, {

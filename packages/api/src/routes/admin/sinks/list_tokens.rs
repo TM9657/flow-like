@@ -5,13 +5,13 @@
 //! Lists all registered sink tokens with their status.
 
 use crate::{
-    entity::sink_token,
-    error::ApiError,
-    middleware::jwt::AppUser,
-    permission::global_permission::GlobalPermission,
-    state::AppState,
+    entity::sink_token, error::ApiError, middleware::jwt::AppUser,
+    permission::global_permission::GlobalPermission, state::AppState,
 };
-use axum::{Extension, Json, extract::{Query, State}};
+use axum::{
+    Extension, Json,
+    extract::{Query, State},
+};
 use flow_like_types::anyhow;
 use sea_orm::{ColumnTrait, EntityTrait, QueryFilter, QueryOrder};
 use serde::{Deserialize, Serialize};
@@ -59,7 +59,8 @@ pub async fn list_tokens(
     Query(query): Query<ListTokensQuery>,
 ) -> Result<Json<ListTokensResponse>, ApiError> {
     // Require admin permission
-    user.check_global_permission(&state, GlobalPermission::Admin).await?;
+    user.check_global_permission(&state, GlobalPermission::Admin)
+        .await?;
 
     let mut db_query = sink_token::Entity::find();
 

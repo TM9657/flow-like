@@ -1,12 +1,11 @@
 "use client";
 
 import {
-	useCallback,
+	type ComponentType,
 	useEffect,
 	useMemo,
 	useRef,
 	useState,
-	type ComponentType,
 } from "react";
 import type { ChartInput } from "./chart-data-parser";
 import { toNivoData } from "./chart-data-parser";

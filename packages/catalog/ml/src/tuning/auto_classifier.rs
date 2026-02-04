@@ -6,7 +6,8 @@
 use crate::ml::{AutoMLEntry, AutoMLResult, NodeMLModel};
 #[cfg(feature = "execute")]
 use crate::ml::{
-    MAX_ML_PREDICTION_RECORDS, MLModel, ModelWithMeta, values_to_array1_target, values_to_array2_f64,
+    MAX_ML_PREDICTION_RECORDS, MLModel, ModelWithMeta, values_to_array1_target,
+    values_to_array2_f64,
 };
 use flow_like::flow::{
     board::Board,
@@ -22,13 +23,13 @@ use flow_like_storage::databases::vector::VectorStore;
 use flow_like_types::rand::{self, seq::SliceRandom};
 use flow_like_types::{Result, Value, async_trait, json::json};
 #[cfg(feature = "execute")]
-use linfa::composing::MultiClassModel;
-#[cfg(feature = "execute")]
-use linfa::prelude::Pr;
-#[cfg(feature = "execute")]
 use linfa::DatasetBase;
 #[cfg(feature = "execute")]
+use linfa::composing::MultiClassModel;
+#[cfg(feature = "execute")]
 use linfa::dataset::Records;
+#[cfg(feature = "execute")]
+use linfa::prelude::Pr;
 #[cfg(feature = "execute")]
 use linfa::traits::{Fit, Predict};
 #[cfg(feature = "execute")]
@@ -223,7 +224,12 @@ impl NodeLogic for AutoClassifierNode {
         };
 
         context.log_message(
-            &format!("AutoML: {} samples, {} folds, metric={}", records.nsamples(), cv_folds, metric),
+            &format!(
+                "AutoML: {} samples, {} folds, metric={}",
+                records.nsamples(),
+                cv_folds,
+                metric
+            ),
             LogLevel::Info,
         );
 
@@ -244,7 +250,8 @@ impl NodeLogic for AutoClassifierNode {
             let mut fold_scores = Vec::with_capacity(cv_folds);
 
             for fold in 0..cv_folds {
-                let (train_ds, val_records, val_targets) = create_fold_split(&records, &indices, fold, fold_size, cv_folds);
+                let (train_ds, val_records, val_targets) =
+                    create_fold_split(&records, &indices, fold, fold_size, cv_folds);
                 let model = GaussianNb::params().fit(&train_ds)?;
                 let val_ds = DatasetBase::from(val_records);
                 let predictions = model.predict(&val_ds);
@@ -253,7 +260,10 @@ impl NodeLogic for AutoClassifierNode {
             }
 
             let mean_score = fold_scores.iter().sum::<f64>() / fold_scores.len() as f64;
-            context.log_message(&format!("NaiveBayes: CV score={:.4}", mean_score), LogLevel::Info);
+            context.log_message(
+                &format!("NaiveBayes: CV score={:.4}", mean_score),
+                LogLevel::Info,
+            );
 
             AutoMLEntry {
                 model_type: "GaussianNaiveBayes".to_string(),
@@ -276,7 +286,8 @@ impl NodeLogic for AutoClassifierNode {
                 let mut fold_scores = Vec::with_capacity(cv_folds);
 
                 for fold in 0..cv_folds {
-                    let (train_ds, val_records, val_targets) = create_fold_split(&records, &indices, fold, fold_size, cv_folds);
+                    let (train_ds, val_records, val_targets) =
+                        create_fold_split(&records, &indices, fold, fold_size, cv_folds);
                     let model = LinfaDecisionTree::params()
                         .max_depth(Some(depth))
                         .fit(&train_ds)?;
@@ -293,7 +304,13 @@ impl NodeLogic for AutoClassifierNode {
                 }
             }
 
-            context.log_message(&format!("DecisionTree: CV score={:.4} (depth={})", best_score, best_depth), LogLevel::Info);
+            context.log_message(
+                &format!(
+                    "DecisionTree: CV score={:.4} (depth={})",
+                    best_score, best_depth
+                ),
+                LogLevel::Info,
+            );
 
             let mut params = HashMap::new();
             params.insert("max_depth".to_string(), json!(best_depth));
@@ -315,7 +332,8 @@ impl NodeLogic for AutoClassifierNode {
                 let mut fold_scores = Vec::with_capacity(cv_folds);
 
                 for fold in 0..cv_folds {
-                    let (train_ds, val_records, val_targets) = create_fold_split(&records, &indices, fold, fold_size, cv_folds);
+                    let (train_ds, val_records, val_targets) =
+                        create_fold_split(&records, &indices, fold, fold_size, cv_folds);
 
                     // Train OvA SVM
                     let params = Svm::<_, Pr>::params().gaussian_kernel(GAUSSIAN_KERNEL_EPS);
@@ -365,7 +383,8 @@ impl NodeLogic for AutoClassifierNode {
                 })
             }
             "DecisionTree" => {
-                let max_depth = best_params.get("max_depth")
+                let max_depth = best_params
+                    .get("max_depth")
                     .and_then(|v| v.as_i64())
                     .map(|v| v as usize)
                     .unwrap_or(10);
@@ -401,15 +420,21 @@ impl NodeLogic for AutoClassifierNode {
         };
 
         context.log_message(
-            &format!("AutoML complete: best={} (score={:.4}) in {:.2}s",
-                best_model_type, result.leaderboard[0].cv_score, result.total_time_secs),
+            &format!(
+                "AutoML complete: best={} (score={:.4}) in {:.2}s",
+                best_model_type, result.leaderboard[0].cv_score, result.total_time_secs
+            ),
             LogLevel::Info,
         );
 
         let node_model = NodeMLModel::new(context, final_model).await;
         context.set_pin_value("results", json!(result)).await?;
-        context.set_pin_value("best_model", json!(node_model)).await?;
-        context.set_pin_value("best_model_type", json!(best_model_type)).await?;
+        context
+            .set_pin_value("best_model", json!(node_model))
+            .await?;
+        context
+            .set_pin_value("best_model_type", json!(best_model_type))
+            .await?;
         context.activate_exec_pin("exec_out").await?;
         Ok(())
     }
@@ -476,25 +501,29 @@ fn create_fold_split(
 ) {
     let n_samples = records.nsamples();
     let val_start = fold * fold_size;
-    let val_end = if fold == cv_folds - 1 { n_samples } else { val_start + fold_size };
+    let val_end = if fold == cv_folds - 1 {
+        n_samples
+    } else {
+        val_start + fold_size
+    };
 
     let val_indices: Vec<usize> = indices[val_start..val_end].to_vec();
-    let train_indices: Vec<usize> = indices.iter()
+    let train_indices: Vec<usize> = indices
+        .iter()
         .enumerate()
         .filter(|(i, _)| *i < val_start || *i >= val_end)
         .map(|(_, &idx)| idx)
         .collect();
 
     let train_records = records.records().select(ndarray::Axis(0), &train_indices);
-    let train_targets: ndarray::Array1<usize> = train_indices.iter()
+    let train_targets: ndarray::Array1<usize> = train_indices
+        .iter()
         .map(|&i| records.targets()[i])
         .collect();
     let train_ds = DatasetBase::from(train_records).with_targets(train_targets);
 
     let val_records = records.records().select(ndarray::Axis(0), &val_indices);
-    let val_targets: Vec<usize> = val_indices.iter()
-        .map(|&i| records.targets()[i])
-        .collect();
+    let val_targets: Vec<usize> = val_indices.iter().map(|&i| records.targets()[i]).collect();
 
     (train_ds, val_records, val_targets)
 }
@@ -504,7 +533,9 @@ fn compute_accuracy(predictions: &ndarray::Array1<usize>, targets: &[usize]) -> 
     if predictions.len() != targets.len() || predictions.is_empty() {
         return 0.0;
     }
-    let correct = predictions.iter().zip(targets.iter())
+    let correct = predictions
+        .iter()
+        .zip(targets.iter())
         .filter(|(p, t)| p == t)
         .count();
     correct as f64 / predictions.len() as f64

@@ -13,7 +13,10 @@ function getManagerSingleton(): DownloadManager {
 }
 
 type ProgressListener = (dl: Download) => void;
-export type DownloadCompleteListener = (bit: IBit, downloadedBits: IBit[]) => void;
+export type DownloadCompleteListener = (
+	bit: IBit,
+	downloadedBits: IBit[],
+) => void;
 
 export class DownloadManager {
 	private readonly downloads = new Map<string, Download>();

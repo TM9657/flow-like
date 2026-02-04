@@ -37,7 +37,10 @@ export function EmptyState({
 			)}
 		>
 			{/* Floating orbs background */}
-			<FloatingOrbs count={3} className="opacity-30 group-hover:opacity-50 transition-opacity duration-500" />
+			<FloatingOrbs
+				count={3}
+				className="opacity-30 group-hover:opacity-50 transition-opacity duration-500"
+			/>
 
 			{/* Gradient accent on hover */}
 			<div className="absolute inset-0 bg-gradient-to-br from-primary/[0.03] via-transparent to-purple-500/[0.03] opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none" />
@@ -70,7 +73,9 @@ export function EmptyState({
 					</div>
 				)}
 			</div>
-			<h2 className="relative z-10 text-foreground font-medium mt-6">{title}</h2>
+			<h2 className="relative z-10 text-foreground font-medium mt-6">
+				{title}
+			</h2>
 			<p className="relative z-10 text-sm text-muted-foreground mt-1 whitespace-pre-line">
 				{description}
 			</p>

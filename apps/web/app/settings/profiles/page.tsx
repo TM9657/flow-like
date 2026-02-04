@@ -135,7 +135,8 @@ export default function SettingsProfilesPage() {
 	const upsertProfile = useCallback(
 		async (profile: ISettingsProfile) => {
 			if (!auth.user?.access_token || !profile.hub_profile.id) return;
-			const baseUrl = process.env.NEXT_PUBLIC_API_URL || "https://api.flow-like.com";
+			const baseUrl =
+				process.env.NEXT_PUBLIC_API_URL || "https://api.flow-like.com";
 			await fetch(`${baseUrl}/api/v1/profile/${profile.hub_profile.id}`, {
 				method: "POST",
 				headers: {

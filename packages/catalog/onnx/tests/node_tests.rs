@@ -256,7 +256,13 @@ mod face_types {
             bbox: [10.0, 20.0, 100.0, 100.0],
             confidence: 0.98,
             landmarks: Some(FaceLandmarks {
-                points: vec![[30.0, 40.0], [70.0, 40.0], [50.0, 60.0], [35.0, 80.0], [65.0, 80.0]],
+                points: vec![
+                    [30.0, 40.0],
+                    [70.0, 40.0],
+                    [50.0, 60.0],
+                    [35.0, 80.0],
+                    [65.0, 80.0],
+                ],
                 landmark_type: LandmarkType::FivePoint,
             }),
         };
@@ -349,9 +355,7 @@ mod ocr_types {
 mod node_metadata {
     use super::*;
     use flow_like_catalog_onnx::{
-        audio::{
-            LoadAudioNode, ResampleAudioNode, TrimAudioNode, VoiceActivityDetectionNode,
-        },
+        audio::{LoadAudioNode, ResampleAudioNode, TrimAudioNode, VoiceActivityDetectionNode},
         batch::BatchImageInferenceNode,
         depth::{DepthColorizeNode, DepthEstimationNode, DepthToPointCloudNode},
         face::{CompareFacesNode, CropFacesNode, FaceDetectionNode, FaceEmbeddingNode},
@@ -360,7 +364,9 @@ mod node_metadata {
 
     fn assert_node_has_exec_pins(node: &flow_like::flow::node::Node) {
         assert!(
-            node.pins.values().any(|p| p.name.contains("exec") || p.name == "Input"),
+            node.pins
+                .values()
+                .any(|p| p.name.contains("exec") || p.name == "Input"),
             "Node should have execution pin"
         );
     }

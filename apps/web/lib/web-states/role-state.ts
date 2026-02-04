@@ -1,6 +1,12 @@
 import type { IRoleState } from "@tm9657/flow-like-ui";
 import type { IBackendRole } from "@tm9657/flow-like-ui/state/backend-state/types";
-import { apiDelete, apiGet, apiPost, apiPut, type WebBackendRef } from "./api-utils";
+import {
+	type WebBackendRef,
+	apiDelete,
+	apiGet,
+	apiPost,
+	apiPut,
+} from "./api-utils";
 
 export class WebRoleState implements IRoleState {
 	constructor(private readonly backend: WebBackendRef) {}
@@ -17,10 +23,7 @@ export class WebRoleState implements IRoleState {
 	}
 
 	async deleteRole(appId: string, roleId: string): Promise<void> {
-		await apiDelete(
-			`apps/${appId}/roles/${roleId}`,
-			this.backend.auth,
-		);
+		await apiDelete(`apps/${appId}/roles/${roleId}`, this.backend.auth);
 	}
 
 	async makeRoleDefault(appId: string, roleId: string): Promise<void> {
@@ -32,11 +35,7 @@ export class WebRoleState implements IRoleState {
 	}
 
 	async upsertRole(appId: string, role: IBackendRole): Promise<void> {
-		await apiPut(
-			`apps/${appId}/roles/${role.id}`,
-			role,
-			this.backend.auth,
-		);
+		await apiPut(`apps/${appId}/roles/${role.id}`, role, this.backend.auth);
 	}
 
 	async assignRole(appId: string, roleId: string, sub: string): Promise<void> {

@@ -168,7 +168,8 @@ impl State {
                 Some(flow_like_sinks::scheduler::SchedulerProvider::Aws) => {
                     #[cfg(feature = "aws")]
                     {
-                        let scheduler = flow_like_sinks::scheduler::AwsEventBridgeScheduler::from_env().await;
+                        let scheduler =
+                            flow_like_sinks::scheduler::AwsEventBridgeScheduler::from_env().await;
                         tracing::info!("Initialized AWS EventBridge sink scheduler");
                         Some(Arc::new(scheduler) as Arc<dyn flow_like_sinks::SchedulerBackend>)
                     }
@@ -184,7 +185,8 @@ impl State {
                         match flow_like_sinks::scheduler::KubernetesScheduler::from_env().await {
                             Ok(scheduler) => {
                                 tracing::info!("Initialized Kubernetes CronJob sink scheduler");
-                                Some(Arc::new(scheduler) as Arc<dyn flow_like_sinks::SchedulerBackend>)
+                                Some(Arc::new(scheduler)
+                                    as Arc<dyn flow_like_sinks::SchedulerBackend>)
                             }
                             Err(e) => {
                                 tracing::warn!("Failed to initialize K8s scheduler: {}", e);
@@ -194,16 +196,23 @@ impl State {
                     }
                     #[cfg(not(feature = "kubernetes"))]
                     {
-                        tracing::warn!("Kubernetes scheduler requested but kubernetes feature not enabled");
+                        tracing::warn!(
+                            "Kubernetes scheduler requested but kubernetes feature not enabled"
+                        );
                         None
                     }
                 }
                 Some(flow_like_sinks::scheduler::SchedulerProvider::Memory) => {
                     tracing::info!("Using in-memory sink scheduler");
-                    Some(Arc::new(flow_like_sinks::scheduler::InMemoryScheduler::new()) as Arc<dyn flow_like_sinks::SchedulerBackend>)
+                    Some(
+                        Arc::new(flow_like_sinks::scheduler::InMemoryScheduler::new())
+                            as Arc<dyn flow_like_sinks::SchedulerBackend>,
+                    )
                 }
                 None => {
-                    tracing::debug!("No sink scheduler configured (SINK_SCHEDULER_PROVIDER not set)");
+                    tracing::debug!(
+                        "No sink scheduler configured (SINK_SCHEDULER_PROVIDER not set)"
+                    );
                     None
                 }
             }

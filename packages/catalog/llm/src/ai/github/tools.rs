@@ -54,14 +54,9 @@ impl NodeLogic for CopilotToolConfigNode {
         )
         .set_default_value(Some(json::json!({})));
 
-        node.add_output_pin(
-            "tool",
-            "Tool",
-            "Configured tool",
-            VariableType::Struct,
-        )
-        .set_schema::<CopilotToolConfig>()
-        .set_options(PinOptions::new().set_enforce_schema(true).build());
+        node.add_output_pin("tool", "Tool", "Configured tool", VariableType::Struct)
+            .set_schema::<CopilotToolConfig>()
+            .set_options(PinOptions::new().set_enforce_schema(true).build());
 
         node
     }
@@ -139,7 +134,10 @@ impl NodeLogic for CopilotToolListNode {
         let mut tools: Vec<CopilotToolConfig> = Vec::new();
 
         for i in 1..=8 {
-            if let Ok(tool) = context.evaluate_pin::<CopilotToolConfig>(&format!("tool_{}", i)).await {
+            if let Ok(tool) = context
+                .evaluate_pin::<CopilotToolConfig>(&format!("tool_{}", i))
+                .await
+            {
                 tools.push(tool);
             }
         }

@@ -21,8 +21,9 @@ impl AwsEventBridgeConfig {
     /// Create configuration from environment variables
     pub fn from_env() -> Result<Self, SchedulerError> {
         Ok(Self {
-            target_arn: std::env::var("EVENTBRIDGE_TARGET_ARN")
-                .map_err(|_| SchedulerError::ConfigError("EVENTBRIDGE_TARGET_ARN not set".into()))?,
+            target_arn: std::env::var("EVENTBRIDGE_TARGET_ARN").map_err(|_| {
+                SchedulerError::ConfigError("EVENTBRIDGE_TARGET_ARN not set".into())
+            })?,
             role_arn: std::env::var("EVENTBRIDGE_ROLE_ARN")
                 .map_err(|_| SchedulerError::ConfigError("EVENTBRIDGE_ROLE_ARN not set".into()))?,
             group_name: std::env::var("EVENTBRIDGE_GROUP_NAME")
@@ -235,7 +236,10 @@ impl SchedulerBackend for AwsEventBridgeScheduler {
                     tracing::debug!(event_id = %event_id, "Schedule already deleted");
                     Ok(())
                 } else {
-                    Err(SchedulerError::ProviderError(format!("AWS SDK error: {}", e)))
+                    Err(SchedulerError::ProviderError(format!(
+                        "AWS SDK error: {}",
+                        e
+                    )))
                 }
             }
         }
@@ -346,7 +350,10 @@ impl SchedulerBackend for AwsEventBridgeScheduler {
                 if err_str.contains("ResourceNotFoundException") {
                     Ok(false)
                 } else {
-                    Err(SchedulerError::ProviderError(format!("AWS SDK error: {}", e)))
+                    Err(SchedulerError::ProviderError(format!(
+                        "AWS SDK error: {}",
+                        e
+                    )))
                 }
             }
         }
@@ -387,7 +394,10 @@ impl SchedulerBackend for AwsEventBridgeScheduler {
                 if err_str.contains("ResourceNotFoundException") {
                     Ok(None)
                 } else {
-                    Err(SchedulerError::ProviderError(format!("AWS SDK error: {}", e)))
+                    Err(SchedulerError::ProviderError(format!(
+                        "AWS SDK error: {}",
+                        e
+                    )))
                 }
             }
         }

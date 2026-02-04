@@ -1,6 +1,6 @@
 "use client";
 
-import { CommandIcon, Search, SparkleIcon, Sparkles, SparklesIcon } from "lucide-react";
+import { CommandIcon, Search, Sparkles, SparklesIcon } from "lucide-react";
 import { cn } from "../../lib/utils";
 import { useSpotlightStore } from "../../state/spotlight-state";
 import { Button } from "../ui/button";

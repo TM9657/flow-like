@@ -580,7 +580,9 @@ impl Copilot {
                             UserContent::ToolResult(RigToolResult {
                                 id: tool_id.clone(),
                                 call_id: None,
-                                content: OneOrMany::one(ToolResultContent::text(tool_output.clone())),
+                                content: OneOrMany::one(ToolResultContent::text(
+                                    tool_output.clone(),
+                                )),
                             })
                         })
                         .collect();

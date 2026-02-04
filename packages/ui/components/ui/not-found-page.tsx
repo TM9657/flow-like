@@ -1,8 +1,8 @@
 "use client";
 
-import { cn } from "../../lib/utils";
 import { ArrowLeft, Home, RefreshCw } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
+import { cn } from "../../lib/utils";
 import { Button } from "./button";
 
 interface FloatingOrbProps {
@@ -13,18 +13,26 @@ interface FloatingOrbProps {
 	startAngle: number;
 }
 
-function FloatingOrb({ delay, duration, size, color, startAngle }: FloatingOrbProps) {
+function FloatingOrb({
+	delay,
+	duration,
+	size,
+	color,
+	startAngle,
+}: FloatingOrbProps) {
 	return (
 		<div
 			className="absolute rounded-full blur-xl pointer-events-none animate-orbit"
-			style={{
-				width: size,
-				height: size,
-				background: `radial-gradient(circle, ${color} 0%, transparent 70%)`,
-				animationDelay: `${delay}s`,
-				animationDuration: `${duration}s`,
-				"--start-angle": `${startAngle}deg`,
-			} as React.CSSProperties}
+			style={
+				{
+					width: size,
+					height: size,
+					background: `radial-gradient(circle, ${color} 0%, transparent 70%)`,
+					animationDelay: `${delay}s`,
+					animationDuration: `${duration}s`,
+					"--start-angle": `${startAngle}deg`,
+				} as React.CSSProperties
+			}
 		/>
 	);
 }
@@ -60,7 +68,8 @@ function AnimatedDigit({ digit, index, mouseX, mouseY }: AnimatedDigitProps) {
 			<span
 				className="absolute inset-0 bg-clip-text text-transparent animate-gradient-text bg-size-[200%_200%]"
 				style={{
-					backgroundImage: "linear-gradient(135deg, hsl(var(--primary)) 0%, hsl(var(--foreground)) 25%, hsl(var(--primary)) 50%, hsl(var(--foreground)) 75%, hsl(var(--primary)) 100%)",
+					backgroundImage:
+						"linear-gradient(135deg, hsl(var(--primary)) 0%, hsl(var(--foreground)) 25%, hsl(var(--primary)) 50%, hsl(var(--foreground)) 75%, hsl(var(--primary)) 100%)",
 					animationDelay: `${offset}s`,
 				}}
 			>
@@ -94,7 +103,7 @@ export function NotFoundPage({
 
 	useEffect(() => {
 		setMounted(true);
-		const interval = setInterval(() => setTime(t => t + 1), 50);
+		const interval = setInterval(() => setTime((t) => t + 1), 50);
 		return () => clearInterval(interval);
 	}, []);
 
@@ -105,8 +114,8 @@ export function NotFoundPage({
 			const centerX = rect.left + rect.width / 2;
 			const centerY = rect.top + rect.height / 2;
 			setMousePosition({
-				x: (e.clientX - centerX) / (rect.width / 2) * 15,
-				y: (e.clientY - centerY) / (rect.height / 2) * 15,
+				x: ((e.clientX - centerX) / (rect.width / 2)) * 15,
+				y: ((e.clientY - centerY) / (rect.height / 2)) * 15,
 			});
 		};
 		window.addEventListener("mousemove", handleMouseMove);
@@ -130,9 +139,27 @@ export function NotFoundPage({
 	};
 
 	const orbs = [
-		{ delay: 0, duration: 20, size: 300, color: "hsl(var(--primary) / 0.15)", startAngle: 0 },
-		{ delay: 5, duration: 25, size: 200, color: "hsl(var(--secondary) / 0.1)", startAngle: 120 },
-		{ delay: 10, duration: 30, size: 250, color: "hsl(var(--primary) / 0.1)", startAngle: 240 },
+		{
+			delay: 0,
+			duration: 20,
+			size: 300,
+			color: "hsl(var(--primary) / 0.15)",
+			startAngle: 0,
+		},
+		{
+			delay: 5,
+			duration: 25,
+			size: 200,
+			color: "hsl(var(--secondary) / 0.1)",
+			startAngle: 120,
+		},
+		{
+			delay: 10,
+			duration: 30,
+			size: 250,
+			color: "hsl(var(--primary) / 0.1)",
+			startAngle: 240,
+		},
 	];
 
 	const digits = "404".split("");
@@ -165,9 +192,7 @@ export function NotFoundPage({
 
 			{/* Floating orbs */}
 			<div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-				{mounted && orbs.map((orb, i) => (
-					<FloatingOrb key={i} {...orb} />
-				))}
+				{mounted && orbs.map((orb, i) => <FloatingOrb key={i} {...orb} />)}
 			</div>
 
 			{/* Orbiting rings */}
@@ -190,7 +215,7 @@ export function NotFoundPage({
 			<div
 				className={cn(
 					"relative z-10 flex flex-col items-center text-center px-6 transition-all duration-500 ease-out",
-					mounted ? "opacity-100 translate-y-0" : "opacity-0 translate-y-12"
+					mounted ? "opacity-100 translate-y-0" : "opacity-0 translate-y-12",
 				)}
 				style={{
 					transform: mounted
@@ -220,22 +245,29 @@ export function NotFoundPage({
 					<div
 						className="absolute inset-0 blur-3xl opacity-30 -z-10"
 						style={{
-							background: "radial-gradient(circle, hsl(var(--primary)) 0%, transparent 70%)",
+							background:
+								"radial-gradient(circle, hsl(var(--primary)) 0%, transparent 70%)",
 							transform: `scale(1.2) translateZ(-50px)`,
 						}}
 					/>
 
 					{/* Floating dots decoration */}
 					<div className="absolute -top-8 -right-8 w-3 h-3 rounded-full bg-primary/60 animate-bounce-slow" />
-					<div className="absolute top-1/4 -left-12 w-2 h-2 rounded-full bg-primary/40 animate-bounce-slow" style={{ animationDelay: "0.5s" }} />
-					<div className="absolute -bottom-4 right-1/4 w-4 h-4 rounded-full bg-primary/30 animate-bounce-slow" style={{ animationDelay: "1s" }} />
+					<div
+						className="absolute top-1/4 -left-12 w-2 h-2 rounded-full bg-primary/40 animate-bounce-slow"
+						style={{ animationDelay: "0.5s" }}
+					/>
+					<div
+						className="absolute -bottom-4 right-1/4 w-4 h-4 rounded-full bg-primary/30 animate-bounce-slow"
+						style={{ animationDelay: "1s" }}
+					/>
 				</div>
 
 				{/* Error message with fade-in effect */}
 				<div
 					className={cn(
 						"space-y-3 mb-10 transition-all duration-700 delay-300",
-						mounted ? "opacity-100 translate-y-0" : "opacity-0 translate-y-4"
+						mounted ? "opacity-100 translate-y-0" : "opacity-0 translate-y-4",
 					)}
 				>
 					<h1 className="text-2xl sm:text-3xl md:text-4xl font-bold text-foreground">
@@ -250,7 +282,7 @@ export function NotFoundPage({
 				<div
 					className={cn(
 						"flex flex-col sm:flex-row gap-3 transition-all duration-700 delay-500",
-						mounted ? "opacity-100 translate-y-0" : "opacity-0 translate-y-4"
+						mounted ? "opacity-100 translate-y-0" : "opacity-0 translate-y-4",
 					)}
 				>
 					<Button
@@ -292,10 +324,11 @@ export function NotFoundPage({
 				<p
 					className={cn(
 						"mt-12 text-xs text-muted-foreground/60 max-w-xs transition-all duration-700 delay-700",
-						mounted ? "opacity-100" : "opacity-0"
+						mounted ? "opacity-100" : "opacity-0",
 					)}
 				>
-					Lost in the flow? Don't worry, even the best workflows take unexpected turns sometimes.
+					Lost in the flow? Don't worry, even the best workflows take unexpected
+					turns sometimes.
 				</p>
 			</div>
 

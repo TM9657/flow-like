@@ -5,7 +5,8 @@
 use crate::ml::{GridSearchEntry, GridSearchResult, NodeMLModel, ParameterSpec};
 #[cfg(feature = "execute")]
 use crate::ml::{
-    MAX_ML_PREDICTION_RECORDS, MLModel, ModelWithMeta, values_to_array1_target, values_to_array2_f64,
+    MAX_ML_PREDICTION_RECORDS, MLModel, ModelWithMeta, values_to_array1_target,
+    values_to_array2_f64,
 };
 use flow_like::flow::{
     board::Board,
@@ -81,10 +82,7 @@ impl NodeLogic for GridSearchNode {
         )
         .set_options(
             PinOptions::new()
-                .set_valid_values(vec![
-                    "NaiveBayes".to_string(),
-                    "DecisionTree".to_string(),
-                ])
+                .set_valid_values(vec!["NaiveBayes".to_string(), "DecisionTree".to_string()])
                 .build(),
         )
         .set_default_value(Some(json!("DecisionTree")));
@@ -203,14 +201,21 @@ impl NodeLogic for GridSearchNode {
         };
 
         context.log_message(
-            &format!("Grid Search: {} samples, {} folds", records.nsamples(), cv_folds),
+            &format!(
+                "Grid Search: {} samples, {} folds",
+                records.nsamples(),
+                cv_folds
+            ),
             LogLevel::Info,
         );
 
         // Generate parameter combinations
         let param_combinations = generate_param_combinations(&param_grid);
         context.log_message(
-            &format!("Testing {} parameter combinations", param_combinations.len()),
+            &format!(
+                "Testing {} parameter combinations",
+                param_combinations.len()
+            ),
             LogLevel::Info,
         );
 
@@ -236,11 +241,16 @@ impl NodeLogic for GridSearchNode {
             // K-fold cross validation
             for fold in 0..cv_folds {
                 let val_start = fold * fold_size;
-                let val_end = if fold == cv_folds - 1 { n_samples } else { val_start + fold_size };
+                let val_end = if fold == cv_folds - 1 {
+                    n_samples
+                } else {
+                    val_start + fold_size
+                };
 
                 // Split indices
                 let val_indices: Vec<usize> = indices[val_start..val_end].to_vec();
-                let train_indices: Vec<usize> = indices.iter()
+                let train_indices: Vec<usize> = indices
+                    .iter()
                     .enumerate()
                     .filter(|(i, _)| *i < val_start || *i >= val_end)
                     .map(|(_, &idx)| idx)
@@ -248,15 +258,15 @@ impl NodeLogic for GridSearchNode {
 
                 // Create train/val datasets
                 let train_records = records.records().select(ndarray::Axis(0), &train_indices);
-                let train_targets: ndarray::Array1<usize> = train_indices.iter()
+                let train_targets: ndarray::Array1<usize> = train_indices
+                    .iter()
                     .map(|&i| records.targets()[i])
                     .collect();
                 let train_ds = DatasetBase::from(train_records).with_targets(train_targets);
 
                 let val_records = records.records().select(ndarray::Axis(0), &val_indices);
-                let val_targets: Vec<usize> = val_indices.iter()
-                    .map(|&i| records.targets()[i])
-                    .collect();
+                let val_targets: Vec<usize> =
+                    val_indices.iter().map(|&i| records.targets()[i]).collect();
 
                 // Train and evaluate
                 let score = match model_type.as_str() {
@@ -267,10 +277,12 @@ impl NodeLogic for GridSearchNode {
                         compute_accuracy(&predictions, &val_targets)
                     }
                     "DecisionTree" => {
-                        let max_depth = params.get("max_depth")
+                        let max_depth = params
+                            .get("max_depth")
                             .and_then(|v| v.as_i64())
                             .map(|v| v as usize);
-                        let min_weight = params.get("min_weight_split")
+                        let min_weight = params
+                            .get("min_weight_split")
                             .and_then(|v| v.as_f64())
                             .unwrap_or(1.0) as f32;
 
@@ -285,16 +297,23 @@ impl NodeLogic for GridSearchNode {
                         let predictions = model.predict(&val_ds);
                         compute_accuracy(&predictions, &val_targets)
                     }
-                    _ => return Err(flow_like_types::anyhow!("Unknown model type: {}", model_type)),
+                    _ => {
+                        return Err(flow_like_types::anyhow!(
+                            "Unknown model type: {}",
+                            model_type
+                        ));
+                    }
                 };
 
                 fold_scores.push(score);
             }
 
             let mean_score = fold_scores.iter().sum::<f64>() / fold_scores.len() as f64;
-            let variance = fold_scores.iter()
+            let variance = fold_scores
+                .iter()
                 .map(|s| (s - mean_score).powi(2))
-                .sum::<f64>() / fold_scores.len() as f64;
+                .sum::<f64>()
+                / fold_scores.len() as f64;
             let std_score = variance.sqrt();
 
             let entry = GridSearchEntry {
@@ -311,7 +330,13 @@ impl NodeLogic for GridSearchNode {
             }
 
             context.log_message(
-                &format!("Combo {}/{}: score={:.4} ± {:.4}", combo_idx + 1, param_combinations.len(), mean_score, std_score),
+                &format!(
+                    "Combo {}/{}: score={:.4} ± {:.4}",
+                    combo_idx + 1,
+                    param_combinations.len(),
+                    mean_score,
+                    std_score
+                ),
                 LogLevel::Debug,
             );
 
@@ -330,10 +355,12 @@ impl NodeLogic for GridSearchNode {
                 })
             }
             "DecisionTree" => {
-                let max_depth = best_params.get("max_depth")
+                let max_depth = best_params
+                    .get("max_depth")
                     .and_then(|v| v.as_i64())
                     .map(|v| v as usize);
-                let min_weight = best_params.get("min_weight_split")
+                let min_weight = best_params
+                    .get("min_weight_split")
                     .and_then(|v| v.as_f64())
                     .unwrap_or(1.0) as f32;
 
@@ -363,13 +390,18 @@ impl NodeLogic for GridSearchNode {
         };
 
         context.log_message(
-            &format!("Grid Search complete: best score={:.4} in {:.2}s", best_score, result.total_time_secs),
+            &format!(
+                "Grid Search complete: best score={:.4} in {:.2}s",
+                best_score, result.total_time_secs
+            ),
             LogLevel::Info,
         );
 
         let node_model = NodeMLModel::new(context, final_model).await;
         context.set_pin_value("results", json!(result)).await?;
-        context.set_pin_value("best_model", json!(node_model)).await?;
+        context
+            .set_pin_value("best_model", json!(node_model))
+            .await?;
         context.activate_exec_pin("exec_out").await?;
         Ok(())
     }
@@ -479,7 +511,9 @@ fn compute_accuracy(predictions: &ndarray::Array1<usize>, targets: &[usize]) -> 
     if predictions.len() != targets.len() || predictions.is_empty() {
         return 0.0;
     }
-    let correct = predictions.iter().zip(targets.iter())
+    let correct = predictions
+        .iter()
+        .zip(targets.iter())
         .filter(|(p, t)| p == t)
         .count();
     correct as f64 / predictions.len() as f64

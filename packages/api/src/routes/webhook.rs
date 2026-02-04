@@ -291,7 +291,10 @@ async fn handle_app_purchase_completed(
         discount_id: Set(None), // Could be enhanced to extract discount code from session
         currency: Set(currency),
         stripe_session_id: Set(session_id.clone()),
-        stripe_payment_intent_id: Set(session.payment_intent.as_ref().map(|pi| pi.id().to_string())),
+        stripe_payment_intent_id: Set(session
+            .payment_intent
+            .as_ref()
+            .map(|pi| pi.id().to_string())),
         status: Set(PurchaseStatus::Completed),
         completed_at: Set(Some(now)),
         refunded_at: Set(None),
@@ -341,8 +344,8 @@ async fn handle_app_purchase_completed(
         .unwrap_or_else(|| "the app".to_string());
 
     // Build app link URL for notification - link directly to "use" page since they own it now
-    let frontend_url = std::env::var("FRONTEND_URL")
-        .unwrap_or_else(|_| "https://app.flow-like.com".to_string());
+    let frontend_url =
+        std::env::var("FRONTEND_URL").unwrap_or_else(|_| "https://app.flow-like.com".to_string());
     let app_link_url = format!("{}/use?id={}", frontend_url, app_id);
 
     // Create notification for the user

@@ -3,6 +3,8 @@
 //! This node uses an LLM to intelligently detect and mask PII in text.
 //! It can understand context and detect PII types that may be missed by regex patterns.
 
+#[cfg(feature = "execute")]
+use flow_like::flow::execution::LogLevel;
 use flow_like::{
     bit::Bit,
     flow::{
@@ -13,12 +15,10 @@ use flow_like::{
     },
 };
 #[cfg(feature = "execute")]
-use flow_like::flow::execution::LogLevel;
+use flow_like_types::Value;
 #[cfg(feature = "execute")]
 use flow_like_types::anyhow;
 use flow_like_types::{async_trait, json::json};
-#[cfg(feature = "execute")]
-use flow_like_types::Value;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
@@ -141,12 +141,14 @@ impl Tool for PiiMaskTool {
         // Verify masked_text doesn't contain the original values
         for detection in detections {
             if let Some(original) = detection.get("original").and_then(|v| v.as_str())
-                && !original.is_empty() && masked_text.contains(original) {
-                    return Err(PiiMaskError(format!(
-                        "Masked text still contains original PII: {}",
-                        original
-                    )));
-                }
+                && !original.is_empty()
+                && masked_text.contains(original)
+            {
+                return Err(PiiMaskError(format!(
+                    "Masked text still contains original PII: {}",
+                    original
+                )));
+            }
         }
 
         Ok(args)
@@ -292,16 +294,24 @@ impl NodeLogic for PiiMaskAiNode {
 
         if text.trim().is_empty() {
             context.set_pin_value("masked_text", json!("")).await?;
-            context.set_pin_value("detection_count", json!(0i64)).await?;
+            context
+                .set_pin_value("detection_count", json!(0i64))
+                .await?;
             context.set_pin_value("detections", json!([])).await?;
             context.activate_exec_pin("exec_out").await?;
             return Ok(());
         }
 
         let sensitivity_instruction = match sensitivity.as_str() {
-            "low" => "Only mask clearly identifiable PII such as full names, complete email addresses, phone numbers, SSNs, and credit card numbers.",
-            "high" => "Aggressively mask any potentially identifying information including partial names, nicknames, locations, dates, ages, job titles, organizations, and any data that could be combined to identify someone.",
-            _ => "Mask standard PII including names, email addresses, phone numbers, physical addresses, SSNs, credit card numbers, dates of birth, passport numbers, and any other government ID numbers.",
+            "low" => {
+                "Only mask clearly identifiable PII such as full names, complete email addresses, phone numbers, SSNs, and credit card numbers."
+            }
+            "high" => {
+                "Aggressively mask any potentially identifying information including partial names, nicknames, locations, dates, ages, job titles, organizations, and any data that could be combined to identify someone."
+            }
+            _ => {
+                "Mask standard PII including names, email addresses, phone numbers, physical addresses, SSNs, credit card numbers, dates of birth, passport numbers, and any other government ID numbers."
+            }
         };
 
         let mut system_prompt = format!(
@@ -335,8 +345,10 @@ IMPORTANT:
         );
 
         if !additional_context.trim().is_empty() {
-            system_prompt
-                .push_str(&format!("\n\nAdditional instructions: {}", additional_context));
+            system_prompt.push_str(&format!(
+                "\n\nAdditional instructions: {}",
+                additional_context
+            ));
         }
 
         let user_prompt = format!(
@@ -391,7 +403,8 @@ IMPORTANT:
 
         let detections = args
             .get("detections")
-            .and_then(|v| v.as_array()).cloned()
+            .and_then(|v| v.as_array())
+            .cloned()
             .unwrap_or_default();
 
         context.log_message(

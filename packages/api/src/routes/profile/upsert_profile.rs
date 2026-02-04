@@ -66,7 +66,11 @@ async fn generate_upload_url(
 }
 
 /// Delete an old profile image from storage
-async fn delete_old_image(state: &AppState, profile_id: &str, image_id: &str) -> Result<(), ApiError> {
+async fn delete_old_image(
+    state: &AppState,
+    profile_id: &str,
+    image_id: &str,
+) -> Result<(), ApiError> {
     // Construct path: media/profiles/{profile_id}/{image_id}.webp
     let path = ObjectPath::from("media")
         .child("profiles")
@@ -197,7 +201,8 @@ pub async fn upsert_profile(
         (None, None)
     };
 
-    let (thumbnail_upload_url, thumbnail_id) = if let Some(ext) = &profile_body.thumbnail_upload_ext {
+    let (thumbnail_upload_url, thumbnail_id) = if let Some(ext) = &profile_body.thumbnail_upload_ext
+    {
         let (url, img_id) = generate_upload_url(&state, &id, ext).await?;
         (Some(url), Some(img_id))
     } else {

@@ -10,7 +10,9 @@ use axum::{
 };
 use chrono::{NaiveDateTime, Utc};
 use flow_like_types::create_id;
-use sea_orm::{ActiveModelTrait, ActiveValue::Set, ColumnTrait, EntityTrait, QueryFilter, QueryOrder};
+use sea_orm::{
+    ActiveModelTrait, ActiveValue::Set, ColumnTrait, EntityTrait, QueryFilter, QueryOrder,
+};
 use serde::{Deserialize, Serialize};
 
 use super::overview::verify_sales_access;
@@ -115,8 +117,8 @@ pub async fn list_discounts(
 
     verify_sales_access(&state, &sub, &app_id).await?;
 
-    let mut query_builder = app_discount::Entity::find()
-        .filter(app_discount::Column::AppId.eq(&app_id));
+    let mut query_builder =
+        app_discount::Entity::find().filter(app_discount::Column::AppId.eq(&app_id));
 
     if query.active_only {
         query_builder = query_builder.filter(app_discount::Column::IsActive.eq(true));
@@ -133,7 +135,10 @@ pub async fn list_discounts(
 }
 
 /// GET /apps/{app_id}/sales/discounts/{discount_id} - Get a specific discount
-#[tracing::instrument(name = "GET /apps/{app_id}/sales/discounts/{discount_id}", skip(state, user))]
+#[tracing::instrument(
+    name = "GET /apps/{app_id}/sales/discounts/{discount_id}",
+    skip(state, user)
+)]
 pub async fn get_discount(
     State(state): State<AppState>,
     Extension(user): Extension<AppUser>,
@@ -183,12 +188,14 @@ pub async fn create_discount(
         _ => {
             return Err(ApiError::bad_request(
                 "discount_type must be 'percentage' or 'fixed_amount'".to_string(),
-            ))
+            ));
         }
     };
 
     // Validate percentage is 0-100
-    if discount_type == DiscountType::Percentage && (body.discount_value < 0 || body.discount_value > 100) {
+    if discount_type == DiscountType::Percentage
+        && (body.discount_value < 0 || body.discount_value > 100)
+    {
         return Err(ApiError::bad_request(
             "Percentage discount must be between 0 and 100".to_string(),
         ));
@@ -206,7 +213,11 @@ pub async fn create_discount(
         .starts_at
         .as_ref()
         .and_then(|s| NaiveDateTime::parse_from_str(s, "%Y-%m-%dT%H:%M:%S%.fZ").ok())
-        .or_else(|| body.starts_at.as_ref().and_then(|s| NaiveDateTime::parse_from_str(s, "%Y-%m-%dT%H:%M:%S").ok()))
+        .or_else(|| {
+            body.starts_at
+                .as_ref()
+                .and_then(|s| NaiveDateTime::parse_from_str(s, "%Y-%m-%dT%H:%M:%S").ok())
+        })
         .unwrap_or(now);
 
     let expires_at = body.expires_at.as_ref().and_then(|s| {
@@ -248,7 +259,10 @@ pub async fn create_discount(
 }
 
 /// PATCH /apps/{app_id}/sales/discounts/{discount_id} - Update a discount
-#[tracing::instrument(name = "PATCH /apps/{app_id}/sales/discounts/{discount_id}", skip(state, user))]
+#[tracing::instrument(
+    name = "PATCH /apps/{app_id}/sales/discounts/{discount_id}",
+    skip(state, user)
+)]
 pub async fn update_discount(
     State(state): State<AppState>,
     Extension(user): Extension<AppUser>,
@@ -300,7 +314,7 @@ pub async fn update_discount(
             _ => {
                 return Err(ApiError::bad_request(
                     "discount_type must be 'percentage' or 'fixed_amount'".to_string(),
-                ))
+                ));
             }
         };
         active.discount_type = Set(discount_type);
@@ -355,7 +369,10 @@ pub async fn update_discount(
 }
 
 /// DELETE /apps/{app_id}/sales/discounts/{discount_id} - Delete a discount
-#[tracing::instrument(name = "DELETE /apps/{app_id}/sales/discounts/{discount_id}", skip(state, user))]
+#[tracing::instrument(
+    name = "DELETE /apps/{app_id}/sales/discounts/{discount_id}",
+    skip(state, user)
+)]
 pub async fn delete_discount(
     State(state): State<AppState>,
     Extension(user): Extension<AppUser>,
@@ -385,7 +402,10 @@ pub async fn delete_discount(
 }
 
 /// POST /apps/{app_id}/sales/discounts/{discount_id}/toggle - Toggle discount active state
-#[tracing::instrument(name = "POST /apps/{app_id}/sales/discounts/{discount_id}/toggle", skip(state, user))]
+#[tracing::instrument(
+    name = "POST /apps/{app_id}/sales/discounts/{discount_id}/toggle",
+    skip(state, user)
+)]
 pub async fn toggle_discount(
     State(state): State<AppState>,
     Extension(user): Extension<AppUser>,

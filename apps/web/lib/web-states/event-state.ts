@@ -9,32 +9,42 @@ import {
 	type IOAuthToken,
 	type IRunPayload,
 	type IVersionType,
-	checkOAuthTokens,
-	showProgressToast,
-	finishAllProgressToasts,
 	type ProgressToastData,
+	checkOAuthTokens,
+	finishAllProgressToasts,
+	showProgressToast,
 } from "@tm9657/flow-like-ui";
 import type { IOAuthCheckResult } from "@tm9657/flow-like-ui/state/backend-state/event-state";
 import type { IPrerunEventResponse } from "@tm9657/flow-like-ui/state/backend-state/types";
 import { toast } from "sonner";
 import { oauthConsentStore, oauthTokenStore } from "../oauth-db";
 import { oauthService } from "../oauth-service";
-import { apiDelete, apiGet, apiPost, apiPut, type WebBackendRef, getApiBaseUrl } from "./api-utils";
+import {
+	type WebBackendRef,
+	apiDelete,
+	apiGet,
+	apiPost,
+	apiPut,
+	getApiBaseUrl,
+} from "./api-utils";
 
 // Hub configuration cache
 let hubCache: IHub | undefined;
 let hubCachePromise: Promise<IHub | undefined> | undefined;
 
-async function getHubConfig(profile?: { hub?: string }): Promise<IHub | undefined> {
+async function getHubConfig(profile?: { hub?: string }): Promise<
+	IHub | undefined
+> {
 	if (hubCache) return hubCache;
 	if (hubCachePromise) return hubCachePromise;
 
 	const hubUrl = profile?.hub;
 	if (!hubUrl) return undefined;
 
-	const url = hubUrl.startsWith("http://") || hubUrl.startsWith("https://")
-		? `${hubUrl}/api/v1`
-		: `https://${hubUrl}/api/v1`;
+	const url =
+		hubUrl.startsWith("http://") || hubUrl.startsWith("https://")
+			? `${hubUrl}/api/v1`
+			: `https://${hubUrl}/api/v1`;
 
 	hubCachePromise = fetch(url)
 		.then((res) => res.json() as Promise<IHub>)
@@ -97,10 +107,7 @@ export class WebEventState implements IEventState {
 
 	async getEvents(appId: string): Promise<IEvent[]> {
 		try {
-			return await apiGet<IEvent[]>(
-				`apps/${appId}/events`,
-				this.backend.auth,
-			);
+			return await apiGet<IEvent[]>(`apps/${appId}/events`, this.backend.auth);
 		} catch {
 			return [];
 		}
@@ -139,10 +146,15 @@ export class WebEventState implements IEventState {
 		);
 	}
 
-	async checkEventOAuth(appId: string, event: IEvent): Promise<IOAuthCheckResult> {
+	async checkEventOAuth(
+		appId: string,
+		event: IEvent,
+	): Promise<IOAuthCheckResult> {
 		try {
 			// Get the board for this event
-			const boardParams = event.board_version ? `?version=${event.board_version.join(".")}` : "";
+			const boardParams = event.board_version
+				? `?version=${event.board_version.join(".")}`
+				: "";
 			const board = await apiGet<IBoard>(
 				`apps/${appId}/board/${event.board_id}${boardParams}`,
 				this.backend.auth,
@@ -160,7 +172,8 @@ export class WebEventState implements IEventState {
 			});
 
 			// Check consent for providers that have tokens but might not have consent for this app
-			const consentedIds = await oauthConsentStore.getConsentedProviderIds(appId);
+			const consentedIds =
+				await oauthConsentStore.getConsentedProviderIds(appId);
 			console.log("[checkEventOAuth] consentedIds:", [...consentedIds]);
 			const providersNeedingConsent: IOAuthProvider[] = [];
 
@@ -198,10 +211,7 @@ export class WebEventState implements IEventState {
 	}
 
 	async deleteEvent(appId: string, eventId: string): Promise<void> {
-		await apiDelete(
-			`apps/${appId}/events/${eventId}`,
-			this.backend.auth,
-		);
+		await apiDelete(`apps/${appId}/events/${eventId}`, this.backend.auth);
 	}
 
 	async validateEvent(
@@ -248,7 +258,9 @@ export class WebEventState implements IEventState {
 	): Promise<ILogMetadata | undefined> {
 		// Get the event and its board for OAuth checking
 		const event = await this.getEvent(appId, eventId);
-		const boardParams = event.board_version ? `?version=${event.board_version.join(".")}` : "";
+		const boardParams = event.board_version
+			? `?version=${event.board_version.join(".")}`
+			: "";
 		const board = await apiGet<IBoard>(
 			`apps/${appId}/board/${event.board_id}${boardParams}`,
 			this.backend.auth,
@@ -268,7 +280,8 @@ export class WebEventState implements IEventState {
 		});
 
 		if (!skipConsentCheck) {
-			const consentedIds = await oauthConsentStore.getConsentedProviderIds(appId);
+			const consentedIds =
+				await oauthConsentStore.getConsentedProviderIds(appId);
 			const providersNeedingConsent: IOAuthProvider[] = [];
 
 			// Add providers that are missing tokens
@@ -308,9 +321,10 @@ export class WebEventState implements IEventState {
 		}
 
 		// Collect OAuth tokens to pass to execution
-		const oauthTokens = Object.keys(oauthResult.tokens).length > 0
-			? oauthResult.tokens
-			: undefined;
+		const oauthTokens =
+			Object.keys(oauthResult.tokens).length > 0
+				? oauthResult.tokens
+				: undefined;
 
 		const baseUrl = getApiBaseUrl();
 		const url = `${baseUrl}/api/v1/apps/${appId}/events/${eventId}/invoke`;
@@ -319,7 +333,8 @@ export class WebEventState implements IEventState {
 			"Content-Type": "application/json",
 		};
 		if (this.backend.auth?.user?.access_token) {
-			headers["Authorization"] = `Bearer ${this.backend.auth.user.access_token}`;
+			headers["Authorization"] =
+				`Bearer ${this.backend.auth.user.access_token}`;
 		}
 
 		console.log("[OAuth] Sending event execution with tokens:", {
@@ -385,7 +400,11 @@ export class WebEventState implements IEventState {
 							const event = JSON.parse(eventData) as IIntercomEvent;
 
 							// Handle run_initiated to get run ID
-							if (!foundRunId && onEventId && event.event_type === "run_initiated") {
+							if (
+								!foundRunId &&
+								onEventId &&
+								event.event_type === "run_initiated"
+							) {
 								const runId = (event.payload as { run_id?: string })?.run_id;
 								if (runId) {
 									onEventId(runId);
@@ -409,8 +428,11 @@ export class WebEventState implements IEventState {
 							}
 
 							// Check for terminal events
-							if (eventName === "done" || eventName === "completed" ||
-								event.event_type === "completed") {
+							if (
+								eventName === "done" ||
+								eventName === "completed" ||
+								event.event_type === "completed"
+							) {
 								executionFinished = true;
 								finishAllProgressToasts(true);
 								break;
@@ -440,11 +462,7 @@ export class WebEventState implements IEventState {
 	}
 
 	async cancelExecution(runId: string): Promise<void> {
-		await apiPost(
-			`runs/${runId}/cancel`,
-			undefined,
-			this.backend.auth,
-		);
+		await apiPost(`runs/${runId}/cancel`, undefined, this.backend.auth);
 	}
 
 	async isEventSinkActive(eventId: string): Promise<boolean> {

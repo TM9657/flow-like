@@ -241,13 +241,14 @@ fn should_process_message(
 
     if handler.respond_to_mentions
         && let Some(username) = bot_username
-            && text.contains(&format!("@{}", username)) {
-                println!(
-                    "🔍 [TELEGRAM] Message mentions bot @{}, processing",
-                    username
-                );
-                return true;
-            }
+        && text.contains(&format!("@{}", username))
+    {
+        println!(
+            "🔍 [TELEGRAM] Message mentions bot @{}, processing",
+            username
+        );
+        return true;
+    }
 
     println!("🔍 [TELEGRAM] Message does not match criteria, skipping");
     false
@@ -283,32 +284,34 @@ async fn prepare_message_payload(
         match &common.media_kind {
             MediaKind::Photo(photo) => {
                 if let Some(largest) = photo.photo.last()
-                    && let Ok(file) = bot.get_file(largest.file.id.clone()).await {
-                        let url = format!(
-                            "https://api.telegram.org/file/bot{}/{}",
-                            bot.token(),
-                            file.path
-                        );
-                        content_parts.push(serde_json::json!({
-                            "type": "image_url",
-                            "image_url": { "url": url }
-                        }));
-                    }
+                    && let Ok(file) = bot.get_file(largest.file.id.clone()).await
+                {
+                    let url = format!(
+                        "https://api.telegram.org/file/bot{}/{}",
+                        bot.token(),
+                        file.path
+                    );
+                    content_parts.push(serde_json::json!({
+                        "type": "image_url",
+                        "image_url": { "url": url }
+                    }));
+                }
             }
             MediaKind::Document(doc) => {
                 if let Some(mime) = &doc.document.mime_type
                     && mime.type_().as_str() == "image"
-                        && let Ok(file) = bot.get_file(doc.document.file.id.clone()).await {
-                            let url = format!(
-                                "https://api.telegram.org/file/bot{}/{}",
-                                bot.token(),
-                                file.path
-                            );
-                            content_parts.push(serde_json::json!({
-                                "type": "image_url",
-                                "image_url": { "url": url }
-                            }));
-                        }
+                    && let Ok(file) = bot.get_file(doc.document.file.id.clone()).await
+                {
+                    let url = format!(
+                        "https://api.telegram.org/file/bot{}/{}",
+                        bot.token(),
+                        file.path
+                    );
+                    content_parts.push(serde_json::json!({
+                        "type": "image_url",
+                        "image_url": { "url": url }
+                    }));
+                }
             }
             _ => {}
         }
@@ -355,18 +358,19 @@ async fn prepare_message_payload(
             // Check for images in reply
             if let MessageKind::Common(common) = &reply_msg.kind
                 && let MediaKind::Photo(photo) = &common.media_kind
-                    && let Some(largest) = photo.photo.last()
-                        && let Ok(file) = bot.get_file(largest.file.id.clone()).await {
-                            let url = format!(
-                                "https://api.telegram.org/file/bot{}/{}",
-                                bot.token(),
-                                file.path
-                            );
-                            reply_content.push(serde_json::json!({
-                                "type": "image_url",
-                                "image_url": { "url": url }
-                            }));
-                        }
+                && let Some(largest) = photo.photo.last()
+                && let Ok(file) = bot.get_file(largest.file.id.clone()).await
+            {
+                let url = format!(
+                    "https://api.telegram.org/file/bot{}/{}",
+                    bot.token(),
+                    file.path
+                );
+                reply_content.push(serde_json::json!({
+                    "type": "image_url",
+                    "image_url": { "url": url }
+                }));
+            }
 
             reply_chain.push(serde_json::json!({
                 "role": if is_bot { "assistant" } else { "user" },
@@ -393,16 +397,17 @@ async fn prepare_message_payload(
     let mut attachments: Vec<String> = Vec::new();
     if let MessageKind::Common(common) = &msg.kind
         && let MediaKind::Document(doc) = &common.media_kind
-            && let Some(mime) = &doc.document.mime_type
-                && mime.type_().as_str() != "image"
-                    && let Ok(file) = bot.get_file(doc.document.file.id.clone()).await {
-                        let url = format!(
-                            "https://api.telegram.org/file/bot{}/{}",
-                            bot.token(),
-                            file.path
-                        );
-                        attachments.push(url);
-                    }
+        && let Some(mime) = &doc.document.mime_type
+        && mime.type_().as_str() != "image"
+        && let Ok(file) = bot.get_file(doc.document.file.id.clone()).await
+    {
+        let url = format!(
+            "https://api.telegram.org/file/bot{}/{}",
+            bot.token(),
+            file.path
+        );
+        attachments.push(url);
+    }
 
     serde_json::json!({
         "local_session": {
@@ -721,9 +726,8 @@ async fn fire_telegram_event(
 
                                 // Build reasoning HTML (kept separate from content)
                                 let reasoning_lock = reasoning.lock().await;
-                                let reasoning_html = reasoning_lock
-                                    .as_ref()
-                                    .map(format_reasoning_for_telegram);
+                                let reasoning_html =
+                                    reasoning_lock.as_ref().map(format_reasoning_for_telegram);
 
                                 (content, reasoning_html)
                             };

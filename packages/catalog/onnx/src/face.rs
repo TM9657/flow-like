@@ -64,7 +64,9 @@ impl FaceEmbedding {
             return 0.0;
         }
 
-        let dot: f32 = self.embedding.iter()
+        let dot: f32 = self
+            .embedding
+            .iter()
             .zip(other.embedding.iter())
             .map(|(a, b)| a * b)
             .sum();
@@ -85,7 +87,8 @@ impl FaceEmbedding {
             return f32::MAX;
         }
 
-        self.embedding.iter()
+        self.embedding
+            .iter()
             .zip(other.embedding.iter())
             .map(|(a, b)| (a - b).powi(2))
             .sum::<f32>()
@@ -115,30 +118,60 @@ impl NodeLogic for FaceDetectionNode {
 
         node.add_icon("/flow/icons/face.svg");
 
-        node.add_input_pin("exec_in", "Input", "Initiate Execution", VariableType::Execution);
+        node.add_input_pin(
+            "exec_in",
+            "Input",
+            "Initiate Execution",
+            VariableType::Execution,
+        );
 
-        node.add_input_pin("model", "Model", "ONNX Face Detection Model", VariableType::Struct)
-            .set_schema::<NodeOnnxSession>()
-            .set_options(PinOptions::new().set_enforce_schema(true).build());
+        node.add_input_pin(
+            "model",
+            "Model",
+            "ONNX Face Detection Model",
+            VariableType::Struct,
+        )
+        .set_schema::<NodeOnnxSession>()
+        .set_options(PinOptions::new().set_enforce_schema(true).build());
 
         node.add_input_pin("image", "Image", "Input Image", VariableType::Struct)
             .set_schema::<NodeImage>()
             .set_options(PinOptions::new().set_enforce_schema(true).build());
 
-        node.add_input_pin("threshold", "Threshold", "Detection confidence threshold", VariableType::Float)
-            .set_default_value(Some(json!(0.5)));
+        node.add_input_pin(
+            "threshold",
+            "Threshold",
+            "Detection confidence threshold",
+            VariableType::Float,
+        )
+        .set_default_value(Some(json!(0.5)));
 
-        node.add_input_pin("nms_threshold", "NMS Threshold", "Non-maximum suppression threshold", VariableType::Float)
-            .set_default_value(Some(json!(0.4)));
+        node.add_input_pin(
+            "nms_threshold",
+            "NMS Threshold",
+            "Non-maximum suppression threshold",
+            VariableType::Float,
+        )
+        .set_default_value(Some(json!(0.4)));
 
-        node.add_input_pin("input_size", "Input Size", "Model input size", VariableType::Integer)
-            .set_default_value(Some(json!(640)));
+        node.add_input_pin(
+            "input_size",
+            "Input Size",
+            "Model input size",
+            VariableType::Integer,
+        )
+        .set_default_value(Some(json!(640)));
 
         node.add_output_pin("exec_out", "Output", "Done", VariableType::Execution);
 
         node.add_output_pin("faces", "Faces", "Detected faces", VariableType::Generic);
 
-        node.add_output_pin("count", "Count", "Number of detected faces", VariableType::Integer);
+        node.add_output_pin(
+            "count",
+            "Count",
+            "Number of detected faces",
+            VariableType::Integer,
+        );
 
         node
     }
@@ -196,9 +229,13 @@ impl NodeLogic for FaceDetectionNode {
 
                 if let (Ok(boxes), Ok(scores)) = (
                     boxes_tensor.try_extract_array::<f32>(),
-                    scores_tensor.try_extract_array::<f32>()
+                    scores_tensor.try_extract_array::<f32>(),
                 ) {
-                    let num_boxes = if boxes.shape().len() >= 2 { boxes.shape()[1] } else { 0 };
+                    let num_boxes = if boxes.shape().len() >= 2 {
+                        boxes.shape()[1]
+                    } else {
+                        0
+                    };
 
                     for i in 0..num_boxes {
                         let score = if scores.shape().len() == 3 {
@@ -249,12 +286,32 @@ impl NodeLogic for FaceDetectionNode {
                         let num_det = shape[1];
 
                         for i in 0..num_det {
-                            let score = if shape.len() == 3 { data[[0, i, 4]] } else { data[[i, 4]] };
+                            let score = if shape.len() == 3 {
+                                data[[0, i, 4]]
+                            } else {
+                                data[[i, 4]]
+                            };
                             if score > threshold as f32 {
-                                let cx = if shape.len() == 3 { data[[0, i, 0]] } else { data[[i, 0]] };
-                                let cy = if shape.len() == 3 { data[[0, i, 1]] } else { data[[i, 1]] };
-                                let w = if shape.len() == 3 { data[[0, i, 2]] } else { data[[i, 2]] };
-                                let h = if shape.len() == 3 { data[[0, i, 3]] } else { data[[i, 3]] };
+                                let cx = if shape.len() == 3 {
+                                    data[[0, i, 0]]
+                                } else {
+                                    data[[i, 0]]
+                                };
+                                let cy = if shape.len() == 3 {
+                                    data[[0, i, 1]]
+                                } else {
+                                    data[[i, 1]]
+                                };
+                                let w = if shape.len() == 3 {
+                                    data[[0, i, 2]]
+                                } else {
+                                    data[[i, 2]]
+                                };
+                                let h = if shape.len() == 3 {
+                                    data[[0, i, 3]]
+                                } else {
+                                    data[[i, 3]]
+                                };
 
                                 let x = (cx - w / 2.0) * scale_x;
                                 let y = (cy - h / 2.0) * scale_y;
@@ -355,23 +412,43 @@ impl NodeLogic for FaceEmbeddingNode {
 
         node.add_icon("/flow/icons/fingerprint.svg");
 
-        node.add_input_pin("exec_in", "Input", "Initiate Execution", VariableType::Execution);
+        node.add_input_pin(
+            "exec_in",
+            "Input",
+            "Initiate Execution",
+            VariableType::Execution,
+        );
 
-        node.add_input_pin("model", "Model", "ONNX Face Embedding Model", VariableType::Struct)
-            .set_schema::<NodeOnnxSession>()
-            .set_options(PinOptions::new().set_enforce_schema(true).build());
+        node.add_input_pin(
+            "model",
+            "Model",
+            "ONNX Face Embedding Model",
+            VariableType::Struct,
+        )
+        .set_schema::<NodeOnnxSession>()
+        .set_options(PinOptions::new().set_enforce_schema(true).build());
 
         node.add_input_pin("image", "Image", "Aligned face image", VariableType::Struct)
             .set_schema::<NodeImage>()
             .set_options(PinOptions::new().set_enforce_schema(true).build());
 
-        node.add_input_pin("input_size", "Input Size", "Model input size (typically 112 or 160)", VariableType::Integer)
-            .set_default_value(Some(json!(112)));
+        node.add_input_pin(
+            "input_size",
+            "Input Size",
+            "Model input size (typically 112 or 160)",
+            VariableType::Integer,
+        )
+        .set_default_value(Some(json!(112)));
 
         node.add_output_pin("exec_out", "Output", "Done", VariableType::Execution);
 
-        node.add_output_pin("embedding", "Embedding", "Face embedding vector", VariableType::Struct)
-            .set_schema::<FaceEmbedding>();
+        node.add_output_pin(
+            "embedding",
+            "Embedding",
+            "Face embedding vector",
+            VariableType::Struct,
+        )
+        .set_schema::<FaceEmbedding>();
 
         node
     }
@@ -410,7 +487,10 @@ impl NodeLogic for FaceEmbeddingNode {
             let input_value = Value::from_array(input)?;
             let outputs = session.run(inputs![input_value])?;
 
-            let output = outputs.iter().next().ok_or_else(|| anyhow!("No output from model"))?;
+            let output = outputs
+                .iter()
+                .next()
+                .ok_or_else(|| anyhow!("No output from model"))?;
             let (_, tensor) = output;
             let emb_arr = tensor.try_extract_array::<f32>()?;
 
@@ -456,24 +536,59 @@ impl NodeLogic for CompareFacesNode {
 
         node.add_icon("/flow/icons/compare.svg");
 
-        node.add_input_pin("exec_in", "Input", "Initiate Execution", VariableType::Execution);
+        node.add_input_pin(
+            "exec_in",
+            "Input",
+            "Initiate Execution",
+            VariableType::Execution,
+        );
 
-        node.add_input_pin("embedding_a", "Embedding A", "First face embedding", VariableType::Struct)
-            .set_schema::<FaceEmbedding>();
+        node.add_input_pin(
+            "embedding_a",
+            "Embedding A",
+            "First face embedding",
+            VariableType::Struct,
+        )
+        .set_schema::<FaceEmbedding>();
 
-        node.add_input_pin("embedding_b", "Embedding B", "Second face embedding", VariableType::Struct)
-            .set_schema::<FaceEmbedding>();
+        node.add_input_pin(
+            "embedding_b",
+            "Embedding B",
+            "Second face embedding",
+            VariableType::Struct,
+        )
+        .set_schema::<FaceEmbedding>();
 
-        node.add_input_pin("threshold", "Threshold", "Match threshold (cosine similarity)", VariableType::Float)
-            .set_default_value(Some(json!(0.5)));
+        node.add_input_pin(
+            "threshold",
+            "Threshold",
+            "Match threshold (cosine similarity)",
+            VariableType::Float,
+        )
+        .set_default_value(Some(json!(0.5)));
 
         node.add_output_pin("exec_out", "Output", "Done", VariableType::Execution);
 
-        node.add_output_pin("is_match", "Is Match", "Whether faces match", VariableType::Boolean);
+        node.add_output_pin(
+            "is_match",
+            "Is Match",
+            "Whether faces match",
+            VariableType::Boolean,
+        );
 
-        node.add_output_pin("similarity", "Similarity", "Cosine similarity score", VariableType::Float);
+        node.add_output_pin(
+            "similarity",
+            "Similarity",
+            "Cosine similarity score",
+            VariableType::Float,
+        );
 
-        node.add_output_pin("distance", "Distance", "Euclidean distance", VariableType::Float);
+        node.add_output_pin(
+            "distance",
+            "Distance",
+            "Euclidean distance",
+            VariableType::Float,
+        );
 
         node
     }
@@ -493,8 +608,12 @@ impl NodeLogic for CompareFacesNode {
             let is_match = similarity >= threshold as f32;
 
             context.set_pin_value("is_match", json!(is_match)).await?;
-            context.set_pin_value("similarity", json!(similarity as f64)).await?;
-            context.set_pin_value("distance", json!(distance as f64)).await?;
+            context
+                .set_pin_value("similarity", json!(similarity as f64))
+                .await?;
+            context
+                .set_pin_value("distance", json!(distance as f64))
+                .await?;
             context.activate_exec_pin("exec_out").await?;
             Ok(())
         }
@@ -520,7 +639,12 @@ impl NodeLogic for CropFacesNode {
 
         node.add_icon("/flow/icons/crop.svg");
 
-        node.add_input_pin("exec_in", "Input", "Initiate Execution", VariableType::Execution);
+        node.add_input_pin(
+            "exec_in",
+            "Input",
+            "Initiate Execution",
+            VariableType::Execution,
+        );
 
         node.add_input_pin("image", "Image", "Source image", VariableType::Struct)
             .set_schema::<NodeImage>()
@@ -528,12 +652,22 @@ impl NodeLogic for CropFacesNode {
 
         node.add_input_pin("faces", "Faces", "Detected faces", VariableType::Generic);
 
-        node.add_input_pin("margin", "Margin", "Margin around face (fraction)", VariableType::Float)
-            .set_default_value(Some(json!(0.2)));
+        node.add_input_pin(
+            "margin",
+            "Margin",
+            "Margin around face (fraction)",
+            VariableType::Float,
+        )
+        .set_default_value(Some(json!(0.2)));
 
         node.add_output_pin("exec_out", "Output", "Done", VariableType::Execution);
 
-        node.add_output_pin("crops", "Crops", "Cropped face images", VariableType::Generic);
+        node.add_output_pin(
+            "crops",
+            "Crops",
+            "Cropped face images",
+            VariableType::Generic,
+        );
 
         node
     }

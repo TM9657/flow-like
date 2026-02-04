@@ -341,4 +341,3 @@ pub struct InitInfo {
 pub fn initialize() -> () {
     // No-op when execute feature is not enabled
 }
-

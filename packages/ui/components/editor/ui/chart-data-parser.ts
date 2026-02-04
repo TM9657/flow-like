@@ -130,7 +130,9 @@ function parseConfig(configBlock: string): CSVConfig {
 		if (colonIndex === -1) continue;
 
 		const key = line.slice(0, colonIndex).trim();
-		let value: string | number | boolean | string[] = line.slice(colonIndex + 1).trim();
+		let value: string | number | boolean | string[] = line
+			.slice(colonIndex + 1)
+			.trim();
 
 		// Parse common values
 		if (value === "true") value = true as any;
@@ -163,7 +165,9 @@ function autoDetectChartType(data: CSVData): string {
 
 	// If 2 columns and second is numeric, could be pie or bar
 	if (numCols === 2) {
-		const secondColNumeric = data.rows.every((row) => typeof row[1] === "number");
+		const secondColNumeric = data.rows.every(
+			(row) => typeof row[1] === "number",
+		);
 		if (secondColNumeric) {
 			// Few categories = pie, many = bar
 			return numRows <= 6 ? "pie" : "bar";
@@ -363,7 +367,10 @@ export function csvToPlotly(
 /**
  * Parse chart code block content into ChartInput
  */
-export function parseChartData(content: string, language: "nivo" | "plotly"): ChartInput {
+export function parseChartData(
+	content: string,
+	language: "nivo" | "plotly",
+): ChartInput {
 	const trimmed = content.trim();
 
 	// Check if it's JSON mode
@@ -519,7 +526,10 @@ export function toPlotlyData(input: ChartInput): {
 		layout.title = input.config.title;
 	}
 	if (input.config.xLabel) {
-		layout.xaxis = { ...((layout.xaxis as object) || {}), title: input.config.xLabel };
+		layout.xaxis = {
+			...((layout.xaxis as object) || {}),
+			title: input.config.xLabel,
+		};
 	}
 	if (input.config.yLabel) {
 		layout.yaxis = { title: input.config.yLabel };

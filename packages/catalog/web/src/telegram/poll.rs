@@ -176,8 +176,7 @@ impl NodeLogic for SendPollWithRefNode {
         let bot = get_telegram_bot(context, &session.ref_id).await?;
         let chat_id = session.chat_id()?;
 
-        let poll_options: Vec<InputPollOption> =
-            options.iter().map(InputPollOption::new).collect();
+        let poll_options: Vec<InputPollOption> = options.iter().map(InputPollOption::new).collect();
 
         let sent = bot
             .bot
@@ -476,8 +475,7 @@ impl NodeLogic for SendQuizNode {
         let bot = get_telegram_bot(context, &session.ref_id).await?;
         let chat_id = session.chat_id()?;
 
-        let poll_options: Vec<InputPollOption> =
-            options.iter().map(InputPollOption::new).collect();
+        let poll_options: Vec<InputPollOption> = options.iter().map(InputPollOption::new).collect();
 
         let mut request = bot
             .bot

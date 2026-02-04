@@ -34,7 +34,7 @@ impl NodeLogic for GetKMeansCentroidsNode {
 
         node.set_scores(
             NodeScores::new()
-                .set_privacy(10)  // Only extracts math params, no raw data
+                .set_privacy(10) // Only extracts math params, no raw data
                 .set_security(10) // Pure computation, no external calls
                 .set_performance(9)
                 .set_governance(9)
@@ -92,9 +92,8 @@ impl NodeLogic for GetKMeansCentroidsNode {
                 let centroids = kmeans.model.centroids();
                 let (n_clusters, n_dims) = centroids.dim();
 
-                let centroids_vec: Vec<Vec<f64>> = (0..n_clusters)
-                    .map(|i| centroids.row(i).to_vec())
-                    .collect();
+                let centroids_vec: Vec<Vec<f64>> =
+                    (0..n_clusters).map(|i| centroids.row(i).to_vec()).collect();
 
                 let result = crate::ml::KMeansCentroids {
                     k: n_clusters,
@@ -110,9 +109,7 @@ impl NodeLogic for GetKMeansCentroidsNode {
                     LogLevel::Debug,
                 );
 
-                context
-                    .set_pin_value("result", json!(result))
-                    .await?;
+                context.set_pin_value("result", json!(result)).await?;
                 context.activate_exec_pin("exec_out").await?;
                 Ok(())
             }

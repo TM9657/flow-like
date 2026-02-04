@@ -23,6 +23,8 @@ use linfa::prelude::Pr;
 #[cfg(feature = "execute")]
 use linfa::{DatasetBase, traits::Predict};
 #[cfg(feature = "execute")]
+use linfa_bayes::GaussianNb;
+#[cfg(feature = "execute")]
 use linfa_clustering::KMeans;
 #[cfg(feature = "execute")]
 use linfa_linear::FittedLinearRegression;
@@ -30,8 +32,6 @@ use linfa_linear::FittedLinearRegression;
 use linfa_nn::distance::L2Dist;
 #[cfg(feature = "execute")]
 use linfa_svm::Svm;
-#[cfg(feature = "execute")]
-use linfa_bayes::GaussianNb;
 #[cfg(feature = "execute")]
 use linfa_trees::DecisionTree;
 #[cfg(feature = "execute")]
@@ -789,11 +789,9 @@ pub fn values_to_array1_target(
             }
             Ok((Array1::from(flat), None))
         }
-        Value::Number(_) => {
-            Err(anyhow!(
-                "Target column `{attr}` contains floats. Classification requires categorical (string) or integer targets."
-            ))
-        }
+        Value::Number(_) => Err(anyhow!(
+            "Target column `{attr}` contains floats. Classification requires categorical (string) or integer targets."
+        )),
         other => Err(anyhow!(
             "Unsupported target type for column `{attr}`: {:?}",
             other

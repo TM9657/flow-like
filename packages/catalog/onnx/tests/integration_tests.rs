@@ -13,9 +13,9 @@
 //! cargo test --package flow-like-catalog-onnx --test integration_tests --features execute -- --ignored test_depth_midas
 //! ```
 
-use std::path::PathBuf;
 use std::fs;
 use std::io::Write;
+use std::path::PathBuf;
 
 const TEST_MODELS_DIR: &str = env!("CARGO_MANIFEST_DIR");
 
@@ -41,8 +41,7 @@ fn download_if_missing(url: &str, filename: &str) -> PathBuf {
 
     println!("Downloading {} from {}...", filename, url);
 
-    let response = reqwest::blocking::get(url)
-        .expect(&format!("Failed to download {}", url));
+    let response = reqwest::blocking::get(url).expect(&format!("Failed to download {}", url));
 
     if !response.status().is_success() {
         panic!("Failed to download {}: HTTP {}", url, response.status());
@@ -138,7 +137,8 @@ const MIDAS_SMALL_URL: &str = "https://huggingface.co/depth-anything/Depth-Anyth
 const ULTRAFACE_URL: &str = "https://github.com/onnx/models/raw/main/validated/vision/body_analysis/ultraface/models/version-RFB-320.onnx";
 
 // Voice activity detection - Silero VAD (~2.3MB)
-const SILERO_VAD_URL: &str = "https://github.com/snakers4/silero-vad/raw/master/src/silero_vad/data/silero_vad.onnx";
+const SILERO_VAD_URL: &str =
+    "https://github.com/snakers4/silero-vad/raw/master/src/silero_vad/data/silero_vad.onnx";
 
 // Image classification - SqueezeNet is small (~5MB)
 const SQUEEZENET_URL: &str = "https://github.com/onnx/models/raw/main/validated/vision/classification/squeezenet/model/squeezenet1.0-12.onnx";
@@ -162,7 +162,8 @@ const FCN_INT8_URL: &str = "https://github.com/onnx/models/raw/main/validated/vi
 // NER - BERT-base-NER ONNX (~430MB - requires HuggingFace)
 // Note: This requires authentication for HuggingFace, so we use a smaller test model
 #[allow(dead_code)]
-const BERT_NER_URL: &str = "https://huggingface.co/dslim/bert-base-NER/resolve/main/onnx/model.onnx";
+const BERT_NER_URL: &str =
+    "https://huggingface.co/dslim/bert-base-NER/resolve/main/onnx/model.onnx";
 
 // ============================================================================
 // ONNX Session Tests
@@ -296,7 +297,8 @@ mod face_detection_tests {
         let input_value = Value::from_array(input).expect("Failed to create input tensor");
 
         // Run inference
-        let outputs = session.run(inputs!["input" => input_value])
+        let outputs = session
+            .run(inputs!["input" => input_value])
             .expect("Inference failed");
 
         println!("Output keys: {:?}", outputs.keys().collect::<Vec<_>>());
@@ -366,11 +368,13 @@ mod vad_tests {
         let sr_value = Value::from_array(sr).expect("Failed to create sr tensor");
 
         // Run inference
-        let outputs = session.run(inputs![
-            "input" => input_value,
-            "state" => state_value,
-            "sr" => sr_value
-        ]).expect("Inference failed");
+        let outputs = session
+            .run(inputs![
+                "input" => input_value,
+                "state" => state_value,
+                "sr" => sr_value
+            ])
+            .expect("Inference failed");
 
         println!("VAD output keys: {:?}", outputs.keys().collect::<Vec<_>>());
 
@@ -382,7 +386,11 @@ mod vad_tests {
 
                 // Should be a probability between 0 and 1
                 if let Some(&prob) = arr.first() {
-                    assert!(prob >= 0.0 && prob <= 1.0, "Probability should be in [0, 1], got {}", prob);
+                    assert!(
+                        prob >= 0.0 && prob <= 1.0,
+                        "Probability should be in [0, 1], got {}",
+                        prob
+                    );
                 }
             }
         }
@@ -392,7 +400,11 @@ mod vad_tests {
             if let Ok(arr) = state_out.try_extract_array::<f32>() {
                 println!("New state shape: {:?}", arr.shape());
                 // State output is [2, batch, 128]
-                assert_eq!(arr.shape(), &[2, 1, 128], "State shape should be [2, 1, 128]");
+                assert_eq!(
+                    arr.shape(),
+                    &[2, 1, 128],
+                    "State shape should be [2, 1, 128]"
+                );
             }
         }
     }
@@ -416,24 +428,39 @@ mod feature_tests {
 
         // Cosine similarity
         let sim_same = v1.cosine_similarity(&v3);
-        assert!((sim_same - 1.0).abs() < 0.001, "Same vectors should have similarity 1.0");
+        assert!(
+            (sim_same - 1.0).abs() < 0.001,
+            "Same vectors should have similarity 1.0"
+        );
 
         let sim_ortho = v1.cosine_similarity(&v2);
-        assert!(sim_ortho.abs() < 0.001, "Orthogonal vectors should have similarity 0.0");
+        assert!(
+            sim_ortho.abs() < 0.001,
+            "Orthogonal vectors should have similarity 0.0"
+        );
 
         // L2 distance
         let dist_same = v1.l2_distance(&v3);
-        assert!(dist_same.abs() < 0.001, "Same vectors should have distance 0.0");
+        assert!(
+            dist_same.abs() < 0.001,
+            "Same vectors should have distance 0.0"
+        );
 
         let dist_ortho = v1.l2_distance(&v2);
         let expected_dist = 2.0f32.sqrt();
-        assert!((dist_ortho - expected_dist).abs() < 0.001, "Distance should be sqrt(2)");
+        assert!(
+            (dist_ortho - expected_dist).abs() < 0.001,
+            "Distance should be sqrt(2)"
+        );
 
         // Normalization
         let mut v4 = FeatureVector::new(vec![3.0, 4.0]);
         v4.normalize();
         let norm: f32 = v4.values.iter().map(|x| x * x).sum::<f32>().sqrt();
-        assert!((norm - 1.0).abs() < 0.001, "Normalized vector should have unit length");
+        assert!(
+            (norm - 1.0).abs() < 0.001,
+            "Normalized vector should have unit length"
+        );
     }
 }
 
@@ -443,10 +470,10 @@ mod feature_tests {
 
 mod serialization_tests {
     use flow_like_catalog_onnx::{
-        audio::{AudioData, VadResult, SpeechSegment},
+        audio::{AudioData, SpeechSegment, VadResult},
         depth::DepthMap,
         face::{DetectedFace, FaceEmbedding, FaceLandmarks, LandmarkType},
-        ocr::{TextRegion, RecognizedText},
+        ocr::{RecognizedText, TextRegion},
     };
 
     #[test]
@@ -464,8 +491,16 @@ mod serialization_tests {
     fn test_vad_result_roundtrip() {
         let result = VadResult {
             segments: vec![
-                SpeechSegment { start: 0.5, end: 1.5, confidence: 0.95 },
-                SpeechSegment { start: 2.0, end: 3.0, confidence: 0.88 },
+                SpeechSegment {
+                    start: 0.5,
+                    end: 1.5,
+                    confidence: 0.95,
+                },
+                SpeechSegment {
+                    start: 2.0,
+                    end: 3.0,
+                    confidence: 0.88,
+                },
             ],
             probabilities: vec![0.1, 0.8, 0.9, 0.3],
             frame_duration: 0.032,
@@ -504,7 +539,13 @@ mod serialization_tests {
             bbox: [10.0, 20.0, 100.0, 100.0],
             confidence: 0.98,
             landmarks: Some(FaceLandmarks {
-                points: vec![[30.0, 40.0], [70.0, 40.0], [50.0, 60.0], [35.0, 80.0], [65.0, 80.0]],
+                points: vec![
+                    [30.0, 40.0],
+                    [70.0, 40.0],
+                    [50.0, 60.0],
+                    [35.0, 80.0],
+                    [65.0, 80.0],
+                ],
                 landmark_type: LandmarkType::FivePoint,
             }),
         };
@@ -641,16 +682,20 @@ mod classification_tests {
             for x in 0..w {
                 let pixel = rgb.get_pixel(x, y);
                 // Normalize: (pixel / 255 - mean) / std
-                input[[0, 0, y as usize, x as usize]] = ((pixel[0] as f32 / 255.0) - mean[0]) / std[0];
-                input[[0, 1, y as usize, x as usize]] = ((pixel[1] as f32 / 255.0) - mean[1]) / std[1];
-                input[[0, 2, y as usize, x as usize]] = ((pixel[2] as f32 / 255.0) - mean[2]) / std[2];
+                input[[0, 0, y as usize, x as usize]] =
+                    ((pixel[0] as f32 / 255.0) - mean[0]) / std[0];
+                input[[0, 1, y as usize, x as usize]] =
+                    ((pixel[1] as f32 / 255.0) - mean[1]) / std[1];
+                input[[0, 2, y as usize, x as usize]] =
+                    ((pixel[2] as f32 / 255.0) - mean[2]) / std[2];
             }
         }
 
         let input_value = Value::from_array(input).expect("Failed to create input tensor");
 
         // Run inference (SqueezeNet uses "data_0" as input name)
-        let outputs = session.run(inputs!["data_0" => input_value])
+        let outputs = session
+            .run(inputs!["data_0" => input_value])
             .expect("Inference failed");
 
         println!("Output keys: {:?}", outputs.keys().collect::<Vec<_>>());
@@ -662,11 +707,15 @@ mod classification_tests {
 
                 // Find top prediction
                 let flat = arr.as_slice().unwrap();
-                let (max_idx, max_val) = flat.iter()
+                let (max_idx, max_val) = flat
+                    .iter()
                     .enumerate()
                     .max_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap())
                     .unwrap();
-                println!("Top prediction: class {} with logit {:.4}", max_idx, max_val);
+                println!(
+                    "Top prediction: class {} with logit {:.4}",
+                    max_idx, max_val
+                );
 
                 // Shape should be [1, 1000] or [1, 1000, 1, 1]
                 assert!(arr.len() == 1000, "Should have 1000 class outputs");
@@ -707,9 +756,12 @@ mod classification_tests {
         for y in 0..h {
             for x in 0..w {
                 let pixel = rgb.get_pixel(x, y);
-                input[[0, 0, y as usize, x as usize]] = ((pixel[0] as f32 / 255.0) - mean[0]) / std[0];
-                input[[0, 1, y as usize, x as usize]] = ((pixel[1] as f32 / 255.0) - mean[1]) / std[1];
-                input[[0, 2, y as usize, x as usize]] = ((pixel[2] as f32 / 255.0) - mean[2]) / std[2];
+                input[[0, 0, y as usize, x as usize]] =
+                    ((pixel[0] as f32 / 255.0) - mean[0]) / std[0];
+                input[[0, 1, y as usize, x as usize]] =
+                    ((pixel[1] as f32 / 255.0) - mean[1]) / std[1];
+                input[[0, 2, y as usize, x as usize]] =
+                    ((pixel[2] as f32 / 255.0) - mean[2]) / std[2];
             }
         }
 
@@ -717,7 +769,8 @@ mod classification_tests {
 
         // Get input name from session (clone to avoid borrow conflict)
         let input_name = session.inputs[0].name.clone();
-        let outputs = session.run(inputs![input_name.as_str() => input_value])
+        let outputs = session
+            .run(inputs![input_name.as_str() => input_value])
             .expect("Inference failed");
 
         for (name, tensor) in outputs.iter() {
@@ -794,10 +847,14 @@ mod object_detection_tests {
         let input_value = Value::from_array(input).expect("Failed to create input tensor");
 
         let input_name = session.inputs[0].name.clone();
-        let outputs = session.run(inputs![input_name.as_str() => input_value])
+        let outputs = session
+            .run(inputs![input_name.as_str() => input_value])
             .expect("Inference failed");
 
-        println!("TinyYOLOv2 output keys: {:?}", outputs.keys().collect::<Vec<_>>());
+        println!(
+            "TinyYOLOv2 output keys: {:?}",
+            outputs.keys().collect::<Vec<_>>()
+        );
 
         for (name, tensor) in outputs.iter() {
             if let Ok(arr) = tensor.try_extract_array::<f32>() {
@@ -872,13 +929,26 @@ mod emotion_tests {
         let input_value = Value::from_array(input).expect("Failed to create input tensor");
 
         let input_name = session.inputs[0].name.clone();
-        let outputs = session.run(inputs![input_name.as_str() => input_value])
+        let outputs = session
+            .run(inputs![input_name.as_str() => input_value])
             .expect("Inference failed");
 
-        println!("Emotion output keys: {:?}", outputs.keys().collect::<Vec<_>>());
+        println!(
+            "Emotion output keys: {:?}",
+            outputs.keys().collect::<Vec<_>>()
+        );
 
         // Emotion labels: neutral, happiness, surprise, sadness, anger, disgust, fear, contempt
-        let emotions = ["neutral", "happiness", "surprise", "sadness", "anger", "disgust", "fear", "contempt"];
+        let emotions = [
+            "neutral",
+            "happiness",
+            "surprise",
+            "sadness",
+            "anger",
+            "disgust",
+            "fear",
+            "contempt",
+        ];
 
         for (name, tensor) in outputs.iter() {
             if let Ok(arr) = tensor.try_extract_array::<f32>() {
@@ -886,7 +956,8 @@ mod emotion_tests {
 
                 let flat = arr.as_slice().unwrap();
                 if flat.len() == 8 {
-                    let (max_idx, max_val) = flat.iter()
+                    let (max_idx, max_val) = flat
+                        .iter()
                         .enumerate()
                         .max_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap())
                         .unwrap();
@@ -958,16 +1029,20 @@ mod segmentation_tests {
         for y in 0..input_size {
             for x in 0..input_size {
                 let pixel = rgb.get_pixel(x, y);
-                input[[0, 0, y as usize, x as usize]] = ((pixel[0] as f32 / 255.0) - mean[0]) / std[0];
-                input[[0, 1, y as usize, x as usize]] = ((pixel[1] as f32 / 255.0) - mean[1]) / std[1];
-                input[[0, 2, y as usize, x as usize]] = ((pixel[2] as f32 / 255.0) - mean[2]) / std[2];
+                input[[0, 0, y as usize, x as usize]] =
+                    ((pixel[0] as f32 / 255.0) - mean[0]) / std[0];
+                input[[0, 1, y as usize, x as usize]] =
+                    ((pixel[1] as f32 / 255.0) - mean[1]) / std[1];
+                input[[0, 2, y as usize, x as usize]] =
+                    ((pixel[2] as f32 / 255.0) - mean[2]) / std[2];
             }
         }
 
         let input_value = Value::from_array(input).expect("Failed to create input tensor");
 
         let input_name = session.inputs[0].name.clone();
-        let outputs = session.run(inputs![input_name.as_str() => input_value])
+        let outputs = session
+            .run(inputs![input_name.as_str() => input_value])
             .expect("Inference failed");
 
         println!("FCN output keys: {:?}", outputs.keys().collect::<Vec<_>>());
@@ -1025,7 +1100,16 @@ mod ner_tests {
             EntityLabel::Inside("LOC".to_string()),
         ];
         let confidences = vec![0.95, 0.92, 0.1, 0.1, 0.88, 0.1, 0.85, 0.83];
-        let offsets = vec![(0, 4), (5, 10), (11, 16), (17, 19), (20, 26), (27, 29), (30, 33), (34, 38)];
+        let offsets = vec![
+            (0, 4),
+            (5, 10),
+            (11, 16),
+            (17, 19),
+            (20, 26),
+            (27, 29),
+            (30, 33),
+            (34, 38),
+        ];
         let text = "John Smith works at Google in New York";
 
         let entities = merge_entities(&tokens, &labels, &confidences, Some(&offsets), text);
@@ -1049,10 +1133,22 @@ mod ner_tests {
 
     #[test]
     fn test_entity_label_type() {
-        assert_eq!(EntityLabel::Begin("PER".to_string()).entity_type(), Some("PER"));
-        assert_eq!(EntityLabel::Inside("PER".to_string()).entity_type(), Some("PER"));
-        assert_eq!(EntityLabel::Begin("ORG".to_string()).entity_type(), Some("ORG"));
-        assert_eq!(EntityLabel::Begin("LOC".to_string()).entity_type(), Some("LOC"));
+        assert_eq!(
+            EntityLabel::Begin("PER".to_string()).entity_type(),
+            Some("PER")
+        );
+        assert_eq!(
+            EntityLabel::Inside("PER".to_string()).entity_type(),
+            Some("PER")
+        );
+        assert_eq!(
+            EntityLabel::Begin("ORG".to_string()).entity_type(),
+            Some("ORG")
+        );
+        assert_eq!(
+            EntityLabel::Begin("LOC".to_string()).entity_type(),
+            Some("LOC")
+        );
         assert_eq!(EntityLabel::O.entity_type(), None);
     }
 
@@ -1114,13 +1210,41 @@ fn test_all_models_summary() {
     println!("================================================================================\n");
 
     let models = [
-        ("UltraFace (Face Detection)", ULTRAFACE_URL, "ultraface_RFB_320.onnx"),
-        ("Silero VAD (Voice Activity)", SILERO_VAD_URL, "silero_vad.onnx"),
-        ("SqueezeNet (Classification)", SQUEEZENET_URL, "squeezenet1.0-12.onnx"),
-        ("MobileNetV2 (Classification)", MOBILENET_URL, "mobilenetv2-12.onnx"),
-        ("TinyYOLOv2 (Object Detection)", TINY_YOLOV2_URL, "tinyyolov2-8.onnx"),
-        ("Emotion FERPlus", EMOTION_FERPLUS_URL, "emotion-ferplus-8.onnx"),
-        ("FCN ResNet-50-int8 (Segmentation)", FCN_INT8_URL, "fcn-resnet50-12-int8.onnx"),
+        (
+            "UltraFace (Face Detection)",
+            ULTRAFACE_URL,
+            "ultraface_RFB_320.onnx",
+        ),
+        (
+            "Silero VAD (Voice Activity)",
+            SILERO_VAD_URL,
+            "silero_vad.onnx",
+        ),
+        (
+            "SqueezeNet (Classification)",
+            SQUEEZENET_URL,
+            "squeezenet1.0-12.onnx",
+        ),
+        (
+            "MobileNetV2 (Classification)",
+            MOBILENET_URL,
+            "mobilenetv2-12.onnx",
+        ),
+        (
+            "TinyYOLOv2 (Object Detection)",
+            TINY_YOLOV2_URL,
+            "tinyyolov2-8.onnx",
+        ),
+        (
+            "Emotion FERPlus",
+            EMOTION_FERPLUS_URL,
+            "emotion-ferplus-8.onnx",
+        ),
+        (
+            "FCN ResNet-50-int8 (Segmentation)",
+            FCN_INT8_URL,
+            "fcn-resnet50-12-int8.onnx",
+        ),
     ];
 
     for (name, url, filename) in models {

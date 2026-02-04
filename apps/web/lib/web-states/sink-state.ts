@@ -1,5 +1,5 @@
 import type { IEventRegistration, ISinkState } from "@tm9657/flow-like-ui";
-import { apiGet, apiDelete, type WebBackendRef } from "./api-utils";
+import { type WebBackendRef, apiDelete, apiGet } from "./api-utils";
 
 export class WebSinkState implements ISinkState {
 	constructor(private readonly backend: WebBackendRef) {}

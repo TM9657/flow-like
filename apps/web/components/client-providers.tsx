@@ -7,19 +7,19 @@ import {
 	ReactFlowProvider,
 } from "@tm9657/flow-like-ui";
 import { ThemeProvider } from "@tm9657/flow-like-ui/components/theme-provider";
+import { NetworkStatusIndicator } from "@tm9657/flow-like-ui/components/ui/network-status-indicator";
 import { Toaster } from "@tm9657/flow-like-ui/components/ui/sonner";
 import { TooltipProvider } from "@tm9657/flow-like-ui/components/ui/tooltip";
-import { NetworkStatusIndicator } from "@tm9657/flow-like-ui/components/ui/network-status-indicator";
 import { useNetworkStatus } from "@tm9657/flow-like-ui/hooks/use-network-status";
 import { createIDBPersister } from "@tm9657/flow-like-ui/lib/persister";
 import { useEffect } from "react";
-import { WebAuthProvider } from "../components/auth-provider";
-import { WebProvider } from "../components/web-provider";
 import { AppSidebar } from "../components/app-sidebar";
+import { WebAuthProvider } from "../components/auth-provider";
 import { OAuthCallbackHandler } from "../components/oauth-callback-handler";
 import { OAuthExecutionProvider } from "../components/oauth-execution-provider";
 import { RuntimeVariablesProviderComponent } from "../components/runtime-variables-provider";
 import { SpotlightWrapper } from "../components/spotlight-wrapper";
+import { WebProvider } from "../components/web-provider";
 
 const persister = createIDBPersister();
 const queryClient = new QueryClient({

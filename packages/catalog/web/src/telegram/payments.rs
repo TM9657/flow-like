@@ -326,9 +326,10 @@ impl NodeLogic for SendInvoiceNode {
             .await
             .unwrap_or_else(|_| "[]".to_string());
         if let Ok(tips) = from_str::<Vec<u32>>(&suggested_tips)
-            && !tips.is_empty() {
-                request = request.suggested_tip_amounts(tips);
-            }
+            && !tips.is_empty()
+        {
+            request = request.suggested_tip_amounts(tips);
+        }
 
         let start_param: String = context
             .evaluate_pin::<String>("start_parameter")

@@ -325,7 +325,10 @@ impl NodeLogic for CopilotLocalClientStartNode {
         let client = match builder.build() {
             Ok(c) => c,
             Err(e) => {
-                let error_msg = format!("Failed to build local Copilot client: {}. Make sure 'copilot' CLI is installed and in PATH, or set COPILOT_CLI_PATH environment variable.", e);
+                let error_msg = format!(
+                    "Failed to build local Copilot client: {}. Make sure 'copilot' CLI is installed and in PATH, or set COPILOT_CLI_PATH environment variable.",
+                    e
+                );
                 context.log_message(&error_msg, FlowLogLevel::Error);
                 context
                     .set_pin_value("error_message", json::json!(error_msg))

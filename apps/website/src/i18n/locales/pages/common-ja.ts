@@ -70,7 +70,8 @@ export const jaCommon = {
 	"pricing.badge": "シンプルで透明な料金体系",
 	"pricing.title": "無料で始めて、",
 	"pricing.titleHighlight": "成長に合わせて拡張",
-	"pricing.description": "ユーザーごとの課金なし。隠れた料金なし。どこでもデプロイ可能 — クラウド、オンプレミス、またはエアギャップ環境。自動化インフラを所有しましょう。",
+	"pricing.description":
+		"ユーザーごとの課金なし。隠れた料金なし。どこでもデプロイ可能 — クラウド、オンプレミス、またはエアギャップ環境。自動化インフラを所有しましょう。",
 	"pricing.feature.unlimitedUsers": "無制限のユーザー",
 	"pricing.feature.selfHostable": "セルフホスト可能",
 	"pricing.feature.noVendorLockIn": "ベンダーロックインなし",
@@ -92,16 +93,20 @@ export const jaCommon = {
 	"pricing.tier.or": "または",
 	"pricing.tier.yearlySavings": "約17%お得",
 	"pricing.tier.free.description": "Flow-Likeの試用や個人プロジェクトに最適",
-	"pricing.tier.premium.description": "自動化に本格的に取り組む個人や小規模チーム向け",
-	"pricing.tier.pro.description": "より多くのパワーが必要な成長中のチームや企業向け",
-	"pricing.tier.enterprise.description": "高度なセキュリティとコンプライアンス要件を持つ組織向け",
+	"pricing.tier.premium.description":
+		"自動化に本格的に取り組む個人や小規模チーム向け",
+	"pricing.tier.pro.description":
+		"より多くのパワーが必要な成長中のチームや企業向け",
+	"pricing.tier.enterprise.description":
+		"高度なセキュリティとコンプライアンス要件を持つ組織向け",
 	"pricing.tier.popular": "最も人気",
 
 	// Pricing Studio Section
 	"pricing.studio.badge": "100% 永久無料",
 	"pricing.studio.title": "Flow-Like Studioは",
 	"pricing.studio.titleHighlight": "完全無料",
-	"pricing.studio.description": "デスクトップやモバイルデバイスでワークフローをローカルで構築、実行、自動化 — サブスクリプション不要。プレミアムプランはクラウド機能を追加し、ローカル機能ではありません。",
+	"pricing.studio.description":
+		"デスクトップやモバイルデバイスでワークフローをローカルで構築、実行、自動化 — サブスクリプション不要。プレミアムプランはクラウド機能を追加し、ローカル機能ではありません。",
 	"pricing.studio.desktop": "デスクトップアプリ",
 	"pricing.studio.desktopPlatforms": "Windows、macOS、Linux",
 	"pricing.studio.mobile": "モバイルアプリ",
@@ -113,7 +118,8 @@ export const jaCommon = {
 	"pricing.studio.visualBuilder": "ビジュアルワークフロービルダー",
 	"pricing.studio.visualBuilderDesc": "ドラッグ＆ドロップ • ノーコード",
 	"pricing.studio.downloadCta": "無料Studioをダウンロード",
-	"pricing.studio.inAppNote": "プレミアムプランはStudioアプリ内で直接購入 — ウェブサイトでの決済不要",
+	"pricing.studio.inAppNote":
+		"プレミアムプランはStudioアプリ内で直接購入 — ウェブサイトでの決済不要",
 
 	// Pricing Features
 	"pricing.feature.projects.10": "10個のプライベートプロジェクト",
@@ -170,26 +176,37 @@ export const jaCommon = {
 	"pricing.faq.title": "よくある質問",
 	"pricing.faq.subtitle": "料金について知っておくべきこと",
 	"pricing.faq.q1": "プランの制限を超えたらどうなりますか？",
-	"pricing.faq.a1": "制限に近づくとお知らせします。いつでもアップグレードでき、ワークフローを突然停止することはありません。クラウド実行の追加使用分は従量課金されます。",
+	"pricing.faq.a1":
+		"制限に近づくとお知らせします。いつでもアップグレードでき、ワークフローを突然停止することはありません。クラウド実行の追加使用分は従量課金されます。",
 	"pricing.faq.q2": "Flow-Likeをセルフホストできますか？",
-	"pricing.faq.a2": "はい！Flow-Likeは完全にセルフホスト可能です。自社インフラ、オンプレミス、またはエアギャップ環境で実行できます。デスクトップアプリは完全にオフラインで動作します。",
+	"pricing.faq.a2":
+		"はい！Flow-Likeは完全にセルフホスト可能です。自社インフラ、オンプレミス、またはエアギャップ環境で実行できます。デスクトップアプリは完全にオフラインで動作します。",
 	"pricing.faq.q3": "ユーザーごとの課金はありますか？",
-	"pricing.faq.a3": "いいえ。自動化は組織全体がアクセスできるべきだと考えています。全てのプランで無制限のユーザーをサポート。使用量（クラウド機能）に基づいて支払い、従業員数ではありません。",
+	"pricing.faq.a3":
+		"いいえ。自動化は組織全体がアクセスできるべきだと考えています。全てのプランで無制限のユーザーをサポート。使用量（クラウド機能）に基づいて支払い、従業員数ではありません。",
 	"pricing.faq.q4": "AIモデルアクセスには何が含まれますか？",
-	"pricing.faq.a4": "AIモデルアクセスには、FlowPilot（AIアシスタント）、インテリジェントなワークフロー提案、ホストされたモデルを通じた自然言語自動化などの機能が含まれます。",
+	"pricing.faq.a4":
+		"AIモデルアクセスには、FlowPilot（AIアシスタント）、インテリジェントなワークフロー提案、ホストされたモデルを通じた自然言語自動化などの機能が含まれます。",
 	"pricing.faq.q5": "スタートアップや非営利団体向けの割引はありますか？",
-	"pricing.faq.a5": "はい！登録された非営利団体、教育機関、アーリーステージのスタートアップには大幅な割引を提供しています。詳細は hello@flow-like.com までお問い合わせください。",
+	"pricing.faq.a5":
+		"はい！登録された非営利団体、教育機関、アーリーステージのスタートアップには大幅な割引を提供しています。詳細は hello@flow-like.com までお問い合わせください。",
 	"pricing.faq.q6": "ローカル実行とクラウド実行の違いは何ですか？",
-	"pricing.faq.a6": "ローカル実行はワークフローをお使いのマシンで実行します — 全プランで完全に無料かつ無制限。クラウド実行は当社のインフラでワークフローを実行し、スケジュール実行、Webhook、24時間365日の可用性を実現します。",
+	"pricing.faq.a6":
+		"ローカル実行はワークフローをお使いのマシンで実行します — 全プランで完全に無料かつ無制限。クラウド実行は当社のインフラでワークフローを実行し、スケジュール実行、Webhook、24時間365日の可用性を実現します。",
 	"pricing.faq.q7": "いつでも解約できますか？",
-	"pricing.faq.a7": "もちろんです。契約なし、解約料なし。解約しても請求期間の終わりまでアクセスを維持し、その後自動的に無料プランに移行します。",
-	"pricing.faq.q8": "エンタープライズのコンプライアンス要件についてはどうですか？",
-	"pricing.faq.a8": "エンタープライズプランにはSOC 2コンプライアンス文書、GDPRデータ処理契約、カスタム保持ポリシー、監査ログ、SSO/SAML統合が含まれます。",
+	"pricing.faq.a7":
+		"もちろんです。契約なし、解約料なし。解約しても請求期間の終わりまでアクセスを維持し、その後自動的に無料プランに移行します。",
+	"pricing.faq.q8":
+		"エンタープライズのコンプライアンス要件についてはどうですか？",
+	"pricing.faq.a8":
+		"エンタープライズプランにはSOC 2コンプライアンス文書、GDPRデータ処理契約、カスタム保持ポリシー、監査ログ、SSO/SAML統合が含まれます。",
 
 	// Pricing CTA Section
 	"pricing.ctaSection.title": "カスタムソリューションが必要ですか？",
-	"pricing.ctaSection.description": "24時間以内にビジネス向けの完全にカスタマイズされた自動化ソリューションを入手できます。お客様の正確なニーズに合わせた本番環境対応のワークフローを設計、構築、デプロイします。",
+	"pricing.ctaSection.description":
+		"24時間以内にビジネス向けの完全にカスタマイズされた自動化ソリューションを入手できます。お客様の正確なニーズに合わせた本番環境対応のワークフローを設計、構築、デプロイします。",
 	"pricing.ctaSection.24h": "24時間ソリューション",
 	"pricing.ctaSection.enterprise": "エンタープライズ営業に問い合わせ",
-	"pricing.ctaSection.startingAt": "€1,999から · 完全なソースコード所有権 · どこでもデプロイ",
+	"pricing.ctaSection.startingAt":
+		"€1,999から · 完全なソースコード所有権 · どこでもデプロイ",
 };

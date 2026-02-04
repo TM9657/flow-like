@@ -3,21 +3,16 @@
 import {
 	AlertCircle,
 	Check,
-	ChevronDown,
-	Clock,
 	Copy,
 	Eye,
 	EyeOff,
-	Filter,
 	Key,
 	Loader2,
 	Plus,
 	RefreshCw,
-	Search,
 	Shield,
 	ShieldOff,
 	Trash2,
-	X,
 } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
 import {
@@ -48,14 +43,6 @@ import {
 	DialogHeader,
 	DialogTitle,
 } from "../../ui/dialog";
-import {
-	DropdownMenu,
-	DropdownMenuCheckboxItem,
-	DropdownMenuContent,
-	DropdownMenuLabel,
-	DropdownMenuSeparator,
-	DropdownMenuTrigger,
-} from "../../ui/dropdown-menu";
 import { Input } from "../../ui/input";
 import { Label } from "../../ui/label";
 import {
@@ -119,7 +106,8 @@ export function SinkTokensPage({
 	const [copiedToken, setCopiedToken] = useState(false);
 
 	// Form state
-	const [selectedServiceSinkType, setSelectedServiceSinkType] = useState<ServiceSinkType>("cron");
+	const [selectedServiceSinkType, setSelectedServiceSinkType] =
+		useState<ServiceSinkType>("cron");
 	const [tokenName, setTokenName] = useState("");
 	const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -296,7 +284,9 @@ export function SinkTokensPage({
 				</Card>
 				<Card>
 					<CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-						<CardTitle className="text-sm font-medium">Revoked Tokens</CardTitle>
+						<CardTitle className="text-sm font-medium">
+							Revoked Tokens
+						</CardTitle>
 						<ShieldOff className="h-4 w-4 text-destructive" />
 					</CardHeader>
 					<CardContent>
@@ -464,7 +454,8 @@ export function SinkTokensPage({
 									<Check className="h-5 w-5 text-green-600 mt-0.5" />
 									<div className="flex-1">
 										<p className="text-sm font-medium text-green-800 dark:text-green-200">
-											Token created for {SINK_TYPE_LABELS[newToken.sink_type as ServiceSinkType]}
+											Token created for{" "}
+											{SINK_TYPE_LABELS[newToken.sink_type as ServiceSinkType]}
 										</p>
 										<p className="text-xs text-green-700 dark:text-green-300 mt-1">
 											JTI: {newToken.jti}
@@ -526,7 +517,9 @@ export function SinkTokensPage({
 								<Label htmlFor="sink-type">Sink Type</Label>
 								<Select
 									value={selectedServiceSinkType}
-									onValueChange={(v) => setSelectedServiceSinkType(v as ServiceSinkType)}
+									onValueChange={(v) =>
+										setSelectedServiceSinkType(v as ServiceSinkType)
+									}
 								>
 									<SelectTrigger id="sink-type">
 										<SelectValue />
@@ -548,8 +541,7 @@ export function SinkTokensPage({
 
 							<div className="space-y-2">
 								<Label htmlFor="token-name">
-									Name{" "}
-									<span className="text-muted-foreground">(optional)</span>
+									Name <span className="text-muted-foreground">(optional)</span>
 								</Label>
 								<Input
 									id="token-name"
@@ -611,8 +603,9 @@ export function SinkTokensPage({
 								</p>
 								<p className="text-sm">
 									Type:{" "}
-									{SINK_TYPE_LABELS[tokenToRevoke.sink_type as ServiceSinkType] ??
-										tokenToRevoke.sink_type}
+									{SINK_TYPE_LABELS[
+										tokenToRevoke.sink_type as ServiceSinkType
+									] ?? tokenToRevoke.sink_type}
 								</p>
 							</div>
 						</div>

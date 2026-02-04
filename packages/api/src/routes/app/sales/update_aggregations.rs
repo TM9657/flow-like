@@ -35,7 +35,12 @@ pub async fn update_daily_aggregation(
 
     let refunded: Vec<_> = purchases
         .iter()
-        .filter(|p| matches!(p.status, PurchaseStatus::Refunded | PurchaseStatus::PartiallyRefunded))
+        .filter(|p| {
+            matches!(
+                p.status,
+                PurchaseStatus::Refunded | PurchaseStatus::PartiallyRefunded
+            )
+        })
         .collect();
 
     let total_revenue: i64 = completed.iter().map(|p| p.price_paid).sum();

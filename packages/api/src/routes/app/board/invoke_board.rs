@@ -332,7 +332,12 @@ pub async fn invoke_board(
 
             tracing::info!(run_id = %run_id, "Got Lambda response, starting stream proxy");
 
-            Ok(proxy_lambda_sse_response(byte_stream, run_id, Some(std::sync::Arc::new(state.db.clone()))).into_response())
+            Ok(proxy_lambda_sse_response(
+                byte_stream,
+                run_id,
+                Some(std::sync::Arc::new(state.db.clone())),
+            )
+            .into_response())
         }
         _ => {
             // Use HTTP SSE for all other backends (Http, etc.)
@@ -367,8 +372,9 @@ fn proxy_lambda_sse_response(
     stream: ByteStream,
     run_id: String,
     db: Option<std::sync::Arc<sea_orm::DatabaseConnection>>,
-) -> axum::response::sse::Sse<impl futures::Stream<Item = Result<axum::response::sse::Event, std::convert::Infallible>>>
-{
+) -> axum::response::sse::Sse<
+    impl futures::Stream<Item = Result<axum::response::sse::Event, std::convert::Infallible>>,
+> {
     use axum::response::sse::{Event, KeepAlive, Sse};
     use futures::StreamExt;
     use std::time::Duration;

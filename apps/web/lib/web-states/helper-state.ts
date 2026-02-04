@@ -1,6 +1,6 @@
 import type { IHelperState } from "@tm9657/flow-like-ui";
 import type { IFileMetadata } from "@tm9657/flow-like-ui/lib";
-import { apiGet, type WebBackendRef } from "./api-utils";
+import { type WebBackendRef, apiGet } from "./api-utils";
 
 export class WebHelperState implements IHelperState {
 	constructor(private readonly backend: WebBackendRef) {}
@@ -19,7 +19,9 @@ export class WebHelperState implements IHelperState {
 	): Promise<string[] | string | undefined> {
 		// Web version: Cannot open native file dialogs
 		// This would need to use HTML file input instead
-		console.warn("openFileOrFolderMenu is not available in web mode - use HTML file input");
+		console.warn(
+			"openFileOrFolderMenu is not available in web mode - use HTML file input",
+		);
 		return undefined;
 	}
 

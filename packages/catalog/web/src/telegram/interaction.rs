@@ -442,12 +442,13 @@ impl NodeLogic for SendAndWaitNode {
                             }
 
                             if let Some(reply_to) = msg.reply_to_message()
-                                && reply_to.id.0 == message_id {
-                                    let reply = UserReply::from(&msg);
-                                    let mut result_guard = result_clone.lock().await;
-                                    *result_guard = Some(reply);
-                                    return;
-                                }
+                                && reply_to.id.0 == message_id
+                            {
+                                let reply = UserReply::from(&msg);
+                                let mut result_guard = result_clone.lock().await;
+                                *result_guard = Some(reply);
+                                return;
+                            }
                         }
                     }
                 }
@@ -633,9 +634,10 @@ impl NodeLogic for WaitForCallbackNode {
                             let msg_chat_id = callback.message.as_ref().map(|m| m.chat().id.0);
 
                             if let Some(cid) = msg_chat_id
-                                && cid != chat_id.0 {
-                                    continue;
-                                }
+                                && cid != chat_id.0
+                            {
+                                continue;
+                            }
 
                             if let Some(expected_msg_id) = message_id_filter {
                                 let actual_msg_id =
@@ -977,14 +979,14 @@ impl NodeLogic for ConfirmationDialogNode {
                             }
 
                             if let Some(data) = callback.data
-                                && (data == "confirm" || data == "cancel") {
-                                    let _ =
-                                        bot_clone.answer_callback_query(callback.id.clone()).await;
+                                && (data == "confirm" || data == "cancel")
+                            {
+                                let _ = bot_clone.answer_callback_query(callback.id.clone()).await;
 
-                                    let mut result_guard = result_clone.lock().await;
-                                    *result_guard = Some(data);
-                                    return;
-                                }
+                                let mut result_guard = result_clone.lock().await;
+                                *result_guard = Some(data);
+                                return;
+                            }
                         }
                     }
                 }

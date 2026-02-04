@@ -162,7 +162,9 @@ impl NodeLogic for KFoldGeneratorNode {
 
         let k = k as usize;
         if k < 2 {
-            return Err(flow_like_types::anyhow!("K must be at least 2 for cross-validation"));
+            return Err(flow_like_types::anyhow!(
+                "K must be at least 2 for cross-validation"
+            ));
         }
 
         // Load all data from source
@@ -182,7 +184,8 @@ impl NodeLogic for KFoldGeneratorNode {
         if total_samples < k {
             return Err(flow_like_types::anyhow!(
                 "Not enough samples ({}) for {} folds",
-                total_samples, k
+                total_samples,
+                k
             ));
         }
 
@@ -197,7 +200,10 @@ impl NodeLogic for KFoldGeneratorNode {
         let remainder = total_samples % k;
 
         context.log_message(
-            &format!("K-Fold CV: {} samples, {} folds, ~{} per fold", total_samples, k, fold_size),
+            &format!(
+                "K-Fold CV: {} samples, {} folds, ~{} per fold",
+                total_samples, k, fold_size
+            ),
             LogLevel::Info,
         );
 
@@ -227,7 +233,13 @@ impl NodeLogic for KFoldGeneratorNode {
             }
 
             context.log_message(
-                &format!("Fold {}/{}: {} train, {} validation", fold_idx + 1, k, train_items.len(), val_items.len()),
+                &format!(
+                    "Fold {}/{}: {} train, {} validation",
+                    fold_idx + 1,
+                    k,
+                    train_items.len(),
+                    val_items.len()
+                ),
                 LogLevel::Debug,
             );
 
@@ -252,7 +264,9 @@ impl NodeLogic for KFoldGeneratorNode {
             }
 
             // Output current fold index and trigger fold execution
-            context.set_pin_value("fold_index", json!(fold_idx as i64)).await?;
+            context
+                .set_pin_value("fold_index", json!(fold_idx as i64))
+                .await?;
             context.activate_exec_pin("exec_fold").await?;
 
             // Note: In a real flow, the downstream nodes would execute here

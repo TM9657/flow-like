@@ -73,7 +73,9 @@ function SheetContent({
 			>
 				{/* Subtle gradient accent */}
 				<div className="absolute inset-0 bg-gradient-to-br from-primary/[0.02] via-transparent to-purple-500/[0.02] pointer-events-none" />
-				<div className="relative z-10 flex flex-col gap-4 h-full">{children}</div>
+				<div className="relative z-10 flex flex-col gap-4 h-full">
+					{children}
+				</div>
 				<SheetPrimitive.Close className="ring-offset-background focus:ring-ring data-[state=open]:bg-secondary absolute top-4 right-4 rounded-xs opacity-70 transition-opacity hover:opacity-100 focus:ring-2 focus:ring-offset-2 focus:outline-hidden disabled:pointer-events-none z-20">
 					<XIcon className="size-4" />
 					<span className="sr-only">Close</span>

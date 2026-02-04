@@ -72,7 +72,8 @@ export const esCommon = {
 	"pricing.badge": "Precios simples y transparentes",
 	"pricing.title": "Comienza gratis,",
 	"pricing.titleHighlight": "escala mientras creces",
-	"pricing.description": "Sin licencias por usuario. Sin tarifas ocultas. Despliega en cualquier lugar — nube, on-premise o air-gapped. Sé dueño de tu infraestructura de automatización.",
+	"pricing.description":
+		"Sin licencias por usuario. Sin tarifas ocultas. Despliega en cualquier lugar — nube, on-premise o air-gapped. Sé dueño de tu infraestructura de automatización.",
 	"pricing.feature.unlimitedUsers": "Usuarios ilimitados",
 	"pricing.feature.selfHostable": "Auto-hospedable",
 	"pricing.feature.noVendorLockIn": "Sin dependencia de proveedor",
@@ -93,17 +94,22 @@ export const esCommon = {
 	"pricing.tier.perYear": "/año",
 	"pricing.tier.or": "o",
 	"pricing.tier.yearlySavings": "Ahorra ~17%",
-	"pricing.tier.free.description": "Perfecto para probar Flow-Like y proyectos personales",
-	"pricing.tier.premium.description": "Para individuos y equipos pequeños que se toman la automatización en serio",
-	"pricing.tier.pro.description": "Para equipos en crecimiento y empresas que necesitan más potencia",
-	"pricing.tier.enterprise.description": "Para organizaciones con necesidades avanzadas de seguridad y cumplimiento",
+	"pricing.tier.free.description":
+		"Perfecto para probar Flow-Like y proyectos personales",
+	"pricing.tier.premium.description":
+		"Para individuos y equipos pequeños que se toman la automatización en serio",
+	"pricing.tier.pro.description":
+		"Para equipos en crecimiento y empresas que necesitan más potencia",
+	"pricing.tier.enterprise.description":
+		"Para organizaciones con necesidades avanzadas de seguridad y cumplimiento",
 	"pricing.tier.popular": "Más popular",
 
 	// Pricing Studio Section
 	"pricing.studio.badge": "100% Gratis para siempre",
 	"pricing.studio.title": "Flow-Like Studio es",
 	"pricing.studio.titleHighlight": "completamente gratis",
-	"pricing.studio.description": "Crea, ejecuta y automatiza workflows localmente en tu escritorio o dispositivo móvil — sin necesidad de suscripción. Los planes premium añaden funciones en la nube, no capacidades locales.",
+	"pricing.studio.description":
+		"Crea, ejecuta y automatiza workflows localmente en tu escritorio o dispositivo móvil — sin necesidad de suscripción. Los planes premium añaden funciones en la nube, no capacidades locales.",
 	"pricing.studio.desktop": "App de Escritorio",
 	"pricing.studio.desktopPlatforms": "Windows, macOS y Linux",
 	"pricing.studio.mobile": "App Móvil",
@@ -115,7 +121,8 @@ export const esCommon = {
 	"pricing.studio.visualBuilder": "Constructor Visual de Workflows",
 	"pricing.studio.visualBuilderDesc": "Arrastrar y Soltar • Sin Código",
 	"pricing.studio.downloadCta": "Descargar Studio Gratis",
-	"pricing.studio.inAppNote": "Los planes premium se compran directamente en la app Studio — sin checkout en la web",
+	"pricing.studio.inAppNote":
+		"Los planes premium se compran directamente en la app Studio — sin checkout en la web",
 
 	// Pricing Features
 	"pricing.feature.projects.10": "10 proyectos privados",
@@ -172,26 +179,37 @@ export const esCommon = {
 	"pricing.faq.title": "Preguntas frecuentes",
 	"pricing.faq.subtitle": "Todo lo que necesitas saber sobre nuestros precios",
 	"pricing.faq.q1": "¿Qué pasa cuando excedo los límites de mi plan?",
-	"pricing.faq.a1": "Te notificaremos cuando te acerques a tus límites. Puedes actualizar en cualquier momento y no cortaremos tus workflows de repente. Para ejecuciones en la nube, el uso adicional se factura según consumo.",
+	"pricing.faq.a1":
+		"Te notificaremos cuando te acerques a tus límites. Puedes actualizar en cualquier momento y no cortaremos tus workflows de repente. Para ejecuciones en la nube, el uso adicional se factura según consumo.",
 	"pricing.faq.q2": "¿Puedo auto-hospedar Flow-Like?",
-	"pricing.faq.a2": "¡Sí! Flow-Like es completamente auto-hospedable. Puedes ejecutarlo en tu propia infraestructura, on-premise o en entornos air-gapped. La app de escritorio funciona completamente offline.",
+	"pricing.faq.a2":
+		"¡Sí! Flow-Like es completamente auto-hospedable. Puedes ejecutarlo en tu propia infraestructura, on-premise o en entornos air-gapped. La app de escritorio funciona completamente offline.",
 	"pricing.faq.q3": "¿Hay precios por usuario?",
-	"pricing.faq.a3": "No. Creemos que la automatización debe ser accesible para toda tu organización. Todos los planes soportan usuarios ilimitados. Solo pagas por uso (funciones en la nube), no por cantidad de empleados.",
+	"pricing.faq.a3":
+		"No. Creemos que la automatización debe ser accesible para toda tu organización. Todos los planes soportan usuarios ilimitados. Solo pagas por uso (funciones en la nube), no por cantidad de empleados.",
 	"pricing.faq.q4": "¿Qué incluye el acceso a modelos IA?",
-	"pricing.faq.a4": "El acceso a modelos IA cubre funciones como FlowPilot (nuestro asistente IA), sugerencias inteligentes de workflows y automatización en lenguaje natural a través de nuestros modelos hospedados.",
+	"pricing.faq.a4":
+		"El acceso a modelos IA cubre funciones como FlowPilot (nuestro asistente IA), sugerencias inteligentes de workflows y automatización en lenguaje natural a través de nuestros modelos hospedados.",
 	"pricing.faq.q5": "¿Ofrecen descuentos para startups u ONGs?",
-	"pricing.faq.a5": "¡Sí! Ofrecemos descuentos significativos para ONGs registradas, instituciones educativas y startups en etapa temprana. Contáctanos en hello@flow-like.com para más información.",
-	"pricing.faq.q6": "¿Cuál es la diferencia entre ejecución local y en la nube?",
-	"pricing.faq.a6": "La ejecución local ejecuta workflows en tu máquina — completamente gratis e ilimitada en todos los planes. La ejecución en la nube ejecuta workflows en nuestra infraestructura, permitiendo ejecuciones programadas, webhooks y disponibilidad 24/7.",
+	"pricing.faq.a5":
+		"¡Sí! Ofrecemos descuentos significativos para ONGs registradas, instituciones educativas y startups en etapa temprana. Contáctanos en hello@flow-like.com para más información.",
+	"pricing.faq.q6":
+		"¿Cuál es la diferencia entre ejecución local y en la nube?",
+	"pricing.faq.a6":
+		"La ejecución local ejecuta workflows en tu máquina — completamente gratis e ilimitada en todos los planes. La ejecución en la nube ejecuta workflows en nuestra infraestructura, permitiendo ejecuciones programadas, webhooks y disponibilidad 24/7.",
 	"pricing.faq.q7": "¿Puedo cancelar en cualquier momento?",
-	"pricing.faq.a7": "Absolutamente. Sin contratos, sin tarifas de cancelación. Si cancelas, mantendrás el acceso hasta el final de tu período de facturación, luego bajarás automáticamente a Gratis.",
+	"pricing.faq.a7":
+		"Absolutamente. Sin contratos, sin tarifas de cancelación. Si cancelas, mantendrás el acceso hasta el final de tu período de facturación, luego bajarás automáticamente a Gratis.",
 	"pricing.faq.q8": "¿Qué hay de los requisitos de cumplimiento empresarial?",
-	"pricing.faq.a8": "Los planes empresariales incluyen documentación de cumplimiento SOC 2, acuerdos de procesamiento de datos GDPR, políticas de retención personalizadas, registros de auditoría e integración SSO/SAML.",
+	"pricing.faq.a8":
+		"Los planes empresariales incluyen documentación de cumplimiento SOC 2, acuerdos de procesamiento de datos GDPR, políticas de retención personalizadas, registros de auditoría e integración SSO/SAML.",
 
 	// Pricing CTA Section
 	"pricing.ctaSection.title": "¿Necesitas una solución personalizada?",
-	"pricing.ctaSection.description": "Obtén una solución de automatización completamente personalizada para tu negocio en solo 24 horas. Diseñaremos, construiremos y desplegaremos un workflow listo para producción adaptado a tus necesidades exactas.",
+	"pricing.ctaSection.description":
+		"Obtén una solución de automatización completamente personalizada para tu negocio en solo 24 horas. Diseñaremos, construiremos y desplegaremos un workflow listo para producción adaptado a tus necesidades exactas.",
 	"pricing.ctaSection.24h": "Solución 24 horas",
 	"pricing.ctaSection.enterprise": "Contactar ventas empresariales",
-	"pricing.ctaSection.startingAt": "Desde €1.999 · Propiedad completa del código · Despliega en cualquier lugar",
+	"pricing.ctaSection.startingAt":
+		"Desde €1.999 · Propiedad completa del código · Despliega en cualquier lugar",
 };

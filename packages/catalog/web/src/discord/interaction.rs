@@ -217,25 +217,27 @@ impl NodeLogic for SendAndWaitNode {
                         }
 
                         if let Some(expected_user) = filter_user
-                            && msg.author.id.get() != expected_user {
-                                continue;
-                            }
+                            && msg.author.id.get() != expected_user
+                        {
+                            continue;
+                        }
 
                         if let Some(ref reply) = msg.referenced_message
-                            && reply.id == sent_id {
-                                let user_reply = UserReply {
-                                    message_id: msg.id.to_string(),
-                                    channel_id: channel_id.to_string(),
-                                    user_id: msg.author.id.to_string(),
-                                    username: msg.author.name.clone(),
-                                    text: msg.content.clone(),
-                                    timestamp: msg.timestamp.unix_timestamp(),
-                                };
+                            && reply.id == sent_id
+                        {
+                            let user_reply = UserReply {
+                                message_id: msg.id.to_string(),
+                                channel_id: channel_id.to_string(),
+                                user_id: msg.author.id.to_string(),
+                                username: msg.author.name.clone(),
+                                text: msg.content.clone(),
+                                timestamp: msg.timestamp.unix_timestamp(),
+                            };
 
-                                let mut result_guard = result_clone.lock().await;
-                                *result_guard = Some(user_reply);
-                                return;
-                            }
+                            let mut result_guard = result_clone.lock().await;
+                            *result_guard = Some(user_reply);
+                            return;
+                        }
                     }
                 }
             }
@@ -421,9 +423,10 @@ impl NodeLogic for WaitForMessageNode {
                         }
 
                         if let Some(expected_user) = filter_user
-                            && msg.author.id.get() != expected_user {
-                                continue;
-                            }
+                            && msg.author.id.get() != expected_user
+                        {
+                            continue;
+                        }
 
                         let user_reply = UserReply {
                             message_id: msg.id.to_string(),

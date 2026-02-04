@@ -6,7 +6,7 @@ import type {
 } from "@tm9657/flow-like-ui";
 import type { IBitSearchQuery } from "@tm9657/flow-like-ui/lib/schema/hub/bit-search-query";
 import type { ISettingsProfile } from "@tm9657/flow-like-ui/types";
-import { apiGet, apiPost, type WebBackendRef } from "./api-utils";
+import { type WebBackendRef, apiGet, apiPost } from "./api-utils";
 
 export class WebBitState implements IBitState {
 	constructor(private readonly backend: WebBackendRef) {}
@@ -47,19 +47,11 @@ export class WebBitState implements IBitState {
 	}
 
 	async addBit(bit: IBit, profile: ISettingsProfile): Promise<void> {
-		await apiPost(
-			"profile/bits/add",
-			{ bit_id: bit.id },
-			this.backend.auth,
-		);
+		await apiPost("profile/bits/add", { bit_id: bit.id }, this.backend.auth);
 	}
 
 	async removeBit(bit: IBit, profile: ISettingsProfile): Promise<void> {
-		await apiPost(
-			"profile/bits/remove",
-			{ bit_id: bit.id },
-			this.backend.auth,
-		);
+		await apiPost("profile/bits/remove", { bit_id: bit.id }, this.backend.auth);
 	}
 
 	async getPackSize(bits: IBit[]): Promise<number> {
@@ -74,11 +66,7 @@ export class WebBitState implements IBitState {
 
 	async searchBits(query: IBitSearchQuery): Promise<IBit[]> {
 		try {
-			const result = await apiPost<IBit[]>(
-				"bit",
-				query,
-				this.backend.auth,
-			);
+			const result = await apiPost<IBit[]>("bit", query, this.backend.auth);
 			return result ?? [];
 		} catch {
 			return [];

@@ -888,10 +888,11 @@ pub async fn execute_agent_streaming(
                     // Only include if we have a pending tool call for it
                     for c in content.iter() {
                         if let rig::message::UserContent::ToolResult(tr) = c
-                            && pending_tool_call_ids.remove(&tr.id) {
-                                current_history.push(msg.clone());
-                                break;
-                            }
+                            && pending_tool_call_ids.remove(&tr.id)
+                        {
+                            current_history.push(msg.clone());
+                            break;
+                        }
                     }
                 } else {
                     current_history.push(msg);

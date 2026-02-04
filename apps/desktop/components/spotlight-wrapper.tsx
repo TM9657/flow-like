@@ -50,7 +50,10 @@ export function SpotlightWrapper({ children }: SpotlightWrapperProps) {
 		[],
 	);
 
-	const profiles = useTauriInvoke<Record<string, ISettingsProfile>>("get_profiles", {});
+	const profiles = useTauriInvoke<Record<string, ISettingsProfile>>(
+		"get_profiles",
+		{},
+	);
 
 	const appMetadata = useInvoke(backend.appState.getApps, backend.appState, []);
 

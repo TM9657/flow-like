@@ -74,7 +74,8 @@ export const enCommon = {
 	"pricing.badge": "Simple, transparent pricing",
 	"pricing.title": "Start free,",
 	"pricing.titleHighlight": "scale as you grow",
-	"pricing.description": "No per-seat licensing. No hidden fees. Deploy anywhere — cloud, on-premise, or air-gapped. Own your automation infrastructure.",
+	"pricing.description":
+		"No per-seat licensing. No hidden fees. Deploy anywhere — cloud, on-premise, or air-gapped. Own your automation infrastructure.",
 	"pricing.feature.unlimitedUsers": "Unlimited users",
 	"pricing.feature.selfHostable": "Self-hostable",
 	"pricing.feature.noVendorLockIn": "No vendor lock-in",
@@ -95,17 +96,22 @@ export const enCommon = {
 	"pricing.tier.perYear": "/year",
 	"pricing.tier.or": "or",
 	"pricing.tier.yearlySavings": "Save ~17%",
-	"pricing.tier.free.description": "Perfect for trying out Flow-Like and personal projects",
-	"pricing.tier.premium.description": "For individuals and small teams getting serious about automation",
-	"pricing.tier.pro.description": "For growing teams and businesses that need more power",
-	"pricing.tier.enterprise.description": "For organizations with advanced security and compliance needs",
+	"pricing.tier.free.description":
+		"Perfect for trying out Flow-Like and personal projects",
+	"pricing.tier.premium.description":
+		"For individuals and small teams getting serious about automation",
+	"pricing.tier.pro.description":
+		"For growing teams and businesses that need more power",
+	"pricing.tier.enterprise.description":
+		"For organizations with advanced security and compliance needs",
 	"pricing.tier.popular": "Most Popular",
 
 	// Pricing Studio Section
 	"pricing.studio.badge": "100% Free Forever",
 	"pricing.studio.title": "Flow-Like Studio is",
 	"pricing.studio.titleHighlight": "completely free",
-	"pricing.studio.description": "Build, run, and automate workflows locally on your desktop or mobile device — no subscription required. Premium plans add cloud features, not local capabilities.",
+	"pricing.studio.description":
+		"Build, run, and automate workflows locally on your desktop or mobile device — no subscription required. Premium plans add cloud features, not local capabilities.",
 	"pricing.studio.desktop": "Desktop App",
 	"pricing.studio.desktopPlatforms": "Windows, macOS & Linux",
 	"pricing.studio.mobile": "Mobile App",
@@ -117,7 +123,8 @@ export const enCommon = {
 	"pricing.studio.downloadCta": "Download Free Studio",
 	"pricing.studio.visualBuilder": "Visual Workflow Builder",
 	"pricing.studio.visualBuilderDesc": "Drag & Drop • No Code",
-	"pricing.studio.inAppNote": "Premium plans are purchased directly in the Studio app — no website checkout needed",
+	"pricing.studio.inAppNote":
+		"Premium plans are purchased directly in the Studio app — no website checkout needed",
 
 	// Pricing Features
 	"pricing.feature.projects.10": "10 private projects",
@@ -174,29 +181,39 @@ export const enCommon = {
 	"pricing.faq.title": "Frequently asked questions",
 	"pricing.faq.subtitle": "Everything you need to know about our pricing",
 	"pricing.faq.q1": "What happens when I exceed my plan limits?",
-	"pricing.faq.a1": "We'll notify you when you're approaching your limits. You can upgrade anytime, and we won't suddenly cut off your workflows. For cloud executions, additional usage is billed at a pay-as-you-go rate.",
+	"pricing.faq.a1":
+		"We'll notify you when you're approaching your limits. You can upgrade anytime, and we won't suddenly cut off your workflows. For cloud executions, additional usage is billed at a pay-as-you-go rate.",
 	"pricing.faq.q2": "Can I self-host Flow-Like?",
-	"pricing.faq.a2": "Yes! Flow-Like is fully self-hostable. You can run it on your own infrastructure, on-premise, or in air-gapped environments. The desktop app works entirely offline — no cloud connection required for local execution.",
+	"pricing.faq.a2":
+		"Yes! Flow-Like is fully self-hostable. You can run it on your own infrastructure, on-premise, or in air-gapped environments. The desktop app works entirely offline — no cloud connection required for local execution.",
 	"pricing.faq.q3": "Is there per-seat or per-user pricing?",
-	"pricing.faq.a3": "No. We believe automation should be accessible to your entire organization. All plans support unlimited users. You only pay based on usage (cloud features), not headcount.",
+	"pricing.faq.a3":
+		"No. We believe automation should be accessible to your entire organization. All plans support unlimited users. You only pay based on usage (cloud features), not headcount.",
 	"pricing.faq.q4": "What's included in AI model access?",
-	"pricing.faq.a4": "AI model access covers features like FlowPilot (our AI assistant), intelligent workflow suggestions, and natural language automation through our hosted models.",
+	"pricing.faq.a4":
+		"AI model access covers features like FlowPilot (our AI assistant), intelligent workflow suggestions, and natural language automation through our hosted models.",
 	"pricing.faq.q5": "Do you offer discounts for startups or non-profits?",
-	"pricing.faq.a5": "Yes! We offer significant discounts for registered non-profits, educational institutions, and early-stage startups. Contact us at hello@flow-like.com to learn more.",
+	"pricing.faq.a5":
+		"Yes! We offer significant discounts for registered non-profits, educational institutions, and early-stage startups. Contact us at hello@flow-like.com to learn more.",
 	"pricing.faq.q6": "What's the difference between local and cloud execution?",
-	"pricing.faq.a6": "Local execution runs workflows on your machine — completely free and unlimited on all plans. Cloud execution runs workflows on our infrastructure, enabling scheduled runs, webhooks, and 24/7 availability.",
+	"pricing.faq.a6":
+		"Local execution runs workflows on your machine — completely free and unlimited on all plans. Cloud execution runs workflows on our infrastructure, enabling scheduled runs, webhooks, and 24/7 availability.",
 	"pricing.faq.q7": "Can I cancel anytime?",
-	"pricing.faq.a7": "Absolutely. No contracts, no cancellation fees. If you cancel, you'll retain access until the end of your billing period, then automatically downgrade to Free.",
+	"pricing.faq.a7":
+		"Absolutely. No contracts, no cancellation fees. If you cancel, you'll retain access until the end of your billing period, then automatically downgrade to Free.",
 	"pricing.faq.q8": "What about enterprise compliance requirements?",
-	"pricing.faq.a8": "Enterprise plans include SOC 2 compliance documentation, GDPR data processing agreements, custom retention policies, audit logs, and SSO/SAML integration.",
+	"pricing.faq.a8":
+		"Enterprise plans include SOC 2 compliance documentation, GDPR data processing agreements, custom retention policies, audit logs, and SSO/SAML integration.",
 	"pricing.faq.moreQuestions": "Still have questions?",
 	"pricing.faq.contactUs": "We're here to help",
 	"pricing.faq.contactButton": "Contact us",
 
 	// Pricing CTA Section
 	"pricing.ctaSection.title": "Need a custom solution?",
-	"pricing.ctaSection.description": "Get a fully custom automation solution built for your business in just 24 hours. We'll design, build, and deploy a production-ready workflow tailored to your exact needs.",
+	"pricing.ctaSection.description":
+		"Get a fully custom automation solution built for your business in just 24 hours. We'll design, build, and deploy a production-ready workflow tailored to your exact needs.",
 	"pricing.ctaSection.24h": "24-Hour Solution",
 	"pricing.ctaSection.enterprise": "Contact Enterprise Sales",
-	"pricing.ctaSection.startingAt": "Starting at €1,999 · Full source code ownership · Deploy anywhere",
+	"pricing.ctaSection.startingAt":
+		"Starting at €1,999 · Full source code ownership · Deploy anywhere",
 };

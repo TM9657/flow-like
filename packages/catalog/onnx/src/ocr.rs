@@ -79,27 +79,57 @@ impl NodeLogic for TextDetectionNode {
 
         node.add_icon("/flow/icons/text-search.svg");
 
-        node.add_input_pin("exec_in", "Input", "Initiate Execution", VariableType::Execution);
+        node.add_input_pin(
+            "exec_in",
+            "Input",
+            "Initiate Execution",
+            VariableType::Execution,
+        );
 
-        node.add_input_pin("model", "Model", "ONNX Text Detection Model", VariableType::Struct)
-            .set_schema::<NodeOnnxSession>()
-            .set_options(PinOptions::new().set_enforce_schema(true).build());
+        node.add_input_pin(
+            "model",
+            "Model",
+            "ONNX Text Detection Model",
+            VariableType::Struct,
+        )
+        .set_schema::<NodeOnnxSession>()
+        .set_options(PinOptions::new().set_enforce_schema(true).build());
 
         node.add_input_pin("image", "Image", "Input Image", VariableType::Struct)
             .set_schema::<NodeImage>()
             .set_options(PinOptions::new().set_enforce_schema(true).build());
 
-        node.add_input_pin("threshold", "Threshold", "Detection confidence threshold", VariableType::Float)
-            .set_default_value(Some(json!(0.5)));
+        node.add_input_pin(
+            "threshold",
+            "Threshold",
+            "Detection confidence threshold",
+            VariableType::Float,
+        )
+        .set_default_value(Some(json!(0.5)));
 
-        node.add_input_pin("input_size", "Input Size", "Model input size", VariableType::Integer)
-            .set_default_value(Some(json!(640)));
+        node.add_input_pin(
+            "input_size",
+            "Input Size",
+            "Model input size",
+            VariableType::Integer,
+        )
+        .set_default_value(Some(json!(640)));
 
         node.add_output_pin("exec_out", "Output", "Done", VariableType::Execution);
 
-        node.add_output_pin("regions", "Regions", "Detected text regions", VariableType::Generic);
+        node.add_output_pin(
+            "regions",
+            "Regions",
+            "Detected text regions",
+            VariableType::Generic,
+        );
 
-        node.add_output_pin("count", "Count", "Number of detected regions", VariableType::Integer);
+        node.add_output_pin(
+            "count",
+            "Count",
+            "Number of detected regions",
+            VariableType::Integer,
+        );
 
         node
     }
@@ -147,93 +177,97 @@ impl NodeLogic for TextDetectionNode {
 
             // Try to extract score map from first output
             if let Some((_, tensor)) = outputs.iter().next()
-                && let Ok(scores) = tensor.try_extract_array::<f32>() {
-                    let shape = scores.shape();
+                && let Ok(scores) = tensor.try_extract_array::<f32>()
+            {
+                let shape = scores.shape();
 
-                    // Simple connected component analysis on score map
-                    if shape.len() >= 3 {
-                        let h = if shape.len() == 4 { shape[2] } else { shape[1] };
-                        let w = if shape.len() == 4 { shape[3] } else { shape[2] };
+                // Simple connected component analysis on score map
+                if shape.len() >= 3 {
+                    let h = if shape.len() == 4 { shape[2] } else { shape[1] };
+                    let w = if shape.len() == 4 { shape[3] } else { shape[2] };
 
-                        let scale_x = orig_w as f32 / w as f32;
-                        let scale_y = orig_h as f32 / h as f32;
+                    let scale_x = orig_w as f32 / w as f32;
+                    let scale_y = orig_h as f32 / h as f32;
 
-                        // Find connected regions above threshold
-                        let mut visited = vec![false; h * w];
-                        for y in 0..h {
-                            for x in 0..w {
-                                let idx = y * w + x;
-                                if visited[idx] {
-                                    continue;
+                    // Find connected regions above threshold
+                    let mut visited = vec![false; h * w];
+                    for y in 0..h {
+                        for x in 0..w {
+                            let idx = y * w + x;
+                            if visited[idx] {
+                                continue;
+                            }
+
+                            let score = if shape.len() == 4 {
+                                scores[[0, 0, y, x]]
+                            } else {
+                                scores[[0, y, x]]
+                            };
+
+                            if score > threshold as f32 {
+                                // BFS to find connected region
+                                let mut min_x = x;
+                                let mut max_x = x;
+                                let mut min_y = y;
+                                let mut max_y = y;
+                                let mut sum_score = 0.0f32;
+                                let mut count = 0;
+
+                                let mut stack = vec![(x, y)];
+                                while let Some((cx, cy)) = stack.pop() {
+                                    let cidx = cy * w + cx;
+                                    if visited[cidx] {
+                                        continue;
+                                    }
+                                    visited[cidx] = true;
+
+                                    let s = if shape.len() == 4 {
+                                        scores[[0, 0, cy, cx]]
+                                    } else {
+                                        scores[[0, cy, cx]]
+                                    };
+
+                                    if s > threshold as f32 {
+                                        min_x = min_x.min(cx);
+                                        max_x = max_x.max(cx);
+                                        min_y = min_y.min(cy);
+                                        max_y = max_y.max(cy);
+                                        sum_score += s;
+                                        count += 1;
+
+                                        // Check neighbors
+                                        if cx > 0 {
+                                            stack.push((cx - 1, cy));
+                                        }
+                                        if cx < w - 1 {
+                                            stack.push((cx + 1, cy));
+                                        }
+                                        if cy > 0 {
+                                            stack.push((cx, cy - 1));
+                                        }
+                                        if cy < h - 1 {
+                                            stack.push((cx, cy + 1));
+                                        }
+                                    }
                                 }
 
-                                let score = if shape.len() == 4 {
-                                    scores[[0, 0, y, x]]
-                                } else {
-                                    scores[[0, y, x]]
-                                };
+                                if count > 4 {
+                                    let x1 = min_x as f32 * scale_x;
+                                    let y1 = min_y as f32 * scale_y;
+                                    let x2 = (max_x + 1) as f32 * scale_x;
+                                    let y2 = (max_y + 1) as f32 * scale_y;
 
-                                if score > threshold as f32 {
-                                    // BFS to find connected region
-                                    let mut min_x = x;
-                                    let mut max_x = x;
-                                    let mut min_y = y;
-                                    let mut max_y = y;
-                                    let mut sum_score = 0.0f32;
-                                    let mut count = 0;
-
-                                    let mut stack = vec![(x, y)];
-                                    while let Some((cx, cy)) = stack.pop() {
-                                        let cidx = cy * w + cx;
-                                        if visited[cidx] {
-                                            continue;
-                                        }
-                                        visited[cidx] = true;
-
-                                        let s = if shape.len() == 4 {
-                                            scores[[0, 0, cy, cx]]
-                                        } else {
-                                            scores[[0, cy, cx]]
-                                        };
-
-                                        if s > threshold as f32 {
-                                            min_x = min_x.min(cx);
-                                            max_x = max_x.max(cx);
-                                            min_y = min_y.min(cy);
-                                            max_y = max_y.max(cy);
-                                            sum_score += s;
-                                            count += 1;
-
-                                            // Check neighbors
-                                            if cx > 0 { stack.push((cx - 1, cy)); }
-                                            if cx < w - 1 { stack.push((cx + 1, cy)); }
-                                            if cy > 0 { stack.push((cx, cy - 1)); }
-                                            if cy < h - 1 { stack.push((cx, cy + 1)); }
-                                        }
-                                    }
-
-                                    if count > 4 {
-                                        let x1 = min_x as f32 * scale_x;
-                                        let y1 = min_y as f32 * scale_y;
-                                        let x2 = (max_x + 1) as f32 * scale_x;
-                                        let y2 = (max_y + 1) as f32 * scale_y;
-
-                                        regions.push(TextRegion {
-                                            bbox: [x1, y1, x2 - x1, y2 - y1],
-                                            polygon: [
-                                                [x1, y1],
-                                                [x2, y1],
-                                                [x2, y2],
-                                                [x1, y2],
-                                            ],
-                                            confidence: sum_score / count as f32,
-                                        });
-                                    }
+                                    regions.push(TextRegion {
+                                        bbox: [x1, y1, x2 - x1, y2 - y1],
+                                        polygon: [[x1, y1], [x2, y1], [x2, y2], [x1, y2]],
+                                        confidence: sum_score / count as f32,
+                                    });
                                 }
                             }
                         }
                     }
                 }
+            }
 
             let count = regions.len() as i64;
             context.set_pin_value("regions", json!(regions)).await?;
@@ -269,28 +303,58 @@ impl NodeLogic for TextRecognitionNode {
 
         node.add_icon("/flow/icons/text.svg");
 
-        node.add_input_pin("exec_in", "Input", "Initiate Execution", VariableType::Execution);
+        node.add_input_pin(
+            "exec_in",
+            "Input",
+            "Initiate Execution",
+            VariableType::Execution,
+        );
 
-        node.add_input_pin("model", "Model", "ONNX Text Recognition Model", VariableType::Struct)
-            .set_schema::<NodeOnnxSession>()
-            .set_options(PinOptions::new().set_enforce_schema(true).build());
+        node.add_input_pin(
+            "model",
+            "Model",
+            "ONNX Text Recognition Model",
+            VariableType::Struct,
+        )
+        .set_schema::<NodeOnnxSession>()
+        .set_options(PinOptions::new().set_enforce_schema(true).build());
 
-        node.add_input_pin("image", "Image", "Cropped text region image", VariableType::Struct)
-            .set_schema::<NodeImage>()
-            .set_options(PinOptions::new().set_enforce_schema(true).build());
+        node.add_input_pin(
+            "image",
+            "Image",
+            "Cropped text region image",
+            VariableType::Struct,
+        )
+        .set_schema::<NodeImage>()
+        .set_options(PinOptions::new().set_enforce_schema(true).build());
 
         node.add_input_pin("charset", "Charset", "Character set for decoding", VariableType::String)
             .set_default_value(Some(json!("0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ!\"#$%&'()*+,-./:;<=>?@[\\]^_`{|}~ ")));
 
-        node.add_input_pin("input_height", "Input Height", "Model expected input height", VariableType::Integer)
-            .set_default_value(Some(json!(32)));
+        node.add_input_pin(
+            "input_height",
+            "Input Height",
+            "Model expected input height",
+            VariableType::Integer,
+        )
+        .set_default_value(Some(json!(32)));
 
         node.add_output_pin("exec_out", "Output", "Done", VariableType::Execution);
 
-        node.add_output_pin("result", "Result", "Recognition result", VariableType::Struct)
-            .set_schema::<RecognizedText>();
+        node.add_output_pin(
+            "result",
+            "Result",
+            "Recognition result",
+            VariableType::Struct,
+        )
+        .set_schema::<RecognizedText>();
 
-        node.add_output_pin("text", "Text", "Recognized text string", VariableType::String);
+        node.add_output_pin(
+            "text",
+            "Text",
+            "Recognized text string",
+            VariableType::String,
+        );
 
         node
     }
@@ -322,7 +386,8 @@ impl NodeLogic for TextRecognitionNode {
             let gray = resized.to_luma8();
 
             // Create input tensor [1, 1, H, W] or [1, 3, H, W]
-            let mut input = Array4::<f32>::zeros((1, 1, input_height as usize, input_width as usize));
+            let mut input =
+                Array4::<f32>::zeros((1, 1, input_height as usize, input_width as usize));
             for y in 0..input_height {
                 for x in 0..input_width {
                     let pixel = gray.get_pixel(x, y);
@@ -340,45 +405,48 @@ impl NodeLogic for TextRecognitionNode {
             let mut prev_idx: Option<usize> = None;
 
             if let Some((_, tensor)) = outputs.iter().next()
-                && let Ok(logits) = tensor.try_extract_array::<f32>() {
-                    let shape = logits.shape();
+                && let Ok(logits) = tensor.try_extract_array::<f32>()
+            {
+                let shape = logits.shape();
 
-                    // Expect shape [1, T, num_classes] or [T, num_classes]
-                    let (seq_len, num_classes) = if shape.len() == 3 {
-                        (shape[1], shape[2])
-                    } else {
-                        (shape[0], shape[1])
-                    };
+                // Expect shape [1, T, num_classes] or [T, num_classes]
+                let (seq_len, num_classes) = if shape.len() == 3 {
+                    (shape[1], shape[2])
+                } else {
+                    (shape[0], shape[1])
+                };
 
-                    for t in 0..seq_len {
-                        // Find max class
-                        let mut max_idx = 0;
-                        let mut max_val = f32::NEG_INFINITY;
+                for t in 0..seq_len {
+                    // Find max class
+                    let mut max_idx = 0;
+                    let mut max_val = f32::NEG_INFINITY;
 
-                        for c in 0..num_classes {
-                            let val = if shape.len() == 3 {
-                                logits[[0, t, c]]
-                            } else {
-                                logits[[t, c]]
-                            };
-                            if val > max_val {
-                                max_val = val;
-                                max_idx = c;
-                            }
+                    for c in 0..num_classes {
+                        let val = if shape.len() == 3 {
+                            logits[[0, t, c]]
+                        } else {
+                            logits[[t, c]]
+                        };
+                        if val > max_val {
+                            max_val = val;
+                            max_idx = c;
                         }
-
-                        // CTC blank is usually 0 or last class
-                        let blank_idx = 0;
-                        if max_idx != blank_idx && Some(max_idx) != prev_idx
-                            && let Some(ch) = chars.get(max_idx.saturating_sub(1)) {
-                                text.push(*ch);
-                                // Softmax for confidence
-                                let conf = (max_val).exp();
-                                char_confidences.push(conf);
-                            }
-                        prev_idx = Some(max_idx);
                     }
+
+                    // CTC blank is usually 0 or last class
+                    let blank_idx = 0;
+                    if max_idx != blank_idx
+                        && Some(max_idx) != prev_idx
+                        && let Some(ch) = chars.get(max_idx.saturating_sub(1))
+                    {
+                        text.push(*ch);
+                        // Softmax for confidence
+                        let conf = (max_val).exp();
+                        char_confidences.push(conf);
+                    }
+                    prev_idx = Some(max_idx);
                 }
+            }
 
             let avg_conf = if char_confidences.is_empty() {
                 0.0
@@ -419,20 +487,40 @@ impl NodeLogic for CropTextRegionsNode {
 
         node.add_icon("/flow/icons/crop.svg");
 
-        node.add_input_pin("exec_in", "Input", "Initiate Execution", VariableType::Execution);
+        node.add_input_pin(
+            "exec_in",
+            "Input",
+            "Initiate Execution",
+            VariableType::Execution,
+        );
 
         node.add_input_pin("image", "Image", "Source image", VariableType::Struct)
             .set_schema::<NodeImage>()
             .set_options(PinOptions::new().set_enforce_schema(true).build());
 
-        node.add_input_pin("regions", "Regions", "Detected text regions", VariableType::Generic);
+        node.add_input_pin(
+            "regions",
+            "Regions",
+            "Detected text regions",
+            VariableType::Generic,
+        );
 
-        node.add_input_pin("padding", "Padding", "Padding around regions (pixels)", VariableType::Integer)
-            .set_default_value(Some(json!(2)));
+        node.add_input_pin(
+            "padding",
+            "Padding",
+            "Padding around regions (pixels)",
+            VariableType::Integer,
+        )
+        .set_default_value(Some(json!(2)));
 
         node.add_output_pin("exec_out", "Output", "Done", VariableType::Execution);
 
-        node.add_output_pin("crops", "Crops", "Cropped region images", VariableType::Generic);
+        node.add_output_pin(
+            "crops",
+            "Crops",
+            "Cropped region images",
+            VariableType::Generic,
+        );
 
         node
     }

@@ -40,8 +40,8 @@
 //! - CUDA/TensorRT require the NVIDIA runtime on the target system
 //! - XNNPACK works on all platforms with ARM or x86 CPUs
 
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::RwLock;
+use std::sync::atomic::{AtomicBool, Ordering};
 
 /// Track whether ORT has been initialized
 static ORT_INITIALIZED: AtomicBool = AtomicBool::new(false);

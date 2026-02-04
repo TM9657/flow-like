@@ -6,11 +6,10 @@ import {
 	Background,
 	BackgroundVariant,
 	type Connection,
+	ControlButton,
 	Controls,
 	type Edge,
 	type FinalConnectionState,
-	getNodesBounds,
-	getViewportForBounds,
 	type InternalNode,
 	type IsValidConnection,
 	MiniMap,
@@ -18,24 +17,23 @@ import {
 	type OnEdgesChange,
 	type OnNodesChange,
 	type OnSelectionChangeFunc,
-	Panel,
 	ReactFlow,
 	type ReactFlowInstance,
 	addEdge,
 	applyEdgeChanges,
 	applyNodeChanges,
+	getNodesBounds,
+	getViewportForBounds,
 	reconnectEdge,
 	useEdgesState,
 	useKeyPress,
 	useNodesState,
 	useReactFlow,
-	ControlButton,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import { useMediaQuery } from "@uidotdev/usehooks";
 import {
 	ArrowBigLeftDashIcon,
-	CameraIcon,
 	CheckIcon,
 	FileTextIcon,
 	HistoryIcon,
@@ -75,8 +73,6 @@ import {
 } from "../..";
 import { BoardActivityIndicator } from "../../components/flow/board-activity-indicator";
 import { CommentNode } from "../../components/flow/comment-node";
-import { MediaNode } from "../../components/flow/media-node";
-import { UploadPlaceholderNode } from "../../components/flow/upload-placeholder-node";
 import { FlowContextMenu } from "../../components/flow/flow-context-menu";
 import { FlowDock } from "../../components/flow/flow-dock";
 import { FlowNode } from "../../components/flow/flow-node";
@@ -85,7 +81,9 @@ import {
 	type FlowNodeInfoOverlayHandle,
 } from "../../components/flow/flow-node/flow-node-info-overlay";
 import { FlowPages } from "../../components/flow/flow-pages";
+import { MediaNode } from "../../components/flow/media-node";
 import { Traces } from "../../components/flow/traces";
+import { UploadPlaceholderNode } from "../../components/flow/upload-placeholder-node";
 import {
 	Variable,
 	VariablesMenu,
@@ -424,15 +422,14 @@ export function FlowBoard({
 		});
 
 	// Media upload for images/videos on the board
-	const { handleMediaPaste } =
-		useMediaUpload({
-			appId,
-			boardId,
-			backend,
-			executeCommand,
-			currentLayer,
-			setNodes,
-		});
+	const { handleMediaPaste } = useMediaUpload({
+		appId,
+		boardId,
+		backend,
+		executeCommand,
+		currentLayer,
+		setNodes,
+	});
 
 	useEffect(() => {
 		if (!logPanelRef.current) return;
@@ -979,7 +976,10 @@ export function FlowBoard({
 			});
 
 			// Try to handle media paste first (images/videos)
-			const wasMediaPaste = await handleMediaPaste(event, currentCursorPosition);
+			const wasMediaPaste = await handleMediaPaste(
+				event,
+				currentCursorPosition,
+			);
 			if (wasMediaPaste) return;
 
 			// Fall back to regular paste handling
@@ -991,7 +991,14 @@ export function FlowBoard({
 				currentLayer,
 			);
 		},
-		[boardId, mousePosition, executeCommand, currentLayer, version, handleMediaPaste],
+		[
+			boardId,
+			mousePosition,
+			executeCommand,
+			currentLayer,
+			version,
+			handleMediaPaste,
+		],
 	);
 
 	const handleCopyCB = useCallback(
@@ -2085,7 +2092,6 @@ export function FlowBoard({
 								board={board.data}
 								droppedPin={droppedPin}
 								onCommentPlace={onCommentPlace}
-
 								refs={board.data?.refs || {}}
 								onClose={() => setDroppedPin(undefined)}
 								nodes={catalog.data ?? []}
@@ -2208,9 +2214,9 @@ export function FlowBoard({
 									>
 										<Controls>
 											<ControlButton onClick={onScreenshot}>
-          <ShareIcon className="size-4" />
-        </ControlButton>
-											</Controls>
+												<ShareIcon className="size-4" />
+											</ControlButton>
+										</Controls>
 										<MiniMap
 											pannable
 											zoomable

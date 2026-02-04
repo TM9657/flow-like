@@ -41,7 +41,12 @@ import {
 	TooltipProvider,
 	TooltipTrigger,
 } from "../../ui";
-import { FilePreviewer, canPreview, isCode, isText } from "../../ui/file-previewer";
+import {
+	FilePreviewer,
+	canPreview,
+	isCode,
+	isText,
+} from "../../ui/file-previewer";
 import type { ProcessedAttachment } from "./attachment";
 
 const getDisplayFileName = (name: string) => {
@@ -68,8 +73,13 @@ export const canPreviewFile = (file: ProcessedAttachment) => {
 };
 
 export async function downloadFile(file: ProcessedAttachment): Promise<void> {
-	const isTauriEnv = typeof window !== "undefined" &&
-		!!((window as any).__TAURI__ || (window as any).__TAURI_IPC__ || (window as any).__TAURI_INTERNALS__);
+	const isTauriEnv =
+		typeof window !== "undefined" &&
+		!!(
+			(window as any).__TAURI__ ||
+			(window as any).__TAURI_IPC__ ||
+			(window as any).__TAURI_INTERNALS__
+		);
 
 	if (isTauriEnv) {
 		try {

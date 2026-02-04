@@ -241,19 +241,20 @@ pub async fn copilot_chat(
 ) -> Result<UnifiedCopilotResponse, String> {
     // Check if using Copilot SDK (model_id starts with "copilot:")
     if let Some(ref id) = model_id
-        && let Some(copilot_model) = id.strip_prefix("copilot:") {
-            return copilot_sdk_chat_internal(
-                copilot_model,
-                scope,
-                board.as_ref(),
-                selected_node_ids.as_deref().unwrap_or(&[]),
-                current_surface.as_ref(),
-                user_prompt,
-                history.unwrap_or_default(),
-                channel,
-            )
-            .await;
-        }
+        && let Some(copilot_model) = id.strip_prefix("copilot:")
+    {
+        return copilot_sdk_chat_internal(
+            copilot_model,
+            scope,
+            board.as_ref(),
+            selected_node_ids.as_deref().unwrap_or(&[]),
+            current_surface.as_ref(),
+            user_prompt,
+            history.unwrap_or_default(),
+            channel,
+        )
+        .await;
+    }
 
     println!(
         "[copilot_chat] Called with scope: {:?}, run_context: {:?}",
@@ -388,14 +389,15 @@ async fn copilot_sdk_chat_internal(
     // Add current UI surface context for Frontend/Both scopes
     if matches!(scope, CopilotScope::Frontend | CopilotScope::Both)
         && let Some(components) = current_surface
-            && !components.is_empty() {
-                let components_json =
-                    serde_json::to_string_pretty(components).unwrap_or_else(|_| "[]".to_string());
-                system_content.push_str(&format!(
+        && !components.is_empty()
+    {
+        let components_json =
+            serde_json::to_string_pretty(components).unwrap_or_else(|_| "[]".to_string());
+        system_content.push_str(&format!(
                     "\n\n## CURRENT UI COMPONENTS\nThe user has the following existing UI. You can modify or extend it:\n```json\n{}\n```",
                     components_json
                 ));
-            }
+    }
 
     // Add conversation history
     if !context_parts.is_empty() {
@@ -485,57 +487,55 @@ async fn copilot_sdk_chat_internal(
                     if let Some(ref result) = tool_complete.result
                         && let Ok(parsed) =
                             serde_json::from_str::<serde_json::Value>(&result.content)
+                    {
+                        // Extract commands from emit_commands tool (status: "queued")
+                        if parsed.get("status").and_then(|s| s.as_str()) == Some("queued")
+                            && let Some(cmds) = parsed.get("commands")
+                            && let Ok(commands) =
+                                serde_json::from_value::<Vec<BoardCommand>>(cmds.clone())
                         {
-                            // Extract commands from emit_commands tool (status: "queued")
-                            if parsed.get("status").and_then(|s| s.as_str()) == Some("queued")
-                                && let Some(cmds) = parsed.get("commands")
-                                    && let Ok(commands) =
-                                        serde_json::from_value::<Vec<BoardCommand>>(cmds.clone())
-                                    {
-                                        let cmd_event = format!(
-                                            "<commands>{}</commands>",
-                                            serde_json::to_string(&commands).unwrap_or_default()
-                                        );
-                                        let _ = channel.send(cmd_event);
-                                        extracted_commands.extend(commands);
-                                    }
-                            // Extract components from emit_ui tool (status: "rendered")
-                            if parsed.get("status").and_then(|s| s.as_str()) == Some("rendered") {
-                                // Extract canvasSettings
-                                if let Some(canvas) = parsed.get("canvasSettings") {
-                                    extracted_canvas_settings = Some(canvas.clone());
+                            let cmd_event = format!(
+                                "<commands>{}</commands>",
+                                serde_json::to_string(&commands).unwrap_or_default()
+                            );
+                            let _ = channel.send(cmd_event);
+                            extracted_commands.extend(commands);
+                        }
+                        // Extract components from emit_ui tool (status: "rendered")
+                        if parsed.get("status").and_then(|s| s.as_str()) == Some("rendered") {
+                            // Extract canvasSettings
+                            if let Some(canvas) = parsed.get("canvasSettings") {
+                                extracted_canvas_settings = Some(canvas.clone());
+                            }
+                            // Extract rootComponentId
+                            if let Some(root_id) =
+                                parsed.get("rootComponentId").and_then(|v| v.as_str())
+                            {
+                                extracted_root_component_id = Some(root_id.to_string());
+                            }
+                            // Extract components
+                            if let Some(comps) = parsed.get("components")
+                                && let Ok(components) =
+                                    serde_json::from_value::<Vec<SurfaceComponent>>(comps.clone())
+                            {
+                                // Send components WITH canvas settings to frontend
+                                let comp_event = format!(
+                                    "<components>{}</components>",
+                                    serde_json::to_string(&components).unwrap_or_default()
+                                );
+                                let _ = channel.send(comp_event);
+                                // Also send canvas settings
+                                if let Some(ref canvas) = extracted_canvas_settings {
+                                    let canvas_event = format!(
+                                        "<canvas_settings>{}</canvas_settings>",
+                                        serde_json::to_string(canvas).unwrap_or_default()
+                                    );
+                                    let _ = channel.send(canvas_event);
                                 }
-                                // Extract rootComponentId
-                                if let Some(root_id) =
-                                    parsed.get("rootComponentId").and_then(|v| v.as_str())
-                                {
-                                    extracted_root_component_id = Some(root_id.to_string());
-                                }
-                                // Extract components
-                                if let Some(comps) = parsed.get("components")
-                                    && let Ok(components) =
-                                        serde_json::from_value::<Vec<SurfaceComponent>>(
-                                            comps.clone(),
-                                        )
-                                    {
-                                        // Send components WITH canvas settings to frontend
-                                        let comp_event = format!(
-                                            "<components>{}</components>",
-                                            serde_json::to_string(&components).unwrap_or_default()
-                                        );
-                                        let _ = channel.send(comp_event);
-                                        // Also send canvas settings
-                                        if let Some(ref canvas) = extracted_canvas_settings {
-                                            let canvas_event = format!(
-                                                "<canvas_settings>{}</canvas_settings>",
-                                                serde_json::to_string(canvas).unwrap_or_default()
-                                            );
-                                            let _ = channel.send(canvas_event);
-                                        }
-                                        extracted_components.extend(components);
-                                    }
+                                extracted_components.extend(components);
                             }
                         }
+                    }
 
                     // Send tool completion event to frontend
                     let status = if tool_complete.success {

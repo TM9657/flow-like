@@ -42,11 +42,7 @@ export class SalesState implements ISalesState {
 		const url = query
 			? `apps/${appId}/sales/stats?${query}`
 			: `apps/${appId}/sales/stats`;
-		return await fetcher<ISalesStats>(
-			this.backend.profile,
-			url,
-			undefined,
-		);
+		return await fetcher<ISalesStats>(this.backend.profile, url, undefined);
 	}
 
 	async listPurchases(
@@ -105,11 +101,7 @@ export class SalesState implements ISalesState {
 		const url = query
 			? `apps/${appId}/sales/discounts?${query}`
 			: `apps/${appId}/sales/discounts`;
-		return await fetcher<IDiscount[]>(
-			this.backend.profile,
-			url,
-			undefined,
-		);
+		return await fetcher<IDiscount[]>(this.backend.profile, url, undefined);
 	}
 
 	async getDiscount(appId: string, discountId: string): Promise<IDiscount> {

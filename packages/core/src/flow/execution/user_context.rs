@@ -147,7 +147,9 @@ impl RoleContext {
     /// Check if the role has a specific permission
     pub fn has_permission(&self, permission: i64) -> bool {
         // Owner and Admin have all permissions
-        if self.permissions & Self::OWNER_PERMISSION != 0 || self.permissions & Self::ADMIN_PERMISSION != 0 {
+        if self.permissions & Self::OWNER_PERMISSION != 0
+            || self.permissions & Self::ADMIN_PERMISSION != 0
+        {
             return true;
         }
         self.permissions & permission != 0
@@ -174,7 +176,10 @@ mod tests {
             name: "Editor".to_string(),
             permissions: 0b00001000,
             attributes: vec!["editor".to_string()],
-            custom_attributes: HashMap::from([("department".to_string(), "engineering".to_string())]),
+            custom_attributes: HashMap::from([(
+                "department".to_string(),
+                "engineering".to_string(),
+            )]),
         };
 
         let ctx = UserExecutionContext::new("user-123").with_role(role);

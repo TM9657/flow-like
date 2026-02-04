@@ -5,7 +5,13 @@ import {
 	IIndexType,
 	type IQueryTablePayload,
 } from "@tm9657/flow-like-ui/state/backend-state/db-state";
-import { apiDelete, apiGet, apiPost, apiPut, type WebBackendRef } from "./api-utils";
+import {
+	type WebBackendRef,
+	apiDelete,
+	apiGet,
+	apiPost,
+	apiPut,
+} from "./api-utils";
 
 export class WebDatabaseState implements IDatabaseState {
 	constructor(private readonly backend: WebBackendRef) {}
@@ -39,7 +45,11 @@ export class WebDatabaseState implements IDatabaseState {
 		);
 	}
 
-	async addItems(appId: string, tableName: string, items: any[]): Promise<void> {
+	async addItems(
+		appId: string,
+		tableName: string,
+		items: any[],
+	): Promise<void> {
 		await apiPost(
 			`apps/${appId}/db/${tableName}/items`,
 			{ items },
@@ -47,7 +57,11 @@ export class WebDatabaseState implements IDatabaseState {
 		);
 	}
 
-	async removeItems(appId: string, tableName: string, query: string): Promise<void> {
+	async removeItems(
+		appId: string,
+		tableName: string,
+		query: string,
+	): Promise<void> {
 		await apiPost(
 			`apps/${appId}/db/${tableName}/delete`,
 			{ query },
@@ -123,7 +137,11 @@ export class WebDatabaseState implements IDatabaseState {
 		}
 	}
 
-	async dropIndex(appId: string, tableName: string, indexName: string): Promise<void> {
+	async dropIndex(
+		appId: string,
+		tableName: string,
+		indexName: string,
+	): Promise<void> {
 		await apiDelete(
 			`apps/${appId}/db/${tableName}/index/${indexName}`,
 			this.backend.auth,
@@ -132,10 +150,7 @@ export class WebDatabaseState implements IDatabaseState {
 
 	async listTables(appId: string): Promise<string[]> {
 		try {
-			return await apiGet<string[]>(
-				`apps/${appId}/db`,
-				this.backend.auth,
-			);
+			return await apiGet<string[]>(`apps/${appId}/db`, this.backend.auth);
 		} catch {
 			return [];
 		}

@@ -3,7 +3,7 @@ use aws_lambda_events::sqs::SqsEvent;
 use aws_sdk_dynamodb::Client as DynamoClient;
 use flow_like_api::sea_orm::{ConnectOptions, Database};
 use lambda_runtime::{run, service_fn, Error, LambdaEvent};
-use tracing_subscriber::{EnvFilter, layer::SubscriberExt, util::SubscriberInitExt};
+use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, EnvFilter};
 mod event_handler;
 use std::time::Duration;
 
@@ -26,8 +26,7 @@ fn create_dynamo_client(config: &SdkConfig) -> DynamoClient {
 
 #[tokio::main(flavor = "current_thread")]
 async fn main() -> Result<(), Error> {
-    let env_filter = EnvFilter::try_from_default_env()
-        .unwrap_or_else(|_| EnvFilter::new("warn"));
+    let env_filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("warn"));
 
     let _ = tracing_subscriber::registry()
         .with(tracing_subscriber::fmt::layer())

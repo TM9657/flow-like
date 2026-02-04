@@ -40,7 +40,7 @@ pub mod segmentation;
 /// ONNX Model Utility Nodes
 pub mod utils;
 
-pub use execution_providers::{initialize_ort, is_initialized, get_ep_info};
+pub use execution_providers::{get_ep_info, initialize_ort, is_initialized};
 
 /// Model provider type for automatic inference routing
 pub enum Provider {

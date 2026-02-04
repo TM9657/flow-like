@@ -17,7 +17,10 @@ import {
 	TooltipProvider,
 	TooltipTrigger,
 } from "@tm9657/flow-like-ui";
-import type { IHub, ISupportedSinks } from "@tm9657/flow-like-ui/lib/schema/hub/hub";
+import type {
+	IHub,
+	ISupportedSinks,
+} from "@tm9657/flow-like-ui/lib/schema/hub/hub";
 import { Cloud, Laptop, MonitorSmartphone } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 
@@ -77,7 +80,10 @@ function computeSinkAvailability(
 function SinkAvailabilityBadge({
 	availability,
 	description,
-}: Readonly<{ availability: "local" | "remote" | "both"; description?: string }>) {
+}: Readonly<{
+	availability: "local" | "remote" | "both";
+	description?: string;
+}>) {
 	const config = {
 		local: {
 			icon: Laptop,
@@ -195,7 +201,9 @@ export function EventTypeConfiguration({
 						return (
 							<SelectItem key={type} value={type}>
 								<span className="flex items-center">
-									{type.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase())}
+									{type
+										.replace(/_/g, " ")
+										.replace(/\b\w/g, (c) => c.toUpperCase())}
 									{sinkConfig && (
 										<SinkAvailabilityBadge
 											availability={sinkConfig.availability}

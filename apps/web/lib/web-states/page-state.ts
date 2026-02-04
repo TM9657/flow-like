@@ -1,6 +1,9 @@
 import type { IPageState } from "@tm9657/flow-like-ui";
-import type { IPage, PageListItem } from "@tm9657/flow-like-ui/state/backend-state/page-state";
-import { apiDelete, apiGet, apiPut, type WebBackendRef } from "./api-utils";
+import type {
+	IPage,
+	PageListItem,
+} from "@tm9657/flow-like-ui/state/backend-state/page-state";
+import { type WebBackendRef, apiDelete, apiGet, apiPut } from "./api-utils";
 
 export class WebPageState implements IPageState {
 	constructor(private readonly backend: WebBackendRef) {}
@@ -17,7 +20,11 @@ export class WebPageState implements IPageState {
 		}
 	}
 
-	async getPage(appId: string, pageId: string, boardId?: string): Promise<IPage> {
+	async getPage(
+		appId: string,
+		pageId: string,
+		boardId?: string,
+	): Promise<IPage> {
 		const params = boardId ? `?board_id=${boardId}` : "";
 		return apiGet<IPage>(
 			`apps/${appId}/pages/${pageId}${params}`,
@@ -55,14 +62,14 @@ export class WebPageState implements IPageState {
 	}
 
 	async updatePage(appId: string, page: IPage): Promise<void> {
-		await apiPut(
-			`apps/${appId}/pages/${page.id}`,
-			{ page },
-			this.backend.auth,
-		);
+		await apiPut(`apps/${appId}/pages/${page.id}`, { page }, this.backend.auth);
 	}
 
-	async deletePage(appId: string, pageId: string, boardId: string): Promise<void> {
+	async deletePage(
+		appId: string,
+		pageId: string,
+		boardId: string,
+	): Promise<void> {
 		await apiDelete(
 			`apps/${appId}/pages/${pageId}?board_id=${boardId}`,
 			this.backend.auth,

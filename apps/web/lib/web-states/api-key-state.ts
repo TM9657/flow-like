@@ -4,7 +4,7 @@ import type {
 	ITechnicalUserCreateInput,
 	ITechnicalUserCreateResult,
 } from "@tm9657/flow-like-ui";
-import { apiDelete, apiGet, apiPut, type WebBackendRef } from "./api-utils";
+import { type WebBackendRef, apiDelete, apiGet, apiPut } from "./api-utils";
 
 export class WebApiKeyState implements IApiKeyState {
 	constructor(private readonly backend: WebBackendRef) {}

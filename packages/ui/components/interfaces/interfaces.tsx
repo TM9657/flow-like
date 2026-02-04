@@ -65,4 +65,3 @@ export type IEventMapping = Record<
 		sinkAvailability?: Record<string, ISinkConfig>;
 	}
 >;
-

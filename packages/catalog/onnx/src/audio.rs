@@ -140,7 +140,12 @@ impl NodeLogic for LoadAudioNode {
 
         node.add_icon("/flow/icons/audio.svg");
 
-        node.add_input_pin("exec_in", "Input", "Initiate Execution", VariableType::Execution);
+        node.add_input_pin(
+            "exec_in",
+            "Input",
+            "Initiate Execution",
+            VariableType::Execution,
+        );
 
         node.add_input_pin("path", "Path", "Path to audio file", VariableType::PathBuf);
 
@@ -149,9 +154,19 @@ impl NodeLogic for LoadAudioNode {
         node.add_output_pin("audio", "Audio", "Loaded audio data", VariableType::Struct)
             .set_schema::<AudioData>();
 
-        node.add_output_pin("sample_rate", "Sample Rate", "Audio sample rate", VariableType::Integer);
+        node.add_output_pin(
+            "sample_rate",
+            "Sample Rate",
+            "Audio sample rate",
+            VariableType::Integer,
+        );
 
-        node.add_output_pin("duration", "Duration", "Duration in seconds", VariableType::Float);
+        node.add_output_pin(
+            "duration",
+            "Duration",
+            "Duration in seconds",
+            VariableType::Float,
+        );
 
         node
     }
@@ -173,15 +188,15 @@ impl NodeLogic for LoadAudioNode {
             let channels = spec.channels;
 
             let samples: Vec<f32> = match spec.sample_format {
-                hound::SampleFormat::Float => {
-                    reader.into_samples::<f32>()
-                        .filter_map(|s| s.ok())
-                        .collect()
-                }
+                hound::SampleFormat::Float => reader
+                    .into_samples::<f32>()
+                    .filter_map(|s| s.ok())
+                    .collect(),
                 hound::SampleFormat::Int => {
                     let bits = spec.bits_per_sample;
                     let max_val = (1 << (bits - 1)) as f32;
-                    reader.into_samples::<i32>()
+                    reader
+                        .into_samples::<i32>()
                         .filter_map(|s| s.ok())
                         .map(|s| s as f32 / max_val)
                         .collect()
@@ -192,7 +207,9 @@ impl NodeLogic for LoadAudioNode {
             let duration = audio.duration_secs as f64;
 
             context.set_pin_value("audio", json!(audio)).await?;
-            context.set_pin_value("sample_rate", json!(sample_rate as i64)).await?;
+            context
+                .set_pin_value("sample_rate", json!(sample_rate as i64))
+                .await?;
             context.set_pin_value("duration", json!(duration)).await?;
             context.activate_exec_pin("exec_out").await?;
             Ok(())
@@ -225,7 +242,12 @@ impl NodeLogic for VoiceActivityDetectionNode {
 
         node.add_icon("/flow/icons/microphone.svg");
 
-        node.add_input_pin("exec_in", "Input", "Initiate Execution", VariableType::Execution);
+        node.add_input_pin(
+            "exec_in",
+            "Input",
+            "Initiate Execution",
+            VariableType::Execution,
+        );
 
         node.add_input_pin("model", "Model", "ONNX VAD Model", VariableType::Struct)
             .set_schema::<NodeOnnxSession>()
@@ -234,21 +256,41 @@ impl NodeLogic for VoiceActivityDetectionNode {
         node.add_input_pin("audio", "Audio", "Input audio data", VariableType::Struct)
             .set_schema::<AudioData>();
 
-        node.add_input_pin("threshold", "Threshold", "Speech probability threshold", VariableType::Float)
-            .set_default_value(Some(json!(0.5)));
+        node.add_input_pin(
+            "threshold",
+            "Threshold",
+            "Speech probability threshold",
+            VariableType::Float,
+        )
+        .set_default_value(Some(json!(0.5)));
 
-        node.add_input_pin("min_speech_ms", "Min Speech", "Minimum speech duration (ms)", VariableType::Integer)
-            .set_default_value(Some(json!(250)));
+        node.add_input_pin(
+            "min_speech_ms",
+            "Min Speech",
+            "Minimum speech duration (ms)",
+            VariableType::Integer,
+        )
+        .set_default_value(Some(json!(250)));
 
-        node.add_input_pin("min_silence_ms", "Min Silence", "Minimum silence duration (ms)", VariableType::Integer)
-            .set_default_value(Some(json!(100)));
+        node.add_input_pin(
+            "min_silence_ms",
+            "Min Silence",
+            "Minimum silence duration (ms)",
+            VariableType::Integer,
+        )
+        .set_default_value(Some(json!(100)));
 
         node.add_output_pin("exec_out", "Output", "Done", VariableType::Execution);
 
         node.add_output_pin("result", "Result", "VAD result", VariableType::Struct)
             .set_schema::<VadResult>();
 
-        node.add_output_pin("segments", "Segments", "Speech segments", VariableType::Generic);
+        node.add_output_pin(
+            "segments",
+            "Segments",
+            "Speech segments",
+            VariableType::Generic,
+        );
 
         node
     }
@@ -299,14 +341,14 @@ impl NodeLogic for VoiceActivityDetectionNode {
                 ])?;
 
                 // Get probability and update state
-                if let (Some(prob_tensor), Some(state_tensor)) = (
-                    outputs.get("output"),
-                    outputs.get("stateN")
-                ) {
+                if let (Some(prob_tensor), Some(state_tensor)) =
+                    (outputs.get("output"), outputs.get("stateN"))
+                {
                     if let Ok(prob) = prob_tensor.try_extract_array::<f32>()
-                        && !prob.is_empty() {
-                            probabilities.push(prob[[0, 0]]);
-                        }
+                        && !prob.is_empty()
+                    {
+                        probabilities.push(prob[[0, 0]]);
+                    }
 
                     if let Ok(new_state) = state_tensor.try_extract_array::<f32>() {
                         for i in 0..2 {
@@ -321,8 +363,10 @@ impl NodeLogic for VoiceActivityDetectionNode {
             }
 
             // Convert probabilities to segments
-            let min_speech_frames = (min_speech_ms as f32 / 1000.0 / frame_duration).ceil() as usize;
-            let min_silence_frames = (min_silence_ms as f32 / 1000.0 / frame_duration).ceil() as usize;
+            let min_speech_frames =
+                (min_speech_ms as f32 / 1000.0 / frame_duration).ceil() as usize;
+            let min_silence_frames =
+                (min_silence_ms as f32 / 1000.0 / frame_duration).ceil() as usize;
 
             let mut segments: Vec<SpeechSegment> = Vec::new();
             let mut in_speech = false;
@@ -345,7 +389,8 @@ impl NodeLogic for VoiceActivityDetectionNode {
                         // End of speech
                         let speech_frames = i - silence_count - speech_start;
                         if speech_frames >= min_speech_frames {
-                            let avg_conf = speech_probs.iter().sum::<f32>() / speech_probs.len() as f32;
+                            let avg_conf =
+                                speech_probs.iter().sum::<f32>() / speech_probs.len() as f32;
                             segments.push(SpeechSegment {
                                 start: speech_start as f32 * frame_duration,
                                 end: (i - silence_count) as f32 * frame_duration,
@@ -361,7 +406,8 @@ impl NodeLogic for VoiceActivityDetectionNode {
             if in_speech {
                 let speech_frames = probabilities.len() - speech_start;
                 if speech_frames >= min_speech_frames {
-                    let avg_conf = speech_probs.iter().sum::<f32>() / speech_probs.len().max(1) as f32;
+                    let avg_conf =
+                        speech_probs.iter().sum::<f32>() / speech_probs.len().max(1) as f32;
                     segments.push(SpeechSegment {
                         start: speech_start as f32 * frame_duration,
                         end: probabilities.len() as f32 * frame_duration,
@@ -403,16 +449,31 @@ impl NodeLogic for ResampleAudioNode {
 
         node.add_icon("/flow/icons/waveform.svg");
 
-        node.add_input_pin("exec_in", "Input", "Initiate Execution", VariableType::Execution);
+        node.add_input_pin(
+            "exec_in",
+            "Input",
+            "Initiate Execution",
+            VariableType::Execution,
+        );
 
         node.add_input_pin("audio", "Audio", "Input audio", VariableType::Struct)
             .set_schema::<AudioData>();
 
-        node.add_input_pin("target_rate", "Target Rate", "Target sample rate", VariableType::Integer)
-            .set_default_value(Some(json!(16000)));
+        node.add_input_pin(
+            "target_rate",
+            "Target Rate",
+            "Target sample rate",
+            VariableType::Integer,
+        )
+        .set_default_value(Some(json!(16000)));
 
-        node.add_input_pin("to_mono", "To Mono", "Convert to mono", VariableType::Boolean)
-            .set_default_value(Some(json!(true)));
+        node.add_input_pin(
+            "to_mono",
+            "To Mono",
+            "Convert to mono",
+            VariableType::Boolean,
+        )
+        .set_default_value(Some(json!(true)));
 
         node.add_output_pin("exec_out", "Output", "Done", VariableType::Execution);
 
@@ -464,19 +525,39 @@ impl NodeLogic for TrimAudioNode {
 
         node.add_icon("/flow/icons/scissors.svg");
 
-        node.add_input_pin("exec_in", "Input", "Initiate Execution", VariableType::Execution);
+        node.add_input_pin(
+            "exec_in",
+            "Input",
+            "Initiate Execution",
+            VariableType::Execution,
+        );
 
         node.add_input_pin("audio", "Audio", "Input audio", VariableType::Struct)
             .set_schema::<AudioData>();
 
-        node.add_input_pin("segments", "Segments", "Speech segments from VAD", VariableType::Generic);
+        node.add_input_pin(
+            "segments",
+            "Segments",
+            "Speech segments from VAD",
+            VariableType::Generic,
+        );
 
-        node.add_input_pin("padding", "Padding", "Padding around segments (seconds)", VariableType::Float)
-            .set_default_value(Some(json!(0.1)));
+        node.add_input_pin(
+            "padding",
+            "Padding",
+            "Padding around segments (seconds)",
+            VariableType::Float,
+        )
+        .set_default_value(Some(json!(0.1)));
 
         node.add_output_pin("exec_out", "Output", "Done", VariableType::Execution);
 
-        node.add_output_pin("clips", "Clips", "Trimmed audio clips", VariableType::Generic);
+        node.add_output_pin(
+            "clips",
+            "Clips",
+            "Trimmed audio clips",
+            VariableType::Generic,
+        );
 
         node
     }
@@ -495,12 +576,18 @@ impl NodeLogic for TrimAudioNode {
             let mut clips: Vec<AudioData> = Vec::new();
 
             for seg in segments {
-                let start_sample = ((seg.start - padding as f32).max(0.0) * samples_per_sec) as usize;
-                let end_sample = ((seg.end + padding as f32).min(audio.duration_secs) * samples_per_sec) as usize;
+                let start_sample =
+                    ((seg.start - padding as f32).max(0.0) * samples_per_sec) as usize;
+                let end_sample = ((seg.end + padding as f32).min(audio.duration_secs)
+                    * samples_per_sec) as usize;
 
                 if start_sample < end_sample && end_sample <= audio.samples.len() {
                     let clip_samples: Vec<f32> = audio.samples[start_sample..end_sample].to_vec();
-                    clips.push(AudioData::new(audio.sample_rate, audio.channels, clip_samples));
+                    clips.push(AudioData::new(
+                        audio.sample_rate,
+                        audio.channels,
+                        clip_samples,
+                    ));
                 }
             }
 
@@ -530,25 +617,55 @@ impl NodeLogic for AudioToMelSpectrogramNode {
 
         node.add_icon("/flow/icons/waveform.svg");
 
-        node.add_input_pin("exec_in", "Input", "Initiate Execution", VariableType::Execution);
+        node.add_input_pin(
+            "exec_in",
+            "Input",
+            "Initiate Execution",
+            VariableType::Execution,
+        );
 
-        node.add_input_pin("audio", "Audio", "Input audio (16kHz mono)", VariableType::Struct)
-            .set_schema::<AudioData>();
+        node.add_input_pin(
+            "audio",
+            "Audio",
+            "Input audio (16kHz mono)",
+            VariableType::Struct,
+        )
+        .set_schema::<AudioData>();
 
-        node.add_input_pin("n_mels", "N Mels", "Number of mel bands", VariableType::Integer)
-            .set_default_value(Some(json!(80)));
+        node.add_input_pin(
+            "n_mels",
+            "N Mels",
+            "Number of mel bands",
+            VariableType::Integer,
+        )
+        .set_default_value(Some(json!(80)));
 
-        node.add_input_pin("hop_length", "Hop Length", "Hop length in samples", VariableType::Integer)
-            .set_default_value(Some(json!(160)));
+        node.add_input_pin(
+            "hop_length",
+            "Hop Length",
+            "Hop length in samples",
+            VariableType::Integer,
+        )
+        .set_default_value(Some(json!(160)));
 
         node.add_input_pin("n_fft", "N FFT", "FFT window size", VariableType::Integer)
             .set_default_value(Some(json!(400)));
 
         node.add_output_pin("exec_out", "Output", "Done", VariableType::Execution);
 
-        node.add_output_pin("spectrogram", "Spectrogram", "Mel spectrogram [n_mels, time]", VariableType::Generic);
+        node.add_output_pin(
+            "spectrogram",
+            "Spectrogram",
+            "Mel spectrogram [n_mels, time]",
+            VariableType::Generic,
+        );
 
-        node.add_output_pin("frames", "Frames", "Number of time frames", VariableType::Integer);
+        node.add_output_pin(
+            "frames",
+            "Frames",
+            "Number of time frames",
+            VariableType::Integer,
+        );
 
         node
     }
@@ -591,15 +708,20 @@ impl NodeLogic for AudioToMelSpectrogramNode {
                     let energy: f32 = frame[band_start..band_end]
                         .iter()
                         .map(|x| x * x)
-                        .sum::<f32>() / band_size as f32;
+                        .sum::<f32>()
+                        / band_size as f32;
                     *mel_band = (energy + 1e-10).log10();
                 }
 
                 spectrogram.push(mel_bands);
             }
 
-            context.set_pin_value("spectrogram", json!(spectrogram)).await?;
-            context.set_pin_value("frames", json!(n_frames as i64)).await?;
+            context
+                .set_pin_value("spectrogram", json!(spectrogram))
+                .await?;
+            context
+                .set_pin_value("frames", json!(n_frames as i64))
+                .await?;
             context.activate_exec_pin("exec_out").await?;
             Ok(())
         }

@@ -51,7 +51,8 @@ function PlotlyChartPreview({ input, height = 350 }: PlotlyChartPreviewProps) {
 				if (!mounted) return;
 
 				// plotly.js-dist-min exports default as the Plotly object
-				const Plotly = (PlotlyModule.default || PlotlyModule) as unknown as PlotlyModule;
+				const Plotly = (PlotlyModule.default ||
+					PlotlyModule) as unknown as PlotlyModule;
 				plotlyRef.current = Plotly;
 				await Plotly.react(containerRef.current, data as any, layout, config);
 			} catch (err) {

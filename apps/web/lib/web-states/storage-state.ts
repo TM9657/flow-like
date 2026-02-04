@@ -1,11 +1,14 @@
 import type { IStorageItem, IStorageState } from "@tm9657/flow-like-ui";
 import type { IStorageItemActionResult } from "@tm9657/flow-like-ui/state/backend-state/types";
-import { apiDelete, apiPost, apiPut, type WebBackendRef } from "./api-utils";
+import { type WebBackendRef, apiDelete, apiPost, apiPut } from "./api-utils";
 
 export class WebStorageState implements IStorageState {
 	constructor(private readonly backend: WebBackendRef) {}
 
-	async listStorageItems(appId: string, prefix: string): Promise<IStorageItem[]> {
+	async listStorageItems(
+		appId: string,
+		prefix: string,
+	): Promise<IStorageItem[]> {
 		try {
 			return await apiPost<IStorageItem[]>(
 				`apps/${appId}/data/list`,
@@ -18,11 +21,7 @@ export class WebStorageState implements IStorageState {
 	}
 
 	async deleteStorageItems(appId: string, prefixes: string[]): Promise<void> {
-		await apiDelete(
-			`apps/${appId}/data`,
-			this.backend.auth,
-			{ prefixes },
-		);
+		await apiDelete(`apps/${appId}/data`, this.backend.auth, { prefixes });
 	}
 
 	async downloadStorageItems(
@@ -50,9 +49,10 @@ export class WebStorageState implements IStorageState {
 		let completedFiles = 0;
 
 		const buildFilePath = (file: File): string => {
-			const path = (file.webkitRelativePath ?? "") === ""
-				? file.name
-				: file.webkitRelativePath;
+			const path =
+				(file.webkitRelativePath ?? "") === ""
+					? file.name
+					: file.webkitRelativePath;
 			// Avoid leading slash when prefix is empty
 			return prefix ? `${prefix}/${path}` : path;
 		};
@@ -73,7 +73,9 @@ export class WebStorageState implements IStorageState {
 		for (const urlInfo of signedUrls) {
 			const signedUrl = urlInfo.url;
 			if (urlInfo.error || !signedUrl) {
-				console.warn(`Failed to get signed URL for ${urlInfo.prefix}: ${urlInfo.error}`);
+				console.warn(
+					`Failed to get signed URL for ${urlInfo.prefix}: ${urlInfo.error}`,
+				);
 				completedFiles++;
 				continue;
 			}
@@ -91,7 +93,8 @@ export class WebStorageState implements IStorageState {
 				xhr.upload.addEventListener("progress", (event) => {
 					if (event.lengthComputable) {
 						const fileProgress = event.loaded / event.total;
-						const totalProgress = ((completedFiles + fileProgress) / totalFiles) * 100;
+						const totalProgress =
+							((completedFiles + fileProgress) / totalFiles) * 100;
 						onProgress?.(totalProgress);
 					}
 				});
@@ -101,19 +104,28 @@ export class WebStorageState implements IStorageState {
 						completedFiles++;
 						resolve();
 					} else {
-						reject(new Error(`Upload failed with status ${xhr.status}: ${xhr.statusText}`));
+						reject(
+							new Error(
+								`Upload failed with status ${xhr.status}: ${xhr.statusText}`,
+							),
+						);
 					}
 				});
 
 				xhr.addEventListener("error", () => {
 					// Network error - could be CORS, connection refused, etc.
-					reject(new Error(`Upload failed: Network error (possible CORS issue)`));
+					reject(
+						new Error(`Upload failed: Network error (possible CORS issue)`),
+					);
 				});
 
 				xhr.open("PUT", signedUrl);
 
 				// Set Content-Type header - required for cloud storage providers
-				xhr.setRequestHeader("Content-Type", file.type || "application/octet-stream");
+				xhr.setRequestHeader(
+					"Content-Type",
+					file.type || "application/octet-stream",
+				);
 
 				// Azure Blob Storage requires x-ms-blob-type header
 				// This header is ignored by other providers (S3, GCS) so it's safe to always set

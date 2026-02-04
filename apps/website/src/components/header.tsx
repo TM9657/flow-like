@@ -145,9 +145,7 @@ function NavDropdown({
 								}`}
 								onClick={() => setOpen(false)}
 							>
-								{item.icon && (
-									<item.icon className="w-4 h-4 mt-0.5 shrink-0" />
-								)}
+								{item.icon && <item.icon className="w-4 h-4 mt-0.5 shrink-0" />}
 								<div className="flex-1 min-w-0">
 									<div className="flex items-center gap-1.5">
 										<span className="font-medium text-sm">{item.label}</span>

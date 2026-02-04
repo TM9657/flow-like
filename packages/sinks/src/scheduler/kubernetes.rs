@@ -73,19 +73,19 @@ impl KubernetesScheduler {
 impl KubernetesScheduler {
     /// Create a new scheduler from environment variables
     pub async fn from_env() -> Result<Self, SchedulerError> {
-        let config =
-            KubernetesConfig::from_env().expect("Failed to load Kubernetes config from environment");
-        let client = kube::Client::try_default()
-            .await
-            .map_err(|e| SchedulerError::ConfigError(format!("Failed to create K8s client: {}", e)))?;
+        let config = KubernetesConfig::from_env()
+            .expect("Failed to load Kubernetes config from environment");
+        let client = kube::Client::try_default().await.map_err(|e| {
+            SchedulerError::ConfigError(format!("Failed to create K8s client: {}", e))
+        })?;
         Ok(Self { config, client })
     }
 
     /// Create a new scheduler with explicit configuration
     pub async fn new(config: KubernetesConfig) -> Result<Self, SchedulerError> {
-        let client = kube::Client::try_default()
-            .await
-            .map_err(|e| SchedulerError::ConfigError(format!("Failed to create K8s client: {}", e)))?;
+        let client = kube::Client::try_default().await.map_err(|e| {
+            SchedulerError::ConfigError(format!("Failed to create K8s client: {}", e))
+        })?;
         Ok(Self { config, client })
     }
 
@@ -108,8 +108,14 @@ impl KubernetesScheduler {
         let name = self.cronjob_name(event_id);
 
         let mut labels = BTreeMap::new();
-        labels.insert("app.kubernetes.io/name".to_string(), "flow-like-cron".to_string());
-        labels.insert("app.kubernetes.io/component".to_string(), "sink-trigger".to_string());
+        labels.insert(
+            "app.kubernetes.io/name".to_string(),
+            "flow-like-cron".to_string(),
+        );
+        labels.insert(
+            "app.kubernetes.io/component".to_string(),
+            "sink-trigger".to_string(),
+        );
         labels.insert("flow-like.io/event-id".to_string(), event_id.to_string());
 
         let mut requests = BTreeMap::new();
@@ -222,8 +228,8 @@ impl KubernetesScheduler {
 impl KubernetesScheduler {
     /// Create a new scheduler (stub without kube-rs)
     pub fn from_env() -> Self {
-        let config =
-            KubernetesConfig::from_env().expect("Failed to load Kubernetes config from environment");
+        let config = KubernetesConfig::from_env()
+            .expect("Failed to load Kubernetes config from environment");
         Self { config }
     }
 
@@ -310,7 +316,10 @@ impl SchedulerBackend for KubernetesScheduler {
                 tracing::debug!(event_id = %event_id, "CronJob already deleted");
                 Ok(())
             }
-            Err(e) => Err(SchedulerError::ProviderError(format!("K8s API error: {}", e))),
+            Err(e) => Err(SchedulerError::ProviderError(format!(
+                "K8s API error: {}",
+                e
+            ))),
         }
     }
 
@@ -370,7 +379,10 @@ impl SchedulerBackend for KubernetesScheduler {
         match cronjobs.get(&name).await {
             Ok(_) => Ok(true),
             Err(kube::Error::Api(e)) if e.code == 404 => Ok(false),
-            Err(e) => Err(SchedulerError::ProviderError(format!("K8s API error: {}", e))),
+            Err(e) => Err(SchedulerError::ProviderError(format!(
+                "K8s API error: {}",
+                e
+            ))),
         }
     }
 
@@ -402,7 +414,10 @@ impl SchedulerBackend for KubernetesScheduler {
                 }))
             }
             Err(kube::Error::Api(e)) if e.code == 404 => Ok(None),
-            Err(e) => Err(SchedulerError::ProviderError(format!("K8s API error: {}", e))),
+            Err(e) => Err(SchedulerError::ProviderError(format!(
+                "K8s API error: {}",
+                e
+            ))),
         }
     }
 

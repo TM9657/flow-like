@@ -14,7 +14,7 @@ use flow_like_model_provider::ml::{
     ort::{inputs, value::Value as OrtValue},
 };
 #[cfg(feature = "execute")]
-use flow_like_types::image::{GenericImageView, imageops::FilterType};
+use flow_like_types::image::imageops::FilterType;
 use flow_like_types::{Result, Value, async_trait, json::json};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -52,29 +52,64 @@ impl NodeLogic for BatchImageInferenceNode {
 
         node.add_icon("/flow/icons/layers.svg");
 
-        node.add_input_pin("exec_in", "Input", "Initiate Execution", VariableType::Execution);
+        node.add_input_pin(
+            "exec_in",
+            "Input",
+            "Initiate Execution",
+            VariableType::Execution,
+        );
 
         node.add_input_pin("model", "Model", "ONNX Model Session", VariableType::Struct)
             .set_schema::<NodeOnnxSession>()
             .set_options(PinOptions::new().set_enforce_schema(true).build());
 
-        node.add_input_pin("images", "Images", "List of images to process", VariableType::Generic);
+        node.add_input_pin(
+            "images",
+            "Images",
+            "List of images to process",
+            VariableType::Generic,
+        );
 
-        node.add_input_pin("batch_size", "Batch Size", "Number of images per batch", VariableType::Integer)
-            .set_default_value(Some(json!(8)));
+        node.add_input_pin(
+            "batch_size",
+            "Batch Size",
+            "Number of images per batch",
+            VariableType::Integer,
+        )
+        .set_default_value(Some(json!(8)));
 
-        node.add_input_pin("input_size", "Input Size", "Model input size", VariableType::Integer)
-            .set_default_value(Some(json!(224)));
+        node.add_input_pin(
+            "input_size",
+            "Input Size",
+            "Model input size",
+            VariableType::Integer,
+        )
+        .set_default_value(Some(json!(224)));
 
-        node.add_input_pin("normalize", "Normalize", "Apply ImageNet normalization", VariableType::Boolean)
-            .set_default_value(Some(json!(true)));
+        node.add_input_pin(
+            "normalize",
+            "Normalize",
+            "Apply ImageNet normalization",
+            VariableType::Boolean,
+        )
+        .set_default_value(Some(json!(true)));
 
         node.add_output_pin("exec_out", "Output", "Done", VariableType::Execution);
 
-        node.add_output_pin("results", "Results", "Raw output tensors per image", VariableType::Generic);
+        node.add_output_pin(
+            "results",
+            "Results",
+            "Raw output tensors per image",
+            VariableType::Generic,
+        );
 
-        node.add_output_pin("batch_result", "Batch Result", "Batch processing summary", VariableType::Struct)
-            .set_schema::<BatchResult>();
+        node.add_output_pin(
+            "batch_result",
+            "Batch Result",
+            "Batch processing summary",
+            VariableType::Struct,
+        )
+        .set_schema::<BatchResult>();
 
         node
     }
@@ -119,7 +154,8 @@ impl NodeLogic for BatchImageInferenceNode {
                 for (idx, img) in chunk.iter().enumerate() {
                     let img_wrapper = img.get_image(context).await?;
                     let dyn_image = img_wrapper.lock().await;
-                    let resized = dyn_image.resize_exact(input_size, input_size, FilterType::Triangle);
+                    let resized =
+                        dyn_image.resize_exact(input_size, input_size, FilterType::Triangle);
                     let rgb = resized.to_rgb8();
 
                     for y in 0..input_size {
@@ -135,9 +171,12 @@ impl NodeLogic for BatchImageInferenceNode {
                                 batch_input[[idx, 2, y as usize, x as usize]] =
                                     (pixel[2] as f32 / 255.0 - mean[2]) / std[2];
                             } else {
-                                batch_input[[idx, 0, y as usize, x as usize]] = pixel[0] as f32 / 255.0;
-                                batch_input[[idx, 1, y as usize, x as usize]] = pixel[1] as f32 / 255.0;
-                                batch_input[[idx, 2, y as usize, x as usize]] = pixel[2] as f32 / 255.0;
+                                batch_input[[idx, 0, y as usize, x as usize]] =
+                                    pixel[0] as f32 / 255.0;
+                                batch_input[[idx, 1, y as usize, x as usize]] =
+                                    pixel[1] as f32 / 255.0;
+                                batch_input[[idx, 2, y as usize, x as usize]] =
+                                    pixel[2] as f32 / 255.0;
                             }
                         }
                     }
@@ -149,19 +188,20 @@ impl NodeLogic for BatchImageInferenceNode {
 
                 // Extract results
                 if let Some((_, tensor)) = outputs.iter().next()
-                    && let Ok(data) = tensor.try_extract_array::<f32>() {
-                        let shape = data.shape();
+                    && let Ok(data) = tensor.try_extract_array::<f32>()
+                {
+                    let shape = data.shape();
 
-                        // Split batch results
-                        for i in 0..current_batch_size {
-                            let result: Vec<f32> = if shape.len() >= 2 {
-                                (0..shape[1]).map(|j| data[[i, j]]).collect()
-                            } else {
-                                data.iter().copied().collect()
-                            };
-                            all_results.push(json!(result));
-                        }
+                    // Split batch results
+                    for i in 0..current_batch_size {
+                        let result: Vec<f32> = if shape.len() >= 2 {
+                            (0..shape[1]).map(|j| data[[i, j]]).collect()
+                        } else {
+                            data.iter().copied().collect()
+                        };
+                        all_results.push(json!(result));
                     }
+                }
             }
 
             let elapsed = start_time.elapsed();
@@ -178,7 +218,9 @@ impl NodeLogic for BatchImageInferenceNode {
             };
 
             context.set_pin_value("results", json!(all_results)).await?;
-            context.set_pin_value("batch_result", json!(batch_result)).await?;
+            context
+                .set_pin_value("batch_result", json!(batch_result))
+                .await?;
             context.activate_exec_pin("exec_out").await?;
             Ok(())
         }

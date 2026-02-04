@@ -138,9 +138,10 @@ impl Command for CopyPasteCommand {
         // Second pass: translate parent_ids now that all layer IDs are known
         for layer in intermediate_layers.iter_mut() {
             if let Some(parent_id) = &layer.parent_id
-                && let Some(new_parent_id) = layer_translation.get(parent_id) {
-                    layer.parent_id = Some(new_parent_id.clone());
-                }
+                && let Some(new_parent_id) = layer_translation.get(parent_id)
+            {
+                layer.parent_id = Some(new_parent_id.clone());
+            }
             // Don't insert yet - pin connections need to be translated first in the final pass
         }
 
@@ -228,10 +229,8 @@ impl Command for CopyPasteCommand {
                             let variable_ref = board.variables.get(&var_ref);
                             if variable_ref.is_none() {
                                 // Try to find the original variable from the template/copy source
-                                let original_var = self
-                                    .original_variables
-                                    .iter()
-                                    .find(|v| v.id == var_ref);
+                                let original_var =
+                                    self.original_variables.iter().find(|v| v.id == var_ref);
 
                                 if let Some(orig) = original_var {
                                     // Clone the original variable to preserve all properties including category

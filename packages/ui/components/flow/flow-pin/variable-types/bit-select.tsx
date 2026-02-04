@@ -73,12 +73,14 @@ function BitRender({
 	// Parse the bitId format "hub:id" into separate components
 	// Hub can contain colons (e.g., "https://hub.flow-like.com"), so split from the last colon
 	const lastColonIndex = bitId?.lastIndexOf(":");
-	const hub = lastColonIndex !== undefined && lastColonIndex > 0
-		? bitId?.substring(0, lastColonIndex)
-		: undefined;
-	const id = lastColonIndex !== undefined && lastColonIndex > 0
-		? bitId?.substring(lastColonIndex + 1)
-		: bitId;
+	const hub =
+		lastColonIndex !== undefined && lastColonIndex > 0
+			? bitId?.substring(0, lastColonIndex)
+			: undefined;
+	const id =
+		lastColonIndex !== undefined && lastColonIndex > 0
+			? bitId?.substring(lastColonIndex + 1)
+			: bitId;
 
 	const bit = useInvoke(
 		backend.bitState.getBit,

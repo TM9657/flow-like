@@ -1,3 +1,4 @@
+import { createId } from "@paralleldrive/cuid2";
 import type {
 	IMetadata,
 	IProfile,
@@ -6,8 +7,11 @@ import type {
 	IUserState,
 } from "@tm9657/flow-like-ui";
 import { IAppVisibility } from "@tm9657/flow-like-ui";
-import { createId } from "@paralleldrive/cuid2";
-import type { ISettingsProfile } from "@tm9657/flow-like-ui/types";
+import type {
+	INotification,
+	INotificationsOverview,
+	IUserLookup,
+} from "@tm9657/flow-like-ui/state/backend-state/types";
 import type {
 	IBillingSession,
 	IPricingResponse,
@@ -18,13 +22,15 @@ import type {
 	IUserUpdate,
 	IUserWidgetInfo,
 } from "@tm9657/flow-like-ui/state/backend-state/user-state";
-import type {
-	IUserLookup,
-	INotification,
-	INotificationsOverview,
-} from "@tm9657/flow-like-ui/state/backend-state/types";
-import { apiDelete, apiGet, apiPost, apiPut, type WebBackendRef } from "./api-utils";
+import type { ISettingsProfile } from "@tm9657/flow-like-ui/types";
 import { appsDB } from "../apps-db";
+import {
+	type WebBackendRef,
+	apiDelete,
+	apiGet,
+	apiPost,
+	apiPut,
+} from "./api-utils";
 
 // API returns snake_case fields, frontend expects camelCase
 interface ApiProfile {
@@ -124,10 +130,7 @@ export class WebUserState implements IUserState {
 	}
 
 	async deleteNotification(notificationId: string): Promise<void> {
-		await apiDelete(
-			`user/notifications/${notificationId}`,
-			this.backend.auth,
-		);
+		await apiDelete(`user/notifications/${notificationId}`, this.backend.auth);
 	}
 
 	async markAllNotificationsRead(): Promise<number> {
@@ -146,22 +149,25 @@ export class WebUserState implements IUserState {
 			// Get offline apps from local IndexedDB
 			const visibilityRecords = await appsDB.visibility.toArray();
 			const offlineAppIds = visibilityRecords
-				.filter(v => v.visibility === IAppVisibility.Offline)
-				.map(v => v.appId);
+				.filter((v) => v.visibility === IAppVisibility.Offline)
+				.map((v) => v.appId);
 
 			if (offlineAppIds.length === 0) return profile;
 
 			// Find apps that are marked as offline locally but not in the server profile
-			const serverAppIds = new Set(profile.apps?.map(a => a.app_id) || []);
+			const serverAppIds = new Set(profile.apps?.map((a) => a.app_id) || []);
 
 			// Get local storage data for offline apps that need to be merged
 			const localAppsKey = `flow-like-offline-apps-${profile.id}`;
 			const localAppsJson = localStorage.getItem(localAppsKey);
-			const localApps: IProfileApp[] = localAppsJson ? JSON.parse(localAppsJson) : [];
+			const localApps: IProfileApp[] = localAppsJson
+				? JSON.parse(localAppsJson)
+				: [];
 
 			// Filter to only offline apps that aren't already in the server profile
 			const missingOfflineApps = localApps.filter(
-				app => offlineAppIds.includes(app.app_id) && !serverAppIds.has(app.app_id)
+				(app) =>
+					offlineAppIds.includes(app.app_id) && !serverAppIds.has(app.app_id),
 			);
 
 			if (missingOfflineApps.length === 0) return profile;
@@ -177,17 +183,24 @@ export class WebUserState implements IUserState {
 	}
 
 	async getProfile(): Promise<IProfile> {
-		const apiProfiles = await apiGet<ApiProfile[]>("profile", this.backend.auth);
+		const apiProfiles = await apiGet<ApiProfile[]>(
+			"profile",
+			this.backend.auth,
+		);
 
 		if (apiProfiles && apiProfiles.length > 0) {
 			// Check localStorage for a preferred profile ID
-			const savedProfileId = typeof window !== "undefined"
-				? localStorage.getItem("flow-like-profile-id")
-				: null;
+			const savedProfileId =
+				typeof window !== "undefined"
+					? localStorage.getItem("flow-like-profile-id")
+					: null;
 
 			if (savedProfileId) {
-				const savedApiProfile = apiProfiles.find(p => p.id === savedProfileId);
-				if (savedApiProfile) return this.mergeOfflineApps(transformApiProfile(savedApiProfile));
+				const savedApiProfile = apiProfiles.find(
+					(p) => p.id === savedProfileId,
+				);
+				if (savedApiProfile)
+					return this.mergeOfflineApps(transformApiProfile(savedApiProfile));
 			}
 
 			// Fall back to first profile and save it
@@ -199,7 +212,8 @@ export class WebUserState implements IUserState {
 		}
 
 		// No profiles exist - create a default one using upsert endpoint
-		const hubUrl = process.env.NEXT_PUBLIC_API_URL || "https://api.flow-like.com";
+		const hubUrl =
+			process.env.NEXT_PUBLIC_API_URL || "https://api.flow-like.com";
 		const newProfileId = createId();
 
 		const newApiProfile = await apiPost<ApiProfile>(
@@ -222,7 +236,10 @@ export class WebUserState implements IUserState {
 	}
 
 	async getProfiles(): Promise<IProfile[]> {
-		const apiProfiles = await apiGet<ApiProfile[]>("profile", this.backend.auth);
+		const apiProfiles = await apiGet<ApiProfile[]>(
+			"profile",
+			this.backend.auth,
+		);
 		console.log("getProfiles API response:", apiProfiles);
 		if (!apiProfiles || apiProfiles.length === 0) return [];
 		return apiProfiles.map(transformApiProfile);
@@ -231,7 +248,7 @@ export class WebUserState implements IUserState {
 	async getAllSettingsProfiles(): Promise<ISettingsProfile[]> {
 		const profiles = await this.getProfiles();
 		console.log("getAllSettingsProfiles - profiles count:", profiles.length);
-		return profiles.map(profile => ({
+		return profiles.map((profile) => ({
 			hub_profile: profile,
 			execution_settings: {
 				gpu_mode: false,
@@ -308,7 +325,9 @@ export class WebUserState implements IUserState {
 			await this.removeFromOfflineStorage(profileId, app.app_id);
 		} else {
 			// Upsert: find existing app or add new one
-			const existingIndex = currentApps.findIndex((a) => a.app_id === app.app_id);
+			const existingIndex = currentApps.findIndex(
+				(a) => a.app_id === app.app_id,
+			);
 			if (existingIndex >= 0) {
 				currentApps[existingIndex] = app;
 			} else {
@@ -322,7 +341,7 @@ export class WebUserState implements IUserState {
 		}
 
 		// Only sync non-offline apps to server
-		const appsToSync = currentApps.filter(a => {
+		const appsToSync = currentApps.filter((a) => {
 			const vis = a.app_id === app.app_id ? visibility : undefined;
 			return vis?.visibility !== IAppVisibility.Offline;
 		});
@@ -335,14 +354,19 @@ export class WebUserState implements IUserState {
 		);
 	}
 
-	private async saveToOfflineStorage(profileId: string, app: IProfileApp): Promise<void> {
+	private async saveToOfflineStorage(
+		profileId: string,
+		app: IProfileApp,
+	): Promise<void> {
 		if (typeof window === "undefined") return;
 
 		const localAppsKey = `flow-like-offline-apps-${profileId}`;
 		const localAppsJson = localStorage.getItem(localAppsKey);
-		const localApps: IProfileApp[] = localAppsJson ? JSON.parse(localAppsJson) : [];
+		const localApps: IProfileApp[] = localAppsJson
+			? JSON.parse(localAppsJson)
+			: [];
 
-		const existingIndex = localApps.findIndex(a => a.app_id === app.app_id);
+		const existingIndex = localApps.findIndex((a) => a.app_id === app.app_id);
 		if (existingIndex >= 0) {
 			localApps[existingIndex] = app;
 		} else {
@@ -352,7 +376,10 @@ export class WebUserState implements IUserState {
 		localStorage.setItem(localAppsKey, JSON.stringify(localApps));
 	}
 
-	private async removeFromOfflineStorage(profileId: string, appId: string): Promise<void> {
+	private async removeFromOfflineStorage(
+		profileId: string,
+		appId: string,
+	): Promise<void> {
 		if (typeof window === "undefined") return;
 
 		const localAppsKey = `flow-like-offline-apps-${profileId}`;
@@ -360,7 +387,7 @@ export class WebUserState implements IUserState {
 		if (!localAppsJson) return;
 
 		const localApps: IProfileApp[] = JSON.parse(localAppsJson);
-		const filtered = localApps.filter(a => a.app_id !== appId);
+		const filtered = localApps.filter((a) => a.app_id !== appId);
 		localStorage.setItem(localAppsKey, JSON.stringify(filtered));
 	}
 
@@ -408,7 +435,9 @@ export class WebUserState implements IUserState {
 		return apiGet<IPricingResponse>("user/pricing", this.backend.auth);
 	}
 
-	async createSubscription(request: ISubscribeRequest): Promise<ISubscribeResponse> {
+	async createSubscription(
+		request: ISubscribeRequest,
+	): Promise<ISubscribeResponse> {
 		return apiPost<ISubscribeResponse>(
 			"user/subscribe",
 			request,
@@ -429,11 +458,16 @@ export class WebUserState implements IUserState {
 			);
 			if (!Array.isArray(response)) return [];
 			return response
-				.filter((entry): entry is [string, string, IMetadata] =>
-					Array.isArray(entry) && entry.length >= 3 &&
-					typeof entry[0] === 'string' && entry[0] !== '' &&
-					typeof entry[1] === 'string' && entry[1] !== '' &&
-					entry[2] !== null && typeof entry[2] === 'object'
+				.filter(
+					(entry): entry is [string, string, IMetadata] =>
+						Array.isArray(entry) &&
+						entry.length >= 3 &&
+						typeof entry[0] === "string" &&
+						entry[0] !== "" &&
+						typeof entry[1] === "string" &&
+						entry[1] !== "" &&
+						entry[2] !== null &&
+						typeof entry[2] === "object",
 				)
 				.map(([appId, widgetId, meta]) => ({
 					appId,

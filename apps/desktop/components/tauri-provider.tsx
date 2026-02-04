@@ -1,7 +1,7 @@
 "use client";
 import { invoke } from "@tauri-apps/api/core";
-import { fetch as tauriFetch } from "@tauri-apps/plugin-http";
 import { readFile } from "@tauri-apps/plugin-fs";
+import { fetch as tauriFetch } from "@tauri-apps/plugin-http";
 
 import { createId } from "@paralleldrive/cuid2";
 import {
@@ -220,7 +220,11 @@ export class TauriBackend implements IBackendState {
 				if (xhr.status >= 200 && xhr.status < 300) {
 					resolve();
 				} else {
-					reject(new Error(`Upload failed with status ${xhr.status}: ${xhr.statusText}`));
+					reject(
+						new Error(
+							`Upload failed with status ${xhr.status}: ${xhr.statusText}`,
+						),
+					);
 				}
 			});
 
@@ -371,8 +375,12 @@ function ProfileSyncer() {
 	);
 
 	// Extract auth state for dependency tracking
-	const isAuthenticated = backend instanceof TauriBackend && backend.auth?.isAuthenticated;
-	const accessToken = backend instanceof TauriBackend ? backend.auth?.user?.access_token : undefined;
+	const isAuthenticated =
+		backend instanceof TauriBackend && backend.auth?.isAuthenticated;
+	const accessToken =
+		backend instanceof TauriBackend
+			? backend.auth?.user?.access_token
+			: undefined;
 	const hubUrl = profile.data?.hub;
 
 	useEffect(() => {
@@ -400,11 +408,17 @@ function ProfileSyncer() {
 
 		const getContentType = (ext: string): string => {
 			switch (ext) {
-				case "webp": return "image/webp";
-				case "jpg": case "jpeg": return "image/jpeg";
-				case "gif": return "image/gif";
-				case "svg": return "image/svg+xml";
-				default: return "image/png";
+				case "webp":
+					return "image/webp";
+				case "jpg":
+				case "jpeg":
+					return "image/jpeg";
+				case "gif":
+					return "image/gif";
+				case "svg":
+					return "image/svg+xml";
+				default:
+					return "image/png";
 			}
 		};
 
@@ -432,26 +446,33 @@ function ProfileSyncer() {
 		const syncProfiles = async () => {
 			try {
 				console.log("Starting profile sync...");
-				const localProfiles = await invoke<Record<string, { hub_profile: IProfile }>>("get_profiles");
+				const localProfiles =
+					await invoke<Record<string, { hub_profile: IProfile }>>(
+						"get_profiles",
+					);
 				console.log("Local profiles:", Object.keys(localProfiles || {}).length);
 				if (!localProfiles || Object.keys(localProfiles).length === 0) return;
 
 				const visibilityRecords = await appsDB.visibility.toArray();
 				const offlineAppIds = new Set(
 					visibilityRecords
-						.filter(v => v.visibility === IAppVisibility.Offline)
-						.map(v => v.appId)
+						.filter((v) => v.visibility === IAppVisibility.Offline)
+						.map((v) => v.appId),
 				);
 
-				const baseUrl = hubUrl ?? process.env.NEXT_PUBLIC_API_URL ?? "api.flow-like.com";
+				const baseUrl =
+					hubUrl ?? process.env.NEXT_PUBLIC_API_URL ?? "api.flow-like.com";
 				const protocol = profile.data?.secure === false ? "http" : "https";
 
 				// Build profile data with upload extensions
-				const profilesWithLocalImages: Map<string, { icon?: string; thumbnail?: string }> = new Map();
-				const profilesToSync = Object.values(localProfiles).map(p => {
+				const profilesWithLocalImages: Map<
+					string,
+					{ icon?: string; thumbnail?: string }
+				> = new Map();
+				const profilesToSync = Object.values(localProfiles).map((p) => {
 					const hubProfile = p.hub_profile;
 					const filteredApps = hubProfile.apps?.filter(
-						app => !offlineAppIds.has(app.app_id)
+						(app) => !offlineAppIds.has(app.app_id),
 					);
 
 					const hasLocalIcon = isLocalPath(hubProfile.icon);
@@ -468,8 +489,12 @@ function ProfileSyncer() {
 						id: hubProfile.id,
 						name: hubProfile.name,
 						description: hubProfile.description,
-						icon_upload_ext: hasLocalIcon ? getExtension(hubProfile.icon!) : undefined,
-						thumbnail_upload_ext: hasLocalThumbnail ? getExtension(hubProfile.thumbnail!) : undefined,
+						icon_upload_ext: hasLocalIcon
+							? getExtension(hubProfile.icon!)
+							: undefined,
+						thumbnail_upload_ext: hasLocalThumbnail
+							? getExtension(hubProfile.thumbnail!)
+							: undefined,
 						interests: hubProfile.interests,
 						tags: hubProfile.tags,
 						theme: hubProfile.theme,
@@ -482,7 +507,11 @@ function ProfileSyncer() {
 					};
 				});
 
-				console.log("Profiles to sync:", profilesToSync.length, profilesToSync.map(p => p.name));
+				console.log(
+					"Profiles to sync:",
+					profilesToSync.length,
+					profilesToSync.map((p) => p.name),
+				);
 				if (profilesToSync.length === 0) return;
 
 				const url = baseUrl.startsWith("http")
@@ -495,13 +524,17 @@ function ProfileSyncer() {
 					method: "POST",
 					headers: {
 						"Content-Type": "application/json",
-						"Authorization": `Bearer ${accessToken}`,
+						Authorization: `Bearer ${accessToken}`,
 					},
 					body: JSON.stringify(profilesToSync),
 				});
 
 				if (!response.ok) {
-					console.warn("Profile sync failed:", response.status, await response.text());
+					console.warn(
+						"Profile sync failed:",
+						response.status,
+						await response.text(),
+					);
 					return;
 				}
 
@@ -521,7 +554,7 @@ function ProfileSyncer() {
 					skipped: string[];
 				};
 
-				const result = await response.json() as SyncResult;
+				const result = (await response.json()) as SyncResult;
 				console.log("Profile sync result:", result);
 
 				// Upload images to the signed URLs returned by server
@@ -532,8 +565,14 @@ function ProfileSyncer() {
 						await uploadToSignedUrl(localImages.icon, created.icon_upload_url);
 					}
 					if (localImages?.thumbnail && created.thumbnail_upload_url) {
-						console.log("Uploading thumbnail for new profile:", created.local_id);
-						await uploadToSignedUrl(localImages.thumbnail, created.thumbnail_upload_url);
+						console.log(
+							"Uploading thumbnail for new profile:",
+							created.local_id,
+						);
+						await uploadToSignedUrl(
+							localImages.thumbnail,
+							created.thumbnail_upload_url,
+						);
 					}
 				}
 
@@ -545,13 +584,19 @@ function ProfileSyncer() {
 					}
 					if (localImages?.thumbnail && updated.thumbnail_upload_url) {
 						console.log("Uploading thumbnail for updated profile:", updated.id);
-						await uploadToSignedUrl(localImages.thumbnail, updated.thumbnail_upload_url);
+						await uploadToSignedUrl(
+							localImages.thumbnail,
+							updated.thumbnail_upload_url,
+						);
 					}
 				}
 
 				// Remap local profile IDs to server-assigned IDs
 				for (const { local_id, server_id } of result.created) {
-					await invoke("remap_profile_id", { localId: local_id, serverId: server_id });
+					await invoke("remap_profile_id", {
+						localId: local_id,
+						serverId: server_id,
+					});
 				}
 			} catch (error) {
 				console.warn("Failed to sync profiles to backend:", error);

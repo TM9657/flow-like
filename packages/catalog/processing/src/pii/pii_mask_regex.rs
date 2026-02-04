@@ -7,6 +7,8 @@
 //! PII masking node instead. Regex-based detection works well for structured data
 //! but cannot reliably detect unstructured PII like names.
 
+#[cfg(feature = "execute")]
+use flow_like::flow::execution::LogLevel;
 use flow_like::flow::{
     execution::context::ExecutionContext,
     node::{Node, NodeLogic, NodeScores},
@@ -14,10 +16,8 @@ use flow_like::flow::{
     variable::VariableType,
 };
 #[cfg(feature = "execute")]
-use flow_like::flow::execution::LogLevel;
-use flow_like_types::{async_trait, json::json};
-#[cfg(feature = "execute")]
 use flow_like_types::Value;
+use flow_like_types::{async_trait, json::json};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
@@ -300,11 +300,7 @@ fn build_patterns(options: &PiiDetectionOptions) -> Vec<PiiPattern> {
     // US: 9 digits or letter + 8 digits
     // German: 9-10 alphanumeric
     // UK: 9 digits
-    add_pattern!(
-        options.passport,
-        "Passport",
-        r"\b[A-Z]{0,2}\d{7,9}[A-Z]?\b"
-    );
+    add_pattern!(options.passport, "Passport", r"\b[A-Z]{0,2}\d{7,9}[A-Z]?\b");
 
     // EU VAT numbers
     add_pattern!(
@@ -328,11 +324,7 @@ fn build_patterns(options: &PiiDetectionOptions) -> Vec<PiiPattern> {
     );
 
     // Austrian SVNR (social insurance) - 10 digits, first 4 are ID, then birth date
-    add_pattern!(
-        options.svnr_austria,
-        "SVNRAustria",
-        r"\b\d{4}\s?\d{6}\b"
-    );
+    add_pattern!(options.svnr_austria, "SVNRAustria", r"\b\d{4}\s?\d{6}\b");
 
     patterns
 }
@@ -594,10 +586,7 @@ impl NodeLogic for PiiMaskRegexNode {
             .unwrap_or(true);
         options.iban = context.evaluate_pin("detect_iban").await.unwrap_or(true);
 
-        let detect_address: bool = context
-            .evaluate_pin("detect_address")
-            .await
-            .unwrap_or(true);
+        let detect_address: bool = context.evaluate_pin("detect_address").await.unwrap_or(true);
         options.address_us = detect_address;
         options.address_de = detect_address;
         options.postcode_uk = detect_address;

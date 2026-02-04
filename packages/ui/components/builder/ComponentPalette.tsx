@@ -541,7 +541,7 @@ export function ComponentPalette({
 		if (!widgets || !showWidgets) return [];
 		// Filter out invalid widgets first
 		const validWidgets = widgets.filter(
-			(w) => w?.appId && w?.widgetId && w?.metadata
+			(w) => w?.appId && w?.widgetId && w?.metadata,
 		);
 		if (!searchQuery.trim()) return validWidgets;
 		const query = searchQuery.toLowerCase();

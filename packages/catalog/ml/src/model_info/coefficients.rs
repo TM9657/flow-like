@@ -34,7 +34,7 @@ impl NodeLogic for GetLinearCoefficientsNode {
 
         node.set_scores(
             NodeScores::new()
-                .set_privacy(10)  // Only extracts math params, no raw data
+                .set_privacy(10) // Only extracts math params, no raw data
                 .set_security(10) // Pure computation, no external calls
                 .set_performance(9)
                 .set_governance(9)
@@ -108,9 +108,7 @@ impl NodeLogic for GetLinearCoefficientsNode {
                     LogLevel::Debug,
                 );
 
-                context
-                    .set_pin_value("result", json!(result))
-                    .await?;
+                context.set_pin_value("result", json!(result)).await?;
                 context.activate_exec_pin("exec_out").await?;
                 Ok(())
             }

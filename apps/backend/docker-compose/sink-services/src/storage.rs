@@ -18,8 +18,8 @@ pub struct RedisStorage {
 
 impl RedisStorage {
     pub async fn new(redis_url: &str) -> Result<Self, RedisStorageError> {
-        let client =
-            redis::Client::open(redis_url).map_err(|e| RedisStorageError::Connection(e.to_string()))?;
+        let client = redis::Client::open(redis_url)
+            .map_err(|e| RedisStorageError::Connection(e.to_string()))?;
 
         let conn = ConnectionManager::new(client)
             .await
@@ -40,8 +40,8 @@ impl RedisStorage {
         value: &T,
         ttl_secs: Option<u64>,
     ) -> Result<(), RedisStorageError> {
-        let json =
-            serde_json::to_string(value).map_err(|e| RedisStorageError::Serialization(e.to_string()))?;
+        let json = serde_json::to_string(value)
+            .map_err(|e| RedisStorageError::Serialization(e.to_string()))?;
 
         let mut conn = self.conn.clone();
 
@@ -58,7 +58,10 @@ impl RedisStorage {
         Ok(())
     }
 
-    pub async fn get_json<T: DeserializeOwned>(&self, key: &str) -> Result<Option<T>, RedisStorageError> {
+    pub async fn get_json<T: DeserializeOwned>(
+        &self,
+        key: &str,
+    ) -> Result<Option<T>, RedisStorageError> {
         let mut conn = self.conn.clone();
 
         let result: Option<String> = conn
@@ -86,12 +89,18 @@ impl RedisStorage {
 
     // Cron-specific operations
 
-    pub async fn set_cron_schedule(&self, schedule: &CronScheduleState) -> Result<(), RedisStorageError> {
+    pub async fn set_cron_schedule(
+        &self,
+        schedule: &CronScheduleState,
+    ) -> Result<(), RedisStorageError> {
         let key = Self::key(&["cron", "schedule", &schedule.event_id]);
         self.set_json(&key, schedule, None).await
     }
 
-    pub async fn get_cron_schedule(&self, event_id: &str) -> Result<Option<CronScheduleState>, RedisStorageError> {
+    pub async fn get_cron_schedule(
+        &self,
+        event_id: &str,
+    ) -> Result<Option<CronScheduleState>, RedisStorageError> {
         let key = Self::key(&["cron", "schedule", event_id]);
         self.get_json(&key).await
     }
@@ -101,7 +110,9 @@ impl RedisStorage {
         self.delete(&key).await
     }
 
-    pub async fn get_all_cron_schedules(&self) -> Result<Vec<CronScheduleState>, RedisStorageError> {
+    pub async fn get_all_cron_schedules(
+        &self,
+    ) -> Result<Vec<CronScheduleState>, RedisStorageError> {
         let mut conn = self.conn.clone();
         let pattern = Self::key(&["cron", "schedule", "*"]);
 
@@ -134,22 +145,33 @@ impl RedisStorage {
 
     // Discord-specific operations
 
-    pub async fn set_discord_config(&self, config: &DiscordConfigState) -> Result<(), RedisStorageError> {
+    pub async fn set_discord_config(
+        &self,
+        config: &DiscordConfigState,
+    ) -> Result<(), RedisStorageError> {
         let key = Self::key(&["discord", "config", &config.event_id]);
         self.set_json(&key, config, None).await
     }
 
-    pub async fn set_telegram_config(&self, config: &TelegramConfigState) -> Result<(), RedisStorageError> {
+    pub async fn set_telegram_config(
+        &self,
+        config: &TelegramConfigState,
+    ) -> Result<(), RedisStorageError> {
         let key = Self::key(&["telegram", "config", &config.event_id]);
         self.set_json(&key, config, None).await
     }
 
     // Batch operations for sync
 
-    pub async fn sync_cron_schedules(&self, schedules: Vec<CronScheduleState>) -> Result<(), RedisStorageError> {
+    pub async fn sync_cron_schedules(
+        &self,
+        schedules: Vec<CronScheduleState>,
+    ) -> Result<(), RedisStorageError> {
         let existing = self.get_all_cron_schedules().await?;
-        let existing_ids: std::collections::HashSet<_> = existing.iter().map(|s| s.event_id.clone()).collect();
-        let new_ids: std::collections::HashSet<_> = schedules.iter().map(|s| s.event_id.clone()).collect();
+        let existing_ids: std::collections::HashSet<_> =
+            existing.iter().map(|s| s.event_id.clone()).collect();
+        let new_ids: std::collections::HashSet<_> =
+            schedules.iter().map(|s| s.event_id.clone()).collect();
 
         // Add/update schedules
         for schedule in schedules {
@@ -185,7 +207,10 @@ impl RedisStorage {
         self.set_json(&key, bot, None).await
     }
 
-    pub async fn get_discord_bot(&self, bot_id: &str) -> Result<Option<DiscordBotState>, RedisStorageError> {
+    pub async fn get_discord_bot(
+        &self,
+        bot_id: &str,
+    ) -> Result<Option<DiscordBotState>, RedisStorageError> {
         let key = Self::key(&["discord", "bot", bot_id]);
         self.get_json(&key).await
     }
@@ -200,7 +225,10 @@ impl RedisStorage {
         self.set_json(&key, bot, None).await
     }
 
-    pub async fn get_telegram_bot(&self, bot_id: &str) -> Result<Option<TelegramBotState>, RedisStorageError> {
+    pub async fn get_telegram_bot(
+        &self,
+        bot_id: &str,
+    ) -> Result<Option<TelegramBotState>, RedisStorageError> {
         let key = Self::key(&["telegram", "bot", bot_id]);
         self.get_json(&key).await
     }

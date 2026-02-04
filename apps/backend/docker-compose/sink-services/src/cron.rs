@@ -115,10 +115,7 @@ impl CronScheduler {
                 match self.add_job(&schedule).await {
                     Ok(job_id) => {
                         active_jobs.insert(id.clone(), job_id);
-                        debug!(
-                            "Added cron job: {} ({})",
-                            id, schedule.cron_expression
-                        );
+                        debug!("Added cron job: {} ({})", id, schedule.cron_expression);
                         added += 1;
                     }
                     Err(e) => {
@@ -144,7 +141,10 @@ impl CronScheduler {
             let schedule_id = schedule_id.clone();
 
             Box::pin(async move {
-                info!("Triggering cron event: {} (schedule: {})", event_id, schedule_id);
+                info!(
+                    "Triggering cron event: {} (schedule: {})",
+                    event_id, schedule_id
+                );
 
                 match api_client.trigger_event(&event_id, "cron", None).await {
                     Ok(()) => {
@@ -153,7 +153,9 @@ impl CronScheduler {
                         // Update last_triggered in Redis
                         if let Some(ref storage) = storage {
                             let now = chrono::Utc::now().timestamp();
-                            if let Err(e) = storage.update_cron_last_triggered(&schedule_id, now).await {
+                            if let Err(e) =
+                                storage.update_cron_last_triggered(&schedule_id, now).await
+                            {
                                 warn!("Failed to update last_triggered in Redis: {}", e);
                             }
                         }
@@ -174,7 +176,6 @@ impl CronScheduler {
 
         Ok(job_id)
     }
-
 }
 
 #[derive(Debug)]

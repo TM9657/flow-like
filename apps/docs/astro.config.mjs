@@ -97,7 +97,10 @@ posthog.init('phc_hxGZEJaPqyCNzqqfrYyuUDCUSpcc7RSbwh07t4xtfrE', { api_host:'http
 								{ label: "Connecting Pins", slug: "studio/connecting" },
 								{ label: "Layers & Organization", slug: "studio/layers" },
 								{ label: "Variables", slug: "studio/variables" },
-								{ label: "Local-Only Execution", slug: "studio/local-execution" },
+								{
+									label: "Local-Only Execution",
+									slug: "studio/local-execution",
+								},
 								{ label: "Logging & Debugging", slug: "studio/logging" },
 								{ label: "Version Control", slug: "studio/versioning" },
 							],
@@ -140,10 +143,19 @@ posthog.init('phc_hxGZEJaPqyCNzqqfrYyuUDCUSpcc7RSbwh07t4xtfrE', { api_host:'http
 									items: [
 										{ label: "Overview", slug: "topics/genai/overview" },
 										{ label: "AI Models & Setup", slug: "topics/genai/models" },
-										{ label: "Chat & Conversations", slug: "topics/genai/chat" },
-										{ label: "RAG & Knowledge Bases", slug: "topics/genai/rag" },
+										{
+											label: "Chat & Conversations",
+											slug: "topics/genai/chat",
+										},
+										{
+											label: "RAG & Knowledge Bases",
+											slug: "topics/genai/rag",
+										},
 										{ label: "AI Agents", slug: "topics/genai/agents" },
-										{ label: "Extraction & Structured Output", slug: "topics/genai/extraction" },
+										{
+											label: "Extraction & Structured Output",
+											slug: "topics/genai/extraction",
+										},
 									],
 								},
 								{
@@ -151,39 +163,66 @@ posthog.init('phc_hxGZEJaPqyCNzqqfrYyuUDCUSpcc7RSbwh07t4xtfrE', { api_host:'http
 									collapsed: true,
 									items: [
 										{ label: "Overview", slug: "topics/datascience/overview" },
-										{ label: "Data Loading & Storage", slug: "topics/datascience/loading" },
-										{ label: "DataFusion & SQL", slug: "topics/datascience/datafusion" },
-										{ label: "Machine Learning", slug: "topics/datascience/ml" },
-										{ label: "Data Visualization", slug: "topics/datascience/visualization" },
-										{ label: "AI-Powered Analysis", slug: "topics/datascience/ai-analysis" },
+										{
+											label: "Data Loading & Storage",
+											slug: "topics/datascience/loading",
+										},
+										{
+											label: "DataFusion & SQL",
+											slug: "topics/datascience/datafusion",
+										},
+										{
+											label: "Machine Learning",
+											slug: "topics/datascience/ml",
+										},
+										{
+											label: "Data Visualization",
+											slug: "topics/datascience/visualization",
+										},
+										{
+											label: "AI-Powered Analysis",
+											slug: "topics/datascience/ai-analysis",
+										},
 									],
 								},
 								{
 									label: "Internal Tools",
 									collapsed: true,
 									items: [
-										{ label: "Overview", slug: "topics/internal-tools/overview" },
+										{
+											label: "Overview",
+											slug: "topics/internal-tools/overview",
+										},
 									],
 								},
 								{
 									label: "Desktop Automation",
 									collapsed: true,
 									items: [
-										{ label: "Overview", slug: "topics/desktop-automation/overview" },
+										{
+											label: "Overview",
+											slug: "topics/desktop-automation/overview",
+										},
 									],
 								},
 								{
 									label: "Document Processing",
 									collapsed: true,
 									items: [
-										{ label: "Overview", slug: "topics/document-processing/overview" },
+										{
+											label: "Overview",
+											slug: "topics/document-processing/overview",
+										},
 									],
 								},
 								{
 									label: "API Integrations",
 									collapsed: true,
 									items: [
-										{ label: "Overview", slug: "topics/api-integrations/overview" },
+										{
+											label: "Overview",
+											slug: "topics/api-integrations/overview",
+										},
 									],
 								},
 								{
@@ -197,14 +236,20 @@ posthog.init('phc_hxGZEJaPqyCNzqqfrYyuUDCUSpcc7RSbwh07t4xtfrE', { api_host:'http
 									label: "Data Pipelines",
 									collapsed: true,
 									items: [
-										{ label: "Overview", slug: "topics/data-pipelines/overview" },
+										{
+											label: "Overview",
+											slug: "topics/data-pipelines/overview",
+										},
 									],
 								},
 								{
 									label: "Business Intelligence",
 									collapsed: true,
 									items: [
-										{ label: "Overview", slug: "topics/business-intelligence/overview" },
+										{
+											label: "Overview",
+											slug: "topics/business-intelligence/overview",
+										},
 									],
 								},
 								{
@@ -212,10 +257,19 @@ posthog.init('phc_hxGZEJaPqyCNzqqfrYyuUDCUSpcc7RSbwh07t4xtfrE', { api_host:'http
 									collapsed: true,
 									items: [
 										{ label: "UiPath", slug: "topics/coming-from/uipath" },
-										{ label: "LangChain", slug: "topics/coming-from/langchain" },
-										{ label: "Developers", slug: "topics/coming-from/developers" },
+										{
+											label: "LangChain",
+											slug: "topics/coming-from/langchain",
+										},
+										{
+											label: "Developers",
+											slug: "topics/coming-from/developers",
+										},
 										{ label: "n8n", slug: "topics/coming-from/n8n" },
-										{ label: "Unreal Blueprints", slug: "topics/coming-from/unreal" },
+										{
+											label: "Unreal Blueprints",
+											slug: "topics/coming-from/unreal",
+										},
 									],
 								},
 							],
@@ -324,7 +378,10 @@ posthog.init('phc_hxGZEJaPqyCNzqqfrYyuUDCUSpcc7RSbwh07t4xtfrE', { api_host:'http
 					items: [
 						{ label: "WASM Nodes Overview", slug: "dev/wasm-nodes/overview" },
 						{ label: "Manifest Format", slug: "dev/wasm-nodes/manifest" },
-						{ label: "Publishing to Registry", slug: "dev/wasm-nodes/registry" },
+						{
+							label: "Publishing to Registry",
+							slug: "dev/wasm-nodes/registry",
+						},
 						{
 							label: "Language SDKs",
 							collapsed: true,
@@ -375,7 +432,10 @@ posthog.init('phc_hxGZEJaPqyCNzqqfrYyuUDCUSpcc7RSbwh07t4xtfrE', { api_host:'http
 					collapsed: true,
 					items: [
 						{ label: "Benchmarks", slug: "reference/benchmarks" },
-						{ label: "Markdown Formatting", slug: "reference/markdown-formatting" },
+						{
+							label: "Markdown Formatting",
+							slug: "reference/markdown-formatting",
+						},
 						{ label: "A2UI Components", slug: "reference/a2ui-components" },
 						{ label: "Widget Builder", slug: "reference/widget-builder" },
 						{ label: "FlowPilot UI", slug: "reference/flowpilot-ui" },

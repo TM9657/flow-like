@@ -1,6 +1,12 @@
 import type { IAppRouteState } from "@tm9657/flow-like-ui";
 import type { IRouteMapping } from "@tm9657/flow-like-ui/state/backend-state/route-state";
-import { apiDelete, apiGet, apiPost, apiPut, type WebBackendRef } from "./api-utils";
+import {
+	type WebBackendRef,
+	apiDelete,
+	apiGet,
+	apiPost,
+	apiPut,
+} from "./api-utils";
 
 // Generate a simple ID for routes
 function generateRouteId(): string {
@@ -25,7 +31,10 @@ export class WebRouteState implements IAppRouteState {
 		}
 	}
 
-	async getRouteByPath(appId: string, path: string): Promise<IRouteMapping | null> {
+	async getRouteByPath(
+		appId: string,
+		path: string,
+	): Promise<IRouteMapping | null> {
 		try {
 			const route = await apiGet<any>(
 				`apps/${appId}/routes/by-path?path=${encodeURIComponent(path)}`,
@@ -126,10 +135,7 @@ export class WebRouteState implements IAppRouteState {
 				this.backend.auth,
 			);
 			if (route?.id) {
-				await apiDelete(
-					`apps/${appId}/routes/${route.id}`,
-					this.backend.auth,
-				);
+				await apiDelete(`apps/${appId}/routes/${route.id}`, this.backend.auth);
 			}
 		} catch {
 			// Route may not exist
@@ -145,10 +151,7 @@ export class WebRouteState implements IAppRouteState {
 			);
 			const route = routes.find((r) => (r.eventId ?? r.event_id) === eventId);
 			if (route?.id) {
-				await apiDelete(
-					`apps/${appId}/routes/${route.id}`,
-					this.backend.auth,
-				);
+				await apiDelete(`apps/${appId}/routes/${route.id}`, this.backend.auth);
 			}
 		} catch {
 			// Route may not exist

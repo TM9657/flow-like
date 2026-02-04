@@ -1,8 +1,8 @@
 "use client";
 
-import { useAuth } from "react-oidc-context";
 import { useRouter } from "next/navigation";
 import { useEffect } from "react";
+import { useAuth } from "react-oidc-context";
 
 const AUTH_CHANNEL = "flow-like-auth";
 
@@ -40,10 +40,10 @@ export default function CallbackPage() {
 		return (
 			<div className="flex h-screen items-center justify-center">
 				<div className="text-center">
-					<div className="mb-4 text-lg text-red-500">
-						Authentication Error
+					<div className="mb-4 text-lg text-red-500">Authentication Error</div>
+					<div className="text-sm text-muted-foreground">
+						{auth.error.message}
 					</div>
-					<div className="text-sm text-muted-foreground">{auth.error.message}</div>
 					<button
 						type="button"
 						onClick={() => router.push("/")}

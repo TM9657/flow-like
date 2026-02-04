@@ -6,7 +6,8 @@
 use crate::ml::NodeMLModel;
 #[cfg(feature = "execute")]
 use crate::ml::{
-    MAX_ML_PREDICTION_RECORDS, MLModel, ModelWithMeta, values_to_array1_target, values_to_array2_f64,
+    MAX_ML_PREDICTION_RECORDS, MLModel, ModelWithMeta, values_to_array1_target,
+    values_to_array2_f64,
 };
 use flow_like::flow::{
     board::Board,

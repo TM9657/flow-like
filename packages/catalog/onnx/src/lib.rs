@@ -24,7 +24,8 @@ pub use onnx::*;
 
 // Re-export submodules for external access
 pub use onnx::{
-    audio, batch, classification, depth, detection, face, feature, load, ner, ocr, pose, segmentation,
+    audio, batch, classification, depth, detection, face, feature, load, ner, ocr, pose,
+    segmentation,
 };
 
 pub fn get_catalog() -> Vec<Arc<dyn NodeLogic>> {

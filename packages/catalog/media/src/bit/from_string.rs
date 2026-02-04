@@ -68,7 +68,10 @@ impl NodeLogic for BitFromStringNode {
                 // Split into hub and id
                 let hub = &bit_id[..last_colon];
                 let id = &bit_id[last_colon + 1..];
-                context.profile.get_bit(id.to_string(), Some(hub.to_string()), http_client).await
+                context
+                    .profile
+                    .get_bit(id.to_string(), Some(hub.to_string()), http_client)
+                    .await
             }
         } else {
             // No colon at all, plain bit ID

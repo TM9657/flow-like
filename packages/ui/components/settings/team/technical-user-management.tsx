@@ -5,8 +5,6 @@ import {
 	Calendar,
 	Check,
 	Copy,
-	Eye,
-	EyeOff,
 	Key,
 	MoreVertical,
 	Plus,
@@ -15,6 +13,7 @@ import {
 } from "lucide-react";
 import { useCallback, useState } from "react";
 import { toast } from "sonner";
+import type { IBackendRole, ITechnicalUser } from "../../..";
 import {
 	AlertDialog,
 	AlertDialogAction,
@@ -55,7 +54,6 @@ import {
 	useInvalidateInvoke,
 	useInvoke,
 } from "../../../";
-import type { IBackendRole, ITechnicalUser } from "../../..";
 
 interface TechnicalUserManagementProps {
 	appId: string;
@@ -283,7 +281,10 @@ export function TechnicalUserManagement({
 						>
 							Cancel
 						</Button>
-						<Button onClick={handleCreate} disabled={isCreating || !name.trim()}>
+						<Button
+							onClick={handleCreate}
+							disabled={isCreating || !name.trim()}
+						>
 							{isCreating ? "Creating..." : "Create API Key"}
 						</Button>
 					</DialogFooter>
@@ -368,7 +369,9 @@ function ApiKeyCard({ apiKey, roles, onDelete }: Readonly<ApiKeyCardProps>) {
 		<>
 			<div
 				className={`flex items-center justify-between p-4 border rounded-lg ${
-					isExpired ? "border-red-200 bg-red-50/50 dark:border-red-900/50 dark:bg-red-900/10" : "hover:bg-muted/50"
+					isExpired
+						? "border-red-200 bg-red-50/50 dark:border-red-900/50 dark:bg-red-900/10"
+						: "hover:bg-muted/50"
 				} transition-colors`}
 			>
 				<div className="flex items-center gap-3 min-w-0 flex-1">
@@ -405,7 +408,8 @@ function ApiKeyCard({ apiKey, roles, onDelete }: Readonly<ApiKeyCardProps>) {
 								</span>
 							)}
 							<span>
-								Created {new Date(apiKey.created_at * 1000).toLocaleDateString()}
+								Created{" "}
+								{new Date(apiKey.created_at * 1000).toLocaleDateString()}
 							</span>
 						</div>
 						{apiKey.description && (

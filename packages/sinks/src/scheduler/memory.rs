@@ -50,11 +50,12 @@ impl InMemoryScheduler {
             .filter(|s| {
                 // Parse cron and check if it should run now
                 if let Ok(schedule) = cron::Schedule::from_str(&s.cron_expression)
-                    && let Some(next) = schedule.upcoming(chrono::Utc).next() {
-                        // Check if next trigger is within the last minute (for minute-level cron)
-                        let diff = next.signed_duration_since(now);
-                        return diff.num_seconds().abs() < 60;
-                    }
+                    && let Some(next) = schedule.upcoming(chrono::Utc).next()
+                {
+                    // Check if next trigger is within the last minute (for minute-level cron)
+                    let diff = next.signed_duration_since(now);
+                    return diff.num_seconds().abs() < 60;
+                }
                 false
             })
             .map(|s| s.event_id.clone())
@@ -74,8 +75,10 @@ impl InMemoryScheduler {
         let mut schedules = self.schedules.write();
 
         // Build set of external event IDs
-        let external_ids: std::collections::HashSet<_> =
-            external_schedules.iter().map(|(id, _, _, _)| id.clone()).collect();
+        let external_ids: std::collections::HashSet<_> = external_schedules
+            .iter()
+            .map(|(id, _, _, _)| id.clone())
+            .collect();
 
         // Remove schedules that no longer exist
         schedules.retain(|id, _| external_ids.contains(id));

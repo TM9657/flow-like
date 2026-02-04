@@ -18,13 +18,13 @@ import {
 	type INode,
 	parseBoard,
 } from "../../lib";
+import type { ILayer } from "../../lib/schema/flow/board";
 import {
 	CommentNode,
 	type CommentNode as CommentNodeType,
 } from "./comment-node";
 import { FlowNode, type FlowNode as FlowNodeType } from "./flow-node";
 import { LayerNode, type LayerNode as LayerNodeType } from "./layer-node";
-import type { ILayer } from "../../lib/schema/flow/board";
 
 interface FlowPreviewProps {
 	nodes: INode[];

@@ -85,7 +85,11 @@ async fn generate_upload_url(
 }
 
 /// Delete an old profile image from storage
-async fn delete_old_image(state: &AppState, profile_id: &str, image_id: &str) -> Result<(), ApiError> {
+async fn delete_old_image(
+    state: &AppState,
+    profile_id: &str,
+    image_id: &str,
+) -> Result<(), ApiError> {
     // Construct path: media/profiles/{profile_id}/{image_id}.webp
     let path = Path::from("media")
         .child("profiles")
@@ -167,7 +171,8 @@ pub async fn sync_profiles(
                     if let Some(old_icon_id) = &existing.icon {
                         delete_old_image(&state, &profile_req.id, old_icon_id).await?;
                     }
-                    let (upload_url, image_id) = generate_upload_url(&state, &profile_req.id, ext).await?;
+                    let (upload_url, image_id) =
+                        generate_upload_url(&state, &profile_req.id, ext).await?;
                     active_model.icon = Set(Some(image_id));
                     Some(upload_url)
                 } else {
@@ -180,7 +185,8 @@ pub async fn sync_profiles(
                     if let Some(old_thumb_id) = &existing.thumbnail {
                         delete_old_image(&state, &profile_req.id, old_thumb_id).await?;
                     }
-                    let (upload_url, image_id) = generate_upload_url(&state, &profile_req.id, ext).await?;
+                    let (upload_url, image_id) =
+                        generate_upload_url(&state, &profile_req.id, ext).await?;
                     active_model.thumbnail = Set(Some(image_id));
                     Some(upload_url)
                 } else {
@@ -227,12 +233,13 @@ pub async fn sync_profiles(
                 (None, None)
             };
 
-            let (thumbnail_upload_url, thumbnail_id) = if let Some(ext) = &profile_req.thumbnail_upload_ext {
-                let (url, id) = generate_upload_url(&state, &server_id, ext).await?;
-                (Some(url), Some(id))
-            } else {
-                (None, None)
-            };
+            let (thumbnail_upload_url, thumbnail_id) =
+                if let Some(ext) = &profile_req.thumbnail_upload_ext {
+                    let (url, id) = generate_upload_url(&state, &server_id, ext).await?;
+                    (Some(url), Some(id))
+                } else {
+                    (None, None)
+                };
 
             let new_profile = profile::ActiveModel {
                 id: Set(server_id.clone()),

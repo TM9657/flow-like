@@ -176,10 +176,14 @@ impl NodeLogic for CopilotSessionBuilderNode {
             .unwrap_or(0.9);
         let provider: Option<ProviderConfig> = context.evaluate_pin("provider").await.ok();
         let tools: Vec<CopilotToolConfig> = context.evaluate_pin("tools").await.unwrap_or_default();
-        let custom_agents: Vec<CustomAgentConfig> =
-            context.evaluate_pin("custom_agents").await.unwrap_or_default();
-        let mcp_servers: HashMap<String, flow_like_types::Value> =
-            context.evaluate_pin("mcp_servers").await.unwrap_or_default();
+        let custom_agents: Vec<CustomAgentConfig> = context
+            .evaluate_pin("custom_agents")
+            .await
+            .unwrap_or_default();
+        let mcp_servers: HashMap<String, flow_like_types::Value> = context
+            .evaluate_pin("mcp_servers")
+            .await
+            .unwrap_or_default();
 
         let system_msg_config = if system_message.is_empty() {
             None
@@ -328,10 +332,11 @@ impl NodeLogic for CopilotCreateSessionNode {
             }
 
             if let Some(infinite) = cfg.infinite_sessions
-                && infinite.enabled {
-                    session_config.infinite_sessions =
-                        Some(copilot_sdk::InfiniteSessionConfig::enabled());
-                }
+                && infinite.enabled
+            {
+                session_config.infinite_sessions =
+                    Some(copilot_sdk::InfiniteSessionConfig::enabled());
+            }
 
             if let Some(provider) = cfg.provider {
                 session_config.provider = Some(copilot_sdk::ProviderConfig {
@@ -493,12 +498,13 @@ impl NodeLogic for CopilotDestroySessionNode {
 
         if let Some(cached) = cached
             && let Some(cached_session) = cached.as_any().downcast_ref::<CachedCopilotSession>()
-                && let Err(e) = cached_session.session.destroy().await {
-                    context.log_message(
-                        &format!("Warning: Failed to destroy session: {}", e),
-                        LogLevel::Warn,
-                    );
-                }
+            && let Err(e) = cached_session.session.destroy().await
+        {
+            context.log_message(
+                &format!("Warning: Failed to destroy session: {}", e),
+                LogLevel::Warn,
+            );
+        }
 
         context.cache.write().await.remove(&handle.cache_key);
         context.log_message("Session destroyed", LogLevel::Info);

@@ -1,9 +1,7 @@
-use flow_like::{
-    flow::{
-        execution::{LogLevel, context::ExecutionContext},
-        node::{Node, NodeLogic},
-        variable::VariableType,
-    },
+use flow_like::flow::{
+    execution::{LogLevel, context::ExecutionContext},
+    node::{Node, NodeLogic},
+    variable::VariableType,
 };
 use flow_like_types::{async_trait, json::json};
 

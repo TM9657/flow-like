@@ -71,8 +71,8 @@ pub async fn list_purchases(
 
     let limit = query.limit.min(100);
 
-    let mut query_builder = app_purchase::Entity::find()
-        .filter(app_purchase::Column::AppId.eq(&app_id));
+    let mut query_builder =
+        app_purchase::Entity::find().filter(app_purchase::Column::AppId.eq(&app_id));
 
     // Filter by status if provided
     if let Some(status_str) = &query.status {
@@ -89,10 +89,7 @@ pub async fn list_purchases(
         }
     }
 
-    let total = query_builder
-        .clone()
-        .count(&state.db)
-        .await?;
+    let total = query_builder.clone().count(&state.db).await?;
 
     let purchases: Vec<app_purchase::Model> = query_builder
         .order_by_desc(app_purchase::Column::CreatedAt)

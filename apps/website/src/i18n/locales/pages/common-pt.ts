@@ -72,7 +72,8 @@ export const ptCommon = {
 	"pricing.badge": "Preços simples e transparentes",
 	"pricing.title": "Comece grátis,",
 	"pricing.titleHighlight": "escale conforme cresce",
-	"pricing.description": "Sem licenças por usuário. Sem taxas ocultas. Implante em qualquer lugar — nuvem, on-premise ou air-gapped. Seja dono da sua infraestrutura de automação.",
+	"pricing.description":
+		"Sem licenças por usuário. Sem taxas ocultas. Implante em qualquer lugar — nuvem, on-premise ou air-gapped. Seja dono da sua infraestrutura de automação.",
 	"pricing.feature.unlimitedUsers": "Usuários ilimitados",
 	"pricing.feature.selfHostable": "Auto-hospedagem",
 	"pricing.feature.noVendorLockIn": "Sem vendor lock-in",
@@ -93,17 +94,22 @@ export const ptCommon = {
 	"pricing.tier.perYear": "/ano",
 	"pricing.tier.or": "ou",
 	"pricing.tier.yearlySavings": "Economize ~17%",
-	"pricing.tier.free.description": "Perfeito para experimentar Flow-Like e projetos pessoais",
-	"pricing.tier.premium.description": "Para indivíduos e pequenas equipes levando automação a sério",
-	"pricing.tier.pro.description": "Para equipes em crescimento e empresas que precisam de mais poder",
-	"pricing.tier.enterprise.description": "Para organizações com necessidades avançadas de segurança e conformidade",
+	"pricing.tier.free.description":
+		"Perfeito para experimentar Flow-Like e projetos pessoais",
+	"pricing.tier.premium.description":
+		"Para indivíduos e pequenas equipes levando automação a sério",
+	"pricing.tier.pro.description":
+		"Para equipes em crescimento e empresas que precisam de mais poder",
+	"pricing.tier.enterprise.description":
+		"Para organizações com necessidades avançadas de segurança e conformidade",
 	"pricing.tier.popular": "Mais popular",
 
 	// Pricing Studio Section
 	"pricing.studio.badge": "100% Grátis para sempre",
 	"pricing.studio.title": "Flow-Like Studio é",
 	"pricing.studio.titleHighlight": "completamente grátis",
-	"pricing.studio.description": "Crie, execute e automatize workflows localmente no seu desktop ou dispositivo móvel — sem necessidade de assinatura. Planos premium adicionam recursos na nuvem, não capacidades locais.",
+	"pricing.studio.description":
+		"Crie, execute e automatize workflows localmente no seu desktop ou dispositivo móvel — sem necessidade de assinatura. Planos premium adicionam recursos na nuvem, não capacidades locais.",
 	"pricing.studio.desktop": "App Desktop",
 	"pricing.studio.desktopPlatforms": "Windows, macOS e Linux",
 	"pricing.studio.mobile": "App Móvel",
@@ -115,7 +121,8 @@ export const ptCommon = {
 	"pricing.studio.visualBuilder": "Construtor Visual de Workflows",
 	"pricing.studio.visualBuilderDesc": "Arrastar e Soltar • Sem Código",
 	"pricing.studio.downloadCta": "Baixar Studio Grátis",
-	"pricing.studio.inAppNote": "Planos premium são comprados diretamente no app Studio — sem checkout no site",
+	"pricing.studio.inAppNote":
+		"Planos premium são comprados diretamente no app Studio — sem checkout no site",
 
 	// Pricing Features
 	"pricing.feature.projects.10": "10 projetos privados",
@@ -172,26 +179,36 @@ export const ptCommon = {
 	"pricing.faq.title": "Perguntas frequentes",
 	"pricing.faq.subtitle": "Tudo que você precisa saber sobre nossos preços",
 	"pricing.faq.q1": "O que acontece quando excedo os limites do meu plano?",
-	"pricing.faq.a1": "Notificaremos você quando estiver se aproximando dos limites. Você pode fazer upgrade a qualquer momento e não cortaremos seus workflows de repente. Para execuções na nuvem, uso adicional é cobrado por consumo.",
+	"pricing.faq.a1":
+		"Notificaremos você quando estiver se aproximando dos limites. Você pode fazer upgrade a qualquer momento e não cortaremos seus workflows de repente. Para execuções na nuvem, uso adicional é cobrado por consumo.",
 	"pricing.faq.q2": "Posso auto-hospedar o Flow-Like?",
-	"pricing.faq.a2": "Sim! Flow-Like é totalmente auto-hospedável. Você pode executá-lo em sua própria infraestrutura, on-premise ou em ambientes air-gapped. O app desktop funciona completamente offline.",
+	"pricing.faq.a2":
+		"Sim! Flow-Like é totalmente auto-hospedável. Você pode executá-lo em sua própria infraestrutura, on-premise ou em ambientes air-gapped. O app desktop funciona completamente offline.",
 	"pricing.faq.q3": "Há preços por usuário?",
-	"pricing.faq.a3": "Não. Acreditamos que automação deve ser acessível para toda sua organização. Todos os planos suportam usuários ilimitados. Você só paga com base no uso (recursos na nuvem), não por quantidade de funcionários.",
+	"pricing.faq.a3":
+		"Não. Acreditamos que automação deve ser acessível para toda sua organização. Todos os planos suportam usuários ilimitados. Você só paga com base no uso (recursos na nuvem), não por quantidade de funcionários.",
 	"pricing.faq.q4": "O que está incluído no acesso a modelos IA?",
-	"pricing.faq.a4": "O acesso a modelos IA cobre recursos como FlowPilot (nosso assistente IA), sugestões inteligentes de workflows e automação em linguagem natural através de nossos modelos hospedados.",
+	"pricing.faq.a4":
+		"O acesso a modelos IA cobre recursos como FlowPilot (nosso assistente IA), sugestões inteligentes de workflows e automação em linguagem natural através de nossos modelos hospedados.",
 	"pricing.faq.q5": "Oferecem descontos para startups ou ONGs?",
-	"pricing.faq.a5": "Sim! Oferecemos descontos significativos para ONGs registradas, instituições de ensino e startups em estágio inicial. Entre em contato em hello@flow-like.com para saber mais.",
+	"pricing.faq.a5":
+		"Sim! Oferecemos descontos significativos para ONGs registradas, instituições de ensino e startups em estágio inicial. Entre em contato em hello@flow-like.com para saber mais.",
 	"pricing.faq.q6": "Qual a diferença entre execução local e na nuvem?",
-	"pricing.faq.a6": "Execução local executa workflows em sua máquina — completamente grátis e ilimitada em todos os planos. Execução na nuvem executa workflows em nossa infraestrutura, permitindo execuções agendadas, webhooks e disponibilidade 24/7.",
+	"pricing.faq.a6":
+		"Execução local executa workflows em sua máquina — completamente grátis e ilimitada em todos os planos. Execução na nuvem executa workflows em nossa infraestrutura, permitindo execuções agendadas, webhooks e disponibilidade 24/7.",
 	"pricing.faq.q7": "Posso cancelar a qualquer momento?",
-	"pricing.faq.a7": "Absolutamente. Sem contratos, sem taxas de cancelamento. Se cancelar, você manterá acesso até o final do período de cobrança, depois fará downgrade automaticamente para Grátis.",
+	"pricing.faq.a7":
+		"Absolutamente. Sem contratos, sem taxas de cancelamento. Se cancelar, você manterá acesso até o final do período de cobrança, depois fará downgrade automaticamente para Grátis.",
 	"pricing.faq.q8": "E os requisitos de conformidade empresarial?",
-	"pricing.faq.a8": "Planos empresariais incluem documentação de conformidade SOC 2, acordos de processamento de dados GDPR, políticas de retenção personalizadas, logs de auditoria e integração SSO/SAML.",
+	"pricing.faq.a8":
+		"Planos empresariais incluem documentação de conformidade SOC 2, acordos de processamento de dados GDPR, políticas de retenção personalizadas, logs de auditoria e integração SSO/SAML.",
 
 	// Pricing CTA Section
 	"pricing.ctaSection.title": "Precisa de uma solução personalizada?",
-	"pricing.ctaSection.description": "Obtenha uma solução de automação completamente personalizada para seu negócio em apenas 24 horas. Projetaremos, construiremos e implantaremos um workflow pronto para produção adaptado às suas necessidades exatas.",
+	"pricing.ctaSection.description":
+		"Obtenha uma solução de automação completamente personalizada para seu negócio em apenas 24 horas. Projetaremos, construiremos e implantaremos um workflow pronto para produção adaptado às suas necessidades exatas.",
 	"pricing.ctaSection.24h": "Solução 24 horas",
 	"pricing.ctaSection.enterprise": "Contatar vendas empresariais",
-	"pricing.ctaSection.startingAt": "A partir de €1.999 · Propriedade completa do código · Implante em qualquer lugar",
+	"pricing.ctaSection.startingAt":
+		"A partir de €1.999 · Propriedade completa do código · Implante em qualquer lugar",
 };

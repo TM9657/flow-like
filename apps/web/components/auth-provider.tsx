@@ -1,12 +1,14 @@
 "use client";
 
 import { LoadingScreen, useBackend } from "@tm9657/flow-like-ui";
+import type { IProfile } from "@tm9657/flow-like-ui";
 import { Amplify } from "aws-amplify";
 import {
 	type AuthTokens,
 	type TokenProvider,
 	decodeJWT,
 } from "aws-amplify/auth";
+import { usePathname } from "next/navigation";
 import {
 	UserManager,
 	type UserManagerSettings,
@@ -14,11 +16,9 @@ import {
 } from "oidc-client-ts";
 import { useEffect, useState } from "react";
 import { AuthProvider, useAuth } from "react-oidc-context";
-import { usePathname } from "next/navigation";
 import { get } from "../lib/api";
-import { WebBackend } from "./web-provider";
-import type { IProfile } from "@tm9657/flow-like-ui";
 import { SignInRequired } from "./sign-in-required";
+import { WebBackend } from "./web-provider";
 
 const PUBLIC_PATHS = ["/thirdparty/callback"];
 
@@ -193,11 +193,22 @@ function AuthInner({ children }: Readonly<{ children: React.ReactNode }>) {
 			backend.pushAuthContext(auth);
 			setAuthPushed(true);
 		}
-	}, [auth?.isAuthenticated, auth?.isLoading, auth?.user?.id_token, auth?.activeNavigator, backend]);
+	}, [
+		auth?.isAuthenticated,
+		auth?.isLoading,
+		auth?.user?.id_token,
+		auth?.activeNavigator,
+		backend,
+	]);
 
 	// Fetch and push profile after authentication and auth push
 	useEffect(() => {
-		if (!authPushed || !auth?.isAuthenticated || !auth?.user?.access_token || !backend) {
+		if (
+			!authPushed ||
+			!auth?.isAuthenticated ||
+			!auth?.user?.access_token ||
+			!backend
+		) {
 			return;
 		}
 

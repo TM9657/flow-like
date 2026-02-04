@@ -13,11 +13,7 @@ import { memo, useCallback, useEffect, useState } from "react";
 
 import { Button } from "../ui/button";
 import { ScrollArea } from "../ui/scroll-area";
-import {
-	Tooltip,
-	TooltipContent,
-	TooltipTrigger,
-} from "../ui/tooltip";
+import { Tooltip, TooltipContent, TooltipTrigger } from "../ui/tooltip";
 
 import {
 	type IFlowPilotConversation,
@@ -94,18 +90,15 @@ export const HistoryPanel = memo(function HistoryPanel({
 		}
 	}, [isOpen, loadConversations]);
 
-	const handleDelete = useCallback(
-		async (e: React.MouseEvent, id: string) => {
-			e.stopPropagation();
-			try {
-				await deleteConversation(id);
-				setConversations((prev) => prev.filter((c) => c.id !== id));
-			} catch (error) {
-				console.error("Failed to delete conversation:", error);
-			}
-		},
-		[],
-	);
+	const handleDelete = useCallback(async (e: React.MouseEvent, id: string) => {
+		e.stopPropagation();
+		try {
+			await deleteConversation(id);
+			setConversations((prev) => prev.filter((c) => c.id !== id));
+		} catch (error) {
+			console.error("Failed to delete conversation:", error);
+		}
+	}, []);
 
 	if (!isOpen) return null;
 

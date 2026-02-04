@@ -1,9 +1,9 @@
 import { createId } from "@paralleldrive/cuid2";
 import type { Node } from "@xyflow/react";
 import { useCallback, useRef, useState } from "react";
-import { ICommentType, type IComment } from "../lib/schema/flow/board";
-import type { IGenericCommand } from "../lib/schema/flow/board/commands/generic-command";
 import { upsertCommentCommand } from "../lib/command/generic-command";
+import { type IComment, ICommentType } from "../lib/schema/flow/board";
+import type { IGenericCommand } from "../lib/schema/flow/board/commands/generic-command";
 import type { IBackendState } from "../state/backend-state";
 
 export interface MediaUploadResult {
@@ -230,7 +230,13 @@ export function useMediaUpload({
 				height: dimensions.height,
 			};
 		},
-		[appId, boardId, backend.storageState, addPlaceholderNode, updatePlaceholderProgress],
+		[
+			appId,
+			boardId,
+			backend.storageState,
+			addPlaceholderNode,
+			updatePlaceholderProgress,
+		],
 	);
 
 	const createMediaComment = useCallback(

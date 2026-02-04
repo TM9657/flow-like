@@ -1,9 +1,9 @@
 /// # ONNX Model Loader Nodes
 use crate::onnx::NodeOnnxSession;
 #[cfg(feature = "execute")]
-use crate::onnx::{Provider, SessionWithMeta, classification, detection};
-#[cfg(feature = "execute")]
 use crate::onnx::execution_providers::{get_ep_info, is_initialized};
+#[cfg(feature = "execute")]
+use crate::onnx::{Provider, SessionWithMeta, classification, detection};
 use flow_like::flow::{
     execution::context::ExecutionContext,
     node::{Node, NodeLogic},
@@ -56,7 +56,8 @@ pub fn determine_provider(session: &Session) -> Result<Provider> {
     } else {
         tracing::info!(
             "Model does not match known patterns, using Generic provider. Inputs: {:?}, Outputs: {:?}",
-            input_names, output_names
+            input_names,
+            output_names
         );
         Ok(Provider::Generic)
     }

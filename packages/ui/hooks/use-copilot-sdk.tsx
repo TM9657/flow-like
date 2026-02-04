@@ -1,12 +1,12 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { isTauri } from "../lib/platform";
 import type {
 	CopilotAuthStatus,
 	CopilotConnectionConfig,
 	CopilotModel,
 } from "../components/flowpilot/types";
+import { isTauri } from "../lib/platform";
 
 interface UseCopilotSDKResult {
 	/** Whether the Copilot SDK client is running */
@@ -109,8 +109,9 @@ export function useCopilotSDK(): UseCopilotSDKResult {
 
 		try {
 			const { invoke } = await import("@tauri-apps/api/core");
-			const result =
-				await invoke<CopilotAuthStatus>("copilot_sdk_get_auth_status");
+			const result = await invoke<CopilotAuthStatus>(
+				"copilot_sdk_get_auth_status",
+			);
 			setAuthStatus(result);
 		} catch (e) {
 			const errMsg = e instanceof Error ? e.message : String(e);

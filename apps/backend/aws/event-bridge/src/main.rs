@@ -43,8 +43,7 @@ async fn main() -> Result<(), Error> {
 async fn event_bridge_handler(
     event: LambdaEvent<CloudWatchEvent<EventDetail>>,
 ) -> Result<(), Error> {
-    let api_base_url =
-        env::var("API_BASE_URL").map_err(|_| Error::from("API_BASE_URL not set"))?;
+    let api_base_url = env::var("API_BASE_URL").map_err(|_| Error::from("API_BASE_URL not set"))?;
 
     let sink_jwt = get_sink_jwt()?;
 

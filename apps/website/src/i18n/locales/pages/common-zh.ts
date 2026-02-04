@@ -67,7 +67,8 @@ export const zhCommon = {
 	"pricing.badge": "简单透明的定价",
 	"pricing.title": "免费开始，",
 	"pricing.titleHighlight": "随需扩展",
-	"pricing.description": "无按用户收费。无隐藏费用。随处部署 — 云端、本地或离线环境。拥有您的自动化基础设施。",
+	"pricing.description":
+		"无按用户收费。无隐藏费用。随处部署 — 云端、本地或离线环境。拥有您的自动化基础设施。",
 	"pricing.feature.unlimitedUsers": "无限用户",
 	"pricing.feature.selfHostable": "可自托管",
 	"pricing.feature.noVendorLockIn": "无供应商锁定",
@@ -98,7 +99,8 @@ export const zhCommon = {
 	"pricing.studio.badge": "100% 永久免费",
 	"pricing.studio.title": "Flow-Like Studio",
 	"pricing.studio.titleHighlight": "完全免费",
-	"pricing.studio.description": "在您的桌面或移动设备上本地构建、运行和自动化工作流——无需订阅。高级计划增加云功能，而非本地功能。",
+	"pricing.studio.description":
+		"在您的桌面或移动设备上本地构建、运行和自动化工作流——无需订阅。高级计划增加云功能，而非本地功能。",
 	"pricing.studio.desktop": "桌面应用",
 	"pricing.studio.desktopPlatforms": "Windows、macOS 和 Linux",
 	"pricing.studio.mobile": "移动应用",
@@ -167,25 +169,34 @@ export const zhCommon = {
 	"pricing.faq.title": "常见问题",
 	"pricing.faq.subtitle": "关于定价您需要知道的一切",
 	"pricing.faq.q1": "超出计划限制会怎样？",
-	"pricing.faq.a1": "当您接近限制时我们会通知您。您可以随时升级，我们不会突然中断您的工作流。云端执行的额外用量按使用量计费。",
+	"pricing.faq.a1":
+		"当您接近限制时我们会通知您。您可以随时升级，我们不会突然中断您的工作流。云端执行的额外用量按使用量计费。",
 	"pricing.faq.q2": "我可以自托管 Flow-Like 吗？",
-	"pricing.faq.a2": "是的！Flow-Like 完全可自托管。您可以在自己的基础设施上运行，支持本地部署或离线环境。桌面应用完全离线运行 — 本地执行无需云端连接。",
+	"pricing.faq.a2":
+		"是的！Flow-Like 完全可自托管。您可以在自己的基础设施上运行，支持本地部署或离线环境。桌面应用完全离线运行 — 本地执行无需云端连接。",
 	"pricing.faq.q3": "有按用户收费吗？",
-	"pricing.faq.a3": "没有。我们相信自动化应该对整个组织开放。所有计划支持无限用户。您只需按使用量（云端功能）付费，而非按员工数量。",
+	"pricing.faq.a3":
+		"没有。我们相信自动化应该对整个组织开放。所有计划支持无限用户。您只需按使用量（云端功能）付费，而非按员工数量。",
 	"pricing.faq.q4": "AI模型访问包含什么？",
-	"pricing.faq.a4": "AI模型访问涵盖 FlowPilot（我们的AI助手）、智能工作流建议和通过托管模型的自然语言自动化等功能。",
+	"pricing.faq.a4":
+		"AI模型访问涵盖 FlowPilot（我们的AI助手）、智能工作流建议和通过托管模型的自然语言自动化等功能。",
 	"pricing.faq.q5": "有创业公司或非营利组织折扣吗？",
-	"pricing.faq.a5": "有！我们为注册的非营利组织、教育机构和早期创业公司提供大幅折扣。请通过 hello@flow-like.com 联系我们了解更多。",
+	"pricing.faq.a5":
+		"有！我们为注册的非营利组织、教育机构和早期创业公司提供大幅折扣。请通过 hello@flow-like.com 联系我们了解更多。",
 	"pricing.faq.q6": "本地执行和云端执行有什么区别？",
-	"pricing.faq.a6": "本地执行在您的机器上运行工作流 — 所有计划完全免费且无限制。云端执行在我们的基础设施上运行工作流，支持定时执行、Webhooks 和全天候可用性。",
+	"pricing.faq.a6":
+		"本地执行在您的机器上运行工作流 — 所有计划完全免费且无限制。云端执行在我们的基础设施上运行工作流，支持定时执行、Webhooks 和全天候可用性。",
 	"pricing.faq.q7": "可以随时取消吗？",
-	"pricing.faq.a7": "当然可以。没有合同，没有取消费用。如果您取消，将保留访问权限直到计费期结束，然后自动降级为免费版。",
+	"pricing.faq.a7":
+		"当然可以。没有合同，没有取消费用。如果您取消，将保留访问权限直到计费期结束，然后自动降级为免费版。",
 	"pricing.faq.q8": "企业合规要求怎么办？",
-	"pricing.faq.a8": "企业计划包含SOC 2合规文档、GDPR数据处理协议、自定义保留策略、审计日志和SSO/SAML集成。",
+	"pricing.faq.a8":
+		"企业计划包含SOC 2合规文档、GDPR数据处理协议、自定义保留策略、审计日志和SSO/SAML集成。",
 
 	// Pricing CTA Section
 	"pricing.ctaSection.title": "需要定制解决方案？",
-	"pricing.ctaSection.description": "在24小时内为您的业务获得完全定制的自动化解决方案。我们将设计、构建并部署一个适合您确切需求的生产就绪工作流。",
+	"pricing.ctaSection.description":
+		"在24小时内为您的业务获得完全定制的自动化解决方案。我们将设计、构建并部署一个适合您确切需求的生产就绪工作流。",
 	"pricing.ctaSection.24h": "24小时解决方案",
 	"pricing.ctaSection.enterprise": "联系企业销售",
 	"pricing.ctaSection.startingAt": "起价 €1,999 · 完整源代码所有权 · 随处部署",

@@ -1,29 +1,29 @@
-import type { SurfaceComponent } from "@tm9657/flow-like-ui/components/a2ui/types";
 import {
-	IConnectionMode,
 	type IBoard,
 	type IBoardState,
+	ICommentType,
+	IConnectionMode,
 	type IExecutionMode,
 	type IExecutionStage,
 	type IGenericCommand,
 	type IHub,
 	type IIntercomEvent,
+	type IJwks,
 	type ILog,
 	type ILogLevel,
 	type ILogMetadata,
 	type INode,
 	type IOAuthProvider,
+	type IRealtimeAccess,
 	type IRunContext,
 	type IRunPayload,
-	IVersionType,
-	IJwks,
-	IRealtimeAccess,
-	checkOAuthTokens,
-	ICommentType,
-	showProgressToast,
-	finishAllProgressToasts,
+	type IVersionType,
 	type ProgressToastData,
+	checkOAuthTokens,
+	finishAllProgressToasts,
+	showProgressToast,
 } from "@tm9657/flow-like-ui";
+import type { SurfaceComponent } from "@tm9657/flow-like-ui/components/a2ui/types";
 import type {
 	CopilotScope,
 	UIActionContext,
@@ -34,22 +34,33 @@ import type { IPrerunBoardResponse } from "@tm9657/flow-like-ui/state/backend-st
 import { toast } from "sonner";
 import { oauthConsentStore, oauthTokenStore } from "../oauth-db";
 import { oauthService } from "../oauth-service";
-import { apiDelete, apiGet, apiPatch, apiPost, apiPut, type WebBackendRef, getApiBaseUrl } from "./api-utils";
+import {
+	type WebBackendRef,
+	apiDelete,
+	apiGet,
+	apiPatch,
+	apiPost,
+	apiPut,
+	getApiBaseUrl,
+} from "./api-utils";
 
 // Hub configuration cache
 let hubCache: IHub | undefined;
 let hubCachePromise: Promise<IHub | undefined> | undefined;
 
-async function getHubConfig(profile?: { hub?: string }): Promise<IHub | undefined> {
+async function getHubConfig(profile?: { hub?: string }): Promise<
+	IHub | undefined
+> {
 	if (hubCache) return hubCache;
 	if (hubCachePromise) return hubCachePromise;
 
 	const hubUrl = profile?.hub;
 	if (!hubUrl) return undefined;
 
-	const url = hubUrl.startsWith("http://") || hubUrl.startsWith("https://")
-		? `${hubUrl}/api/v1`
-		: `https://${hubUrl}/api/v1`;
+	const url =
+		hubUrl.startsWith("http://") || hubUrl.startsWith("https://")
+			? `${hubUrl}/api/v1`
+			: `https://${hubUrl}/api/v1`;
 
 	hubCachePromise = fetch(url)
 		.then((res) => res.json() as Promise<IHub>)
@@ -100,10 +111,7 @@ export class WebBoardState implements IBoardState {
 
 	async getBoards(appId: string): Promise<IBoard[]> {
 		try {
-			return await apiGet<IBoard[]>(
-				`apps/${appId}/board`,
-				this.backend.auth,
-			);
+			return await apiGet<IBoard[]>(`apps/${appId}/board`, this.backend.auth);
 		} catch {
 			return [];
 		}
@@ -151,20 +159,18 @@ export class WebBoardState implements IBoardState {
 		const buildFullPath = (filename: string) =>
 			`apps/${appId}/upload/boards/${boardId}/${filename}`;
 
-		const prefixes = mediaComments.map((comment) => buildFullPath(comment.content));
+		const prefixes = mediaComments.map((comment) =>
+			buildFullPath(comment.content),
+		);
 
 		try {
-			const results = await apiPost<{ prefix: string; url?: string; error?: string }[]>(
-				`apps/${appId}/data/download`,
-				{ prefixes },
-				this.backend.auth,
-			);
+			const results = await apiPost<
+				{ prefix: string; url?: string; error?: string }[]
+			>(`apps/${appId}/data/download`, { prefixes }, this.backend.auth);
 
 			// Map presigned URLs back to comments
 			const urlMap = new Map(
-				results
-					.filter((r) => r.url)
-					.map((r) => [r.prefix, r.url as string]),
+				results.filter((r) => r.url).map((r) => [r.prefix, r.url as string]),
 			);
 
 			for (const comment of mediaComments) {
@@ -189,7 +195,9 @@ export class WebBoardState implements IBoardState {
 					buildFullPath(comment.content),
 				);
 
-				const layerResults = await apiPost<{ prefix: string; url?: string; error?: string }[]>(
+				const layerResults = await apiPost<
+					{ prefix: string; url?: string; error?: string }[]
+				>(
 					`apps/${appId}/data/download`,
 					{ prefixes: layerPrefixes },
 					this.backend.auth,
@@ -214,7 +222,10 @@ export class WebBoardState implements IBoardState {
 		}
 	}
 
-	async getRealtimeAccess(appId: string, boardId: string): Promise<IRealtimeAccess> {
+	async getRealtimeAccess(
+		appId: string,
+		boardId: string,
+	): Promise<IRealtimeAccess> {
 		return apiPost<IRealtimeAccess>(
 			`apps/${appId}/board/${boardId}/realtime`,
 			undefined,
@@ -293,7 +304,8 @@ export class WebBoardState implements IBoardState {
 		});
 
 		if (!skipConsentCheck) {
-			const consentedIds = await oauthConsentStore.getConsentedProviderIds(appId);
+			const consentedIds =
+				await oauthConsentStore.getConsentedProviderIds(appId);
 			const providersNeedingConsent: IOAuthProvider[] = [];
 
 			// Add providers that are missing tokens
@@ -333,9 +345,10 @@ export class WebBoardState implements IBoardState {
 		}
 
 		// Collect OAuth tokens to pass to execution
-		const oauthTokens = Object.keys(oauthResult.tokens).length > 0
-			? oauthResult.tokens
-			: undefined;
+		const oauthTokens =
+			Object.keys(oauthResult.tokens).length > 0
+				? oauthResult.tokens
+				: undefined;
 
 		// Web mode always executes remotely
 		return this.executeBoardRemote(
@@ -356,12 +369,15 @@ export class WebBoardState implements IBoardState {
 		streamState?: boolean,
 		eventId?: (id: string) => void,
 		cb?: (event: IIntercomEvent[]) => void,
-		oauthTokens?: Record<string, {
-			access_token: string;
-			refresh_token?: string;
-			expires_at?: number;
-			token_type?: string;
-		}>,
+		oauthTokens?: Record<
+			string,
+			{
+				access_token: string;
+				refresh_token?: string;
+				expires_at?: number;
+				token_type?: string;
+			}
+		>,
 	): Promise<ILogMetadata | undefined> {
 		const baseUrl = getApiBaseUrl();
 		const url = `${baseUrl}/api/v1/apps/${appId}/board/${boardId}/invoke`;
@@ -370,7 +386,8 @@ export class WebBoardState implements IBoardState {
 			"Content-Type": "application/json",
 		};
 		if (this.backend.auth?.user?.access_token) {
-			headers["Authorization"] = `Bearer ${this.backend.auth.user.access_token}`;
+			headers["Authorization"] =
+				`Bearer ${this.backend.auth.user.access_token}`;
 		}
 
 		console.log("[OAuth] Sending execution with tokens:", {
@@ -438,7 +455,11 @@ export class WebBoardState implements IBoardState {
 							const event = JSON.parse(eventData) as IIntercomEvent;
 
 							// Handle run_initiated event to get run ID
-							if (!foundRunId && eventId && event.event_type === "run_initiated") {
+							if (
+								!foundRunId &&
+								eventId &&
+								event.event_type === "run_initiated"
+							) {
 								const runId = event.payload?.run_id;
 								if (runId) {
 									eventId(runId);
@@ -460,8 +481,11 @@ export class WebBoardState implements IBoardState {
 							if (cb) cb([event]);
 
 							// Check for terminal events
-							if (eventName === "done" || eventName === "completed" ||
-								event.event_type === "completed") {
+							if (
+								eventName === "done" ||
+								eventName === "completed" ||
+								event.event_type === "completed"
+							) {
 								executionFinished = true;
 								finishAllProgressToasts(true);
 								break;
@@ -666,7 +690,8 @@ export class WebBoardState implements IBoardState {
 			"Content-Type": "application/json",
 		};
 		if (this.backend.auth?.user?.access_token) {
-			headers["Authorization"] = `Bearer ${this.backend.auth.user.access_token}`;
+			headers["Authorization"] =
+				`Bearer ${this.backend.auth.user.access_token}`;
 		}
 
 		const response = await fetch(url, {
@@ -722,13 +747,15 @@ export class WebBoardState implements IBoardState {
 				}
 			}
 
-			return result ?? {
-				message: "",
-				commands: [],
-				components: [],
-				suggestions: [],
-				active_scope: "Board" as const
-			};
+			return (
+				result ?? {
+					message: "",
+					commands: [],
+					components: [],
+					suggestions: [],
+					active_scope: "Board" as const,
+				}
+			);
 		}
 
 		return response.json();

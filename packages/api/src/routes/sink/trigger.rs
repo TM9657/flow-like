@@ -43,9 +43,10 @@ fn is_telegram_ip(ip: &std::net::IpAddr) -> bool {
 
     for range in TELEGRAM_IP_RANGES {
         if let Ok(network) = range.parse::<IpNetwork>()
-            && network.contains(std::net::IpAddr::V4(*ipv4)) {
-                return true;
-            }
+            && network.contains(std::net::IpAddr::V4(*ipv4))
+        {
+            return true;
+        }
     }
     false
 }
@@ -61,7 +62,10 @@ fn merge_payloads(
         (None, None) => None,
         (Some(base), None) => Some(base),
         (None, Some(over)) => Some(over),
-        (Some(serde_json::Value::Object(mut base_map)), Some(serde_json::Value::Object(over_map))) => {
+        (
+            Some(serde_json::Value::Object(mut base_map)),
+            Some(serde_json::Value::Object(over_map)),
+        ) => {
             // Deep merge objects: override values take precedence
             for (key, value) in over_map {
                 base_map.insert(key, value);
@@ -193,7 +197,7 @@ pub async fn trigger_event(
         credentials_json,
         jwt: executor_jwt,
         callback_url,
-        token, // PAT from sink (if configured)
+        token,        // PAT from sink (if configured)
         oauth_tokens, // OAuth tokens from sink (if configured)
         stream_state: false,
         runtime_variables: None,
@@ -425,7 +429,7 @@ pub async fn http_trigger(
         credentials_json,
         jwt: executor_jwt,
         callback_url,
-        token, // PAT from sink (if configured)
+        token,        // PAT from sink (if configured)
         oauth_tokens, // OAuth tokens from sink (if configured)
         stream_state: false,
         runtime_variables: None,
@@ -507,7 +511,10 @@ pub struct TelegramQueryParams {
 
 /// POST /sink/trigger/telegram/{event_id}
 /// Telegram webhook endpoint - async execution with secret token & IP verification
-#[tracing::instrument(name = "POST /sink/trigger/telegram/{event_id}", skip(state, headers, body, connect_info))]
+#[tracing::instrument(
+    name = "POST /sink/trigger/telegram/{event_id}",
+    skip(state, headers, body, connect_info)
+)]
 pub async fn telegram_trigger(
     State(state): State<AppState>,
     Path(event_id): Path<String>,
@@ -586,7 +593,10 @@ pub async fn telegram_trigger(
         match provided_secret {
             Some(token) if &token == expected_secret => {}
             _ => {
-                tracing::warn!("Invalid or missing Telegram secret token for event {}", event_id);
+                tracing::warn!(
+                    "Invalid or missing Telegram secret token for event {}",
+                    event_id
+                );
                 return Ok((
                     StatusCode::UNAUTHORIZED,
                     Json(TriggerResponse {
@@ -699,7 +709,7 @@ pub async fn telegram_trigger(
         credentials_json,
         jwt: executor_jwt,
         callback_url,
-        token, // PAT from sink (if configured)
+        token,        // PAT from sink (if configured)
         oauth_tokens, // OAuth tokens from sink (if configured)
         stream_state: false,
         runtime_variables: None,
@@ -812,7 +822,10 @@ fn verify_discord_signature(
 /// POST /sink/trigger/discord/{event_id}
 /// Discord interactions webhook endpoint - async execution with Ed25519 signature verification
 /// Discord requires responding to PING interactions with PONG, and must respond within 3 seconds
-#[tracing::instrument(name = "POST /sink/trigger/discord/{event_id}", skip(state, headers, body))]
+#[tracing::instrument(
+    name = "POST /sink/trigger/discord/{event_id}",
+    skip(state, headers, body)
+)]
 pub async fn discord_trigger(
     State(state): State<AppState>,
     Path(event_id): Path<String>,
@@ -873,9 +886,12 @@ pub async fn discord_trigger(
         // Skip verification in development mode
         let api_base_url =
             std::env::var("API_BASE_URL").unwrap_or_else(|_| "http://localhost:8080".to_string());
-        let is_development = api_base_url.contains("localhost") || api_base_url.contains("127.0.0.1");
+        let is_development =
+            api_base_url.contains("localhost") || api_base_url.contains("127.0.0.1");
 
-        if !is_development && !verify_discord_signature(public_key, signature, timestamp, &body_bytes) {
+        if !is_development
+            && !verify_discord_signature(public_key, signature, timestamp, &body_bytes)
+        {
             tracing::warn!("Invalid Discord signature for event {}", event_id);
             return Ok((
                 StatusCode::UNAUTHORIZED,
@@ -894,7 +910,10 @@ pub async fn discord_trigger(
     })?;
 
     // Check interaction type
-    let interaction_type = interaction.get("type").and_then(|t| t.as_u64()).unwrap_or(0);
+    let interaction_type = interaction
+        .get("type")
+        .and_then(|t| t.as_u64())
+        .unwrap_or(0);
 
     // Type 1 = PING - must respond with PONG immediately
     if interaction_type == 1 {
@@ -984,7 +1003,7 @@ pub async fn discord_trigger(
         credentials_json,
         jwt: executor_jwt,
         callback_url,
-        token, // PAT from sink (if configured)
+        token,        // PAT from sink (if configured)
         oauth_tokens, // OAuth tokens from sink (if configured)
         stream_state: false,
         runtime_variables: None,
@@ -1089,9 +1108,8 @@ pub struct ServiceTriggerResponse {
 
 /// Validate a sink trigger JWT and extract claims (without DB check)
 fn validate_sink_trigger_jwt(token: &str) -> Result<SinkTriggerClaims, ApiError> {
-    let secret = std::env::var("SINK_SECRET").map_err(|_| {
-        ApiError::internal_error(anyhow!("SINK_SECRET not configured"))
-    })?;
+    let secret = std::env::var("SINK_SECRET")
+        .map_err(|_| ApiError::internal_error(anyhow!("SINK_SECRET not configured")))?;
 
     let validation = jsonwebtoken::Validation::new(jsonwebtoken::Algorithm::HS256);
     let key = jsonwebtoken::DecodingKey::from_secret(secret.as_bytes());
@@ -1172,10 +1190,11 @@ pub async fn service_trigger(
 
     // Check if token has been revoked (if jti is present)
     if let Some(ref jti) = claims.jti
-        && is_token_revoked(&state.db, jti).await? {
-            tracing::warn!(jti = %jti, "Attempted use of revoked sink token");
-            return Err(ApiError::unauthorized("Token has been revoked"));
-        }
+        && is_token_revoked(&state.db, jti).await?
+    {
+        tracing::warn!(jti = %jti, "Attempted use of revoked sink token");
+        return Err(ApiError::unauthorized("Token has been revoked"));
+    }
 
     // Check if this JWT is allowed to trigger this sink type
     if !claims.sink_types.contains(&request.sink_type) {
@@ -1198,7 +1217,10 @@ pub async fn service_trigger(
         .await
         .map_err(|e| ApiError::internal_error(anyhow!("Database error: {}", e)))?
         .ok_or_else(|| {
-            ApiError::not_found(format!("No active sink found for event {}", request.event_id))
+            ApiError::not_found(format!(
+                "No active sink found for event {}",
+                request.event_id
+            ))
         })?;
 
     // Verify sink type matches
@@ -1217,12 +1239,13 @@ pub async fn service_trigger(
 
     // Check app_id restriction if present in token
     if let Some(ref allowed_apps) = claims.app_ids
-        && !allowed_apps.contains(&sink.app_id) {
-            return Err(ApiError::forbidden(format!(
-                "Token not authorized for app: {}",
-                sink.app_id
-            )));
-        }
+        && !allowed_apps.contains(&sink.app_id)
+    {
+        return Err(ApiError::forbidden(format!(
+            "Token not authorized for app: {}",
+            sink.app_id
+        )));
+    }
 
     // Get the event to access its config for additional payload
     let event = get_event_from_db(&state.db, &request.event_id)
@@ -1376,7 +1399,9 @@ pub async fn list_sink_configs(
     let claims = validate_sink_trigger_jwt(token)?;
 
     // Only allow tokens with access to the requested sink type
-    if !claims.sink_types.contains(&query.sink_type) && !claims.sink_types.contains(&"*".to_string()) {
+    if !claims.sink_types.contains(&query.sink_type)
+        && !claims.sink_types.contains(&"*".to_string())
+    {
         return Err(ApiError::forbidden(format!(
             "Token not authorized for sink type: {}",
             query.sink_type
@@ -1401,9 +1426,7 @@ pub async fn list_sink_configs(
 
     let event_configs: std::collections::HashMap<String, serde_json::Value> = events
         .into_iter()
-        .filter_map(|e| {
-            e.config.map(|c| (e.id, c))
-        })
+        .filter_map(|e| e.config.map(|c| (e.id, c)))
         .collect();
 
     let configs: Vec<SinkConfigInfo> = sinks

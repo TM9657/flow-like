@@ -2,8 +2,8 @@
 
 import type { SlateElementProps } from "platejs";
 
-import { SlateElement } from "platejs";
 import { User } from "lucide-react";
+import { SlateElement } from "platejs";
 
 export interface TUserMentionElement {
 	type: "user_mention";

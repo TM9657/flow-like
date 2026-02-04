@@ -21,7 +21,6 @@ mod management;
 pub mod service;
 mod trigger;
 
-
 pub fn routes() -> Router<AppState> {
     Router::new()
         // List all active sinks for apps user has access to
@@ -40,7 +39,10 @@ pub fn routes() -> Router<AppState> {
         .route("/configs", get(trigger::list_sink_configs))
         // HTTP sink trigger - matches any method and path after app_id
         .route("/trigger/http/{app_id}/{*path}", get(trigger::http_trigger))
-        .route("/trigger/http/{app_id}/{*path}", post(trigger::http_trigger))
+        .route(
+            "/trigger/http/{app_id}/{*path}",
+            post(trigger::http_trigger),
+        )
         .route(
             "/trigger/http/{app_id}/{*path}",
             patch(trigger::http_trigger),

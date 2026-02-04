@@ -112,11 +112,7 @@ impl NodeLogic for HasPermissionNode {
                     Some(uc) => {
                         // Check if user has the permission
                         // Admin (bit 1) and Owner (bit 0) have all permissions
-                        let user_perms = uc
-                            .role
-                            .as_ref()
-                            .map(|r| r.permissions)
-                            .unwrap_or(0);
+                        let user_perms = uc.role.as_ref().map(|r| r.permissions).unwrap_or(0);
 
                         let is_admin = (user_perms & 0b10) != 0; // Admin bit
                         let is_owner = (user_perms & 0b01) != 0; // Owner bit

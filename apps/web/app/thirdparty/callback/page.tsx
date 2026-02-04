@@ -22,9 +22,7 @@ function ThirdpartyCallbackContent() {
 				const idToken = searchParams.get("id_token");
 
 				if (errorParam) {
-					setError(
-						`Authorization failed: ${errorDescription || errorParam}`,
-					);
+					setError(`Authorization failed: ${errorDescription || errorParam}`);
 					setProcessing(false);
 					return;
 				}

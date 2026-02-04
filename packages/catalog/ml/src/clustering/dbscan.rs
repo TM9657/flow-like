@@ -205,7 +205,9 @@ impl NodeLogic for FitDbscanNode {
             LogLevel::Info,
         );
 
-        context.set_pin_value("n_clusters", json!(n_clusters)).await?;
+        context
+            .set_pin_value("n_clusters", json!(n_clusters))
+            .await?;
         context.set_pin_value("n_noise", json!(noise_count)).await?;
         context.activate_exec_pin("exec_out").await?;
         Ok(())

@@ -793,9 +793,10 @@ fn count_nonempty_in_rect(grid: &[Vec<String>], rect: &Rect) -> usize {
         if let Some(row) = grid.get(r) {
             for c in c0..=c1 {
                 if let Some(cell) = row.get(c)
-                    && !cell.trim().is_empty() {
-                        n += 1;
-                    }
+                    && !cell.trim().is_empty()
+                {
+                    n += 1;
+                }
             }
         }
     }

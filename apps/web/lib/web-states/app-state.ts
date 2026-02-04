@@ -11,7 +11,14 @@ import type {
 import { IExecutionStage, ILogLevel } from "@tm9657/flow-like-ui";
 import type { IAppSearchSort } from "@tm9657/flow-like-ui/lib/schema/app/app-search-query";
 import type { IMediaItem } from "@tm9657/flow-like-ui/state/backend-state/app-state";
-import { apiDelete, apiGet, apiPatch, apiPost, apiPut, type WebBackendRef } from "./api-utils";
+import {
+	type WebBackendRef,
+	apiDelete,
+	apiGet,
+	apiPatch,
+	apiPost,
+	apiPut,
+} from "./api-utils";
 
 export class WebAppState implements IAppState {
 	constructor(private readonly backend: WebBackendRef) {}
@@ -34,7 +41,8 @@ export class WebAppState implements IAppState {
 			`apps/${app.id}/board/${boardId}`,
 			{
 				name: template?.name ?? "Initial Board",
-				description: template?.description ?? "A blank canvas ready for your ideas",
+				description:
+					template?.description ?? "A blank canvas ready for your ideas",
 				log_level: template?.log_level ?? ILogLevel.Debug,
 				stage: IExecutionStage.Dev,
 				execution_mode: template?.execution_mode,
@@ -159,7 +167,10 @@ export class WebAppState implements IAppState {
 		}
 	}
 
-	async changeAppVisibility(appId: string, visibility: IAppVisibility): Promise<void> {
+	async changeAppVisibility(
+		appId: string,
+		visibility: IAppVisibility,
+	): Promise<void> {
 		await apiPatch(
 			`apps/${appId}/visibility`,
 			{ visibility },
@@ -168,11 +179,7 @@ export class WebAppState implements IAppState {
 	}
 
 	async requestJoinApp(appId: string, comment?: string): Promise<void> {
-		await apiPut(
-			`apps/${appId}/team/queue`,
-			{ comment },
-			this.backend.auth,
-		);
+		await apiPut(`apps/${appId}/team/queue`, { comment }, this.backend.auth);
 	}
 
 	async purchaseApp(appId: string): Promise<IPurchaseResponse> {

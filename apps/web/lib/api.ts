@@ -3,7 +3,8 @@ import type { AuthContextProps } from "react-oidc-context";
 
 function constructUrl(profile: IProfile, path: string): string {
 	// Use profile.hub if available, then NEXT_PUBLIC_API_URL as fallback, then default
-	let baseUrl = profile.hub || process.env.NEXT_PUBLIC_API_URL || "api.flow-like.com";
+	let baseUrl =
+		profile.hub || process.env.NEXT_PUBLIC_API_URL || "api.flow-like.com";
 	if (!baseUrl.endsWith("/")) {
 		baseUrl += "/";
 	}

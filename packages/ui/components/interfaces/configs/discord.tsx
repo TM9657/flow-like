@@ -244,7 +244,9 @@ export function DiscordConfig({
 								<Cloud className="h-4 w-4" />
 								<span>Interactions Webhook Setup</span>
 								{supportsRemote && remoteWebhookUrl && (
-									<Badge variant="default" className="ml-2">Remote Available</Badge>
+									<Badge variant="default" className="ml-2">
+										Remote Available
+									</Badge>
 								)}
 							</div>
 						</AccordionTrigger>
@@ -269,7 +271,9 @@ export function DiscordConfig({
 												<Input
 													type={showPublicKey ? "text" : "password"}
 													value={publicKey}
-													onChange={(e) => setValue("webhook_secret", e.target.value)}
+													onChange={(e) =>
+														setValue("webhook_secret", e.target.value)
+													}
 													placeholder="Discord application public key"
 													disabled={!isEditing}
 													className="font-mono text-xs"
@@ -284,7 +288,8 @@ export function DiscordConfig({
 												</Button>
 											</div>
 											<p className="text-xs text-muted-foreground">
-												Find this in your Discord Developer Portal under General Information → Public Key
+												Find this in your Discord Developer Portal under General
+												Information → Public Key
 											</p>
 										</div>
 
@@ -300,7 +305,9 @@ export function DiscordConfig({
 													variant="ghost"
 													size="sm"
 													className="absolute right-1 top-1 h-8"
-													onClick={() => navigator.clipboard.writeText(remoteWebhookUrl)}
+													onClick={() =>
+														navigator.clipboard.writeText(remoteWebhookUrl)
+													}
 												>
 													Copy
 												</Button>
@@ -312,15 +319,38 @@ export function DiscordConfig({
 											<AlertTitle>Setup Instructions</AlertTitle>
 											<AlertDescription className="space-y-3">
 												<ol className="text-xs list-decimal list-inside space-y-2">
-													<li>Go to the <a href="https://discord.com/developers/applications" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">Discord Developer Portal</a></li>
+													<li>
+														Go to the{" "}
+														<a
+															href="https://discord.com/developers/applications"
+															target="_blank"
+															rel="noopener noreferrer"
+															className="text-primary hover:underline"
+														>
+															Discord Developer Portal
+														</a>
+													</li>
 													<li>Select your application</li>
-													<li>Copy the <strong>Public Key</strong> from General Information and paste it above</li>
-													<li>Go to General Information → Interactions Endpoint URL</li>
-													<li>Paste the Interactions Endpoint URL shown above</li>
-													<li>Discord will verify the endpoint - make sure the sink is active</li>
+													<li>
+														Copy the <strong>Public Key</strong> from General
+														Information and paste it above
+													</li>
+													<li>
+														Go to General Information → Interactions Endpoint
+														URL
+													</li>
+													<li>
+														Paste the Interactions Endpoint URL shown above
+													</li>
+													<li>
+														Discord will verify the endpoint - make sure the
+														sink is active
+													</li>
 												</ol>
 												<p className="text-xs text-muted-foreground mt-2">
-													<strong>Note:</strong> Discord verifies signatures using Ed25519. The public key is used to verify incoming webhook requests.
+													<strong>Note:</strong> Discord verifies signatures
+													using Ed25519. The public key is used to verify
+													incoming webhook requests.
 												</p>
 											</AlertDescription>
 										</Alert>
@@ -330,11 +360,17 @@ export function DiscordConfig({
 											<AlertTitle>Local Setup (Gateway Mode)</AlertTitle>
 											<AlertDescription className="space-y-3">
 												<p className="text-xs">
-													When running locally (desktop app), the bot connects via <strong>Discord Gateway</strong> (WebSocket) instead of webhooks.
-													No Interactions Endpoint URL setup is required - the bot will automatically connect when the event is activated.
+													When running locally (desktop app), the bot connects
+													via <strong>Discord Gateway</strong> (WebSocket)
+													instead of webhooks. No Interactions Endpoint URL
+													setup is required - the bot will automatically connect
+													when the event is activated.
 												</p>
 												<p className="text-xs">
-													<strong>Note:</strong> If you previously set an Interactions Endpoint URL in the Developer Portal, you can leave it - the local bot will use Gateway connection regardless.
+													<strong>Note:</strong> If you previously set an
+													Interactions Endpoint URL in the Developer Portal, you
+													can leave it - the local bot will use Gateway
+													connection regardless.
 												</p>
 											</AlertDescription>
 										</Alert>
@@ -345,11 +381,14 @@ export function DiscordConfig({
 									<AlertTitle>Local Setup (Gateway Mode)</AlertTitle>
 									<AlertDescription className="space-y-3">
 										<p className="text-xs">
-											The bot uses <strong>Discord Gateway</strong> (WebSocket) mode when running locally.
-											No webhook setup is required - the bot will automatically connect when the event is activated.
+											The bot uses <strong>Discord Gateway</strong> (WebSocket)
+											mode when running locally. No webhook setup is required -
+											the bot will automatically connect when the event is
+											activated.
 										</p>
 										<p className="text-xs text-muted-foreground">
-											Remote webhook mode is not available for this hub configuration.
+											Remote webhook mode is not available for this hub
+											configuration.
 										</p>
 									</AlertDescription>
 								</Alert>

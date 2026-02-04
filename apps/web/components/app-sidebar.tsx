@@ -54,7 +54,6 @@ import {
 	useInvoke,
 	useSidebar,
 } from "@tm9657/flow-like-ui";
-import type { ISettingsProfile } from "@tm9657/flow-like-ui/types";
 import {
 	BadgeCheck,
 	BellIcon,
@@ -63,7 +62,6 @@ import {
 	Check,
 	ChevronRight,
 	ChevronsUpDown,
-	Code2Icon,
 	CreditCard,
 	Edit3Icon,
 	ExternalLinkIcon,
@@ -268,7 +266,11 @@ export function AppSidebar({
 				<MobileHeaderProvider>
 					<MobileHeader />
 					<SidebarInset className="relative flex flex-col flex-1 min-h-0 h-full overflow-hidden">
-						<FlowBackground intensity="subtle" interactive className="flex flex-col flex-1 min-h-0">
+						<FlowBackground
+							intensity="subtle"
+							interactive
+							className="flex flex-col flex-1 min-h-0"
+						>
 							{children}
 						</FlowBackground>
 					</SidebarInset>
@@ -463,32 +465,35 @@ function Profiles() {
 
 	const profiles = allProfiles.data ?? [];
 
-	const handleProfileChange = useCallback(async (id: string) => {
-		// Save selected profile ID to localStorage
-		if (typeof window !== "undefined") {
-			localStorage.setItem("flow-like-profile-id", id);
-		}
-		await Promise.allSettled([
-			invalidate(backend.userState.getProfile, []),
-			invalidate(backend.userState.getSettingsProfile, []),
-			invalidate(backend.appState.getApps, []),
-			invalidate(backend.bitState.searchBits, [
-				{
-					bit_types: [
-						IBitTypes.Llm,
-						IBitTypes.Vlm,
-						IBitTypes.Embedding,
-						IBitTypes.ImageEmbedding,
-					],
-				},
-			]),
-			invalidate(backend.bitState.searchBits, [
-				{
-					bit_types: [IBitTypes.Template],
-				},
-			]),
-		]);
-	}, [invalidate, backend]);
+	const handleProfileChange = useCallback(
+		async (id: string) => {
+			// Save selected profile ID to localStorage
+			if (typeof window !== "undefined") {
+				localStorage.setItem("flow-like-profile-id", id);
+			}
+			await Promise.allSettled([
+				invalidate(backend.userState.getProfile, []),
+				invalidate(backend.userState.getSettingsProfile, []),
+				invalidate(backend.appState.getApps, []),
+				invalidate(backend.bitState.searchBits, [
+					{
+						bit_types: [
+							IBitTypes.Llm,
+							IBitTypes.Vlm,
+							IBitTypes.Embedding,
+							IBitTypes.ImageEmbedding,
+						],
+					},
+				]),
+				invalidate(backend.bitState.searchBits, [
+					{
+						bit_types: [IBitTypes.Template],
+					},
+				]),
+			]);
+		},
+		[invalidate, backend],
+	);
 
 	const handleCreateProfile = useCallback(async () => {
 		if (!newProfileName.trim() || !currentProfile.data) return;
@@ -496,7 +501,10 @@ function Profiles() {
 		setIsCreating(true);
 		try {
 			const newProfileId = createId();
-			const hubUrl = currentProfile.data.hub_profile.hub || process.env.NEXT_PUBLIC_API_URL || "https://api.flow-like.com";
+			const hubUrl =
+				currentProfile.data.hub_profile.hub ||
+				process.env.NEXT_PUBLIC_API_URL ||
+				"https://api.flow-like.com";
 
 			const response = await fetch(
 				`${process.env.NEXT_PUBLIC_API_URL || "https://api.flow-like.com"}/api/v1/profile/${newProfileId}`,
@@ -514,7 +522,7 @@ function Profiles() {
 						hub: hubUrl,
 						hubs: [hubUrl],
 					}),
-				}
+				},
 			);
 
 			if (response.ok) {
@@ -538,7 +546,14 @@ function Profiles() {
 		} finally {
 			setIsCreating(false);
 		}
-	}, [newProfileName, newProfileDescription, currentProfile.data, auth, invalidate, backend]);
+	}, [
+		newProfileName,
+		newProfileDescription,
+		currentProfile.data,
+		auth,
+		invalidate,
+		backend,
+	]);
 
 	return (
 		<SidebarMenu>
@@ -589,40 +604,44 @@ function Profiles() {
 							Profile
 						</DropdownMenuLabel>
 						{profiles
-							.filter((profile) => profile.hub_profile.id && profile.hub_profile.name)
+							.filter(
+								(profile) => profile.hub_profile.id && profile.hub_profile.name,
+							)
 							.map((profile, index) => {
-							const isCurrentProfile = profile.hub_profile.id === currentProfile.data?.hub_profile.id;
-							return (
-								<DropdownMenuItem
-									key={profile.hub_profile.id}
-									onClick={async () => {
-										if (profile.hub_profile.id)
-											handleProfileChange(profile.hub_profile.id);
-									}}
-									className="gap-4 p-2"
-								>
-									<div className="flex size-6 items-center justify-center rounded-sm border">
-										<Avatar className="h-8 w-8 rounded-sm">
-											<AvatarImage
-												className="rounded-sm w-8 h-8"
-												src={
-													profile.hub_profile.icon ??
-													"/thumbnail-placeholder.webp"
-												}
-											/>
-											<AvatarImage
-												className="rounded-sm w-8 h-8"
-												src="/app-logo.webp"
-											/>
-											<AvatarFallback>NA</AvatarFallback>
-										</Avatar>
-									</div>
-									{profile.hub_profile.name || "Unnamed Profile"}
-									{isCurrentProfile && <Check className="ml-auto size-4" />}
-									<DropdownMenuShortcut>⌘{index + 1}</DropdownMenuShortcut>
-								</DropdownMenuItem>
-							);
-						})}
+								const isCurrentProfile =
+									profile.hub_profile.id ===
+									currentProfile.data?.hub_profile.id;
+								return (
+									<DropdownMenuItem
+										key={profile.hub_profile.id}
+										onClick={async () => {
+											if (profile.hub_profile.id)
+												handleProfileChange(profile.hub_profile.id);
+										}}
+										className="gap-4 p-2"
+									>
+										<div className="flex size-6 items-center justify-center rounded-sm border">
+											<Avatar className="h-8 w-8 rounded-sm">
+												<AvatarImage
+													className="rounded-sm w-8 h-8"
+													src={
+														profile.hub_profile.icon ??
+														"/thumbnail-placeholder.webp"
+													}
+												/>
+												<AvatarImage
+													className="rounded-sm w-8 h-8"
+													src="/app-logo.webp"
+												/>
+												<AvatarFallback>NA</AvatarFallback>
+											</Avatar>
+										</div>
+										{profile.hub_profile.name || "Unnamed Profile"}
+										{isCurrentProfile && <Check className="ml-auto size-4" />}
+										<DropdownMenuShortcut>⌘{index + 1}</DropdownMenuShortcut>
+									</DropdownMenuItem>
+								);
+							})}
 						<DropdownMenuSeparator />
 						<Dialog open={createDialogOpen} onOpenChange={setCreateDialogOpen}>
 							<DialogTrigger asChild>
@@ -769,7 +788,7 @@ function NavMain({
 															window.open(
 																item.url,
 																"_blank",
-																"noopener,noreferrer"
+																"noopener,noreferrer",
 															);
 														} catch (error) {
 															console.error(
@@ -1055,7 +1074,11 @@ export function NavUser({
 													auth,
 												);
 
-												window.open(urlRequest.url, "_blank", "noopener,noreferrer");
+												window.open(
+													urlRequest.url,
+													"_blank",
+													"noopener,noreferrer",
+												);
 											}}
 										>
 											<CreditCard className="size-4" />

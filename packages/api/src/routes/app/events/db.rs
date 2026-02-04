@@ -291,7 +291,7 @@ pub async fn sync_event_with_sink_tokens(
             app_id: app_id.to_string(),
             sink_type: sink_type.to_string(),
             path: event.route.clone(),
-            auth_token: None, // Auth token is set separately
+            auth_token: None,     // Auth token is set separately
             webhook_secret: None, // Webhook secret is set separately
             cron_expression,
             cron_timezone,
@@ -323,10 +323,7 @@ fn get_encryption_key() -> &'static [u8; 32] {
 /// Encrypt a token using AES-256-GCM
 /// Returns base64-encoded ciphertext with prepended nonce
 fn encrypt_token(token: &str) -> String {
-    use aes_gcm::{
-        Aes256Gcm, KeyInit, Nonce,
-        aead::Aead,
-    };
+    use aes_gcm::{Aes256Gcm, KeyInit, Nonce, aead::Aead};
     use base64::Engine;
 
     let key = get_encryption_key();
@@ -351,10 +348,7 @@ fn encrypt_token(token: &str) -> String {
 /// Decrypt a token using AES-256-GCM
 /// Expects base64-encoded ciphertext with prepended nonce
 pub fn decrypt_token(encrypted: &str) -> Option<String> {
-    use aes_gcm::{
-        Aes256Gcm, KeyInit, Nonce,
-        aead::Aead,
-    };
+    use aes_gcm::{Aes256Gcm, KeyInit, Nonce, aead::Aead};
     use base64::Engine;
 
     let key = get_encryption_key();

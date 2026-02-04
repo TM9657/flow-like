@@ -453,7 +453,10 @@ function Profiles() {
 	const backend = useBackend();
 	const invalidate = useInvalidateInvoke();
 	const { isMobile } = useSidebar();
-	const profiles = useTauriInvoke<Record<string, ISettingsProfile>>("get_profiles", {});
+	const profiles = useTauriInvoke<Record<string, ISettingsProfile>>(
+		"get_profiles",
+		{},
+	);
 	const currentProfile = useInvoke(
 		backend.userState.getSettingsProfile,
 		backend.userState,

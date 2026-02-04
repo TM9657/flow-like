@@ -856,7 +856,7 @@ fn wrap_as_apigw_v2_event(path: &str, body: serde_json::Value) -> serde_json::Va
         ApiGatewayV2httpRequest, ApiGatewayV2httpRequestContext,
         ApiGatewayV2httpRequestContextHttpDescription,
     };
-    use hyper::http::{header::CONTENT_TYPE, HeaderMap, Method};
+    use hyper::http::{HeaderMap, Method, header::CONTENT_TYPE};
 
     let body_string = serde_json::to_string(&body).unwrap_or_default();
     let body_base64 =

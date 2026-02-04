@@ -172,7 +172,9 @@ export function OAuthCallbackHandler({
 
 				sessionStorage.removeItem("oauth-callback-pending");
 
-				console.log("[Web OAuth] Processing pending callback from sessionStorage");
+				console.log(
+					"[Web OAuth] Processing pending callback from sessionStorage",
+				);
 				processCallback({
 					url: data.url,
 					code: data.code,

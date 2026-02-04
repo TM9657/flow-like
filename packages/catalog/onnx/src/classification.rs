@@ -8,10 +8,7 @@ use flow_like::flow::{
     variable::VariableType,
 };
 use flow_like_catalog_core::{ClassPrediction, NodeImage};
-use flow_like_types::{
-    Result, anyhow, async_trait,
-    json::json,
-};
+use flow_like_types::{Result, anyhow, async_trait, json::json};
 
 #[cfg(feature = "execute")]
 use flow_like_model_provider::ml::{

@@ -641,10 +641,11 @@ impl NodeLogic for ExtractExcelTablesAINode {
                         },
                     ..
                 }) = content
-                    && name == "submit_extraction_strategy" {
-                        strategy = json::from_value(arguments).ok();
-                        break;
-                    }
+                    && name == "submit_extraction_strategy"
+                {
+                    strategy = json::from_value(arguments).ok();
+                    break;
+                }
             }
 
             let strategy = match strategy {

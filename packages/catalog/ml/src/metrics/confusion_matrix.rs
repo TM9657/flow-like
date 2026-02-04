@@ -160,8 +160,11 @@ impl NodeLogic for ConfusionMatrixNode {
         let mut labels: Vec<String> = labels_set.into_iter().collect();
         labels.sort();
 
-        let label_to_idx: HashMap<String, usize> =
-            labels.iter().enumerate().map(|(i, l)| (l.clone(), i)).collect();
+        let label_to_idx: HashMap<String, usize> = labels
+            .iter()
+            .enumerate()
+            .map(|(i, l)| (l.clone(), i))
+            .collect();
 
         let n_classes = labels.len();
 
@@ -259,7 +262,10 @@ impl NodeLogic for ConfusionMatrixNode {
             LogLevel::Debug,
         );
 
-        let matrix_i64: Vec<Vec<i64>> = matrix.iter().map(|row| row.iter().map(|&v| v as i64).collect()).collect();
+        let matrix_i64: Vec<Vec<i64>> = matrix
+            .iter()
+            .map(|row| row.iter().map(|&v| v as i64).collect())
+            .collect();
         let result = ConfusionMatrixResult {
             matrix: matrix_i64,
             labels,
