@@ -101,7 +101,7 @@ smtp = ["lettre"]
 sendgrid = []
 local = []
 kubernetes = ["kube", "k8s-openapi", "flow-like-sinks/kubernetes"]
-lambda = ["aws-config", "aws-sdk-lambda"]
+lambda = ["aws-config", "aws-sdk-lambda", "aws_lambda_events"]
 sqs = ["aws-config", "aws-sdk-sqs"]
 # State store backends
 redis = ["dep:redis", "dep:tokio"]

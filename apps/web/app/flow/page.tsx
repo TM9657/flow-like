@@ -3,9 +3,11 @@ import { FlowWrapper } from "@tm9657/flow-like-ui/components/flow/flow-wrapper";
 import "@xyflow/react/dist/style.css";
 import { useSearchParams } from "next/navigation";
 import { useMemo } from "react";
+import { useAuth } from "react-oidc-context";
 
 export default function FlowEditPage() {
 	const searchParams = useSearchParams();
+	const auth = useAuth();
 	const { boardId, appId, nodeId, version } = useMemo(() => {
 		const boardId = searchParams.get("id") ?? "";
 		const appId = searchParams.get("app") ?? "";
@@ -23,6 +25,7 @@ export default function FlowEditPage() {
 			appId={appId}
 			nodeId={nodeId}
 			version={version}
+			sub={auth.user?.profile?.sub}
 		/>
 	);
 }

@@ -151,21 +151,19 @@ function FlowLibraryScoreBar({ scores }: { scores: AggregatedScores }) {
 	return (
 		<HoverCard openDelay={100} closeDelay={100}>
 			<HoverCardTrigger asChild>
-				<div className="flex items-center gap-2 cursor-pointer rounded-md px-1.5 py-1 -mx-1.5 -my-1 hover:bg-muted/50 transition-colors">
-					<div className="flex items-center gap-1.5">
-						<Shield
-							className={cn("h-4 w-4", getOverallHealthColor(avgScore))}
-						/>
-						<span
-							className={cn(
-								"text-sm font-semibold tabular-nums",
-								getOverallHealthColor(avgScore),
-							)}
-						>
-							{avgScore.toFixed(1)}
-						</span>
-					</div>
-					<div className="flex gap-0.5">
+				<div className="flex items-center gap-1.5 cursor-pointer rounded-md px-1.5 py-0.5 hover:bg-muted/50 transition-colors">
+					<Shield
+						className={cn("h-3.5 w-3.5", getOverallHealthColor(avgScore))}
+					/>
+					<span
+						className={cn(
+							"text-xs font-semibold tabular-nums",
+							getOverallHealthColor(avgScore),
+						)}
+					>
+						{avgScore.toFixed(1)}
+					</span>
+					<div className="hidden sm:flex gap-0.5">
 						{SCORE_CONFIGS.map((config) => (
 							<div
 								key={config.key}
@@ -478,37 +476,37 @@ export function FlowLibraryBoardCard({
 				className="relative group border shadow-sm hover:shadow-lg transition-all duration-200 cursor-pointer hover:border-primary/30 h-full flex flex-col"
 			>
 				<CardHeader className="pb-2">
-					<div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
-						<div className="flex items-start gap-3 flex-1 min-w-0">
-							<div className="p-2 rounded-lg bg-primary/10 shrink-0">
-								<WorkflowIcon className="h-4 w-4 text-primary" />
-							</div>
-							<div className="flex-1 min-w-0">
+					<div className="flex items-start gap-3">
+						<div className="p-2 rounded-lg bg-primary/10 shrink-0">
+							<WorkflowIcon className="h-4 w-4 text-primary" />
+						</div>
+						<div className="flex-1 min-w-0">
+							<div className="flex items-center gap-2 justify-between">
 								<CardTitle className="text-base font-semibold truncate group-hover:text-primary transition-colors">
 									{board.name}
 								</CardTitle>
-								<div className="flex items-center gap-1.5 mt-1 flex-wrap">
-									<Badge
-										variant="secondary"
-										className="text-[10px] px-1.5 py-0"
+								{aggregatedScores && (
+									<div
+										className="relative z-10 shrink-0"
+										onClick={(event) => event.stopPropagation()}
 									>
-										{board.stage}
-									</Badge>
-									<ExecutionModeBadge mode={board.execution_mode} />
-									<span className="text-[10px] text-muted-foreground">
-										{board.log_level}
-									</span>
-								</div>
+										<FlowLibraryScoreBar scores={aggregatedScores} />
+									</div>
+								)}
+							</div>
+							<div className="flex items-center gap-1.5 mt-1 flex-wrap">
+								<Badge
+									variant="secondary"
+									className="text-[10px] px-1.5 py-0"
+								>
+									{board.stage}
+								</Badge>
+								<ExecutionModeBadge mode={board.execution_mode} />
+								<span className="text-[10px] text-muted-foreground">
+									{board.log_level}
+								</span>
 							</div>
 						</div>
-						{aggregatedScores && (
-							<div
-								className="relative z-10 shrink-0"
-								onClick={(event) => event.stopPropagation()}
-							>
-								<FlowLibraryScoreBar scores={aggregatedScores} />
-							</div>
-						)}
 					</div>
 				</CardHeader>
 				<CardContent className="pt-0 space-y-3 flex-1 flex flex-col">

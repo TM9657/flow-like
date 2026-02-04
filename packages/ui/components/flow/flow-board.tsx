@@ -164,17 +164,21 @@ import { FlowVeilEdge } from "./flow-veil-edge";
 import { LayerInnerNode } from "./layer-inner-node";
 import { LayerNode } from "./layer-node";
 import { RuntimeVariablesPrompt } from "./runtime-variables-prompt";
+import { usePeerUserInfo } from "../../hooks/use-peer-users";
 
 export function FlowBoard({
 	appId,
 	boardId,
 	nodeId,
 	initialVersion,
+	sub,
 }: Readonly<{
 	appId: string;
 	boardId: string;
 	nodeId?: string;
 	initialVersion?: [number, number, number];
+	/** The authenticated user's sub (subject) from the auth token - used for realtime collaboration */
+	sub?: string;
 }>) {
 	const { pushCommand, pushCommands, redo, undo } = useUndoRedo(appId, boardId);
 	const router = useRouter();
@@ -412,7 +416,7 @@ export function FlowBoard({
 			board,
 			version,
 			backend,
-			currentProfile,
+			sub,
 			hub,
 			mousePosition,
 			layerPath,
@@ -420,6 +424,16 @@ export function FlowBoard({
 			commandAwarenessRef,
 			setNodes,
 		});
+
+	// Cache peer user info to avoid repeated API calls
+	const peerSubs = useMemo(
+		() => peerStates.map((p) => p.sub).filter((s): s is string => !!s),
+		[peerStates],
+	);
+	const peerUsers = usePeerUserInfo(
+		peerSubs,
+		backend.userState.lookupUser.bind(backend.userState),
+	);
 
 	// Media upload for images/videos on the board
 	const { handleMediaPaste } = useMediaUpload({
@@ -2277,6 +2291,7 @@ export function FlowBoard({
 										<FlowCursors
 											peers={peerStates}
 											currentLayerPath={layerPath ?? "root"}
+											peerUsers={peerUsers}
 										/>
 									)}
 									{peerStates.length > 0 && (
@@ -2284,6 +2299,7 @@ export function FlowBoard({
 											peers={peerStates}
 											currentLayerPath={layerPath ?? "root"}
 											nodes={nodes}
+											peerUsers={peerUsers}
 										/>
 									)}
 									<DragOverlay

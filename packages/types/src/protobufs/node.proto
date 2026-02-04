@@ -44,6 +44,7 @@ message Node {
     repeated string oauth_providers = 21;
     map<string, StringList> required_oauth_scopes = 22;
     bool only_offline = 23;
+    optional uint32 version = 24;
 }
 
 message StringList {

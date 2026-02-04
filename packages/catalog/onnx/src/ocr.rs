@@ -15,7 +15,7 @@ use flow_like_model_provider::ml::{
 };
 #[cfg(feature = "execute")]
 use flow_like_types::image::{GenericImageView, imageops::FilterType};
-use flow_like_types::{Result, async_trait, json::json};
+use flow_like_types::{Result, anyhow, async_trait, json::json};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 

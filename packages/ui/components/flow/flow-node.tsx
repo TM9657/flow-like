@@ -78,12 +78,12 @@ import { FlowNodeToolbar } from "./flow-node/flow-node-toolbar";
 import { FlowPin } from "./flow-pin";
 import { LayerEditMenu } from "./layer-editing-menu";
 import { typeToColor } from "./utils";
+import { colorFromSub } from "../../hooks/use-peer-users";
 
 export interface RemoteSelectionParticipant {
 	clientId: number;
-	userId?: string;
-	name: string;
-	color: string;
+	/** The sub (subject) from the auth token - use to resolve user info via API */
+	sub?: string;
 }
 
 export interface IPinAction {
@@ -752,19 +752,22 @@ const FlowNodeInner = memo(
 			>
 				{remoteSelections.length > 0 && (
 					<div className="pointer-events-none absolute -top-3 left-0 flex flex-col gap-1">
-						{displayedRemoteSelections.map((participant) => (
-							<div
-								key={`${participant.clientId}-${participant.userId ?? participant.name}`}
-								className="flex items-center gap-1 rounded-md border bg-background/80 px-1.5 py-0.5 text-[0.625rem] leading-none shadow-sm"
-								style={{ borderColor: participant.color }}
-							>
-								<span
-									className="h-1.5 w-1.5 rounded-full"
-									style={{ backgroundColor: participant.color }}
-								/>
-								<span className="font-medium">{participant.name}</span>
-							</div>
-						))}
+						{displayedRemoteSelections.map((participant) => {
+							const color = colorFromSub(participant.sub);
+							return (
+								<div
+									key={`${participant.clientId}-${participant.sub ?? "unknown"}`}
+									className="flex items-center gap-1 rounded-md border bg-background/80 px-1.5 py-0.5 text-[0.625rem] leading-none shadow-sm"
+									style={{ borderColor: color }}
+									title={participant.sub}
+								>
+									<span
+										className="h-1.5 w-1.5 rounded-full"
+										style={{ backgroundColor: color }}
+									/>
+								</div>
+							);
+						})}
 						{extraRemoteSelections > 0 && (
 							<div className="rounded-md border bg-background/80 px-1.5 py-0.5 text-[0.625rem] leading-none shadow-sm">
 								+{extraRemoteSelections}

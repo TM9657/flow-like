@@ -236,6 +236,10 @@ impl Board {
         let registry = state.node_registry().clone();
         let registry = registry.read().await;
 
+        // First, sync node schemas for any version mismatches
+        // This runs BEFORE on_update so dynamic nodes can still add their pins
+        cleanup::sync_node_schema::sync_board_node_schemas(self, &registry.node_registry).await;
+
         const MAX_PASSES: usize = 10;
         for _ in 0..MAX_PASSES {
             let reference = Arc::new(self.clone());
@@ -921,6 +925,11 @@ impl Board {
         board.board_dir = board_dir;
         board.app_state = Some(app_state.clone());
         board.logic_nodes = HashMap::new();
+
+        // Sync node schemas on load to handle version migrations
+        board.node_updates(app_state).await;
+        board.cleanup();
+
         Ok(board)
     }
 
