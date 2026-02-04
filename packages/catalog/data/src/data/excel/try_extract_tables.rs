@@ -2047,7 +2047,7 @@ impl NodeLogic for ExtractExcelTablesNode {
         let csv_tables: Vec<CSVTable> =
             tokio::task::spawn_blocking(move || -> Result<Vec<CSVTable>> {
                 let mut out = Vec::new();
-                for (_sheet_idx, sheet_name) in sheets_to_process.iter().enumerate() {
+                for sheet_name in sheets_to_process.iter() {
                     let tables = match extract_tables(file_buffer.clone(), sheet_name, &cfg_clone) {
                         Ok(t) => t,
                         Err(e) => {

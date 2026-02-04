@@ -128,7 +128,7 @@ impl NodeLogic for ModelInfoNode {
                     let shape = i
                         .input_type
                         .tensor_shape()
-                        .map(|s| s.iter().map(|&d| d).collect())
+                        .map(|s| s.iter().copied().collect())
                         .unwrap_or_default();
                     TensorInfo {
                         name: i.name.clone(),
@@ -145,7 +145,7 @@ impl NodeLogic for ModelInfoNode {
                     let shape = o
                         .output_type
                         .tensor_shape()
-                        .map(|s| s.iter().map(|&d| d).collect())
+                        .map(|s| s.iter().copied().collect())
                         .unwrap_or_default();
                     TensorInfo {
                         name: o.name.clone(),
@@ -345,7 +345,7 @@ impl NodeLogic for SessionInfoNode {
                     let shape = i
                         .input_type
                         .tensor_shape()
-                        .map(|s| s.iter().map(|&d| d).collect())
+                        .map(|s| s.iter().copied().collect())
                         .unwrap_or_default();
                     TensorInfo {
                         name: i.name.clone(),
@@ -363,7 +363,7 @@ impl NodeLogic for SessionInfoNode {
                     let shape = o
                         .output_type
                         .tensor_shape()
-                        .map(|s| s.iter().map(|&d| d).collect())
+                        .map(|s| s.iter().copied().collect())
                         .unwrap_or_default();
                     TensorInfo {
                         name: o.name.clone(),
