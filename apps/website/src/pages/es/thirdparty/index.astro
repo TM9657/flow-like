@@ -1,0 +1,47 @@
+---
+import "@tm9657/flow-like-ui/global.css";
+import LegalLayout from "../../../layouts/Legal-Layout.astro";
+import { SbomTable } from "../../../components/thirdparty/sbom-table";
+
+import cargoLicenses from "../../../../../../thirdparty/cargo-licenses.json";
+import npmLicenses from "../../../../../../thirdparty/npm-licenses.json";
+
+const title = "Licencias de Terceros";
+const description = "Software Bill of Materials (SBOM) - Lista completa de bibliotecas de código abierto utilizadas en Flow-Like";
+---
+
+<LegalLayout title={title} description={description} lastUpdated="04 de febrero de 2026">
+	<p class="text-lg mb-8">
+		Flow-Like está construido con muchos proyectos de código abierto increíbles.
+		Estamos agradecidos con los desarrolladores y mantenedores de estas bibliotecas que hacen posible nuestro trabajo.
+		Esta página sirve como Software Bill of Materials (SBOM), proporcionando transparencia sobre nuestras dependencias.
+	</p>
+
+	<div class="mb-8 p-4 rounded-lg bg-muted/30 border border-border/50">
+		<h3 class="font-semibold mb-2">Acerca de este SBOM</h3>
+		<p class="text-sm text-muted-foreground">
+			Esta lista se genera automáticamente a partir de las dependencias de nuestro proyecto.
+			Incluye todos los crates de Rust de nuestro workspace de Cargo y paquetes npm de nuestras aplicaciones web.
+		</p>
+		<div class="flex flex-wrap gap-2 mt-3">
+			<a
+				href="https://github.com/TM9657/flow-like/blob/dev/thirdparty/cargo-licenses.json"
+				target="_blank"
+				rel="noreferrer"
+				class="text-sm px-3 py-1 rounded-full bg-primary/10 text-primary hover:bg-primary/20 transition-colors"
+			>
+				Dependencias Rust (JSON)
+			</a>
+			<a
+				href="https://github.com/TM9657/flow-like/blob/dev/thirdparty/npm-licenses.json"
+				target="_blank"
+				rel="noreferrer"
+				class="text-sm px-3 py-1 rounded-full bg-primary/10 text-primary hover:bg-primary/20 transition-colors"
+			>
+				Dependencias NPM (JSON)
+			</a>
+		</div>
+	</div>
+
+	<SbomTable client:load cargoLicenses={cargoLicenses} npmLicenses={npmLicenses} />
+</LegalLayout>

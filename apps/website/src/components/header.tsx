@@ -109,7 +109,7 @@ function NavDropdown({
 	};
 
 	const handleMouseLeave = () => {
-		timeoutRef.current = setTimeout(() => setOpen(false), 150);
+		timeoutRef.current = setTimeout(() => setOpen(false), 50);
 	};
 
 	return (
@@ -120,12 +120,12 @@ function NavDropdown({
 		>
 			<button
 				type="button"
-				className="flex items-center gap-1 text-sm font-medium text-foreground/70 hover:text-foreground transition-colors px-3 py-2"
+				className="flex items-center gap-1 text-sm font-medium text-foreground/70 hover:text-foreground transition-colors duration-300 px-3 py-2"
 				onClick={() => setOpen(!open)}
 			>
 				{label}
 				<ChevronDown
-					className={`w-3.5 h-3.5 transition-transform ${open ? "rotate-180" : ""}`}
+					className={`w-3.5 h-3.5 transition-transform duration-300 ${open ? "rotate-180" : ""}`}
 				/>
 			</button>
 
@@ -138,7 +138,7 @@ function NavDropdown({
 								href={item.href}
 								target={item.external ? "_blank" : undefined}
 								rel={item.external ? "noreferrer" : undefined}
-								className={`flex items-start gap-3 px-3 py-2.5 rounded-lg transition-colors ${
+								className={`flex items-start gap-3 px-3 py-2.5 rounded-lg transition-colors duration-300 ${
 									item.highlight
 										? "text-primary hover:bg-primary/10"
 										: "text-foreground/80 hover:bg-muted/50"
@@ -178,7 +178,7 @@ function LanguageSelector({ currentLang }: { currentLang: Lang }) {
 	};
 
 	const handleMouseLeave = () => {
-		timeoutRef.current = setTimeout(() => setOpen(false), 150);
+		timeoutRef.current = setTimeout(() => setOpen(false), 50);
 	};
 
 	return (
@@ -190,13 +190,13 @@ function LanguageSelector({ currentLang }: { currentLang: Lang }) {
 			<button
 				type="button"
 				onClick={() => setOpen(!open)}
-				className="flex items-center gap-1.5 px-2 py-1.5 rounded-lg text-sm text-foreground/70 hover:text-foreground hover:bg-muted/50 transition-all"
+				className="flex items-center gap-1.5 px-2 py-1.5 rounded-lg text-sm text-foreground/70 hover:text-foreground hover:bg-muted/50 transition-all duration-300"
 				aria-label="Select language"
 			>
 				<span className="text-base leading-none">{langFlags[currentLang]}</span>
 				<span className="uppercase text-xs font-medium">{currentLang}</span>
 				<ChevronDown
-					className={`w-3 h-3 transition-transform ${open ? "rotate-180" : ""}`}
+					className={`w-3 h-3 transition-transform duration-300 ${open ? "rotate-180" : ""}`}
 				/>
 			</button>
 
@@ -208,7 +208,7 @@ function LanguageSelector({ currentLang }: { currentLang: Lang }) {
 								<a
 									key={code}
 									href={getLocalizedPath(currentLang, code)}
-									className={`flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm transition-all ${
+								className={`flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm transition-all duration-300 ${
 										code === currentLang
 											? "bg-primary/10 text-primary font-medium"
 											: "text-foreground/70 hover:bg-muted/50 hover:text-foreground"
@@ -283,7 +283,7 @@ function MobileMenu({
 					<button
 						type="button"
 						onClick={onClose}
-						className="p-2 rounded-lg hover:bg-muted/50 transition-colors"
+						className="p-2 rounded-lg hover:bg-muted/50 transition-colors duration-300"
 						aria-label="Close menu"
 					>
 						<X className="w-5 h-5" />
@@ -365,7 +365,7 @@ function MobileMenu({
 								href="https://github.com/TM9657/flow-like"
 								target="_blank"
 								rel="noreferrer"
-								className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg bg-muted/50 hover:bg-muted transition-colors"
+								className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg bg-muted/50 hover:bg-muted transition-colors duration-300"
 							>
 								<BsGithub className="w-4 h-4" />
 								<span className="text-sm">GitHub</span>
@@ -374,7 +374,7 @@ function MobileMenu({
 								href="https://discord.com/invite/KTWMrS2/"
 								target="_blank"
 								rel="noreferrer"
-								className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg bg-muted/50 hover:bg-muted transition-colors"
+								className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg bg-muted/50 hover:bg-muted transition-colors duration-300"
 							>
 								<BsDiscord className="w-4 h-4" />
 								<span className="text-sm">Discord</span>
@@ -390,7 +390,7 @@ function MobileMenu({
 						<button
 							type="button"
 							onClick={() => setLangOpen(!langOpen)}
-							className="w-full flex items-center justify-between px-3 py-3 rounded-lg hover:bg-muted/50 transition-colors"
+							className="w-full flex items-center justify-between px-3 py-3 rounded-lg hover:bg-muted/50 transition-colors duration-300"
 						>
 							<div className="flex items-center gap-3">
 								<LuGlobe className="w-5 h-5" />
@@ -399,7 +399,7 @@ function MobileMenu({
 								</span>
 							</div>
 							<ChevronDown
-								className={`w-4 h-4 transition-transform ${langOpen ? "rotate-180" : ""}`}
+								className={`w-4 h-4 transition-transform duration-300 ${langOpen ? "rotate-180" : ""}`}
 							/>
 						</button>
 						{langOpen && (
@@ -409,7 +409,7 @@ function MobileMenu({
 										<a
 											key={code}
 											href={getLocalizedPath(currentLang, code)}
-											className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm transition-all ${
+											className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm transition-all duration-300 ${
 												code === currentLang
 													? "bg-primary/10 text-primary font-medium"
 													: "text-foreground/70 hover:bg-muted/50"
@@ -430,11 +430,11 @@ function MobileMenu({
 					<a
 						href="/download"
 						onClick={onClose}
-						className="w-full group flex items-center justify-center gap-2 py-2.5 px-4 rounded-lg bg-primary text-primary-foreground font-medium hover:bg-primary/90 transition-colors"
+						className="w-full group flex items-center justify-center gap-2 py-2.5 px-4 rounded-lg bg-primary text-primary-foreground font-medium hover:bg-primary/90 transition-colors duration-300"
 					>
 						<LuDownload className="w-4 h-4" />
 						{t("header.download")}
-						<LuArrowRight className="w-4 h-4 ml-auto transition-transform group-hover:translate-x-1" />
+						<LuArrowRight className="w-4 h-4 ml-auto transition-transform duration-300 group-hover:translate-x-1" />
 					</a>
 				</div>
 			</div>
@@ -555,7 +555,7 @@ export function Header() {
 							src="/icon.webp"
 							className={`transition-all duration-300 ${scrolled ? "h-8 w-8" : "h-10 w-10"}`}
 						/>
-						<span className="font-semibold text-lg tracking-tight group-hover:text-primary transition-colors">
+						<span className="font-semibold text-lg tracking-tight group-hover:text-primary transition-colors duration-300">
 							Flow Like
 						</span>
 					</a>
@@ -566,7 +566,7 @@ export function Header() {
 						<NavDropdown label="Resources" items={resourceItems} />
 						<a
 							href="/pricing"
-							className="px-3 py-2 text-sm font-medium text-foreground/70 hover:text-foreground transition-colors"
+							className="px-3 py-2 text-sm font-medium text-foreground/70 hover:text-foreground transition-colors duration-300"
 						>
 							Pricing
 						</a>
@@ -582,7 +582,7 @@ export function Header() {
 								target="_blank"
 								rel="noreferrer"
 								aria-label="GitHub"
-								className="p-2 rounded-lg text-foreground/60 hover:text-foreground hover:bg-muted/50 transition-all"
+								className="p-2 rounded-lg text-foreground/60 hover:text-foreground hover:bg-muted/50 transition-all duration-300"
 							>
 								<BsGithub className="w-4 h-4" />
 							</a>
@@ -591,7 +591,7 @@ export function Header() {
 								target="_blank"
 								rel="noreferrer"
 								aria-label="Discord"
-								className="p-2 rounded-lg text-foreground/60 hover:text-foreground hover:bg-muted/50 transition-all"
+								className="p-2 rounded-lg text-foreground/60 hover:text-foreground hover:bg-muted/50 transition-all duration-300"
 							>
 								<BsDiscord className="w-4 h-4" />
 							</a>
@@ -599,7 +599,7 @@ export function Header() {
 
 						<a
 							href="/download"
-							className="ml-2 flex items-center gap-2 py-1.5 px-3 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors"
+							className="ml-2 flex items-center gap-2 py-1.5 px-3 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors duration-300"
 						>
 							<LuDownload className="w-4 h-4" />
 							{t("header.download")}
@@ -610,7 +610,7 @@ export function Header() {
 					<button
 						type="button"
 						onClick={() => setMobileMenuOpen(true)}
-						className="lg:hidden p-2 rounded-lg hover:bg-muted/50 transition-colors"
+						className="lg:hidden p-2 rounded-lg hover:bg-muted/50 transition-colors duration-300"
 						aria-label="Open menu"
 					>
 						<Menu className="w-5 h-5" />

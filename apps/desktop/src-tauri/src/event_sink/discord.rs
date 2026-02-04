@@ -642,13 +642,13 @@ async fn update_discord_message(
     let time_since_last_edit = now.duration_since(*last_edit);
 
     // Adaptive rate limiting: Discord's client stops rendering after too many rapid edits
-    // Start at 1.5s, increase to 3s after many edits to prevent client rendering issues
-    let min_interval = if *edit_count < 5 {
-        Duration::from_millis(1500)
-    } else if *edit_count < 10 {
-        Duration::from_millis(2000)
-    } else {
+    // Using longer intervals to prevent Discord UI from stopping updates entirely
+    let min_interval = if *edit_count < 3 {
         Duration::from_millis(3000)
+    } else if *edit_count < 8 {
+        Duration::from_millis(5000)
+    } else {
+        Duration::from_millis(8000)
     };
 
     if time_since_last_edit < min_interval {

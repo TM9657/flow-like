@@ -19,6 +19,7 @@ import { OAuthCallbackHandler } from "../components/oauth-callback-handler";
 import { OAuthExecutionProvider } from "../components/oauth-execution-provider";
 import { RuntimeVariablesProviderComponent } from "../components/runtime-variables-provider";
 import { SpotlightWrapper } from "../components/spotlight-wrapper";
+import { ThemeLoader } from "../components/theme-loader";
 import { WebProvider } from "../components/web-provider";
 
 const persister = createIDBPersister();
@@ -75,6 +76,7 @@ export function ClientProviders({ children }: { children: React.ReactNode }) {
 							<Toaster />
 							<WebProvider>
 								<WebAuthProvider>
+									<ThemeLoader />
 									<OAuthCallbackHandler>
 										<OAuthExecutionProvider>
 											<RuntimeVariablesProviderComponent>

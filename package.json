@@ -44,6 +44,7 @@
 		"bench:flows": "cargo bench -p flow-like-catalog --bench flow_bench",
 		"fix": "cargo clippy --fix && cargo fmt && bunx biome check --write",
 		"schema": "bun run ./tools/generate-schema.ts",
+		"licenses": "bun run ./tools/generate-licenses.ts",
 		"license": "cd src-tauri && cargo license -j > ./assets/licenses.json && cd .. && bunx license-report --output=json > src-tauri/assets/licenses-node.json && bun run ./tools/license-bundle.ts"
 	},
 	"workspaces": ["packages/*", "apps/*"],

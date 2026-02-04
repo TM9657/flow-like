@@ -332,7 +332,7 @@ dependencies = [
  "bitflags 2.10.0",
  "cc",
  "cesu8",
- "jni 0.21.1",
+ "jni",
  "jni-sys",
  "libc",
  "log",
@@ -7122,7 +7122,7 @@ dependencies = [
  "flow-like-storage",
  "flow-like-types",
  "futures",
- "htmd",
+ "htmd 0.5.0",
  "iana-time-zone",
  "inventory",
  "nalgebra 0.34.1",
@@ -7157,7 +7157,7 @@ dependencies = [
  "flow-like-storage",
  "flow-like-types",
  "futures",
- "htmd",
+ "htmd 0.3.2",
  "icalendar",
  "inventory",
  "mail-parser",
@@ -8770,35 +8770,18 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4642ae72538a8d374109c5acf95c603732c736aace63c337ec2d3e42f7095854"
 dependencies = [
  "html5ever 0.35.0",
- "markup5ever_rcdom 0.35.0+unofficial",
+ "markup5ever_rcdom",
 ]
 
 [[package]]
-name = "html2md"
-version = "0.2.15"
+name = "htmd"
+version = "0.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8cff9891f2e0d9048927fbdfc28b11bf378f6a93c7ba70b23d0fbee9af6071b4"
+checksum = "60ae59466542f2346e43d4a5e9b4432a1fc915b279c9fc0484e9ed7379121454"
 dependencies = [
- "html5ever 0.27.0",
- "jni 0.19.0",
- "lazy_static",
- "markup5ever_rcdom 0.3.0",
- "percent-encoding",
- "regex",
-]
-
-[[package]]
-name = "html5ever"
-version = "0.27.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c13771afe0e6e846f1e67d038d4cb29998a6779f93c809212e4e9c32efd244d4"
-dependencies = [
- "log",
- "mac",
- "markup5ever 0.12.1",
- "proc-macro2",
- "quote",
- "syn 2.0.114",
+ "html5ever 0.35.0",
+ "markup5ever_rcdom",
+ "phf 0.13.1",
 ]
 
 [[package]]
@@ -9949,20 +9932,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "875a5a69ac2bab1a891711cf5eccbec1ce0341ea805560dcd90b7a2e925132e8"
 dependencies = [
  "jiff-tzdb",
-]
-
-[[package]]
-name = "jni"
-version = "0.19.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c6df18c2e3db7e453d3c6ac5b3e9d5182664d28788126d39b91f2d1e22b017ec"
-dependencies = [
- "cesu8",
- "combine",
- "jni-sys",
- "log",
- "thiserror 1.0.69",
- "walkdir",
 ]
 
 [[package]]
@@ -11944,7 +11913,7 @@ checksum = "3e2e65a1a2e43cfcb47a895c4c8b10d1f4a61097f9f254f183aee60cad9c651d"
 [[package]]
 name = "markitdown"
 version = "0.2.0"
-source = "git+https://github.com/TM9657/markitdown-rs.git?rev=edf7601#edf7601813bb8d97669bf8d35317a9067fccb86b"
+source = "git+https://github.com/TM9657/markitdown-rs.git?rev=73fe271#73fe27174864b7d7c0d1d64cc5ee93993dcbe6c9"
 dependencies = [
  "async-trait",
  "base64 0.22.1",
@@ -11960,7 +11929,7 @@ dependencies = [
  "futures",
  "hayro",
  "hayro-syntax",
- "html2md",
+ "htmd 0.5.0",
  "icalendar",
  "image",
  "infer 0.19.0",
@@ -11993,20 +11962,6 @@ dependencies = [
 
 [[package]]
 name = "markup5ever"
-version = "0.12.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "16ce3abbeba692c8b8441d036ef91aea6df8da2c6b6e21c7e14d3c18e526be45"
-dependencies = [
- "log",
- "phf 0.11.3",
- "phf_codegen 0.11.3",
- "string_cache",
- "string_cache_codegen",
- "tendril",
-]
-
-[[package]]
-name = "markup5ever"
 version = "0.14.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c7a7213d12e1864c0f002f52c2923d4556935a43dec5e71355c2760e0f6e7a18"
@@ -12032,18 +11987,6 @@ dependencies = [
 
 [[package]]
 name = "markup5ever_rcdom"
-version = "0.3.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "edaa21ab3701bfee5099ade5f7e1f84553fd19228cf332f13cd6e964bf59be18"
-dependencies = [
- "html5ever 0.27.0",
- "markup5ever 0.12.1",
- "tendril",
- "xml5ever 0.18.1",
-]
-
-[[package]]
-name = "markup5ever_rcdom"
 version = "0.35.0+unofficial"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c8bcd53df4748257345b8bc156d620340ce0f015ec1c7ef1cff475543888a31d"
@@ -12051,7 +11994,7 @@ dependencies = [
  "html5ever 0.35.0",
  "markup5ever 0.35.0",
  "tendril",
- "xml5ever 0.35.0",
+ "xml5ever",
 ]
 
 [[package]]
@@ -19662,7 +19605,7 @@ dependencies = [
  "gdkwayland-sys",
  "gdkx11-sys",
  "gtk",
- "jni 0.21.1",
+ "jni",
  "lazy_static",
  "libc",
  "log",
@@ -19749,7 +19692,7 @@ dependencies = [
  "heck 0.5.0",
  "http 1.4.0",
  "http-range",
- "jni 0.21.1",
+ "jni",
  "libc",
  "log",
  "mime",
@@ -20148,7 +20091,7 @@ dependencies = [
  "dpi",
  "gtk",
  "http 1.4.0",
- "jni 0.21.1",
+ "jni",
  "objc2 0.6.3",
  "objc2-ui-kit 0.3.2",
  "objc2-web-kit",
@@ -20171,7 +20114,7 @@ checksum = "187a3f26f681bdf028f796ccf57cf478c1ee422c50128e5a0a6ebeb3f5910065"
 dependencies = [
  "gtk",
  "http 1.4.0",
- "jni 0.21.1",
+ "jni",
  "log",
  "objc2 0.6.3",
  "objc2-app-kit 0.3.2",
@@ -23740,7 +23683,7 @@ dependencies = [
  "html5ever 0.29.1",
  "http 1.4.0",
  "javascriptcore-rs",
- "jni 0.21.1",
+ "jni",
  "kuchikiki",
  "libc",
  "ndk",
@@ -23843,17 +23786,6 @@ name = "xkeysym"
 version = "0.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b9cc00251562a284751c9973bace760d86c0276c471b4be569fe6b068ee97a56"
-
-[[package]]
-name = "xml5ever"
-version = "0.18.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9bbb26405d8e919bc1547a5aa9abc95cbfa438f04844f5fdd9dc7596b748bf69"
-dependencies = [
- "log",
- "mac",
- "markup5ever 0.12.1",
-]
 
 [[package]]
 name = "xml5ever"
