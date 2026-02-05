@@ -461,7 +461,7 @@ impl NodeLogic for PoseEstimationNode {
 
         #[cfg(not(feature = "execute"))]
         {
-            Err(anyhow!(
+            Err(flow_like_types::anyhow!(
                 "ONNX execution requires the 'execute' feature. Rebuild with --features execute"
             ))
         }

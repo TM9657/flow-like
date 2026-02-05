@@ -12,6 +12,7 @@ use crate::{
     routes::app::events::db::get_event_from_db_opt,
     state::AppState,
 };
+use utoipa::ToSchema;
 use axum::{
     Extension, Json,
     extract::{Path, State},
@@ -24,7 +25,7 @@ use sea_orm::{
 use serde::{Deserialize, Serialize};
 
 /// Response for a sink - includes event info via lookup
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, ToSchema)]
 pub struct SinkResponse {
     pub id: String,
     pub event_id: String,
@@ -66,7 +67,7 @@ impl From<event_sink::Model> for SinkResponse {
 }
 
 /// Request to update a sink (only sink-specific fields)
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, ToSchema)]
 pub struct UpdateSinkRequest {
     /// Custom path for HTTP sinks (optional)
     pub path: Option<String>,
@@ -76,8 +77,20 @@ pub struct UpdateSinkRequest {
 
 /// GET /sink
 /// List all active sinks for apps the user has WriteEvents permission
+#[utoipa::path(
+    get,
+    path = "/sink",
+    tag = "sink",
+    responses(
+        (status = 200, description = "List of active sinks", body = Vec<SinkResponse>),
+        (status = 401, description = "Unauthorized")
+    ),
+    security(
+        ("bearer_auth" = [])
+    )
+)]
 #[tracing::instrument(name = "GET /sink", skip(state, user))]
-pub async fn list_user_sinks(
+pub async fn list_sinks(
     State(state): State<AppState>,
     Extension(user): Extension<AppUser>,
 ) -> Result<Json<Vec<SinkResponse>>, ApiError> {
@@ -134,6 +147,22 @@ pub async fn list_user_sinks(
 
 /// GET /sink/app/{app_id}
 /// List all sinks for a specific app
+#[utoipa::path(
+    get,
+    path = "/sink/app/{app_id}",
+    tag = "sink",
+    params(
+        ("app_id" = String, Path, description = "Application ID")
+    ),
+    responses(
+        (status = 200, description = "List of sinks for the app", body = Vec<SinkResponse>),
+        (status = 401, description = "Unauthorized"),
+        (status = 403, description = "Forbidden")
+    ),
+    security(
+        ("bearer_auth" = [])
+    )
+)]
 #[tracing::instrument(name = "GET /sink/app/{app_id}", skip(state, user))]
 pub async fn list_app_sinks(
     State(state): State<AppState>,
@@ -168,6 +197,23 @@ pub async fn list_app_sinks(
 
 /// GET /sink/{event_id}
 /// Get a specific sink by event ID
+#[utoipa::path(
+    get,
+    path = "/sink/{event_id}",
+    tag = "sink",
+    params(
+        ("event_id" = String, Path, description = "Event ID")
+    ),
+    responses(
+        (status = 200, description = "Sink details", body = SinkResponse),
+        (status = 401, description = "Unauthorized"),
+        (status = 403, description = "Forbidden"),
+        (status = 404, description = "Sink not found")
+    ),
+    security(
+        ("bearer_auth" = [])
+    )
+)]
 #[tracing::instrument(name = "GET /sink/{event_id}", skip(state, user))]
 pub async fn get_sink(
     State(state): State<AppState>,
@@ -197,6 +243,24 @@ pub async fn get_sink(
 
 /// PATCH /sink/{event_id}
 /// Update sink-specific fields (path, auth_token)
+#[utoipa::path(
+    patch,
+    path = "/sink/{event_id}",
+    tag = "sink",
+    params(
+        ("event_id" = String, Path, description = "Event ID")
+    ),
+    request_body = UpdateSinkRequest,
+    responses(
+        (status = 200, description = "Updated sink", body = SinkResponse),
+        (status = 401, description = "Unauthorized"),
+        (status = 403, description = "Forbidden"),
+        (status = 404, description = "Sink not found")
+    ),
+    security(
+        ("bearer_auth" = [])
+    )
+)]
 #[tracing::instrument(name = "PATCH /sink/{event_id}", skip(state, user, body))]
 pub async fn update_sink(
     State(state): State<AppState>,
@@ -246,6 +310,23 @@ pub async fn update_sink(
 
 /// POST /sink/{event_id}/toggle
 /// Toggle sink active state (also updates external scheduler for cron sinks)
+#[utoipa::path(
+    post,
+    path = "/sink/{event_id}/toggle",
+    tag = "sink",
+    params(
+        ("event_id" = String, Path, description = "Event ID")
+    ),
+    responses(
+        (status = 200, description = "Toggled sink", body = SinkResponse),
+        (status = 401, description = "Unauthorized"),
+        (status = 403, description = "Forbidden"),
+        (status = 404, description = "Sink not found")
+    ),
+    security(
+        ("bearer_auth" = [])
+    )
+)]
 #[tracing::instrument(name = "POST /sink/{event_id}/toggle", skip(state, user))]
 pub async fn toggle_sink(
     State(state): State<AppState>,

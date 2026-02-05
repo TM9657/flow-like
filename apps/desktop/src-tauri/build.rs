@@ -1,6 +1,12 @@
 use std::fs;
 
 fn main() {
+    // Link against system zlib on iOS (needed by flate2 with zlib feature)
+    let target_os = std::env::var("CARGO_CFG_TARGET_OS").unwrap_or_default();
+    if target_os == "ios" {
+        println!("cargo:rustc-link-lib=z");
+    }
+
     println!("cargo:rerun-if-changed=../../../flow-like.config.json");
     println!("cargo:rerun-if-changed=../../../flow-like.config.prod.json");
 

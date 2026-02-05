@@ -7,8 +7,9 @@ use crate::state::AppState;
 use axum::extract::State;
 use axum::{Extension, Json};
 use serde::Serialize;
+use utoipa::ToSchema;
 
-#[derive(Serialize)]
+#[derive(Serialize, ToSchema)]
 pub struct RegistryStatsResponse {
     pub total_packages: i64,
     pub total_versions: i64,
@@ -18,7 +19,16 @@ pub struct RegistryStatsResponse {
     pub rejected_packages: i64,
 }
 
-/// GET /admin/packages/stats
+#[utoipa::path(
+    get,
+    path = "/admin/packages/stats",
+    tag = "admin",
+    responses(
+        (status = 200, description = "Registry statistics", body = RegistryStatsResponse),
+        (status = 401, description = "Unauthorized"),
+        (status = 403, description = "Forbidden")
+    )
+)]
 pub async fn get_stats(
     State(state): State<AppState>,
     Extension(user): Extension<AppUser>,

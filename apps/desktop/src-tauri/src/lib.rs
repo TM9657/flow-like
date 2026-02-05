@@ -5,8 +5,16 @@ mod functions;
 mod profile;
 mod settings;
 mod state;
+#[cfg(desktop)]
 mod tray;
 pub mod utils;
+
+// Stub for tray_update_state on non-desktop platforms
+#[cfg(not(desktop))]
+#[tauri::command]
+async fn tray_update_state() -> Result<(), String> {
+    Ok(())
+}
 
 use flow_like::{
     flow::node::NodeLogic,
@@ -271,9 +279,6 @@ pub fn run() {
         .manage(state::TauriSettingsState(settings_state.clone()))
         .manage(state::TauriFlowLikeState(state_ref.clone()))
         .manage(state::TauriRegistryState(Arc::new(Mutex::new(None))))
-        .manage(state::TauriTrayState(Arc::new(Mutex::new(
-            tray::TrayRuntimeState::default(),
-        ))))
         .plugin(tauri_plugin_http::init())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_deep_link::init())
@@ -346,6 +351,11 @@ pub fn run() {
 
             #[cfg(desktop)]
             {
+                // Manage TauriTrayState for desktop platforms
+                app.manage(state::TauriTrayState(Arc::new(Mutex::new(
+                    tray::TrayRuntimeState::default(),
+                ))));
+
                 if let Err(err) = tray::init_tray(&relay_handle) {
                     eprintln!("Failed to initialize tray: {}", err);
                 } else {
@@ -545,12 +555,16 @@ pub fn run() {
             functions::ai::invoke::chat_completion,
             functions::ai::invoke::find_best_model,
             functions::system::get_system_info,
+            #[cfg(desktop)]
             tray::tray_update_state,
+            #[cfg(not(desktop))]
+            tray_update_state,
             functions::download::init::init_downloads,
             functions::download::init::get_downloads,
             functions::settings::profiles::get_profiles,
             functions::settings::profiles::get_default_profiles,
             functions::settings::profiles::get_current_profile,
+            functions::settings::profiles::get_current_profile_id,
             functions::settings::profiles::set_current_profile,
             functions::settings::profiles::upsert_profile,
             functions::settings::profiles::remap_profile_id,
@@ -559,6 +573,7 @@ pub fn run() {
             functions::settings::profiles::remove_bit,
             functions::settings::profiles::get_bits_in_current_profile,
             functions::settings::profiles::change_profile_image,
+            functions::settings::profiles::read_profile_icon,
             functions::settings::profiles::profile_update_app,
             functions::app::app_configured,
             functions::app::upsert_board,

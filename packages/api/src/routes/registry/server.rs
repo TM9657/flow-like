@@ -21,13 +21,14 @@ use sea_orm::{
 };
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
+use utoipa::ToSchema;
 use std::time::Duration;
 
 /// CDN path prefix for WASM packages
 const WASM_PACKAGES_PATH: &str = "wasm-packages";
 
 /// Author information for display
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct AuthorInfo {
     pub user_id: String,
     pub username: Option<String>,
@@ -37,7 +38,7 @@ pub struct AuthorInfo {
 }
 
 /// Extended package summary with additional metadata for UI
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct PackageDetails {
     pub id: String,
     pub name: String,
@@ -60,7 +61,7 @@ pub struct PackageDetails {
 }
 
 /// Package review entry
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct PackageReview {
     pub id: String,
     pub package_id: String,
@@ -74,7 +75,7 @@ pub struct PackageReview {
 }
 
 /// Request to submit a review
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct ReviewRequest {
     pub action: String, // "approve", "reject", "request_changes", "comment", "flag"
     pub comment: Option<String>,
@@ -85,7 +86,7 @@ pub struct ReviewRequest {
 }
 
 /// Statistics for the registry
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct RegistryStats {
     pub total_packages: i64,
     pub total_versions: i64,

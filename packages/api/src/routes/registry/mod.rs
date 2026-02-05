@@ -1,9 +1,9 @@
 //! WASM Package Registry API
 
-mod download;
+pub mod download;
 mod index;
-mod publish;
-mod search;
+pub mod publish;
+pub mod search;
 pub mod server;
 
 use crate::state::AppState;

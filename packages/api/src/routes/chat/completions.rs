@@ -455,6 +455,15 @@ async fn handle_non_streaming(
     Ok(response)
 }
 
+#[utoipa::path(
+    post,
+    path = "/chat/completions",
+    tag = "chat",
+    request_body = serde_json::Value,
+    responses(
+        (status = 200, description = "LLM completion response (streaming or JSON)")
+    )
+)]
 #[tracing::instrument(name = "POST /chat/completions", skip(state, user, payload))]
 pub async fn invoke_llm(
     State(state): State<AppState>,

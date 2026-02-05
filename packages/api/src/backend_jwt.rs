@@ -226,7 +226,7 @@ pub fn verify_any<T: for<'de> Deserialize<'de>>(token: &str) -> Result<T, Backen
 // ============================================================================
 
 /// JWK representation for JWKS endpoint
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, utoipa::ToSchema)]
 pub struct Jwk {
     pub kty: String,
     pub crv: String,
@@ -239,7 +239,7 @@ pub struct Jwk {
 }
 
 /// JWKS (JSON Web Key Set) for public key distribution
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, utoipa::ToSchema)]
 pub struct Jwks {
     pub keys: Vec<Jwk>,
 }

@@ -30,27 +30,31 @@ use axum::{
 use flow_like_types::{anyhow, create_id};
 use sea_orm::{ActiveModelTrait, ActiveValue::Set};
 use serde::{Deserialize, Serialize};
+use utoipa::ToSchema;
 
 /// Request body for async board invocation
-#[derive(Clone, Debug, Deserialize)]
+#[derive(Clone, Debug, Deserialize, ToSchema)]
 pub struct InvokeBoardAsyncRequest {
     /// Node ID to start execution from (required)
     pub node_id: String,
     /// Optional board version as tuple (major, minor, patch) - defaults to latest
     pub version: Option<(u32, u32, u32)>,
     /// Input payload for the execution
+    #[schema(value_type = Option<Object>)]
     pub payload: Option<serde_json::Value>,
     /// User's auth token to pass to the flow
     pub token: Option<String>,
     /// OAuth tokens keyed by provider name
+    #[schema(value_type = Option<Object>)]
     pub oauth_tokens: Option<std::collections::HashMap<String, serde_json::Value>>,
     /// Runtime-configured variables to override board variables
+    #[schema(value_type = Option<Object>)]
     pub runtime_variables:
         Option<std::collections::HashMap<String, flow_like::flow::variable::Variable>>,
 }
 
 /// Response from async board invocation
-#[derive(Clone, Debug, Serialize)]
+#[derive(Clone, Debug, Serialize, ToSchema)]
 pub struct InvokeBoardAsyncResponse {
     /// Unique run ID (use this to track progress)
     pub run_id: String,
@@ -72,6 +76,22 @@ fn get_credentials_access() -> crate::credentials::CredentialsAccess {
 ///
 /// Invoke async execution of a board workflow via queue.
 /// Uses EXECUTION_BACKEND env var to determine queue (redis, sqs, kafka).
+#[utoipa::path(
+    post,
+    path = "/apps/{app_id}/board/{board_id}/invoke/async",
+    tag = "execution",
+    params(
+        ("app_id" = String, Path, description = "Application ID"),
+        ("board_id" = String, Path, description = "Board ID")
+    ),
+    request_body = InvokeBoardAsyncRequest,
+    responses(
+        (status = 200, description = "Async invocation started", body = InvokeBoardAsyncResponse),
+        (status = 401, description = "Unauthorized"),
+        (status = 403, description = "Forbidden"),
+        (status = 500, description = "JWT signing not configured")
+    )
+)]
 #[tracing::instrument(
     name = "POST /apps/{app_id}/board/{board_id}/invoke/async",
     skip(state, user, params)

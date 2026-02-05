@@ -8,7 +8,20 @@ use crate::state::AppState;
 use axum::extract::{Path, State};
 use axum::{Extension, Json};
 
-/// POST /admin/packages/{package_id}/review
+#[utoipa::path(
+    post,
+    path = "/admin/packages/{package_id}/review",
+    tag = "admin",
+    params(
+        ("package_id" = String, Path, description = "Package ID to review")
+    ),
+    request_body = ReviewRequest,
+    responses(
+        (status = 200, description = "Review submitted", body = PackageReview),
+        (status = 401, description = "Unauthorized"),
+        (status = 403, description = "Forbidden")
+    )
+)]
 pub async fn review_package(
     State(state): State<AppState>,
     Extension(user): Extension<AppUser>,

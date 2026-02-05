@@ -16,6 +16,7 @@ use flow_like_types::{
 use mime::Mime;
 use serde::{Deserialize, Serialize};
 use std::time::Duration;
+use utoipa::ToSchema;
 
 const MAX_DOWNLOAD_TTL_SECS: u64 = 60 * 60 * 24 * 31;
 const DEFAULT_DOWNLOAD_TTL_SECS: u64 = 60 * 60 * 24 * 7;
@@ -23,40 +24,54 @@ const UPLOAD_TTL_SECS: u64 = 60 * 15;
 // Optional soft client hint (not enforced by PUT presign; enforce on POST policies or server finalize step)
 const DEFAULT_SIZE_LIMIT_BYTES: Option<u64> = Some(1024 * 1024 * 35); // 35 MB
 
-#[derive(Clone, Deserialize, Serialize, Debug)]
+#[derive(Clone, Deserialize, Serialize, Debug, ToSchema)]
 #[serde(rename_all = "camelCase")]
-struct TemporaryFileResponse {
-    key: String,
-    content_type: String,
-    upload_url: String,
-    upload_expires_at: String,
-    download_url: String,
-    download_expires_at: String,
-    head_url: String,
-    delete_url: String,
-    size_limit_bytes: Option<u64>,
+pub struct TemporaryFileResponse {
+    pub key: String,
+    pub content_type: String,
+    pub upload_url: String,
+    pub upload_expires_at: String,
+    pub download_url: String,
+    pub download_expires_at: String,
+    pub head_url: String,
+    pub delete_url: String,
+    pub size_limit_bytes: Option<u64>,
 }
 
-#[derive(Deserialize, Debug)]
-struct ExtensionParams {
+#[derive(Deserialize, Debug, ToSchema, utoipa::IntoParams)]
+pub struct ExtensionParams {
     /// Optional file extension (e.g. "png"). Will be sanitized (alnum only).
-    extension: Option<String>,
+    pub extension: Option<String>,
     /// Optional explicit content-type; falls back to extension mapping or octet-stream.
-    content_type: Option<String>,
+    pub content_type: Option<String>,
     /// Optional custom download TTL in seconds (capped at 31 days).
-    download_ttl_secs: Option<u64>,
+    pub download_ttl_secs: Option<u64>,
 }
 
 pub fn routes() -> Router<AppState> {
-    Router::new().route("/", get(presign_tmp_upload))
+    Router::new().route("/", get(get_temporary_upload))
 }
 
+#[utoipa::path(
+    get,
+    path = "/tmp",
+    tag = "tmp",
+    params(ExtensionParams),
+    responses(
+        (status = 200, description = "Presigned temporary upload URL generated successfully", body = TemporaryFileResponse),
+        (status = 401, description = "Unauthorized"),
+        (status = 500, description = "Internal server error")
+    ),
+    security(
+        ("bearer_auth" = [])
+    )
+)]
 #[tracing::instrument(
     name = "GET /tmp",
     skip(state, user),
     fields(user_sub = tracing::field::Empty, key = tracing::field::Empty, ext = tracing::field::Empty)
 )]
-async fn presign_tmp_upload(
+pub async fn get_temporary_upload(
     State(state): State<AppState>,
     Extension(user): Extension<AppUser>,
     Query(params): Query<ExtensionParams>,

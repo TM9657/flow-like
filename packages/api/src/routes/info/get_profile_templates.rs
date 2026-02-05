@@ -28,6 +28,7 @@ impl From<template_profile::Model> for Profile {
             description: model.description,
             icon: model.icon,
             apps: Some(vec![]),
+            shortcuts: Some(vec![]),
             secure: model.secure.unwrap_or(true),
             bits: model.bit_ids.unwrap_or_default(),
             hub: model.hub,

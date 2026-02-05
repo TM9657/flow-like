@@ -18,6 +18,23 @@ use sea_orm::{
 
 /// Get all widgets accessible to the current user based on their permissions.
 /// Returns widgets from all apps where the user has ReadWidgets permission.
+#[utoipa::path(
+    get,
+    path = "/user/widgets",
+    tag = "user",
+    params(
+        ("language" = Option<String>, Query, description = "Language code"),
+        ("limit" = Option<u64>, Query, description = "Maximum number of results"),
+        ("offset" = Option<u64>, Query, description = "Offset for pagination")
+    ),
+    responses(
+        (status = 200, description = "List of accessible widgets with metadata"),
+        (status = 401, description = "Unauthorized")
+    ),
+    security(
+        ("bearer_auth" = [])
+    )
+)]
 #[tracing::instrument(name = "GET /user/widgets", skip(state, user))]
 pub async fn get_widgets(
     State(state): State<AppState>,

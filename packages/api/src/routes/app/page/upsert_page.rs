@@ -9,12 +9,29 @@ use axum::{
 use flow_like::a2ui::widget::Page;
 use sea_orm::{ActiveModelTrait, ActiveValue::Set, ColumnTrait, EntityTrait, QueryFilter};
 use serde::{Deserialize, Serialize};
+use utoipa::ToSchema;
 
-#[derive(Clone, Deserialize, Serialize)]
+#[derive(Clone, Deserialize, Serialize, ToSchema)]
 pub struct PageUpsert {
+    #[schema(value_type = Object)]
     pub page: Page,
 }
 
+#[utoipa::path(
+    put,
+    path = "/apps/{app_id}/pages/{page_id}",
+    tag = "pages",
+    params(
+        ("app_id" = String, Path, description = "Application ID"),
+        ("page_id" = String, Path, description = "Page ID")
+    ),
+    request_body = PageUpsert,
+    responses(
+        (status = 200, description = "Page created or updated", body = Object),
+        (status = 401, description = "Unauthorized"),
+        (status = 403, description = "Forbidden")
+    )
+)]
 #[tracing::instrument(
     name = "PUT /apps/{app_id}/pages/{page_id}",
     skip(state, user, page_data)

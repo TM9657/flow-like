@@ -373,6 +373,7 @@ pub struct Contact {
 }
 
 #[derive(Debug, Serialize, Deserialize, JsonSchema, Clone)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 pub struct BitSearchQuery {
     pub search: Option<String>,
     pub limit: Option<u64>,

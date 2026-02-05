@@ -14,6 +14,18 @@ use sea_orm::{ColumnTrait, EntityTrait, QueryFilter, QuerySelect};
 
 use super::get_bit::temporary_bit;
 
+#[utoipa::path(
+    post,
+    path = "/bit/search",
+    tag = "bit",
+    params(
+        ("language" = Option<String>, Query, description = "Language code for metadata")
+    ),
+    request_body = BitSearchQuery,
+    responses(
+        (status = 200, description = "Search results", body = Vec<Bit>)
+    )
+)]
 #[tracing::instrument(name = "POST /bit", skip(state, user, bit_query, lang_query))]
 pub async fn search_bits(
     State(state): State<AppState>,

@@ -17,14 +17,14 @@ use axum::{
     routing::{delete, get, patch, post},
 };
 
-mod management;
+pub mod management;
 pub mod service;
-mod trigger;
+pub mod trigger;
 
 pub fn routes() -> Router<AppState> {
     Router::new()
         // List all active sinks for apps user has access to
-        .route("/", get(management::list_user_sinks))
+        .route("/", get(management::list_sinks))
         // List sinks for a specific app
         .route("/app/{app_id}", get(management::list_app_sinks))
         // Get/update/toggle a specific sink
@@ -32,33 +32,33 @@ pub fn routes() -> Router<AppState> {
         .route("/{event_id}", patch(management::update_sink))
         .route("/{event_id}/toggle", post(management::toggle_sink))
         // Service-to-service trigger (for internal sink services: cron, discord bot, telegram bot)
-        .route("/trigger/async", post(trigger::service_trigger))
+        .route("/trigger/async", post(trigger::trigger_service))
         // List cron schedules (for docker-compose sink service to sync)
-        .route("/schedules", get(trigger::list_cron_schedules))
+        .route("/schedules", get(trigger::get_cron_sinks))
         // List sink configs by type (for discord/telegram bots to sync)
-        .route("/configs", get(trigger::list_sink_configs))
+        .route("/configs", get(trigger::get_sink_configs))
         // HTTP sink trigger - matches any method and path after app_id
-        .route("/trigger/http/{app_id}/{*path}", get(trigger::http_trigger))
+        .route("/trigger/http/{app_id}/{*path}", get(trigger::trigger_http))
         .route(
             "/trigger/http/{app_id}/{*path}",
-            post(trigger::http_trigger),
+            post(trigger::trigger_http),
         )
         .route(
             "/trigger/http/{app_id}/{*path}",
-            patch(trigger::http_trigger),
+            patch(trigger::trigger_http),
         )
         .route(
             "/trigger/http/{app_id}/{*path}",
-            delete(trigger::http_trigger),
+            delete(trigger::trigger_http),
         )
         // Telegram webhook trigger - async execution with secret token verification
         .route(
             "/trigger/telegram/{event_id}",
-            post(trigger::telegram_trigger),
+            post(trigger::trigger_telegram),
         )
         // Discord interactions webhook trigger - async execution with Ed25519 signature verification
         .route(
             "/trigger/discord/{event_id}",
-            post(trigger::discord_trigger),
+            post(trigger::trigger_discord),
         )
 }

@@ -35,6 +35,18 @@ async fn should_update(
     should_update
 }
 
+#[utoipa::path(
+    get,
+    path = "/user/info",
+    tag = "user",
+    responses(
+        (status = 200, description = "Returns the current user's information"),
+        (status = 401, description = "Unauthorized")
+    ),
+    security(
+        ("bearer_auth" = [])
+    )
+)]
 #[tracing::instrument(name = "GET /user/info", skip(state, user))]
 pub async fn user_info(
     State(state): State<AppState>,

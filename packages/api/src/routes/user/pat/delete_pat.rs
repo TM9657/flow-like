@@ -2,12 +2,26 @@ use crate::{entity::pat, error::ApiError, middleware::jwt::AppUser, state::AppSt
 use axum::{Extension, Json, extract::State};
 use sea_orm::{ColumnTrait, EntityTrait, QueryFilter};
 use serde::{Deserialize, Serialize};
+use utoipa::ToSchema;
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Deserialize, Serialize, ToSchema)]
 pub struct DeletePatInput {
     pub id: String,
 }
 
+#[utoipa::path(
+    delete,
+    path = "/user/pat",
+    tag = "user",
+    request_body = DeletePatInput,
+    responses(
+        (status = 200, description = "Personal access token deleted"),
+        (status = 401, description = "Unauthorized")
+    ),
+    security(
+        ("bearer_auth" = [])
+    )
+)]
 #[tracing::instrument(name = "DELETE /user/pat", skip(state, user, input))]
 pub async fn delete_pat(
     State(state): State<AppState>,

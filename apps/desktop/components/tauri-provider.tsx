@@ -469,6 +469,20 @@ function ProfileSyncer() {
 					string,
 					{ icon?: string; thumbnail?: string }
 				> = new Map();
+
+				// Gather shortcuts for each profile
+				const profileShortcuts: Map<string, any[]> = new Map();
+				for (const p of Object.values(localProfiles)) {
+					const profileId = p.hub_profile.id;
+					if (profileId) {
+						const shortcuts = await appsDB.shortcuts
+							.where("profileId")
+							.equals(profileId)
+							.toArray();
+						profileShortcuts.set(profileId, shortcuts);
+					}
+				}
+
 				const profilesToSync = Object.values(localProfiles).map((p) => {
 					const hubProfile = p.hub_profile;
 					const filteredApps = hubProfile.apps?.filter(
@@ -485,6 +499,8 @@ function ProfileSyncer() {
 						});
 					}
 
+					const shortcuts = hubProfile.id ? profileShortcuts.get(hubProfile.id) : undefined;
+
 					return {
 						id: hubProfile.id,
 						name: hubProfile.name,
@@ -500,6 +516,7 @@ function ProfileSyncer() {
 						theme: hubProfile.theme,
 						bit_ids: hubProfile.bits,
 						apps: filteredApps,
+						shortcuts: shortcuts,
 						hubs: hubProfile.hubs,
 						settings: hubProfile.settings,
 						createdAt: hubProfile.created,
@@ -597,6 +614,183 @@ function ProfileSyncer() {
 						localId: local_id,
 						serverId: server_id,
 					});
+
+					// Also remap shortcuts profileId
+					const shortcuts = await appsDB.shortcuts
+						.where("profileId")
+						.equals(local_id)
+						.toArray();
+					for (const shortcut of shortcuts) {
+						await appsDB.shortcuts.update(shortcut.id, {
+							profileId: server_id,
+						});
+					}
+				}
+
+				// After successful sync and uploads, fetch the updated profiles from backend
+				// to get the final icon/thumbnail CUIDs and update local profiles with CDN URLs
+				try {
+					const profilesUrl = baseUrl.startsWith("http")
+						? `${baseUrl}/api/v1/profile`
+						: `${protocol}://${baseUrl}/api/v1/profile`;
+
+					const profilesResponse = await tauriFetch(profilesUrl, {
+						method: "GET",
+						headers: {
+							"Content-Type": "application/json",
+							Authorization: `Bearer ${accessToken}`,
+						},
+					});
+
+					if (profilesResponse.ok) {
+						const onlineProfiles = (await profilesResponse.json()) as Array<{
+							id: string;
+							icon?: string;
+							thumbnail?: string;
+							shortcuts?: Array<{
+								id: string;
+								profileId: string;
+								label: string;
+								path: string;
+								appId?: string;
+								icon?: string;
+								order: number;
+								createdAt: string;
+							}>;
+						}>;
+
+						// Get CDN base URL from platform config or use hub URL
+						const cdnUrl =
+							(await invoke<string | null>("get_platform_cdn_url").catch(
+								() => null,
+							)) ||
+							(baseUrl.startsWith("http") ? baseUrl : `${protocol}://${baseUrl}`);
+
+						// Build set of online profile IDs
+						const onlineProfileIds = new Set(onlineProfiles.map((p) => p.id));
+
+						// Delete local profiles that don't exist online anymore
+						const currentLocalProfiles =
+							await invoke<Record<string, { hub_profile: IProfile }>>(
+								"get_profiles",
+							);
+						const currentProfileId = await invoke<string>("get_current_profile_id").catch(() => null);
+						let deletedCurrentProfile = false;
+
+						if (currentLocalProfiles) {
+							for (const localProfileId of Object.keys(currentLocalProfiles)) {
+								const localProfile = currentLocalProfiles[localProfileId];
+								// Only delete if profile has online apps (is synced) and doesn't exist online
+								const hasOnlineApps = localProfile.hub_profile.apps?.some(
+									(app) => !offlineAppIds.has(app.app_id),
+								);
+								if (hasOnlineApps && !onlineProfileIds.has(localProfileId)) {
+									console.log(
+										"Deleting local profile that no longer exists online:",
+										localProfileId,
+									);
+
+									// Check if we're deleting the current profile
+									if (localProfileId === currentProfileId) {
+										deletedCurrentProfile = true;
+									}
+
+									try {
+										await invoke("delete_profile", {
+											profileId: localProfileId,
+										});
+										// Also delete associated shortcuts
+										await appsDB.shortcuts
+											.where("profileId")
+											.equals(localProfileId)
+											.delete();
+									} catch (error) {
+										console.error(
+											"Failed to delete local profile:",
+											localProfileId,
+											error,
+										);
+									}
+								}
+							}
+						}
+
+						// Handle edge cases after deletion
+						const remainingProfiles = await invoke<Record<string, { hub_profile: IProfile }>>(
+							"get_profiles",
+						);
+
+						if (!remainingProfiles || Object.keys(remainingProfiles).length === 0) {
+							// No profiles left - redirect to onboarding
+							console.log("No profiles remaining after sync, redirecting to onboarding");
+							if (typeof window !== "undefined") {
+								window.location.href = "/onboarding";
+							}
+							return;
+						}
+
+						if (deletedCurrentProfile) {
+							// Current profile was deleted - switch to first available profile
+							const firstProfileId = Object.keys(remainingProfiles)[0];
+							console.log("Current profile was deleted, switching to:", firstProfileId);
+							try {
+								await invoke("set_current_profile", {
+									profileId: firstProfileId,
+								});
+							} catch (error) {
+								console.error("Failed to switch profile:", error);
+							}
+						}
+
+						// Update local profiles with online icon/thumbnail URLs and sync shortcuts
+						for (const onlineProfile of onlineProfiles) {
+							// Sync shortcuts from backend to local IndexedDB
+							if (onlineProfile.shortcuts) {
+								const localShortcuts = await appsDB.shortcuts
+									.where("profileId")
+									.equals(onlineProfile.id)
+									.toArray();
+
+								const localShortcutMap = new Map(localShortcuts.map(s => [s.id, s]));
+								const onlineShortcutMap = new Map(onlineProfile.shortcuts.map(s => [s.id, s]));
+
+								// Add or update shortcuts from online
+								for (const onlineShortcut of onlineProfile.shortcuts) {
+									await appsDB.shortcuts.put(onlineShortcut);
+								}
+
+								// Remove shortcuts that don't exist online anymore
+								for (const localShortcut of localShortcuts) {
+									if (!onlineShortcutMap.has(localShortcut.id)) {
+										await appsDB.shortcuts.delete(localShortcut.id);
+									}
+								}
+							}
+
+							if (onlineProfile.icon || onlineProfile.thumbnail) {
+								const localProfile = localProfiles[onlineProfile.id];
+								if (localProfile) {
+									// Construct full CDN URL for icon (icon field contains the CUID)
+									if (onlineProfile.icon) {
+										localProfile.hub_profile.icon = `${cdnUrl}/media/profiles/${onlineProfile.id}/${onlineProfile.icon}.webp`;
+									}
+
+									// Construct full CDN URL for thumbnail
+									if (onlineProfile.thumbnail) {
+										localProfile.hub_profile.thumbnail = `${cdnUrl}/media/profiles/${onlineProfile.id}/${onlineProfile.thumbnail}.webp`;
+									}
+
+									// Update the local profile with new URLs
+									await invoke("upsert_profile", {
+										profile: localProfile,
+									});
+								}
+							}
+						}
+						console.log("Local profiles updated with online CDN URLs");
+					}
+				} catch (error) {
+					console.warn("Failed to fetch and update profile URLs:", error);
 				}
 			} catch (error) {
 				console.warn("Failed to sync profiles to backend:", error);

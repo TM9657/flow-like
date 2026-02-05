@@ -25,13 +25,14 @@ use axum::{
 use flow_like_types::{anyhow, create_id, tokio};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
+use utoipa::{IntoParams, ToSchema};
 
 // ============================================================================
 // Executor endpoints (require executor JWT)
 // ============================================================================
 
 /// Request body for progress updates from executors
-#[derive(Clone, Debug, Deserialize)]
+#[derive(Clone, Debug, Deserialize, ToSchema)]
 pub struct ProgressUpdateRequest {
     /// Progress percentage (0-100)
     pub progress: Option<i32>,
@@ -46,14 +47,14 @@ pub struct ProgressUpdateRequest {
 }
 
 /// Request body for pushing streaming events from executors
-#[derive(Clone, Debug, Deserialize)]
+#[derive(Clone, Debug, Deserialize, ToSchema)]
 pub struct PushEventsRequest {
     /// Batch of events to push
     pub events: Vec<ExecutionEventInput>,
 }
 
 /// Single event input from executor
-#[derive(Clone, Debug, Deserialize)]
+#[derive(Clone, Debug, Deserialize, ToSchema)]
 pub struct ExecutionEventInput {
     /// Event type (log, progress, output, error, chunk, etc.)
     pub event_type: String,
@@ -62,7 +63,7 @@ pub struct ExecutionEventInput {
 }
 
 /// Status values that can be reported
-#[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, ToSchema)]
 #[serde(rename_all = "lowercase")]
 pub enum ProgressStatus {
     Running,
@@ -72,14 +73,14 @@ pub enum ProgressStatus {
 }
 
 /// Response from progress update
-#[derive(Clone, Debug, Serialize)]
+#[derive(Clone, Debug, Serialize, ToSchema)]
 pub struct ProgressUpdateResponse {
     pub accepted: bool,
     pub status: String,
 }
 
 /// Response from pushing events
-#[derive(Clone, Debug, Serialize)]
+#[derive(Clone, Debug, Serialize, ToSchema)]
 pub struct PushEventsResponse {
     pub accepted: i32,
     pub next_sequence: i32,
@@ -88,6 +89,20 @@ pub struct PushEventsResponse {
 /// POST /execution/progress
 ///
 /// Report execution progress. Requires executor JWT in Authorization header.
+#[utoipa::path(
+    post,
+    path = "/execution/progress",
+    tag = "execution",
+    request_body = ProgressUpdateRequest,
+    responses(
+        (status = 200, description = "Progress update accepted", body = ProgressUpdateResponse),
+        (status = 400, description = "Invalid request or JWT"),
+        (status = 404, description = "Run not found")
+    ),
+    security(
+        ("executor_jwt" = [])
+    )
+)]
 #[tracing::instrument(name = "POST /execution/progress", skip(state, headers, body))]
 pub async fn report_progress(
     State(state): State<AppState>,
@@ -174,6 +189,19 @@ pub async fn report_progress(
 /// POST /execution/events
 ///
 /// Push streaming events from executor. Requires executor JWT.
+#[utoipa::path(
+    post,
+    path = "/execution/events",
+    tag = "execution",
+    request_body = PushEventsRequest,
+    responses(
+        (status = 200, description = "Events pushed successfully", body = PushEventsResponse),
+        (status = 400, description = "Invalid request or JWT")
+    ),
+    security(
+        ("executor_jwt" = [])
+    )
+)]
 #[tracing::instrument(name = "POST /execution/events", skip(state, headers, body))]
 pub async fn push_events(
     State(state): State<AppState>,
@@ -229,7 +257,7 @@ pub async fn push_events(
 // ============================================================================
 
 /// Query params for long polling
-#[derive(Clone, Debug, Deserialize)]
+#[derive(Clone, Debug, Deserialize, IntoParams, ToSchema)]
 pub struct PollParams {
     /// Last event sequence received (for pagination)
     pub after_sequence: Option<i32>,
@@ -238,7 +266,7 @@ pub struct PollParams {
 }
 
 /// Response with run status and events
-#[derive(Clone, Debug, Serialize)]
+#[derive(Clone, Debug, Serialize, ToSchema)]
 pub struct PollResponse {
     pub run_id: String,
     pub status: String,
@@ -251,7 +279,7 @@ pub struct PollResponse {
 }
 
 /// Event output for users
-#[derive(Clone, Debug, Serialize)]
+#[derive(Clone, Debug, Serialize, ToSchema)]
 pub struct ExecutionEventOutput {
     pub sequence: i32,
     pub event_type: String,
@@ -263,6 +291,20 @@ pub struct ExecutionEventOutput {
 ///
 /// Long poll for run status and events. Requires user JWT in Authorization header.
 /// The JWT is returned from invoke endpoints (poll_token).
+#[utoipa::path(
+    get,
+    path = "/execution/poll",
+    tag = "execution",
+    params(PollParams),
+    responses(
+        (status = 200, description = "Run status and events", body = PollResponse),
+        (status = 400, description = "Invalid request or JWT"),
+        (status = 404, description = "Run not found")
+    ),
+    security(
+        ("user_jwt" = [])
+    )
+)]
 #[tracing::instrument(name = "GET /execution/poll", skip(state, headers))]
 pub async fn poll_status(
     State(state): State<AppState>,
@@ -342,6 +384,23 @@ pub async fn poll_status(
 /// GET /execution/run/{run_id}
 ///
 /// Get run status (requires app access via normal auth).
+#[utoipa::path(
+    get,
+    path = "/execution/run/{run_id}",
+    tag = "execution",
+    params(
+        ("run_id" = String, Path, description = "Run ID")
+    ),
+    responses(
+        (status = 200, description = "Run status details", body = RunStatusResponse),
+        (status = 401, description = "Unauthorized"),
+        (status = 403, description = "Forbidden"),
+        (status = 404, description = "Run not found")
+    ),
+    security(
+        ("bearer_auth" = [])
+    )
+)]
 #[tracing::instrument(name = "GET /execution/run/{run_id}", skip(state))]
 pub async fn get_run_status(
     State(state): State<AppState>,
@@ -387,7 +446,7 @@ pub async fn get_run_status(
 }
 
 /// Response with run status details
-#[derive(Clone, Debug, Serialize)]
+#[derive(Clone, Debug, Serialize, ToSchema)]
 pub struct RunStatusResponse {
     pub run_id: String,
     pub board_id: String,

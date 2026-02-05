@@ -17,6 +17,7 @@ use tauri::{AppHandle, Url};
 use tauri_plugin_dialog::DialogExt;
 use tracing::instrument;
 use urlencoding::encode;
+use std::path::PathBuf;
 
 fn presign_icon(icon: &str) -> Result<String, TauriFunctionError> {
     // if it already looks like a URL (has a scheme), return it as-is to avoid double-presigning
@@ -189,6 +190,17 @@ pub async fn get_bits_in_current_profile(
         .collect();
 
     Ok(found_bits)
+}
+
+#[instrument(skip_all)]
+#[tauri::command(async)]
+pub async fn get_current_profile_id(
+    app_handle: AppHandle,
+) -> Result<String, TauriFunctionError> {
+    let settings = TauriSettingsState::construct(&app_handle).await?;
+    let settings = settings.lock().await;
+    let current_profile = settings.get_current_profile()?;
+    Ok(current_profile.hub_profile.id)
 }
 
 #[instrument(skip_all)]
@@ -411,4 +423,30 @@ pub async fn profile_update_app(
     }
     settings.serialize();
     Ok(())
+}
+
+/// Read a profile icon file and return its bytes
+#[instrument(skip_all)]
+#[tauri::command(async)]
+pub async fn read_profile_icon(icon_path: String) -> Result<Vec<u8>, TauriFunctionError> {
+    // Decode the path if it's URL encoded
+    let decoded_path = urlencoding::decode(&icon_path)
+        .map_err(|e| TauriFunctionError::new(&format!("Failed to decode path: {}", e)))?;
+
+    // Convert to PathBuf and resolve
+    let path = PathBuf::from(decoded_path.as_ref());
+
+    // Check if file exists
+    if !path.exists() {
+        return Err(TauriFunctionError::new(&format!(
+            "Icon file not found: {}",
+            path.display()
+        )));
+    }
+
+    // Read the file
+    let bytes = std::fs::read(&path)
+        .map_err(|e| TauriFunctionError::new(&format!("Failed to read icon file: {}", e)))?;
+
+    Ok(bytes)
 }

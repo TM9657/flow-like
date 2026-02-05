@@ -15,11 +15,11 @@ sea-orm.workspace = true
 serde = { workspace = true, features = ["derive", "rc"] }
 pin-project-lite = "0.2.16"
 tower.workspace = true
-flow-like.workspace = true
+flow-like = { workspace = true, features = ["openapi"] }
 flow-like-types.workspace = true
 flow-like-storage.workspace = true
 flow-like-sinks.workspace = true
-flow-like-wasm.workspace = true
+flow-like-wasm = { workspace = true, features = ["openapi"] }
 serde_json.workspace = true
 base64.workspace = true
 jsonwebtoken.workspace = true
@@ -29,7 +29,9 @@ tracing.workspace = true
 tracing-subscriber = { workspace = true, features = ["env-filter"] }
 tower-http.workspace = true
 chrono.workspace = true
-oasgen = {version="0.25.0", features = ["axum"]}
+utoipa = { version = "5", features = ["axum_extras", "chrono"] }
+utoipa-axum = "0.2"
+utoipa-swagger-ui = { version = "9", features = ["axum"] }
 async-stripe.workspace = true
 bitflags.workspace = true
 futures.workspace = true

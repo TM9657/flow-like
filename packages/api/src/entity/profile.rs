@@ -24,6 +24,8 @@ pub struct Model {
     pub settings: Option<Json>,
     #[sea_orm(column_type = "JsonBinary", nullable)]
     pub apps: Option<Json>,
+    #[sea_orm(column_type = "JsonBinary", nullable)]
+    pub shortcuts: Option<Json>,
     #[sea_orm(column_name = "bitIds")]
     pub bit_ids: Option<Vec<String>>,
     #[sea_orm(column_type = "Text")]

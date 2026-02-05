@@ -15,8 +15,9 @@ use axum::{
 use flow_like_types::anyhow;
 use sea_orm::{ColumnTrait, EntityTrait, QueryFilter, QueryOrder};
 use serde::{Deserialize, Serialize};
+use utoipa::{IntoParams, ToSchema};
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, IntoParams, ToSchema)]
 pub struct ListTokensQuery {
     /// Filter by sink type
     pub sink_type: Option<String>,
@@ -25,7 +26,7 @@ pub struct ListTokensQuery {
     pub include_revoked: bool,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, ToSchema)]
 pub struct SinkTokenInfo {
     pub jti: String,
     pub sink_type: String,
@@ -36,22 +37,23 @@ pub struct SinkTokenInfo {
     pub created_at: String,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, ToSchema)]
 pub struct ListTokensResponse {
     pub tokens: Vec<SinkTokenInfo>,
     pub total: usize,
 }
 
-/// GET /admin/sinks
-///
-/// List all registered sink tokens.
-///
-/// # Authentication
-/// Requires Admin global permission.
-///
-/// # Query Parameters
-/// - `sink_type`: Filter by sink type (optional)
-/// - `include_revoked`: Include revoked tokens (default: false)
+#[utoipa::path(
+    get,
+    path = "/admin/sinks",
+    tag = "admin",
+    params(ListTokensQuery),
+    responses(
+        (status = 200, description = "List of sink tokens", body = ListTokensResponse),
+        (status = 401, description = "Unauthorized"),
+        (status = 403, description = "Forbidden")
+    )
+)]
 #[tracing::instrument(name = "GET /admin/sinks", skip(state, user))]
 pub async fn list_tokens(
     State(state): State<AppState>,

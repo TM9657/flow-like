@@ -5,9 +5,10 @@ use crate::{
 use axum::{Extension, Json, extract::State};
 use sea_orm::{ColumnTrait, EntityTrait, QueryFilter};
 use serde::Serialize;
+use utoipa::ToSchema;
 
 /// Profile response with signed image URLs in icon/thumbnail fields
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, ToSchema)]
 pub struct ProfileResponse {
     pub id: String,
     pub user_id: String,
@@ -19,16 +20,32 @@ pub struct ProfileResponse {
     pub thumbnail: Option<String>,
     pub interests: Option<Vec<String>>,
     pub tags: Option<Vec<String>>,
+    #[schema(value_type = Option<Object>)]
     pub theme: Option<serde_json::Value>,
     pub bit_ids: Option<Vec<String>>,
+    #[schema(value_type = Option<Object>)]
     pub apps: Option<serde_json::Value>,
+    #[schema(value_type = Option<Object>)]
+    pub shortcuts: Option<serde_json::Value>,
+    #[schema(value_type = Option<Object>)]
     pub settings: Option<serde_json::Value>,
     pub hub: String,
     pub hubs: Option<Vec<String>>,
+    #[schema(value_type = String)]
     pub created_at: chrono::NaiveDateTime,
+    #[schema(value_type = String)]
     pub updated_at: chrono::NaiveDateTime,
 }
 
+#[utoipa::path(
+    get,
+    path = "/profile",
+    tag = "profile",
+    responses(
+        (status = 200, description = "List of user profiles with signed image URLs", body = Vec<ProfileResponse>),
+        (status = 401, description = "Unauthorized")
+    )
+)]
 #[tracing::instrument(name = "GET /profile", skip(state, user))]
 pub async fn get_profiles(
     State(state): State<AppState>,
@@ -66,6 +83,7 @@ pub async fn get_profiles(
             theme: p.theme,
             bit_ids: p.bit_ids,
             apps: p.apps,
+            shortcuts: p.shortcuts,
             settings: p.settings,
             hub: p.hub,
             hubs: p.hubs,

@@ -1,5 +1,19 @@
 "use client";
 import { createId } from "@paralleldrive/cuid2";
+import {
+	DndContext,
+	type DragEndEvent,
+	PointerSensor,
+	closestCenter,
+	useSensor,
+	useSensors,
+} from "@dnd-kit/core";
+import {
+	SortableContext,
+	useSortable,
+	verticalListSortingStrategy,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 import type Dexie from "dexie";
 import type { EntityTable } from "dexie";
 import {
@@ -9,6 +23,7 @@ import {
 	ExternalLink,
 	FolderClosed,
 	Globe,
+	GripVertical,
 	Loader2,
 	type LucideIcon,
 	PinIcon,
@@ -269,6 +284,57 @@ export function Shortcuts<TBackend, TAppMetadata>({
 			]
 		: [];
 
+	// Handle drag end for shortcuts reordering
+	const sensors = useSensors(
+		useSensor(PointerSensor, {
+			activationConstraint: {
+				distance: 8,
+			},
+		}),
+	);
+
+	const handleDragEnd = useCallback(
+		async (event: DragEndEvent) => {
+			const { active, over } = event;
+
+			if (!over || active.id === over.id || !shortcuts) {
+				return;
+			}
+
+			const oldIndex = shortcuts.findIndex((s) => s.id === active.id);
+			const newIndex = shortcuts.findIndex((s) => s.id === over.id);
+
+			if (oldIndex === -1 || newIndex === -1) {
+				return;
+			}
+
+			// Reorder the shortcuts
+			const reordered = [...shortcuts];
+			const [moved] = reordered.splice(oldIndex, 1);
+			reordered.splice(newIndex, 0, moved);
+
+			// Update order values
+			const updates = reordered.map((shortcut, index) => ({
+				...shortcut,
+				order: index,
+			}));
+
+			// Update in database
+			try {
+				await db.transaction("rw", db.shortcuts, async () => {
+					for (const update of updates) {
+						await db.shortcuts.update(update.id, { order: update.order });
+					}
+				});
+				toast.success("Shortcuts reordered");
+			} catch (error) {
+				console.error("Failed to reorder shortcuts:", error);
+				toast.error("Failed to reorder shortcuts");
+			}
+		},
+		[shortcuts, db, toast],
+	);
+
 	if (predefinedShortcuts.length === 0 && (shortcuts?.length || 0) === 0) {
 		return null;
 	}
@@ -290,73 +356,29 @@ export function Shortcuts<TBackend, TAppMetadata>({
 						</SidebarMenuItem>
 					))}
 
-					{shortcuts?.map((shortcut) => {
-						const metadata = shortcut.appId
-							? getAppMetadata(shortcut.appId)
-							: null;
-						const pageType = getPageType(shortcut.path);
-						const PageIcon = pageType?.icon;
-
-						return (
-							<SidebarMenuItem key={shortcut.id}>
-								<div className="group flex items-center w-full gap-1">
-									<SidebarMenuButton
-										asChild
-										className="flex-1 flex-row items-center"
-										tooltip={shortcut.label}
-										variant={pathname === shortcut.path ? "outline" : "default"}
-									>
-										<a href={shortcut.path} className="flex items-center gap-2">
-											{metadata ? (
-												<div className="relative shrink-0">
-													<Avatar className="h-6 w-6 -left-1">
-														<AvatarImage
-															src={metadata.icon ?? "/app-logo.webp"}
-															alt={metadata.name ?? "App"}
-															className="object-cover rounded-md"
-														/>
-														<AvatarFallback className="text-[9px] rounded-md">
-															{(metadata.name ?? "A")
-																.substring(0, 2)
-																.toUpperCase()}
-														</AvatarFallback>
-													</Avatar>
-													{PageIcon && (
-														<div className="absolute -top-0.5 -right-0.5 bg-background rounded-full p-0.5">
-															<PageIcon className="h-2.5 w-2.5 text-muted-foreground" />
-														</div>
-													)}
-												</div>
-											) : (
-												<Bookmark className="h-4 w-4" />
-											)}
-											<span>{shortcut.label}</span>
-										</a>
-									</SidebarMenuButton>
-									{sidebarState === "expanded" && (
-										<Button
-											variant="ghost"
-											size="icon"
-											className="h-8 w-8 opacity-0 group-hover:opacity-100 transition-opacity shrink-0"
-											onClick={async (e) => {
-												e.preventDefault();
-												e.stopPropagation();
-												try {
-													await db.shortcuts.delete(shortcut.id);
-													toast.success("Shortcut removed");
-												} catch (error) {
-													console.error("Failed to delete shortcut:", error);
-													toast.error("Failed to remove shortcut");
-												}
-											}}
-										>
-											<Trash2 className="h-4 w-4" />
-										</Button>
-									)}
-								</div>
-							</SidebarMenuItem>
-						);
-					})}
+					<DndContext
+						sensors={sensors}
+						collisionDetection={closestCenter}
+						onDragEnd={handleDragEnd}
+					>
+						<SortableContext
+							items={shortcuts?.map((s) => s.id) ?? []}
+							strategy={verticalListSortingStrategy}
+						>
+							{shortcuts?.map((shortcut) => (
+								<SortableShortcutItem
+									key={shortcut.id}
+									shortcut={shortcut}
+									pathname={pathname}
+									sidebarState={sidebarState}
+									db={db}
+									toast={toast}
+									getAppMetadata={getAppMetadata}
+									getPageType={getPageType}
+								/>
+							))}
+						</SortableContext>
+					</DndContext>
 
 					<SidebarMenuItem>
 						<SidebarMenuButton
@@ -494,5 +516,120 @@ export function Shortcuts<TBackend, TAppMetadata>({
 				</Dialog>
 			)}
 		</>
+	);
+}
+
+interface SortableShortcutItemProps {
+	shortcut: IShortcut;
+	pathname: string;
+	sidebarState: "expanded" | "collapsed";
+	db: Dexie & { shortcuts: EntityTable<IShortcut, "id"> };
+	toast: {
+		success: (message: string) => void;
+		error: (message: string) => void;
+	};
+	getAppMetadata: (
+		appId: string,
+	) => { name?: string; icon?: string } | null;
+	getPageType: (
+		path: string,
+	) => { type: string; icon: LucideIcon } | null;
+}
+
+function SortableShortcutItem({
+	shortcut,
+	pathname,
+	sidebarState,
+	db,
+	toast,
+	getAppMetadata,
+	getPageType,
+}: SortableShortcutItemProps) {
+	const {
+		attributes,
+		listeners,
+		setNodeRef,
+		transform,
+		transition,
+		isDragging,
+	} = useSortable({
+		id: shortcut.id,
+	});
+
+	const style: React.CSSProperties = {
+		transform: transform ? CSS.Transform.toString(transform) : undefined,
+		transition,
+		opacity: isDragging ? 0.5 : 1,
+	};
+
+	const metadata = shortcut.appId ? getAppMetadata(shortcut.appId) : null;
+	const pageType = getPageType(shortcut.path);
+	const PageIcon = pageType?.icon;
+
+	return (
+		<SidebarMenuItem ref={setNodeRef} style={style}>
+			<div className="group flex items-center w-full gap-1">
+				{sidebarState === "expanded" && (
+					<div
+						{...attributes}
+						{...listeners}
+						className="cursor-grab active:cursor-grabbing p-1 hover:bg-accent rounded"
+					>
+						<GripVertical className="h-4 w-4 text-muted-foreground" />
+					</div>
+				)}
+				<SidebarMenuButton
+					asChild
+					className="flex-1 flex-row items-center"
+					tooltip={shortcut.label}
+					variant={pathname === shortcut.path ? "outline" : "default"}
+				>
+					<a href={shortcut.path} className="flex items-center gap-2">
+						{metadata ? (
+							<div className="relative shrink-0">
+								<Avatar className="h-6 w-6 -left-1">
+									<AvatarImage
+										src={metadata.icon ?? "/app-logo.webp"}
+										alt={metadata.name ?? "App"}
+										className="object-cover rounded-md"
+									/>
+									<AvatarFallback className="text-[9px] rounded-md">
+										{(metadata.name ?? "A").substring(0, 2).toUpperCase()}
+									</AvatarFallback>
+								</Avatar>
+								{PageIcon && (
+									<div className="absolute -top-0.5 -right-0.5 bg-background rounded-full p-0.5">
+										<PageIcon className="h-2.5 w-2.5 text-muted-foreground" />
+									</div>
+								)}
+							</div>
+						) : (
+							<Bookmark className="h-4 w-4" />
+						)}
+						<span>{shortcut.label}</span>
+					</a>
+				</SidebarMenuButton>
+				{sidebarState === "expanded" && (
+					<Button
+						variant="ghost"
+						size="icon"
+						className="h-8 w-8 opacity-0 group-hover:opacity-100 transition-opacity shrink-0"
+						onClick={async (e) => {
+							e.preventDefault();
+							e.stopPropagation();
+							try {
+								await db.shortcuts.delete(shortcut.id);
+								toast.success("Shortcut removed");
+							} catch (error) {
+								console.error("Failed to delete shortcut:", error);
+								toast.error("Failed to remove shortcut");
+							}
+						}}
+					>
+						<Trash2 className="h-4 w-4" />
+					</Button>
+				)}
+			</div>
+		</SidebarMenuItem>
 	);
 }

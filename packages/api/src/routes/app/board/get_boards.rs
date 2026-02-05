@@ -8,6 +8,18 @@ use axum::{
 };
 use flow_like::flow::board::Board;
 
+#[utoipa::path(
+    get,
+    path = "/apps/{app_id}/board",
+    tag = "boards",
+    params(
+        ("app_id" = String, Path, description = "Application ID")
+    ),
+    responses(
+        (status = 200, description = "List of boards in the application", body = Vec<Object>),
+        (status = 401, description = "Unauthorized")
+    )
+)]
 #[tracing::instrument(name = "GET /apps/{app_id}/board", skip(state, user))]
 pub async fn get_boards(
     State(state): State<AppState>,

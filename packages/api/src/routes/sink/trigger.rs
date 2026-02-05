@@ -28,6 +28,7 @@ use ipnetwork::IpNetwork;
 use sea_orm::{ActiveModelTrait, ActiveValue::Set, ColumnTrait, EntityTrait, QueryFilter};
 use serde::{Deserialize, Serialize};
 use std::{net::SocketAddr, sync::Arc};
+use utoipa::ToSchema;
 
 /// Telegram server IP ranges (CIDR notation)
 /// Webhooks are sent from these ranges only
@@ -78,7 +79,7 @@ fn merge_payloads(
 }
 
 /// Input for programmatic event triggering
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct TriggerEventInput {
     /// The event ID to trigger
     pub event_id: String,
@@ -89,7 +90,7 @@ pub struct TriggerEventInput {
 }
 
 /// Response from trigger operations
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, ToSchema)]
 pub struct TriggerResponse {
     pub triggered: bool,
     pub run_id: Option<String>,
@@ -251,8 +252,23 @@ pub async fn trigger_event(
 
 /// POST/GET/etc /sink/trigger/{app_id}/{path}
 /// HTTP endpoint for HTTP sinks
+#[utoipa::path(
+    post,
+    path = "/sink/trigger/http/{app_id}/{path}",
+    tag = "sink",
+    params(
+        ("app_id" = String, Path, description = "Application ID"),
+        ("path" = String, Path, description = "HTTP path for the sink")
+    ),
+    responses(
+        (status = 200, description = "Event triggered successfully"),
+        (status = 401, description = "Invalid or missing auth token"),
+        (status = 404, description = "Route not found"),
+        (status = 500, description = "Internal server error")
+    )
+)]
 #[tracing::instrument(name = "ANY /sink/trigger/{app_id}/{path}", skip(state, headers, body))]
-pub async fn http_trigger(
+pub async fn trigger_http(
     State(state): State<AppState>,
     Path((app_id, path)): Path<(String, String)>,
     method: Method,
@@ -511,11 +527,26 @@ pub struct TelegramQueryParams {
 
 /// POST /sink/trigger/telegram/{event_id}
 /// Telegram webhook endpoint - async execution with secret token & IP verification
+#[utoipa::path(
+    post,
+    path = "/sink/trigger/telegram/{event_id}",
+    tag = "sink",
+    params(
+        ("event_id" = String, Path, description = "Event ID"),
+        ("secret_token" = Option<String>, Query, description = "Telegram secret token")
+    ),
+    responses(
+        (status = 200, description = "Webhook received and processing", body = TriggerResponse),
+        (status = 401, description = "Invalid or missing secret token"),
+        (status = 403, description = "Request not from Telegram servers"),
+        (status = 404, description = "Webhook not found or inactive")
+    )
+)]
 #[tracing::instrument(
     name = "POST /sink/trigger/telegram/{event_id}",
     skip(state, headers, body, connect_info)
 )]
-pub async fn telegram_trigger(
+pub async fn trigger_telegram(
     State(state): State<AppState>,
     Path(event_id): Path<String>,
     Query(query): Query<TelegramQueryParams>,
@@ -822,11 +853,24 @@ fn verify_discord_signature(
 /// POST /sink/trigger/discord/{event_id}
 /// Discord interactions webhook endpoint - async execution with Ed25519 signature verification
 /// Discord requires responding to PING interactions with PONG, and must respond within 3 seconds
+#[utoipa::path(
+    post,
+    path = "/sink/trigger/discord/{event_id}",
+    tag = "sink",
+    params(
+        ("event_id" = String, Path, description = "Event ID")
+    ),
+    responses(
+        (status = 200, description = "Interaction processed"),
+        (status = 401, description = "Invalid signature"),
+        (status = 404, description = "Webhook not found or inactive")
+    )
+)]
 #[tracing::instrument(
     name = "POST /sink/trigger/discord/{event_id}",
     skip(state, headers, body)
 )]
-pub async fn discord_trigger(
+pub async fn trigger_discord(
     State(state): State<AppState>,
     Path(event_id): Path<String>,
     headers: HeaderMap,
@@ -1086,7 +1130,7 @@ pub struct SinkTriggerClaims {
 }
 
 /// Request body for service-to-service trigger
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, ToSchema)]
 pub struct ServiceTriggerRequest {
     /// The event ID to trigger
     pub event_id: String,
@@ -1098,7 +1142,7 @@ pub struct ServiceTriggerRequest {
 }
 
 /// Response from service trigger
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, ToSchema)]
 pub struct ServiceTriggerResponse {
     pub success: bool,
     pub run_id: Option<String>,
@@ -1170,8 +1214,26 @@ async fn is_token_revoked(db: &sea_orm::DatabaseConnection, jti: &str) -> Result
 ///
 /// If a service is compromised, it can only trigger events of its own type.
 /// Tokens can be individually revoked via /admin/sinks/{jti}.
+#[utoipa::path(
+    post,
+    path = "/sink/trigger/service/{event_id}",
+    tag = "sink",
+    params(
+        ("event_id" = String, Path, description = "Event ID")
+    ),
+    request_body = ServiceTriggerRequest,
+    responses(
+        (status = 200, description = "Service trigger response", body = ServiceTriggerResponse),
+        (status = 401, description = "Unauthorized"),
+        (status = 403, description = "Token not authorized for sink type"),
+        (status = 404, description = "Sink not found")
+    ),
+    security(
+        ("bearer_auth" = [])
+    )
+)]
 #[tracing::instrument(name = "POST /sink/trigger/async", skip(state, headers))]
-pub async fn service_trigger(
+pub async fn trigger_service(
     State(state): State<AppState>,
     headers: HeaderMap,
     Json(request): Json<ServiceTriggerRequest>,
@@ -1305,8 +1367,21 @@ pub async fn service_trigger(
 ///
 /// List all active cron schedules. Used by docker-compose sink service
 /// to sync its in-memory scheduler with the database.
+#[utoipa::path(
+    get,
+    path = "/sink/cron",
+    tag = "sink",
+    responses(
+        (status = 200, description = "List of cron schedules", body = Vec<CronScheduleInfo>),
+        (status = 401, description = "Unauthorized"),
+        (status = 403, description = "Token not authorized for cron schedules")
+    ),
+    security(
+        ("bearer_auth" = [])
+    )
+)]
 #[tracing::instrument(name = "GET /sink/schedules", skip(state, headers))]
-pub async fn list_cron_schedules(
+pub async fn get_cron_sinks(
     State(state): State<AppState>,
     headers: HeaderMap,
 ) -> Result<Json<Vec<CronScheduleInfo>>, ApiError> {
@@ -1352,7 +1427,7 @@ pub async fn list_cron_schedules(
 }
 
 /// Cron schedule info returned by list_cron_schedules
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, ToSchema)]
 pub struct CronScheduleInfo {
     pub event_id: String,
     pub cron_expression: String,
@@ -1360,7 +1435,7 @@ pub struct CronScheduleInfo {
 }
 
 /// Sink config info returned by list_sink_configs
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, ToSchema)]
 pub struct SinkConfigInfo {
     pub event_id: String,
     pub app_id: String,
@@ -1371,7 +1446,7 @@ pub struct SinkConfigInfo {
 }
 
 /// Query parameters for list_sink_configs
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, ToSchema)]
 pub struct SinkConfigsQuery {
     pub sink_type: String,
 }
@@ -1380,8 +1455,24 @@ pub struct SinkConfigsQuery {
 ///
 /// List all active sink configs for a specific sink type.
 /// Used by sink services (Discord bot, Telegram bot) to sync their configs.
+#[utoipa::path(
+    get,
+    path = "/sink/configs",
+    tag = "sink",
+    params(
+        ("sink_type" = String, Query, description = "Sink type to filter by")
+    ),
+    responses(
+        (status = 200, description = "List of sink configs", body = Vec<SinkConfigInfo>),
+        (status = 401, description = "Unauthorized"),
+        (status = 403, description = "Token not authorized for sink type")
+    ),
+    security(
+        ("bearer_auth" = [])
+    )
+)]
 #[tracing::instrument(name = "GET /sink/configs", skip(state, headers))]
-pub async fn list_sink_configs(
+pub async fn get_sink_configs(
     State(state): State<AppState>,
     headers: HeaderMap,
     axum::extract::Query(query): axum::extract::Query<SinkConfigsQuery>,

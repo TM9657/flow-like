@@ -61,6 +61,21 @@ fn default_secure() -> bool {
 }
 
 #[derive(Serialize, Deserialize, JsonSchema, Debug, Clone, Hash, PartialEq, Eq)]
+pub struct ProfileShortcut {
+    pub id: String,
+    #[serde(rename = "profileId")]
+    pub profile_id: String,
+    pub label: String,
+    pub path: String,
+    #[serde(rename = "appId")]
+    pub app_id: Option<String>,
+    pub icon: Option<String>,
+    pub order: i32,
+    #[serde(rename = "createdAt")]
+    pub created_at: String,
+}
+
+#[derive(Serialize, Deserialize, JsonSchema, Debug, Clone, Hash, PartialEq, Eq)]
 pub struct Profile {
     #[serde(default = "flow_like_types::create_id")]
     pub id: String,
@@ -81,6 +96,8 @@ pub struct Profile {
     pub hubs: Vec<String>,
     #[serde(default)]
     pub apps: Option<Vec<ProfileApp>>,
+    #[serde(default)]
+    pub shortcuts: Option<Vec<ProfileShortcut>>,
     #[serde(default)]
     pub theme: Option<Value>,
     pub bits: Vec<String>, // hub:id
@@ -105,6 +122,7 @@ impl Default for Profile {
             interests: vec![],
             tags: vec![],
             apps: Some(vec![]),
+            shortcuts: Some(vec![]),
             theme: None,
             settings: Settings {
                 connection_mode: ConnectionMode::SimpleBezier,

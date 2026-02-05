@@ -11,6 +11,23 @@ use axum::{
 };
 use sea_orm::{ColumnTrait, EntityTrait, QueryFilter, QueryOrder, QuerySelect};
 
+#[utoipa::path(
+    get,
+    path = "/user/invites",
+    tag = "user",
+    params(
+        ("language" = Option<String>, Query, description = "Language code"),
+        ("limit" = Option<u64>, Query, description = "Maximum number of results"),
+        ("offset" = Option<u64>, Query, description = "Offset for pagination")
+    ),
+    responses(
+        (status = 200, description = "List of pending invitations"),
+        (status = 401, description = "Unauthorized")
+    ),
+    security(
+        ("bearer_auth" = [])
+    )
+)]
 #[tracing::instrument(name = "GET /user/invites", skip(state, user))]
 pub async fn get_invites(
     State(state): State<AppState>,

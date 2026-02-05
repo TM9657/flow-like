@@ -11,8 +11,9 @@ use flow_like_types::{Value, create_id};
 use sea_orm::{ActiveModelTrait, ActiveValue::Set, ColumnTrait, EntityTrait, QueryFilter};
 use serde::{Deserialize, Serialize};
 use serde_json::to_value;
+use utoipa::ToSchema;
 
-#[derive(Debug, Clone, Deserialize, Serialize)]
+#[derive(Debug, Clone, Deserialize, Serialize, ToSchema)]
 pub struct ProfileBody {
     pub name: Option<String>,
     pub description: Option<String>,
@@ -22,16 +23,20 @@ pub struct ProfileBody {
     pub thumbnail_upload_ext: Option<String>,
     pub interests: Option<Vec<String>>,
     pub tags: Option<Vec<String>>,
+    #[schema(value_type = Option<Object>)]
     pub theme: Option<Value>,
     pub bit_ids: Option<Vec<String>>,
+    #[schema(value_type = Option<Vec<Object>>)]
     pub apps: Option<Vec<ProfileApp>>,
     pub hub: Option<String>,
     pub hubs: Option<Vec<String>>,
+    #[schema(value_type = Option<Object>)]
     pub settings: Option<Settings>,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, ToSchema)]
 pub struct UpsertProfileResponse {
+    #[schema(value_type = Object)]
     pub profile: profile::Model,
     /// Signed URL for uploading icon (if requested)
     pub icon_upload_url: Option<String>,
@@ -85,6 +90,19 @@ async fn delete_old_image(
     Ok(())
 }
 
+#[utoipa::path(
+    post,
+    path = "/profile/{profile_id}",
+    tag = "profile",
+    params(
+        ("profile_id" = String, Path, description = "Profile ID to create or update")
+    ),
+    request_body = ProfileBody,
+    responses(
+        (status = 200, description = "Profile created or updated successfully", body = UpsertProfileResponse),
+        (status = 401, description = "Unauthorized")
+    )
+)]
 #[tracing::instrument(name = "POST /profile/{profile_id}", skip(state, user, profile_body))]
 pub async fn upsert_profile(
     State(state): State<AppState>,

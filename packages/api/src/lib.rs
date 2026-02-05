@@ -17,9 +17,12 @@ use tower_http::{
     decompression::RequestDecompressionLayer,
 };
 use tracing_subscriber::EnvFilter;
+use utoipa::OpenApi;
+use utoipa_swagger_ui::SwaggerUi;
 
 pub mod entity;
 mod middleware;
+pub mod openapi;
 mod routes;
 
 pub mod alerting;
@@ -97,7 +100,9 @@ pub fn construct_router(state: Arc<State>) -> Router {
                 )),
         );
 
-    Router::new().nest("/api/v1", router)
+    Router::new()
+        .merge(SwaggerUi::new("/swagger-ui").url("/api-doc/openapi.json", openapi::ApiDoc::openapi()))
+        .nest("/api/v1", router)
 }
 
 #[tracing::instrument(name = "GET /", skip(state))]

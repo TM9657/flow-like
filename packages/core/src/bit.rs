@@ -25,6 +25,7 @@ const NAME_HINT_WEIGHT: f32 = 0.2; // weight of name similarity for best model p
 const NAME_HINT_SIMILARITY_THRESHOLD: f32 = 0.5; // minimum required similarity score to model name
 
 #[derive(Serialize, Deserialize, JsonSchema, Clone, Debug)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 pub struct Metadata {
     pub name: String,
     pub description: String,
@@ -40,7 +41,9 @@ pub struct Metadata {
     pub support_url: Option<String>,
     pub docs_url: Option<String>,
     pub organization_specific_values: Option<Vec<u8>>,
+    #[cfg_attr(feature = "openapi", schema(value_type = String))]
     pub created_at: SystemTime,
+    #[cfg_attr(feature = "openapi", schema(value_type = String))]
     pub updated_at: SystemTime,
 }
 
@@ -123,6 +126,7 @@ impl Metadata {
 }
 
 #[derive(Serialize, Deserialize, JsonSchema, Clone, Debug, PartialEq, Default)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 pub enum BitTypes {
     Llm,
     Vlm,
@@ -332,6 +336,7 @@ impl BitModelClassification {
 }
 
 #[derive(Serialize, Deserialize, JsonSchema, Clone, Debug, Default)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 pub struct Bit {
     pub id: String,
     #[serde(rename = "type")]

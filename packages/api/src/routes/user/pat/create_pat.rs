@@ -7,22 +7,36 @@ use flow_like_types::{
 };
 use sea_orm::{ActiveModelTrait, ActiveValue::Set};
 use serde::{Deserialize, Serialize};
+use utoipa::ToSchema;
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Deserialize, Serialize, ToSchema)]
 pub struct PatOut {
     pub pat: String,
     pub permission: i64,
 }
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Deserialize, Serialize, ToSchema)]
 pub struct PatInput {
     pub name: String,
-
-    // Optional expiration timestamp (in seconds since epoch)
+    /// Optional expiration timestamp (in seconds since epoch)
     pub valid_until: Option<i64>,
     pub permissions: Option<i64>,
 }
 
+#[utoipa::path(
+    put,
+    path = "/user/pat",
+    tag = "user",
+    request_body = PatInput,
+    responses(
+        (status = 200, description = "Personal access token created", body = PatOut),
+        (status = 401, description = "Unauthorized"),
+        (status = 400, description = "Invalid input")
+    ),
+    security(
+        ("bearer_auth" = [])
+    )
+)]
 #[tracing::instrument(name = "PUT /user/pat", skip(state, user, input))]
 pub async fn create_pat(
     State(state): State<AppState>,

@@ -35,9 +35,10 @@ use axum::{
 use flow_like_types::{anyhow, create_id, tokio};
 use sea_orm::{ActiveModelTrait, ActiveValue::Set};
 use serde::{Deserialize, Serialize};
+use utoipa::{IntoParams, ToSchema};
 
 /// Query parameters for board invocation
-#[derive(Clone, Debug, Deserialize, Default)]
+#[derive(Clone, Debug, Deserialize, Default, IntoParams, ToSchema)]
 pub struct InvokeBoardQuery {
     /// Track run locally only - no remote execution
     #[serde(default)]
@@ -48,22 +49,25 @@ pub struct InvokeBoardQuery {
 }
 
 /// Request body for board invocation
-#[derive(Clone, Debug, Deserialize)]
+#[derive(Clone, Debug, Deserialize, ToSchema)]
 pub struct InvokeBoardRequest {
     /// Node ID to start execution from (required)
     pub node_id: String,
     /// Optional board version as tuple (major, minor, patch) - defaults to latest
     pub version: Option<(u32, u32, u32)>,
     /// Input payload for the execution
+    #[schema(value_type = Option<Object>)]
     pub payload: Option<serde_json::Value>,
     /// User's auth token to pass to the flow
     pub token: Option<String>,
     /// OAuth tokens keyed by provider name
+    #[schema(value_type = Option<Object>)]
     pub oauth_tokens: Option<std::collections::HashMap<String, serde_json::Value>>,
     /// Whether to stream node state updates (true for boards, false for events)
     #[serde(default = "default_stream_state")]
     pub stream_state: bool,
     /// Runtime-configured variables to override board variables
+    #[schema(value_type = Option<Object>)]
     pub runtime_variables:
         Option<std::collections::HashMap<String, flow_like::flow::variable::Variable>>,
 }
@@ -73,7 +77,7 @@ fn default_stream_state() -> bool {
 }
 
 /// Response from board invocation
-#[derive(Clone, Debug, Serialize)]
+#[derive(Clone, Debug, Serialize, ToSchema)]
 pub struct InvokeBoardResponse {
     /// Unique run ID
     pub run_id: String,
@@ -98,6 +102,22 @@ fn get_credentials_access() -> crate::credentials::CredentialsAccess {
 /// Use `?isolated=true` for isolated K8s job execution (Kubernetes only).
 ///
 /// Returns SSE stream for remote execution or JSON for local mode.
+#[utoipa::path(
+    post,
+    path = "/apps/{app_id}/board/{board_id}/invoke",
+    tag = "execution",
+    params(
+        ("app_id" = String, Path, description = "Application ID"),
+        ("board_id" = String, Path, description = "Board ID"),
+        InvokeBoardQuery
+    ),
+    request_body = InvokeBoardRequest,
+    responses(
+        (status = 200, description = "Board invocation started, returns SSE stream or JSON", body = InvokeBoardResponse),
+        (status = 401, description = "Unauthorized"),
+        (status = 403, description = "Forbidden")
+    )
+)]
 #[tracing::instrument(
     name = "POST /apps/{app_id}/board/{board_id}/invoke",
     skip(state, user, params)

@@ -19,9 +19,9 @@
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
-	<string>0.0.7</string>
+	<string>0.0.8</string>
 	<key>CFBundleVersion</key>
-	<string>0.0.4</string>
+	<string>0.0.8</string>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
 	<key>NSAppleEventsUsageDescription</key>
@@ -61,17 +61,8 @@
 			</array>
 		</dict>
 	</array>
-	<key>CFBundleURLTypes</key>
-	<array>
-		<dict>
-			<key>CFBundleURLSchemes</key>
-			<array>
-				<string>flow-like</string>
-			</array>
-			<key>CFBundleURLName</key>
-			<string>flow-like</string>
-		</dict>
-	</array>
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>Allow Flow-Like to save images to your Photos.</string>
 	<key>NSLocalNetworkUsageDescription</key>
 	<string>Flow-Like needs local network access to connect to your desktop and discover peers.</string>
 	<key>NSBonjourServices</key>
@@ -83,7 +74,5 @@
 	<true/>
 	<key>LSSupportsOpeningDocumentsInPlace</key>
 	<true/>
-	<key>NSPhotoLibraryAddUsageDescription</key>
-	<string>Allow Flow-Like to save images to your Photos.</string>
 </dict>
 </plist>

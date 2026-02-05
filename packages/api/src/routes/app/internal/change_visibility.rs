@@ -19,10 +19,10 @@ use sea_orm::{
     ColumnTrait, EntityTrait, IntoActiveModel, QueryFilter, TransactionTrait,
 };
 use serde::{Deserialize, Serialize};
+use utoipa::ToSchema;
 
-#[derive(Clone, Serialize, Deserialize)]
-pub struct UpdateVisibilityBody {
-    pub visibility: Visibility,
+#[derive(Clone, Serialize, Deserialize, ToSchema)]
+pub struct UpdateVisibilityBody {    #[schema(value_type = String)]    pub visibility: Visibility,
 }
 
 /// The following visibility changes are allowed:
@@ -35,6 +35,21 @@ pub struct UpdateVisibilityBody {
 /// - From Prototype to Public Request Join (goes to review)
 /// - From Public to Prototype (requires review -> might be a paid app for example)
 /// - From Public Request Join to Prototype (requires review -> might be a paid app for example)
+#[utoipa::path(
+    patch,
+    path = "/apps/{app_id}/visibility",
+    tag = "apps",
+    params(
+        ("app_id" = String, Path, description = "Application ID")
+    ),
+    request_body = UpdateVisibilityBody,
+    responses(
+        (status = 200, description = "Visibility updated"),
+        (status = 401, description = "Unauthorized"),
+        (status = 403, description = "Forbidden"),
+        (status = 404, description = "Application not found")
+    )
+)]
 #[tracing::instrument(name = "PATCH /apps/{app_id}/visibility", skip(state, user, body))]
 pub async fn change_visibility(
     State(state): State<AppState>,

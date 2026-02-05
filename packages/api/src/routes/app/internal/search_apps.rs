@@ -16,8 +16,28 @@ use flow_like::{
     bit::Metadata,
 };
 use sea_orm::{ColumnTrait, EntityTrait, QueryFilter, QueryOrder, QuerySelect};
-#[tracing::instrument(name = "GET /apps/search", skip(state, user))]
 
+#[utoipa::path(
+    get,
+    path = "/apps/search",
+    tag = "apps",
+    params(
+        ("id" = Option<String>, Query, description = "Filter by app ID"),
+        ("query" = Option<String>, Query, description = "Search query string"),
+        ("language" = Option<String>, Query, description = "Language code (default: en)"),
+        ("limit" = Option<u64>, Query, description = "Maximum number of results (max 100)"),
+        ("offset" = Option<u64>, Query, description = "Offset for pagination"),
+        ("category" = Option<String>, Query, description = "Filter by category"),
+        ("author" = Option<String>, Query, description = "Filter by author"),
+        ("sort" = Option<String>, Query, description = "Sort order (BestRated, MostPopular, MostRelevant, etc.)"),
+        ("tag" = Option<String>, Query, description = "Filter by tag")
+    ),
+    responses(
+        (status = 200, description = "Search results with applications and metadata", body = Vec<Object>),
+        (status = 401, description = "Unauthorized")
+    )
+)]
+#[tracing::instrument(name = "GET /apps/search", skip(state, user))]
 pub async fn search_apps(
     State(state): State<AppState>,
     Extension(user): Extension<AppUser>,

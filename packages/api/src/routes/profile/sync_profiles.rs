@@ -2,14 +2,15 @@ use std::time::Duration;
 
 use crate::{entity::profile, error::ApiError, middleware::jwt::AppUser, state::AppState};
 use axum::{Extension, Json, extract::State};
-use flow_like::profile::{ProfileApp, Settings};
+use flow_like::profile::{ProfileApp, ProfileShortcut, Settings};
 use flow_like_storage::object_store::path::Path;
 use flow_like_types::{Value, create_id};
 use sea_orm::{ActiveModelTrait, ActiveValue::Set, ColumnTrait, EntityTrait, QueryFilter};
 use serde::{Deserialize, Serialize};
 use serde_json::to_value;
+use utoipa::ToSchema;
 
-#[derive(Debug, Clone, Deserialize, Serialize)]
+#[derive(Debug, Clone, Deserialize, Serialize, ToSchema)]
 pub struct SyncProfileRequest {
     pub id: String,
     pub name: String,
@@ -20,10 +21,15 @@ pub struct SyncProfileRequest {
     pub thumbnail_upload_ext: Option<String>,
     pub interests: Option<Vec<String>>,
     pub tags: Option<Vec<String>>,
+    #[schema(value_type = Option<Object>)]
     pub theme: Option<Value>,
     pub bit_ids: Option<Vec<String>>,
+    #[schema(value_type = Option<Vec<Object>>)]
     pub apps: Option<Vec<ProfileApp>>,
+    #[schema(value_type = Option<Vec<Object>>)]
+    pub shortcuts: Option<Vec<ProfileShortcut>>,
     pub hubs: Option<Vec<String>>,
+    #[schema(value_type = Option<Object>)]
     pub settings: Option<Settings>,
     #[serde(rename = "createdAt")]
     pub created_at: Option<String>,
@@ -31,7 +37,7 @@ pub struct SyncProfileRequest {
     pub updated_at: Option<String>,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, ToSchema)]
 pub struct SyncProfileResponse {
     pub synced: Vec<String>,
     pub created: Vec<SyncedProfile>,
@@ -39,7 +45,7 @@ pub struct SyncProfileResponse {
     pub skipped: Vec<String>,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, ToSchema)]
 pub struct SyncedProfile {
     pub local_id: String,
     pub server_id: String,
@@ -49,7 +55,7 @@ pub struct SyncedProfile {
     pub thumbnail_upload_url: Option<String>,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, ToSchema)]
 pub struct UpdatedProfile {
     pub id: String,
     /// Signed URL for uploading icon (if requested)
@@ -108,6 +114,16 @@ async fn delete_old_image(
 /// For existing profiles (matched by ID), updates if local is newer
 /// For new profiles, creates with a server-generated ID and returns the mapping
 /// Returns signed URLs for direct S3 upload when icon/thumbnail uploads are requested
+#[utoipa::path(
+    post,
+    path = "/profile/sync",
+    tag = "profile",
+    request_body = Vec<SyncProfileRequest>,
+    responses(
+        (status = 200, description = "Profiles synced successfully", body = SyncProfileResponse),
+        (status = 401, description = "Unauthorized")
+    )
+)]
 #[tracing::instrument(name = "POST /profile/sync", skip(state, user, profiles))]
 pub async fn sync_profiles(
     State(state): State<AppState>,
@@ -156,6 +172,11 @@ pub async fn sync_profiles(
                 if let Some(apps) = profile_req.apps {
                     let apps: Vec<Value> = apps.iter().map(|v| to_value(v).unwrap()).collect();
                     active_model.apps = Set(Some(Value::Array(apps)));
+                }
+
+                if let Some(shortcuts) = profile_req.shortcuts {
+                    let shortcuts: Vec<Value> = shortcuts.iter().map(|v| to_value(v).unwrap()).collect();
+                    active_model.shortcuts = Set(Some(Value::Array(shortcuts)));
                 }
 
                 if let Some(settings) = profile_req.settings {
@@ -213,6 +234,13 @@ pub async fn sync_profiles(
                 None
             };
 
+            let shortcuts = if let Some(shortcuts) = profile_req.shortcuts {
+                let shortcuts: Vec<Value> = shortcuts.iter().map(|v| to_value(v).unwrap()).collect();
+                Some(Value::Array(shortcuts))
+            } else {
+                None
+            };
+
             let settings = if let Some(settings) = profile_req.settings {
                 Some(to_value(&settings)?)
             } else {
@@ -253,6 +281,7 @@ pub async fn sync_profiles(
                 theme: Set(profile_req.theme.clone()),
                 bit_ids: Set(profile_req.bit_ids.clone()),
                 apps: Set(apps),
+                shortcuts: Set(shortcuts),
                 settings: Set(settings),
                 hub: Set(default_hub.clone()),
                 hubs: Set(profile_req.hubs.or(Some(vec![default_hub]))),

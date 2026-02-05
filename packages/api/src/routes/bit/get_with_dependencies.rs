@@ -19,6 +19,18 @@ use std::{
 
 use super::get_bit::temporary_bit;
 
+#[utoipa::path(
+    get,
+    path = "/bit/{bit_id}/dependencies",
+    tag = "bit",
+    params(
+        ("bit_id" = String, Path, description = "Unique identifier of the bit")
+    ),
+    responses(
+        (status = 200, description = "Bit with all dependencies retrieved successfully", body = Vec<Bit>),
+        (status = 404, description = "Bit not found")
+    )
+)]
 #[tracing::instrument(name = "GET /bit/{bit_id}/dependencies", skip(state, user))]
 pub async fn get_with_dependencies(
     State(state): State<AppState>,
