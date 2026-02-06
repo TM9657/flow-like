@@ -1883,7 +1883,7 @@ export function FlowBoard({
 	});
 
 	return (
-		<div className="w-full flex-1 grow flex-col min-h-0 relative">
+		<div className="w-full flex flex-1 grow flex-col min-h-0 relative overflow-hidden">
 			{/* Desktop FlowPilot floating panel */}
 			{copilotOpen && (
 				<div className="hidden md:block fixed inset-0 z-100 pointer-events-none">
@@ -2075,10 +2075,9 @@ export function FlowBoard({
 
 			<ResizablePanelGroup
 				direction="horizontal"
-				className="flex grow min-h-[calc(100dvh-var(--mobile-header-height,56px)-env(safe-area-inset-bottom))] h-[calc(100dvh-var(--mobile-header-height,56px)-env(safe-area-inset-bottom))] md:min-h-dvh md:h-dvh overscroll-contain"
+				className="flex grow flex-1 min-h-0 h-full overscroll-none"
 				style={{
-					touchAction: "manipulation",
-					WebkitOverflowScrolling: "touch",
+					touchAction: "none",
 					overflow: "hidden",
 				}}
 			>

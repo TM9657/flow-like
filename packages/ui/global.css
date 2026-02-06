@@ -503,9 +503,13 @@
 	html,
 	body {
 		height: 100%;
+		overscroll-behavior: none;
 	}
 	body {
 		overflow: hidden;
+		position: fixed;
+		inset: 0;
+		width: 100%;
 	}
 
 	@supports (font: -apple-system-body) and (-webkit-appearance: none) {
