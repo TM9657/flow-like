@@ -9,14 +9,36 @@ use axum::{
     extract::{Path, State},
 };
 use flow_like_types::{Value, create_id, json};
+use utoipa::ToSchema;
 
 const MAX_PREFIXES: usize = 100;
 
-#[derive(Debug, Clone, serde::Deserialize)]
+#[derive(Debug, Clone, serde::Deserialize, ToSchema)]
 pub struct DownloadFilesPayload {
     pub prefixes: Vec<String>,
 }
 
+#[utoipa::path(
+    post,
+    path = "/apps/{app_id}/data/download",
+    tag = "data",
+    description = "Create signed download URLs for file prefixes.",
+    params(
+        ("app_id" = String, Path, description = "Application ID")
+    ),
+    request_body = DownloadFilesPayload,
+    responses(
+        (status = 200, description = "Signed download URLs", body = String, content_type = "application/json"),
+        (status = 400, description = "Bad request"),
+        (status = 401, description = "Unauthorized"),
+        (status = 403, description = "Forbidden")
+    ),
+    security(
+        ("bearer_auth" = []),
+        ("api_key" = []),
+        ("pat" = [])
+    )
+)]
 #[tracing::instrument(name = "POST /apps/{app_id}/data/download", skip(state, user))]
 pub async fn download_files(
     State(state): State<AppState>,

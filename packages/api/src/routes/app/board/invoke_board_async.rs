@@ -16,8 +16,8 @@ use crate::{
     entity::execution_run,
     error::ApiError,
     execution::{
-        DispatchRequest, ExecutionJwtParams, TokenType, is_jwt_configured, payload_storage,
-        sign_execution_jwt,
+        DispatchRequest, ExecutionJwtParams, TokenType, fetch_profile_for_dispatch,
+        is_jwt_configured, payload_storage, sign_execution_jwt,
     },
     middleware::jwt::AppUser,
     permission::role_permission::RolePermissions,
@@ -51,6 +51,8 @@ pub struct InvokeBoardAsyncRequest {
     #[schema(value_type = Option<Object>)]
     pub runtime_variables:
         Option<std::collections::HashMap<String, flow_like::flow::variable::Variable>>,
+    /// Optional profile ID to select a specific user profile for execution
+    pub profile_id: Option<String>,
 }
 
 /// Response from async board invocation
@@ -218,6 +220,8 @@ pub async fn invoke_board_async(
         ApiError::internal_error(anyhow!("Failed to sign executor JWT: {}", e))
     })?;
 
+    let profile = fetch_profile_for_dispatch(&state.db, &sub, params.profile_id.as_deref(), &app_id).await;
+
     let request = DispatchRequest {
         run_id: run_id.clone(),
         app_id: app_id.clone(),
@@ -235,6 +239,7 @@ pub async fn invoke_board_async(
         stream_state: true,
         runtime_variables: params.runtime_variables,
         user_context: Some(permission.to_user_context()),
+        profile,
     };
 
     let response = state

@@ -1,12 +1,15 @@
-use std::time::Duration;
-
-use crate::{entity::profile, error::ApiError, middleware::jwt::AppUser, state::AppState};
+use crate::{
+    entity::profile,
+    error::ApiError,
+    middleware::jwt::AppUser,
+    routes::profile::{delete_old_image, generate_upload_url},
+    state::AppState,
+};
 use axum::{
     Extension, Json,
     extract::{Path, State},
 };
 use flow_like::profile::{ProfileApp, Settings};
-use flow_like_storage::object_store::path::Path as ObjectPath;
 use flow_like_types::{Value, create_id};
 use sea_orm::{ActiveModelTrait, ActiveValue::Set, ColumnTrait, EntityTrait, QueryFilter};
 use serde::{Deserialize, Serialize};
@@ -42,52 +45,6 @@ pub struct UpsertProfileResponse {
     pub icon_upload_url: Option<String>,
     /// Signed URL for uploading thumbnail (if requested)
     pub thumbnail_upload_url: Option<String>,
-}
-
-/// Generate a signed upload URL and return the CUID to store in DB
-/// - Upload path: media/profiles/{profile_id}/{cuid}.{ext} (original format)
-/// - Final path: media/profiles/{profile_id}/{cuid}.webp (after conversion)
-/// - DB stores: just the cuid
-async fn generate_upload_url(
-    state: &AppState,
-    profile_id: &str,
-    extension: &str,
-) -> Result<(String, String), ApiError> {
-    let id = create_id();
-
-    // Upload path: media/profiles/{profile_id}/{id}.{ext}
-    let upload_path = ObjectPath::from("media")
-        .child("profiles")
-        .child(profile_id)
-        .child(format!("{}.{}", id, extension));
-
-    let signed_url = state
-        .cdn_bucket
-        .sign("PUT", &upload_path, Duration::from_secs(60 * 60))
-        .await?;
-
-    // Return just the cuid to store in DB
-    Ok((signed_url.to_string(), id))
-}
-
-/// Delete an old profile image from storage
-async fn delete_old_image(
-    state: &AppState,
-    profile_id: &str,
-    image_id: &str,
-) -> Result<(), ApiError> {
-    // Construct path: media/profiles/{profile_id}/{image_id}.webp
-    let path = ObjectPath::from("media")
-        .child("profiles")
-        .child(profile_id)
-        .child(format!("{}.webp", image_id));
-
-    let store = state.cdn_bucket.as_generic();
-    if let Err(e) = store.delete(&path).await {
-        tracing::warn!("Failed to delete old profile image: {}", e);
-    }
-
-    Ok(())
 }
 
 #[utoipa::path(
@@ -157,9 +114,9 @@ pub async fn upsert_profile(
         // Handle icon upload request
         let icon_upload_url = if let Some(ext) = &profile_body.icon_upload_ext {
             if let Some(old_icon_id) = &found_profile.icon {
-                delete_old_image(&state, &profile_id, old_icon_id).await?;
+                delete_old_image(&state, &sub, old_icon_id).await?;
             }
-            let (upload_url, image_id) = generate_upload_url(&state, &profile_id, ext).await?;
+            let (upload_url, image_id) = generate_upload_url(&state, &sub, ext).await?;
             active_model.icon = Set(Some(image_id));
             Some(upload_url)
         } else {
@@ -169,9 +126,9 @@ pub async fn upsert_profile(
         // Handle thumbnail upload request
         let thumbnail_upload_url = if let Some(ext) = &profile_body.thumbnail_upload_ext {
             if let Some(old_thumb_id) = &found_profile.thumbnail {
-                delete_old_image(&state, &profile_id, old_thumb_id).await?;
+                delete_old_image(&state, &sub, old_thumb_id).await?;
             }
-            let (upload_url, image_id) = generate_upload_url(&state, &profile_id, ext).await?;
+            let (upload_url, image_id) = generate_upload_url(&state, &sub, ext).await?;
             active_model.thumbnail = Set(Some(image_id));
             Some(upload_url)
         } else {
@@ -211,9 +168,9 @@ pub async fn upsert_profile(
         .or_else(|| profile_body.hubs.as_ref().and_then(|h| h.first().cloned()))
         .unwrap_or_else(|| "https://api.flow-like.com".to_string());
 
-    // Generate upload URLs if requested (using id since that's the new profile's ID)
+    // Generate upload URLs for the new profile
     let (icon_upload_url, icon_id) = if let Some(ext) = &profile_body.icon_upload_ext {
-        let (url, img_id) = generate_upload_url(&state, &id, ext).await?;
+        let (url, img_id) = generate_upload_url(&state, &sub, ext).await?;
         (Some(url), Some(img_id))
     } else {
         (None, None)
@@ -221,7 +178,7 @@ pub async fn upsert_profile(
 
     let (thumbnail_upload_url, thumbnail_id) = if let Some(ext) = &profile_body.thumbnail_upload_ext
     {
-        let (url, img_id) = generate_upload_url(&state, &id, ext).await?;
+        let (url, img_id) = generate_upload_url(&state, &sub, ext).await?;
         (Some(url), Some(img_id))
     } else {
         (None, None)

@@ -11,8 +11,9 @@ use axum::{
 use chrono::{Duration, NaiveDate, Utc};
 use sea_orm::{ColumnTrait, EntityTrait, PaginatorTrait, QueryFilter, QueryOrder};
 use serde::{Deserialize, Serialize};
+use utoipa::ToSchema;
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, ToSchema)]
 pub struct StatsQuery {
     /// Start date for the stats period (YYYY-MM-DD)
     pub start_date: Option<String>,
@@ -27,7 +28,7 @@ fn default_period() -> String {
     "day".to_string()
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct SalesOverview {
     /// Total lifetime revenue (cents)
@@ -59,7 +60,7 @@ pub struct SalesOverview {
     pub purchases_change_percent: Option<f64>,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct DailyStat {
     pub date: String,
@@ -73,7 +74,7 @@ pub struct DailyStat {
     pub avg_order_value: i64,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct SalesStats {
     pub daily_stats: Vec<DailyStat>,
@@ -81,6 +82,26 @@ pub struct SalesStats {
 }
 
 /// GET /apps/{app_id}/sales - Get sales overview for an app
+#[utoipa::path(
+    get,
+    path = "/apps/{app_id}/sales",
+    tag = "sales",
+    description = "Get sales overview for an app.",
+    params(
+        ("app_id" = String, Path, description = "Application ID")
+    ),
+    responses(
+        (status = 200, description = "Sales overview", body = SalesOverview),
+        (status = 401, description = "Unauthorized"),
+        (status = 403, description = "Forbidden"),
+        (status = 404, description = "Not found")
+    ),
+    security(
+        ("bearer_auth" = []),
+        ("api_key" = []),
+        ("pat" = [])
+    )
+)]
 #[tracing::instrument(name = "GET /apps/{app_id}/sales", skip(state, user))]
 pub async fn get_sales_overview(
     State(state): State<AppState>,
@@ -211,6 +232,29 @@ pub async fn get_sales_overview(
 }
 
 /// GET /apps/{app_id}/sales/stats - Get detailed sales statistics with daily breakdown
+#[utoipa::path(
+    get,
+    path = "/apps/{app_id}/sales/stats",
+    tag = "sales",
+    description = "Get sales statistics with daily breakdown.",
+    params(
+        ("app_id" = String, Path, description = "Application ID"),
+        ("start_date" = Option<String>, Query, description = "Start date (YYYY-MM-DD)"),
+        ("end_date" = Option<String>, Query, description = "End date (YYYY-MM-DD)"),
+        ("period" = String, Query, description = "Aggregation period: day, week, month")
+    ),
+    responses(
+        (status = 200, description = "Sales stats", body = SalesStats),
+        (status = 401, description = "Unauthorized"),
+        (status = 403, description = "Forbidden"),
+        (status = 404, description = "Not found")
+    ),
+    security(
+        ("bearer_auth" = []),
+        ("api_key" = []),
+        ("pat" = [])
+    )
+)]
 #[tracing::instrument(name = "GET /apps/{app_id}/sales/stats", skip(state, user))]
 pub async fn get_sales_stats(
     State(state): State<AppState>,

@@ -17,8 +17,9 @@ use flow_like_types::{
 };
 use sea_orm::{ActiveModelTrait, ActiveValue::Set, ColumnTrait, EntityTrait, QueryFilter};
 use serde::{Deserialize, Serialize};
+use utoipa::ToSchema;
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Deserialize, Serialize, ToSchema)]
 pub struct ApiKeyInput {
     pub name: String,
     pub description: Option<String>,
@@ -26,7 +27,7 @@ pub struct ApiKeyInput {
     pub valid_until: Option<i64>,
 }
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Deserialize, Serialize, ToSchema)]
 pub struct ApiKeyOut {
     pub id: String,
     pub api_key: String,
@@ -34,6 +35,27 @@ pub struct ApiKeyOut {
     pub role_name: Option<String>,
 }
 
+#[utoipa::path(
+    put,
+    path = "/apps/{app_id}/api",
+    tag = "api-keys",
+    description = "Create an API key for an app.",
+    params(
+        ("app_id" = String, Path, description = "Application ID")
+    ),
+    request_body = ApiKeyInput,
+    responses(
+        (status = 200, description = "API key created", body = ApiKeyOut),
+        (status = 400, description = "Bad request"),
+        (status = 401, description = "Unauthorized"),
+        (status = 403, description = "Forbidden")
+    ),
+    security(
+        ("bearer_auth" = []),
+        ("api_key" = []),
+        ("pat" = [])
+    )
+)]
 #[tracing::instrument(name = "PUT /apps/{app_id}/api", skip(state, user, input))]
 pub async fn create_api_key(
     State(state): State<AppState>,

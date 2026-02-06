@@ -14,6 +14,28 @@ use axum::{
 use flow_like::bit::Metadata;
 use sea_orm::{ColumnTrait, EntityTrait, QueryFilter};
 
+#[utoipa::path(
+    get,
+    path = "/apps/{app_id}/templates",
+    tag = "templates",
+    description = "List templates for an app with localized metadata.",
+    params(
+        ("app_id" = String, Path, description = "Application ID"),
+        ("language" = Option<String>, Query, description = "Language code (default en)"),
+        ("limit" = Option<u64>, Query, description = "Max results"),
+        ("offset" = Option<u64>, Query, description = "Result offset")
+    ),
+    responses(
+        (status = 200, description = "Template list", body = String, content_type = "application/json"),
+        (status = 401, description = "Unauthorized"),
+        (status = 403, description = "Forbidden")
+    ),
+    security(
+        ("bearer_auth" = []),
+        ("api_key" = []),
+        ("pat" = [])
+    )
+)]
 #[tracing::instrument(name = "GET /apps/{app_id}/templates", skip(state, user))]
 pub async fn get_templates(
     State(state): State<AppState>,

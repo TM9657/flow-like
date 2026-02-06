@@ -10,10 +10,11 @@ use axum::{
 };
 use sea_orm::{ColumnTrait, EntityTrait, PaginatorTrait, QueryFilter, QueryOrder, QuerySelect};
 use serde::{Deserialize, Serialize};
+use utoipa::ToSchema;
 
 use super::overview::verify_sales_access;
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, ToSchema)]
 pub struct PurchasesQuery {
     /// Filter by status
     pub status: Option<String>,
@@ -29,7 +30,7 @@ fn default_limit() -> u64 {
     50
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct PurchaseItem {
     pub id: String,
@@ -48,7 +49,7 @@ pub struct PurchaseItem {
     pub created_at: String,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct PurchasesResponse {
     pub purchases: Vec<PurchaseItem>,
@@ -58,6 +59,28 @@ pub struct PurchasesResponse {
 }
 
 /// GET /apps/{app_id}/sales/purchases - List purchases for an app
+#[utoipa::path(
+    get,
+    path = "/apps/{app_id}/sales/purchases",
+    tag = "sales",
+    description = "List purchases for an app.",
+    params(
+        ("app_id" = String, Path, description = "Application ID"),
+        ("status" = Option<String>, Query, description = "Filter by status"),
+        ("offset" = u64, Query, description = "Result offset"),
+        ("limit" = u64, Query, description = "Max results (max 100)")
+    ),
+    responses(
+        (status = 200, description = "Purchases list", body = PurchasesResponse),
+        (status = 401, description = "Unauthorized"),
+        (status = 403, description = "Forbidden")
+    ),
+    security(
+        ("bearer_auth" = []),
+        ("api_key" = []),
+        ("pat" = [])
+    )
+)]
 #[tracing::instrument(name = "GET /apps/{app_id}/sales/purchases", skip(state, user))]
 pub async fn list_purchases(
     State(state): State<AppState>,

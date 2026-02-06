@@ -9,6 +9,27 @@ use axum::{
 use flow_like_types::create_id;
 use sea_orm::{ActiveModelTrait, ColumnTrait, EntityTrait, QueryFilter, TransactionTrait};
 
+#[utoipa::path(
+    put,
+    path = "/apps/{app_id}/roles/{role_id}",
+    tag = "roles",
+    description = "Create or update a role.",
+    params(
+        ("app_id" = String, Path, description = "Application ID"),
+        ("role_id" = String, Path, description = "Role ID")
+    ),
+    request_body = String,
+    responses(
+        (status = 200, description = "Role saved", body = ()),
+        (status = 401, description = "Unauthorized"),
+        (status = 403, description = "Forbidden")
+    ),
+    security(
+        ("bearer_auth" = []),
+        ("api_key" = []),
+        ("pat" = [])
+    )
+)]
 #[tracing::instrument(name = "PUT /apps/{app_id}/roles/{role_id}", skip(state, user))]
 pub async fn upsert_role(
     State(state): State<AppState>,

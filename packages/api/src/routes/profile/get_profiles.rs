@@ -52,21 +52,23 @@ pub async fn get_profiles(
     Extension(user): Extension<AppUser>,
 ) -> Result<Json<Vec<ProfileResponse>>, ApiError> {
     let sub = user.sub()?;
+    println!("[ProfileSync] GET /profile called by user={}", sub);
     let profiles = profile::Entity::find()
         .filter(profile::Column::UserId.eq(sub))
         .all(&state.db)
         .await?;
 
+    println!("[ProfileSync] GET /profile found {} profiles in DB", profiles.len());
     let mut result = Vec::with_capacity(profiles.len());
     for p in profiles {
         let icon = if let Some(icon_id) = &p.icon {
-            sign_profile_image(&p.id, icon_id, &state).await.ok()
+            sign_profile_image(&p.user_id, icon_id, &state).await.ok()
         } else {
             None
         };
 
         let thumbnail = if let Some(thumb_id) = &p.thumbnail {
-            sign_profile_image(&p.id, thumb_id, &state).await.ok()
+            sign_profile_image(&p.user_id, thumb_id, &state).await.ok()
         } else {
             None
         };

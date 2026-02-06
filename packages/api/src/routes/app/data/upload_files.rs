@@ -9,14 +9,36 @@ use axum::{
     extract::{Path, State},
 };
 use flow_like_types::{Value, create_id, json};
+use utoipa::ToSchema;
 
 const MAX_PREFIXES: usize = 100;
 
-#[derive(Debug, Clone, serde::Deserialize)]
+#[derive(Debug, Clone, serde::Deserialize, ToSchema)]
 pub struct UploadFilesPayload {
     pub prefixes: Vec<String>,
 }
 
+#[utoipa::path(
+    put,
+    path = "/apps/{app_id}/data",
+    tag = "data",
+    description = "Create signed upload URLs for file prefixes.",
+    params(
+        ("app_id" = String, Path, description = "Application ID")
+    ),
+    request_body = UploadFilesPayload,
+    responses(
+        (status = 200, description = "Signed upload URLs", body = String, content_type = "application/json"),
+        (status = 400, description = "Bad request"),
+        (status = 401, description = "Unauthorized"),
+        (status = 403, description = "Forbidden")
+    ),
+    security(
+        ("bearer_auth" = []),
+        ("api_key" = []),
+        ("pat" = [])
+    )
+)]
 #[tracing::instrument(name = "PUT /apps/{app_id}/data", skip(state, user))]
 pub async fn upload_files(
     State(state): State<AppState>,

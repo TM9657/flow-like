@@ -177,9 +177,23 @@ export function FlowPilot({
 	const bitsModels = useMemo(() => {
 		if (!foundBits.data || !profile.data?.hub_profile.bits) return [];
 		const profileBitIds = new Set(profile.data.hub_profile.bits);
+		const canHostLocal = backendContext.capabilities().canHostLlamaCPP;
+
 		return foundBits.data.filter((model) => {
 			const fullId = `${model.hub}:${model.id}`;
-			return profileBitIds.has(fullId);
+			if (!profileBitIds.has(fullId)) return false;
+
+			if (!canHostLocal) {
+				const providerName = model.parameters?.provider?.provider_name?.toLowerCase();
+				if (providerName === "local" ||
+					providerName === "llama.cpp" ||
+					providerName === "llamacpp" ||
+					providerName === "ollama") {
+					return false;
+				}
+			}
+
+			return true;
 		});
 	}, [foundBits.data, profile.data?.hub_profile.bits]);
 

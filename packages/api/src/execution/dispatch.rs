@@ -256,6 +256,9 @@ pub struct DispatchRequest {
     /// User execution context for permission checks during execution
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub user_context: Option<flow_like::flow::execution::UserExecutionContext>,
+    /// User profile data for execution context (bits, settings, etc.)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub profile: Option<serde_json::Value>,
 }
 
 /// Response from dispatch
@@ -843,6 +846,8 @@ fn build_executor_payload(job_id: &str, request: &DispatchRequest) -> serde_json
         "oauth_tokens": request.oauth_tokens,
         "stream_state": request.stream_state,
         "runtime_variables": request.runtime_variables,
+        "user_context": request.user_context,
+        "profile": request.profile,
     })
 }
 
@@ -900,4 +905,80 @@ fn wrap_as_apigw_v2_event(path: &str, body: serde_json::Value) -> serde_json::Va
     request.is_base64_encoded = true;
 
     serde_json::to_value(&request).expect("Failed to serialize API Gateway event")
+}
+
+/// Fetch a profile for a user from the database and convert it
+/// to a JSON value matching the core `Profile` struct format for the executor.
+///
+/// Resolution order:
+/// 1. If `profile_id` is provided, fetch that specific profile (must belong to user)
+/// 2. Otherwise find the first profile whose `apps` list contains the given `app_id`
+/// 3. Fallback to the first profile for the user
+pub async fn fetch_profile_for_dispatch(
+    db: &sea_orm::DatabaseConnection,
+    user_id: &str,
+    profile_id: Option<&str>,
+    app_id: &str,
+) -> Option<serde_json::Value> {
+    use crate::entity::profile;
+    use sea_orm::{ColumnTrait, EntityTrait, QueryFilter};
+
+    let model = if let Some(pid) = profile_id {
+        profile::Entity::find_by_id(pid)
+            .filter(profile::Column::UserId.eq(user_id))
+            .one(db)
+            .await
+            .ok()
+            .flatten()
+    } else {
+        None
+    };
+
+    let model = if model.is_some() {
+        model
+    } else {
+        let profiles = profile::Entity::find()
+            .filter(profile::Column::UserId.eq(user_id))
+            .all(db)
+            .await
+            .ok()
+            .unwrap_or_default();
+
+        profiles
+            .iter()
+            .find(|p| {
+                p.apps
+                    .as_ref()
+                    .and_then(|v| v.as_array())
+                    .map(|arr| {
+                        arr.iter()
+                            .any(|a| a.get("app_id").and_then(|id| id.as_str()) == Some(app_id))
+                    })
+                    .unwrap_or(false)
+            })
+            .or_else(|| profiles.first())
+            .cloned()
+    };
+
+    let model = model?;
+
+    Some(serde_json::json!({
+        "id": model.id,
+        "name": model.name,
+        "description": model.description,
+        "icon": model.icon,
+        "thumbnail": model.thumbnail,
+        "interests": model.interests.unwrap_or_default(),
+        "tags": model.tags.unwrap_or_default(),
+        "hub": model.hub,
+        "secure": true,
+        "hubs": model.hubs.unwrap_or_default(),
+        "apps": model.apps,
+        "shortcuts": model.shortcuts,
+        "theme": model.theme,
+        "bits": model.bit_ids.unwrap_or_default(),
+        "settings": model.settings.unwrap_or_else(|| serde_json::json!({"connection_mode": "simplebezier"})),
+        "updated": model.updated_at.format("%Y-%m-%dT%H:%M:%S%.3fZ").to_string(),
+        "created": model.created_at.format("%Y-%m-%dT%H:%M:%S%.3fZ").to_string(),
+    }))
 }

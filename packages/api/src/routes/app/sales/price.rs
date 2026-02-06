@@ -5,17 +5,18 @@ use axum::{
 };
 use sea_orm::{ActiveModelTrait, ActiveValue::Set, EntityTrait};
 use serde::{Deserialize, Serialize};
+use utoipa::ToSchema;
 
 use super::overview::verify_sales_access;
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct UpdatePriceRequest {
     /// New price in cents (must be >= 0)
     pub price: i64,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct PriceResponse {
     pub price: i64,
@@ -23,6 +24,27 @@ pub struct PriceResponse {
 }
 
 /// PATCH /apps/{app_id}/sales/price - Update the app price
+#[utoipa::path(
+    patch,
+    path = "/apps/{app_id}/sales/price",
+    tag = "sales",
+    description = "Update the app price.",
+    params(
+        ("app_id" = String, Path, description = "Application ID")
+    ),
+    request_body = UpdatePriceRequest,
+    responses(
+        (status = 200, description = "Price updated", body = PriceResponse),
+        (status = 400, description = "Bad request"),
+        (status = 401, description = "Unauthorized"),
+        (status = 403, description = "Forbidden")
+    ),
+    security(
+        ("bearer_auth" = []),
+        ("api_key" = []),
+        ("pat" = [])
+    )
+)]
 #[tracing::instrument(name = "PATCH /apps/{app_id}/sales/price", skip(state, user))]
 pub async fn update_price(
     State(state): State<AppState>,

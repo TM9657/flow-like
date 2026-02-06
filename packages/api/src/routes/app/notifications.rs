@@ -14,8 +14,9 @@ use axum::{
 use flow_like_types::create_id;
 use sea_orm::{ActiveModelTrait, ActiveValue::Set, ColumnTrait, EntityTrait, QueryFilter};
 use serde::{Deserialize, Serialize};
+use utoipa::ToSchema;
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, ToSchema)]
 pub struct CreateNotificationParams {
     /// Event ID that triggered this execution.
     /// Used to resolve the board and verify that notifications are allowed for it.
@@ -32,7 +33,7 @@ pub struct CreateNotificationParams {
     pub node_id: Option<String>,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, ToSchema)]
 pub struct CreateNotificationResponse {
     pub id: String,
     pub success: bool,
@@ -46,6 +47,27 @@ pub struct CreateNotificationResponse {
 /// - The resolved board must contain a Notify User node, otherwise the request is denied
 /// - If target_user_sub is provided, that user must be a member of the project
 /// - If target_user_sub is not provided, notifies the executing user (from JWT sub)
+#[utoipa::path(
+    post,
+    path = "/apps/{app_id}/notifications/create",
+    tag = "notifications",
+    description = "Create a user notification for an event run.",
+    params(
+        ("app_id" = String, Path, description = "Application ID")
+    ),
+    request_body = CreateNotificationParams,
+    responses(
+        (status = 200, description = "Notification created", body = CreateNotificationResponse),
+        (status = 400, description = "Bad request"),
+        (status = 401, description = "Unauthorized"),
+        (status = 403, description = "Forbidden")
+    ),
+    security(
+        ("bearer_auth" = []),
+        ("api_key" = []),
+        ("pat" = [])
+    )
+)]
 #[tracing::instrument(name = "POST /apps/{app_id}/notifications/create", skip(state, user))]
 pub async fn create_notification(
     State(state): State<AppState>,

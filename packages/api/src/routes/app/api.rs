@@ -4,9 +4,12 @@ use axum::{
     routing::{delete, put},
 };
 
-mod create_api_key;
-mod delete_api_key;
-mod get_api_keys;
+pub mod create_api_key;
+pub mod delete_api_key;
+pub mod get_api_keys;
+
+pub use create_api_key::{ApiKeyInput, ApiKeyOut};
+pub use get_api_keys::ApiKeyInfo;
 
 pub fn routes() -> Router<AppState> {
     Router::new()

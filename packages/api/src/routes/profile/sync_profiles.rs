@@ -1,9 +1,12 @@
-use std::time::Duration;
-
-use crate::{entity::profile, error::ApiError, middleware::jwt::AppUser, state::AppState};
+use crate::{
+    entity::profile,
+    error::ApiError,
+    middleware::jwt::AppUser,
+    routes::profile::{delete_old_image, generate_upload_url},
+    state::AppState,
+};
 use axum::{Extension, Json, extract::State};
 use flow_like::profile::{ProfileApp, ProfileShortcut, Settings};
-use flow_like_storage::object_store::path::Path;
 use flow_like_types::{Value, create_id};
 use sea_orm::{ActiveModelTrait, ActiveValue::Set, ColumnTrait, EntityTrait, QueryFilter};
 use serde::{Deserialize, Serialize};
@@ -64,52 +67,6 @@ pub struct UpdatedProfile {
     pub thumbnail_upload_url: Option<String>,
 }
 
-/// Generate a signed upload URL and return the CUID to store in DB
-/// - Upload path: media/profiles/{profile_id}/{cuid}.{ext} (original format)
-/// - Final path: media/profiles/{profile_id}/{cuid}.webp (after conversion)
-/// - DB stores: just the cuid
-async fn generate_upload_url(
-    state: &AppState,
-    profile_id: &str,
-    extension: &str,
-) -> Result<(String, String), ApiError> {
-    let id = create_id();
-
-    // Upload path: media/profiles/{profile_id}/{id}.{ext}
-    let upload_path = Path::from("media")
-        .child("profiles")
-        .child(profile_id)
-        .child(format!("{}.{}", id, extension));
-
-    let signed_url = state
-        .cdn_bucket
-        .sign("PUT", &upload_path, Duration::from_secs(60 * 60))
-        .await?;
-
-    // Return just the cuid to store in DB
-    Ok((signed_url.to_string(), id))
-}
-
-/// Delete an old profile image from storage
-async fn delete_old_image(
-    state: &AppState,
-    profile_id: &str,
-    image_id: &str,
-) -> Result<(), ApiError> {
-    // Construct path: media/profiles/{profile_id}/{image_id}.webp
-    let path = Path::from("media")
-        .child("profiles")
-        .child(profile_id)
-        .child(format!("{}.webp", image_id));
-
-    let store = state.cdn_bucket.as_generic();
-    if let Err(e) = store.delete(&path).await {
-        tracing::warn!("Failed to delete old profile image: {}", e);
-    }
-
-    Ok(())
-}
-
 /// Sync multiple profiles from desktop to server
 /// For existing profiles (matched by ID), updates if local is newer
 /// For new profiles, creates with a server-generated ID and returns the mapping
@@ -131,6 +88,10 @@ pub async fn sync_profiles(
     Json(profiles): Json<Vec<SyncProfileRequest>>,
 ) -> Result<Json<SyncProfileResponse>, ApiError> {
     let sub = user.sub()?;
+    println!("[ProfileSync] sync_profiles called by user={}, profile_count={}", sub, profiles.len());
+    for (i, p) in profiles.iter().enumerate() {
+        println!("[ProfileSync]   profile[{}]: id={}, name={}, icon_ext={:?}, thumb_ext={:?}", i, p.id, p.name, p.icon_upload_ext, p.thumbnail_upload_ext);
+    }
 
     let mut created: Vec<SyncedProfile> = Vec::new();
     let mut updated: Vec<UpdatedProfile> = Vec::new();
@@ -148,6 +109,7 @@ pub async fn sync_profiles(
             .await?;
 
         if let Some(existing) = found_profile {
+            println!("[ProfileSync] Profile {} found in DB, updated_at={}", profile_req.id, existing.updated_at);
             // Update existing profile only if local is newer
             let should_update = if let Some(local_updated) = &profile_req.updated_at {
                 if let Ok(local_time) = chrono::DateTime::parse_from_rfc3339(local_updated) {
@@ -160,6 +122,7 @@ pub async fn sync_profiles(
             };
 
             if should_update {
+                println!("[ProfileSync] Updating profile {}", profile_req.id);
                 let mut active_model: profile::ActiveModel = existing.clone().into();
 
                 active_model.name = Set(profile_req.name.clone());
@@ -170,13 +133,11 @@ pub async fn sync_profiles(
                 active_model.bit_ids = Set(profile_req.bit_ids.clone());
 
                 if let Some(apps) = profile_req.apps {
-                    let apps: Vec<Value> = apps.iter().map(|v| to_value(v).unwrap()).collect();
-                    active_model.apps = Set(Some(Value::Array(apps)));
+                    active_model.apps = Set(Some(to_value(&apps)?));
                 }
 
                 if let Some(shortcuts) = profile_req.shortcuts {
-                    let shortcuts: Vec<Value> = shortcuts.iter().map(|v| to_value(v).unwrap()).collect();
-                    active_model.shortcuts = Set(Some(Value::Array(shortcuts)));
+                    active_model.shortcuts = Set(Some(to_value(&shortcuts)?));
                 }
 
                 if let Some(settings) = profile_req.settings {
@@ -190,10 +151,10 @@ pub async fn sync_profiles(
                 let icon_upload_url = if let Some(ext) = &profile_req.icon_upload_ext {
                     // Delete old icon if exists
                     if let Some(old_icon_id) = &existing.icon {
-                        delete_old_image(&state, &profile_req.id, old_icon_id).await?;
+                        delete_old_image(&state, &sub, old_icon_id).await?;
                     }
                     let (upload_url, image_id) =
-                        generate_upload_url(&state, &profile_req.id, ext).await?;
+                        generate_upload_url(&state, &sub, ext).await?;
                     active_model.icon = Set(Some(image_id));
                     Some(upload_url)
                 } else {
@@ -204,10 +165,10 @@ pub async fn sync_profiles(
                 let thumbnail_upload_url = if let Some(ext) = &profile_req.thumbnail_upload_ext {
                     // Delete old thumbnail if exists
                     if let Some(old_thumb_id) = &existing.thumbnail {
-                        delete_old_image(&state, &profile_req.id, old_thumb_id).await?;
+                        delete_old_image(&state, &sub, old_thumb_id).await?;
                     }
                     let (upload_url, image_id) =
-                        generate_upload_url(&state, &profile_req.id, ext).await?;
+                        generate_upload_url(&state, &sub, ext).await?;
                     active_model.thumbnail = Set(Some(image_id));
                     Some(upload_url)
                 } else {
@@ -226,17 +187,16 @@ pub async fn sync_profiles(
         } else {
             // Create new profile with SERVER-GENERATED ID
             let server_id = create_id();
+            println!("[ProfileSync] Creating new profile: local_id={}, server_id={}", profile_req.id, server_id);
 
             let apps = if let Some(apps) = profile_req.apps {
-                let apps: Vec<Value> = apps.iter().map(|v| to_value(v).unwrap()).collect();
-                Some(Value::Array(apps))
+                Some(to_value(&apps)?)
             } else {
                 None
             };
 
             let shortcuts = if let Some(shortcuts) = profile_req.shortcuts {
-                let shortcuts: Vec<Value> = shortcuts.iter().map(|v| to_value(v).unwrap()).collect();
-                Some(Value::Array(shortcuts))
+                Some(to_value(&shortcuts)?)
             } else {
                 None
             };
@@ -253,9 +213,9 @@ pub async fn sync_profiles(
                 state.platform_config.domain.clone()
             };
 
-            // Generate upload URLs if requested (using server_id since that's the profile's ID)
+            // Generate upload URLs for the new profile
             let (icon_upload_url, icon_id) = if let Some(ext) = &profile_req.icon_upload_ext {
-                let (url, id) = generate_upload_url(&state, &server_id, ext).await?;
+                let (url, id) = generate_upload_url(&state, &sub, ext).await?;
                 (Some(url), Some(id))
             } else {
                 (None, None)
@@ -263,7 +223,7 @@ pub async fn sync_profiles(
 
             let (thumbnail_upload_url, thumbnail_id) =
                 if let Some(ext) = &profile_req.thumbnail_upload_ext {
-                    let (url, id) = generate_upload_url(&state, &server_id, ext).await?;
+                    let (url, id) = generate_upload_url(&state, &sub, ext).await?;
                     (Some(url), Some(id))
                 } else {
                     (None, None)
@@ -306,6 +266,8 @@ pub async fn sync_profiles(
         .map(|p| p.server_id.clone())
         .chain(updated.iter().map(|p| p.id.clone()))
         .collect();
+
+    println!("[ProfileSync] Done: created={}, updated={}, skipped={}, synced={}", created.len(), updated.len(), skipped.len(), synced.len());
 
     Ok(Json(SyncProfileResponse {
         synced,

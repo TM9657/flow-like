@@ -141,6 +141,7 @@ export class WebEventState implements IEventState {
 				version_type: versionType,
 				pat: personalAccessToken,
 				oauth_tokens: oauthTokens,
+				profile_id: this.backend.profile?.id,
 			},
 			this.backend.auth,
 		);
@@ -352,6 +353,7 @@ export class WebEventState implements IEventState {
 					token: this.backend.auth?.user?.access_token,
 					oauth_tokens: oauthTokens,
 					runtime_variables: payload.runtime_variables,
+					profile_id: this.backend.profile?.id,
 				}),
 			});
 

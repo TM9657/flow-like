@@ -14,12 +14,35 @@ use flow_like::a2ui::widget::Widget;
 use flow_like_types::create_id;
 use sea_orm::{ActiveModelTrait, ActiveValue::Set, ColumnTrait, EntityTrait, QueryFilter};
 use serde::{Deserialize, Serialize};
+use utoipa::ToSchema;
 
-#[derive(Clone, Deserialize, Serialize)]
+#[derive(Clone, Deserialize, Serialize, ToSchema)]
 pub struct WidgetUpsert {
+    #[schema(value_type = Object)]
     pub widget: Widget,
 }
 
+#[utoipa::path(
+    put,
+    path = "/apps/{app_id}/widgets/{widget_id}",
+    tag = "widgets",
+    description = "Create or update a widget.",
+    params(
+        ("app_id" = String, Path, description = "Application ID"),
+        ("widget_id" = String, Path, description = "Widget ID")
+    ),
+    request_body = WidgetUpsert,
+    responses(
+        (status = 200, description = "Widget saved", body = String, content_type = "application/json"),
+        (status = 401, description = "Unauthorized"),
+        (status = 403, description = "Forbidden")
+    ),
+    security(
+        ("bearer_auth" = []),
+        ("api_key" = []),
+        ("pat" = [])
+    )
+)]
 #[tracing::instrument(
     name = "PUT /apps/{app_id}/widgets/{widget_id}",
     skip(state, user, widget_data)

@@ -9,15 +9,39 @@ use axum::{
 use flow_like::flow::event::Event;
 use flow_like_types::anyhow;
 use serde::Deserialize;
+use utoipa::ToSchema;
 
 use super::db::{filter_event_secrets, get_event_from_db};
 
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Debug, ToSchema)]
 pub struct VersionQuery {
     /// expected format: "MAJOR_MINOR_PATCH", e.g. "1_0_3"
     pub version: Option<String>,
 }
 
+#[utoipa::path(
+    get,
+    path = "/apps/{app_id}/events/{event_id}",
+    tag = "events",
+    description = "Get an event by ID and optional version.",
+    params(
+        ("app_id" = String, Path, description = "Application ID"),
+        ("event_id" = String, Path, description = "Event ID"),
+        ("version" = Option<String>, Query, description = "Version in MAJOR_MINOR_PATCH format")
+    ),
+    responses(
+        (status = 200, description = "Event payload", body = String, content_type = "application/json"),
+        (status = 400, description = "Bad request"),
+        (status = 401, description = "Unauthorized"),
+        (status = 403, description = "Forbidden"),
+        (status = 404, description = "Not found")
+    ),
+    security(
+        ("bearer_auth" = []),
+        ("api_key" = []),
+        ("pat" = [])
+    )
+)]
 #[tracing::instrument(name = "GET /apps/{app_id}/events/{event_id}", skip(state, user))]
 pub async fn get_event(
     State(state): State<AppState>,

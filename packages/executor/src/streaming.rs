@@ -218,7 +218,13 @@ async fn execute_inner(
         })
         .unwrap_or_default();
 
-    let profile = Profile::default();
+    // Use profile from request if provided, otherwise use default (empty profile)
+    let profile: Profile = request
+        .profile
+        .as_ref()
+        .and_then(|p| serde_json::from_value(p.clone()).ok())
+        .unwrap_or_default();
+
     let run_payload = RunPayload {
         id: request.node_id.clone(),
         payload: request.payload.clone(),

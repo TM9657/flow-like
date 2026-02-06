@@ -15,18 +15,19 @@ use axum::{
 use flow_like::flow::board::ExecutionMode;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use utoipa::ToSchema;
 
 use super::db::get_event_from_db;
 
 /// Query parameters for pre-run analysis
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, ToSchema)]
 pub struct PrerunEventQuery {
     /// Board version as tuple (major, minor, patch) - defaults to latest
     pub version: Option<String>,
 }
 
 /// A runtime-configured variable that needs a value before execution
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, ToSchema)]
 pub struct RuntimeVariable {
     pub id: String,
     pub name: String,
@@ -38,14 +39,14 @@ pub struct RuntimeVariable {
 }
 
 /// OAuth provider requirement
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, ToSchema)]
 pub struct OAuthRequirement {
     pub provider_id: String,
     pub scopes: Vec<String>,
 }
 
 /// Response from pre-run analysis
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, ToSchema)]
 pub struct PrerunEventResponse {
     /// ID of the board this event triggers
     pub board_id: String,
@@ -56,6 +57,7 @@ pub struct PrerunEventResponse {
     /// Whether the event can only run locally (has offline-only nodes)
     pub requires_local_execution: bool,
     /// Board's execution mode setting (Hybrid, Remote, Local)
+    #[schema(value_type = String)]
     pub execution_mode: ExecutionMode,
     /// Whether the user can execute locally (has ReadBoards permission)
     /// If false, execution must happen on server
@@ -77,6 +79,28 @@ fn parse_version(version_str: &str) -> Option<(u32, u32, u32)> {
 /// Analyze an event to determine what's needed before execution.
 ///
 /// Returns runtime-configured variables and OAuth requirements from the event's board.
+#[utoipa::path(
+    get,
+    path = "/apps/{app_id}/events/{event_id}/prerun",
+    tag = "events",
+    description = "Get pre-run requirements for an event.",
+    params(
+        ("app_id" = String, Path, description = "Application ID"),
+        ("event_id" = String, Path, description = "Event ID"),
+        ("version" = Option<String>, Query, description = "Version in MAJOR_MINOR_PATCH format")
+    ),
+    responses(
+        (status = 200, description = "Pre-run requirements", body = PrerunEventResponse),
+        (status = 401, description = "Unauthorized"),
+        (status = 403, description = "Forbidden"),
+        (status = 404, description = "Not found")
+    ),
+    security(
+        ("bearer_auth" = []),
+        ("api_key" = []),
+        ("pat" = [])
+    )
+)]
 #[tracing::instrument(
     name = "GET /apps/{app_id}/events/{event_id}/prerun",
     skip(state, user)

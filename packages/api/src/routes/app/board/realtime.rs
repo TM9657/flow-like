@@ -17,6 +17,7 @@ use flow_like_types::{anyhow, create_id};
 use sea_orm::TransactionTrait;
 use sea_orm::{ActiveModelTrait, ActiveValue::Set, ColumnTrait, EntityTrait, QueryFilter};
 use serde::{Deserialize, Serialize};
+use utoipa::ToSchema;
 
 // ============================================================================
 // Realtime collaboration auth (JWT + room key) using unified backend JWT
@@ -24,7 +25,7 @@ use serde::{Deserialize, Serialize};
 
 const SCOPE: &str = "realtime.read";
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct RealtimeClaims {
     pub sub: String,
     pub name: Option<String>,
@@ -41,7 +42,7 @@ pub struct RealtimeClaims {
     pub jti: String,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone, ToSchema)]
 pub struct RealtimeParams {
     /// JWT authorizing the user for this (app_id, board_id) in y-webrtc
     jwt: String,
@@ -63,6 +64,25 @@ fn generate_encryption_key() -> String {
 // ============================================================================
 // JWKS (no auth) — mount at GET /apps/{app_id}/board/{board_id}/realtime
 // ============================================================================
+#[utoipa::path(
+    get,
+    path = "/apps/{app_id}/board/{board_id}/realtime",
+    tag = "boards",
+    description = "Get JWKS for realtime collaboration.",
+    params(
+        ("app_id" = String, Path, description = "Application ID"),
+        ("board_id" = String, Path, description = "Board ID")
+    ),
+    responses(
+        (status = 200, description = "JWKS", body = String, content_type = "application/json"),
+        (status = 401, description = "Unauthorized")
+    ),
+    security(
+        ("bearer_auth" = []),
+        ("api_key" = []),
+        ("pat" = [])
+    )
+)]
 #[tracing::instrument(
     name = "GET /apps/{app_id}/board/{board_id}/realtime",
     skip(_state, user)
@@ -84,6 +104,26 @@ pub async fn jwks(
 // ============================================================================
 // Access token + room key
 // ============================================================================
+#[utoipa::path(
+    post,
+    path = "/apps/{app_id}/board/{board_id}/realtime",
+    tag = "boards",
+    description = "Get realtime access token and room key.",
+    params(
+        ("app_id" = String, Path, description = "Application ID"),
+        ("board_id" = String, Path, description = "Board ID")
+    ),
+    responses(
+        (status = 200, description = "Realtime access", body = RealtimeParams),
+        (status = 401, description = "Unauthorized"),
+        (status = 403, description = "Forbidden")
+    ),
+    security(
+        ("bearer_auth" = []),
+        ("api_key" = []),
+        ("pat" = [])
+    )
+)]
 #[tracing::instrument(
     name = "POST /apps/{app_id}/board/{board_id}/realtime",
     skip(state, user)

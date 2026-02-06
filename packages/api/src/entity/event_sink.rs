@@ -42,6 +42,9 @@ pub struct Model {
     /// Encrypted OAuth tokens JSON (optional - for provider-specific access)
     #[sea_orm(column_name = "oauthTokensEncrypted", column_type = "Text", nullable)]
     pub oauth_tokens_encrypted: Option<String>,
+    /// Snapshot of the last updater's profile (bits, hubs) for trigger execution
+    #[sea_orm(column_name = "profileJson", column_type = "Json", nullable)]
+    pub profile_json: Option<Json>,
     #[sea_orm(column_name = "createdAt")]
     pub created_at: DateTime,
     #[sea_orm(column_name = "updatedAt")]

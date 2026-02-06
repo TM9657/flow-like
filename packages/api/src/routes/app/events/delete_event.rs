@@ -10,6 +10,27 @@ use flow_like_types::anyhow;
 
 use super::db::delete_event_with_sink;
 
+#[utoipa::path(
+    delete,
+    path = "/apps/{app_id}/events/{event_id}",
+    tag = "events",
+    description = "Delete an event.",
+    params(
+        ("app_id" = String, Path, description = "Application ID"),
+        ("event_id" = String, Path, description = "Event ID")
+    ),
+    responses(
+        (status = 200, description = "Event deleted", body = ()),
+        (status = 401, description = "Unauthorized"),
+        (status = 403, description = "Forbidden"),
+        (status = 404, description = "Not found")
+    ),
+    security(
+        ("bearer_auth" = []),
+        ("api_key" = []),
+        ("pat" = [])
+    )
+)]
 #[tracing::instrument(name = "DELETE /apps/{app_id}/events/{event_id}", skip(state, user))]
 pub async fn delete_event(
     State(state): State<AppState>,

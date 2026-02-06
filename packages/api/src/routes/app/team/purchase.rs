@@ -13,8 +13,9 @@ use sea_orm::{ColumnTrait, EntityTrait, QueryFilter};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use stripe::CustomerId;
+use utoipa::ToSchema;
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, ToSchema)]
 pub struct PurchaseParams {
     /// Optional success URL override (frontend will append receipt info)
     pub success_url: Option<String>,
@@ -22,7 +23,7 @@ pub struct PurchaseParams {
     pub cancel_url: Option<String>,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct PurchaseResponse {
     pub checkout_url: Option<String>,
@@ -36,6 +37,27 @@ pub struct PurchaseResponse {
 /// - If user is already a member, returns already_member=true with no checkout URL
 /// - Creates an idempotent checkout session (same user+app = same session if not expired)
 /// - Returns the checkout URL for the frontend to redirect to
+#[utoipa::path(
+    post,
+    path = "/apps/{app_id}/team/purchase",
+    tag = "team",
+    description = "Start a purchase flow for a paid app.",
+    params(
+        ("app_id" = String, Path, description = "Application ID")
+    ),
+    request_body = PurchaseParams,
+    responses(
+        (status = 200, description = "Purchase session", body = PurchaseResponse),
+        (status = 400, description = "Bad request"),
+        (status = 401, description = "Unauthorized"),
+        (status = 403, description = "Forbidden")
+    ),
+    security(
+        ("bearer_auth" = []),
+        ("api_key" = []),
+        ("pat" = [])
+    )
+)]
 #[tracing::instrument(name = "POST /apps/{app_id}/team/purchase", skip(state, user))]
 pub async fn purchase(
     State(state): State<AppState>,

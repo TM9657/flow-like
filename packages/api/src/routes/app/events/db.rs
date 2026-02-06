@@ -232,7 +232,7 @@ pub async fn sync_event_with_sink(
     app_id: &str,
     event: &CoreEvent,
 ) -> flow_like_types::Result<()> {
-    sync_event_with_sink_tokens(db, state, app_id, event, None, None).await
+    sync_event_with_sink_tokens(db, state, app_id, event, None, None, None).await
 }
 
 /// Sync an event and its sink to the database, with optional PAT and OAuth tokens
@@ -243,6 +243,9 @@ pub async fn sync_event_with_sink(
 ///
 /// If `pat` or `oauth_tokens` are provided, they will be encrypted and stored with the sink.
 /// This enables triggered flows to access models and personal files.
+///
+/// If `profile_json` is provided, it will be stored with the sink so triggered flows
+/// can use the last updater's profile (bits, hubs) for model resolution.
 pub async fn sync_event_with_sink_tokens(
     db: &DatabaseConnection,
     state: &crate::state::AppState,
@@ -250,6 +253,7 @@ pub async fn sync_event_with_sink_tokens(
     event: &CoreEvent,
     pat: Option<&str>,
     oauth_tokens: Option<&std::collections::HashMap<String, serde_json::Value>>,
+    profile_json: Option<serde_json::Value>,
 ) -> flow_like_types::Result<()> {
     use crate::routes::sink::service::{SinkConfig, sink_type_from_event_type, sync_sink};
 
@@ -297,6 +301,7 @@ pub async fn sync_event_with_sink_tokens(
             cron_timezone,
             pat_encrypted,
             oauth_tokens_encrypted,
+            profile_json,
         },
     )
     .await?;

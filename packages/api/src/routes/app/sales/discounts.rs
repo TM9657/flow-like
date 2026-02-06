@@ -14,17 +14,18 @@ use sea_orm::{
     ActiveModelTrait, ActiveValue::Set, ColumnTrait, EntityTrait, QueryFilter, QueryOrder,
 };
 use serde::{Deserialize, Serialize};
+use utoipa::ToSchema;
 
 use super::overview::verify_sales_access;
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, ToSchema)]
 pub struct ListDiscountsQuery {
     /// Filter to only active discounts
     #[serde(default)]
     pub active_only: bool,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct DiscountResponse {
     pub id: String,
@@ -72,7 +73,7 @@ impl From<app_discount::Model> for DiscountResponse {
     }
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct CreateDiscountRequest {
     pub code: String,
@@ -90,7 +91,7 @@ pub struct CreateDiscountRequest {
     pub expires_at: Option<String>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct UpdateDiscountRequest {
     pub code: Option<String>,
@@ -106,6 +107,26 @@ pub struct UpdateDiscountRequest {
 }
 
 /// GET /apps/{app_id}/sales/discounts - List all discounts for an app
+#[utoipa::path(
+    get,
+    path = "/apps/{app_id}/sales/discounts",
+    tag = "sales",
+    description = "List discounts for an app.",
+    params(
+        ("app_id" = String, Path, description = "Application ID"),
+        ("active_only" = bool, Query, description = "Only active discounts")
+    ),
+    responses(
+        (status = 200, description = "Discount list", body = Vec<DiscountResponse>),
+        (status = 401, description = "Unauthorized"),
+        (status = 403, description = "Forbidden")
+    ),
+    security(
+        ("bearer_auth" = []),
+        ("api_key" = []),
+        ("pat" = [])
+    )
+)]
 #[tracing::instrument(name = "GET /apps/{app_id}/sales/discounts", skip(state, user))]
 pub async fn list_discounts(
     State(state): State<AppState>,
@@ -135,6 +156,27 @@ pub async fn list_discounts(
 }
 
 /// GET /apps/{app_id}/sales/discounts/{discount_id} - Get a specific discount
+#[utoipa::path(
+    get,
+    path = "/apps/{app_id}/sales/discounts/{discount_id}",
+    tag = "sales",
+    description = "Get a discount by ID.",
+    params(
+        ("app_id" = String, Path, description = "Application ID"),
+        ("discount_id" = String, Path, description = "Discount ID")
+    ),
+    responses(
+        (status = 200, description = "Discount", body = DiscountResponse),
+        (status = 401, description = "Unauthorized"),
+        (status = 403, description = "Forbidden"),
+        (status = 404, description = "Not found")
+    ),
+    security(
+        ("bearer_auth" = []),
+        ("api_key" = []),
+        ("pat" = [])
+    )
+)]
 #[tracing::instrument(
     name = "GET /apps/{app_id}/sales/discounts/{discount_id}",
     skip(state, user)
@@ -158,6 +200,27 @@ pub async fn get_discount(
 }
 
 /// POST /apps/{app_id}/sales/discounts - Create a new discount
+#[utoipa::path(
+    post,
+    path = "/apps/{app_id}/sales/discounts",
+    tag = "sales",
+    description = "Create a discount.",
+    params(
+        ("app_id" = String, Path, description = "Application ID")
+    ),
+    request_body = CreateDiscountRequest,
+    responses(
+        (status = 200, description = "Discount created", body = DiscountResponse),
+        (status = 400, description = "Bad request"),
+        (status = 401, description = "Unauthorized"),
+        (status = 403, description = "Forbidden")
+    ),
+    security(
+        ("bearer_auth" = []),
+        ("api_key" = []),
+        ("pat" = [])
+    )
+)]
 #[tracing::instrument(name = "POST /apps/{app_id}/sales/discounts", skip(state, user))]
 pub async fn create_discount(
     State(state): State<AppState>,
@@ -259,6 +322,29 @@ pub async fn create_discount(
 }
 
 /// PATCH /apps/{app_id}/sales/discounts/{discount_id} - Update a discount
+#[utoipa::path(
+    patch,
+    path = "/apps/{app_id}/sales/discounts/{discount_id}",
+    tag = "sales",
+    description = "Update a discount.",
+    params(
+        ("app_id" = String, Path, description = "Application ID"),
+        ("discount_id" = String, Path, description = "Discount ID")
+    ),
+    request_body = UpdateDiscountRequest,
+    responses(
+        (status = 200, description = "Discount updated", body = DiscountResponse),
+        (status = 400, description = "Bad request"),
+        (status = 401, description = "Unauthorized"),
+        (status = 403, description = "Forbidden"),
+        (status = 404, description = "Not found")
+    ),
+    security(
+        ("bearer_auth" = []),
+        ("api_key" = []),
+        ("pat" = [])
+    )
+)]
 #[tracing::instrument(
     name = "PATCH /apps/{app_id}/sales/discounts/{discount_id}",
     skip(state, user)
@@ -369,6 +455,27 @@ pub async fn update_discount(
 }
 
 /// DELETE /apps/{app_id}/sales/discounts/{discount_id} - Delete a discount
+#[utoipa::path(
+    delete,
+    path = "/apps/{app_id}/sales/discounts/{discount_id}",
+    tag = "sales",
+    description = "Delete a discount.",
+    params(
+        ("app_id" = String, Path, description = "Application ID"),
+        ("discount_id" = String, Path, description = "Discount ID")
+    ),
+    responses(
+        (status = 200, description = "Discount deleted", body = ()),
+        (status = 401, description = "Unauthorized"),
+        (status = 403, description = "Forbidden"),
+        (status = 404, description = "Not found")
+    ),
+    security(
+        ("bearer_auth" = []),
+        ("api_key" = []),
+        ("pat" = [])
+    )
+)]
 #[tracing::instrument(
     name = "DELETE /apps/{app_id}/sales/discounts/{discount_id}",
     skip(state, user)
@@ -402,6 +509,27 @@ pub async fn delete_discount(
 }
 
 /// POST /apps/{app_id}/sales/discounts/{discount_id}/toggle - Toggle discount active state
+#[utoipa::path(
+    post,
+    path = "/apps/{app_id}/sales/discounts/{discount_id}/toggle",
+    tag = "sales",
+    description = "Enable or disable a discount.",
+    params(
+        ("app_id" = String, Path, description = "Application ID"),
+        ("discount_id" = String, Path, description = "Discount ID")
+    ),
+    responses(
+        (status = 200, description = "Discount toggled", body = DiscountResponse),
+        (status = 401, description = "Unauthorized"),
+        (status = 403, description = "Forbidden"),
+        (status = 404, description = "Not found")
+    ),
+    security(
+        ("bearer_auth" = []),
+        ("api_key" = []),
+        ("pat" = [])
+    )
+)]
 #[tracing::instrument(
     name = "POST /apps/{app_id}/sales/discounts/{discount_id}/toggle",
     skip(state, user)

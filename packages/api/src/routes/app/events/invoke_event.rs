@@ -21,8 +21,9 @@ use crate::{
     entity::execution_run,
     error::ApiError,
     execution::{
-        DispatchRequest, ExecutionBackend, ExecutionJwtParams, TokenType, is_jwt_configured,
-        payload_storage, proxy_sse_response, sign_execution_jwt,
+        DispatchRequest, ExecutionBackend, ExecutionJwtParams, TokenType,
+        fetch_profile_for_dispatch, is_jwt_configured, payload_storage, proxy_sse_response,
+        sign_execution_jwt,
     },
     middleware::jwt::AppUser,
     permission::role_permission::RolePermissions,
@@ -36,11 +37,12 @@ use axum::{
 use flow_like_types::{anyhow, create_id, tokio};
 use sea_orm::{ActiveModelTrait, ActiveValue::Set};
 use serde::{Deserialize, Serialize};
+use utoipa::ToSchema;
 
 use super::db::get_event_from_db;
 
 /// Query parameters for event invocation
-#[derive(Clone, Debug, Deserialize, Default)]
+#[derive(Clone, Debug, Deserialize, Default, ToSchema)]
 pub struct InvokeEventQuery {
     /// Track run locally only - no remote execution
     #[serde(default)]
@@ -51,7 +53,7 @@ pub struct InvokeEventQuery {
 }
 
 /// Request body for event invocation
-#[derive(Clone, Debug, Deserialize)]
+#[derive(Clone, Debug, Deserialize, ToSchema)]
 pub struct InvokeEventRequest {
     /// Optional board version to execute (defaults to latest)
     pub version: Option<String>,
@@ -62,12 +64,15 @@ pub struct InvokeEventRequest {
     /// OAuth tokens keyed by provider name
     pub oauth_tokens: Option<std::collections::HashMap<String, serde_json::Value>>,
     /// Runtime-configured variables to override board variables
+    #[schema(value_type = Option<Object>)]
     pub runtime_variables:
         Option<std::collections::HashMap<String, flow_like::flow::variable::Variable>>,
+    /// Optional profile ID to select a specific user profile for execution
+    pub profile_id: Option<String>,
 }
 
 /// Response from event invocation
-#[derive(Clone, Debug, Serialize)]
+#[derive(Clone, Debug, Serialize, ToSchema)]
 pub struct InvokeEventResponse {
     /// Unique run ID
     pub run_id: String,
@@ -92,6 +97,30 @@ fn get_credentials_access() -> crate::credentials::CredentialsAccess {
 /// Use `?isolated=true` for isolated K8s job execution (Kubernetes only).
 ///
 /// Returns SSE stream for remote execution or JSON for local mode.
+#[utoipa::path(
+    post,
+    path = "/apps/{app_id}/events/{event_id}/invoke",
+    tag = "events",
+    description = "Invoke an event and stream execution results.",
+    params(
+        ("app_id" = String, Path, description = "Application ID"),
+        ("event_id" = String, Path, description = "Event ID"),
+        ("local" = bool, Query, description = "Track locally without dispatch"),
+        ("isolated" = bool, Query, description = "Use isolated execution")
+    ),
+    request_body = InvokeEventRequest,
+    responses(
+        (status = 200, description = "SSE stream or JSON", body = String, content_type = "text/event-stream"),
+        (status = 400, description = "Bad request"),
+        (status = 401, description = "Unauthorized"),
+        (status = 403, description = "Forbidden")
+    ),
+    security(
+        ("bearer_auth" = []),
+        ("api_key" = []),
+        ("pat" = [])
+    )
+)]
 #[tracing::instrument(
     name = "POST /apps/{app_id}/events/{event_id}/invoke",
     skip(state, user, params)
@@ -249,6 +278,8 @@ pub async fn invoke_event(
         ApiError::internal_error(anyhow!("Failed to sign executor JWT: {}", e))
     })?;
 
+    let profile = fetch_profile_for_dispatch(&state.db, &sub, params.profile_id.as_deref(), &app_id).await;
+
     let request = DispatchRequest {
         run_id: run_id.clone(),
         app_id: app_id.clone(),
@@ -266,6 +297,7 @@ pub async fn invoke_event(
         stream_state: false,
         runtime_variables: params.runtime_variables,
         user_context: Some(permission.to_user_context()),
+        profile,
     };
 
     // For isolated K8s jobs, insert run record and dispatch async

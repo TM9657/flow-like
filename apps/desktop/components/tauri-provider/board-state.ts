@@ -827,6 +827,7 @@ export class BoardState implements IBoardState {
 					token: this.backend.auth.user?.access_token,
 					stream_state: streamState ?? true,
 					runtime_variables: payload.runtime_variables,
+					profile_id: this.backend.profile?.id,
 				}),
 			},
 			this.backend.auth,

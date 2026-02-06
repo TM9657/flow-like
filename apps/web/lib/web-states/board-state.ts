@@ -407,6 +407,7 @@ export class WebBoardState implements IBoardState {
 					token: this.backend.auth?.user?.access_token,
 					oauth_tokens: oauthTokens,
 					runtime_variables: payload.runtime_variables,
+					profile_id: this.backend.profile?.id,
 				}),
 			});
 

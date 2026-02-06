@@ -62,6 +62,20 @@ pub async fn get_profiles(
 
 #[instrument(skip_all)]
 #[tauri::command(async)]
+pub async fn get_profiles_raw(
+    app_handle: AppHandle,
+) -> Result<HashMap<String, UserProfile>, TauriFunctionError> {
+    let settings = TauriSettingsState::construct(&app_handle).await?;
+    let profiles = {
+        let settings_guard = settings.lock().await;
+        settings_guard.profiles.clone()
+    };
+    println!("[ProfileSync] get_profiles_raw: returning {} profiles: {:?}", profiles.len(), profiles.keys().collect::<Vec<_>>());
+    Ok(profiles)
+}
+
+#[instrument(skip_all)]
+#[tauri::command(async)]
 pub async fn get_default_profiles(
     app_handle: AppHandle,
 ) -> Result<(Vec<(UserProfile, Vec<Bit>)>, Hub), TauriFunctionError> {
@@ -249,6 +263,7 @@ pub async fn remap_profile_id(
     local_id: String,
     server_id: String,
 ) -> Result<(), TauriFunctionError> {
+    println!("[ProfileSync] remap_profile_id: {} -> {}", local_id, server_id);
     let settings = TauriSettingsState::construct(&app_handle).await?;
     let mut settings = settings.lock().await;
 
@@ -429,14 +444,11 @@ pub async fn profile_update_app(
 #[instrument(skip_all)]
 #[tauri::command(async)]
 pub async fn read_profile_icon(icon_path: String) -> Result<Vec<u8>, TauriFunctionError> {
-    // Decode the path if it's URL encoded
     let decoded_path = urlencoding::decode(&icon_path)
         .map_err(|e| TauriFunctionError::new(&format!("Failed to decode path: {}", e)))?;
 
-    // Convert to PathBuf and resolve
     let path = PathBuf::from(decoded_path.as_ref());
 
-    // Check if file exists
     if !path.exists() {
         return Err(TauriFunctionError::new(&format!(
             "Icon file not found: {}",
@@ -444,9 +456,43 @@ pub async fn read_profile_icon(icon_path: String) -> Result<Vec<u8>, TauriFuncti
         )));
     }
 
-    // Read the file
     let bytes = std::fs::read(&path)
         .map_err(|e| TauriFunctionError::new(&format!("Failed to read icon file: {}", e)))?;
 
     Ok(bytes)
+}
+
+/// Get the raw filesystem path for a profile's icon or thumbnail
+#[instrument(skip_all)]
+#[tauri::command(async)]
+pub async fn get_profile_icon_path(
+    app_handle: AppHandle,
+    profile_id: String,
+    field: String,
+) -> Result<Option<String>, TauriFunctionError> {
+    println!("[ProfileSync] get_profile_icon_path: profile_id={}, field={}", profile_id, field);
+    let settings = TauriSettingsState::construct(&app_handle).await?;
+    let settings = settings.lock().await;
+
+    let profile = settings
+        .profiles
+        .get(&profile_id)
+        .ok_or(anyhow::anyhow!("Profile not found"))?;
+
+    let path = match field.as_str() {
+        "icon" => profile.hub_profile.icon.clone(),
+        "thumbnail" => profile.hub_profile.thumbnail.clone(),
+        _ => None,
+    };
+
+    match path {
+        Some(p)
+            if !p.starts_with("http://")
+                && !p.starts_with("https://")
+                && !p.starts_with("asset://") =>
+        {
+            Ok(Some(p))
+        }
+        _ => Ok(None),
+    }
 }

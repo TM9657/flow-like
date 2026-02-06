@@ -20,7 +20,7 @@ import {
 import { useEffect, useState } from "react";
 import { AuthProvider, useAuth } from "react-oidc-context";
 import { get } from "../lib/api";
-import { TauriBackend } from "./tauri-provider";
+import { ProfileSyncer, TauriBackend } from "./tauri-provider";
 
 export class OIDCTokenProvider implements TokenProvider {
 	constructor(private readonly userManager: UserManager) {}
@@ -288,5 +288,8 @@ function AuthInner({ children }: Readonly<{ children: React.ReactNode }>) {
 		})();
 	}, [auth.user?.profile?.sub]);
 
-	return <>{children}</>;
+	return <>
+		<ProfileSyncer auth={{ isAuthenticated: auth.isAuthenticated, accessToken: auth.user?.access_token }} />
+		{children}
+	</>;
 }

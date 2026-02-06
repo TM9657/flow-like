@@ -7,13 +7,35 @@ use axum::{
     extract::{Path, State},
 };
 use flow_like_storage::databases::vector::lancedb::LanceDBVectorStore;
+use utoipa::ToSchema;
 
-#[derive(Debug, Clone, serde::Deserialize)]
+#[derive(Debug, Clone, serde::Deserialize, ToSchema)]
 pub struct AddColumnPayload {
     pub name: String,
     pub sql_expression: String,
 }
 
+#[utoipa::path(
+    post,
+    path = "/apps/{app_id}/db/{table}/columns",
+    tag = "database",
+    description = "Add a computed column to a table.",
+    params(
+        ("app_id" = String, Path, description = "Application ID"),
+        ("table" = String, Path, description = "Table name")
+    ),
+    request_body = AddColumnPayload,
+    responses(
+        (status = 200, description = "Column added", body = ()),
+        (status = 401, description = "Unauthorized"),
+        (status = 403, description = "Forbidden")
+    ),
+    security(
+        ("bearer_auth" = []),
+        ("api_key" = []),
+        ("pat" = [])
+    )
+)]
 #[tracing::instrument(name = "POST /apps/{app_id}/db/{table}/columns", skip(state, user))]
 pub async fn add_column(
     State(state): State<AppState>,

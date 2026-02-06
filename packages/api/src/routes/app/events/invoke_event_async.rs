@@ -17,8 +17,8 @@ use crate::{
     entity::execution_run,
     error::ApiError,
     execution::{
-        DispatchRequest, ExecutionJwtParams, TokenType, is_jwt_configured, payload_storage,
-        sign_execution_jwt,
+        DispatchRequest, ExecutionJwtParams, TokenType, fetch_profile_for_dispatch,
+        is_jwt_configured, payload_storage, sign_execution_jwt,
     },
     middleware::jwt::AppUser,
     permission::role_permission::RolePermissions,
@@ -31,11 +31,12 @@ use axum::{
 use flow_like_types::{anyhow, create_id};
 use sea_orm::{ActiveModelTrait, ActiveValue::Set};
 use serde::{Deserialize, Serialize};
+use utoipa::ToSchema;
 
 use super::db::get_event_from_db;
 
 /// Request body for async event invocation
-#[derive(Clone, Debug, Deserialize)]
+#[derive(Clone, Debug, Deserialize, ToSchema)]
 pub struct InvokeEventAsyncRequest {
     /// Optional board version to execute (defaults to latest)
     pub version: Option<String>,
@@ -46,12 +47,15 @@ pub struct InvokeEventAsyncRequest {
     /// OAuth tokens keyed by provider name
     pub oauth_tokens: Option<std::collections::HashMap<String, serde_json::Value>>,
     /// Runtime-configured variables to override board variables
+    #[schema(value_type = Option<Object>)]
     pub runtime_variables:
         Option<std::collections::HashMap<String, flow_like::flow::variable::Variable>>,
+    /// Optional profile ID to select a specific user profile for execution
+    pub profile_id: Option<String>,
 }
 
 /// Response from async event invocation
-#[derive(Clone, Debug, Serialize)]
+#[derive(Clone, Debug, Serialize, ToSchema)]
 pub struct InvokeEventAsyncResponse {
     /// Unique run ID (use this to track progress)
     pub run_id: String,
@@ -73,6 +77,28 @@ fn get_credentials_access() -> crate::credentials::CredentialsAccess {
 ///
 /// Invoke async execution of an event workflow via queue.
 /// Uses EXECUTION_BACKEND env var to determine queue (redis, sqs, kafka).
+#[utoipa::path(
+    post,
+    path = "/apps/{app_id}/events/{event_id}/invoke/async",
+    tag = "events",
+    description = "Invoke an event asynchronously via queue.",
+    params(
+        ("app_id" = String, Path, description = "Application ID"),
+        ("event_id" = String, Path, description = "Event ID")
+    ),
+    request_body = InvokeEventAsyncRequest,
+    responses(
+        (status = 200, description = "Async invocation result", body = InvokeEventAsyncResponse),
+        (status = 400, description = "Bad request"),
+        (status = 401, description = "Unauthorized"),
+        (status = 403, description = "Forbidden")
+    ),
+    security(
+        ("bearer_auth" = []),
+        ("api_key" = []),
+        ("pat" = [])
+    )
+)]
 #[tracing::instrument(
     name = "POST /apps/{app_id}/events/{event_id}/invoke/async",
     skip(state, user, params)
@@ -203,6 +229,8 @@ pub async fn invoke_event_async(
         ApiError::internal_error(anyhow!("Failed to sign executor JWT: {}", e))
     })?;
 
+    let profile = fetch_profile_for_dispatch(&state.db, &sub, params.profile_id.as_deref(), &app_id).await;
+
     let request = DispatchRequest {
         run_id: run_id.clone(),
         app_id: app_id.clone(),
@@ -220,6 +248,7 @@ pub async fn invoke_event_async(
         stream_state: false,
         runtime_variables: params.runtime_variables,
         user_context: Some(permission.to_user_context()),
+        profile,
     };
 
     let response = state

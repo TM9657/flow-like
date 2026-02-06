@@ -1,6 +1,5 @@
 "use client";
 import { invoke } from "@tauri-apps/api/core";
-import { readFile } from "@tauri-apps/plugin-fs";
 import { fetch as tauriFetch } from "@tauri-apps/plugin-http";
 
 import { createId } from "@paralleldrive/cuid2";
@@ -359,13 +358,12 @@ export function TauriProvider({
 
 	return (
 		<>
-			{backend && <ProfileSyncer />}
 			{children}
 		</>
 	);
 }
 
-function ProfileSyncer() {
+export function ProfileSyncer({ auth }: { auth: { isAuthenticated: boolean; accessToken?: string } }) {
 	const backend = useBackend();
 	const profile = useInvoke(
 		backend.userState.getProfile,
@@ -374,14 +372,14 @@ function ProfileSyncer() {
 		true,
 	);
 
-	// Extract auth state for dependency tracking
 	const isAuthenticated =
-		backend instanceof TauriBackend && backend.auth?.isAuthenticated;
-	const accessToken =
-		backend instanceof TauriBackend
-			? backend.auth?.user?.access_token
-			: undefined;
+		backend instanceof TauriBackend && auth.isAuthenticated;
+	const accessToken = auth.accessToken;
 	const hubUrl = profile.data?.hub;
+
+	console.log("[ProfileSync] Render:", { isAuthenticated, hasAccessToken: !!accessToken, hubUrl });
+
+	const syncingRef = useRef(false);
 
 	useEffect(() => {
 		if (profile.data && backend instanceof TauriBackend) {
@@ -389,19 +387,31 @@ function ProfileSyncer() {
 		}
 	}, [profile.data, backend]);
 
-	// Sync profiles to backend when authenticated
 	useEffect(() => {
-		if (!(backend instanceof TauriBackend)) return;
-		if (!isAuthenticated || !hubUrl || !accessToken) return;
+		if (!(backend instanceof TauriBackend)) {
+			console.log("[ProfileSync] Skipping: not TauriBackend");
+			return;
+		}
+		if (!isAuthenticated || !hubUrl || !accessToken) {
+			console.log("[ProfileSync] Skipping: missing auth state", {
+				isAuthenticated,
+				hasHubUrl: !!hubUrl,
+				hasAccessToken: !!accessToken,
+			});
+			return;
+		}
 
-		const isLocalPath = (path?: string | null): boolean => {
+		const isLocalFilePath = (path?: string | null): boolean => {
 			if (!path) return false;
-			return !path.startsWith("http://") && !path.startsWith("https://");
+			return (
+				!path.startsWith("http://") &&
+				!path.startsWith("https://") &&
+				!path.startsWith("asset://")
+			);
 		};
 
 		const getExtension = (path: string): string => {
 			const ext = path.split(".").pop()?.toLowerCase() ?? "png";
-			// Normalize common extensions
 			if (ext === "jpeg") return "jpg";
 			return ext;
 		};
@@ -422,36 +432,55 @@ function ProfileSyncer() {
 			}
 		};
 
-		const uploadToSignedUrl = async (
-			localPath: string,
+		const uploadIconByProfileId = async (
+			profileId: string,
+			iconField: "icon" | "thumbnail",
 			signedUrl: string,
 		): Promise<boolean> => {
 			try {
-				const fileData = await readFile(localPath);
-				const ext = getExtension(localPath);
+				const iconPath = await invoke<string | null>("get_profile_icon_path", {
+					profileId,
+					field: iconField,
+				});
+				if (!iconPath) return false;
+
+				const fileData = await invoke<number[]>("read_profile_icon", {
+					iconPath,
+				});
+				const ext = getExtension(iconPath);
+				const bytes = new Uint8Array(fileData);
+
 				const uploadResponse = await tauriFetch(signedUrl, {
 					method: "PUT",
-					headers: {
-						"Content-Type": getContentType(ext),
-					},
-					body: fileData,
+					headers: { "Content-Type": getContentType(ext) },
+					body: bytes,
 				});
 				return uploadResponse.ok;
 			} catch (error) {
-				console.warn("Failed to upload to signed URL:", error);
+				console.warn(`Failed to upload ${iconField} for ${profileId}:`, error);
 				return false;
 			}
 		};
 
 		const syncProfiles = async () => {
+			if (syncingRef.current) {
+				console.log("[ProfileSync] Already syncing, skipping");
+				return;
+			}
+			syncingRef.current = true;
+
 			try {
-				console.log("Starting profile sync...");
-				const localProfiles =
+				console.log("[ProfileSync] Starting profile sync...");
+
+				const rawProfiles =
 					await invoke<Record<string, { hub_profile: IProfile }>>(
-						"get_profiles",
+						"get_profiles_raw",
 					);
-				console.log("Local profiles:", Object.keys(localProfiles || {}).length);
-				if (!localProfiles || Object.keys(localProfiles).length === 0) return;
+				console.log("[ProfileSync] Raw profiles from Tauri:", rawProfiles ? Object.keys(rawProfiles) : "null");
+				if (!rawProfiles || Object.keys(rawProfiles).length === 0) {
+					console.log("[ProfileSync] No profiles found, aborting");
+					return;
+				}
 
 				const visibilityRecords = await appsDB.visibility.toArray();
 				const offlineAppIds = new Set(
@@ -463,16 +492,13 @@ function ProfileSyncer() {
 				const baseUrl =
 					hubUrl ?? process.env.NEXT_PUBLIC_API_URL ?? "api.flow-like.com";
 				const protocol = profile.data?.secure === false ? "http" : "https";
+				const apiBase = baseUrl.startsWith("http")
+					? baseUrl
+					: `${protocol}://${baseUrl}`;
+				console.log("[ProfileSync] API base:", apiBase, "hubUrl:", hubUrl, "secure:", profile.data?.secure);
 
-				// Build profile data with upload extensions
-				const profilesWithLocalImages: Map<
-					string,
-					{ icon?: string; thumbnail?: string }
-				> = new Map();
-
-				// Gather shortcuts for each profile
 				const profileShortcuts: Map<string, any[]> = new Map();
-				for (const p of Object.values(localProfiles)) {
+				for (const p of Object.values(rawProfiles)) {
 					const profileId = p.hub_profile.id;
 					if (profileId) {
 						const shortcuts = await appsDB.shortcuts
@@ -483,23 +509,37 @@ function ProfileSyncer() {
 					}
 				}
 
-				const profilesToSync = Object.values(localProfiles).map((p) => {
+				const profilesWithLocalImages: Map<
+					string,
+					{ icon: boolean; thumbnail: boolean }
+				> = new Map();
+
+				const profilesToSync = Object.values(rawProfiles).map((p) => {
 					const hubProfile = p.hub_profile;
 					const filteredApps = hubProfile.apps?.filter(
 						(app) => !offlineAppIds.has(app.app_id),
 					);
 
-					const hasLocalIcon = isLocalPath(hubProfile.icon);
-					const hasLocalThumbnail = isLocalPath(hubProfile.thumbnail);
+					const hasLocalIcon = isLocalFilePath(hubProfile.icon);
+					const hasLocalThumbnail = isLocalFilePath(hubProfile.thumbnail);
 
 					if ((hasLocalIcon || hasLocalThumbnail) && hubProfile.id) {
 						profilesWithLocalImages.set(hubProfile.id, {
-							icon: hasLocalIcon ? hubProfile.icon! : undefined,
-							thumbnail: hasLocalThumbnail ? hubProfile.thumbnail! : undefined,
+							icon: hasLocalIcon,
+							thumbnail: hasLocalThumbnail,
 						});
 					}
 
-					const shortcuts = hubProfile.id ? profileShortcuts.get(hubProfile.id) : undefined;
+					const shortcuts = hubProfile.id
+						? profileShortcuts.get(hubProfile.id)
+						: undefined;
+
+					const updatedAt = hubProfile.updated
+						? new Date(hubProfile.updated).toISOString()
+						: undefined;
+					const createdAt = hubProfile.created
+						? new Date(hubProfile.created).toISOString()
+						: undefined;
 
 					return {
 						id: hubProfile.id,
@@ -519,39 +559,33 @@ function ProfileSyncer() {
 						shortcuts: shortcuts,
 						hubs: hubProfile.hubs,
 						settings: hubProfile.settings,
-						createdAt: hubProfile.created,
-						updatedAt: hubProfile.updated,
+						createdAt,
+						updatedAt,
 					};
 				});
 
-				console.log(
-					"Profiles to sync:",
-					profilesToSync.length,
-					profilesToSync.map((p) => p.name),
-				);
-				if (profilesToSync.length === 0) return;
+				if (profilesToSync.length === 0) {
+					console.log("[ProfileSync] No profiles to sync after filtering");
+					return;
+				}
 
-				const url = baseUrl.startsWith("http")
-					? `${baseUrl}/api/v1/profile/sync`
-					: `${protocol}://${baseUrl}/api/v1/profile/sync`;
+				console.log("[ProfileSync] Sending", profilesToSync.length, "profiles to sync:", JSON.stringify(profilesToSync, null, 2));
 
-				console.log("Syncing to URL:", url);
-
-				const response = await tauriFetch(url, {
-					method: "POST",
-					headers: {
-						"Content-Type": "application/json",
-						Authorization: `Bearer ${accessToken}`,
+				const response = await tauriFetch(
+					`${apiBase}/api/v1/profile/sync`,
+					{
+						method: "POST",
+						headers: {
+							"Content-Type": "application/json",
+							Authorization: `Bearer ${accessToken}`,
+						},
+						body: JSON.stringify(profilesToSync),
 					},
-					body: JSON.stringify(profilesToSync),
-				});
+				);
 
 				if (!response.ok) {
-					console.warn(
-						"Profile sync failed:",
-						response.status,
-						await response.text(),
-					);
+					const errorBody = await response.text().catch(() => "<no body>");
+					console.error("[ProfileSync] Sync request failed:", response.status, response.statusText, errorBody);
 					return;
 				}
 
@@ -572,22 +606,22 @@ function ProfileSyncer() {
 				};
 
 				const result = (await response.json()) as SyncResult;
-				console.log("Profile sync result:", result);
+				console.log("[ProfileSync] Sync result:", JSON.stringify(result, null, 2));
 
-				// Upload images to the signed URLs returned by server
 				for (const created of result.created) {
+					console.log("[ProfileSync] Processing created profile:", created.local_id, "->", created.server_id);
 					const localImages = profilesWithLocalImages.get(created.local_id);
 					if (localImages?.icon && created.icon_upload_url) {
-						console.log("Uploading icon for new profile:", created.local_id);
-						await uploadToSignedUrl(localImages.icon, created.icon_upload_url);
+						await uploadIconByProfileId(
+							created.local_id,
+							"icon",
+							created.icon_upload_url,
+						);
 					}
 					if (localImages?.thumbnail && created.thumbnail_upload_url) {
-						console.log(
-							"Uploading thumbnail for new profile:",
+						await uploadIconByProfileId(
 							created.local_id,
-						);
-						await uploadToSignedUrl(
-							localImages.thumbnail,
+							"thumbnail",
 							created.thumbnail_upload_url,
 						);
 					}
@@ -596,26 +630,27 @@ function ProfileSyncer() {
 				for (const updated of result.updated) {
 					const localImages = profilesWithLocalImages.get(updated.id);
 					if (localImages?.icon && updated.icon_upload_url) {
-						console.log("Uploading icon for updated profile:", updated.id);
-						await uploadToSignedUrl(localImages.icon, updated.icon_upload_url);
+						await uploadIconByProfileId(
+							updated.id,
+							"icon",
+							updated.icon_upload_url,
+						);
 					}
 					if (localImages?.thumbnail && updated.thumbnail_upload_url) {
-						console.log("Uploading thumbnail for updated profile:", updated.id);
-						await uploadToSignedUrl(
-							localImages.thumbnail,
+						await uploadIconByProfileId(
+							updated.id,
+							"thumbnail",
 							updated.thumbnail_upload_url,
 						);
 					}
 				}
 
-				// Remap local profile IDs to server-assigned IDs
 				for (const { local_id, server_id } of result.created) {
+					console.log("[ProfileSync] Remapping profile ID:", local_id, "->", server_id);
 					await invoke("remap_profile_id", {
 						localId: local_id,
 						serverId: server_id,
 					});
-
-					// Also remap shortcuts profileId
 					const shortcuts = await appsDB.shortcuts
 						.where("profileId")
 						.equals(local_id)
@@ -627,178 +662,239 @@ function ProfileSyncer() {
 					}
 				}
 
-				// After successful sync and uploads, fetch the updated profiles from backend
-				// to get the final icon/thumbnail CUIDs and update local profiles with CDN URLs
+				// Phase 6: Pull remote state
+				console.log("[ProfileSync] Phase 6: Pulling remote profiles from", `${apiBase}/api/v1/profile`);
 				try {
-					const profilesUrl = baseUrl.startsWith("http")
-						? `${baseUrl}/api/v1/profile`
-						: `${protocol}://${baseUrl}/api/v1/profile`;
-
-					const profilesResponse = await tauriFetch(profilesUrl, {
-						method: "GET",
-						headers: {
-							"Content-Type": "application/json",
-							Authorization: `Bearer ${accessToken}`,
+					const profilesResponse = await tauriFetch(
+						`${apiBase}/api/v1/profile`,
+						{
+							method: "GET",
+							headers: {
+								"Content-Type": "application/json",
+								Authorization: `Bearer ${accessToken}`,
+							},
 						},
-					});
+					);
 
-					if (profilesResponse.ok) {
-						const onlineProfiles = (await profilesResponse.json()) as Array<{
+					if (!profilesResponse.ok) {
+						const pullErrorBody = await profilesResponse.text().catch(() => "<no body>");
+						console.error("[ProfileSync] Pull profiles failed:", profilesResponse.status, pullErrorBody);
+						return;
+					}
+
+					const onlineProfiles = (await profilesResponse.json()) as Array<{
+						id: string;
+						name: string;
+						description?: string | null;
+						icon?: string | null;
+						thumbnail?: string | null;
+						interests?: string[];
+						tags?: string[];
+						theme?: any;
+						bit_ids?: string[];
+						apps?: any;
+						shortcuts?: Array<{
 							id: string;
+							profileId: string;
+							label: string;
+							path: string;
+							appId?: string;
 							icon?: string;
-							thumbnail?: string;
-							shortcuts?: Array<{
-								id: string;
-								profileId: string;
-								label: string;
-								path: string;
-								appId?: string;
-								icon?: string;
-								order: number;
-								createdAt: string;
-							}>;
+							order: number;
+							createdAt: string;
 						}>;
+						settings?: any;
+						hub: string;
+						hubs?: string[];
+						created_at: string;
+						updated_at: string;
+					}>;
 
-						// Get CDN base URL from platform config or use hub URL
-						const cdnUrl =
-							(await invoke<string | null>("get_platform_cdn_url").catch(
-								() => null,
-							)) ||
-							(baseUrl.startsWith("http") ? baseUrl : `${protocol}://${baseUrl}`);
+					const onlineProfileIds = new Set(
+						onlineProfiles.map((p) => p.id),
+					);
 
-						// Build set of online profile IDs
-						const onlineProfileIds = new Set(onlineProfiles.map((p) => p.id));
+					const currentLocalProfiles = await invoke<
+						Record<string, { hub_profile: IProfile }>
+					>("get_profiles_raw");
+					const currentProfileId = await invoke<string>(
+						"get_current_profile_id",
+					).catch(() => null);
+					let deletedCurrentProfile = false;
 
-						// Delete local profiles that don't exist online anymore
-						const currentLocalProfiles =
-							await invoke<Record<string, { hub_profile: IProfile }>>(
-								"get_profiles",
+					if (currentLocalProfiles) {
+						for (const localProfileId of Object.keys(
+							currentLocalProfiles,
+						)) {
+							const localProfile = currentLocalProfiles[localProfileId];
+							const hasOnlineApps = localProfile.hub_profile.apps?.some(
+								(app) => !offlineAppIds.has(app.app_id),
 							);
-						const currentProfileId = await invoke<string>("get_current_profile_id").catch(() => null);
-						let deletedCurrentProfile = false;
-
-						if (currentLocalProfiles) {
-							for (const localProfileId of Object.keys(currentLocalProfiles)) {
-								const localProfile = currentLocalProfiles[localProfileId];
-								// Only delete if profile has online apps (is synced) and doesn't exist online
-								const hasOnlineApps = localProfile.hub_profile.apps?.some(
-									(app) => !offlineAppIds.has(app.app_id),
+							if (
+								hasOnlineApps &&
+								!onlineProfileIds.has(localProfileId)
+							) {
+								console.log(
+									"Deleting stale local profile:",
+									localProfileId,
 								);
-								if (hasOnlineApps && !onlineProfileIds.has(localProfileId)) {
-									console.log(
-										"Deleting local profile that no longer exists online:",
-										localProfileId,
+								if (localProfileId === currentProfileId) {
+									deletedCurrentProfile = true;
+								}
+								try {
+									await invoke("delete_profile", {
+										profileId: localProfileId,
+									});
+									await appsDB.shortcuts
+										.where("profileId")
+										.equals(localProfileId)
+										.delete();
+								} catch (error) {
+									console.error(
+										"Failed to delete local profile:",
+										error,
 									);
-
-									// Check if we're deleting the current profile
-									if (localProfileId === currentProfileId) {
-										deletedCurrentProfile = true;
-									}
-
-									try {
-										await invoke("delete_profile", {
-											profileId: localProfileId,
-										});
-										// Also delete associated shortcuts
-										await appsDB.shortcuts
-											.where("profileId")
-											.equals(localProfileId)
-											.delete();
-									} catch (error) {
-										console.error(
-											"Failed to delete local profile:",
-											localProfileId,
-											error,
-										);
-									}
 								}
 							}
 						}
+					}
 
-						// Handle edge cases after deletion
-						const remainingProfiles = await invoke<Record<string, { hub_profile: IProfile }>>(
-							"get_profiles",
-						);
+					const remainingProfiles = await invoke<
+						Record<string, { hub_profile: IProfile }>
+					>("get_profiles_raw");
 
-						if (!remainingProfiles || Object.keys(remainingProfiles).length === 0) {
-							// No profiles left - redirect to onboarding
-							console.log("No profiles remaining after sync, redirecting to onboarding");
-							if (typeof window !== "undefined") {
-								window.location.href = "/onboarding";
-							}
-							return;
+					if (
+						!remainingProfiles ||
+						Object.keys(remainingProfiles).length === 0
+					) {
+						if (typeof window !== "undefined") {
+							window.location.href = "/onboarding";
 						}
+						return;
+					}
 
-						if (deletedCurrentProfile) {
-							// Current profile was deleted - switch to first available profile
-							const firstProfileId = Object.keys(remainingProfiles)[0];
-							console.log("Current profile was deleted, switching to:", firstProfileId);
+					if (deletedCurrentProfile) {
+						const firstProfileId = Object.keys(remainingProfiles)[0];
+						try {
+							await invoke("set_current_profile", {
+								profileId: firstProfileId,
+							});
+						} catch (error) {
+							console.error("Failed to switch profile:", error);
+						}
+					}
+
+					// Create local profiles for remote-only profiles
+					for (const onlineProfile of onlineProfiles) {
+						if (!remainingProfiles[onlineProfile.id]) {
+							console.log(
+								"Creating local profile from remote:",
+								onlineProfile.id,
+								onlineProfile.name,
+							);
+							const newLocalProfile = {
+								hub_profile: {
+									id: onlineProfile.id,
+									name: onlineProfile.name,
+									description: onlineProfile.description ?? null,
+									icon: onlineProfile.icon ?? null,
+									thumbnail: onlineProfile.thumbnail ?? null,
+									interests: onlineProfile.interests ?? [],
+									tags: onlineProfile.tags ?? [],
+									theme: onlineProfile.theme ?? null,
+									bits: onlineProfile.bit_ids ?? [],
+									apps: onlineProfile.apps ?? [],
+									shortcuts: onlineProfile.shortcuts ?? [],
+									hub: onlineProfile.hub,
+									hubs: onlineProfile.hubs ?? [],
+									settings: onlineProfile.settings ?? {
+										connection_mode: "simplebezier",
+									},
+									secure: true,
+									created: onlineProfile.created_at,
+									updated: onlineProfile.updated_at,
+								},
+								execution_settings: {
+									gpu_mode: false,
+									max_context_size: 32000,
+								},
+								updated: onlineProfile.updated_at,
+								created: onlineProfile.created_at,
+							};
 							try {
-								await invoke("set_current_profile", {
-									profileId: firstProfileId,
+								await invoke("upsert_profile", {
+									profile: newLocalProfile,
 								});
 							} catch (error) {
-								console.error("Failed to switch profile:", error);
+								console.error(
+									"Failed to create local profile:",
+									onlineProfile.id,
+									error,
+								);
 							}
 						}
-
-						// Update local profiles with online icon/thumbnail URLs and sync shortcuts
-						for (const onlineProfile of onlineProfiles) {
-							// Sync shortcuts from backend to local IndexedDB
-							if (onlineProfile.shortcuts) {
-								const localShortcuts = await appsDB.shortcuts
-									.where("profileId")
-									.equals(onlineProfile.id)
-									.toArray();
-
-								const localShortcutMap = new Map(localShortcuts.map(s => [s.id, s]));
-								const onlineShortcutMap = new Map(onlineProfile.shortcuts.map(s => [s.id, s]));
-
-								// Add or update shortcuts from online
-								for (const onlineShortcut of onlineProfile.shortcuts) {
-									await appsDB.shortcuts.put(onlineShortcut);
-								}
-
-								// Remove shortcuts that don't exist online anymore
-								for (const localShortcut of localShortcuts) {
-									if (!onlineShortcutMap.has(localShortcut.id)) {
-										await appsDB.shortcuts.delete(localShortcut.id);
-									}
-								}
-							}
-
-							if (onlineProfile.icon || onlineProfile.thumbnail) {
-								const localProfile = localProfiles[onlineProfile.id];
-								if (localProfile) {
-									// Construct full CDN URL for icon (icon field contains the CUID)
-									if (onlineProfile.icon) {
-										localProfile.hub_profile.icon = `${cdnUrl}/media/profiles/${onlineProfile.id}/${onlineProfile.icon}.webp`;
-									}
-
-									// Construct full CDN URL for thumbnail
-									if (onlineProfile.thumbnail) {
-										localProfile.hub_profile.thumbnail = `${cdnUrl}/media/profiles/${onlineProfile.id}/${onlineProfile.thumbnail}.webp`;
-									}
-
-									// Update the local profile with new URLs
-									await invoke("upsert_profile", {
-										profile: localProfile,
-									});
-								}
-							}
-						}
-						console.log("Local profiles updated with online CDN URLs");
 					}
+
+					// Sync shortcuts and update icon URLs
+					for (const onlineProfile of onlineProfiles) {
+						if (onlineProfile.shortcuts) {
+							const localShortcuts = await appsDB.shortcuts
+								.where("profileId")
+								.equals(onlineProfile.id)
+								.toArray();
+							const onlineShortcutMap = new Map(
+								onlineProfile.shortcuts.map((s) => [s.id, s]),
+							);
+							for (const onlineShortcut of onlineProfile.shortcuts) {
+								await appsDB.shortcuts.put(onlineShortcut);
+							}
+							for (const localShortcut of localShortcuts) {
+								if (!onlineShortcutMap.has(localShortcut.id)) {
+									await appsDB.shortcuts.delete(localShortcut.id);
+								}
+							}
+						}
+
+						// Use signed URLs from server directly
+						if (onlineProfile.icon || onlineProfile.thumbnail) {
+							const latestLocal = await invoke<
+								Record<string, { hub_profile: IProfile }>
+							>("get_profiles_raw");
+							const localProfile = latestLocal?.[onlineProfile.id];
+							if (localProfile) {
+								if (
+									onlineProfile.icon &&
+									!isLocalFilePath(localProfile.hub_profile.icon)
+								) {
+									localProfile.hub_profile.icon = onlineProfile.icon;
+								}
+								if (
+									onlineProfile.thumbnail &&
+									!isLocalFilePath(localProfile.hub_profile.thumbnail)
+								) {
+									localProfile.hub_profile.thumbnail =
+										onlineProfile.thumbnail;
+								}
+								await invoke("upsert_profile", {
+									profile: localProfile,
+								});
+							}
+						}
+					}
+					console.log("[ProfileSync] Profile sync complete");
 				} catch (error) {
-					console.warn("Failed to fetch and update profile URLs:", error);
+					console.warn("Failed to pull remote profiles:", error);
 				}
 			} catch (error) {
-				console.warn("Failed to sync profiles to backend:", error);
+				console.error("[ProfileSync] Failed to sync profiles:", error);
+			} finally {
+				console.log("[ProfileSync] Sync finished, releasing lock");
+				syncingRef.current = false;
 			}
 		};
 
 		syncProfiles();
-	}, [backend, isAuthenticated, accessToken, hubUrl, profile.data?.secure]);
+	}, [backend, isAuthenticated, accessToken, hubUrl]);
 
 	return null;
 }

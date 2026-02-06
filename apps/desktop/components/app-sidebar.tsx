@@ -630,10 +630,17 @@ function NavMain({
 	}[];
 }>) {
 	const backend = useBackend();
+	const auth = useAuth();
 	const router = useRouter();
 	const pathname = usePathname();
 	const { open } = useSidebar();
-	const info = useInvoke(backend.userState.getInfo, backend.userState, []);
+	const info = useInvoke(
+		backend.userState.getInfo,
+		backend.userState,
+		[],
+		Boolean(auth?.isAuthenticated),
+		[auth?.user?.profile?.sub, auth?.isAuthenticated],
+	);
 
 	return (
 		<>
@@ -871,8 +878,16 @@ export function NavUser({
 		backend.userState.getProfile,
 		backend.userState,
 		[],
+		Boolean(auth?.isAuthenticated),
+		[auth?.user?.profile?.sub, auth?.isAuthenticated],
 	);
-	const info = useInvoke(backend.userState.getInfo, backend.userState, []);
+	const info = useInvoke(
+		backend.userState.getInfo,
+		backend.userState,
+		[],
+		Boolean(auth?.isAuthenticated),
+		[auth?.user?.profile?.sub, auth?.isAuthenticated],
+	);
 
 	const displayName: string = useMemo(() => {
 		if (!info.data) return "Offline";
@@ -888,8 +903,8 @@ export function NavUser({
 		backend.userState.getNotifications,
 		backend.userState,
 		[],
-		true,
-		[],
+		Boolean(auth?.isAuthenticated),
+		[auth?.user?.profile?.sub, auth?.isAuthenticated],
 		0, // staleTime: 0 to always refetch on mount
 	);
 	// Show total unread count (includes invites + local workflow notifications)

@@ -8,6 +8,27 @@ use axum::{
 };
 use sea_orm::{ColumnTrait, EntityTrait, ModelTrait, QueryFilter};
 
+#[utoipa::path(
+    delete,
+    path = "/apps/{app_id}/api/{key_id}",
+    tag = "api-keys",
+    description = "Delete an API key.",
+    params(
+        ("app_id" = String, Path, description = "Application ID"),
+        ("key_id" = String, Path, description = "API key ID")
+    ),
+    responses(
+        (status = 200, description = "API key deleted", body = ()),
+        (status = 401, description = "Unauthorized"),
+        (status = 403, description = "Forbidden"),
+        (status = 404, description = "Not found")
+    ),
+    security(
+        ("bearer_auth" = []),
+        ("api_key" = []),
+        ("pat" = [])
+    )
+)]
 #[tracing::instrument(name = "DELETE /apps/{app_id}/api/{key_id}", skip(state, user))]
 pub async fn delete_api_key(
     State(state): State<AppState>,

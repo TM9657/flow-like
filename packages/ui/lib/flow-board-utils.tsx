@@ -260,11 +260,18 @@ export function doPinsMatch(
 		if (schemaSource !== schemaTarget) return false;
 	}
 
-	if (
-		targetPin.options?.enforce_generic_value_type ||
-		sourcePin.options?.enforce_generic_value_type
-	) {
-		if (targetPin.value_type !== sourcePin.value_type) return false;
+	if (targetPin.value_type !== sourcePin.value_type) {
+		const sourceEnforces =
+			sourcePin.options?.enforce_generic_value_type ?? false;
+		const targetEnforces =
+			targetPin.options?.enforce_generic_value_type ?? false;
+		if (sourceEnforces || targetEnforces) {
+			if (sourceEnforces && targetEnforces) return false;
+			if (sourceEnforces && targetPin.data_type !== "Generic")
+				return false;
+			if (targetEnforces && sourcePin.data_type !== "Generic")
+				return false;
+		}
 	}
 
 	if (

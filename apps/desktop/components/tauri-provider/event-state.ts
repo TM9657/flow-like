@@ -242,6 +242,7 @@ export class EventState implements IEventState {
 				body: JSON.stringify({
 					event: event,
 					version_type: versionType,
+					profile_id: this.backend.profile.id,
 				}),
 			},
 			this.backend.auth,

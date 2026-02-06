@@ -14,6 +14,27 @@ use sea_orm::{
     TransactionTrait,
 };
 
+#[utoipa::path(
+    post,
+    path = "/apps/{app_id}/team/link/join/{token}",
+    tag = "team",
+    description = "Join an app via invite link.",
+    params(
+        ("app_id" = String, Path, description = "Application ID"),
+        ("token" = String, Path, description = "Invite token")
+    ),
+    responses(
+        (status = 200, description = "Joined app", body = ()),
+        (status = 401, description = "Unauthorized"),
+        (status = 403, description = "Forbidden"),
+        (status = 404, description = "Not found")
+    ),
+    security(
+        ("bearer_auth" = []),
+        ("api_key" = []),
+        ("pat" = [])
+    )
+)]
 #[tracing::instrument(name = "POST /apps/{app_id}/team/link/join/{token}", skip(state, user))]
 pub async fn join_invite_link(
     State(state): State<AppState>,

@@ -35,6 +35,8 @@ pub struct SinkConfig {
     pub pat_encrypted: Option<String>,
     /// Encrypted OAuth tokens JSON (optional - for provider-specific access)
     pub oauth_tokens_encrypted: Option<String>,
+    /// Snapshot of the last updater's profile (bits, hubs) for trigger execution
+    pub profile_json: Option<serde_json::Value>,
 }
 
 /// Sync a sink to the database and external schedulers
@@ -82,6 +84,9 @@ pub async fn sync_sink(
         if config.oauth_tokens_encrypted.is_some() {
             active_model.oauth_tokens_encrypted = Set(config.oauth_tokens_encrypted.clone());
         }
+        if config.profile_json.is_some() {
+            active_model.profile_json = Set(config.profile_json.clone());
+        }
 
         let updated = active_model.update(db).await?;
 
@@ -119,6 +124,7 @@ pub async fn sync_sink(
             cron_timezone: Set(config.cron_timezone.clone()),
             pat_encrypted: Set(config.pat_encrypted),
             oauth_tokens_encrypted: Set(config.oauth_tokens_encrypted),
+            profile_json: Set(config.profile_json),
             created_at: Set(now),
             updated_at: Set(now),
         };

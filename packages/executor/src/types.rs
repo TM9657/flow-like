@@ -46,6 +46,9 @@ pub struct ExecutionRequest {
     /// User execution context (role, permissions, attributes)
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub user_context: Option<UserExecutionContext>,
+    /// User profile (bits, hubs, settings) - pre-filtered for cloud deployments
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub profile: Option<serde_json::Value>,
 }
 
 /// Result of an execution

@@ -141,6 +141,7 @@ async fn process_queued_job(job: QueuedJob, executor_config: ExecutorConfig) -> 
         stream_state: job.stream_state,
         runtime_variables: job.runtime_variables,
         user_context: job.user_context,
+        profile: job.profile,
     };
 
     let result = execute(exec_request, executor_config).await;

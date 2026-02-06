@@ -15,13 +15,35 @@ use sea_orm::{
     ActiveModelTrait, ActiveValue::Set, ColumnTrait, EntityTrait, PaginatorTrait, QueryFilter,
     TransactionTrait,
 };
+use utoipa::ToSchema;
 
-#[derive(Debug, Clone, serde::Deserialize)]
+#[derive(Debug, Clone, serde::Deserialize, ToSchema)]
 pub struct InviteUserParams {
     pub message: Option<String>,
     pub sub: String,
 }
 
+#[utoipa::path(
+    put,
+    path = "/apps/{app_id}/team/invite",
+    tag = "team",
+    description = "Invite a user to the app.",
+    params(
+        ("app_id" = String, Path, description = "Application ID")
+    ),
+    request_body = InviteUserParams,
+    responses(
+        (status = 200, description = "Invite created", body = ()),
+        (status = 401, description = "Unauthorized"),
+        (status = 403, description = "Forbidden"),
+        (status = 404, description = "Not found")
+    ),
+    security(
+        ("bearer_auth" = []),
+        ("api_key" = []),
+        ("pat" = [])
+    )
+)]
 #[tracing::instrument(name = "PUT /apps/{app_id}/team/invite", skip(state, user))]
 pub async fn invite_user(
     State(state): State<AppState>,

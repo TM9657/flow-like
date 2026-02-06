@@ -95,6 +95,9 @@ pub struct QueuedJob {
     /// User execution context (role, permissions, attributes)
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub user_context: Option<flow_like::flow::execution::UserExecutionContext>,
+    /// User profile data for execution context (bits, settings, etc.)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub profile: Option<serde_json::Value>,
 }
 
 /// Queue worker errors

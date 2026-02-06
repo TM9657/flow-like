@@ -49,6 +49,13 @@ import {
 } from "../../ui";
 import { Badge } from "../../ui/badge";
 import { Checkbox } from "../../ui/checkbox";
+import {
+	Sheet,
+	SheetContent,
+	SheetHeader,
+	SheetTitle,
+	SheetDescription,
+} from "../../ui/sheet";
 
 type SortOption =
 	| "name"
@@ -131,6 +138,7 @@ export function AIModelPage({ webMode = false }: AIModelPageProps) {
 	const [viewMode, setViewMode] = useState<ViewMode>("grid");
 	const [sortBy, setSortBy] = useState<SortOption>("updated");
 	const [showFilters, setShowFilters] = useState(true);
+	const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false);
 	const [providerFilter, setProviderFilter] = useState("all");
 	const [contextLengthFilter, setContextLengthFilter] = useState<
 		[number, number]
@@ -477,22 +485,8 @@ export function AIModelPage({ webMode = false }: AIModelPageProps) {
 		});
 	}, [maxContextLength]);
 
-	return (
-		<main className="flex grow h-full min-h-0 overflow-hidden flex-col w-full bg-background">
-			<div className="flex flex-1 min-h-0 overflow-hidden">
-				{/* Sidebar */}
-				<div className="w-64 border-r border-border/40 flex flex-col bg-muted/10 min-h-0">
-					<div className="p-4 border-b border-border/40 shrink-0">
-						<div className="flex items-center gap-2 mb-1">
-							<Sparkles className="h-5 w-5 text-primary" />
-							<h1 className="text-lg font-bold">Model Catalog</h1>
-						</div>
-						<p className="text-xs text-muted-foreground">
-							{modalityCounts.total} models available
-						</p>
-					</div>
-
-					<div className="flex-1 min-h-0 overflow-y-auto p-3 space-y-5">
+	const sidebarContent = (
+		<div className="flex-1 min-h-0 overflow-y-auto p-3 space-y-5">
 						<FilterSection title="Input" icon={MessageSquare}>
 							<FilterCheckbox
 								checked={inputModalities.has("text")}
@@ -677,16 +671,70 @@ export function AIModelPage({ webMode = false }: AIModelPageProps) {
 									Clear {activeFilterCount} Filter
 									{activeFilterCount !== 1 ? "s" : ""}
 								</Button>
-							</div>
-						)}
 					</div>
+				)}
+		</div>
+	);
+
+	return (
+		<main className="flex grow h-full min-h-0 overflow-hidden flex-col w-full -m-4 sm:m-0 sm:rounded-lg sm:border sm:border-border/40">
+			<div className="flex flex-1 min-h-0 overflow-hidden">
+				{/* Desktop Sidebar */}
+				<div className="hidden lg:flex w-64 border-r border-border/40 flex-col bg-muted/10 min-h-0">
+					<div className="p-4 border-b border-border/40 shrink-0">
+						<div className="flex items-center gap-2 mb-1">
+							<Sparkles className="h-5 w-5 text-primary" />
+							<h1 className="text-lg font-bold">Model Catalog</h1>
+						</div>
+						<p className="text-xs text-muted-foreground">
+							{modalityCounts.total} models available
+						</p>
+					</div>
+					{sidebarContent}
 				</div>
+
+				{/* Mobile Filter Sheet */}
+				<Sheet open={mobileFiltersOpen} onOpenChange={setMobileFiltersOpen}>
+					<SheetContent side="left" className="w-72 p-0 lg:hidden">
+						<SheetHeader className="p-4 border-b border-border/40">
+							<SheetTitle className="flex items-center gap-2">
+								<Filter className="h-4 w-4" />
+								Filters
+							</SheetTitle>
+							<SheetDescription className="text-xs">
+								{modalityCounts.total} models available
+							</SheetDescription>
+						</SheetHeader>
+						{sidebarContent}
+					</SheetContent>
+				</Sheet>
 
 				{/* Main Content */}
 				<div className="flex-1 flex flex-col min-h-0 min-w-0 overflow-hidden">
-					<div className="p-4 border-b border-border/40 space-y-3 bg-background/80 backdrop-blur-sm shrink-0">
-						<div className="flex items-center gap-3">
-							<div className="relative flex-1 max-w-lg">
+					<div className="p-3 sm:p-4 border-b border-border/40 space-y-3 bg-background/80 backdrop-blur-sm shrink-0">
+						{/* Mobile header */}
+						<div className="flex items-center gap-2 lg:hidden">
+							<Sparkles className="h-5 w-5 text-primary" />
+							<h1 className="text-lg font-bold">Model Catalog</h1>
+						</div>
+
+						<div className="flex flex-wrap items-center gap-2 sm:gap-3">
+							{/* Mobile filter toggle */}
+							<Button
+								variant="outline"
+								size="icon"
+								className="relative h-10 w-10 lg:hidden shrink-0"
+								onClick={() => setMobileFiltersOpen(true)}
+							>
+								<Filter className="h-4 w-4" />
+								{activeFilterCount > 0 && (
+									<span className="absolute -top-1 -right-1 h-4 w-4 rounded-full bg-primary text-[10px] text-primary-foreground flex items-center justify-center">
+										{activeFilterCount}
+									</span>
+								)}
+							</Button>
+
+							<div className="relative flex-1 min-w-37.5 max-w-lg">
 								<Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
 								<Input
 									placeholder="Search models..."
@@ -703,7 +751,7 @@ export function AIModelPage({ webMode = false }: AIModelPageProps) {
 								value={sortBy}
 								onValueChange={(v) => setSortBy(v as SortOption)}
 							>
-								<SelectTrigger className="w-44 h-10">
+								<SelectTrigger className="w-32 sm:w-44 h-10 shrink-0">
 									<SelectValue placeholder="Sort by" />
 								</SelectTrigger>
 								<SelectContent>
@@ -753,7 +801,7 @@ export function AIModelPage({ webMode = false }: AIModelPageProps) {
 					</div>
 
 					<div className="flex-1 min-h-0 overflow-y-auto">
-						<div className="p-4">
+						<div className="p-2 sm:p-4">
 							{foundBits.isLoading ? (
 								<div className="flex flex-col items-center justify-center py-16">
 									<Loader2 className="h-8 w-8 animate-spin text-primary mb-4" />
@@ -791,7 +839,7 @@ export function AIModelPage({ webMode = false }: AIModelPageProps) {
 								<div
 									className={
 										viewMode === "grid"
-											? "grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-3"
+										? "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-3"
 											: "space-y-2"
 									}
 								>

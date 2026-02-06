@@ -370,6 +370,9 @@ model EventSink {
   /// Encrypted OAuth tokens JSON (optional - for provider-specific access like Google, GitHub, etc.)
   oauthTokensEncrypted String?
 
+  /// Snapshot of the last updater's profile JSON (bits, hubs) for trigger execution
+  profileJson Json?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 

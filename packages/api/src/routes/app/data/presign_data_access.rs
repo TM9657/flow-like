@@ -1,0 +1,170 @@
+//! Presign data access endpoint
+//!
+//! Provides scoped storage credentials for direct client access to app data under
+//! `apps/{app_id}/upload` with optional subpath.
+
+use crate::{
+    credentials::{CredentialsAccess, RuntimeCredentials},
+    ensure_permission,
+    error::ApiError,
+    middleware::jwt::AppUser,
+    permission::role_permission::RolePermissions,
+    state::AppState,
+};
+use axum::{
+    Extension, Json,
+    extract::{Path, State},
+};
+use flow_like_storage::Path as FlowPath;
+use serde::{Deserialize, Serialize};
+use utoipa::ToSchema;
+
+#[derive(Debug, Clone, Deserialize, ToSchema)]
+pub struct PresignDataAccessRequest {
+    /// Optional subpath inside apps/{app_id}/upload
+    #[serde(default)]
+    pub prefix: Option<String>,
+    /// Access mode: "read" or "write"
+    #[serde(default = "default_access_mode")]
+    pub access_mode: String,
+}
+
+fn default_access_mode() -> String {
+    "read".to_string()
+}
+
+#[derive(Debug, Clone, Serialize, ToSchema)]
+pub struct PresignDataAccessResponse {
+    /// Shared credentials for direct storage access
+    pub shared_credentials: serde_json::Value,
+    /// Resolved path within the bucket/container
+    pub path: String,
+    /// Access mode granted
+    pub access_mode: String,
+    /// Expiration time (if available)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub expiration: Option<chrono::DateTime<chrono::Utc>>,
+}
+
+#[utoipa::path(
+    post,
+    path = "/apps/{app_id}/data/presign",
+    tag = "data",
+    description = "Get shared credentials for direct file access.",
+    params(
+        ("app_id" = String, Path, description = "Application ID")
+    ),
+    request_body = PresignDataAccessRequest,
+    responses(
+        (status = 200, description = "Presigned data access credentials", body = PresignDataAccessResponse),
+        (status = 400, description = "Bad request - invalid access mode"),
+        (status = 401, description = "Unauthorized"),
+        (status = 403, description = "Forbidden - insufficient permissions"),
+        (status = 500, description = "Internal server error")
+    ),
+    security(
+        ("bearer_auth" = []),
+        ("api_key" = []),
+        ("pat" = [])
+    )
+)]
+#[tracing::instrument(
+    name = "POST /apps/{app_id}/data/presign",
+    skip(state, user),
+    fields(app_id = %app_id, mode = %payload.access_mode)
+)]
+pub async fn presign_data_access(
+    State(state): State<AppState>,
+    Extension(user): Extension<AppUser>,
+    Path(app_id): Path<String>,
+    Json(payload): Json<PresignDataAccessRequest>,
+) -> Result<Json<PresignDataAccessResponse>, ApiError> {
+    let access_mode = payload.access_mode.to_lowercase();
+    if access_mode != "read" && access_mode != "write" {
+        return Err(ApiError::bad_request(
+            "access_mode must be either 'read' or 'write'".to_string(),
+        ));
+    }
+
+    let (required_permission, credentials_access) = if access_mode == "write" {
+        (RolePermissions::WriteFiles, CredentialsAccess::EditApp)
+    } else {
+        (RolePermissions::ReadFiles, CredentialsAccess::ReadApp)
+    };
+
+    let permission = ensure_permission!(user, &app_id, &state, required_permission);
+    let sub = permission.sub()?;
+
+    let scoped_credentials = RuntimeCredentials::scoped(&sub, &app_id, &state, credentials_access)
+        .await
+        .map_err(|e| {
+            tracing::error!("Failed to generate scoped credentials: {}", e);
+            ApiError::internal("Failed to generate data access credentials")
+        })?;
+
+    let upload_path = build_upload_path(&app_id, payload.prefix.as_deref());
+    let path_str = upload_path.to_string();
+
+    let shared_credentials = serde_json::to_value(
+        scoped_credentials
+            .clone()
+            .into_shared_credentials(),
+    )
+    .map_err(|e| {
+        tracing::error!("Failed to serialize shared credentials: {}", e);
+        ApiError::internal("Failed to serialize shared credentials")
+    })?;
+
+    let expiration = get_credentials_expiration(&scoped_credentials);
+
+    Ok(Json(PresignDataAccessResponse {
+        shared_credentials,
+        path: path_str,
+        access_mode,
+        expiration,
+    }))
+}
+
+fn build_upload_path(app_id: &str, prefix: Option<&str>) -> FlowPath {
+    let mut base = FlowPath::from("apps").child(app_id).child("upload");
+
+    let Some(prefix) = prefix else {
+        return base;
+    };
+
+    if prefix.starts_with("apps/") {
+        let segments: Vec<&str> = prefix.split('/').collect();
+        if segments.len() > 3 {
+            for segment in segments.iter().skip(3) {
+                if !segment.is_empty() {
+                    base = base.child(*segment);
+                }
+            }
+        }
+        return base;
+    }
+
+    for segment in prefix.split('/') {
+        if !segment.is_empty() {
+            base = base.child(segment);
+        }
+    }
+
+    base
+}
+
+
+fn get_credentials_expiration(
+    credentials: &RuntimeCredentials,
+) -> Option<chrono::DateTime<chrono::Utc>> {
+    match credentials {
+        #[cfg(feature = "aws")]
+        RuntimeCredentials::Aws(aws) => aws.expiration,
+        #[cfg(feature = "azure")]
+        RuntimeCredentials::Azure(azure) => azure.expiration,
+        #[cfg(feature = "gcp")]
+        RuntimeCredentials::Gcp(gcp) => gcp.expiration,
+        #[cfg(feature = "r2")]
+        RuntimeCredentials::R2(r2) => r2.expiration,
+    }
+}

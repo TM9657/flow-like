@@ -73,10 +73,11 @@ model Profile {
     settings Json?
 
     // JSON with the apps that are part of the profile. Contains the app ID, if it is favorite, pinned and position of the two
-    apps   Json?
-    bitIds String[]
-    hub    String
-    hubs   String[]
+    apps      Json?
+    shortcuts Json?
+    bitIds    String[]
+    hub       String
+    hubs      String[]
 
     userId String
     user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)

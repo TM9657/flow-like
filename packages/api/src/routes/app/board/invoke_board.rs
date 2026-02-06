@@ -21,7 +21,8 @@ use crate::{
     error::ApiError,
     execution::{
         ByteStream, DispatchRequest, ExecutionBackend, ExecutionJwtParams, TokenType,
-        is_jwt_configured, payload_storage, proxy_sse_response, sign_execution_jwt,
+        fetch_profile_for_dispatch, is_jwt_configured, payload_storage, proxy_sse_response,
+        sign_execution_jwt,
     },
     middleware::jwt::AppUser,
     permission::role_permission::RolePermissions,
@@ -70,6 +71,8 @@ pub struct InvokeBoardRequest {
     #[schema(value_type = Option<Object>)]
     pub runtime_variables:
         Option<std::collections::HashMap<String, flow_like::flow::variable::Variable>>,
+    /// Optional profile ID to select a specific user profile for execution
+    pub profile_id: Option<String>,
 }
 
 fn default_stream_state() -> bool {
@@ -273,6 +276,8 @@ pub async fn invoke_board(
         ApiError::internal_error(anyhow!("Failed to sign executor JWT: {}", e))
     })?;
 
+    let profile = fetch_profile_for_dispatch(&state.db, &sub, params.profile_id.as_deref(), &app_id).await;
+
     let request = DispatchRequest {
         run_id: run_id.clone(),
         app_id: app_id.clone(),
@@ -290,6 +295,7 @@ pub async fn invoke_board(
         stream_state: params.stream_state,
         runtime_variables: params.runtime_variables,
         user_context: Some(permission.to_user_context()),
+        profile,
     };
 
     // For isolated K8s jobs, insert run record and dispatch async

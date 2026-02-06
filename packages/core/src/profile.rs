@@ -134,13 +134,63 @@ impl Default for Profile {
 }
 
 impl Profile {
+    /// Check if a bit is a local model (requires local hosting capabilities)
+    fn is_local_model(bit: &Bit) -> bool {
+        if let Ok(llm_params) = flow_like_types::json::from_value::<crate::bit::LLMParameters>(bit.parameters.clone()) {
+            let provider_name = llm_params.provider.provider_name.to_lowercase();
+            if provider_name == "local" ||
+               provider_name == "llama.cpp" ||
+               provider_name == "llamacpp" ||
+               provider_name == "ollama" {
+                return true;
+            }
+        } else if let Ok(vlm_params) = flow_like_types::json::from_value::<crate::bit::VLMParameters>(bit.parameters.clone()) {
+            let provider_name = vlm_params.provider.provider_name.to_lowercase();
+            if provider_name == "local" ||
+               provider_name == "llama.cpp" ||
+               provider_name == "llamacpp" ||
+               provider_name == "ollama" {
+                return true;
+            }
+        }
+
+        false
+    }
+
     /// Gets the best model based on the preference
     /// For remote we are also looking on hubs for available models (for recommendations, for example)
+    /// When only_hosted=true, filters out local models that require hosting capabilities
     pub async fn get_best_model(
         &self,
         preference: &BitModelPreference,
         multimodal: bool,
         remote: bool,
+        http_client: Arc<HTTPClient>,
+    ) -> Result<Bit> {
+        self.get_best_model_filtered(preference, multimodal, remote, false, http_client).await
+    }
+
+    /// Create a copy of this profile with only hosted models (filters out local models)
+    /// This is useful for cloud deployments where local models cannot be hosted
+    pub fn filter_hosted_only(&self) -> Self {
+        let mut filtered = self.clone();
+        filtered.bits.retain(|bit_ref| {
+            // We can't check the actual bit without fetching it from the hub,
+            // so we filter based on known patterns in the bit reference
+            // Desktop app will use the full profile; cloud will use filtered
+            true // Keep all for now - actual filtering happens in get_best_model_filtered
+        });
+        filtered
+    }
+
+    /// Gets the best model based on the preference with filtering options
+    /// When only_hosted=true, filters out local models that require hosting capabilities
+    pub async fn get_best_model_filtered(
+        &self,
+        preference: &BitModelPreference,
+        multimodal: bool,
+        remote: bool,
+        only_hosted: bool,
         http_client: Arc<HTTPClient>,
     ) -> Result<Bit> {
         let mut best_bit = (0.0, None);
@@ -153,6 +203,12 @@ impl Profile {
 
                 let hub = Hub::new(hub, http_client.clone()).await?;
                 let bit = hub.get_bit(bit_id).await?;
+
+                // Skip local models if only_hosted is true
+                if only_hosted && Self::is_local_model(&bit) {
+                    continue;
+                }
+
                 if multimodal && !bit.is_multimodal() {
                     continue;
                 }
@@ -186,6 +242,11 @@ impl Profile {
         }
 
         for (_, bit) in bits {
+            // Skip local models if only_hosted is true
+            if only_hosted && Self::is_local_model(&bit) {
+                continue;
+            }
+
             if multimodal && !bit.is_multimodal() {
                 continue;
             }

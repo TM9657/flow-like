@@ -12,8 +12,9 @@ use axum::{
 };
 use sea_orm::{ColumnTrait, EntityTrait, QueryFilter, QuerySelect};
 use serde::{Deserialize, Serialize};
+use utoipa::ToSchema;
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Deserialize, Serialize, ToSchema)]
 pub struct ApiKeyInfo {
     pub id: String,
     pub name: String,
@@ -25,6 +26,25 @@ pub struct ApiKeyInfo {
     pub created_at: i64,
 }
 
+#[utoipa::path(
+    get,
+    path = "/apps/{app_id}/api",
+    tag = "api-keys",
+    description = "List API keys for an app.",
+    params(
+        ("app_id" = String, Path, description = "Application ID")
+    ),
+    responses(
+        (status = 200, description = "API keys", body = Vec<ApiKeyInfo>),
+        (status = 401, description = "Unauthorized"),
+        (status = 403, description = "Forbidden")
+    ),
+    security(
+        ("bearer_auth" = []),
+        ("api_key" = []),
+        ("pat" = [])
+    )
+)]
 #[tracing::instrument(name = "GET /apps/{app_id}/api", skip(state, user))]
 pub async fn get_api_keys(
     State(state): State<AppState>,

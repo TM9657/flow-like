@@ -203,6 +203,7 @@ pub async fn trigger_event(
         stream_state: false,
         runtime_variables: None,
         user_context: None, // Sink triggers don't have user context
+        profile: sink.profile_json.clone(),
     };
 
     // Create run record
@@ -450,6 +451,7 @@ pub async fn trigger_http(
         stream_state: false,
         runtime_variables: None,
         user_context: None, // HTTP sink triggers don't have user context
+        profile: sink.profile_json.clone(),
     };
 
     // Create run record
@@ -745,6 +747,7 @@ pub async fn trigger_telegram(
         stream_state: false,
         runtime_variables: None,
         user_context: None, // Telegram webhook triggers don't have user context
+        profile: sink.profile_json.clone(),
     };
 
     // Create run record
@@ -1052,6 +1055,7 @@ pub async fn trigger_discord(
         stream_state: false,
         runtime_variables: None,
         user_context: None, // Discord webhook triggers don't have user context
+        profile: sink.profile_json.clone(),
     };
 
     // Create run record

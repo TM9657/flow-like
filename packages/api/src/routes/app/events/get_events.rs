@@ -11,6 +11,25 @@ use flow_like::flow::event::Event;
 use super::db::{filter_event_secrets, get_events_for_app};
 
 #[tracing::instrument(name = "GET /apps/{app_id}/events", skip(state, user))]
+#[utoipa::path(
+    get,
+    path = "/apps/{app_id}/events",
+    tag = "events",
+    description = "List events for an app.",
+    params(
+        ("app_id" = String, Path, description = "Application ID")
+    ),
+    responses(
+        (status = 200, description = "Event list", body = String, content_type = "application/json"),
+        (status = 401, description = "Unauthorized"),
+        (status = 403, description = "Forbidden")
+    ),
+    security(
+        ("bearer_auth" = []),
+        ("api_key" = []),
+        ("pat" = [])
+    )
+)]
 pub async fn get_events(
     State(state): State<AppState>,
     Extension(user): Extension<AppUser>,

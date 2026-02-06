@@ -12,6 +12,25 @@ use axum::{
 };
 use sea_orm::{ColumnTrait, EntityTrait, QueryFilter, TransactionTrait};
 
+#[utoipa::path(
+    get,
+    path = "/apps/{app_id}/roles",
+    tag = "roles",
+    description = "List roles for an app.",
+    params(
+        ("app_id" = String, Path, description = "Application ID")
+    ),
+    responses(
+        (status = 200, description = "Roles list", body = String, content_type = "application/json"),
+        (status = 401, description = "Unauthorized"),
+        (status = 403, description = "Forbidden")
+    ),
+    security(
+        ("bearer_auth" = []),
+        ("api_key" = []),
+        ("pat" = [])
+    )
+)]
 #[tracing::instrument(name = "GET /apps/{app_id}/roles", skip(state, user))]
 pub async fn get_roles(
     State(state): State<AppState>,

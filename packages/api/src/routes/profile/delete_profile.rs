@@ -5,6 +5,7 @@ use axum::{
 };
 use sea_orm::{ColumnTrait, EntityTrait, ModelTrait, QueryFilter};
 
+/// Delete a profile by ID
 #[utoipa::path(
     delete,
     path = "/profile/{profile_id}",
@@ -14,7 +15,8 @@ use sea_orm::{ColumnTrait, EntityTrait, ModelTrait, QueryFilter};
     ),
     responses(
         (status = 200, description = "Profile deleted successfully"),
-        (status = 401, description = "Unauthorized")
+        (status = 401, description = "Unauthorized"),
+        (status = 404, description = "Profile not found")
     )
 )]
 #[tracing::instrument(name = "DELETE /profile/{profile_id}", skip(state, user))]
@@ -26,7 +28,11 @@ pub async fn delete_profile(
     let sub = user.sub()?;
 
     let profile = profile::Entity::find()
-        .filter(profile::Column::UserId.eq(sub))
+        .filter(
+            profile::Column::Id
+                .eq(&profile_id)
+                .and(profile::Column::UserId.eq(sub)),
+        )
         .one(&state.db)
         .await?;
 
