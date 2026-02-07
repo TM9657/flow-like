@@ -29,7 +29,7 @@ impl NodeLogic for GetButtonDisabled {
             "a2ui_get_button_disabled",
             "Get Button Disabled",
             "Gets whether a button element is disabled",
-            "A2UI/Elements/Button",
+            "UI/Elements/Button",
         );
         node.add_icon("/flow/icons/a2ui.svg");
 

@@ -25,7 +25,7 @@ impl NodeLogic for SetModel3dTransform {
             "a2ui_set_model3d_transform",
             "Set Model3D Transform",
             "Sets the position, rotation, and scale of a 3D model element",
-            "A2UI/Elements/Game",
+            "UI/Elements/Game",
         );
         node.add_icon("/flow/icons/a2ui.svg");
 

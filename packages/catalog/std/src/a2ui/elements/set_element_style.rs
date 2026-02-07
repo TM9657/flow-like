@@ -27,7 +27,7 @@ impl NodeLogic for SetElementStyle {
             "a2ui_set_element_style",
             "Set Element Style",
             "Sets style properties of an element",
-            "A2UI/Elements",
+            "UI/Elements",
         );
         node.add_icon("/flow/icons/a2ui.svg");
 

@@ -25,7 +25,7 @@ impl NodeLogic for SetSpritePosition {
             "a2ui_set_sprite_position",
             "Set Sprite Position",
             "Sets the x/y position of a sprite element",
-            "A2UI/Elements/Game",
+            "UI/Elements/Game",
         );
         node.add_icon("/flow/icons/a2ui.svg");
 

@@ -28,7 +28,7 @@ impl NodeLogic for AddLabelerBox {
             "a2ui_add_labeler_box",
             "Add Labeler Box",
             "Adds a bounding box to an ImageLabeler element",
-            "A2UI/Elements/Labeler",
+            "UI/Elements/Labeler",
         );
         node.add_icon("/flow/icons/a2ui.svg");
 

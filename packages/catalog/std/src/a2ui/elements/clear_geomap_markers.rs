@@ -26,7 +26,7 @@ impl NodeLogic for ClearGeoMapMarkers {
             "a2ui_clear_geomap_markers",
             "Clear GeoMap Markers",
             "Removes all markers from a GeoMap element",
-            "A2UI/Elements/GeoMap",
+            "UI/Elements/GeoMap",
         );
         node.add_icon("/flow/icons/a2ui.svg");
 

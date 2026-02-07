@@ -26,7 +26,7 @@ impl NodeLogic for ClearHotspots {
             "a2ui_clear_hotspots",
             "Clear Hotspots",
             "Removes all hotspots from an ImageHotspot element",
-            "A2UI/Elements/Hotspot",
+            "UI/Elements/Hotspot",
         );
         node.add_icon("/flow/icons/a2ui.svg");
 

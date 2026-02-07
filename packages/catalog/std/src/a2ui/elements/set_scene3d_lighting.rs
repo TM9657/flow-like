@@ -25,7 +25,7 @@ impl NodeLogic for SetScene3dLighting {
             "a2ui_set_scene3d_lighting",
             "Set Scene3D Lighting",
             "Sets the lighting options for a 3D scene",
-            "A2UI/Elements/Game",
+            "UI/Elements/Game",
         );
         node.add_icon("/flow/icons/a2ui.svg");
 

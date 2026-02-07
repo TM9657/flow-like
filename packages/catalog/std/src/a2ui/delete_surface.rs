@@ -22,7 +22,7 @@ impl NodeLogic for DeleteSurface {
             "a2ui_delete_surface",
             "Delete Surface",
             "Removes a surface from the frontend",
-            "A2UI/Surface",
+            "UI/Surface",
         );
         node.add_icon("/flow/icons/a2ui.svg");
 

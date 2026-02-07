@@ -26,7 +26,7 @@ impl NodeLogic for SetAvatarSrc {
             "a2ui_set_avatar_src",
             "Set Avatar Source",
             "Sets the source image of an avatar element",
-            "A2UI/Elements/Display",
+            "UI/Elements/Display",
         );
         node.add_icon("/flow/icons/a2ui.svg");
 

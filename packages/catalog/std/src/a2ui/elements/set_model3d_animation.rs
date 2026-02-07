@@ -25,7 +25,7 @@ impl NodeLogic for SetModel3dAnimation {
             "a2ui_set_model3d_animation",
             "Set Model3D Animation",
             "Sets the animation and rotation options for a 3D model",
-            "A2UI/Elements/Game",
+            "UI/Elements/Game",
         );
         node.add_icon("/flow/icons/a2ui.svg");
 

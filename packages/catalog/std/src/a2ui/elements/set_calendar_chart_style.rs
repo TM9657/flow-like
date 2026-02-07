@@ -30,7 +30,7 @@ impl NodeLogic for SetCalendarChartStyle {
             "a2ui_set_calendar_chart_style",
             "Set Calendar Chart Style",
             "Configures Calendar heatmap appearance. Docs: https://nivo.rocks/calendar/",
-            "A2UI/Elements/Charts/Calendar",
+            "UI/Elements/Charts/Calendar",
         );
         node.add_icon("/flow/icons/a2ui.svg");
 

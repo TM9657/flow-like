@@ -30,7 +30,7 @@ impl NodeLogic for SetRadarChartStyle {
             "a2ui_set_radar_chart_style",
             "Set Radar Chart Style",
             "Configures Radar/Spider chart appearance. Docs: https://nivo.rocks/radar/",
-            "A2UI/Elements/Charts/Radar",
+            "UI/Elements/Charts/Radar",
         );
         node.add_icon("/flow/icons/a2ui.svg");
 

@@ -28,7 +28,7 @@ impl NodeLogic for SetTableColumns {
             "a2ui_set_table_columns",
             "Set Table Columns",
             "Sets the column definitions for a table element",
-            "A2UI/Elements/Table",
+            "UI/Elements/Table",
         );
         node.add_icon("/flow/icons/a2ui.svg");
 

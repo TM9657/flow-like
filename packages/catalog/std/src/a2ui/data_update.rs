@@ -22,7 +22,7 @@ impl NodeLogic for DataUpdate {
             "a2ui_data_update",
             "Data Update",
             "Updates data in a surface's data model",
-            "A2UI/Data",
+            "UI/Data",
         );
         node.add_icon("/flow/icons/a2ui.svg");
 

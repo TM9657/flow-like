@@ -26,7 +26,7 @@ impl NodeLogic for SetVideoSrc {
             "a2ui_set_video_src",
             "Set Video Source",
             "Sets the source URL of a video element",
-            "A2UI/Elements/Media",
+            "UI/Elements/Media",
         );
         node.add_icon("/flow/icons/a2ui.svg");
 

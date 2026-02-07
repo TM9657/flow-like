@@ -25,7 +25,7 @@ impl NodeLogic for SetIframeSrc {
             "a2ui_set_iframe_src",
             "Set Iframe Src",
             "Sets the src URL of an iframe element",
-            "A2UI/Elements/Set",
+            "UI/Elements/Set",
         );
         node.add_icon("/flow/icons/a2ui.svg");
 

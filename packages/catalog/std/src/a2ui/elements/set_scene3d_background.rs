@@ -25,7 +25,7 @@ impl NodeLogic for SetScene3dBackground {
             "a2ui_set_scene3d_background",
             "Set Scene3D Background",
             "Sets the background color of a 3D scene",
-            "A2UI/Elements/Game",
+            "UI/Elements/Game",
         );
         node.add_icon("/flow/icons/a2ui.svg");
 

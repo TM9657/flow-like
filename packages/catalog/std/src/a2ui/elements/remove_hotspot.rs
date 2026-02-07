@@ -26,7 +26,7 @@ impl NodeLogic for RemoveHotspot {
             "a2ui_remove_hotspot",
             "Remove Hotspot",
             "Removes a hotspot from an ImageHotspot by ID",
-            "A2UI/Elements/Hotspot",
+            "UI/Elements/Hotspot",
         );
         node.add_icon("/flow/icons/a2ui.svg");
 

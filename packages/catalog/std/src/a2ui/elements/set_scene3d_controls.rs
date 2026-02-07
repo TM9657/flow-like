@@ -25,7 +25,7 @@ impl NodeLogic for SetScene3dControls {
             "a2ui_set_scene3d_controls",
             "Set Scene3D Controls",
             "Sets the control mode and options for a 3D scene",
-            "A2UI/Elements/Game",
+            "UI/Elements/Game",
         );
         node.add_icon("/flow/icons/a2ui.svg");
 

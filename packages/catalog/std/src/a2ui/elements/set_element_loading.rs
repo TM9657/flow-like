@@ -27,7 +27,7 @@ impl NodeLogic for SetElementLoading {
             "a2ui_set_element_loading",
             "Set Element Loading",
             "Sets the loading state of a button element",
-            "A2UI/Elements",
+            "UI/Elements",
         );
         node.add_icon("/flow/icons/a2ui.svg");
 

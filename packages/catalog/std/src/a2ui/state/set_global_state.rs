@@ -28,7 +28,7 @@ impl NodeLogic for SetGlobalState {
             "a2ui_set_global_state",
             "Set Global State",
             "Sets a value in global state by key",
-            "A2UI/State",
+            "UI/State",
         );
         node.add_icon("/flow/icons/a2ui.svg");
 

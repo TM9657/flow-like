@@ -26,7 +26,7 @@ impl NodeLogic for SetLottieSrc {
             "a2ui_set_lottie_src",
             "Set Lottie Source",
             "Sets the source URL of a Lottie animation element",
-            "A2UI/Elements/Media",
+            "UI/Elements/Media",
         );
         node.add_icon("/flow/icons/a2ui.svg");
 

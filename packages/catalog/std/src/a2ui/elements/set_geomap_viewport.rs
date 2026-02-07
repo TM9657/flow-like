@@ -26,7 +26,7 @@ impl NodeLogic for SetGeoMapViewport {
             "a2ui_set_geomap_viewport",
             "Set GeoMap Viewport",
             "Navigates a GeoMap to a specific location and zoom level",
-            "A2UI/Elements/GeoMap",
+            "UI/Elements/GeoMap",
         );
         node.add_icon("/flow/icons/a2ui.svg");
 

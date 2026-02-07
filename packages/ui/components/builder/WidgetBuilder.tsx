@@ -1237,6 +1237,21 @@ function BuilderPreview({ surfaceId }: BuilderPreviewProps) {
 						};
 						break;
 					}
+					case "setGeoMapViewport": {
+						const viewport = updateValue.viewport as { literalJson?: string } | undefined;
+						const componentData = component.component as unknown as Record<
+							string,
+							unknown
+						>;
+						updatedComponent = {
+							...component,
+							component: {
+								...componentData,
+								viewport,
+							} as unknown as SurfaceComponent["component"],
+						};
+						break;
+					}
 					default: {
 						const componentData = component.component as unknown as Record<
 							string,

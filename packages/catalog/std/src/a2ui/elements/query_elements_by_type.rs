@@ -32,7 +32,7 @@ impl NodeLogic for QueryElementsByType {
             "a2ui_query_elements_by_type",
             "Query Elements by Type",
             "Gets all elements of a specific component type",
-            "A2UI/Elements/Query",
+            "UI/Elements/Query",
         );
         node.add_icon("/flow/icons/a2ui.svg");
 

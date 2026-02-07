@@ -27,7 +27,7 @@ impl NodeLogic for GetRouteParams {
             "a2ui_get_route_params",
             "Get Route Params",
             "Gets route parameters from the current URL",
-            "A2UI/Navigation",
+            "UI/Navigation",
         );
         node.add_icon("/flow/icons/a2ui.svg");
 

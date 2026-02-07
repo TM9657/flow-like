@@ -30,7 +30,7 @@ impl NodeLogic for SetLineChartStyle {
             "a2ui_set_line_chart_style",
             "Set Line Chart Style",
             "Configures Line chart appearance. Docs: https://nivo.rocks/line/",
-            "A2UI/Elements/Charts/Line",
+            "UI/Elements/Charts/Line",
         );
         node.add_icon("/flow/icons/a2ui.svg");
 

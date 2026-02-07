@@ -23,7 +23,7 @@ impl NodeLogic for RemoveChildAtIndex {
             "a2ui_remove_child_at_index",
             "Remove Child At Index",
             "Removes a child element at a specific index from a container",
-            "A2UI/Elements/Containers",
+            "UI/Elements/Containers",
         );
         node.add_icon("/flow/icons/a2ui.svg");
 

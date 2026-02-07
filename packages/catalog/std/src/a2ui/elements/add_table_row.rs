@@ -28,7 +28,7 @@ impl NodeLogic for AddTableRow {
             "a2ui_add_table_row",
             "Add Table Row",
             "Adds a new row to a table element",
-            "A2UI/Elements/Table",
+            "UI/Elements/Table",
         );
         node.add_icon("/flow/icons/a2ui.svg");
 

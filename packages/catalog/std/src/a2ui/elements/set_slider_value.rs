@@ -26,7 +26,7 @@ impl NodeLogic for SetSliderValue {
             "a2ui_set_slider_value",
             "Set Slider Value",
             "Sets the value of a slider element",
-            "A2UI/Elements/Slider",
+            "UI/Elements/Slider",
         );
         node.add_icon("/flow/icons/a2ui.svg");
 

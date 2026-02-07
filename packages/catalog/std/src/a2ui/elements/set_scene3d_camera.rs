@@ -25,7 +25,7 @@ impl NodeLogic for SetScene3dCamera {
             "a2ui_set_scene3d_camera",
             "Set Scene3D Camera",
             "Sets the camera type and position of a 3D scene",
-            "A2UI/Elements/Game",
+            "UI/Elements/Game",
         );
         node.add_icon("/flow/icons/a2ui.svg");
 

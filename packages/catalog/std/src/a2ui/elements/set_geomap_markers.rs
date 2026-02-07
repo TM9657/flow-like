@@ -26,7 +26,7 @@ impl NodeLogic for SetGeoMapMarkers {
             "a2ui_set_geomap_markers",
             "Set GeoMap Markers",
             "Sets all markers on a GeoMap element, replacing existing ones",
-            "A2UI/Elements/GeoMap",
+            "UI/Elements/GeoMap",
         );
         node.add_icon("/flow/icons/a2ui.svg");
 

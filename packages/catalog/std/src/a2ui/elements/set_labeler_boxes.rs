@@ -28,7 +28,7 @@ impl NodeLogic for SetLabelerBoxes {
             "a2ui_set_labeler_boxes",
             "Set Labeler Boxes",
             "Sets all bounding boxes on an ImageLabeler element",
-            "A2UI/Elements/Labeler",
+            "UI/Elements/Labeler",
         );
         node.add_icon("/flow/icons/a2ui.svg");
 

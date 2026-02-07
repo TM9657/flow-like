@@ -270,6 +270,19 @@ function RouteDialogRenderer({
 						text,
 					} as unknown as SurfaceComponent["component"],
 				};
+			} else if (updateType === "setGeoMapViewport") {
+				const viewport = updateValue.viewport as { literalJson?: string } | undefined;
+				const componentData = component.component as unknown as Record<
+					string,
+					unknown
+				>;
+				updatedComponent = {
+					...component,
+					component: {
+						...componentData,
+						viewport,
+					} as unknown as SurfaceComponent["component"],
+				};
 			} else if (updateType === "setProps") {
 				const props = updateValue.props as Record<string, unknown>;
 				const componentData = component.component as unknown as Record<

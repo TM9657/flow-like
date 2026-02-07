@@ -21,7 +21,7 @@ use crate::{
     entity::execution_run,
     error::ApiError,
     execution::{
-        DispatchRequest, ExecutionBackend, ExecutionJwtParams, TokenType,
+        ByteStream, DispatchRequest, ExecutionBackend, ExecutionJwtParams, TokenType,
         fetch_profile_for_dispatch, is_jwt_configured, payload_storage, proxy_sse_response,
         sign_execution_jwt,
     },
@@ -325,7 +325,9 @@ pub async fn invoke_event(
         .into_response());
     }
 
-    tracing::info!(run_id = %run_id, "Dispatching HTTP SSE for event execution");
+    // Determine the streaming dispatch method based on backend configuration
+    let backend = state.dispatcher.backend();
+    tracing::info!(run_id = %run_id, ?backend, "Dispatching streaming execution for event");
 
     // Create run record in DB (can happen in parallel with dispatch)
     let db_clone = state.db.clone();
@@ -337,27 +339,184 @@ pub async fn invoke_event(
         })
     });
 
-    // Dispatch and get SSE stream from executor (in parallel with DB insert)
-    let (_dispatch_response, executor_response) = state
-        .dispatcher
-        .dispatch_http_sse(request)
-        .await
-        .map_err(|e| {
-            tracing::error!(error = %e, "Failed to dispatch SSE job");
-            ApiError::internal_error(anyhow!("Failed to dispatch job: {}", e))
-        })?;
+    // Dispatch based on the configured backend
+    match backend {
+        ExecutionBackend::LambdaStream => {
+            // Use Lambda SDK streaming
+            let (_dispatch_response, byte_stream) = state
+                .dispatcher
+                .dispatch_streaming(request)
+                .await
+                .map_err(|e| {
+                    tracing::error!(error = %e, "Failed to dispatch Lambda streaming job");
+                    ApiError::internal_error(anyhow!("Failed to dispatch job: {}", e))
+                })?;
 
-    // Wait for DB insert to complete (it's likely already done by now)
-    if let Err(e) = db_insert_handle.await {
-        tracing::error!(run_id = %run_id_clone, error = ?e, "DB insert task failed");
+            // Wait for DB insert to complete
+            if let Err(e) = db_insert_handle.await {
+                tracing::error!(run_id = %run_id_clone, error = ?e, "DB insert task failed");
+            }
+
+            tracing::info!(run_id = %run_id, "Got Lambda response, starting stream proxy");
+
+            Ok(proxy_lambda_sse_response(
+                byte_stream,
+                run_id,
+                Some(std::sync::Arc::new(state.db.clone())),
+            )
+            .into_response())
+        }
+        _ => {
+            // Use HTTP SSE for all other backends (Http, etc.)
+            let (_dispatch_response, executor_response) = state
+                .dispatcher
+                .dispatch_http_sse(request)
+                .await
+                .map_err(|e| {
+                    tracing::error!(error = %e, "Failed to dispatch HTTP SSE job");
+                    ApiError::internal_error(anyhow!("Failed to dispatch job: {}", e))
+                })?;
+
+            // Wait for DB insert to complete
+            if let Err(e) = db_insert_handle.await {
+                tracing::error!(run_id = %run_id_clone, error = ?e, "DB insert task failed");
+            }
+
+            tracing::info!(run_id = %run_id, "Got executor response, starting stream proxy");
+
+            Ok(proxy_sse_response(
+                executor_response,
+                run_id,
+                Some(std::sync::Arc::new(state.db.clone())),
+            )
+            .into_response())
+        }
     }
+}
 
-    tracing::info!(run_id = %run_id, "Got executor response, starting stream proxy");
+/// Create an SSE stream from a Lambda ByteStream response
+fn proxy_lambda_sse_response(
+    stream: ByteStream,
+    run_id: String,
+    db: Option<std::sync::Arc<sea_orm::DatabaseConnection>>,
+) -> axum::response::sse::Sse<
+    impl futures::Stream<Item = Result<axum::response::sse::Event, std::convert::Infallible>>,
+> {
+    use axum::response::sse::{Event, KeepAlive, Sse};
+    use futures::StreamExt;
+    use std::time::Duration;
 
-    Ok(proxy_sse_response(
-        executor_response,
-        run_id,
-        Some(std::sync::Arc::new(state.db.clone())),
+    let stream = async_stream::stream! {
+        let mut byte_stream = stream;
+        let mut buffer = Vec::new();
+
+        while let Some(result) = byte_stream.next().await {
+            match result {
+                Ok(bytes) => {
+                    // Append bytes to buffer
+                    buffer.extend_from_slice(&bytes);
+
+                    // Try to parse complete SSE events from buffer
+                    while let Some(event) = extract_sse_event(&mut buffer) {
+                        // Check if this is a completed event and update the database
+                        if let Some(db) = &db
+                            && let Ok(parsed) = serde_json::from_str::<serde_json::Value>(&event.data)
+                                && let Some(event_type) = parsed.get("event_type").and_then(|v| v.as_str())
+                                    && event_type == "completed" {
+                                        let log_level = parsed.get("payload")
+                                            .and_then(|p| p.get("log_level"))
+                                            .and_then(|l| l.as_i64())
+                                            .unwrap_or(0) as i32;
+                                        let status = parsed.get("payload")
+                                            .and_then(|p| p.get("status"))
+                                            .and_then(|s| s.as_str())
+                                            .unwrap_or("Completed");
+
+                                        let run_status = match status {
+                                            "Failed" => execution_run::RunStatus::Failed,
+                                            "Cancelled" => execution_run::RunStatus::Cancelled,
+                                            "Timeout" => execution_run::RunStatus::Timeout,
+                                            _ => execution_run::RunStatus::Completed,
+                                        };
+
+                                        let db = db.clone();
+                                        let run_id_clone = run_id.clone();
+                                        tokio::spawn(async move {
+                                            use sea_orm::{ActiveModelTrait, ActiveValue::Set, EntityTrait};
+                                            use crate::entity::prelude::*;
+                                            if let Ok(Some(run)) = ExecutionRun::find_by_id(&run_id_clone).one(db.as_ref()).await {
+                                                let mut run: execution_run::ActiveModel = run.into();
+                                                run.status = Set(run_status);
+                                                run.log_level = Set(log_level);
+                                                run.updated_at = Set(chrono::Utc::now().naive_utc());
+                                                if let Err(e) = run.update(db.as_ref()).await {
+                                                    tracing::error!(run_id = %run_id_clone, error = %e, "Failed to update run on completion");
+                                                }
+                                            }
+                                        });
+                                    }
+
+                        let sse_event = Event::default()
+                            .event(&event.event_type)
+                            .data(event.data);
+                        yield Ok(sse_event);
+                    }
+                }
+                Err(e) => {
+                    tracing::warn!(run_id = %run_id, error = %e, "Lambda stream error");
+                    let error_event = Event::default()
+                        .event("error")
+                        .data(format!(r#"{{"error":"{}"}}"#, e));
+                    yield Ok(error_event);
+                    break;
+                }
+            }
+        }
+
+        tracing::debug!(run_id = %run_id, "Lambda SSE stream ended");
+    };
+
+    Sse::new(stream).keep_alive(
+        KeepAlive::new()
+            .text("keep-alive")
+            .interval(Duration::from_secs(1)),
     )
-    .into_response())
+}
+
+/// Parsed SSE event
+struct ParsedSseEvent {
+    event_type: String,
+    data: String,
+}
+
+/// Extract a complete SSE event from the buffer, if available
+fn extract_sse_event(buffer: &mut Vec<u8>) -> Option<ParsedSseEvent> {
+    // Look for double newline which marks end of SSE event
+    let s = String::from_utf8_lossy(buffer);
+    if let Some(end_pos) = s.find("\n\n") {
+        let event_str = &s[..end_pos];
+        let remainder = &s[end_pos + 2..];
+
+        let mut event_type = "message".to_string();
+        let mut data_parts = Vec::new();
+
+        for line in event_str.lines() {
+            if let Some(value) = line.strip_prefix("event:") {
+                event_type = value.trim().to_string();
+            } else if let Some(value) = line.strip_prefix("data:") {
+                data_parts.push(value.trim_start().to_string());
+            }
+        }
+
+        // Update buffer with remainder
+        *buffer = remainder.as_bytes().to_vec();
+
+        if !data_parts.is_empty() {
+            return Some(ParsedSseEvent {
+                event_type,
+                data: data_parts.join("\n"),
+            });
+        }
+    }
+    None
 }

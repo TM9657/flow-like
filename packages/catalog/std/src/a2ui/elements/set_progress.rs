@@ -26,7 +26,7 @@ impl NodeLogic for SetProgress {
             "a2ui_set_progress",
             "Set Progress",
             "Sets the value of a progress bar (0-100)",
-            "A2UI/Elements/Display",
+            "UI/Elements/Display",
         );
         node.add_icon("/flow/icons/a2ui.svg");
 

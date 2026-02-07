@@ -30,7 +30,7 @@ impl NodeLogic for SetPieChartStyle {
             "a2ui_set_pie_chart_style",
             "Set Pie Chart Style",
             "Configures Pie/Donut chart appearance. Docs: https://nivo.rocks/pie/",
-            "A2UI/Elements/Charts/Pie",
+            "UI/Elements/Charts/Pie",
         );
         node.add_icon("/flow/icons/a2ui.svg");
 

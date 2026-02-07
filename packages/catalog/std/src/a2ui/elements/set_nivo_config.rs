@@ -29,7 +29,7 @@ impl NodeLogic for SetNivoConfig {
             "a2ui_set_nivo_config",
             "Set Nivo Chart Config",
             "Sets configuration options for a Nivo chart",
-            "A2UI/Elements/Charts",
+            "UI/Elements/Charts",
         );
         node.add_icon("/flow/icons/a2ui.svg");
 

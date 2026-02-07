@@ -30,7 +30,7 @@ impl NodeLogic for SetSankeyChartStyle {
             "a2ui_set_sankey_chart_style",
             "Set Sankey Chart Style",
             "Configures Sankey diagram appearance. Docs: https://nivo.rocks/sankey/",
-            "A2UI/Elements/Charts/Sankey",
+            "UI/Elements/Charts/Sankey",
         );
         node.add_icon("/flow/icons/a2ui.svg");
 

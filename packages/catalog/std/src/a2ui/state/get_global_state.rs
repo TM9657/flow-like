@@ -28,7 +28,7 @@ impl NodeLogic for GetGlobalState {
             "a2ui_get_global_state",
             "Get Global State",
             "Gets a value from global state by key",
-            "A2UI/State",
+            "UI/State",
         );
         node.add_icon("/flow/icons/a2ui.svg");
 

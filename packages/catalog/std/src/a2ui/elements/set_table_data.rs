@@ -28,7 +28,7 @@ impl NodeLogic for SetTableData {
             "a2ui_set_table_data",
             "Set Table Data",
             "Sets the data rows for a table element",
-            "A2UI/Elements/Table",
+            "UI/Elements/Table",
         );
         node.add_icon("/flow/icons/a2ui.svg");
 

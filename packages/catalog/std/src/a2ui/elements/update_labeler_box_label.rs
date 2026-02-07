@@ -26,7 +26,7 @@ impl NodeLogic for UpdateLabelerBoxLabel {
             "a2ui_update_labeler_box_label",
             "Update Box Label",
             "Updates the label of a bounding box in an ImageLabeler",
-            "A2UI/Elements/Labeler",
+            "UI/Elements/Labeler",
         );
         node.add_icon("/flow/icons/a2ui.svg");
 

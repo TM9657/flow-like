@@ -26,7 +26,7 @@ impl NodeLogic for SurfaceUpdate {
             "a2ui_surface_update",
             "Surface Update",
             "Updates components in an existing surface",
-            "A2UI/Surface",
+            "UI/Surface",
         );
         node.add_icon("/flow/icons/a2ui.svg");
 

@@ -26,7 +26,7 @@ impl NodeLogic for RemoveLabelerBox {
             "a2ui_remove_labeler_box",
             "Remove Labeler Box",
             "Removes a bounding box from an ImageLabeler by ID",
-            "A2UI/Elements/Labeler",
+            "UI/Elements/Labeler",
         );
         node.add_icon("/flow/icons/a2ui.svg");
 

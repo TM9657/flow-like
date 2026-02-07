@@ -25,7 +25,7 @@ impl NodeLogic for SetSpriteSrc {
             "a2ui_set_sprite_src",
             "Set Sprite Src",
             "Sets the source image of a sprite element",
-            "A2UI/Elements/Game",
+            "UI/Elements/Game",
         );
         node.add_icon("/flow/icons/a2ui.svg");
 

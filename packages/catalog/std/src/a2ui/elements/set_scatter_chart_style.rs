@@ -30,7 +30,7 @@ impl NodeLogic for SetScatterChartStyle {
             "a2ui_set_scatter_chart_style",
             "Set Scatter Chart Style",
             "Configures Scatter plot appearance. Docs: https://nivo.rocks/scatterplot/",
-            "A2UI/Elements/Charts/Scatter",
+            "UI/Elements/Charts/Scatter",
         );
         node.add_icon("/flow/icons/a2ui.svg");
 

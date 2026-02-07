@@ -26,7 +26,7 @@ impl NodeLogic for ClearLabelerBoxes {
             "a2ui_clear_labeler_boxes",
             "Clear Labeler Boxes",
             "Clears all bounding boxes from an ImageLabeler element",
-            "A2UI/Elements/Labeler",
+            "UI/Elements/Labeler",
         );
         node.add_icon("/flow/icons/a2ui.svg");
 

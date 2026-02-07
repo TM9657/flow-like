@@ -26,7 +26,7 @@ impl NodeLogic for AddHotspot {
             "a2ui_add_hotspot",
             "Add Hotspot",
             "Adds a hotspot to an ImageHotspot element",
-            "A2UI/Elements/Hotspot",
+            "UI/Elements/Hotspot",
         );
         node.add_icon("/flow/icons/a2ui.svg");
 

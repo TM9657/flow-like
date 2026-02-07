@@ -28,7 +28,7 @@ impl NodeLogic for SetHotspots {
             "a2ui_set_hotspots",
             "Set Hotspots",
             "Sets all hotspots on an ImageHotspot element",
-            "A2UI/Elements/Hotspot",
+            "UI/Elements/Hotspot",
         );
         node.add_icon("/flow/icons/a2ui.svg");
 

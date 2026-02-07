@@ -194,7 +194,7 @@ export function A2UIGeoMap({
 			}}
 		>
 			<Map
-				className="w-full h-full rounded-md overflow-hidden"
+				className="w-full h-full rounded-lg overflow-hidden border border-border/50 shadow-sm"
 				{...(mapViewport
 					? { viewport: mapViewport, onViewportChange: handleViewportChange }
 					: {

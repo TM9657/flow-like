@@ -29,7 +29,7 @@ impl NodeLogic for SetCheckboxChecked {
             "a2ui_set_checkbox_checked",
             "Set Checkbox Checked",
             "Sets the checked state of a checkbox or switch",
-            "A2UI/Elements/Checkbox",
+            "UI/Elements/Checkbox",
         );
         node.add_icon("/flow/icons/a2ui.svg");
 

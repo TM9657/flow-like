@@ -30,7 +30,7 @@ impl NodeLogic for SetBarChartStyle {
             "a2ui_set_bar_chart_style",
             "Set Bar Chart Style",
             "Configures Bar chart appearance. Docs: https://nivo.rocks/bar/",
-            "A2UI/Elements/Charts/Bar",
+            "UI/Elements/Charts/Bar",
         );
         node.add_icon("/flow/icons/a2ui.svg");
 

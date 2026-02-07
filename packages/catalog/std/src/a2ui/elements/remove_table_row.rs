@@ -26,7 +26,7 @@ impl NodeLogic for RemoveTableRow {
             "a2ui_remove_table_row",
             "Remove Table Row",
             "Removes a row from a table element by index",
-            "A2UI/Elements/Table",
+            "UI/Elements/Table",
         );
         node.add_icon("/flow/icons/a2ui.svg");
 

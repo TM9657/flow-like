@@ -26,7 +26,7 @@ impl NodeLogic for SetSelectOptions {
             "a2ui_set_select_options",
             "Set Select Options",
             "Sets the available options in a select element",
-            "A2UI/Elements/Select",
+            "UI/Elements/Select",
         );
         node.add_icon("/flow/icons/a2ui.svg");
 

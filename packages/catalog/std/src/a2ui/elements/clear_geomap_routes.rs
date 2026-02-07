@@ -26,7 +26,7 @@ impl NodeLogic for ClearGeoMapRoutes {
             "a2ui_clear_geomap_routes",
             "Clear GeoMap Routes",
             "Removes all routes from a GeoMap element",
-            "A2UI/Elements/GeoMap",
+            "UI/Elements/GeoMap",
         );
         node.add_icon("/flow/icons/a2ui.svg");
 

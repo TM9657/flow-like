@@ -27,7 +27,7 @@ impl NodeLogic for SetElementVisibility {
             "a2ui_set_element_visibility",
             "Set Element Visibility",
             "Shows or hides an element",
-            "A2UI/Elements",
+            "UI/Elements",
         );
         node.add_icon("/flow/icons/a2ui.svg");
 

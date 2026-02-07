@@ -26,7 +26,7 @@ impl NodeLogic for SetImageSrc {
             "a2ui_set_image_src",
             "Set Image Source",
             "Sets the source URL of an image element",
-            "A2UI/Elements/Display",
+            "UI/Elements/Display",
         );
         node.add_icon("/flow/icons/a2ui.svg");
 

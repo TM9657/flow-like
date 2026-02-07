@@ -29,7 +29,7 @@ impl NodeLogic for QueryElementsById {
             "a2ui_query_elements_by_id",
             "Query Elements by ID",
             "Gets elements whose IDs match a pattern",
-            "A2UI/Elements/Query",
+            "UI/Elements/Query",
         );
         node.add_icon("/flow/icons/a2ui.svg");
 

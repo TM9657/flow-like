@@ -26,7 +26,7 @@ impl NodeLogic for SetSwitchChecked {
             "a2ui_set_switch_checked",
             "Set Switch Checked",
             "Sets the checked state of a switch element",
-            "A2UI/Elements/Switch",
+            "UI/Elements/Switch",
         );
         node.add_icon("/flow/icons/a2ui.svg");
 

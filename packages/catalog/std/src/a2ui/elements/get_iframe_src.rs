@@ -25,7 +25,7 @@ impl NodeLogic for GetIframeSrc {
             "a2ui_get_iframe_src",
             "Get Iframe Src",
             "Gets the src URL of an iframe element",
-            "A2UI/Elements/Get",
+            "UI/Elements/Get",
         );
         node.add_icon("/flow/icons/a2ui.svg");
 

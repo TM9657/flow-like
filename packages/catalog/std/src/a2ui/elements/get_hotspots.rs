@@ -30,7 +30,7 @@ impl NodeLogic for GetHotspots {
             "a2ui_get_hotspots",
             "Get Hotspots",
             "Gets all hotspots from an ImageHotspot element",
-            "A2UI/Elements/Hotspot",
+            "UI/Elements/Hotspot",
         );
         node.add_icon("/flow/icons/a2ui.svg");
 

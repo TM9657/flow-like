@@ -26,7 +26,7 @@ impl NodeLogic for SetHotspotImage {
             "a2ui_set_hotspot_image",
             "Set Hotspot Image",
             "Sets the source image for an ImageHotspot element",
-            "A2UI/Elements/Hotspot",
+            "UI/Elements/Hotspot",
         );
         node.add_icon("/flow/icons/a2ui.svg");
 

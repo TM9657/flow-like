@@ -26,7 +26,7 @@ impl NodeLogic for SetLabelerImage {
             "a2ui_set_labeler_image",
             "Set Labeler Image",
             "Sets the source image for an ImageLabeler element",
-            "A2UI/Elements/Labeler",
+            "UI/Elements/Labeler",
         );
         node.add_icon("/flow/icons/a2ui.svg");
 

@@ -26,7 +26,7 @@ impl NodeLogic for ToggleSwitch {
             "a2ui_toggle_switch",
             "Toggle Switch",
             "Toggles the on/off state of a switch element",
-            "A2UI/Elements/Switch",
+            "UI/Elements/Switch",
         );
         node.add_icon("/flow/icons/a2ui.svg");
 

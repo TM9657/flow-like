@@ -31,7 +31,7 @@ impl NodeLogic for SetTreemapChartStyle {
             "a2ui_set_treemap_chart_style",
             "Set Treemap Chart Style",
             "Configures Treemap/Sunburst appearance. Docs: https://nivo.rocks/treemap/",
-            "A2UI/Elements/Charts/Treemap",
+            "UI/Elements/Charts/Treemap",
         );
         node.add_icon("/flow/icons/a2ui.svg");
 

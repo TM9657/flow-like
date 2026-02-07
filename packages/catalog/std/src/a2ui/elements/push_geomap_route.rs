@@ -26,7 +26,7 @@ impl NodeLogic for PushGeoMapRoute {
             "a2ui_push_geomap_route",
             "Push GeoMap Route",
             "Adds a route to a GeoMap without removing existing routes",
-            "A2UI/Elements/GeoMap",
+            "UI/Elements/GeoMap",
         );
         node.add_icon("/flow/icons/a2ui.svg");
 

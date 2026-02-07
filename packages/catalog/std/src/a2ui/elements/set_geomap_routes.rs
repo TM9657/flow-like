@@ -26,7 +26,7 @@ impl NodeLogic for SetGeoMapRoutes {
             "a2ui_set_geomap_routes",
             "Set GeoMap Routes",
             "Sets all routes on a GeoMap element, replacing existing ones",
-            "A2UI/Elements/GeoMap",
+            "UI/Elements/GeoMap",
         );
         node.add_icon("/flow/icons/a2ui.svg");
 

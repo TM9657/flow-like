@@ -29,7 +29,7 @@ impl NodeLogic for GetCheckboxChecked {
             "a2ui_get_checkbox_checked",
             "Get Checkbox Checked",
             "Gets whether a checkbox or switch is checked",
-            "A2UI/Elements/Checkbox",
+            "UI/Elements/Checkbox",
         );
         node.add_icon("/flow/icons/a2ui.svg");
 

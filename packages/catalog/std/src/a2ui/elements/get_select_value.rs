@@ -29,7 +29,7 @@ impl NodeLogic for GetSelectValue {
             "a2ui_get_select_value",
             "Get Select Value",
             "Gets the selected value of a select element",
-            "A2UI/Elements/Select",
+            "UI/Elements/Select",
         );
         node.add_icon("/flow/icons/a2ui.svg");
 

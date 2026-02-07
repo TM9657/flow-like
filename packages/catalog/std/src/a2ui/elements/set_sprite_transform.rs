@@ -25,7 +25,7 @@ impl NodeLogic for SetSpriteTransform {
             "a2ui_set_sprite_transform",
             "Set Sprite Transform",
             "Sets rotation, scale, and opacity of a sprite element",
-            "A2UI/Elements/Game",
+            "UI/Elements/Game",
         );
         node.add_icon("/flow/icons/a2ui.svg");
 

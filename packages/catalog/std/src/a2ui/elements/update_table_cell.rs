@@ -26,7 +26,7 @@ impl NodeLogic for UpdateTableCell {
             "a2ui_update_table_cell",
             "Update Table Cell",
             "Updates a specific cell value in a table element",
-            "A2UI/Elements/Table",
+            "UI/Elements/Table",
         );
         node.add_icon("/flow/icons/a2ui.svg");
 

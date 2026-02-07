@@ -27,7 +27,7 @@ impl NodeLogic for SetSelectValue {
             "a2ui_set_select_value",
             "Set Select Value",
             "Sets the selected value of a select element",
-            "A2UI/Elements/Select",
+            "UI/Elements/Select",
         );
         node.add_icon("/flow/icons/a2ui.svg");
 

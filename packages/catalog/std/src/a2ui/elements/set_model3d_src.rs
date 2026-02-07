@@ -25,7 +25,7 @@ impl NodeLogic for SetModel3dSrc {
             "a2ui_set_model3d_src",
             "Set Model3D Src",
             "Sets the source URL of a 3D model element",
-            "A2UI/Elements/Game",
+            "UI/Elements/Game",
         );
         node.add_icon("/flow/icons/a2ui.svg");
 

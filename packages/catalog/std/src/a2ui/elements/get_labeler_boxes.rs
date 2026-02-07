@@ -30,7 +30,7 @@ impl NodeLogic for GetLabelerBoxes {
             "a2ui_get_labeler_boxes",
             "Get Labeler Boxes",
             "Gets all bounding boxes from an ImageLabeler element",
-            "A2UI/Elements/Labeler",
+            "UI/Elements/Labeler",
         );
         node.add_icon("/flow/icons/a2ui.svg");
 

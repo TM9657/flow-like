@@ -23,7 +23,7 @@ impl NodeLogic for CreateSurface {
             "a2ui_create_surface",
             "Create Surface",
             "Creates a new A2UI surface with an ID and root component",
-            "A2UI/Surface",
+            "UI/Surface",
         );
         node.add_icon("/flow/icons/a2ui.svg");
 

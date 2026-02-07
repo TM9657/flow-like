@@ -26,7 +26,7 @@ impl NodeLogic for PushGeoMapMarker {
             "a2ui_push_geomap_marker",
             "Push GeoMap Marker",
             "Adds a single marker to a GeoMap without removing existing markers",
-            "A2UI/Elements/GeoMap",
+            "UI/Elements/GeoMap",
         );
         node.add_icon("/flow/icons/a2ui.svg");
 

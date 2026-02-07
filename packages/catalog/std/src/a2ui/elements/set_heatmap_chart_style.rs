@@ -30,7 +30,7 @@ impl NodeLogic for SetHeatmapChartStyle {
             "a2ui_set_heatmap_chart_style",
             "Set Heatmap Chart Style",
             "Configures Heatmap appearance. Docs: https://nivo.rocks/heatmap/",
-            "A2UI/Elements/Charts/Heatmap",
+            "UI/Elements/Charts/Heatmap",
         );
         node.add_icon("/flow/icons/a2ui.svg");
 

@@ -39,7 +39,7 @@ impl NodeLogic for GetElement {
             "a2ui_get_element",
             "Get Element",
             "Gets an element's data from the page",
-            "A2UI/Elements",
+            "UI/Elements",
         );
         node.add_icon("/flow/icons/a2ui.svg");
 

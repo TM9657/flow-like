@@ -27,7 +27,7 @@ impl NodeLogic for ToggleCheckbox {
             "a2ui_toggle_checkbox",
             "Toggle Checkbox",
             "Toggles the checked state of a checkbox or switch",
-            "A2UI/Elements/Checkbox",
+            "UI/Elements/Checkbox",
         );
         node.add_icon("/flow/icons/a2ui.svg");
 

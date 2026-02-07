@@ -23,7 +23,7 @@ impl NodeLogic for UrlEncode {
             "a2ui_url_encode",
             "URL Encode",
             "Encodes a string for safe use in URLs (percent-encoding)",
-            "A2UI/Navigation",
+            "UI/Navigation",
         );
         node.add_icon("/flow/icons/a2ui.svg");
 

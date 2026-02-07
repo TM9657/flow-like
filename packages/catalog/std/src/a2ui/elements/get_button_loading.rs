@@ -29,7 +29,7 @@ impl NodeLogic for GetButtonLoading {
             "a2ui_get_button_loading",
             "Get Button Loading",
             "Gets whether a button element is in loading state",
-            "A2UI/Elements/Button",
+            "UI/Elements/Button",
         );
         node.add_icon("/flow/icons/a2ui.svg");
 

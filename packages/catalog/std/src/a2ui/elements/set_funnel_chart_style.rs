@@ -30,7 +30,7 @@ impl NodeLogic for SetFunnelChartStyle {
             "a2ui_set_funnel_chart_style",
             "Set Funnel Chart Style",
             "Configures Funnel chart appearance. Docs: https://nivo.rocks/funnel/",
-            "A2UI/Elements/Charts/Funnel",
+            "UI/Elements/Charts/Funnel",
         );
         node.add_icon("/flow/icons/a2ui.svg");
 

@@ -30,7 +30,7 @@ impl NodeLogic for SetChordChartStyle {
             "a2ui_set_chord_chart_style",
             "Set Chord Chart Style",
             "Configures Chord diagram appearance. Docs: https://nivo.rocks/chord/",
-            "A2UI/Elements/Charts/Chord",
+            "UI/Elements/Charts/Chord",
         );
         node.add_icon("/flow/icons/a2ui.svg");
 
