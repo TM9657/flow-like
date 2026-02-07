@@ -529,6 +529,11 @@ impl Board {
         board.board_dir = board_dir;
         board.app_state = Some(app_state.clone());
         board.logic_nodes = HashMap::new();
+
+        // Sync node schemas on load to handle version migrations and OAuth metadata
+        board.node_updates(app_state).await;
+        board.cleanup();
+
         Ok(board)
     }
 

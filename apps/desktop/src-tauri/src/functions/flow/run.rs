@@ -56,6 +56,9 @@ async fn execute_internal(
         return Err(TauriFunctionError::new("App not found"));
     };
 
+    // Desktop execution is trusted — allow secret overrides from local runtime vars
+    payload.filter_secrets = Some(false);
+
     if let Some(event_id) = &event_id {
         let intermediate_event = app.get_event(event_id, None).await?;
         payload.id = intermediate_event.node_id.clone();

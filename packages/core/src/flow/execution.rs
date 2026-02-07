@@ -571,6 +571,11 @@ pub struct RunPayload {
     /// These override board variable defaults when present.
     #[serde(default)]
     pub runtime_variables: Option<std::collections::HashMap<String, Variable>>,
+    /// When true (default), secret variables from runtime_variables are ignored
+    /// unless they are also marked as runtime_configured.
+    /// Set to false only for trusted local (desktop) execution.
+    #[serde(default)]
+    pub filter_secrets: Option<bool>,
 }
 
 impl InternalRun {
@@ -680,12 +685,17 @@ impl InternalRun {
 
         // Extract runtime_variables from payload
         let runtime_variables = payload.runtime_variables.clone().unwrap_or_default();
+        let filter_secrets = payload.filter_secrets.unwrap_or(true);
 
         let variables = Arc::new(Mutex::new({
             let mut map = AHashMap::with_capacity(board.variables.len());
             for (variable_id, board_variable) in &board.variables {
-                // Priority: runtime_configured vars > event vars (for exposed) > board vars
-                let variable = if board_variable.runtime_configured {
+                // Priority: runtime_configured/secret vars > event vars (for exposed) > board vars
+                // When filter_secrets is true, only runtime_configured vars may be overridden;
+                // secrets from untrusted callers are ignored to prevent injection.
+                let allow_runtime_override = board_variable.runtime_configured
+                    || (board_variable.secret && !filter_secrets);
+                let variable = if allow_runtime_override {
                     runtime_variables.get(variable_id).unwrap_or(board_variable)
                 } else if board_variable.exposed {
                     event_variables.get(variable_id).unwrap_or(board_variable)

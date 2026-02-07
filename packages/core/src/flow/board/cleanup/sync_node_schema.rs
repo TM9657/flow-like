@@ -139,22 +139,36 @@ pub async fn sync_board_node_schemas(
     board: &mut Board,
     registry: &crate::state::FlowNodeRegistryInner,
 ) {
-    for node in board.nodes.values_mut() {
-        // Try to get the catalog definition for this node
+    let sync_node = |node: &mut Node, registry: &crate::state::FlowNodeRegistryInner| {
         let catalog_node = match registry.get_node(&node.name) {
             Ok(n) => n,
-            Err(_) => {
-                // Node not found in registry - might be a custom/deprecated node
-                // Don't modify it, let it remain as-is
-                continue;
-            }
+            Err(_) => return,
         };
 
-        // Check if sync is needed based on version
         if needs_sync(catalog_node.version, node.version) {
             sync_node_with_catalog(node, &catalog_node);
+        } else {
+            sync_oauth_metadata(node, &catalog_node);
+        }
+    };
+
+    for node in board.nodes.values_mut() {
+        sync_node(node, registry);
+    }
+
+    for layer in board.layers.values_mut() {
+        for node in layer.nodes.values_mut() {
+            sync_node(node, registry);
         }
     }
+}
+
+/// Copies OAuth-related metadata from the catalog node to the placed node.
+/// Called independently of version-based sync because OAuth provider references
+/// must always reflect the current catalog definition.
+fn sync_oauth_metadata(placed_node: &mut Node, catalog_node: &Node) {
+    placed_node.oauth_providers = catalog_node.oauth_providers.clone();
+    placed_node.required_oauth_scopes = catalog_node.required_oauth_scopes.clone();
 }
 
 /// Helper to create a sync function that can be used with NodeLogic

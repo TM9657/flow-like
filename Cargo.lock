@@ -10644,6 +10644,7 @@ dependencies = [
  "async-recursion",
  "async-trait",
  "async_cell",
+ "aws-credential-types",
  "byteorder",
  "bytes",
  "chrono",
@@ -10980,6 +10981,8 @@ dependencies = [
  "arrow-select",
  "async-recursion",
  "async-trait",
+ "aws-config",
+ "aws-credential-types",
  "byteorder",
  "bytes",
  "chrono",
@@ -10990,6 +10993,8 @@ dependencies = [
  "lance-namespace",
  "log",
  "object_store 0.12.5",
+ "object_store_opendal",
+ "opendal",
  "path_abs",
  "pin-project",
  "prost 0.14.3",
@@ -13753,6 +13758,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "object_store_opendal"
+version = "0.55.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "113ab0769e972eee585e57407b98de08bda5354fa28e8ba4d89038d6cb6a8991"
+dependencies = [
+ "async-trait",
+ "bytes",
+ "chrono",
+ "futures",
+ "object_store 0.12.5",
+ "opendal",
+ "pin-project",
+ "tokio",
+]
+
+[[package]]
 name = "odbc-api"
 version = "17.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -13893,6 +13914,7 @@ dependencies = [
  "reqwest 0.12.28",
  "serde",
  "serde_json",
+ "sha2",
  "tokio",
  "url",
  "uuid 1.20.0",
@@ -14776,6 +14798,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "pkcs5"
+version = "0.7.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e847e2c91a18bfa887dd028ec33f2fe6f25db77db3619024764914affe8b69a6"
+dependencies = [
+ "aes",
+ "cbc",
+ "der 0.7.10",
+ "pbkdf2",
+ "scrypt",
+ "sha2",
+ "spki 0.7.3",
+]
+
+[[package]]
 name = "pkcs8"
 version = "0.9.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -14792,6 +14829,8 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f950b2377845cebe5cf8b5165cb3cc1a5e0fa5cfa3e1f7f55707d8fd82e0a7b7"
 dependencies = [
  "der 0.7.10",
+ "pkcs5",
+ "rand_core 0.6.4",
  "spki 0.7.3",
 ]
 
@@ -16489,11 +16528,13 @@ dependencies = [
  "hmac",
  "home",
  "http 1.4.0",
+ "jsonwebtoken",
  "log",
  "percent-encoding",
  "quick-xml 0.37.5",
  "rand 0.8.5",
  "reqwest 0.12.28",
+ "rsa",
  "rust-ini",
  "serde",
  "serde_json",
@@ -16906,6 +16947,7 @@ dependencies = [
  "pkcs1",
  "pkcs8 0.10.2",
  "rand_core 0.6.4",
+ "sha2",
  "signature 2.2.0",
  "spki 0.7.3",
  "subtle",
@@ -17342,6 +17384,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "salsa20"
+version = "0.10.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "97a22f5af31f73a954c10289c93e8a50cc23d971e80ee446f1f6f7137a088213"
+dependencies = [
+ "cipher",
+]
+
+[[package]]
 name = "same-file"
 version = "1.0.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -17484,6 +17535,17 @@ dependencies = [
  "precomputed-hash",
  "selectors 0.26.0",
  "tendril",
+]
+
+[[package]]
+name = "scrypt"
+version = "0.11.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0516a385866c09368f0b5bcd1caff3366aace790fcd46e2bb032697bb172fd1f"
+dependencies = [
+ "pbkdf2",
+ "salsa20",
+ "sha2",
 ]
 
 [[package]]
