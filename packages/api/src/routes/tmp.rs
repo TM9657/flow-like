@@ -46,6 +46,8 @@ pub struct ExtensionParams {
     pub content_type: Option<String>,
     /// Optional custom download TTL in seconds (capped at 31 days).
     pub download_ttl_secs: Option<u64>,
+    /// Optional original filename. Appended as a query param on the download URL so consumers can recover it.
+    pub filename: Option<String>,
 }
 
 pub fn routes() -> Router<AppState> {
@@ -115,12 +117,21 @@ pub async fn get_temporary_upload(
     let download_expires_at = (now_utc + ChronoDuration::seconds(download_ttl as i64)).to_rfc3339();
     let upload_expires_at = (now_utc + ChronoDuration::seconds(upload_ttl as i64)).to_rfc3339();
 
+    let download_url_str = match params.filename.as_deref().map(str::trim).filter(|s| !s.is_empty()) {
+        Some(name) => {
+            let mut url = download_url;
+            url.query_pairs_mut().append_pair("filename", name);
+            url.to_string()
+        }
+        None => download_url.to_string(),
+    };
+
     let response = TemporaryFileResponse {
         key,
         content_type: content_type.to_string(),
         upload_url: upload_url.to_string(),
         upload_expires_at,
-        download_url: download_url.to_string(),
+        download_url: download_url_str,
         download_expires_at: download_expires_at.clone(),
         head_url: head_url.to_string(),
         delete_url: delete_url.to_string(),

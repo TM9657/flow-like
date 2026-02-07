@@ -118,6 +118,18 @@ export type {
 	HealthBarComponent,
 	MiniMapComponent,
 	MapMarkerDef,
+	GeoMapComponent,
+	GeoMapMarkerDef,
+	GeoMapRouteDef,
+	GeoMapViewport,
+	GeoCoordinate,
+	GeoBoundingBox,
+	GeoRouteGeometry,
+	GeoRouteStep,
+	GeoRouteLeg,
+	GeoRouteResult,
+	GeoTripWaypoint,
+	GeoSearchResult,
 } from "./types";
 
 // Layout components
@@ -143,6 +155,19 @@ export { A2UIProgress } from "./display/Progress";
 export { A2UISpinner } from "./display/Spinner";
 export { A2UISkeleton } from "./display/Skeleton";
 export { A2UILottie } from "./display/Lottie";
+export { A2UIGeoMap } from "./display/GeoMap";
+
+// Geo conversion utilities
+export {
+	routeResultToRouteDef,
+	routeResultsToRouteDefs,
+	searchResultToMarkerDef,
+	searchResultsToMarkerDefs,
+	tripWaypointToMarkerDef,
+	tripWaypointsToMarkerDefs,
+	routeStepsToMarkerDefs,
+	searchResultToViewport,
+} from "./geoConversions";
 
 // Interactive components
 export { A2UIButton } from "./interactive/Button";

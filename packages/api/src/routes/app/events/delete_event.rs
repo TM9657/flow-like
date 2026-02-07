@@ -49,13 +49,16 @@ pub async fn delete_event(
         )
         .await?;
 
-    // Delete from bucket
-    app.delete_event(&event_id).await.map_err(|e| {
-        tracing::error!("Failed to delete event from bucket: {}", e);
-        ApiError::internal_error(anyhow!(e))
-    })?;
+    // Try to delete from bucket, but don't fail if file doesn't exist
+    // The event might only exist in the database (e.g., if bucket sync failed)
+    if let Err(e) = app.delete_event(&event_id).await {
+        tracing::warn!(
+            "Failed to delete event from bucket (may not exist): {}",
+            e
+        );
+    }
 
-    // Delete from database and external schedulers
+    // Always delete from database and external schedulers
     delete_event_with_sink(&state.db, &state, &event_id)
         .await
         .map_err(|e| {

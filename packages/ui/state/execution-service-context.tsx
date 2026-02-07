@@ -452,6 +452,15 @@ export function ExecutionServiceProvider({
 						prerunResult.runtime_variables,
 						isRemote,
 					);
+
+					if (!isRemote) {
+						try {
+							const board = await backend.boardState.getBoard(appId, boardId);
+							varsNeedingValues = getVariablesNeedingPrompt(board, false);
+						} catch {
+							// Fall back to prerun variables if board fetch fails
+						}
+					}
 				} catch {
 					// Prerun failed, fall back to fetching event + board
 					try {

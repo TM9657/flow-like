@@ -336,6 +336,7 @@ impl BitModelClassification {
 }
 
 #[derive(Serialize, Deserialize, JsonSchema, Clone, Debug, Default)]
+#[serde(default)]
 #[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 pub struct Bit {
     pub id: String,

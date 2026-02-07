@@ -38,6 +38,7 @@ interface EventFormProps {
 		oauthTokens?: Record<string, IOAuthToken>,
 	) => void;
 	onCancel: () => void;
+	isSubmitting?: boolean;
 	/** Token store for OAuth checks. If not provided, OAuth checks are skipped. */
 	tokenStore?: IOAuthTokenStoreWithPending;
 	/** Consent store for OAuth consent tracking. */
@@ -60,6 +61,7 @@ export function EventForm({
 	event,
 	onSubmit,
 	onCancel,
+	isSubmitting = false,
 	tokenStore,
 	consentStore,
 	hub,
@@ -654,6 +656,7 @@ export function EventForm({
 				<Button
 					type="submit"
 					disabled={
+						isSubmitting ||
 						!formData.name ||
 						(isPageEvent
 							? !formData.default_page_id

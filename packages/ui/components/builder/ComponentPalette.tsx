@@ -490,6 +490,13 @@ const COMPONENT_DEFINITIONS: ComponentDefinition[] = [
 		category: "Game",
 		description: "Game minimap",
 	},
+	{
+		type: "geoMap",
+		label: "Geo Map",
+		icon: Square,
+		category: "Display",
+		description: "Interactive geographic map with markers and routes",
+	},
 ];
 
 const CATEGORIES = ["Layout", "Display", "Interactive", "Container", "Game"];

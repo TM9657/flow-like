@@ -859,6 +859,12 @@
 	.dark .codeblock .hljs-title.function_ {
 		color: #a77bfa;
 	}
+  .maplibregl-popup-content {
+    @apply bg-transparent! shadow-none! p-0! rounded-none!;
+	}
+  .maplibregl-popup-tip {
+    @apply hidden!;
+	}
 }
 
 .react-flow__nodesselection-rect {

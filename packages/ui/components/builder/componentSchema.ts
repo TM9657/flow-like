@@ -676,6 +676,22 @@ export const COMPONENT_SCHEMAS: Record<string, ComponentSchema> = {
 		playerY: { type: "boundValue" },
 		playerRotation: { type: "boundValue" },
 	},
+	geoMap: {
+		type: { type: "string", required: true },
+		viewport: { type: "boundValue" },
+		markers: { type: "boundValue" },
+		routes: { type: "boundValue" },
+		showControls: { type: "boundValue" },
+		showZoom: { type: "boundValue" },
+		showCompass: { type: "boundValue" },
+		showLocate: { type: "boundValue" },
+		showFullscreen: { type: "boundValue" },
+		interactive: { type: "boundValue" },
+		controlPosition: { type: "boundValue", enum: ["top-left", "top-right", "bottom-left", "bottom-right"] },
+		clusterMarkers: { type: "boundValue" },
+		clusterRadius: { type: "boundValue" },
+		clusterMaxZoom: { type: "boundValue" },
+	},
 };
 
 /**

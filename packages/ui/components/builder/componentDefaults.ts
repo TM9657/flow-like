@@ -428,6 +428,16 @@ export const COMPONENT_DEFAULT_PROPS: Record<
 		playerY: num(100),
 		playerRotation: num(0),
 	},
+	geoMap: {
+		viewport: { literalJson: JSON.stringify({ center: { latitude: 48.137, longitude: 11.576 }, zoom: 10 }) },
+		showControls: bool(true),
+		showZoom: bool(true),
+		showCompass: bool(false),
+		showLocate: bool(false),
+		showFullscreen: bool(false),
+		interactive: bool(true),
+		controlPosition: str("bottom-right"),
+	},
 	lottie: {
 		src: str(""),
 		autoplay: bool(true),

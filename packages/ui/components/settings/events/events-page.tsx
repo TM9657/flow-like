@@ -136,6 +136,7 @@ export default function EventsPage({
 	const backend = useBackend();
 	const invalidate = useInvalidateInvoke();
 	const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
+	const [isCreating, setIsCreating] = useState(false);
 	const [editingEvent, setEditingEvent] = useState<IEvent | null>(null);
 	const [showCreatePatDialog, setShowCreatePatDialog] = useState(false);
 	const [pendingEvent, setPendingEvent] = useState<IEvent | null>(null);
@@ -242,6 +243,10 @@ export default function EventsPage({
 				console.error("App ID is required to create an event");
 				return;
 			}
+			if (isCreating) {
+				return;
+			}
+			setIsCreating(true);
 
 			// Determine if we got a PAT string or OAuth tokens
 			const selectedPat =
@@ -279,63 +284,73 @@ export default function EventsPage({
 				notes: null,
 			};
 
-			// Check if the event requires a sink and PAT is needed
-			if (event.board_id && event.node_id) {
-				try {
-					const board = await backend.boardState.getBoard(
-						id,
-						event.board_id,
-						event.board_version as [number, number, number] | undefined,
-					);
-					const node = board?.nodes?.[event.node_id];
-					if (node?.name) {
-						const requiresSink = eventRequiresSink(
-							eventMapping,
-							event,
-							node.name,
+			let savedEvent: IEvent | null = null;
+			try {
+				// Check if the event requires a sink and PAT is needed
+				if (event.board_id && event.node_id) {
+					try {
+						const board = await backend.boardState.getBoard(
+							id,
+							event.board_id,
+							event.board_version as [number, number, number] | undefined,
 						);
+						const node = board?.nodes?.[event.node_id];
+						if (node?.name) {
+							const requiresSink = eventRequiresSink(
+								eventMapping,
+								event,
+								node.name,
+							);
 
-						if (requiresSink && !isOffline && !selectedPat) {
-							// Store the event and route path, then show PAT dialog
-							setPendingEvent(event);
-							setPendingRoutePath((newEvent as any)?.path ?? null);
-							setShowCreatePatDialog(true);
-							return;
+							if (requiresSink && !isOffline && !selectedPat) {
+								// Store the event and route path, then show PAT dialog
+								setPendingEvent(event);
+								setPendingRoutePath((newEvent as any)?.path ?? null);
+								setShowCreatePatDialog(true);
+								return;
+							}
 						}
+					} catch (error) {
+						console.error("Failed to fetch board for sink check:", error);
 					}
-				} catch (error) {
-					console.error("Failed to fetch board for sink check:", error);
 				}
-			}
 
-			const savedEvent = await backend.eventState.upsertEvent(
-				id,
-				event,
-				undefined,
-				selectedPat,
-				oauthTokens,
-			);
+				savedEvent = await backend.eventState.upsertEvent(
+					id,
+					event,
+					undefined,
+					selectedPat,
+					oauthTokens,
+				);
 
-			// If this is a UI event (including page-target events), create a path-based route pointing to it.
-			// Use savedEvent.id since the backend may generate a new ID for new events
-			if (
-				uiEventTypeSet.has(savedEvent.event_type) ||
-				!!savedEvent.default_page_id
-			) {
-				try {
-					const path = normalizePath((newEvent as any)?.path);
-					await backend.routeState.setRoute(id, path, savedEvent.id);
-					await invalidate(backend.routeState.getRoutes, [id]);
-				} catch (error) {
-					console.error("Failed to create route for UI event:", error);
+				// If this is a UI event (including page-target events), create a path-based route pointing to it.
+				// Use savedEvent.id since the backend may generate a new ID for new events
+				if (
+					uiEventTypeSet.has(savedEvent.event_type) ||
+					!!savedEvent.default_page_id
+				) {
+					try {
+						const path = normalizePath((newEvent as any)?.path);
+						await backend.routeState.setRoute(id, path, savedEvent.id);
+						await invalidate(backend.routeState.getRoutes, [id]);
+					} catch (error) {
+						console.error("Failed to create route for UI event:", error);
+					}
 				}
-			}
 
-			await events.refetch();
-			setIsCreateDialogOpen(false);
-			setShowCreatePatDialog(false);
-			setPendingEvent(null);
-			setPendingRoutePath(null);
+				await invalidate(backend.eventState.getEvents, [id]);
+				await events.refetch();
+			} catch (error) {
+				console.error("Failed to create event:", error);
+			} finally {
+				if (savedEvent) {
+					setIsCreateDialogOpen(false);
+					setShowCreatePatDialog(false);
+					setPendingEvent(null);
+					setPendingRoutePath(null);
+				}
+				setIsCreating(false);
+			}
 		},
 		[
 			id,
@@ -348,6 +363,7 @@ export default function EventsPage({
 			uiEventTypeSet,
 			normalizePath,
 			invalidate,
+			isCreating,
 		],
 	);
 
@@ -358,20 +374,25 @@ export default function EventsPage({
 				return;
 			}
 			try {
-				// Delete route pointing to this event
-				await backend.routeState.deleteRouteByEvent(id, eventId);
-				await invalidate(backend.routeState.getRoutes, [id]);
+				// Delete route pointing to this event (non-fatal)
+				try {
+					await backend.routeState.deleteRouteByEvent(id, eventId);
+					await invalidate(backend.routeState.getRoutes, [id]);
+				} catch (routeError) {
+					console.warn("Failed to delete route for event:", routeError);
+				}
 
 				await backend.eventState.deleteEvent(id, eventId);
+				console.log(`Deleted event with ID: ${eventId}`);
 			} catch (e) {
 				console.error("Failed to delete event:", e);
+			} finally {
+				if (editingEvent?.id === eventId) {
+					setEditingEvent(null);
+				}
+				await invalidate(backend.eventState.getEvents, [id]);
 				await events.refetch();
 			}
-			if (editingEvent?.id === eventId) {
-				setEditingEvent(null);
-			}
-			console.log(`Deleted event with ID: ${eventId}`);
-			await events.refetch();
 		},
 		[
 			id,
@@ -407,32 +428,46 @@ export default function EventsPage({
 	const handleCreateWithPat = useCallback(
 		async (selectedPat: string) => {
 			if (pendingEvent && id) {
-				const savedEvent = await backend.eventState.upsertEvent(
-					id,
-					pendingEvent,
-					undefined,
-					selectedPat,
-				);
-
-				// Create route for UI events - use savedEvent.id since backend may generate new ID
-				if (
-					uiEventTypeSet.has(savedEvent.event_type) ||
-					!!savedEvent.default_page_id
-				) {
-					try {
-						const path = normalizePath(pendingRoutePath);
-						await backend.routeState.setRoute(id, path, savedEvent.id);
-						await invalidate(backend.routeState.getRoutes, [id]);
-					} catch (error) {
-						console.error("Failed to create route for UI event:", error);
-					}
+				if (isCreating) {
+					return;
 				}
+				setIsCreating(true);
+				let savedEvent: IEvent | null = null;
+				try {
+					savedEvent = await backend.eventState.upsertEvent(
+						id,
+						pendingEvent,
+						undefined,
+						selectedPat,
+					);
 
-				await events.refetch();
-				setIsCreateDialogOpen(false);
-				setShowCreatePatDialog(false);
-				setPendingEvent(null);
-				setPendingRoutePath(null);
+					// Create route for UI events - use savedEvent.id since backend may generate new ID
+					if (
+						uiEventTypeSet.has(savedEvent.event_type) ||
+						!!savedEvent.default_page_id
+					) {
+						try {
+							const path = normalizePath(pendingRoutePath);
+							await backend.routeState.setRoute(id, path, savedEvent.id);
+							await invalidate(backend.routeState.getRoutes, [id]);
+						} catch (error) {
+							console.error("Failed to create route for UI event:", error);
+						}
+					}
+
+					await invalidate(backend.eventState.getEvents, [id]);
+					await events.refetch();
+				} catch (error) {
+					console.error("Failed to create event with PAT:", error);
+				} finally {
+					if (savedEvent) {
+						setIsCreateDialogOpen(false);
+						setShowCreatePatDialog(false);
+						setPendingEvent(null);
+						setPendingRoutePath(null);
+					}
+					setIsCreating(false);
+				}
 			}
 		},
 		[
@@ -445,6 +480,7 @@ export default function EventsPage({
 			uiEventTypeSet,
 			normalizePath,
 			invalidate,
+			isCreating,
 		],
 	);
 
@@ -528,6 +564,7 @@ export default function EventsPage({
 								appId={id}
 								onSubmit={handleCreateEvent}
 								onCancel={() => setIsCreateDialogOpen(false)}
+								isSubmitting={isCreating}
 								tokenStore={tokenStore}
 								consentStore={consentStore}
 								hub={hub}

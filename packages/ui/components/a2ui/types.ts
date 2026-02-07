@@ -1236,6 +1236,113 @@ export interface ImageHotspotComponent extends ComponentBase {
 	showTooltips?: BoundValue;
 }
 
+// ── Geo types (mirrors Rust structs from packages/catalog/geo) ─────
+// All fields use snake_case matching default serde serialization.
+
+export interface GeoCoordinate {
+	latitude: number;
+	longitude: number;
+}
+
+export interface GeoBoundingBox {
+	min_lat: number;
+	min_lon: number;
+	max_lat: number;
+	max_lon: number;
+}
+
+export interface GeoRouteGeometry {
+	points: GeoCoordinate[];
+}
+
+export interface GeoRouteStep {
+	instruction: string;
+	distance: number;
+	duration: number;
+	name: string;
+	maneuver_type: string;
+	coordinate: GeoCoordinate;
+}
+
+export interface GeoRouteLeg {
+	distance: number;
+	duration: number;
+	summary: string;
+	steps: GeoRouteStep[];
+}
+
+export interface GeoRouteResult {
+	distance: number;
+	duration: number;
+	geometry: GeoRouteGeometry;
+	legs: GeoRouteLeg[];
+	weight_name: string;
+}
+
+export interface GeoTripWaypoint {
+	name: string;
+	distance: number;
+	coordinate: GeoCoordinate;
+	hint?: string;
+	waypoint_index?: number;
+}
+
+export interface GeoSearchResult {
+	display_name: string;
+	coordinate: GeoCoordinate;
+	place_type: string;
+	importance: number;
+	bounding_box?: GeoBoundingBox;
+	osm_id?: number;
+	osm_type?: string;
+}
+
+// ── Geo Map component types ────────────────────────────────────────
+
+export interface GeoMapMarkerDef {
+	id: string;
+	coordinate: GeoCoordinate;
+	color?: string;
+	label?: string;
+	icon?: string;
+	popup?: string;
+	draggable?: boolean;
+}
+
+export interface GeoMapRouteDef {
+	id: string;
+	coordinates: GeoCoordinate[];
+	color?: string;
+	width?: number;
+	opacity?: number;
+	dashArray?: [number, number];
+	label?: string;
+}
+
+export interface GeoMapViewport {
+	center: GeoCoordinate;
+	zoom: number;
+	bearing?: number;
+	pitch?: number;
+}
+
+export interface GeoMapComponent extends ComponentBase {
+	type: "geoMap";
+	viewport?: BoundValue;
+	markers?: BoundValue;
+	routes?: BoundValue;
+	showControls?: BoundValue;
+	showZoom?: BoundValue;
+	showCompass?: BoundValue;
+	showLocate?: BoundValue;
+	showFullscreen?: BoundValue;
+	interactive?: BoundValue;
+	controlPosition?: BoundValue;
+	clusterMarkers?: BoundValue;
+	clusterRadius?: BoundValue;
+	clusterMaxZoom?: BoundValue;
+}
+
 // Widget Instance Component - references a widget definition stored in page.widgetRefs
 // The widget definition is looked up by instanceId from the page's widgetRefs
 export interface WidgetInstanceComponent {
@@ -1319,6 +1426,7 @@ export type A2UIComponent =
 	| BoundingBoxOverlayComponent
 	| ImageLabelerComponent
 	| ImageHotspotComponent
+	| GeoMapComponent
 	| WidgetInstanceComponent;
 
 // Surface and data model
