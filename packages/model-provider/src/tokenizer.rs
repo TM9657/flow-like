@@ -2,13 +2,58 @@ use std::sync::Arc;
 
 #[cfg(feature = "local-ml")]
 use fastembed::TokenizerFiles;
-use tokenizers::{AddedToken, PaddingParams, PaddingStrategy, Tokenizer, TruncationParams};
+use text_splitter::ChunkSizer;
+use tokenizers::{AddedToken, Encoding, PaddingParams, PaddingStrategy, Tokenizer, TruncationParams};
+
+#[derive(Clone)]
+pub struct TokenizerSizer(Arc<Tokenizer>);
+
+impl TokenizerSizer {
+    pub fn new(tokenizer: Tokenizer) -> Self {
+        Self(Arc::new(tokenizer))
+    }
+}
+
+fn num_tokens_with_overflow(encoding: &Encoding, pad_id: Option<u32>) -> usize {
+    let base = encoding
+        .get_ids()
+        .iter()
+        .skip_while(|&id| pad_id.is_some_and(|pad_id| id == &pad_id))
+        .take_while(|&id| pad_id.is_none_or(|pad_id| id != &pad_id))
+        .count();
+
+    let overflow: usize = encoding
+        .get_overflowing()
+        .iter()
+        .map(|enc| num_tokens_with_overflow(enc, pad_id))
+        .sum();
+
+    base + overflow
+}
+
+impl ChunkSizer for TokenizerSizer {
+    fn size(&self, chunk: &str) -> usize {
+        let encoding = self
+            .0
+            .encode_fast(chunk, false)
+            .expect("Unable to tokenize the following string {chunk}");
+
+        let pad_id = self.0.get_padding().map(|params| params.pad_id);
+        num_tokens_with_overflow(&encoding, pad_id)
+    }
+}
+
+impl From<Tokenizer> for TokenizerSizer {
+    fn from(tokenizer: Tokenizer) -> Self {
+        Self::new(tokenizer)
+    }
+}
 
 #[cfg(feature = "local-ml")]
 pub fn load_tokenizer_from_file(
     tokenizer_files: Arc<TokenizerFiles>,
     max_length: usize,
-) -> flow_like_types::Result<Tokenizer> {
+) -> flow_like_types::Result<TokenizerSizer> {
     let base_error_message =
         "Error building TokenizerFiles for UserDefinedEmbeddingModel. Could not read {} file.";
 
@@ -60,20 +105,19 @@ pub fn load_tokenizer_from_file(
         .expect("Error reading pad_token from tokenier_config.json")
         .into();
 
-    let mut tokenizer = tokenizer
-        .with_padding(Some(PaddingParams {
-            // TODO: the user should able to choose the padding strategy
-            strategy: PaddingStrategy::BatchLongest,
-            pad_token,
-            pad_id,
-            ..Default::default()
-        }))
+    tokenizer.with_padding(Some(PaddingParams {
+        // TODO: the user should able to choose the padding strategy
+        strategy: PaddingStrategy::BatchLongest,
+        pad_token,
+        pad_id,
+        ..Default::default()
+    }));
+    tokenizer
         .with_truncation(Some(TruncationParams {
             max_length,
             ..Default::default()
         }))
-        .map_err(flow_like_types::Error::msg)?
-        .clone();
+        .map_err(flow_like_types::Error::msg)?;
     if let flow_like_types::Value::Object(root_object) = special_tokens_map {
         for (_, value) in root_object.iter() {
             if value.is_string() {
@@ -94,5 +138,6 @@ pub fn load_tokenizer_from_file(
             }
         }
     }
-    Ok(tokenizer.into())
+    let tokenizer: Tokenizer = tokenizer.into();
+    Ok(TokenizerSizer::new(tokenizer))
 }

@@ -176,6 +176,7 @@ pub async fn execute(
         id: request.node_id.clone(),
         payload: request.payload.clone(),
         runtime_variables: request.runtime_variables.clone(),
+        filter_secrets: Some(true)
     };
 
     // Create BufferedInterComHandler - this is REQUIRED for meaningful execution output

@@ -229,6 +229,7 @@ async fn execute_inner(
         id: request.node_id.clone(),
         payload: request.payload.clone(),
         runtime_variables: request.runtime_variables.clone(),
+         filter_secrets: Some(true)
     };
 
     // Create BufferedInterComHandler to stream events back to client
