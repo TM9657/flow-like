@@ -12,6 +12,22 @@ export default function JoinPage() {
 	const appId = searchParams.get("appId");
 	const token = searchParams.get("token");
 
+	const addToProfile = useCallback(
+		async (appId: string) => {
+			try {
+				const profile = await backend.userState.getSettingsProfile();
+				await backend.userState.updateProfileApp(
+					profile,
+					{ app_id: appId, favorite: false, pinned: false },
+					"Upsert",
+				);
+			} catch (error) {
+				console.error("Failed to add app to profile:", error);
+			}
+		},
+		[backend],
+	);
+
 	const joinApp = useCallback(async () => {
 		if (!appId || !token) {
 			console.error("App ID or token is missing in the URL parameters.");
@@ -20,12 +36,13 @@ export default function JoinPage() {
 
 		try {
 			await backend.teamState.joinInviteLink(appId, token);
+			await addToProfile(appId);
 			toast.success("Successfully joined the app!");
 			router.push(`/use?id=${appId}`);
 		} catch (error) {
 			router.push(`/use?id=${appId}`);
 		}
-	}, [backend, appId, token]);
+	}, [backend, appId, token, addToProfile]);
 
 	useEffect(() => {
 		joinApp();

@@ -18,7 +18,10 @@
 
 use crate::{
     ensure_permission,
-    entity::execution_run,
+    entity::{
+        execution_run,
+        sea_orm_active_enums::{RunMode, RunStatus},
+    },
     error::ApiError,
     execution::{
         ByteStream, DispatchRequest, ExecutionBackend, ExecutionJwtParams, TokenType,
@@ -156,11 +159,11 @@ pub async fn invoke_event(
 
     // Determine run mode
     let run_mode = if query.local {
-        execution_run::RunMode::Local
+        RunMode::Local
     } else if query.isolated {
-        execution_run::RunMode::KubernetesIsolated
+        RunMode::KubernetesIsolated
     } else {
-        execution_run::RunMode::Http
+        RunMode::Http
     };
 
     // Store payload in object storage if present (for remote runs only - enables re-run)
@@ -198,7 +201,7 @@ pub async fn invoke_event(
         version: Set(params.version.clone()),
         event_id: Set(Some(event_id.clone())),
         node_id: Set(Some(event.id.clone())),
-        status: Set(execution_run::RunStatus::Pending),
+        status: Set(RunStatus::Pending),
         mode: Set(run_mode.clone()),
         log_level: Set(0),
         input_payload_len: Set(input_payload_len),
@@ -434,10 +437,10 @@ fn proxy_lambda_sse_response(
                                             .unwrap_or("Completed");
 
                                         let run_status = match status {
-                                            "Failed" => execution_run::RunStatus::Failed,
-                                            "Cancelled" => execution_run::RunStatus::Cancelled,
-                                            "Timeout" => execution_run::RunStatus::Timeout,
-                                            _ => execution_run::RunStatus::Completed,
+                                            "Failed" => RunStatus::Failed,
+                                            "Cancelled" => RunStatus::Cancelled,
+                                            "Timeout" => RunStatus::Timeout,
+                                            _ => RunStatus::Completed,
                                         };
 
                                         let db = db.clone();

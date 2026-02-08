@@ -1,6 +1,7 @@
 use crate::{
     ensure_permission, error::ApiError, middleware::jwt::AppUser,
-    permission::role_permission::RolePermissions, state::AppState,
+    permission::role_permission::RolePermissions,
+    routes::app::events::db::filter_event_list_execution, state::AppState,
 };
 use axum::{
     Extension, Json,
@@ -35,13 +36,20 @@ pub async fn get_events(
     Extension(user): Extension<AppUser>,
     Path(app_id): Path<String>,
 ) -> Result<Json<Vec<Event>>, ApiError> {
-    let _permission = ensure_permission!(user, &app_id, &state, RolePermissions::WriteEvents);
+    let permission = ensure_permission!(user, &app_id, &state, RolePermissions::ListEvents);
 
     // Use database lookup instead of bucket
     let events = get_events_for_app(&state.db, &app_id).await?;
 
     // Filter out secret variable values from all events
-    let events: Vec<Event> = events.into_iter().map(filter_event_secrets).collect();
+    let mut events: Vec<Event> = events.into_iter().map(filter_event_secrets).collect();
+
+    if !permission.has_permission(RolePermissions::ReadEvents) {
+        events = events
+            .into_iter()
+            .map(filter_event_list_execution)
+            .collect();
+    }
 
     Ok(Json(events))
 }

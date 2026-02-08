@@ -14,7 +14,10 @@
 
 use crate::{
     ensure_permission,
-    entity::execution_run,
+    entity::{
+        execution_run,
+        sea_orm_active_enums::{RunMode, RunStatus},
+    },
     error::ApiError,
     execution::{
         DispatchRequest, ExecutionJwtParams, TokenType, fetch_profile_for_dispatch,
@@ -164,8 +167,8 @@ pub async fn invoke_event_async(
         version: Set(params.version.clone()),
         event_id: Set(Some(event_id.clone())),
         node_id: Set(Some(event.id.clone())),
-        status: Set(execution_run::RunStatus::Pending),
-        mode: Set(execution_run::RunMode::Queue),
+        status: Set(RunStatus::Pending),
+        mode: Set(RunMode::Queue),
         input_payload_len: Set(input_payload_len),
         input_payload_key: Set(input_payload_key),
         output_payload_len: Set(0),

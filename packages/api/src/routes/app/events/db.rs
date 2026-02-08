@@ -6,7 +6,10 @@
 //! For older events not yet in the database, fallback functions load from the bucket
 //! and sync to the database for future fast lookups.
 
+use std::collections::HashMap;
+
 use crate::entity::event;
+use blake3::Hash;
 use flow_like::app::App;
 use flow_like::flow::event::{CanaryEvent, Event as CoreEvent, EventInput, ReleaseNotes};
 use flow_like_types::anyhow;
@@ -38,6 +41,19 @@ pub fn filter_event_secrets(mut event: CoreEvent) -> CoreEvent {
     }
 
     event
+}
+
+pub fn filter_event_list_execution(mut event: CoreEvent) -> CoreEvent {
+    event.canary = None;
+    event.variables = HashMap::new();
+    event.notes = None;
+    event
+}
+
+const USER_FACING_EVENT_TYPES: &[&str] = &["simple_chat", "generic_form", "quick_action"];
+
+pub fn is_user_facing_event(event: &CoreEvent) -> bool {
+    event.default_page_id.is_some() || USER_FACING_EVENT_TYPES.contains(&event.event_type.as_str())
 }
 
 /// Convert a core Event to database Event model

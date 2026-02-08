@@ -20,8 +20,10 @@ export default function CallbackPage() {
 			} catch {
 				// BroadcastChannel not supported, fallback will be handled by storage event
 			}
-			// Redirect to home page after successful authentication
-			router.push("/");
+
+			const returnUrl = sessionStorage.getItem("flow-like-return-url");
+			sessionStorage.removeItem("flow-like-return-url");
+			router.push(returnUrl || "/");
 		}
 	}, [auth.isAuthenticated, router]);
 

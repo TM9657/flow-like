@@ -361,7 +361,7 @@ async fn handle_app_purchase_completed(
         ))),
         icon: Set(Some("shopping-bag".to_string())),
         link: Set(Some(app_link_url)),
-        notification_type: Set(NotificationType::System),
+        r#type: Set(NotificationType::System),
         read: Set(false),
         source_run_id: Set(None),
         source_node_id: Set(None),

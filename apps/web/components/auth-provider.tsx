@@ -286,6 +286,12 @@ function AuthInner({ children }: Readonly<{ children: React.ReactNode }>) {
 
 	// Show sign-in required screen when not authenticated (skip for public paths)
 	if (!auth.isAuthenticated && !isPublicPath) {
+		if (typeof window !== "undefined" && pathname) {
+			const returnUrl = window.location.pathname + window.location.search;
+			if (returnUrl && returnUrl !== "/") {
+				sessionStorage.setItem("flow-like-return-url", returnUrl);
+			}
+		}
 		return <SignInRequired />;
 	}
 

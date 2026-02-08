@@ -184,11 +184,14 @@ export function FlowPilot({
 			if (!profileBitIds.has(fullId)) return false;
 
 			if (!canHostLocal) {
-				const providerName = model.parameters?.provider?.provider_name?.toLowerCase();
-				if (providerName === "local" ||
+				const providerName =
+					model.parameters?.provider?.provider_name?.toLowerCase();
+				if (
+					providerName === "local" ||
 					providerName === "llama.cpp" ||
 					providerName === "llamacpp" ||
-					providerName === "ollama") {
+					providerName === "ollama"
+				) {
 					return false;
 				}
 			}
@@ -1184,11 +1187,11 @@ ${userMsg}`;
 
 			{/* Messages area */}
 			<ScrollArea
-				className="flex-1 min-h-0 px-3"
+				className="flex-1 min-h-0 px-3 overflow-x-hidden"
 				viewportRef={scrollContainerRef}
 				onScroll={handleScroll}
 			>
-				<div className="py-3 space-y-3 min-w-0">
+				<div className="py-3 space-y-3 min-w-0 overflow-hidden">
 					{messages.length === 0 ? (
 						<EmptyState
 							agentMode={agentMode}
@@ -1800,12 +1803,12 @@ const MessageBubble = memo(function MessageBubble({
 		>
 			<div
 				className={cn(
-					"px-3 py-2 rounded-xl text-sm min-w-0 max-w-[85%]",
+					"px-3 py-2 rounded-xl text-sm min-w-0 max-w-[85%] overflow-hidden",
 					isUser
 						? "bg-muted/60 text-foreground rounded-br-sm border border-border/40"
 						: "bg-background border border-border/40 rounded-bl-sm",
 				)}
-				style={{ wordBreak: "break-word", overflowWrap: "break-word" }}
+				style={{ wordBreak: "break-word", overflowWrap: "anywhere" }}
 			>
 				{/* Images */}
 				{message.images && message.images.length > 0 && (

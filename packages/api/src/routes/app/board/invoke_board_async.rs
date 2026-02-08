@@ -13,7 +13,10 @@
 
 use crate::{
     ensure_permission,
-    entity::execution_run,
+    entity::{
+        execution_run,
+        sea_orm_active_enums::{RunMode, RunStatus},
+    },
     error::ApiError,
     execution::{
         DispatchRequest, ExecutionJwtParams, TokenType, fetch_profile_for_dispatch,
@@ -155,8 +158,8 @@ pub async fn invoke_board_async(
             .map(|(maj, min, pat)| format!("{}.{}.{}", maj, min, pat))),
         event_id: Set(None),
         node_id: Set(Some(params.node_id.clone())),
-        status: Set(execution_run::RunStatus::Pending),
-        mode: Set(execution_run::RunMode::Queue),
+        status: Set(RunStatus::Pending),
+        mode: Set(RunMode::Queue),
         log_level: Set(0),
         input_payload_len: Set(input_payload_len),
         input_payload_key: Set(input_payload_key),

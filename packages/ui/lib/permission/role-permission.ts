@@ -1,65 +1,45 @@
 /**
  * Represents a set of role permission flags.
+ * Must stay in sync with packages/api/src/permission/role_permission.rs
  */
 export class RolePermissions {
 	private readonly value: bigint;
 
-	// Permission constants
-	static readonly Owner = new RolePermissions(0b00000000_00000000_00000001n);
-	static readonly Admin = new RolePermissions(0b00000000_00000000_00000010n);
-	static readonly ReadTeam = new RolePermissions(0b00000000_00000000_00000100n);
-	static readonly ReadRoles = new RolePermissions(
-		0b00000000_00000000_00001000n,
-	);
-	static readonly ReadFiles = new RolePermissions(
-		0b00000000_00000000_00010000n,
-	);
-	static readonly WriteFiles = new RolePermissions(
-		0b00000000_00000000_00100000n,
-	);
-	static readonly InvokeApi = new RolePermissions(
-		0b00000000_00000000_01000000n,
-	);
-	static readonly WriteMeta = new RolePermissions(
-		0b00000000_00000000_10000000n,
-	);
-	static readonly ReadBoards = new RolePermissions(
-		0b00000000_00000001_00000000n,
-	);
-	static readonly ExecuteBoards = new RolePermissions(
-		0b00000000_00000010_00000000n,
-	);
-	static readonly WriteBoards = new RolePermissions(
-		0b00000000_00000100_00000000n,
-	);
-	static readonly ListReleases = new RolePermissions(
-		0b00000000_00001000_00000000n,
-	);
-	static readonly ReadReleases = new RolePermissions(
-		0b00000000_00010000_00000000n,
-	);
-	static readonly ExecuteReleases = new RolePermissions(
-		0b00000000_00100000_00000000n,
-	);
-	static readonly WriteReleases = new RolePermissions(
-		0b00000000_01000000_00000000n,
-	);
-	static readonly ReadLogs = new RolePermissions(0b00000000_10000000_00000000n);
-	static readonly ReadAnalytics = new RolePermissions(
-		0b00000001_00000000_00000000n,
-	);
-	static readonly ReadConfig = new RolePermissions(
-		0b00000010_00000000_00000000n,
-	);
-	static readonly WriteConfig = new RolePermissions(
-		0b00000100_00000000_00000000n,
-	);
-	static readonly ReadTemplates = new RolePermissions(
-		0b00001000_00000000_00000000n,
-	);
-	static readonly WriteTemplates = new RolePermissions(
-		0b00010000_00000000_00000000n,
-	);
+	static readonly Owner = new RolePermissions(0b00000000_00000000_00000000_00000001n);
+	static readonly Admin = new RolePermissions(0b00000000_00000000_00000000_00000010n);
+	static readonly ReadTeam = new RolePermissions(0b00000000_00000000_00000000_00000100n);
+	static readonly ReadRoles = new RolePermissions(0b00000000_00000000_00000000_00001000n);
+	static readonly ReadFiles = new RolePermissions(0b00000000_00000000_00000000_00010000n);
+	static readonly WriteFiles = new RolePermissions(0b00000000_00000000_00000000_00100000n);
+	static readonly InvokeApi = new RolePermissions(0b00000000_00000000_00000000_01000000n);
+	static readonly WriteMeta = new RolePermissions(0b00000000_00000000_00000000_10000000n);
+	static readonly ReadBoards = new RolePermissions(0b00000000_00000000_00000001_00000000n);
+	static readonly ExecuteBoards = new RolePermissions(0b00000000_00000000_00000010_00000000n);
+	static readonly WriteBoards = new RolePermissions(0b00000000_00000000_00000100_00000000n);
+	static readonly ListEvents = new RolePermissions(0b00000000_00000000_00001000_00000000n);
+	static readonly ReadEvents = new RolePermissions(0b00000000_00000000_00010000_00000000n);
+	static readonly ExecuteEvents = new RolePermissions(0b00000000_00000000_00100000_00000000n);
+	static readonly WriteEvents = new RolePermissions(0b00000000_00000000_01000000_00000000n);
+	static readonly ReadLogs = new RolePermissions(0b00000000_00000000_10000000_00000000n);
+	static readonly ReadAnalytics = new RolePermissions(0b00000000_00000001_00000000_00000000n);
+	static readonly ReadConfig = new RolePermissions(0b00000000_00000010_00000000_00000000n);
+	static readonly WriteConfig = new RolePermissions(0b00000000_00000100_00000000_00000000n);
+	static readonly ReadTemplates = new RolePermissions(0b00000000_00001000_00000000_00000000n);
+	static readonly WriteTemplates = new RolePermissions(0b00000000_00010000_00000000_00000000n);
+	static readonly ReadCourses = new RolePermissions(0b00000000_00100000_00000000_00000000n);
+	static readonly WriteCourses = new RolePermissions(0b00000000_01000000_00000000_00000000n);
+	static readonly ReadWidgets = new RolePermissions(0b00000000_10000000_00000000_00000000n);
+	static readonly WriteWidgets = new RolePermissions(0b00000001_00000000_00000000_00000000n);
+	static readonly WriteRoutes = new RolePermissions(0b00000010_00000000_00000000_00000000n);
+
+	/** @deprecated Use ListEvents instead */
+	static readonly ListReleases = RolePermissions.ListEvents;
+	/** @deprecated Use ReadEvents instead */
+	static readonly ReadReleases = RolePermissions.ReadEvents;
+	/** @deprecated Use ExecuteEvents instead */
+	static readonly ExecuteReleases = RolePermissions.ExecuteEvents;
+	/** @deprecated Use WriteEvents instead */
+	static readonly WriteReleases = RolePermissions.WriteEvents;
 
 	constructor(value: bigint | number = 0n) {
 		this.value = typeof value === "number" ? BigInt(value) : value;

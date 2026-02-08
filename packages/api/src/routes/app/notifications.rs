@@ -172,7 +172,7 @@ pub async fn create_notification(
         description: Set(params.description),
         icon: Set(params.icon),
         link: Set(params.link),
-        notification_type: Set(NotificationType::Workflow),
+        r#type: Set(NotificationType::Workflow),
         read: Set(false),
         source_run_id: Set(params.run_id),
         source_node_id: Set(params.node_id),

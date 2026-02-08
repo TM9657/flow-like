@@ -91,6 +91,8 @@ function handleProgressEvent(event: IIntercomEvent): void {
 }
 
 export class WebEventState implements IEventState {
+	readonly alwaysRemote = true;
+
 	constructor(private readonly backend: WebBackendRef) {}
 
 	async getEvent(

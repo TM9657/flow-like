@@ -1,5 +1,5 @@
 use crate::{
-    ensure_permission, error::ApiError, middleware::jwt::AppUser,
+    ensure_in_project, error::ApiError, middleware::jwt::AppUser,
     permission::role_permission::RolePermissions, state::AppState,
 };
 use axum::{
@@ -11,7 +11,7 @@ use flow_like_types::anyhow;
 use serde::Deserialize;
 use utoipa::ToSchema;
 
-use super::db::{filter_event_secrets, get_event_from_db};
+use super::db::{filter_event_list_execution, filter_event_secrets, get_event_from_db};
 
 #[derive(Deserialize, Debug, ToSchema)]
 pub struct VersionQuery {
@@ -49,8 +49,14 @@ pub async fn get_event(
     Path((app_id, event_id)): Path<(String, String)>,
     Query(query): Query<VersionQuery>,
 ) -> Result<Json<Event>, ApiError> {
-    let permission = ensure_permission!(user, &app_id, &state, RolePermissions::WriteEvents);
+    let permission = ensure_in_project!(user, &app_id, &state);
+    if !permission.has_permission(RolePermissions::ReadEvents)
+        && !permission.has_permission(RolePermissions::ExecuteEvents)
+    {
+        return Err(ApiError::FORBIDDEN);
+    }
     let sub = permission.sub()?;
+    let has_read = permission.has_permission(RolePermissions::ReadEvents);
 
     let version_opt = if let Some(ver_str) = query.version {
         let parts = ver_str
@@ -78,9 +84,12 @@ pub async fn get_event(
         app.get_event(&event_id, version_opt).await?
     };
 
-    // Filter out secret variable values - clients don't need them
-    // (secrets are only used server-side during remote execution)
     let event = filter_event_secrets(event);
+    let event = if has_read {
+        event
+    } else {
+        filter_event_list_execution(event)
+    };
 
     Ok(Json(event))
 }

@@ -142,12 +142,12 @@ export const MessageContent = memo(function MessageContent({
 						<ChevronDown className="w-3 h-3 ml-auto transition-transform duration-200 group-data-[state=open]:rotate-180" />
 					</CollapsibleTrigger>
 					<CollapsibleContent>
-						<div className="p-3 pt-0 text-xs text-muted-foreground whitespace-pre-wrap font-mono bg-muted/30">
+						<div className="p-3 pt-0 text-xs text-muted-foreground whitespace-pre-wrap font-mono bg-muted/30 wrap-anywhere">
 							{thinkingContent.trim()}
 						</div>
 					</CollapsibleContent>
 				</Collapsible>
-				<div className="text-sm leading-relaxed whitespace-break-spaces text-wrap max-w-full w-full">
+				<div className="text-sm leading-relaxed whitespace-break-spaces text-wrap max-w-full w-full overflow-hidden wrap-anywhere">
 					{enableMarkdown ? (
 						<TextEditor
 							initialContent={restContent}
@@ -156,7 +156,9 @@ export const MessageContent = memo(function MessageContent({
 							onFocusNode={onFocusNode}
 						/>
 					) : (
-						<p className="whitespace-pre-wrap break-words">{restContent}</p>
+						<p className="whitespace-pre-wrap wrap-anywhere">
+							{restContent}
+						</p>
 					)}
 				</div>
 			</div>
@@ -173,7 +175,7 @@ export const MessageContent = memo(function MessageContent({
 		return (
 			<div className="space-y-2 w-full">
 				{beforeContent && (
-					<div className="text-sm leading-relaxed whitespace-break-spaces text-wrap max-w-full w-full">
+					<div className="text-sm leading-relaxed whitespace-break-spaces text-wrap max-w-full w-full overflow-hidden wrap-anywhere">
 						{enableMarkdown ? (
 							<TextEditor
 								initialContent={beforeContent}
@@ -181,7 +183,9 @@ export const MessageContent = memo(function MessageContent({
 								editable={false}
 							/>
 						) : (
-							<p className="whitespace-pre-wrap break-words">{beforeContent}</p>
+							<p className="whitespace-pre-wrap wrap-anywhere">
+								{beforeContent}
+							</p>
 						)}
 					</div>
 				)}
@@ -195,7 +199,7 @@ export const MessageContent = memo(function MessageContent({
 						<ChevronDown className="w-3 h-3 ml-auto transition-transform duration-200 group-data-[state=open]:rotate-180" />
 					</CollapsibleTrigger>
 					<CollapsibleContent>
-						<div className="p-3 pt-0 text-xs text-muted-foreground whitespace-pre-wrap font-mono bg-muted/30">
+						<div className="p-3 pt-0 text-xs text-muted-foreground whitespace-pre-wrap font-mono bg-muted/30 wrap-anywhere">
 							{thinkingContent.trim()}
 							<span className="inline-block w-1.5 h-3 ml-1 bg-primary/50 animate-pulse" />
 						</div>
@@ -207,7 +211,7 @@ export const MessageContent = memo(function MessageContent({
 
 	// Normal content rendering
 	return (
-		<div className="text-sm leading-relaxed whitespace-break-spaces text-wrap max-w-full w-full">
+		<div className="text-sm leading-relaxed whitespace-break-spaces text-wrap max-w-full w-full overflow-hidden wrap-anywhere">
 			{enableMarkdown ? (
 				<TextEditor
 					initialContent={processedContent}
@@ -216,7 +220,9 @@ export const MessageContent = memo(function MessageContent({
 					onFocusNode={onFocusNode}
 				/>
 			) : (
-				<p className="whitespace-pre-wrap break-words">{processedContent}</p>
+				<p className="whitespace-pre-wrap wrap-anywhere">
+					{processedContent}
+				</p>
 			)}
 		</div>
 	);

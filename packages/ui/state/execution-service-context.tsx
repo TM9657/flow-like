@@ -436,7 +436,9 @@ export function ExecutionServiceProvider({
 			let varsNeedingValues: IVariable[];
 			let boardId: string;
 			// Determine if execution is remote (server-side) - if so, don't prompt for secrets
-			let isRemote = false;
+			// If the backend always executes remotely (e.g. web app), secrets are always server-side
+			const backendAlwaysRemote = backend.eventState.alwaysRemote === true;
+			let isRemote = backendAlwaysRemote;
 
 			if (backend.eventState.prerunEvent) {
 				try {
@@ -445,9 +447,8 @@ export function ExecutionServiceProvider({
 						eventIdStr,
 					);
 					boardId = prerunResult.board_id;
-					// If user can't execute locally, execution is remote (server-side)
-					// In that case, secrets are handled server-side, don't prompt for them
-					isRemote = !prerunResult.can_execute_locally;
+					// Remote if backend is always remote OR user can't execute locally
+					isRemote = backendAlwaysRemote || !prerunResult.can_execute_locally;
 					varsNeedingValues = convertPrerunToVariables(
 						prerunResult.runtime_variables,
 						isRemote,
@@ -474,9 +475,7 @@ export function ExecutionServiceProvider({
 							event.board_id,
 							version ?? undefined,
 						);
-						// Without prerun info, assume remote if no executeBoardRemote
-						// (web app doesn't have separate local execution)
-						isRemote = !backend.boardState.executeBoardRemote;
+						isRemote = backendAlwaysRemote || !backend.boardState.executeBoardRemote;
 						varsNeedingValues = getVariablesNeedingPrompt(board, isRemote);
 					} catch {
 						// Event or board not found, execute anyway
@@ -504,8 +503,7 @@ export function ExecutionServiceProvider({
 						event.board_id,
 						version ?? undefined,
 					);
-					// Without prerun info, assume local execution for desktop
-					varsNeedingValues = getVariablesNeedingPrompt(board, false);
+					varsNeedingValues = getVariablesNeedingPrompt(board, backendAlwaysRemote);
 				} catch {
 					// Event or board not found, execute anyway
 					return backend.eventState.executeEvent(

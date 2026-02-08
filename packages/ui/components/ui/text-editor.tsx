@@ -348,6 +348,7 @@ function TextEditorStatic({
 					}
 				}
 			}}
+			className="overflow-hidden [&_pre]:overflow-x-auto [&_pre]:whitespace-pre-wrap [&_code]:wrap-break-word"
 		>
 			<PlateStatic editor={editor} className="py-0" />
 		</div>

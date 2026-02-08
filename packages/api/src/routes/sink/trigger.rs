@@ -7,7 +7,10 @@
 //! - `service_trigger` - Service-to-service trigger for internal services (cron, discord bot, etc.)
 
 use crate::{
-    entity::{event, event_sink, execution_run},
+    entity::{
+        event, event_sink, execution_run,
+        sea_orm_active_enums::{RunMode, RunStatus},
+    },
     error::ApiError,
     execution::{
         ByteStream, DispatchRequest, ExecutionBackend, ExecutionJwtParams, TokenType,
@@ -213,8 +216,8 @@ pub async fn trigger_event(
         version: Set(None),
         event_id: Set(Some(sink.event_id.clone())),
         node_id: Set(Some(event.id.clone())),
-        status: Set(execution_run::RunStatus::Pending),
-        mode: Set(execution_run::RunMode::Http),
+        status: Set(RunStatus::Pending),
+        mode: Set(RunMode::Http),
         log_level: Set(0),
         input_payload_len: Set(input_payload_len),
         input_payload_key: Set(None),
@@ -462,8 +465,8 @@ pub async fn trigger_http(
         version: Set(None),
         event_id: Set(Some(sink.event_id.clone())),
         node_id: Set(Some(event.id.clone())),
-        status: Set(execution_run::RunStatus::Pending),
-        mode: Set(execution_run::RunMode::Http),
+        status: Set(RunStatus::Pending),
+        mode: Set(RunMode::Http),
         log_level: Set(0),
         input_payload_len: Set(input_payload_len),
         input_payload_key: Set(None),
@@ -800,8 +803,8 @@ pub async fn trigger_telegram(
         version: Set(None),
         event_id: Set(Some(sink.event_id.clone())),
         node_id: Set(Some(event.id.clone())),
-        status: Set(execution_run::RunStatus::Pending),
-        mode: Set(execution_run::RunMode::Http),
+        status: Set(RunStatus::Pending),
+        mode: Set(RunMode::Http),
         log_level: Set(0),
         input_payload_len: Set(input_payload_len),
         input_payload_key: Set(None),
@@ -1108,8 +1111,8 @@ pub async fn trigger_discord(
         version: Set(None),
         event_id: Set(Some(sink.event_id.clone())),
         node_id: Set(Some(event.id.clone())),
-        status: Set(execution_run::RunStatus::Pending),
-        mode: Set(execution_run::RunMode::Http),
+        status: Set(RunStatus::Pending),
+        mode: Set(RunMode::Http),
         log_level: Set(0),
         input_payload_len: Set(input_payload_len),
         input_payload_key: Set(None),
@@ -1623,10 +1626,10 @@ fn proxy_lambda_sse_response(
                                             .unwrap_or("Completed");
 
                                         let run_status = match status {
-                                            "Failed" => execution_run::RunStatus::Failed,
-                                            "Cancelled" => execution_run::RunStatus::Cancelled,
-                                            "Timeout" => execution_run::RunStatus::Timeout,
-                                            _ => execution_run::RunStatus::Completed,
+                                            "Failed" => RunStatus::Failed,
+                                            "Cancelled" => RunStatus::Cancelled,
+                                            "Timeout" => RunStatus::Timeout,
+                                            _ => RunStatus::Completed,
                                         };
 
                                         let db = db.clone();

@@ -15,6 +15,9 @@ export interface IOAuthCheckResult {
 }
 
 export interface IEventState {
+	/** Whether events always execute remotely (server-side). When true, secrets are handled server-side and don't need to be prompted or sent from the client. */
+	readonly alwaysRemote?: boolean;
+
 	getEvent(
 		appId: string,
 		eventId: string,

@@ -18,6 +18,12 @@ export function constructApiUrl(path: string): string {
 	return `${cleanBase}/api/v1/${path}`;
 }
 
+function jsonStringify(value: unknown): string {
+	return JSON.stringify(value, (_key, v) =>
+		typeof v === "bigint" ? Number(v) : v,
+	);
+}
+
 export async function apiFetch<T>(
 	path: string,
 	options?: RequestInit,
@@ -75,7 +81,7 @@ export async function apiPost<T>(
 		path,
 		{
 			method: "POST",
-			body: body ? JSON.stringify(body) : undefined,
+			body: body ? jsonStringify(body) : undefined,
 		},
 		auth,
 	);
@@ -90,7 +96,7 @@ export async function apiPut<T>(
 		path,
 		{
 			method: "PUT",
-			body: body ? JSON.stringify(body) : undefined,
+			body: body ? jsonStringify(body) : undefined,
 		},
 		auth,
 	);
@@ -105,7 +111,7 @@ export async function apiPatch<T>(
 		path,
 		{
 			method: "PATCH",
-			body: body ? JSON.stringify(body) : undefined,
+			body: body ? jsonStringify(body) : undefined,
 		},
 		auth,
 	);

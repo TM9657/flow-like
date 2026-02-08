@@ -12,7 +12,10 @@ use sea_orm::{
 };
 use std::sync::Arc;
 
-use crate::entity::{execution_event, execution_run};
+use crate::entity::{
+    execution_event, execution_run,
+    sea_orm_active_enums::{RunMode as EntityRunMode, RunStatus as EntityRunStatus},
+};
 
 #[derive(Debug, Clone)]
 pub struct PostgresStateStore {
@@ -26,49 +29,49 @@ impl PostgresStateStore {
 }
 
 // Conversion helpers
-fn entity_run_status_to_type(s: execution_run::RunStatus) -> RunStatus {
+fn entity_run_status_to_type(s: EntityRunStatus) -> RunStatus {
     match s {
-        execution_run::RunStatus::Pending => RunStatus::Pending,
-        execution_run::RunStatus::Running => RunStatus::Running,
-        execution_run::RunStatus::Completed => RunStatus::Completed,
-        execution_run::RunStatus::Failed => RunStatus::Failed,
-        execution_run::RunStatus::Cancelled => RunStatus::Cancelled,
-        execution_run::RunStatus::Timeout => RunStatus::Timeout,
+        EntityRunStatus::Pending => RunStatus::Pending,
+        EntityRunStatus::Running => RunStatus::Running,
+        EntityRunStatus::Completed => RunStatus::Completed,
+        EntityRunStatus::Failed => RunStatus::Failed,
+        EntityRunStatus::Cancelled => RunStatus::Cancelled,
+        EntityRunStatus::Timeout => RunStatus::Timeout,
     }
 }
 
-fn type_run_status_to_entity(s: RunStatus) -> execution_run::RunStatus {
+fn type_run_status_to_entity(s: RunStatus) -> EntityRunStatus {
     match s {
-        RunStatus::Pending => execution_run::RunStatus::Pending,
-        RunStatus::Running => execution_run::RunStatus::Running,
-        RunStatus::Completed => execution_run::RunStatus::Completed,
-        RunStatus::Failed => execution_run::RunStatus::Failed,
-        RunStatus::Cancelled => execution_run::RunStatus::Cancelled,
-        RunStatus::Timeout => execution_run::RunStatus::Timeout,
+        RunStatus::Pending => EntityRunStatus::Pending,
+        RunStatus::Running => EntityRunStatus::Running,
+        RunStatus::Completed => EntityRunStatus::Completed,
+        RunStatus::Failed => EntityRunStatus::Failed,
+        RunStatus::Cancelled => EntityRunStatus::Cancelled,
+        RunStatus::Timeout => EntityRunStatus::Timeout,
     }
 }
 
-fn entity_run_mode_to_type(m: execution_run::RunMode) -> RunMode {
+fn entity_run_mode_to_type(m: EntityRunMode) -> RunMode {
     match m {
-        execution_run::RunMode::Local => RunMode::Local,
-        execution_run::RunMode::Http => RunMode::Http,
-        execution_run::RunMode::Lambda => RunMode::Lambda,
-        execution_run::RunMode::KubernetesIsolated => RunMode::KubernetesIsolated,
-        execution_run::RunMode::KubernetesPool => RunMode::KubernetesPool,
-        execution_run::RunMode::Function => RunMode::Function,
-        execution_run::RunMode::Queue => RunMode::Queue,
+        EntityRunMode::Local => RunMode::Local,
+        EntityRunMode::Http => RunMode::Http,
+        EntityRunMode::Lambda => RunMode::Lambda,
+        EntityRunMode::KubernetesIsolated => RunMode::KubernetesIsolated,
+        EntityRunMode::KubernetesPool => RunMode::KubernetesPool,
+        EntityRunMode::Function => RunMode::Function,
+        EntityRunMode::Queue => RunMode::Queue,
     }
 }
 
-fn type_run_mode_to_entity(m: RunMode) -> execution_run::RunMode {
+fn type_run_mode_to_entity(m: RunMode) -> EntityRunMode {
     match m {
-        RunMode::Local => execution_run::RunMode::Local,
-        RunMode::Http => execution_run::RunMode::Http,
-        RunMode::Lambda => execution_run::RunMode::Lambda,
-        RunMode::KubernetesIsolated => execution_run::RunMode::KubernetesIsolated,
-        RunMode::KubernetesPool => execution_run::RunMode::KubernetesPool,
-        RunMode::Function => execution_run::RunMode::Function,
-        RunMode::Queue => execution_run::RunMode::Queue,
+        RunMode::Local => EntityRunMode::Local,
+        RunMode::Http => EntityRunMode::Http,
+        RunMode::Lambda => EntityRunMode::Lambda,
+        RunMode::KubernetesIsolated => EntityRunMode::KubernetesIsolated,
+        RunMode::KubernetesPool => EntityRunMode::KubernetesPool,
+        RunMode::Function => EntityRunMode::Function,
+        RunMode::Queue => EntityRunMode::Queue,
     }
 }
 
@@ -137,7 +140,7 @@ impl ExecutionStateStore for PostgresStateStore {
             version: Set(input.version),
             event_id: Set(input.event_id),
             node_id: Set(None),
-            status: Set(execution_run::RunStatus::Pending),
+            status: Set(EntityRunStatus::Pending),
             mode: Set(type_run_mode_to_entity(input.mode)),
             input_payload_len: Set(input.input_payload_len),
             input_payload_key: Set(None),

@@ -36,7 +36,7 @@ pub async fn get_event_versions(
     Extension(user): Extension<AppUser>,
     Path((app_id, event_id)): Path<(String, String)>,
 ) -> Result<Json<Vec<(u32, u32, u32)>>, ApiError> {
-    let permission = ensure_permission!(user, &app_id, &state, RolePermissions::WriteEvents);
+    let permission = ensure_permission!(user, &app_id, &state, RolePermissions::ReadEvents);
     let sub = permission.sub()?;
 
     let app = state
