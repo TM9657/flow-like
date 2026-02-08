@@ -101,7 +101,9 @@ pub fn construct_router(state: Arc<State>) -> Router {
         );
 
     Router::new()
-        .merge(SwaggerUi::new("/swagger-ui").url("/api-doc/openapi.json", openapi::ApiDoc::openapi()))
+        .merge(
+            SwaggerUi::new("/swagger-ui").url("/api-doc/openapi.json", openapi::ApiDoc::openapi()),
+        )
         .nest("/api/v1", router)
 }
 

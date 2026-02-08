@@ -507,10 +507,12 @@ pub async fn trigger_http(
             match dispatch_result {
                 Ok((_dispatch_response, byte_stream)) => {
                     tracing::info!(run_id = %run_id, "Got Lambda response, starting stream");
-                    Ok(
-                        proxy_lambda_sse_response(byte_stream, run_id, Some(Arc::new(state.db.clone())))
-                            .into_response(),
+                    Ok(proxy_lambda_sse_response(
+                        byte_stream,
+                        run_id,
+                        Some(Arc::new(state.db.clone())),
                     )
+                    .into_response())
                 }
                 Err(e) => {
                     tracing::error!(error = %e, "Failed to dispatch Lambda streaming");
@@ -537,10 +539,12 @@ pub async fn trigger_http(
             match dispatch_result {
                 Ok((_dispatch_response, executor_response)) => {
                     tracing::info!(run_id = %run_id, "Got executor response, starting stream");
-                    Ok(
-                        proxy_sse_response(executor_response, run_id, Some(Arc::new(state.db.clone())))
-                            .into_response(),
+                    Ok(proxy_sse_response(
+                        executor_response,
+                        run_id,
+                        Some(Arc::new(state.db.clone())),
                     )
+                    .into_response())
                 }
                 Err(e) => {
                     tracing::error!(error = %e, "Failed to dispatch");

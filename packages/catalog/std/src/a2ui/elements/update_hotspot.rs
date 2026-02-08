@@ -4,11 +4,11 @@ use flow_like::a2ui::components::ImageHotspotProps;
 use flow_like::flow::{
     board::Board,
     execution::context::ExecutionContext,
-    node::{remove_pin, Node, NodeLogic},
+    node::{Node, NodeLogic, remove_pin},
     pin::{PinOptions, ValueType},
     variable::VariableType,
 };
-use flow_like_types::{async_trait, json::json, Value};
+use flow_like_types::{Value, async_trait, json::json};
 use std::sync::Arc;
 
 use super::element_utils::find_element;
@@ -105,7 +105,9 @@ impl NodeLogic for UpdateHotspot {
                     "hotspot": hotspot
                 });
                 context.upsert_element(&element_id, update).await?;
-                context.set_pin_value("hotspot_id", json!(hotspot.id)).await?;
+                context
+                    .set_pin_value("hotspot_id", json!(hotspot.id))
+                    .await?;
             }
             "Remove" => {
                 let hotspot_id: String = context.evaluate_pin("hotspot_id").await?;
@@ -169,13 +171,7 @@ impl NodeLogic for UpdateHotspot {
             .unwrap_or_else(|| "Add".to_string());
 
         // Remove all dynamic pins first
-        let pins_to_check = [
-            "hotspot",
-            "hotspot_id",
-            "hotspots",
-            "count",
-            "image",
-        ];
+        let pins_to_check = ["hotspot", "hotspot_id", "hotspots", "count", "image"];
         for pin_name in pins_to_check {
             if let Some(pin) = node.get_pin_by_name(pin_name).cloned() {
                 remove_pin(node, Some(pin));
@@ -223,7 +219,12 @@ impl NodeLogic for UpdateHotspot {
                 )
                 .set_value_type(ValueType::Array)
                 .set_schema::<Hotspot>();
-                node.add_output_pin("count", "Count", "Number of hotspots", VariableType::Integer);
+                node.add_output_pin(
+                    "count",
+                    "Count",
+                    "Number of hotspots",
+                    VariableType::Integer,
+                );
             }
             "Set Image" => {
                 node.add_input_pin(

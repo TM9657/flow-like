@@ -189,10 +189,8 @@ impl NodeLogic for CloneGitHubRepoNode {
             }
         } else {
             // Universal path: clone to temp dir, copy into FlowPath store
-            let temp_dir = std::env::temp_dir().join(format!(
-                "flow-like-clone-{}",
-                uuid::Uuid::new_v4()
-            ));
+            let temp_dir =
+                std::env::temp_dir().join(format!("flow-like-clone-{}", uuid::Uuid::new_v4()));
 
             context.log_message(
                 &format!("Cloning {}/{} via temp directory", owner, repo),

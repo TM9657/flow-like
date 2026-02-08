@@ -31,7 +31,9 @@ pub fn routes() -> Router<AppState> {
     )
 )]
 #[tracing::instrument(name = "GET /auth/openid", skip(state))]
-pub async fn openid_config(State(state): State<AppState>) -> Result<Json<OpenIdConfig>, InternalError> {
+pub async fn openid_config(
+    State(state): State<AppState>,
+) -> Result<Json<OpenIdConfig>, InternalError> {
     let config = state
         .platform_config
         .authentication

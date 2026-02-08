@@ -4,11 +4,11 @@ use flow_like::a2ui::components::Model3dProps;
 use flow_like::flow::{
     board::Board,
     execution::context::ExecutionContext,
-    node::{remove_pin, Node, NodeLogic},
+    node::{Node, NodeLogic, remove_pin},
     pin::PinOptions,
     variable::VariableType,
 };
-use flow_like_types::{async_trait, json::json, Value};
+use flow_like_types::{Value, async_trait, json::json};
 use std::sync::Arc;
 
 /// Unified Model3D update node.
@@ -70,7 +70,12 @@ impl NodeLogic for UpdateModel3d {
         .set_default_value(Some(json!("Source")));
 
         // Default to Source input
-        node.add_input_pin("src", "Source URL", "GLTF/GLB model URL", VariableType::String);
+        node.add_input_pin(
+            "src",
+            "Source URL",
+            "GLTF/GLB model URL",
+            VariableType::String,
+        );
 
         node.add_output_pin("exec_out", "▶", "", VariableType::Execution);
 

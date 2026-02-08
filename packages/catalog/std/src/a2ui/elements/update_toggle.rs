@@ -2,11 +2,11 @@ use super::element_utils::{extract_element_id, find_element};
 use flow_like::flow::{
     board::Board,
     execution::context::ExecutionContext,
-    node::{remove_pin, Node, NodeLogic},
+    node::{Node, NodeLogic, remove_pin},
     pin::PinOptions,
     variable::VariableType,
 };
-use flow_like_types::{async_trait, json::json, Value};
+use flow_like_types::{Value, async_trait, json::json};
 use std::sync::Arc;
 
 /// Unified toggle (checkbox/switch) update node.
@@ -67,8 +67,13 @@ impl NodeLogic for UpdateToggle {
         .set_default_value(Some(json!("Set")));
 
         // Default: Set operation pins
-        node.add_input_pin("checked", "Checked", "New checked state", VariableType::Boolean)
-            .set_default_value(Some(json!(false)));
+        node.add_input_pin(
+            "checked",
+            "Checked",
+            "New checked state",
+            VariableType::Boolean,
+        )
+        .set_default_value(Some(json!(false)));
 
         node.add_output_pin("exec_out", "▶", "", VariableType::Execution);
 
@@ -148,8 +153,13 @@ impl NodeLogic for UpdateToggle {
 
         match operation.as_str() {
             "Set" => {
-                node.add_input_pin("checked", "Checked", "New checked state", VariableType::Boolean)
-                    .set_default_value(Some(json!(false)));
+                node.add_input_pin(
+                    "checked",
+                    "Checked",
+                    "New checked state",
+                    VariableType::Boolean,
+                )
+                .set_default_value(Some(json!(false)));
                 node.add_output_pin(
                     "state",
                     "State",

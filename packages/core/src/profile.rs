@@ -136,20 +136,26 @@ impl Default for Profile {
 impl Profile {
     /// Check if a bit is a local model (requires local hosting capabilities)
     fn is_local_model(bit: &Bit) -> bool {
-        if let Ok(llm_params) = flow_like_types::json::from_value::<crate::bit::LLMParameters>(bit.parameters.clone()) {
+        if let Ok(llm_params) =
+            flow_like_types::json::from_value::<crate::bit::LLMParameters>(bit.parameters.clone())
+        {
             let provider_name = llm_params.provider.provider_name.to_lowercase();
-            if provider_name == "local" ||
-               provider_name == "llama.cpp" ||
-               provider_name == "llamacpp" ||
-               provider_name == "ollama" {
+            if provider_name == "local"
+                || provider_name == "llama.cpp"
+                || provider_name == "llamacpp"
+                || provider_name == "ollama"
+            {
                 return true;
             }
-        } else if let Ok(vlm_params) = flow_like_types::json::from_value::<crate::bit::VLMParameters>(bit.parameters.clone()) {
+        } else if let Ok(vlm_params) =
+            flow_like_types::json::from_value::<crate::bit::VLMParameters>(bit.parameters.clone())
+        {
             let provider_name = vlm_params.provider.provider_name.to_lowercase();
-            if provider_name == "local" ||
-               provider_name == "llama.cpp" ||
-               provider_name == "llamacpp" ||
-               provider_name == "ollama" {
+            if provider_name == "local"
+                || provider_name == "llama.cpp"
+                || provider_name == "llamacpp"
+                || provider_name == "ollama"
+            {
                 return true;
             }
         }
@@ -167,7 +173,8 @@ impl Profile {
         remote: bool,
         http_client: Arc<HTTPClient>,
     ) -> Result<Bit> {
-        self.get_best_model_filtered(preference, multimodal, remote, false, http_client).await
+        self.get_best_model_filtered(preference, multimodal, remote, false, http_client)
+            .await
     }
 
     /// Create a copy of this profile with only hosted models (filters out local models)

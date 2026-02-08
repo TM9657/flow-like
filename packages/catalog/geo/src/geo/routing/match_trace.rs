@@ -8,10 +8,13 @@ use flow_like_types::{async_trait, json::json};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
-use crate::geo::{GeoCoordinate, routing::osrm::{RouteProfile, RouteResult}};
+use crate::geo::{
+    GeoCoordinate,
+    routing::osrm::{RouteProfile, RouteResult},
+};
 
 #[cfg(feature = "execute")]
-use crate::geo::routing::osrm::{build_coordinate_string, map_osrm_routes, OsrmRoute};
+use crate::geo::routing::osrm::{OsrmRoute, build_coordinate_string, map_osrm_routes};
 
 #[derive(Serialize, Deserialize, Clone, Debug, JsonSchema, Default)]
 pub struct Tracepoint {
@@ -270,7 +273,9 @@ impl NodeLogic for OsrmMatchTraceNode {
         context
             .set_pin_value("primary_matching", json!(primary))
             .await?;
-        context.set_pin_value("tracepoints", json!(tracepoints)).await?;
+        context
+            .set_pin_value("tracepoints", json!(tracepoints))
+            .await?;
 
         context.deactivate_exec_pin("exec_error").await?;
         context.activate_exec_pin("exec_success").await?;

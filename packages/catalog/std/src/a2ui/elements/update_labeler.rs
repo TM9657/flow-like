@@ -4,11 +4,11 @@ use flow_like::a2ui::components::ImageLabelerProps;
 use flow_like::flow::{
     board::Board,
     execution::context::ExecutionContext,
-    node::{remove_pin, Node, NodeLogic},
+    node::{Node, NodeLogic, remove_pin},
     pin::{PinOptions, ValueType},
     variable::VariableType,
 };
-use flow_like_types::{async_trait, json::json, Value};
+use flow_like_types::{Value, async_trait, json::json};
 use std::sync::Arc;
 
 use super::element_utils::find_element;
@@ -107,7 +107,9 @@ impl NodeLogic for UpdateLabeler {
                     "box": labeler_box
                 });
                 context.upsert_element(&element_id, update).await?;
-                context.set_pin_value("box_id", json!(labeler_box.id)).await?;
+                context
+                    .set_pin_value("box_id", json!(labeler_box.id))
+                    .await?;
             }
             "Remove" => {
                 let box_id: String = context.evaluate_pin("box_id").await?;
@@ -192,14 +194,34 @@ impl NodeLogic for UpdateLabeler {
             "Add" => {
                 node.add_input_pin("box", "Box", "Bounding box to add", VariableType::Struct)
                     .set_schema::<LabelerBox>();
-                node.add_output_pin("box_id", "Box ID", "ID of the added box", VariableType::String);
+                node.add_output_pin(
+                    "box_id",
+                    "Box ID",
+                    "ID of the added box",
+                    VariableType::String,
+                );
             }
             "Remove" => {
-                node.add_input_pin("box_id", "Box ID", "ID of box to remove", VariableType::String);
+                node.add_input_pin(
+                    "box_id",
+                    "Box ID",
+                    "ID of box to remove",
+                    VariableType::String,
+                );
             }
             "Update Label" => {
-                node.add_input_pin("box_id", "Box ID", "ID of box to update", VariableType::String);
-                node.add_input_pin("label", "Label", "New label for the box", VariableType::String);
+                node.add_input_pin(
+                    "box_id",
+                    "Box ID",
+                    "ID of box to update",
+                    VariableType::String,
+                );
+                node.add_input_pin(
+                    "label",
+                    "Label",
+                    "New label for the box",
+                    VariableType::String,
+                );
             }
             "Set All" => {
                 node.add_input_pin(

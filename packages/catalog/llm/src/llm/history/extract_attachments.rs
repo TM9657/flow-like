@@ -10,8 +10,8 @@ use flow_like::flow::{
 use flow_like_catalog_core::FlowPath;
 use flow_like_catalog_data::events::chat_event::Attachment;
 use flow_like_model_provider::history::{Content, History, MessageContent};
-use flow_like_storage::files::store::FlowLikeStore;
 use flow_like_storage::Path;
+use flow_like_storage::files::store::FlowLikeStore;
 use flow_like_types::Cacheable;
 use flow_like_types::{async_trait, json::json};
 
@@ -192,9 +192,7 @@ impl NodeLogic for ExtractAttachments {
                 let unique = deduplicate_name(&sanitized, &mut used_names);
                 let target = Path::from(unique);
                 if target != downloaded_path {
-                    generic_store
-                        .rename(&downloaded_path, &target)
-                        .await?;
+                    generic_store.rename(&downloaded_path, &target).await?;
                 }
                 target
             } else {

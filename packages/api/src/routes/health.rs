@@ -48,7 +48,9 @@ pub async fn health() -> Result<Json<HealthResponse>, InternalError> {
     )
 )]
 #[tracing::instrument(name = "GET /health/db", skip(state))]
-pub async fn db_health(State(state): State<AppState>) -> Result<Json<DbHealthResponse>, InternalError> {
+pub async fn db_health(
+    State(state): State<AppState>,
+) -> Result<Json<DbHealthResponse>, InternalError> {
     let state = state.db.clone();
     let now = Instant::now();
     state.ping().await?;

@@ -6,11 +6,11 @@ use flow_like::a2ui::components::NivoChartProps;
 use flow_like::flow::{
     board::Board,
     execution::context::ExecutionContext,
-    node::{remove_pin, Node, NodeLogic},
+    node::{Node, NodeLogic, remove_pin},
     pin::PinOptions,
     variable::VariableType,
 };
-use flow_like_types::{async_trait, json::json, Value};
+use flow_like_types::{Value, async_trait, json::json};
 use std::sync::Arc;
 
 /// Unified Nivo chart styling node.
@@ -127,7 +127,12 @@ impl NodeLogic for SetChartStyle {
                 context.activate_exec_pin("exec_out").await?;
                 return Ok(());
             }
-            _ => return Err(flow_like_types::anyhow!("Unknown chart type: {}", chart_type)),
+            _ => {
+                return Err(flow_like_types::anyhow!(
+                    "Unknown chart type: {}",
+                    chart_type
+                ));
+            }
         };
 
         let update = json!({ style_key: style_value });

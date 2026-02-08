@@ -6,7 +6,7 @@ use flow_like::flow::{
     pin::PinOptions,
     variable::VariableType,
 };
-use flow_like_types::{async_trait, json::json, json::Map, Value};
+use flow_like_types::{Value, async_trait, json::Map, json::json};
 
 /// Supported chart libraries
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -92,18 +92,13 @@ impl NodeLogic for PushCsvToChart {
         )
         .set_options(PinOptions::new().set_enforce_schema(false).build());
 
-        node.add_input_pin(
-            "library",
-            "Library",
-            "Chart library",
-            VariableType::String,
-        )
-        .set_options(
-            PinOptions::new()
-                .set_valid_values(vec!["Nivo".to_string(), "Plotly".to_string()])
-                .build(),
-        )
-        .set_default_value(Some(json!("Nivo")));
+        node.add_input_pin("library", "Library", "Chart library", VariableType::String)
+            .set_options(
+                PinOptions::new()
+                    .set_valid_values(vec!["Nivo".to_string(), "Plotly".to_string()])
+                    .build(),
+            )
+            .set_default_value(Some(json!("Nivo")));
 
         node.add_input_pin(
             "chart_type",
@@ -225,7 +220,10 @@ async fn push_nivo_data(
 
     if let Some(cfg) = config {
         context
-            .upsert_element(element_id, json!({ "type": "setNivoConfig", "config": cfg }))
+            .upsert_element(
+                element_id,
+                json!({ "type": "setNivoConfig", "config": cfg }),
+            )
             .await?;
     }
 
@@ -242,7 +240,10 @@ async fn push_plotly_data(
     let traces = transform_for_plotly(chart_type, headers, rows)?;
 
     context
-        .upsert_element(element_id, json!({ "type": "setChartData", "data": traces }))
+        .upsert_element(
+            element_id,
+            json!({ "type": "setChartData", "data": traces }),
+        )
         .await?;
 
     Ok(())
@@ -329,7 +330,10 @@ fn nivo_pie(
         .iter()
         .map(|row| {
             let label = row.first().cloned().unwrap_or_default();
-            let value: f64 = row.get(value_idx).and_then(|s| s.parse().ok()).unwrap_or(0.0);
+            let value: f64 = row
+                .get(value_idx)
+                .and_then(|s| s.parse().ok())
+                .unwrap_or(0.0);
             json!({ "id": clean_field_name(&label), "label": label, "value": value })
         })
         .collect();
@@ -405,7 +409,10 @@ fn nivo_calendar(
         .iter()
         .map(|row| {
             let day = row.first().cloned().unwrap_or_default();
-            let value: f64 = row.get(value_idx).and_then(|s| s.parse().ok()).unwrap_or(0.0);
+            let value: f64 = row
+                .get(value_idx)
+                .and_then(|s| s.parse().ok())
+                .unwrap_or(0.0);
             json!({ "day": day, "value": value })
         })
         .collect();
@@ -430,7 +437,10 @@ fn nivo_sankey(
         })
         .collect();
 
-    let nodes: Vec<Value> = nodes_set.into_iter().map(|id| json!({ "id": id })).collect();
+    let nodes: Vec<Value> = nodes_set
+        .into_iter()
+        .map(|id| json!({ "id": id }))
+        .collect();
     Ok((json!({ "nodes": nodes, "links": links }), None))
 }
 

@@ -22,7 +22,9 @@ use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
 
 #[derive(Clone, Serialize, Deserialize, ToSchema)]
-pub struct UpdateVisibilityBody {    #[schema(value_type = String)]    pub visibility: Visibility,
+pub struct UpdateVisibilityBody {
+    #[schema(value_type = String)]
+    pub visibility: Visibility,
 }
 
 /// The following visibility changes are allowed:

@@ -142,8 +142,8 @@ impl From<RigMessage> for HistoryMessage {
     fn from(msg: RigMessage) -> Self {
         match msg {
             RigMessage::User { content } => {
-                let is_single_tool_result = content.len() == 1
-                    && matches!(content.first(), RigUserContent::ToolResult(_));
+                let is_single_tool_result =
+                    content.len() == 1 && matches!(content.first(), RigUserContent::ToolResult(_));
 
                 if is_single_tool_result {
                     if let RigUserContent::ToolResult(tr) = content.first() {
@@ -151,9 +151,7 @@ impl From<RigMessage> for HistoryMessage {
                             .content
                             .iter()
                             .filter_map(|c| match c {
-                                rig::message::ToolResultContent::Text(t) => {
-                                    Some(t.text.as_str())
-                                }
+                                rig::message::ToolResultContent::Text(t) => Some(t.text.as_str()),
                                 _ => None,
                             })
                             .collect::<Vec<_>>()

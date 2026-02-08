@@ -3,11 +3,11 @@ use super::update_schemas::{AvatarSource, ImageSource, VideoSource};
 use flow_like::flow::{
     board::Board,
     execution::context::ExecutionContext,
-    node::{remove_pin, Node, NodeLogic},
+    node::{Node, NodeLogic, remove_pin},
     pin::PinOptions,
     variable::VariableType,
 };
-use flow_like_types::{async_trait, json::json, Value};
+use flow_like_types::{Value, async_trait, json::json};
 use std::sync::Arc;
 
 /// Unified media source setter node.
@@ -72,8 +72,13 @@ impl NodeLogic for SetMediaSource {
         .set_default_value(Some(json!("Image")));
 
         // Default: Image pins
-        node.add_input_pin("image", "Image", "Image source and alt", VariableType::Struct)
-            .set_schema::<ImageSource>();
+        node.add_input_pin(
+            "image",
+            "Image",
+            "Image source and alt",
+            VariableType::Struct,
+        )
+        .set_schema::<ImageSource>();
 
         node.add_output_pin("exec_out", "▶", "", VariableType::Execution);
 
@@ -139,7 +144,12 @@ impl NodeLogic for SetMediaSource {
                     "src": src
                 })
             }
-            _ => return Err(flow_like_types::anyhow!("Unknown media type: {}", media_type)),
+            _ => {
+                return Err(flow_like_types::anyhow!(
+                    "Unknown media type: {}",
+                    media_type
+                ));
+            }
         };
 
         context.upsert_element(&element_id, update).await?;
@@ -165,8 +175,13 @@ impl NodeLogic for SetMediaSource {
 
         match media_type.as_str() {
             "Image" => {
-                node.add_input_pin("image", "Image", "Image source and alt", VariableType::Struct)
-                    .set_schema::<ImageSource>();
+                node.add_input_pin(
+                    "image",
+                    "Image",
+                    "Image source and alt",
+                    VariableType::Struct,
+                )
+                .set_schema::<ImageSource>();
             }
             "Avatar" => {
                 node.add_input_pin(

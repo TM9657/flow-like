@@ -12,12 +12,12 @@ use flow_like::{
 use flow_like_types::tokio::task::JoinHandle;
 use futures::future::join_all;
 use serde::Deserialize;
+use std::path::PathBuf;
 use std::{collections::HashMap, sync::Arc};
 use tauri::{AppHandle, Url};
 use tauri_plugin_dialog::DialogExt;
 use tracing::instrument;
 use urlencoding::encode;
-use std::path::PathBuf;
 
 fn presign_icon(icon: &str) -> Result<String, TauriFunctionError> {
     // if it already looks like a URL (has a scheme), return it as-is to avoid double-presigning
@@ -70,7 +70,11 @@ pub async fn get_profiles_raw(
         let settings_guard = settings.lock().await;
         settings_guard.profiles.clone()
     };
-    println!("[ProfileSync] get_profiles_raw: returning {} profiles: {:?}", profiles.len(), profiles.keys().collect::<Vec<_>>());
+    println!(
+        "[ProfileSync] get_profiles_raw: returning {} profiles: {:?}",
+        profiles.len(),
+        profiles.keys().collect::<Vec<_>>()
+    );
     Ok(profiles)
 }
 
@@ -208,9 +212,7 @@ pub async fn get_bits_in_current_profile(
 
 #[instrument(skip_all)]
 #[tauri::command(async)]
-pub async fn get_current_profile_id(
-    app_handle: AppHandle,
-) -> Result<String, TauriFunctionError> {
+pub async fn get_current_profile_id(app_handle: AppHandle) -> Result<String, TauriFunctionError> {
     let settings = TauriSettingsState::construct(&app_handle).await?;
     let settings = settings.lock().await;
     let current_profile = settings.get_current_profile()?;
@@ -263,7 +265,10 @@ pub async fn remap_profile_id(
     local_id: String,
     server_id: String,
 ) -> Result<(), TauriFunctionError> {
-    println!("[ProfileSync] remap_profile_id: {} -> {}", local_id, server_id);
+    println!(
+        "[ProfileSync] remap_profile_id: {} -> {}",
+        local_id, server_id
+    );
     let settings = TauriSettingsState::construct(&app_handle).await?;
     let mut settings = settings.lock().await;
 
@@ -470,7 +475,10 @@ pub async fn get_profile_icon_path(
     profile_id: String,
     field: String,
 ) -> Result<Option<String>, TauriFunctionError> {
-    println!("[ProfileSync] get_profile_icon_path: profile_id={}, field={}", profile_id, field);
+    println!(
+        "[ProfileSync] get_profile_icon_path: profile_id={}, field={}",
+        profile_id, field
+    );
     let settings = TauriSettingsState::construct(&app_handle).await?;
     let settings = settings.lock().await;
 

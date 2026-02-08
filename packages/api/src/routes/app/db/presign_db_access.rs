@@ -155,9 +155,7 @@ pub async fn presign_db_access(
         })?;
 
     let shared_credentials = serde_json::to_value(
-        scoped_credentials
-            .clone()
-            .into_shared_credentials(),
+        scoped_credentials.clone().into_shared_credentials(),
     )
     .map_err(|e| {
         tracing::error!("Failed to serialize shared credentials: {}", e);

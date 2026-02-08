@@ -693,8 +693,8 @@ impl InternalRun {
                 // Priority: runtime_configured/secret vars > event vars (for exposed) > board vars
                 // When filter_secrets is true, only runtime_configured vars may be overridden;
                 // secrets from untrusted callers are ignored to prevent injection.
-                let allow_runtime_override = board_variable.runtime_configured
-                    || (board_variable.secret && !filter_secrets);
+                let allow_runtime_override =
+                    board_variable.runtime_configured || (board_variable.secret && !filter_secrets);
                 let variable = if allow_runtime_override {
                     runtime_variables.get(variable_id).unwrap_or(board_variable)
                 } else if board_variable.exposed {

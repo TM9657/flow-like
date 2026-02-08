@@ -117,7 +117,12 @@ pub async fn get_temporary_upload(
     let download_expires_at = (now_utc + ChronoDuration::seconds(download_ttl as i64)).to_rfc3339();
     let upload_expires_at = (now_utc + ChronoDuration::seconds(upload_ttl as i64)).to_rfc3339();
 
-    let download_url_str = match params.filename.as_deref().map(str::trim).filter(|s| !s.is_empty()) {
+    let download_url_str = match params
+        .filename
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+    {
         Some(name) => {
             let mut url = download_url;
             url.query_pairs_mut().append_pair("filename", name);

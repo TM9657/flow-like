@@ -278,7 +278,8 @@ pub async fn invoke_event(
         ApiError::internal_error(anyhow!("Failed to sign executor JWT: {}", e))
     })?;
 
-    let profile = fetch_profile_for_dispatch(&state.db, &sub, params.profile_id.as_deref(), &app_id).await;
+    let profile =
+        fetch_profile_for_dispatch(&state.db, &sub, params.profile_id.as_deref(), &app_id).await;
 
     let request = DispatchRequest {
         run_id: run_id.clone(),

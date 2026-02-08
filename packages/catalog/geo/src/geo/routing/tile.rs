@@ -46,29 +46,14 @@ impl NodeLogic for OsrmTileNode {
         .set_schema::<RouteProfile>()
         .set_default_value(Some(json!(RouteProfile::Car)));
 
-        node.add_input_pin(
-            "z",
-            "Zoom",
-            "Tile zoom level",
-            VariableType::Integer,
-        )
-        .set_default_value(Some(json!(14)));
+        node.add_input_pin("z", "Zoom", "Tile zoom level", VariableType::Integer)
+            .set_default_value(Some(json!(14)));
 
-        node.add_input_pin(
-            "x",
-            "X",
-            "Tile X coordinate",
-            VariableType::Integer,
-        )
-        .set_default_value(Some(json!(0)));
+        node.add_input_pin("x", "X", "Tile X coordinate", VariableType::Integer)
+            .set_default_value(Some(json!(0)));
 
-        node.add_input_pin(
-            "y",
-            "Y",
-            "Tile Y coordinate",
-            VariableType::Integer,
-        )
-        .set_default_value(Some(json!(0)));
+        node.add_input_pin("y", "Y", "Tile Y coordinate", VariableType::Integer)
+            .set_default_value(Some(json!(0)));
 
         node.add_input_pin(
             "path",
@@ -145,10 +130,7 @@ impl NodeLogic for OsrmTileNode {
         let profile_str = profile.as_str();
         let base_url = base_url.trim_end_matches('/');
 
-        let url = format!(
-            "{}/tile/v1/{}/{}/{}/{}.mvt",
-            base_url, profile_str, z, x, y
-        );
+        let url = format!("{}/tile/v1/{}/{}/{}/{}.mvt", base_url, profile_str, z, x, y);
 
         let client = reqwest::Client::builder()
             .user_agent("FlowLike/1.0")

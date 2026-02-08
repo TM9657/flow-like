@@ -196,12 +196,7 @@ impl NodeLogic for OsrmTableNode {
             "Car" | "car" => "driving",
             "Bike" | "bike" => "cycling",
             "Foot" | "foot" => "foot",
-            _ => {
-                return Err(flow_like_types::anyhow!(
-                    "Unsupported profile: {}",
-                    profile
-                ))
-            }
+            _ => return Err(flow_like_types::anyhow!("Unsupported profile: {}", profile)),
         };
         let base_url = base_url.trim_end_matches('/');
 

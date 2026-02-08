@@ -12,7 +12,6 @@ use crate::{
     routes::app::events::db::get_event_from_db_opt,
     state::AppState,
 };
-use utoipa::ToSchema;
 use axum::{
     Extension, Json,
     extract::{Path, State},
@@ -23,6 +22,7 @@ use sea_orm::{
     QueryOrder, QuerySelect, RelationTrait,
 };
 use serde::{Deserialize, Serialize};
+use utoipa::ToSchema;
 
 /// Response for a sink - includes event info via lookup
 #[derive(Debug, Clone, Serialize, ToSchema)]

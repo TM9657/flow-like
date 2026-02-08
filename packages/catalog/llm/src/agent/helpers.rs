@@ -1006,7 +1006,10 @@ pub async fn execute_agent_streaming(
         );
     }
     context.log_message(
-        &format!("Filtered history: {} messages sent to LLM", current_history.len()),
+        &format!(
+            "Filtered history: {} messages sent to LLM",
+            current_history.len()
+        ),
         LogLevel::Debug,
     );
 
@@ -1046,7 +1049,8 @@ pub async fn execute_agent_streaming(
     // - call_cache_blacklist: keys that ever returned different results — never cached
     let mut call_prior_result: HashMap<String, Value> = HashMap::new();
     let mut call_result_cache: HashMap<String, Value> = HashMap::new();
-    let mut call_cache_blacklist: std::collections::HashSet<String> = std::collections::HashSet::new();
+    let mut call_cache_blacklist: std::collections::HashSet<String> =
+        std::collections::HashSet::new();
 
     loop {
         if iteration >= agent.max_iterations {
@@ -1263,10 +1267,17 @@ pub async fn execute_agent_streaming(
             {
                 tool_calls_found = true;
 
-                let cache_key = format!("{}::{}", name, json::to_string(arguments).unwrap_or_default());
+                let cache_key = format!(
+                    "{}::{}",
+                    name,
+                    json::to_string(arguments).unwrap_or_default()
+                );
                 let tool_output = if let Some(cached) = call_result_cache.get(&cache_key) {
                     context.log_message(
-                        &format!("Cache hit for '{}' — proven deterministic, skipping execution", name),
+                        &format!(
+                            "Cache hit for '{}' — proven deterministic, skipping execution",
+                            name
+                        ),
                         LogLevel::Info,
                     );
                     cached.clone()
@@ -1328,7 +1339,9 @@ pub async fn execute_agent_streaming(
                 };
 
                 // Update proven-deterministic cache state (skip for cache hits — already proven)
-                if !call_result_cache.contains_key(&cache_key) && !call_cache_blacklist.contains(&cache_key) {
+                if !call_result_cache.contains_key(&cache_key)
+                    && !call_cache_blacklist.contains(&cache_key)
+                {
                     if let Some(prior) = call_prior_result.get(&cache_key) {
                         if *prior == tool_output {
                             context.log_message(
@@ -1354,7 +1367,11 @@ pub async fn execute_agent_streaming(
         }
 
         {
-            let mut tools_summary = format!("Iteration {}: {} tool call(s)", iteration, tool_results.len());
+            let mut tools_summary = format!(
+                "Iteration {}: {} tool call(s)",
+                iteration,
+                tool_results.len()
+            );
             for (id, name, args, output) in &tool_results {
                 let args_preview = {
                     let s = json::to_string(args).unwrap_or_default();
@@ -1534,7 +1551,8 @@ pub async fn execute_agent_streaming(
                 }
                 gathered.reverse();
                 final_response = if gathered.is_empty() {
-                    "I was unable to find the requested information after multiple search attempts.".to_string()
+                    "I was unable to find the requested information after multiple search attempts."
+                        .to_string()
                 } else {
                     format!(
                         "After multiple search attempts, here is what I found:\n\n{}",

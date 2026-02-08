@@ -8,10 +8,13 @@ use flow_like_types::{async_trait, json::json};
 #[cfg(feature = "execute")]
 use serde::Deserialize;
 
-use crate::geo::{GeoCoordinate, routing::osrm::{RouteGeometry, RouteResult}};
+use crate::geo::{
+    GeoCoordinate,
+    routing::osrm::{RouteGeometry, RouteResult},
+};
 
 #[cfg(feature = "execute")]
-use crate::geo::routing::osrm::{build_coordinate_string, map_osrm_routes, OsrmRoute};
+use crate::geo::routing::osrm::{OsrmRoute, build_coordinate_string, map_osrm_routes};
 
 #[crate::register_node]
 #[derive(Default)]
@@ -172,12 +175,7 @@ impl NodeLogic for PlanRouteNode {
             "Car" | "car" => "driving",
             "Bike" | "bike" => "cycling",
             "Foot" | "foot" => "foot",
-            _ => {
-                return Err(flow_like_types::anyhow!(
-                    "Unsupported profile: {}",
-                    profile
-                ))
-            }
+            _ => return Err(flow_like_types::anyhow!("Unsupported profile: {}", profile)),
         };
 
         let mut coordinates = vec![start];

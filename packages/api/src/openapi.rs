@@ -1,4 +1,10 @@
-use utoipa::{OpenApi, Modify, openapi::security::{SecurityScheme, ApiKey, ApiKeyValue, Http, HttpAuthScheme, OAuth2, Scopes, AuthorizationCode, Flow}};
+use utoipa::{
+    Modify, OpenApi,
+    openapi::security::{
+        ApiKey, ApiKeyValue, AuthorizationCode, Flow, Http, HttpAuthScheme, OAuth2, Scopes,
+        SecurityScheme,
+    },
+};
 
 /// Security scheme modifier to add authentication methods
 struct SecurityAddon;
@@ -24,15 +30,15 @@ impl Modify for SecurityAddon {
             "pat",
             SecurityScheme::ApiKey(ApiKey::Header(ApiKeyValue::with_description(
                 "Authorization",
-                "Personal Access Token. Format: 'PAT <token>'"
+                "Personal Access Token. Format: 'PAT <token>'",
             ))),
         );
 
         // OAuth2 Authorization Code flow
         components.add_security_scheme(
             "oauth2",
-            SecurityScheme::OAuth2(OAuth2::new([
-                Flow::AuthorizationCode(AuthorizationCode::new(
+            SecurityScheme::OAuth2(OAuth2::new([Flow::AuthorizationCode(
+                AuthorizationCode::new(
                     "/api/v1/auth/authorize",
                     "/api/v1/auth/token",
                     Scopes::from_iter([
@@ -40,8 +46,8 @@ impl Modify for SecurityAddon {
                         ("profile", "User profile information"),
                         ("email", "User email address"),
                     ]),
-                ))
-            ])),
+                ),
+            )])),
         );
 
         // Executor JWT (for backend execution services)
@@ -52,7 +58,7 @@ impl Modify for SecurityAddon {
                     .scheme(HttpAuthScheme::Bearer)
                     .bearer_format("JWT")
                     .description(Some("JWT token for execution services"))
-                    .build()
+                    .build(),
             ),
         );
     }

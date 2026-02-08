@@ -106,9 +106,7 @@ pub async fn presign_data_access(
     let path_str = upload_path.to_string();
 
     let shared_credentials = serde_json::to_value(
-        scoped_credentials
-            .clone()
-            .into_shared_credentials(),
+        scoped_credentials.clone().into_shared_credentials(),
     )
     .map_err(|e| {
         tracing::error!("Failed to serialize shared credentials: {}", e);
@@ -152,7 +150,6 @@ fn build_upload_path(app_id: &str, prefix: Option<&str>) -> FlowPath {
 
     base
 }
-
 
 fn get_credentials_expiration(
     credentials: &RuntimeCredentials,

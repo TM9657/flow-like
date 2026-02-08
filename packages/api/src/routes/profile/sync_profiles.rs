@@ -88,9 +88,16 @@ pub async fn sync_profiles(
     Json(profiles): Json<Vec<SyncProfileRequest>>,
 ) -> Result<Json<SyncProfileResponse>, ApiError> {
     let sub = user.sub()?;
-    println!("[ProfileSync] sync_profiles called by user={}, profile_count={}", sub, profiles.len());
+    println!(
+        "[ProfileSync] sync_profiles called by user={}, profile_count={}",
+        sub,
+        profiles.len()
+    );
     for (i, p) in profiles.iter().enumerate() {
-        println!("[ProfileSync]   profile[{}]: id={}, name={}, icon_ext={:?}, thumb_ext={:?}", i, p.id, p.name, p.icon_upload_ext, p.thumbnail_upload_ext);
+        println!(
+            "[ProfileSync]   profile[{}]: id={}, name={}, icon_ext={:?}, thumb_ext={:?}",
+            i, p.id, p.name, p.icon_upload_ext, p.thumbnail_upload_ext
+        );
     }
 
     let mut created: Vec<SyncedProfile> = Vec::new();
@@ -109,7 +116,10 @@ pub async fn sync_profiles(
             .await?;
 
         if let Some(existing) = found_profile {
-            println!("[ProfileSync] Profile {} found in DB, updated_at={}", profile_req.id, existing.updated_at);
+            println!(
+                "[ProfileSync] Profile {} found in DB, updated_at={}",
+                profile_req.id, existing.updated_at
+            );
             // Update existing profile only if local is newer
             let should_update = if let Some(local_updated) = &profile_req.updated_at {
                 if let Ok(local_time) = chrono::DateTime::parse_from_rfc3339(local_updated) {
@@ -153,8 +163,7 @@ pub async fn sync_profiles(
                     if let Some(old_icon_id) = &existing.icon {
                         delete_old_image(&state, &sub, old_icon_id).await?;
                     }
-                    let (upload_url, image_id) =
-                        generate_upload_url(&state, &sub, ext).await?;
+                    let (upload_url, image_id) = generate_upload_url(&state, &sub, ext).await?;
                     active_model.icon = Set(Some(image_id));
                     Some(upload_url)
                 } else {
@@ -167,8 +176,7 @@ pub async fn sync_profiles(
                     if let Some(old_thumb_id) = &existing.thumbnail {
                         delete_old_image(&state, &sub, old_thumb_id).await?;
                     }
-                    let (upload_url, image_id) =
-                        generate_upload_url(&state, &sub, ext).await?;
+                    let (upload_url, image_id) = generate_upload_url(&state, &sub, ext).await?;
                     active_model.thumbnail = Set(Some(image_id));
                     Some(upload_url)
                 } else {
@@ -187,7 +195,10 @@ pub async fn sync_profiles(
         } else {
             // Create new profile with SERVER-GENERATED ID
             let server_id = create_id();
-            println!("[ProfileSync] Creating new profile: local_id={}, server_id={}", profile_req.id, server_id);
+            println!(
+                "[ProfileSync] Creating new profile: local_id={}, server_id={}",
+                profile_req.id, server_id
+            );
 
             let apps = if let Some(apps) = profile_req.apps {
                 Some(to_value(&apps)?)
@@ -267,7 +278,13 @@ pub async fn sync_profiles(
         .chain(updated.iter().map(|p| p.id.clone()))
         .collect();
 
-    println!("[ProfileSync] Done: created={}, updated={}, skipped={}, synced={}", created.len(), updated.len(), skipped.len(), synced.len());
+    println!(
+        "[ProfileSync] Done: created={}, updated={}, skipped={}, synced={}",
+        created.len(),
+        updated.len(),
+        skipped.len(),
+        synced.len()
+    );
 
     Ok(Json(SyncProfileResponse {
         synced,

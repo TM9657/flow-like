@@ -4,11 +4,11 @@ use flow_like::a2ui::components::TableProps;
 use flow_like::flow::{
     board::Board,
     execution::context::ExecutionContext,
-    node::{remove_pin, Node, NodeLogic},
+    node::{Node, NodeLogic, remove_pin},
     pin::PinOptions,
     variable::VariableType,
 };
-use flow_like_types::{async_trait, json::json, Value};
+use flow_like_types::{Value, async_trait, json::json};
 use std::sync::Arc;
 
 /// Unified Table update node.
@@ -76,13 +76,8 @@ impl NodeLogic for UpdateTable {
         .set_default_value(Some(json!("Set Data")));
 
         // Default: Set Data pins
-        node.add_input_pin(
-            "data",
-            "Data",
-            "Array of row objects",
-            VariableType::Struct,
-        )
-        .set_options(PinOptions::new().set_enforce_schema(false).build());
+        node.add_input_pin("data", "Data", "Array of row objects", VariableType::Struct)
+            .set_options(PinOptions::new().set_enforce_schema(false).build());
 
         node.add_output_pin("exec_out", "▶", "", VariableType::Execution);
 
@@ -207,17 +202,17 @@ impl NodeLogic for UpdateTable {
                 );
             }
             "Update Cell" => {
-                node.add_input_pin("cell", "Cell", "Cell update parameters", VariableType::Struct)
-                    .set_schema::<TableCellUpdate>();
-            }
-            "Get Data" => {
-                node.add_output_pin(
-                    "data",
-                    "Data",
-                    "Current table data",
+                node.add_input_pin(
+                    "cell",
+                    "Cell",
+                    "Cell update parameters",
                     VariableType::Struct,
                 )
-                .set_options(PinOptions::new().set_enforce_schema(false).build());
+                .set_schema::<TableCellUpdate>();
+            }
+            "Get Data" => {
+                node.add_output_pin("data", "Data", "Current table data", VariableType::Struct)
+                    .set_options(PinOptions::new().set_enforce_schema(false).build());
                 node.add_output_pin(
                     "row_count",
                     "Row Count",
