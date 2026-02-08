@@ -143,7 +143,7 @@ export class WebTeamState implements ITeamState {
 	): Promise<void> {
 		await apiPut(
 			`apps/${appId}/team/invite`,
-			{ user_id, message },
+			{ sub: user_id, message },
 			this.backend.auth,
 		);
 	}
