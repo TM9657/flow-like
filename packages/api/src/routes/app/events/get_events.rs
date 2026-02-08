@@ -1,7 +1,7 @@
 use crate::{
     ensure_permission, error::ApiError, middleware::jwt::AppUser,
     permission::role_permission::RolePermissions,
-    routes::app::events::db::filter_event_list_execution, state::AppState,
+    routes::app::events::db::{filter_event_list_execution, is_user_facing_event}, state::AppState,
 };
 use axum::{
     Extension, Json,
@@ -47,6 +47,8 @@ pub async fn get_events(
     if !permission.has_permission(RolePermissions::ReadEvents) {
         events = events
             .into_iter()
+            .filter(|e| e.active)
+            .filter(|e| is_user_facing_event(&e))
             .map(filter_event_list_execution)
             .collect();
     }
