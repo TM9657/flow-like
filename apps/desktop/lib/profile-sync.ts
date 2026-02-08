@@ -58,5 +58,6 @@ export const toLocalProfile = (onlineProfile: OnlineProfile) => ({
 
 export const getDefaultApiBase = () => {
 	const baseUrl = process.env.NEXT_PUBLIC_API_URL ?? "api.flow-like.com";
-	return baseUrl.startsWith("http") ? baseUrl : `https://${baseUrl}`;
+	const full = baseUrl.startsWith("http") ? baseUrl : `https://${baseUrl}`;
+	return full.endsWith("/") ? full.slice(0, -1) : full;
 };

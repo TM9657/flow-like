@@ -171,6 +171,27 @@ const logBoardDifferences = (localBoard: IBoard, remoteBoard: IBoard) => {
 		console.groupEnd();
 	});
 };
+const preserveSecretValues = (
+	remoteBoard: IBoard,
+	localBoard?: IBoard,
+): IBoard => {
+	if (!localBoard) return remoteBoard;
+
+	for (const [varId, remoteVar] of Object.entries(remoteBoard.variables)) {
+		const localVar = localBoard.variables[varId];
+		if (
+			localVar?.secret &&
+			remoteVar.secret &&
+			remoteVar.default_value == null &&
+			localVar.default_value != null
+		) {
+			remoteVar.default_value = localVar.default_value;
+		}
+	}
+
+	return remoteBoard;
+};
+
 export class BoardState implements IBoardState {
 	constructor(private readonly backend: TauriBackend) {}
 
@@ -214,18 +235,20 @@ export class BoardState implements IBoardState {
 				}
 
 				for (const board of remoteData) {
-					if (!isEqual(board, mergedBoards.get(board.id))) {
+					const localBoard = mergedBoards.get(board.id);
+					const merged = preserveSecretValues(board, localBoard);
+					if (!isEqual(merged, localBoard)) {
 						console.log("Board data changed, updating local state:");
 						await invoke("upsert_board", {
 							appId: appId,
-							boardId: board.id,
-							name: board.name,
-							description: board.description,
-							boardData: board,
+							boardId: merged.id,
+							name: merged.name,
+							description: merged.description,
+							boardData: merged,
 						});
 					}
 
-					mergedBoards.set(board.id, board);
+					mergedBoards.set(board.id, merged);
 				}
 
 				return Array.from(mergedBoards.values());
@@ -325,24 +348,25 @@ export class BoardState implements IBoardState {
 				}
 
 				remoteData.updated_at = board.updated_at;
+				const merged = preserveSecretValues(remoteData, board);
 
-				if (!isEqual(remoteData, board) && typeof version === "undefined") {
+				if (!isEqual(merged, board) && typeof version === "undefined") {
 					console.log("Board Missmatch, updating local state:");
 
-					logBoardDifferences(board, remoteData);
+					logBoardDifferences(board, merged);
 
 					await invoke("upsert_board", {
 						appId: appId,
 						boardId: boardId,
-						name: remoteData.name,
-						description: remoteData.description,
-						boardData: remoteData,
+						name: merged.name,
+						description: merged.description,
+						boardData: merged,
 					});
 				} else {
 					console.log("Board data is up to date, no update needed.");
 				}
 
-				return remoteData;
+				return merged;
 			},
 			this,
 			this.backend.queryClient,

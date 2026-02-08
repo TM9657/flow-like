@@ -107,7 +107,7 @@ export class WebEventState implements IEventState {
 		);
 	}
 
-	async getEvents(appId: string): Promise<IEvent[]> {
+	async getEvents(appId: string, _force?: boolean): Promise<IEvent[]> {
 		try {
 			return await apiGet<IEvent[]>(`apps/${appId}/events`, this.backend.auth);
 		} catch {

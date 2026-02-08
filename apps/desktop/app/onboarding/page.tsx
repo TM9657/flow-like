@@ -23,7 +23,7 @@ import { ArrowBigRight, CloudDownload, Loader2, LogIn } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useAuth } from "react-oidc-context";
-import { useTauriInvoke } from "../../components/useInvoke";
+import { useInvalidateTauriInvoke, useTauriInvoke } from "../../components/useInvoke";
 import {
 	type OnlineProfile,
 	getDefaultApiBase,
@@ -62,10 +62,15 @@ const requiresHostedSignIn = (bit: IBit): boolean => {
 	return !LOCAL_PROVIDERS.has(providerName);
 };
 
+// Module-level flag — survives component remounts within the same SPA session,
+// unlike useRef which resets every time the route re-mounts the component.
+let hasInitiatedProfilePull = false;
+
 export default function Onboarding() {
 	const backend = useBackend();
 	const auth = useAuth();
 	const router = useRouter();
+	const invalidate = useInvalidateTauriInvoke();
 	const canHostModels = backend.capabilities().canHostLlamaCPP;
 	const isAuthenticated = Boolean(auth?.isAuthenticated);
 	const [profiles, setProfiles] = useState<[ISettingsProfile, IBit[]][]>([]);
@@ -131,19 +136,26 @@ export default function Onboarding() {
 
 	const handleSignIn = useCallback(async () => {
 		if (!auth?.signinRedirect) return;
-		await auth.signinRedirect();
+		try {
+			await auth.signinRedirect();
+		} catch (error) {
+			console.error("signinRedirect failed:", error);
+		}
 	}, [auth]);
 
 	useEffect(() => {
 		const accessToken = auth?.user?.access_token;
 		if (!isAuthenticated || !accessToken) return;
+		if (hasInitiatedProfilePull) return;
+		hasInitiatedProfilePull = true;
 
 		let cancelled = false;
 		const pullServerProfiles = async () => {
 			setIsPullingProfiles(true);
 			try {
 				const apiBase = getDefaultApiBase();
-				const response = await tauriFetch(`${apiBase}/api/v1/profile`, {
+				const url = `${apiBase}/api/v1/profile`;
+				const response = await tauriFetch(url, {
 					method: "GET",
 					headers: {
 						"Content-Type": "application/json",
@@ -152,6 +164,7 @@ export default function Onboarding() {
 				});
 
 				if (!response.ok || cancelled) {
+					if (!response.ok) hasInitiatedProfilePull = false;
 					if (!cancelled) setIsPullingProfiles(false);
 					return;
 				}
@@ -164,13 +177,14 @@ export default function Onboarding() {
 					let firstProfileId: string | null = null;
 					for (const op of serverProfiles) {
 						try {
+							const localProfile = toLocalProfile(op);
 							await invoke("upsert_profile", {
-								profile: toLocalProfile(op),
+								profile: localProfile,
 							});
 							firstProfileId ??= op.id;
 						} catch (error) {
 							console.error(
-								"[Onboarding] Failed to create profile:",
+								"Failed to create profile:",
 								op.id,
 								error,
 							);
@@ -181,12 +195,14 @@ export default function Onboarding() {
 						await invoke("set_current_profile", {
 							profileId: firstProfileId,
 						});
-						router.push("/");
+						await invalidate("get_profiles");
+						router.replace("/");
 						return;
 					}
 				}
 			} catch (error) {
-				console.warn("[Onboarding] Failed to pull server profiles:", error);
+				hasInitiatedProfilePull = false;
+				console.warn("Failed to pull server profiles:", error);
 			}
 			if (!cancelled) setIsPullingProfiles(false);
 		};
@@ -321,6 +337,10 @@ function OnboardingIntro() {
 function ExistingAccountBanner({
 	onSignIn,
 }: Readonly<{ onSignIn: () => void }>) {
+	const handleClick = () => {
+		console.log("[Onboarding] ExistingAccountBanner Sign in clicked");
+		onSignIn();
+	};
 	return (
 		<div className="w-full max-w-6xl">
 			<div className="flex flex-col items-center gap-4 rounded-xl border bg-card/80 backdrop-blur-sm px-6 py-6 shadow-sm">
@@ -330,7 +350,7 @@ function ExistingAccountBanner({
 						Sign in to restore your profiles and settings from another device.
 					</p>
 				</div>
-				<Button variant="outline" className="gap-2" onClick={onSignIn}>
+				<Button variant="outline" className="gap-2" onClick={handleClick}>
 					<LogIn className="h-4 w-4" />
 					Sign in
 				</Button>

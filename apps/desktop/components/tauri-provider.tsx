@@ -381,8 +381,6 @@ export function ProfileSyncer({ auth }: { auth: { isAuthenticated: boolean; acce
 	const accessToken = auth.accessToken;
 	const hubUrl = profile.data?.hub;
 
-	console.log("[ProfileSync] Render:", { isAuthenticated, hasAccessToken: !!accessToken, hubUrl });
-
 	const syncingRef = useRef(false);
 
 	useEffect(() => {
@@ -396,10 +394,9 @@ export function ProfileSyncer({ auth }: { auth: { isAuthenticated: boolean; acce
 			console.log("[ProfileSync] Skipping: not TauriBackend");
 			return;
 		}
-		if (!isAuthenticated || !hubUrl || !accessToken) {
+		if (!isAuthenticated || !accessToken) {
 			console.log("[ProfileSync] Skipping: missing auth state", {
 				isAuthenticated,
-				hasHubUrl: !!hubUrl,
 				hasAccessToken: !!accessToken,
 			});
 			return;

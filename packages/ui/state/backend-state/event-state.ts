@@ -23,7 +23,7 @@ export interface IEventState {
 		eventId: string,
 		version?: [number, number, number],
 	): Promise<IEvent>;
-	getEvents(appId: string): Promise<IEvent[]>;
+	getEvents(appId: string, force?: boolean): Promise<IEvent[]>;
 	getEventVersions(
 		appId: string,
 		eventId: string,

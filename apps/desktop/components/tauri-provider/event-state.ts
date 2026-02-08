@@ -114,7 +114,7 @@ export class EventState implements IEventState {
 		this.backend.backgroundTaskHandler(promise);
 		return event;
 	}
-	async getEvents(appId: string): Promise<IEvent[]> {
+	async getEvents(appId: string, force?: boolean): Promise<IEvent[]> {
 		const events = await invoke<IEvent[]>("get_events", {
 			appId: appId,
 		});
@@ -128,28 +128,37 @@ export class EventState implements IEventState {
 			return events;
 		}
 
+		const syncRemote = async () => {
+			const remoteData = await fetcher<IEvent[]>(
+				this.backend.profile!,
+				`apps/${appId}/events`,
+				{
+					method: "GET",
+				},
+				this.backend.auth,
+			);
+
+			for (const event of remoteData) {
+				await invoke("upsert_event", {
+					appId: appId,
+					event: event,
+					enforceId: true,
+					offline: isOffline,
+				});
+			}
+
+			return remoteData;
+		};
+
+		if (force) {
+			const remoteData = await syncRemote();
+			const queryKey = [this.getEvents.name || "backendFn", appId];
+			this.backend.queryClient.setQueryData(queryKey, remoteData);
+			return remoteData;
+		}
+
 		const promise = injectDataFunction(
-			async () => {
-				const remoteData = await fetcher<IEvent[]>(
-					this.backend.profile!,
-					`apps/${appId}/events`,
-					{
-						method: "GET",
-					},
-					this.backend.auth,
-				);
-
-				for (const event of remoteData) {
-					await invoke("upsert_event", {
-						appId: appId,
-						event: event,
-						enforceId: true,
-						offline: isOffline,
-					});
-				}
-
-				return remoteData;
-			},
+			syncRemote,
 			this,
 			this.backend.queryClient,
 			this.getEvents,

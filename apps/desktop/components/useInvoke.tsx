@@ -1,5 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
-import { type UseQueryResult, useQuery } from "@tm9657/flow-like-ui";
+import { type UseQueryResult, useQuery, useQueryClient } from "@tm9657/flow-like-ui";
 
 export function useTauriInvoke<T>(
 	path: string,
@@ -22,4 +22,12 @@ export function useTauriInvoke<T>(
 	});
 
 	return query;
+}
+
+export function useInvalidateTauriInvoke() {
+	const queryClient = useQueryClient();
+	return (path: string, deps: string[] = []) =>
+		queryClient.invalidateQueries({
+			queryKey: [...path.split("_"), ...deps],
+		});
 }

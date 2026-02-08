@@ -354,7 +354,7 @@ async fn call_huggingface(
                 backoff_ms = backoff_ms,
                 "Huggingface endpoint cold start, backing off"
             );
-            tokio::time::sleep(Duration::from_millis(backoff_ms)).await;
+            flow_like_types::tokio::time::sleep(Duration::from_millis(backoff_ms)).await;
             continue;
         }
 

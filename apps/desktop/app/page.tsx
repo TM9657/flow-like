@@ -25,17 +25,25 @@ export default function Home() {
 		if (profiles.data) {
 			const profileCount = Object.keys(profiles.data).length;
 
-			if (profileCount === 0) {
-				router.push("/onboarding");
-			} else {
+			if (profileCount > 0) {
 				setIsCheckingProfiles(false);
+				return;
 			}
+
+			// Cache may be stale after login sync — refetch before redirecting.
+			const { data: fresh } = await profiles.refetch();
+			if (fresh && Object.keys(fresh).length > 0) {
+				setIsCheckingProfiles(false);
+				return;
+			}
+
+			router.replace("/onboarding");
 			return;
 		}
 
 		if (profiles.isError) {
 			console.error("Failed to load profiles:", profiles.error);
-			router.push("/onboarding");
+			router.replace("/onboarding");
 		}
 	}, [profiles.data, profiles.isLoading, profiles.isError, profiles.error, router]);
 
