@@ -1,7 +1,10 @@
 use crate::{
-    ensure_permission, error::ApiError, middleware::jwt::AppUser,
+    ensure_permission,
+    error::ApiError,
+    middleware::jwt::AppUser,
     permission::role_permission::RolePermissions,
-    routes::app::events::db::{filter_event_list_execution, is_user_facing_event}, state::AppState,
+    routes::app::events::db::{filter_event_list_execution, is_user_facing_event},
+    state::AppState,
 };
 use axum::{
     Extension, Json,
