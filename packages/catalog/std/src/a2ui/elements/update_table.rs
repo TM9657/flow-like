@@ -181,6 +181,7 @@ impl NodeLogic for UpdateTable {
         match operation.as_str() {
             "Set Data" => {
                 node.add_input_pin("data", "Data", "Array of row objects", VariableType::Struct)
+                    .set_value_type(flow_like::flow::pin::ValueType::Array)
                     .set_options(PinOptions::new().set_enforce_schema(false).build());
             }
             "Set Columns" => {
@@ -190,7 +191,8 @@ impl NodeLogic for UpdateTable {
                     "Column definitions",
                     VariableType::Struct,
                 )
-                .set_schema::<Vec<TableColumn>>();
+                .set_value_type(flow_like::flow::pin::ValueType::Array)
+                .set_schema::<TableColumn>();
             }
             "Add Row" => {
                 node.add_input_pin("row", "Row", "Row data object", VariableType::Struct)
