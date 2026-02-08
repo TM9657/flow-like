@@ -79,12 +79,12 @@ pub struct Model {
     pub assigned_to: Option<String>,
     #[sea_orm(column_name = "deliveredAt")]
     pub delivered_at: Option<DateTime>,
+    #[sea_orm(column_name = "trackingToken", column_type = "Text", unique)]
+    pub tracking_token: String,
     #[sea_orm(column_name = "createdAt")]
     pub created_at: DateTime,
     #[sea_orm(column_name = "updatedAt")]
     pub updated_at: DateTime,
-    #[sea_orm(column_name = "trackingToken", column_type = "Text", unique)]
-    pub tracking_token: String,
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
