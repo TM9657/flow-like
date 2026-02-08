@@ -7,6 +7,8 @@ edition = "2024"
 # default = ["local-ml"]
 default = []
 local-ml = ["dep:ort", "dep:fastembed"]
+# Remote ML execution via API proxy (for executors without local model capabilities)
+remote-ml = ["dep:reqwest"]
 # Execution feature - alias for local-ml for consistency across catalog crates
 execute = ["local-ml"]
 
@@ -37,6 +39,7 @@ ndarray.workspace = true
 rig-core.workspace = true
 rmcp.workspace = true
 http = "1.4.0"
+reqwest = { workspace = true, optional = true }
 
 [target.'cfg(not(any(target_os = "ios", target_os = "tvos")))'.dependencies]
 # We can enable the standard ort crate again with the next release, when PR: https://github.com/pykeio/ort/pull/430 is merged and released.

@@ -1,11 +1,10 @@
-
 model LandingPage {
   id String @id
 
-  title String
+  title       String
   description String
-  image String
-  link String
+  image       String
+  link        String
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -29,7 +28,7 @@ enum SwimlaneSize {
 model Swimlane {
   id String @id
 
-  title String?
+  title       String?
   description String?
 
   type SwimlaneType
@@ -38,7 +37,7 @@ model Swimlane {
   items SwimlaneItem[]
 
   // these are used to find items for the swimlane that are not fixed
-  tags String[]
+  tags  String[]
   index BigInt
 
   createdAt DateTime @default(now())
@@ -48,7 +47,7 @@ model Swimlane {
 model SwimlaneItem {
   id String @id
 
-  swimlane Swimlane @relation(fields: [swimlaneId], references: [id], onDelete: Cascade)
+  swimlane   Swimlane @relation(fields: [swimlaneId], references: [id], onDelete: Cascade)
   swimlaneId String
 
   order BigInt
@@ -56,7 +55,7 @@ model SwimlaneItem {
   // This could be a link to a different page / article / ... depending on the Type of Swimlane
   content Json?
 
-  bit Bit? @relation(fields: [bitId], references: [id], onDelete: Cascade)
+  bit   Bit?    @relation(fields: [bitId], references: [id], onDelete: Cascade)
   bitId String?
 
   createdAt DateTime @default(now())

@@ -42,71 +42,71 @@ enum Visibility {
   OFFLINE
 }
 
-
 model App {
   id String @id
 
-  status     Status @default(ACTIVE)
+  status     Status     @default(ACTIVE)
   visibility Visibility @default(PRIVATE)
 
   meta Meta[]
 
   templates Template[]
-  widgets Widget[]
-  pages Page[]
-  queue JoinQueue[]
-  members Membership[]
-  comments Comment[]
+  widgets   Widget[]
+  pages     Page[]
+  queue     JoinQueue[]
+  members   Membership[]
+  comments  Comment[]
   changelog String?
 
-  courses CourseConnection[]
-  inviteLinks InviteLink[]
-  invitations Invitation[]
+  courses       CourseConnection[]
+  inviteLinks   InviteLink[]
+  invitations   Invitation[]
   notifications Notification[]
 
-  feedback Feedback[]
+  feedback            Feedback[]
   publicationRequests PublicationRequest[]
 
-  defaultRole Role? @relation("defaultForApp", fields: [defaultRoleId], references: [id])
+  defaultRole   Role?   @relation("defaultForApp", fields: [defaultRoleId], references: [id])
   defaultRoleId String? @unique
-  ownerRole Role? @relation("ownerForApp", fields: [ownerRoleId], references: [id])
-  ownerRoleId String? @unique
-  roles Role[]
+  ownerRole     Role?   @relation("ownerForApp", fields: [ownerRoleId], references: [id])
+  ownerRoleId   String? @unique
+  roles         Role[]
 
-  primaryCategory Category?
+  primaryCategory   Category?
   secondaryCategory Category?
 
-  ratingSum   BigInt   @default(0)
-  ratingCount BigInt   @default(0)
-  downloadCount BigInt @default(0)
+  ratingSum         BigInt @default(0)
+  ratingCount       BigInt @default(0)
+  downloadCount     BigInt @default(0)
   interactionsCount BigInt @default(0)
 
-  avgRating Float? @default(0)
+  avgRating      Float? @default(0)
   // Relevance formula: (downloads * 2 + interactions) * (1 + avgRating/5) * log(ratingCount + 1)
   relevanceScore Float? @default(0)
 
   totalSize BigInt @default(0)
 
-  price BigInt @default(0)
+  price   BigInt  @default(0)
   version String?
 
   technicalUsers TechnicalUser[]
-  llmUsage LLMUsageTracking[]
+  llmUsage       LLMUsageTracking[]
   executionUsage ExecutionUsageTracking[]
-  executionRuns ExecutionRun[]
-  executionMode ExecutionMode @default(ANY)
+  executionRuns  ExecutionRun[]
+  executionMode  ExecutionMode            @default(ANY)
 
-  syncs BoardSync[]
-  bits String[] @default([])
+  syncs  BoardSync[]
+  bits   String[]    @default([])
   events Event[]
-  sinks EventSink[]
+  sinks  EventSink[]
 
-  purchases AppPurchase[]
-  discounts AppDiscount[]
+  purchases  AppPurchase[]
+  discounts  AppDiscount[]
   salesDaily AppSalesDaily[]
 
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt               DateTime                 @default(now())
+  updatedAt               DateTime                 @updatedAt
+  embeddingUsageTrackings EmbeddingUsageTracking[]
 
   @@index([createdAt])
   @@index([updatedAt])
@@ -119,23 +119,22 @@ model App {
 model TechnicalUser {
   id String @id
 
-  name String
+  name        String
   description String?
-  key String @unique
+  key         String  @unique
 
-  role Role? @relation(fields: [roleId], references: [id], onDelete: SetNull)
+  role   Role?   @relation(fields: [roleId], references: [id], onDelete: SetNull)
   roleId String?
 
-  app   App @relation(fields: [appId], references: [id], onDelete: Cascade)
+  app   App    @relation(fields: [appId], references: [id], onDelete: Cascade)
   appId String
 
   validUntil DateTime?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
 
   @@index([appId])
 }
-
 
 model Feedback {
   id String @id
@@ -143,16 +142,16 @@ model Feedback {
   user   User?   @relation(fields: [userId], references: [id], onDelete: SetNull)
   userId String?
 
-  app   App? @relation(fields: [appId], references: [id], onDelete: Cascade)
+  app   App?    @relation(fields: [appId], references: [id], onDelete: Cascade)
   appId String?
 
-  template Template? @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  template   Template? @relation(fields: [templateId], references: [id], onDelete: Cascade)
   templateId String?
 
   eventId String?
   context Json?
   comment String
-  rating BigInt
+  rating  BigInt
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -163,20 +162,19 @@ model Feedback {
   @@index([userId])
 }
 
-
 model Comment {
   id String @id
 
-  text String
+  text   String
   rating BigInt
 
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
   userId String
 
-  app   App? @relation(fields: [appId], references: [id], onDelete: Cascade)
+  app   App?    @relation(fields: [appId], references: [id], onDelete: Cascade)
   appId String?
 
-  template Template? @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  template   Template? @relation(fields: [templateId], references: [id], onDelete: Cascade)
   templateId String?
 
   createdAt DateTime @default(now())
@@ -192,15 +190,15 @@ model Template {
 
   meta Meta[]
 
-  comments Comment[]
+  comments  Comment[]
   changelog String?
 
   feedback Feedback[]
 
-  ratingSum   BigInt   @default(0)
-  ratingCount BigInt   @default(0)
+  ratingSum   BigInt @default(0)
+  ratingCount BigInt @default(0)
 
-  app App @relation(fields: [appId], references: [id], onDelete: Cascade)
+  app   App    @relation(fields: [appId], references: [id], onDelete: Cascade)
   appId String
 
   version String?
@@ -214,7 +212,7 @@ model Widget {
 
   meta Meta[]
 
-  app App @relation(fields: [appId], references: [id], onDelete: Cascade)
+  app   App    @relation(fields: [appId], references: [id], onDelete: Cascade)
   appId String
 
   version String?
@@ -228,10 +226,10 @@ model Widget {
 model Page {
   id String @id
 
-  name String
+  name        String
   description String?
 
-  app App @relation(fields: [appId], references: [id], onDelete: Cascade)
+  app   App    @relation(fields: [appId], references: [id], onDelete: Cascade)
   appId String
 
   boardId String?
@@ -248,10 +246,10 @@ model Page {
 model BoardSync {
   id String @id
 
-  app   App @relation(fields: [appId], references: [id], onDelete: Cascade)
+  app   App    @relation(fields: [appId], references: [id], onDelete: Cascade)
   appId String
 
-  boardId String
+  boardId      String
   lastSyncedAt DateTime
 
   syncEncryptionKey String
@@ -270,7 +268,7 @@ model Event {
   app   App    @relation(fields: [appId], references: [id], onDelete: Cascade)
   appId String
 
-  name String
+  name        String
   description String?
 
   /// Event type: "chat", "api", "email", "quick_action", etc.
@@ -283,11 +281,11 @@ model Event {
   priority Int @default(0)
 
   /// Board this event triggers (mutually exclusive with pageId for A2UI events)
-  boardId String?
+  boardId      String?
   /// Board version as semver string "major.minor.patch"
   boardVersion String?
   /// Node ID within the board
-  nodeId String?
+  nodeId       String?
 
   /// For A2UI events: default page to render
   pageId String?
@@ -337,7 +335,7 @@ model EventSink {
 
   /// The event this sink is for - unique 1:1 mapping
   eventId String @unique
-  event Event @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  event   Event  @relation(fields: [eventId], references: [id], onDelete: Cascade)
 
   /// App the event belongs to (for permission checks and lookups)
   app   App    @relation(fields: [appId], references: [id], onDelete: Cascade)
@@ -438,9 +436,9 @@ model AppPurchase {
   appId String
 
   /// Price paid in cents at time of purchase
-  pricePaid BigInt
+  pricePaid      BigInt
   /// Original price before discount (in cents)
-  originalPrice BigInt
+  originalPrice  BigInt
   /// Discount amount in cents (0 if none)
   discountAmount BigInt @default(0)
 
@@ -451,16 +449,16 @@ model AppPurchase {
   currency String @default("EUR")
 
   /// Stripe checkout session ID for this purchase
-  stripeSessionId String
+  stripeSessionId       String
   /// Stripe payment intent ID
   stripePaymentIntentId String?
 
   status PurchaseStatus @default(PENDING)
 
   /// When purchase was completed
-  completedAt DateTime?
+  completedAt  DateTime?
   /// When refunded (if applicable)
-  refundedAt DateTime?
+  refundedAt   DateTime?
   /// Refund reason if refunded
   refundReason String?
 
@@ -482,9 +480,9 @@ model AppDiscount {
   appId String
 
   /// Discount code (e.g., "LAUNCH20")
-  code String
+  code        String
   /// Human-readable name for the discount
-  name String
+  name        String
   /// Description of the discount
   description String?
 
@@ -493,18 +491,18 @@ model AppDiscount {
   discountValue BigInt
 
   /// Maximum number of uses (null = unlimited)
-  maxUses BigInt?
+  maxUses           BigInt?
   /// Current number of times used
-  usedCount BigInt @default(0)
+  usedCount         BigInt  @default(0)
   /// Minimum purchase amount required (in cents, null = no minimum)
   minPurchaseAmount BigInt?
 
   /// When the discount becomes active
-  startsAt DateTime @default(now())
+  startsAt  DateTime  @default(now())
   /// When the discount expires (null = never)
   expiresAt DateTime?
   /// Whether the discount is currently active
-  isActive Boolean @default(true)
+  isActive  Boolean   @default(true)
 
   purchases AppPurchase[]
 
@@ -528,21 +526,21 @@ model AppSalesDaily {
   date DateTime @db.Date
 
   /// Total revenue for the day (in cents)
-  totalRevenue BigInt @default(0)
+  totalRevenue      BigInt @default(0)
   /// Gross revenue before discounts (in cents)
-  grossRevenue BigInt @default(0)
+  grossRevenue      BigInt @default(0)
   /// Total discount amount given (in cents)
-  totalDiscounts BigInt @default(0)
+  totalDiscounts    BigInt @default(0)
   /// Number of purchases
-  purchaseCount BigInt @default(0)
+  purchaseCount     BigInt @default(0)
   /// Number of refunds
-  refundCount BigInt @default(0)
+  refundCount       BigInt @default(0)
   /// Total refund amount (in cents)
-  refundAmount BigInt @default(0)
+  refundAmount      BigInt @default(0)
   /// Number of unique buyers
-  uniqueBuyers BigInt @default(0)
+  uniqueBuyers      BigInt @default(0)
   /// Average order value (in cents)
-  avgOrderValue BigInt @default(0)
+  avgOrderValue     BigInt @default(0)
   /// Number of discount codes used
   discountCodesUsed BigInt @default(0)
 

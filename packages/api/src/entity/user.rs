@@ -48,6 +48,8 @@ pub struct Model {
     pub total_size: i64,
     #[sea_orm(column_name = "totalLLMPrice")]
     pub total_llm_price: i64,
+    #[sea_orm(column_name = "totalEmbeddingPrice")]
+    pub total_embedding_price: i64,
     #[sea_orm(column_name = "llmPriceTrackingMonth", column_type = "Text", nullable)]
     pub llm_price_tracking_month: Option<String>,
     #[sea_orm(column_name = "createdAt")]
@@ -62,6 +64,8 @@ pub enum Relation {
     Comment,
     #[sea_orm(has_many = "super::execution_usage_tracking::Entity")]
     ExecutionUsageTracking,
+    #[sea_orm(has_many = "super::embedding_usage_tracking::Entity")]
+    EmbeddingUsageTracking,
     #[sea_orm(has_many = "super::feedback::Entity")]
     Feedback,
     #[sea_orm(has_many = "super::invitation::Entity")]
@@ -97,6 +101,12 @@ impl Related<super::comment::Entity> for Entity {
 impl Related<super::execution_usage_tracking::Entity> for Entity {
     fn to() -> RelationDef {
         Relation::ExecutionUsageTracking.def()
+    }
+}
+
+impl Related<super::embedding_usage_tracking::Entity> for Entity {
+    fn to() -> RelationDef {
+        Relation::EmbeddingUsageTracking.def()
     }
 }
 

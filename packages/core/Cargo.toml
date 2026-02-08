@@ -57,6 +57,7 @@ utoipa = { version = "5", optional = true }
 [features]
 tauri = ["flow-like-storage/tauri"]
 local-ml = ["flow-like-model-provider/local-ml"]
+remote-ml = ["flow-like-model-provider/remote-ml"]
 schema-gen = []
 flow-runtime = []
 flow = ["flow-runtime"]

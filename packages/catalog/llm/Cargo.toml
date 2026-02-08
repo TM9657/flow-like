@@ -6,6 +6,7 @@ edition = "2024"
 [features]
 default = []
 local-ml = ["flow-like-catalog-core/local-ml"]
+remote-ml = ["flow-like-catalog-core/remote-ml"]
 # Execution feature - enables heavy dependencies for node execution
 execute = [
     "flow-like-catalog-core/execute",

@@ -16,6 +16,10 @@ local-ml = [
     "flow-like-catalog-llm/local-ml",
     "flow-like-catalog-processing/local-ml",
 ]
+remote-ml = [
+    "flow-like-catalog-core/remote-ml",
+    "flow-like-catalog-llm/remote-ml",
+]
 mimalloc = ["dep:mimalloc"]
 
 

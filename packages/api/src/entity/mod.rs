@@ -13,6 +13,7 @@ pub mod board_sync;
 pub mod comment;
 pub mod course;
 pub mod course_connection;
+pub mod embedding_usage_tracking;
 pub mod error_report;
 pub mod event;
 pub mod event_sink;

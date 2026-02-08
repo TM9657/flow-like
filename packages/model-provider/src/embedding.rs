@@ -9,6 +9,9 @@ use tiktoken_rs::CoreBPE;
 
 pub mod openai;
 
+#[cfg(feature = "remote-ml")]
+pub mod proxy;
+
 #[derive(Clone)]
 pub enum GeneralTextSplitter {
     MarkdownCharacter(Arc<MarkdownSplitter<Characters>>),
