@@ -65,7 +65,7 @@ impl ProxyEmbeddingModel {
     }
 
     async fn call_api(&self, texts: &[String], embed_type: &str) -> Result<Vec<Vec<f32>>> {
-        let url = format!("{}/embeddings/embed", API_BASE_URL.as_str());
+        let url = format!("{}/api/v1/embeddings/embed", API_BASE_URL.as_str());
 
         let request = EmbedRequest {
             model: self.bit_id.clone(),

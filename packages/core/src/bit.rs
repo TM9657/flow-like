@@ -765,7 +765,7 @@ mod tests {
         let mut config: FlowLikeConfig = FlowLikeConfig::new();
         let store = LocalObjectStore::new(temp_dir.path().to_path_buf()).unwrap();
         config.stores.bits_store = Some(FlowLikeStore::Local(store.into()));
-        let (http_client, _rx) = crate::utils::http::HTTPClient::new();
+        let http_client = crate::utils::http::HTTPClient::new_without_refetch();
         let state = FlowLikeState::new(config, http_client);
         let state = Arc::new(state);
 

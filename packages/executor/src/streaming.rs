@@ -166,7 +166,7 @@ async fn execute_inner(
     // Load model provider configuration from environment
     let model_provider_config = model_provider_config_from_env();
 
-    let (http_client, _) = HTTPClient::new();
+    let http_client = HTTPClient::new_without_refetch();
     let state =
         FlowLikeState::new_with_model_config(flow_config, http_client, model_provider_config);
 

@@ -7,7 +7,7 @@ import {
 } from "@tm9657/flow-like-ui";
 import type { ISettingsProfile } from "@tm9657/flow-like-ui/types";
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useTauriInvoke } from "../components/useInvoke";
 
 export default function Home() {
@@ -19,10 +19,9 @@ export default function Home() {
 		{},
 	);
 
-	useEffect(() => {
+	const checkProfiles = useCallback(async () => {
 		if (profiles.isLoading) return;
 
-		// Handle successful data load
 		if (profiles.data) {
 			const profileCount = Object.keys(profiles.data).length;
 
@@ -34,18 +33,15 @@ export default function Home() {
 			return;
 		}
 
-		// Only redirect on actual errors, not on undefined/null data during loading
 		if (profiles.isError) {
 			console.error("Failed to load profiles:", profiles.error);
 			router.push("/onboarding");
 		}
-	}, [
-		profiles.data,
-		profiles.isLoading,
-		profiles.isError,
-		profiles.error,
-		router,
-	]);
+	}, [profiles.data, profiles.isLoading, profiles.isError, profiles.error, router]);
+
+	useEffect(() => {
+		checkProfiles();
+	}, [checkProfiles]);
 
 	if (profiles.isLoading || isCheckingProfiles) {
 		return (

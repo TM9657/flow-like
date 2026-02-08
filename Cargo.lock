@@ -853,7 +853,7 @@ dependencies = [
  "atoi",
  "chrono",
  "log",
- "odbc-api 17.0.0",
+ "odbc-api",
  "thiserror 2.0.18",
 ]
 
@@ -2228,6 +2228,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "az"
+version = "1.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "be5eb007b7cacc6c660343e96f650fedf4b5a77512399eb952ca6642cf8d13f7"
+
+[[package]]
 name = "backoff"
 version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3434,7 +3440,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "117725a109d387c937a1533ce01b450cbde6b88abceea8473c4d7a85853cda3c"
 dependencies = [
  "lazy_static",
- "windows-sys 0.48.0",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]
@@ -3443,7 +3449,7 @@ version = "3.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "faf9468729b8cbcea668e36183cb69d317348c2e08e994829fb56ebfdfbaac34"
 dependencies = [
- "windows-sys 0.48.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -5205,7 +5211,7 @@ dependencies = [
  "mysql_async",
  "native-tls",
  "num-bigint",
- "odbc-api 19.1.0",
+ "odbc-api",
  "pem",
  "postgres-native-tls",
  "prost 0.14.3",
@@ -6474,6 +6480,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "extended"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "af9673d8203fcb076b19dfd17e38b3d4ae9f44959416ea532ce72415a6020365"
+
+[[package]]
 name = "fake"
 version = "4.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6749,6 +6761,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "fixed"
+version = "1.30.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c566da967934c6c7ee0458a9773de9b2a685bd2ce26a3b28ddfc740e640182f5"
+dependencies = [
+ "az",
+ "bytemuck",
+ "half",
+ "typenum",
+]
+
+[[package]]
 name = "fixedbitset"
 version = "0.4.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -7002,6 +7026,8 @@ dependencies = [
  "serde",
  "sqlx",
  "strsim 0.11.1",
+ "tdms",
+ "tempfile",
  "tokio",
  "tokio-postgres",
  "tracing",
@@ -9230,7 +9256,7 @@ dependencies = [
  "libc",
  "percent-encoding",
  "pin-project-lite",
- "socket2 0.5.10",
+ "socket2 0.6.2",
  "system-configuration 0.7.0",
  "tokio",
  "tower-layer",
@@ -13115,7 +13141,7 @@ version = "0.7.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ff32365de1b6743cb203b710788263c44a03de03802daf96092f2da4fe6ba4d7"
 dependencies = [
- "proc-macro-crate 1.3.1",
+ "proc-macro-crate 3.4.0",
  "proc-macro2",
  "quote",
  "syn 2.0.114",
@@ -13187,7 +13213,7 @@ version = "5.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "51e219e79014df21a225b1860a479e2dcd7cbd9130f4defd4bd0e191ea31d67d"
 dependencies = [
- "base64 0.21.7",
+ "base64 0.22.1",
  "chrono",
  "getrandom 0.2.17",
  "http 1.4.0",
@@ -13770,37 +13796,17 @@ dependencies = [
 
 [[package]]
 name = "odbc-api"
-version = "17.0.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "67fb19e1cee47949af1445f6e46f02c6b5dc02bff176fe6d5ab0c6e5a47bcbf8"
-dependencies = [
- "atoi",
- "log",
- "odbc-sys 0.25.1",
- "thiserror 2.0.18",
- "widestring",
- "winit",
-]
-
-[[package]]
-name = "odbc-api"
 version = "19.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f017d3949731e436bc1bb9a1fbc34197c2f39c588cdcb60d21adb1f8dd3b8514"
 dependencies = [
  "atoi",
  "log",
- "odbc-sys 0.27.4",
+ "odbc-sys",
  "thiserror 2.0.18",
  "widestring",
  "winit",
 ]
-
-[[package]]
-name = "odbc-sys"
-version = "0.25.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4ecdb20f7c165083ad1bc9f55122f677725e257716a5bc83e5413d5654b7d6f1"
 
 [[package]]
 name = "odbc-sys"
@@ -14145,7 +14151,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7d8fae84b431384b68627d0f9b3b1245fcf9f46f6c0e3dc902e9dce64edd1967"
 dependencies = [
  "libc",
- "windows-sys 0.45.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -15609,8 +15615,8 @@ version = "0.13.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "be769465445e8c1474e9c5dac2018218498557af32d9ed057325ec9a41ae81bf"
 dependencies = [
- "heck 0.4.1",
- "itertools 0.10.5",
+ "heck 0.5.0",
+ "itertools 0.14.0",
  "log",
  "multimap",
  "once_cell",
@@ -15629,8 +15635,8 @@ version = "0.14.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "343d3bd7056eda839b03204e68deff7d1b13aba7af2b2fd16890697274262ee7"
 dependencies = [
- "heck 0.4.1",
- "itertools 0.10.5",
+ "heck 0.5.0",
+ "itertools 0.14.0",
  "log",
  "multimap",
  "petgraph 0.8.3",
@@ -15662,7 +15668,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8a56d757972c98b346a9b766e3f02746cde6dd1cd1d1d563472929fdd74bec4d"
 dependencies = [
  "anyhow",
- "itertools 0.10.5",
+ "itertools 0.14.0",
  "proc-macro2",
  "quote",
  "syn 2.0.114",
@@ -15675,7 +15681,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "27c6023962132f4b30eb4c172c91ce92d933da334c59c23cddee82358ddafb0b"
 dependencies = [
  "anyhow",
- "itertools 0.10.5",
+ "itertools 0.14.0",
  "proc-macro2",
  "quote",
  "syn 2.0.114",
@@ -15917,7 +15923,7 @@ dependencies = [
  "quinn-udp",
  "rustc-hash 2.1.1",
  "rustls 0.23.36",
- "socket2 0.5.10",
+ "socket2 0.6.2",
  "thiserror 2.0.18",
  "tokio",
  "tracing",
@@ -15954,7 +15960,7 @@ dependencies = [
  "cfg_aliases",
  "libc",
  "once_cell",
- "socket2 0.5.10",
+ "socket2 0.6.2",
  "tracing",
  "windows-sys 0.60.2",
 ]
@@ -18433,7 +18439,7 @@ dependencies = [
  "mime_guess",
  "parking_lot",
  "percent-encoding",
- "reqwest 0.11.27",
+ "reqwest 0.12.28",
  "rustc-hash 2.1.1",
  "secrecy 0.8.0",
  "serde",
@@ -18829,7 +18835,7 @@ version = "0.8.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c1c97747dbf44bb1ca44a561ece23508e99cb592e862f22222dcf42f51d1e451"
 dependencies = [
- "heck 0.4.1",
+ "heck 0.5.0",
  "proc-macro2",
  "quote",
  "syn 2.0.114",
@@ -20432,6 +20438,20 @@ dependencies = [
  "thiserror 2.0.18",
  "windows 0.61.3",
  "windows-version",
+]
+
+[[package]]
+name = "tdms"
+version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "29b726d98c8c02292cc57828ba2e437bc4a41895340e5e127e22aa86151f50b5"
+dependencies = [
+ "extended",
+ "fixed",
+ "hex",
+ "indexmap 1.9.3",
+ "log",
+ "thiserror 1.0.69",
 ]
 
 [[package]]
@@ -23271,7 +23291,7 @@ version = "0.1.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c2a7b1c03c876122aa43f3020e6c3c3ee5c05081c9a00739faf7503aeba10d22"
 dependencies = [
- "windows-sys 0.48.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]

@@ -129,7 +129,6 @@ import {
 	parseBoard,
 } from "../../lib/flow-board-utils";
 import { toastError, toastSuccess } from "../../lib/messages";
-import { isTauri } from "../../lib/platform";
 import { getRuntimeConfiguredVariables } from "../../lib/runtime-vars-utils";
 import { IAppVisibility } from "../../lib/schema/app/app";
 import {
@@ -1253,7 +1252,7 @@ export function FlowBoard({
 			version,
 			openNodeInfo,
 			handleExplainNodes,
-			isTauri() && backend.boardState.executeBoardRemote
+			backend.boardState.executeBoardRemote
 				? {
 						isOffline,
 						onRemoteExecute: executeBoardRemote,

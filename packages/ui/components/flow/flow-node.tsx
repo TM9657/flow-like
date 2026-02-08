@@ -44,7 +44,6 @@ import {
 	ILogLevel,
 	IPinType,
 	IValueType,
-	isTauri,
 	moveNodeCommand,
 	removeNodeCommand,
 	updateNodeCommand,
@@ -621,7 +620,6 @@ const FlowNodeInner = memo(
 
 			const executionMode = props.data.executionMode ?? IExecutionMode.Hybrid;
 			const canRemoteExecuteBase =
-				isTauri() &&
 				!props.data.isOffline &&
 				props.data.onRemoteExecute !== undefined;
 

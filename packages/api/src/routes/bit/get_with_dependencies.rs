@@ -124,7 +124,7 @@ pub async fn get_with_dependencies(
 async fn fetch_dependencies(bit: &Bit, state: &AppState) -> flow_like_types::Result<Vec<Bit>> {
     let mut bits = vec![bit.clone()];
     let self_domain = state.platform_config.domain.clone();
-    let (http_client, _rcv) = HTTPClient::new();
+    let http_client = HTTPClient::new_without_refetch();
     let http_client = Arc::new(http_client);
     let mut hubs: HashMap<String, flow_like::hub::Hub> = HashMap::new();
 

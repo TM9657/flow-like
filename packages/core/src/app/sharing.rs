@@ -1002,7 +1002,7 @@ mod tests {
         let storage_store = Arc::new(InMemory::new());
         config.register_app_meta_store(FlowLikeStore::Memory(meta_store.clone()));
         config.register_app_storage_store(FlowLikeStore::Memory(storage_store.clone()));
-        let (http_client, _rx) = HTTPClient::new();
+        let http_client = HTTPClient::new_without_refetch();
         let state = FlowLikeState::new(config, http_client);
         (Arc::new(state), meta_store, storage_store)
     }

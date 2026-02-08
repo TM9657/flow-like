@@ -1206,7 +1206,7 @@ mod tests {
         config.register_app_meta_store(FlowLikeStore::Other(Arc::new(
             flow_like_storage::object_store::memory::InMemory::new(),
         )));
-        let (http_client, _refetch_rx) = HTTPClient::new();
+        let http_client = HTTPClient::new_without_refetch();
         let flow_like_state = crate::state::FlowLikeState::new(config, http_client);
         Arc::new(flow_like_state)
     }

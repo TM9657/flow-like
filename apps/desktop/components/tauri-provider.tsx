@@ -4,6 +4,10 @@ import { fetch as tauriFetch } from "@tauri-apps/plugin-http";
 
 import { createId } from "@paralleldrive/cuid2";
 import {
+	type OnlineProfile,
+	toLocalProfile,
+} from "../lib/profile-sync";
+import {
 	type IApiKeyState,
 	type IApiState,
 	type IAppRouteState,
@@ -472,14 +476,81 @@ export function ProfileSyncer({ auth }: { auth: { isAuthenticated: boolean; acce
 			try {
 				console.log("[ProfileSync] Starting profile sync...");
 
-				const rawProfiles =
+				const baseUrl =
+					hubUrl ?? process.env.NEXT_PUBLIC_API_URL ?? "api.flow-like.com";
+				const protocol = profile.data?.secure === false ? "http" : "https";
+				const apiBase = baseUrl.startsWith("http")
+					? baseUrl
+					: `${protocol}://${baseUrl}`;
+				console.log("[ProfileSync] API base:", apiBase, "hubUrl:", hubUrl, "secure:", profile.data?.secure);
+
+				let rawProfiles =
 					await invoke<Record<string, { hub_profile: IProfile }>>(
 						"get_profiles_raw",
 					);
 				console.log("[ProfileSync] Raw profiles from Tauri:", rawProfiles ? Object.keys(rawProfiles) : "null");
+
+				// If no local profiles exist, pull from server first (new device scenario)
 				if (!rawProfiles || Object.keys(rawProfiles).length === 0) {
-					console.log("[ProfileSync] No profiles found, aborting");
-					return;
+					console.log("[ProfileSync] No local profiles — pulling from server first...");
+					try {
+						const pullResponse = await tauriFetch(
+							`${apiBase}/api/v1/profile`,
+							{
+								method: "GET",
+								headers: {
+									"Content-Type": "application/json",
+									Authorization: `Bearer ${accessToken}`,
+								},
+							},
+						);
+
+						if (pullResponse.ok) {
+							const serverProfiles = (await pullResponse.json()) as OnlineProfile[];
+
+							if (serverProfiles.length > 0) {
+								console.log("[ProfileSync] Found", serverProfiles.length, "profiles on server, creating locally...");
+								let firstProfileId: string | null = null;
+
+								for (const onlineProfile of serverProfiles) {
+									try {
+										await invoke("upsert_profile", {
+											profile: toLocalProfile(onlineProfile),
+										});
+										if (!firstProfileId) firstProfileId = onlineProfile.id;
+									} catch (error) {
+										console.error("[ProfileSync] Failed to create profile from server:", onlineProfile.id, error);
+									}
+
+									if (onlineProfile.shortcuts) {
+										for (const shortcut of onlineProfile.shortcuts) {
+											await appsDB.shortcuts.put(shortcut);
+										}
+									}
+								}
+
+								if (firstProfileId) {
+									try {
+										await invoke("set_current_profile", { profileId: firstProfileId });
+									} catch (error) {
+										console.error("[ProfileSync] Failed to set current profile:", error);
+									}
+								}
+
+								// Re-fetch local profiles after creating from server
+								rawProfiles = await invoke<Record<string, { hub_profile: IProfile }>>("get_profiles_raw");
+								console.log("[ProfileSync] After server pull, local profiles:", rawProfiles ? Object.keys(rawProfiles) : "null");
+							}
+						}
+					} catch (error) {
+						console.warn("[ProfileSync] Failed to pull server profiles on fresh device:", error);
+					}
+
+					// If still no profiles after server pull, nothing to sync
+					if (!rawProfiles || Object.keys(rawProfiles).length === 0) {
+						console.log("[ProfileSync] Still no profiles after server pull, aborting");
+						return;
+					}
 				}
 
 				const visibilityRecords = await appsDB.visibility.toArray();
@@ -488,14 +559,6 @@ export function ProfileSyncer({ auth }: { auth: { isAuthenticated: boolean; acce
 						.filter((v) => v.visibility === IAppVisibility.Offline)
 						.map((v) => v.appId),
 				);
-
-				const baseUrl =
-					hubUrl ?? process.env.NEXT_PUBLIC_API_URL ?? "api.flow-like.com";
-				const protocol = profile.data?.secure === false ? "http" : "https";
-				const apiBase = baseUrl.startsWith("http")
-					? baseUrl
-					: `${protocol}://${baseUrl}`;
-				console.log("[ProfileSync] API base:", apiBase, "hubUrl:", hubUrl, "secure:", profile.data?.secure);
 
 				const profileShortcuts: Map<string, any[]> = new Map();
 				for (const p of Object.values(rawProfiles)) {
@@ -682,33 +745,7 @@ export function ProfileSyncer({ auth }: { auth: { isAuthenticated: boolean; acce
 						return;
 					}
 
-					const onlineProfiles = (await profilesResponse.json()) as Array<{
-						id: string;
-						name: string;
-						description?: string | null;
-						icon?: string | null;
-						thumbnail?: string | null;
-						interests?: string[];
-						tags?: string[];
-						theme?: any;
-						bit_ids?: string[];
-						apps?: any;
-						shortcuts?: Array<{
-							id: string;
-							profileId: string;
-							label: string;
-							path: string;
-							appId?: string;
-							icon?: string;
-							order: number;
-							createdAt: string;
-						}>;
-						settings?: any;
-						hub: string;
-						hubs?: string[];
-						created_at: string;
-						updated_at: string;
-					}>;
+					const onlineProfiles = (await profilesResponse.json()) as OnlineProfile[];
 
 					const onlineProfileIds = new Set(
 						onlineProfiles.map((p) => p.id),
@@ -764,8 +801,9 @@ export function ProfileSyncer({ auth }: { auth: { isAuthenticated: boolean; acce
 					>("get_profiles_raw");
 
 					if (
-						!remainingProfiles ||
-						Object.keys(remainingProfiles).length === 0
+						(!remainingProfiles ||
+						Object.keys(remainingProfiles).length === 0) &&
+						onlineProfiles.length === 0
 					) {
 						if (typeof window !== "undefined") {
 							window.location.href = "/onboarding";
@@ -773,7 +811,7 @@ export function ProfileSyncer({ auth }: { auth: { isAuthenticated: boolean; acce
 						return;
 					}
 
-					if (deletedCurrentProfile) {
+					if (deletedCurrentProfile && remainingProfiles && Object.keys(remainingProfiles).length > 0) {
 						const firstProfileId = Object.keys(remainingProfiles)[0];
 						try {
 							await invoke("set_current_profile", {
@@ -784,59 +822,96 @@ export function ProfileSyncer({ auth }: { auth: { isAuthenticated: boolean; acce
 						}
 					}
 
-					// Create local profiles for remote-only profiles
+					// Create or merge profiles from server
+					const latestLocal = await invoke<
+						Record<string, { hub_profile: IProfile; execution_settings: any; updated: string; created: string }>
+					>("get_profiles_raw");
+
 					for (const onlineProfile of onlineProfiles) {
-						if (!remainingProfiles[onlineProfile.id]) {
+						const localProfile = latestLocal?.[onlineProfile.id];
+
+						if (!localProfile) {
 							console.log(
-								"Creating local profile from remote:",
+								"[ProfileSync] Creating local profile from remote:",
 								onlineProfile.id,
 								onlineProfile.name,
 							);
-							const newLocalProfile = {
-								hub_profile: {
-									id: onlineProfile.id,
-									name: onlineProfile.name,
-									description: onlineProfile.description ?? null,
-									icon: onlineProfile.icon ?? null,
-									thumbnail: onlineProfile.thumbnail ?? null,
-									interests: onlineProfile.interests ?? [],
-									tags: onlineProfile.tags ?? [],
-									theme: onlineProfile.theme ?? null,
-									bits: onlineProfile.bit_ids ?? [],
-									apps: onlineProfile.apps ?? [],
-									shortcuts: onlineProfile.shortcuts ?? [],
-									hub: onlineProfile.hub,
-									hubs: onlineProfile.hubs ?? [],
-									settings: onlineProfile.settings ?? {
-										connection_mode: "simplebezier",
-									},
-									secure: true,
-									created: onlineProfile.created_at,
-									updated: onlineProfile.updated_at,
-								},
-								execution_settings: {
-									gpu_mode: false,
-									max_context_size: 32000,
-								},
-								updated: onlineProfile.updated_at,
-								created: onlineProfile.created_at,
-							};
 							try {
 								await invoke("upsert_profile", {
-									profile: newLocalProfile,
+									profile: toLocalProfile(onlineProfile),
 								});
 							} catch (error) {
 								console.error(
-									"Failed to create local profile:",
+									"[ProfileSync] Failed to create local profile:",
 									onlineProfile.id,
 									error,
 								);
 							}
-						}
-					}
+						} else {
+							// Merge: update existing local profile if server is newer
+							const serverTime = new Date(onlineProfile.updated_at).getTime();
+							const localTime = new Date(localProfile.hub_profile.updated || localProfile.updated || 0).getTime();
 
-					// Sync shortcuts and update icon URLs
-					for (const onlineProfile of onlineProfiles) {
+							if (serverTime > localTime) {
+								console.log(
+									"[ProfileSync] Merging server profile into local:",
+									onlineProfile.id,
+									onlineProfile.name,
+									"(server:", onlineProfile.updated_at, "local:", localProfile.hub_profile.updated, ")",
+								);
+
+								localProfile.hub_profile.name = onlineProfile.name;
+								localProfile.hub_profile.description = onlineProfile.description ?? null;
+								localProfile.hub_profile.interests = onlineProfile.interests ?? [];
+								localProfile.hub_profile.tags = onlineProfile.tags ?? [];
+								localProfile.hub_profile.theme = onlineProfile.theme ?? null;
+								localProfile.hub_profile.bits = onlineProfile.bit_ids ?? [];
+								localProfile.hub_profile.apps = onlineProfile.apps ?? [];
+								localProfile.hub_profile.hub = onlineProfile.hub;
+								localProfile.hub_profile.hubs = onlineProfile.hubs ?? [];
+								localProfile.hub_profile.settings = onlineProfile.settings ?? localProfile.hub_profile.settings;
+								localProfile.hub_profile.updated = onlineProfile.updated_at;
+
+								if (!isLocalFilePath(localProfile.hub_profile.icon) && onlineProfile.icon) {
+									localProfile.hub_profile.icon = onlineProfile.icon;
+								}
+								if (!isLocalFilePath(localProfile.hub_profile.thumbnail) && onlineProfile.thumbnail) {
+									localProfile.hub_profile.thumbnail = onlineProfile.thumbnail;
+								}
+
+								localProfile.updated = onlineProfile.updated_at;
+
+								try {
+									await invoke("upsert_profile", {
+										profile: localProfile,
+									});
+								} catch (error) {
+									console.error(
+										"[ProfileSync] Failed to merge profile:",
+										onlineProfile.id,
+										error,
+									);
+								}
+							} else {
+								// Local is newer or same — only update icon URLs if needed
+								let needsUpdate = false;
+								if (onlineProfile.icon && !isLocalFilePath(localProfile.hub_profile.icon)) {
+									localProfile.hub_profile.icon = onlineProfile.icon;
+									needsUpdate = true;
+								}
+								if (onlineProfile.thumbnail && !isLocalFilePath(localProfile.hub_profile.thumbnail)) {
+									localProfile.hub_profile.thumbnail = onlineProfile.thumbnail;
+									needsUpdate = true;
+								}
+								if (needsUpdate) {
+									await invoke("upsert_profile", {
+										profile: localProfile,
+									});
+								}
+							}
+						}
+
+						// Sync shortcuts
 						if (onlineProfile.shortcuts) {
 							const localShortcuts = await appsDB.shortcuts
 								.where("profileId")
@@ -854,33 +929,21 @@ export function ProfileSyncer({ auth }: { auth: { isAuthenticated: boolean; acce
 								}
 							}
 						}
+					}
 
-						// Use signed URLs from server directly
-						if (onlineProfile.icon || onlineProfile.thumbnail) {
-							const latestLocal = await invoke<
-								Record<string, { hub_profile: IProfile }>
-							>("get_profiles_raw");
-							const localProfile = latestLocal?.[onlineProfile.id];
-							if (localProfile) {
-								if (
-									onlineProfile.icon &&
-									!isLocalFilePath(localProfile.hub_profile.icon)
-								) {
-									localProfile.hub_profile.icon = onlineProfile.icon;
-								}
-								if (
-									onlineProfile.thumbnail &&
-									!isLocalFilePath(localProfile.hub_profile.thumbnail)
-								) {
-									localProfile.hub_profile.thumbnail =
-										onlineProfile.thumbnail;
-								}
-								await invoke("upsert_profile", {
-									profile: localProfile,
-								});
+					// If the current profile was deleted and we created new profiles from server, switch to the first one
+					if (deletedCurrentProfile) {
+						const finalProfiles = await invoke<Record<string, { hub_profile: IProfile }>>("get_profiles_raw");
+						if (finalProfiles && Object.keys(finalProfiles).length > 0) {
+							const firstProfileId = Object.keys(finalProfiles)[0];
+							try {
+								await invoke("set_current_profile", { profileId: firstProfileId });
+							} catch (error) {
+								console.error("[ProfileSync] Failed to set current profile after merge:", error);
 							}
 						}
 					}
+
 					console.log("[ProfileSync] Profile sync complete");
 				} catch (error) {
 					console.warn("Failed to pull remote profiles:", error);

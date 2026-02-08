@@ -35,7 +35,13 @@ pub async fn get_boards(
     for board_id in app.boards.iter() {
         let board = app.open_board(board_id.clone(), Some(false), None).await;
         if let Ok(board) = board {
-            boards.push(board.lock().await.clone());
+            let mut board = board.lock().await.clone();
+            board.variables.iter_mut().for_each(|(_id, var)| {
+                if var.secret {
+                    var.default_value = None;
+                }
+            });
+            boards.push(board);
         }
     }
 

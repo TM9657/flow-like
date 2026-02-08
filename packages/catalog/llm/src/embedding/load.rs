@@ -92,6 +92,11 @@ impl NodeLogic for LoadModelNode {
             let embedding_provider = bit.try_to_embedding();
             if let Some(provider) = &embedding_provider {
                 if provider.supports_remote() {
+                    println!(
+                        "[LoadModelNode] using proxy mode for bit={}, token_len={}",
+                        bit.id,
+                        access_token.len()
+                    );
                     // Use proxy mode - call internal API
                     let model = match bit.bit_type {
                         BitTypes::Embedding => {

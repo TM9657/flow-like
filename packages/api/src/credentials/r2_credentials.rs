@@ -297,15 +297,15 @@ impl RuntimeCredentialsTrait for R2RuntimeCredentials {
         level = "debug"
     )]
     async fn to_state(&self, state: AppState) -> Result<FlowLikeState> {
-        let (meta_store, content_store, (http_client, _refetch_rx)) = {
+        let (meta_store, content_store) = {
             use flow_like_types::tokio;
 
             tokio::join!(
                 async { self.into_shared_credentials().to_store(true).await },
                 async { self.into_shared_credentials().to_store(false).await },
-                async { HTTPClient::new() }
             )
         };
+        let http_client = HTTPClient::new_without_refetch();
 
         let meta_store = meta_store?;
         let content_store = content_store?;
