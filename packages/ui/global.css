@@ -506,10 +506,12 @@
 		overscroll-behavior: none;
 	}
 	body {
+		width: 100%;
+	}
+	body:where([data-desktop-app]) {
 		overflow: hidden;
 		position: fixed;
 		inset: 0;
-		width: 100%;
 	}
 
 	@supports (font: -apple-system-body) and (-webkit-appearance: none) {

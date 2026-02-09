@@ -235,7 +235,6 @@ export function FileOrFolder({
 											e.preventDefault();
 											e.stopPropagation();
 											deleteFile?.(file.location.split("/").pop() ?? "");
-											deleteFile?.(file.location.split("/").pop() ?? "");
 										}}
 									>
 										Delete

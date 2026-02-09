@@ -97,3 +97,5 @@ export * from "./a2ui/copilot";
 export * from "./copilot";
 // WASM Package types
 export * from "./wasm";
+// Usage tracking types
+export * from "./usage";

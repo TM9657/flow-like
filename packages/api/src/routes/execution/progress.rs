@@ -7,6 +7,7 @@
 //! Events are stored with TTL and deleted after delivery.
 
 use crate::{
+    entity::{execution_usage_tracking, sea_orm_active_enums::ExecutionStatus},
     error::ApiError,
     execution::{
         state::{
@@ -23,6 +24,7 @@ use axum::{
     http::HeaderMap,
 };
 use flow_like_types::{anyhow, create_id, tokio};
+use sea_orm::{ActiveModelTrait, ActiveValue::Set};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use utoipa::{IntoParams, ToSchema};
@@ -179,6 +181,35 @@ pub async fn report_progress(
         .update_run(&claims.run_id, update)
         .await
         .map_err(|e| ApiError::internal_error(anyhow!("Failed to update run: {}", e)))?;
+
+    if updated.status.is_terminal() {
+        let duration_us = match (updated.started_at, updated.completed_at) {
+            (Some(start), Some(end)) => (end - start) * 1000,
+            _ => 0,
+        };
+        let exec_status = match updated.status {
+            StateRunStatus::Completed => ExecutionStatus::Info,
+            StateRunStatus::Failed => ExecutionStatus::Error,
+            StateRunStatus::Cancelled => ExecutionStatus::Warn,
+            _ => ExecutionStatus::Info,
+        };
+        let db = state.db.clone();
+        let board_id = claims.board_id.clone();
+        let event_id = claims.event_id.clone().unwrap_or_default();
+        let app_id = claims.app_id.clone();
+        let user_id = claims.sub.clone();
+        let run_id = claims.run_id.clone();
+        tokio::spawn(async move {
+            if let Err(e) = track_execution_usage(
+                &db, &board_id, &event_id, &run_id, duration_us, exec_status,
+                &user_id, &app_id,
+            )
+            .await
+            {
+                tracing::warn!(error=%e, "Failed to track execution usage");
+            }
+        });
+    }
 
     Ok(Json(ProgressUpdateResponse {
         accepted: true,
@@ -461,6 +492,39 @@ pub struct RunStatusResponse {
     pub started_at: Option<String>,
     pub completed_at: Option<String>,
     pub created_at: String,
+}
+
+// ============================================================================
+// Tracking
+// ============================================================================
+
+async fn track_execution_usage(
+    db: &sea_orm::DatabaseConnection,
+    board_id: &str,
+    node_id: &str,
+    version: &str,
+    microseconds: i64,
+    status: ExecutionStatus,
+    user_id: &str,
+    app_id: &str,
+) -> Result<(), flow_like_types::Error> {
+    let now = chrono::Utc::now().naive_utc();
+    let instance = std::env::var("INSTANCE_ID").ok();
+    let record = execution_usage_tracking::ActiveModel {
+        id: Set(create_id()),
+        instance: Set(instance),
+        board_id: Set(board_id.to_string()),
+        node_id: Set(node_id.to_string()),
+        version: Set(version.to_string()),
+        microseconds: Set(microseconds),
+        status: Set(status),
+        user_id: Set(Some(user_id.to_string())),
+        app_id: Set(Some(app_id.to_string())),
+        created_at: Set(now),
+        updated_at: Set(now),
+    };
+    record.insert(db).await?;
+    Ok(())
 }
 
 // ============================================================================

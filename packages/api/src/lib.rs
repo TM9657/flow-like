@@ -81,6 +81,7 @@ pub fn construct_router(state: Arc<State>) -> Router {
         .nest("/tmp", routes::tmp::routes())
         .nest("/solution", routes::solution::routes())
         .nest("/execution", routes::execution::routes())
+        .nest("/usage", routes::usage::routes())
         .nest("/registry", routes::registry::routes())
         .nest("/sink", routes::sink::routes())
         .route("/webhook/stripe", post(routes::webhook::stripe_webhook))

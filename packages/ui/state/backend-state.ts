@@ -25,6 +25,7 @@ import {
 	EmptyTemplateState,
 	EmptyUserState,
 } from "./backend-state/empty-states";
+import { EmptyUsageState } from "./backend-state/empty-states";
 import type { IEventState } from "./backend-state/event-state";
 import type { IHelperState } from "./backend-state/helper-state";
 import type { IPageState } from "./backend-state/page-state";
@@ -41,6 +42,7 @@ import type { ITeamState } from "./backend-state/team-state";
 import type { ITemplateState } from "./backend-state/template-state";
 import type { IUserState } from "./backend-state/user-state";
 import type { IWidgetState } from "./backend-state/widget-state";
+import type { IUsageState } from "./backend-state/usage-state";
 
 export * from "./backend-state/api-key-state";
 export * from "./backend-state/api-key-state";
@@ -70,6 +72,7 @@ export type {
 	ITemplateState,
 	IUserState,
 	IWidgetState,
+	IUsageState,
 };
 
 export type { SinkType } from "./backend-state/sink-state";
@@ -148,6 +151,8 @@ export interface IBackendState {
 	sinkState?: ISinkState;
 	/** Sales state for managing app sales and discounts (online apps only) */
 	salesState?: ISalesState;
+	/** Usage tracking state for LLM, embedding, and execution usage history */
+	usageState?: IUsageState;
 
 	/** Optional runtime profile (desktop/mobile providers populate this). */
 	profile?: IProfile;
@@ -206,6 +211,7 @@ const serverBackend: IBackendState = {
 			},
 		},
 	) as IRegistryState,
+	usageState: new EmptyUsageState(),
 	capabilities: () => ({
 		needsSignIn: false,
 		canHostLlamaCPP: false,

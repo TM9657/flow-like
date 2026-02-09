@@ -1,0 +1,26 @@
+/*
+ * Website base styles.
+ * The desktop-app body styles (position: fixed, overflow: hidden, inset: 0)
+ * are now guarded by [data-desktop-app] in global.css, so the website
+ * never receives them.  These rules just set sensible scroll defaults.
+ */
+html,
+body {
+	height: auto;
+	min-height: 100%;
+	margin: 0;
+	width: 100%;
+	max-width: 100vw;
+}
+
+body {
+	overflow-x: clip;
+	overflow-y: auto;
+	-webkit-overflow-scrolling: touch;
+	touch-action: pan-y;
+}
+
+main {
+	max-width: 100vw;
+	overflow-x: clip;
+}

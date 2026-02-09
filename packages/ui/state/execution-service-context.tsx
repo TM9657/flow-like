@@ -590,6 +590,16 @@ export function ExecutionServiceProvider({
 
 			if (varsNeedingValues.length === 0) {
 				// No runtime-configured variables, execute directly
+				if (isRemote && backend.eventState.executeEventRemote) {
+					return backend.eventState.executeEventRemote(
+						appId,
+						eventIdStr,
+						payload,
+						streamState,
+						onEventId,
+						cb,
+					);
+				}
 				return backend.eventState.executeEvent(
 					appId,
 					eventIdStr,
@@ -618,6 +628,16 @@ export function ExecutionServiceProvider({
 					...payload,
 					runtime_variables: runtimeVariablesMap,
 				};
+				if (isRemote && backend.eventState.executeEventRemote) {
+					return backend.eventState.executeEventRemote(
+						appId,
+						eventIdStr,
+						payloadWithVars,
+						streamState,
+						onEventId,
+						cb,
+					);
+				}
 				return backend.eventState.executeEvent(
 					appId,
 					eventIdStr,
@@ -845,15 +865,26 @@ export function ExecutionServiceProvider({
 				};
 
 				if (isEvent && eventIdStr) {
-					result = await backend.eventState.executeEvent(
-						appId,
-						eventIdStr,
-						payloadWithVars,
-						streamState,
-						eventId,
-						cb,
-						skipConsentCheck,
-					);
+					if (isRemote && backend.eventState.executeEventRemote) {
+						result = await backend.eventState.executeEventRemote(
+							appId,
+							eventIdStr,
+							payloadWithVars,
+							streamState,
+							eventId,
+							cb,
+						);
+					} else {
+						result = await backend.eventState.executeEvent(
+							appId,
+							eventIdStr,
+							payloadWithVars,
+							streamState,
+							eventId,
+							cb,
+							skipConsentCheck,
+						);
+					}
 				} else if (isRemote && backend.boardState.executeBoardRemote) {
 					result = await backend.boardState.executeBoardRemote(
 						appId,

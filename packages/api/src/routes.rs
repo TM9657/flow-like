@@ -17,6 +17,7 @@ pub mod sink;
 pub mod solution;
 pub mod store;
 pub mod tmp;
+pub mod usage;
 pub mod user;
 pub mod webhook;
 

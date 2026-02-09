@@ -1,5 +1,6 @@
 ---
 import "@tm9657/flow-like-ui/global.css";
+import "../styles/website-base.css";
 import { Header } from "../components/header";
 import LanguageDetect from "../components/language-detect.astro";
 
@@ -102,7 +103,7 @@ const ldWebPage = {
 ---
 
 <!doctype html>
-<html lang="en" class="scroll-smooth max-w-full overflow-x-hidden" style="overflow-x: hidden;">
+<html lang="en" class="scroll-smooth">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -190,67 +191,23 @@ const ldWebPage = {
         background-size: 16px 16px !important;
         background-attachment: scroll !important;
       }
-      html, body { overflow-x: clip; }
       @media (hover: none) and (pointer: coarse) {
-        /* Keep decorative overlays passive on touch without disabling legit fixed UI */
         [data-overlay], [data-visual], .overlay, .backdrop {
           pointer-events: none;
           touch-action: pan-y;
         }
-
-        /* Disable scroll snapping & smooth scroll on phones */
         * { scroll-snap-type: none !important; }
         html { scroll-behavior: auto !important; }
-
-        /* Don’t allow sections to create nested scrollers or crop content */
-        html, body, main, section, [role="region"] {
-          overflow: visible !important;
-        }
-
-        /* Sticky/fixed inside sections can break the scroll chain after style changes */
-        .sticky, [style*="position: sticky"] { position: static !important; }
       }
 
-      html, body { min-height: 100%; }
-      html, body {
-        overflow-y: auto;
-        overflow-x: hidden !important;
-        max-width: 100vw;
-        -webkit-overflow-scrolling: touch;
-        touch-action: pan-y;
-      }
-      :root, body, #content {
-        overscroll-behavior: auto;
-      }
     </style>
   </head>
 
   <body
-    class="bg-background text-foreground antialiased selection:bg-primary/30 selection:text-primary-foreground overflow-x-hidden max-w-full
+    class="bg-background text-foreground antialiased selection:bg-primary/30 selection:text-primary-foreground
             bg-[radial-gradient(var(--muted)_1px,transparent_1px)] [background-size:16px_16px]"
   >
-    <script is:inline>
-      // DEV: horizontal overflow detector (remove in production if undesired)
-      (function(){
-        try {
-          const vw = () => document.documentElement.clientWidth;
-          const offenders = [];
-          document.querySelectorAll('*').forEach(function(el){
-            var sw = el.scrollWidth;
-            if (sw > vw() + 1) {
-              var styles = getComputedStyle(el);
-              if (styles.overflowX === 'hidden' || styles.position === 'fixed') return;
-              offenders.push({el: el, sw: sw, cls: el.className});
-            }
-          });
-          if (offenders.length) {
-            window.__overflowOffenders = offenders;
-            console.warn('[Overflow detector] Elements exceeding viewport width:', offenders.slice(0,5));
-          }
-        } catch(e) {}
-      })();
-    </script>
-    <main id="content" class="w-full">
+    <main id="content" class="w-full max-w-[100vw] overflow-x-clip">
       <AmbientGlow />
       <Header client:load/>
       <Hero client:load/>

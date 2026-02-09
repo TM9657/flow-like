@@ -812,13 +812,19 @@ export function StorageSystem({
 														}
 														loadFile={(file) => loadFile(file)}
 														deleteFile={async (file) => {
-															const filePrefix = `${prefix}/${file}`;
-															await backend.storageState.deleteStorageItems(
-																appId,
-																[filePrefix],
-															);
-															await files.refetch();
-															toast.success("File deleted successfully");
+															try {
+																const filePrefix = `${prefix}/${file}`;
+																await backend.storageState.deleteStorageItems(
+																	appId,
+																	[filePrefix],
+																);
+																toast.success("Deleted successfully");
+															} catch (error) {
+																console.error(error);
+																toast.error("Failed to delete");
+															} finally {
+																await files.refetch();
+															}
 														}}
 														shareFile={async (file) => {
 															const downloadLinks =
@@ -913,12 +919,18 @@ export function StorageSystem({
 											}}
 											loadFile={loadFile}
 											deleteFile={async (file) => {
-												const filePrefix = `${prefix}/${file}`;
-												await backend.storageState.deleteStorageItems(appId, [
-													filePrefix,
-												]);
-												await files.refetch();
-												toast.success("File deleted successfully");
+												try {
+													const filePrefix = `${prefix}/${file}`;
+													await backend.storageState.deleteStorageItems(appId, [
+														filePrefix,
+													]);
+													toast.success("Deleted successfully");
+												} catch (error) {
+													console.error(error);
+													toast.error("Failed to delete");
+												} finally {
+													await files.refetch();
+												}
 											}}
 											shareFile={async (file) => {
 												const downloadLinks =

@@ -20,11 +20,11 @@
 			{
 				"id": "featured-3",
 				"type": "static",
-				"title": "Build Your First Flow",
-				"description": "Learn how to create powerful workflows with our comprehensive guide",
+				"title": "Get Started with Flow Like",
+				"description": "New to Flow Like? Follow our quick-start guide to build your first workflow in minutes",
 				"image": "/placeholder-thumbnail.webp",
-				"link": "https://docs.flow-like.com/start/first-use/",
-				"badge": "Tutorial",
+				"link": "https://docs.flow-like.com/start/getting-started/",
+				"badge": "Guide",
 				"icon": "https://cdn.flow-like.com/media/play.svg",
 				"gradient": "from-blue-500 to-purple-600"
 			}
@@ -40,98 +40,112 @@
 			{
 				"id": "model-1",
 				"type": "model",
-				"modelId": "do4rezco2ebwfipqzio6u6mk",
+				"modelId": "dt7121ak3swi6l45s3ei0g3e",
 				"hub": "api.alpha.flow-like.com"
 			},
 			{
 				"id": "model-2",
 				"type": "model",
-				"modelId": "jbr6vcrf6xmyswo5ldqr4l21",
+				"modelId": "jpjaryxwugonzra14ckj8a1f",
 				"hub": "api.alpha.flow-like.com"
 			},
 			{
 				"id": "model-spotlight",
 				"type": "static",
-				"title": "New: Advanced Vision Models",
-				"description": "Experience next-generation image understanding with our latest model collection",
-				"image": "/swimlanes/gemma.jpg",
-				"badge": "New",
+				"title": "FlowPilot — Your AI Assistant",
+				"description": "Let FlowPilot build flows for you, explain nodes, and generate UI — all with natural language",
+				"image": "https://cdn.flow-like.com/swimlanes/gemma.jpg",
+				"badge": "AI",
 				"icon": "https://cdn.flow-like.com/media/sparkles.svg",
 				"gradient": "from-emerald-500 to-teal-600",
-				"link": "/settings/ai"
+				"link": "https://docs.flow-like.com/studio/flowpilot/"
 			}
 		],
 		"viewAllLink": "/settings/ai"
 	},
 	{
-		"id": "productivity",
-		"title": "Productivity Tools",
+		"id": "whats-new",
+		"title": "What's New",
+		"subtitle": "Latest releases and announcements",
 		"size": "medium",
 		"items": [
 			{
-				"id": "prod-1",
-				"type": "app",
-				"appId": "task-manager"
+				"id": "release-008",
+				"type": "static",
+				"title": "Alpha v0.0.8 — UI Builder & BI",
+				"description": "Build dashboards, query data lakes, create WASM nodes, and more in our biggest release yet",
+				"badge": "Latest Release",
+				"icon": "/base-logo.svg",
+				"gradient": "from-violet-500 to-fuchsia-600",
+				"image": "https://cdn.flow-like.com/swimlanes/wasm-nodes.jpg",
+				"link": "https://flow-like.com/blog/alpha-0-0-8/"
 			},
 			{
-				"id": "prod-2",
-				"type": "app",
-				"appId": "document-processor"
+				"id": "release-007",
+				"type": "static",
+				"title": "Alpha v0.0.7 — Self-Hosting & Storage",
+				"description": "Deploy anywhere with Helm charts, connect any S3-compatible storage, and enjoy major UX upgrades",
+				"badge": "Release",
+				"icon": "/base-logo.svg",
+				"gradient": "from-sky-500 to-indigo-600",
+				"image": "https://cdn.flow-like.com/swimlanes/0-7.jpg",
+				"link": "https://flow-like.com/blog/alpha-0-0-7/"
 			},
 			{
-				"id": "prod-3",
-				"type": "app",
-				"appId": "data-analyzer"
+				"id": "release-006",
+				"type": "static",
+				"title": "Alpha v0.0.6 — FlowPilot & Agents",
+				"description": "Meet FlowPilot, the new agent interface, real-time collaboration, and massive integrations",
+				"badge": "Release",
+				"icon": "/base-logo.svg",
+				"gradient": "from-amber-500 to-orange-600",
+				"image": "https://cdn.flow-like.com/swimlanes/0-6.jpg",
+				"link": "https://flow-like.com/blog/alpha-0-0-6/"
 			}
 		],
-		"viewAllLink": "/apps/productivity"
+		"viewAllLink": "https://flow-like.com/blog/"
 	},
 	{
-		"id": "trending",
-		"title": "Trending This Week",
+		"id": "learn",
+		"title": "Learn & Explore",
+		"subtitle": "Guides, tutorials, and resources to level up your workflows",
 		"size": "small",
 		"items": [
 			{
-				"id": "trend-spotlight-release",
+				"id": "learn-studio",
 				"type": "static",
-				"title": "Release v0.0.4 - New Features!",
-				"description": "Excel Tables, ML Nodes & Auto-Updates! Check out what's new in Flow Like.",
-				"badge": "Release",
-				"icon": "/base-logo.svg",
-				"gradient": "from-[#7289da] to-[#99aab5] dark:to-[#424549]",
-				"image": "/placeholder-thumbnail.webp",
-				"link": "https://flow-like.com/blog/alpha-0-0-4/"
+				"title": "Studio Overview",
+				"description": "Master the flow editor — nodes, layers, variables, and execution all in one place",
+				"badge": "Docs",
+				"icon": "https://cdn.flow-like.com/media/play.svg",
+				"gradient": "from-blue-500 to-cyan-500",
+				"image": "https://cdn.flow-like.com/swimlanes/studio.jpg",
+				"link": "https://docs.flow-like.com/studio/overview/"
 			},
-			[
-				{
-					"id": "trend-1",
-					"type": "app",
-					"appId": "viral-app-1"
-				},
-				{
-					"id": "trend-2",
-					"type": "app",
-					"appId": "viral-app-2"
-				},
-				{
-					"id": "trend-3",
-					"type": "app",
-					"appId": "viral-app-3"
-				}
-			],
 			{
-				"id": "trend-spotlight",
+				"id": "learn-selfhost",
+				"type": "static",
+				"title": "Self-Hosting Guide",
+				"description": "Run Flow Like on your own infrastructure with Docker Compose or Kubernetes",
+				"badge": "Docs",
+				"icon": "https://cdn.flow-like.com/media/play.svg",
+				"gradient": "from-teal-500 to-green-500",
+				"image": "https://cdn.flow-like.com/swimlanes/self-hosting.jpg",
+				"link": "https://docs.flow-like.com/self-hosting/overview/"
+			},
+			{
+				"id": "learn-community",
 				"type": "static",
 				"title": "Join Our Community!",
 				"description": "Connect, share, and get support on Discord. Be part of the Flow Like community.",
 				"badge": "Community",
 				"icon": "https://cdn.flow-like.com/media/discord.svg",
 				"gradient": "from-[#7289da] to-[#99aab5] dark:to-[#424549]",
-				"image": "/swimlanes/discord.jpg",
-				"link": "https://discord.gg/mdBA9kMjFJ"
+				"image": "https://cdn.flow-like.com/swimlanes/discord.jpg",
+				"link": "https://discord.gg/KTWMrS2"
 			}
 		],
-		"viewAllLink": "/trending"
+		"viewAllLink": "https://docs.flow-like.com/"
 	},
 	{
 		"id": "recent",

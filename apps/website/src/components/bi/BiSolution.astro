@@ -45,12 +45,12 @@ const features = [
 ];
 ---
 
-<section id="solution" class="relative py-32">
+<section id="solution" class="relative py-16 sm:py-24 lg:py-32">
   <!-- Background decoration -->
   <div class="absolute inset-0 bg-gradient-to-b from-transparent via-primary/5 to-transparent pointer-events-none" />
 
   <div class="mx-auto max-w-7xl px-6 lg:px-8 relative">
-    <div class="text-center mb-20">
+    <div class="text-center mb-12 lg:mb-20">
       <p class="text-[11px] font-medium tracking-[0.3em] uppercase text-primary mb-4">
         {t("bi.solution.tagline")}
       </p>
@@ -65,7 +65,7 @@ const features = [
 
     <div class="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
       {features.map((feature, i) => (
-        <div class="group relative p-8 rounded-3xl border border-border/50 bg-card/50 hover:bg-card transition-all duration-500 overflow-hidden">
+        <div class="group relative p-5 sm:p-8 rounded-3xl border border-border/50 bg-card/50 hover:bg-card transition-all duration-500 overflow-hidden">
           <!-- Gradient glow on hover -->
           <div class={`
             absolute -inset-px rounded-3xl opacity-0 group-hover:opacity-100 transition-opacity duration-500 blur-xl

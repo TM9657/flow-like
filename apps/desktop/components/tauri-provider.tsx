@@ -31,6 +31,7 @@ import {
 	type IStorageState,
 	type ITeamState,
 	type ITemplateState,
+	type IUsageState,
 	type IUserState,
 	type IWidgetState,
 	LoadingScreen,
@@ -65,6 +66,7 @@ import { SinkState } from "./tauri-provider/sink-state";
 import { StorageState } from "./tauri-provider/storage-state";
 import { TeamState } from "./tauri-provider/team-state";
 import { TemplateState } from "./tauri-provider/template-state";
+import { UsageState } from "./tauri-provider/usage-state";
 import { UserState } from "./tauri-provider/user-state";
 import { WidgetState } from "./tauri-provider/widget-state";
 
@@ -97,6 +99,7 @@ export class TauriBackend implements IBackendState {
 	registryState: IRegistryState;
 	sinkState: ISinkState;
 	salesState: ISalesState;
+	usageState: IUsageState;
 
 	private _apiState: TauriApiState;
 
@@ -127,6 +130,7 @@ export class TauriBackend implements IBackendState {
 		this.registryState = new RegistryState(this);
 		this.sinkState = new SinkState();
 		this.salesState = new SalesState(this);
+		this.usageState = new UsageState(this);
 	}
 
 	capabilities(): ICapabilities {

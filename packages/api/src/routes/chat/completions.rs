@@ -322,6 +322,7 @@ pin_project! {
         state: AppState,
         user: String,
         model: String,
+        started_at: std::time::Instant,
     }
 }
 
@@ -348,6 +349,7 @@ where
                     let state_c = this.state.clone();
                     let user_c = this.user.clone();
                     let model_c = this.model.clone();
+                    let latency_ms = this.started_at.elapsed().as_secs_f64() * 1000.0;
                     flow_like_types::tokio::spawn(async move {
                         let (in_tok, out_tok, cost_micro) = {
                             let a = acc.lock().unwrap();
@@ -356,7 +358,7 @@ where
                         if let (Some(in_t), Some(out_t)) = (in_tok, out_tok) {
                             let price = cost_micro.unwrap_or(0);
                             if let Err(e) =
-                                track_llm_usage(&state_c, &user_c, &model_c, in_t, out_t, price)
+                                track_llm_usage(&state_c, &user_c, &model_c, in_t, out_t, price, latency_ms)
                                     .await
                             {
                                 tracing::warn!(error=%e, "Failed to track streaming LLM usage");
@@ -404,6 +406,7 @@ async fn handle_streaming(
         state,
         user: user_sub,
         model: model_id,
+        started_at: std::time::Instant::now(),
     };
     let body_stream = tracking_stream.map(|res| res);
     let body = passthrough_byte_stream(body_stream);
@@ -416,6 +419,7 @@ async fn handle_non_streaming(
     state: &AppState,
     user_sub: &str,
 ) -> Result<AxumResponse, ApiError> {
+    let start = std::time::Instant::now();
     let resp = request_builder.send().await.map_err(|e| {
         tracing::error!(error=%e, "Upstream request failed");
         anyhow!("Upstream request failed: {e}")
@@ -426,12 +430,12 @@ async fn handle_non_streaming(
         tracing::error!(error=%e, "Failed to read upstream body");
         anyhow!("Failed to read upstream body: {e}")
     })?;
+    let latency_ms = start.elapsed().as_secs_f64() * 1000.0;
     if status.is_success() {
-        tracing::info!(model = %upstream_model_id, bytes = body_bytes.len(), "LLM invoke success (non-stream)");
+        tracing::info!(model = %upstream_model_id, bytes = body_bytes.len(), latency_ms = latency_ms, "LLM invoke success (non-stream)");
         if let Some((in_tok, out_tok)) = extract_usage_from_body(&body_bytes) {
-            // Placeholder cost calculation (0). Replace with proper pricing logic later.
             if let Err(e) =
-                track_llm_usage(state, user_sub, upstream_model_id, in_tok, out_tok, 0).await
+                track_llm_usage(state, user_sub, upstream_model_id, in_tok, out_tok, 0, latency_ms).await
             {
                 tracing::warn!(error=%e, "Failed to track LLM usage");
             }
@@ -550,6 +554,7 @@ async fn track_llm_usage(
     token_in: i64,
     token_out: i64,
     price: i64,
+    latency_ms: f64,
 ) -> Result<(), flow_like_types::Error> {
     use chrono::Utc;
     use llm_usage_tracking::ActiveModel;
@@ -559,7 +564,7 @@ async fn track_llm_usage(
         model_id: Set(model.to_string()),
         token_in: Set(token_in),
         token_out: Set(token_out),
-        latency: Set(None),
+        latency: Set(Some(latency_ms)),
         user_id: Set(Some(user_sub.to_string())),
         app_id: Set(None),
         price: Set(price),

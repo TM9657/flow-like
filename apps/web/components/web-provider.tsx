@@ -23,6 +23,7 @@ import {
 	type IStorageState,
 	type ITeamState,
 	type ITemplateState,
+	type IUsageState,
 	type IUserState,
 	type IWidgetState,
 	LoadingScreen,
@@ -52,6 +53,7 @@ import {
 	WebStorageState,
 	WebTeamState,
 	WebTemplateState,
+	WebUsageState,
 	WebUserState,
 	WebWidgetState,
 } from "@/lib/web-states";
@@ -79,6 +81,7 @@ export class WebBackend implements IBackendState {
 	registryState: IRegistryState;
 	sinkState: ISinkState;
 	salesState: ISalesState;
+	usageState: IUsageState;
 
 	private backendRef: WebBackendRef;
 
@@ -110,6 +113,7 @@ export class WebBackend implements IBackendState {
 		this.registryState = new WebRegistryState(this.backendRef);
 		this.sinkState = new WebSinkState(this.backendRef);
 		this.salesState = new WebSalesState(this.backendRef);
+		this.usageState = new WebUsageState(this.backendRef);
 	}
 
 	capabilities(): ICapabilities {

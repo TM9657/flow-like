@@ -65,6 +65,16 @@ export interface IEventState {
 		skipConsentCheck?: boolean,
 	): Promise<ILogMetadata | undefined>;
 
+	/** Execute an event remotely via the server-side SSE invoke endpoint */
+	executeEventRemote?(
+		appId: string,
+		eventId: string,
+		payload: IRunPayload,
+		streamState?: boolean,
+		onEventId?: (id: string) => void,
+		cb?: (event: IIntercomEvent[]) => void,
+	): Promise<ILogMetadata | undefined>;
+
 	cancelExecution(runId: string): Promise<void>;
 
 	isEventSinkActive(eventId: string): Promise<boolean>;
