@@ -79,30 +79,48 @@ pub trait EventSink: Send + Sync {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(untagged)]
+#[serde(tag = "sink_type")]
 pub enum EventConfig {
+    #[serde(rename = "discord")]
     Discord(DiscordSink),
+    #[serde(rename = "email")]
     Email(EmailSink),
 
+    #[serde(rename = "slack")]
     Slack(SlackSink),
+    #[serde(rename = "telegram")]
     Telegram(TelegramSink),
 
     // Check for the state of a website and trigger the event when it changes
+    #[serde(rename = "web_watcher")]
     WebWatcher(WebWatcherSink),
+    #[serde(rename = "rss")]
     Rss(RSSSink),
 
+    #[serde(rename = "deeplink")]
     Deeplink(DeeplinkSink),
+    #[serde(rename = "http")]
     Http(HttpSink),
+    #[serde(rename = "webhook")]
     Webhook(WebhookSink),
+    #[serde(rename = "mqtt")]
     Mqtt(MQTTSink),
+    #[serde(rename = "mcp")]
     Mcp(MCPSink),
+    #[serde(rename = "file")]
     File(FileSink),
+    #[serde(rename = "github")]
     GitHub(GitHubSink),
 
+    #[serde(rename = "nfc")]
     Nfc(NFCSink),
+    #[serde(rename = "geolocation")]
     GeoLocation(GeoLocationSink),
+    #[serde(rename = "notion")]
     Notion(NotionSink),
+    #[serde(rename = "shortcut")]
     Shortcut(ShortcutSink),
+    #[serde(rename = "cron")]
     Cron(CronSink),
 }
 

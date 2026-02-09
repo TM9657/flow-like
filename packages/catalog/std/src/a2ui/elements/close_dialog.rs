@@ -22,7 +22,7 @@ impl NodeLogic for CloseDialog {
             "a2ui_close_dialog",
             "Close Dialog",
             "Closes an open dialog. If no dialog ID is specified, closes the topmost dialog.",
-            "A2UI/Navigation",
+            "UI/Navigation",
         );
         node.add_icon("/flow/icons/a2ui.svg");
 

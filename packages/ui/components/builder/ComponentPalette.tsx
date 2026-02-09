@@ -490,6 +490,13 @@ const COMPONENT_DEFINITIONS: ComponentDefinition[] = [
 		category: "Game",
 		description: "Game minimap",
 	},
+	{
+		type: "geoMap",
+		label: "Geo Map",
+		icon: Square,
+		category: "Display",
+		description: "Interactive geographic map with markers and routes",
+	},
 ];
 
 const CATEGORIES = ["Layout", "Display", "Interactive", "Container", "Game"];
@@ -539,11 +546,15 @@ export function ComponentPalette({
 
 	const filteredWidgets = useMemo(() => {
 		if (!widgets || !showWidgets) return [];
-		if (!searchQuery.trim()) return widgets;
+		// Filter out invalid widgets first
+		const validWidgets = widgets.filter(
+			(w) => w?.appId && w?.widgetId && w?.metadata,
+		);
+		if (!searchQuery.trim()) return validWidgets;
 		const query = searchQuery.toLowerCase();
-		return widgets.filter(
+		return validWidgets.filter(
 			(w) =>
-				w.metadata.name.toLowerCase().includes(query) ||
+				w.metadata.name?.toLowerCase().includes(query) ||
 				w.widgetId.toLowerCase().includes(query) ||
 				w.metadata.description?.toLowerCase().includes(query) ||
 				w.metadata.tags?.some((tag) => tag.toLowerCase().includes(query)),
@@ -768,6 +779,7 @@ interface WidgetItemProps {
 }
 
 function WidgetItem({ widget, onDragStart }: WidgetItemProps) {
+	const metadata = widget.metadata;
 	const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
 		id: `widget-${widget.appId}-${widget.widgetId}`,
 		data: {
@@ -776,6 +788,8 @@ function WidgetItem({ widget, onDragStart }: WidgetItemProps) {
 			widgetId: widget.widgetId,
 		} satisfies WidgetDragData,
 	});
+
+	if (!metadata) return null;
 
 	return (
 		<div
@@ -786,18 +800,18 @@ function WidgetItem({ widget, onDragStart }: WidgetItemProps) {
 				"flex items-center gap-2 px-3 py-2 text-sm rounded cursor-grab hover:bg-muted active:cursor-grabbing select-none touch-none",
 				isDragging && "opacity-50",
 			)}
-			title={widget.metadata.description}
+			title={metadata.description ?? undefined}
 		>
-			{widget.metadata.thumbnail ? (
+			{metadata.thumbnail ? (
 				<img
-					src={widget.metadata.thumbnail}
+					src={metadata.thumbnail}
 					alt=""
 					className="h-4 w-4 rounded object-cover shrink-0"
 				/>
 			) : (
 				<Layers className="h-4 w-4 text-muted-foreground shrink-0" />
 			)}
-			<span className="truncate">{widget.metadata.name}</span>
+			<span className="truncate">{metadata.name ?? "Unnamed"}</span>
 		</div>
 	);
 }

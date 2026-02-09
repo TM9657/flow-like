@@ -65,6 +65,13 @@ export interface UnifiedSuggestion {
 	scope?: CopilotScope;
 }
 
+/** Canvas settings for UI components */
+export interface CanvasSettings {
+	backgroundColor?: string;
+	padding?: string;
+	customCss?: string;
+}
+
 /** Unified response from the copilot agent */
 export interface UnifiedCopilotResponse {
 	/** The assistant's message explaining what was done or what should be done */
@@ -75,6 +82,12 @@ export interface UnifiedCopilotResponse {
 
 	/** UI components generated (for Frontend and Both scopes) */
 	components: SurfaceComponent[];
+
+	/** Canvas settings for UI components (includes customCss) */
+	canvas_settings?: CanvasSettings;
+
+	/** Root component ID for UI components */
+	root_component_id?: string;
 
 	/** Suggested follow-up prompts */
 	suggestions: UnifiedSuggestion[];

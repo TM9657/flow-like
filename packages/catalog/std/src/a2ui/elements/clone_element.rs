@@ -23,7 +23,7 @@ impl NodeLogic for CloneElement {
             "a2ui_clone_element",
             "Clone Element",
             "Clones an existing element and adds it to a container",
-            "A2UI/Elements",
+            "UI/Elements",
         );
         node.add_icon("/flow/icons/a2ui.svg");
 

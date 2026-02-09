@@ -122,42 +122,6 @@ impl EventSink for crate::event_sink::slack::SlackSink {
     }
 }
 
-// Telegram Sink
-#[async_trait::async_trait]
-impl EventSink for crate::event_sink::telegram::TelegramSink {
-    async fn start(&self, _app_handle: &AppHandle, _db: DbConnection) -> Result<()> {
-        tracing::warn!("TelegramSink not yet fully implemented");
-        Ok(())
-    }
-
-    async fn stop(&self, _app_handle: &AppHandle, _db: DbConnection) -> Result<()> {
-        Ok(())
-    }
-
-    async fn on_register(
-        &self,
-        _app_handle: &AppHandle,
-        registration: &EventRegistration,
-        _db: DbConnection,
-    ) -> Result<()> {
-        tracing::info!(
-            "Registered Telegram bot -> event {} (NOT IMPLEMENTED)",
-            registration.event_id
-        );
-        Ok(())
-    }
-
-    async fn on_unregister(
-        &self,
-        _app_handle: &AppHandle,
-        registration: &EventRegistration,
-        _db: DbConnection,
-    ) -> Result<()> {
-        tracing::info!("Unregistered Telegram bot: {}", registration.event_id);
-        Ok(())
-    }
-}
-
 // Web Watcher Sink
 #[async_trait::async_trait]
 impl EventSink for crate::event_sink::web_watcher::WebWatcherSink {

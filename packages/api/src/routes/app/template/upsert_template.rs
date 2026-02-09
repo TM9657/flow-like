@@ -14,10 +14,12 @@ use flow_like::flow::board::VersionType;
 use flow_like_types::create_id;
 use sea_orm::{ActiveModelTrait, ActiveValue::Set, ColumnTrait, EntityTrait, QueryFilter};
 use serde::{Deserialize, Serialize};
+use utoipa::ToSchema;
 
-#[derive(Clone, Deserialize, Serialize)]
+#[derive(Clone, Deserialize, Serialize, ToSchema)]
 pub struct TemplateUpsert {
     pub changelog: Option<String>,
+    #[schema(value_type = Option<String>)]
     pub version_type: Option<VersionType>,
     pub board_id: String,
     pub board_version: Option<(u32, u32, u32)>,
@@ -86,6 +88,27 @@ async fn create_template(
 #[tracing::instrument(
     name = "PUT /apps/{app_id}/templates/{template_id}",
     skip(state, user, template_data)
+)]
+#[utoipa::path(
+    put,
+    path = "/apps/{app_id}/templates/{template_id}",
+    tag = "templates",
+    description = "Create or update a template.",
+    params(
+        ("app_id" = String, Path, description = "Application ID"),
+        ("template_id" = String, Path, description = "Template ID")
+    ),
+    request_body = TemplateUpsert,
+    responses(
+        (status = 200, description = "Template saved", body = String, content_type = "application/json"),
+        (status = 401, description = "Unauthorized"),
+        (status = 403, description = "Forbidden")
+    ),
+    security(
+        ("bearer_auth" = []),
+        ("api_key" = []),
+        ("pat" = [])
+    )
 )]
 pub async fn upsert_template(
     State(state): State<AppState>,

@@ -13,19 +13,19 @@ model WasmPackage {
   id String @id
 
   // Manifest fields
-  name String
+  name        String
   description String
-  version String
-  authors WasmPackageAuthor[]
-  license String?
-  homepage String?
-  repository String? // Link to GitHub/GitLab repo
-  keywords String[]
+  version     String
+  authors     WasmPackageAuthor[]
+  license     String?
+  homepage    String?
+  repository  String? // Link to GitHub/GitLab repo
+  keywords    String[]
 
   // Registry metadata
-  status WasmPackageStatus @default(PENDING_REVIEW)
-  verified Boolean @default(false)
-  downloadCount BigInt @default(0)
+  status        WasmPackageStatus @default(PENDING_REVIEW)
+  verified      Boolean           @default(false)
+  downloadCount BigInt            @default(0)
 
   // Storage references (CDN paths)
   wasmPath String // CDN path to WASM binary
@@ -39,13 +39,13 @@ model WasmPackage {
   permissions Json // Array of permission strings
 
   // Timestamps
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
   publishedAt DateTime? // Only set when approved
 
   // Relations
   versions WasmPackageVersion[]
-  reviews WasmPackageReview[]
+  reviews  WasmPackageReview[]
 
   @@unique([id, version])
   @@index([name])
@@ -59,21 +59,21 @@ model WasmPackage {
 model WasmPackageVersion {
   id String @id @default(cuid())
 
-  package WasmPackage @relation(fields: [packageId], references: [id], onDelete: Cascade)
+  package   WasmPackage @relation(fields: [packageId], references: [id], onDelete: Cascade)
   packageId String
 
-  version String
+  version  String
   wasmPath String
   wasmHash String
   wasmSize BigInt
 
-  releaseNotes String?
+  releaseNotes       String?
   minFlowLikeVersion String?
-  yanked Boolean @default(false)
-  status WasmPackageStatus @default(PENDING_REVIEW) // Each version needs approval
+  yanked             Boolean           @default(false)
+  status             WasmPackageStatus @default(PENDING_REVIEW) // Each version needs approval
 
-  publishedAt DateTime @default(now())
-  approvedAt DateTime?
+  publishedAt DateTime  @default(now())
+  approvedAt  DateTime?
 
   @@unique([packageId, version])
   @@index([packageId])
@@ -86,18 +86,18 @@ model WasmPackageVersion {
 model WasmPackageReview {
   id String @id @default(cuid())
 
-  package WasmPackage @relation(fields: [packageId], references: [id], onDelete: Cascade)
+  package   WasmPackage @relation(fields: [packageId], references: [id], onDelete: Cascade)
   packageId String
 
-  reviewer   User   @relation(fields: [reviewerId], references: [id], onDelete: Cascade)
-  reviewerId String
-  action WasmReviewAction
-  comment String? // Optional feedback to submitter
+  reviewer     User             @relation(fields: [reviewerId], references: [id], onDelete: Cascade)
+  reviewerId   String
+  action       WasmReviewAction
+  comment      String? // Optional feedback to submitter
   internalNote String? // Internal notes not shown to submitter
 
   // Review decision details
-  securityScore Int? // 1-5 score for security assessment
-  codeQualityScore Int? // 1-5 score for code quality
+  securityScore      Int? // 1-5 score for security assessment
+  codeQualityScore   Int? // 1-5 score for code quality
   documentationScore Int? // 1-5 score for documentation
 
   createdAt DateTime @default(now())

@@ -28,7 +28,7 @@ impl NodeLogic for GetElementValue {
             "a2ui_get_element_value",
             "Get Element Value",
             "Gets the value of an input element",
-            "A2UI/Elements",
+            "UI/Elements",
         );
         node.add_icon("/flow/icons/a2ui.svg");
 

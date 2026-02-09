@@ -29,7 +29,7 @@ impl NodeLogic for SetPageState {
             "a2ui_set_page_state",
             "Set Page State",
             "Sets a value in page-local state by key",
-            "A2UI/State",
+            "UI/State",
         );
         node.add_icon("/flow/icons/a2ui.svg");
 

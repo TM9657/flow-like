@@ -53,7 +53,7 @@ export class HelperState implements IHelperState {
 
 			const response: ITemporaryFileResponse = await get(
 				this.backend.profile,
-				`tmp?extension=${encodeURIComponent(file.name.split(".").pop() || "")}`,
+				`tmp?extension=${encodeURIComponent(file.name.split(".").pop() || "")}&filename=${encodeURIComponent(file.name)}`,
 				this.backend.auth,
 			);
 
@@ -96,7 +96,9 @@ export class HelperState implements IHelperState {
 			createdAt: Date.now(),
 		});
 
-		return convertFileSrc(postProcessedPath);
+		const assetUrl = convertFileSrc(postProcessedPath);
+		const separator = assetUrl.includes("?") ? "&" : "?";
+		return `${assetUrl}${separator}filename=${encodeURIComponent(file.name)}`;
 	}
 }
 

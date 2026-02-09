@@ -89,6 +89,7 @@ impl NodeLogic for SearchLocationNode {
             "Array of search results with coordinates",
             VariableType::Struct,
         )
+        .set_value_type(flow_like::flow::pin::ValueType::Array)
         .set_schema::<SearchResult>();
 
         node.add_output_pin(

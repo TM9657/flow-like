@@ -9,6 +9,19 @@ use axum::{
 use flow_like::profile::Profile;
 use sea_orm::{ColumnTrait, EntityTrait, QueryFilter};
 
+#[utoipa::path(
+    delete,
+    path = "/admin/profiles/{profile_id}",
+    tag = "admin",
+    params(
+        ("profile_id" = String, Path, description = "Profile template ID to delete")
+    ),
+    responses(
+        (status = 200, description = "Deleted profile templates"),
+        (status = 401, description = "Unauthorized"),
+        (status = 403, description = "Forbidden")
+    )
+)]
 #[tracing::instrument(name = "DELETE /admin/profiles/{profile_id}", skip(state, user))]
 pub async fn delete_profile_template(
     State(state): State<AppState>,

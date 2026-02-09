@@ -56,6 +56,7 @@ const COMPONENT_ICONS: Record<string, string> = {
 	inventoryGrid: "🎒",
 	healthBar: "❤️",
 	miniMap: "🗺",
+	geoMap: "🌍",
 };
 
 const COMPONENT_COLORS: Record<
@@ -284,6 +285,11 @@ const COMPONENT_COLORS: Record<
 		bg: "bg-rose-50",
 		border: "border-rose-200",
 		text: "text-rose-600",
+	},
+	geoMap: {
+		bg: "bg-green-50",
+		border: "border-green-200",
+		text: "text-green-600",
 	},
 };
 

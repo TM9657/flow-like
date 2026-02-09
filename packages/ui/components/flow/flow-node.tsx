@@ -7,6 +7,7 @@ import {
 	type NodeProps,
 	Position,
 	useReactFlow,
+	useUpdateNodeInternals,
 } from "@xyflow/react";
 import {
 	BanIcon,
@@ -34,6 +35,7 @@ import {
 import PuffLoader from "react-spinners/PuffLoader";
 import { useLogAggregation } from "../..";
 import { useInvalidateInvoke } from "../../hooks";
+import { colorFromSub } from "../../hooks/use-peer-users";
 import {
 	getActivityColorClasses,
 	useRunActivity,
@@ -43,7 +45,6 @@ import {
 	ILogLevel,
 	IPinType,
 	IValueType,
-	isTauri,
 	moveNodeCommand,
 	removeNodeCommand,
 	updateNodeCommand,
@@ -80,9 +81,8 @@ import { typeToColor } from "./utils";
 
 export interface RemoteSelectionParticipant {
 	clientId: number;
-	userId?: string;
-	name: string;
-	color: string;
+	/** The sub (subject) from the auth token - use to resolve user info via API */
+	sub?: string;
 }
 
 export interface IPinAction {
@@ -158,6 +158,7 @@ const FlowNodeInner = memo(
 		const div = useRef<HTMLDivElement>(null);
 		const reactFlow = useReactFlow();
 		const { getNode } = useReactFlow();
+		const updateNodeInternals = useUpdateNodeInternals();
 		const remoteSelections = props.data.remoteSelections ?? [];
 		const displayedRemoteSelections = useMemo(
 			() => remoteSelections.slice(0, 3),
@@ -222,14 +223,6 @@ const FlowNodeInner = memo(
 			if (div.current)
 				div.current.style.height = `calc(${height * 15}px + 1.25rem + 0.5rem)`;
 		}, [isReroute, inputPins, outputPins]);
-
-		useEffect(() => {
-			parsePins(Object.values(props.data.node?.pins || []));
-		}, [
-			props.data.node.pins,
-			props.positionAbsoluteX,
-			props.positionAbsoluteY,
-		]);
 
 		// Execution state is now computed directly from the selector above
 
@@ -442,8 +435,15 @@ const FlowNodeInner = memo(
 				setOutputPins(outputPins);
 				setIsExec(isExec);
 			},
-			[props.data.node.pins],
+			[addPin, sortPins, props.data.node],
 		);
+
+		// Parse pins when node pins change
+		useEffect(() => {
+			parsePins(Object.values(props.data.node?.pins || []));
+			// Update React Flow internals when pins change (handles may have changed)
+			updateNodeInternals(props.id);
+		}, [props.data.node.pins, props.id]);
 
 		function isPinAction(pin: IPin | IPinAction): pin is IPinAction {
 			return typeof (pin as IPinAction).onAction === "function";
@@ -620,9 +620,7 @@ const FlowNodeInner = memo(
 
 			const executionMode = props.data.executionMode ?? IExecutionMode.Hybrid;
 			const canRemoteExecuteBase =
-				isTauri() &&
-				!props.data.isOffline &&
-				props.data.onRemoteExecute !== undefined;
+				!props.data.isOffline && props.data.onRemoteExecute !== undefined;
 
 			// Apply execution mode restrictions
 			// only_offline nodes can never run remotely
@@ -751,19 +749,22 @@ const FlowNodeInner = memo(
 			>
 				{remoteSelections.length > 0 && (
 					<div className="pointer-events-none absolute -top-3 left-0 flex flex-col gap-1">
-						{displayedRemoteSelections.map((participant) => (
-							<div
-								key={`${participant.clientId}-${participant.userId ?? participant.name}`}
-								className="flex items-center gap-1 rounded-md border bg-background/80 px-1.5 py-0.5 text-[0.625rem] leading-none shadow-sm"
-								style={{ borderColor: participant.color }}
-							>
-								<span
-									className="h-1.5 w-1.5 rounded-full"
-									style={{ backgroundColor: participant.color }}
-								/>
-								<span className="font-medium">{participant.name}</span>
-							</div>
-						))}
+						{displayedRemoteSelections.map((participant) => {
+							const color = colorFromSub(participant.sub);
+							return (
+								<div
+									key={`${participant.clientId}-${participant.sub ?? "unknown"}`}
+									className="flex items-center gap-1 rounded-md border bg-background/80 px-1.5 py-0.5 text-[0.625rem] leading-none shadow-sm"
+									style={{ borderColor: color }}
+									title={participant.sub}
+								>
+									<span
+										className="h-1.5 w-1.5 rounded-full"
+										style={{ backgroundColor: color }}
+									/>
+								</div>
+							);
+						})}
 						{extraRemoteSelections > 0 && (
 							<div className="rounded-md border bg-background/80 px-1.5 py-0.5 text-[0.625rem] leading-none shadow-sm">
 								+{extraRemoteSelections}
@@ -1014,17 +1015,23 @@ function FlowNode(props: NodeProps<FlowNode>) {
 	}, [props.data.node, props.data.appId, props.data.boardId, flow]);
 
 	const handleCollapse = useCallback(
-		async (x: number, y: number) => {
+		async (_x: number, _y: number) => {
 			if (typeof props.data.version !== "undefined") {
 				return;
 			}
 
 			const selectedNodes = flow.getNodes().filter((node) => node.selected);
-			const flowCords = flow.screenToFlowPosition({
-				x: x,
-				y: y,
-			});
 			if (selectedNodes.length <= 1) return;
+
+			// Calculate bounding box of selected nodes to position the collapsed layer
+			let minX = Number.POSITIVE_INFINITY;
+			let minY = Number.POSITIVE_INFINITY;
+			for (const node of selectedNodes) {
+				const x = node.position.x;
+				const y = node.position.y;
+				if (x < minX) minX = x;
+				if (y < minY) minY = y;
+			}
 
 			const nodeIds = selectedNodes.map((node) => {
 				const isNode = node.data.node as INode;
@@ -1042,7 +1049,7 @@ function FlowNode(props: NodeProps<FlowNode>) {
 					nodes: {},
 					pins: {},
 					parent_id: (selectedNodes[0].data.node as INode).layer,
-					coordinates: [flowCords.x, flowCords.y, 0],
+					coordinates: [minX, minY, 0],
 					in_coordinates: undefined,
 					name: "Collapsed",
 					type: ILayerType.Collapsed,

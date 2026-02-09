@@ -9,6 +9,19 @@ use flow_like_wasm::registry::{PublishRequest, PublishResponse};
 
 /// POST /registry/publish
 /// Publish a new package or version (requires admin approval)
+#[utoipa::path(
+    post,
+    path = "/registry/publish",
+    tag = "registry",
+    request_body = PublishRequest,
+    responses(
+        (status = 200, description = "Package published successfully", body = PublishResponse),
+        (status = 400, description = "Invalid manifest or WASM binary"),
+        (status = 401, description = "Authentication required"),
+        (status = 503, description = "WASM registry not configured")
+    ),
+    security(("bearer_auth" = []))
+)]
 pub async fn publish(
     State(state): State<AppState>,
     Extension(user): Extension<AppUser>,

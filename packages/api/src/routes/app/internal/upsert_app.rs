@@ -24,14 +24,32 @@ use sea_orm::{
     QuerySelect, RelationTrait, TransactionTrait,
 };
 use serde::{Deserialize, Serialize};
+use utoipa::ToSchema;
 
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize, ToSchema)]
 pub struct AppUpsertBody {
+    #[schema(value_type = Option<Object>)]
     pub app: Option<App>,
+    #[schema(value_type = Option<Object>)]
     pub meta: Option<Metadata>,
     pub bits: Option<Vec<String>>,
 }
 
+#[utoipa::path(
+    put,
+    path = "/apps/{app_id}",
+    tag = "apps",
+    params(
+        ("app_id" = String, Path, description = "Application ID"),
+        ("language" = Option<String>, Query, description = "Language code (default: en)")
+    ),
+    request_body = AppUpsertBody,
+    responses(
+        (status = 200, description = "Application created or updated", body = Object),
+        (status = 401, description = "Unauthorized"),
+        (status = 403, description = "Forbidden")
+    )
+)]
 #[tracing::instrument(name = "PUT /apps/{app_id}", skip(state, user, app_body, query))]
 pub async fn upsert_app(
     State(state): State<AppState>,

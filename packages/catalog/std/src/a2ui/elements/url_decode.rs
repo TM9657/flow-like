@@ -23,7 +23,7 @@ impl NodeLogic for UrlDecode {
             "a2ui_url_decode",
             "URL Decode",
             "Decodes a URL-encoded (percent-encoded) string",
-            "A2UI/Navigation",
+            "UI/Navigation",
         );
         node.add_icon("/flow/icons/a2ui.svg");
 

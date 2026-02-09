@@ -27,7 +27,7 @@ impl NodeLogic for InstantiateWidget {
             "a2ui_instantiate_widget",
             "Instantiate Widget",
             "Creates a new widget instance for dynamic insertion into containers",
-            "A2UI/Container",
+            "UI/Container",
         );
         node.add_icon("/flow/icons/a2ui.svg");
 

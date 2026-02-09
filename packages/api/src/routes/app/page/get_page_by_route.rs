@@ -8,18 +8,33 @@ use axum::{
 };
 use flow_like::a2ui::widget::Page;
 use serde::{Deserialize, Serialize};
+use utoipa::{IntoParams, ToSchema};
 
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Debug, IntoParams, ToSchema)]
 pub struct RouteQuery {
     pub route: String,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, ToSchema)]
 pub struct PageWithBoardId {
+    #[schema(value_type = Object)]
     pub page: Page,
     pub board_id: Option<String>,
 }
 
+#[utoipa::path(
+    get,
+    path = "/apps/{app_id}/pages/by-route",
+    tag = "pages",
+    params(
+        ("app_id" = String, Path, description = "Application ID"),
+        RouteQuery
+    ),
+    responses(
+        (status = 200, description = "Page matching the route", body = Option<PageWithBoardId>),
+        (status = 401, description = "Unauthorized")
+    )
+)]
 #[tracing::instrument(name = "GET /apps/{app_id}/pages/by-route", skip(state, user))]
 pub async fn get_page_by_route(
     State(state): State<AppState>,

@@ -25,7 +25,7 @@ impl NodeLogic for SetTooltipContent {
             "a2ui_set_tooltip_content",
             "Set Tooltip Content",
             "Sets the content text of a tooltip element",
-            "A2UI/Elements/Set",
+            "UI/Elements/Set",
         );
         node.add_icon("/flow/icons/a2ui.svg");
 

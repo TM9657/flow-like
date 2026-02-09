@@ -1,0 +1,436 @@
+---
+title: Markdown Formatting
+description: Complete reference for markdown formatting in Flow-Like chat and text editors
+---
+
+import { Steps, Aside, Card, CardGrid, Tabs, TabItem, Code } from '@astrojs/starlight/components';
+
+# Markdown Formatting
+
+Flow-Like supports rich markdown formatting throughout the platform, including chat interfaces, documentation, and text editors. This reference covers all supported formatting options.
+
+<Aside>
+  Try the live markdown playground at [app.flow-like.com/debug/markdown](https://app.flow-like.com/debug/markdown) to experiment with all formatting options.
+</Aside>
+
+---
+
+## Basic Text Formatting
+
+### Headings
+
+```markdown
+# Heading 1
+## Heading 2
+### Heading 3
+#### Heading 4
+##### Heading 5
+###### Heading 6
+```
+
+### Emphasis
+
+| Syntax | Result |
+|--------|--------|
+| `**bold**` | **bold** |
+| `*italic*` | *italic* |
+| `~~strikethrough~~` | ~~strikethrough~~ |
+| `***bold italic***` | ***bold italic*** |
+| `` `inline code` `` | `inline code` |
+
+---
+
+## Lists
+
+### Unordered Lists
+
+```markdown
+- Item one
+- Item two
+  - Nested item
+  - Another nested item
+- Item three
+```
+
+### Ordered Lists
+
+```markdown
+1. First item
+2. Second item
+   1. Nested numbered
+   2. Another nested
+3. Third item
+```
+
+### Task Lists
+
+```markdown
+- [x] Completed task
+- [ ] Incomplete task
+- [ ] Another task
+```
+
+---
+
+## Links and Images
+
+### Links
+
+```markdown
+[Link text](https://example.com)
+```
+
+### Images
+
+```markdown
+![Alt text](https://example.com/image.png)
+```
+
+---
+
+## Code Blocks
+
+### Inline Code
+
+Use backticks for inline code: `` `const x = 42` ``
+
+### Fenced Code Blocks
+
+Use triple backticks with an optional language identifier for syntax highlighting:
+
+````markdown
+```javascript
+function greet(name) {
+  return `Hello, ${name}!`;
+}
+```
+````
+
+Supported languages include: `javascript`, `typescript`, `python`, `rust`, `json`, `html`, `css`, `bash`, `sql`, and many more.
+
+---
+
+## Tables
+
+```markdown
+| Header 1 | Header 2 | Header 3 |
+|----------|----------|----------|
+| Cell 1   | Cell 2   | Cell 3   |
+| Cell 4   | Cell 5   | Cell 6   |
+```
+
+### Alignment
+
+```markdown
+| Left | Center | Right |
+|:-----|:------:|------:|
+| L    |   C    |     R |
+```
+
+---
+
+## Blockquotes
+
+```markdown
+> This is a blockquote
+> It can span multiple lines
+
+> Nested blockquotes
+>> Are also supported
+```
+
+---
+
+## Horizontal Rules
+
+```markdown
+---
+```
+
+or
+
+```markdown
+***
+```
+
+---
+
+## Interactive Charts
+
+Flow-Like extends standard markdown with interactive chart support using `nivo` and `plotly` code blocks. Charts can be defined using CSV data or native JSON configuration.
+
+<Aside type="tip">
+  Charts are fully interactive with hover tooltips, zooming, and panning where applicable.
+</Aside>
+
+### CSV Mode
+
+The simplest way to create charts is with CSV data and an optional configuration header:
+
+````markdown
+```nivo
+type: bar
+title: Sales by Quarter
+colors: paired
+---
+quarter,sales,profit
+Q1,150,45
+Q2,230,67
+Q3,180,52
+Q4,290,84
+```
+````
+
+#### Configuration Options
+
+| Option | Description | Values |
+|--------|-------------|--------|
+| `type` | Chart type | `bar`, `line`, `pie`, `radar`, `heatmap`, `scatter`, `funnel`, `treemap`, `sunburst`, `sankey`, `stream`, `waffle`, `radialBar`, `chord`, `calendar`, `bump`, `areaBump` |
+| `title` | Chart title | Any string |
+| `colors` | Color scheme | `nivo`, `paired`, `category10`, `accent`, `dark2`, `set1`, `set2`, `set3`, `pastel1`, `pastel2`, `spectral`, or array of hex colors |
+| `height` | Chart height in pixels | Number (default: 300) |
+| `showLegend` | Show/hide legend | `true`, `false` |
+| `stacked` | Stack bars/areas | `true`, `false` |
+| `layout` | Bar orientation | `vertical`, `horizontal` |
+
+### Nivo Charts (CSV Examples)
+
+<Tabs>
+  <TabItem label="Bar Chart">
+    ````markdown
+    ```nivo
+    type: bar
+    title: Monthly Revenue
+    colors: paired
+    ---
+    month,revenue,expenses
+    Jan,4500,3200
+    Feb,5200,3800
+    Mar,4800,3100
+    Apr,6100,4200
+    ```
+    ````
+  </TabItem>
+  <TabItem label="Line Chart">
+    ````markdown
+    ```nivo
+    type: line
+    title: User Growth
+    ---
+    month,users,active
+    Jan,1000,800
+    Feb,1500,1200
+    Mar,2200,1900
+    Apr,3100,2700
+    ```
+    ````
+  </TabItem>
+  <TabItem label="Pie Chart">
+    ````markdown
+    ```nivo
+    type: pie
+    title: Market Share
+    ---
+    company,share
+    Company A,35
+    Company B,28
+    Company C,22
+    Others,15
+    ```
+    ````
+  </TabItem>
+  <TabItem label="Radar Chart">
+    ````markdown
+    ```nivo
+    type: radar
+    title: Skill Assessment
+    ---
+    skill,Alice,Bob
+    JavaScript,90,75
+    Python,70,85
+    Design,80,60
+    Communication,85,90
+    Leadership,75,80
+    ```
+    ````
+  </TabItem>
+  <TabItem label="Heatmap">
+    ````markdown
+    ```nivo
+    type: heatmap
+    title: Activity Heatmap
+    ---
+    hour,Mon,Tue,Wed,Thu,Fri
+    9am,5,8,6,9,7
+    10am,8,9,7,8,9
+    11am,9,7,8,6,8
+    12pm,6,5,9,7,6
+    ```
+    ````
+  </TabItem>
+</Tabs>
+
+### Plotly Charts (CSV Examples)
+
+<Tabs>
+  <TabItem label="Bar Chart">
+    ````markdown
+    ```plotly
+    type: bar
+    title: Quarterly Results
+    ---
+    quarter,revenue,costs
+    Q1,120,80
+    Q2,150,95
+    Q3,180,110
+    Q4,210,130
+    ```
+    ````
+  </TabItem>
+  <TabItem label="Line Chart">
+    ````markdown
+    ```plotly
+    type: line
+    title: Temperature Trend
+    ---
+    day,temperature
+    Mon,22
+    Tue,24
+    Wed,21
+    Thu,23
+    Fri,25
+    ```
+    ````
+  </TabItem>
+  <TabItem label="Scatter Plot">
+    ````markdown
+    ```plotly
+    type: scatter
+    title: Performance vs Experience
+    ---
+    experience,performance
+    1,65
+    2,72
+    3,78
+    5,85
+    7,88
+    10,92
+    ```
+    ````
+  </TabItem>
+  <TabItem label="Pie Chart">
+    ````markdown
+    ```plotly
+    type: pie
+    title: Budget Allocation
+    ---
+    category,amount
+    Development,45000
+    Marketing,25000
+    Operations,20000
+    Support,10000
+    ```
+    ````
+  </TabItem>
+</Tabs>
+
+### JSON Mode (Full Control)
+
+For advanced customization, use native Plotly or Nivo JSON configuration:
+
+<Tabs>
+  <TabItem label="Plotly JSON">
+    ````markdown
+    ```plotly
+    {
+      "data": [
+        {
+          "x": ["Jan", "Feb", "Mar", "Apr"],
+          "y": [10, 15, 13, 17],
+          "type": "scatter",
+          "mode": "lines+markers",
+          "name": "Series A"
+        },
+        {
+          "x": ["Jan", "Feb", "Mar", "Apr"],
+          "y": [8, 12, 9, 14],
+          "type": "scatter",
+          "mode": "lines+markers",
+          "name": "Series B"
+        }
+      ],
+      "layout": {
+        "title": "Multi-Series Line Chart",
+        "xaxis": { "title": "Month" },
+        "yaxis": { "title": "Value" }
+      }
+    }
+    ```
+    ````
+  </TabItem>
+  <TabItem label="Nivo JSON">
+    ````markdown
+    ```nivo
+    {
+      "type": "bar",
+      "data": [
+        { "country": "USA", "value": 120 },
+        { "country": "UK", "value": 85 },
+        { "country": "Germany", "value": 95 }
+      ],
+      "keys": ["value"],
+      "indexBy": "country",
+      "colors": { "scheme": "paired" },
+      "margin": { "top": 50, "right": 50, "bottom": 50, "left": 60 }
+    }
+    ```
+    ````
+  </TabItem>
+</Tabs>
+
+<Aside type="note">
+  JSON mode passes configuration directly to the chart library, giving you access to all native options. See the [Plotly.js documentation](https://plotly.com/javascript/) and [Nivo documentation](https://nivo.rocks/) for complete configuration references.
+</Aside>
+
+### Auto-Detection
+
+When no `type` is specified in CSV mode, the chart type is automatically detected based on your data:
+
+| Data Pattern | Detected Type |
+|--------------|---------------|
+| One numeric column | Pie chart |
+| Two numeric columns | Scatter plot |
+| Multiple numeric columns | Bar chart |
+| Time-series labels | Line chart |
+
+---
+
+## Best Practices
+
+<CardGrid>
+  <Card title="Use Semantic Headings" icon="document">
+    Structure your content with proper heading hierarchy (h1 → h2 → h3).
+  </Card>
+  <Card title="Keep Tables Simple" icon="list-format">
+    For complex data, consider using charts instead of large tables.
+  </Card>
+  <Card title="Choose the Right Chart" icon="graph">
+    Use bar charts for comparisons, line charts for trends, pie charts for proportions.
+  </Card>
+  <Card title="Test Your Markdown" icon="rocket">
+    Use the [debug playground](https://app.flow-like.com/debug/markdown) to preview formatting.
+  </Card>
+</CardGrid>
+
+---
+
+## Playground
+
+Test all markdown features interactively:
+
+**[Open Markdown Playground →](https://app.flow-like.com/debug/markdown)**
+
+The playground provides:
+- Live side-by-side editing and preview
+- Pre-built examples for all chart types
+- Instant rendering of your markdown

@@ -12,6 +12,45 @@ function generateRandomString(length: number): string {
 	return Array.from(array, (b) => b.toString(16).padStart(2, "0")).join("");
 }
 
+/**
+ * Platform targets for OAuth callback routing.
+ * These map to hardcoded URLs on the callback handler for security.
+ */
+export type OAuthPlatform = "desktop" | "web-dev" | "web-prod";
+
+/**
+ * Encodes platform info into the OAuth state parameter.
+ * Format: platform_randomState
+ * Uses predefined platform flags that map to hardcoded URLs on the callback handler.
+ */
+function encodeStateWithPlatform(
+	randomState: string,
+	platform: OAuthPlatform,
+): string {
+	return `${platform}_${randomState}`;
+}
+
+/**
+ * Decodes platform info from the OAuth state parameter.
+ * Returns the platform flag and random state.
+ */
+export function decodeStateWithPlatform(state: string): {
+	platform: OAuthPlatform;
+	randomState: string;
+} {
+	const platforms: OAuthPlatform[] = ["desktop", "web-dev", "web-prod"];
+	for (const platform of platforms) {
+		if (state.startsWith(`${platform}_`)) {
+			return {
+				platform,
+				randomState: state.substring(platform.length + 1),
+			};
+		}
+	}
+	// Legacy state without platform prefix - assume desktop
+	return { platform: "desktop", randomState: state };
+}
+
 function generateCodeVerifier(): string {
 	return generateRandomString(64);
 }
@@ -36,6 +75,14 @@ export interface OAuthServiceConfig {
 	 * Should return the base URL like "https://api.example.com"
 	 */
 	getApiBaseUrl?: () => Promise<string | null>;
+	/**
+	 * Platform identifier for OAuth callback routing.
+	 * These map to hardcoded URLs on the callback handler for security.
+	 * - "desktop": Callback will use deeplink (flow-like://thirdparty/callback)
+	 * - "web-dev": Callback will redirect to localhost:3001/thirdparty/callback
+	 * - "web-prod": Callback will redirect to app.flow-like.com/thirdparty/callback
+	 */
+	platform?: OAuthPlatform;
 }
 
 export function createOAuthService(config: OAuthServiceConfig) {
@@ -44,6 +91,7 @@ export function createOAuthService(config: OAuthServiceConfig) {
 		tokenStore,
 		redirectUri = "https://flow-like.com/thirdparty/callback",
 		getApiBaseUrl,
+		platform = "desktop",
 	} = config;
 
 	return {
@@ -65,7 +113,9 @@ export function createOAuthService(config: OAuthServiceConfig) {
 
 			await tokenStore.cleanupPendingAuth();
 
-			const state = generateRandomString(32);
+			const randomState = generateRandomString(32);
+			// Encode platform info into state for callback routing
+			const state = encodeStateWithPlatform(randomState, platform);
 			const codeVerifier = generateCodeVerifier();
 			const codeChallenge = await generateCodeChallenge(codeVerifier);
 

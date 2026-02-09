@@ -180,6 +180,7 @@ impl NodeLogic for CallReferenceNode {
                 &pin.description,
                 pin.data_type,
             );
+            new_pin.value_type = pin.value_type.clone();
             new_pin.schema = pin.schema.clone();
             new_pin.options = pin.options.clone();
         }

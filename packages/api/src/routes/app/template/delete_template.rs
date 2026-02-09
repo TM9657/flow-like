@@ -8,6 +8,26 @@ use axum::{
 };
 use sea_orm::{ColumnTrait, EntityTrait, QueryFilter};
 
+#[utoipa::path(
+    delete,
+    path = "/apps/{app_id}/templates/{template_id}",
+    tag = "templates",
+    description = "Delete a template.",
+    params(
+        ("app_id" = String, Path, description = "Application ID"),
+        ("template_id" = String, Path, description = "Template ID")
+    ),
+    responses(
+        (status = 200, description = "Template deleted", body = String, content_type = "application/json"),
+        (status = 401, description = "Unauthorized"),
+        (status = 403, description = "Forbidden")
+    ),
+    security(
+        ("bearer_auth" = []),
+        ("api_key" = []),
+        ("pat" = [])
+    )
+)]
 #[tracing::instrument(
     name = "DELETE /apps/{app_id}/templates/{template_id}",
     skip(state, user)

@@ -2,7 +2,7 @@
 mod tests {
     use crate::geo::{
         GeoCoordinate,
-        routing::plan_route::{RouteLeg, RouteProfile, RouteResult, RouteStep},
+        routing::osrm::{RouteLeg, RouteProfile, RouteResult, RouteStep},
     };
 
     #[test]
@@ -93,7 +93,7 @@ mod tests {
 
         assert_eq!(route.distance, 0.0);
         assert_eq!(route.duration, 0.0);
-        assert!(route.geometry.is_empty());
+        assert!(route.geometry.points.is_empty());
         assert!(route.legs.is_empty());
         assert!(route.weight_name.is_empty());
     }

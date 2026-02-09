@@ -6,6 +6,7 @@ import {
 	Background,
 	BackgroundVariant,
 	type Connection,
+	ControlButton,
 	Controls,
 	type Edge,
 	type FinalConnectionState,
@@ -21,6 +22,8 @@ import {
 	addEdge,
 	applyEdgeChanges,
 	applyNodeChanges,
+	getNodesBounds,
+	getViewportForBounds,
 	reconnectEdge,
 	useEdgesState,
 	useKeyPress,
@@ -31,6 +34,7 @@ import "@xyflow/react/dist/style.css";
 import { useMediaQuery } from "@uidotdev/usehooks";
 import {
 	ArrowBigLeftDashIcon,
+	CheckIcon,
 	FileTextIcon,
 	HistoryIcon,
 	LayoutTemplateIcon,
@@ -38,6 +42,7 @@ import {
 	PlayCircleIcon,
 	ScrollIcon,
 	SearchIcon,
+	ShareIcon,
 	SparklesIcon,
 	SquareChevronUpIcon,
 	VariableIcon,
@@ -76,7 +81,9 @@ import {
 	type FlowNodeInfoOverlayHandle,
 } from "../../components/flow/flow-node/flow-node-info-overlay";
 import { FlowPages } from "../../components/flow/flow-pages";
+import { MediaNode } from "../../components/flow/media-node";
 import { Traces } from "../../components/flow/traces";
+import { UploadPlaceholderNode } from "../../components/flow/upload-placeholder-node";
 import {
 	Variable,
 	VariablesMenu,
@@ -92,6 +99,8 @@ import { useFlowPanels } from "../../hooks/use-flow-panels";
 import { useInvoke } from "../../hooks/use-invoke";
 import { useKeyboardShortcuts } from "../../hooks/use-keyboard-shortcuts";
 import { useLayerNavigation } from "../../hooks/use-layer-navigation";
+import { useMediaUpload } from "../../hooks/use-media-upload";
+import { usePeerUserInfo } from "../../hooks/use-peer-users";
 import { useRealtimeCollaboration } from "../../hooks/use-realtime-collaboration";
 import { useViewportManager } from "../../hooks/use-viewport-manager";
 import {
@@ -120,8 +129,7 @@ import {
 	isValidConnection,
 	parseBoard,
 } from "../../lib/flow-board-utils";
-import { toastError } from "../../lib/messages";
-import { isTauri } from "../../lib/platform";
+import { toastError, toastSuccess } from "../../lib/messages";
 import { getRuntimeConfiguredVariables } from "../../lib/runtime-vars-utils";
 import { IAppVisibility } from "../../lib/schema/app/app";
 import {
@@ -162,11 +170,14 @@ export function FlowBoard({
 	boardId,
 	nodeId,
 	initialVersion,
+	sub,
 }: Readonly<{
 	appId: string;
 	boardId: string;
 	nodeId?: string;
 	initialVersion?: [number, number, number];
+	/** The authenticated user's sub (subject) from the auth token - used for realtime collaboration */
+	sub?: string;
 }>) {
 	const { pushCommand, pushCommands, redo, undo } = useUndoRedo(appId, boardId);
 	const router = useRouter();
@@ -212,7 +223,7 @@ export function FlowBoard({
 	);
 	const app = useInvoke(backend.appState.getApp, backend.appState, [appId]);
 	const { addRun, removeRun, pushUpdate } = useRunExecutionStore();
-	const { screenToFlowPosition, getViewport, setViewport, fitView } =
+	const { screenToFlowPosition, getViewport, setViewport, fitView, getNodes } =
 		useReactFlow();
 
 	const [nodes, setNodes] = useNodesState<any>([]);
@@ -404,7 +415,7 @@ export function FlowBoard({
 			board,
 			version,
 			backend,
-			currentProfile,
+			sub,
 			hub,
 			mousePosition,
 			layerPath,
@@ -412,6 +423,26 @@ export function FlowBoard({
 			commandAwarenessRef,
 			setNodes,
 		});
+
+	// Cache peer user info to avoid repeated API calls
+	const peerSubs = useMemo(
+		() => peerStates.map((p) => p.sub).filter((s): s is string => !!s),
+		[peerStates],
+	);
+	const peerUsers = usePeerUserInfo(
+		peerSubs,
+		backend.userState.lookupUser.bind(backend.userState),
+	);
+
+	// Media upload for images/videos on the board
+	const { handleMediaPaste } = useMediaUpload({
+		appId,
+		boardId,
+		backend,
+		executeCommand,
+		currentLayer,
+		setNodes,
+	});
 
 	useEffect(() => {
 		if (!logPanelRef.current) return;
@@ -468,6 +499,7 @@ export function FlowBoard({
 				const templateNodes = Object.values(templateBoard.nodes);
 				const templateComments = Object.values(templateBoard.comments);
 				const templateLayers = Object.values(templateBoard.layers);
+				const templateVariables = Object.values(templateBoard.variables);
 
 				if (
 					templateNodes.length === 0 &&
@@ -484,6 +516,7 @@ export function FlowBoard({
 					original_nodes: templateNodes,
 					original_comments: templateComments,
 					original_layers: templateLayers,
+					original_variables: templateVariables,
 					new_nodes: [],
 					new_comments: [],
 					new_layers: [],
@@ -954,6 +987,15 @@ export function FlowBoard({
 				x: mousePosition.x,
 				y: mousePosition.y,
 			});
+
+			// Try to handle media paste first (images/videos)
+			const wasMediaPaste = await handleMediaPaste(
+				event,
+				currentCursorPosition,
+			);
+			if (wasMediaPaste) return;
+
+			// Fall back to regular paste handling
 			await handlePaste(
 				event,
 				currentCursorPosition,
@@ -962,7 +1004,14 @@ export function FlowBoard({
 				currentLayer,
 			);
 		},
-		[boardId, mousePosition, executeCommand, currentLayer, version],
+		[
+			boardId,
+			mousePosition,
+			executeCommand,
+			currentLayer,
+			version,
+			handleMediaPaste,
+		],
 	);
 
 	const handleCopyCB = useCallback(
@@ -1203,7 +1252,7 @@ export function FlowBoard({
 			version,
 			openNodeInfo,
 			handleExplainNodes,
-			isTauri() && backend.boardState.executeBoardRemote
+			backend.boardState.executeBoardRemote
 				? {
 						isOffline,
 						onRemoteExecute: executeBoardRemote,
@@ -1230,6 +1279,8 @@ export function FlowBoard({
 		() => ({
 			flowNode: FlowNode,
 			commentNode: CommentNode,
+			mediaNode: MediaNode,
+			uploadPlaceholderNode: UploadPlaceholderNode,
 			layerNode: LayerNode,
 			layerInnerNode: LayerInnerNode,
 			node: FlowNode,
@@ -1565,6 +1616,77 @@ export function FlowBoard({
 		],
 	);
 
+	const onScreenshot = useCallback(async () => {
+		const viewportEl = document.querySelector(
+			".react-flow__viewport",
+		) as HTMLElement | null;
+		if (!viewportEl) return;
+
+		const nodes = getNodes();
+		if (nodes.length === 0) {
+			toastError("No nodes to capture", <XIcon />);
+			return;
+		}
+
+		const nodesBounds = getNodesBounds(nodes);
+		const padding = 50;
+		const imageWidth = Math.min(4096, nodesBounds.width + padding * 2);
+		const imageHeight = Math.min(4096, nodesBounds.height + padding * 2);
+
+		const viewport = getViewportForBounds(
+			nodesBounds,
+			imageWidth,
+			imageHeight,
+			0.5,
+			2,
+			padding,
+		);
+
+		const { toPng } = await import("html-to-image");
+
+		try {
+			const dataUrl = await toPng(viewportEl, {
+				backgroundColor: "transparent",
+				width: imageWidth,
+				height: imageHeight,
+				style: {
+					width: `${imageWidth}px`,
+					height: `${imageHeight}px`,
+					transform: `translate(${viewport.x}px, ${viewport.y}px) scale(${viewport.zoom})`,
+				},
+				// Skip images that fail to load (cross-origin issues)
+				filter: (node) => {
+					// Skip video elements as they can't be captured
+					if (node instanceof HTMLVideoElement) return false;
+					return true;
+				},
+				// Handle image fetch errors gracefully
+				skipFonts: true,
+				imagePlaceholder:
+					"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==",
+			});
+
+			const response = await fetch(dataUrl);
+			const blob = await response.blob();
+
+			try {
+				await navigator.clipboard.write([
+					new ClipboardItem({ "image/png": blob }),
+				]);
+				toastSuccess("Screenshot copied to clipboard", <CheckIcon />);
+			} catch {
+				const link = document.createElement("a");
+				link.download = "flow-screenshot.png";
+				link.href = dataUrl;
+				link.click();
+				toastSuccess("Screenshot downloaded", <CheckIcon />);
+			}
+		} catch (error) {
+			console.error("Screenshot failed:", error);
+			toastError("Failed to capture screenshot", <XIcon />);
+		}
+	}, [getNodes]);
+
 	const onReconnectEnd = useCallback(
 		async (event: any, edge: any) => {
 			// Don't execute commands when viewing an old version
@@ -1760,7 +1882,7 @@ export function FlowBoard({
 	});
 
 	return (
-		<div className="w-full flex-1 grow flex-col min-h-0 relative">
+		<div className="w-full flex flex-1 grow flex-col min-h-0 relative overflow-hidden">
 			{/* Desktop FlowPilot floating panel */}
 			{copilotOpen && (
 				<div className="hidden md:block fixed inset-0 z-100 pointer-events-none">
@@ -1952,10 +2074,9 @@ export function FlowBoard({
 
 			<ResizablePanelGroup
 				direction="horizontal"
-				className="flex grow min-h-[calc(100dvh-var(--mobile-header-height,56px)-env(safe-area-inset-bottom))] h-[calc(100dvh-var(--mobile-header-height,56px)-env(safe-area-inset-bottom))] md:min-h-dvh md:h-dvh overscroll-contain"
+				className="flex grow flex-1 min-h-0 h-full overscroll-none"
 				style={{
-					touchAction: "manipulation",
-					WebkitOverflowScrolling: "touch",
+					touchAction: "none",
 					overflow: "hidden",
 				}}
 			>
@@ -2103,7 +2224,11 @@ export function FlowBoard({
 										fitView
 										proOptions={{ hideAttribution: true }}
 									>
-										<Controls />
+										<Controls>
+											<ControlButton onClick={onScreenshot}>
+												<ShareIcon className="size-4" />
+											</ControlButton>
+										</Controls>
 										<MiniMap
 											pannable
 											zoomable
@@ -2164,6 +2289,7 @@ export function FlowBoard({
 										<FlowCursors
 											peers={peerStates}
 											currentLayerPath={layerPath ?? "root"}
+											peerUsers={peerUsers}
 										/>
 									)}
 									{peerStates.length > 0 && (
@@ -2171,6 +2297,7 @@ export function FlowBoard({
 											peers={peerStates}
 											currentLayerPath={layerPath ?? "root"}
 											nodes={nodes}
+											peerUsers={peerUsers}
 										/>
 									)}
 									<DragOverlay

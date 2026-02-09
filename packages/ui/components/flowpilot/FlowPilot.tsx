@@ -3,10 +3,10 @@
 import { AnimatePresence, motion } from "framer-motion";
 import {
 	ArrowDown,
-	BotIcon,
 	CameraIcon,
 	CheckCircle2,
 	ChevronDownIcon,
+	ClockIcon,
 	ImageIcon,
 	LayoutGridIcon,
 	Loader2,
@@ -17,8 +17,16 @@ import {
 } from "lucide-react";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 
-import { useInvoke } from "../../hooks";
+import { useCopilotSDK, useInvoke } from "../../hooks";
 import { IBitTypes } from "../../lib";
+import {
+	type IFlowPilotConversation,
+	addMessage,
+	createConversation,
+	getMessages,
+	updateConversation,
+	updateMessage,
+} from "../../lib/flowpilot-db";
 import { cn } from "../../lib/utils";
 import { useBackend } from "../../state/backend-state";
 
@@ -30,22 +38,18 @@ import {
 	DropdownMenuTrigger,
 } from "../ui/dropdown-menu";
 import { ScrollArea } from "../ui/scroll-area";
-import {
-	Select,
-	SelectContent,
-	SelectItem,
-	SelectTrigger,
-	SelectValue,
-} from "../ui/select";
 import { Tooltip, TooltipContent, TooltipTrigger } from "../ui/tooltip";
 
 import { ContextNodes } from "./ContextNodes";
+import { HistoryPanel } from "./HistoryPanel";
 import { MessageContent } from "./MessageContent";
 import { PendingCommandsView } from "./PendingCommandsView";
 import { PendingComponentsView } from "./PendingComponentsView";
 import { PlanStepsView } from "./PlanStepsView";
+import { ModelSelector, ProviderSelector } from "./ProviderSelector";
 import { StatusPill } from "./StatusPill";
 import type {
+	AIProvider,
 	AgentMode,
 	AttachedImage,
 	CopilotMessage,
@@ -55,6 +59,7 @@ import type {
 } from "./types";
 
 import type {
+	CanvasSettings,
 	CopilotScope,
 	UnifiedChatMessage,
 } from "../../lib/schema/copilot";
@@ -66,6 +71,11 @@ export function FlowPilot({
 	title = "FlowPilot",
 	className,
 	onClose,
+	// Provider props
+	forceProvider,
+	defaultProvider = "bits",
+	copilotServerUrl,
+	onRequestCopilotServerUrl,
 	// Board mode props
 	board,
 	selectedNodeIds = [],
@@ -96,6 +106,11 @@ export function FlowPilot({
 	const [userScrolledUp, setUserScrolledUp] = useState(false);
 	const [selectedModelId, setSelectedModelId] = useState("");
 
+	// Provider state
+	const [provider, setProvider] = useState<AIProvider>(
+		forceProvider ?? defaultProvider,
+	);
+
 	// Board-specific state
 	const [pendingCommands, setPendingCommands] = useState<BoardCommand[]>([]);
 	const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
@@ -105,6 +120,16 @@ export function FlowPilot({
 	const [pendingComponents, setPendingComponents] = useState<
 		SurfaceComponent[]
 	>([]);
+	const [pendingCanvasSettings, setPendingCanvasSettings] = useState<
+		CanvasSettings | undefined
+	>();
+
+	// History state
+	const [showHistory, setShowHistory] = useState(false);
+	const [currentConversationId, setCurrentConversationId] = useState<
+		string | undefined
+	>();
+	const currentMessageIdRef = useRef<string | undefined>(undefined);
 
 	// Refs
 	const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -115,6 +140,9 @@ export function FlowPilot({
 
 	// Backend context
 	const backendContext = useBackend();
+
+	// Copilot SDK hook
+	const copilotSDK = useCopilotSDK();
 
 	// Elapsed time tracking
 	useEffect(() => {
@@ -136,7 +164,7 @@ export function FlowPilot({
 		true,
 	);
 
-	// Fetch available models
+	// Fetch available models (bits)
 	const foundBits = useInvoke(
 		backendContext.bitState.searchBits,
 		backendContext.bitState,
@@ -145,27 +173,83 @@ export function FlowPilot({
 		[profile.data?.hub_profile.id],
 	);
 
-	// Filter models to only include those in the user's profile
-	const models = useMemo(() => {
+	// Filter bits models to only include those in the user's profile
+	const bitsModels = useMemo(() => {
 		if (!foundBits.data || !profile.data?.hub_profile.bits) return [];
 		const profileBitIds = new Set(profile.data.hub_profile.bits);
+		const canHostLocal = backendContext.capabilities().canHostLlamaCPP;
+
 		return foundBits.data.filter((model) => {
 			const fullId = `${model.hub}:${model.id}`;
-			return profileBitIds.has(fullId);
+			if (!profileBitIds.has(fullId)) return false;
+
+			if (!canHostLocal) {
+				const providerName =
+					model.parameters?.provider?.provider_name?.toLowerCase();
+				if (
+					providerName === "local" ||
+					providerName === "llama.cpp" ||
+					providerName === "llamacpp" ||
+					providerName === "ollama"
+				) {
+					return false;
+				}
+			}
+
+			return true;
 		});
 	}, [foundBits.data, profile.data?.hub_profile.bits]);
 
-	// Set default model when models are loaded
+	// Get current models based on provider
+	const currentModels = useMemo(() => {
+		if (provider === "copilot") {
+			return copilotSDK.models;
+		}
+		return bitsModels;
+	}, [provider, copilotSDK.models, bitsModels]);
+
+	// Set default model when models are loaded or provider changes
 	useEffect(() => {
-		if (!selectedModelId && models.length > 0) {
-			const hostedModel = models.find(
+		if (currentModels.length === 0) return;
+
+		// Check if current selection is valid for current provider
+		const isCurrentValid = currentModels.some((m) => m.id === selectedModelId);
+		if (isCurrentValid) return;
+
+		// Select a default model
+		if (provider === "copilot") {
+			// Prefer claude or gpt-4 for Copilot
+			const preferredModel =
+				currentModels.find((m) => m.id.includes("claude")) ||
+				currentModels.find((m) => m.id.includes("gpt-4")) ||
+				currentModels[0];
+			setSelectedModelId(preferredModel?.id || "");
+		} else {
+			// Bits provider - existing logic
+			const hostedModel = bitsModels.find(
 				(m) => m.parameters?.provider?.provider_name === "Hosted",
 			);
-			const gpt4o = models.find((m) => m.id.includes("gpt-4o"));
-			const defaultModel = hostedModel || gpt4o || models[0];
-			setSelectedModelId(defaultModel.id);
+			const gpt4o = bitsModels.find((m) => m.id.includes("gpt-4o"));
+			const defaultModel = hostedModel || gpt4o || bitsModels[0];
+			setSelectedModelId(defaultModel?.id || "");
 		}
-	}, [models, selectedModelId]);
+	}, [currentModels, selectedModelId, provider, bitsModels]);
+
+	// Copilot connection handlers
+	const handleStartCopilot = useCallback(
+		async (serverUrl?: string) => {
+			await copilotSDK.start({
+				useStdio: !serverUrl,
+				serverUrl,
+			});
+		},
+		[copilotSDK],
+	);
+
+	const handleStopCopilot = useCallback(async () => {
+		await copilotSDK.stop();
+		setProvider("bits");
+	}, [copilotSDK]);
 
 	// Scroll handling
 	const scrollToBottom = useCallback(
@@ -200,7 +284,31 @@ export function FlowPilot({
 		setPendingCommands([]);
 		setPendingComponents([]);
 		setSuggestions([]);
+		setCurrentConversationId(undefined);
+		setShowHistory(false);
 	}, []);
+
+	// Select conversation from history
+	const handleSelectConversation = useCallback(
+		async (conversation: IFlowPilotConversation) => {
+			try {
+				const storedMessages = await getMessages(conversation.id);
+				const loadedMessages: CopilotMessage[] = storedMessages.map((m) => ({
+					role: m.role as "user" | "assistant",
+					content: m.content,
+				}));
+				setMessages(loadedMessages);
+				setCurrentConversationId(conversation.id);
+				setPlanSteps([]);
+				setPendingCommands([]);
+				setPendingComponents([]);
+				setShowHistory(false);
+			} catch (err) {
+				console.error("Failed to load conversation:", err);
+			}
+		},
+		[],
+	);
 
 	// Image handling
 	const handleImageSelect = useCallback(
@@ -324,7 +432,7 @@ export function FlowPilot({
 	// UI mode handlers
 	const handleApplyComponents = useCallback(() => {
 		if (pendingComponents.length > 0) {
-			onApplyComponents?.(pendingComponents);
+			onApplyComponents?.(pendingComponents, pendingCanvasSettings);
 			setMessages((prev) => {
 				const newMessages = [...prev];
 				for (let i = newMessages.length - 1; i >= 0; i--) {
@@ -339,11 +447,13 @@ export function FlowPilot({
 				return newMessages;
 			});
 			setPendingComponents([]);
+			setPendingCanvasSettings(undefined);
 		}
-	}, [pendingComponents, onApplyComponents]);
+	}, [pendingComponents, pendingCanvasSettings, onApplyComponents]);
 
 	const handleDismissComponents = useCallback(() => {
 		setPendingComponents([]);
+		setPendingCanvasSettings(undefined);
 	}, []);
 
 	// Main submit handler
@@ -402,6 +512,47 @@ export function FlowPilot({
 				setPendingComponents([]);
 			}
 
+			// Create or get conversation for persistence
+			let conversationId = currentConversationId;
+			if (!conversationId) {
+				try {
+					const newConversation = await createConversation(
+						agentMode,
+						board?.id,
+						undefined,
+					);
+					conversationId = newConversation.id;
+					setCurrentConversationId(conversationId);
+					// Set initial title based on first message
+					await updateConversation(conversationId, {
+						title: currentInput.slice(0, 100) || "New conversation",
+					});
+				} catch (err) {
+					console.error("Failed to create conversation:", err);
+				}
+			}
+
+			// Save user message to DB
+			if (conversationId) {
+				try {
+					await addMessage(conversationId, {
+						role: "user",
+						content: currentInput,
+						images: currentImages.length > 0 ? currentImages : undefined,
+						contextNodeIds:
+							currentContextNodes.length > 0 ? currentContextNodes : undefined,
+					});
+					// Update conversation title if this is the first message
+					if (messages.length === 0) {
+						await updateConversation(conversationId, {
+							title: currentInput.slice(0, 100),
+						});
+					}
+				} catch (err) {
+					console.error("Failed to save user message:", err);
+				}
+			}
+
 			// Add user message and empty assistant message together
 			setMessages((prev) => [
 				...prev,
@@ -415,10 +566,26 @@ export function FlowPilot({
 				{ role: "assistant", content: "" },
 			]);
 
+			// Store assistant message ID ref for updating later
+			let assistantMessageId: string | undefined;
+			if (conversationId) {
+				try {
+					const assistantMsg = await addMessage(conversationId, {
+						role: "assistant",
+						content: "",
+					});
+					assistantMessageId = assistantMsg.id;
+					currentMessageIdRef.current = assistantMessageId;
+				} catch (err) {
+					console.error("Failed to create assistant message:", err);
+				}
+			}
+
 			try {
 				let currentMessageContent = "";
 				let lastUpdateTime = 0;
 				const UPDATE_INTERVAL = 100;
+				let tagBuffer = ""; // Buffer for partial XML tags that might be split across tokens
 
 				setTimeout(() => setLoadingPhase("analyzing"), 300);
 
@@ -433,8 +600,75 @@ export function FlowPilot({
 					});
 				};
 
-				const onToken = (token: string) => {
+				const onToken = (rawToken: string) => {
 					setTokenCount((prev) => prev + 1);
+
+					// Combine with buffer for partial tags
+					let token = tagBuffer + rawToken;
+					tagBuffer = "";
+
+					// Check if we have an incomplete XML tag at the end
+					const lastOpenTag = token.lastIndexOf("<");
+					if (lastOpenTag !== -1 && !token.slice(lastOpenTag).includes(">")) {
+						// Incomplete tag - buffer it for next token
+						tagBuffer = token.slice(lastOpenTag);
+						token = token.slice(0, lastOpenTag);
+						if (!token) return; // Nothing to process yet
+					}
+
+					// Parse scope decision events (skip them - they're internal)
+					const scopeDecisionMatch = token.match(
+						/<scope_decision>([\s\S]*?)<\/scope_decision>/,
+					);
+					if (scopeDecisionMatch) {
+						return;
+					}
+
+					// Parse tool start events (Copilot SDK)
+					const toolStartMatch = token.match(
+						/<tool_start>([\s\S]*?)<\/tool_start>/,
+					);
+					if (toolStartMatch) {
+						try {
+							const eventData = JSON.parse(toolStartMatch[1]);
+							setCurrentToolCall(eventData.tool);
+							// Update loading phase based on tool name
+							if (
+								eventData.tool?.includes("search") ||
+								eventData.tool?.includes("catalog")
+							) {
+								setLoadingPhase("searching");
+							} else if (
+								eventData.tool === "get_node_details" ||
+								eventData.tool === "list_board_nodes"
+							) {
+								setLoadingPhase("reasoning");
+							} else if (
+								eventData.tool === "emit_commands" ||
+								eventData.tool === "emit_ui"
+							) {
+								setLoadingPhase("generating");
+							} else if (eventData.tool === "get_unconfigured_nodes") {
+								setLoadingPhase("searching");
+							}
+						} catch {
+							// Invalid JSON
+						}
+						return;
+					}
+
+					// Parse tool end events (Copilot SDK)
+					const toolEndMatch = token.match(/<tool_end>([\s\S]*?)<\/tool_end>/);
+					if (toolEndMatch) {
+						try {
+							const eventData = JSON.parse(toolEndMatch[1]);
+							// Keep the tool name visible briefly, then clear
+							setTimeout(() => setCurrentToolCall(null), 500);
+						} catch {
+							// Invalid JSON
+						}
+						return;
+					}
 
 					// Parse plan step events
 					const planStepMatch = token.match(
@@ -510,13 +744,82 @@ export function FlowPilot({
 						return;
 					}
 
-					// Skip command blocks
-					if (token.includes("<commands>") && token.includes("</commands>")) {
+					// Parse command blocks from Copilot SDK emit_commands tool
+					const commandsMatch = token.match(/<commands>([\s\S]*?)<\/commands>/);
+					if (commandsMatch) {
+						try {
+							const commands = JSON.parse(commandsMatch[1]);
+							if (Array.isArray(commands) && commands.length > 0) {
+								setPendingCommands((prev) => [...prev, ...commands]);
+							}
+						} catch {
+							// Invalid JSON in commands
+						}
+						// Remove the commands tag from the token but keep any surrounding text
+						const cleanedToken = token.replace(
+							/<commands>[\s\S]*?<\/commands>/g,
+							"",
+						);
+						if (!cleanedToken.trim()) return;
+						// Continue with the cleaned token
+						currentMessageContent += cleanedToken;
+						flushMessageContent();
 						return;
 					}
 
+					// Parse component blocks from Copilot SDK emit_ui tool
+					const componentsMatch = token.match(
+						/<components>([\s\S]*?)<\/components>/,
+					);
+					if (componentsMatch) {
+						try {
+							const components = JSON.parse(componentsMatch[1]);
+							if (Array.isArray(components) && components.length > 0) {
+								setPendingComponents((prev) => [...prev, ...components]);
+							}
+						} catch {
+							// Invalid JSON in components
+						}
+						// Remove the components tag from the token but keep any surrounding text
+						const cleanedToken = token.replace(
+							/<components>[\s\S]*?<\/components>/g,
+							"",
+						);
+						if (!cleanedToken.trim()) return;
+						currentMessageContent += cleanedToken;
+						flushMessageContent();
+						return;
+					}
+
+					// Parse canvas_settings blocks from Copilot SDK emit_ui tool
+					const canvasSettingsMatch = token.match(
+						/<canvas_settings>([\s\S]*?)<\/canvas_settings>/,
+					);
+					if (canvasSettingsMatch) {
+						try {
+							const settings = JSON.parse(canvasSettingsMatch[1]);
+							setPendingCanvasSettings(settings);
+						} catch {
+							// Invalid JSON in canvas settings
+						}
+						// Remove the tag and continue
+						const cleanedToken = token.replace(
+							/<canvas_settings>[\s\S]*?<\/canvas_settings>/g,
+							"",
+						);
+						if (!cleanedToken.trim()) return;
+						currentMessageContent += cleanedToken;
+						flushMessageContent();
+						return;
+					}
+
+					// First token? Set loading phase immediately
 					if (currentMessageContent.length === 0 && token.trim()) {
 						setLoadingPhase("generating");
+						// Flush immediately on first content to avoid losing it
+						currentMessageContent += token;
+						flushMessageContent();
+						return;
 					}
 
 					currentMessageContent += token;
@@ -604,7 +907,13 @@ ${userMsg}`;
 						}
 					: undefined;
 
-				// Call the unified copilot
+				// Prefix model_id with "copilot:" when using Copilot provider
+				// This tells the backend to use Copilot SDK instead of bits
+				const effectiveModelId =
+					provider === "copilot" && selectedModelId
+						? `copilot:${selectedModelId}`
+						: selectedModelId;
+
 				const response = await backendContext.boardState.copilot_chat(
 					scope,
 					board ?? null,
@@ -614,13 +923,24 @@ ${userMsg}`;
 					userMsg,
 					chatHistory,
 					onToken,
-					selectedModelId,
+					effectiveModelId,
 					undefined,
 					backendRunContext,
 					undefined, // actionContext - can be added later
 				);
 
 				flushMessageContent();
+
+				// Save final assistant message to DB
+				if (assistantMessageId && currentMessageContent) {
+					try {
+						await updateMessage(assistantMessageId, {
+							content: currentMessageContent || response.message,
+						});
+					} catch (err) {
+						console.error("Failed to update assistant message:", err);
+					}
+				}
 
 				setMessages((prev) => {
 					const newMessages = [...prev];
@@ -703,6 +1023,8 @@ ${userMsg}`;
 			backendContext.boardState,
 			planSteps,
 			captureScreenshot,
+			provider,
+			currentConversationId,
 		],
 	);
 
@@ -848,18 +1170,28 @@ ${userMsg}`;
 				runContext={runContext}
 				onNewChat={handleNewChat}
 				onClose={onClose}
-				models={models}
+				showHistory={showHistory}
+				setShowHistory={setShowHistory}
+				// Provider props
+				provider={provider}
+				onProviderChange={setProvider}
+				forceProvider={forceProvider}
+				copilotSDK={copilotSDK}
+				onStartCopilot={handleStartCopilot}
+				onStopCopilot={handleStopCopilot}
+				// Model props
+				bitsModels={bitsModels}
 				selectedModelId={selectedModelId}
 				setSelectedModelId={setSelectedModelId}
 			/>
 
 			{/* Messages area */}
 			<ScrollArea
-				className="flex-1 min-h-0 px-3"
+				className="flex-1 min-h-0 px-3 overflow-x-hidden"
 				viewportRef={scrollContainerRef}
 				onScroll={handleScroll}
 			>
-				<div className="py-3 space-y-3 min-w-0">
+				<div className="py-3 space-y-3 min-w-0 overflow-hidden">
 					{messages.length === 0 ? (
 						<EmptyState
 							agentMode={agentMode}
@@ -1083,6 +1415,16 @@ ${userMsg}`;
 					)}
 				</div>
 			</div>
+
+			{/* History Panel */}
+			<HistoryPanel
+				mode={agentMode}
+				currentConversationId={currentConversationId}
+				onSelectConversation={handleSelectConversation}
+				onNewConversation={handleNewChat}
+				isOpen={showHistory}
+				onClose={() => setShowHistory(false)}
+			/>
 		</motion.div>
 	);
 }
@@ -1096,7 +1438,18 @@ interface HeaderProps {
 	runContext?: { run_id: string };
 	onNewChat: () => void;
 	onClose?: () => void;
-	models: any[];
+	// History props
+	showHistory: boolean;
+	setShowHistory: (show: boolean) => void;
+	// Provider props
+	provider: AIProvider;
+	onProviderChange: (provider: AIProvider) => void;
+	forceProvider?: AIProvider;
+	copilotSDK: ReturnType<typeof useCopilotSDK>;
+	onStartCopilot: (serverUrl?: string) => Promise<void>;
+	onStopCopilot: () => Promise<void>;
+	// Model props
+	bitsModels: any[];
 	selectedModelId: string;
 	setSelectedModelId: (id: string) => void;
 }
@@ -1109,10 +1462,20 @@ const Header = memo(function Header({
 	runContext,
 	onNewChat,
 	onClose,
-	models,
+	showHistory,
+	setShowHistory,
+	provider,
+	onProviderChange,
+	forceProvider,
+	copilotSDK,
+	onStartCopilot,
+	onStopCopilot,
+	bitsModels,
 	selectedModelId,
 	setSelectedModelId,
 }: HeaderProps) {
+	const currentModels = provider === "copilot" ? copilotSDK.models : bitsModels;
+
 	return (
 		<div className="relative overflow-hidden shrink-0">
 			<div className="absolute inset-0 bg-linear-to-br from-primary/8 via-violet-500/5 to-pink-500/5" />
@@ -1177,6 +1540,21 @@ const Header = memo(function Header({
 								variant="ghost"
 								size="icon"
 								className="h-7 w-7 rounded-md hover:bg-accent/50"
+								onClick={() => setShowHistory(!showHistory)}
+							>
+								<ClockIcon className="w-4 h-4" />
+							</Button>
+						</TooltipTrigger>
+						<TooltipContent side="bottom" className="text-xs">
+							History
+						</TooltipContent>
+					</Tooltip>
+					<Tooltip>
+						<TooltipTrigger asChild>
+							<Button
+								variant="ghost"
+								size="icon"
+								className="h-7 w-7 rounded-md hover:bg-accent/50"
 								onClick={onNewChat}
 							>
 								<SquarePenIcon className="w-4 h-4" />
@@ -1206,27 +1584,33 @@ const Header = memo(function Header({
 				</div>
 			</div>
 
-			{/* Model selector */}
-			<div className="relative px-3 pb-2">
-				<Select value={selectedModelId} onValueChange={setSelectedModelId}>
-					<SelectTrigger className="h-8 text-xs bg-background/60 backdrop-blur-sm border-border/30 hover:border-primary/30 transition-all duration-200 rounded-lg focus:ring-2 focus:ring-primary/20">
-						<div className="flex items-center gap-1.5">
-							<BotIcon className="w-3.5 h-3.5 text-muted-foreground" />
-							<SelectValue placeholder="Select Model" />
-						</div>
-					</SelectTrigger>
-					<SelectContent className="rounded-lg z-150">
-						{models.map((model) => (
-							<SelectItem
-								key={model.id}
-								value={model.id}
-								className="text-xs rounded-md"
-							>
-								{model.meta?.en?.name || model.friendly_name || model.id}
-							</SelectItem>
-						))}
-					</SelectContent>
-				</Select>
+			{/* Provider and Model selector */}
+			<div className="relative px-3 pb-2 flex items-center gap-2">
+				{/* Provider selector (only show if not forced) */}
+				{!forceProvider && (
+					<ProviderSelector
+						provider={provider}
+						onProviderChange={onProviderChange}
+						copilotModels={copilotSDK.models}
+						copilotAuthStatus={copilotSDK.authStatus}
+						copilotRunning={copilotSDK.isRunning}
+						copilotConnecting={copilotSDK.isConnecting}
+						onStartCopilot={onStartCopilot}
+						onStopCopilot={onStopCopilot}
+						disabled={loading}
+					/>
+				)}
+
+				{/* Model selector */}
+				<ModelSelector
+					provider={provider}
+					bitsModels={bitsModels}
+					copilotModels={copilotSDK.models}
+					selectedModelId={selectedModelId}
+					onModelChange={setSelectedModelId}
+					disabled={loading}
+					className="flex-1"
+				/>
 			</div>
 
 			{loading && (
@@ -1419,12 +1803,12 @@ const MessageBubble = memo(function MessageBubble({
 		>
 			<div
 				className={cn(
-					"px-3 py-2 rounded-xl text-sm min-w-0 max-w-[85%]",
+					"px-3 py-2 rounded-xl text-sm min-w-0 max-w-[85%] overflow-hidden",
 					isUser
 						? "bg-muted/60 text-foreground rounded-br-sm border border-border/40"
 						: "bg-background border border-border/40 rounded-bl-sm",
 				)}
-				style={{ wordBreak: "break-word", overflowWrap: "break-word" }}
+				style={{ wordBreak: "break-word", overflowWrap: "anywhere" }}
 			>
 				{/* Images */}
 				{message.images && message.images.length > 0 && (

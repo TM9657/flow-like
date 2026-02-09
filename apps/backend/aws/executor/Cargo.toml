@@ -5,6 +5,7 @@ edition = "2024"
 description = "Flow-Like AWS Lambda Executor with Streaming Support"
 
 [dependencies]
+flow-like-catalog = { workspace = true, features = ["execute", "remote-ml"] }
 flow-like-executor = { workspace = true, features = ["all-execute"] }
 flow-like-types.workspace = true
 lambda_http.workspace = true

@@ -64,6 +64,7 @@ impl EventBusEvent {
             id: loaded_event.node_id.clone(),
             payload: self.payload.to_owned(),
             runtime_variables: None, // Event bus triggers don't have runtime vars context
+            filter_secrets: Some(false), // Desktop execution is trusted
         };
 
         let board_version = loaded_event.board_version;

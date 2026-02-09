@@ -15,13 +15,14 @@ use flow_like_storage::{
     },
     datafusion::prelude::SessionContext,
 };
+use utoipa::ToSchema;
 
-#[derive(Debug, Clone, serde::Deserialize)]
+#[derive(Debug, Clone, serde::Deserialize, ToSchema)]
 pub struct VectorQueryPayload {
     pub vector: Vec<f64>,
 }
 
-#[derive(Debug, Clone, serde::Deserialize)]
+#[derive(Debug, Clone, serde::Deserialize, ToSchema)]
 pub struct QueryTablePayload {
     sql: Option<String>,
     vector_query: Option<VectorQueryPayload>,
@@ -31,6 +32,30 @@ pub struct QueryTablePayload {
     select: Option<Vec<String>>,
 }
 
+#[utoipa::path(
+    post,
+    path = "/apps/{app_id}/db/{table}/query",
+    tag = "database",
+    description = "Query a table using SQL, vector, full-text, or hybrid search.",
+    params(
+        ("app_id" = String, Path, description = "Application ID"),
+        ("table" = String, Path, description = "Table name"),
+        ("limit" = Option<u64>, Query, description = "Max results (default 25, max 250)"),
+        ("offset" = Option<u64>, Query, description = "Result offset")
+    ),
+    request_body = QueryTablePayload,
+    responses(
+        (status = 200, description = "Query results", body = String, content_type = "application/json"),
+        (status = 400, description = "Bad request"),
+        (status = 401, description = "Unauthorized"),
+        (status = 403, description = "Forbidden")
+    ),
+    security(
+        ("bearer_auth" = []),
+        ("api_key" = []),
+        ("pat" = [])
+    )
+)]
 #[tracing::instrument(name = "POST /apps/{app_id}/db/{table}/query", skip(state, user))]
 pub async fn query_table(
     State(state): State<AppState>,

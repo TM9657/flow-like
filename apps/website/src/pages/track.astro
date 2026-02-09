@@ -1,8 +1,9 @@
 ---
 import "@tm9657/flow-like-ui/global.css";
+import "../styles/website-base.css";
 import PostHog from "../components/posthog.astro";
 import { SolutionTracker } from "../components/solution-tracker";
-import { BlogHeader } from "../components/blog-header";
+import { Header } from "../components/header";
 import { BlogFooter } from "../components/blog-footer";
 
 const site = Astro.site ?? import.meta.env.SITE ?? "https://flow-like.com";
@@ -14,7 +15,7 @@ const cover = "/og.png";
 ---
 
 <!doctype html>
-<html lang="en" class="scroll-smooth" style="overflow-x: hidden;">
+<html lang="en" class="scroll-smooth">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -41,21 +42,10 @@ const cover = "/og.png";
 
     <PostHog />
 
-    <style is:global>
-      html, body { min-height: 100%; }
-      html, body {
-        overflow-y: auto;
-        overflow-x: hidden !important;
-        max-width: 100vw;
-        -webkit-overflow-scrolling: touch;
-        touch-action: pan-y;
-      }
-    </style>
+
   </head>
-  <body class="bg-background text-foreground antialiased overflow-x-hidden max-w-full"
-        style="overflow-y: auto !important;"
-  >
-    <BlogHeader client:load />
+  <body class="bg-background text-foreground antialiased overflow-x-hidden max-w-full">
+    <Header client:load />
 
     <main class="pt-24 pb-16 min-h-screen">
       <!-- Decorative background -->

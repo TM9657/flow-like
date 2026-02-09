@@ -16,3 +16,4 @@ export { A2UITable, A2UITableRow, A2UITableCell } from "./Table";
 export { A2UIFilePreview } from "./FilePreview";
 export { A2UINivoChart } from "./NivoChart";
 export { A2UIBoundingBoxOverlay } from "./BoundingBoxOverlay";
+export { A2UIGeoMap } from "./GeoMap";

@@ -8,8 +8,9 @@ use crate::state::AppState;
 use axum::extract::{Query, State};
 use axum::{Extension, Json};
 use serde::{Deserialize, Serialize};
+use utoipa::{IntoParams, ToSchema};
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, IntoParams, ToSchema)]
 pub struct ListQuery {
     #[serde(default)]
     pub status: Option<String>,
@@ -19,7 +20,7 @@ pub struct ListQuery {
     pub limit: Option<usize>,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, ToSchema)]
 pub struct ListResponse {
     pub packages: Vec<PackageDetails>,
     pub total_count: usize,
@@ -27,7 +28,17 @@ pub struct ListResponse {
     pub limit: usize,
 }
 
-/// GET /admin/packages
+#[utoipa::path(
+    get,
+    path = "/admin/packages",
+    tag = "admin",
+    params(ListQuery),
+    responses(
+        (status = 200, description = "List of packages", body = ListResponse),
+        (status = 401, description = "Unauthorized"),
+        (status = 403, description = "Forbidden")
+    )
+)]
 pub async fn get_packages(
     State(state): State<AppState>,
     Extension(user): Extension<AppUser>,

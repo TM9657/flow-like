@@ -10,6 +10,7 @@ pub mod file;
 pub mod flow;
 pub mod registry;
 pub mod settings;
+pub mod statistics;
 pub mod system;
 pub mod tmp;
 

@@ -1,0 +1,47 @@
+---
+import "@tm9657/flow-like-ui/global.css";
+import LegalLayout from "../../../layouts/Legal-Layout.astro";
+import { SbomTable } from "../../../components/thirdparty/sbom-table";
+
+import cargoLicenses from "../../../../../../thirdparty/cargo-licenses.json";
+import npmLicenses from "../../../../../../thirdparty/npm-licenses.json";
+
+const title = "第三方许可";
+const description = "软件物料清单 (SBOM) - Flow-Like 中使用的开源库完整列表";
+---
+
+<LegalLayout title={title} description={description} lastUpdated="2026年2月4日">
+	<p class="text-lg mb-8">
+		Flow-Like 建立在许多优秀的开源项目之上。
+		我们感谢这些库的开发者和维护者，正是他们的工作使我们的项目成为可能。
+		本页面作为软件物料清单 (SBOM)，提供我们依赖项的透明度。
+	</p>
+
+	<div class="mb-8 p-4 rounded-lg bg-muted/30 border border-border/50">
+		<h3 class="font-semibold mb-2">关于此 SBOM</h3>
+		<p class="text-sm text-muted-foreground">
+			此列表从我们的项目依赖项自动生成。
+			它包含我们 Cargo 工作区的所有 Rust crate 和我们 Web 应用程序的 npm 包。
+		</p>
+		<div class="flex flex-wrap gap-2 mt-3">
+			<a
+				href="https://github.com/TM9657/flow-like/blob/dev/thirdparty/cargo-licenses.json"
+				target="_blank"
+				rel="noreferrer"
+				class="text-sm px-3 py-1 rounded-full bg-primary/10 text-primary hover:bg-primary/20 transition-colors"
+			>
+				Rust 依赖项 (JSON)
+			</a>
+			<a
+				href="https://github.com/TM9657/flow-like/blob/dev/thirdparty/npm-licenses.json"
+				target="_blank"
+				rel="noreferrer"
+				class="text-sm px-3 py-1 rounded-full bg-primary/10 text-primary hover:bg-primary/20 transition-colors"
+			>
+				NPM 依赖项 (JSON)
+			</a>
+		</div>
+	</div>
+
+	<SbomTable client:load cargoLicenses={cargoLicenses} npmLicenses={npmLicenses} />
+</LegalLayout>

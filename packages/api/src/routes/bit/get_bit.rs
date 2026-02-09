@@ -15,6 +15,19 @@ use flow_like::bit::{Bit, Metadata};
 use flow_like_storage::files::store::FlowLikeStore;
 use sea_orm::{ColumnTrait, EntityTrait, QueryFilter};
 
+#[utoipa::path(
+    get,
+    path = "/bit/{bit_id}",
+    tag = "bit",
+    params(
+        ("bit_id" = String, Path, description = "Unique identifier of the bit"),
+        ("language" = Option<String>, Query, description = "Language code for metadata")
+    ),
+    responses(
+        (status = 200, description = "Bit retrieved successfully", body = Bit),
+        (status = 404, description = "Bit not found")
+    )
+)]
 #[tracing::instrument(name = "GET /bit/{bit_id}", skip(state, user))]
 pub async fn get_bit(
     State(state): State<AppState>,

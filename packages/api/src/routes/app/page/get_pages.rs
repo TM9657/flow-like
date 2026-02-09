@@ -8,14 +8,15 @@ use axum::{
 };
 use sea_orm::{ColumnTrait, EntityTrait, QueryFilter};
 use serde::{Deserialize, Serialize};
+use utoipa::{IntoParams, ToSchema};
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, IntoParams, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct GetPagesParams {
     pub board_id: Option<String>,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct PageInfo {
     pub app_id: String,
@@ -25,6 +26,19 @@ pub struct PageInfo {
     pub description: Option<String>,
 }
 
+#[utoipa::path(
+    get,
+    path = "/apps/{app_id}/pages",
+    tag = "pages",
+    params(
+        ("app_id" = String, Path, description = "Application ID"),
+        GetPagesParams
+    ),
+    responses(
+        (status = 200, description = "List of pages in the application", body = Vec<PageInfo>),
+        (status = 401, description = "Unauthorized")
+    )
+)]
 #[tracing::instrument(name = "GET /apps/{app_id}/pages", skip(state, user))]
 pub async fn get_pages(
     State(state): State<AppState>,

@@ -31,7 +31,7 @@ impl NodeLogic for QueryParent {
             "a2ui_query_parent",
             "Query Parent",
             "Gets the parent element of an element",
-            "A2UI/Elements/Query",
+            "UI/Elements/Query",
         );
         node.add_icon("/flow/icons/a2ui.svg");
 

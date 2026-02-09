@@ -16,6 +16,8 @@ execute = [
     "dep:async-smtp",
     "dep:mail-parser",
     "dep:icalendar",
+    "dep:serenity",
+    "dep:teloxide",
 ]
 
 [dependencies]
@@ -48,3 +50,7 @@ async-native-tls = { version = "0.5", default-features = false, features = ["run
 async-smtp = { version = "0.10.2", default-features = false, features = ["runtime-tokio", "tokio"], optional = true }
 mail-parser = { version = "0.11.0", optional = true }
 icalendar = { workspace = true, optional = true }
+
+# Discord/Telegram bot integrations - only included when execute feature is enabled
+serenity = { version = "0.12.4", optional = true }
+teloxide = { version = "0.17", features = ["macros"], optional = true }

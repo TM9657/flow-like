@@ -27,7 +27,7 @@ impl NodeLogic for GetQueryParams {
             "a2ui_get_query_params",
             "Get Query Params",
             "Gets query parameters from the current URL",
-            "A2UI/Navigation",
+            "UI/Navigation",
         );
         node.add_icon("/flow/icons/a2ui.svg");
 

@@ -12,8 +12,9 @@ use sea_orm::{
     TransactionTrait,
 };
 use serde::{Deserialize, Serialize};
+use utoipa::ToSchema;
 
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Debug, ToSchema)]
 pub struct FeedbackBody {
     pub rating: i64,
     pub context: Option<Value>,
@@ -21,11 +22,32 @@ pub struct FeedbackBody {
     pub feedback_id: String,
 }
 
-#[derive(Serialize, Debug)]
+#[derive(Serialize, Debug, ToSchema)]
 pub struct FeedbackResponse {
     pub feedback_id: String,
 }
 
+#[utoipa::path(
+    put,
+    path = "/apps/{app_id}/events/{event_id}/feedback",
+    tag = "events",
+    description = "Submit feedback for an event run.",
+    params(
+        ("app_id" = String, Path, description = "Application ID"),
+        ("event_id" = String, Path, description = "Event ID")
+    ),
+    request_body = FeedbackBody,
+    responses(
+        (status = 200, description = "Feedback stored", body = FeedbackResponse),
+        (status = 401, description = "Unauthorized"),
+        (status = 403, description = "Forbidden")
+    ),
+    security(
+        ("bearer_auth" = []),
+        ("api_key" = []),
+        ("pat" = [])
+    )
+)]
 #[tracing::instrument(
     name = "PUT /apps/{app_id}/events/{event_id}/feedback",
     skip(state, user)

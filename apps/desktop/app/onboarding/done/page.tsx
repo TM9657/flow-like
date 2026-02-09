@@ -33,7 +33,10 @@ const FinishSetupButton: React.FC<{ onFinish: () => void }> = ({
 
 export default function DonePage() {
 	const router = useRouter();
-	const profiles = useTauriInvoke<ISettingsProfile[]>("get_profiles", {});
+	const profiles = useTauriInvoke<Record<string, ISettingsProfile>>(
+		"get_profiles",
+		{},
+	);
 
 	const onFinish = useCallback(async () => {
 		await profiles.refetch();

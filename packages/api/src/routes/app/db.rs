@@ -20,10 +20,12 @@ pub mod get_db_schema;
 pub mod get_indices;
 pub mod list_tables;
 pub mod optimize;
+pub mod presign_db_access;
 
 pub fn routes() -> Router<AppState> {
     Router::new()
         .route("/", get(list_tables::list_tables))
+        .route("/presign", post(presign_db_access::presign_db_access))
         .route(
             "/{table}",
             put(db_add::add_to_table)

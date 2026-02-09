@@ -17,46 +17,72 @@ const { page } = Astro.props;
 const first = page.data[0];
 const rest = page.data.slice(1);
 ---
-<BlogLayout data={{ title: "Blog", description: "Latest blog posts", slug: "blog" }}>
-  <main class="mx-auto max-w-4xl p-2 flex grow flex-col items-start justify-start gap-8">
-    <h1 class="sr-only">Blog</h1>
+<BlogLayout data={{ title: "Blog", description: "Latest news, releases, and tutorials from the Flow-Like team.", slug: "blog" }}>
+  <div class="mx-auto max-w-6xl px-4 sm:px-6 lg:px-8 flex grow flex-col items-stretch gap-12 py-8 sm:py-12">
+    <!-- Page header -->
+    <header class="text-center max-w-2xl mx-auto">
+      <p class="text-[11px] font-medium tracking-[0.3em] uppercase text-primary mb-3">Flow-Like Blog</p>
+      <h1 class="text-3xl sm:text-4xl lg:text-5xl font-bold tracking-tight mb-4">
+        Latest Updates
+      </h1>
+      <p class="text-lg text-muted-foreground">
+        Releases, deep-dives, comparisons, and tutorials.
+      </p>
+    </header>
 
+    <!-- Featured post -->
     {first && <PostCard entry={first} variant="lead" />}
 
-    <section class="mt-6 flex flex-col gap-8">
-      {rest.map(p => <PostCard entry={p} variant="compact" />)}
-    </section>
+    <!-- Post grid -->
+    {rest.length > 0 && (
+      <section class="grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
+        {rest.map(p => <PostCard entry={p} variant="compact" />)}
+      </section>
+    )}
 
+    <!-- Pagination -->
     {page.lastPage > 1 && (
-      <nav class="mt-10 flex gap-2 items-center" aria-label="Blog pagination">
+      <nav class="flex items-center justify-center gap-2 pt-4" aria-label="Blog pagination">
         {page.url.prev && (
           <a
             href={page.url.prev}
-            class="px-3 py-1 rounded border border-zinc-300 dark:border-zinc-700 hover:bg-zinc-100 dark:hover:bg-zinc-800"
+            class="inline-flex items-center gap-1.5 px-4 py-2 rounded-full border border-border/50 text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-muted/50 hover:border-border transition-all"
           >
-            Previous
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
+            </svg>
+            Prev
           </a>
         )}
 
-        {Array.from({length: page.lastPage}, (_, i) => i + 1).map(i => (
-          <a
-            href={i === 1 ? '/blog' : `/blog/${i}`}
-            aria-current={i === page.currentPage ? 'page' : undefined}
-            class={`px-3 py-1 rounded border border-zinc-300 dark:border-zinc-700 hover:bg-zinc-100 dark:hover:bg-zinc-800 ${i === page.currentPage ? 'bg-zinc-200 dark:bg-zinc-700 font-medium' : ''}`}
-          >
-            {i}
-          </a>
-        ))}
+        <div class="flex items-center gap-1">
+          {Array.from({length: page.lastPage}, (_, i) => i + 1).map(i => (
+            <a
+              href={i === 1 ? '/blog' : `/blog/${i}`}
+              aria-current={i === page.currentPage ? 'page' : undefined}
+              class={`w-9 h-9 rounded-full flex items-center justify-center text-sm font-medium transition-all ${
+                i === page.currentPage
+                  ? 'bg-primary text-primary-foreground shadow-sm'
+                  : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
+              }`}
+            >
+              {i}
+            </a>
+          ))}
+        </div>
 
         {page.url.next && (
           <a
             href={page.url.next}
-            class="px-3 py-1 rounded border border-zinc-300 dark:border-zinc-700 hover:bg-zinc-100 dark:hover:bg-zinc-800"
+            class="inline-flex items-center gap-1.5 px-4 py-2 rounded-full border border-border/50 text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-muted/50 hover:border-border transition-all"
           >
             Next
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
+            </svg>
           </a>
         )}
       </nav>
     )}
-  </main>
+  </div>
 </BlogLayout>

@@ -2,10 +2,15 @@
 
 import { createContext, useContext, useEffect, useRef } from "react";
 import { RunningTasksIndicator } from "../components/execution-indicator";
-import { ExecutionEngineProvider } from "../lib/execution-engine";
+import {
+	ExecutionEngineProvider,
+	type OnIncrementalSaveFn,
+} from "../lib/execution-engine";
 import type { IIntercomEvent } from "../lib/schema/events/intercom-event";
 import { useBackend } from "./backend-state";
 import { useExecutionServiceOptional } from "./execution-service-context";
+
+export type { OnIncrementalSaveFn };
 
 const ExecutionEngineContext = createContext<ExecutionEngineProvider | null>(
 	null,

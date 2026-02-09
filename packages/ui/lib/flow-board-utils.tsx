@@ -11,7 +11,7 @@ import {
 	upsertLayerCommand,
 } from "./command/generic-command";
 import { toastSuccess } from "./messages";
-import type { IGenericCommand, IValueType } from "./schema";
+import type { IGenericCommand, IValueType, IVariable } from "./schema";
 import {
 	type IBoard,
 	type IComment,
@@ -260,11 +260,16 @@ export function doPinsMatch(
 		if (schemaSource !== schemaTarget) return false;
 	}
 
-	if (
-		targetPin.options?.enforce_generic_value_type ||
-		sourcePin.options?.enforce_generic_value_type
-	) {
-		if (targetPin.value_type !== sourcePin.value_type) return false;
+	if (targetPin.value_type !== sourcePin.value_type) {
+		const sourceEnforces =
+			sourcePin.options?.enforce_generic_value_type ?? false;
+		const targetEnforces =
+			targetPin.options?.enforce_generic_value_type ?? false;
+		if (sourceEnforces || targetEnforces) {
+			if (sourceEnforces && targetEnforces) return false;
+			if (sourceEnforces && targetPin.data_type !== "Generic") return false;
+			if (targetEnforces && sourcePin.data_type !== "Generic") return false;
+		}
 	}
 
 	if (
@@ -364,7 +369,17 @@ export function parseBoard(
 		const hash = node.hash ?? -1;
 		const oldNode = hash === -1 ? undefined : oldNodesMap.get(hash);
 		if (oldNode) {
-			nodes.push(oldNode);
+			// Reuse old node but create new data object to ensure React detects changes
+			// Update the hash to reflect the current node state
+			nodes.push({
+				...oldNode,
+				data: {
+					...oldNode.data,
+					node: node,
+					hash: hash,
+				},
+				selected: selected.has(node.id),
+			});
 		} else {
 			nodes.push({
 				id: node.id,
@@ -734,20 +749,27 @@ export function parseBoard(
 			continue;
 		}
 
+		// Use mediaNode for Image/Video comment types, commentNode for Text
+		const isMedia =
+			comment.comment_type === ICommentType.Image ||
+			comment.comment_type === ICommentType.Video;
+
 		nodes.push({
 			id: comment.id,
-			type: "commentNode",
+			type: isMedia ? "mediaNode" : "commentNode",
 			position: { x: comment.coordinates[0], y: comment.coordinates[1] },
-			width: comment.width ?? 200,
-			height: comment.height ?? 80,
+			width: comment.width ?? (isMedia ? 400 : 200),
+			height: comment.height ?? (isMedia ? 300 : 80),
 			zIndex: comment.z_index ?? 1,
 			draggable: !(comment.is_locked ?? false),
 			data: {
 				label: comment.id,
 				boardId: board.id,
+				appId: appId,
 				hash: hash,
 				boardRef: boardRef,
 				comment: { ...comment, is_locked: comment.is_locked ?? false },
+				presignedUrl: comment.presigned_url,
 				onUpsert: async (comment: IComment) => {
 					const command = upsertCommentCommand({
 						comment: comment,
@@ -830,6 +852,30 @@ export function handleCopy(
 					: comment.layer,
 		}));
 
+	// Collect variables referenced by the selected nodes
+	const referencedVarIds = new Set<string>();
+	for (const node of selectedNodes) {
+		for (const pin of Object.values(node.pins)) {
+			if (pin.name === "var_ref" && pin.default_value) {
+				try {
+					const varRef =
+						typeof pin.default_value === "string"
+							? JSON.parse(pin.default_value)
+							: pin.default_value;
+					if (typeof varRef === "string") {
+						referencedVarIds.add(varRef);
+					}
+				} catch {
+					// Ignore parse errors
+				}
+			}
+		}
+	}
+
+	const selectedVariables = Object.values(board.variables).filter((v) =>
+		referencedVarIds.has(v.id),
+	);
+
 	try {
 		navigator.clipboard.writeText(
 			JSON.stringify(
@@ -838,6 +884,7 @@ export function handleCopy(
 					comments: selectedComments,
 					cursorPosition,
 					layers: Array.from(foundLayer.values()),
+					variables: selectedVariables,
 				},
 				null,
 				2,
@@ -880,11 +927,13 @@ export async function handlePaste(
 		);
 		const comments: any[] = data.comments;
 		const layers: ILayer[] = data.layers ?? [];
+		const variables: IVariable[] = data.variables ?? [];
 
 		const command = copyPasteCommand({
 			original_comments: comments,
 			original_nodes: nodes,
 			original_layers: layers,
+			original_variables: variables,
 			new_comments: [],
 			new_nodes: [],
 			new_layers: [],

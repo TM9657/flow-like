@@ -5,8 +5,16 @@ mod functions;
 mod profile;
 mod settings;
 mod state;
+#[cfg(desktop)]
 mod tray;
 pub mod utils;
+
+// Stub for tray_update_state on non-desktop platforms
+#[cfg(not(desktop))]
+#[tauri::command]
+async fn tray_update_state() -> Result<(), String> {
+    Ok(())
+}
 
 use flow_like::{
     flow::node::NodeLogic,
@@ -19,7 +27,7 @@ use flow_like::{
     state::{FlowLikeConfig, FlowLikeState},
     utils::http::HTTPClient,
 };
-use flow_like_catalog::get_catalog;
+use flow_like_catalog::{get_catalog, initialize as initialize_catalog};
 use flow_like_types::{sync::Mutex, tokio::time::interval};
 use settings::Settings;
 use state::TauriFlowLikeState;
@@ -116,6 +124,9 @@ pub fn run() {
     #[cfg(all(target_os = "ios", not(debug_assertions)))]
     ios_release_logging::init();
     disable_app_nap();
+
+    // Initialize catalog runtime (ONNX execution providers, etc.)
+    initialize_catalog();
 
     let mut settings_state = Settings::new();
     let project_dir = settings_state.project_dir.clone();
@@ -268,15 +279,13 @@ pub fn run() {
         .manage(state::TauriSettingsState(settings_state.clone()))
         .manage(state::TauriFlowLikeState(state_ref.clone()))
         .manage(state::TauriRegistryState(Arc::new(Mutex::new(None))))
-        .manage(state::TauriTrayState(Arc::new(Mutex::new(
-            tray::TrayRuntimeState::default(),
-        ))))
         .plugin(tauri_plugin_http::init())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_deep_link::init())
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_clipboard_manager::init())
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_notification::init())
         .setup(move |app| {
             #[cfg(desktop)]
             if let Err(e) = app
@@ -342,6 +351,11 @@ pub fn run() {
 
             #[cfg(desktop)]
             {
+                // Manage TauriTrayState for desktop platforms
+                app.manage(state::TauriTrayState(Arc::new(Mutex::new(
+                    tray::TrayRuntimeState::default(),
+                ))));
+
                 if let Err(err) = tray::init_tray(&relay_handle) {
                     eprintln!("Failed to initialize tray: {}", err);
                 } else {
@@ -510,12 +524,22 @@ pub fn run() {
                 println!("EventBus Sink Started");
 
                 while let Some(event) = event_receiver.recv().await {
-                    match event.execute(&handle, flow_like_state.clone(), &hub).await {
-                        Ok(meta) => _ = meta,
-                        Err(e) => {
-                            eprintln!("Error executing event: {:?}", e);
+                    // Spawn each event execution as a separate task for parallel processing
+                    let handle_clone = handle.clone();
+                    let flow_like_state_clone = flow_like_state.clone();
+                    let hub_clone = hub.clone();
+
+                    tokio::spawn(async move {
+                        match event
+                            .execute(&handle_clone, flow_like_state_clone, &hub_clone)
+                            .await
+                        {
+                            Ok(meta) => _ = meta,
+                            Err(e) => {
+                                eprintln!("Error executing event: {:?}", e);
+                            }
                         }
-                    }
+                    });
                 }
 
                 println!("EventBus Sink stopped");
@@ -531,19 +555,27 @@ pub fn run() {
             functions::ai::invoke::chat_completion,
             functions::ai::invoke::find_best_model,
             functions::system::get_system_info,
+            #[cfg(desktop)]
             tray::tray_update_state,
+            #[cfg(not(desktop))]
+            tray_update_state,
             functions::download::init::init_downloads,
             functions::download::init::get_downloads,
             functions::settings::profiles::get_profiles,
+            functions::settings::profiles::get_profiles_raw,
             functions::settings::profiles::get_default_profiles,
             functions::settings::profiles::get_current_profile,
+            functions::settings::profiles::get_current_profile_id,
             functions::settings::profiles::set_current_profile,
             functions::settings::profiles::upsert_profile,
+            functions::settings::profiles::remap_profile_id,
             functions::settings::profiles::delete_profile,
             functions::settings::profiles::add_bit,
             functions::settings::profiles::remove_bit,
             functions::settings::profiles::get_bits_in_current_profile,
             functions::settings::profiles::change_profile_image,
+            functions::settings::profiles::read_profile_icon,
+            functions::settings::profiles::get_profile_icon_path,
             functions::settings::profiles::profile_update_app,
             functions::app::app_configured,
             functions::app::upsert_board,
@@ -626,6 +658,12 @@ pub fn run() {
             functions::flow::template::get_template_meta,
             functions::flow::template::push_template_meta,
             functions::ai::copilot::copilot_chat,
+            functions::ai::copilot::copilot_sdk_start,
+            functions::ai::copilot::copilot_sdk_stop,
+            functions::ai::copilot::copilot_sdk_is_running,
+            functions::ai::copilot::copilot_sdk_list_models,
+            functions::ai::copilot::copilot_sdk_get_auth_status,
+            functions::ai::copilot::copilot_sdk_create_agent_session,
             functions::a2ui::widget::get_widgets,
             functions::a2ui::widget::get_widget,
             functions::a2ui::widget::create_widget,
@@ -670,6 +708,7 @@ pub fn run() {
             functions::registry::registry_check_for_updates,
             functions::registry::registry_load_local,
             functions::registry::registry_init,
+            functions::statistics::get_board_statistics,
         ]);
 
     #[cfg(desktop)]

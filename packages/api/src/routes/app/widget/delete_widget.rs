@@ -8,6 +8,26 @@ use axum::{
 };
 use sea_orm::{ColumnTrait, EntityTrait, QueryFilter};
 
+#[utoipa::path(
+    delete,
+    path = "/apps/{app_id}/widgets/{widget_id}",
+    tag = "widgets",
+    description = "Delete a widget.",
+    params(
+        ("app_id" = String, Path, description = "Application ID"),
+        ("widget_id" = String, Path, description = "Widget ID")
+    ),
+    responses(
+        (status = 200, description = "Widget deleted", body = ()),
+        (status = 401, description = "Unauthorized"),
+        (status = 403, description = "Forbidden")
+    ),
+    security(
+        ("bearer_auth" = []),
+        ("api_key" = []),
+        ("pat" = [])
+    )
+)]
 #[tracing::instrument(name = "DELETE /apps/{app_id}/widgets/{widget_id}", skip(state, user))]
 pub async fn delete_widget(
     State(state): State<AppState>,

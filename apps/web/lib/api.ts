@@ -1,0 +1,171 @@
+import type { IProfile } from "@tm9657/flow-like-ui";
+import type { AuthContextProps } from "react-oidc-context";
+
+function constructUrl(profile: IProfile, path: string): string {
+	// Use profile.hub if available, then NEXT_PUBLIC_API_URL as fallback, then default
+	let baseUrl =
+		profile.hub || process.env.NEXT_PUBLIC_API_URL || "api.flow-like.com";
+	if (!baseUrl.endsWith("/")) {
+		baseUrl += "/";
+	}
+
+	if (baseUrl.startsWith("http://") || baseUrl.startsWith("https://")) {
+		return `${baseUrl}api/v1/${path}`;
+	}
+
+	const protocol = profile.secure === false ? "http" : "https";
+	return `${protocol}://${baseUrl}api/v1/${path}`;
+}
+
+export async function get<T>(
+	profile: IProfile,
+	path: string,
+	auth?: AuthContextProps,
+): Promise<T | undefined> {
+	const authHeader: Record<string, string> = auth?.user?.access_token
+		? { Authorization: `Bearer ${auth.user.access_token}` }
+		: {};
+
+	const url = constructUrl(profile, path);
+	const response = await fetch(url, {
+		method: "GET",
+		headers: {
+			"Content-Type": "application/json",
+			...authHeader,
+		},
+	});
+
+	if (!response.ok) {
+		console.error(`HTTP error: ${response.status}`, await response.text());
+		return undefined;
+	}
+
+	return (await response.json()) as T;
+}
+
+export async function post<T>(
+	profile: IProfile,
+	path: string,
+	body?: any,
+	auth?: AuthContextProps,
+): Promise<T | undefined> {
+	const authHeader: Record<string, string> = auth?.user?.access_token
+		? { Authorization: `Bearer ${auth.user.access_token}` }
+		: {};
+
+	const url = constructUrl(profile, path);
+	const response = await fetch(url, {
+		method: "POST",
+		headers: {
+			"Content-Type": "application/json",
+			...authHeader,
+		},
+		body: body ? JSON.stringify(body) : undefined,
+	});
+
+	if (!response.ok) {
+		console.error(`HTTP error: ${response.status}`, await response.text());
+		return undefined;
+	}
+
+	return (await response.json()) as T;
+}
+
+export async function put<T>(
+	profile: IProfile,
+	path: string,
+	body?: any,
+	auth?: AuthContextProps,
+): Promise<T | undefined> {
+	const authHeader: Record<string, string> = auth?.user?.access_token
+		? { Authorization: `Bearer ${auth.user.access_token}` }
+		: {};
+
+	const url = constructUrl(profile, path);
+	const response = await fetch(url, {
+		method: "PUT",
+		headers: {
+			"Content-Type": "application/json",
+			...authHeader,
+		},
+		body: body ? JSON.stringify(body) : undefined,
+	});
+
+	if (!response.ok) {
+		console.error(`HTTP error: ${response.status}`, await response.text());
+		return undefined;
+	}
+
+	return (await response.json()) as T;
+}
+
+export async function del<T>(
+	profile: IProfile,
+	path: string,
+	auth?: AuthContextProps,
+): Promise<T | undefined> {
+	const authHeader: Record<string, string> = auth?.user?.access_token
+		? { Authorization: `Bearer ${auth.user.access_token}` }
+		: {};
+
+	const url = constructUrl(profile, path);
+	const response = await fetch(url, {
+		method: "DELETE",
+		headers: {
+			"Content-Type": "application/json",
+			...authHeader,
+		},
+	});
+
+	if (!response.ok) {
+		console.error(`HTTP error: ${response.status}`, await response.text());
+		return undefined;
+	}
+
+	return (await response.json()) as T;
+}
+
+export async function fetcher<T>(
+	profile: IProfile,
+	path: string,
+	options?: RequestInit,
+	auth?: AuthContextProps,
+): Promise<T> {
+	const headers: HeadersInit = {};
+	if (auth?.user?.access_token) {
+		headers["Authorization"] = `Bearer ${auth?.user?.access_token}`;
+	}
+
+	// Check network status before attempting request
+	if (typeof navigator !== "undefined" && !navigator.onLine) {
+		console.warn(`Network offline - request will use cache: ${path}`);
+		throw new Error(`Network unavailable: ${path}`);
+	}
+
+	const url = constructUrl(profile, path);
+	try {
+		const response = await fetch(url, {
+			...options,
+			headers: {
+				"Content-Type": "application/json",
+				...options?.headers,
+				...headers,
+			},
+			keepalive: true,
+		});
+
+		if (!response.ok) {
+			if (response.status === 401 && auth) {
+				auth?.startSilentRenew();
+			}
+			console.error(`Error fetching ${path}:`, response);
+			console.error(await response.text());
+			throw new Error(`HTTP error! status: ${response.status}`);
+		}
+
+		return await response.json();
+	} catch (error) {
+		console.error(`Error fetching ${path}:`, error);
+		throw error;
+	}
+}

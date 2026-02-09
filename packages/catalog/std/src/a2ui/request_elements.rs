@@ -23,7 +23,7 @@ impl NodeLogic for RequestElements {
             "a2ui_request_elements",
             "Request Elements",
             "Requests element values from the frontend before processing",
-            "A2UI/Data",
+            "UI/Data",
         );
         node.add_icon("/flow/icons/a2ui.svg");
 

@@ -87,7 +87,8 @@ export function DeviceFlowDialog({
 
 		setState({ status: "polling", deviceAuth });
 
-		const scopes = [...provider.scopes];
+		// Use merged_scopes to include all required scopes from nodes, fallback to base scopes
+		const scopes = [...(provider.merged_scopes ?? provider.scopes)];
 		const timeoutMs = deviceAuth.expires_in * 1000;
 		const startTime = Date.now();
 		let interval = (deviceAuth.interval || 5) * 1000;

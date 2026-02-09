@@ -32,9 +32,9 @@ use super::VectorStore;
 
 #[derive(serde::Serialize)]
 pub struct IndexConfigDto {
-    name: String,
-    index_type: String, // render enum via Display
-    columns: Vec<String>,
+    pub name: String,
+    pub index_type: String, // render enum via Display
+    pub columns: Vec<String>,
 }
 
 impl From<IndexConfig> for IndexConfigDto {

@@ -7,12 +7,34 @@ use axum::{
     extract::{Path, State},
 };
 use flow_like_storage::databases::vector::lancedb::LanceDBVectorStore;
+use utoipa::ToSchema;
 
-#[derive(Debug, Clone, serde::Deserialize)]
+#[derive(Debug, Clone, serde::Deserialize, ToSchema)]
 pub struct DropColumnsPayload {
     pub columns: Vec<String>,
 }
 
+#[utoipa::path(
+    delete,
+    path = "/apps/{app_id}/db/{table}/columns",
+    tag = "database",
+    description = "Remove columns from a table.",
+    params(
+        ("app_id" = String, Path, description = "Application ID"),
+        ("table" = String, Path, description = "Table name")
+    ),
+    request_body = DropColumnsPayload,
+    responses(
+        (status = 200, description = "Columns dropped", body = ()),
+        (status = 401, description = "Unauthorized"),
+        (status = 403, description = "Forbidden")
+    ),
+    security(
+        ("bearer_auth" = []),
+        ("api_key" = []),
+        ("pat" = [])
+    )
+)]
 #[tracing::instrument(name = "DELETE /apps/{app_id}/db/{table}/columns", skip(state, user))]
 pub async fn drop_columns(
     State(state): State<AppState>,

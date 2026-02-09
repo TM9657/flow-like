@@ -2,7 +2,8 @@ use aws_config::{retry::RetryConfig, timeout::TimeoutConfig, SdkConfig};
 use aws_lambda_events::sqs::SqsEvent;
 use aws_sdk_dynamodb::Client as DynamoClient;
 use flow_like_api::sea_orm::{ConnectOptions, Database};
-use lambda_runtime::{run, service_fn, tracing, Error, LambdaEvent};
+use lambda_runtime::{run, service_fn, Error, LambdaEvent};
+use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, EnvFilter};
 mod event_handler;
 use std::time::Duration;
 
@@ -25,7 +26,12 @@ fn create_dynamo_client(config: &SdkConfig) -> DynamoClient {
 
 #[tokio::main(flavor = "current_thread")]
 async fn main() -> Result<(), Error> {
-    tracing::init_default_subscriber();
+    let env_filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("warn"));
+
+    let _ = tracing_subscriber::registry()
+        .with(tracing_subscriber::fmt::layer())
+        .with(env_filter)
+        .try_init();
 
     let db_url = std::env::var("DATABASE_URL").expect("DATABASE_URL must be set");
     let mut opt = ConnectOptions::new(db_url.to_owned());

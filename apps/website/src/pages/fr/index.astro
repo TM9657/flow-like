@@ -1,6 +1,7 @@
 ---
 import "@tm9657/flow-like-ui/global.css";
-import { BlogHeader } from "../../components/blog-header";
+import "../../styles/website-base.css";
+import { Header } from "../../components/header";
 
 import AmbientGlow from "../../components/ambient-glow.astro";
 import SoftSeam from "../../components/soft-seam.astro";
@@ -71,7 +72,7 @@ const alternateLinks = [
 ---
 
 <!doctype html>
-<html lang={lang} class="scroll-smooth max-w-full overflow-x-hidden">
+<html lang={lang} class="scroll-smooth">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -116,7 +117,6 @@ const alternateLinks = [
         background-size: 16px 16px !important;
         background-attachment: scroll !important;
       }
-      html, body { overflow-x: clip; }
       @media (hover: none) and (pointer: coarse) {
         [data-overlay], [data-visual], .overlay, .backdrop {
           pointer-events: none;
@@ -124,29 +124,14 @@ const alternateLinks = [
         }
         * { scroll-snap-type: none !important; }
         html { scroll-behavior: auto !important; }
-        html, body, main, section, [role="region"] {
-          overflow: visible !important;
-        }
-        .sticky, [style*="position: sticky"] { position: static !important; }
-      }
-      html, body { min-height: 100%; }
-      html, body {
-        overflow-y: auto;
-        overflow-x: hidden !important;
-        max-width: 100vw;
-        -webkit-overflow-scrolling: touch;
-        touch-action: pan-y;
-      }
-      :root, body, #content {
-        overscroll-behavior: auto;
       }
     </style>
   </head>
 
-  <body class="bg-background text-foreground antialiased selection:bg-primary/30 overflow-x-hidden max-w-full">
-    <main id="content" class="w-full">
+  <body class="bg-background text-foreground antialiased selection:bg-primary/30">
+    <main id="content" class="w-full max-w-[100vw] overflow-x-clip">
       <AmbientGlow />
-      <BlogHeader client:load/>
+      <Header client:load/>
       <Hero lang={lang} />
 
       <EnterpriseStack lang={lang} />

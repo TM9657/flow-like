@@ -85,6 +85,47 @@ impl NodeLogic for LoadModelNode {
         let app_state = context.app_state.clone();
         let model_factory = context.app_state.embedding_factory.clone();
 
+        // Check if we should use proxy mode (remote execution via API)
+        // context.token already exists and is used by LLM hosted execution
+        #[cfg(feature = "remote-ml")]
+        if let Some(access_token) = &context.token {
+            let embedding_provider = bit.try_to_embedding();
+            if let Some(provider) = &embedding_provider
+                && provider.supports_remote()
+            {
+                println!(
+                    "[LoadModelNode] using proxy mode for bit={}, token_len={}",
+                    bit.id,
+                    access_token.len()
+                );
+                // Use proxy mode - call internal API
+                let model = match bit.bit_type {
+                    BitTypes::Embedding => {
+                        let model = model_factory
+                            .lock()
+                            .await
+                            .build_text_proxy(&bit, access_token.clone())
+                            .await?;
+                        CachedEmbeddingModelObject {
+                            text_model: Some(model),
+                            image_model: None,
+                        }
+                    }
+                    _ => bail!("Remote image embedding not yet supported"),
+                };
+
+                context.set_cache(&bit.id, Arc::new(model)).await;
+                let model = CachedEmbeddingModel {
+                    cache_key: bit.id.clone(),
+                    model_type: bit.bit_type.clone(),
+                };
+                context.set_pin_value("model", json!(model)).await?;
+                context.activate_exec_pin("exec_out").await?;
+                return Ok(());
+            }
+        }
+
+        // Fall back to local/standard execution
         let model = match bit.bit_type {
             BitTypes::Embedding => {
                 let model = model_factory

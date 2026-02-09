@@ -12,6 +12,7 @@ pub const MANIFEST_VERSION: u32 = 1;
 
 /// Memory tier presets for packages
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[serde(rename_all = "snake_case")]
 pub enum MemoryTier {
     /// 16 MB - minimal processing
@@ -51,6 +52,7 @@ impl MemoryTier {
 
 /// Timeout tier presets
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[serde(rename_all = "snake_case")]
 pub enum TimeoutTier {
     /// 5 seconds - quick operations
@@ -86,6 +88,7 @@ impl TimeoutTier {
 
 /// OAuth scope requirement for a specific provider
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 pub struct OAuthScopeRequirement {
     /// OAuth provider ID (e.g., "google", "github", "microsoft")
     pub provider: String,
@@ -100,6 +103,7 @@ pub struct OAuthScopeRequirement {
 
 /// Network access requirements
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 pub struct NetworkPermissions {
     /// Allow outbound HTTP requests
     #[serde(default)]
@@ -114,6 +118,7 @@ pub struct NetworkPermissions {
 
 /// File system access requirements
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 pub struct FileSystemPermissions {
     /// Access to node-scoped storage
     #[serde(default)]
@@ -131,6 +136,7 @@ pub struct FileSystemPermissions {
 
 /// Package permissions declaration
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 pub struct PackagePermissions {
     /// Memory tier required
     #[serde(default)]
@@ -286,6 +292,7 @@ impl PackagePermissions {
 
 /// Node entry in the package manifest
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 pub struct PackageNodeEntry {
     /// Node identifier (used in code)
     pub id: String,
@@ -309,6 +316,7 @@ pub struct PackageNodeEntry {
 
 /// Package author information
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 pub struct PackageAuthor {
     pub name: String,
     #[serde(default)]
@@ -319,6 +327,7 @@ pub struct PackageAuthor {
 
 /// Package manifest - declares everything about a WASM node package
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 pub struct PackageManifest {
     /// Manifest schema version
     pub manifest_version: u32,

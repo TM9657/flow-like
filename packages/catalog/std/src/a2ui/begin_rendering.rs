@@ -26,7 +26,7 @@ impl NodeLogic for BeginRendering {
             "a2ui_begin_rendering",
             "Begin Rendering",
             "Sends a surface to the frontend to begin rendering",
-            "A2UI/Surface",
+            "UI/Surface",
         );
         node.add_icon("/flow/icons/a2ui.svg");
 

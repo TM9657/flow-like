@@ -9,12 +9,29 @@ use axum::{
 use flow_like::flow::board::commands::GenericCommand;
 use flow_like_types::anyhow;
 use serde::Deserialize;
+use utoipa::ToSchema;
 
-#[derive(Clone, Deserialize)]
+#[derive(Clone, Deserialize, ToSchema)]
 pub struct ExecuteCommandsBody {
+    #[schema(value_type = Vec<Object>)]
     pub commands: Vec<GenericCommand>,
 }
 
+#[utoipa::path(
+    patch,
+    path = "/apps/{app_id}/board/{board_id}/undo",
+    tag = "boards",
+    params(
+        ("app_id" = String, Path, description = "Application ID"),
+        ("board_id" = String, Path, description = "Board ID")
+    ),
+    request_body = ExecuteCommandsBody,
+    responses(
+        (status = 200, description = "Undo operation completed"),
+        (status = 401, description = "Unauthorized"),
+        (status = 403, description = "Forbidden")
+    )
+)]
 #[tracing::instrument(
     name = "PATCH /apps/{app_id}/board/{board_id}/undo",
     skip(state, user, params)
@@ -46,6 +63,21 @@ pub async fn undo_board(
     Ok(Json(()))
 }
 
+#[utoipa::path(
+    patch,
+    path = "/apps/{app_id}/board/{board_id}/redo",
+    tag = "boards",
+    params(
+        ("app_id" = String, Path, description = "Application ID"),
+        ("board_id" = String, Path, description = "Board ID")
+    ),
+    request_body = ExecuteCommandsBody,
+    responses(
+        (status = 200, description = "Redo operation completed"),
+        (status = 401, description = "Unauthorized"),
+        (status = 403, description = "Forbidden")
+    )
+)]
 #[tracing::instrument(
     name = "PATCH /apps/{app_id}/board/{board_id}/redo",
     skip(state, user, params)

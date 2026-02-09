@@ -128,9 +128,15 @@ export default function UsePage() {
 		typeof appId === "string",
 	);
 
+	const getEventsForced = useMemo(() => {
+		const getEvents = (appId: string) =>
+			backend.eventState.getEvents(appId, true);
+		return getEvents;
+	}, [backend.eventState]);
+
 	const eventId = searchParams.get("eventId");
 	const events = useInvoke(
-		backend.eventState.getEvents,
+		getEventsForced,
 		backend.eventState,
 		[appId ?? ""],
 		(appId ?? "") !== "",

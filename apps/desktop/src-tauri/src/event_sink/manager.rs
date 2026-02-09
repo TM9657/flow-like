@@ -36,6 +36,35 @@ impl RegistrationStorage {
         Arc::clone(&self.conn)
     }
 
+    /// Parse config JSON with backwards compatibility
+    /// Injects sink_type if missing, based on the registration type
+    fn parse_config_json(
+        config_json: &str,
+        reg_type: &str,
+    ) -> Result<EventConfig, serde_json::Error> {
+        // First try to parse directly (new format with sink_type)
+        if let Ok(config) = serde_json::from_str::<EventConfig>(config_json) {
+            return Ok(config);
+        }
+
+        // Backwards compatibility: inject sink_type based on registration type
+        let mut config_value: serde_json::Value = serde_json::from_str(config_json)?;
+        if let Some(obj) = config_value.as_object_mut() {
+            // Map registration type to sink_type
+            let sink_type = match reg_type {
+                "api" | "http" => "http",
+                "mail" | "email" => "email",
+                _ => reg_type,
+            };
+            obj.insert(
+                "sink_type".to_string(),
+                serde_json::Value::String(sink_type.to_string()),
+            );
+        }
+
+        serde_json::from_value(config_value)
+    }
+
     fn init_schema(&self) -> Result<()> {
         let conn = self.conn.lock().unwrap();
 
@@ -144,13 +173,15 @@ impl RegistrationStorage {
 
         let result = stmt.query_row(params![event_id], |row| {
             let config_json: String = row.get(5)?;
-            let config: EventConfig = serde_json::from_str(&config_json).map_err(|e| {
-                rusqlite::Error::FromSqlConversionFailure(
-                    5,
-                    rusqlite::types::Type::Text,
-                    Box::new(e),
-                )
-            })?;
+            let reg_type: String = row.get(2)?;
+            let config: EventConfig =
+                Self::parse_config_json(&config_json, &reg_type).map_err(|e| {
+                    rusqlite::Error::FromSqlConversionFailure(
+                        5,
+                        rusqlite::types::Type::Text,
+                        Box::new(e),
+                    )
+                })?;
 
             let default_payload_json: Option<String> = row.get(8)?;
             let default_payload = default_payload_json
@@ -215,13 +246,15 @@ impl RegistrationStorage {
         let registrations = stmt
             .query_map([], |row| {
                 let config_json: String = row.get(5)?;
-                let config: EventConfig = serde_json::from_str(&config_json).map_err(|e| {
-                    rusqlite::Error::FromSqlConversionFailure(
-                        5,
-                        rusqlite::types::Type::Text,
-                        Box::new(e),
-                    )
-                })?;
+                let reg_type: String = row.get(2)?;
+                let config: EventConfig = Self::parse_config_json(&config_json, &reg_type)
+                    .map_err(|e| {
+                        rusqlite::Error::FromSqlConversionFailure(
+                            5,
+                            rusqlite::types::Type::Text,
+                            Box::new(e),
+                        )
+                    })?;
 
                 let default_payload_json: Option<String> = row.get(8)?;
                 let default_payload = default_payload_json
@@ -322,22 +355,28 @@ impl EventSinkManager {
     ) -> Result<()> {
         let mut started_guard = self.started_sinks.lock().await;
         if started_guard.contains(sink_type) {
-            tracing::debug!("Sink {} already started or starting, skipping", sink_type);
+            println!(
+                "[SINK_MANAGER] Sink {} already started or starting, skipping",
+                sink_type
+            );
             return Ok(());
         }
 
-        tracing::info!("🚀 Starting {} sink", sink_type);
+        println!("🚀 [SINK_MANAGER] Starting {} sink", sink_type);
         started_guard.insert(sink_type.to_string());
         drop(started_guard);
 
         if let Err(err) = sink.start(app_handle, self.db.clone()).await {
             let mut started_guard = self.started_sinks.lock().await;
             started_guard.remove(sink_type);
-            tracing::error!("❌ Failed to start {} sink: {}", sink_type, err);
+            println!(
+                "❌ [SINK_MANAGER] Failed to start {} sink: {}",
+                sink_type, err
+            );
             return Err(err);
         }
 
-        tracing::info!("✅ {} sink ready", sink_type);
+        println!("✅ [SINK_MANAGER] {} sink ready", sink_type);
         Ok(())
     }
 
@@ -766,11 +805,76 @@ impl EventSinkManager {
                         .context("Failed to parse Discord config")?;
                 Ok(EventConfig::Discord(discord_config))
             }
+            "telegram" => {
+                let telegram_config: super::telegram::TelegramSink =
+                    serde_json::from_value(config_json)
+                        .context("Failed to parse Telegram config")?;
+                Ok(EventConfig::Telegram(telegram_config))
+            }
+            "slack" => {
+                let slack_config: super::slack::SlackSink =
+                    serde_json::from_value(config_json).context("Failed to parse Slack config")?;
+                Ok(EventConfig::Slack(slack_config))
+            }
             "deeplink" => {
                 let deeplink_config: super::deeplink::DeeplinkSink =
                     serde_json::from_value(config_json)
                         .context("Failed to parse deeplink config")?;
                 Ok(EventConfig::Deeplink(deeplink_config))
+            }
+            "webhook" => {
+                let webhook_config: super::webhook::WebhookSink =
+                    serde_json::from_value(config_json)
+                        .context("Failed to parse Webhook config")?;
+                Ok(EventConfig::Webhook(webhook_config))
+            }
+            "mqtt" => {
+                let mqtt_config: super::mqtt::MQTTSink =
+                    serde_json::from_value(config_json).context("Failed to parse MQTT config")?;
+                Ok(EventConfig::Mqtt(mqtt_config))
+            }
+            "github" => {
+                let github_config: super::github::GitHubSink =
+                    serde_json::from_value(config_json).context("Failed to parse GitHub config")?;
+                Ok(EventConfig::GitHub(github_config))
+            }
+            "file" => {
+                let file_config: super::file::FileSink =
+                    serde_json::from_value(config_json).context("Failed to parse File config")?;
+                Ok(EventConfig::File(file_config))
+            }
+            "web_watcher" => {
+                let web_watcher_config: super::web_watcher::WebWatcherSink =
+                    serde_json::from_value(config_json)
+                        .context("Failed to parse WebWatcher config")?;
+                Ok(EventConfig::WebWatcher(web_watcher_config))
+            }
+            "notion" => {
+                let notion_config: super::notion::NotionSink =
+                    serde_json::from_value(config_json).context("Failed to parse Notion config")?;
+                Ok(EventConfig::Notion(notion_config))
+            }
+            "geolocation" => {
+                let geolocation_config: super::geolocation::GeoLocationSink =
+                    serde_json::from_value(config_json)
+                        .context("Failed to parse GeoLocation config")?;
+                Ok(EventConfig::GeoLocation(geolocation_config))
+            }
+            "nfc" => {
+                let nfc_config: super::nfc::NFCSink =
+                    serde_json::from_value(config_json).context("Failed to parse NFC config")?;
+                Ok(EventConfig::Nfc(nfc_config))
+            }
+            "shortcut" => {
+                let shortcut_config: super::shortcut::ShortcutSink =
+                    serde_json::from_value(config_json)
+                        .context("Failed to parse Shortcut config")?;
+                Ok(EventConfig::Shortcut(shortcut_config))
+            }
+            "mcp" => {
+                let mcp_config: super::mcp::MCPSink =
+                    serde_json::from_value(config_json).context("Failed to parse MCP config")?;
+                Ok(EventConfig::Mcp(mcp_config))
             }
             // Add more sink types as needed
             _ => Err(anyhow::anyhow!(
@@ -905,10 +1009,17 @@ impl EventSinkManager {
     pub async fn init_from_storage(&self, app_handle: &AppHandle) -> Result<()> {
         let registrations = self.list_registrations()?;
 
-        tracing::info!(
-            "🔄 Loading {} event registrations from database",
+        println!(
+            "🔄 [SINK_MANAGER] Loading {} event registrations from database",
             registrations.len()
         );
+
+        for reg in &registrations {
+            println!(
+                "🔄 [SINK_MANAGER] Found registration: {} (type: {})",
+                reg.event_id, reg.r#type
+            );
+        }
 
         // Group registrations by sink type to start each sink once
         let mut sink_types = std::collections::HashSet::new();
@@ -936,7 +1047,10 @@ impl EventSinkManager {
         }
 
         // Start each unique sink type without blocking the main initialization path
-        tracing::info!("📋 Unique sink types to start: {:?}", sink_types);
+        println!(
+            "📋 [SINK_MANAGER] Unique sink types to start: {:?}",
+            sink_types
+        );
 
         let default_delay = Duration::from_secs(3);
 
@@ -994,6 +1108,33 @@ impl EventSinkManager {
                         };
                         manager
                             .ensure_sink_started("discord", &app_handle, &discord_sink)
+                            .await
+                    }
+                    "telegram" => {
+                        let telegram_sink = super::telegram::TelegramSink {
+                            bot_token: String::new(),
+                            bot_name: None,
+                            bot_description: None,
+                            chat_whitelist: None,
+                            chat_blacklist: None,
+                            respond_to_mentions: true,
+                            respond_to_private: true,
+                            command_prefix: "/".to_string(),
+                        };
+                        manager
+                            .ensure_sink_started("telegram", &app_handle, &telegram_sink)
+                            .await
+                    }
+                    "slack" => {
+                        let slack_sink = super::slack::SlackSink {
+                            bot_token: String::new(),
+                            app_token: None,
+                            channel_id: None,
+                            team_id: None,
+                            last_event_ts: None,
+                        };
+                        manager
+                            .ensure_sink_started("slack", &app_handle, &slack_sink)
                             .await
                     }
                     "email" => {

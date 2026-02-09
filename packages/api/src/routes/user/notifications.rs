@@ -13,21 +13,34 @@ use sea_orm::{
     QueryOrder, QuerySelect,
 };
 use serde::{Deserialize, Serialize};
+use utoipa::{IntoParams, ToSchema};
 
-#[derive(Debug, Clone, Default, Deserialize, Serialize)]
+#[derive(Debug, Clone, Default, Deserialize, Serialize, ToSchema)]
 pub struct NotificationOverview {
     pub invites_count: u64,
     pub notifications_count: u64,
     pub unread_count: u64,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, IntoParams)]
 pub struct ListNotificationsParams {
     pub limit: Option<u64>,
     pub offset: Option<u64>,
     pub unread_only: Option<bool>,
 }
 
+#[utoipa::path(
+    get,
+    path = "/user/notifications",
+    tag = "user",
+    responses(
+        (status = 200, description = "Notification overview with counts", body = NotificationOverview),
+        (status = 401, description = "Unauthorized")
+    ),
+    security(
+        ("bearer_auth" = [])
+    )
+)]
 #[tracing::instrument(name = "GET /user/notifications", skip(state, user))]
 pub async fn get_notifications(
     State(state): State<AppState>,
@@ -58,6 +71,19 @@ pub async fn get_notifications(
     }))
 }
 
+#[utoipa::path(
+    get,
+    path = "/user/notifications/list",
+    tag = "user",
+    params(ListNotificationsParams),
+    responses(
+        (status = 200, description = "List of notifications"),
+        (status = 401, description = "Unauthorized")
+    ),
+    security(
+        ("bearer_auth" = [])
+    )
+)]
 #[tracing::instrument(name = "GET /user/notifications/list", skip(state, user))]
 pub async fn list_notifications(
     State(state): State<AppState>,
@@ -82,6 +108,22 @@ pub async fn list_notifications(
     Ok(Json(notifications))
 }
 
+#[utoipa::path(
+    post,
+    path = "/user/notifications/{id}/read",
+    tag = "user",
+    params(
+        ("id" = String, Path, description = "Notification ID")
+    ),
+    responses(
+        (status = 200, description = "Notification marked as read"),
+        (status = 401, description = "Unauthorized"),
+        (status = 404, description = "Notification not found")
+    ),
+    security(
+        ("bearer_auth" = [])
+    )
+)]
 #[tracing::instrument(name = "POST /user/notifications/{id}/read", skip(state, user))]
 pub async fn mark_notification_read(
     State(state): State<AppState>,
@@ -104,6 +146,22 @@ pub async fn mark_notification_read(
     Ok(Json(()))
 }
 
+#[utoipa::path(
+    delete,
+    path = "/user/notifications/{id}",
+    tag = "user",
+    params(
+        ("id" = String, Path, description = "Notification ID")
+    ),
+    responses(
+        (status = 200, description = "Notification deleted"),
+        (status = 401, description = "Unauthorized"),
+        (status = 404, description = "Notification not found")
+    ),
+    security(
+        ("bearer_auth" = [])
+    )
+)]
 #[tracing::instrument(name = "DELETE /user/notifications/{id}", skip(state, user))]
 pub async fn delete_notification(
     State(state): State<AppState>,
@@ -124,6 +182,18 @@ pub async fn delete_notification(
     Ok(Json(()))
 }
 
+#[utoipa::path(
+    post,
+    path = "/user/notifications/read-all",
+    tag = "user",
+    responses(
+        (status = 200, description = "Number of notifications marked as read", body = u64),
+        (status = 401, description = "Unauthorized")
+    ),
+    security(
+        ("bearer_auth" = [])
+    )
+)]
 #[tracing::instrument(name = "POST /user/notifications/read-all", skip(state, user))]
 pub async fn mark_all_read(
     State(state): State<AppState>,

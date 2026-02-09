@@ -152,7 +152,7 @@ pub async fn error_reporting_middleware(
         user_id: Set(user_id),
         method: Set(method),
         path: Set(path),
-        status_code: Set(report.status_code as i64),
+        status_code: Set(report.status_code as i32),
         public_code: Set(report.public_code),
         summary: Set(summary),
         details: Set(details_json),

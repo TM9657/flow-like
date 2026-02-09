@@ -3,9 +3,14 @@
 //! This module provides the A2UICopilot struct which enables natural language
 //! UI generation using the A2UI component system.
 
+pub mod component_docs;
 mod tools;
 mod types;
 
+pub use component_docs::{
+    CHART_DOCUMENTATION, COMPONENT_CATALOG, GAME_COMPONENT_DOCUMENTATION, ML_VISION_DOCUMENTATION,
+    STYLE_GUIDE, get_documentation_section, get_full_documentation,
+};
 pub use tools::*;
 pub use types::*;
 
@@ -435,10 +440,24 @@ impl A2UICopilot {
                 ));
             }
 
-            // Add tool results to history (each as a separate User message)
-            for (_tool_id, _tool_name, tool_result) in tool_results {
+            // Add all tool results to history as a single User message
+            // This is required for Gemini API which expects tool results to immediately follow
+            // the assistant's tool call message in a single message
+            if !tool_results.is_empty() {
+                let tool_result_contents: Vec<UserContent> = tool_results
+                    .into_iter()
+                    .map(|(_tool_id, _tool_name, tool_result)| UserContent::ToolResult(tool_result))
+                    .collect();
+
+                let combined_tool_results = if tool_result_contents.len() == 1 {
+                    OneOrMany::one(tool_result_contents.into_iter().next().unwrap())
+                } else {
+                    OneOrMany::many(tool_result_contents)
+                        .expect("tool_result_contents should have at least 2 elements")
+                };
+
                 current_history.push(rig::message::Message::User {
-                    content: OneOrMany::one(UserContent::ToolResult(tool_result)),
+                    content: combined_tool_results,
                 });
             }
         }

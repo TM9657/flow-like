@@ -33,7 +33,7 @@ import {
 } from "lucide-react";
 import * as React from "react";
 
-import { cn } from "../../../lib/utils";
+import { cn, sanitizeImageUrl } from "../../../lib/utils";
 import {
 	Button,
 	Checkbox,
@@ -123,6 +123,74 @@ async function downloadCSV(data: string[][], filename = "table.csv") {
 	document.body.appendChild(link);
 	link.click();
 	document.body.removeChild(link);
+}
+
+// Renders cell content with support for markdown images and links
+function CellContent({ content }: { content: string }) {
+	const parts = React.useMemo(() => {
+		const result: React.ReactNode[] = [];
+		let lastIndex = 0;
+		let key = 0;
+
+		// Combined regex to match both images and links
+		const combinedRegex = /(!?\[([^\]]*)\]\(([^)]+)\))/g;
+		let match: RegExpExecArray | null;
+
+		while ((match = combinedRegex.exec(content)) !== null) {
+			// Add text before the match
+			if (match.index > lastIndex) {
+				result.push(
+					<span key={key++}>{content.slice(lastIndex, match.index)}</span>,
+				);
+			}
+
+			const fullMatch = match[1];
+			const isImage = fullMatch.startsWith("!");
+			const altOrText = match[2];
+			const url = match[3];
+
+			if (isImage) {
+				const sanitizedUrl = sanitizeImageUrl(url, "");
+				if (sanitizedUrl) {
+					result.push(
+						<img
+							key={key++}
+							src={sanitizedUrl}
+							alt={altOrText}
+							className="max-h-24 max-w-[200px] rounded object-contain inline-block align-middle"
+							loading="lazy"
+						/>,
+					);
+				} else {
+					// If URL is not safe, show alt text
+					result.push(<span key={key++}>[{altOrText || "image"}]</span>);
+				}
+			} else {
+				result.push(
+					<a
+						key={key++}
+						href={url}
+						target="_blank"
+						rel="noopener noreferrer"
+						className="text-primary hover:underline"
+					>
+						{altOrText}
+					</a>,
+				);
+			}
+
+			lastIndex = match.index + fullMatch.length;
+		}
+
+		// Add remaining text
+		if (lastIndex < content.length) {
+			result.push(<span key={key++}>{content.slice(lastIndex)}</span>);
+		}
+
+		return result.length > 0 ? result : content;
+	}, [content]);
+
+	return <>{parts}</>;
 }
 
 // Sortable column item for the popover list
@@ -721,7 +789,9 @@ export function TableViewer({ data, children, className }: TableViewerProps) {
 								>
 									{visibleColumns.map((colIdx) => {
 										const cell = row[colIdx] || "";
-										const isLongText = cell.length > 100;
+										const hasMarkdownContent =
+											cell.includes("![") || cell.includes("](");
+										const isLongText = cell.length > 100 && !hasMarkdownContent;
 										return (
 											<td
 												key={colIdx}
@@ -734,13 +804,21 @@ export function TableViewer({ data, children, className }: TableViewerProps) {
 											>
 												<div
 													className={cn(
-														isLongText
-															? "whitespace-pre-wrap wrap-break-word text-sm leading-relaxed"
-															: "truncate",
+														hasMarkdownContent
+															? "flex flex-wrap items-center gap-1"
+															: isLongText
+																? "whitespace-pre-wrap wrap-break-word text-sm leading-relaxed"
+																: "truncate",
 													)}
-													title={isLongText ? undefined : cell}
+													title={
+														isLongText || hasMarkdownContent ? undefined : cell
+													}
 												>
-													{cell}
+													{hasMarkdownContent ? (
+														<CellContent content={cell} />
+													) : (
+														cell
+													)}
 												</div>
 											</td>
 										);

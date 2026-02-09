@@ -124,6 +124,9 @@ pub struct Node {
     /// If true, this node can only run locally (compute-intensive, RPA, browser automation)
     #[serde(default)]
     pub only_offline: bool,
+    /// Schema version for node migration. When catalog version > placed version, pins are synced.
+    /// None means unversioned (legacy). Bump this when changing pins in get_node().
+    pub version: Option<u32>,
 }
 
 impl Node {
@@ -150,11 +153,16 @@ impl Node {
             oauth_providers: None,
             required_oauth_scopes: None,
             only_offline: false,
+            version: None,
         }
     }
 
     pub fn add_comment(&mut self, comment: &str) {
         self.comment = Some(comment.to_string());
+    }
+
+    pub fn set_version(&mut self, version: u32) {
+        self.version = Some(version);
     }
 
     pub fn add_icon(&mut self, icon: &str) {
@@ -387,6 +395,23 @@ impl Node {
         }
 
         Some(variable_type)
+    }
+
+    pub fn harmonize_value_type(&mut self, pins: Vec<&str>) -> Option<ValueType> {
+        let value_type = match self.pins.iter().find(|(_, pin)| {
+            pins.contains(&pin.name.as_str()) && pin.value_type != ValueType::Normal
+        }) {
+            Some((_, pin)) => pin.value_type.clone(),
+            None => return None,
+        };
+
+        for pin in self.pins.values_mut() {
+            if pins.contains(&pin.name.as_str()) {
+                pin.value_type = value_type.clone();
+            }
+        }
+
+        Some(value_type)
     }
 
     pub fn match_type(

@@ -26,7 +26,7 @@ impl NodeLogic for PushToContainer {
             "a2ui_push_to_container",
             "Push To Container",
             "Dynamically adds an element to a container's children list",
-            "A2UI/Container",
+            "UI/Container",
         );
         node.add_icon("/flow/icons/a2ui.svg");
 

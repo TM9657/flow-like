@@ -9,16 +9,18 @@ use axum::{
 use flow_like_types::Value;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use utoipa::{IntoParams, ToSchema};
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, IntoParams, ToSchema)]
 pub struct GetExecutionElementsQuery {
     pub page_id: String,
     #[serde(default)]
     pub wildcard: bool,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, ToSchema)]
 pub struct GetExecutionElementsResponse {
+    #[schema(value_type = Object)]
     pub elements: HashMap<String, Value>,
 }
 
@@ -26,6 +28,20 @@ pub struct GetExecutionElementsResponse {
 ///
 /// This returns only the elements that are referenced by nodes in the board,
 /// along with their children. Use `wildcard: true` to get all elements.
+#[utoipa::path(
+    get,
+    path = "/apps/{app_id}/board/{board_id}/elements",
+    tag = "execution",
+    params(
+        ("app_id" = String, Path, description = "Application ID"),
+        ("board_id" = String, Path, description = "Board ID"),
+        GetExecutionElementsQuery
+    ),
+    responses(
+        (status = 200, description = "Execution elements for the page", body = GetExecutionElementsResponse),
+        (status = 401, description = "Unauthorized")
+    )
+)]
 #[tracing::instrument(
     name = "GET /apps/{app_id}/board/{board_id}/elements",
     skip(state, user)

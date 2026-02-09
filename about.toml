@@ -1,0 +1,29 @@
+# cargo-about configuration
+# See https://github.com/EmbarkStudios/cargo-about
+
+# The directory where license texts are cached
+private = { ignore = true }
+
+# Accept all common licenses
+accepted = [
+    "MIT",
+    "Apache-2.0",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "ISC",
+    "Zlib",
+    "MPL-2.0",
+    "CC0-1.0",
+    "Unlicense",
+    "WTFPL",
+    "0BSD",
+    "Unicode-DFS-2016",
+    "BSL-1.0",
+    "OFL-1.1",
+    "OpenSSL",
+    "Unicode-3.0",
+]
+
+# Workarounds for crates with missing/ambiguous license info
+[ring]
+accepted = ["ISC", "MIT", "OpenSSL"]

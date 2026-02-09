@@ -40,6 +40,8 @@ pub struct GcpRuntimeCredentials {
     /// Whether write operations are allowed
     pub write_access: bool,
     pub expiration: Option<chrono::DateTime<chrono::Utc>>,
+    pub content_path_prefix: Option<String>,
+    pub user_content_path_prefix: Option<String>,
 }
 
 #[cfg(feature = "gcp")]
@@ -54,6 +56,8 @@ impl GcpRuntimeCredentials {
             allowed_prefixes: Vec::new(),
             write_access: true,
             expiration: None,
+            content_path_prefix: None,
+            user_content_path_prefix: None,
         }
     }
 
@@ -75,6 +79,8 @@ impl GcpRuntimeCredentials {
             allowed_prefixes: Vec::new(),
             write_access: true,
             expiration: None,
+            content_path_prefix: None,
+            user_content_path_prefix: None,
         }
     }
 
@@ -90,6 +96,8 @@ impl GcpRuntimeCredentials {
             allowed_prefixes: Vec::new(),
             write_access: true,
             expiration: None,
+            content_path_prefix: None,
+            user_content_path_prefix: None,
         }
     }
 
@@ -116,7 +124,7 @@ impl GcpRuntimeCredentials {
 
         let apps_prefix = format!("apps/{}", app_id);
         let user_prefix = format!("users/{}/apps/{}", sub, app_id);
-        let log_prefix = format!("logs/runs/{}", app_id);
+        let log_prefix = format!("runs/{}", app_id);
         let temporary_user_prefix = format!("tmp/user/{}/apps/{}", sub, app_id);
         let temporary_global_prefix = format!("tmp/global/apps/{}", app_id);
 
@@ -169,6 +177,8 @@ impl GcpRuntimeCredentials {
             allowed_prefixes,
             write_access,
             expiration: Some(chrono_expiration),
+            content_path_prefix: Some(format!("apps/{}", app_id)),
+            user_content_path_prefix: Some(format!("users/{}/apps/{}", sub, app_id)),
         })
     }
 
@@ -193,7 +203,7 @@ impl GcpRuntimeCredentials {
 
         let apps_prefix = format!("apps/{}", app_id);
         let user_prefix = format!("users/{}/apps/{}", sub, app_id);
-        let log_prefix = format!("logs/runs/{}", app_id);
+        let log_prefix = format!("runs/{}", app_id);
         let temporary_user_prefix = format!("tmp/user/{}/apps/{}", sub, app_id);
         let temporary_global_prefix = format!("tmp/global/apps/{}", app_id);
 
@@ -242,9 +252,12 @@ impl GcpRuntimeCredentials {
             access_token: Some(access_token),
             meta_bucket: self.meta_bucket.clone(),
             content_bucket: self.content_bucket.clone(),
+            logs_bucket: self.logs_bucket.clone(),
             allowed_prefixes,
             write_access,
             expiration: Some(chrono_expiration),
+            content_path_prefix: Some(format!("apps/{}", app_id)),
+            user_content_path_prefix: Some(format!("users/{}/apps/{}", sub, app_id)),
         })
     }
 }
@@ -485,11 +498,17 @@ impl RuntimeCredentialsTrait for GcpRuntimeCredentials {
             allowed_prefixes: self.allowed_prefixes.clone(),
             write_access: self.write_access,
             expiration: self.expiration,
+            content_path_prefix: self.content_path_prefix.clone(),
+            user_content_path_prefix: self.user_content_path_prefix.clone(),
         })
     }
 
     async fn to_db(&self, app_id: &str) -> Result<ConnectBuilder> {
         self.into_shared_credentials().to_db(app_id).await
+    }
+
+    async fn to_db_scoped(&self, app_id: &str) -> Result<ConnectBuilder> {
+        self.into_shared_credentials().to_db_scoped(app_id).await
     }
 
     #[tracing::instrument(
@@ -498,15 +517,15 @@ impl RuntimeCredentialsTrait for GcpRuntimeCredentials {
         level = "debug"
     )]
     async fn to_state(&self, state: AppState) -> Result<FlowLikeState> {
-        let (meta_store, content_store, (http_client, _refetch_rx)) = {
+        let (meta_store, content_store) = {
             use flow_like_types::tokio;
 
             tokio::join!(
                 async { self.into_shared_credentials().to_store(true).await },
                 async { self.into_shared_credentials().to_store(false).await },
-                async { HTTPClient::new() }
             )
         };
+        let http_client = HTTPClient::new_without_refetch();
 
         let meta_store = meta_store?;
         let content_store = content_store?;
@@ -987,7 +1006,7 @@ mod tests {
     fn test_credentials_access_modes() {
         let apps_prefix = format!("apps/{}", TEST_APP_ID);
         let user_prefix = format!("users/{}/apps/{}", TEST_SUB, TEST_APP_ID);
-        let log_prefix = format!("logs/runs/{}", TEST_APP_ID);
+        let log_prefix = format!("runs/{}", TEST_APP_ID);
         let tmp_user_prefix = format!("tmp/user/{}/apps/{}", TEST_SUB, TEST_APP_ID);
         let tmp_global_prefix = format!("tmp/global/apps/{}", TEST_APP_ID);
 

@@ -26,7 +26,7 @@ impl NodeLogic for SetTextFieldError {
             "a2ui_set_textfield_error",
             "Set TextField Error",
             "Sets the error state or message of a text field",
-            "A2UI/Elements/Input",
+            "UI/Elements/Input",
         );
         node.add_icon("/flow/icons/a2ui.svg");
 

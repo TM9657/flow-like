@@ -4,6 +4,7 @@ use crate::{
     error::ApiError,
     middleware::jwt::AppUser,
     permission::role_permission::RolePermissions,
+    routes::app::events::db::get_event_from_db,
     state::AppState,
 };
 use axum::{
@@ -13,8 +14,9 @@ use axum::{
 use flow_like_types::create_id;
 use sea_orm::{ActiveModelTrait, ActiveValue::Set, ColumnTrait, EntityTrait, QueryFilter};
 use serde::{Deserialize, Serialize};
+use utoipa::ToSchema;
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, ToSchema)]
 pub struct CreateNotificationParams {
     /// Event ID that triggered this execution.
     /// Used to resolve the board and verify that notifications are allowed for it.
@@ -31,7 +33,7 @@ pub struct CreateNotificationParams {
     pub node_id: Option<String>,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, ToSchema)]
 pub struct CreateNotificationResponse {
     pub id: String,
     pub success: bool,
@@ -45,6 +47,27 @@ pub struct CreateNotificationResponse {
 /// - The resolved board must contain a Notify User node, otherwise the request is denied
 /// - If target_user_sub is provided, that user must be a member of the project
 /// - If target_user_sub is not provided, notifies the executing user (from JWT sub)
+#[utoipa::path(
+    post,
+    path = "/apps/{app_id}/notifications/create",
+    tag = "notifications",
+    description = "Create a user notification for an event run.",
+    params(
+        ("app_id" = String, Path, description = "Application ID")
+    ),
+    request_body = CreateNotificationParams,
+    responses(
+        (status = 200, description = "Notification created", body = CreateNotificationResponse),
+        (status = 400, description = "Bad request"),
+        (status = 401, description = "Unauthorized"),
+        (status = 403, description = "Forbidden")
+    ),
+    security(
+        ("bearer_auth" = []),
+        ("api_key" = []),
+        ("pat" = [])
+    )
+)]
 #[tracing::instrument(name = "POST /apps/{app_id}/notifications/create", skip(state, user))]
 pub async fn create_notification(
     State(state): State<AppState>,
@@ -60,10 +83,8 @@ pub async fn create_notification(
         return Err(ApiError::bad_request("event_id is required".to_string()));
     }
 
-    // Resolve event -> board, then verify that the board actually contains a notification node.
-    // This prevents arbitrary clients from spamming notifications for boards that don't opt-in.
-    let app = state.master_app(&caller_sub, &app_id, &state).await?;
-    let event = app.get_event(&params.event_id, None).await.map_err(|e| {
+    // Get event from database
+    let event = get_event_from_db(&state.db, &params.event_id).await.map_err(|e| {
         tracing::warn!(error = %e, event_id = %params.event_id, "Failed to resolve event for notification");
         ApiError::FORBIDDEN
     })?;
@@ -151,7 +172,7 @@ pub async fn create_notification(
         description: Set(params.description),
         icon: Set(params.icon),
         link: Set(params.link),
-        notification_type: Set(NotificationType::Workflow),
+        r#type: Set(NotificationType::Workflow),
         read: Set(false),
         source_run_id: Set(params.run_id),
         source_node_id: Set(params.node_id),

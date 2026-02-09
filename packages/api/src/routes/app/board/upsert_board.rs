@@ -11,22 +11,42 @@ use flow_like::flow::{
     execution::LogLevel,
 };
 use serde::{Deserialize, Serialize};
+use utoipa::ToSchema;
 
-#[derive(Clone, Deserialize)]
+#[derive(Clone, Deserialize, ToSchema)]
 pub struct UpsertBoard {
     pub name: Option<String>,
     pub description: Option<String>,
+    #[schema(value_type = Option<String>)]
     pub stage: Option<ExecutionStage>,
+    #[schema(value_type = Option<i32>)]
     pub log_level: Option<LogLevel>,
+    #[schema(value_type = Option<String>)]
     pub execution_mode: Option<ExecutionMode>,
+    #[schema(value_type = Option<Object>)]
     pub template: Option<Board>,
 }
 
-#[derive(Deserialize, Serialize)]
+#[derive(Deserialize, Serialize, ToSchema)]
 pub struct UpsertBoardResponse {
     pub id: String,
 }
 
+#[utoipa::path(
+    put,
+    path = "/apps/{app_id}/board/{board_id}",
+    tag = "boards",
+    params(
+        ("app_id" = String, Path, description = "Application ID"),
+        ("board_id" = String, Path, description = "Board ID")
+    ),
+    request_body = UpsertBoard,
+    responses(
+        (status = 200, description = "Board created or updated", body = UpsertBoardResponse),
+        (status = 401, description = "Unauthorized"),
+        (status = 403, description = "Forbidden")
+    )
+)]
 #[tracing::instrument(
     name = "PUT /apps/{app_id}/board/{board_id}",
     skip(state, user, params)

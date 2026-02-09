@@ -9,6 +9,19 @@ use axum::{
 use flow_like::bit::Bit;
 use sea_orm::EntityTrait;
 
+#[utoipa::path(
+    delete,
+    path = "/admin/bit/{bit_id}",
+    tag = "admin",
+    params(
+        ("bit_id" = String, Path, description = "Bit ID to delete")
+    ),
+    responses(
+        (status = 200, description = "Deleted bits", body = Vec<Bit>),
+        (status = 401, description = "Unauthorized"),
+        (status = 403, description = "Forbidden")
+    )
+)]
 #[tracing::instrument(name = "DELETE admin//bit/{bit_id}", skip(state, user))]
 pub async fn delete_bit(
     State(state): State<AppState>,

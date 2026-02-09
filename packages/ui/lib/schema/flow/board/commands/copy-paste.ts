@@ -8,6 +8,7 @@ export interface ICopyPaste {
 	original_comments: IComment[];
 	original_layers: ILayer[];
 	original_nodes: INode[];
+	original_variables?: IVariable[];
 	[property: string]: any;
 }
 
@@ -77,6 +78,8 @@ export interface INode {
 	pins: { [key: string]: IPin };
 	scores?: null | INodeScores;
 	start?: boolean | null;
+	/** Schema version for node migration. When catalog version > placed version, pins are synced. */
+	version?: number | null;
 	[property: string]: any;
 }
 

@@ -28,7 +28,7 @@ impl NodeLogic for SetChartData {
             "a2ui_set_chart_data",
             "Set Chart Data",
             "Sets the data for a Plotly chart element",
-            "A2UI/Elements/Charts",
+            "UI/Elements/Charts",
         );
         node.add_icon("/flow/icons/a2ui.svg");
 

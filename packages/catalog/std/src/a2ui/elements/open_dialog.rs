@@ -23,7 +23,7 @@ impl NodeLogic for OpenDialog {
             "a2ui_open_dialog",
             "Open Dialog",
             "Opens a route/page as a modal dialog overlay",
-            "A2UI/Navigation",
+            "UI/Navigation",
         );
         node.add_icon("/flow/icons/a2ui.svg");
 

@@ -510,7 +510,7 @@ async fn build_dependency_hash(
 
     dependencies.sort();
     let mut hasher = blake3::Hasher::new();
-    let (http_client, _rcv) = HTTPClient::new();
+    let http_client = HTTPClient::new_without_refetch();
     let http_client = Arc::new(http_client);
 
     if let Some(tx) = &tx {

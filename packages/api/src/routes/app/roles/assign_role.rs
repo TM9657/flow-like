@@ -13,6 +13,28 @@ use axum::{
 use flow_like_types::anyhow;
 use sea_orm::{ColumnTrait, EntityTrait, QueryFilter, TransactionTrait, prelude::Expr};
 
+#[utoipa::path(
+    post,
+    path = "/apps/{app_id}/roles/{role_id}/assign/{sub}",
+    tag = "roles",
+    description = "Assign a role to a user.",
+    params(
+        ("app_id" = String, Path, description = "Application ID"),
+        ("role_id" = String, Path, description = "Role ID"),
+        ("sub" = String, Path, description = "User subject")
+    ),
+    responses(
+        (status = 200, description = "Role assigned", body = ()),
+        (status = 401, description = "Unauthorized"),
+        (status = 403, description = "Forbidden"),
+        (status = 404, description = "Not found")
+    ),
+    security(
+        ("bearer_auth" = []),
+        ("api_key" = []),
+        ("pat" = [])
+    )
+)]
 #[tracing::instrument(
     name = "POST /apps/{app_id}/roles/{role_id}/assign/{sub}",
     skip(state, user)

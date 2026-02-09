@@ -720,6 +720,46 @@ impl Default for ToastEvent {
     }
 }
 
+/// Event sent via InterCom to show progress to the user
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct ProgressEvent {
+    /// Unique identifier to update/dismiss this progress toast
+    pub id: String,
+    /// The message shown to the user
+    pub message: String,
+    /// Progress value between 0 and 100 (None to dismiss)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub progress: Option<u8>,
+    /// Whether this is the final update (dismisses or completes the progress)
+    #[serde(default)]
+    pub done: bool,
+    /// Whether the operation succeeded (only relevant when done=true)
+    #[serde(default)]
+    pub success: bool,
+}
+
+impl ProgressEvent {
+    pub fn new(id: &str, message: &str, progress: Option<u8>) -> Self {
+        ProgressEvent {
+            id: id.to_string(),
+            message: message.to_string(),
+            progress,
+            done: false,
+            success: false,
+        }
+    }
+
+    pub fn done(id: &str, message: &str, success: bool) -> Self {
+        ProgressEvent {
+            id: id.to_string(),
+            message: message.to_string(),
+            progress: if success { Some(100) } else { None },
+            done: true,
+            success,
+        }
+    }
+}
+
 /// Event sent via InterCom to notify the user
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct NotificationEvent {

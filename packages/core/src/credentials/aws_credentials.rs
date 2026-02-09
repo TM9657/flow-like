@@ -40,6 +40,12 @@ pub struct AwsSharedCredentials {
     pub logs_config: Option<BucketConfig>,
     pub region: String,
     pub expiration: Option<chrono::DateTime<chrono::Utc>>,
+    /// App-level content path prefix (e.g., "apps/{app_id}")
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub content_path_prefix: Option<String>,
+    /// User-level content path prefix (e.g., "users/{sub}/apps/{app_id}")
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub user_content_path_prefix: Option<String>,
 }
 
 impl AwsSharedCredentials {
@@ -109,10 +115,36 @@ impl SharedCredentialsTrait for AwsSharedCredentials {
 
     #[tracing::instrument(name = "AwsSharedCredentials::to_db", skip(self), level = "debug")]
     async fn to_db(&self, app_id: &str) -> Result<ConnectBuilder> {
-        let path = Path::from("apps")
-            .child(app_id)
-            .child("storage")
-            .child("db");
+        let base_path = self
+            .content_path_prefix
+            .clone()
+            .unwrap_or_else(|| format!("apps/{}", app_id));
+        let path = Path::from(base_path).child("storage").child("db");
+        let connection = make_s3_builder(
+            &self.content_bucket,
+            self.content_config
+                .as_ref()
+                .and_then(|c| c.endpoint.clone()),
+            self.access_key_id
+                .clone()
+                .ok_or(anyhow!("AWS_ACCESS_KEY_ID is not set"))?,
+            self.secret_access_key
+                .clone()
+                .ok_or(anyhow!("AWS_SECRET_ACCESS_KEY is not set"))?,
+            self.session_token.clone(),
+        );
+        let connection = connection(path.clone());
+        Ok(connection)
+    }
+
+    async fn to_db_scoped(&self, app_id: &str) -> Result<ConnectBuilder> {
+        let base_path = self
+            .user_content_path_prefix
+            .clone()
+            .or_else(|| self.content_path_prefix.clone())
+            .unwrap_or_else(|| format!("apps/{}", app_id));
+
+        let path = Path::from(base_path).child("storage").child("db");
         let connection = make_s3_builder(
             &self.content_bucket,
             self.content_config
@@ -204,6 +236,8 @@ mod tests {
             logs_config: None,
             region: "us-west-2".to_string(),
             expiration: None,
+            content_path_prefix: None,
+            user_content_path_prefix: None,
         }
     }
 

@@ -23,7 +23,7 @@ impl NodeLogic for CreateComponent {
             "a2ui_create_component",
             "Create Component",
             "Creates an A2UI component with ID, style, and component data",
-            "A2UI/Component",
+            "UI/Component",
         );
         node.add_icon("/flow/icons/a2ui.svg");
 

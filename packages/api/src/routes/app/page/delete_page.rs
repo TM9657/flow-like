@@ -8,6 +8,20 @@ use axum::{
 };
 use sea_orm::{ColumnTrait, EntityTrait, QueryFilter};
 
+#[utoipa::path(
+    delete,
+    path = "/apps/{app_id}/pages/{page_id}",
+    tag = "pages",
+    params(
+        ("app_id" = String, Path, description = "Application ID"),
+        ("page_id" = String, Path, description = "Page ID")
+    ),
+    responses(
+        (status = 200, description = "Page deleted"),
+        (status = 401, description = "Unauthorized"),
+        (status = 403, description = "Forbidden")
+    )
+)]
 #[tracing::instrument(name = "DELETE /apps/{app_id}/pages/{page_id}", skip(state, user))]
 pub async fn delete_page(
     State(state): State<AppState>,

@@ -89,6 +89,14 @@ impl HTTPClient {
         )
     }
 
+    pub fn new_without_refetch() -> HTTPClient {
+        HTTPClient {
+            cache: Arc::new(DashMap::new()),
+            sender: None,
+            client: reqwest::Client::new(),
+        }
+    }
+
     /// Refetches the request
     /// This is used to update the cache in the background
     async fn refetch(&self, request: &Request) {

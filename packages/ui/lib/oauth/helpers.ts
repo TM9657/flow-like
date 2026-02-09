@@ -104,13 +104,17 @@ export function extractOAuthRequirementsFromBoard(board: IBoard): {
 			}
 		}
 
+		// Only add scopes for providers that are already registered via oauth_providers
+		// required_oauth_scopes is informational - it documents what scopes a node needs
+		// IF OAuth is used, but shouldn't trigger OAuth by itself
 		const requiredScopes = (node as any).required_oauth_scopes as
 			| Record<string, string[] | { values?: string[] }>
 			| undefined;
 		if (requiredScopes) {
 			for (const [providerId, scopes] of Object.entries(requiredScopes)) {
+				// Only add scopes if this provider was already registered by an OAuth provider node
 				if (!scopesMap.has(providerId)) {
-					scopesMap.set(providerId, new Set());
+					continue;
 				}
 				const scopeSet = scopesMap.get(providerId)!;
 				const scopeArray = Array.isArray(scopes)
@@ -202,14 +206,17 @@ export function extractOAuthProvidersFromBoard(
 			}
 		}
 
-		// All scopes come from required_oauth_scopes
+		// Only add scopes for providers that are already registered via oauth_providers
+		// required_oauth_scopes is informational - it documents what scopes a node needs
+		// IF OAuth is used, but shouldn't trigger OAuth by itself
 		const requiredScopes = (node as any).required_oauth_scopes as
 			| Record<string, string[] | { values?: string[] }>
 			| undefined;
 		if (requiredScopes) {
 			for (const [providerId, scopes] of Object.entries(requiredScopes)) {
+				// Only add scopes if this provider was already registered by an OAuth provider node
 				if (!scopesMap.has(providerId)) {
-					scopesMap.set(providerId, new Set());
+					continue;
 				}
 				const scopeSet = scopesMap.get(providerId)!;
 				// Handle both array format and protobuf { values: [] } format

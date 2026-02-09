@@ -14,6 +14,27 @@ use sea_orm::{
     ActiveModelTrait, ColumnTrait, EntityTrait, QueryFilter, TransactionTrait, prelude::Expr,
 };
 
+#[utoipa::path(
+    delete,
+    path = "/apps/{app_id}/roles/{role_id}",
+    tag = "roles",
+    description = "Delete a role and reassign members to the default role.",
+    params(
+        ("app_id" = String, Path, description = "Application ID"),
+        ("role_id" = String, Path, description = "Role ID")
+    ),
+    responses(
+        (status = 200, description = "Role deleted", body = ()),
+        (status = 401, description = "Unauthorized"),
+        (status = 403, description = "Forbidden"),
+        (status = 404, description = "Not found")
+    ),
+    security(
+        ("bearer_auth" = []),
+        ("api_key" = []),
+        ("pat" = [])
+    )
+)]
 #[tracing::instrument(name = "DELETE /apps/{app_id}/roles/{role_id}", skip(state, user))]
 pub async fn delete_role(
     State(state): State<AppState>,

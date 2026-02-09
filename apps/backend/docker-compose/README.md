@@ -37,11 +37,31 @@ Full step-by-step documentation: **[docs.flow-like.com/self-hosting/docker-compo
 | Service | Port | Description |
 |---------|------|-------------|
 | api | 8080 | Flow-Like API |
+| web | 3001 | Web application |
 | runtime | 9000 | Execution runtime |
 | postgres | 5432 | Database |
 | redis | 6379 | Job queue |
 | grafana | 3002 | Dashboards (monitoring profile) |
 | prometheus | 9091 | Metrics (monitoring profile) |
+
+## Supported Event Sinks
+
+The docker-compose deployment supports server-side event sinks for triggering flows. Configure which sinks are enabled in the `flow-like.config.json` file under `supported_sinks`:
+
+| Sink | Default | Description | Requirements |
+|------|---------|-------------|--------------|
+| `http` | ✅ | REST API endpoints | None |
+| `webhook` | ✅ | Incoming webhooks | None |
+| `cron` | ✅ | Scheduled triggers | None |
+| `github` | ✅ | Repository webhooks | Public endpoint |
+| `rss` | ✅ | Feed polling | None |
+| `discord` | ✅ | Discord bot | Bot token, persistent process |
+| `telegram` | ✅ | Telegram bot | Bot token, persistent process |
+| `slack` | ✅ | Slack bot | Bot token, persistent process |
+| `email` | ✅ | IMAP polling | IMAP credentials |
+| `mqtt` | ❌ | MQTT broker | MQTT broker |
+
+See `flow-like.config.example.json` for a full configuration template.
 
 ## Build Caching
 

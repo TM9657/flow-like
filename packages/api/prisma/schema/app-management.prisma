@@ -1,138 +1,138 @@
 model InviteLink {
-    id String @id
+  id String @id
 
-    name String?
-    maxUses BigInt @default(-1) // -1 means unlimited uses
+  name    String?
+  maxUses BigInt  @default(-1) // -1 means unlimited uses
 
-    token String @unique
-    app   App    @relation(fields: [appId], references: [id], onDelete: Cascade)
-    appId String
+  token String @unique
+  app   App    @relation(fields: [appId], references: [id], onDelete: Cascade)
+  appId String
 
-    countJoined BigInt @default(0)
+  countJoined BigInt @default(0)
 
-    createdAt DateTime @default(now())
-    updatedAt DateTime @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-    @@index([appId, createdAt])
-    @@index([appId, token])
+  @@index([appId, createdAt])
+  @@index([appId, token])
 }
 
 model JoinQueue {
-    id String @id
+  id String @id
 
-    user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
-    userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId String
 
-    app   App    @relation(fields: [appId], references: [id], onDelete: Cascade)
-    appId String
+  app   App    @relation(fields: [appId], references: [id], onDelete: Cascade)
+  appId String
 
-    comment String?
+  comment String?
 
-    createdAt DateTime @default(now())
-    updatedAt DateTime @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-    @@index([userId, appId])
-    @@unique([userId, appId])
-    @@index([appId, createdAt])
+  @@unique([userId, appId])
+  @@index([userId, appId])
+  @@index([appId, createdAt])
 }
 
 model Invitation {
-    id String @id
+  id String @id
 
-    user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
-    userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId String
 
-    app   App    @relation(fields: [appId], references: [id], onDelete: Cascade)
-    appId String
+  app   App    @relation(fields: [appId], references: [id], onDelete: Cascade)
+  appId String
 
-    name String
-    description String?
-    message String?
+  name        String
+  description String?
+  message     String?
 
-    byMember   Membership   @relation(fields: [byMemberId], references: [id], onDelete: Cascade)
-    byMemberId String
+  byMember   Membership @relation(fields: [byMemberId], references: [id], onDelete: Cascade)
+  byMemberId String
 
-    createdAt DateTime @default(now())
-    updatedAt DateTime @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-    @@unique([userId, appId])
-    @@index([userId, createdAt])
+  @@unique([userId, appId])
+  @@index([userId, createdAt])
 }
 
 model Membership {
-    id String @id
+  id String @id
 
-    user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
-    userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId String
 
-    app   App    @relation(fields: [appId], references: [id], onDelete: Cascade)
-    appId String
+  app   App    @relation(fields: [appId], references: [id], onDelete: Cascade)
+  appId String
 
-    role   Role   @relation(fields: [roleId], references: [id])
-    roleId String
+  role   Role   @relation(fields: [roleId], references: [id])
+  roleId String
 
-    invitations Invitation[]
+  invitations Invitation[]
 
-    createdAt DateTime @default(now())
-    updatedAt DateTime @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-    joinedVia String?
+  joinedVia String?
 
-    @@unique([userId, appId])
-    @@index([appId, roleId])
+  @@unique([userId, appId])
+  @@index([appId, roleId])
 }
 
 model Role {
-    id String @id
+  id String @id
 
-    name        String
-    description String?
+  name        String
+  description String?
 
-    attributes  String[]
-    permissions BigInt
+  attributes  String[]
+  permissions BigInt
 
-    memberships    Membership[]
-    technicalUsers TechnicalUser[]
+  memberships    Membership[]
+  technicalUsers TechnicalUser[]
 
-    app   App?    @relation(fields: [appId], references: [id], onDelete: Cascade)
-    appId String?
+  app   App?    @relation(fields: [appId], references: [id], onDelete: Cascade)
+  appId String?
 
-    defaultForApp App? @relation("defaultForApp")
-    ownerForApp   App? @relation("ownerForApp")
+  defaultForApp App? @relation("defaultForApp")
+  ownerForApp   App? @relation("ownerForApp")
 
-    createdAt DateTime @default(now())
-    updatedAt DateTime @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 enum NotificationType {
-    WORKFLOW
-    SYSTEM
+  WORKFLOW
+  SYSTEM
 }
 
 model Notification {
-    id String @id
+  id String @id
 
-    user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
-    userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId String
 
-    app   App?    @relation(fields: [appId], references: [id], onDelete: Cascade)
-    appId String?
+  app   App?    @relation(fields: [appId], references: [id], onDelete: Cascade)
+  appId String?
 
-    title       String
-    description String?
-    icon        String?
-    link        String?
+  title       String
+  description String?
+  icon        String?
+  link        String?
 
-    type NotificationType @default(WORKFLOW)
-    read Boolean          @default(false)
+  type NotificationType @default(WORKFLOW)
+  read Boolean          @default(false)
 
-    sourceRunId  String?
-    sourceNodeId String?
+  sourceRunId  String?
+  sourceNodeId String?
 
-    createdAt DateTime  @default(now())
-    readAt    DateTime?
+  createdAt DateTime  @default(now())
+  readAt    DateTime?
 
-    @@index([userId, createdAt])
-    @@index([userId, read])
-    @@index([appId, createdAt])
+  @@index([userId, createdAt])
+  @@index([userId, read])
+  @@index([appId, createdAt])
 }

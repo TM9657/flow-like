@@ -3,6 +3,7 @@ import { listen } from "@tauri-apps/api/event";
 import { getAllWindows } from "@tauri-apps/api/window";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { useBackend, useInvoke } from "@tm9657/flow-like-ui";
+import type { IProfile } from "@tm9657/flow-like-ui";
 import { Amplify } from "aws-amplify";
 import {
 	type AuthTokens,
@@ -20,13 +21,14 @@ import {
 import { useEffect, useState } from "react";
 import { AuthProvider, useAuth } from "react-oidc-context";
 import { get } from "../lib/api";
-import { TauriBackend } from "./tauri-provider";
+import { ProfileSyncer, TauriBackend } from "./tauri-provider";
 
 export class OIDCTokenProvider implements TokenProvider {
 	constructor(private readonly userManager: UserManager) {}
 	async getTokens(options?: {
 		forceRefresh?: boolean;
 	}): Promise<AuthTokens | null> {
+		console.warn("Getting tokens from OIDCTokenProvider...");
 		const user = await this.userManager.getUser();
 		if (!user?.access_token || !user?.id_token) {
 			return null;
@@ -82,42 +84,60 @@ export function DesktopAuthProvider({
 	);
 
 	useEffect(() => {
-		if (!currentProfile.data) return;
+		const profileData = currentProfile.data;
+		const effectiveProfile =
+			profileData ??
+			({
+				hub: "api.flow-like.com",
+				secure: true,
+				bits: [],
+				created: new Date().toISOString(),
+				updated: new Date().toISOString(),
+				name: "default",
+			} as IProfile);
+
 		(async () => {
-			const response = await get<any>(currentProfile.data, "auth/openid");
-			if (response) {
-				if (process.env.NEXT_PUBLIC_REDIRECT_URL)
-					response.redirect_uri = process.env.NEXT_PUBLIC_REDIRECT_URL;
-				if (process.env.NEXT_PUBLIC_REDIRECT_LOGOUT_URL)
-					response.post_logout_redirect_uri =
-						process.env.NEXT_PUBLIC_REDIRECT_LOGOUT_URL;
-				const store = new WebStorageStateStore({
-					store: localStorage,
-				});
-				response.userStore = store;
-				response.automaticSilentRenew = true;
-				const navigator = new TauriRedirectNavigator();
-				const userManagerInstance = new UserManager(response, navigator);
-				response.userManager = userManagerInstance;
-				const tokenProvider = new OIDCTokenProvider(userManagerInstance);
-				if (response.cognito)
-					Amplify.configure(
-						{
-							Auth: {
-								Cognito: {
-									userPoolClientId: response.client_id,
-									userPoolId: response.cognito.user_pool_id,
+			try {
+				const response = await get<any>(effectiveProfile, "auth/openid");
+				if (response) {
+					if (process.env.NEXT_PUBLIC_REDIRECT_URL)
+						response.redirect_uri = process.env.NEXT_PUBLIC_REDIRECT_URL;
+					if (process.env.NEXT_PUBLIC_REDIRECT_LOGOUT_URL)
+						response.post_logout_redirect_uri =
+							process.env.NEXT_PUBLIC_REDIRECT_LOGOUT_URL;
+					const store = new WebStorageStateStore({
+						store: localStorage,
+					});
+					response.userStore = store;
+					response.automaticSilentRenew = true;
+					const navigator = new TauriRedirectNavigator();
+					const userManagerInstance = new UserManager(response, navigator);
+					response.userManager = userManagerInstance;
+					const tokenProvider = new OIDCTokenProvider(userManagerInstance);
+					if (response.cognito)
+						Amplify.configure(
+							{
+								Auth: {
+									Cognito: {
+										userPoolClientId: response.client_id,
+										userPoolId: response.cognito.user_pool_id,
+									},
 								},
 							},
-						},
-						{
-							Auth: {
-								tokenProvider: tokenProvider,
+							{
+								Auth: {
+									tokenProvider: tokenProvider,
+								},
 							},
-						},
-					);
-				setUserManager(userManagerInstance);
-				setOpenIdAuthConfig(response);
+						);
+					console.log("[DESKTOPAUTH] Setting openIdAuthConfig and userManager");
+					setUserManager(userManagerInstance);
+					setOpenIdAuthConfig(response);
+				} else {
+					console.warn("OpenID response was falsy, not configuring auth");
+				}
+			} catch (error) {
+				console.error("Failed to fetch OpenID config:", error);
 			}
 		})();
 	}, [currentProfile.data]);
@@ -283,5 +303,15 @@ function AuthInner({ children }: Readonly<{ children: React.ReactNode }>) {
 		})();
 	}, [auth.user?.profile?.sub]);
 
-	return <>{children}</>;
+	return (
+		<>
+			<ProfileSyncer
+				auth={{
+					isAuthenticated: auth.isAuthenticated,
+					accessToken: auth.user?.access_token,
+				}}
+			/>
+			{children}
+		</>
+	);
 }

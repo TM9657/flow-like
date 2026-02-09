@@ -12,46 +12,54 @@ pub struct NodeMetadata {
 }
 
 impl NodeMetadata {
-    /// Convert to a compact string format for token efficiency
-    /// Format: "name|friendly_name|desc|inputs:pin1(Type),pin2(Type)|outputs:pin1(Type)"
+    /// Convert to a minimal string format for token efficiency
+    /// Format: "node_type: friendly_name - description (truncated)"
     pub fn to_compact(&self) -> String {
+        // Truncate description to first ~50 chars
+        let desc = if self.description.chars().count() > 50 {
+            let truncated: String = self.description.chars().take(47).collect();
+            format!("{}...", truncated)
+        } else {
+            self.description.clone()
+        };
+
+        format!("{}: {} - {}", self.name, self.friendly_name, desc)
+    }
+
+    /// Get detailed pin information (only call when needed)
+    pub fn to_detailed(&self) -> String {
         let inputs: Vec<String> = self
             .inputs
             .iter()
-            .filter(|p| p.data_type != "Execution") // Skip exec pins, they're standard
-            .map(|p| format!("{}({})", p.name, p.data_type))
+            .filter(|p| p.data_type != "Execution")
+            .map(|p| {
+                if p.description.is_empty() {
+                    format!("  - {} ({})", p.name, p.data_type)
+                } else {
+                    format!("  - {} ({}): {}", p.name, p.data_type, p.description)
+                }
+            })
             .collect();
 
         let outputs: Vec<String> = self
             .outputs
             .iter()
             .filter(|p| p.data_type != "Execution")
-            .map(|p| format!("{}({})", p.name, p.data_type))
+            .map(|p| format!("  - {} ({})", p.name, p.data_type))
             .collect();
 
-        // Truncate description to first 80 chars
-        let desc = if self.description.len() > 80 {
-            format!("{}...", &self.description[..77])
-        } else {
-            self.description.clone()
-        };
+        let mut result = format!(
+            "Node: {}\nName: {}\nDescription: {}\n",
+            self.name, self.friendly_name, self.description
+        );
 
-        format!(
-            "{}|{}|{}|in:{}|out:{}",
-            self.name,
-            self.friendly_name,
-            desc,
-            if inputs.is_empty() {
-                "-".to_string()
-            } else {
-                inputs.join(",")
-            },
-            if outputs.is_empty() {
-                "-".to_string()
-            } else {
-                outputs.join(",")
-            }
-        )
+        if !inputs.is_empty() {
+            result.push_str(&format!("Inputs:\n{}\n", inputs.join("\n")));
+        }
+        if !outputs.is_empty() {
+            result.push_str(&format!("Outputs:\n{}\n", outputs.join("\n")));
+        }
+        result
     }
 }
 

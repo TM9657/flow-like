@@ -7,11 +7,8 @@ use flow_like::flow::{
     pin::{PinOptions, ValueType},
     variable::VariableType,
 };
-use flow_like_catalog_core::NodeImage;
-use flow_like_types::{
-    JsonSchema, Result, anyhow, async_trait,
-    json::{Deserialize, Serialize, json},
-};
+use flow_like_catalog_core::{ClassPrediction, NodeImage};
+use flow_like_types::{Result, anyhow, async_trait, json::json};
 
 #[cfg(feature = "execute")]
 use flow_like_model_provider::ml::{
@@ -30,12 +27,6 @@ use flow_like_types::image::{DynamicImage, GenericImageView, imageops::FilterTyp
 use ndarray::{Array1, ArrayView1};
 #[cfg(feature = "execute")]
 use std::borrow::Cow;
-
-#[derive(Default, Serialize, Deserialize, JsonSchema, Clone, Debug)]
-pub struct ClassPrediction {
-    pub class_idx: u32,
-    pub score: f32,
-}
 
 #[cfg(feature = "execute")]
 // ## Image Classification Trait for Common Behavior
@@ -110,10 +101,7 @@ impl Classification for TimmLike {
         let mut predictions = Vec::with_capacity(output.len_of(Axis(0)));
         for (class_idx, score) in output.axis_iter(Axis(0)).enumerate() {
             let score = score.first().copied().unwrap_or(0.);
-            predictions.push(ClassPrediction {
-                class_idx: class_idx as u32,
-                score,
-            });
+            predictions.push(ClassPrediction::new(class_idx as u32, score));
         }
         predictions.sort_unstable_by(|a, b| {
             b.score
@@ -240,7 +228,7 @@ impl NodeLogic for ImageClassificationNode {
         let mut node = Node::new(
             "image_classification",
             "Image Classification",
-            "Image Classification with ONNX-Models",
+            "Image Classification with ONNX-Models. Download models from: MobileNetV2 (https://github.com/onnx/models/tree/main/validated/vision/classification/mobilenet), SqueezeNet (https://github.com/onnx/models/tree/main/validated/vision/classification/squeezenet), ResNet (https://github.com/onnx/models/tree/main/validated/vision/classification/resnet), EfficientNet (https://github.com/onnx/models/tree/main/validated/vision/classification/efficientnet-lite4)",
             "AI/ML/ONNX",
         );
 

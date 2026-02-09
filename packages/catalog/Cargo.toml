@@ -16,6 +16,10 @@ local-ml = [
     "flow-like-catalog-llm/local-ml",
     "flow-like-catalog-processing/local-ml",
 ]
+remote-ml = [
+    "flow-like-catalog-core/remote-ml",
+    "flow-like-catalog-llm/remote-ml",
+]
 mimalloc = ["dep:mimalloc"]
 
 
@@ -83,6 +87,7 @@ flow-like-catalog-llm.workspace = true
 flow-like-catalog-processing.workspace = true
 flow-like-catalog-geo.workspace = true
 mimalloc = { workspace = true, optional = true }
+tracing.workspace = true
 
 [dev-dependencies]
 criterion = { version = "0.7", features = ["html_reports", "async_tokio"] }

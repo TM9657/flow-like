@@ -27,7 +27,7 @@ impl NodeLogic for CreateElement {
             "a2ui_create_element",
             "Create Element",
             "Creates a new element and adds it to a parent container",
-            "A2UI/Elements",
+            "UI/Elements",
         );
         node.add_icon("/flow/icons/a2ui.svg");
 

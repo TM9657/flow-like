@@ -241,7 +241,7 @@ mod tests {
         let store = Arc::new(store);
         config.register_app_storage_store(FlowLikeStore::Local(store.clone()));
         config.register_bits_store(FlowLikeStore::Local(store));
-        let (http_client, _refetch_rx) = HTTPClient::new();
+        let http_client = HTTPClient::new_without_refetch();
         let flow_like_state = crate::state::FlowLikeState::new(config, http_client);
         Arc::new(flow_like_state)
     }

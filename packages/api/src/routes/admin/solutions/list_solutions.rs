@@ -5,8 +5,9 @@ use crate::{
 use axum::{Extension, Json, extract::State};
 use sea_orm::{ColumnTrait, EntityTrait, PaginatorTrait, QueryFilter, QueryOrder};
 use serde::{Deserialize, Serialize};
+use utoipa::{IntoParams, ToSchema};
 
-#[derive(Clone, Serialize, Deserialize, Debug)]
+#[derive(Clone, Serialize, Deserialize, Debug, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct SolutionListItem {
     pub id: String,
@@ -40,7 +41,7 @@ pub struct SolutionListItem {
     pub updated_at: String,
 }
 
-#[derive(Clone, Serialize, Deserialize, Debug)]
+#[derive(Clone, Serialize, Deserialize, Debug, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct ListSolutionsResponse {
     pub solutions: Vec<SolutionListItem>,
@@ -50,7 +51,7 @@ pub struct ListSolutionsResponse {
     pub has_more: bool,
 }
 
-#[derive(Clone, Deserialize, Debug)]
+#[derive(Clone, Deserialize, Debug, IntoParams, ToSchema)]
 pub struct ListSolutionsQuery {
     pub status: Option<String>,
     pub search: Option<String>,
@@ -58,6 +59,17 @@ pub struct ListSolutionsQuery {
     pub limit: Option<u64>,
 }
 
+#[utoipa::path(
+    get,
+    path = "/admin/solutions",
+    tag = "admin",
+    params(ListSolutionsQuery),
+    responses(
+        (status = 200, description = "List of solutions", body = ListSolutionsResponse),
+        (status = 401, description = "Unauthorized"),
+        (status = 403, description = "Forbidden")
+    )
+)]
 #[tracing::instrument(name = "GET /admin/solutions", skip(state, user))]
 pub async fn list_solutions(
     State(state): State<AppState>,

@@ -1,7 +1,8 @@
 ---
 import "@tm9657/flow-like-ui/global.css";
+import "../../styles/website-base.css";
 import PostHog from "../posthog.astro";
-import { BlogHeader } from "../blog-header";
+import { Header } from "../header";
 import { BlogFooter } from "../blog-footer";
 
 import CompareHero from "./CompareHero.astro";
@@ -28,7 +29,7 @@ const cover = "/og.png";
 ---
 
 <!doctype html>
-<html lang={lang} class="scroll-smooth" style="overflow-x: hidden;">
+<html lang={lang} class="scroll-smooth">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -56,22 +57,10 @@ const cover = "/og.png";
 
     <PostHog />
 
-    <style is:global>
-      html, body { min-height: 100%; }
-      html, body {
-        overflow-y: auto;
-        overflow-x: hidden !important;
-        max-width: 100vw;
-        -webkit-overflow-scrolling: touch;
-        touch-action: pan-y;
-      }
-      :root, body, #content { overscroll-behavior: auto; }
-    </style>
+
   </head>
-  <body class="bg-background text-foreground antialiased overflow-x-hidden max-w-full"
-        style="overflow-y: auto !important;"
-  >
-    <BlogHeader client:load />
+  <body class="bg-background text-foreground antialiased overflow-x-hidden max-w-full">
+    <Header client:load />
 
     <main class="pt-16">
       <CompareHero t={t} />

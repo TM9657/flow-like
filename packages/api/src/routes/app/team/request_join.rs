@@ -12,12 +12,34 @@ use flow_like_types::create_id;
 use sea_orm::{
     ActiveModelTrait, ActiveValue::Set, ColumnTrait, EntityTrait, QueryFilter, TransactionTrait,
 };
+use utoipa::ToSchema;
 
-#[derive(Debug, Clone, serde::Deserialize)]
+#[derive(Debug, Clone, serde::Deserialize, ToSchema)]
 pub struct RequestJoinParams {
     pub comment: Option<String>,
 }
 
+#[utoipa::path(
+    put,
+    path = "/apps/{app_id}/team/queue",
+    tag = "team",
+    description = "Request to join an app.",
+    params(
+        ("app_id" = String, Path, description = "Application ID")
+    ),
+    request_body = RequestJoinParams,
+    responses(
+        (status = 200, description = "Join request submitted", body = ()),
+        (status = 401, description = "Unauthorized"),
+        (status = 403, description = "Forbidden"),
+        (status = 404, description = "Not found")
+    ),
+    security(
+        ("bearer_auth" = []),
+        ("api_key" = []),
+        ("pat" = [])
+    )
+)]
 #[tracing::instrument(name = "PUT /apps/{app_id}/team/queue", skip(state, user))]
 pub async fn request_join(
     State(state): State<AppState>,

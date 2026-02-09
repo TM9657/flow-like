@@ -5,8 +5,9 @@ use axum::{Extension, Json, extract::State};
 use flow_like_types::create_id;
 use sea_orm::{ActiveModelTrait, ActiveValue::Set, EntityTrait};
 use serde::{Deserialize, Serialize};
+use utoipa::ToSchema;
 
-#[derive(Debug, Clone, Default, Deserialize, Serialize)]
+#[derive(Debug, Clone, Default, Deserialize, Serialize, ToSchema)]
 pub struct UpsertInfoBody {
     pub name: Option<String>,
     pub description: Option<String>,
@@ -15,11 +16,25 @@ pub struct UpsertInfoBody {
     pub tutorial_completed: Option<bool>,
 }
 
-#[derive(Debug, Clone, Default, Deserialize, Serialize)]
+#[derive(Debug, Clone, Default, Deserialize, Serialize, ToSchema)]
 pub struct UpsertInfoResponse {
     pub signed_url: Option<String>,
 }
 
+#[utoipa::path(
+    put,
+    path = "/user/info",
+    tag = "user",
+    request_body = UpsertInfoBody,
+    responses(
+        (status = 200, description = "User info updated successfully", body = UpsertInfoResponse),
+        (status = 401, description = "Unauthorized"),
+        (status = 404, description = "User not found")
+    ),
+    security(
+        ("bearer_auth" = [])
+    )
+)]
 #[tracing::instrument(name = "PUT /user/info", skip(state, user))]
 pub async fn upsert_info(
     State(state): State<AppState>,

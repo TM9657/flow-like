@@ -18,6 +18,21 @@ use sea_orm::{
     TransactionTrait,
 };
 
+#[utoipa::path(
+    delete,
+    path = "/user/invites/{invite_id}",
+    tag = "user",
+    params(
+        ("invite_id" = String, Path, description = "Invitation ID to reject")
+    ),
+    responses(
+        (status = 200, description = "Invitation rejected"),
+        (status = 401, description = "Unauthorized")
+    ),
+    security(
+        ("bearer_auth" = [])
+    )
+)]
 #[tracing::instrument(name = "DELETE /user/invites/{invite_id}", skip(state, user))]
 pub async fn reject_invite(
     State(state): State<AppState>,
@@ -35,6 +50,23 @@ pub async fn reject_invite(
     Ok(Json(()))
 }
 
+#[utoipa::path(
+    post,
+    path = "/user/invites/{invite_id}",
+    tag = "user",
+    params(
+        ("invite_id" = String, Path, description = "Invitation ID to accept")
+    ),
+    responses(
+        (status = 200, description = "Invitation accepted"),
+        (status = 401, description = "Unauthorized"),
+        (status = 403, description = "Forbidden - app is private or user limit reached"),
+        (status = 404, description = "Invitation not found")
+    ),
+    security(
+        ("bearer_auth" = [])
+    )
+)]
 #[tracing::instrument(name = "POST /user/invites/{invite_id}", skip(state, user))]
 pub async fn accept_invite(
     State(state): State<AppState>,

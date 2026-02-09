@@ -215,6 +215,8 @@ impl UnifiedCopilot {
                 })
                 .collect(),
             active_scope: CopilotScope::Board,
+            canvas_settings: None,
+            root_component_id: None,
         })
     }
 
@@ -275,6 +277,8 @@ impl UnifiedCopilot {
             components: response.components,
             suggestions: vec![],
             active_scope: CopilotScope::Frontend,
+            canvas_settings: None,
+            root_component_id: None,
         })
     }
 

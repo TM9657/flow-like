@@ -22,12 +22,13 @@ use sea_orm::{
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use std::time::Duration;
+use utoipa::ToSchema;
 
 /// CDN path prefix for WASM packages
 const WASM_PACKAGES_PATH: &str = "wasm-packages";
 
 /// Author information for display
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct AuthorInfo {
     pub user_id: String,
     pub username: Option<String>,
@@ -37,7 +38,7 @@ pub struct AuthorInfo {
 }
 
 /// Extended package summary with additional metadata for UI
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct PackageDetails {
     pub id: String,
     pub name: String,
@@ -60,7 +61,7 @@ pub struct PackageDetails {
 }
 
 /// Package review entry
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct PackageReview {
     pub id: String,
     pub package_id: String,
@@ -74,7 +75,7 @@ pub struct PackageReview {
 }
 
 /// Request to submit a review
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct ReviewRequest {
     pub action: String, // "approve", "reject", "request_changes", "comment", "flag"
     pub comment: Option<String>,
@@ -85,7 +86,7 @@ pub struct ReviewRequest {
 }
 
 /// Statistics for the registry
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct RegistryStats {
     pub total_packages: i64,
     pub total_versions: i64,
@@ -187,7 +188,7 @@ impl ServerRegistry {
                 latest_version: pkg.version,
                 download_count: pkg.download_count as u64,
                 status: PackageStatus::Active,
-                keywords: pkg.keywords,
+                keywords: pkg.keywords.unwrap_or_default(),
                 verified: pkg.verified,
             })
             .collect();
@@ -282,7 +283,7 @@ impl ServerRegistry {
             license: pkg.license,
             homepage: pkg.homepage,
             repository: pkg.repository,
-            keywords: pkg.keywords,
+            keywords: pkg.keywords.unwrap_or_default(),
             status: status_to_string(&pkg.status),
             verified: pkg.verified,
             download_count: pkg.download_count as u64,
@@ -359,7 +360,7 @@ impl ServerRegistry {
             license: pkg.license.clone(),
             homepage: pkg.homepage.clone(),
             repository: pkg.repository.clone(),
-            keywords: pkg.keywords.clone(),
+            keywords: pkg.keywords.unwrap_or_default(),
             nodes: serde_json::from_value(pkg.nodes.clone()).unwrap_or_default(),
             permissions: serde_json::from_value(pkg.permissions.clone()).unwrap_or_default(),
             min_flow_like_version: None,
@@ -495,7 +496,7 @@ impl ServerRegistry {
                     WasmPackageStatus::Deprecated => PackageStatus::Deprecated,
                     _ => PackageStatus::Disabled,
                 },
-                keywords: pkg.keywords,
+                keywords: pkg.keywords.unwrap_or_default(),
                 verified: pkg.verified,
             })
             .collect();
@@ -621,7 +622,7 @@ impl ServerRegistry {
                 license: Set(manifest.license.clone()),
                 homepage: Set(manifest.homepage.clone()),
                 repository: Set(manifest.repository.clone()),
-                keywords: Set(manifest.keywords.clone()),
+                keywords: Set(Some(manifest.keywords.clone())),
                 wasm_path: Set(wasm_path.to_string()),
                 wasm_hash: Set(hash.clone()),
                 wasm_size: Set(size),
@@ -641,7 +642,7 @@ impl ServerRegistry {
                 license: Set(manifest.license.clone()),
                 homepage: Set(manifest.homepage.clone()),
                 repository: Set(manifest.repository.clone()),
-                keywords: Set(manifest.keywords.clone()),
+                keywords: Set(Some(manifest.keywords.clone())),
                 status: Set(WasmPackageStatus::PendingReview),
                 verified: Set(false),
                 download_count: Set(0),
@@ -793,7 +794,7 @@ impl ServerRegistry {
                 license: pkg.license,
                 homepage: pkg.homepage,
                 repository: pkg.repository,
-                keywords: pkg.keywords,
+                keywords: pkg.keywords.unwrap_or_default(),
                 status: status_to_string(&pkg.status),
                 verified: pkg.verified,
                 download_count: pkg.download_count as u64,
@@ -863,7 +864,7 @@ impl ServerRegistry {
         if let Some(status) = new_status {
             let mut update_model = wasm_package::ActiveModel {
                 id: Set(package_id.to_string()),
-                status: Set(status),
+                status: Set(status.clone()),
                 updated_at: Set(now),
                 ..Default::default()
             };
@@ -958,7 +959,7 @@ impl ServerRegistry {
 
         let mut update_model = wasm_package::ActiveModel {
             id: Set(package_id.to_string()),
-            status: Set(new_status),
+            status: Set(new_status.clone()),
             updated_at: Set(now),
             ..Default::default()
         };
@@ -1113,7 +1114,7 @@ impl ServerRegistry {
                     }
                     _ => PackageStatus::Disabled,
                 },
-                keywords: pkg.keywords,
+                keywords: pkg.keywords.unwrap_or_default(),
                 verified: pkg.verified,
             })
             .collect())

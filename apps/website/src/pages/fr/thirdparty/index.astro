@@ -1,0 +1,47 @@
+---
+import "@tm9657/flow-like-ui/global.css";
+import LegalLayout from "../../../layouts/Legal-Layout.astro";
+import { SbomTable } from "../../../components/thirdparty/sbom-table";
+
+import cargoLicenses from "../../../../../../thirdparty/cargo-licenses.json";
+import npmLicenses from "../../../../../../thirdparty/npm-licenses.json";
+
+const title = "Licences Tierces";
+const description = "Software Bill of Materials (SBOM) - Liste complète des bibliothèques open source utilisées dans Flow-Like";
+---
+
+<LegalLayout title={title} description={description} lastUpdated="04 février 2026">
+	<p class="text-lg mb-8">
+		Flow-Like est construit avec de nombreux projets open source incroyables.
+		Nous sommes reconnaissants envers les développeurs et mainteneurs de ces bibliothèques qui rendent notre travail possible.
+		Cette page sert de Software Bill of Materials (SBOM), offrant une transparence sur nos dépendances.
+	</p>
+
+	<div class="mb-8 p-4 rounded-lg bg-muted/30 border border-border/50">
+		<h3 class="font-semibold mb-2">À propos de ce SBOM</h3>
+		<p class="text-sm text-muted-foreground">
+			Cette liste est générée automatiquement à partir des dépendances de notre projet.
+			Elle inclut tous les crates Rust de notre workspace Cargo et les packages npm de nos applications web.
+		</p>
+		<div class="flex flex-wrap gap-2 mt-3">
+			<a
+				href="https://github.com/TM9657/flow-like/blob/dev/thirdparty/cargo-licenses.json"
+				target="_blank"
+				rel="noreferrer"
+				class="text-sm px-3 py-1 rounded-full bg-primary/10 text-primary hover:bg-primary/20 transition-colors"
+			>
+				Dépendances Rust (JSON)
+			</a>
+			<a
+				href="https://github.com/TM9657/flow-like/blob/dev/thirdparty/npm-licenses.json"
+				target="_blank"
+				rel="noreferrer"
+				class="text-sm px-3 py-1 rounded-full bg-primary/10 text-primary hover:bg-primary/20 transition-colors"
+			>
+				Dépendances NPM (JSON)
+			</a>
+		</div>
+	</div>
+
+	<SbomTable client:load cargoLicenses={cargoLicenses} npmLicenses={npmLicenses} />
+</LegalLayout>

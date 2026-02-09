@@ -21,8 +21,38 @@ export interface IHub {
 	region?: null | string;
 	terms_of_service: string;
 	signaling?: null | string[];
+	/** Supported server-side event sinks */
+	supported_sinks?: ISupportedSinks | null;
 	thumbnail?: null | string;
 	tiers: { [key: string]: IUserTier };
+	[property: string]: any;
+}
+
+/**
+ * Configuration for supported server-side event sinks.
+ * When a hub is deployed, only sinks listed here will be available for server-side execution.
+ */
+export interface ISupportedSinks {
+	/** HTTP/REST API endpoint sink */
+	http?: boolean;
+	/** Incoming webhook from external service */
+	webhook?: boolean;
+	/** Cron scheduled trigger */
+	cron?: boolean;
+	/** MQTT message broker */
+	mqtt?: boolean;
+	/** GitHub repository webhook */
+	github?: boolean;
+	/** RSS feed polling */
+	rss?: boolean;
+	/** Discord bot integration */
+	discord?: boolean;
+	/** Slack bot integration */
+	slack?: boolean;
+	/** Telegram bot integration */
+	telegram?: boolean;
+	/** Email/IMAP polling */
+	email?: boolean;
 	[property: string]: any;
 }
 

@@ -1,0 +1,102 @@
+{{/*
+Sink Trigger CronJob Template
+
+This template is NOT used directly - it documents the CronJob structure that
+the API's Kubernetes controller will create dynamically when users configure
+cron-based event sinks.
+
+The API controller in packages/sinks/src/scheduler/kubernetes.rs uses kube-rs
+to create/update/delete these CronJob resources programmatically.
+
+Example CronJob that would be created for an event sink with:
+  - event_id: "abc123"
+  - cron: "0 * * * *" (hourly)
+*/}}
+
+{{/*
+The controller creates CronJobs with this structure:
+
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: flow-like-sink-{event_id}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app.kubernetes.io/name: flow-like-sink-trigger
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/component: sink-trigger
+    flow-like.io/event-id: {event_id}
+spec:
+  schedule: "{cron_expression}"
+  concurrencyPolicy: {{ .Values.sinkServices.cronJob.concurrencyPolicy }}
+  successfulJobsHistoryLimit: {{ .Values.sinkServices.cronJob.successfulJobsHistoryLimit }}
+  failedJobsHistoryLimit: {{ .Values.sinkServices.cronJob.failedJobsHistoryLimit }}
+  jobTemplate:
+    spec:
+      ttlSecondsAfterFinished: {{ .Values.sinkServices.cronJob.ttlSecondsAfterFinished }}
+      template:
+        spec:
+          restartPolicy: Never
+          containers:
+            - name: sink-trigger
+              image: {{ .Values.sinkServices.image.repository }}:{{ .Values.sinkServices.image.tag }}
+              imagePullPolicy: {{ .Values.sinkServices.image.pullPolicy }}
+              env:
+                - name: EVENT_ID
+                  value: "{event_id}"
+                - name: API_BASE_URL
+                  valueFrom:
+                    configMapKeyRef:
+                      name: {{ include "flow-like.fullname" . }}-sink-config
+                      key: base-url
+                - name: SINK_TRIGGER_JWT
+                  valueFrom:
+                    secretKeyRef:
+                      name: {{ include "flow-like.fullname" . }}-sink-secrets
+                      key: trigger-jwt
+              resources:
+                {{- toYaml .Values.sinkServices.cronJob.resources | nindent 16 }}
+              securityContext:
+                runAsNonRoot: true
+                runAsUser: 1000
+                readOnlyRootFilesystem: true
+                allowPrivilegeEscalation: false
+                capabilities:
+                  drop:
+                    - ALL
+*/}}
+
+{{/*
+RBAC required for the API to manage CronJobs
+*/}}
+{{- if .Values.sinkServices.enabled }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ include "flow-like.fullname" . }}-sink-manager
+  labels:
+    {{- include "flow-like.labels" . | nindent 4 }}
+rules:
+  - apiGroups: ["batch"]
+    resources: ["cronjobs"]
+    verbs: ["create", "delete", "get", "list", "patch", "update", "watch"]
+  - apiGroups: ["batch"]
+    resources: ["jobs"]
+    verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ include "flow-like.fullname" . }}-sink-manager
+  labels:
+    {{- include "flow-like.labels" . | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: {{ include "flow-like.fullname" . }}-sink-manager
+subjects:
+  - kind: ServiceAccount
+    name: {{ include "flow-like.serviceAccountName" . }}
+    namespace: {{ .Release.Namespace }}
+{{- end }}

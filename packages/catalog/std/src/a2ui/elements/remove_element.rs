@@ -25,7 +25,7 @@ impl NodeLogic for RemoveElement {
             "a2ui_remove_element",
             "Remove Element",
             "Removes an element from the page",
-            "A2UI/Elements",
+            "UI/Elements",
         );
         node.add_icon("/flow/icons/a2ui.svg");
 

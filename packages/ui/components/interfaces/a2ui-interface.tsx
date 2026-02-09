@@ -68,13 +68,13 @@ export function A2UIInterface({
 	}
 
 	return (
-		<div className="h-full w-full overflow-hidden">
+		<div className="h-full w-full overflow-auto">
 			{allSurfaces.map((surface) => (
 				<A2UIRenderer
 					key={surface.id}
 					surface={surface}
 					onMessage={handleClientMessage}
-					className="h-full w-full overflow-hidden"
+					className="w-full min-h-full"
 					appId={appId}
 					isPreviewMode={true}
 				/>

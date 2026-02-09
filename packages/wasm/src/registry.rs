@@ -9,9 +9,9 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 
 /// Registry entry status
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[serde(rename_all = "snake_case")]
-#[derive(Default)]
 pub enum PackageStatus {
     /// Package is active and usable
     #[default]
@@ -130,6 +130,7 @@ pub struct RegistryIndex {
 
 /// Lightweight package summary for index
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 pub struct PackageSummary {
     pub id: String,
     pub name: String,
@@ -192,6 +193,7 @@ impl Default for RegistryConfig {
 
 /// Search filters for registry queries
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 pub struct SearchFilters {
     /// Search query (matches name, description, keywords)
     #[serde(default)]
@@ -230,6 +232,7 @@ fn default_limit() -> usize {
 }
 
 #[derive(Debug, Clone, Copy, Default, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[serde(rename_all = "snake_case")]
 pub enum SortField {
     #[default]
@@ -242,6 +245,7 @@ pub enum SortField {
 
 /// Search results
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 pub struct SearchResults {
     pub packages: Vec<PackageSummary>,
     pub total_count: usize,
@@ -252,6 +256,7 @@ pub struct SearchResults {
 /// API request/response types for registry HTTP API
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 pub struct PublishRequest {
     /// Package manifest
     pub manifest: PackageManifest,
@@ -263,6 +268,7 @@ pub struct PublishRequest {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 pub struct PublishResponse {
     pub success: bool,
     pub package_id: String,
@@ -272,6 +278,7 @@ pub struct PublishResponse {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 pub struct DownloadRequest {
     pub package_id: String,
     #[serde(default)]
@@ -279,6 +286,7 @@ pub struct DownloadRequest {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 pub struct DownloadResponse {
     pub package_id: String,
     pub version: String,
@@ -293,6 +301,7 @@ pub struct DownloadResponse {
 
 /// Registry API error
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 pub struct RegistryError {
     pub code: String,
     pub message: String,

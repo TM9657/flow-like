@@ -24,7 +24,7 @@ impl NodeLogic for ClearChildren {
             "a2ui_clear_children",
             "Clear Children",
             "Removes all children from a container element",
-            "A2UI/Elements/Containers",
+            "UI/Elements/Containers",
         );
         node.add_icon("/flow/icons/a2ui.svg");
 

@@ -13,7 +13,7 @@ use crate::{
         variable::{Variable, VariableType},
     },
     profile::Profile,
-    state::{FlowLikeState, FlowLikeStores, ToastEvent, ToastLevel},
+    state::{FlowLikeState, FlowLikeStores, ProgressEvent, ToastEvent, ToastLevel},
 };
 use ahash::AHashMap;
 use flow_like_model_provider::provider::ModelProviderConfiguration;
@@ -176,6 +176,8 @@ pub struct ExecutionContext {
     pub context_pin_overrides: Option<BTreeMap<String, Value>>,
     pub result: Option<Value>,
     pub oauth_tokens: Arc<AHashMap<String, OAuthToken>>,
+    /// User context containing information about who triggered the execution
+    pub user_context: Option<super::UserExecutionContext>,
     cancellation_token: Option<CancellationToken>,
     run_id: String,
     state: NodeState,
@@ -244,6 +246,7 @@ impl ExecutionContext {
             delegated: false,
             oauth_tokens,
             cancellation_token: None,
+            user_context: None,
         }
     }
     pub fn run_id(&self) -> &str {
@@ -312,6 +315,7 @@ impl ExecutionContext {
             delegated: false,
             oauth_tokens,
             cancellation_token: None,
+            user_context: None,
         }
     }
 
@@ -344,6 +348,23 @@ impl ExecutionContext {
         if let Some(overrides) = &mut self.context_pin_overrides {
             overrides.clear();
         }
+    }
+
+    /// Set the user execution context
+    pub fn set_user_context(&mut self, user_context: super::UserExecutionContext) {
+        self.user_context = Some(user_context);
+    }
+
+    /// Get the user execution context, returning an error if not set
+    pub fn require_user_context(&self) -> flow_like_types::Result<&super::UserExecutionContext> {
+        self.user_context
+            .as_ref()
+            .ok_or_else(|| flow_like_types::anyhow!("User context not available - this execution was triggered by a sink that does not support user context"))
+    }
+
+    /// Get the user execution context if available
+    pub fn user_context(&self) -> Option<&super::UserExecutionContext> {
+        self.user_context.as_ref()
     }
 
     pub fn is_cancelled(&self) -> bool {
@@ -425,6 +446,7 @@ impl ExecutionContext {
 
         context.context_pin_overrides = self.context_pin_overrides.clone();
         context.cancellation_token = self.cancellation_token.clone();
+        context.user_context = self.user_context.clone();
 
         context
     }
@@ -899,6 +921,38 @@ impl ExecutionContext {
         if let Err(err) = event.call(&self.callback).await {
             self.log_message(
                 &format!("Failed to send toast event: {}", err),
+                LogLevel::Error,
+            );
+        }
+        Ok(())
+    }
+
+    pub async fn progress_message(
+        &mut self,
+        id: &str,
+        message: &str,
+        progress: Option<u8>,
+    ) -> flow_like_types::Result<()> {
+        let event = InterComEvent::with_type("progress", ProgressEvent::new(id, message, progress));
+        if let Err(err) = event.call(&self.callback).await {
+            self.log_message(
+                &format!("Failed to send progress event: {}", err),
+                LogLevel::Error,
+            );
+        }
+        Ok(())
+    }
+
+    pub async fn progress_done(
+        &mut self,
+        id: &str,
+        message: &str,
+        success: bool,
+    ) -> flow_like_types::Result<()> {
+        let event = InterComEvent::with_type("progress", ProgressEvent::done(id, message, success));
+        if let Err(err) = event.call(&self.callback).await {
+            self.log_message(
+                &format!("Failed to send progress done event: {}", err),
                 LogLevel::Error,
             );
         }

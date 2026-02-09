@@ -16,9 +16,13 @@ use tower_http::{
     cors::CorsLayer,
     decompression::RequestDecompressionLayer,
 };
+use tracing_subscriber::EnvFilter;
+use utoipa::OpenApi;
+use utoipa_swagger_ui::SwaggerUi;
 
 pub mod entity;
 mod middleware;
+pub mod openapi;
 mod routes;
 
 pub mod alerting;
@@ -46,6 +50,18 @@ pub mod auth {
 
 pub use sea_orm;
 
+pub fn warn_env_filter() -> EnvFilter {
+    EnvFilter::try_from_default_env().unwrap_or_else(|_| {
+        EnvFilter::new("warn")
+            .add_directive("hyper=warn".parse().unwrap())
+            .add_directive("hyper_util=warn".parse().unwrap())
+            .add_directive("rustls=warn".parse().unwrap())
+            .add_directive("tokio=warn".parse().unwrap())
+            .add_directive("h2=warn".parse().unwrap())
+            .add_directive("tower=warn".parse().unwrap())
+    })
+}
+
 pub fn construct_router(state: Arc<State>) -> Router {
     let router = Router::new()
         .route("/", get(hub_info))
@@ -59,12 +75,15 @@ pub fn construct_router(state: Arc<State>) -> Router {
         .nest("/auth", routes::auth::routes())
         .nest("/oauth", routes::oauth::routes())
         .nest("/chat", routes::chat::routes())
+        .nest("/embeddings", routes::embeddings::routes())
         .nest("/ai", routes::ai::routes())
         .nest("/admin", routes::admin::routes())
         .nest("/tmp", routes::tmp::routes())
         .nest("/solution", routes::solution::routes())
         .nest("/execution", routes::execution::routes())
+        .nest("/usage", routes::usage::routes())
         .nest("/registry", routes::registry::routes())
+        .nest("/sink", routes::sink::routes())
         .route("/webhook/stripe", post(routes::webhook::stripe_webhook))
         .with_state(state.clone())
         .route("/version", get(|| async { "0.0.0" }))
@@ -83,7 +102,11 @@ pub fn construct_router(state: Arc<State>) -> Router {
                 )),
         );
 
-    Router::new().nest("/api/v1", router)
+    Router::new()
+        .merge(
+            SwaggerUi::new("/swagger-ui").url("/api-doc/openapi.json", openapi::ApiDoc::openapi()),
+        )
+        .nest("/api/v1", router)
 }
 
 #[tracing::instrument(name = "GET /", skip(state))]

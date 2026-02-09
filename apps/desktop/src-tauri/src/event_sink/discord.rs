@@ -1,10 +1,14 @@
 use anyhow::Result;
 use flow_like::flow_like_model_provider::response::Response;
-use flow_like_catalog::events::chat_event::{Attachment, ChatResponse, ChatStreamingResponse};
+use flow_like_catalog::events::chat_event::{
+    Attachment, ChatResponse, ChatStreamingResponse, Reasoning,
+};
 use flow_like_types::{intercom::BufferedInterComHandler, sync::Mutex};
 use rusqlite::params;
 use serde::{Deserialize, Serialize};
-use serenity::all::{CreateAttachment, CreateMessage, EditMessage, GatewayIntents};
+use serenity::all::{
+    Colour, CreateAttachment, CreateEmbed, CreateMessage, EditMessage, GatewayIntents,
+};
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -293,7 +297,11 @@ impl serenity::client::EventHandler for DiscordEventHandler {
 
         let bot = self.bot_instance.lock().await;
         let handlers: Vec<EventHandler> = bot.handlers.values().cloned().collect();
+        let bot_token = bot.token.clone();
         drop(bot);
+
+        // Get bot user id from cache
+        let bot_user_id = ctx.cache.current_user().id.get();
 
         for handler in handlers {
             // Check if should process this message
@@ -306,9 +314,9 @@ impl serenity::client::EventHandler for DiscordEventHandler {
             }
 
             // Prepare payload with context
-            let payload = prepare_message_payload(&ctx, &msg).await;
+            let payload = prepare_message_payload(&ctx, &msg, &bot_token, Some(bot_user_id)).await;
 
-            // Fire the event
+            // Fire the event (parallelism handled by event bus consumer)
             if let Err(e) = fire_discord_event(
                 &self.app_handle,
                 &self.db,
@@ -402,6 +410,8 @@ fn should_process_message(
 async fn prepare_message_payload(
     ctx: &serenity::client::Context,
     msg: &serenity::model::channel::Message,
+    bot_token: &str,
+    bot_user_id: Option<u64>,
 ) -> flow_like_types::Value {
     // Build content array with text and images
     let mut content_parts = Vec::new();
@@ -508,24 +518,114 @@ async fn prepare_message_payload(
         .collect();
 
     serde_json::json!({
-        "user": {
-            "sub": msg.author.id.to_string(),
-            "name": msg.author.name,
-            "discriminator": msg.author.discriminator,
-            "bot": msg.author.bot,
-        },
         "local_session": {
+            "bot_token": bot_token,
+            "bot_user_id": bot_user_id.map(|id| id.to_string()),
             "guild_id": msg.guild_id.map(|id| id.to_string()),
             "message_id": msg.id.to_string(),
             "channel_id": msg.channel_id.to_string(),
-            "embeds": msg.embeds.len(),
-            "edited_timestamp": msg.edited_timestamp.map(|t| t.to_rfc3339()),
-            "mentions": msg.mentions.iter().map(|u| u.id.to_string()).collect::<Vec<_>>(),
-            "timestamp": msg.timestamp.to_rfc3339(),
+            "user": {
+                "id": msg.author.id.to_string(),
+                "name": msg.author.name,
+                "discriminator": msg.author.discriminator,
+                "bot": msg.author.bot,
+            },
         },
         "messages": messages,
         "attachments": other_attachments,
     })
+}
+
+/// Create a Discord embed for reasoning/plan steps
+/// Discord embed limits: 6000 total chars, 1024 per field, 25 fields max
+fn create_reasoning_embed(reasoning: &Reasoning) -> Option<CreateEmbed> {
+    if reasoning.plan.is_empty() && reasoning.current_message.is_empty() {
+        return None;
+    }
+
+    let mut embed = CreateEmbed::new()
+        .title("🧠 Thinking...")
+        .colour(Colour::from_rgb(255, 191, 0)); // Amber color
+
+    let current_step = reasoning.current_step;
+    let total_steps = reasoning.plan.len();
+
+    // Count completed steps
+    let completed_count = reasoning
+        .plan
+        .iter()
+        .filter(|(id, _)| *id < current_step)
+        .count();
+
+    // If we have many completed steps, show a summary instead
+    if completed_count > 2 {
+        embed = embed.field(
+            format!("✅ {} steps completed", completed_count),
+            "─".repeat(20),
+            false,
+        );
+    } else {
+        // Show individual completed steps (max 2)
+        for (step_id, step_text) in &reasoning.plan {
+            if *step_id < current_step {
+                let truncated = if step_text.len() > 60 {
+                    format!("{}...", &step_text[..57])
+                } else {
+                    step_text.clone()
+                };
+                embed = embed.field(format!("✅ Step {}", step_id), truncated, false);
+            }
+        }
+    }
+
+    // Show current step with full detail
+    for (step_id, step_text) in &reasoning.plan {
+        if *step_id == current_step {
+            let mut value = if step_text.len() > 200 {
+                format!("{}...", &step_text[..197])
+            } else {
+                step_text.clone()
+            };
+
+            // Add current message under the active step
+            if !reasoning.current_message.is_empty() {
+                let truncated = if reasoning.current_message.len() > 150 {
+                    format!("{}...", &reasoning.current_message[..147])
+                } else {
+                    reasoning.current_message.clone()
+                };
+                value = format!("{}\n> *{}*", value, truncated);
+            }
+
+            embed = embed.field(format!("🔄 Step {}", step_id), value, false);
+        }
+    }
+
+    // Show only next 2 upcoming steps briefly
+    let mut upcoming_shown = 0;
+    for (step_id, step_text) in &reasoning.plan {
+        if *step_id > current_step && upcoming_shown < 2 {
+            let truncated = if step_text.len() > 50 {
+                format!("{}...", &step_text[..47])
+            } else {
+                step_text.clone()
+            };
+            embed = embed.field(format!("⏳ Step {}", step_id), truncated, false);
+            upcoming_shown += 1;
+        }
+    }
+
+    // If there are more upcoming steps, show count
+    let remaining = total_steps.saturating_sub(current_step as usize + upcoming_shown);
+    if remaining > 0 {
+        embed = embed.field(
+            format!("⏳ +{} more steps", remaining),
+            "─".repeat(10),
+            false,
+        );
+    }
+
+    Some(embed)
 }
 
 async fn update_discord_message(
@@ -534,23 +634,40 @@ async fn update_discord_message(
     response_msg: &mut Option<serenity::all::Message>,
     content: String,
     attachments: &[Attachment],
+    reasoning_embed: Option<CreateEmbed>,
     last_edit: &mut Instant,
-) -> Result<()> {
+    edit_count: &mut u32,
+) -> Result<bool> {
     let now = Instant::now();
     let time_since_last_edit = now.duration_since(*last_edit);
 
-    // Rate limit: only edit once per second
-    if time_since_last_edit < Duration::from_secs(1) {
-        return Ok(());
+    // Adaptive rate limiting: Discord's client stops rendering after too many rapid edits.
+    // These intervals are intentionally generous to keep the UI responsive.
+    let min_interval = if *edit_count < 3 {
+        Duration::from_millis(5000)
+    } else if *edit_count < 8 {
+        Duration::from_millis(10000)
+    } else {
+        Duration::from_millis(15000)
+    };
+
+    if time_since_last_edit < min_interval {
+        return Ok(false);
     }
 
     *last_edit = now;
+    *edit_count += 1;
 
     // Prepare Discord attachments from our Attachment enum
     let discord_attachments = prepare_discord_attachments(attachments).await;
 
     if let Some(msg) = response_msg.as_mut() {
         let mut edit = EditMessage::new().content(content.clone());
+
+        // Add reasoning embed if present
+        if let Some(embed) = reasoning_embed {
+            edit = edit.embed(embed);
+        }
 
         // Note: Discord API doesn't support editing attachments directly
         // We include attachment URLs in the message content instead
@@ -565,6 +682,11 @@ async fn update_discord_message(
             .content(content)
             .reference_message(message);
 
+        // Add reasoning embed if present
+        if let Some(embed) = reasoning_embed {
+            reply = reply.embed(embed);
+        }
+
         // Add attachments to the initial message
         for attachment in discord_attachments {
             reply = reply.add_file(attachment);
@@ -576,7 +698,7 @@ async fn update_discord_message(
         }
     }
 
-    Ok(())
+    Ok(true)
 }
 
 async fn prepare_discord_attachments(attachments: &[Attachment]) -> Vec<CreateAttachment> {
@@ -650,12 +772,17 @@ async fn fire_discord_event(
     let last_edit: Arc<Mutex<Instant>> =
         Arc::new(Mutex::new(Instant::now() - Duration::from_secs(2)));
     let collected_attachments: Arc<Mutex<Vec<Attachment>>> = Arc::new(Mutex::new(Vec::new()));
+    let reasoning_state: Arc<Mutex<Option<Reasoning>>> = Arc::new(Mutex::new(None));
+    let edit_count: Arc<Mutex<u32>> = Arc::new(Mutex::new(0));
+    let last_sent_content: Arc<Mutex<String>> = Arc::new(Mutex::new(String::new()));
 
     // Clone for final flush
     let context_final = context.clone();
     let response_final = response.clone();
     let last_edit_final = last_edit.clone();
     let collected_attachments_final = collected_attachments.clone();
+    let _reasoning_state_final = reasoning_state.clone();
+    let edit_count_final = edit_count.clone();
     let ctx_final = ctx.clone();
     let message_final = message.clone();
 
@@ -669,6 +796,9 @@ async fn fire_discord_event(
             let response = response.clone();
             let last_edit = last_edit.clone();
             let collected_attachments = collected_attachments.clone();
+            let reasoning = reasoning_state.clone();
+            let edit_count = edit_count.clone();
+            let last_sent_content = last_sent_content.clone();
             let ctx = ctx_clone.clone();
             let message = message_clone.clone();
             Box::pin({
@@ -684,6 +814,12 @@ async fn fire_discord_event(
                                     e
                                 )
                             })?;
+
+                            // Update reasoning state if present
+                            if let Some(plan) = &payload.plan {
+                                let mut reasoning_lock = reasoning.lock().await;
+                                *reasoning_lock = Some(plan.clone());
+                            }
 
                             // Handle chunks
                             let mut context = cloned_context.lock().await;
@@ -701,22 +837,45 @@ async fn fire_discord_event(
                             // Update message with rate limiting
                             let context = cloned_context.lock().await;
                             let last_message = context.last_message();
-                            if let Some(last_message) = last_message
-                                && let Some(content) = &last_message.content
-                            {
-                                let mut resp_lock = response.lock().await;
-                                let mut last_edit_lock = last_edit.lock().await;
-                                let attachments = collected_attachments.lock().await;
+                            let content = last_message
+                                .and_then(|m| m.content.clone())
+                                .unwrap_or_default();
 
-                                let _ = update_discord_message(
-                                    &ctx,
-                                    &message,
-                                    &mut resp_lock,
-                                    content.clone(),
-                                    &attachments,
-                                    &mut last_edit_lock,
-                                )
-                                .await;
+                            // Create reasoning embed
+                            let reasoning_lock = reasoning.lock().await;
+                            let reasoning_embed =
+                                reasoning_lock.as_ref().and_then(create_reasoning_embed);
+                            drop(reasoning_lock);
+
+                            if !content.is_empty() || reasoning_embed.is_some() {
+                                // Skip if content hasn't changed since last successful edit
+                                let last_content = last_sent_content.lock().await;
+                                if *last_content == content && reasoning_embed.is_none() {
+                                    drop(last_content);
+                                } else {
+                                    drop(last_content);
+                                    let mut resp_lock = response.lock().await;
+                                    let mut last_edit_lock = last_edit.lock().await;
+                                    let mut edit_count_lock = edit_count.lock().await;
+                                    let attachments = collected_attachments.lock().await;
+
+                                    let did_edit = update_discord_message(
+                                        &ctx,
+                                        &message,
+                                        &mut resp_lock,
+                                        content.clone(),
+                                        &attachments,
+                                        reasoning_embed,
+                                        &mut last_edit_lock,
+                                        &mut edit_count_lock,
+                                    )
+                                    .await;
+
+                                    if did_edit.unwrap_or(false) {
+                                        let mut last_content = last_sent_content.lock().await;
+                                        *last_content = content;
+                                    }
+                                }
                             }
                         }
 
@@ -734,14 +893,15 @@ async fn fire_discord_event(
                                 attachments.extend(payload.attachments.clone());
                             }
 
-                            // Final update (force immediate update)
+                            // Final update (force immediate update) - no embed on final message
                             let last_message = payload.response.last_message();
                             if let Some(last_message) = last_message
                                 && let Some(content) = &last_message.content
                             {
                                 let mut resp_lock = response.lock().await;
                                 let mut last_edit_lock = last_edit.lock().await;
-                                *last_edit_lock = Instant::now() - Duration::from_secs(2); // Force update
+                                let mut edit_count_lock = edit_count.lock().await;
+                                *last_edit_lock = Instant::now() - Duration::from_secs(20); // Force update
                                 let attachments = collected_attachments.lock().await;
 
                                 let _ = update_discord_message(
@@ -750,7 +910,9 @@ async fn fire_discord_event(
                                     &mut resp_lock,
                                     content.clone(),
                                     &attachments,
+                                    None, // No embed on final message
                                     &mut last_edit_lock,
+                                    &mut edit_count_lock,
                                 )
                                 .await;
                             }
@@ -801,10 +963,11 @@ async fn fire_discord_event(
         {
             let mut resp_lock = response_final.lock().await;
             let mut last_edit_lock = last_edit_final.lock().await;
+            let mut edit_count_lock = edit_count_final.lock().await;
             let attachments = collected_attachments_final.lock().await;
 
             // Force final update by resetting the last edit time
-            *last_edit_lock = Instant::now() - Duration::from_secs(2);
+            *last_edit_lock = Instant::now() - Duration::from_secs(20);
 
             let _ = update_discord_message(
                 &ctx_final,
@@ -812,7 +975,9 @@ async fn fire_discord_event(
                 &mut resp_lock,
                 content.clone(),
                 &attachments,
+                None, // No embed on final flush
                 &mut last_edit_lock,
+                &mut edit_count_lock,
             )
             .await;
         }

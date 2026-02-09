@@ -6,6 +6,8 @@ pub mod clear_ref;
 pub mod construct;
 pub mod extend;
 pub mod extend_ref;
+pub mod filter_array_field;
+pub mod filter_array_fields;
 pub mod find_item;
 pub mod get;
 pub mod includes;

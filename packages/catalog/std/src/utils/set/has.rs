@@ -62,8 +62,7 @@ impl NodeLogic for SetHasNode {
 
     async fn on_update(&self, node: &mut Node, board: Arc<Board>) {
         let _ = node.match_type("set_in", board.clone(), Some(ValueType::HashSet), None);
-        let _ = node.match_type("set_out", board.clone(), Some(ValueType::HashSet), None);
         let _ = node.match_type("value", board, Some(ValueType::Normal), None);
-        node.harmonize_type(vec!["set_in", "value", "set_out"], true);
+        node.harmonize_type(vec!["set_in", "value"], true);
     }
 }

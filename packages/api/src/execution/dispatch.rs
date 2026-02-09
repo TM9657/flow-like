@@ -249,6 +249,16 @@ pub struct DispatchRequest {
     /// Whether to stream node state updates
     #[serde(default)]
     pub stream_state: bool,
+    /// Runtime-configured variables to override board variables
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub runtime_variables:
+        Option<std::collections::HashMap<String, flow_like::flow::variable::Variable>>,
+    /// User execution context for permission checks during execution
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub user_context: Option<flow_like::flow::execution::UserExecutionContext>,
+    /// User profile data for execution context (bits, settings, etc.)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub profile: Option<serde_json::Value>,
 }
 
 /// Response from dispatch
@@ -345,6 +355,11 @@ impl Dispatcher {
             #[cfg(feature = "redis")]
             redis_client: None,
         }
+    }
+
+    /// Get the configured sync/streaming backend type
+    pub fn backend(&self) -> ExecutionBackend {
+        self.config.backend.clone()
     }
 
     /// Dispatch an execution request to the configured sync/streaming backend (EXECUTION_BACKEND)
@@ -515,8 +530,10 @@ impl Dispatcher {
             .ok_or_else(|| DispatchError::Configuration("Lambda client not initialized".into()))?;
 
         let body = build_executor_payload(job_id, request);
-        let payload =
-            serde_json::to_vec(&body).map_err(|e| DispatchError::Serialization(e.to_string()))?;
+        // Wrap in API Gateway v2 event format for lambda_http compatibility
+        let apigw_event = wrap_as_apigw_v2_event("/execute", body);
+        let payload = serde_json::to_vec(&apigw_event)
+            .map_err(|e| DispatchError::Serialization(e.to_string()))?;
 
         client
             .invoke()
@@ -553,8 +570,10 @@ impl Dispatcher {
             .ok_or_else(|| DispatchError::Configuration("Lambda client not initialized".into()))?;
 
         let body = build_executor_payload(job_id, request);
-        let payload =
-            serde_json::to_vec(&body).map_err(|e| DispatchError::Serialization(e.to_string()))?;
+        // Wrap in API Gateway v2 event format for lambda_http compatibility
+        let apigw_event = wrap_as_apigw_v2_event("/execute/sse", body);
+        let payload = serde_json::to_vec(&apigw_event)
+            .map_err(|e| DispatchError::Serialization(e.to_string()))?;
 
         let response = client
             .invoke_with_response_stream()
@@ -826,5 +845,140 @@ fn build_executor_payload(job_id: &str, request: &DispatchRequest) -> serde_json
         "token": request.token,
         "oauth_tokens": request.oauth_tokens,
         "stream_state": request.stream_state,
+        "runtime_variables": request.runtime_variables,
+        "user_context": request.user_context,
+        "profile": request.profile,
     })
+}
+
+/// Wrap executor payload in API Gateway v2 HTTP event format.
+/// This is required when invoking Lambda functions that use `lambda_http`
+/// (which expects API Gateway / Function URL event structure) via direct
+/// Lambda SDK invocation rather than HTTP.
+#[cfg(feature = "lambda")]
+fn wrap_as_apigw_v2_event(path: &str, body: serde_json::Value) -> serde_json::Value {
+    use aws_lambda_events::apigw::{
+        ApiGatewayV2httpRequest, ApiGatewayV2httpRequestContext,
+        ApiGatewayV2httpRequestContextHttpDescription,
+    };
+    use hyper::http::{HeaderMap, Method, header::CONTENT_TYPE};
+
+    let body_string = serde_json::to_string(&body).unwrap_or_default();
+    let body_base64 =
+        base64::Engine::encode(&base64::engine::general_purpose::STANDARD, &body_string);
+
+    let mut headers = HeaderMap::new();
+    headers.insert(CONTENT_TYPE, "application/json".parse().unwrap());
+
+    let now = chrono::Utc::now();
+
+    // Build the HTTP description for request context
+    let mut http_desc = ApiGatewayV2httpRequestContextHttpDescription::default();
+    http_desc.method = Method::POST;
+    http_desc.path = Some(path.to_string());
+    http_desc.protocol = Some("HTTP/1.1".to_string());
+    http_desc.source_ip = Some("127.0.0.1".to_string());
+    http_desc.user_agent = Some("flow-like-api/1.0".to_string());
+
+    // Build the request context
+    let mut request_context = ApiGatewayV2httpRequestContext::default();
+    request_context.account_id = Some("anonymous".to_string());
+    request_context.apiid = Some("lambda-invoke".to_string());
+    request_context.domain_name = Some("lambda.internal".to_string());
+    request_context.domain_prefix = Some("lambda-invoke".to_string());
+    request_context.http = http_desc;
+    request_context.request_id = Some(flow_like_types::create_id());
+    request_context.route_key = Some("$default".to_string());
+    request_context.stage = Some("$default".to_string());
+    request_context.time = Some(now.format("%d/%b/%Y:%H:%M:%S %z").to_string());
+    request_context.time_epoch = now.timestamp_millis();
+
+    // Build the full request
+    let mut request = ApiGatewayV2httpRequest::default();
+    request.version = Some("2.0".to_string());
+    request.route_key = Some("$default".to_string());
+    request.raw_path = Some(path.to_string());
+    request.raw_query_string = Some(String::new());
+    request.headers = headers;
+    request.request_context = request_context;
+    request.body = Some(body_base64);
+    request.is_base64_encoded = true;
+
+    serde_json::to_value(&request).expect("Failed to serialize API Gateway event")
+}
+
+/// Fetch a profile for a user from the database and convert it
+/// to a JSON value matching the core `Profile` struct format for the executor.
+///
+/// Resolution order:
+/// 1. If `profile_id` is provided, fetch that specific profile (must belong to user)
+/// 2. Otherwise find the first profile whose `apps` list contains the given `app_id`
+/// 3. Fallback to the first profile for the user
+pub async fn fetch_profile_for_dispatch(
+    db: &sea_orm::DatabaseConnection,
+    user_id: &str,
+    profile_id: Option<&str>,
+    app_id: &str,
+) -> Option<serde_json::Value> {
+    use crate::entity::profile;
+    use sea_orm::{ColumnTrait, EntityTrait, QueryFilter};
+
+    let model = if let Some(pid) = profile_id {
+        profile::Entity::find_by_id(pid)
+            .filter(profile::Column::UserId.eq(user_id))
+            .one(db)
+            .await
+            .ok()
+            .flatten()
+    } else {
+        None
+    };
+
+    let model = if model.is_some() {
+        model
+    } else {
+        let profiles = profile::Entity::find()
+            .filter(profile::Column::UserId.eq(user_id))
+            .all(db)
+            .await
+            .ok()
+            .unwrap_or_default();
+
+        profiles
+            .iter()
+            .find(|p| {
+                p.apps
+                    .as_ref()
+                    .and_then(|v| v.as_array())
+                    .map(|arr| {
+                        arr.iter()
+                            .any(|a| a.get("app_id").and_then(|id| id.as_str()) == Some(app_id))
+                    })
+                    .unwrap_or(false)
+            })
+            .or_else(|| profiles.first())
+            .cloned()
+    };
+
+    let model = model?;
+
+    Some(serde_json::json!({
+        "id": model.id,
+        "name": model.name,
+        "description": model.description,
+        "icon": model.icon,
+        "thumbnail": model.thumbnail,
+        "interests": model.interests.unwrap_or_default(),
+        "tags": model.tags.unwrap_or_default(),
+        "hub": model.hub,
+        "secure": true,
+        "hubs": model.hubs.unwrap_or_default(),
+        "apps": model.apps,
+        "shortcuts": model.shortcuts,
+        "theme": model.theme,
+        "bits": model.bit_ids.unwrap_or_default(),
+        "settings": model.settings.unwrap_or_else(|| serde_json::json!({"connection_mode": "simplebezier"})),
+        "updated": model.updated_at.format("%Y-%m-%dT%H:%M:%S%.3fZ").to_string(),
+        "created": model.created_at.format("%Y-%m-%dT%H:%M:%S%.3fZ").to_string(),
+    }))
 }

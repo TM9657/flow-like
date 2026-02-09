@@ -13,7 +13,7 @@ pub mod state;
 pub use crate::backend_jwt::TokenType;
 pub use dispatch::{
     ByteStream, DispatchConfig, DispatchError, DispatchRequest, DispatchResponse, Dispatcher,
-    ExecutionBackend, StreamChunk,
+    ExecutionBackend, StreamChunk, fetch_profile_for_dispatch,
 };
 pub use jwt::{
     ExecutionClaims, ExecutionJwk, ExecutionJwks, ExecutionJwtError, ExecutionJwtParams,

@@ -14,7 +14,7 @@ use flow_like_types::{FromProto, ToProto, create_id, proto, sync::Mutex};
 use futures::{StreamExt, TryStreamExt};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
-use std::{collections::HashMap, sync::Arc, time::SystemTime, vec};
+use std::{sync::Arc, time::SystemTime, vec};
 pub mod sharing;
 
 #[derive(Clone, Serialize, Deserialize, JsonSchema)]
@@ -148,11 +148,6 @@ pub struct App {
     #[serde(default)]
     pub page_ids: Vec<String>,
 
-    /// Route mappings: path -> event_id (e.g., "/" -> "event123")
-    /// The event determines what to display (page-target or board-target)
-    #[serde(default)]
-    pub route_mappings: HashMap<String, String>,
-
     #[serde(skip)]
     pub app_state: Option<Arc<FlowLikeState>>,
 }
@@ -186,7 +181,6 @@ impl Clone for App {
             frontend: self.frontend.clone(),
             widget_ids: self.widget_ids.clone(),
             page_ids: self.page_ids.clone(),
-            route_mappings: self.route_mappings.clone(),
         }
     }
 }
@@ -231,7 +225,6 @@ impl App {
             frontend: None,
             widget_ids: vec![],
             page_ids: vec![],
-            route_mappings: HashMap::new(),
             app_state: Some(app_state.clone()),
         };
 
@@ -1213,7 +1206,7 @@ mod tests {
         config.register_app_meta_store(FlowLikeStore::Other(Arc::new(
             flow_like_storage::object_store::memory::InMemory::new(),
         )));
-        let (http_client, _refetch_rx) = HTTPClient::new();
+        let http_client = HTTPClient::new_without_refetch();
         let flow_like_state = crate::state::FlowLikeState::new(config, http_client);
         Arc::new(flow_like_state)
     }
@@ -1247,7 +1240,6 @@ mod tests {
             frontend: None,
             widget_ids: vec![],
             page_ids: vec![],
-            route_mappings: std::collections::HashMap::new(),
         };
 
         let mut buf = Vec::new();

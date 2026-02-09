@@ -1,8 +1,10 @@
 "use client";
 import { invoke } from "@tauri-apps/api/core";
+import { fetch as tauriFetch } from "@tauri-apps/plugin-http";
 
 import { createId } from "@paralleldrive/cuid2";
 import {
+	type IApiKeyState,
 	type IApiState,
 	type IAppRouteState,
 	type IAppState,
@@ -20,10 +22,12 @@ import {
 	type IProfile,
 	type IRegistryState,
 	type IRoleState,
+	type ISalesState,
 	type ISinkState,
 	type IStorageState,
 	type ITeamState,
 	type ITemplateState,
+	type IUsageState,
 	type IUserState,
 	type IWidgetState,
 	LoadingScreen,
@@ -40,7 +44,9 @@ import type { IAIState } from "@tm9657/flow-like-ui/state/backend-state/ai-state
 import { useCallback, useEffect, useRef, useTransition } from "react";
 import type { AuthContextProps } from "react-oidc-context";
 import { appsDB } from "../lib/apps-db";
+import { type OnlineProfile, toLocalProfile } from "../lib/profile-sync";
 import { AiState } from "./tauri-provider/ai-state";
+import { ApiKeyState } from "./tauri-provider/api-key-state";
 import { TauriApiState } from "./tauri-provider/api-state";
 import { AppState } from "./tauri-provider/app-state";
 import { BitState } from "./tauri-provider/bit-state";
@@ -52,10 +58,12 @@ import { PageState } from "./tauri-provider/page-state";
 import { RegistryState } from "./tauri-provider/registry-state";
 import { RoleState } from "./tauri-provider/role-state";
 import { RouteState } from "./tauri-provider/route-state";
+import { SalesState } from "./tauri-provider/sales-state";
 import { SinkState } from "./tauri-provider/sink-state";
 import { StorageState } from "./tauri-provider/storage-state";
 import { TeamState } from "./tauri-provider/team-state";
 import { TemplateState } from "./tauri-provider/template-state";
+import { UsageState } from "./tauri-provider/usage-state";
 import { UserState } from "./tauri-provider/user-state";
 import { WidgetState } from "./tauri-provider/widget-state";
 
@@ -70,6 +78,7 @@ declare global {
 export class TauriBackend implements IBackendState {
 	appState: IAppState;
 	apiState: IApiState;
+	apiKeyState: IApiKeyState;
 	bitState: IBitState;
 	boardState: IBoardState;
 	eventState: IEventState;
@@ -86,6 +95,8 @@ export class TauriBackend implements IBackendState {
 	pageState: IPageState;
 	registryState: IRegistryState;
 	sinkState: ISinkState;
+	salesState: ISalesState;
+	usageState: IUsageState;
 
 	private _apiState: TauriApiState;
 
@@ -97,6 +108,7 @@ export class TauriBackend implements IBackendState {
 	) {
 		this._apiState = new TauriApiState();
 		this.apiState = this._apiState;
+		this.apiKeyState = new ApiKeyState(this);
 		this.appState = new AppState(this);
 		this.bitState = new BitState(this);
 		this.boardState = new BoardState(this);
@@ -114,6 +126,8 @@ export class TauriBackend implements IBackendState {
 		this.pageState = new PageState(this);
 		this.registryState = new RegistryState(this);
 		this.sinkState = new SinkState();
+		this.salesState = new SalesState(this);
+		this.usageState = new UsageState(this);
 	}
 
 	capabilities(): ICapabilities {
@@ -194,9 +208,6 @@ export class TauriBackend implements IBackendState {
 		totalFiles: number,
 		onProgress?: (progress: number) => void,
 	): Promise<void> {
-		const formData = new FormData();
-		formData.append("file", file);
-
 		await new Promise<void>((resolve, reject) => {
 			const xhr = new XMLHttpRequest();
 
@@ -213,12 +224,16 @@ export class TauriBackend implements IBackendState {
 				if (xhr.status >= 200 && xhr.status < 300) {
 					resolve();
 				} else {
-					reject(new Error(`Upload failed with status: ${xhr.status}`));
+					reject(
+						new Error(
+							`Upload failed with status ${xhr.status}: ${xhr.statusText}`,
+						),
+					);
 				}
 			});
 
 			xhr.addEventListener("error", () => {
-				reject(new Error("Upload failed"));
+				reject(new Error("Upload failed: Network error (possible CORS issue)"));
 			});
 
 			xhr.open("PUT", signedUrl);
@@ -226,6 +241,12 @@ export class TauriBackend implements IBackendState {
 				"Content-Type",
 				file.type || "application/octet-stream",
 			);
+
+			// Azure Blob Storage requires x-ms-blob-type header
+			if (signedUrl.includes(".blob.core.windows.net")) {
+				xhr.setRequestHeader("x-ms-blob-type", "BlockBlob");
+			}
+
 			xhr.send(file);
 		});
 
@@ -340,15 +361,12 @@ export function TauriProvider({
 		return <LoadingScreen progress={50} />;
 	}
 
-	return (
-		<>
-			{backend && <ProfileSyncer />}
-			{children}
-		</>
-	);
+	return <>{children}</>;
 }
 
-function ProfileSyncer() {
+export function ProfileSyncer({
+	auth,
+}: { auth: { isAuthenticated: boolean; accessToken?: string } }) {
 	const backend = useBackend();
 	const profile = useInvoke(
 		backend.userState.getProfile,
@@ -357,11 +375,680 @@ function ProfileSyncer() {
 		true,
 	);
 
+	const isAuthenticated =
+		backend instanceof TauriBackend && auth.isAuthenticated;
+	const accessToken = auth.accessToken;
+	const hubUrl = profile.data?.hub;
+
+	const syncingRef = useRef(false);
+
 	useEffect(() => {
 		if (profile.data && backend instanceof TauriBackend) {
 			backend.pushProfile(profile.data);
 		}
 	}, [profile.data, backend]);
+
+	useEffect(() => {
+		if (!(backend instanceof TauriBackend)) {
+			console.log("[ProfileSync] Skipping: not TauriBackend");
+			return;
+		}
+		if (!isAuthenticated || !accessToken) {
+			console.log("[ProfileSync] Skipping: missing auth state", {
+				isAuthenticated,
+				hasAccessToken: !!accessToken,
+			});
+			return;
+		}
+
+		const isLocalFilePath = (path?: string | null): boolean => {
+			if (!path) return false;
+			return (
+				!path.startsWith("http://") &&
+				!path.startsWith("https://") &&
+				!path.startsWith("asset://")
+			);
+		};
+
+		const getExtension = (path: string): string => {
+			const ext = path.split(".").pop()?.toLowerCase() ?? "png";
+			if (ext === "jpeg") return "jpg";
+			return ext;
+		};
+
+		const getContentType = (ext: string): string => {
+			switch (ext) {
+				case "webp":
+					return "image/webp";
+				case "jpg":
+				case "jpeg":
+					return "image/jpeg";
+				case "gif":
+					return "image/gif";
+				case "svg":
+					return "image/svg+xml";
+				default:
+					return "image/png";
+			}
+		};
+
+		const uploadIconByProfileId = async (
+			profileId: string,
+			iconField: "icon" | "thumbnail",
+			signedUrl: string,
+		): Promise<boolean> => {
+			try {
+				const iconPath = await invoke<string | null>("get_profile_icon_path", {
+					profileId,
+					field: iconField,
+				});
+				if (!iconPath) return false;
+
+				const fileData = await invoke<number[]>("read_profile_icon", {
+					iconPath,
+				});
+				const ext = getExtension(iconPath);
+				const bytes = new Uint8Array(fileData);
+
+				const uploadResponse = await tauriFetch(signedUrl, {
+					method: "PUT",
+					headers: { "Content-Type": getContentType(ext) },
+					body: bytes,
+				});
+				return uploadResponse.ok;
+			} catch (error) {
+				console.warn(`Failed to upload ${iconField} for ${profileId}:`, error);
+				return false;
+			}
+		};
+
+		const syncProfiles = async () => {
+			if (syncingRef.current) {
+				console.log("[ProfileSync] Already syncing, skipping");
+				return;
+			}
+			syncingRef.current = true;
+
+			try {
+				console.log("[ProfileSync] Starting profile sync...");
+
+				const baseUrl =
+					hubUrl ?? process.env.NEXT_PUBLIC_API_URL ?? "api.flow-like.com";
+				const protocol = profile.data?.secure === false ? "http" : "https";
+				const apiBase = baseUrl.startsWith("http")
+					? baseUrl
+					: `${protocol}://${baseUrl}`;
+				console.log(
+					"[ProfileSync] API base:",
+					apiBase,
+					"hubUrl:",
+					hubUrl,
+					"secure:",
+					profile.data?.secure,
+				);
+
+				let rawProfiles =
+					await invoke<Record<string, { hub_profile: IProfile }>>(
+						"get_profiles_raw",
+					);
+				console.log(
+					"[ProfileSync] Raw profiles from Tauri:",
+					rawProfiles ? Object.keys(rawProfiles) : "null",
+				);
+
+				// If no local profiles exist, pull from server first (new device scenario)
+				if (!rawProfiles || Object.keys(rawProfiles).length === 0) {
+					console.log(
+						"[ProfileSync] No local profiles — pulling from server first...",
+					);
+					try {
+						const pullResponse = await tauriFetch(`${apiBase}/api/v1/profile`, {
+							method: "GET",
+							headers: {
+								"Content-Type": "application/json",
+								Authorization: `Bearer ${accessToken}`,
+							},
+						});
+
+						if (pullResponse.ok) {
+							const serverProfiles =
+								(await pullResponse.json()) as OnlineProfile[];
+
+							if (serverProfiles.length > 0) {
+								console.log(
+									"[ProfileSync] Found",
+									serverProfiles.length,
+									"profiles on server, creating locally...",
+								);
+								let firstProfileId: string | null = null;
+
+								for (const onlineProfile of serverProfiles) {
+									try {
+										await invoke("upsert_profile", {
+											profile: toLocalProfile(onlineProfile),
+										});
+										if (!firstProfileId) firstProfileId = onlineProfile.id;
+									} catch (error) {
+										console.error(
+											"[ProfileSync] Failed to create profile from server:",
+											onlineProfile.id,
+											error,
+										);
+									}
+
+									if (onlineProfile.shortcuts) {
+										for (const shortcut of onlineProfile.shortcuts) {
+											await appsDB.shortcuts.put(shortcut);
+										}
+									}
+								}
+
+								if (firstProfileId) {
+									try {
+										await invoke("set_current_profile", {
+											profileId: firstProfileId,
+										});
+									} catch (error) {
+										console.error(
+											"[ProfileSync] Failed to set current profile:",
+											error,
+										);
+									}
+								}
+
+								// Re-fetch local profiles after creating from server
+								rawProfiles =
+									await invoke<Record<string, { hub_profile: IProfile }>>(
+										"get_profiles_raw",
+									);
+								console.log(
+									"[ProfileSync] After server pull, local profiles:",
+									rawProfiles ? Object.keys(rawProfiles) : "null",
+								);
+							}
+						}
+					} catch (error) {
+						console.warn(
+							"[ProfileSync] Failed to pull server profiles on fresh device:",
+							error,
+						);
+					}
+
+					// If still no profiles after server pull, nothing to sync
+					if (!rawProfiles || Object.keys(rawProfiles).length === 0) {
+						console.log(
+							"[ProfileSync] Still no profiles after server pull, aborting",
+						);
+						return;
+					}
+				}
+
+				const visibilityRecords = await appsDB.visibility.toArray();
+				const offlineAppIds = new Set(
+					visibilityRecords
+						.filter((v) => v.visibility === IAppVisibility.Offline)
+						.map((v) => v.appId),
+				);
+
+				const profileShortcuts: Map<string, any[]> = new Map();
+				for (const p of Object.values(rawProfiles)) {
+					const profileId = p.hub_profile.id;
+					if (profileId) {
+						const shortcuts = await appsDB.shortcuts
+							.where("profileId")
+							.equals(profileId)
+							.toArray();
+						profileShortcuts.set(profileId, shortcuts);
+					}
+				}
+
+				const profilesWithLocalImages: Map<
+					string,
+					{ icon: boolean; thumbnail: boolean }
+				> = new Map();
+
+				const profilesToSync = Object.values(rawProfiles).map((p) => {
+					const hubProfile = p.hub_profile;
+					const filteredApps = hubProfile.apps?.filter(
+						(app) => !offlineAppIds.has(app.app_id),
+					);
+
+					const hasLocalIcon = isLocalFilePath(hubProfile.icon);
+					const hasLocalThumbnail = isLocalFilePath(hubProfile.thumbnail);
+
+					if ((hasLocalIcon || hasLocalThumbnail) && hubProfile.id) {
+						profilesWithLocalImages.set(hubProfile.id, {
+							icon: hasLocalIcon,
+							thumbnail: hasLocalThumbnail,
+						});
+					}
+
+					const shortcuts = hubProfile.id
+						? profileShortcuts.get(hubProfile.id)
+						: undefined;
+
+					const updatedAt = hubProfile.updated
+						? new Date(hubProfile.updated).toISOString()
+						: undefined;
+					const createdAt = hubProfile.created
+						? new Date(hubProfile.created).toISOString()
+						: undefined;
+
+					return {
+						id: hubProfile.id,
+						name: hubProfile.name,
+						description: hubProfile.description,
+						icon_upload_ext: hasLocalIcon
+							? getExtension(hubProfile.icon!)
+							: undefined,
+						thumbnail_upload_ext: hasLocalThumbnail
+							? getExtension(hubProfile.thumbnail!)
+							: undefined,
+						interests: hubProfile.interests,
+						tags: hubProfile.tags,
+						theme: hubProfile.theme,
+						bit_ids: hubProfile.bits,
+						apps: filteredApps,
+						shortcuts: shortcuts,
+						hubs: hubProfile.hubs,
+						settings: hubProfile.settings,
+						createdAt,
+						updatedAt,
+					};
+				});
+
+				if (profilesToSync.length === 0) {
+					console.log("[ProfileSync] No profiles to sync after filtering");
+					return;
+				}
+
+				console.log(
+					"[ProfileSync] Sending",
+					profilesToSync.length,
+					"profiles to sync:",
+					JSON.stringify(profilesToSync, null, 2),
+				);
+
+				const response = await tauriFetch(`${apiBase}/api/v1/profile/sync`, {
+					method: "POST",
+					headers: {
+						"Content-Type": "application/json",
+						Authorization: `Bearer ${accessToken}`,
+					},
+					body: JSON.stringify(profilesToSync),
+				});
+
+				if (!response.ok) {
+					const errorBody = await response.text().catch(() => "<no body>");
+					console.error(
+						"[ProfileSync] Sync request failed:",
+						response.status,
+						response.statusText,
+						errorBody,
+					);
+					return;
+				}
+
+				type SyncResult = {
+					synced: string[];
+					created: Array<{
+						local_id: string;
+						server_id: string;
+						icon_upload_url?: string;
+						thumbnail_upload_url?: string;
+					}>;
+					updated: Array<{
+						id: string;
+						icon_upload_url?: string;
+						thumbnail_upload_url?: string;
+					}>;
+					skipped: string[];
+				};
+
+				const result = (await response.json()) as SyncResult;
+				console.log(
+					"[ProfileSync] Sync result:",
+					JSON.stringify(result, null, 2),
+				);
+
+				for (const created of result.created) {
+					console.log(
+						"[ProfileSync] Processing created profile:",
+						created.local_id,
+						"->",
+						created.server_id,
+					);
+					const localImages = profilesWithLocalImages.get(created.local_id);
+					if (localImages?.icon && created.icon_upload_url) {
+						await uploadIconByProfileId(
+							created.local_id,
+							"icon",
+							created.icon_upload_url,
+						);
+					}
+					if (localImages?.thumbnail && created.thumbnail_upload_url) {
+						await uploadIconByProfileId(
+							created.local_id,
+							"thumbnail",
+							created.thumbnail_upload_url,
+						);
+					}
+				}
+
+				for (const updated of result.updated) {
+					const localImages = profilesWithLocalImages.get(updated.id);
+					if (localImages?.icon && updated.icon_upload_url) {
+						await uploadIconByProfileId(
+							updated.id,
+							"icon",
+							updated.icon_upload_url,
+						);
+					}
+					if (localImages?.thumbnail && updated.thumbnail_upload_url) {
+						await uploadIconByProfileId(
+							updated.id,
+							"thumbnail",
+							updated.thumbnail_upload_url,
+						);
+					}
+				}
+
+				for (const { local_id, server_id } of result.created) {
+					console.log(
+						"[ProfileSync] Remapping profile ID:",
+						local_id,
+						"->",
+						server_id,
+					);
+					await invoke("remap_profile_id", {
+						localId: local_id,
+						serverId: server_id,
+					});
+					const shortcuts = await appsDB.shortcuts
+						.where("profileId")
+						.equals(local_id)
+						.toArray();
+					for (const shortcut of shortcuts) {
+						await appsDB.shortcuts.update(shortcut.id, {
+							profileId: server_id,
+						});
+					}
+				}
+
+				// Phase 6: Pull remote state
+				console.log(
+					"[ProfileSync] Phase 6: Pulling remote profiles from",
+					`${apiBase}/api/v1/profile`,
+				);
+				try {
+					const profilesResponse = await tauriFetch(
+						`${apiBase}/api/v1/profile`,
+						{
+							method: "GET",
+							headers: {
+								"Content-Type": "application/json",
+								Authorization: `Bearer ${accessToken}`,
+							},
+						},
+					);
+
+					if (!profilesResponse.ok) {
+						const pullErrorBody = await profilesResponse
+							.text()
+							.catch(() => "<no body>");
+						console.error(
+							"[ProfileSync] Pull profiles failed:",
+							profilesResponse.status,
+							pullErrorBody,
+						);
+						return;
+					}
+
+					const onlineProfiles =
+						(await profilesResponse.json()) as OnlineProfile[];
+
+					const onlineProfileIds = new Set(onlineProfiles.map((p) => p.id));
+
+					const currentLocalProfiles =
+						await invoke<Record<string, { hub_profile: IProfile }>>(
+							"get_profiles_raw",
+						);
+					const currentProfileId = await invoke<string>(
+						"get_current_profile_id",
+					).catch(() => null);
+					let deletedCurrentProfile = false;
+
+					if (currentLocalProfiles) {
+						for (const localProfileId of Object.keys(currentLocalProfiles)) {
+							const localProfile = currentLocalProfiles[localProfileId];
+							const hasOnlineApps = localProfile.hub_profile.apps?.some(
+								(app) => !offlineAppIds.has(app.app_id),
+							);
+							if (hasOnlineApps && !onlineProfileIds.has(localProfileId)) {
+								console.log("Deleting stale local profile:", localProfileId);
+								if (localProfileId === currentProfileId) {
+									deletedCurrentProfile = true;
+								}
+								try {
+									await invoke("delete_profile", {
+										profileId: localProfileId,
+									});
+									await appsDB.shortcuts
+										.where("profileId")
+										.equals(localProfileId)
+										.delete();
+								} catch (error) {
+									console.error("Failed to delete local profile:", error);
+								}
+							}
+						}
+					}
+
+					const remainingProfiles =
+						await invoke<Record<string, { hub_profile: IProfile }>>(
+							"get_profiles_raw",
+						);
+
+					if (
+						(!remainingProfiles ||
+							Object.keys(remainingProfiles).length === 0) &&
+						onlineProfiles.length === 0
+					) {
+						if (typeof window !== "undefined") {
+							window.location.href = "/onboarding";
+						}
+						return;
+					}
+
+					if (
+						deletedCurrentProfile &&
+						remainingProfiles &&
+						Object.keys(remainingProfiles).length > 0
+					) {
+						const firstProfileId = Object.keys(remainingProfiles)[0];
+						try {
+							await invoke("set_current_profile", {
+								profileId: firstProfileId,
+							});
+						} catch (error) {
+							console.error("Failed to switch profile:", error);
+						}
+					}
+
+					// Create or merge profiles from server
+					const latestLocal =
+						await invoke<
+							Record<
+								string,
+								{
+									hub_profile: IProfile;
+									execution_settings: any;
+									updated: string;
+									created: string;
+								}
+							>
+						>("get_profiles_raw");
+
+					for (const onlineProfile of onlineProfiles) {
+						const localProfile = latestLocal?.[onlineProfile.id];
+
+						if (!localProfile) {
+							console.log(
+								"[ProfileSync] Creating local profile from remote:",
+								onlineProfile.id,
+								onlineProfile.name,
+							);
+							try {
+								await invoke("upsert_profile", {
+									profile: toLocalProfile(onlineProfile),
+								});
+							} catch (error) {
+								console.error(
+									"[ProfileSync] Failed to create local profile:",
+									onlineProfile.id,
+									error,
+								);
+							}
+						} else {
+							// Merge: update existing local profile if server is newer
+							const serverTime = new Date(onlineProfile.updated_at).getTime();
+							const localTime = new Date(
+								localProfile.hub_profile.updated || localProfile.updated || 0,
+							).getTime();
+
+							if (serverTime > localTime) {
+								console.log(
+									"[ProfileSync] Merging server profile into local:",
+									onlineProfile.id,
+									onlineProfile.name,
+									"(server:",
+									onlineProfile.updated_at,
+									"local:",
+									localProfile.hub_profile.updated,
+									")",
+								);
+
+								localProfile.hub_profile.name = onlineProfile.name;
+								localProfile.hub_profile.description =
+									onlineProfile.description ?? null;
+								localProfile.hub_profile.interests =
+									onlineProfile.interests ?? [];
+								localProfile.hub_profile.tags = onlineProfile.tags ?? [];
+								localProfile.hub_profile.theme = onlineProfile.theme ?? null;
+								localProfile.hub_profile.bits = onlineProfile.bit_ids ?? [];
+								localProfile.hub_profile.apps = onlineProfile.apps ?? [];
+								localProfile.hub_profile.hub = onlineProfile.hub;
+								localProfile.hub_profile.hubs = onlineProfile.hubs ?? [];
+								localProfile.hub_profile.settings =
+									onlineProfile.settings ?? localProfile.hub_profile.settings;
+								localProfile.hub_profile.updated = onlineProfile.updated_at;
+
+								if (
+									!isLocalFilePath(localProfile.hub_profile.icon) &&
+									onlineProfile.icon
+								) {
+									localProfile.hub_profile.icon = onlineProfile.icon;
+								}
+								if (
+									!isLocalFilePath(localProfile.hub_profile.thumbnail) &&
+									onlineProfile.thumbnail
+								) {
+									localProfile.hub_profile.thumbnail = onlineProfile.thumbnail;
+								}
+
+								localProfile.updated = onlineProfile.updated_at;
+
+								try {
+									await invoke("upsert_profile", {
+										profile: localProfile,
+									});
+								} catch (error) {
+									console.error(
+										"[ProfileSync] Failed to merge profile:",
+										onlineProfile.id,
+										error,
+									);
+								}
+							} else {
+								// Local is newer or same — only update icon URLs if needed
+								let needsUpdate = false;
+								if (
+									onlineProfile.icon &&
+									!isLocalFilePath(localProfile.hub_profile.icon)
+								) {
+									localProfile.hub_profile.icon = onlineProfile.icon;
+									needsUpdate = true;
+								}
+								if (
+									onlineProfile.thumbnail &&
+									!isLocalFilePath(localProfile.hub_profile.thumbnail)
+								) {
+									localProfile.hub_profile.thumbnail = onlineProfile.thumbnail;
+									needsUpdate = true;
+								}
+								if (needsUpdate) {
+									await invoke("upsert_profile", {
+										profile: localProfile,
+									});
+								}
+							}
+						}
+
+						// Sync shortcuts
+						if (onlineProfile.shortcuts) {
+							const localShortcuts = await appsDB.shortcuts
+								.where("profileId")
+								.equals(onlineProfile.id)
+								.toArray();
+							const onlineShortcutMap = new Map(
+								onlineProfile.shortcuts.map((s) => [s.id, s]),
+							);
+							for (const onlineShortcut of onlineProfile.shortcuts) {
+								await appsDB.shortcuts.put(onlineShortcut);
+							}
+							for (const localShortcut of localShortcuts) {
+								if (!onlineShortcutMap.has(localShortcut.id)) {
+									await appsDB.shortcuts.delete(localShortcut.id);
+								}
+							}
+						}
+					}
+
+					// If the current profile was deleted and we created new profiles from server, switch to the first one
+					if (deletedCurrentProfile) {
+						const finalProfiles =
+							await invoke<Record<string, { hub_profile: IProfile }>>(
+								"get_profiles_raw",
+							);
+						if (finalProfiles && Object.keys(finalProfiles).length > 0) {
+							const firstProfileId = Object.keys(finalProfiles)[0];
+							try {
+								await invoke("set_current_profile", {
+									profileId: firstProfileId,
+								});
+							} catch (error) {
+								console.error(
+									"[ProfileSync] Failed to set current profile after merge:",
+									error,
+								);
+							}
+						}
+					}
+
+					console.log("[ProfileSync] Profile sync complete");
+				} catch (error) {
+					console.warn("Failed to pull remote profiles:", error);
+				}
+			} catch (error) {
+				console.error("[ProfileSync] Failed to sync profiles:", error);
+			} finally {
+				console.log("[ProfileSync] Sync finished, releasing lock");
+				syncingRef.current = false;
+			}
+		};
+
+		syncProfiles();
+	}, [backend, isAuthenticated, accessToken, hubUrl]);
 
 	return null;
 }

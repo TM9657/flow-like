@@ -9,6 +9,7 @@ use axum::{
     routing::post,
 };
 use serde::{Deserialize, Serialize};
+use utoipa::ToSchema;
 
 use crate::state::AppState;
 
@@ -83,8 +84,8 @@ fn get_oauth_configs() -> &'static HashMap<String, ResolvedOAuthConfig> {
 
 pub fn routes() -> Router<AppState> {
     Router::new()
-        .route("/token/{provider_id}", post(proxy_token_exchange))
-        .route("/refresh/{provider_id}", post(proxy_token_refresh))
+        .route("/token/{provider_id}", post(token_exchange))
+        .route("/refresh/{provider_id}", post(token_refresh))
 }
 
 /// Custom error type for OAuth proxy errors
@@ -112,7 +113,7 @@ impl IntoResponse for OAuthProxyError {
     }
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, ToSchema)]
 pub struct TokenExchangeRequest {
     /// The authorization code from the OAuth flow
     pub code: String,
@@ -122,13 +123,13 @@ pub struct TokenExchangeRequest {
     pub code_verifier: Option<String>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, ToSchema)]
 pub struct TokenRefreshRequest {
     /// The refresh token
     pub refresh_token: String,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
 pub struct TokenResponse {
     pub access_token: String,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -139,7 +140,6 @@ pub struct TokenResponse {
     pub token_type: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub scope: Option<String>,
-    // Notion-specific fields
     #[serde(skip_serializing_if = "Option::is_none")]
     pub workspace_id: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -150,17 +150,30 @@ pub struct TokenResponse {
     pub bot_id: Option<String>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
 pub struct ErrorResponse {
     pub error: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub error_description: Option<String>,
 }
 
-/// Proxy endpoint for OAuth token exchange
-/// This adds the client_secret to the request for providers that require it
+#[utoipa::path(
+    post,
+    path = "/oauth/token/{provider_id}",
+    tag = "oauth",
+    params(
+        ("provider_id" = String, Path, description = "OAuth provider identifier")
+    ),
+    request_body = TokenExchangeRequest,
+    responses(
+        (status = 200, description = "Token exchange successful", body = TokenResponse),
+        (status = 400, description = "Bad request", body = ErrorResponse),
+        (status = 404, description = "Provider not found", body = ErrorResponse),
+        (status = 500, description = "Internal error", body = ErrorResponse)
+    )
+)]
 #[tracing::instrument(name = "POST /oauth/token/:provider_id", skip(_state))]
-async fn proxy_token_exchange(
+pub async fn token_exchange(
     State(_state): State<AppState>,
     Path(provider_id): Path<String>,
     Json(request): Json<TokenExchangeRequest>,
@@ -331,10 +344,23 @@ async fn proxy_token_exchange(
     Ok(Json(token_response))
 }
 
-/// Proxy endpoint for OAuth token refresh
-/// This adds the client_secret to the request for providers that require it
+#[utoipa::path(
+    post,
+    path = "/oauth/refresh/{provider_id}",
+    tag = "oauth",
+    params(
+        ("provider_id" = String, Path, description = "OAuth provider identifier")
+    ),
+    request_body = TokenRefreshRequest,
+    responses(
+        (status = 200, description = "Token refresh successful", body = TokenResponse),
+        (status = 400, description = "Bad request", body = ErrorResponse),
+        (status = 404, description = "Provider not found", body = ErrorResponse),
+        (status = 500, description = "Internal error", body = ErrorResponse)
+    )
+)]
 #[tracing::instrument(name = "POST /oauth/refresh/:provider_id", skip(_state))]
-async fn proxy_token_refresh(
+pub async fn token_refresh(
     State(_state): State<AppState>,
     Path(provider_id): Path<String>,
     Json(request): Json<TokenRefreshRequest>,

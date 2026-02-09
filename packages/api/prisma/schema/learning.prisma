@@ -1,11 +1,10 @@
-
 model CourseConnection {
   id String @id
 
-  course Course @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  course   Course @relation(fields: [courseId], references: [id], onDelete: Cascade)
   courseId String
 
-  app App @relation(fields: [appId], references: [id], onDelete: Cascade)
+  app   App    @relation(fields: [appId], references: [id], onDelete: Cascade)
   appId String
 
   createdAt DateTime @default(now())
@@ -18,7 +17,7 @@ model Course {
   id String @id
 
   language String
-  meta Meta[]
+  meta     Meta[]
 
   connections CourseConnection[]
 

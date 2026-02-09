@@ -27,6 +27,7 @@ pub mod read_cell;
 pub mod remove_column;
 pub mod remove_row;
 pub mod try_extract_tables;
+pub mod try_extract_tables_ai;
 pub mod write_cell;
 pub mod write_cell_html;
 
@@ -239,6 +240,9 @@ impl std::fmt::Display for Cell {
 
 #[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
 pub struct CSVTable {
+    /// Optional name/identifier for this table
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
     headers: Arc<[Arc<str>]>,
     rows: Vec<Box<[Cell]>>,
     source: Option<FlowPath>,
@@ -264,6 +268,7 @@ impl CSVTable {
             .collect();
 
         Self {
+            name: None,
             headers,
             rows,
             source,

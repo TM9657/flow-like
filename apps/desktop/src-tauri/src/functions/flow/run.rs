@@ -56,6 +56,9 @@ async fn execute_internal(
         return Err(TauriFunctionError::new("App not found"));
     };
 
+    // Desktop execution is trusted — allow secret overrides from local runtime vars
+    payload.filter_secrets = Some(false);
+
     if let Some(event_id) = &event_id {
         let intermediate_event = app.get_event(event_id, None).await?;
         payload.id = intermediate_event.node_id.clone();
@@ -129,6 +132,10 @@ async fn execute_internal(
         oauth_tokens.unwrap_or_default().into_iter().collect(),
     )
     .await?;
+
+    // Set offline user context for desktop app (always admin/owner)
+    internal_run.set_offline_user_context();
+
     let run_id = internal_run.run.lock().await.id.clone();
 
     let _send_result = buffered_sender

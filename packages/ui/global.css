@@ -438,9 +438,47 @@
 		}
 	}
 
+	@keyframes indeterminate {
+		0% {
+			transform: translateX(-100%);
+		}
+		100% {
+			transform: translateX(300%);
+		}
+	}
+
+	@keyframes float-orb {
+		0%,
+		100% {
+			transform: translate(-50%, -50%) translateY(0) translateX(0);
+		}
+		25% {
+			transform: translate(-50%, -50%) translateY(-15px) translateX(10px);
+		}
+		50% {
+			transform: translate(-50%, -50%) translateY(-5px) translateX(-8px);
+		}
+		75% {
+			transform: translate(-50%, -50%) translateY(-20px) translateX(5px);
+		}
+	}
+
+	@keyframes pulse-ring {
+		0% {
+			transform: scale(1);
+			opacity: 0.4;
+		}
+		100% {
+			transform: scale(1.5);
+			opacity: 0;
+		}
+	}
+
 	--animate-spin-slow: spin-slow 3s linear infinite;
 	--animate-spin-reverse: spin-reverse 2s linear infinite;
 	--animate-progress: progress 1.5s ease-in-out infinite;
+	--animate-float-orb: float-orb 15s ease-in-out infinite;
+	--animate-pulse-ring: pulse-ring 2s ease-out infinite;
 }
 
 @layer base {
@@ -465,9 +503,15 @@
 	html,
 	body {
 		height: 100%;
+		overscroll-behavior: none;
 	}
 	body {
+		width: 100%;
+	}
+	body:where([data-desktop-app]) {
 		overflow: hidden;
+		position: fixed;
+		inset: 0;
 	}
 
 	@supports (font: -apple-system-body) and (-webkit-appearance: none) {
@@ -816,6 +860,12 @@
 	.dark .codeblock .hljs-title.class_.inherited__,
 	.dark .codeblock .hljs-title.function_ {
 		color: #a77bfa;
+	}
+	.maplibregl-popup-content {
+		@apply bg-transparent! shadow-none! p-0! rounded-none!;
+	}
+	.maplibregl-popup-tip {
+		@apply hidden!;
 	}
 }
 

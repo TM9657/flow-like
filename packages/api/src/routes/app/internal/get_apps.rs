@@ -13,6 +13,21 @@ use flow_like::{app::App, bit::Metadata};
 use sea_orm::{
     ColumnTrait, EntityTrait, JoinType, QueryFilter, QueryOrder, QuerySelect, RelationTrait,
 };
+
+#[utoipa::path(
+    get,
+    path = "/apps",
+    tag = "apps",
+    params(
+        ("language" = Option<String>, Query, description = "Language code (default: en)"),
+        ("limit" = Option<u64>, Query, description = "Maximum number of results (max 100)"),
+        ("offset" = Option<u64>, Query, description = "Offset for pagination")
+    ),
+    responses(
+        (status = 200, description = "List of user applications with metadata", body = Vec<Object>),
+        (status = 401, description = "Unauthorized")
+    )
+)]
 #[tracing::instrument(name = "GET /apps", skip(state, user))]
 pub async fn get_apps(
     State(state): State<AppState>,
