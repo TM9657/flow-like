@@ -7,7 +7,8 @@ edition = "2024"
 flow-like-types.workspace = true
 object_store = {version="0.12.4", features = ["gcp", "aws", "azure", "serde", "serde_json", "cloud"] }
 # Using lancedb branch with lance v3.0.0-beta.1 which includes iOS fp16kernels fix (PR #5747)
-lancedb = { git = "https://github.com/lancedb/lancedb.git", branch = "codex/update-lance-3-0-0-beta-1", features = ["polars", "remote", "aws", "azure", "gcs", "fp16kernels"]}
+# fp16kernels are not supported on Windows (lance skips compiling the C kernels for MSVC)
+lancedb = { git = "https://github.com/lancedb/lancedb.git", branch = "codex/update-lance-3-0-0-beta-1", features = ["polars", "remote", "aws", "azure", "gcs"]}
 polars = "0.39.2"
 polars-arrow = "0.39.2"
 arrow-array = "57.2"
@@ -39,6 +40,9 @@ datafusion-federation = { version = "0.4", optional = true }
 # Iceberg support from TM9657 fork (compatible with DataFusion 51)
 iceberg = { git = "https://github.com/TM9657/iceberg-rust.git", branch = "main", optional = true }
 iceberg-datafusion = { git = "https://github.com/TM9657/iceberg-rust.git", branch = "main", optional = true }
+
+[target.'cfg(not(target_os = "windows"))'.dependencies]
+lancedb = { git = "https://github.com/lancedb/lancedb.git", branch = "codex/update-lance-3-0-0-beta-1", features = ["fp16kernels"]}
 
 [features]
 tauri = []
