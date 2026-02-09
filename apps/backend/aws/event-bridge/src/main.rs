@@ -9,6 +9,11 @@ use std::env;
 use std::sync::OnceLock;
 
 static SINK_JWT: OnceLock<String> = OnceLock::new();
+static HTTP_CLIENT: OnceLock<reqwest::Client> = OnceLock::new();
+
+fn get_http_client() -> &'static reqwest::Client {
+    HTTP_CLIENT.get_or_init(reqwest::Client::new)
+}
 
 fn get_sink_jwt() -> Result<&'static str, Error> {
     if let Some(value) = SINK_JWT.get() {
@@ -54,7 +59,7 @@ async fn event_bridge_handler(
 
     tracing::info!(event_id = %detail.event_id, "Processing scheduled event");
 
-    let client = reqwest::Client::new();
+    let client = get_http_client();
     let trigger_url = format!("{}/api/v1/sink/trigger/async", api_base_url);
 
     let request_body = TriggerRequest {
