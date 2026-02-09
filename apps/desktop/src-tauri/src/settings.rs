@@ -178,15 +178,15 @@ impl Settings {
 
         ensure_app_dirs().ok();
 
-        let bit_dir = dirs_next::data_dir()
+        let mut bit_dir = dirs_next::data_dir()
             .unwrap_or_default()
             .join("flow-like")
             .join("bits");
-        let project_dir = dirs_next::data_dir()
+        let mut project_dir = dirs_next::data_dir()
             .unwrap_or_default()
             .join("flow-like")
             .join("projects");
-        let user_dir = dirs_next::cache_dir().unwrap_or_default().join("flow-like");
+        let mut user_dir = dirs_next::cache_dir().unwrap_or_default().join("flow-like");
 
         if cfg!(target_os = "ios") {
             #[cfg(target_os = "ios")]

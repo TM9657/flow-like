@@ -24,8 +24,6 @@
 	<string>0.0.8</string>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
-	<key>ITSAppUsesNonExemptEncryption</key>
-  	<true/>
 	<key>NSAppleEventsUsageDescription</key>
 	<string>Flow Like automates and integrates with other apps you choose (e.g., Finder) to manage files.</string>
 	<key>NSCameraUsageDescription</key>
