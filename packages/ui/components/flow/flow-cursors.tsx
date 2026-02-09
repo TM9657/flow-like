@@ -3,11 +3,10 @@ import { useStore } from "@xyflow/react";
 import { ArrowRight } from "lucide-react";
 import { memo, useMemo } from "react";
 import {
+	type PeerUserInfo,
 	colorFromSub,
 	truncateName,
-	type PeerUserInfo,
 } from "../../hooks/use-peer-users";
-import type { IUserLookup } from "../../state/backend-state/types";
 import { Avatar, AvatarFallback, AvatarImage } from "../ui/avatar";
 
 interface CursorPeer {
@@ -196,7 +195,9 @@ const EdgeIndicator = memo(function EdgeIndicator({
 					className="h-5 w-5 ring-2 ring-white/50 shadow-sm"
 					style={{ borderColor: cursor.color }}
 				>
-					{cursor.avatarUrl && <AvatarImage src={cursor.avatarUrl} className="object-cover" />}
+					{cursor.avatarUrl && (
+						<AvatarImage src={cursor.avatarUrl} className="object-cover" />
+					)}
 					<AvatarFallback
 						className="text-[9px] font-bold"
 						style={{
@@ -263,7 +264,9 @@ const RemoteCursor = memo(function RemoteCursor({
 						className="h-5 w-5 ring-2 ring-white/50 shadow-sm"
 						style={{ borderColor: cursor.color }}
 					>
-						{cursor.avatarUrl && <AvatarImage src={cursor.avatarUrl} className="object-cover" />}
+						{cursor.avatarUrl && (
+							<AvatarImage src={cursor.avatarUrl} className="object-cover" />
+						)}
 						<AvatarFallback
 							className="text-[9px] font-bold"
 							style={{

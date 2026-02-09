@@ -495,10 +495,7 @@ export function FlowLibraryBoardCard({
 								)}
 							</div>
 							<div className="flex items-center gap-1.5 mt-1 flex-wrap">
-								<Badge
-									variant="secondary"
-									className="text-[10px] px-1.5 py-0"
-								>
+								<Badge variant="secondary" className="text-[10px] px-1.5 py-0">
 									{board.stage}
 								</Badge>
 								<ExecutionModeBadge mode={board.execution_mode} />

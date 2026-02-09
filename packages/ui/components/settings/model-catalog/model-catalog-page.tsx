@@ -52,9 +52,9 @@ import { Checkbox } from "../../ui/checkbox";
 import {
 	Sheet,
 	SheetContent,
+	SheetDescription,
 	SheetHeader,
 	SheetTitle,
-	SheetDescription,
 } from "../../ui/sheet";
 
 type SortOption =
@@ -487,192 +487,185 @@ export function AIModelPage({ webMode = false }: AIModelPageProps) {
 
 	const sidebarContent = (
 		<div className="flex-1 min-h-0 overflow-y-auto p-3 space-y-5">
-						<FilterSection title="Input" icon={MessageSquare}>
-							<FilterCheckbox
-								checked={inputModalities.has("text")}
-								onCheckedChange={() => toggleInputModality("text")}
-								icon={Type}
-								iconColor="text-blue-500"
-								label="Text"
-								count={modalityCounts.text}
-							/>
-							<FilterCheckbox
-								checked={inputModalities.has("image")}
-								onCheckedChange={() => toggleInputModality("image")}
-								icon={ImageIcon}
-								iconColor="text-purple-500"
-								label="Image"
-								count={modalityCounts.image}
-							/>
-						</FilterSection>
+			<FilterSection title="Input" icon={MessageSquare}>
+				<FilterCheckbox
+					checked={inputModalities.has("text")}
+					onCheckedChange={() => toggleInputModality("text")}
+					icon={Type}
+					iconColor="text-blue-500"
+					label="Text"
+					count={modalityCounts.text}
+				/>
+				<FilterCheckbox
+					checked={inputModalities.has("image")}
+					onCheckedChange={() => toggleInputModality("image")}
+					icon={ImageIcon}
+					iconColor="text-purple-500"
+					label="Image"
+					count={modalityCounts.image}
+				/>
+			</FilterSection>
 
-						<FilterSection
-							title="Output"
-							icon={MessageSquare}
-							className="-scale-x-100"
-						>
-							<FilterCheckbox
-								checked={outputModalities.has("text")}
-								onCheckedChange={() => toggleOutputModality("text")}
-								icon={Type}
-								iconColor="text-green-500"
-								label="Text"
-							/>
-							<FilterCheckbox
-								checked={outputModalities.has("embedding")}
-								onCheckedChange={() => toggleOutputModality("embedding")}
-								icon={FileSearchIcon}
-								iconColor="text-orange-500"
-								label="Embedding"
-								count={modalityCounts.embedding}
-							/>
-						</FilterSection>
+			<FilterSection
+				title="Output"
+				icon={MessageSquare}
+				className="-scale-x-100"
+			>
+				<FilterCheckbox
+					checked={outputModalities.has("text")}
+					onCheckedChange={() => toggleOutputModality("text")}
+					icon={Type}
+					iconColor="text-green-500"
+					label="Text"
+				/>
+				<FilterCheckbox
+					checked={outputModalities.has("embedding")}
+					onCheckedChange={() => toggleOutputModality("embedding")}
+					icon={FileSearchIcon}
+					iconColor="text-orange-500"
+					label="Embedding"
+					count={modalityCounts.embedding}
+				/>
+			</FilterSection>
 
-						<FilterSection title="Status" icon={Filter}>
-							<FilterCheckbox
-								checked={showInProfileOnly}
-								onCheckedChange={(c) => setShowInProfileOnly(!!c)}
-								icon={Sparkles}
-								iconColor="text-primary"
-								label="In Profile"
-							/>
-							{!webMode && (
-								<FilterCheckbox
-									checked={showDownloadedOnly}
-									onCheckedChange={(c) => setShowDownloadedOnly(!!c)}
-									icon={PackageCheck}
-									iconColor="text-emerald-500"
-									label="Downloaded"
-								/>
-							)}
-						</FilterSection>
-
-						{providers.length > 0 && (
-							<FilterSection title="Provider" icon={Globe}>
-								<Select
-									value={providerFilter}
-									onValueChange={setProviderFilter}
-								>
-									<SelectTrigger className="h-8 text-xs">
-										<SelectValue placeholder="All providers" />
-									</SelectTrigger>
-									<SelectContent>
-										<SelectItem value="all">All providers</SelectItem>
-										{providers.map((provider) => (
-											<SelectItem key={provider} value={provider}>
-												{provider}
-											</SelectItem>
-										))}
-									</SelectContent>
-								</Select>
-							</FilterSection>
-						)}
-
-						<div className="space-y-2">
-							<div className="flex items-center justify-between px-2">
-								<p className="text-xs font-medium text-muted-foreground uppercase tracking-wider flex items-center gap-2">
-									<Cpu className="h-3 w-3" />
-									Context
-								</p>
-								<span className="text-[10px] text-muted-foreground">
-									{formatContextLength(contextLengthFilter[0])} -{" "}
-									{formatContextLength(contextLengthFilter[1])}
-								</span>
-							</div>
-							<div className="px-2 pb-2">
-								<Slider
-									value={contextLengthFilter}
-									onValueChange={(v) =>
-										setContextLengthFilter(v as [number, number])
-									}
-									min={0}
-									max={maxContextLength}
-									step={1000}
-								/>
-							</div>
-						</div>
-
-						<div className="space-y-3">
-							<button
-								type="button"
-								onClick={() => setShowFilters(!showFilters)}
-								className="flex items-center gap-2 text-xs font-medium text-muted-foreground uppercase tracking-wider px-2 w-full hover:text-foreground transition-colors"
-							>
-								<Brain className="h-3 w-3" />
-								<span>Capabilities</span>
-								{Object.values(capabilityFilters).some((v) => v > 0) && (
-									<Badge variant="default" className="h-4 px-1 text-[9px] ml-1">
-										Active
-									</Badge>
-								)}
-								<ChevronDown
-									className={`h-3 w-3 ml-auto transition-transform ${showFilters ? "rotate-180" : ""}`}
-								/>
-							</button>
-
-							<AnimatePresence>
-								{showFilters && (
-									<motion.div
-										initial={{ height: 0, opacity: 0 }}
-										animate={{ height: "auto", opacity: 1 }}
-										exit={{ height: 0, opacity: 0 }}
-										className="space-y-5 overflow-hidden px-2 pb-2"
-									>
-										{Object.entries(capabilityIcons)
-											.slice(0, 6)
-											.map(([key, info]) => {
-												const Icon = info.icon;
-												const value = capabilityFilters[key] ?? 0;
-												return (
-													<div key={key} className="space-y-2">
-														<div className="flex items-center justify-between text-xs">
-															<div
-																className={`flex items-center gap-1.5 ${info.color}`}
-															>
-																<Icon className="h-3 w-3" />
-																<span>{info.label}</span>
-															</div>
-															<span className="text-muted-foreground">
-																{value > 0
-																	? `≥${Math.round(value * 100)}%`
-																	: "Any"}
-															</span>
-														</div>
-														<Slider
-															value={[value]}
-															onValueChange={([v]) =>
-																setCapabilityFilters((prev) => ({
-																	...prev,
-																	[key]: v,
-																}))
-															}
-															min={0}
-															max={1}
-															step={0.1}
-															className="h-1"
-														/>
-													</div>
-												);
-											})}
-									</motion.div>
-								)}
-							</AnimatePresence>
-						</div>
-
-						{activeFilterCount > 0 && (
-							<div className="px-2 pt-2">
-								<Button
-									variant="outline"
-									size="sm"
-									className="w-full h-8 text-xs"
-									onClick={resetFilters}
-								>
-									<X className="h-3 w-3 mr-1.5" />
-									Clear {activeFilterCount} Filter
-									{activeFilterCount !== 1 ? "s" : ""}
-								</Button>
-					</div>
+			<FilterSection title="Status" icon={Filter}>
+				<FilterCheckbox
+					checked={showInProfileOnly}
+					onCheckedChange={(c) => setShowInProfileOnly(!!c)}
+					icon={Sparkles}
+					iconColor="text-primary"
+					label="In Profile"
+				/>
+				{!webMode && (
+					<FilterCheckbox
+						checked={showDownloadedOnly}
+						onCheckedChange={(c) => setShowDownloadedOnly(!!c)}
+						icon={PackageCheck}
+						iconColor="text-emerald-500"
+						label="Downloaded"
+					/>
 				)}
+			</FilterSection>
+
+			{providers.length > 0 && (
+				<FilterSection title="Provider" icon={Globe}>
+					<Select value={providerFilter} onValueChange={setProviderFilter}>
+						<SelectTrigger className="h-8 text-xs">
+							<SelectValue placeholder="All providers" />
+						</SelectTrigger>
+						<SelectContent>
+							<SelectItem value="all">All providers</SelectItem>
+							{providers.map((provider) => (
+								<SelectItem key={provider} value={provider}>
+									{provider}
+								</SelectItem>
+							))}
+						</SelectContent>
+					</Select>
+				</FilterSection>
+			)}
+
+			<div className="space-y-2">
+				<div className="flex items-center justify-between px-2">
+					<p className="text-xs font-medium text-muted-foreground uppercase tracking-wider flex items-center gap-2">
+						<Cpu className="h-3 w-3" />
+						Context
+					</p>
+					<span className="text-[10px] text-muted-foreground">
+						{formatContextLength(contextLengthFilter[0])} -{" "}
+						{formatContextLength(contextLengthFilter[1])}
+					</span>
+				</div>
+				<div className="px-2 pb-2">
+					<Slider
+						value={contextLengthFilter}
+						onValueChange={(v) => setContextLengthFilter(v as [number, number])}
+						min={0}
+						max={maxContextLength}
+						step={1000}
+					/>
+				</div>
+			</div>
+
+			<div className="space-y-3">
+				<button
+					type="button"
+					onClick={() => setShowFilters(!showFilters)}
+					className="flex items-center gap-2 text-xs font-medium text-muted-foreground uppercase tracking-wider px-2 w-full hover:text-foreground transition-colors"
+				>
+					<Brain className="h-3 w-3" />
+					<span>Capabilities</span>
+					{Object.values(capabilityFilters).some((v) => v > 0) && (
+						<Badge variant="default" className="h-4 px-1 text-[9px] ml-1">
+							Active
+						</Badge>
+					)}
+					<ChevronDown
+						className={`h-3 w-3 ml-auto transition-transform ${showFilters ? "rotate-180" : ""}`}
+					/>
+				</button>
+
+				<AnimatePresence>
+					{showFilters && (
+						<motion.div
+							initial={{ height: 0, opacity: 0 }}
+							animate={{ height: "auto", opacity: 1 }}
+							exit={{ height: 0, opacity: 0 }}
+							className="space-y-5 overflow-hidden px-2 pb-2"
+						>
+							{Object.entries(capabilityIcons)
+								.slice(0, 6)
+								.map(([key, info]) => {
+									const Icon = info.icon;
+									const value = capabilityFilters[key] ?? 0;
+									return (
+										<div key={key} className="space-y-2">
+											<div className="flex items-center justify-between text-xs">
+												<div
+													className={`flex items-center gap-1.5 ${info.color}`}
+												>
+													<Icon className="h-3 w-3" />
+													<span>{info.label}</span>
+												</div>
+												<span className="text-muted-foreground">
+													{value > 0 ? `≥${Math.round(value * 100)}%` : "Any"}
+												</span>
+											</div>
+											<Slider
+												value={[value]}
+												onValueChange={([v]) =>
+													setCapabilityFilters((prev) => ({
+														...prev,
+														[key]: v,
+													}))
+												}
+												min={0}
+												max={1}
+												step={0.1}
+												className="h-1"
+											/>
+										</div>
+									);
+								})}
+						</motion.div>
+					)}
+				</AnimatePresence>
+			</div>
+
+			{activeFilterCount > 0 && (
+				<div className="px-2 pt-2">
+					<Button
+						variant="outline"
+						size="sm"
+						className="w-full h-8 text-xs"
+						onClick={resetFilters}
+					>
+						<X className="h-3 w-3 mr-1.5" />
+						Clear {activeFilterCount} Filter
+						{activeFilterCount !== 1 ? "s" : ""}
+					</Button>
+				</div>
+			)}
 		</div>
 	);
 
@@ -839,7 +832,7 @@ export function AIModelPage({ webMode = false }: AIModelPageProps) {
 								<div
 									className={
 										viewMode === "grid"
-										? "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-3"
+											? "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-3"
 											: "space-y-2"
 									}
 								>

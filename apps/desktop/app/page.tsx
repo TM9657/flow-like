@@ -45,7 +45,13 @@ export default function Home() {
 			console.error("Failed to load profiles:", profiles.error);
 			router.replace("/onboarding");
 		}
-	}, [profiles.data, profiles.isLoading, profiles.isError, profiles.error, router]);
+	}, [
+		profiles.data,
+		profiles.isLoading,
+		profiles.isError,
+		profiles.error,
+		router,
+	]);
 
 	useEffect(() => {
 		checkProfiles();

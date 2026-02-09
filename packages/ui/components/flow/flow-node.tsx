@@ -35,6 +35,7 @@ import {
 import PuffLoader from "react-spinners/PuffLoader";
 import { useLogAggregation } from "../..";
 import { useInvalidateInvoke } from "../../hooks";
+import { colorFromSub } from "../../hooks/use-peer-users";
 import {
 	getActivityColorClasses,
 	useRunActivity,
@@ -77,7 +78,6 @@ import { FlowNodeToolbar } from "./flow-node/flow-node-toolbar";
 import { FlowPin } from "./flow-pin";
 import { LayerEditMenu } from "./layer-editing-menu";
 import { typeToColor } from "./utils";
-import { colorFromSub } from "../../hooks/use-peer-users";
 
 export interface RemoteSelectionParticipant {
 	clientId: number;
@@ -620,8 +620,7 @@ const FlowNodeInner = memo(
 
 			const executionMode = props.data.executionMode ?? IExecutionMode.Hybrid;
 			const canRemoteExecuteBase =
-				!props.data.isOffline &&
-				props.data.onRemoteExecute !== undefined;
+				!props.data.isOffline && props.data.onRemoteExecute !== undefined;
 
 			// Apply execution mode restrictions
 			// only_offline nodes can never run remotely

@@ -65,16 +65,21 @@ export function RoleDialog({
 	}, [role, open]);
 
 	const isOwnerRole = useMemo(
-		() => !!role && new RolePermissions(role.permissions).contains(RolePermissions.Owner),
+		() =>
+			!!role &&
+			new RolePermissions(role.permissions).contains(RolePermissions.Owner),
 		[role],
 	);
 
-	const togglePermission = useCallback((perm: RolePermissions) => {
-		if (isOwnerRole && perm.equals(RolePermissions.Owner)) return;
-		setPermissions((prev) =>
-			prev.contains(perm) ? prev.remove(perm) : prev.insert(perm),
-		);
-	}, [isOwnerRole]);
+	const togglePermission = useCallback(
+		(perm: RolePermissions) => {
+			if (isOwnerRole && perm.equals(RolePermissions.Owner)) return;
+			setPermissions((prev) =>
+				prev.contains(perm) ? prev.remove(perm) : prev.insert(perm),
+			);
+		},
+		[isOwnerRole],
+	);
 
 	const toggleGroup = useCallback(
 		(group: PermissionGroup) => {
@@ -83,7 +88,8 @@ export function RoleDialog({
 				if (active === total) {
 					let next = prev;
 					for (const p of group.permissions) {
-						if (isOwnerRole && p.permission.equals(RolePermissions.Owner)) continue;
+						if (isOwnerRole && p.permission.equals(RolePermissions.Owner))
+							continue;
 						next = next.remove(p.permission);
 					}
 					return next;
@@ -96,7 +102,10 @@ export function RoleDialog({
 		[isOwnerRole],
 	);
 
-	const isAdminRole = useMemo(() => permissions.contains(RolePermissions.Admin), [permissions]);
+	const isAdminRole = useMemo(
+		() => permissions.contains(RolePermissions.Admin),
+		[permissions],
+	);
 
 	const addAttribute = useCallback(() => {
 		const val = attrInput.trim();
@@ -203,7 +212,7 @@ export function RoleDialog({
 							</p>
 							<div className="flex gap-2">
 								<Input
-								placeholder="Add attribute..."
+									placeholder="Add attribute..."
 									value={attrInput}
 									onChange={(e) => setAttrInput(e.target.value)}
 									onKeyDown={(e) => e.key === "Enter" && addAttribute()}
@@ -276,8 +285,12 @@ function PermissionGroupSection({
 		<Collapsible>
 			<div className="flex items-center gap-2 rounded-lg border px-3 py-2 hover:bg-muted/50 transition-colors">
 				<Checkbox
-					checked={effectiveAllActive ? true : someActive ? "indeterminate" : false}
-					onCheckedChange={() => !disabled && !impliedByAdmin && onToggleGroup(group)}
+					checked={
+						effectiveAllActive ? true : someActive ? "indeterminate" : false
+					}
+					onCheckedChange={() =>
+						!disabled && !impliedByAdmin && onToggleGroup(group)
+					}
 					disabled={disabled || impliedByAdmin}
 					className="shrink-0"
 				/>
@@ -285,7 +298,9 @@ function PermissionGroupSection({
 					<GroupIcon className="h-4 w-4 text-muted-foreground shrink-0" />
 					<span className="text-sm font-medium truncate">{group.label}</span>
 					{impliedByAdmin && (
-						<span className="text-[10px] text-muted-foreground italic">via Admin</span>
+						<span className="text-[10px] text-muted-foreground italic">
+							via Admin
+						</span>
 					)}
 					<span className="text-xs text-muted-foreground tabular-nums ml-auto shrink-0">
 						{impliedByAdmin ? total : active}/{total}

@@ -265,7 +265,9 @@ export function useSurfaceManager() {
 							break;
 						}
 						case "setGeoMapViewport": {
-							const viewport = updateValue.viewport as { literalJson?: string } | undefined;
+							const viewport = updateValue.viewport as
+								| { literalJson?: string }
+								| undefined;
 							const componentData = component.component as unknown as Record<
 								string,
 								unknown

@@ -80,7 +80,8 @@ const FEATURED_LIBRARIES: FeaturedLibrary[] = [
 	{
 		name: "llama.cpp",
 		displayName: "llama.cpp",
-		description: "LLM inference in C/C++ - powers local AI models in Flow-Like.",
+		description:
+			"LLM inference in C/C++ - powers local AI models in Flow-Like.",
 		url: "https://github.com/ggerganov/llama.cpp",
 		category: "AI/ML",
 		sideloaded: true,
@@ -89,42 +90,48 @@ const FEATURED_LIBRARIES: FeaturedLibrary[] = [
 	{
 		name: "tauri",
 		displayName: "Tauri",
-		description: "Build smaller, faster, and more secure desktop and mobile applications with a web frontend.",
+		description:
+			"Build smaller, faster, and more secure desktop and mobile applications with a web frontend.",
 		url: "https://tauri.app",
 		category: "Framework",
 	},
 	{
 		name: "axum",
 		displayName: "Axum",
-		description: "Ergonomic and modular web framework built with Tokio, Tower, and Hyper.",
+		description:
+			"Ergonomic and modular web framework built with Tokio, Tower, and Hyper.",
 		url: "https://github.com/tokio-rs/axum",
 		category: "Web Framework",
 	},
 	{
 		name: "tokio",
 		displayName: "Tokio",
-		description: "Asynchronous runtime for Rust providing async I/O, networking, and task scheduling.",
+		description:
+			"Asynchronous runtime for Rust providing async I/O, networking, and task scheduling.",
 		url: "https://tokio.rs",
 		category: "Runtime",
 	},
 	{
 		name: "tonic",
 		displayName: "Tonic",
-		description: "A native gRPC client & server implementation with async/await support.",
+		description:
+			"A native gRPC client & server implementation with async/await support.",
 		url: "https://github.com/hyperium/tonic",
 		category: "gRPC",
 	},
 	{
 		name: "tracing",
 		displayName: "Tracing",
-		description: "Application-level tracing for Rust - structured, async-aware diagnostics.",
+		description:
+			"Application-level tracing for Rust - structured, async-aware diagnostics.",
 		url: "https://tracing.rs",
 		category: "Observability",
 	},
 	{
 		name: "serde",
 		displayName: "Serde",
-		description: "Framework for serializing and deserializing Rust data structures efficiently.",
+		description:
+			"Framework for serializing and deserializing Rust data structures efficiently.",
 		url: "https://serde.rs",
 		category: "Serialization",
 	},
@@ -139,7 +146,8 @@ const FEATURED_LIBRARIES: FeaturedLibrary[] = [
 	{
 		name: "lancedb",
 		displayName: "LanceDB",
-		description: "Developer-friendly, serverless vector database for AI applications.",
+		description:
+			"Developer-friendly, serverless vector database for AI applications.",
 		url: "https://lancedb.com",
 		category: "Vector DB",
 	},
@@ -153,7 +161,8 @@ const FEATURED_LIBRARIES: FeaturedLibrary[] = [
 	{
 		name: "datafusion",
 		displayName: "DataFusion",
-		description: "Extensible query engine written in Rust that uses Apache Arrow.",
+		description:
+			"Extensible query engine written in Rust that uses Apache Arrow.",
 		url: "https://datafusion.apache.org",
 		category: "Query Engine",
 	},
@@ -167,21 +176,24 @@ const FEATURED_LIBRARIES: FeaturedLibrary[] = [
 	{
 		name: "arrow",
 		displayName: "Apache Arrow",
-		description: "In-memory columnar data format for efficient analytic operations.",
+		description:
+			"In-memory columnar data format for efficient analytic operations.",
 		url: "https://arrow.apache.org",
 		category: "Data Format",
 	},
 	{
 		name: "parquet",
 		displayName: "Apache Parquet",
-		description: "Columnar storage file format optimized for big data processing.",
+		description:
+			"Columnar storage file format optimized for big data processing.",
 		url: "https://parquet.apache.org",
 		category: "Data Format",
 	},
 	{
 		name: "sqlx",
 		displayName: "SQLx",
-		description: "Async, pure Rust SQL toolkit with compile-time checked queries.",
+		description:
+			"Async, pure Rust SQL toolkit with compile-time checked queries.",
 		url: "https://github.com/launchbadge/sqlx",
 		category: "Database",
 	},
@@ -211,7 +223,8 @@ const FEATURED_LIBRARIES: FeaturedLibrary[] = [
 	{
 		name: "next",
 		displayName: "Next.js",
-		description: "The React framework for production - hybrid static & server rendering.",
+		description:
+			"The React framework for production - hybrid static & server rendering.",
 		url: "https://nextjs.org",
 		category: "Framework",
 	},
@@ -234,7 +247,7 @@ const FEATURED_LIBRARIES: FeaturedLibrary[] = [
 function FeaturedLibraries({ licenses }: { licenses: License[] }) {
 	const featured = FEATURED_LIBRARIES.map((lib) => {
 		const found = licenses.find(
-			(l) => l.name.toLowerCase() === lib.name.toLowerCase()
+			(l) => l.name.toLowerCase() === lib.name.toLowerCase(),
 		);
 		return { ...lib, license: found };
 	}).filter((lib) => lib.license || lib.sideloaded);
@@ -245,7 +258,8 @@ function FeaturedLibraries({ licenses }: { licenses: License[] }) {
 		<div className="mb-12">
 			<h2 className="text-2xl font-semibold mb-6">Featured Libraries</h2>
 			<p className="text-muted-foreground mb-6">
-				Flow-Like is built on the shoulders of these amazing open source projects.
+				Flow-Like is built on the shoulders of these amazing open source
+				projects.
 			</p>
 			<div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
 				{featured.map((lib) => (
@@ -337,7 +351,10 @@ function LicenseTextModal({
 				<div className="flex items-center justify-between p-4 border-b border-border">
 					<div>
 						<h3 className="text-lg font-semibold">
-							{license.name} <span className="text-muted-foreground font-normal">v{license.version}</span>
+							{license.name}{" "}
+							<span className="text-muted-foreground font-normal">
+								v{license.version}
+							</span>
 						</h3>
 						<div className="flex items-center gap-2 mt-1">
 							<LicenseBadge license={license.license} />
@@ -382,7 +399,9 @@ function LicenseTextModal({
 export function SbomTable({ cargoLicenses, npmLicenses }: SbomTableProps) {
 	const [search, setSearch] = useState("");
 	const [licenseFilter, setLicenseFilter] = useState<string>("all");
-	const [sourceFilter, setSourceFilter] = useState<"all" | "rust" | "npm">("all");
+	const [sourceFilter, setSourceFilter] = useState<"all" | "rust" | "npm">(
+		"all",
+	);
 	const [selectedLicense, setSelectedLicense] = useState<License | null>(null);
 
 	const allLicenses = useMemo(() => {
@@ -410,8 +429,7 @@ export function SbomTable({ cargoLicenses, npmLicenses }: SbomTableProps) {
 			const matchesLicense =
 				licenseFilter === "all" || l.license === licenseFilter;
 
-			const matchesSource =
-				sourceFilter === "all" || l.source === sourceFilter;
+			const matchesSource = sourceFilter === "all" || l.source === sourceFilter;
 
 			return matchesSearch && matchesLicense && matchesSource;
 		});
@@ -467,7 +485,9 @@ export function SbomTable({ cargoLicenses, npmLicenses }: SbomTableProps) {
 
 					<select
 						value={sourceFilter}
-						onChange={(e) => setSourceFilter(e.target.value as "all" | "rust" | "npm")}
+						onChange={(e) =>
+							setSourceFilter(e.target.value as "all" | "rust" | "npm")
+						}
 						className="w-full sm:w-44 shrink-0 px-4 py-2 rounded-lg border border-border bg-background focus:outline-none focus:ring-2 focus:ring-primary/50"
 					>
 						<option value="all">All Sources ({stats.total})</option>
@@ -557,7 +577,11 @@ export function SbomTable({ cargoLicenses, npmLicenses }: SbomTableProps) {
 												? "hover:bg-primary/10 text-primary"
 												: "hover:bg-muted text-muted-foreground"
 										}`}
-										title={l.licenseText ? "View license text" : "License text not available"}
+										title={
+											l.licenseText
+												? "View license text"
+												: "License text not available"
+										}
 									>
 										<FileText className="w-4 h-4" />
 									</button>

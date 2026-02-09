@@ -1,5 +1,4 @@
 "use client";
-import { createId } from "@paralleldrive/cuid2";
 import {
 	DndContext,
 	type DragEndEvent,
@@ -14,6 +13,7 @@ import {
 	verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
+import { createId } from "@paralleldrive/cuid2";
 import type Dexie from "dexie";
 import type { EntityTable } from "dexie";
 import {
@@ -528,12 +528,8 @@ interface SortableShortcutItemProps {
 		success: (message: string) => void;
 		error: (message: string) => void;
 	};
-	getAppMetadata: (
-		appId: string,
-	) => { name?: string; icon?: string } | null;
-	getPageType: (
-		path: string,
-	) => { type: string; icon: LucideIcon } | null;
+	getAppMetadata: (appId: string) => { name?: string; icon?: string } | null;
+	getPageType: (path: string) => { type: string; icon: LucideIcon } | null;
 }
 
 function SortableShortcutItem({

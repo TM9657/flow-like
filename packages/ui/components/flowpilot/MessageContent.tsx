@@ -156,9 +156,7 @@ export const MessageContent = memo(function MessageContent({
 							onFocusNode={onFocusNode}
 						/>
 					) : (
-						<p className="whitespace-pre-wrap wrap-anywhere">
-							{restContent}
-						</p>
+						<p className="whitespace-pre-wrap wrap-anywhere">{restContent}</p>
 					)}
 				</div>
 			</div>
@@ -220,9 +218,7 @@ export const MessageContent = memo(function MessageContent({
 					onFocusNode={onFocusNode}
 				/>
 			) : (
-				<p className="whitespace-pre-wrap wrap-anywhere">
-					{processedContent}
-				</p>
+				<p className="whitespace-pre-wrap wrap-anywhere">{processedContent}</p>
 			)}
 		</div>
 	);

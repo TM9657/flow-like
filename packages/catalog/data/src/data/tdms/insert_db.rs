@@ -131,13 +131,13 @@ impl NodeLogic for BatchInsertTdmsLocalDatabaseNode {
                 }
             }
 
-            if !chunk.is_empty() {
-                if let Err(e) = database.insert(chunk).await {
-                    context.log_message(
-                        &format!("Error inserting final TDMS chunk: {:?}", e),
-                        LogLevel::Error,
-                    );
-                }
+            if !chunk.is_empty()
+                && let Err(e) = database.insert(chunk).await
+            {
+                context.log_message(
+                    &format!("Error inserting final TDMS chunk: {:?}", e),
+                    LogLevel::Error,
+                );
             }
         }
 

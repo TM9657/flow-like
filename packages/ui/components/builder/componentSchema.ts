@@ -687,7 +687,10 @@ export const COMPONENT_SCHEMAS: Record<string, ComponentSchema> = {
 		showLocate: { type: "boundValue" },
 		showFullscreen: { type: "boundValue" },
 		interactive: { type: "boundValue" },
-		controlPosition: { type: "boundValue", enum: ["top-left", "top-right", "bottom-left", "bottom-right"] },
+		controlPosition: {
+			type: "boundValue",
+			enum: ["top-left", "top-right", "bottom-left", "bottom-right"],
+		},
 		clusterMarkers: { type: "boundValue" },
 		clusterRadius: { type: "boundValue" },
 		clusterMaxZoom: { type: "boundValue" },

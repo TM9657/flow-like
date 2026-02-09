@@ -10,7 +10,7 @@ use flow_like::flow::{
 use flow_like_catalog_core::FlowPath;
 #[cfg(feature = "execute")]
 use flow_like_model_provider::ml::ort::session::Session;
-use flow_like_types::{Result, anyhow, async_trait, json::json};
+use flow_like_types::{Result, async_trait, json::json};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 

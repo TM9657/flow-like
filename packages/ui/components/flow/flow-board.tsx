@@ -100,6 +100,7 @@ import { useInvoke } from "../../hooks/use-invoke";
 import { useKeyboardShortcuts } from "../../hooks/use-keyboard-shortcuts";
 import { useLayerNavigation } from "../../hooks/use-layer-navigation";
 import { useMediaUpload } from "../../hooks/use-media-upload";
+import { usePeerUserInfo } from "../../hooks/use-peer-users";
 import { useRealtimeCollaboration } from "../../hooks/use-realtime-collaboration";
 import { useViewportManager } from "../../hooks/use-viewport-manager";
 import {
@@ -163,7 +164,6 @@ import { FlowVeilEdge } from "./flow-veil-edge";
 import { LayerInnerNode } from "./layer-inner-node";
 import { LayerNode } from "./layer-node";
 import { RuntimeVariablesPrompt } from "./runtime-variables-prompt";
-import { usePeerUserInfo } from "../../hooks/use-peer-users";
 
 export function FlowBoard({
 	appId,

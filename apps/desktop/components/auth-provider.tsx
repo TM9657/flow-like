@@ -85,14 +85,16 @@ export function DesktopAuthProvider({
 
 	useEffect(() => {
 		const profileData = currentProfile.data;
-		const effectiveProfile = profileData ?? ({
-			hub: "api.flow-like.com",
-			secure: true,
-			bits: [],
-			created: new Date().toISOString(),
-			updated: new Date().toISOString(),
-			name: "default",
-		} as IProfile);
+		const effectiveProfile =
+			profileData ??
+			({
+				hub: "api.flow-like.com",
+				secure: true,
+				bits: [],
+				created: new Date().toISOString(),
+				updated: new Date().toISOString(),
+				name: "default",
+			} as IProfile);
 
 		(async () => {
 			try {
@@ -301,8 +303,15 @@ function AuthInner({ children }: Readonly<{ children: React.ReactNode }>) {
 		})();
 	}, [auth.user?.profile?.sub]);
 
-	return <>
-		<ProfileSyncer auth={{ isAuthenticated: auth.isAuthenticated, accessToken: auth.user?.access_token }} />
-		{children}
-	</>;
+	return (
+		<>
+			<ProfileSyncer
+				auth={{
+					isAuthenticated: auth.isAuthenticated,
+					accessToken: auth.user?.access_token,
+				}}
+			/>
+			{children}
+		</>
+	);
 }

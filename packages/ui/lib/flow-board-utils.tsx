@@ -267,10 +267,8 @@ export function doPinsMatch(
 			targetPin.options?.enforce_generic_value_type ?? false;
 		if (sourceEnforces || targetEnforces) {
 			if (sourceEnforces && targetEnforces) return false;
-			if (sourceEnforces && targetPin.data_type !== "Generic")
-				return false;
-			if (targetEnforces && sourcePin.data_type !== "Generic")
-				return false;
+			if (sourceEnforces && targetPin.data_type !== "Generic") return false;
+			if (targetEnforces && sourcePin.data_type !== "Generic") return false;
 		}
 	}
 

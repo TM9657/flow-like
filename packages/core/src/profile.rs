@@ -181,7 +181,7 @@ impl Profile {
     /// This is useful for cloud deployments where local models cannot be hosted
     pub fn filter_hosted_only(&self) -> Self {
         let mut filtered = self.clone();
-        filtered.bits.retain(|bit_ref| {
+        filtered.bits.retain(|_bit_ref| {
             // We can't check the actual bit without fetching it from the hub,
             // so we filter based on known patterns in the bit reference
             // Desktop app will use the full profile; cloud will use filtered

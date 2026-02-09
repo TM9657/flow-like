@@ -3,9 +3,9 @@
 // Usage: bun tools/generate-licenses.ts
 
 import { constants as FS, existsSync, readdirSync } from "node:fs";
-import { dirname, resolve, relative, join } from "node:path";
 import { access, mkdir, readFile, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
+import { dirname, join, relative, resolve } from "node:path";
 
 const ROOT = resolve(import.meta.dir, "..");
 const OUT_DIR = resolve(ROOT, "thirdparty");
@@ -85,7 +85,9 @@ async function run(cmd: string[], cwd = ROOT) {
 	const stdout = await outP;
 	const stderr = await errP;
 	if (code !== 0) {
-		console.warn(`Command warning (${code}): ${cmd.join(" ")}\n${stderr || stdout}`);
+		console.warn(
+			`Command warning (${code}): ${cmd.join(" ")}\n${stderr || stdout}`,
+		);
 	}
 	return { stdout, stderr, code };
 }
@@ -110,7 +112,10 @@ const LICENSE_FILE_PATTERNS = [
 	"License",
 ];
 
-async function findLicenseText(crateName: string, version: string): Promise<string | undefined> {
+async function findLicenseText(
+	crateName: string,
+	version: string,
+): Promise<string | undefined> {
 	if (!existsSync(CARGO_REGISTRY)) return undefined;
 
 	// Find the registry index directory (e.g., github.com-1ecc6299db9ec823)
@@ -166,7 +171,9 @@ async function gatherRustLicenses(): Promise<RustLicense[]> {
 		}
 	}
 
-	const deduped = [...seen.values()].sort((a, b) => a.name.localeCompare(b.name));
+	const deduped = [...seen.values()].sort((a, b) =>
+		a.name.localeCompare(b.name),
+	);
 
 	// Try to find license texts from cargo cache
 	console.log("📄 Reading Rust license texts from cargo cache...");
@@ -178,7 +185,9 @@ async function gatherRustLicenses(): Promise<RustLicense[]> {
 			foundCount++;
 		}
 	}
-	console.log(`   Found license text for ${foundCount}/${deduped.length} crates`);
+	console.log(
+		`   Found license text for ${foundCount}/${deduped.length} crates`,
+	);
 
 	return deduped;
 }
@@ -207,15 +216,25 @@ async function gatherNpmLicenses(): Promise<Record<string, NpmLicenseEntry>> {
 
 		try {
 			const { stdout, code } = await run(
-				["bunx", "license-checker-rseidelsohn", "--json", "--production", "--start", dir],
-				dir
+				[
+					"bunx",
+					"license-checker-rseidelsohn",
+					"--json",
+					"--production",
+					"--start",
+					dir,
+				],
+				dir,
 			);
 
 			if (code === 0) {
 				const licenses = JSON.parse(stdout) as Record<string, NpmLicenseEntry>;
 				// Merge, preferring entries with more info
 				for (const [key, value] of Object.entries(licenses)) {
-					if (!allLicenses[key] || (value.licenseFile && !allLicenses[key].licenseFile)) {
+					if (
+						!allLicenses[key] ||
+						(value.licenseFile && !allLicenses[key].licenseFile)
+					) {
 						allLicenses[key] = value;
 					}
 				}
@@ -229,7 +248,7 @@ async function gatherNpmLicenses(): Promise<Record<string, NpmLicenseEntry>> {
 }
 
 async function readNpmLicenseTexts(
-	npmLicenses: Record<string, NpmLicenseEntry>
+	npmLicenses: Record<string, NpmLicenseEntry>,
 ): Promise<Record<string, NpmLicenseEntry>> {
 	console.log("📄 Reading npm license text files...");
 
@@ -271,7 +290,7 @@ async function readNpmLicenseTexts(
 
 function combineAllLicenses(
 	rustLicenses: RustLicense[],
-	npmLicenses: Record<string, NpmLicenseEntry>
+	npmLicenses: Record<string, NpmLicenseEntry>,
 ): CombinedLicense[] {
 	const combined: CombinedLicense[] = [];
 
@@ -337,7 +356,11 @@ async function main() {
 	console.log(`   Total: ${rustLicenses.length} Rust crates\n`);
 
 	// Write Rust output
-	await writeFile(RUST_LICENSES_JSON, JSON.stringify(rustLicenses, null, 2), "utf8");
+	await writeFile(
+		RUST_LICENSES_JSON,
+		JSON.stringify(rustLicenses, null, 2),
+		"utf8",
+	);
 	console.log(`   Written to ${relative(ROOT, RUST_LICENSES_JSON)}\n`);
 
 	// Gather npm licenses
@@ -349,7 +372,11 @@ async function main() {
 	const npmWithTexts = await readNpmLicenseTexts(npmLicenses);
 
 	// Write npm output
-	await writeFile(NPM_LICENSES_JSON, JSON.stringify(npmWithTexts, null, 2), "utf8");
+	await writeFile(
+		NPM_LICENSES_JSON,
+		JSON.stringify(npmWithTexts, null, 2),
+		"utf8",
+	);
 	console.log(`   Written to ${relative(ROOT, NPM_LICENSES_JSON)}\n`);
 
 	// Combine all licenses
@@ -364,7 +391,9 @@ async function main() {
 	console.log(`   Total packages: ${combined.length}`);
 	console.log(`   Rust crates: ${rustLicenses.length}`);
 	console.log(`   npm packages: ${npmCount}`);
-	console.log(`   With license text: ${withText} (${Math.round((withText / combined.length) * 100)}%)`);
+	console.log(
+		`   With license text: ${withText} (${Math.round((withText / combined.length) * 100)}%)`,
+	);
 
 	console.log("\n✅ Done!");
 }

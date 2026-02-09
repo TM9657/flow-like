@@ -23,7 +23,10 @@ import { ArrowBigRight, CloudDownload, Loader2, LogIn } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useAuth } from "react-oidc-context";
-import { useInvalidateTauriInvoke, useTauriInvoke } from "../../components/useInvoke";
+import {
+	useInvalidateTauriInvoke,
+	useTauriInvoke,
+} from "../../components/useInvoke";
 import {
 	type OnlineProfile,
 	getDefaultApiBase,
@@ -169,8 +172,7 @@ export default function Onboarding() {
 					return;
 				}
 
-				const serverProfiles =
-					(await response.json()) as OnlineProfile[];
+				const serverProfiles = (await response.json()) as OnlineProfile[];
 				if (cancelled) return;
 
 				if (serverProfiles.length > 0) {
@@ -183,11 +185,7 @@ export default function Onboarding() {
 							});
 							firstProfileId ??= op.id;
 						} catch (error) {
-							console.error(
-								"Failed to create profile:",
-								op.id,
-								error,
-							);
+							console.error("Failed to create profile:", op.id, error);
 						}
 					}
 
@@ -373,9 +371,7 @@ function RestoreProfilesLoading() {
 	return (
 		<div className="w-full max-w-6xl flex flex-col items-center gap-4 py-12">
 			<Loader2 className="h-8 w-8 animate-spin text-primary" />
-			<p className="text-sm text-muted-foreground">
-				Restoring your profiles…
-			</p>
+			<p className="text-sm text-muted-foreground">Restoring your profiles…</p>
 		</div>
 	);
 }

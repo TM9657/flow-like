@@ -1,7 +1,16 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { cn } from "../../../lib/utils";
+import {
+	Map,
+	MapControls,
+	MapMarker,
+	MapPopup,
+	MapRoute,
+	MarkerContent,
+	MarkerLabel,
+} from "../../ui/map";
 import type { ComponentProps } from "../ComponentRegistry";
 import { useData } from "../DataContext";
 import { resolveInlineStyle, resolveStyle } from "../StyleResolver";
@@ -13,15 +22,6 @@ import type {
 	GeoMapRouteDef,
 	GeoMapViewport,
 } from "../types";
-import {
-	Map,
-	MapControls,
-	MapMarker,
-	MapPopup,
-	MapRoute,
-	MarkerContent,
-	MarkerLabel,
-} from "../../ui/map";
 
 function useResolved<T>(boundValue: BoundValue | undefined): T | undefined {
 	const { resolve } = useData();
@@ -49,7 +49,8 @@ const MARKER_COLORS: Record<string, string> = {
 };
 
 function MarkerDot({ color }: { color?: string }) {
-	const colorClass = color && MARKER_COLORS[color] ? MARKER_COLORS[color] : "bg-blue-500";
+	const colorClass =
+		color && MARKER_COLORS[color] ? MARKER_COLORS[color] : "bg-blue-500";
 	return (
 		<div
 			className={cn(
@@ -74,9 +75,11 @@ export function A2UIGeoMap({
 	const showZoom = useResolved<boolean>(component.showZoom) ?? true;
 	const showCompass = useResolved<boolean>(component.showCompass) ?? false;
 	const showLocate = useResolved<boolean>(component.showLocate) ?? false;
-	const showFullscreen = useResolved<boolean>(component.showFullscreen) ?? false;
+	const showFullscreen =
+		useResolved<boolean>(component.showFullscreen) ?? false;
 	const interactive = useResolved<boolean>(component.interactive) ?? true;
-	const controlPosition = useResolved<string>(component.controlPosition) ?? "bottom-right";
+	const controlPosition =
+		useResolved<string>(component.controlPosition) ?? "bottom-right";
 
 	const [activePopupId, setActivePopupId] = useState<string | null>(null);
 
@@ -91,7 +94,12 @@ export function A2UIGeoMap({
 	}, [viewport]);
 
 	const handleViewportChange = useCallback(
-		(vp: { center: [number, number]; zoom: number; bearing: number; pitch: number }) => {
+		(vp: {
+			center: [number, number];
+			zoom: number;
+			bearing: number;
+			pitch: number;
+		}) => {
 			if (!onAction) return;
 			onAction({
 				type: "userAction",
@@ -170,7 +178,10 @@ export function A2UIGeoMap({
 				sourceComponentId: componentId,
 				timestamp: Date.now(),
 				context: {
-					coordinate: { latitude: coords.latitude, longitude: coords.longitude },
+					coordinate: {
+						latitude: coords.latitude,
+						longitude: coords.longitude,
+					},
 				},
 			});
 		},
@@ -179,8 +190,18 @@ export function A2UIGeoMap({
 
 	const validControlPosition = (
 		["top-left", "top-right", "bottom-left", "bottom-right"] as const
-	).includes(controlPosition as "top-left" | "top-right" | "bottom-left" | "bottom-right")
-		? (controlPosition as "top-left" | "top-right" | "bottom-left" | "bottom-right")
+	).includes(
+		controlPosition as
+			| "top-left"
+			| "top-right"
+			| "bottom-left"
+			| "bottom-right",
+	)
+		? (controlPosition as
+				| "top-left"
+				| "top-right"
+				| "bottom-left"
+				| "bottom-right")
 		: "bottom-right";
 
 	// The map needs explicit dimensions to render.

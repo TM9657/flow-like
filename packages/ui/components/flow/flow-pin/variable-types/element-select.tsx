@@ -99,9 +99,7 @@ export function ElementSelect({
 										...el,
 										id: optionId,
 										rawId: el.id,
-										label: pageName
-											? `${pageName} / ${el.label}`
-											: el.label,
+										label: pageName ? `${pageName} / ${el.label}` : el.label,
 										pageName,
 										pagePath,
 									});

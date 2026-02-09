@@ -145,29 +145,27 @@ impl From<RigMessage> for HistoryMessage {
                 let is_single_tool_result =
                     content.len() == 1 && matches!(content.first(), RigUserContent::ToolResult(_));
 
-                if is_single_tool_result {
-                    if let RigUserContent::ToolResult(tr) = content.first() {
-                        let text = tr
-                            .content
-                            .iter()
-                            .filter_map(|c| match c {
-                                rig::message::ToolResultContent::Text(t) => Some(t.text.as_str()),
-                                _ => None,
-                            })
-                            .collect::<Vec<_>>()
-                            .join("\n");
-                        return HistoryMessage {
-                            role: Role::Tool,
-                            content: MessageContent::Contents(vec![Content::Text {
-                                content_type: ContentType::Text,
-                                text,
-                            }]),
-                            name: None,
-                            tool_call_id: Some(tr.id.clone()),
-                            tool_calls: None,
-                            annotations: None,
-                        };
-                    }
+                if is_single_tool_result && let RigUserContent::ToolResult(tr) = content.first() {
+                    let text = tr
+                        .content
+                        .iter()
+                        .filter_map(|c| match c {
+                            rig::message::ToolResultContent::Text(t) => Some(t.text.as_str()),
+                            _ => None,
+                        })
+                        .collect::<Vec<_>>()
+                        .join("\n");
+                    return HistoryMessage {
+                        role: Role::Tool,
+                        content: MessageContent::Contents(vec![Content::Text {
+                            content_type: ContentType::Text,
+                            text,
+                        }]),
+                        name: None,
+                        tool_call_id: Some(tr.id.clone()),
+                        tool_calls: None,
+                        annotations: None,
+                    };
                 }
 
                 let contents: Vec<Content> = content.iter().map(|c| c.clone().into()).collect();

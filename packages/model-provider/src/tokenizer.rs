@@ -140,6 +140,6 @@ pub fn load_tokenizer_from_file(
             }
         }
     }
-    let tokenizer: Tokenizer = tokenizer.into();
+    let tokenizer: Tokenizer = tokenizer;
     Ok(TokenizerSizer::new(tokenizer))
 }

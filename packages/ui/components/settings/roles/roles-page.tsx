@@ -131,8 +131,8 @@ export function RolesPage() {
 						<div className="flex items-center gap-2">
 							<Star className="h-4 w-4 text-primary" />
 							<CardDescription className="text-sm m-0">
-								New members are assigned the{" "}
-								<strong>{defaultRole.name}</strong> role by default.
+								New members are assigned the <strong>{defaultRole.name}</strong>{" "}
+								role by default.
 							</CardDescription>
 						</div>
 					</CardHeader>

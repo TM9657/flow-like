@@ -1,10 +1,7 @@
 "use client";
 import { type Node, useStore } from "@xyflow/react";
 import { memo, useMemo } from "react";
-import {
-	colorFromSub,
-	type PeerUserInfo,
-} from "../../hooks/use-peer-users";
+import { type PeerUserInfo, colorFromSub } from "../../hooks/use-peer-users";
 import { Avatar, AvatarFallback, AvatarImage } from "../ui/avatar";
 
 interface PeerPresence {

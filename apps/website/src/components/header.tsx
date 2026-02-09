@@ -208,7 +208,7 @@ function LanguageSelector({ currentLang }: { currentLang: Lang }) {
 								<a
 									key={code}
 									href={getLocalizedPath(currentLang, code)}
-								className={`flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm transition-all duration-300 ${
+									className={`flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm transition-all duration-300 ${
 										code === currentLang
 											? "bg-primary/10 text-primary font-medium"
 											: "text-foreground/70 hover:bg-muted/50 hover:text-foreground"

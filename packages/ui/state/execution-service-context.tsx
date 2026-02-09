@@ -299,8 +299,7 @@ export function ExecutionServiceProvider({
 					// Prerun failed, try to fall back to local board
 					try {
 						const board = await backend.boardState.getBoard(appId, boardId);
-						const executionMode =
-							board.execution_mode ?? IExecutionMode.Hybrid;
+						const executionMode = board.execution_mode ?? IExecutionMode.Hybrid;
 						if (
 							executionMode === IExecutionMode.Remote &&
 							backend.boardState.executeBoardRemote
@@ -338,8 +337,7 @@ export function ExecutionServiceProvider({
 				// prerunBoard not available - use getBoard
 				try {
 					const board = await backend.boardState.getBoard(appId, boardId);
-					const executionMode =
-						board.execution_mode ?? IExecutionMode.Hybrid;
+					const executionMode = board.execution_mode ?? IExecutionMode.Hybrid;
 					if (
 						executionMode === IExecutionMode.Remote &&
 						backend.boardState.executeBoardRemote
@@ -536,11 +534,9 @@ export function ExecutionServiceProvider({
 							event.board_id,
 							version ?? undefined,
 						);
-						const executionMode =
-							board.execution_mode ?? IExecutionMode.Hybrid;
+						const executionMode = board.execution_mode ?? IExecutionMode.Hybrid;
 						isRemote =
-							backendAlwaysRemote ||
-							executionMode === IExecutionMode.Remote;
+							backendAlwaysRemote || executionMode === IExecutionMode.Remote;
 						varsNeedingValues = getVariablesNeedingPrompt(board, isRemote);
 					} catch {
 						// Event or board not found, execute anyway
@@ -568,11 +564,9 @@ export function ExecutionServiceProvider({
 						event.board_id,
 						version ?? undefined,
 					);
-					const executionMode =
-						board.execution_mode ?? IExecutionMode.Hybrid;
+					const executionMode = board.execution_mode ?? IExecutionMode.Hybrid;
 					isRemote =
-						backendAlwaysRemote ||
-						executionMode === IExecutionMode.Remote;
+						backendAlwaysRemote || executionMode === IExecutionMode.Remote;
 					varsNeedingValues = getVariablesNeedingPrompt(board, isRemote);
 				} catch {
 					// Event or board not found, execute anyway

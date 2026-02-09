@@ -40,9 +40,9 @@ import type {
 import type { IStorageState } from "./backend-state/storage-state";
 import type { ITeamState } from "./backend-state/team-state";
 import type { ITemplateState } from "./backend-state/template-state";
+import type { IUsageState } from "./backend-state/usage-state";
 import type { IUserState } from "./backend-state/user-state";
 import type { IWidgetState } from "./backend-state/widget-state";
-import type { IUsageState } from "./backend-state/usage-state";
 
 export * from "./backend-state/api-key-state";
 export * from "./backend-state/api-key-state";

@@ -64,7 +64,10 @@ interface UsePeerUsersOptions {
  * Hook to manage peer user information with caching.
  * Fetches user info only once per sub and provides cached results.
  */
-export function usePeerUsers({ lookupUser, maxNameLength = 12 }: UsePeerUsersOptions) {
+export function usePeerUsers({
+	lookupUser,
+	maxNameLength = 12,
+}: UsePeerUsersOptions) {
 	const [users, setUsers] = useState<Map<string, PeerUserInfo>>(new Map());
 	const pendingFetches = useRef<Set<string>>(new Set());
 	const cache = useRef<Map<string, IUserLookup>>(new Map());
@@ -79,7 +82,10 @@ export function usePeerUsers({ lookupUser, maxNameLength = 12 }: UsePeerUsersOpt
 					sub,
 					color: colorFromSub(sub),
 					name: cached.name ?? cached.username ?? "User",
-					truncatedName: truncateName(cached.name ?? cached.username, maxNameLength),
+					truncatedName: truncateName(
+						cached.name ?? cached.username,
+						maxNameLength,
+					),
 					avatarUrl: cached.avatar_url,
 					loading: false,
 				};
@@ -109,7 +115,10 @@ export function usePeerUsers({ lookupUser, maxNameLength = 12 }: UsePeerUsersOpt
 					sub,
 					color: colorFromSub(sub),
 					name: user.name ?? user.username ?? "User",
-					truncatedName: truncateName(user.name ?? user.username, maxNameLength),
+					truncatedName: truncateName(
+						user.name ?? user.username,
+						maxNameLength,
+					),
 					avatarUrl: user.avatar_url,
 					loading: false,
 				};
@@ -179,7 +188,8 @@ export function usePeerUsers({ lookupUser, maxNameLength = 12 }: UsePeerUsersOpt
 		getCachedUser,
 		prefetchUsers,
 		colorFromSub,
-		truncateName: (name: string | undefined) => truncateName(name, maxNameLength),
+		truncateName: (name: string | undefined) =>
+			truncateName(name, maxNameLength),
 	};
 }
 

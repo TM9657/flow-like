@@ -357,9 +357,10 @@ where
                         };
                         if let (Some(in_t), Some(out_t)) = (in_tok, out_tok) {
                             let price = cost_micro.unwrap_or(0);
-                            if let Err(e) =
-                                track_llm_usage(&state_c, &user_c, &model_c, in_t, out_t, price, latency_ms)
-                                    .await
+                            if let Err(e) = track_llm_usage(
+                                &state_c, &user_c, &model_c, in_t, out_t, price, latency_ms,
+                            )
+                            .await
                             {
                                 tracing::warn!(error=%e, "Failed to track streaming LLM usage");
                             }
@@ -433,12 +434,19 @@ async fn handle_non_streaming(
     let latency_ms = start.elapsed().as_secs_f64() * 1000.0;
     if status.is_success() {
         tracing::info!(model = %upstream_model_id, bytes = body_bytes.len(), latency_ms = latency_ms, "LLM invoke success (non-stream)");
-        if let Some((in_tok, out_tok)) = extract_usage_from_body(&body_bytes) {
-            if let Err(e) =
-                track_llm_usage(state, user_sub, upstream_model_id, in_tok, out_tok, 0, latency_ms).await
-            {
-                tracing::warn!(error=%e, "Failed to track LLM usage");
-            }
+        if let Some((in_tok, out_tok)) = extract_usage_from_body(&body_bytes)
+            && let Err(e) = track_llm_usage(
+                state,
+                user_sub,
+                upstream_model_id,
+                in_tok,
+                out_tok,
+                0,
+                latency_ms,
+            )
+            .await
+        {
+            tracing::warn!(error=%e, "Failed to track LLM usage");
         }
     } else {
         tracing::warn!(status = %status, body = %String::from_utf8_lossy(&body_bytes), "LLM invoke upstream error");

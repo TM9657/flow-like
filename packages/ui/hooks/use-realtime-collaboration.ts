@@ -67,8 +67,6 @@ export function useRealtimeCollaboration({
 		[JSON.stringify(hub.hub?.signaling)],
 	);
 
-
-
 	// Track whether the session has been initialized for this board
 	const sessionInitializedRef = useRef<string | null>(null);
 
@@ -288,11 +286,7 @@ export function useRealtimeCollaboration({
 				for (let i = 0; i < participants.length; i++) {
 					const p = participants[i];
 					const prevP = prev[i];
-					if (
-						!prevP ||
-						p.clientId !== prevP.clientId ||
-						p.sub !== prevP.sub
-					) {
+					if (!prevP || p.clientId !== prevP.clientId || p.sub !== prevP.sub) {
 						hasChanges = true;
 						break;
 					}

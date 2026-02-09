@@ -210,21 +210,13 @@ function findMatchingPin(
 				pin.data_type !== IVariableType.Generic
 			)
 				return false;
-			const sourceEnforces =
-				options?.enforce_generic_value_type ?? false;
-			const targetEnforces =
-				pin.options?.enforce_generic_value_type ?? false;
+			const sourceEnforces = options?.enforce_generic_value_type ?? false;
+			const targetEnforces = pin.options?.enforce_generic_value_type ?? false;
 			if (sourceEnforces || targetEnforces) {
 				if (sourceEnforces && targetEnforces) return false;
-				if (
-					sourceEnforces &&
-					pin.data_type !== IVariableType.Generic
-				)
+				if (sourceEnforces && pin.data_type !== IVariableType.Generic)
 					return false;
-				if (
-					targetEnforces &&
-					pinDataType !== IVariableType.Generic
-				)
+				if (targetEnforces && pinDataType !== IVariableType.Generic)
 					return false;
 			}
 		}
@@ -435,21 +427,13 @@ async function connectLayerToDroppedPin(
 				pin.data_type !== IVariableType.Generic
 			)
 				return false;
-			const sourceEnforces =
-				options?.enforce_generic_value_type ?? false;
-			const targetEnforces =
-				pin.options?.enforce_generic_value_type ?? false;
+			const sourceEnforces = options?.enforce_generic_value_type ?? false;
+			const targetEnforces = pin.options?.enforce_generic_value_type ?? false;
 			if (sourceEnforces || targetEnforces) {
 				if (sourceEnforces && targetEnforces) return false;
-				if (
-					sourceEnforces &&
-					pin.data_type !== IVariableType.Generic
-				)
+				if (sourceEnforces && pin.data_type !== IVariableType.Generic)
 					return false;
-				if (
-					targetEnforces &&
-					pinDataType !== IVariableType.Generic
-				)
+				if (targetEnforces && pinDataType !== IVariableType.Generic)
 					return false;
 			}
 		}

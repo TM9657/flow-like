@@ -96,10 +96,10 @@ async fn get_cached_bit(
         let cache = BIT_CACHE
             .read()
             .map_err(|_| ApiError::internal("Failed to acquire bit cache read lock"))?;
-        if let Some(cached) = cache.get(bit_id) {
-            if cached.cached_at.elapsed() < BIT_CACHE_TTL {
-                return Ok((cached.provider.clone(), cached.remote_config.clone()));
-            }
+        if let Some(cached) = cache.get(bit_id)
+            && cached.cached_at.elapsed() < BIT_CACHE_TTL
+        {
+            return Ok((cached.provider.clone(), cached.remote_config.clone()));
         }
     }
 

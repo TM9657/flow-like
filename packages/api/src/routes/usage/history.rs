@@ -4,7 +4,10 @@ use crate::{
     middleware::jwt::AppUser,
     state::AppState,
 };
-use axum::{Extension, Json, extract::{Query, State}};
+use axum::{
+    Extension, Json,
+    extract::{Query, State},
+};
 use sea_orm::{ColumnTrait, EntityTrait, PaginatorTrait, QueryFilter, QueryOrder};
 use serde::{Deserialize, Serialize};
 use utoipa::{IntoParams, ToSchema};
@@ -18,8 +21,12 @@ pub struct PaginationParams {
     pub app_id: Option<String>,
 }
 
-fn default_page() -> u64 { 0 }
-fn default_page_size() -> u64 { 50 }
+fn default_page() -> u64 {
+    0
+}
+fn default_page_size() -> u64 {
+    50
+}
 
 #[derive(Clone, Debug, Serialize, ToSchema)]
 pub struct PaginatedResponse<T: Serialize> {
@@ -61,8 +68,8 @@ pub async fn get_llm_history(
     let sub = user.sub()?;
     let page_size = params.page_size.min(100);
 
-    let mut query = llm_usage_tracking::Entity::find()
-        .filter(llm_usage_tracking::Column::UserId.eq(&sub));
+    let mut query =
+        llm_usage_tracking::Entity::find().filter(llm_usage_tracking::Column::UserId.eq(&sub));
 
     if let Some(ref app_id) = params.app_id {
         query = query.filter(llm_usage_tracking::Column::AppId.eq(app_id));

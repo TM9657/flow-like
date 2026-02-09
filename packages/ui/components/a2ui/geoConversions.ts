@@ -94,7 +94,9 @@ export function routeStepsToMarkerDefs(
 	);
 }
 
-export function searchResultToViewport(result: GeoSearchResult): GeoMapViewport {
+export function searchResultToViewport(
+	result: GeoSearchResult,
+): GeoMapViewport {
 	return {
 		center: result.coordinate,
 		zoom: result.bounding_box ? 14 : 12,

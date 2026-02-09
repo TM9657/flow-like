@@ -212,7 +212,7 @@ impl NodeLogic for OsrmTripNode {
         let profile_str = profile.as_str();
         let base_url = base_url.trim_end_matches('/');
 
-        let mut query_parts = vec![
+        let query_parts = [
             "overview=full".to_string(),
             "geometries=geojson".to_string(),
             "steps=true".to_string(),

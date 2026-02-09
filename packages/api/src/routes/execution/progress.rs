@@ -201,8 +201,14 @@ pub async fn report_progress(
         let run_id = claims.run_id.clone();
         tokio::spawn(async move {
             if let Err(e) = track_execution_usage(
-                &db, &board_id, &event_id, &run_id, duration_us, exec_status,
-                &user_id, &app_id,
+                &db,
+                &board_id,
+                &event_id,
+                &run_id,
+                duration_us,
+                exec_status,
+                &user_id,
+                &app_id,
             )
             .await
             {

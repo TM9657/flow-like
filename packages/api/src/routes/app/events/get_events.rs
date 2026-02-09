@@ -51,7 +51,7 @@ pub async fn get_events(
         events = events
             .into_iter()
             .filter(|e| e.active)
-            .filter(|e| is_user_facing_event(&e))
+            .filter(|e| is_user_facing_event(e))
             .map(filter_event_list_execution)
             .collect();
     }

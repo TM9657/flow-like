@@ -1,7 +1,6 @@
 import {
 	BarChart3,
 	BookOpen,
-	Calendar,
 	Code2,
 	Crown,
 	Database,
@@ -273,9 +272,10 @@ export function countGroupPermissions(
 	return { active, total };
 }
 
-export function countTotalPermissions(
-	current: RolePermissions,
-): { active: number; total: number } {
+export function countTotalPermissions(current: RolePermissions): {
+	active: number;
+	total: number;
+} {
 	const total = ALL_PERMISSIONS.length;
 	const active = ALL_PERMISSIONS.filter((p) => current.contains(p)).length;
 	return { active, total };

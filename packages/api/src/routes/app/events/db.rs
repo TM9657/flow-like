@@ -9,7 +9,6 @@
 use std::collections::HashMap;
 
 use crate::entity::event;
-use blake3::Hash;
 use flow_like::app::App;
 use flow_like::flow::event::{CanaryEvent, Event as CoreEvent, EventInput, ReleaseNotes};
 use flow_like_types::anyhow;

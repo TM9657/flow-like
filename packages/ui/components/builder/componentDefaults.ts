@@ -429,7 +429,12 @@ export const COMPONENT_DEFAULT_PROPS: Record<
 		playerRotation: num(0),
 	},
 	geoMap: {
-		viewport: { literalJson: JSON.stringify({ center: { latitude: 48.137, longitude: 11.576 }, zoom: 10 }) },
+		viewport: {
+			literalJson: JSON.stringify({
+				center: { latitude: 48.137, longitude: 11.576 },
+				zoom: 10,
+			}),
+		},
 		showControls: bool(true),
 		showZoom: bool(true),
 		showCompass: bool(false),
