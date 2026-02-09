@@ -121,6 +121,12 @@ pub struct Node {
     pub oauth_providers: Option<Vec<String>>,
     /// OAuth scopes required by this node (provider_id -> scopes)
     pub required_oauth_scopes: Option<HashMap<String, Vec<String>>>,
+    /// If true, this node can only run locally (compute-intensive, RPA, browser automation)
+    #[serde(default)]
+    pub only_offline: bool,
+    /// Schema version for node migration. When catalog version > placed version, pins are synced.
+    /// None means unversioned (legacy). Bump this when changing pins in get_node().
+    pub version: Option<u32>,
 }
 
 impl Node {
@@ -146,11 +152,17 @@ impl Node {
             fn_refs: None,
             oauth_providers: None,
             required_oauth_scopes: None,
+            only_offline: false,
+            version: None,
         }
     }
 
     pub fn add_comment(&mut self, comment: &str) {
         self.comment = Some(comment.to_string());
+    }
+
+    pub fn set_version(&mut self, version: u32) {
+        self.version = Some(version);
     }
 
     pub fn add_icon(&mut self, icon: &str) {
@@ -233,6 +245,11 @@ impl Node {
             .and_then(|scopes| scopes.get(provider_id))
             .cloned()
             .unwrap_or_default()
+    }
+
+    /// Set whether this node can only run locally (offline)
+    pub fn set_only_offline(&mut self, only_offline: bool) {
+        self.only_offline = only_offline;
     }
 
     pub fn add_input_pin(
@@ -378,6 +395,23 @@ impl Node {
         }
 
         Some(variable_type)
+    }
+
+    pub fn harmonize_value_type(&mut self, pins: Vec<&str>) -> Option<ValueType> {
+        let value_type = match self.pins.iter().find(|(_, pin)| {
+            pins.contains(&pin.name.as_str()) && pin.value_type != ValueType::Normal
+        }) {
+            Some((_, pin)) => pin.value_type.clone(),
+            None => return None,
+        };
+
+        for pin in self.pins.values_mut() {
+            if pins.contains(&pin.name.as_str()) {
+                pin.value_type = value_type.clone();
+            }
+        }
+
+        Some(value_type)
     }
 
     pub fn match_type(

@@ -1,4 +1,10 @@
-import type { IBoard, IHub, INode, IOAuthProviderConfig } from "../schema";
+import type {
+	IBoard,
+	IExecutionMode,
+	IHub,
+	INode,
+	IOAuthProviderConfig,
+} from "../schema";
 import type {
 	IOAuthProvider,
 	IOAuthToken,
@@ -70,6 +76,114 @@ export function buildOAuthProviderFromHub(
 }
 
 /**
+ * Extract raw OAuth requirements from a board (provider_id + scopes).
+ * Useful for offline apps or when you only need the requirements without hub resolution.
+ * Also returns requires_local_execution flag if any node has only_offline set,
+ * execution_mode from the board settings, and can_execute_locally (always true since we have the board).
+ */
+export function extractOAuthRequirementsFromBoard(board: IBoard): {
+	oauth_requirements: Array<{ provider_id: string; scopes: string[] }>;
+	requires_local_execution: boolean;
+	execution_mode: IExecutionMode;
+	can_execute_locally: boolean;
+} {
+	const scopesMap = new Map<string, Set<string>>();
+	let requiresLocalExecution = false;
+
+	const processNode = (node: INode) => {
+		if ((node as any).only_offline) {
+			requiresLocalExecution = true;
+		}
+
+		const providerIds = (node as any).oauth_providers as string[] | undefined;
+		if (providerIds && providerIds.length > 0) {
+			for (const providerId of providerIds) {
+				if (!scopesMap.has(providerId)) {
+					scopesMap.set(providerId, new Set());
+				}
+			}
+		}
+
+		// Only add scopes for providers that are already registered via oauth_providers
+		// required_oauth_scopes is informational - it documents what scopes a node needs
+		// IF OAuth is used, but shouldn't trigger OAuth by itself
+		const requiredScopes = (node as any).required_oauth_scopes as
+			| Record<string, string[] | { values?: string[] }>
+			| undefined;
+		if (requiredScopes) {
+			for (const [providerId, scopes] of Object.entries(requiredScopes)) {
+				// Only add scopes if this provider was already registered by an OAuth provider node
+				if (!scopesMap.has(providerId)) {
+					continue;
+				}
+				const scopeSet = scopesMap.get(providerId)!;
+				const scopeArray = Array.isArray(scopes)
+					? scopes
+					: (scopes?.values ?? []);
+				for (const scope of scopeArray) {
+					scopeSet.add(scope);
+				}
+			}
+		}
+	};
+
+	for (const node of Object.values(board.nodes)) {
+		processNode(node);
+	}
+	for (const layer of Object.values(board.layers)) {
+		for (const node of Object.values(layer.nodes)) {
+			processNode(node);
+		}
+	}
+
+	const oauth_requirements = Array.from(scopesMap.entries()).map(
+		([provider_id, scopes]) => ({
+			provider_id,
+			scopes: Array.from(scopes),
+		}),
+	);
+
+	return {
+		oauth_requirements,
+		requires_local_execution: requiresLocalExecution,
+		execution_mode: board.execution_mode,
+		can_execute_locally: true, // We have the board, so we can execute locally
+	};
+}
+
+/**
+ * Build OAuth providers from prerun requirements (provider_id + scopes).
+ * Uses Hub config to get full provider details.
+ * This is more efficient than extractOAuthProvidersFromBoard as it doesn't require the full board.
+ */
+export function buildOAuthProvidersFromPrerun(
+	requirements: Array<{ provider_id: string; scopes: string[] }>,
+	hub?: IHub,
+): IOAuthProvider[] {
+	const hubOAuthProviders = hub?.oauth_providers ?? {};
+	const providers: IOAuthProvider[] = [];
+
+	for (const req of requirements) {
+		const hubConfig = hubOAuthProviders[req.provider_id];
+		if (!hubConfig) {
+			console.warn(
+				`[OAuth] Provider ${req.provider_id} referenced but not configured in Hub`,
+			);
+			continue;
+		}
+
+		const provider = buildOAuthProviderFromHub(
+			req.provider_id,
+			req.scopes,
+			hubConfig,
+		);
+		providers.push(provider);
+	}
+
+	return providers;
+}
+
+/**
  * Extract OAuth providers from board nodes (including layers).
  * Nodes only contain provider_id and scopes - full config comes from Hub.
  * Deduplicates providers by ID and merges required scopes from all nodes.
@@ -92,14 +206,17 @@ export function extractOAuthProvidersFromBoard(
 			}
 		}
 
-		// All scopes come from required_oauth_scopes
+		// Only add scopes for providers that are already registered via oauth_providers
+		// required_oauth_scopes is informational - it documents what scopes a node needs
+		// IF OAuth is used, but shouldn't trigger OAuth by itself
 		const requiredScopes = (node as any).required_oauth_scopes as
 			| Record<string, string[] | { values?: string[] }>
 			| undefined;
 		if (requiredScopes) {
 			for (const [providerId, scopes] of Object.entries(requiredScopes)) {
+				// Only add scopes if this provider was already registered by an OAuth provider node
 				if (!scopesMap.has(providerId)) {
-					scopesMap.set(providerId, new Set());
+					continue;
 				}
 				const scopeSet = scopesMap.get(providerId)!;
 				// Handle both array format and protobuf { values: [] } format
@@ -258,6 +375,34 @@ export async function checkOAuthTokens(
 	options?: GetOAuthTokensOptions,
 ): Promise<IOAuthTokenCheckResult & { requiredProviders: IOAuthProvider[] }> {
 	const requiredProviders = extractOAuthProvidersFromBoard(board, hub);
+
+	if (requiredProviders.length === 0) {
+		return { tokens: {}, missingProviders: [], requiredProviders: [] };
+	}
+
+	const result = await getOAuthTokensForProviders(
+		requiredProviders,
+		tokenStore,
+		options,
+	);
+	return { ...result, requiredProviders };
+}
+
+/**
+ * Check OAuth tokens using prerun requirements instead of full board.
+ * This only requires execute permission, not read board permission.
+ * @param requirements OAuth requirements from prerun endpoint
+ * @param tokenStore The token store to check for existing tokens
+ * @param hub The hub configuration containing OAuth provider configs
+ * @param options Optional configuration including refresh callback
+ */
+export async function checkOAuthTokensFromPrerun(
+	requirements: Array<{ provider_id: string; scopes: string[] }>,
+	tokenStore: IOAuthTokenStore,
+	hub?: IHub,
+	options?: GetOAuthTokensOptions,
+): Promise<IOAuthTokenCheckResult & { requiredProviders: IOAuthProvider[] }> {
+	const requiredProviders = buildOAuthProvidersFromPrerun(requirements, hub);
 
 	if (requiredProviders.length === 0) {
 		return { tokens: {}, missingProviders: [], requiredProviders: [] };

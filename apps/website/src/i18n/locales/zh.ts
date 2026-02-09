@@ -274,6 +274,20 @@ export const zh = {
 	"reading.viewall": "所有文章",
 	"reading.viewall.mobile": "查看全部",
 
+	// Newsletter
+	"newsletter.tagline": "保持更新",
+	"newsletter.headline": "获取自动化洞察",
+	"newsletter.description":
+		"订阅我们的新闻通讯，获取 Flow-Like 的最新更新、自动化最佳实践和行业洞察。无垃圾邮件 — 只有有价值的内容。",
+	"newsletter.email.label": "电子邮件地址",
+	"newsletter.email.placeholder": "输入你的邮箱",
+	"newsletter.button": "订阅",
+	"newsletter.optin": "我同意接收邮件更新并接受隐私政策",
+	"newsletter.privacy":
+		"我们使用 Brevo 作为营销平台。提交此表单即表示你同意按照 Brevo 的隐私政策处理你的数据。",
+	"newsletter.success": "感谢订阅！请检查你的收件箱进行确认。",
+	"newsletter.error": "出了点问题。请稍后重试。",
+
 	// Footer & Navigation
 	"nav.download": "下载",
 	"nav.docs": "文档",

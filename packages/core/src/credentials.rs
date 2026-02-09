@@ -30,6 +30,7 @@ pub trait SharedCredentialsTrait {
     async fn to_store(&self, meta: bool) -> Result<FlowLikeStore>;
     async fn to_store_type(&self, store_type: StoreType) -> Result<FlowLikeStore>;
     async fn to_db(&self, app_id: &str) -> Result<ConnectBuilder>;
+    async fn to_db_scoped(&self, app_id: &str) -> Result<ConnectBuilder>;
     fn to_logs_db_builder(&self) -> Result<LogsDbBuilder>;
 }
 
@@ -65,6 +66,14 @@ impl SharedCredentials {
         }
     }
 
+    pub async fn to_db_scoped(&self, app_id: &str) -> Result<ConnectBuilder> {
+        match self {
+            SharedCredentials::Aws(aws) => aws.to_db_scoped(app_id).await,
+            SharedCredentials::Azure(azure) => azure.to_db_scoped(app_id).await,
+            SharedCredentials::Gcp(gcp) => gcp.to_db_scoped(app_id).await,
+        }
+    }
+
     pub fn to_logs_db_builder(&self) -> Result<LogsDbBuilder> {
         match self {
             SharedCredentials::Aws(aws) => aws.to_logs_db_builder(),
@@ -92,6 +101,8 @@ mod tests {
             logs_config: None,
             region: "us-west-2".to_string(),
             expiration: None,
+            content_path_prefix: None,
+            user_content_path_prefix: None,
         }
     }
 
@@ -99,6 +110,7 @@ mod tests {
         AzureSharedCredentials {
             meta_sas_token: Some("?sv=2022-11-02&ss=b&sig=meta".to_string()),
             content_sas_token: Some("?sv=2022-11-02&ss=b&sig=content".to_string()),
+            user_content_sas_token: None,
             logs_sas_token: Some("?sv=2022-11-02&ss=b&sig=logs".to_string()),
             meta_container: "azure-meta".to_string(),
             content_container: "azure-content".to_string(),
@@ -106,6 +118,8 @@ mod tests {
             account_name: "mystorageaccount".to_string(),
             account_key: None,
             expiration: None,
+            content_path_prefix: None,
+            user_content_path_prefix: None,
         }
     }
 
@@ -119,6 +133,8 @@ mod tests {
             allowed_prefixes: Vec::new(),
             write_access: true,
             expiration: None,
+            content_path_prefix: None,
+            user_content_path_prefix: None,
         }
     }
 

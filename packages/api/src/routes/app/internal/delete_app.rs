@@ -10,6 +10,20 @@ use flow_like_types::anyhow;
 use futures_util::{StreamExt, TryStreamExt};
 use sea_orm::{ModelTrait, TransactionTrait};
 
+#[utoipa::path(
+    delete,
+    path = "/apps/{app_id}",
+    tag = "apps",
+    params(
+        ("app_id" = String, Path, description = "Application ID")
+    ),
+    responses(
+        (status = 200, description = "Application deleted"),
+        (status = 401, description = "Unauthorized"),
+        (status = 403, description = "Forbidden"),
+        (status = 404, description = "Application not found")
+    )
+)]
 #[tracing::instrument(name = "DELETE /apps/{app_id}", skip(state, user))]
 pub async fn delete_app(
     State(state): State<AppState>,
@@ -25,7 +39,7 @@ pub async fn delete_app(
         .find_related(app::Entity)
         .one(&txn)
         .await?
-        .ok_or(ApiError::NotFound)?;
+        .ok_or(ApiError::NOT_FOUND)?;
 
     app.delete(&txn).await?;
 
@@ -46,7 +60,7 @@ pub async fn delete_app(
         .delete_stream(locations)
         .try_collect::<Vec<flow_like_storage::Path>>()
         .await
-        .map_err(|e| ApiError::InternalError(anyhow!("Failed to delete metadata: {}", e).into()))?;
+        .map_err(|e| ApiError::internal_error(anyhow!("Failed to delete metadata: {}", e)))?;
 
     let locations = project_bucket
         .list(Some(&path))
@@ -56,7 +70,7 @@ pub async fn delete_app(
         .delete_stream(locations)
         .try_collect::<Vec<flow_like_storage::Path>>()
         .await
-        .map_err(|e| ApiError::InternalError(anyhow!("Failed to delete metadata: {}", e).into()))?;
+        .map_err(|e| ApiError::internal_error(anyhow!("Failed to delete metadata: {}", e)))?;
 
     txn.commit().await?;
     Ok(Json(()))

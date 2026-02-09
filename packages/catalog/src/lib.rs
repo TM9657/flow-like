@@ -65,6 +65,7 @@ pub use flow_like_catalog_onnx::{onnx, teachable_machine};
 pub use flow_like_catalog_llm::generative;
 
 // Re-export processing modules
+pub use flow_like_catalog_geo::geo;
 pub use flow_like_catalog_processing::processing;
 
 /// Available catalog packages that can be included/excluded
@@ -79,6 +80,7 @@ pub enum CatalogPackage {
     Onnx,
     Llm,
     Processing,
+    Geo,
 }
 
 impl CatalogPackage {
@@ -93,6 +95,7 @@ impl CatalogPackage {
             CatalogPackage::Onnx,
             CatalogPackage::Llm,
             CatalogPackage::Processing,
+            CatalogPackage::Geo,
         ]
     }
 
@@ -107,6 +110,7 @@ impl CatalogPackage {
             CatalogPackage::Onnx => flow_like_catalog_onnx::get_catalog(),
             CatalogPackage::Llm => flow_like_catalog_llm::get_catalog(),
             CatalogPackage::Processing => flow_like_catalog_processing::get_catalog(),
+            CatalogPackage::Geo => flow_like_catalog_geo::get_catalog(),
         }
     }
 }
@@ -125,6 +129,7 @@ impl std::str::FromStr for CatalogPackage {
             "onnx" => Ok(CatalogPackage::Onnx),
             "llm" | "genai" | "generative" => Ok(CatalogPackage::Llm),
             "processing" => Ok(CatalogPackage::Processing),
+            "geo" | "geolocation" => Ok(CatalogPackage::Geo),
             _ => Err(format!("Unknown catalog package: {}", s)),
         }
     }
@@ -282,4 +287,57 @@ pub fn get_catalog_from(packages: &[CatalogPackage]) -> Vec<Arc<dyn NodeLogic>> 
 /// Get catalog excluding specific packages (not cached - use sparingly)
 pub fn get_catalog_without(packages: &[CatalogPackage]) -> Vec<Arc<dyn NodeLogic>> {
     CatalogBuilder::new().exclude_packages(packages).build()
+}
+
+/// Initialize the catalog runtime systems.
+///
+/// This should be called once at application startup, before any flow execution.
+/// It initializes:
+/// - ONNX Runtime with the best available execution providers (GPU/NPU acceleration)
+///
+/// # Returns
+///
+/// Information about the initialized execution providers.
+///
+/// # Example
+///
+/// ```rust,ignore
+/// use flow_like_catalog::initialize;
+///
+/// fn main() {
+///     let info = initialize();
+///     println!("Active providers: {:?}", info.onnx_providers);
+///     println!("GPU acceleration: {}", info.onnx_accelerated);
+/// }
+/// ```
+#[cfg(feature = "execute")]
+pub fn initialize() -> InitInfo {
+    let onnx_info = flow_like_catalog_onnx::onnx::initialize_ort();
+    tracing::info!(
+        providers = ?onnx_info.active_providers,
+        accelerated = onnx_info.accelerated,
+        "ONNX Runtime initialized"
+    );
+    InitInfo {
+        onnx_providers: onnx_info.active_providers,
+        onnx_accelerated: onnx_info.accelerated,
+        onnx_warnings: onnx_info.warnings,
+    }
+}
+
+/// Information about initialized runtime systems
+#[cfg(feature = "execute")]
+#[derive(Debug, Clone, Default)]
+pub struct InitInfo {
+    /// Active ONNX execution providers
+    pub onnx_providers: Vec<String>,
+    /// Whether ONNX has GPU/NPU acceleration
+    pub onnx_accelerated: bool,
+    /// Any warnings during ONNX initialization
+    pub onnx_warnings: Vec<String>,
+}
+
+#[cfg(not(feature = "execute"))]
+pub fn initialize() -> () {
+    // No-op when execute feature is not enabled
 }

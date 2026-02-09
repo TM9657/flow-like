@@ -11,8 +11,11 @@ use flow_like::{
 };
 use flow_like_types::json::{self, Deserialize, Serialize};
 use flow_like_types::{Value, anyhow};
+#[cfg(feature = "execute")]
 use rig::completion::{Completion, ToolDefinition};
+#[cfg(feature = "execute")]
 use rig::message::{AssistantContent, ToolCall, ToolChoice, ToolFunction};
+#[cfg(feature = "execute")]
 use rig::tool::Tool;
 use std::{fmt, sync::Arc};
 
@@ -27,23 +30,28 @@ impl LLMExtractNode {
 }
 
 // --- Dynamic knowledge extraction submit tool that takes a runtime JSON Schema ---
+#[cfg(feature = "execute")]
 #[derive(Debug, Deserialize, Serialize)]
 struct DynamicSubmitTool {
     parameters: Value,
     output_schema: Value,
 }
 
+#[cfg(feature = "execute")]
 #[derive(Debug)]
 struct SubmitError(String);
 
+#[cfg(feature = "execute")]
 impl fmt::Display for SubmitError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "Schema validation failed: {}", self.0)
     }
 }
 
+#[cfg(feature = "execute")]
 impl std::error::Error for SubmitError {}
 
+#[cfg(feature = "execute")]
 impl Tool for DynamicSubmitTool {
     const NAME: &'static str = "submit";
     type Error = SubmitError;
@@ -69,12 +77,14 @@ impl Tool for DynamicSubmitTool {
     }
 }
 
+#[cfg(feature = "execute")]
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 enum ExtractionMode {
     Direct,
     Wrapped,
 }
 
+#[cfg(feature = "execute")]
 struct PreparedSchema {
     tool_parameters: Value,
     output_schema: Value,
@@ -82,6 +92,7 @@ struct PreparedSchema {
     was_inferred: bool,
 }
 
+#[cfg(feature = "execute")]
 fn looks_like_schema(value: &Value) -> bool {
     const SCHEMA_KEYWORDS: &[&str] = &[
         "type",
@@ -113,6 +124,7 @@ fn looks_like_schema(value: &Value) -> bool {
         .is_some_and(|obj| SCHEMA_KEYWORDS.iter().any(|kw| obj.contains_key(*kw)))
 }
 
+#[cfg(feature = "execute")]
 fn prepare_schema(raw: &str) -> flow_like_types::Result<PreparedSchema> {
     let trimmed = raw.trim();
     if trimmed.is_empty() {
@@ -236,6 +248,7 @@ impl NodeLogic for LLMExtractNode {
         node
     }
 
+    #[cfg(feature = "execute")]
     async fn run(&self, context: &mut ExecutionContext) -> flow_like_types::Result<()> {
         context.deactivate_exec_pin("exec_out").await?;
 
@@ -318,6 +331,14 @@ impl NodeLogic for LLMExtractNode {
         Ok(())
     }
 
+    #[cfg(not(feature = "execute"))]
+    async fn run(&self, _context: &mut ExecutionContext) -> flow_like_types::Result<()> {
+        Err(flow_like_types::anyhow!(
+            "LLM processing requires the 'execute' feature"
+        ))
+    }
+
+    #[cfg(feature = "execute")]
     async fn on_update(&self, node: &mut Node, _board: Arc<Board>) {
         node.error = None;
 
@@ -374,5 +395,11 @@ impl NodeLogic for LLMExtractNode {
                 node.error = Some("Schema input cannot be empty".to_string());
             }
         }
+    }
+
+    #[cfg(not(feature = "execute"))]
+    async fn on_update(&self, node: &mut Node, _board: Arc<Board>) {
+        node.error = None;
+        node.harmonize_type(vec!["response"], true);
     }
 }

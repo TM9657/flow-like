@@ -13,18 +13,30 @@
 #[global_allocator]
 static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
 
+use flow_like_catalog::initialize as initialize_catalog;
 use flow_like_executor::{ExecutorState, executor_router};
 use flow_like_types::tokio;
 use lambda_http::{Error, run_with_streaming_response, tracing};
-use tracing_subscriber::prelude::*;
+use tracing_subscriber::{EnvFilter, prelude::*};
 
 #[flow_like_types::tokio::main]
 async fn main() -> Result<(), Error> {
     // Initialize Sentry if configured
     let sentry_endpoint = std::env::var("SENTRY_ENDPOINT").unwrap_or_default();
+    let env_filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| {
+        EnvFilter::new("warn")
+            .add_directive("hyper=warn".parse().unwrap())
+            .add_directive("hyper_util=warn".parse().unwrap())
+            .add_directive("rustls=warn".parse().unwrap())
+            .add_directive("tokio=warn".parse().unwrap())
+            .add_directive("h2=warn".parse().unwrap())
+            .add_directive("tower=warn".parse().unwrap())
+    });
 
     let _sentry_guard = if sentry_endpoint.is_empty() {
-        tracing::init_default_subscriber();
+        tracing_subscriber::registry()
+            .with(tracing_subscriber::fmt::layer().with_filter(env_filter))
+            .init();
         None
     } else {
         let guard = sentry::init((
@@ -36,13 +48,16 @@ async fn main() -> Result<(), Error> {
             },
         ));
         tracing_subscriber::registry()
-            .with(tracing_subscriber::fmt::layer())
+            .with(tracing_subscriber::fmt::layer().with_filter(env_filter))
             .with(sentry_tracing::layer())
             .init();
         Some(guard)
     };
 
     tracing::info!("Starting Flow-Like AWS Executor Lambda");
+
+    // Initialize catalog runtime (ONNX execution providers, etc.)
+    initialize_catalog();
 
     // Create executor state from environment
     let state = ExecutorState::from_env();

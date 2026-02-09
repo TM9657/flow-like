@@ -1,0 +1,1035 @@
+"use client";
+
+import { Loader2, Settings } from "lucide-react";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+import {
+	useCallback,
+	useEffect,
+	useId,
+	useMemo,
+	useRef,
+	useState,
+} from "react";
+import { createSanitizedStyleProps, safeScopedCss } from "../../lib/css-utils";
+import {
+	presignCanvasSettings,
+	presignPageAssets,
+} from "../../lib/presign-assets";
+import type { IEvent } from "../../lib/schema/flow/event";
+import { useBackend } from "../../state/backend-state";
+import type { IPage } from "../../state/backend-state/page-state";
+import type { IRouteMapping } from "../../state/backend-state/route-state";
+import { useExecutionServiceOptional } from "../../state/execution-service-context";
+import {
+	A2UIRenderer,
+	DataProvider,
+	RouteDialogProvider,
+	useRouteDialog,
+} from "../a2ui";
+import type {
+	A2UIServerMessage,
+	Surface,
+	SurfaceComponent,
+} from "../a2ui/types";
+import type { IUseInterfaceProps } from "./interfaces";
+
+export interface PageInterfaceProps extends Omit<IUseInterfaceProps, "event"> {
+	event?: IUseInterfaceProps["event"];
+	route?: string;
+	page?: IPage;
+}
+
+function buildSurfaceFromPage(page: IPage, pageId: string): Surface | null {
+	if (!page.components || page.components.length === 0) {
+		return null;
+	}
+
+	const componentsRecord = page.components.reduce(
+		(acc, comp) => {
+			acc[comp.id] = comp;
+			return acc;
+		},
+		{} as Record<string, SurfaceComponent>,
+	);
+
+	const rootComponentId = componentsRecord["root"]
+		? "root"
+		: page.components[0]?.id || "";
+
+	return {
+		id: pageId,
+		rootComponentId,
+		components: componentsRecord,
+	};
+}
+
+function useManagedSurface(initialSurface: Surface | null, appId?: string) {
+	const [surface, setSurface] = useState<Surface | null>(initialSurface);
+
+	// Update surface when initialSurface changes
+	useEffect(() => {
+		setSurface(initialSurface);
+	}, [initialSurface]);
+
+	const handleServerMessage = useCallback(
+		(message: A2UIServerMessage) => {
+			if (message.type !== "upsertElement") return;
+
+			setSurface((prevSurface) => {
+				if (!prevSurface) return prevSurface;
+
+				const { element_id: elementId, value } = message;
+				if (!elementId) return prevSurface;
+
+				const [surfaceId, componentId] = elementId.includes("/")
+					? elementId.split("/", 2)
+					: [prevSurface.id, elementId];
+
+				if (surfaceId !== prevSurface.id) return prevSurface;
+
+				const component = prevSurface.components[componentId];
+				if (!component) return prevSurface;
+
+				const updateValue = value as Record<string, unknown>;
+				const updateType = updateValue?.type as string;
+
+				let updatedComponent: SurfaceComponent = { ...component };
+
+				switch (updateType) {
+					case "setText": {
+						const text = updateValue.text as string;
+						const componentData = component.component as unknown as Record<
+							string,
+							unknown
+						>;
+						updatedComponent = {
+							...component,
+							component: {
+								...componentData,
+								content: text,
+								text: text,
+								label: text,
+							} as unknown as SurfaceComponent["component"],
+						};
+						break;
+					}
+					case "setValue": {
+						const val = updateValue.value;
+						const componentData = component.component as unknown as Record<
+							string,
+							unknown
+						>;
+						// Wrap value as BoundValue for components that expect it (TextField, Select, etc.)
+						const boundValue =
+							typeof val === "string"
+								? { literalString: val }
+								: typeof val === "number"
+									? { literalNumber: val }
+									: typeof val === "boolean"
+										? { literalBool: val }
+										: val;
+						updatedComponent = {
+							...component,
+							component: {
+								...componentData,
+								value: boundValue,
+								defaultValue: boundValue,
+							} as unknown as SurfaceComponent["component"],
+						};
+						break;
+					}
+					case "setStyle": {
+						const newStyle = updateValue.style as Partial<
+							SurfaceComponent["style"]
+						>;
+						updatedComponent = {
+							...component,
+							style: {
+								...component.style,
+								...newStyle,
+							},
+						};
+						break;
+					}
+					case "setVisibility": {
+						const visible = updateValue.visible as boolean;
+						const componentData = component.component as unknown as Record<
+							string,
+							unknown
+						>;
+						updatedComponent = {
+							...component,
+							component: {
+								...componentData,
+								hidden: !visible,
+							} as unknown as SurfaceComponent["component"],
+							style: {
+								...component.style,
+								opacity: visible ? undefined : 0,
+							},
+						};
+						break;
+					}
+					case "setDisabled": {
+						const disabled = updateValue.disabled as boolean;
+						const componentData = component.component as unknown as Record<
+							string,
+							unknown
+						>;
+						updatedComponent = {
+							...component,
+							component: {
+								...componentData,
+								disabled,
+							} as unknown as SurfaceComponent["component"],
+						};
+						break;
+					}
+					case "setLoading": {
+						const loading = updateValue.loading as boolean;
+						const componentData = component.component as unknown as Record<
+							string,
+							unknown
+						>;
+						updatedComponent = {
+							...component,
+							component: {
+								...componentData,
+								loading,
+							} as unknown as SurfaceComponent["component"],
+						};
+						break;
+					}
+					case "setAction": {
+						const action = updateValue.action as {
+							name: string;
+							context: Record<string, unknown>;
+						} | null;
+						const componentData = component.component as unknown as Record<
+							string,
+							unknown
+						>;
+						updatedComponent = {
+							...component,
+							component: {
+								...componentData,
+								actions: action ? [action] : undefined,
+							} as unknown as SurfaceComponent["component"],
+						};
+						break;
+					}
+					case "setPlaceholder": {
+						const placeholder = updateValue.placeholder as string;
+						const componentData = component.component as unknown as Record<
+							string,
+							unknown
+						>;
+						updatedComponent = {
+							...component,
+							component: {
+								...componentData,
+								placeholder,
+							} as unknown as SurfaceComponent["component"],
+						};
+						break;
+					}
+					case "setChecked": {
+						const checked = updateValue.checked as boolean;
+						const componentData = component.component as unknown as Record<
+							string,
+							unknown
+						>;
+						updatedComponent = {
+							...component,
+							component: {
+								...componentData,
+								checked,
+								value: checked,
+							} as unknown as SurfaceComponent["component"],
+						};
+						break;
+					}
+					case "setGeoMapViewport": {
+						const viewport = updateValue.viewport as
+							| { literalJson?: string }
+							| undefined;
+						const componentData = component.component as unknown as Record<
+							string,
+							unknown
+						>;
+						updatedComponent = {
+							...component,
+							component: {
+								...componentData,
+								viewport,
+							} as unknown as SurfaceComponent["component"],
+						};
+						break;
+					}
+					case "setChartData": {
+						const data = updateValue.data;
+						const componentData = component.component as unknown as Record<
+							string,
+							unknown
+						>;
+						updatedComponent = {
+							...component,
+							component: {
+								...componentData,
+								data,
+							} as unknown as SurfaceComponent["component"],
+						};
+						break;
+					}
+					case "setChartLayout": {
+						const layout = updateValue.layout;
+						const componentData = component.component as unknown as Record<
+							string,
+							unknown
+						>;
+						updatedComponent = {
+							...component,
+							component: {
+								...componentData,
+								layout,
+							} as unknown as SurfaceComponent["component"],
+						};
+						break;
+					}
+					case "setProgress": {
+						const progressValue = updateValue.value as number;
+						const componentData = component.component as unknown as Record<
+							string,
+							unknown
+						>;
+						updatedComponent = {
+							...component,
+							component: {
+								...componentData,
+								value: progressValue,
+							} as unknown as SurfaceComponent["component"],
+						};
+						break;
+					}
+					case "setImageSrc": {
+						const url = updateValue.url as string;
+						const alt = updateValue.alt as string | undefined;
+						const componentData = component.component as unknown as Record<
+							string,
+							unknown
+						>;
+						updatedComponent = {
+							...component,
+							component: {
+								...componentData,
+								url,
+								src: url,
+								...(alt !== undefined && { alt }),
+							} as unknown as SurfaceComponent["component"],
+						};
+						break;
+					}
+					case "pushChild": {
+						const childId = updateValue.childId as string;
+						const componentData = component.component as unknown as Record<
+							string,
+							unknown
+						>;
+						const childrenData = componentData.children as
+							| { explicitList?: string[] }
+							| undefined;
+						const existingChildren = childrenData?.explicitList || [];
+						updatedComponent = {
+							...component,
+							component: {
+								...componentData,
+								children: { explicitList: [...existingChildren, childId] },
+							} as unknown as SurfaceComponent["component"],
+						};
+						break;
+					}
+					case "insertChildAt": {
+						const childId = updateValue.childId as string;
+						const index = updateValue.index as number;
+						const componentData = component.component as unknown as Record<
+							string,
+							unknown
+						>;
+						const childrenData = componentData.children as
+							| { explicitList?: string[] }
+							| undefined;
+						const existingChildren = [...(childrenData?.explicitList || [])];
+						const insertIndex = Math.max(
+							0,
+							Math.min(index, existingChildren.length),
+						);
+						existingChildren.splice(insertIndex, 0, childId);
+						updatedComponent = {
+							...component,
+							component: {
+								...componentData,
+								children: { explicitList: existingChildren },
+							} as unknown as SurfaceComponent["component"],
+						};
+						break;
+					}
+					case "removeChildAt": {
+						const index = updateValue.index as number;
+						const componentData = component.component as unknown as Record<
+							string,
+							unknown
+						>;
+						const childrenData = componentData.children as
+							| { explicitList?: string[] }
+							| undefined;
+						const existingChildren = [...(childrenData?.explicitList || [])];
+						if (index >= 0 && index < existingChildren.length) {
+							existingChildren.splice(index, 1);
+						}
+						updatedComponent = {
+							...component,
+							component: {
+								...componentData,
+								children: { explicitList: existingChildren },
+							} as unknown as SurfaceComponent["component"],
+						};
+						break;
+					}
+					case "clearChildren": {
+						const componentData = component.component as unknown as Record<
+							string,
+							unknown
+						>;
+						updatedComponent = {
+							...component,
+							component: {
+								...componentData,
+								children: { explicitList: [] },
+							} as unknown as SurfaceComponent["component"],
+						};
+						break;
+					}
+					case "setProps": {
+						const props = updateValue.props as Record<string, unknown>;
+						const componentData = component.component as unknown as Record<
+							string,
+							unknown
+						>;
+						updatedComponent = {
+							...component,
+							component: {
+								...componentData,
+								...props,
+							} as unknown as SurfaceComponent["component"],
+						};
+						break;
+					}
+					default: {
+						const componentData = component.component as unknown as Record<
+							string,
+							unknown
+						>;
+						updatedComponent = {
+							...component,
+							component: {
+								...componentData,
+								...updateValue,
+							} as unknown as SurfaceComponent["component"],
+						};
+					}
+				}
+
+				return {
+					...prevSurface,
+					components: {
+						...prevSurface.components,
+						[componentId]: updatedComponent,
+					},
+				};
+			});
+		},
+		[appId],
+	);
+
+	return { surface, handleServerMessage };
+}
+
+function PageInterfaceInner({
+	appId,
+	event,
+	config,
+	route,
+	page: providedPage,
+}: PageInterfaceProps) {
+	const backend = useBackend();
+	const executionService = useExecutionServiceOptional();
+	const router = useRouter();
+	const { openDialog, closeDialog } = useRouteDialog();
+	const pageContainerId = useId();
+	const [page, setPage] = useState<IPage | null>(providedPage || null);
+	const [routeMapping, setRouteMapping] = useState<IRouteMapping | null>(null);
+	const [routeEvent, setRouteEvent] = useState<IEvent | null>(null);
+	const [isLoading, setIsLoading] = useState(!providedPage);
+	const [isLoadEventRunning, setIsLoadEventRunning] = useState(false);
+	const [error, setError] = useState<string | null>(null);
+	const loadEventExecutedRef = useRef<string | null>(null);
+
+	const pageRoute = route || (config?.route as string);
+
+	useEffect(() => {
+		if (providedPage) {
+			console.log("[PageInterface] Using provided page:", {
+				id: providedPage.id,
+				boardId: providedPage.boardId,
+				onLoadEventId: providedPage.onLoadEventId,
+				onUnloadEventId: providedPage.onUnloadEventId,
+				onIntervalEventId: providedPage.onIntervalEventId,
+				onIntervalSeconds: providedPage.onIntervalSeconds,
+			});
+			// Presign assets in the provided page
+			const presignProvidedPage = async () => {
+				let updatedPage = { ...providedPage };
+
+				// Presign components
+				if (providedPage.components && providedPage.components.length > 0) {
+					try {
+						const presignedComponents = await presignPageAssets(
+							appId,
+							providedPage.components,
+							backend.storageState,
+						);
+						updatedPage = { ...updatedPage, components: presignedComponents };
+					} catch (presignError) {
+						console.warn(
+							"[PageInterface] Failed to presign component assets:",
+							presignError,
+						);
+					}
+				}
+
+				// Presign canvasSettings.backgroundImage
+				if (providedPage.canvasSettings?.backgroundImage) {
+					try {
+						const presignedSettings = await presignCanvasSettings(
+							appId,
+							{
+								backgroundColor:
+									providedPage.canvasSettings.backgroundColor ?? "",
+								backgroundImage: providedPage.canvasSettings.backgroundImage,
+								padding: providedPage.canvasSettings.padding ?? "",
+								customCss: providedPage.canvasSettings.customCss,
+							},
+							backend.storageState,
+						);
+						updatedPage = {
+							...updatedPage,
+							canvasSettings: {
+								...updatedPage.canvasSettings,
+								backgroundImage: presignedSettings.backgroundImage,
+							},
+						};
+					} catch (presignError) {
+						console.warn(
+							"[PageInterface] Failed to presign canvas background:",
+							presignError,
+						);
+					}
+				}
+
+				setPage(updatedPage);
+				setIsLoading(false);
+			};
+			presignProvidedPage();
+			return;
+		}
+
+		const loadPageFromRoute = async () => {
+			setIsLoading(true);
+			setError(null);
+			try {
+				// Get route mapping (path -> eventId)
+				let mapping: IRouteMapping | null = null;
+
+				if (pageRoute) {
+					mapping = await backend.routeState.getRouteByPath(appId, pageRoute);
+				} else {
+					mapping = await backend.routeState.getDefaultRoute(appId);
+				}
+
+				if (!mapping) {
+					setRouteMapping(null);
+					setRouteEvent(null);
+					setPage(null);
+					setIsLoading(false);
+					return;
+				}
+
+				setRouteMapping(mapping);
+
+				// Get the event to determine what to display
+				const eventData = await backend.eventState.getEvent(
+					appId,
+					mapping.eventId,
+				);
+				setRouteEvent(eventData);
+
+				// If event has default_page_id, it's a page-target event
+				if (eventData.default_page_id) {
+					const pageResult = await backend.pageState.getPage(
+						appId,
+						eventData.default_page_id,
+						eventData.board_id || undefined,
+					);
+					if (pageResult) {
+						console.log("[PageInterface] Loaded page:", {
+							id: pageResult.id,
+							boardId: pageResult.boardId,
+							onLoadEventId: pageResult.onLoadEventId,
+							onUnloadEventId: pageResult.onUnloadEventId,
+							onIntervalEventId: pageResult.onIntervalEventId,
+							onIntervalSeconds: pageResult.onIntervalSeconds,
+						});
+						// Presign assets in the page components
+						if (pageResult.components && pageResult.components.length > 0) {
+							try {
+								const presignedComponents = await presignPageAssets(
+									appId,
+									pageResult.components,
+									backend.storageState,
+								);
+								pageResult.components = presignedComponents;
+							} catch (presignError) {
+								console.warn(
+									"[PageInterface] Failed to presign component assets:",
+									presignError,
+								);
+							}
+						}
+
+						// Presign canvasSettings.backgroundImage
+						if (pageResult.canvasSettings?.backgroundImage) {
+							try {
+								const presignedSettings = await presignCanvasSettings(
+									appId,
+									{
+										backgroundColor:
+											pageResult.canvasSettings.backgroundColor ?? "",
+										backgroundImage: pageResult.canvasSettings.backgroundImage,
+										padding: pageResult.canvasSettings.padding ?? "",
+										customCss: pageResult.canvasSettings.customCss,
+									},
+									backend.storageState,
+								);
+								pageResult.canvasSettings = {
+									...pageResult.canvasSettings,
+									backgroundImage: presignedSettings.backgroundImage,
+								};
+							} catch (presignError) {
+								console.warn(
+									"[PageInterface] Failed to presign canvas background:",
+									presignError,
+								);
+							}
+						}
+
+						setPage(pageResult);
+					} else {
+						setError(`Page not found: ${eventData.default_page_id}`);
+					}
+				} else {
+					// Board-target event - no page to display
+					setPage(null);
+				}
+			} catch (e) {
+				console.error("Failed to load page:", e);
+				setError("Failed to load page");
+			} finally {
+				setIsLoading(false);
+			}
+		};
+
+		loadPageFromRoute();
+	}, [
+		appId,
+		pageRoute,
+		providedPage,
+		backend.routeState,
+		backend.pageState,
+		backend.eventState,
+		backend.storageState,
+	]);
+
+	const initialSurface = useMemo(() => {
+		if (!page) return null;
+		return buildSurfaceFromPage(page, page.id);
+	}, [page]);
+
+	const { surface, handleServerMessage } = useManagedSurface(
+		initialSurface,
+		appId,
+	);
+
+	// Comprehensive A2UI message handler for page events
+	const handleA2UIMessage = useCallback(
+		(message: A2UIServerMessage) => {
+			console.log("[PageInterface] A2UI message:", message.type, message);
+
+			// Handle navigation
+			if (message.type === "navigateTo") {
+				const { route, replace, queryParams } = message as {
+					route: string;
+					replace: boolean;
+					queryParams?: Record<string, string>;
+				};
+
+				let navUrl = route;
+				if (appId && !route.startsWith("/use") && !route.startsWith("http")) {
+					// Parse any query params that might be in the route itself
+					const [routePath, routeQueryString] = route.split("?");
+					const params = new URLSearchParams();
+					params.set("id", appId);
+					params.set("route", routePath);
+
+					// Add query params from the route string
+					if (routeQueryString) {
+						const routeParams = new URLSearchParams(routeQueryString);
+						routeParams.forEach((value, key) => {
+							params.set(key, value);
+						});
+					}
+
+					// Add additional query params (these override route params)
+					if (queryParams) {
+						for (const [key, value] of Object.entries(queryParams)) {
+							params.set(key, value);
+						}
+					}
+					navUrl = `/use?${params.toString()}`;
+				} else if (queryParams && Object.keys(queryParams).length > 0) {
+					const params = new URLSearchParams(queryParams);
+					const separator = navUrl.includes("?") ? "&" : "?";
+					navUrl = `${navUrl}${separator}${params.toString()}`;
+				}
+
+				if (replace) {
+					router.replace(navUrl);
+				} else {
+					router.push(navUrl);
+				}
+				return;
+			}
+
+			// Handle open dialog
+			if (message.type === "openDialog") {
+				const { route, title, queryParams, dialogId } = message as {
+					route: string;
+					title?: string;
+					queryParams?: Record<string, string>;
+					dialogId?: string;
+				};
+				console.log("[PageInterface] openDialog message received:", {
+					route,
+					title,
+					queryParams,
+					dialogId,
+				});
+				openDialog(route, title, queryParams, dialogId);
+				return;
+			}
+
+			// Handle close dialog
+			if (message.type === "closeDialog") {
+				const { dialogId } = message as { dialogId?: string };
+				console.log("[PageInterface] closeDialog message received:", {
+					dialogId,
+				});
+				closeDialog(dialogId);
+				return;
+			}
+
+			// Handle query param updates
+			if (message.type === "setQueryParam") {
+				const { key, value, replace } = message as {
+					key: string;
+					value?: string;
+					replace: boolean;
+				};
+
+				const url = new URL(window.location.href);
+				if (value === undefined || value === "") {
+					url.searchParams.delete(key);
+				} else {
+					url.searchParams.set(key, value);
+				}
+
+				if (replace) {
+					router.replace(url.pathname + url.search);
+				} else {
+					router.push(url.pathname + url.search);
+				}
+				return;
+			}
+
+			// Handle element updates
+			handleServerMessage(message);
+		},
+		[appId, router, openDialog, closeDialog, handleServerMessage],
+	);
+
+	// Use ref to access current surface without creating dependency cycles
+	const surfaceRef = useRef(surface);
+	useEffect(() => {
+		surfaceRef.current = surface;
+	}, [surface]);
+
+	// Build elements from surface components for the workflow payload
+	// Uses ref to avoid dependency on surface changing
+	const getElementsFromSurface = useCallback(() => {
+		const currentSurface = surfaceRef.current;
+		if (!currentSurface) return {};
+		const elements: Record<string, unknown> = {};
+		for (const [componentId, surfaceComponent] of Object.entries(
+			currentSurface.components,
+		)) {
+			const elementId = `${currentSurface.id}/${componentId}`;
+			elements[elementId] = {
+				...surfaceComponent,
+				__element_id: elementId,
+			};
+		}
+		return elements;
+	}, []); // No dependencies - uses ref
+
+	// Helper to execute a page lifecycle event
+	const executePageEvent = useCallback(
+		async (
+			eventNodeId: string | undefined,
+			eventName: string,
+			extraPayload?: Record<string, unknown>,
+		) => {
+			if (!eventNodeId || !page) return;
+
+			const boardId = page.boardId || routeEvent?.board_id;
+			if (!boardId) {
+				console.warn(`[PageInterface] No boardId for ${eventName} event`);
+				return;
+			}
+
+			try {
+				// Get component data from surface (for GetElement to work)
+				const surfaceElements = getElementsFromSurface();
+
+				const queryParams: Record<string, string> = {};
+				if (typeof window !== "undefined") {
+					const searchParams = new URLSearchParams(window.location.search);
+					searchParams.forEach((value, key) => {
+						queryParams[key] = value;
+					});
+				}
+
+				const payload = {
+					id: eventNodeId,
+					payload: {
+						_elements: surfaceElements,
+						_route: pageRoute || "/",
+						_query_params: queryParams,
+						_page_id: page.id,
+						_event_type: eventName,
+						...extraPayload,
+					},
+				};
+
+				// Use execution service if available (checks runtime variables)
+				const execFn =
+					executionService?.executeBoard ?? backend.boardState.executeBoard;
+				await execFn(appId, boardId, payload, false, undefined, (events) => {
+					for (const evt of events) {
+						if (evt.event_type === "a2ui") {
+							handleA2UIMessage(evt.payload as A2UIServerMessage);
+						}
+					}
+				});
+			} catch (e) {
+				console.error(
+					`[PageInterface] Failed to execute ${eventName} event:`,
+					e,
+				);
+			}
+		},
+		[
+			appId,
+			page,
+			routeEvent,
+			pageRoute,
+			backend.boardState,
+			executionService,
+			handleA2UIMessage,
+			getElementsFromSurface,
+		],
+	);
+
+	// Execute onLoad event if configured (from page settings)
+	useEffect(() => {
+		const executeOnLoadEvent = async () => {
+			if (!page?.onLoadEventId) return;
+
+			const boardId = page.boardId || routeEvent?.board_id;
+			if (!boardId) return;
+
+			// Prevent duplicate execution for the same page + event combination
+			const executionKey = `${page.id}:${page.onLoadEventId}:${boardId}`;
+			if (loadEventExecutedRef.current === executionKey) return;
+			loadEventExecutedRef.current = executionKey;
+
+			setIsLoadEventRunning(true);
+			try {
+				await executePageEvent(page.onLoadEventId, "onLoad");
+			} finally {
+				setIsLoadEventRunning(false);
+			}
+		};
+
+		executeOnLoadEvent();
+	}, [appId, page, routeEvent, executePageEvent]);
+
+	// Execute onUnload event when page unmounts or user navigates away
+	useEffect(() => {
+		if (!page?.onUnloadEventId) return;
+
+		const handleBeforeUnload = () => {
+			// Fire and forget - can't await in beforeunload
+			executePageEvent(page.onUnloadEventId, "onUnload");
+		};
+
+		window.addEventListener("beforeunload", handleBeforeUnload);
+
+		return () => {
+			window.removeEventListener("beforeunload", handleBeforeUnload);
+			// Also fire on component unmount (navigation within SPA)
+			executePageEvent(page.onUnloadEventId, "onUnload");
+		};
+	}, [page?.onUnloadEventId, executePageEvent]);
+
+	// Execute onInterval event at configured time intervals
+	useEffect(() => {
+		if (
+			!page?.onIntervalEventId ||
+			!page?.onIntervalSeconds ||
+			page.onIntervalSeconds <= 0
+		)
+			return;
+
+		const intervalMs = page.onIntervalSeconds * 1000;
+
+		const intervalId = setInterval(() => {
+			executePageEvent(page.onIntervalEventId, "onInterval", {
+				_interval_seconds: page.onIntervalSeconds,
+			});
+		}, intervalMs);
+
+		return () => clearInterval(intervalId);
+	}, [page?.onIntervalEventId, page?.onIntervalSeconds, executePageEvent]);
+
+	if (isLoading || isLoadEventRunning) {
+		return (
+			<div className="flex items-center justify-center h-full">
+				<Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+			</div>
+		);
+	}
+
+	if (error) {
+		return (
+			<div className="flex items-center justify-center h-full text-muted-foreground">
+				<p>{error}</p>
+			</div>
+		);
+	}
+
+	if (!routeMapping && !providedPage) {
+		return (
+			<div className="flex flex-col items-center justify-center h-full gap-4 text-muted-foreground">
+				<p>No route configured for this path</p>
+				<Link
+					href={`/library/config/pages?appId=${appId}`}
+					className="flex items-center gap-2 text-sm hover:text-foreground transition-colors"
+				>
+					<Settings className="h-4 w-4" />
+					Configure routes
+				</Link>
+			</div>
+		);
+	}
+
+	if (routeEvent && !routeEvent.default_page_id) {
+		return (
+			<div className="flex items-center justify-center h-full text-muted-foreground">
+				<p>Event does not have a page target</p>
+			</div>
+		);
+	}
+
+	if (!surface) {
+		return (
+			<div className="flex items-center justify-center h-full text-muted-foreground">
+				<p>No content to display</p>
+			</div>
+		);
+	}
+
+	const canvasStyle: React.CSSProperties = {
+		backgroundColor: page?.canvasSettings?.backgroundColor,
+		padding: page?.canvasSettings?.padding,
+		backgroundImage: page?.canvasSettings?.backgroundImage
+			? `url(${page.canvasSettings.backgroundImage})`
+			: undefined,
+		backgroundSize: "cover",
+		backgroundPosition: "center",
+	};
+
+	const customCss = page?.canvasSettings?.customCss;
+
+	return (
+		<div className="h-full w-full overflow-auto bg-background">
+			{customCss && (
+				<style
+					{...createSanitizedStyleProps(
+						safeScopedCss(customCss, `[data-page-id="${pageContainerId}"]`),
+					)}
+				/>
+			)}
+			<div
+				data-page-id={pageContainerId}
+				className="min-h-full flex flex-col"
+				style={canvasStyle}
+			>
+				<DataProvider initialData={[]}>
+					<A2UIRenderer
+						surface={surface}
+						widgetRefs={page?.widgetRefs}
+						className="w-full flex-1"
+						appId={appId}
+						boardId={routeEvent?.board_id}
+						onA2UIMessage={handleA2UIMessage}
+						isPreviewMode={true}
+						openDialog={openDialog}
+						closeDialog={closeDialog}
+					/>
+				</DataProvider>
+			</div>
+		</div>
+	);
+}
+
+export function PageInterface(props: PageInterfaceProps) {
+	return (
+		<RouteDialogProvider appId={props.appId}>
+			<PageInterfaceInner {...props} />
+		</RouteDialogProvider>
+	);
+}
+
+export function usePageInterface(props: PageInterfaceProps) {
+	return <PageInterface {...props} />;
+}

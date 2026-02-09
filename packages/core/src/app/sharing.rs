@@ -151,7 +151,7 @@ async fn obj_exists_with_size(
 ) -> flow_like_types::Result<Option<bool>> {
     match store.head(path).await {
         Ok(obj) => {
-            let size = obj.size as u64;
+            let size = obj.size;
             Ok(Some(size == expect_size))
         }
         Err(_) => Ok(None),
@@ -216,7 +216,7 @@ async fn collect_store_files(
     let mut out = Vec::new();
     let mut stream = store.list(Some(root)).boxed();
     while let Some(item) = stream.try_next().await? {
-        out.push((item.location, item.size as u64));
+        out.push((item.location, item.size));
     }
     Ok(out)
 }
@@ -249,9 +249,8 @@ fn encrypt_bytes(password: &str, plain: &[u8]) -> flow_like_types::Result<Vec<u8
         .map_err(|e| anyhow!(e.to_string()))?;
 
     let cipher = XChaCha20Poly1305::new_from_slice(&key).map_err(|e| anyhow!(e))?;
-    let ciphertext = cipher
-        .encrypt(XNonce::from_slice(&nonce), plain)
-        .map_err(|e| anyhow!(e))?;
+    let nonce = XNonce::from(nonce);
+    let ciphertext = cipher.encrypt(&nonce, plain).map_err(|e| anyhow!(e))?;
 
     key.zeroize();
     let mut out = Vec::with_capacity(ENC_MAGIC.len() + SALT_LEN + XNONCE_LEN + ciphertext.len());
@@ -285,8 +284,12 @@ fn decrypt_bytes(password: &str, data: &[u8]) -> flow_like_types::Result<Vec<u8>
 
     let cipher = XChaCha20Poly1305::new_from_slice(&key).map_err(|e| anyhow!(e))?;
     key.zeroize();
+    let nonce: [u8; XNONCE_LEN] = nonce
+        .try_into()
+        .map_err(|_| anyhow!("Invalid nonce length"))?;
+    let nonce = XNonce::from(nonce);
     let plain = cipher
-        .decrypt(XNonce::from_slice(nonce), ciphertext)
+        .decrypt(&nonce, ciphertext)
         .map_err(|_| anyhow!("Decryption failed"))?;
     Ok(plain)
 }
@@ -999,7 +1002,7 @@ mod tests {
         let storage_store = Arc::new(InMemory::new());
         config.register_app_meta_store(FlowLikeStore::Memory(meta_store.clone()));
         config.register_app_storage_store(FlowLikeStore::Memory(storage_store.clone()));
-        let (http_client, _rx) = HTTPClient::new();
+        let http_client = HTTPClient::new_without_refetch();
         let state = FlowLikeState::new(config, http_client);
         (Arc::new(state), meta_store, storage_store)
     }
@@ -1030,6 +1033,8 @@ mod tests {
             frontend: None,
             price: None,
             app_state: Some(state),
+            widget_ids: vec![],
+            page_ids: vec![],
         }
     }
 

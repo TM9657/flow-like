@@ -16,7 +16,7 @@ pub async fn get_event(
 ) -> Result<Event, TauriFunctionError> {
     let flow_like_state = TauriFlowLikeState::construct(&handler).await?;
 
-    if let Ok(app) = App::load(app_id, flow_like_state).await {
+    if let Ok(app) = App::load(app_id.clone(), flow_like_state).await {
         let event = app.get_event(&event_id, version).await?;
         return Ok(event);
     }

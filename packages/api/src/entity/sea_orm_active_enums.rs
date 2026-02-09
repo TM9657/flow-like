@@ -90,6 +90,14 @@ pub enum Category {
     Anime,
 }
 #[derive(Debug, Clone, PartialEq, Eq, EnumIter, DeriveActiveEnum, Serialize, Deserialize)]
+#[sea_orm(rs_type = "String", db_type = "Enum", enum_name = "DiscountType")]
+pub enum DiscountType {
+    #[sea_orm(string_value = "PERCENTAGE")]
+    Percentage,
+    #[sea_orm(string_value = "FIXED_AMOUNT")]
+    FixedAmount,
+}
+#[derive(Debug, Clone, PartialEq, Eq, EnumIter, DeriveActiveEnum, Serialize, Deserialize)]
 #[sea_orm(rs_type = "String", db_type = "Enum", enum_name = "ExecutionMode")]
 pub enum ExecutionMode {
     #[sea_orm(string_value = "ANY")]
@@ -114,6 +122,14 @@ pub enum ExecutionStatus {
     Fatal,
 }
 #[derive(Debug, Clone, PartialEq, Eq, EnumIter, DeriveActiveEnum, Serialize, Deserialize)]
+#[sea_orm(rs_type = "String", db_type = "Enum", enum_name = "NotificationType")]
+pub enum NotificationType {
+    #[sea_orm(string_value = "WORKFLOW")]
+    Workflow,
+    #[sea_orm(string_value = "SYSTEM")]
+    System,
+}
+#[derive(Debug, Clone, PartialEq, Eq, EnumIter, DeriveActiveEnum, Serialize, Deserialize)]
 #[sea_orm(
     rs_type = "String",
     db_type = "Enum",
@@ -128,6 +144,54 @@ pub enum PublicationRequestStatus {
     Accepted,
     #[sea_orm(string_value = "REJECTED")]
     Rejected,
+}
+#[derive(Debug, Clone, PartialEq, Eq, EnumIter, DeriveActiveEnum, Serialize, Deserialize)]
+#[sea_orm(rs_type = "String", db_type = "Enum", enum_name = "PurchaseStatus")]
+pub enum PurchaseStatus {
+    #[sea_orm(string_value = "PENDING")]
+    Pending,
+    #[sea_orm(string_value = "COMPLETED")]
+    Completed,
+    #[sea_orm(string_value = "REFUNDED")]
+    Refunded,
+    #[sea_orm(string_value = "PARTIALLY_REFUNDED")]
+    PartiallyRefunded,
+    #[sea_orm(string_value = "FAILED")]
+    Failed,
+}
+#[derive(Debug, Clone, PartialEq, Eq, EnumIter, DeriveActiveEnum, Serialize, Deserialize)]
+#[sea_orm(rs_type = "String", db_type = "Enum", enum_name = "RunMode")]
+pub enum RunMode {
+    #[sea_orm(string_value = "LOCAL")]
+    Local,
+    #[sea_orm(string_value = "HTTP")]
+    Http,
+    #[sea_orm(string_value = "LAMBDA")]
+    Lambda,
+    #[sea_orm(string_value = "KUBERNETES_ISOLATED")]
+    KubernetesIsolated,
+    #[sea_orm(string_value = "KUBERNETES_POOL")]
+    KubernetesPool,
+    #[sea_orm(string_value = "FUNCTION")]
+    Function,
+    #[sea_orm(string_value = "QUEUE")]
+    Queue,
+}
+#[derive(Debug, Clone, PartialEq, Eq, EnumIter, DeriveActiveEnum, Serialize, Deserialize)]
+#[sea_orm(rs_type = "String", db_type = "Enum", enum_name = "RunStatus")]
+pub enum RunStatus {
+    #[sea_orm(string_value = "PENDING")]
+    Pending,
+    #[sea_orm(string_value = "RUNNING")]
+    Running,
+    #[sea_orm(string_value = "COMPLETED")]
+    Completed,
+    #[sea_orm(string_value = "FAILED")]
+    Failed,
+    #[sea_orm(string_value = "CANCELLED")]
+    Cancelled,
+    #[sea_orm(string_value = "TIMEOUT")]
+    Timeout,
 }
 #[derive(Debug, Clone, PartialEq, Eq, EnumIter, DeriveActiveEnum, Serialize, Deserialize)]
 #[sea_orm(
@@ -236,4 +300,34 @@ pub enum Visibility {
     Prototype,
     #[sea_orm(string_value = "OFFLINE")]
     Offline,
+}
+#[derive(Debug, Clone, PartialEq, Eq, EnumIter, DeriveActiveEnum, Serialize, Deserialize)]
+#[sea_orm(rs_type = "String", db_type = "Enum", enum_name = "WasmPackageStatus")]
+pub enum WasmPackageStatus {
+    #[sea_orm(string_value = "PENDING_REVIEW")]
+    PendingReview,
+    #[sea_orm(string_value = "ACTIVE")]
+    Active,
+    #[sea_orm(string_value = "REJECTED")]
+    Rejected,
+    #[sea_orm(string_value = "DEPRECATED")]
+    Deprecated,
+    #[sea_orm(string_value = "DISABLED")]
+    Disabled,
+}
+#[derive(Debug, Clone, PartialEq, Eq, EnumIter, DeriveActiveEnum, Serialize, Deserialize)]
+#[sea_orm(rs_type = "String", db_type = "Enum", enum_name = "WasmReviewAction")]
+pub enum WasmReviewAction {
+    #[sea_orm(string_value = "SUBMITTED")]
+    Submitted,
+    #[sea_orm(string_value = "APPROVED")]
+    Approved,
+    #[sea_orm(string_value = "REJECTED")]
+    Rejected,
+    #[sea_orm(string_value = "REQUESTED_CHANGES")]
+    RequestedChanges,
+    #[sea_orm(string_value = "COMMENTED")]
+    Commented,
+    #[sea_orm(string_value = "FLAGGED")]
+    Flagged,
 }

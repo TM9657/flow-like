@@ -1,0 +1,12 @@
+model ErrorReport {
+  id         String   @id
+  userId     String?
+  method     String
+  path       String
+  statusCode Int
+  publicCode String
+  summary    String
+  details    Json?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+}

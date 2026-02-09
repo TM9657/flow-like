@@ -11,6 +11,7 @@ import {
 	IExecutionStage,
 	ILogLevel,
 	type IMetadata,
+	type IPurchaseResponse,
 	injectDataFunction,
 } from "@tm9657/flow-like-ui";
 import type { IAppSearchSort } from "@tm9657/flow-like-ui/lib/schema/app/app-search-query";
@@ -68,6 +69,7 @@ export class AppState implements IAppState {
 			template?.description ?? "A blank canvas ready for your ideas",
 			template?.log_level ?? ILogLevel.Debug,
 			IExecutionStage.Dev,
+			template?.execution_mode,
 			template,
 		);
 
@@ -595,5 +597,24 @@ export class AppState implements IAppState {
 			return;
 		}
 		toast.error("You must be logged in to request access to an app.");
+	}
+
+	async purchaseApp(appId: string): Promise<IPurchaseResponse> {
+		if (this.backend.profile && this.backend.auth && this.backend.queryClient) {
+			return fetcher<IPurchaseResponse>(
+				this.backend.profile,
+				`apps/${appId}/team/purchase`,
+				{
+					method: "POST",
+					body: JSON.stringify({}),
+				},
+				this.backend.auth,
+			);
+		}
+
+		if (this.backend.auth) {
+			await this.backend.auth.signinRedirect();
+		}
+		throw new Error("You must be logged in to purchase an app.");
 	}
 }

@@ -12,6 +12,7 @@ use flow_like::flow::{
     variable::VariableType,
 };
 use flow_like_types::{async_trait, json, json::from_slice};
+#[cfg(feature = "execute")]
 use rmcp::{
     ServiceExt,
     model::{ClientCapabilities, ClientInfo, Implementation, PaginatedRequestParam, Tool},
@@ -31,6 +32,7 @@ impl NodeLogic for RegisterMcpToolsNode {
         build_register_mcp_tools_node()
     }
 
+    #[cfg(feature = "execute")]
     async fn run(&self, context: &mut ExecutionContext) -> flow_like_types::Result<()> {
         let mut agent: Agent = context.evaluate_pin("agent_in").await?;
         let uri: String = context.evaluate_pin("uri").await?;
@@ -54,6 +56,14 @@ impl NodeLogic for RegisterMcpToolsNode {
         Ok(())
     }
 
+    #[cfg(not(feature = "execute"))]
+    async fn run(&self, _context: &mut ExecutionContext) -> flow_like_types::Result<()> {
+        Err(flow_like_types::anyhow!(
+            "LLM processing requires the 'execute' feature"
+        ))
+    }
+
+    #[cfg(feature = "execute")]
     async fn on_update(&self, node: &mut Node, _board: Arc<Board>) {
         node.error = None;
 
@@ -79,6 +89,12 @@ impl NodeLogic for RegisterMcpToolsNode {
         if let Err(error) = refresh_manual_tool_pins(node, &uri).await {
             node.error = Some(error);
         }
+    }
+
+    #[cfg(not(feature = "execute"))]
+    async fn on_update(&self, node: &mut Node, _board: Arc<Board>) {
+        node.error = None;
+        cleanup_tool_pins(node, &HashSet::new());
     }
 }
 
@@ -146,6 +162,7 @@ fn base_node() -> Node {
 }
 
 fn add_agent_pin(node: &mut Node) {
+    node.set_version(1);
     node.add_input_pin(
         "agent_in",
         "Agent",
@@ -195,6 +212,7 @@ fn is_manual_mode(value: &str) -> bool {
     value.eq_ignore_ascii_case("Manual")
 }
 
+#[cfg(feature = "execute")]
 async fn collect_manual_tool_selection(context: &mut ExecutionContext) -> HashSet<String> {
     let pin_info = {
         let node_guard = context.node.node.lock().await;
@@ -218,6 +236,7 @@ async fn collect_manual_tool_selection(context: &mut ExecutionContext) -> HashSe
     selected
 }
 
+#[cfg(feature = "execute")]
 async fn refresh_manual_tool_pins(node: &mut Node, uri: &str) -> Result<(), String> {
     match list_all_tools(uri).await {
         Ok(tools) if tools.is_empty() => {
@@ -236,6 +255,7 @@ async fn refresh_manual_tool_pins(node: &mut Node, uri: &str) -> Result<(), Stri
     }
 }
 
+#[cfg(feature = "execute")]
 async fn list_all_tools(uri: &str) -> Result<Vec<Tool>, String> {
     let client_info = ClientInfo {
         protocol_version: Default::default(),
@@ -278,6 +298,7 @@ async fn list_all_tools(uri: &str) -> Result<Vec<Tool>, String> {
     Ok(tools)
 }
 
+#[cfg(feature = "execute")]
 fn apply_tool_pins(node: &mut Node, tools: Vec<Tool>) -> HashSet<String> {
     let mut keep = HashSet::with_capacity(tools.len());
 

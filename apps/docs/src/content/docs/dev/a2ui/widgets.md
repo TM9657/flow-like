@@ -3,14 +3,7 @@ title: Widgets
 description: Building reusable UI components with A2UI
 sidebar:
   order: 2
-  badge:
-    text: Coming Soon
-    variant: caution
 ---
-
-:::caution[Coming Soon]
-Widget creation is currently under development. This documentation previews the planned features.
-:::
 
 ## What are Widgets?
 

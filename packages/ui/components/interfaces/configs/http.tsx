@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import {
 	Alert,
 	AlertDescription,
@@ -15,6 +15,10 @@ import {
 	SelectTrigger,
 	SelectValue,
 	Switch,
+	Tabs,
+	TabsContent,
+	TabsList,
+	TabsTrigger,
 } from "../../ui";
 import type { IConfigInterfaceProps } from "../interfaces";
 
@@ -39,6 +43,7 @@ export function HttpConfig({
 	appId,
 	config,
 	onConfigUpdate,
+	hub,
 }: IConfigInterfaceProps) {
 	const [showToken, setShowToken] = useState(false);
 
@@ -53,17 +58,38 @@ export function HttpConfig({
 		});
 	};
 
-	const fullUrl = `http://localhost:9657/${appId}${path}`;
+	// Compute URLs
+	const localUrl = `http://localhost:9657/${appId}${path}`;
+
+	const remoteUrl = useMemo(() => {
+		if (!hub?.domain) return null;
+		// Use HTTPS for production/staging, HTTP for development
+		const protocol = hub.environment === "Development" ? "http" : "https";
+		return `${protocol}://${hub.domain}/sink/trigger/http/${appId}${path}`;
+	}, [hub?.domain, hub?.environment, appId, path]);
+
+	const supportsRemote = hub?.supported_sinks?.http === true;
 
 	const pathError =
 		path && !path.startsWith("/") ? "Path must start with '/'" : null;
+
+	const CurlExample = ({
+		url,
+		withAuth,
+	}: { url: string; withAuth: boolean }) => (
+		<pre className="mt-2 overflow-x-auto text-xs bg-muted p-3 rounded-md">
+			{withAuth
+				? `curl -X ${method} "${url}" \\\n  -H "Authorization: Bearer ${authToken}"`
+				: `curl -X ${method} "${url}"`}
+		</pre>
+	);
 
 	return (
 		<div className="w-full space-y-6">
 			<div className="space-y-1">
 				<h3 className="text-lg font-semibold">HTTP Event Sink</h3>
 				<p className="text-sm text-muted-foreground">
-					Trigger this event via HTTP requests to a local endpoint.
+					Trigger this event via HTTP requests.
 				</p>
 			</div>
 
@@ -120,44 +146,108 @@ export function HttpConfig({
 				</p>
 			</div>
 
-			{/* URL Preview */}
+			{/* URL Preview - Tabs for local/remote */}
 			<div className="space-y-2">
-				<Label>Endpoint URL</Label>
-				<div className="relative">
-					<div className="flex h-10 w-full rounded-md border border-input bg-muted px-3 py-2 text-sm items-center font-mono">
-						<Badge variant="secondary" className="mr-2 font-mono">
-							{method}
-						</Badge>
-						{fullUrl}
+				<Label>Endpoint URLs</Label>
+				{supportsRemote && remoteUrl ? (
+					<Tabs defaultValue="remote" className="w-full">
+						<TabsList className="grid w-full grid-cols-2">
+							<TabsTrigger value="remote">Remote (Server)</TabsTrigger>
+							<TabsTrigger value="local">Local (Desktop)</TabsTrigger>
+						</TabsList>
+						<TabsContent value="remote" className="space-y-3">
+							<div className="relative">
+								<div className="flex h-auto min-h-10 w-full rounded-md border border-input bg-muted px-3 py-2 text-sm items-center font-mono break-all">
+									<Badge variant="default" className="mr-2 font-mono shrink-0">
+										{method}
+									</Badge>
+									{remoteUrl}
+								</div>
+								<Button
+									type="button"
+									variant="ghost"
+									size="sm"
+									className="absolute right-1 top-1 h-8"
+									onClick={() => navigator.clipboard.writeText(remoteUrl)}
+								>
+									Copy
+								</Button>
+							</div>
+							<p className="text-xs text-muted-foreground">
+								Public endpoint for remote/cloud execution. Available 24/7.
+							</p>
+							<Alert>
+								<AlertTitle>Example Request</AlertTitle>
+								<AlertDescription>
+									<CurlExample url={remoteUrl} withAuth={!!authToken} />
+								</AlertDescription>
+							</Alert>
+						</TabsContent>
+						<TabsContent value="local" className="space-y-3">
+							<div className="relative">
+								<div className="flex h-auto min-h-10 w-full rounded-md border border-input bg-muted px-3 py-2 text-sm items-center font-mono break-all">
+									<Badge
+										variant="secondary"
+										className="mr-2 font-mono shrink-0"
+									>
+										{method}
+									</Badge>
+									{localUrl}
+								</div>
+								<Button
+									type="button"
+									variant="ghost"
+									size="sm"
+									className="absolute right-1 top-1 h-8"
+									onClick={() => navigator.clipboard.writeText(localUrl)}
+								>
+									Copy
+								</Button>
+							</div>
+							<p className="text-xs text-muted-foreground">
+								Local endpoint for desktop app execution. Only available when
+								the app is running.
+							</p>
+							<Alert>
+								<AlertTitle>Example Request</AlertTitle>
+								<AlertDescription>
+									<CurlExample url={localUrl} withAuth={!!authToken} />
+								</AlertDescription>
+							</Alert>
+						</TabsContent>
+					</Tabs>
+				) : (
+					<div className="space-y-3">
+						<div className="relative">
+							<div className="flex h-auto min-h-10 w-full rounded-md border border-input bg-muted px-3 py-2 text-sm items-center font-mono break-all">
+								<Badge variant="secondary" className="mr-2 font-mono shrink-0">
+									{method}
+								</Badge>
+								{localUrl}
+							</div>
+							<Button
+								type="button"
+								variant="ghost"
+								size="sm"
+								className="absolute right-1 top-1 h-8"
+								onClick={() => navigator.clipboard.writeText(localUrl)}
+							>
+								Copy
+							</Button>
+						</div>
+						<p className="text-xs text-muted-foreground">
+							Local endpoint for desktop app execution. Only available when the
+							app is running.
+						</p>
+						<Alert>
+							<AlertTitle>Example Request</AlertTitle>
+							<AlertDescription>
+								<CurlExample url={localUrl} withAuth={!!authToken} />
+							</AlertDescription>
+						</Alert>
 					</div>
-					<Button
-						type="button"
-						variant="ghost"
-						size="sm"
-						className="absolute right-1 top-1 h-8"
-						onClick={() => {
-							navigator.clipboard.writeText(fullUrl);
-						}}
-					>
-						Copy
-					</Button>
-				</div>
-				<p className="text-sm text-muted-foreground">
-					Send requests to this URL to trigger the event.
-				</p>
+				)}
 			</div>
-
-			{/* Example cURL */}
-			<Alert>
-				<AlertTitle>Example Request</AlertTitle>
-				<AlertDescription>
-					<pre className="mt-2 overflow-x-auto text-xs bg-muted p-3 rounded-md">
-						{authToken
-							? `curl -X ${method} "${fullUrl}" \\\n  -H "Authorization: Bearer ${authToken}"`
-							: `curl -X ${method} "${fullUrl}"`}
-					</pre>
-				</AlertDescription>
-			</Alert>
 
 			{/* Authentication */}
 			<div className="space-y-4">

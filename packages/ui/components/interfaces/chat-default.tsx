@@ -2,9 +2,15 @@
 
 import { createId } from "@paralleldrive/cuid2";
 import { useLiveQuery } from "dexie-react-hooks";
-import { HistoryIcon, SquarePenIcon } from "lucide-react";
-import { usePathname, useSearchParams } from "next/navigation";
 import {
+	ChevronDownIcon,
+	HistoryIcon,
+	HomeIcon,
+	SquarePenIcon,
+} from "lucide-react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import {
+	type MutableRefObject,
 	type RefObject,
 	memo,
 	useCallback,
@@ -25,7 +31,16 @@ import { useSetQueryParams } from "../../lib/set-query-params";
 import { parseUint8ArrayToJson } from "../../lib/uint8";
 import { useBackend } from "../../state/backend-state";
 import { useExecutionEngine } from "../../state/execution-engine-context";
-import { Button, HoverCard, HoverCardContent, HoverCardTrigger } from "../ui";
+import {
+	Button,
+	DropdownMenu,
+	DropdownMenuContent,
+	DropdownMenuItem,
+	DropdownMenuTrigger,
+	HoverCard,
+	HoverCardContent,
+	HoverCardTrigger,
+} from "../ui";
 import { fileToAttachment } from "./chat-default/attachment";
 import { Chat, type IChatRef } from "./chat-default/chat";
 import {
@@ -65,6 +80,44 @@ async function prepareAttachments(
 		);
 	}
 	return { imageAttachments, otherAttachments };
+}
+
+/**
+ * Deduplicates consecutive messages with the same role.
+ * Keeps the message with more content when there are consecutive same-role messages.
+ * This prevents showing duplicate user/assistant messages after reconnection or streaming.
+ */
+function deduplicateConsecutiveMessages(messages: IMessage[]): IMessage[] {
+	if (messages.length <= 1) return messages;
+
+	const result: IMessage[] = [];
+	for (const message of messages) {
+		const lastMessage = result[result.length - 1];
+
+		// If no previous message or different role, just add it
+		if (!lastMessage || lastMessage.inner.role !== message.inner.role) {
+			result.push(message);
+			continue;
+		}
+
+		// Same role as previous - keep the one with more content
+		const lastContent =
+			typeof lastMessage.inner.content === "string"
+				? lastMessage.inner.content
+				: JSON.stringify(lastMessage.inner.content);
+		const currentContent =
+			typeof message.inner.content === "string"
+				? message.inner.content
+				: JSON.stringify(message.inner.content);
+
+		if (currentContent.length > lastContent.length) {
+			// Replace last message with current (has more content)
+			result[result.length - 1] = message;
+		}
+		// Otherwise keep the existing one (already has more or equal content)
+	}
+
+	return result;
 }
 
 function createHistoryMessage(
@@ -197,25 +250,90 @@ async function handleStreamCompletion(
 	executionEngine: any,
 	streamId: string,
 	subscriberId: string,
-	tmpLocalState?: any,
-	tmpGlobalState?: any,
+	processedCompletedStreams: MutableRefObject<Set<string>>,
+	events: any[],
+	intermediateResponse: Response,
+	attachments: Map<string, IAttachment>,
+	appId: string,
+	eventId: string,
+	sessionId: string,
+	initialLocalState?: any,
+	initialGlobalState?: any,
 ) {
-	if (tmpLocalState) {
-		await chatDb.localStage.put(tmpLocalState);
+	if (processedCompletedStreams.current.has(streamId)) {
+		return;
 	}
 
-	if (tmpGlobalState) {
-		await chatDb.globalState.put(tmpGlobalState);
+	const result = processChatEvents(events, {
+		intermediateResponse,
+		responseMessage,
+		attachments,
+		tmpLocalState: initialLocalState ?? null,
+		tmpGlobalState: initialGlobalState ?? null,
+		done: false,
+		appId,
+		eventId,
+		sessionId,
+	});
+
+	processedCompletedStreams.current.add(streamId);
+
+	if (result.tmpLocalState) {
+		await chatDb.localStage.put(result.tmpLocalState);
 	}
 
-	// Clear the streaming message BEFORE writing to Dexie to prevent duplicates
+	if (result.tmpGlobalState) {
+		await chatDb.globalState.put(result.tmpGlobalState);
+	}
+
+	// Write to Dexie FIRST to ensure the message is persisted before clearing streaming state
+	// This prevents the message from briefly disappearing
+	await chatDb.messages.put(result.responseMessage);
+
+	// Clear the streaming message AFTER writing to Dexie
+	// The useLiveQuery will pick up the new message from DB
 	chatRef.current?.clearCurrentMessageUpdate();
-
-	await chatDb.messages.put(responseMessage);
 
 	chatRef.current?.scrollToBottom();
 
 	executionEngine.unsubscribeFromEventStream(streamId, subscriberId);
+}
+
+/**
+ * Creates an incremental save function for chat message streaming.
+ * This function saves the current message state to Dexie periodically.
+ * The message object is expected to be updated by the subscriber before this is called.
+ *
+ * Note: The final completion is handled by handleStreamCompletion, so this function
+ * only saves intermediate state. The isFinal flag is used only for logging.
+ *
+ * @param responseMessage - The message object (modified by subscriber)
+ * @param localStateRef - Reference to current local state (updated by subscriber)
+ * @param globalStateRef - Reference to current global state (updated by subscriber)
+ */
+function createChatIncrementalSaver(
+	responseMessage: IMessage,
+	localStateRef: { current: any },
+	globalStateRef: { current: any },
+): (events: any[], isFinal: boolean) => Promise<void> {
+	return async (_events: any[], isFinal: boolean) => {
+		// Save the message in its current state (already updated by subscriber)
+		await chatDb.messages.put(responseMessage);
+
+		// Save local/global state if present
+		if (localStateRef.current) {
+			await chatDb.localStage.put(localStateRef.current);
+		}
+		if (globalStateRef.current) {
+			await chatDb.globalState.put(globalStateRef.current);
+		}
+
+		// Note: We don't clear streaming state here - that's handled by handleStreamCompletion
+		// which also does proper cleanup (unsubscribe, etc.)
+		if (isFinal) {
+			console.log("[Chat] Incremental save completed (final)");
+		}
+	};
 }
 
 export const ChatInterfaceMemoized = memo(function ChatInterface({
@@ -225,6 +343,7 @@ export const ChatInterfaceMemoized = memo(function ChatInterface({
 	toolbarRef,
 	sidebarRef,
 }: Readonly<IUseInterfaceProps>) {
+	const router = useRouter();
 	const backend = useBackend();
 	const executionEngine = useExecutionEngine();
 	const searchParams = useSearchParams();
@@ -234,7 +353,85 @@ export const ChatInterfaceMemoized = memo(function ChatInterface({
 	const chatRef = useRef<IChatRef>(null);
 	const activeSubscriptions = useRef<string[]>([]);
 	const processedCompletedStreams = useRef<Set<string>>(new Set());
+	const reconnectSubscribed = useRef<Set<string>>(new Set());
 	const [isSendingFromWelcome, setIsSendingFromWelcome] = useState(false);
+	const lastNavigateToRef = useRef<string | null>(null);
+
+	const buildUseNavigationUrl = useCallback(
+		(route: string, queryParams?: Record<string, string>): string => {
+			let navUrl = route;
+
+			if (!route) {
+				return `/use?id=${appId}&route=/`;
+			}
+
+			if (appId && !route.startsWith("/use") && !route.startsWith("http")) {
+				const [routePath, routeQueryString] = route.split("?");
+				const params = new URLSearchParams();
+				params.set("id", appId);
+				params.set("route", routePath || "/");
+				params.delete("eventId");
+
+				if (routeQueryString) {
+					const routeParams = new URLSearchParams(routeQueryString);
+					routeParams.forEach((value, key) => {
+						params.set(key, value);
+					});
+				}
+
+				if (queryParams) {
+					for (const [key, value] of Object.entries(queryParams)) {
+						params.set(key, value);
+					}
+				}
+				return `/use?${params.toString()}`;
+			}
+
+			if (queryParams && Object.keys(queryParams).length > 0) {
+				const params = new URLSearchParams(queryParams);
+				const separator = navUrl.includes("?") ? "&" : "?";
+				navUrl = `${navUrl}${separator}${params.toString()}`;
+			}
+
+			return navUrl;
+		},
+		[appId],
+	);
+
+	const handleNavigateTo = useCallback(
+		(route: string, replace: boolean, queryParams?: Record<string, string>) => {
+			const navUrl = buildUseNavigationUrl(route, queryParams);
+			if (replace) {
+				router.replace(navUrl);
+			} else {
+				router.push(navUrl);
+			}
+		},
+		[buildUseNavigationUrl, router],
+	);
+
+	const handleNavigationEvents = useCallback(
+		(events: any[]) => {
+			for (const ev of events) {
+				if (ev?.event_type !== "a2ui") continue;
+				const message = ev?.payload;
+				if (!message || message.type !== "navigateTo") continue;
+
+				const { route, replace, queryParams } = message as {
+					route: string;
+					replace: boolean;
+					queryParams?: Record<string, string>;
+				};
+
+				const key = `${route}::${replace ? "r" : "p"}::${JSON.stringify(queryParams ?? {})}`;
+				if (lastNavigateToRef.current === key) continue;
+				lastNavigateToRef.current = key;
+
+				handleNavigateTo(route, replace, queryParams);
+			}
+		},
+		[handleNavigateTo],
+	);
 
 	// Store pending message data for OAuth retry
 	const pendingMessageRef = useRef<{
@@ -261,14 +458,13 @@ export const ChatInterfaceMemoized = memo(function ChatInterface({
 		};
 	}, [sessionIdParameter, executionEngine]);
 
-	const messages = useLiveQuery(
-		() =>
-			chatDb.messages
-				.where("sessionId")
-				.equals(sessionIdParameter)
-				.sortBy("timestamp"),
-		[sessionIdParameter],
-	);
+	const messages = useLiveQuery(async () => {
+		const rawMessages = await chatDb.messages
+			.where("sessionId")
+			.equals(sessionIdParameter)
+			.sortBy("timestamp");
+		return deduplicateConsecutiveMessages(rawMessages);
+	}, [sessionIdParameter]);
 
 	const localState = useLiveQuery(
 		() =>
@@ -311,8 +507,23 @@ export const ChatInterfaceMemoized = memo(function ChatInterface({
 		[updateSessionId],
 	);
 
-	const toolbarElements = useMemo(
-		() => [
+	const toolbarElements = useMemo(() => {
+		const normalizeRoute = (value: string): string => {
+			const trimmed = value.trim();
+			if (!trimmed) return "";
+			return trimmed.startsWith("/") ? trimmed : `/${trimmed}`;
+		};
+
+		const configuredRoutes = (() => {
+			const rawArray = (config as any)?.navigate_to_routes;
+			const raw: string[] = Array.isArray(rawArray) ? rawArray : [];
+			const normalized = raw
+				.map((r) => normalizeRoute(String(r)))
+				.filter((r) => !!r);
+			return Array.from(new Set(normalized));
+		})();
+
+		const elements = [
 			<HoverCard key="chat-history" openDelay={200} closeDelay={100}>
 				<HoverCardTrigger asChild>
 					<Button
@@ -361,9 +572,92 @@ export const ChatInterfaceMemoized = memo(function ChatInterface({
 					</div>
 				</HoverCardContent>
 			</HoverCard>,
-		],
-		[handleSidebarToggle, handleNewChat],
-	);
+		];
+
+		const getRouteLabel = (path: string): string => {
+			if (path === "/") return "Home";
+			return path.replace(/^\//, "").replace(/-/g, " ").replace(/\//g, " / ");
+		};
+
+		const getRouteIcon = (path: string) => {
+			if (path === "/") return <HomeIcon className="h-4 w-4" />;
+			return null;
+		};
+
+		// Single route: pill button
+		if (configuredRoutes.length === 1) {
+			const route = configuredRoutes[0];
+			const icon = getRouteIcon(route);
+			elements.push(
+				<Button
+					key={`navigate-${route}`}
+					variant="outline"
+					size="sm"
+					onClick={() => handleNavigateTo(route, false)}
+					className="rounded-full px-4 gap-2 font-medium"
+				>
+					{icon}
+					{getRouteLabel(route)}
+				</Button>,
+			);
+		} else if (configuredRoutes.length === 2) {
+			// Two routes: segmented control
+			elements.push(
+				<div
+					key="route-nav"
+					className="inline-flex items-center rounded-full bg-muted/50 p-0.5"
+				>
+					{configuredRoutes.map((route) => {
+						const icon = getRouteIcon(route);
+						return (
+							<button
+								key={route}
+								type="button"
+								onClick={() => handleNavigateTo(route, false)}
+								className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-full transition-all text-muted-foreground hover:text-foreground hover:bg-background hover:shadow-sm"
+							>
+								{icon}
+								{getRouteLabel(route)}
+							</button>
+						);
+					})}
+				</div>,
+			);
+		} else if (configuredRoutes.length >= 3) {
+			// 3+ routes: dropdown
+			elements.push(
+				<DropdownMenu key="navigate-menu">
+					<DropdownMenuTrigger asChild>
+						<Button
+							variant="outline"
+							size="sm"
+							className="rounded-full px-4 gap-2 font-medium"
+						>
+							Navigate
+							<ChevronDownIcon className="h-3.5 w-3.5 opacity-60" />
+						</Button>
+					</DropdownMenuTrigger>
+					<DropdownMenuContent align="start" className="min-w-40">
+						{configuredRoutes.map((route) => {
+							const icon = getRouteIcon(route);
+							return (
+								<DropdownMenuItem
+									key={route}
+									onSelect={() => handleNavigateTo(route, false)}
+									className="gap-2"
+								>
+									{icon}
+									{getRouteLabel(route)}
+								</DropdownMenuItem>
+							);
+						})}
+					</DropdownMenuContent>
+				</DropdownMenu>,
+			);
+		}
+
+		return elements;
+	}, [config, handleSidebarToggle, handleNewChat, handleNavigateTo]);
 
 	const sidebarContent = useMemo(
 		() => (
@@ -410,6 +704,12 @@ export const ChatInterfaceMemoized = memo(function ChatInterface({
 			return;
 		}
 
+		// Skip if we've already subscribed with this reconnect subscriber
+		// This prevents duplicates when the effect re-runs due to messages changes
+		if (reconnectSubscribed.current.has(subscriberId)) {
+			return;
+		}
+
 		const responseMessage: IMessage = {
 			id: createId(),
 			sessionId: sessionIdParameter,
@@ -431,28 +731,25 @@ export const ChatInterfaceMemoized = memo(function ChatInterface({
 		// If stream is already complete, save to IndexedDB directly
 		// (chatRef may not be mounted yet since Chat only renders when messages exist)
 		if (executionEngine.isStreamComplete(streamId)) {
-			// Mark as processed before saving to prevent duplicate processing
-			processedCompletedStreams.current.add(streamId);
-
 			const accumulatedEvents = executionEngine.getAccumulatedEvents(streamId);
 			if (accumulatedEvents.length > 0) {
-				// Pass done: false so that chat_stream_partial and chat_stream events are processed
-				// to extract the message content from the accumulated events
-				const result = processChatEvents(accumulatedEvents, {
-					intermediateResponse,
+				handleNavigationEvents(accumulatedEvents);
+				void handleStreamCompletion(
 					responseMessage,
+					chatRef,
+					executionEngine,
+					streamId,
+					subscriberId,
+					processedCompletedStreams,
+					accumulatedEvents,
+					intermediateResponse,
 					attachments,
-					tmpLocalState: null,
-					tmpGlobalState: null,
-					done: false,
 					appId,
-					eventId: event.id,
-					sessionId: sessionIdParameter,
-				});
-
-				// Save directly to IndexedDB - useLiveQuery will pick it up
-				chatDb.messages.put(result.responseMessage);
-				executionEngine.unsubscribeFromEventStream(streamId, subscriberId);
+					event.id,
+					sessionIdParameter,
+					null,
+					null,
+				);
 			}
 			return;
 		}
@@ -461,11 +758,16 @@ export const ChatInterfaceMemoized = memo(function ChatInterface({
 		// before subscribing, since we need chatRef to push updates
 		if (messages.length === 0) return;
 
+		// Mark this subscriber as active before subscribing
+		reconnectSubscribed.current.add(subscriberId);
+
 		// For active streams, subscribe to receive events
 		executionEngine.subscribeToEventStream(
 			streamId,
 			subscriberId,
 			(events) => {
+				handleNavigationEvents(events);
+
 				const result = processChatEvents(events, {
 					intermediateResponse,
 					responseMessage,
@@ -488,18 +790,31 @@ export const ChatInterfaceMemoized = memo(function ChatInterface({
 				}
 			},
 			async (events) => {
+				handleNavigationEvents(events);
 				await handleStreamCompletion(
 					responseMessage,
 					chatRef,
 					executionEngine,
 					streamId,
 					subscriberId,
+					processedCompletedStreams,
+					events,
+					intermediateResponse,
+					attachments,
+					appId,
+					event.id,
+					sessionIdParameter,
+					null,
+					null,
 				);
+				// Clean up the reconnect subscriber tracking after completion
+				reconnectSubscribed.current.delete(subscriberId);
 			},
 		);
 
 		return () => {
 			executionEngine.unsubscribeFromEventStream(streamId, subscriberId);
+			reconnectSubscribed.current.delete(subscriberId);
 		};
 	}, [
 		sessionIdParameter,
@@ -507,6 +822,7 @@ export const ChatInterfaceMemoized = memo(function ChatInterface({
 		event.id,
 		event.name,
 		executionEngine,
+		handleNavigationEvents,
 		messages,
 	]);
 
@@ -614,9 +930,21 @@ export const ChatInterfaceMemoized = memo(function ChatInterface({
 			let done = false;
 			const attachments: Map<string, IAttachment> = new Map();
 
+			// Refs for incremental save to access current state
+			const localStateRef = { current: tmpLocalState };
+			const globalStateRef = { current: tmpGlobalState };
+
 			const streamId = sessionIdParameter;
 			const subscriberId = `chat-${responseMessage.id}`;
 			activeSubscriptions.current.push(subscriberId);
+
+			// Create incremental save function for robust message persistence
+			// This saves the message every N events to prevent data loss
+			const incrementalSave = createChatIncrementalSaver(
+				responseMessage,
+				localStateRef,
+				globalStateRef,
+			);
 
 			// Start execution first to reset the stream state
 			const executionPromise = executionEngine.executeEvent(streamId, {
@@ -632,11 +960,16 @@ export const ChatInterfaceMemoized = memo(function ChatInterface({
 				title: event.name || "Chat",
 				interfaceType: "chat",
 				skipConsentCheck,
+				// Save to Dexie every 10 events and on completion for robustness
+				onIncrementalSave: incrementalSave,
+				saveIntervalEvents: 10,
 			});
 			executionEngine.subscribeToEventStream(
 				streamId,
 				subscriberId,
 				(events) => {
+					handleNavigationEvents(events);
+
 					const result = processChatEvents(events, {
 						intermediateResponse,
 						responseMessage,
@@ -654,6 +987,13 @@ export const ChatInterfaceMemoized = memo(function ChatInterface({
 					tmpGlobalState = result.tmpGlobalState;
 					done = result.done;
 
+					// Update refs for incremental save to access
+					localStateRef.current = result.tmpLocalState;
+					globalStateRef.current = result.tmpGlobalState;
+
+					// Update responseMessage in place for incremental save
+					Object.assign(responseMessage, result.responseMessage);
+
 					if (result.shouldUpdate) {
 						chatRef.current?.pushCurrentMessageUpdate({
 							...result.responseMessage,
@@ -662,6 +1002,8 @@ export const ChatInterfaceMemoized = memo(function ChatInterface({
 					}
 				},
 				async (events) => {
+					handleNavigationEvents(events);
+
 					try {
 						await handleStreamCompletion(
 							responseMessage,
@@ -669,6 +1011,13 @@ export const ChatInterfaceMemoized = memo(function ChatInterface({
 							executionEngine,
 							streamId,
 							subscriberId,
+							processedCompletedStreams,
+							events,
+							intermediateResponse,
+							attachments,
+							appId,
+							event.id,
+							sessionIdParameter,
 							tmpLocalState,
 							tmpGlobalState,
 						);
@@ -691,6 +1040,7 @@ export const ChatInterfaceMemoized = memo(function ChatInterface({
 			messages,
 			localState,
 			globalState,
+			handleNavigationEvents,
 			pathname,
 		],
 	);

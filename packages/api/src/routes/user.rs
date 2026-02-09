@@ -37,6 +37,7 @@ pub mod pricing;
 pub mod subscribe;
 pub mod templates;
 pub mod upsert_info;
+pub mod widgets;
 
 pub fn routes() -> Router<AppState> {
     Router::new()
@@ -54,7 +55,20 @@ pub fn routes() -> Router<AppState> {
         .route("/search/{query}", get(lookup::user_search))
         .route("/invites", get(get_invites::get_invites))
         .route("/templates", get(templates::get_templates))
+        .route("/widgets", get(widgets::get_widgets))
         .route("/notifications", get(notifications::get_notifications))
+        .route(
+            "/notifications/list",
+            get(notifications::list_notifications),
+        )
+        .route(
+            "/notifications/read-all",
+            post(notifications::mark_all_read),
+        )
+        .route(
+            "/notifications/{notification_id}",
+            post(notifications::mark_notification_read).delete(notifications::delete_notification),
+        )
         .route(
             "/invites/{invite_id}",
             post(manage_invite::accept_invite).delete(manage_invite::reject_invite),

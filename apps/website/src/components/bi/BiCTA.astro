@@ -1,0 +1,73 @@
+---
+interface Props {
+  t: (key: string) => string;
+}
+
+const { t } = Astro.props;
+---
+
+<section class="relative py-16 sm:py-24 lg:py-32 overflow-hidden">
+  <!-- Background glow -->
+  <div class="absolute inset-0 overflow-hidden pointer-events-none">
+    <div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-primary/10 rounded-full blur-[120px]" />
+  </div>
+
+  <div class="mx-auto max-w-4xl px-6 lg:px-8 text-center relative">
+    <p class="text-[11px] font-medium tracking-[0.3em] uppercase text-primary mb-4">
+      {t("bi.cta.tagline")}
+    </p>
+    <h2 class="text-4xl sm:text-5xl lg:text-6xl font-bold tracking-tight mb-6">
+      {t("bi.cta.headline")}
+    </h2>
+    <p class="text-xl text-muted-foreground mb-12 max-w-2xl mx-auto">
+      {t("bi.cta.description")}
+    </p>
+
+    <div class="flex flex-col sm:flex-row items-center justify-center gap-4">
+      <a href="/download" class="group inline-flex items-center gap-3 px-6 sm:px-10 py-4 sm:py-5 bg-primary text-primary-foreground rounded-full font-semibold text-base sm:text-lg hover:bg-primary/90 transition-all hover:scale-[1.02] active:scale-[0.98] shadow-lg shadow-primary/25">
+        {t("bi.cta.button")}
+        <svg class="w-5 h-5 group-hover:translate-x-1 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+        </svg>
+      </a>
+      <a href="/24-hour-solution" class="inline-flex items-center gap-2 px-8 py-5 text-base font-medium rounded-full border border-border hover:bg-muted/50 transition-colors">
+        Talk to Solutions Team
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3" />
+        </svg>
+      </a>
+    </div>
+
+    <p class="text-sm text-muted-foreground mt-8">
+      {t("bi.cta.note")}
+    </p>
+
+    <!-- Trust indicators -->
+    <div class="flex flex-wrap items-center justify-center gap-6 mt-12 pt-8 border-t border-border/50">
+      <div class="flex items-center gap-2 text-sm text-muted-foreground">
+        <svg class="w-5 h-5 text-emerald-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+        </svg>
+        SOC 2 Ready
+      </div>
+      <div class="flex items-center gap-2 text-sm text-muted-foreground">
+        <svg class="w-5 h-5 text-emerald-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+        </svg>
+        GDPR Compliant
+      </div>
+      <div class="flex items-center gap-2 text-sm text-muted-foreground">
+        <svg class="w-5 h-5 text-emerald-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+        </svg>
+        Self-Host Available
+      </div>
+      <div class="flex items-center gap-2 text-sm text-muted-foreground">
+        <svg class="w-5 h-5 text-emerald-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+        </svg>
+        No Per-Seat Fees
+      </div>
+    </div>
+  </div>
+</section>

@@ -42,62 +42,71 @@ enum Visibility {
   OFFLINE
 }
 
-
 model App {
   id String @id
 
-  status     Status @default(ACTIVE)
+  status     Status     @default(ACTIVE)
   visibility Visibility @default(PRIVATE)
 
   meta Meta[]
 
   templates Template[]
-  queue JoinQueue[]
-  members Membership[]
-  comments Comment[]
+  widgets   Widget[]
+  pages     Page[]
+  queue     JoinQueue[]
+  members   Membership[]
+  comments  Comment[]
   changelog String?
 
-  courses CourseConnection[]
-  inviteLinks InviteLink[]
-  invitations Invitation[]
+  courses       CourseConnection[]
+  inviteLinks   InviteLink[]
+  invitations   Invitation[]
+  notifications Notification[]
 
-  feedback Feedback[]
+  feedback            Feedback[]
   publicationRequests PublicationRequest[]
 
-  defaultRole Role? @relation("defaultForApp", fields: [defaultRoleId], references: [id])
+  defaultRole   Role?   @relation("defaultForApp", fields: [defaultRoleId], references: [id])
   defaultRoleId String? @unique
-  ownerRole Role? @relation("ownerForApp", fields: [ownerRoleId], references: [id])
-  ownerRoleId String? @unique
-  roles Role[]
+  ownerRole     Role?   @relation("ownerForApp", fields: [ownerRoleId], references: [id])
+  ownerRoleId   String? @unique
+  roles         Role[]
 
-  primaryCategory Category?
+  primaryCategory   Category?
   secondaryCategory Category?
 
-  ratingSum   BigInt   @default(0)
-  ratingCount BigInt   @default(0)
-  downloadCount BigInt @default(0)
+  ratingSum         BigInt @default(0)
+  ratingCount       BigInt @default(0)
+  downloadCount     BigInt @default(0)
   interactionsCount BigInt @default(0)
 
-  avgRating Float? @default(0)
+  avgRating      Float? @default(0)
   // Relevance formula: (downloads * 2 + interactions) * (1 + avgRating/5) * log(ratingCount + 1)
   relevanceScore Float? @default(0)
 
   totalSize BigInt @default(0)
 
-  price BigInt @default(0)
+  price   BigInt  @default(0)
   version String?
 
   technicalUsers TechnicalUser[]
-  llmUsage LLMUsageTracking[]
+  llmUsage       LLMUsageTracking[]
   executionUsage ExecutionUsageTracking[]
-  executionRuns ExecutionRun[]
-  executionMode ExecutionMode @default(ANY)
+  executionRuns  ExecutionRun[]
+  executionMode  ExecutionMode            @default(ANY)
 
-  syncs BoardSync[]
-  bits String[] @default([])
+  syncs  BoardSync[]
+  bits   String[]    @default([])
+  events Event[]
+  sinks  EventSink[]
 
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  purchases  AppPurchase[]
+  discounts  AppDiscount[]
+  salesDaily AppSalesDaily[]
+
+  createdAt               DateTime                 @default(now())
+  updatedAt               DateTime                 @updatedAt
+  embeddingUsageTrackings EmbeddingUsageTracking[]
 
   @@index([createdAt])
   @@index([updatedAt])
@@ -110,23 +119,22 @@ model App {
 model TechnicalUser {
   id String @id
 
-  name String
+  name        String
   description String?
-  key String @unique
+  key         String  @unique
 
-  role Role? @relation(fields: [roleId], references: [id], onDelete: SetNull)
+  role   Role?   @relation(fields: [roleId], references: [id], onDelete: SetNull)
   roleId String?
 
-  app   App @relation(fields: [appId], references: [id], onDelete: Cascade)
+  app   App    @relation(fields: [appId], references: [id], onDelete: Cascade)
   appId String
 
   validUntil DateTime?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
 
   @@index([appId])
 }
-
 
 model Feedback {
   id String @id
@@ -134,16 +142,16 @@ model Feedback {
   user   User?   @relation(fields: [userId], references: [id], onDelete: SetNull)
   userId String?
 
-  app   App? @relation(fields: [appId], references: [id], onDelete: Cascade)
+  app   App?    @relation(fields: [appId], references: [id], onDelete: Cascade)
   appId String?
 
-  template Template? @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  template   Template? @relation(fields: [templateId], references: [id], onDelete: Cascade)
   templateId String?
 
   eventId String?
   context Json?
   comment String
-  rating BigInt
+  rating  BigInt
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -154,20 +162,19 @@ model Feedback {
   @@index([userId])
 }
 
-
 model Comment {
   id String @id
 
-  text String
+  text   String
   rating BigInt
 
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
   userId String
 
-  app   App? @relation(fields: [appId], references: [id], onDelete: Cascade)
+  app   App?    @relation(fields: [appId], references: [id], onDelete: Cascade)
   appId String?
 
-  template Template? @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  template   Template? @relation(fields: [templateId], references: [id], onDelete: Cascade)
   templateId String?
 
   createdAt DateTime @default(now())
@@ -183,15 +190,15 @@ model Template {
 
   meta Meta[]
 
-  comments Comment[]
+  comments  Comment[]
   changelog String?
 
   feedback Feedback[]
 
-  ratingSum   BigInt   @default(0)
-  ratingCount BigInt   @default(0)
+  ratingSum   BigInt @default(0)
+  ratingCount BigInt @default(0)
 
-  app App @relation(fields: [appId], references: [id], onDelete: Cascade)
+  app   App    @relation(fields: [appId], references: [id], onDelete: Cascade)
   appId String
 
   version String?
@@ -200,13 +207,49 @@ model Template {
   updatedAt DateTime @updatedAt
 }
 
+model Widget {
+  id String @id
+
+  meta Meta[]
+
+  app   App    @relation(fields: [appId], references: [id], onDelete: Cascade)
+  appId String
+
+  version String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([appId])
+}
+
+model Page {
+  id String @id
+
+  name        String
+  description String?
+
+  app   App    @relation(fields: [appId], references: [id], onDelete: Cascade)
+  appId String
+
+  boardId String?
+
+  version String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([appId])
+  @@index([boardId])
+}
+
 model BoardSync {
   id String @id
 
-  app   App @relation(fields: [appId], references: [id], onDelete: Cascade)
+  app   App    @relation(fields: [appId], references: [id], onDelete: Cascade)
   appId String
 
-  boardId String
+  boardId      String
   lastSyncedAt DateTime
 
   syncEncryptionKey String
@@ -215,4 +258,296 @@ model BoardSync {
   updatedAt DateTime @updatedAt
 
   @@unique([appId, boardId])
+}
+
+/// Event model - mirrors the Event structure stored in bucket for fast lookups
+/// The full Event data is kept in the bucket for versioning, this is the DB mirror
+model Event {
+  id String @id
+
+  app   App    @relation(fields: [appId], references: [id], onDelete: Cascade)
+  appId String
+
+  name        String
+  description String?
+
+  /// Event type: "chat", "api", "email", "quick_action", etc.
+  eventType String
+
+  /// Whether this event is active
+  active Boolean @default(true)
+
+  /// Priority for ordering events
+  priority Int @default(0)
+
+  /// Board this event triggers (mutually exclusive with pageId for A2UI events)
+  boardId      String?
+  /// Board version as semver string "major.minor.patch"
+  boardVersion String?
+  /// Node ID within the board
+  nodeId       String?
+
+  /// For A2UI events: default page to render
+  pageId String?
+
+  /// URL route path that maps to this event (e.g., "/", "/dashboard")
+  route String?
+
+  /// Whether this is the default event/route for the app
+  isDefault Boolean @default(false)
+
+  /// Event version as semver string "major.minor.patch"
+  eventVersion String @default("0.0.0")
+
+  /// Variables for this event (JSON blob)
+  variables Json?
+
+  /// Event config (stored as base64 or JSON depending on content)
+  config Json?
+
+  /// Input pins metadata for quick access without loading board
+  inputs Json?
+
+  /// Release notes - can be plain text or URL
+  notes Json?
+
+  /// Canary configuration for A/B testing
+  canary Json?
+
+  sink EventSink?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([appId, route])
+  @@index([appId])
+  @@index([appId, active])
+  @@index([appId, eventType])
+  @@index([appId, isDefault])
+  @@index([boardId])
+  @@index([pageId])
+}
+
+/// Event Sink Registration - tracks which events have active server-side sinks
+/// Most config comes from the Event itself via join - we only store sink-specific data
+model EventSink {
+  id String @id @default(cuid())
+
+  /// The event this sink is for - unique 1:1 mapping
+  eventId String @unique
+  event   Event  @relation(fields: [eventId], references: [id], onDelete: Cascade)
+
+  /// App the event belongs to (for permission checks and lookups)
+  app   App    @relation(fields: [appId], references: [id], onDelete: Cascade)
+  appId String
+
+  /// Sink type: "http", "cron", "discord", "telegram", etc. (from event.eventType)
+  sinkType String
+
+  /// Is the sink currently active on the server?
+  active Boolean @default(true)
+
+  /// For HTTP sinks: the unique path to listen on
+  path String?
+
+  /// Auth token for securing HTTP endpoints (optional, auto-generated if not provided)
+  authToken String?
+
+  /// Secret for webhook verification (Telegram)
+  webhookSecret String?
+
+  /// For cron sinks: the cron expression (e.g., "0 * * * *")
+  cronExpression String?
+
+  /// For cron sinks: timezone (default UTC)
+  cronTimezone String?
+
+  /// Encrypted Personal Access Token for execution (optional - allows model/file access)
+  patEncrypted String?
+
+  /// Encrypted OAuth tokens JSON (optional - for provider-specific access like Google, GitHub, etc.)
+  oauthTokensEncrypted String?
+
+  /// Snapshot of the last updater's profile JSON (bits, hubs) for trigger execution
+  profileJson Json?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([appId, path])
+  @@index([appId])
+  @@index([active])
+  @@index([sinkType])
+  @@index([sinkType, active])
+}
+
+/// Service Sink Token - JWT tokens issued to internal services for triggering sinks
+/// Each token is scoped to a specific sink type and can be individually revoked
+model SinkToken {
+  /// JWT ID (jti claim) - unique identifier for the token
+  id String @id
+
+  /// The sink type this token is authorized to trigger (e.g., "cron", "discord", "telegram")
+  sinkType String
+
+  /// Human-readable name/description for the token
+  name String?
+
+  /// Whether this token has been revoked
+  revoked Boolean @default(false)
+
+  /// When the token was revoked (if applicable)
+  revokedAt DateTime?
+
+  /// Who/what revoked the token
+  revokedBy String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([sinkType])
+  @@index([revoked])
+  @@index([sinkType, revoked])
+}
+
+// ================== Sales & Purchases ==================
+
+enum PurchaseStatus {
+  PENDING
+  COMPLETED
+  REFUNDED
+  PARTIALLY_REFUNDED
+  FAILED
+}
+
+enum DiscountType {
+  PERCENTAGE
+  FIXED_AMOUNT
+}
+
+/// Tracks individual app purchases
+model AppPurchase {
+  id String @id
+
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId String
+
+  app   App    @relation(fields: [appId], references: [id], onDelete: Cascade)
+  appId String
+
+  /// Price paid in cents at time of purchase
+  pricePaid      BigInt
+  /// Original price before discount (in cents)
+  originalPrice  BigInt
+  /// Discount amount in cents (0 if none)
+  discountAmount BigInt @default(0)
+
+  discount   AppDiscount? @relation(fields: [discountId], references: [id], onDelete: SetNull)
+  discountId String?
+
+  /// Currency code (e.g., "EUR", "USD")
+  currency String @default("EUR")
+
+  /// Stripe checkout session ID for this purchase
+  stripeSessionId       String
+  /// Stripe payment intent ID
+  stripePaymentIntentId String?
+
+  status PurchaseStatus @default(PENDING)
+
+  /// When purchase was completed
+  completedAt  DateTime?
+  /// When refunded (if applicable)
+  refundedAt   DateTime?
+  /// Refund reason if refunded
+  refundReason String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId])
+  @@index([appId])
+  @@index([appId, status])
+  @@index([appId, completedAt])
+  @@index([stripeSessionId])
+}
+
+/// Discount codes for apps
+model AppDiscount {
+  id String @id
+
+  app   App    @relation(fields: [appId], references: [id], onDelete: Cascade)
+  appId String
+
+  /// Discount code (e.g., "LAUNCH20")
+  code        String
+  /// Human-readable name for the discount
+  name        String
+  /// Description of the discount
+  description String?
+
+  discountType  DiscountType
+  /// Discount value (percentage 0-100 or fixed amount in cents)
+  discountValue BigInt
+
+  /// Maximum number of uses (null = unlimited)
+  maxUses           BigInt?
+  /// Current number of times used
+  usedCount         BigInt  @default(0)
+  /// Minimum purchase amount required (in cents, null = no minimum)
+  minPurchaseAmount BigInt?
+
+  /// When the discount becomes active
+  startsAt  DateTime  @default(now())
+  /// When the discount expires (null = never)
+  expiresAt DateTime?
+  /// Whether the discount is currently active
+  isActive  Boolean   @default(true)
+
+  purchases AppPurchase[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([appId, code])
+  @@index([appId])
+  @@index([appId, isActive])
+  @@index([code])
+}
+
+/// Pre-aggregated daily sales data for efficient dashboard queries
+model AppSalesDaily {
+  id String @id
+
+  app   App    @relation(fields: [appId], references: [id], onDelete: Cascade)
+  appId String
+
+  /// Date for this aggregation
+  date DateTime @db.Date
+
+  /// Total revenue for the day (in cents)
+  totalRevenue      BigInt @default(0)
+  /// Gross revenue before discounts (in cents)
+  grossRevenue      BigInt @default(0)
+  /// Total discount amount given (in cents)
+  totalDiscounts    BigInt @default(0)
+  /// Number of purchases
+  purchaseCount     BigInt @default(0)
+  /// Number of refunds
+  refundCount       BigInt @default(0)
+  /// Total refund amount (in cents)
+  refundAmount      BigInt @default(0)
+  /// Number of unique buyers
+  uniqueBuyers      BigInt @default(0)
+  /// Average order value (in cents)
+  avgOrderValue     BigInt @default(0)
+  /// Number of discount codes used
+  discountCodesUsed BigInt @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([appId, date])
+  @@index([appId])
+  @@index([appId, date])
 }

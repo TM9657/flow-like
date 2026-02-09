@@ -1,272 +1,300 @@
 enum UserStatus {
-    ACTIVE
-    INACTIVE
-    BANNED
+  ACTIVE
+  INACTIVE
+  BANNED
 }
 
 enum UserTier {
-    FREE
-    PREMIUM
-    PRO
-    ENTERPRISE
+  FREE
+  PREMIUM
+  PRO
+  ENTERPRISE
 }
 
 model User {
-    id String @id
+  id String @id
 
-    stripeId String? @unique
-    trackingId String? @unique
+  stripeId   String? @unique
+  trackingId String? @unique
 
-    email       String? @unique
-    username    String? @unique
-    preferredUsername String? @unique
-    name        String?
-    description String?
-    avatar   String?
+  email             String? @unique
+  username          String? @unique
+  preferredUsername String? @unique
+  name              String?
+  description       String?
+  avatar            String?
 
-    additionalInformation Json?
+  additionalInformation Json?
 
-    permission           BigInt  @default(0)
-    acceptedTermsVersion String?
-    tutorialCompleted    Boolean @default(false)
+  permission           BigInt  @default(0)
+  acceptedTermsVersion String?
+  tutorialCompleted    Boolean @default(false)
 
-    memberships                 Membership[]
-    profiles                    Profile[]
-    personalAccessToken         PAT[]
-    queue                       JoinQueue[]
-    comments                    Comment[]
-    llmUsage                    LLMUsageTracking[]
-    executionUsage              ExecutionUsageTracking[]
-    executionRuns               ExecutionRun[]
-    feedback                    Feedback[]
-    assignedPublicationRequests PublicationRequest[]
-    publicationLogs             PublicationLog[]
-    invitations                 Invitation[]
-    transactions                Transaction[]
+  memberships                 Membership[]
+  profiles                    Profile[]
+  personalAccessToken         PAT[]
+  queue                       JoinQueue[]
+  comments                    Comment[]
+  llmUsage                    LLMUsageTracking[]
+  embeddingUsage              EmbeddingUsageTracking[]
+  executionUsage              ExecutionUsageTracking[]
+  executionRuns               ExecutionRun[]
+  feedback                    Feedback[]
+  assignedPublicationRequests PublicationRequest[]
+  publicationLogs             PublicationLog[]
+  invitations                 Invitation[]
+  transactions                Transaction[]
+  notifications               Notification[]
+  authoredWasmPackages        WasmPackageAuthor[]
+  wasmPackageReviews          WasmPackageReview[]
+  purchases                   AppPurchase[]
 
-    status UserStatus @default(ACTIVE)
-    tier   UserTier   @default(FREE)
+  status UserStatus @default(ACTIVE)
+  tier   UserTier   @default(FREE)
 
-    totalSize BigInt @default(0)
-    totalLLMPrice BigInt @default(0)
-    llmPriceTrackingMonth String?
+  totalSize             BigInt  @default(0)
+  totalLLMPrice         BigInt  @default(0)
+  totalEmbeddingPrice   BigInt  @default(0)
+  llmPriceTrackingMonth String?
 
-    createdAt DateTime @default(now())
-    updatedAt DateTime @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 model Profile {
-    id String @id
+  id String @id
 
-    name        String
-    thumbnail   String?
-    icon        String?
-    description String?
-    interests   String[]
-    tags        String[]
+  name        String
+  thumbnail   String?
+  icon        String?
+  description String?
+  interests   String[]
+  tags        String[]
 
-    theme    Json?
-    settings Json?
+  theme    Json?
+  settings Json?
 
-    // JSON with the apps that are part of the profile. Contains the app ID, if it is favorite, pinned and position of the two
-    apps   Json?
-    bitIds String[]
-    hub    String
-    hubs   String[]
+  // JSON with the apps that are part of the profile. Contains the app ID, if it is favorite, pinned and position of the two
+  apps      Json?
+  shortcuts Json?
+  bitIds    String[]
+  hub       String
+  hubs      String[]
 
-    userId String
-    user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-    createdAt DateTime @default(now())
-    updatedAt DateTime @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId])
 }
 
 model PAT {
-    id String @id
+  id String @id
 
-    name        String
-    key         String @unique
-    permissions BigInt @default(1)
+  name        String
+  key         String @unique
+  permissions BigInt @default(1)
 
-    user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
-    userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId String
 
-    validUntil DateTime?
-    createdAt  DateTime  @default(now())
-    updatedAt  DateTime  @updatedAt
+  validUntil DateTime?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
 
-    @@index([userId])
+  @@index([userId])
 }
 
 model Transaction {
-    id String @id
+  id String @id
 
-    user   User?   @relation(fields: [userId], references: [id], onDelete: SetNull)
-    userId String?
+  user   User?   @relation(fields: [userId], references: [id], onDelete: SetNull)
+  userId String?
 
-    stripeId String @unique
+  stripeId String @unique
 
-    createdAt DateTime @default(now())
-    updatedAt DateTime @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-    @@index([userId])
+  @@index([userId])
 }
 
 model LLMUsageTracking {
-    id String @id
+  id String @id
 
-    modelId  String
-    tokenIn  BigInt
-    tokenOut BigInt
+  modelId  String
+  tokenIn  BigInt
+  tokenOut BigInt
 
-    latency Float?
+  latency Float?
 
-    user   User?   @relation(fields: [userId], references: [id], onDelete: SetNull)
-    userId String?
+  user   User?   @relation(fields: [userId], references: [id], onDelete: SetNull)
+  userId String?
 
-    app   App?    @relation(fields: [appId], references: [id], onDelete: Cascade)
-    appId String?
+  app   App?    @relation(fields: [appId], references: [id], onDelete: Cascade)
+  appId String?
 
-    price BigInt
+  price BigInt
 
-    createdAt DateTime @default(now())
-    updatedAt DateTime @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model EmbeddingUsageTracking {
+  id String @id
+
+  modelId    String
+  tokenCount BigInt
+  latency    Float?
+
+  user   User?   @relation(fields: [userId], references: [id], onDelete: SetNull)
+  userId String?
+
+  app   App?    @relation(fields: [appId], references: [id], onDelete: Cascade)
+  appId String?
+
+  price BigInt
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 enum ExecutionStatus {
-    DEBUG
-    INFO
-    WARN
-    ERROR
-    FATAL
+  DEBUG
+  INFO
+  WARN
+  ERROR
+  FATAL
 }
 
 model ExecutionUsageTracking {
-    id String @id
+  id String @id
 
-    instance String?
+  instance String?
 
-    boardId String
-    nodeId  String
-    version String
+  boardId String
+  nodeId  String
+  version String
 
-    microseconds BigInt
-    status       ExecutionStatus
+  microseconds BigInt
+  status       ExecutionStatus
 
-    user   User?   @relation(fields: [userId], references: [id], onDelete: SetNull)
-    userId String?
+  user   User?   @relation(fields: [userId], references: [id], onDelete: SetNull)
+  userId String?
 
-    app   App?    @relation(fields: [appId], references: [id], onDelete: Cascade)
-    appId String?
+  app   App?    @relation(fields: [appId], references: [id], onDelete: Cascade)
+  appId String?
 
-    createdAt DateTime @default(now())
-    updatedAt DateTime @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 enum RunStatus {
-    PENDING
-    RUNNING
-    COMPLETED
-    FAILED
-    CANCELLED
-    TIMEOUT
+  PENDING
+  RUNNING
+  COMPLETED
+  FAILED
+  CANCELLED
+  TIMEOUT
 }
 
 enum RunMode {
-    LOCAL
-    HTTP                  /// Direct HTTP executor (K8s pool, Docker Compose, Azure Functions, GCP)
-    LAMBDA                /// AWS Lambda
-    KUBERNETES_ISOLATED   /// Isolated K8s job
-    KUBERNETES_POOL       /// Warm K8s executor pool (legacy)
-    FUNCTION              /// Generic function (legacy)
-    QUEUE                 /// Queue-based dispatch (Redis, SQS, Kafka)
+  LOCAL
+  HTTP /// Direct HTTP executor (K8s pool, Docker Compose, Azure Functions, GCP)
+  LAMBDA /// AWS Lambda
+  KUBERNETES_ISOLATED /// Isolated K8s job
+  KUBERNETES_POOL /// Warm K8s executor pool (legacy)
+  FUNCTION /// Generic function (legacy)
+  QUEUE /// Queue-based dispatch (Redis, SQS, Kafka)
 }
 
 /// Streaming events from execution environments
 /// These are batch-pushed by executors and fetched via long polling
 model ExecutionEvent {
-    id String @id
+  id String @id
 
-    /// The run this event belongs to
-    run   ExecutionRun @relation(fields: [runId], references: [id], onDelete: Cascade)
-    runId String
+  /// The run this event belongs to
+  run   ExecutionRun @relation(fields: [runId], references: [id], onDelete: Cascade)
+  runId String
 
-    /// Event sequence number (for ordering)
-    sequence Int
-    /// Event type (log, progress, output, error, etc.)
-    eventType String
-    /// Event payload (JSON)
-    payload Json
+  /// Event sequence number (for ordering)
+  sequence  Int
+  /// Event type (log, progress, output, error, etc.)
+  eventType String
+  /// Event payload (JSON)
+  payload   Json
 
-    /// Whether this event has been delivered to the client
-    delivered Boolean @default(false)
+  /// Whether this event has been delivered to the client
+  delivered Boolean @default(false)
 
-    /// Auto-cleanup after TTL
-    expiresAt DateTime
+  /// Auto-cleanup after TTL
+  expiresAt DateTime
 
-    createdAt DateTime @default(now())
+  createdAt DateTime @default(now())
 
-    @@index([runId, delivered, sequence])
-    @@index([expiresAt])
+  @@index([runId, delivered, sequence])
+  @@index([expiresAt])
 }
 
 /// Tracks individual execution runs of boards/events
 model ExecutionRun {
-    id String @id
+  id String @id
 
-    /// The board being executed
-    boardId String
-    /// Version of the board (optional)
-    version String?
-    /// Event ID if triggered by an event
-    eventId String?
-    /// Node ID that was executed (start node)
-    nodeId String?
+  /// The board being executed
+  boardId String
+  /// Version of the board (optional)
+  version String?
+  /// Event ID if triggered by an event
+  eventId String?
+  /// Node ID that was executed (start node)
+  nodeId  String?
 
-    /// Execution status
-    status RunStatus @default(PENDING)
-    /// Execution mode (local, k8s isolated, k8s pool, function)
-    mode RunMode @default(LOCAL)
-    /// Highest log level encountered during execution (0=Debug, 1=Info, 2=Warn, 3=Error, 4=Fatal)
-    logLevel Int @default(0)
+  /// Execution status
+  status   RunStatus @default(PENDING)
+  /// Execution mode (local, k8s isolated, k8s pool, function)
+  mode     RunMode   @default(LOCAL)
+  /// Highest log level encountered during execution (0=Debug, 1=Info, 2=Warn, 3=Error, 4=Fatal)
+  logLevel Int       @default(0)
 
-    /// Length of input payload in bytes (for tracking only)
-    inputPayloadLen BigInt @default(0)
-    /// Encryption key for input payload stored in object storage (base64 encoded)
-    inputPayloadKey String?
-    /// Length of output payload in bytes (for tracking only)
-    outputPayloadLen BigInt @default(0)
-    /// Error message if failed
-    errorMessage String?
+  /// Length of input payload in bytes (for tracking only)
+  inputPayloadLen  BigInt  @default(0)
+  /// Encryption key for input payload stored in object storage (base64 encoded)
+  inputPayloadKey  String?
+  /// Length of output payload in bytes (for tracking only)
+  outputPayloadLen BigInt  @default(0)
+  /// Error message if failed
+  errorMessage     String?
 
-    /// Progress percentage (0-100)
-    progress Int @default(0)
-    /// Current step/stage description
-    currentStep String?
+  /// Progress percentage (0-100)
+  progress    Int     @default(0)
+  /// Current step/stage description
+  currentStep String?
 
-    /// When execution started
-    startedAt DateTime?
-    /// When execution completed
-    completedAt DateTime?
-    /// TTL - auto-cleanup streaming events after this time
-    expiresAt DateTime?
+  /// When execution started
+  startedAt   DateTime?
+  /// When execution completed
+  completedAt DateTime?
+  /// TTL - auto-cleanup streaming events after this time
+  expiresAt   DateTime?
 
-    /// User who initiated the run
-    user   User?   @relation(fields: [userId], references: [id], onDelete: SetNull)
-    userId String?
+  /// User who initiated the run
+  user   User?   @relation(fields: [userId], references: [id], onDelete: SetNull)
+  userId String?
 
-    /// App the board belongs to
-    app   App    @relation(fields: [appId], references: [id], onDelete: Cascade)
-    appId String
+  /// App the board belongs to
+  app   App    @relation(fields: [appId], references: [id], onDelete: Cascade)
+  appId String
 
-    /// Streaming events for this run
-    events ExecutionEvent[]
+  /// Streaming events for this run
+  events ExecutionEvent[]
 
-    createdAt DateTime @default(now())
-    updatedAt DateTime @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-    @@index([appId, status])
-    @@index([userId, status])
-    @@index([boardId])
-    @@index([expiresAt])
+  @@index([appId, status])
+  @@index([userId, status])
+  @@index([boardId])
+  @@index([expiresAt])
 }

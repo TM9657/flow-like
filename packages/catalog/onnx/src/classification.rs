@@ -1,18 +1,16 @@
-use crate::onnx::{NodeOnnxSession, Provider};
+use crate::onnx::NodeOnnxSession;
+#[cfg(feature = "execute")]
+use crate::onnx::Provider;
 use flow_like::flow::{
     execution::context::ExecutionContext,
     node::{Node, NodeLogic},
     pin::{PinOptions, ValueType},
     variable::VariableType,
 };
-use flow_like_catalog_core::NodeImage;
-use flow_like_types::{
-    Error, JsonSchema, Result, anyhow, async_trait,
-    image::{DynamicImage, GenericImageView, imageops::FilterType},
-    json::{Deserialize, Serialize, json},
-};
+use flow_like_catalog_core::{ClassPrediction, NodeImage};
+use flow_like_types::{Result, anyhow, async_trait, json::json};
 
-#[cfg(feature = "local-ml")]
+#[cfg(feature = "execute")]
 use flow_like_model_provider::ml::{
     ndarray::{Array3, Array4, Axis, s},
     ort::{
@@ -21,16 +19,16 @@ use flow_like_model_provider::ml::{
         value::Value,
     },
 };
+#[cfg(feature = "execute")]
+use flow_like_types::Error;
+#[cfg(feature = "execute")]
+use flow_like_types::image::{DynamicImage, GenericImageView, imageops::FilterType};
+#[cfg(feature = "execute")]
 use ndarray::{Array1, ArrayView1};
+#[cfg(feature = "execute")]
 use std::borrow::Cow;
 
-#[derive(Default, Serialize, Deserialize, JsonSchema, Clone, Debug)]
-pub struct ClassPrediction {
-    pub class_idx: u32,
-    pub score: f32,
-}
-
-#[cfg(feature = "local-ml")]
+#[cfg(feature = "execute")]
 // ## Image Classification Trait for Common Behavior
 pub trait Classification {
     fn make_inputs(
@@ -62,7 +60,7 @@ pub struct TimmLike {
     pub input_height: u32,
 }
 
-#[cfg(feature = "local-ml")]
+#[cfg(feature = "execute")]
 impl Classification for TimmLike {
     fn make_inputs(
         &self,
@@ -103,10 +101,7 @@ impl Classification for TimmLike {
         let mut predictions = Vec::with_capacity(output.len_of(Axis(0)));
         for (class_idx, score) in output.axis_iter(Axis(0)).enumerate() {
             let score = score.first().copied().unwrap_or(0.);
-            predictions.push(ClassPrediction {
-                class_idx: class_idx as u32,
-                score,
-            });
+            predictions.push(ClassPrediction::new(class_idx as u32, score));
         }
         predictions.sort_unstable_by(|a, b| {
             b.score
@@ -131,7 +126,7 @@ impl Classification for TimmLike {
     }
 }
 
-#[cfg(feature = "local-ml")]
+#[cfg(feature = "execute")]
 /// # DynamicImage to ONNX Input Tensor
 /// Transforms:
 ///     1. Resize image to Input Size / Crop Percentage
@@ -207,6 +202,7 @@ fn img_to_arr(
     Ok(arr4)
 }
 
+#[cfg(feature = "execute")]
 /// # Apply Softmax on ONNX output logits
 /// -> all class channels scaled between 0..1 and sum over all classes = 1
 fn softmax(input_array: ArrayView1<f32>) -> Result<Array1<f32>, Error> {
@@ -232,7 +228,7 @@ impl NodeLogic for ImageClassificationNode {
         let mut node = Node::new(
             "image_classification",
             "Image Classification",
-            "Image Classification with ONNX-Models",
+            "Image Classification with ONNX-Models. Download models from: MobileNetV2 (https://github.com/onnx/models/tree/main/validated/vision/classification/mobilenet), SqueezeNet (https://github.com/onnx/models/tree/main/validated/vision/classification/squeezenet), ResNet (https://github.com/onnx/models/tree/main/validated/vision/classification/resnet), EfficientNet (https://github.com/onnx/models/tree/main/validated/vision/classification/efficientnet-lite4)",
             "AI/ML/ONNX",
         );
 
@@ -308,8 +304,9 @@ impl NodeLogic for ImageClassificationNode {
         node
     }
 
+    #[allow(unused_variables)]
     async fn run(&self, context: &mut ExecutionContext) -> Result<()> {
-        #[cfg(feature = "local-ml")]
+        #[cfg(feature = "execute")]
         {
             context.deactivate_exec_pin("exec_out").await?;
 
@@ -358,10 +355,10 @@ impl NodeLogic for ImageClassificationNode {
             Ok(())
         }
 
-        #[cfg(not(feature = "local-ml"))]
+        #[cfg(not(feature = "execute"))]
         {
             Err(anyhow!(
-                "ONNX Image Classification Nodes require the 'local-ml' feature to be enabled."
+                "ONNX execution requires the 'execute' feature. Rebuild with --features execute"
             ))
         }
     }

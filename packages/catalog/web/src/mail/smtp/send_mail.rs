@@ -1,15 +1,22 @@
+#[cfg(feature = "execute")]
 use async_smtp::{Envelope, SendableEmail};
+#[cfg(feature = "execute")]
 use chrono::Offset;
+#[cfg(feature = "execute")]
+use flow_like::flow::execution::LogLevel;
 use flow_like::flow::{
-    execution::{LogLevel, context::ExecutionContext},
+    execution::context::ExecutionContext,
     node::{Node, NodeLogic},
     pin::PinOptions,
     variable::VariableType,
 };
 use flow_like_catalog_core::FlowPath;
-use flow_like_types::{anyhow, async_trait, json::json};
+#[cfg(feature = "execute")]
+use flow_like_types::anyhow;
+use flow_like_types::{async_trait, json::json};
 
 use crate::mail::smtp::SmtpConnection;
+#[cfg(feature = "execute")]
 use crate::mail::{generate_mail_footer_html, generate_mail_footer_plain};
 
 #[crate::register_node]
@@ -110,6 +117,7 @@ impl NodeLogic for SmtpSendMailNode {
         node
     }
 
+    #[cfg(feature = "execute")]
     async fn run(&self, context: &mut ExecutionContext) -> flow_like_types::Result<()> {
         context.deactivate_exec_pin("exec_out").await?;
 
@@ -204,8 +212,16 @@ impl NodeLogic for SmtpSendMailNode {
         context.activate_exec_pin("exec_out").await?;
         Ok(())
     }
+
+    #[cfg(not(feature = "execute"))]
+    async fn run(&self, _context: &mut ExecutionContext) -> flow_like_types::Result<()> {
+        Err(flow_like_types::anyhow!(
+            "Web functionality requires the 'execute' feature"
+        ))
+    }
 }
 
+#[cfg(feature = "execute")]
 pub fn build_rfc5322_message_send(
     from: &str,
     to: &str,
@@ -367,6 +383,7 @@ pub fn build_rfc5322_message_send(
     message
 }
 
+#[cfg(feature = "execute")]
 fn detect_mime_type(filename: &str, _content: &[u8]) -> String {
     let extension = filename.split('.').next_back().unwrap_or("").to_lowercase();
     match extension.as_str() {
@@ -401,10 +418,12 @@ fn detect_mime_type(filename: &str, _content: &[u8]) -> String {
     .to_string()
 }
 
+#[cfg(feature = "execute")]
 fn sanitize_filename(filename: &str) -> String {
-    filename.replace(['\"', '\\', '\r', '\n'], "_")
+    filename.replace(['"', '\\', '\r', '\n'], "_")
 }
 
+#[cfg(feature = "execute")]
 fn parse_first_address(input: &str) -> Option<String> {
     let mut list = parse_address_list(input);
     if list.is_empty() {
@@ -414,6 +433,7 @@ fn parse_first_address(input: &str) -> Option<String> {
     }
 }
 
+#[cfg(feature = "execute")]
 fn parse_address_list(input: &str) -> Vec<String> {
     input
         .split(',')
@@ -430,6 +450,7 @@ fn parse_address_list(input: &str) -> Vec<String> {
         .collect()
 }
 
+#[cfg(feature = "execute")]
 pub fn generate_message_id(from: &str) -> String {
     use std::time::SystemTime;
     let domain = from.split('@').nth(1).unwrap_or("flow-like.local");
@@ -444,6 +465,7 @@ pub fn generate_message_id(from: &str) -> String {
     )
 }
 
+#[cfg(feature = "execute")]
 fn rfc2822_now() -> String {
     use chrono::{DateTime, FixedOffset, Local};
     // Format like: Tue, 01 Jul 2003 10:52:37 +0200
@@ -452,6 +474,7 @@ fn rfc2822_now() -> String {
     now_local.with_timezone(&offset).to_rfc2822()
 }
 
+#[cfg(feature = "execute")]
 fn base64_encode(data: &[u8]) -> String {
     use base64::{Engine as _, engine::general_purpose};
     general_purpose::STANDARD.encode(data)

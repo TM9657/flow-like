@@ -10,11 +10,14 @@ export function FlowWrapper({
 	appId,
 	nodeId,
 	version,
+	sub,
 }: Readonly<{
 	boardId: string;
 	appId: string;
 	nodeId?: string;
 	version?: [number, number, number];
+	/** The authenticated user's sub (subject) from the auth token - used for realtime collaboration */
+	sub?: string;
 }>) {
 	const mouseSensor = useSensor(MouseSensor, {
 		activationConstraint: {
@@ -82,6 +85,7 @@ export function FlowWrapper({
 				appId={appId}
 				nodeId={nodeId}
 				initialVersion={version}
+				sub={sub}
 			/>
 			<Dialog
 				open={detail !== undefined}

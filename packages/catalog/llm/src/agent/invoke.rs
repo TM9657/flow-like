@@ -1,16 +1,20 @@
+#[cfg(feature = "execute")]
 use super::helpers::execute_agent;
 use crate::generative::agent::Agent;
+#[cfg(feature = "execute")]
+use flow_like::flow::execution::LogLevel;
 /// # Invoke Agent Node
 /// Executes an Agent with conversation history and returns the response.
 /// Non-streaming version - waits for complete response before continuing.
 use flow_like::flow::{
-    execution::{LogLevel, context::ExecutionContext},
+    execution::context::ExecutionContext,
     node::{Node, NodeLogic, NodeScores},
     pin::PinOptions,
     variable::VariableType,
 };
 use flow_like_model_provider::{history::History, response::Response};
 use flow_like_types::{async_trait, json};
+#[cfg(feature = "execute")]
 use std::collections::HashMap;
 
 #[crate::register_node]
@@ -32,6 +36,7 @@ impl NodeLogic for InvokeAgentNode {
             "Executes an Agent with history and returns the complete response",
             "AI/Agents",
         );
+        node.set_version(1);
         node.add_icon("/flow/icons/bot-invoke.svg");
 
         node.set_scores(
@@ -100,6 +105,7 @@ impl NodeLogic for InvokeAgentNode {
         node
     }
 
+    #[cfg(feature = "execute")]
     async fn run(&self, context: &mut ExecutionContext) -> flow_like_types::Result<()> {
         context.deactivate_exec_pin("exec_out").await?;
 
@@ -140,5 +146,12 @@ impl NodeLogic for InvokeAgentNode {
         context.activate_exec_pin("exec_out").await?;
 
         Ok(())
+    }
+
+    #[cfg(not(feature = "execute"))]
+    async fn run(&self, _context: &mut ExecutionContext) -> flow_like_types::Result<()> {
+        Err(flow_like_types::anyhow!(
+            "LLM processing requires the 'execute' feature"
+        ))
     }
 }

@@ -1,5 +1,7 @@
 /// # ONNX Object Detection Nodes
-use crate::onnx::{NodeOnnxSession, Provider};
+use crate::onnx::NodeOnnxSession;
+#[cfg(feature = "execute")]
+use crate::onnx::Provider;
 use flow_like::flow::{
     execution::context::ExecutionContext,
     node::{Node, NodeLogic},
@@ -7,7 +9,7 @@ use flow_like::flow::{
     variable::VariableType,
 };
 use flow_like_catalog_core::{BoundingBox, NodeImage};
-#[cfg(feature = "local-ml")]
+#[cfg(feature = "execute")]
 use flow_like_model_provider::ml::{
     ndarray::{Array2, Array3, Array4, ArrayView1, Axis, s},
     ort::{
@@ -16,15 +18,18 @@ use flow_like_model_provider::ml::{
         value::Value,
     },
 };
+#[cfg(feature = "execute")]
 use flow_like_types::{
-    Error, Result, anyhow, async_trait,
+    Error,
     image::{DynamicImage, GenericImageView, imageops::FilterType},
-    json::json,
 };
+use flow_like_types::{Result, anyhow, async_trait, json::json};
+#[cfg(feature = "execute")]
 use std::borrow::Cow;
+#[cfg(feature = "execute")]
 use std::cmp::Ordering;
 
-#[cfg(feature = "local-ml")]
+#[cfg(feature = "execute")]
 // ## Object Detection Trait for Common Behavior
 pub trait ObjectDetection {
     // Preprocessing
@@ -57,7 +62,7 @@ pub struct DfineLike {
     pub input_height: u32,
 }
 
-#[cfg(feature = "local-ml")]
+#[cfg(feature = "execute")]
 impl ObjectDetection for DfineLike {
     fn make_inputs(
         &self,
@@ -135,7 +140,7 @@ pub struct YoloLike {
     pub input_height: u32,
 }
 
-#[cfg(feature = "local-ml")]
+#[cfg(feature = "execute")]
 impl ObjectDetection for YoloLike {
     fn make_inputs(
         &self,
@@ -201,7 +206,7 @@ impl ObjectDetection for YoloLike {
 
 // ## Detection-Related Utilities
 
-#[cfg(feature = "local-ml")]
+#[cfg(feature = "execute")]
 /// Load DynamicImage as Array4
 /// Resulting normalized 4-dim array has shape [B, C, W, H] (batch size, channels, width, height)
 /// ONNX detection model requires Array4-shaped, 0..1 normalized input
@@ -226,6 +231,7 @@ fn img_to_arr(img: &DynamicImage, width: u32, height: u32) -> Result<Array4<f32>
     Ok(arr4)
 }
 
+#[cfg(feature = "execute")]
 /// Convert center-x, center-y, width, height to left, top, right, bottom representation
 fn xywh_to_xyxy(x: &f32, y: &f32, w: &f32, h: &f32) -> (f32, f32, f32, f32) {
     let x1 = x - w / 2.0;
@@ -235,7 +241,7 @@ fn xywh_to_xyxy(x: &f32, y: &f32, w: &f32, h: &f32) -> (f32, f32, f32, f32) {
     (x1, y1, x2, y2)
 }
 
-#[cfg(feature = "local-ml")]
+#[cfg(feature = "execute")]
 fn bounding_box_from_array(arr: ArrayView1<f32>) -> BoundingBox {
     let bbox_xywh = arr.slice(s![..4]).to_vec();
     let confs = arr.slice(s![4..]).to_vec();
@@ -261,6 +267,7 @@ fn bounding_box_from_array(arr: ArrayView1<f32>) -> BoundingBox {
     }
 }
 
+#[cfg(feature = "execute")]
 /// Class-Sensitive Non Maxima Suppression for Overlapping Bounding Boxes
 /// Iteratively removes lower scoring bboxes which have an IoU above iou_thresold.
 /// Inspired by: https://pytorch.org/vision/master/_modules/torchvision/ops/boxes.html#nms
@@ -339,7 +346,7 @@ impl NodeLogic for ObjectDetectionNode {
         let mut node = Node::new(
             "object_detection",
             "Object Detection",
-            "Object Detection in Images with ONNX-Models",
+            "Object Detection in Images with ONNX-Models. Download models from: TinyYOLOv2 (https://github.com/onnx/models/tree/main/validated/vision/object_detection_segmentation/tiny-yolov2), YOLO (https://github.com/onnx/models/tree/main/validated/vision/object_detection_segmentation), SSD-MobileNet (https://github.com/onnx/models/tree/main/validated/vision/object_detection_segmentation/ssd-mobilenetv1)",
             "AI/ML/ONNX",
         );
 
@@ -403,8 +410,9 @@ impl NodeLogic for ObjectDetectionNode {
         node
     }
 
+    #[allow(unused_variables)]
     async fn run(&self, context: &mut ExecutionContext) -> Result<()> {
-        #[cfg(feature = "local-ml")]
+        #[cfg(feature = "execute")]
         {
             context.deactivate_exec_pin("exec_out").await?;
 
@@ -461,10 +469,10 @@ impl NodeLogic for ObjectDetectionNode {
             Ok(())
         }
 
-        #[cfg(not(feature = "local-ml"))]
+        #[cfg(not(feature = "execute"))]
         {
             Err(anyhow!(
-                "Local ONNX models are not supported. Please enable the 'local-ml' feature."
+                "ONNX execution requires the 'execute' feature. Rebuild with --features execute"
             ))
         }
     }

@@ -166,7 +166,7 @@ async fn execute_inner(
     // Load model provider configuration from environment
     let model_provider_config = model_provider_config_from_env();
 
-    let (http_client, _) = HTTPClient::new();
+    let http_client = HTTPClient::new_without_refetch();
     let state =
         FlowLikeState::new_with_model_config(flow_config, http_client, model_provider_config);
 
@@ -218,10 +218,18 @@ async fn execute_inner(
         })
         .unwrap_or_default();
 
-    let profile = Profile::default();
+    // Use profile from request if provided, otherwise use default (empty profile)
+    let profile: Profile = request
+        .profile
+        .as_ref()
+        .and_then(|p| serde_json::from_value(p.clone()).ok())
+        .unwrap_or_default();
+
     let run_payload = RunPayload {
         id: request.node_id.clone(),
         payload: request.payload.clone(),
+        runtime_variables: request.runtime_variables.clone(),
+        filter_secrets: Some(true),
     };
 
     // Create BufferedInterComHandler to stream events back to client
@@ -272,6 +280,11 @@ async fn execute_inner(
     )
     .await
     .map_err(|e| ExecutorError::RunInit(e.to_string()))?;
+
+    // Set user context if provided
+    if let Some(user_context) = request.user_context.clone() {
+        run.set_user_context(user_context);
+    }
 
     let execution_result = tokio::time::timeout(config.execution_timeout(), async {
         run.execute(state.clone()).await

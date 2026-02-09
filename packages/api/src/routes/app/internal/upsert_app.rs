@@ -24,14 +24,32 @@ use sea_orm::{
     QuerySelect, RelationTrait, TransactionTrait,
 };
 use serde::{Deserialize, Serialize};
+use utoipa::ToSchema;
 
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize, ToSchema)]
 pub struct AppUpsertBody {
+    #[schema(value_type = Option<Object>)]
     pub app: Option<App>,
+    #[schema(value_type = Option<Object>)]
     pub meta: Option<Metadata>,
     pub bits: Option<Vec<String>>,
 }
 
+#[utoipa::path(
+    put,
+    path = "/apps/{app_id}",
+    tag = "apps",
+    params(
+        ("app_id" = String, Path, description = "Application ID"),
+        ("language" = Option<String>, Query, description = "Language code (default: en)")
+    ),
+    request_body = AppUpsertBody,
+    responses(
+        (status = 200, description = "Application created or updated", body = Object),
+        (status = 401, description = "Unauthorized"),
+        (status = 403, description = "Forbidden")
+    )
+)]
 #[tracing::instrument(name = "PUT /apps/{app_id}", skip(state, user, app_body, query))]
 pub async fn upsert_app(
     State(state): State<AppState>,
@@ -60,7 +78,7 @@ pub async fn upsert_app(
                 sub.sub()?,
                 app_id
             );
-            return Err(ApiError::Forbidden);
+            return Err(ApiError::FORBIDDEN);
         }
 
         {
@@ -104,7 +122,7 @@ pub async fn upsert_app(
             sub,
             app_id
         );
-        return Err(ApiError::Forbidden);
+        return Err(ApiError::FORBIDDEN);
     }
 
     let Some(metadata) = app_body.meta else {
@@ -113,14 +131,14 @@ pub async fn upsert_app(
             sub,
             app_id
         );
-        return Err(ApiError::InternalError(
-            anyhow!("Meta is required for new apps").into(),
-        ));
+        return Err(ApiError::internal_error(anyhow!(
+            "Meta is required for new apps"
+        )));
     };
 
     if tier.max_non_visible_projects == 0 {
         tracing::warn!("Configuration doesn't allow for the creation of non-visible projects",);
-        return Err(ApiError::Forbidden);
+        return Err(ApiError::FORBIDDEN);
     }
 
     if tier.max_non_visible_projects > 0 {
@@ -145,7 +163,7 @@ pub async fn upsert_app(
                 tier.max_non_visible_projects,
                 count
             );
-            return Err(ApiError::Forbidden);
+            return Err(ApiError::FORBIDDEN);
         }
     }
 
@@ -264,7 +282,11 @@ pub async fn upsert_app(
                 Ok(app)
             })
         })
-        .await?;
+        .await
+        .map_err(|e| match e {
+            sea_orm::TransactionError::Connection(db_err) => ApiError::from(db_err),
+            sea_orm::TransactionError::Transaction(db_err) => ApiError::from(db_err),
+        })?;
 
     Ok(Json(drive_app))
 }

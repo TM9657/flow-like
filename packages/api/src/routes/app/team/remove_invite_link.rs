@@ -8,6 +8,26 @@ use axum::{
 };
 use sea_orm::{ColumnTrait, EntityTrait, QueryFilter};
 
+#[utoipa::path(
+    delete,
+    path = "/apps/{app_id}/team/link/{link_id}",
+    tag = "team",
+    description = "Delete an invite link.",
+    params(
+        ("app_id" = String, Path, description = "Application ID"),
+        ("link_id" = String, Path, description = "Invite link ID")
+    ),
+    responses(
+        (status = 200, description = "Invite link removed", body = ()),
+        (status = 401, description = "Unauthorized"),
+        (status = 403, description = "Forbidden")
+    ),
+    security(
+        ("bearer_auth" = []),
+        ("api_key" = []),
+        ("pat" = [])
+    )
+)]
 #[tracing::instrument(name = "DELETE /apps/{app_id}/team/link/{link_id}", skip(state, user))]
 pub async fn remove_invite_link(
     State(state): State<AppState>,

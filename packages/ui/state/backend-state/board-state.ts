@@ -1,10 +1,8 @@
-import type {
-	ChatMessage,
-	CopilotResponse,
-} from "../../components/flow/flow-copilot";
+import type { SurfaceComponent } from "../../components/a2ui/types";
 import type {
 	IBoard,
 	IConnectionMode,
+	IExecutionMode,
 	IExecutionStage,
 	IGenericCommand,
 	IIntercomEvent,
@@ -17,6 +15,13 @@ import type {
 	IVersionType,
 } from "../../lib";
 import type { IJwks, IRealtimeAccess } from "../../lib";
+import type {
+	CopilotScope,
+	UIActionContext,
+	UnifiedChatMessage,
+	UnifiedCopilotResponse,
+} from "../../lib/schema/copilot";
+import type { IPrerunBoardResponse } from "./types";
 
 export interface IBoardState {
 	getBoards(appId: string): Promise<IBoard[]>;
@@ -99,6 +104,7 @@ export interface IBoardState {
 		description: string,
 		logLevel: ILogLevel,
 		stage: IExecutionStage,
+		executionMode?: IExecutionMode,
 		template?: IBoard,
 	): Promise<void>;
 
@@ -116,14 +122,33 @@ export interface IBoardState {
 		commands: IGenericCommand[],
 	): Promise<IGenericCommand[]>;
 
-	flowpilot_chat(
-		board: IBoard,
+	getExecutionElements(
+		appId: string,
+		boardId: string,
+		pageId: string,
+		wildcard?: boolean,
+	): Promise<Record<string, unknown>>;
+
+	/** Unified copilot chat that can handle board, UI, or both */
+	copilot_chat(
+		scope: CopilotScope,
+		board: IBoard | null,
 		selectedNodeIds: string[],
+		currentSurface: SurfaceComponent[] | null,
+		selectedComponentIds: string[],
 		userPrompt: string,
-		history: ChatMessage[],
+		history: UnifiedChatMessage[],
 		onToken?: (token: string) => void,
 		modelId?: string,
 		token?: string,
 		runContext?: IRunContext,
-	): Promise<CopilotResponse>;
+		actionContext?: UIActionContext,
+	): Promise<UnifiedCopilotResponse>;
+
+	/** Pre-run analysis: get required runtime variables and OAuth for a board */
+	prerunBoard?(
+		appId: string,
+		boardId: string,
+		version?: [number, number, number],
+	): Promise<IPrerunBoardResponse>;
 }

@@ -49,20 +49,22 @@ export class TemplateState implements ITemplateState {
 					const mergedData = new Map<string, [string, string, IMetadata]>();
 
 					for (const [id, templateId, meta] of templates) {
-						if (!mergedData.has(id) && meta) {
-							mergedData.set(id, [id, templateId, meta]);
+						const key = `${id}:${templateId}`;
+						if (!mergedData.has(key) && meta) {
+							mergedData.set(key, [id, templateId, meta]);
 						}
 					}
 
 					for (const [appId, templateId, metadata] of remoteData) {
-						const found = mergedData.get(appId);
+						const key = `${appId}:${templateId}`;
+						const found = mergedData.get(key);
 						if (found) {
 							if (isEqual(found[2], metadata)) {
 								// If metadata is the same, skip adding it again
 								continue;
 							}
 						}
-						mergedData.set(appId, [appId, templateId, metadata]);
+						mergedData.set(key, [appId, templateId, metadata]);
 						await invoke("push_template_meta", {
 							appId: appId,
 							templateId: templateId,
@@ -93,9 +95,10 @@ export class TemplateState implements ITemplateState {
 		let offset = 0;
 		let foundAmount = 0;
 		const mergedData = new Map<string, [string, string, IMetadata]>();
-		for (const [id, name, meta] of templates) {
-			if (!mergedData.has(id) && meta) {
-				mergedData.set(id, [id, name, meta]);
+		for (const [id, templateId, meta] of templates) {
+			const key = `${id}:${templateId}`;
+			if (!mergedData.has(key) && meta) {
+				mergedData.set(key, [id, templateId, meta]);
 			}
 		}
 
@@ -112,14 +115,15 @@ export class TemplateState implements ITemplateState {
 				offset += 100;
 
 				for (const [appId, templateId, metadata] of remoteData) {
-					const found = mergedData.get(appId);
+					const key = `${appId}:${templateId}`;
+					const found = mergedData.get(key);
 					if (found) {
 						if (isEqual(found[2], metadata)) {
 							// If metadata is the same, skip adding it again
 							continue;
 						}
 					}
-					mergedData.set(appId, [appId, templateId, metadata]);
+					mergedData.set(key, [appId, templateId, metadata]);
 					await invoke("push_template_meta", {
 						appId: appId,
 						templateId: templateId,

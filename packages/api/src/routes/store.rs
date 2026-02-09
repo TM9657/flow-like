@@ -3,26 +3,41 @@ use crate::state::AppState;
 use axum::Json;
 use axum::extract::State;
 use axum::{Router, routing::get};
-use serde_json::json;
+use serde::{Deserialize, Serialize};
 use std::time::Instant;
+use utoipa::ToSchema;
+
+#[derive(Clone, Serialize, Deserialize, Debug, ToSchema)]
+pub struct DbStateResponse {
+    pub rtt: u128,
+}
 
 pub fn routes() -> Router<AppState> {
     let router = Router::new();
 
     router
         .route("/", get(|| async { "ok" }))
-        .route("/db", get(db_state_handler))
+        .route("/db", get(get_store_db))
 }
 
-async fn db_state_handler(
+#[utoipa::path(
+    get,
+    path = "/store/db",
+    tag = "store",
+    responses(
+        (status = 200, description = "Database connection status", body = DbStateResponse),
+        (status = 500, description = "Database connection failed")
+    )
+)]
+pub async fn get_store_db(
     State(state): State<AppState>,
-) -> Result<Json<serde_json::Value>, InternalError> {
-    let state = state.db.clone();
+) -> Result<Json<DbStateResponse>, InternalError> {
+    let db = state.db.clone();
     let now = Instant::now();
-    state.ping().await?;
+    db.ping().await?;
     let elapsed = now.elapsed();
-    let response = Json(json!({
-        "rtt": elapsed.as_millis()
-    }));
+    let response = Json(DbStateResponse {
+        rtt: elapsed.as_millis(),
+    });
     Ok(response)
 }

@@ -1,0 +1,134 @@
+---
+interface Props {
+  t: (key: string) => string;
+}
+
+const { t } = Astro.props;
+
+const features = [
+  {
+    icon: "connect",
+    color: "emerald",
+    title: t("bi.solution.feature1.title"),
+    desc: t("bi.solution.feature1.description")
+  },
+  {
+    icon: "speed",
+    color: "blue",
+    title: t("bi.solution.feature2.title"),
+    desc: t("bi.solution.feature2.description")
+  },
+  {
+    icon: "personalize",
+    color: "violet",
+    title: t("bi.solution.feature3.title"),
+    desc: t("bi.solution.feature3.description")
+  },
+  {
+    icon: "ai",
+    color: "amber",
+    title: t("bi.solution.feature4.title"),
+    desc: t("bi.solution.feature4.description")
+  },
+  {
+    icon: "deploy",
+    color: "rose",
+    title: t("bi.solution.feature5.title"),
+    desc: t("bi.solution.feature5.description")
+  },
+  {
+    icon: "integrate",
+    color: "cyan",
+    title: t("bi.solution.feature6.title"),
+    desc: t("bi.solution.feature6.description")
+  },
+];
+---
+
+<section id="solution" class="relative py-16 sm:py-24 lg:py-32">
+  <!-- Background decoration -->
+  <div class="absolute inset-0 bg-gradient-to-b from-transparent via-primary/5 to-transparent pointer-events-none" />
+
+  <div class="mx-auto max-w-7xl px-6 lg:px-8 relative">
+    <div class="text-center mb-12 lg:mb-20">
+      <p class="text-[11px] font-medium tracking-[0.3em] uppercase text-primary mb-4">
+        {t("bi.solution.tagline")}
+      </p>
+      <h2 class="text-4xl sm:text-5xl lg:text-6xl font-bold tracking-tight mb-6">
+        {t("bi.solution.headline")}
+        <span class="text-primary"> {t("bi.solution.headline.highlight")}</span>
+      </h2>
+      <p class="text-xl text-muted-foreground max-w-2xl mx-auto">
+        {t("bi.solution.description")}
+      </p>
+    </div>
+
+    <div class="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+      {features.map((feature, i) => (
+        <div class="group relative p-5 sm:p-8 rounded-3xl border border-border/50 bg-card/50 hover:bg-card transition-all duration-500 overflow-hidden">
+          <!-- Gradient glow on hover -->
+          <div class={`
+            absolute -inset-px rounded-3xl opacity-0 group-hover:opacity-100 transition-opacity duration-500 blur-xl
+            ${feature.color === 'emerald' ? 'bg-emerald-500/20' : ''}
+            ${feature.color === 'blue' ? 'bg-blue-500/20' : ''}
+            ${feature.color === 'violet' ? 'bg-violet-500/20' : ''}
+            ${feature.color === 'amber' ? 'bg-amber-500/20' : ''}
+            ${feature.color === 'rose' ? 'bg-rose-500/20' : ''}
+            ${feature.color === 'cyan' ? 'bg-cyan-500/20' : ''}
+          `} />
+
+          <div class="relative">
+            <!-- Icon -->
+            <div class={`
+              w-16 h-16 rounded-2xl flex items-center justify-center mb-6 transition-colors duration-300
+              ${feature.color === 'emerald' ? 'bg-emerald-500/10 text-emerald-500 group-hover:bg-emerald-500/20' : ''}
+              ${feature.color === 'blue' ? 'bg-blue-500/10 text-blue-500 group-hover:bg-blue-500/20' : ''}
+              ${feature.color === 'violet' ? 'bg-violet-500/10 text-violet-500 group-hover:bg-violet-500/20' : ''}
+              ${feature.color === 'amber' ? 'bg-amber-500/10 text-amber-500 group-hover:bg-amber-500/20' : ''}
+              ${feature.color === 'rose' ? 'bg-rose-500/10 text-rose-500 group-hover:bg-rose-500/20' : ''}
+              ${feature.color === 'cyan' ? 'bg-cyan-500/10 text-cyan-500 group-hover:bg-cyan-500/20' : ''}
+            `}>
+              {feature.icon === "connect" && (
+                <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" />
+                </svg>
+              )}
+              {feature.icon === "speed" && (
+                <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M13 10V3L4 14h7v7l9-11h-7z" />
+                </svg>
+              )}
+              {feature.icon === "personalize" && (
+                <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+                </svg>
+              )}
+              {feature.icon === "ai" && (
+                <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+                </svg>
+              )}
+              {feature.icon === "deploy" && (
+                <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M3.055 11H5a2 2 0 012 2v1a2 2 0 002 2 2 2 0 012 2v2.945M8 3.935V5.5A2.5 2.5 0 0010.5 8h.5a2 2 0 012 2 2 2 0 104 0 2 2 0 012-2h1.064M15 20.488V18a2 2 0 012-2h3.064M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+              )}
+              {feature.icon === "integrate" && (
+                <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M11 4a2 2 0 114 0v1a1 1 0 001 1h3a1 1 0 011 1v3a1 1 0 01-1 1h-1a2 2 0 100 4h1a1 1 0 011 1v3a1 1 0 01-1 1h-3a1 1 0 01-1-1v-1a2 2 0 10-4 0v1a1 1 0 01-1 1H7a1 1 0 01-1-1v-3a1 1 0 00-1-1H4a2 2 0 110-4h1a1 1 0 001-1V7a1 1 0 011-1h3a1 1 0 001-1V4z" />
+                </svg>
+              )}
+            </div>
+
+            <h3 class="text-xl font-semibold mb-3 group-hover:text-foreground transition-colors">
+              {feature.title}
+            </h3>
+            <p class="text-muted-foreground leading-relaxed">
+              {feature.desc}
+            </p>
+          </div>
+        </div>
+      ))}
+    </div>
+  </div>
+</section>

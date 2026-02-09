@@ -1,13 +1,19 @@
+#[cfg(feature = "execute")]
 use flow_like::flow::execution::context::ExecutionContext;
+#[cfg(feature = "execute")]
 use flow_like_catalog_core::FlowPath;
+#[cfg(feature = "execute")]
 use flow_like_types::image::{DynamicImage, ImageBuffer, Rgba};
+#[cfg(feature = "execute")]
 use hayro::{Pdf, Pixmap};
+#[cfg(feature = "execute")]
 use std::sync::Arc;
 
 pub mod page_count;
 pub mod page_to_image;
 pub mod pdf_to_images;
 
+#[cfg(feature = "execute")]
 pub(super) async fn load_pdf_from_flowpath(
     context: &mut ExecutionContext,
     flow_path: &FlowPath,
@@ -18,6 +24,7 @@ pub(super) async fn load_pdf_from_flowpath(
     Pdf::new(data).map_err(|err| flow_like_types::anyhow!("Failed to load PDF: {:?}", err))
 }
 
+#[cfg(feature = "execute")]
 pub(super) fn pixmap_to_dynamic_image(pixmap: Pixmap) -> flow_like_types::Result<DynamicImage> {
     let width = pixmap.width() as u32;
     let height = pixmap.height() as u32;
@@ -32,6 +39,7 @@ pub(super) fn pixmap_to_dynamic_image(pixmap: Pixmap) -> flow_like_types::Result
     Ok(DynamicImage::ImageRgba8(buffer))
 }
 
+#[cfg(feature = "execute")]
 fn unpremultiply_rgba(pixels: &mut [u8]) {
     for chunk in pixels.chunks_exact_mut(4) {
         let alpha = chunk[3] as u32;
@@ -54,6 +62,7 @@ fn unpremultiply_rgba(pixels: &mut [u8]) {
     }
 }
 
+#[cfg(feature = "execute")]
 pub(super) fn validate_scale(scale: f32) -> flow_like_types::Result<()> {
     if scale <= 0.0 {
         return Err(flow_like_types::anyhow!("Scale must be greater than 0"));
@@ -62,6 +71,7 @@ pub(super) fn validate_scale(scale: f32) -> flow_like_types::Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "execute")]
 pub(super) fn resolve_page_index(
     page_number: i64,
     total_pages: usize,

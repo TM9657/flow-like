@@ -137,13 +137,21 @@ async fn handle_checkout_completed(
         client_reference_id = ?session.client_reference_id,
         mode = ?session.mode,
         payment_status = ?session.payment_status,
-        "Processing checkout.session.completed for solution"
+        "Processing checkout.session.completed"
     );
 
-    let submission_id = session
+    let client_ref = session
         .client_reference_id
         .as_ref()
         .ok_or(anyhow!("Missing client_reference_id"))?;
+
+    // Check if this is an app purchase (format: "app_purchase:{user_id}:{app_id}")
+    if client_ref.starts_with("app_purchase:") {
+        return handle_app_purchase_completed(state, session, client_ref).await;
+    }
+
+    // Otherwise, handle as solution request
+    let submission_id = client_ref;
 
     let existing = solution_request::Entity::find_by_id(submission_id.clone())
         .one(&state.db)
@@ -179,6 +187,196 @@ async fn handle_checkout_completed(
             "Solution request not found for checkout session"
         );
     }
+
+    Ok(())
+}
+
+/// Handle app purchase completion - create membership and send notification
+async fn handle_app_purchase_completed(
+    state: &AppState,
+    session: &stripe::CheckoutSession,
+    client_ref: &str,
+) -> Result<(), ApiError> {
+    use crate::entity::{
+        app, app_purchase, membership, meta, notification,
+        sea_orm_active_enums::{NotificationType, PurchaseStatus},
+    };
+
+    let session_id = session.id.to_string();
+
+    // Parse client_ref: "app_purchase:{user_id}:{app_id}"
+    let parts: Vec<&str> = client_ref.split(':').collect();
+    if parts.len() != 3 {
+        tracing::error!(
+            client_ref = %client_ref,
+            "Invalid app_purchase client_reference_id format"
+        );
+        return Err(anyhow!("Invalid client_reference_id format").into());
+    }
+
+    let user_id = parts[1];
+    let app_id = parts[2];
+
+    tracing::info!(
+        session_id = %session_id,
+        user_id = %user_id,
+        app_id = %app_id,
+        "Processing app purchase completion"
+    );
+
+    // Check if purchase already exists (idempotency)
+    let existing_purchase = app_purchase::Entity::find()
+        .filter(app_purchase::Column::StripeSessionId.eq(&session_id))
+        .one(&state.db)
+        .await?;
+
+    if existing_purchase.is_some() {
+        tracing::info!(
+            session_id = %session_id,
+            "Purchase already recorded, skipping (idempotent)"
+        );
+        return Ok(());
+    }
+
+    // Check if user already has membership (idempotency)
+    let existing_membership = membership::Entity::find()
+        .filter(membership::Column::AppId.eq(app_id))
+        .filter(membership::Column::UserId.eq(user_id))
+        .one(&state.db)
+        .await?;
+
+    if existing_membership.is_some() {
+        tracing::info!(
+            user_id = %user_id,
+            app_id = %app_id,
+            "User already has membership, skipping creation (idempotent)"
+        );
+        return Ok(());
+    }
+
+    // Get the app to find the default role and price
+    let app_model = app::Entity::find_by_id(app_id)
+        .one(&state.db)
+        .await?
+        .ok_or_else(|| {
+            tracing::error!(app_id = %app_id, "App not found for purchase");
+            anyhow!("App not found")
+        })?;
+
+    let default_role_id = app_model.default_role_id.clone().ok_or_else(|| {
+        tracing::error!(app_id = %app_id, "App has no default role");
+        anyhow!("App has no default role")
+    })?;
+
+    // Extract price info from session
+    let amount_total = session.amount_total.unwrap_or(0);
+    let amount_subtotal = session.amount_subtotal.unwrap_or(amount_total);
+    let discount_amount = amount_subtotal - amount_total;
+    let currency = session
+        .currency
+        .map(|c| c.to_string().to_uppercase())
+        .unwrap_or_else(|| "EUR".to_string());
+
+    // Create purchase record
+    let purchase_id = flow_like_types::create_id();
+    let now = chrono::Utc::now().naive_utc();
+
+    let new_purchase = app_purchase::ActiveModel {
+        id: Set(purchase_id.clone()),
+        user_id: Set(user_id.to_string()),
+        app_id: Set(app_id.to_string()),
+        price_paid: Set(amount_total),
+        original_price: Set(amount_subtotal),
+        discount_amount: Set(discount_amount.max(0)),
+        discount_id: Set(None), // Could be enhanced to extract discount code from session
+        currency: Set(currency),
+        stripe_session_id: Set(session_id.clone()),
+        stripe_payment_intent_id: Set(session
+            .payment_intent
+            .as_ref()
+            .map(|pi| pi.id().to_string())),
+        status: Set(PurchaseStatus::Completed),
+        completed_at: Set(Some(now)),
+        refunded_at: Set(None),
+        refund_reason: Set(None),
+        created_at: Set(now),
+        updated_at: Set(now),
+    };
+
+    new_purchase.insert(&state.db).await?;
+
+    tracing::info!(
+        purchase_id = %purchase_id,
+        user_id = %user_id,
+        app_id = %app_id,
+        amount = %amount_total,
+        "Created purchase record"
+    );
+
+    // Create membership
+    let membership_id = flow_like_types::create_id();
+    let new_membership = membership::ActiveModel {
+        id: Set(membership_id.clone()),
+        user_id: Set(user_id.to_string()),
+        app_id: Set(app_id.to_string()),
+        role_id: Set(default_role_id),
+        created_at: Set(now),
+        updated_at: Set(now),
+        joined_via: Set(Some(format!("purchase:{}", session_id))),
+    };
+
+    new_membership.insert(&state.db).await?;
+
+    tracing::info!(
+        membership_id = %membership_id,
+        user_id = %user_id,
+        app_id = %app_id,
+        "Created membership from purchase"
+    );
+
+    // Get app name for notification
+    let app_name = meta::Entity::find()
+        .filter(meta::Column::AppId.eq(Some(app_id.to_string())))
+        .filter(meta::Column::Lang.eq("en"))
+        .one(&state.db)
+        .await?
+        .map(|m| m.name)
+        .unwrap_or_else(|| "the app".to_string());
+
+    // Build app link URL for notification - link directly to "use" page since they own it now
+    let frontend_url =
+        std::env::var("FRONTEND_URL").unwrap_or_else(|_| "https://app.flow-like.com".to_string());
+    let app_link_url = format!("{}/use?id={}", frontend_url, app_id);
+
+    // Create notification for the user
+    let notification_id = flow_like_types::create_id();
+    let notification_model = notification::ActiveModel {
+        id: Set(notification_id.clone()),
+        user_id: Set(user_id.to_string()),
+        app_id: Set(Some(app_id.to_string())),
+        title: Set(format!("Purchase Complete: {}", app_name)),
+        description: Set(Some(format!(
+            "You now have access to {}. Click to start using the app.",
+            app_name
+        ))),
+        icon: Set(Some("shopping-bag".to_string())),
+        link: Set(Some(app_link_url)),
+        r#type: Set(NotificationType::System),
+        read: Set(false),
+        source_run_id: Set(None),
+        source_node_id: Set(None),
+        created_at: Set(chrono::Utc::now().naive_utc()),
+        read_at: Set(None),
+    };
+
+    notification_model.insert(&state.db).await?;
+
+    tracing::info!(
+        notification_id = %notification_id,
+        user_id = %user_id,
+        app_id = %app_id,
+        "Created purchase notification"
+    );
 
     Ok(())
 }
@@ -285,15 +483,15 @@ fn determine_tier_from_subscription(
 
                 // Check product_id against hub config tiers
                 for (tier_name, tier_config) in &state.platform_config.tiers {
-                    if let Some(config_product_id) = &tier_config.product_id {
-                        if config_product_id == &product_id {
-                            return match tier_name.to_uppercase().as_str() {
-                                "ENTERPRISE" => UserTier::Enterprise,
-                                "PRO" => UserTier::Pro,
-                                "PREMIUM" => UserTier::Premium,
-                                _ => UserTier::Free,
-                            };
-                        }
+                    if let Some(config_product_id) = &tier_config.product_id
+                        && config_product_id == &product_id
+                    {
+                        return match tier_name.to_uppercase().as_str() {
+                            "ENTERPRISE" => UserTier::Enterprise,
+                            "PRO" => UserTier::Pro,
+                            "PREMIUM" => UserTier::Premium,
+                            _ => UserTier::Free,
+                        };
                     }
                 }
 
@@ -309,14 +507,14 @@ fn determine_tier_from_subscription(
             }
 
             // Also check price metadata for tier info
-            if let Some(metadata) = &price.metadata {
-                if let Some(tier) = metadata.get("tier") {
-                    match tier.to_uppercase().as_str() {
-                        "ENTERPRISE" => return UserTier::Enterprise,
-                        "PRO" => return UserTier::Pro,
-                        "PREMIUM" => return UserTier::Premium,
-                        _ => {}
-                    }
+            if let Some(metadata) = &price.metadata
+                && let Some(tier) = metadata.get("tier")
+            {
+                match tier.to_uppercase().as_str() {
+                    "ENTERPRISE" => return UserTier::Enterprise,
+                    "PRO" => return UserTier::Pro,
+                    "PREMIUM" => return UserTier::Premium,
+                    _ => {}
                 }
             }
         }

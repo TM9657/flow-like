@@ -143,6 +143,7 @@ impl NodeLogic for InsertRowNode {
         node
     }
 
+    #[cfg(feature = "execute")]
     async fn run(&self, context: &mut ExecutionContext) -> flow_like_types::Result<()> {
         use std::io::Cursor;
 
@@ -214,5 +215,12 @@ impl NodeLogic for InsertRowNode {
 
         context.activate_exec_pin("exec_out").await?;
         Ok(())
+    }
+
+    #[cfg(not(feature = "execute"))]
+    async fn run(&self, _context: &mut ExecutionContext) -> flow_like_types::Result<()> {
+        Err(flow_like_types::anyhow!(
+            "Data processing requires the 'execute' feature"
+        ))
     }
 }

@@ -7,12 +7,34 @@ use axum::{
     extract::{Path, State},
 };
 use flow_like_storage::databases::vector::{VectorStore, lancedb::LanceDBVectorStore};
+use utoipa::ToSchema;
 
-#[derive(Debug, Clone, serde::Deserialize)]
+#[derive(Debug, Clone, serde::Deserialize, ToSchema)]
 pub struct DeleteFromDBPayload {
     pub query: String,
 }
 
+#[utoipa::path(
+    delete,
+    path = "/apps/{app_id}/db/{table}",
+    tag = "database",
+    description = "Delete rows matching a filter.",
+    params(
+        ("app_id" = String, Path, description = "Application ID"),
+        ("table" = String, Path, description = "Table name")
+    ),
+    request_body = DeleteFromDBPayload,
+    responses(
+        (status = 200, description = "Items deleted", body = ()),
+        (status = 401, description = "Unauthorized"),
+        (status = 403, description = "Forbidden")
+    ),
+    security(
+        ("bearer_auth" = []),
+        ("api_key" = []),
+        ("pat" = [])
+    )
+)]
 #[tracing::instrument(name = "DELETE /apps/{app_id}/db/{table}", skip(state, user))]
 pub async fn delete_from_table(
     State(state): State<AppState>,

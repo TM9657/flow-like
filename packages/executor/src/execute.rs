@@ -115,7 +115,7 @@ pub async fn execute(
     // Load model provider configuration from environment
     let model_provider_config = model_provider_config_from_env();
 
-    let (http_client, _) = HTTPClient::new();
+    let http_client = HTTPClient::new_without_refetch();
     let state =
         FlowLikeState::new_with_model_config(flow_config, http_client, model_provider_config);
 
@@ -175,6 +175,8 @@ pub async fn execute(
     let run_payload = RunPayload {
         id: request.node_id.clone(),
         payload: request.payload.clone(),
+        runtime_variables: request.runtime_variables.clone(),
+        filter_secrets: Some(true),
     };
 
     // Create BufferedInterComHandler - this is REQUIRED for meaningful execution output
@@ -234,6 +236,11 @@ pub async fn execute(
     )
     .await
     .map_err(|e| ExecutorError::RunInit(e.to_string()))?;
+
+    // Set user context if provided
+    if let Some(user_context) = request.user_context.clone() {
+        run.set_user_context(user_context);
+    }
 
     // Execute with timeout
     let execution_result = tokio::time::timeout(config.execution_timeout(), async {

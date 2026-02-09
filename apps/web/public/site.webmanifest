@@ -1,0 +1,76 @@
+{
+	"name": "Flow-Like — Typed Workflows that Scale (Fast, Robust, Local-First)",
+	"short_name": "Flow-Like",
+	"id": "/",
+	"start_url": "/?source=pwa",
+	"scope": "/",
+	"display": "standalone",
+	"description": "Typed, scalable workflows with Rust performance. Build reliable systems that run locally, on edge, or in any cloud — with governance built-in and effortless integration.",
+	"lang": "en",
+	"dir": "ltr",
+	"orientation": "any",
+	"background_color": "#0b0f19",
+	"theme_color": "#0ea5e9",
+	"categories": ["developer-tools", "productivity", "utilities"],
+	"icons": [
+		{
+			"src": "/android-chrome-192x192.png",
+			"sizes": "192x192",
+			"type": "image/png",
+			"purpose": "any"
+		},
+		{
+			"src": "/android-chrome-512x512.png",
+			"sizes": "512x512",
+			"type": "image/png",
+			"purpose": "any"
+		},
+		{
+			"src": "/android-chrome-192x192.png",
+			"sizes": "192x192",
+			"type": "image/png",
+			"purpose": "maskable"
+		},
+		{
+			"src": "/android-chrome-512x512.png",
+			"sizes": "512x512",
+			"type": "image/png",
+			"purpose": "maskable"
+		}
+	],
+	"shortcuts": [
+		{
+			"name": "Blog",
+			"short_name": "Blog",
+			"url": "/blog/?utm_source=pwa-shortcut#docs",
+			"description": "Open Flow-Like documentation"
+		},
+		{
+			"name": "Docs",
+			"short_name": "Docs",
+			"url": "https://docs.flow-like.com/?utm_source=pwa-shortcut#docs",
+			"description": "Open Flow-Like documentation"
+		},
+		{
+			"name": "GitHub",
+			"short_name": "GitHub",
+			"url": "https://github.com/TM9657/flow-like?utm_source=pwa-shortcut",
+			"description": "View the repository"
+		},
+		{
+			"name": "Download",
+			"short_name": "Download",
+			"url": "https://github.com/TM9657/flow-like/releases?utm_source=pwa-shortcut",
+			"description": "Get the latest release"
+		}
+	],
+	"screenshots": [
+		{
+			"src": "/og.png",
+			"sizes": "1200x630",
+			"type": "image/png",
+			"label": "Flow-Like — Typed Workflows that Scale"
+		}
+	],
+	"prefer_related_applications": false
+}

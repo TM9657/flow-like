@@ -3,7 +3,6 @@ use aws_lambda_events::event::sqs::SqsEvent;
 use aws_lambda_events::s3::S3Event;
 use aws_lambda_events::sqs::SqsBatchResponse;
 use aws_sdk_dynamodb::Client as DynamoClient;
-use aws_sdk_s3::Client as S3Client;
 use flow_like_api::entity::{app, user};
 use flow_like_api::sea_orm::prelude::*;
 use flow_like_api::sea_orm::sea_query::Expr;
@@ -20,7 +19,6 @@ fn decode(key: &str) -> Result<String, Error> {
 pub(crate) async fn function_handler(
     event: LambdaEvent<SqsEvent>,
     dynamo: DynamoClient,
-    s3: S3Client,
     db: DatabaseConnection,
 ) -> Result<SqsBatchResponse, Error> {
     let mut batch_item_failures = Vec::new();
@@ -38,7 +36,7 @@ pub(crate) async fn function_handler(
 
         // Process each S3 record in the event
         for s3_record in s3_event.records {
-            if let Err(err) = process_s3_event(&s3_record, &dynamo, &s3, &db).await {
+            if let Err(err) = process_s3_event(&s3_record, &dynamo, &db).await {
                 tracing::error!("Error processing S3 event: {}", err);
                 successful = false;
             }
@@ -62,19 +60,12 @@ pub(crate) async fn function_handler(
 async fn process_s3_event(
     s3_record: &S3EventRecord,
     dynamo: &DynamoClient,
-    s3: &S3Client,
     db: &DatabaseConnection,
 ) -> Result<(), Error> {
     let event_name = s3_record
         .event_name
         .as_ref()
         .ok_or_else(|| Error::from("Event name is missing"))?;
-    let bucket = s3_record
-        .s3
-        .bucket
-        .name
-        .as_ref()
-        .ok_or_else(|| Error::from("Bucket name is missing"))?;
     let key = s3_record
         .s3
         .object
@@ -121,7 +112,10 @@ async fn process_s3_event(
     // Update Postgres totals
     if let Err(err) = update_postgres_usage(db, user_id.as_deref(), &app_id, delta).await {
         tracing::error!("Failed to update Postgres usage for key {}: {}", key, err);
-        delete_object(s3, bucket, &key).await?;
+        // NOTE: We intentionally do NOT delete the S3 object here.
+        // Doing so would trigger another S3 event notification, causing Lambda recursion.
+        // Instead, we only revert the DynamoDB state and let the SQS retry mechanism
+        // handle the failure. The S3 object remains, and will be reconciled on retry.
         delete_dynamo(dynamo, &app_id, &key).await?;
         return Err(err);
     }
@@ -211,16 +205,6 @@ async fn upsert_dynamo(
     }
 
     Ok(0)
-}
-
-async fn delete_object(s3: &S3Client, bucket: &str, key: &str) -> Result<(), Error> {
-    s3.delete_object()
-        .bucket(bucket)
-        .key(key)
-        .send()
-        .await
-        .map_err(|e| Error::from(format!("Failed to delete object from S3: {}", e)))?;
-    Ok(())
 }
 
 async fn update_postgres_usage(

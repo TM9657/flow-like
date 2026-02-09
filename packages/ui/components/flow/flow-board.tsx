@@ -6,6 +6,7 @@ import {
 	Background,
 	BackgroundVariant,
 	type Connection,
+	ControlButton,
 	Controls,
 	type Edge,
 	type FinalConnectionState,
@@ -21,6 +22,8 @@ import {
 	addEdge,
 	applyEdgeChanges,
 	applyNodeChanges,
+	getNodesBounds,
+	getViewportForBounds,
 	reconnectEdge,
 	useEdgesState,
 	useKeyPress,
@@ -31,11 +34,15 @@ import "@xyflow/react/dist/style.css";
 import { useMediaQuery } from "@uidotdev/usehooks";
 import {
 	ArrowBigLeftDashIcon,
+	CheckIcon,
+	FileTextIcon,
 	HistoryIcon,
 	LayoutTemplateIcon,
 	NotebookPenIcon,
 	PlayCircleIcon,
 	ScrollIcon,
+	SearchIcon,
+	ShareIcon,
 	SparklesIcon,
 	SquareChevronUpIcon,
 	VariableIcon,
@@ -64,6 +71,7 @@ import {
 	useLogAggregation,
 	useMobileHeader,
 } from "../..";
+import { BoardActivityIndicator } from "../../components/flow/board-activity-indicator";
 import { CommentNode } from "../../components/flow/comment-node";
 import { FlowContextMenu } from "../../components/flow/flow-context-menu";
 import { FlowDock } from "../../components/flow/flow-dock";
@@ -72,7 +80,10 @@ import {
 	FlowNodeInfoOverlay,
 	type FlowNodeInfoOverlayHandle,
 } from "../../components/flow/flow-node/flow-node-info-overlay";
+import { FlowPages } from "../../components/flow/flow-pages";
+import { MediaNode } from "../../components/flow/media-node";
 import { Traces } from "../../components/flow/traces";
+import { UploadPlaceholderNode } from "../../components/flow/upload-placeholder-node";
 import {
 	Variable,
 	VariablesMenu,
@@ -88,6 +99,8 @@ import { useFlowPanels } from "../../hooks/use-flow-panels";
 import { useInvoke } from "../../hooks/use-invoke";
 import { useKeyboardShortcuts } from "../../hooks/use-keyboard-shortcuts";
 import { useLayerNavigation } from "../../hooks/use-layer-navigation";
+import { useMediaUpload } from "../../hooks/use-media-upload";
+import { usePeerUserInfo } from "../../hooks/use-peer-users";
 import { useRealtimeCollaboration } from "../../hooks/use-realtime-collaboration";
 import { useViewportManager } from "../../hooks/use-viewport-manager";
 import {
@@ -100,6 +113,7 @@ import {
 	moveNodeCommand,
 	updateNodeCommand,
 	upsertCommentCommand,
+	upsertVariableCommand,
 } from "../../lib";
 import {
 	handleConnection,
@@ -115,9 +129,9 @@ import {
 	isValidConnection,
 	parseBoard,
 } from "../../lib/flow-board-utils";
-import { toastError } from "../../lib/messages";
-import { isTauri } from "../../lib/platform";
-import { IAppExecutionMode } from "../../lib/schema/app/app";
+import { toastError, toastSuccess } from "../../lib/messages";
+import { getRuntimeConfiguredVariables } from "../../lib/runtime-vars-utils";
+import { IAppVisibility } from "../../lib/schema/app/app";
 import {
 	type IBoard,
 	type IComment,
@@ -131,6 +145,10 @@ import { convertJsonToUint8Array } from "../../lib/uint8";
 import { useBackend } from "../../state/backend-state";
 import { useFlowBoardParentState } from "../../state/flow-board-parent-state";
 import { useRunExecutionStore } from "../../state/run-execution-state";
+import {
+	type RuntimeVariableValue,
+	useRuntimeVariables,
+} from "../../state/runtime-variables-context";
 import { BoardMeta } from "./board-meta";
 import { FlowCopilot, type Suggestion } from "./flow-copilot";
 import { FlowCursors } from "./flow-cursors";
@@ -140,21 +158,26 @@ import { useUndoRedo } from "./flow-history";
 import { FlowLayerIndicators } from "./flow-layer-indicators";
 import { PinEditModal } from "./flow-pin/edit-modal";
 import { FlowRuns } from "./flow-runs";
+import { FlowSearch } from "./flow-search";
 import { FlowTemplateSelector } from "./flow-template-selector";
 import { FlowVeilEdge } from "./flow-veil-edge";
 import { LayerInnerNode } from "./layer-inner-node";
 import { LayerNode } from "./layer-node";
+import { RuntimeVariablesPrompt } from "./runtime-variables-prompt";
 
 export function FlowBoard({
 	appId,
 	boardId,
 	nodeId,
 	initialVersion,
+	sub,
 }: Readonly<{
 	appId: string;
 	boardId: string;
 	nodeId?: string;
 	initialVersion?: [number, number, number];
+	/** The authenticated user's sub (subject) from the auth token - used for realtime collaboration */
+	sub?: string;
 }>) {
 	const { pushCommand, pushCommands, redo, undo } = useUndoRedo(appId, boardId);
 	const router = useRouter();
@@ -200,7 +223,7 @@ export function FlowBoard({
 	);
 	const app = useInvoke(backend.appState.getApp, backend.appState, [appId]);
 	const { addRun, removeRun, pushUpdate } = useRunExecutionStore();
-	const { screenToFlowPosition, getViewport, setViewport, fitView } =
+	const { screenToFlowPosition, getViewport, setViewport, fitView, getNodes } =
 		useReactFlow();
 
 	const [nodes, setNodes] = useNodesState<any>([]);
@@ -216,6 +239,16 @@ export function FlowBoard({
 	const [currentLayer, setCurrentLayer] = useState<string | undefined>();
 	const [layerPath, setLayerPath] = useState<string | undefined>();
 	const [templateSelectorOpen, setTemplateSelectorOpen] = useState(false);
+	const [runtimeVarsPromptOpen, setRuntimeVarsPromptOpen] = useState(false);
+	const [pendingExecution, setPendingExecution] = useState<{
+		node: INode;
+		payload?: object;
+		isRemote: boolean;
+	} | null>(null);
+	const [existingRuntimeVars, setExistingRuntimeVars] = useState<
+		Map<string, RuntimeVariableValue>
+	>(new Map());
+	const runtimeVarsContext = useRuntimeVariables();
 	const colorMode = useMemo(
 		() => (resolvedTheme === "dark" ? "dark" : "light"),
 		[resolvedTheme],
@@ -382,7 +415,7 @@ export function FlowBoard({
 			board,
 			version,
 			backend,
-			currentProfile,
+			sub,
 			hub,
 			mousePosition,
 			layerPath,
@@ -390,6 +423,26 @@ export function FlowBoard({
 			commandAwarenessRef,
 			setNodes,
 		});
+
+	// Cache peer user info to avoid repeated API calls
+	const peerSubs = useMemo(
+		() => peerStates.map((p) => p.sub).filter((s): s is string => !!s),
+		[peerStates],
+	);
+	const peerUsers = usePeerUserInfo(
+		peerSubs,
+		backend.userState.lookupUser.bind(backend.userState),
+	);
+
+	// Media upload for images/videos on the board
+	const { handleMediaPaste } = useMediaUpload({
+		appId,
+		boardId,
+		backend,
+		executeCommand,
+		currentLayer,
+		setNodes,
+	});
 
 	useEffect(() => {
 		if (!logPanelRef.current) return;
@@ -446,6 +499,7 @@ export function FlowBoard({
 				const templateNodes = Object.values(templateBoard.nodes);
 				const templateComments = Object.values(templateBoard.comments);
 				const templateLayers = Object.values(templateBoard.layers);
+				const templateVariables = Object.values(templateBoard.variables);
 
 				if (
 					templateNodes.length === 0 &&
@@ -462,6 +516,7 @@ export function FlowBoard({
 					original_nodes: templateNodes,
 					original_comments: templateComments,
 					original_layers: templateLayers,
+					original_variables: templateVariables,
 					new_nodes: [],
 					new_comments: [],
 					new_layers: [],
@@ -483,6 +538,9 @@ export function FlowBoard({
 	const [varsOpen, setVarsOpen] = useState(false);
 	const [runsOpen, setRunsOpen] = useState(false);
 	const [logsOpen, setLogsOpen] = useState(false);
+	const [pagesOpen, setPagesOpen] = useState(false);
+	const [searchOpen, setSearchOpen] = useState(false);
+	const [searchMode, setSearchMode] = useState<"dialog" | "sidebar">("dialog");
 	const [copilotOpen, setCopilotOpen] = useState(false);
 	const [copilotInitialPrompt, setCopilotInitialPrompt] = useState<
 		string | undefined
@@ -497,6 +555,16 @@ export function FlowBoard({
 		setRunsOpen,
 		setLogsOpen,
 	});
+
+	const togglePages = useCallback(() => {
+		if (isMobile) {
+			setPagesOpen((v) => !v);
+		} else {
+			// For desktop, we use the runs panel area to show pages
+			// Toggle the runs panel if needed, or just open the sheet
+			setPagesOpen((v) => !v);
+		}
+	}, [isMobile]);
 
 	// Clear selections when version changes
 	useEffect(() => {
@@ -519,8 +587,86 @@ export function FlowBoard({
 		void saveViewport();
 	}, [saveViewport]);
 
-	const executeBoard = useCallback(
-		async (node: INode, payload?: object, skipConsentCheck?: boolean) => {
+	// Get runtime-configured variables from the board
+	const runtimeConfiguredVars = useMemo(() => {
+		if (!board.data) return [];
+		return getRuntimeConfiguredVariables(board.data);
+	}, [board.data]);
+
+	// Check if runtime variables need configuration before execution
+	// Returns { intercepted: false, runtimeVariables: map } if all configured
+	// Returns { intercepted: true } if prompting user for values
+	const checkRuntimeVarsAndExecute = useCallback(
+		async (
+			node: INode,
+			payload?: object,
+			isRemote?: boolean,
+		): Promise<{
+			intercepted: boolean;
+			runtimeVariables?: Record<string, IVariable>;
+		}> => {
+			// If no runtime-configured variables or no context, proceed directly
+			if (runtimeConfiguredVars.length === 0 || !runtimeVarsContext) {
+				return { intercepted: false }; // No interception needed
+			}
+
+			// Check if all runtime variables are configured
+			const hasAll = await runtimeVarsContext.hasAllValues(
+				appId,
+				runtimeConfiguredVars.map((v) => v.id),
+			);
+
+			if (hasAll) {
+				// All configured - build the runtime variables map
+				const storedValues = await runtimeVarsContext.getValues(appId);
+				const runtimeVariables: Record<string, IVariable> = {};
+
+				for (const variable of runtimeConfiguredVars) {
+					// For remote execution, skip secrets
+					if (isRemote && variable.secret) continue;
+
+					const storedValue = storedValues.get(variable.id);
+					if (storedValue?.value !== undefined) {
+						runtimeVariables[variable.id] = {
+							...variable,
+							default_value: storedValue.value,
+						};
+					}
+				}
+
+				return {
+					intercepted: false,
+					runtimeVariables:
+						Object.keys(runtimeVariables).length > 0
+							? runtimeVariables
+							: undefined,
+				};
+			}
+
+			// Need to prompt for configuration
+			const existingValues = await runtimeVarsContext.getValues(appId);
+			setExistingRuntimeVars(existingValues);
+			setPendingExecution({ node, payload, isRemote: isRemote ?? false });
+			setRuntimeVarsPromptOpen(true);
+			return { intercepted: true }; // Intercepted
+		},
+		[appId, runtimeConfiguredVars, runtimeVarsContext],
+	);
+
+	// Cancel runtime vars prompt
+	const handleRuntimeVarsCancel = useCallback(() => {
+		setRuntimeVarsPromptOpen(false);
+		setPendingExecution(null);
+	}, []);
+
+	// Internal execution function (called after runtime vars check)
+	const executeBoardInternal = useCallback(
+		async (
+			node: INode,
+			payload?: object,
+			skipConsentCheck?: boolean,
+			runtimeVariables?: Record<string, IVariable>,
+		) => {
 			let added = false;
 			let runId = "";
 			let meta: ILogMetadata | undefined = undefined;
@@ -531,6 +677,7 @@ export function FlowBoard({
 					{
 						id: node.id,
 						payload: payload,
+						runtime_variables: runtimeVariables,
 					},
 					true,
 					async (id: string) => {
@@ -547,12 +694,12 @@ export function FlowBoard({
 						if (runUpdates.length === 0) return;
 						const firstItem = runUpdates[0];
 						if (!added) {
-							runId = firstItem.run_id;
-							addRun(firstItem.run_id, boardId, [node.id]);
+							runId = firstItem.runId;
+							addRun(firstItem.runId, boardId, [node.id]);
 							added = true;
 						}
 
-						pushUpdate(firstItem.run_id, runUpdates);
+						pushUpdate(firstItem.runId, runUpdates);
 					},
 					skipConsentCheck,
 				);
@@ -609,8 +756,12 @@ export function FlowBoard({
 		],
 	);
 
-	const executeBoardRemote = useCallback(
-		async (node: INode, payload?: object) => {
+	const executeBoardRemoteInternal = useCallback(
+		async (
+			node: INode,
+			payload?: object,
+			runtimeVariables?: Record<string, IVariable>,
+		) => {
 			if (!backend.boardState.executeBoardRemote) {
 				toastError(
 					"Remote execution not available",
@@ -629,6 +780,7 @@ export function FlowBoard({
 					{
 						id: node.id,
 						payload: payload,
+						runtime_variables: runtimeVariables,
 					},
 					true,
 					async (id: string) => {
@@ -646,12 +798,12 @@ export function FlowBoard({
 						if (runUpdates.length === 0) return;
 						const firstItem = runUpdates[0];
 						if (!added) {
-							runId = firstItem.run_id;
-							addRun(firstItem.run_id, boardId, [node.id]);
+							runId = firstItem.runId;
+							addRun(firstItem.runId, boardId, [node.id]);
 							added = true;
 						}
 
-						pushUpdate(firstItem.run_id, runUpdates);
+						pushUpdate(firstItem.runId, runUpdates);
 					},
 				);
 			} catch (error) {
@@ -684,6 +836,101 @@ export function FlowBoard({
 			removeRun,
 			setCurrentMetadata,
 		],
+	);
+
+	// Handle saving runtime variables and continuing execution
+	const handleRuntimeVarsSave = useCallback(
+		async (values: RuntimeVariableValue[]) => {
+			if (!runtimeVarsContext || !pendingExecution || !board.data) return;
+
+			// Save the values
+			await runtimeVarsContext.saveValues(
+				appId,
+				boardId,
+				values.map((v) => {
+					const variable = runtimeConfiguredVars.find(
+						(rv) => rv.id === v.variableId,
+					);
+					return {
+						variableId: v.variableId,
+						variableName: variable?.name ?? "",
+						value: v.value,
+						isSecret: variable?.secret ?? false,
+					};
+				}),
+			);
+
+			// Build runtime variables map from the saved values
+			const runtimeVariables: Record<string, IVariable> = {};
+			for (const v of values) {
+				const variable = runtimeConfiguredVars.find(
+					(rv) => rv.id === v.variableId,
+				);
+				if (variable) {
+					// For remote execution, skip secrets
+					if (pendingExecution.isRemote && variable.secret) continue;
+
+					runtimeVariables[variable.id] = {
+						...variable,
+						default_value: v.value,
+					};
+				}
+			}
+
+			// Close prompt and proceed with execution
+			setRuntimeVarsPromptOpen(false);
+			const { node, payload, isRemote } = pendingExecution;
+			setPendingExecution(null);
+
+			const varsMap =
+				Object.keys(runtimeVariables).length > 0 ? runtimeVariables : undefined;
+			if (isRemote) {
+				await executeBoardRemoteInternal(node, payload, varsMap);
+			} else {
+				await executeBoardInternal(node, payload, true, varsMap);
+			}
+		},
+		[
+			appId,
+			boardId,
+			runtimeVarsContext,
+			pendingExecution,
+			runtimeConfiguredVars,
+			board.data,
+			executeBoardInternal,
+			executeBoardRemoteInternal,
+		],
+	);
+
+	// Public execution function - checks runtime vars first
+	const executeBoard = useCallback(
+		async (node: INode, payload?: object, skipConsentCheck?: boolean) => {
+			const result = await checkRuntimeVarsAndExecute(node, payload, false);
+			if (!result.intercepted) {
+				await executeBoardInternal(
+					node,
+					payload,
+					skipConsentCheck,
+					result.runtimeVariables,
+				);
+			}
+		},
+		[checkRuntimeVarsAndExecute, executeBoardInternal],
+	);
+
+	// Public remote execution function - checks runtime vars first
+	const executeBoardRemote = useCallback(
+		async (node: INode, payload?: object) => {
+			const result = await checkRuntimeVarsAndExecute(node, payload, true);
+			if (!result.intercepted) {
+				await executeBoardRemoteInternal(
+					node,
+					payload,
+					result.runtimeVariables,
+				);
+			}
+		},
+		[checkRuntimeVarsAndExecute, executeBoardRemoteInternal],
 	);
 
 	// Listen for OAuth retry events to re-execute after authorization
@@ -740,6 +987,15 @@ export function FlowBoard({
 				x: mousePosition.x,
 				y: mousePosition.y,
 			});
+
+			// Try to handle media paste first (images/videos)
+			const wasMediaPaste = await handleMediaPaste(
+				event,
+				currentCursorPosition,
+			);
+			if (wasMediaPaste) return;
+
+			// Fall back to regular paste handling
 			await handlePaste(
 				event,
 				currentCursorPosition,
@@ -748,7 +1004,14 @@ export function FlowBoard({
 				currentLayer,
 			);
 		},
-		[boardId, mousePosition, executeCommand, currentLayer, version],
+		[
+			boardId,
+			mousePosition,
+			executeCommand,
+			currentLayer,
+			version,
+			handleMediaPaste,
+		],
 	);
 
 	const handleCopyCB = useCallback(
@@ -913,6 +1176,40 @@ export function FlowBoard({
 		};
 	}, [nodes]);
 
+	// Keyboard shortcut: Cmd/Ctrl+Shift+P to toggle pages panel
+	useEffect(() => {
+		const handleKeyDown = (e: KeyboardEvent) => {
+			if (
+				(e.metaKey || e.ctrlKey) &&
+				e.shiftKey &&
+				e.key.toLowerCase() === "p"
+			) {
+				e.preventDefault();
+				setPagesOpen((v) => !v);
+			}
+		};
+		document.addEventListener("keydown", handleKeyDown);
+		return () => document.removeEventListener("keydown", handleKeyDown);
+	}, []);
+
+	// Keyboard shortcut: Cmd/Ctrl+F to open search dialog, Cmd/Ctrl+Shift+F for sidebar
+	useEffect(() => {
+		const handleKeyDown = (e: KeyboardEvent) => {
+			if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "f") {
+				e.preventDefault();
+				if (e.shiftKey) {
+					setSearchMode("sidebar");
+					setSearchOpen((prev) => !prev);
+				} else {
+					setSearchMode("dialog");
+					setSearchOpen(true);
+				}
+			}
+		};
+		document.addEventListener("keydown", handleKeyDown);
+		return () => document.removeEventListener("keydown", handleKeyDown);
+	}, []);
+
 	useEffect(() => {
 		document.addEventListener("flow-drop", handleDrop);
 		return () => {
@@ -936,8 +1233,8 @@ export function FlowBoard({
 		if (!board.data) return;
 		boardRef.current = board.data;
 
-		// Determine if app is offline (Local execution mode only)
-		const isOffline = app.data?.execution_mode === IAppExecutionMode.Local;
+		// Determine if app is offline (Offline visibility)
+		const isOffline = app.data?.visibility === IAppVisibility.Offline;
 
 		const parsed = parseBoard(
 			board.data,
@@ -955,7 +1252,7 @@ export function FlowBoard({
 			version,
 			openNodeInfo,
 			handleExplainNodes,
-			isTauri() && backend.boardState.executeBoardRemote
+			backend.boardState.executeBoardRemote
 				? {
 						isOffline,
 						onRemoteExecute: executeBoardRemote,
@@ -982,6 +1279,8 @@ export function FlowBoard({
 		() => ({
 			flowNode: FlowNode,
 			commentNode: CommentNode,
+			mediaNode: MediaNode,
+			uploadPlaceholderNode: UploadPlaceholderNode,
 			layerNode: LayerNode,
 			layerInnerNode: LayerInnerNode,
 			node: FlowNode,
@@ -1317,6 +1616,77 @@ export function FlowBoard({
 		],
 	);
 
+	const onScreenshot = useCallback(async () => {
+		const viewportEl = document.querySelector(
+			".react-flow__viewport",
+		) as HTMLElement | null;
+		if (!viewportEl) return;
+
+		const nodes = getNodes();
+		if (nodes.length === 0) {
+			toastError("No nodes to capture", <XIcon />);
+			return;
+		}
+
+		const nodesBounds = getNodesBounds(nodes);
+		const padding = 50;
+		const imageWidth = Math.min(4096, nodesBounds.width + padding * 2);
+		const imageHeight = Math.min(4096, nodesBounds.height + padding * 2);
+
+		const viewport = getViewportForBounds(
+			nodesBounds,
+			imageWidth,
+			imageHeight,
+			0.5,
+			2,
+			padding,
+		);
+
+		const { toPng } = await import("html-to-image");
+
+		try {
+			const dataUrl = await toPng(viewportEl, {
+				backgroundColor: "transparent",
+				width: imageWidth,
+				height: imageHeight,
+				style: {
+					width: `${imageWidth}px`,
+					height: `${imageHeight}px`,
+					transform: `translate(${viewport.x}px, ${viewport.y}px) scale(${viewport.zoom})`,
+				},
+				// Skip images that fail to load (cross-origin issues)
+				filter: (node) => {
+					// Skip video elements as they can't be captured
+					if (node instanceof HTMLVideoElement) return false;
+					return true;
+				},
+				// Handle image fetch errors gracefully
+				skipFonts: true,
+				imagePlaceholder:
+					"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==",
+			});
+
+			const response = await fetch(dataUrl);
+			const blob = await response.blob();
+
+			try {
+				await navigator.clipboard.write([
+					new ClipboardItem({ "image/png": blob }),
+				]);
+				toastSuccess("Screenshot copied to clipboard", <CheckIcon />);
+			} catch {
+				const link = document.createElement("a");
+				link.download = "flow-screenshot.png";
+				link.href = dataUrl;
+				link.click();
+				toastSuccess("Screenshot downloaded", <CheckIcon />);
+			}
+		} catch (error) {
+			console.error("Screenshot failed:", error);
+			toastError("Failed to capture screenshot", <XIcon />);
+		}
+	}, [getNodes]);
+
 	const onReconnectEnd = useCallback(
 		async (event: any, edge: any) => {
 			// Don't execute commands when viewing an old version
@@ -1512,7 +1882,7 @@ export function FlowBoard({
 	});
 
 	return (
-		<div className="w-full flex-1 grow flex-col min-h-0 relative">
+		<div className="w-full flex flex-1 grow flex-col min-h-0 relative overflow-hidden">
 			{/* Desktop FlowPilot floating panel */}
 			{copilotOpen && (
 				<div className="hidden md:block fixed inset-0 z-100 pointer-events-none">
@@ -1574,6 +1944,8 @@ export function FlowBoard({
 						</span>
 					</div>
 				)}
+				{/* Board activity indicator */}
+				<BoardActivityIndicator boardId={boardId} />
 			</div>
 			<div className="flex items-center justify-center absolute translate-x-[-50%] mt-5 left-[50dvw] z-40">
 				{board.data && editBoard && (
@@ -1584,6 +1956,13 @@ export function FlowBoard({
 						closeMeta={() => setEditBoard(false)}
 						version={version}
 						selectVersion={(version) => setVersion(version)}
+						onPageClick={(pageId) => {
+							setEditBoard(false);
+							router.push(
+								`/page-builder?id=${pageId}&app=${appId}&board=${boardId}`,
+							);
+						}}
+						isOffline={app.data?.visibility === IAppVisibility.Offline}
 					/>
 				)}
 				<FlowDock
@@ -1621,6 +2000,25 @@ export function FlowBoard({
 							title: "Manage Board",
 							onClick: async () => {
 								setEditBoard(true);
+							},
+						},
+						{
+							icon: <FileTextIcon />,
+							title: "Pages",
+							onClick: async () => {
+								togglePages();
+							},
+						},
+						{
+							icon: <SearchIcon />,
+							title: "Search (⌘F / ⌘⇧F sidebar)",
+							onClick: async () => {
+								setSearchMode("dialog");
+								setSearchOpen(true);
+							},
+							onContextMenu: async () => {
+								setSearchMode("sidebar");
+								setSearchOpen((prev) => !prev);
 							},
 						},
 						{
@@ -1676,10 +2074,9 @@ export function FlowBoard({
 
 			<ResizablePanelGroup
 				direction="horizontal"
-				className="flex grow min-h-[calc(100dvh-var(--mobile-header-height,56px)-env(safe-area-inset-bottom))] h-[calc(100dvh-var(--mobile-header-height,56px)-env(safe-area-inset-bottom))] md:min-h-dvh md:h-dvh overscroll-contain"
+				className="flex grow flex-1 min-h-0 h-full overscroll-none"
 				style={{
-					touchAction: "manipulation",
-					WebkitOverflowScrolling: "touch",
+					touchAction: "none",
 					overflow: "hidden",
 				}}
 			>
@@ -1716,6 +2113,11 @@ export function FlowBoard({
 								}}
 								onNodePlace={async (node) => {
 									await placeNode(node);
+								}}
+								onCreateVariable={async (variable) => {
+									const command = upsertVariableCommand({ variable });
+									await executeCommand(command, false);
+									setDroppedPin(undefined);
 								}}
 							>
 								<div
@@ -1822,7 +2224,11 @@ export function FlowBoard({
 										fitView
 										proOptions={{ hideAttribution: true }}
 									>
-										<Controls />
+										<Controls>
+											<ControlButton onClick={onScreenshot}>
+												<ShareIcon className="size-4" />
+											</ControlButton>
+										</Controls>
 										<MiniMap
 											pannable
 											zoomable
@@ -1883,6 +2289,7 @@ export function FlowBoard({
 										<FlowCursors
 											peers={peerStates}
 											currentLayerPath={layerPath ?? "root"}
+											peerUsers={peerUsers}
 										/>
 									)}
 									{peerStates.length > 0 && (
@@ -1890,6 +2297,7 @@ export function FlowBoard({
 											peers={peerStates}
 											currentLayerPath={layerPath ?? "root"}
 											nodes={nodes}
+											peerUsers={peerUsers}
 										/>
 									)}
 									<DragOverlay
@@ -1952,6 +2360,25 @@ export function FlowBoard({
 						/>
 					)}
 				</ResizablePanel>
+				{searchMode === "sidebar" && searchOpen && (
+					<>
+						<ResizableHandle withHandle />
+						<ResizablePanel
+							className="z-50 hidden md:block min-w-[280px] max-w-[400px]"
+							defaultSize={20}
+							minSize={15}
+							maxSize={30}
+						>
+							<FlowSearch
+								board={board.data}
+								open={searchOpen}
+								onOpenChange={setSearchOpen}
+								onNavigate={focusNode}
+								mode="sidebar"
+							/>
+						</ResizablePanel>
+					</>
+				)}
 				{/* Mobile sheets */}
 				<Sheet open={varsOpen} onOpenChange={setVarsOpen}>
 					<SheetContent side="bottom" className="h-[60dvh] w-full">
@@ -2010,6 +2437,21 @@ export function FlowBoard({
 						)}
 					</SheetContent>
 				</Sheet>
+				{/* Pages Sheet */}
+				<Sheet open={pagesOpen} onOpenChange={setPagesOpen}>
+					<SheetContent side="right" className="w-[400px] sm:w-[540px] p-0">
+						<FlowPages
+							appId={appId}
+							boardId={boardId}
+							onOpenPage={(pageId, bId) => {
+								setPagesOpen(false);
+								router.push(
+									`/page-builder?id=${pageId}&app=${appId}&board=${bId}`,
+								);
+							}}
+						/>
+					</SheetContent>
+				</Sheet>
 				{/* Mobile FlowPilot Sheet */}
 				<Sheet
 					open={copilotOpen && isMobile}
@@ -2048,6 +2490,31 @@ export function FlowBoard({
 				refs={board.data?.refs}
 				boardRef={boardRef}
 				onFocusNode={focusNode}
+			/>
+			{searchMode === "dialog" && (
+				<FlowSearch
+					board={board.data}
+					open={searchOpen}
+					onOpenChange={setSearchOpen}
+					onNavigate={focusNode}
+					mode="dialog"
+					onSwitchToSidebar={() => {
+						setSearchOpen(false);
+						setSearchMode("sidebar");
+						// Use setTimeout to ensure state updates properly
+						setTimeout(() => setSearchOpen(true), 0);
+					}}
+				/>
+			)}
+
+			{/* Runtime Variables Prompt */}
+			<RuntimeVariablesPrompt
+				open={runtimeVarsPromptOpen}
+				onOpenChange={setRuntimeVarsPromptOpen}
+				variables={runtimeConfiguredVars}
+				existingValues={existingRuntimeVars}
+				onSave={handleRuntimeVarsSave}
+				onCancel={handleRuntimeVarsCancel}
 			/>
 		</div>
 	);

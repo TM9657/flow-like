@@ -117,7 +117,7 @@ async fn fetch_provider(
 
     let hosted_provider = HostedProvider::from_provider_name(&provider.provider_name).ok_or_else(
         || {
-            ApiError::BadRequest(format!(
+            ApiError::bad_request(format!(
                 "Unsupported provider: {}. Supported: Hosted, hosted:openrouter, hosted:openai, hosted:anthropic, hosted:bedrock, hosted:azure, hosted:vertex",
                 provider.provider_name
             ))
@@ -144,7 +144,7 @@ async fn enforce_tier(
             user_tier,
             tier
         );
-        return Err(ApiError::Forbidden);
+        return Err(ApiError::FORBIDDEN);
     }
     Ok(())
 }
@@ -234,11 +234,14 @@ fn build_provider_url(hosted_provider: &HostedProvider) -> Result<(String, Strin
         .ok()
         .filter(|s| !s.is_empty())
         .or_else(|| hosted_provider.default_endpoint().map(String::from))
-        .ok_or_else(|| anyhow!("{} not configured", endpoint_key))?;
+        .ok_or_else(|| ApiError::internal(format!("{} not configured", endpoint_key)))?;
 
     let api_key = std::env::var(api_key_key).unwrap_or_default();
     if api_key.is_empty() {
-        return Err(anyhow!("{} not configured", api_key_key).into());
+        return Err(ApiError::internal(format!(
+            "{} not configured",
+            api_key_key
+        )));
     }
 
     let url = format!(
@@ -319,6 +322,7 @@ pin_project! {
         state: AppState,
         user: String,
         model: String,
+        started_at: std::time::Instant,
     }
 }
 
@@ -345,6 +349,7 @@ where
                     let state_c = this.state.clone();
                     let user_c = this.user.clone();
                     let model_c = this.model.clone();
+                    let latency_ms = this.started_at.elapsed().as_secs_f64() * 1000.0;
                     flow_like_types::tokio::spawn(async move {
                         let (in_tok, out_tok, cost_micro) = {
                             let a = acc.lock().unwrap();
@@ -352,9 +357,10 @@ where
                         };
                         if let (Some(in_t), Some(out_t)) = (in_tok, out_tok) {
                             let price = cost_micro.unwrap_or(0);
-                            if let Err(e) =
-                                track_llm_usage(&state_c, &user_c, &model_c, in_t, out_t, price)
-                                    .await
+                            if let Err(e) = track_llm_usage(
+                                &state_c, &user_c, &model_c, in_t, out_t, price, latency_ms,
+                            )
+                            .await
                             {
                                 tracing::warn!(error=%e, "Failed to track streaming LLM usage");
                             }
@@ -382,7 +388,7 @@ async fn handle_streaming(
         let status = resp.status();
         let text = resp.text().await.unwrap_or_default();
         tracing::error!(status=%status, body=%text, "Upstream error");
-        return Err(ApiError::BadRequest("Upstream error".into()));
+        return Err(ApiError::bad_request("Upstream error"));
     }
 
     let mut builder = AxumResponse::builder().status(resp.status());
@@ -401,6 +407,7 @@ async fn handle_streaming(
         state,
         user: user_sub,
         model: model_id,
+        started_at: std::time::Instant::now(),
     };
     let body_stream = tracking_stream.map(|res| res);
     let body = passthrough_byte_stream(body_stream);
@@ -413,6 +420,7 @@ async fn handle_non_streaming(
     state: &AppState,
     user_sub: &str,
 ) -> Result<AxumResponse, ApiError> {
+    let start = std::time::Instant::now();
     let resp = request_builder.send().await.map_err(|e| {
         tracing::error!(error=%e, "Upstream request failed");
         anyhow!("Upstream request failed: {e}")
@@ -423,15 +431,22 @@ async fn handle_non_streaming(
         tracing::error!(error=%e, "Failed to read upstream body");
         anyhow!("Failed to read upstream body: {e}")
     })?;
+    let latency_ms = start.elapsed().as_secs_f64() * 1000.0;
     if status.is_success() {
-        tracing::info!(model = %upstream_model_id, bytes = body_bytes.len(), "LLM invoke success (non-stream)");
-        if let Some((in_tok, out_tok)) = extract_usage_from_body(&body_bytes) {
-            // Placeholder cost calculation (0). Replace with proper pricing logic later.
-            if let Err(e) =
-                track_llm_usage(state, user_sub, upstream_model_id, in_tok, out_tok, 0).await
-            {
-                tracing::warn!(error=%e, "Failed to track LLM usage");
-            }
+        tracing::info!(model = %upstream_model_id, bytes = body_bytes.len(), latency_ms = latency_ms, "LLM invoke success (non-stream)");
+        if let Some((in_tok, out_tok)) = extract_usage_from_body(&body_bytes)
+            && let Err(e) = track_llm_usage(
+                state,
+                user_sub,
+                upstream_model_id,
+                in_tok,
+                out_tok,
+                0,
+                latency_ms,
+            )
+            .await
+        {
+            tracing::warn!(error=%e, "Failed to track LLM usage");
         }
     } else {
         tracing::warn!(status = %status, body = %String::from_utf8_lossy(&body_bytes), "LLM invoke upstream error");
@@ -452,6 +467,15 @@ async fn handle_non_streaming(
     Ok(response)
 }
 
+#[utoipa::path(
+    post,
+    path = "/chat/completions",
+    tag = "chat",
+    request_body = serde_json::Value,
+    responses(
+        (status = 200, description = "LLM completion response (streaming or JSON)")
+    )
+)]
 #[tracing::instrument(name = "POST /chat/completions", skip(state, user, payload))]
 pub async fn invoke_llm(
     State(state): State<AppState>,
@@ -462,7 +486,7 @@ pub async fn invoke_llm(
     let model_field = payload
         .get("model")
         .and_then(|v| v.as_str())
-        .ok_or_else(|| ApiError::BadRequest("Missing 'model' field".into()))?;
+        .ok_or_else(|| ApiError::bad_request("Missing 'model' field"))?;
     let (provider, hosted_provider) = fetch_provider(&state, model_field).await?;
     enforce_tier(&user, &state, &provider).await?;
     let upstream_model_id = provider
@@ -538,6 +562,7 @@ async fn track_llm_usage(
     token_in: i64,
     token_out: i64,
     price: i64,
+    latency_ms: f64,
 ) -> Result<(), flow_like_types::Error> {
     use chrono::Utc;
     use llm_usage_tracking::ActiveModel;
@@ -547,7 +572,7 @@ async fn track_llm_usage(
         model_id: Set(model.to_string()),
         token_in: Set(token_in),
         token_out: Set(token_out),
-        latency: Set(None),
+        latency: Set(Some(latency_ms)),
         user_id: Set(Some(user_sub.to_string())),
         app_id: Set(None),
         price: Set(price),

@@ -12,6 +12,9 @@ use super::{
     embedding::local::LocalEmbeddingModel, image_embedding::local::LocalImageEmbeddingModel,
 };
 
+#[cfg(feature = "remote-ml")]
+use flow_like_model_provider::embedding::proxy::ProxyEmbeddingModel;
+
 pub struct EmbeddingFactory {
     pub cached_text_models: HashMap<String, Arc<dyn EmbeddingModelLogic>>,
     pub cached_image_models: HashMap<String, Arc<dyn ImageEmbeddingModelLogic>>,
@@ -117,6 +120,42 @@ impl EmbeddingFactory {
         }
 
         Err(flow_like_types::anyhow!("Model type not supported"))
+    }
+
+    /// Build a text embedding model that proxies through the API
+    /// Used in executors (AWS Lambda, Kubernetes) where secrets are not available
+    #[cfg(feature = "remote-ml")]
+    pub async fn build_text_proxy(
+        &mut self,
+        bit: &Bit,
+        access_token: String,
+    ) -> flow_like_types::Result<Arc<dyn EmbeddingModelLogic>> {
+        let embedding_provider = bit
+            .try_to_embedding()
+            .ok_or(flow_like_types::anyhow!("Model type not supported"))?;
+
+        // Check if the model supports remote execution
+        if !embedding_provider.supports_remote() {
+            return Err(flow_like_types::anyhow!(
+                "Model does not support remote execution"
+            ));
+        }
+
+        // Check cache first
+        let cache_key = format!("{}_proxy", bit.id);
+        if let Some(model) = self.cached_text_models.get(&cache_key) {
+            self.ttl_list.insert(cache_key.clone(), SystemTime::now());
+            return Ok(model.clone());
+        }
+
+        let proxy_model =
+            ProxyEmbeddingModel::new(embedding_provider, bit.id.clone(), access_token);
+        let model: Arc<dyn EmbeddingModelLogic> = Arc::new(proxy_model);
+
+        self.ttl_list.insert(cache_key.clone(), SystemTime::now());
+        self.cached_text_models.insert(cache_key, model.clone());
+
+        Ok(model)
     }
 
     pub fn gc(&mut self) {

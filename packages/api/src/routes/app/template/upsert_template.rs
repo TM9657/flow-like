@@ -14,10 +14,12 @@ use flow_like::flow::board::VersionType;
 use flow_like_types::create_id;
 use sea_orm::{ActiveModelTrait, ActiveValue::Set, ColumnTrait, EntityTrait, QueryFilter};
 use serde::{Deserialize, Serialize};
+use utoipa::ToSchema;
 
-#[derive(Clone, Deserialize, Serialize)]
+#[derive(Clone, Deserialize, Serialize, ToSchema)]
 pub struct TemplateUpsert {
     pub changelog: Option<String>,
+    #[schema(value_type = Option<String>)]
     pub version_type: Option<VersionType>,
     pub board_id: String,
     pub board_version: Option<(u32, u32, u32)>,
@@ -31,7 +33,7 @@ async fn create_template(
     template_data: &TemplateUpsert,
 ) -> Result<(String, (u32, u32, u32)), ApiError> {
     if !permission.has_permission(RolePermissions::ReadBoards) {
-        return Err(ApiError::Forbidden);
+        return Err(ApiError::FORBIDDEN);
     }
     let template_id = create_id();
     let sub = user.sub()?;
@@ -87,6 +89,27 @@ async fn create_template(
     name = "PUT /apps/{app_id}/templates/{template_id}",
     skip(state, user, template_data)
 )]
+#[utoipa::path(
+    put,
+    path = "/apps/{app_id}/templates/{template_id}",
+    tag = "templates",
+    description = "Create or update a template.",
+    params(
+        ("app_id" = String, Path, description = "Application ID"),
+        ("template_id" = String, Path, description = "Template ID")
+    ),
+    request_body = TemplateUpsert,
+    responses(
+        (status = 200, description = "Template saved", body = String, content_type = "application/json"),
+        (status = 401, description = "Unauthorized"),
+        (status = 403, description = "Forbidden")
+    ),
+    security(
+        ("bearer_auth" = []),
+        ("api_key" = []),
+        ("pat" = [])
+    )
+)]
 pub async fn upsert_template(
     State(state): State<AppState>,
     Extension(user): Extension<AppUser>,
@@ -96,7 +119,7 @@ pub async fn upsert_template(
     let permission = ensure_permission!(user, &app_id, &state, RolePermissions::WriteTemplates);
 
     if template_id.is_empty() || app_id.is_empty() {
-        return Err(ApiError::Forbidden);
+        return Err(ApiError::FORBIDDEN);
     }
 
     let template = template::Entity::find()
@@ -125,7 +148,7 @@ pub async fn upsert_template(
     let version_type = template_data.version_type.unwrap_or(VersionType::Patch);
 
     if !permission.has_permission(RolePermissions::ReadBoards) {
-        return Err(ApiError::Forbidden);
+        return Err(ApiError::FORBIDDEN);
     }
 
     // Let´s create a new template version

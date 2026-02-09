@@ -19,6 +19,7 @@ pub mod hybrid_search;
 pub mod index;
 pub mod insert;
 pub mod list;
+pub mod list_tables;
 pub mod optimize;
 pub mod purge;
 pub mod schema;
@@ -90,6 +91,13 @@ impl NodeLogic for CreateLocalDatabaseNode {
             "Name of the Table",
             VariableType::String,
         );
+        node.add_input_pin(
+            "user_scoped",
+            "User Scoped",
+            "Store database in user directory instead of project directory",
+            VariableType::Boolean,
+        )
+        .set_default_value(Some(flow_like_types::json::json!(false)));
 
         node.add_output_pin(
             "exec_out",
@@ -113,7 +121,12 @@ impl NodeLogic for CreateLocalDatabaseNode {
         context.deactivate_exec_pin("exec_out").await?;
 
         let table: String = context.evaluate_pin("name").await?;
-        let cache_key = format!("db_{}", table);
+        let user_scoped: bool = context.evaluate_pin("user_scoped").await.unwrap_or(false);
+        let cache_key = if user_scoped {
+            format!("db_user_{}", table)
+        } else {
+            format!("db_{}", table)
+        };
         let cache_set = context.cache.read().await.contains_key(&cache_key);
         if !cache_set {
             let context_cache = context
@@ -121,12 +134,30 @@ impl NodeLogic for CreateLocalDatabaseNode {
                 .clone()
                 .ok_or(flow_like_types::anyhow!("No execution cache found"))?;
             let app_id = context_cache.app_id.clone();
-            let board_dir = context_cache.get_storage(false)?;
-            let board_dir = board_dir.child("db");
 
             let db = if let Some(credentials) = &context.credentials {
-                credentials.to_db(&app_id).await?
+                if user_scoped {
+                    credentials.to_db_scoped(&app_id).await?
+                } else {
+                    credentials.to_db(&app_id).await?
+                }
+            } else if user_scoped {
+                let user_dir = context_cache.get_user_dir(false)?;
+                let user_dir = user_dir.child("db");
+                context
+                    .app_state
+                    .config
+                    .read()
+                    .await
+                    .callbacks
+                    .build_user_database
+                    .clone()
+                    .ok_or(flow_like_types::anyhow!("No user database builder found"))?(
+                    user_dir
+                )
             } else {
+                let board_dir = context_cache.get_storage(false)?;
+                let board_dir = board_dir.child("db");
                 context
                     .app_state
                     .config

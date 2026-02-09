@@ -6,6 +6,7 @@ import {
 	type IToolBarActions,
 	LoadingScreen,
 	NoDefaultInterface,
+	PageInterface,
 	useBackend,
 	useInvoke,
 	useSetQueryParams,
@@ -14,7 +15,10 @@ import type {
 	ISidebarActions,
 	IUseInterfaceProps,
 } from "@tm9657/flow-like-ui/components/interfaces/interfaces";
+import type { IEvent } from "@tm9657/flow-like-ui/lib/schema/flow/event";
 import { parseUint8ArrayToJson } from "@tm9657/flow-like-ui/lib/uint8";
+import type { IPage } from "@tm9657/flow-like-ui/state/backend-state/page-state";
+import type { IRouteMapping } from "@tm9657/flow-like-ui/state/backend-state/route-state";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
 	type JSX,
@@ -23,18 +27,83 @@ import {
 	useEffect,
 	useMemo,
 	useRef,
+	useState,
 } from "react";
 import { EVENT_CONFIG } from "../../lib/event-config";
 import NotFound from "../library/config/not-found";
 
-export default function Page() {
+export default function UsePage() {
 	const backend = useBackend();
 	const searchParams = useSearchParams();
+	const router = useRouter();
+
 	const appId = searchParams.get("id");
+	const routePath = searchParams.get("route") ?? "/";
+
 	const headerRef = useRef<IToolBarActions>(null!);
 	const sidebarRef = useRef<ISidebarActions>(null!);
 	const setQueryParams = useSetQueryParams();
-	const router = useRouter();
+
+	const routes = useInvoke(
+		backend.routeState.getRoutes,
+		backend.routeState,
+		[appId ?? ""],
+		typeof appId === "string",
+		[appId],
+	);
+
+	// Route and page state
+	const [routeMapping, setRouteMapping] = useState<IRouteMapping | null>(null);
+	const [routeEvent, setRouteEvent] = useState<IEvent | null>(null);
+	const [pageData, setPageData] = useState<IPage | null>(null);
+	const [routeLoading, setRouteLoading] = useState(true);
+
+	// Load route config and associated event
+	useEffect(() => {
+		if (!appId) {
+			setRouteMapping(null);
+			setRouteEvent(null);
+			setRouteLoading(false);
+			return;
+		}
+
+		const loadRoute = async () => {
+			setRouteLoading(true);
+			try {
+				// Get route mapping by path or default
+				let mapping: IRouteMapping | null = null;
+				if (routePath && routePath !== "/") {
+					mapping = await backend.routeState.getRouteByPath(appId, routePath);
+				}
+
+				// If no specific route found, try default route
+				if (!mapping) {
+					mapping = await backend.routeState.getDefaultRoute(appId);
+				}
+
+				setRouteMapping(mapping);
+
+				// Load the event if we have a mapping
+				if (mapping) {
+					const event = await backend.eventState.getEvent(
+						appId,
+						mapping.eventId,
+					);
+					setRouteEvent(event);
+				} else {
+					setRouteEvent(null);
+				}
+			} catch (e) {
+				console.error("Failed to load route:", e);
+				setRouteMapping(null);
+				setRouteEvent(null);
+			} finally {
+				setRouteLoading(false);
+			}
+		};
+
+		loadRoute();
+	}, [appId, routePath, backend.routeState, backend.eventState]);
 
 	const usableEvents = useMemo(() => {
 		const events = new Map<
@@ -50,7 +119,7 @@ export default function Page() {
 			}
 		});
 		return events;
-	}, [EVENT_CONFIG]);
+	}, []);
 
 	const metadata = useInvoke(
 		backend.appState.getAppMeta,
@@ -59,9 +128,15 @@ export default function Page() {
 		typeof appId === "string",
 	);
 
+	const getEventsForced = useMemo(() => {
+		const getEvents = (appId: string) =>
+			backend.eventState.getEvents(appId, true);
+		return getEvents;
+	}, [backend.eventState]);
+
 	const eventId = searchParams.get("eventId");
 	const events = useInvoke(
-		backend.eventState.getEvents,
+		getEventsForced,
 		backend.eventState,
 		[appId ?? ""],
 		(appId ?? "") !== "",
@@ -73,10 +148,59 @@ export default function Page() {
 			.toSorted((a, b) => a.priority - b.priority);
 	}, [events.data]);
 
+	// Load page data for page-target events
+	useEffect(() => {
+		if (!appId) {
+			setPageData(null);
+			return;
+		}
+		if (routeLoading) return;
+		if (!routeEvent) {
+			setPageData(null);
+			return;
+		}
+
+		let cancelled = false;
+		const loadPage = async () => {
+			try {
+				// Event has default_page_id -> page-target event
+				if (routeEvent.default_page_id) {
+					const page = await backend.pageState.getPage(
+						appId,
+						routeEvent.default_page_id,
+						routeEvent.board_id || undefined,
+					);
+					if (!cancelled) setPageData(page);
+					return;
+				}
+
+				// Board-target event - no page
+				if (!cancelled) setPageData(null);
+			} catch (e) {
+				console.error("Failed to load page:", e);
+				if (!cancelled) setPageData(null);
+			}
+		};
+
+		loadPage();
+		return () => {
+			cancelled = true;
+		};
+	}, [appId, routeLoading, routeEvent, backend.pageState]);
+
 	const currentEvent = useMemo(() => {
 		if (!eventId) return undefined;
 		return sortedEvents.find((e) => e.id === eventId);
 	}, [eventId, sortedEvents]);
+
+	const activeEvent = useMemo(() => {
+		// If we have a route event from the mapping, use that
+		if (routeEvent) {
+			return routeEvent;
+		}
+		// Fallback to current event from query params
+		return currentEvent;
+	}, [routeEvent, currentEvent]);
 
 	const switchEvent = useCallback(
 		(newEventId: string) => {
@@ -85,27 +209,38 @@ export default function Page() {
 			if (eventId === newEventId) return;
 			if (newEventId === "") return;
 
-			// Clear toolbar elements when switching events
 			headerRef.current?.pushToolbarElements([]);
 			setQueryParams("eventId", newEventId);
 		},
-		[appId, router, eventId, setQueryParams],
+		[appId, eventId, setQueryParams],
 	);
 
 	const config = useMemo(() => {
-		if (!currentEvent) return {};
+		if (!activeEvent) return {};
 		try {
-			return parseUint8ArrayToJson(currentEvent.config);
+			return parseUint8ArrayToJson(activeEvent.config);
 		} catch (e) {
-			console.error("Error parsing parameters:", e);
+			console.error("Error parsing event config:", e);
 			return {};
 		}
-	}, [currentEvent]);
+	}, [activeEvent]);
+
+	useEffect(() => {
+		if (!routeMapping) return;
+
+		// Route navigation is path-based; avoid stale eventId params.
+		if (eventId && eventId !== routeMapping.eventId) {
+			setQueryParams("eventId", undefined);
+		}
+	}, [routeMapping, eventId, setQueryParams]);
 
 	useEffect(() => {
 		if (!appId) return;
+		if (routeMapping) return;
+		if (routeLoading) return;
+		if ((routes.data?.length ?? 0) > 0) return;
+
 		if (sortedEvents.length === 0 && events.data) {
-			console.log("No events found, redirecting to event config");
 			router.replace(`/store?id=${appId}`);
 			return;
 		}
@@ -115,7 +250,6 @@ export default function Page() {
 		let rerouteEvent = sortedEvents.find((e) => usableEvents.has(e.event_type));
 
 		if (!rerouteEvent && usableEvents.size > 0 && events.data) {
-			console.log("No usable events found, redirecting to event config");
 			router.replace(`/store?id=${appId}`);
 			return;
 		}
@@ -149,24 +283,87 @@ export default function Page() {
 		switchEvent,
 		usableEvents,
 		events.data,
+		routeMapping,
+		routeLoading,
+		routes.data,
+		router,
 	]);
+
+	const switchRoute = useCallback(
+		(path: string) => {
+			if (!appId) return;
+			if (!path) return;
+
+			headerRef.current?.pushToolbarElements([]);
+			setQueryParams("route", path);
+			setQueryParams("eventId", undefined);
+		},
+		[appId, setQueryParams],
+	);
+
+	const shouldRenderHeader = useMemo(() => {
+		if (routeLoading) return false;
+		// Hide header if route event has a default page (full page rendering)
+		if (routeEvent?.default_page_id) return false;
+		return true;
+	}, [routeLoading, routeEvent]);
 
 	const inner = useMemo(() => {
 		if (!appId) return <NotFound />;
-		if (!currentEvent) return <LoadingScreen />;
-		if (!usableEvents) return <LoadingScreen />;
+		if (routeLoading) return <LoadingScreen />;
 
-		if (usableEvents.has(currentEvent.event_type)) {
-			const InterfaceComponent = usableEvents.get(currentEvent.event_type);
-			if (InterfaceComponent)
+		// Route event has a page - render the page interface
+		if (pageData && routeEvent?.default_page_id) {
+			return (
+				<div className="flex flex-col grow h-full w-full max-h-full overflow-hidden">
+					<PageInterface
+						appId={appId}
+						event={routeEvent}
+						config={parseUint8ArrayToJson(routeEvent.config)}
+						page={pageData}
+						toolbarRef={headerRef}
+						sidebarRef={sidebarRef}
+					/>
+				</div>
+			);
+		}
+
+		// Route targets an event (board/node interface)
+		if (routeEvent && usableEvents.has(routeEvent.event_type)) {
+			const InterfaceComponent = usableEvents.get(routeEvent.event_type);
+			if (InterfaceComponent) {
 				return (
 					<div
-						key={currentEvent.id}
-						className="flex flex-col flex-grow h-full w-full max-h-full overflow-hidden"
+						key={routeEvent.id}
+						className="flex flex-col grow h-full w-full max-h-full overflow-hidden"
 					>
 						<InterfaceComponent
 							appId={appId}
-							event={currentEvent}
+							event={routeEvent}
+							config={parseUint8ArrayToJson(routeEvent.config)}
+							toolbarRef={headerRef}
+							sidebarRef={sidebarRef}
+						/>
+					</div>
+				);
+			}
+		}
+
+		// No route config - fall back to event-based interface
+		if (!activeEvent) return <LoadingScreen />;
+		if (!usableEvents) return <LoadingScreen />;
+
+		if (usableEvents.has(activeEvent.event_type)) {
+			const InterfaceComponent = usableEvents.get(activeEvent.event_type);
+			if (InterfaceComponent)
+				return (
+					<div
+						key={activeEvent.id}
+						className="flex flex-col grow h-full w-full max-h-full overflow-hidden"
+					>
+						<InterfaceComponent
+							appId={appId}
+							event={activeEvent}
 							config={config}
 							toolbarRef={headerRef}
 							sidebarRef={sidebarRef}
@@ -178,11 +375,13 @@ export default function Page() {
 		return <NoDefaultInterface appId={appId} eventId={eventId ?? undefined} />;
 	}, [
 		appId,
-		currentEvent,
+		routeLoading,
+		pageData,
+		routeEvent,
+		sortedEvents,
+		activeEvent,
 		config,
 		eventId,
-		headerRef,
-		sidebarRef,
 		usableEvents,
 	]);
 
@@ -193,16 +392,21 @@ export default function Page() {
 	return (
 		<main className="flex flex-col h-full overflow-hidden flex-1 min-h-0">
 			<Container ref={sidebarRef}>
-				<div className="flex flex-col flex-grow h-full w-full max-h-full overflow-hidden">
-					<Header
-						ref={headerRef}
-						usableEvents={new Set(usableEvents.keys())}
-						currentEvent={currentEvent}
-						sortedEvents={sortedEvents}
-						metadata={metadata.data}
-						appId={appId}
-						switchEvent={switchEvent}
-					/>
+				<div className="flex flex-col grow h-full w-full max-h-full overflow-hidden">
+					{shouldRenderHeader ? (
+						<Header
+							ref={headerRef}
+							routes={routes.data ?? []}
+							currentRoutePath={routeMapping?.path ?? routePath}
+							onNavigateRoute={switchRoute}
+							usableEvents={new Set(usableEvents.keys())}
+							currentEvent={activeEvent}
+							sortedEvents={sortedEvents}
+							metadata={metadata.data}
+							appId={appId}
+							switchEvent={switchEvent}
+						/>
+					) : null}
 					{inner}
 				</div>
 			</Container>

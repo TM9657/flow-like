@@ -45,4 +45,7 @@ export class EmptyBitState implements IBitState {
 	isBitInstalled(bit: IBit): Promise<boolean> {
 		throw new Error("Method not implemented.");
 	}
+	getProfileBits(): Promise<IBit[]> {
+		throw new Error("Method not implemented.");
+	}
 }

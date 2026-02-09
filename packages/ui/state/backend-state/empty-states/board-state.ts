@@ -2,6 +2,7 @@ import type {
 	IBoard,
 	IBoardState,
 	IConnectionMode,
+	IExecutionMode,
 	IExecutionStage,
 	IGenericCommand,
 	IIntercomEvent,
@@ -14,10 +15,13 @@ import type {
 	IVersionType,
 } from "../../../";
 import type { IJwks, IRealtimeAccess } from "../../../";
+import type { SurfaceComponent } from "../../../components/a2ui/types";
 import type {
-	ChatMessage,
-	CopilotResponse,
-} from "../../../components/flow/flow-copilot";
+	CopilotScope,
+	UIActionContext,
+	UnifiedChatMessage,
+	UnifiedCopilotResponse,
+} from "../../../lib/schema/copilot";
 
 export class EmptyBoardState implements IBoardState {
 	getBoards(appId: string): Promise<IBoard[]> {
@@ -114,6 +118,7 @@ export class EmptyBoardState implements IBoardState {
 		description: string,
 		logLevel: ILogLevel,
 		stage: IExecutionStage,
+		executionMode?: IExecutionMode,
 		template?: IBoard,
 	): Promise<void> {
 		throw new Error("Method not implemented.");
@@ -136,16 +141,29 @@ export class EmptyBoardState implements IBoardState {
 		throw new Error("Method not implemented.");
 	}
 
-	flowpilot_chat(
-		board: IBoard,
+	getExecutionElements(
+		appId: string,
+		boardId: string,
+		pageId: string,
+		wildcard?: boolean,
+	): Promise<Record<string, unknown>> {
+		throw new Error("Method not implemented.");
+	}
+
+	copilot_chat(
+		scope: CopilotScope,
+		board: IBoard | null,
 		selectedNodeIds: string[],
+		currentSurface: SurfaceComponent[] | null,
+		selectedComponentIds: string[],
 		userPrompt: string,
-		history: ChatMessage[],
+		history: UnifiedChatMessage[],
 		onToken?: (token: string) => void,
 		modelId?: string,
 		token?: string,
 		runContext?: IRunContext,
-	): Promise<CopilotResponse> {
+		actionContext?: UIActionContext,
+	): Promise<UnifiedCopilotResponse> {
 		throw new Error("Method not implemented.");
 	}
 }

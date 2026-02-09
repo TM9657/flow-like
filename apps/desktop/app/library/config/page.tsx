@@ -21,14 +21,15 @@ import {
 	SelectItem,
 	SelectTrigger,
 	SelectValue,
+	TextEditor,
 	Textarea,
 	VerificationDialog,
+	sanitizeImageUrl,
 	toastError,
 	useBackend,
 	useInvalidateInvoke,
 	useInvoke,
 } from "@tm9657/flow-like-ui";
-import { TextEditor } from "@tm9657/flow-like-ui";
 import { isEqual } from "lodash-es";
 import {
 	BombIcon,
@@ -560,9 +561,10 @@ export default function Id() {
 								{/* Current thumbnail or placeholder */}
 								<div className="absolute inset-0">
 									<img
-										src={
-											localMetadata?.thumbnail ?? "/placeholder-thumbnail.webp"
-										}
+										src={sanitizeImageUrl(
+											localMetadata?.thumbnail ?? undefined,
+											"/placeholder-thumbnail.webp",
+										)}
 										alt="App thumbnail"
 										className="w-full h-full object-cover"
 									/>
@@ -614,7 +616,10 @@ export default function Id() {
 									{/* Current icon or placeholder */}
 									<div className="absolute inset-0">
 										<img
-											src={localMetadata?.icon ?? "/app-logo.webp"}
+											src={sanitizeImageUrl(
+												localMetadata?.icon ?? undefined,
+												"/app-logo.webp",
+											)}
 											alt="App icon"
 											className="w-full h-full object-cover rounded-lg"
 										/>

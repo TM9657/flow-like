@@ -127,7 +127,7 @@ The runtime role needs a trust policy allowing the API to assume it:
 When `RUNTIME_ROLE_ARN` is set, each execution receives temporary credentials scoped to:
 - Read/write the specific app's data (`apps/{app_id}/*`)
 - Read/write the user's app data (`users/{user_id}/apps/{app_id}/*`)
-- Write execution logs (`logs/runs/{app_id}/*`)
+- Write execution logs (`runs/{app_id}/*`)
 - Access temporary storage (`tmp/user/{user_id}/apps/{app_id}/*`)
 
 ## Cloudflare R2

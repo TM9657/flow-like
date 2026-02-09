@@ -7,6 +7,7 @@ import {
 	type NodeProps,
 	Position,
 	useReactFlow,
+	useUpdateNodeInternals,
 } from "@xyflow/react";
 import {
 	BanIcon,
@@ -14,6 +15,7 @@ import {
 	CircleXIcon,
 	ClockIcon,
 	CloudCog,
+	MonitorIcon,
 	PlayCircleIcon,
 	ScrollTextIcon,
 	SquareCheckIcon,
@@ -33,11 +35,16 @@ import {
 import PuffLoader from "react-spinners/PuffLoader";
 import { useLogAggregation } from "../..";
 import { useInvalidateInvoke } from "../../hooks";
+import { colorFromSub } from "../../hooks/use-peer-users";
 import {
+	getActivityColorClasses,
+	useRunActivity,
+} from "../../hooks/use-run-activity";
+import {
+	IExecutionMode,
 	ILogLevel,
 	IPinType,
 	IValueType,
-	isTauri,
 	moveNodeCommand,
 	removeNodeCommand,
 	updateNodeCommand,
@@ -74,9 +81,8 @@ import { typeToColor } from "./utils";
 
 export interface RemoteSelectionParticipant {
 	clientId: number;
-	userId?: string;
-	name: string;
-	color: string;
+	/** The sub (subject) from the auth token - use to resolve user info via API */
+	sub?: string;
 }
 
 export interface IPinAction {
@@ -102,6 +108,7 @@ export type FlowNode = Node<
 		remoteSelections?: RemoteSelectionParticipant[];
 		onOpenInfo?: (node: INode) => void;
 		onExplain?: (nodeIds: string[]) => void;
+		executionMode?: IExecutionMode;
 	},
 	"node"
 >;
@@ -127,15 +134,31 @@ const FlowNodeInner = memo(
 		const [isExec, setIsExec] = useState(false);
 		const [inputPins, setInputPins] = useState<(IPin | IPinAction)[]>([]);
 		const [outputPins, setOutputPins] = useState<(IPin | IPinAction)[]>([]);
-		const { runs } = useRunExecutionStore();
-		const [executionState, setExecutionState] = useState<
-			"done" | "running" | "none"
-		>("none");
-		const [runId, setRunId] = useState<string | undefined>(undefined);
-		const debouncedExecutionState = useDebounce(executionState, 100);
+
+		// Use separate selectors returning primitives to avoid infinite re-renders
+		const executionStatus = useRunExecutionStore((state) => {
+			for (const [, run] of state.runs) {
+				if (run.nodes.has(props.id)) return "running" as const;
+				if (run.already_executed.has(props.id)) return "done" as const;
+			}
+			return "none" as const;
+		});
+
+		const activeRunId = useRunExecutionStore((state) => {
+			for (const [runId, run] of state.runs) {
+				if (run.nodes.has(props.id) || run.already_executed.has(props.id)) {
+					return runId;
+				}
+			}
+			return undefined;
+		});
+
+		const debouncedExecutionState = useDebounce(executionStatus, 100);
+		const runActivity = useRunActivity(activeRunId);
 		const div = useRef<HTMLDivElement>(null);
 		const reactFlow = useReactFlow();
 		const { getNode } = useReactFlow();
+		const updateNodeInternals = useUpdateNodeInternals();
 		const remoteSelections = props.data.remoteSelections ?? [];
 		const displayedRemoteSelections = useMemo(
 			() => remoteSelections.slice(0, 3),
@@ -201,43 +224,7 @@ const FlowNodeInner = memo(
 				div.current.style.height = `calc(${height * 15}px + 1.25rem + 0.5rem)`;
 		}, [isReroute, inputPins, outputPins]);
 
-		useEffect(() => {
-			parsePins(Object.values(props.data.node?.pins || []));
-		}, [
-			props.data.node.pins,
-			props.positionAbsoluteX,
-			props.positionAbsoluteY,
-		]);
-
-		useEffect(() => {
-			let isRunning = false;
-			let already_executed = false;
-
-			for (const [runId, run] of runs) {
-				if (run.nodes.has(props.id)) {
-					isRunning = true;
-					setRunId(runId);
-					break;
-				}
-
-				if (run.already_executed.has(props.id)) {
-					already_executed = true;
-					setRunId(runId);
-				}
-			}
-
-			if (isRunning) {
-				setExecutionState("running");
-				return;
-			}
-
-			if (already_executed) {
-				setExecutionState("done");
-				return;
-			}
-
-			setExecutionState("none");
-		}, [runs, props.id]);
+		// Execution state is now computed directly from the selector above
 
 		const addPin = useCallback(
 			async (node: INode, pin: IPin, index: number) => {
@@ -448,8 +435,15 @@ const FlowNodeInner = memo(
 				setOutputPins(outputPins);
 				setIsExec(isExec);
 			},
-			[props.data.node.pins],
+			[addPin, sortPins, props.data.node],
 		);
+
+		// Parse pins when node pins change
+		useEffect(() => {
+			parsePins(Object.values(props.data.node?.pins || []));
+			// Update React Flow internals when pins change (handles may have changed)
+			updateNodeInternals(props.id);
+		}, [props.data.node.pins, props.id]);
 
 		function isPinAction(pin: IPin | IPinAction): pin is IPinAction {
 			return typeof (pin as IPinAction).onAction === "function";
@@ -624,19 +618,27 @@ const FlowNodeInner = memo(
 		const playNode = useMemo(() => {
 			if (!props.data.node.start) return null;
 
-			const canRemoteExecute =
-				isTauri() &&
-				!props.data.isOffline &&
-				props.data.onRemoteExecute !== undefined;
+			const executionMode = props.data.executionMode ?? IExecutionMode.Hybrid;
+			const canRemoteExecuteBase =
+				!props.data.isOffline && props.data.onRemoteExecute !== undefined;
 
-			if (executionState === "done" || executing)
+			// Apply execution mode restrictions
+			// only_offline nodes can never run remotely
+			const canLocalExecute = executionMode !== IExecutionMode.Remote;
+			const canRemoteExecute =
+				canRemoteExecuteBase &&
+				executionMode !== IExecutionMode.Local &&
+				!props.data.node.only_offline;
+
+			if (executionStatus === "done" || executing)
 				return (
 					<button
 						className="bg-background hover:bg-card group/play transition-all rounded-md hover:rounded-lg border p-1 absolute left-0 top-0 translate-x-[calc(-120%)] opacity-200!"
 						onClick={async (e) => {
 							const backend = useBackendStore.getState().backend;
 							if (!backend) return;
-							if (runId) await backend.eventState.cancelExecution(runId);
+							if (activeRunId)
+								await backend.eventState.cancelExecution(activeRunId);
 						}}
 					>
 						<CircleStopIcon className="w-3 h-3 group-hover/play:scale-110 text-primary" />
@@ -660,13 +662,15 @@ const FlowNodeInner = memo(
 			if (Object.keys(props.data.node.pins).length <= 1)
 				return (
 					<div className="absolute left-0 top-0 translate-x-[calc(-120%)] flex flex-col gap-1">
-						<button
-							className="bg-background hover:bg-card group/play transition-all rounded-md hover:rounded-lg border p-1"
-							onClick={() => handleLocalExecute()}
-							title="Execute locally"
-						>
-							<PlayCircleIcon className="w-3 h-3 group-hover/play:scale-110" />
-						</button>
+						{canLocalExecute && (
+							<button
+								className="bg-background hover:bg-card group/play transition-all rounded-md hover:rounded-lg border p-1"
+								onClick={() => handleLocalExecute()}
+								title="Execute locally"
+							>
+								<PlayCircleIcon className="w-3 h-3 group-hover/play:scale-110" />
+							</button>
+						)}
 						{canRemoteExecute && (
 							<button
 								className="bg-background hover:bg-card group/play transition-all rounded-md hover:rounded-lg border p-1 relative"
@@ -688,9 +692,15 @@ const FlowNodeInner = memo(
 						<div className="absolute left-0 top-0 translate-x-[calc(-120%)] flex flex-col gap-1">
 							<button
 								className="bg-background hover:bg-card group/play transition-all rounded-md hover:rounded-lg border p-1"
-								title="Execute locally"
+								title={
+									canLocalExecute ? "Execute locally" : "Execute on server"
+								}
 							>
-								<PlayCircleIcon className="w-3 h-3 group-hover/play:scale-110" />
+								{canLocalExecute ? (
+									<PlayCircleIcon className="w-3 h-3 group-hover/play:scale-110" />
+								) : (
+									<CloudCog className="w-3 h-3 group-hover/play:scale-110" />
+								)}
 							</button>
 						</div>
 					</DialogTrigger>
@@ -704,10 +714,11 @@ const FlowNodeInner = memo(
 						<EventPayloadForm
 							node={props.data.node}
 							boardRef={props.data.boardRef}
-							onLocalExecute={handleLocalExecute}
+							onLocalExecute={canLocalExecute ? handleLocalExecute : undefined}
 							onRemoteExecute={
 								canRemoteExecute ? handleRemoteExecute : undefined
 							}
+							canLocalExecute={canLocalExecute}
 							canRemoteExecute={canRemoteExecute}
 							onClose={() => setPayload((old) => ({ ...old, open: false }))}
 						/>
@@ -717,39 +728,43 @@ const FlowNodeInner = memo(
 		}, [
 			props.data.node.start,
 			payload,
-			runId,
+			activeRunId,
 			executing,
-			executionState,
+			executionStatus,
 			props.data.onExecute,
 			props.data.onRemoteExecute,
 			props.data.isOffline,
 			props.data.node,
+			props.data.executionMode,
 		]);
 
 		return (
 			<div
 				key={`${props.id}__node`}
 				ref={div}
-				className={`bg-card! p-2 react-flow__node-default rounded-md! selectable focus:ring-2 relative group ${props.selected && "border-primary! border-2"} ${executionState === "done" ? "opacity-60" : "opacity-100"} ${isReroute && "w-4 max-w-4 max-h-3! overflow-y rounded-lg! p-[0.4rem]!"} ${!isReroute && "border-border!"}`}
+				className={`bg-card! p-2 react-flow__node-default rounded-md! selectable focus:ring-2 relative group ${props.selected && "border-primary! border-2"} ${executionStatus === "done" ? "opacity-60" : "opacity-100"} ${isReroute && "w-4 max-w-4 max-h-3! overflow-y rounded-lg! p-[0.4rem]!"} ${!isReroute && "border-border!"}`}
 				style={isReroute ? nodeStyle : {}}
 				onMouseEnter={() => onHover(true)}
 				onMouseLeave={() => onHover(false)}
 			>
 				{remoteSelections.length > 0 && (
 					<div className="pointer-events-none absolute -top-3 left-0 flex flex-col gap-1">
-						{displayedRemoteSelections.map((participant) => (
-							<div
-								key={`${participant.clientId}-${participant.userId ?? participant.name}`}
-								className="flex items-center gap-1 rounded-md border bg-background/80 px-1.5 py-0.5 text-[0.625rem] leading-none shadow-sm"
-								style={{ borderColor: participant.color }}
-							>
-								<span
-									className="h-1.5 w-1.5 rounded-full"
-									style={{ backgroundColor: participant.color }}
-								/>
-								<span className="font-medium">{participant.name}</span>
-							</div>
-						))}
+						{displayedRemoteSelections.map((participant) => {
+							const color = colorFromSub(participant.sub);
+							return (
+								<div
+									key={`${participant.clientId}-${participant.sub ?? "unknown"}`}
+									className="flex items-center gap-1 rounded-md border bg-background/80 px-1.5 py-0.5 text-[0.625rem] leading-none shadow-sm"
+									style={{ borderColor: color }}
+									title={participant.sub}
+								>
+									<span
+										className="h-1.5 w-1.5 rounded-full"
+										style={{ backgroundColor: color }}
+									/>
+								</div>
+							);
+						})}
 						{extraRemoteSelections > 0 && (
 							<div className="rounded-md border bg-background/80 px-1.5 py-0.5 text-[0.625rem] leading-none shadow-sm">
 								+{extraRemoteSelections}
@@ -763,6 +778,19 @@ const FlowNodeInner = memo(
 						{useMemo(
 							() => (
 								<ClockIcon className="w-2 h-2 text-foreground" />
+							),
+							[],
+						)}
+					</div>
+				)}
+				{props.data.node.only_offline && (
+					<div
+						className="absolute bottom-0 z-10 translate-y-[calc(50%)] translate-x-[calc(-50%)] left-0 text-center bg-background rounded-full"
+						title="This node can only run locally"
+					>
+						{useMemo(
+							() => (
+								<MonitorIcon className="w-2 h-2 text-blue-500" />
 							),
 							[],
 						)}
@@ -841,22 +869,23 @@ const FlowNodeInner = memo(
 									className="w-2 h-2 cursor-pointer hover:text-primary"
 								/>
 							)}
-							{useMemo(() => {
-								if (debouncedExecutionState !== "running") return null;
-								return (
-									<PuffLoader
-										color={resolvedTheme === "dark" ? "white" : "black"}
-										size={10}
-										speedMultiplier={1}
-									/>
-								);
-							}, [debouncedExecutionState, resolvedTheme])}
-
-							{useMemo(() => {
-								return debouncedExecutionState === "done" ? (
-									<SquareCheckIcon className="w-2 h-2 text-primary" />
-								) : null;
-							}, [debouncedExecutionState])}
+							{debouncedExecutionState === "running" && (
+								<PuffLoader
+									color={resolvedTheme === "dark" ? "white" : "black"}
+									size={10}
+									speedMultiplier={1}
+								/>
+							)}
+							{debouncedExecutionState === "running" && (
+								<span
+									className={`text-[8px] ${getActivityColorClasses(runActivity.status).text}`}
+								>
+									{runActivity.formattedTime}
+								</span>
+							)}
+							{debouncedExecutionState === "done" && (
+								<SquareCheckIcon className="w-2 h-2 text-primary" />
+							)}
 						</div>
 					</div>
 				)}
@@ -986,17 +1015,23 @@ function FlowNode(props: NodeProps<FlowNode>) {
 	}, [props.data.node, props.data.appId, props.data.boardId, flow]);
 
 	const handleCollapse = useCallback(
-		async (x: number, y: number) => {
+		async (_x: number, _y: number) => {
 			if (typeof props.data.version !== "undefined") {
 				return;
 			}
 
 			const selectedNodes = flow.getNodes().filter((node) => node.selected);
-			const flowCords = flow.screenToFlowPosition({
-				x: x,
-				y: y,
-			});
 			if (selectedNodes.length <= 1) return;
+
+			// Calculate bounding box of selected nodes to position the collapsed layer
+			let minX = Number.POSITIVE_INFINITY;
+			let minY = Number.POSITIVE_INFINITY;
+			for (const node of selectedNodes) {
+				const x = node.position.x;
+				const y = node.position.y;
+				if (x < minX) minX = x;
+				if (y < minY) minY = y;
+			}
 
 			const nodeIds = selectedNodes.map((node) => {
 				const isNode = node.data.node as INode;
@@ -1014,7 +1049,7 @@ function FlowNode(props: NodeProps<FlowNode>) {
 					nodes: {},
 					pins: {},
 					parent_id: (selectedNodes[0].data.node as INode).layer,
-					coordinates: [flowCords.x, flowCords.y, 0],
+					coordinates: [minX, minY, 0],
 					in_coordinates: undefined,
 					name: "Collapsed",
 					type: ILayerType.Collapsed,

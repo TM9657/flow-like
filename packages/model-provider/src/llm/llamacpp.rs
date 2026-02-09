@@ -1,16 +1,14 @@
-use std::{any::Any, sync::Arc};
+use std::any::Any;
 
 use super::{ModelConstructor, ModelLogic};
 use crate::provider::ModelProvider;
 use flow_like_types::{Cacheable, Result, async_trait};
-use rig::client::ProviderClient;
 
 mod client;
-pub use client::LlamaCppClient;
+pub use client::{CompletionModel, LlamaCppClient};
 
 pub struct LlamaCppModel {
-    client: Arc<Box<dyn ProviderClient>>,
-    #[allow(dead_code)]
+    client: LlamaCppClient,
     provider: ModelProvider,
     default_model: Option<String>,
     port: u16,
@@ -21,10 +19,10 @@ impl LlamaCppModel {
         let model_id = provider.model_id.clone();
         let base_url = format!("http://localhost:{}", port);
 
-        let client = Box::new(LlamaCppClient::new(&base_url));
+        let client = LlamaCppClient::new(&base_url);
 
         Ok(LlamaCppModel {
-            client: Arc::new(client),
+            client,
             provider: provider.clone(),
             default_model: model_id,
             port,
@@ -33,6 +31,10 @@ impl LlamaCppModel {
 
     pub fn port(&self) -> u16 {
         self.port
+    }
+
+    pub fn completion_model(&self, model: &str) -> CompletionModel {
+        self.client.completion_model(model)
     }
 }
 
@@ -48,9 +50,10 @@ impl Cacheable for LlamaCppModel {
 
 #[async_trait]
 impl ModelLogic for LlamaCppModel {
+    #[allow(deprecated)]
     async fn provider(&self) -> Result<ModelConstructor> {
         Ok(ModelConstructor {
-            inner: self.client.clone(),
+            inner: Box::new(self.client.clone()),
         })
     }
 

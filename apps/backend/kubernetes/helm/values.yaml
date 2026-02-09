@@ -43,6 +43,40 @@ api:
   env: []
   envFrom: []
 
+# Web Application Configuration (Next.js Static Export)
+web:
+  enabled: true
+  replicaCount: 1
+  image:
+    repository: k3d-flow-like.localhost:5000/flow-like-k8s-web
+    tag: latest
+    pullPolicy: Never
+
+  service:
+    type: ClusterIP
+    port: 3001
+    # NodePort for local dev (use with type: NodePort)
+    nodePort: ""
+
+  resources:
+    requests:
+      memory: "64Mi"
+      cpu: "10m"
+    limits:
+      memory: "128Mi"
+      cpu: "100m"
+
+  autoscaling:
+    enabled: false
+    minReplicas: 1
+    maxReplicas: 5
+    targetCPUUtilization: 70
+    targetMemoryUtilization: 80
+
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+
 # Executor Configuration (for Kubernetes Jobs)
 executor:
   image:
@@ -310,11 +344,34 @@ ingress:
   enabled: false
   className: ""
   annotations: {}
+  # Example with separate hosts for API and web:
+  # hosts:
+  #   - host: api.flow-like.local
+  #     paths:
+  #       - path: /
+  #         pathType: Prefix
+  #         service: api
+  #   - host: app.flow-like.local
+  #     paths:
+  #       - path: /
+  #         pathType: Prefix
+  #         service: web
+  # Example with path-based routing on single host:
+  # hosts:
+  #   - host: flow-like.local
+  #     paths:
+  #       - path: /api
+  #         pathType: Prefix
+  #         service: api
+  #       - path: /
+  #         pathType: Prefix
+  #         service: web
   hosts:
     - host: flow-like.local
       paths:
         - path: /
           pathType: Prefix
+          # service: api (default) or web
   tls: []
 
 # Network Policies
@@ -475,6 +532,63 @@ monitoring:
   # Alertmanager Configuration (optional)
   alertmanager:
     enabled: false
+
+# =============================================================================
+# Sink Services Configuration
+# =============================================================================
+# Manages event sinks (cron, webhooks, bots) that trigger flow executions
+sinkServices:
+  enabled: false
+
+  # Image for the sink-trigger CronJob (ultra-lean ~500KB binary)
+  image:
+    repository: flow-like/sink-trigger
+    tag: latest
+    pullPolicy: IfNotPresent
+
+  # Scoped JWT for authenticating sink trigger calls to the API
+  # Generate with: bun run tools/gen-sink-jwt.ts --type cron --secret $SECRET
+  triggerJwt: ""
+
+  # Use existing secret instead of creating one
+  # Secret must have key 'trigger-jwt' containing the JWT
+  existingSecret: ""
+
+  # API base URL for sink triggers (auto-configured if empty)
+  apiBaseUrl: ""
+
+  # CronJob configuration
+  cronJob:
+    # Concurrency policy: Allow, Forbid, Replace
+    concurrencyPolicy: Forbid
+    # How many successful job history to keep
+    successfulJobsHistoryLimit: 3
+    # How many failed job history to keep
+    failedJobsHistoryLimit: 1
+    # TTL for cleaning up completed jobs
+    ttlSecondsAfterFinished: 86400
+
+    resources:
+      requests:
+        memory: "8Mi"
+        cpu: "5m"
+      limits:
+        memory: "32Mi"
+        cpu: "50m"
+
+  # Bot services (run as deployment, not CronJobs)
+  bots:
+    enabled: false
+    # Discord bot configuration
+    discord:
+      enabled: false
+      token: ""
+      existingSecret: ""
+    # Telegram bot configuration
+    telegram:
+      enabled: false
+      token: ""
+      existingSecret: ""
 
 # Runtime Class for Kata Containers
 runtimeClass:

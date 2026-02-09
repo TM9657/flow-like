@@ -17,24 +17,22 @@ import {
 export function BitVariable({
 	pin,
 	value,
-	appId,
 	setValue,
 }: Readonly<{
 	pin: IPin;
 	value: number[] | undefined | null;
-	appId: string;
 	setValue: (value: any) => void;
 }>) {
 	const backend = useBackend();
-	const app = useInvoke(
-		backend.appState.getApp,
-		backend.appState,
-		[appId],
-		!!appId,
+	const profileBits = useInvoke(
+		backend.bitState.getProfileBits,
+		backend.bitState,
+		[],
+		true,
 	);
 
 	return (
-		<div className="flex flex-row items-center justify-start ml-1">
+		<div className="flex flex-row items-center justify-start max-w-full ml-1 overflow-hidden">
 			<Select
 				defaultValue={parseUint8ArrayToJson(value)}
 				value={parseUint8ArrayToJson(value)}
@@ -43,20 +41,21 @@ export function BitVariable({
 				<SelectTrigger
 					noChevron
 					size="sm"
-					className="!w-fit !max-w-fit p-0 border-0 text-xs !bg-card text-nowrap text-start max-h-fit h-4 gap-0.5 flex-row items-center"
+					className="w-fit! max-w-full! p-0 border-0 text-xs bg-card! text-start max-h-fit h-4 gap-0.5 flex-row items-center overflow-hidden"
 				>
-					<small className="text-nowrap text-start text-[10px] !m-0 w-fit">
+					<small className="text-start text-[10px] m-0! truncate">
 						<BitRender backend={backend} bitId={parseUint8ArrayToJson(value)} />
 					</small>
-					<ChevronDown className="size-2 min-w-2 min-h-2 text-card-foreground mt-0.5" />
+					<ChevronDown className="size-2 min-w-2 min-h-2 text-card-foreground mt-0.5 shrink-0" />
 				</SelectTrigger>
 				<SelectContent>
 					<SelectGroup>
 						<SelectLabel>{pin.friendly_name}</SelectLabel>
-						{app?.data?.bits?.map((option) => {
+						{profileBits?.data?.map((bit) => {
+							const bitId = `${bit.hub}:${bit.id}`;
 							return (
-								<SelectItem key={option} value={option}>
-									<BitRender backend={backend} bitId={option} />
+								<SelectItem key={bitId} value={bitId}>
+									<BitRender backend={backend} bitId={bitId} />
 								</SelectItem>
 							);
 						})}
@@ -71,25 +70,28 @@ function BitRender({
 	backend,
 	bitId,
 }: Readonly<{ backend: IBackendState; bitId?: string }>) {
+	// Parse the bitId format "hub:id" into separate components
+	// Hub can contain colons (e.g., "https://hub.flow-like.com"), so split from the last colon
+	const lastColonIndex = bitId?.lastIndexOf(":");
+	const hub =
+		lastColonIndex !== undefined && lastColonIndex > 0
+			? bitId?.substring(0, lastColonIndex)
+			: undefined;
+	const id =
+		lastColonIndex !== undefined && lastColonIndex > 0
+			? bitId?.substring(lastColonIndex + 1)
+			: bitId;
+
 	const bit = useInvoke(
 		backend.bitState.getBit,
 		backend.bitState,
-		[bitId!],
-		!!bitId,
+		[id!, hub],
+		!!id,
 	);
 
-	if (!bitId)
-		return <small className="text-nowrap text-start m-0">Select a bit</small>;
-	if (bit.isFetching)
-		return <small className="text-nowrap text-start m-0">Loading</small>;
-	if (bit.error)
-		return (
-			<small className="text-nowrap text-start m-0">Error loading bit</small>
-		);
+	if (!bitId) return <span className="truncate m-0">Select a bit</span>;
+	if (bit.isFetching) return <span className="truncate m-0">Loading</span>;
+	if (bit.error) return <span className="truncate m-0">Error loading bit</span>;
 
-	return (
-		<small className="text-nowrap text-start m-0">
-			{bit.data?.meta?.["en"]?.name}
-		</small>
-	);
+	return <span className="truncate m-0">{bit.data?.meta?.["en"]?.name}</span>;
 }

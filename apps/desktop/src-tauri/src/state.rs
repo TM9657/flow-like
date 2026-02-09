@@ -2,9 +2,12 @@ use flow_like::{
     flow_like_storage::object_store::ObjectStore, state::FlowLikeState, utils::http::HTTPClient,
 };
 use flow_like_types::sync::Mutex;
+use flow_like_wasm::client::RegistryClient;
 use std::sync::Arc;
 use tauri::{AppHandle, Manager};
 
+#[cfg(desktop)]
+use crate::tray::TrayRuntimeState;
 use crate::{event_bus::EventBus, profile::UserProfile, settings::Settings};
 
 #[derive(Clone)]
@@ -102,3 +105,28 @@ impl TauriEventSinkManagerState {
             .ok_or_else(|| anyhow::anyhow!("EventSinkManager State not found"))
     }
 }
+
+pub struct TauriRegistryState(pub Arc<Mutex<Option<RegistryClient>>>);
+impl TauriRegistryState {
+    #[inline]
+    pub async fn construct(
+        app_handle: &AppHandle,
+    ) -> anyhow::Result<Arc<Mutex<Option<RegistryClient>>>> {
+        app_handle
+            .try_state::<TauriRegistryState>()
+            .map(|state| state.0.clone())
+            .ok_or_else(|| anyhow::anyhow!("Registry State not found"))
+    }
+
+    #[inline]
+    pub async fn get_client(app_handle: &AppHandle) -> anyhow::Result<RegistryClient> {
+        let state: Arc<Mutex<Option<RegistryClient>>> = Self::construct(app_handle).await?;
+        let guard = state.lock().await;
+        guard
+            .clone()
+            .ok_or_else(|| anyhow::anyhow!("Registry client not initialized"))
+    }
+}
+
+#[cfg(desktop)]
+pub struct TauriTrayState(pub Arc<Mutex<TrayRuntimeState>>);

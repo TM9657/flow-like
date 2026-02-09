@@ -13,7 +13,7 @@ use rig::OneOrMany;
 use rig::completion::{Message as RigMessage, ToolDefinition};
 use rig::message::{
     AssistantContent as RigAssistantContent, Audio as RigAudio, Document as RigDocument,
-    DocumentSourceKind, Image as RigImage, ImageMediaType, Text as RigText,
+    DocumentSourceKind, Image as RigImage, ImageDetail, ImageMediaType, Text as RigText,
     ToolCall as RigToolCall, ToolChoice as RigToolChoice, ToolFunction as RigToolFunction,
     UserContent as RigUserContent, Video as RigVideo,
 };
@@ -142,6 +142,32 @@ impl From<RigMessage> for HistoryMessage {
     fn from(msg: RigMessage) -> Self {
         match msg {
             RigMessage::User { content } => {
+                let is_single_tool_result =
+                    content.len() == 1 && matches!(content.first(), RigUserContent::ToolResult(_));
+
+                if is_single_tool_result && let RigUserContent::ToolResult(tr) = content.first() {
+                    let text = tr
+                        .content
+                        .iter()
+                        .filter_map(|c| match c {
+                            rig::message::ToolResultContent::Text(t) => Some(t.text.as_str()),
+                            _ => None,
+                        })
+                        .collect::<Vec<_>>()
+                        .join("\n");
+                    return HistoryMessage {
+                        role: Role::Tool,
+                        content: MessageContent::Contents(vec![Content::Text {
+                            content_type: ContentType::Text,
+                            text,
+                        }]),
+                        name: None,
+                        tool_call_id: Some(tr.id.clone()),
+                        tool_calls: None,
+                        annotations: None,
+                    };
+                }
+
                 let contents: Vec<Content> = content.iter().map(|c| c.clone().into()).collect();
 
                 HistoryMessage {
@@ -183,7 +209,7 @@ impl From<RigMessage> for HistoryMessage {
                                 },
                             });
                         }
-                        RigAssistantContent::Reasoning(_) => {}
+                        RigAssistantContent::Reasoning(_) | RigAssistantContent::Image(_) => {}
                     }
                 }
 
@@ -261,6 +287,8 @@ impl TryFrom<HistoryMessage> for RigMessage {
                                 arguments: json::from_str(&tool_call.function.arguments)
                                     .unwrap_or(json::json!({})),
                             },
+                            signature: None,
+                            additional_params: None,
                         }));
                     }
                 }
@@ -281,7 +309,19 @@ impl TryFrom<HistoryMessage> for RigMessage {
                     content,
                 })
             }
-            Role::System | Role::Function | Role::Tool => {
+            Role::Tool | Role::Function => {
+                use rig::message::{ToolResult, ToolResultContent};
+                let text = msg.as_str();
+                let tool_call_id = msg.tool_call_id.or(msg.name.clone()).unwrap_or_default();
+                Ok(RigMessage::User {
+                    content: OneOrMany::one(RigUserContent::ToolResult(ToolResult {
+                        id: tool_call_id,
+                        call_id: None,
+                        content: OneOrMany::one(ToolResultContent::text(text)),
+                    })),
+                })
+            }
+            Role::System => {
                 let text = msg.as_str();
                 Ok(RigMessage::User {
                     content: OneOrMany::one(RigUserContent::Text(RigText { text })),
@@ -386,10 +426,21 @@ impl From<RigUserContent> for Content {
                 content_type: ContentType::DocumentUrl,
                 document_url: doc.data.to_string(),
             },
-            RigUserContent::ToolResult(_) => Content::Text {
-                content_type: ContentType::Text,
-                text: "[Tool Result]".to_string(),
-            },
+            RigUserContent::ToolResult(tool_result) => {
+                let text = tool_result
+                    .content
+                    .iter()
+                    .filter_map(|c| match c {
+                        rig::message::ToolResultContent::Text(t) => Some(t.text.as_str()),
+                        _ => None,
+                    })
+                    .collect::<Vec<_>>()
+                    .join("\n");
+                Content::Text {
+                    content_type: ContentType::Text,
+                    text,
+                }
+            }
         }
     }
 }
@@ -428,7 +479,7 @@ impl From<Content> for RigUserContent {
                 RigUserContent::Image(RigImage {
                     data,
                     media_type: Some(media_type),
-                    detail: None,
+                    detail: Some(parse_image_detail(image_url.detail.as_deref())),
                     additional_params: None,
                 })
             }
@@ -487,6 +538,16 @@ fn detect_image_media_type(url: &str) -> ImageMediaType {
     } else {
         // Default to PNG if we can't detect
         ImageMediaType::PNG
+    }
+}
+
+/// Parses image detail string to ImageDetail enum, defaulting to Auto
+fn parse_image_detail(detail: Option<&str>) -> ImageDetail {
+    match detail {
+        Some("low") => ImageDetail::Low,
+        Some("high") => ImageDetail::High,
+        Some("auto") => ImageDetail::Auto,
+        _ => ImageDetail::Auto, // Default to Auto if not specified or unknown
     }
 }
 
@@ -677,12 +738,22 @@ impl History {
         }
 
         // If no user message at the end, try to pop one from history
+        // But never take a ToolResult message as the prompt
         if prompt.is_none()
             && !messages.is_empty()
             && let Some(last_msg) = messages.last()
             && matches!(last_msg, RigMessage::User { .. })
         {
-            prompt = messages.pop();
+            let is_tool_result = if let RigMessage::User { content } = last_msg {
+                content
+                    .iter()
+                    .any(|c| matches!(c, RigUserContent::ToolResult(_)))
+            } else {
+                false
+            };
+            if !is_tool_result {
+                prompt = messages.pop();
+            }
         }
 
         // If still no prompt, create a default empty user message
@@ -851,8 +922,49 @@ impl History {
 
 impl From<Vec<RigMessage>> for History {
     fn from(messages: Vec<RigMessage>) -> Self {
-        let history_messages: Vec<HistoryMessage> =
-            messages.into_iter().map(|m| m.into()).collect();
+        let mut history_messages: Vec<HistoryMessage> = Vec::new();
+        for msg in messages {
+            if let RigMessage::User { ref content } = msg {
+                let tool_results: Vec<_> = content
+                    .iter()
+                    .filter(|c| matches!(c, RigUserContent::ToolResult(_)))
+                    .collect();
+                let has_non_tool = content
+                    .iter()
+                    .any(|c| !matches!(c, RigUserContent::ToolResult(_)));
+
+                if tool_results.len() > 1 || (tool_results.len() == 1 && has_non_tool) {
+                    for c in content.iter() {
+                        if let RigUserContent::ToolResult(tr) = c {
+                            let text = tr
+                                .content
+                                .iter()
+                                .filter_map(|trc| match trc {
+                                    rig::message::ToolResultContent::Text(t) => {
+                                        Some(t.text.as_str())
+                                    }
+                                    _ => None,
+                                })
+                                .collect::<Vec<_>>()
+                                .join("\n");
+                            history_messages.push(HistoryMessage {
+                                role: Role::Tool,
+                                content: MessageContent::Contents(vec![Content::Text {
+                                    content_type: ContentType::Text,
+                                    text,
+                                }]),
+                                name: None,
+                                tool_call_id: Some(tr.id.clone()),
+                                tool_calls: None,
+                                annotations: None,
+                            });
+                        }
+                    }
+                    continue;
+                }
+            }
+            history_messages.push(msg.into());
+        }
         Self::new("".to_string(), history_messages)
     }
 }

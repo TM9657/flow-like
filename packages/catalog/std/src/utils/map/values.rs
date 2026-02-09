@@ -1,0 +1,67 @@
+use flow_like::flow::{
+    board::Board,
+    execution::context::ExecutionContext,
+    node::{Node, NodeLogic},
+    pin::ValueType,
+    variable::VariableType,
+};
+use flow_like_types::{Value, async_trait, json::json};
+use std::sync::Arc;
+
+#[crate::register_node]
+#[derive(Default)]
+pub struct ValuesMapNode {}
+
+impl ValuesMapNode {
+    pub fn new() -> Self {
+        ValuesMapNode {}
+    }
+}
+
+#[async_trait]
+impl NodeLogic for ValuesMapNode {
+    fn get_node(&self) -> Node {
+        let mut node = Node::new(
+            "map_values",
+            "Values",
+            "Gets all values from the map as an array",
+            "Utils/Map",
+        );
+
+        node.add_icon("/flow/icons/book-key.svg");
+
+        node.add_input_pin("map_in", "Map", "Your Map", VariableType::Generic)
+            .set_value_type(ValueType::HashMap);
+
+        node.add_output_pin(
+            "values",
+            "Values",
+            "Array of all values",
+            VariableType::Generic,
+        )
+        .set_value_type(ValueType::Array);
+
+        node
+    }
+
+    async fn run(&self, context: &mut ExecutionContext) -> flow_like_types::Result<()> {
+        let map_in = context.evaluate_pin_to_ref("map_in").await?;
+
+        let values: Vec<Value> = {
+            let map_guard = map_in.as_ref().lock().await;
+            map_guard
+                .as_object()
+                .map(|obj| obj.values().cloned().collect())
+                .unwrap_or_default()
+        };
+
+        context.set_pin_value("values", json!(values)).await?;
+        Ok(())
+    }
+
+    async fn on_update(&self, node: &mut Node, board: Arc<Board>) {
+        let _ = node.match_type("map_in", board.clone(), Some(ValueType::HashMap), None);
+        let _ = node.match_type("values", board, Some(ValueType::Array), None);
+        node.harmonize_type(vec!["map_in", "values"], true);
+    }
+}

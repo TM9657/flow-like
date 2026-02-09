@@ -2,8 +2,9 @@ use crate::{entity::pat, error::ApiError, middleware::jwt::AppUser, state::AppSt
 use axum::{Extension, Json, extract::State};
 use sea_orm::{ColumnTrait, EntityTrait, QueryFilter, QuerySelect};
 use serde::{Deserialize, Serialize};
+use utoipa::ToSchema;
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Deserialize, Serialize, ToSchema)]
 pub struct PatOut {
     pub name: String,
     pub created_at: i64,
@@ -12,6 +13,18 @@ pub struct PatOut {
     pub id: String,
 }
 
+#[utoipa::path(
+    get,
+    path = "/user/pat",
+    tag = "user",
+    responses(
+        (status = 200, description = "List of personal access tokens", body = Vec<PatOut>),
+        (status = 401, description = "Unauthorized")
+    ),
+    security(
+        ("bearer_auth" = [])
+    )
+)]
 #[tracing::instrument(name = "GET /user/pat", skip(state, user))]
 pub async fn get_pats(
     State(state): State<AppState>,

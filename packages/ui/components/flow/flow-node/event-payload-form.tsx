@@ -36,8 +36,9 @@ import { typeToColor } from "../utils";
 interface EventPayloadFormProps {
 	node: INode;
 	boardRef: RefObject<IBoard | undefined>;
-	onLocalExecute: (payload?: object) => Promise<void>;
+	onLocalExecute?: (payload?: object) => Promise<void>;
 	onRemoteExecute?: (payload?: object) => Promise<void>;
+	canLocalExecute: boolean;
 	canRemoteExecute: boolean;
 	onClose: () => void;
 }
@@ -167,6 +168,7 @@ export function EventPayloadForm({
 	boardRef,
 	onLocalExecute,
 	onRemoteExecute,
+	canLocalExecute,
 	canRemoteExecute,
 	onClose,
 }: Readonly<EventPayloadFormProps>) {
@@ -270,6 +272,7 @@ export function EventPayloadForm({
 	}, [useJsonMode, jsonPayload, formValues, outputPins]);
 
 	const handleLocalExecute = useCallback(async () => {
+		if (!onLocalExecute) return;
 		const payload = buildPayload();
 		await onLocalExecute(payload);
 		onClose();
@@ -754,14 +757,16 @@ export function EventPayloadForm({
 			)}
 
 			<div className="flex gap-2 pt-4 border-t">
-				<Button className="flex-1" onClick={handleLocalExecute}>
-					<PlayCircleIcon className="w-4 h-4 mr-2" />
-					Execute Locally
-				</Button>
+				{canLocalExecute && (
+					<Button className="flex-1" onClick={handleLocalExecute}>
+						<PlayCircleIcon className="w-4 h-4 mr-2" />
+						Execute Locally
+					</Button>
+				)}
 				{canRemoteExecute && (
 					<Button
 						className="flex-1"
-						variant="secondary"
+						variant={canLocalExecute ? "secondary" : "default"}
 						onClick={handleRemoteExecute}
 					>
 						<CloudIcon className="w-4 h-4 mr-2" />

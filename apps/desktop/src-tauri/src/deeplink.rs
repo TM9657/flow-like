@@ -58,6 +58,12 @@ pub fn handle_deep_link(app_handle: &AppHandle, urls: &Vec<Url>) {
             Some("trigger") => {
                 handle_trigger(app_handle, url);
             }
+            Some("store") => {
+                handle_store(app_handle, url);
+            }
+            Some("join") => {
+                handle_join(app_handle, url);
+            }
             _ => {
                 println!("Unknown deep link command: {}", command);
             }
@@ -197,4 +203,39 @@ fn handle_trigger(app_handle: &AppHandle, url: &Url) {
             println!("❌ Failed to trigger deeplink event: {}", e);
         }
     }
+}
+
+fn handle_store(app_handle: &AppHandle, url: &Url) {
+    // Parse URL: flow-like://store?id={app_id}
+    let app_id = url
+        .query_pairs()
+        .find(|(k, _)| k == "id")
+        .map(|(_, v)| v.to_string());
+
+    println!("Store deep link: app_id={:?}", app_id);
+
+    crate::utils::emit_throttled(
+        app_handle,
+        crate::utils::UiEmitTarget::All,
+        "deeplink/store",
+        json::json!({ "appId": app_id }),
+        std::time::Duration::from_millis(200),
+    );
+}
+
+fn handle_join(app_handle: &AppHandle, url: &Url) {
+    // Parse URL: flow-like://join?appId={app_id}&token={token}
+    let params: std::collections::HashMap<_, _> = url.query_pairs().collect();
+    let app_id = params.get("appId").map(|v| v.to_string());
+    let token = params.get("token").map(|v| v.to_string());
+
+    println!("Join deep link: app_id={:?}, token={:?}", app_id, token);
+
+    crate::utils::emit_throttled(
+        app_handle,
+        crate::utils::UiEmitTarget::All,
+        "deeplink/join",
+        json::json!({ "appId": app_id, "token": token }),
+        std::time::Duration::from_millis(200),
+    );
 }

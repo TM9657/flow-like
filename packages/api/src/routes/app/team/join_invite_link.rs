@@ -14,6 +14,27 @@ use sea_orm::{
     TransactionTrait,
 };
 
+#[utoipa::path(
+    post,
+    path = "/apps/{app_id}/team/link/join/{token}",
+    tag = "team",
+    description = "Join an app via invite link.",
+    params(
+        ("app_id" = String, Path, description = "Application ID"),
+        ("token" = String, Path, description = "Invite token")
+    ),
+    responses(
+        (status = 200, description = "Joined app", body = ()),
+        (status = 401, description = "Unauthorized"),
+        (status = 403, description = "Forbidden"),
+        (status = 404, description = "Not found")
+    ),
+    security(
+        ("bearer_auth" = []),
+        ("api_key" = []),
+        ("pat" = [])
+    )
+)]
 #[tracing::instrument(name = "POST /apps/{app_id}/team/link/join/{token}", skip(state, user))]
 pub async fn join_invite_link(
     State(state): State<AppState>,
@@ -37,7 +58,7 @@ pub async fn join_invite_link(
             sub,
             app_id
         );
-        return Err(ApiError::Forbidden);
+        return Err(ApiError::FORBIDDEN);
     }
 
     let (invite_link, app) = invite_link::Entity::find()
@@ -53,7 +74,7 @@ pub async fn join_invite_link(
                 app_id,
                 token
             );
-            ApiError::NotFound
+            ApiError::NOT_FOUND
         })?;
 
     let current_count = invite_link.count_joined;
@@ -65,10 +86,10 @@ pub async fn join_invite_link(
             sub,
             app_id
         );
-        return Err(ApiError::Forbidden);
+        return Err(ApiError::FORBIDDEN);
     }
 
-    let app = app.ok_or_else(|| ApiError::NotFound)?;
+    let app = app.ok_or(ApiError::NOT_FOUND)?;
 
     if matches!(app.visibility, Visibility::Private | Visibility::Offline) {
         tracing::warn!(
@@ -76,10 +97,10 @@ pub async fn join_invite_link(
             user.sub()?,
             app_id
         );
-        return Err(ApiError::Forbidden);
+        return Err(ApiError::FORBIDDEN);
     }
 
-    let default_role_id = app.default_role_id.ok_or_else(|| ApiError::NotFound)?;
+    let default_role_id = app.default_role_id.ok_or(ApiError::NOT_FOUND)?;
 
     if matches!(app.visibility, Visibility::Offline | Visibility::Private) {
         tracing::warn!(
@@ -88,7 +109,7 @@ pub async fn join_invite_link(
             app_id
         );
 
-        return Err(ApiError::Forbidden);
+        return Err(ApiError::FORBIDDEN);
     }
 
     if max_prototype > 0 && app.visibility == Visibility::Prototype {
@@ -103,7 +124,7 @@ pub async fn join_invite_link(
                 sub,
                 app_id
             );
-            return Err(ApiError::Forbidden);
+            return Err(ApiError::FORBIDDEN);
         }
     }
 

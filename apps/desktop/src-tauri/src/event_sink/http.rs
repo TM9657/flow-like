@@ -311,8 +311,12 @@ impl HttpSink {
             let result = match manager_state.0.try_lock() {
                 Ok(manager) => manager.fire_event(&app_handle, &event_id, body, Some(callback)),
                 Err(_) => {
-                    let manager = manager_state.0.blocking_lock();
-                    manager.fire_event(&app_handle, &event_id, body, Some(callback))
+                    tracing::warn!(
+                        "EventSinkManager busy while handling HTTP event {}",
+                        event_id
+                    );
+                    return (StatusCode::SERVICE_UNAVAILABLE, "Event manager busy, retry")
+                        .into_response();
                 }
             };
 

@@ -6,13 +6,14 @@ use flow_like::flow::execution::LogMeta;
 use flow_like_types::anyhow;
 use sea_orm::{ColumnTrait, EntityTrait, QueryFilter, QueryOrder, QuerySelect};
 use serde::Deserialize;
+use utoipa::{IntoParams, ToSchema};
 
 use crate::{
     ensure_permission, entity::execution_run, error::ApiError, middleware::jwt::AppUser,
     permission::role_permission::RolePermissions, state::AppState,
 };
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, IntoParams, ToSchema)]
 pub struct ListRunsQuery {
     pub node_id: Option<String>,
     pub from: Option<u64>,
@@ -22,6 +23,20 @@ pub struct ListRunsQuery {
     pub offset: Option<u64>,
 }
 
+#[utoipa::path(
+    get,
+    path = "/apps/{app_id}/board/{board_id}/runs",
+    tag = "execution",
+    params(
+        ("app_id" = String, Path, description = "Application ID"),
+        ("board_id" = String, Path, description = "Board ID"),
+        ListRunsQuery
+    ),
+    responses(
+        (status = 200, description = "List of execution runs", body = Vec<Object>),
+        (status = 401, description = "Unauthorized")
+    )
+)]
 #[tracing::instrument(name = "GET /apps/{app_id}/board/{board_id}/runs", skip(state, user))]
 pub async fn get_runs(
     State(state): State<AppState>,
@@ -53,16 +68,16 @@ pub async fn get_runs(
         db_query = db_query.filter(execution_run::Column::NodeId.eq(node_id));
     }
 
-    if let Some(from) = query.from {
-        if let Some(dt) = to_datetime(from) {
-            db_query = db_query.filter(execution_run::Column::CreatedAt.gte(dt));
-        }
+    if let Some(from) = query.from
+        && let Some(dt) = to_datetime(from)
+    {
+        db_query = db_query.filter(execution_run::Column::CreatedAt.gte(dt));
     }
 
-    if let Some(to) = query.to {
-        if let Some(dt) = to_datetime(to) {
-            db_query = db_query.filter(execution_run::Column::CreatedAt.lte(dt));
-        }
+    if let Some(to) = query.to
+        && let Some(dt) = to_datetime(to)
+    {
+        db_query = db_query.filter(execution_run::Column::CreatedAt.lte(dt));
     }
 
     if let Some(status) = query.status {
@@ -81,7 +96,7 @@ pub async fn get_runs(
         .await
         .map_err(|e| {
             tracing::error!(error = %e, "Failed to query runs");
-            ApiError::InternalError(anyhow!("Failed to query runs: {}", e).into())
+            ApiError::internal_error(anyhow!("Failed to query runs: {}", e))
         })?;
 
     let log_metas: Vec<LogMeta> = runs
@@ -90,13 +105,13 @@ pub async fn get_runs(
             // Convert to microseconds to match local LanceDB format
             let start = run
                 .started_at
-                .map(|dt| dt.and_utc().timestamp_micros() as u64)
+                .map(|dt: chrono::NaiveDateTime| dt.and_utc().timestamp_micros() as u64)
                 .unwrap_or_else(|| run.created_at.and_utc().timestamp_micros() as u64);
             // For incomplete runs, use start time so duration shows as 0
             // rather than time since Unix epoch
             let end = run
                 .completed_at
-                .map(|dt| dt.and_utc().timestamp_micros() as u64)
+                .map(|dt: chrono::NaiveDateTime| dt.and_utc().timestamp_micros() as u64)
                 .unwrap_or(start);
 
             LogMeta {

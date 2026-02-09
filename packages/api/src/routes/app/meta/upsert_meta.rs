@@ -12,6 +12,29 @@ use axum::{
 use flow_like_types::create_id;
 use sea_orm::{ActiveModelTrait, TransactionTrait};
 
+#[utoipa::path(
+    put,
+    path = "/apps/{app_id}/meta",
+    tag = "meta",
+    description = "Create or update metadata for an app, template, or course.",
+    params(
+        ("app_id" = String, Path, description = "Application ID"),
+        ("language" = Option<String>, Query, description = "Language code (default en)"),
+        ("template_id" = Option<String>, Query, description = "Template ID"),
+        ("course_id" = Option<String>, Query, description = "Course ID")
+    ),
+    request_body = String,
+    responses(
+        (status = 200, description = "Metadata saved", body = ()),
+        (status = 401, description = "Unauthorized"),
+        (status = 403, description = "Forbidden")
+    ),
+    security(
+        ("bearer_auth" = []),
+        ("api_key" = []),
+        ("pat" = [])
+    )
+)]
 #[tracing::instrument(name = "PUT /apps/{app_id}/meta", skip(state, user))]
 pub async fn upsert_meta(
     State(state): State<AppState>,

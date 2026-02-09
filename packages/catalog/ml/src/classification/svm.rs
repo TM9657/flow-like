@@ -3,8 +3,10 @@
 //! This node loads a dataset (currently from a Database), transforms it into a classification dataset,
 //! and fits multiple SVM-models using the [`linfa`] crate.
 
+use crate::ml::NodeMLModel;
+#[cfg(feature = "execute")]
 use crate::ml::{
-    MAX_ML_PREDICTION_RECORDS, MLModel, ModelWithMeta, NodeMLModel, values_to_array1_usize,
+    MAX_ML_PREDICTION_RECORDS, MLModel, ModelWithMeta, values_to_array1_target,
     values_to_array2_f64,
 };
 use flow_like::flow::{
@@ -14,15 +16,24 @@ use flow_like::flow::{
     pin::PinOptions,
     variable::VariableType,
 };
+#[cfg(feature = "execute")]
 use flow_like_catalog_core::NodeDBConnection;
+#[cfg(feature = "execute")]
 use flow_like_storage::databases::vector::VectorStore;
-use flow_like_types::{Value, anyhow, async_trait, json::json};
+#[cfg(feature = "execute")]
+use flow_like_types::anyhow;
+use flow_like_types::{Result, Value, async_trait, json::json};
+#[cfg(feature = "execute")]
 use linfa::DatasetBase;
+#[cfg(feature = "execute")]
 use linfa::{prelude::Pr, traits::Fit};
+#[cfg(feature = "execute")]
 use linfa_svm::Svm;
+#[cfg(feature = "execute")]
 use std::collections::HashSet;
 use std::sync::Arc;
 
+#[cfg(feature = "execute")]
 const GAUSSIAN_KERNEL_EPS: f64 = 30.0;
 
 #[crate::register_node]
@@ -96,7 +107,8 @@ impl NodeLogic for FitSVMMultiClassNode {
         node
     }
 
-    async fn run(&self, context: &mut ExecutionContext) -> flow_like_types::Result<()> {
+    #[cfg(feature = "execute")]
+    async fn run(&self, context: &mut ExecutionContext) -> Result<()> {
         // fetch inputs
         context.deactivate_exec_pin("exec_out").await?;
         let source: String = context.evaluate_pin("source").await?;
@@ -143,7 +155,7 @@ impl NodeLogic for FitSVMMultiClassNode {
                 );
 
                 let train_array = values_to_array2_f64(&records, &records_col)?;
-                let (target_array, classes) = values_to_array1_usize(&records, &targets_col)?;
+                let (target_array, classes) = values_to_array1_target(&records, &targets_col)?;
                 (
                     DatasetBase::from(train_array).with_targets(target_array),
                     classes,
@@ -168,7 +180,7 @@ impl NodeLogic for FitSVMMultiClassNode {
         // set outputs
         let model = MLModel::SVMMultiClass(ModelWithMeta {
             model: svm_models,
-            classes: Some(classes),
+            classes,
         });
         let node_model = NodeMLModel::new(context, model).await;
         context.set_pin_value("model", json!(node_model)).await?;
@@ -176,7 +188,17 @@ impl NodeLogic for FitSVMMultiClassNode {
         Ok(())
     }
 
+    #[cfg(not(feature = "execute"))]
+    async fn run(&self, _context: &mut ExecutionContext) -> Result<()> {
+        Err(flow_like_types::anyhow!(
+            "ML execution requires the 'execute' feature. Rebuild with --features execute"
+        ))
+    }
+
+    #[cfg(feature = "execute")]
     async fn on_update(&self, node: &mut Node, _board: Arc<Board>) {
+        use flow_like_catalog_core::NodeDBConnection;
+
         let source_pin: String = node
             .get_pin_by_name("source")
             .and_then(|pin| pin.default_value.clone())

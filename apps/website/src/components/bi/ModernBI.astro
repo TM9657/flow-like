@@ -1,0 +1,96 @@
+---
+import "@tm9657/flow-like-ui/global.css";
+import "../../styles/website-base.css";
+import PostHog from "../posthog.astro";
+import { Header } from "../header";
+import { BlogFooter } from "../blog-footer";
+
+import BiHero from "./BiHero.astro";
+import BiProblem from "./BiProblem.astro";
+import BiSolution from "./BiSolution.astro";
+import BiDataSources from "./BiDataSources.astro";
+import BiDeploy from "./BiDeploy.astro";
+import BiComparison from "./BiComparison.astro";
+import BiUseCases from "./BiUseCases.astro";
+import BiCTA from "./BiCTA.astro";
+import BiFAQ from "./BiFAQ.astro";
+
+import { tBi } from "../../i18n/locales/pages/bi";
+
+interface Props {
+  lang: string;
+}
+
+const { lang } = Astro.props;
+const t = (key: string) => tBi(lang, key);
+
+const site = Astro.site ?? import.meta.env.SITE ?? "https://flow-like.com";
+const canonical = new URL(Astro.url.pathname, site).toString();
+
+const title = t("bi.meta.title");
+const desc = t("bi.meta.description");
+const keywords = t("bi.meta.keywords");
+const ogTitle = t("bi.meta.og.title") || title;
+const ogDesc = t("bi.meta.og.description") || desc;
+const cover = "/og.png";
+---
+
+<!doctype html>
+<html lang={lang} class="scroll-smooth">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="generator" content={Astro.generator} />
+
+    <title>{title}</title>
+    <meta name="description" content={desc} />
+    <meta name="keywords" content={keywords} />
+    <meta name="robots" content="index, follow" />
+    <link rel="canonical" href={canonical} />
+    <meta name="theme-color" content="#ffffff" />
+    <link rel="sitemap" href="/sitemap-index.xml" />
+
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Flow-Like" />
+    <meta property="og:url" content={canonical} />
+    <meta property="og:title" content={ogTitle} />
+    <meta property="og:description" content={ogDesc} />
+    <meta property="og:image" content={cover} />
+
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content={ogTitle} />
+    <meta name="twitter:description" content={ogDesc} />
+    <meta name="twitter:image" content={cover} />
+
+    <PostHog />
+
+    <style is:global>
+      body {
+        background-image: radial-gradient(
+          color-mix(in srgb, var(--muted) 20%, transparent) 1px,
+          transparent 1px
+        ) !important;
+        background-size: 16px 16px !important;
+        background-attachment: scroll !important;
+      }
+    </style>
+  </head>
+  <body class="bg-background text-foreground antialiased overflow-x-hidden max-w-full">
+    <Header client:load />
+
+    <main class="pt-16">
+      <BiHero t={t} />
+      <BiProblem t={t} />
+      <BiSolution t={t} />
+      <BiDataSources t={t} />
+      <BiDeploy t={t} />
+      <BiComparison t={t} />
+      <BiUseCases t={t} />
+      <BiCTA t={t} />
+      <BiFAQ t={t} />
+    </main>
+
+    <BlogFooter client:load />
+  </body>
+</html>

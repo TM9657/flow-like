@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::sync::Arc;
 
 use flow_like::flow::{
@@ -9,6 +10,7 @@ use flow_like::flow::{
 use flow_like_catalog_core::FlowPath;
 use flow_like_catalog_data::events::chat_event::Attachment;
 use flow_like_model_provider::history::{Content, History, MessageContent};
+use flow_like_storage::Path;
 use flow_like_storage::files::store::FlowLikeStore;
 use flow_like_types::Cacheable;
 use flow_like_types::{async_trait, json::json};
@@ -31,6 +33,34 @@ fn extract_image_urls(history: &History) -> Vec<String> {
                 .collect()
         })
         .unwrap_or_default()
+}
+
+fn sanitize_for_path(name: &str) -> String {
+    name.chars()
+        .map(|c| {
+            if c.is_ascii_alphanumeric() || matches!(c, '.' | '-' | '_') {
+                c
+            } else {
+                '-'
+            }
+        })
+        .collect()
+}
+
+fn deduplicate_name(name: &str, used_names: &mut HashMap<String, u32>) -> String {
+    let count = used_names.entry(name.to_string()).or_insert(0);
+    *count += 1;
+    if *count == 1 {
+        return name.to_string();
+    }
+    let idx = *count - 1;
+    let path = std::path::Path::new(name);
+    let stem = path.file_stem().and_then(|s| s.to_str()).unwrap_or(name);
+    let ext = path.extension().and_then(|s| s.to_str());
+    match ext {
+        Some(e) => format!("{}-{}.{}", stem, idx, e),
+        None => format!("{}-{}", stem, idx),
+    }
 }
 
 #[crate::register_node]
@@ -142,33 +172,45 @@ impl NodeLogic for ExtractAttachments {
 
         let runtime = virtual_path.to_runtime(context).await?;
         let store = runtime.store;
+        let generic_store = store.as_generic();
+        let mut used_names: HashMap<String, u32> = HashMap::new();
 
         for attachment in &attachments {
-            match attachment {
+            let (downloaded_path, preferred_name) = match attachment {
                 Attachment::Url(url) => {
                     let (path, _len) = store.put_from_url(url).await?;
-                    let virtual_path = FlowPath {
-                        path: path.to_string(),
-                        store_ref: cache_path.clone(),
-                        cache_store_ref: None,
-                    };
-                    paths.push(virtual_path);
+                    (path, None)
                 }
                 Attachment::Complex(complex) => {
                     let (path, _len) = store.put_from_url(&complex.url).await?;
-                    let virtual_path = FlowPath {
-                        path: path.to_string(),
-                        store_ref: cache_path.clone(),
-                        cache_store_ref: None,
-                    };
-                    paths.push(virtual_path);
+                    (path, complex.name.clone().filter(|n| !n.is_empty()))
                 }
-            }
+            };
+
+            let final_path = if let Some(name) = preferred_name {
+                let sanitized = sanitize_for_path(&name);
+                let unique = deduplicate_name(&sanitized, &mut used_names);
+                let target = Path::from(unique);
+                if target != downloaded_path {
+                    generic_store.rename(&downloaded_path, &target).await?;
+                }
+                target
+            } else {
+                let name_str = downloaded_path.to_string();
+                deduplicate_name(&name_str, &mut used_names);
+                downloaded_path
+            };
+
+            paths.push(FlowPath {
+                path: final_path.to_string(),
+                store_ref: cache_path.clone(),
+                cache_store_ref: None,
+            });
         }
 
         context.set_pin_value("paths", json!(&paths)).await?;
         context.activate_exec_pin("exec_out").await?;
 
-        return Ok(());
+        Ok(())
     }
 }

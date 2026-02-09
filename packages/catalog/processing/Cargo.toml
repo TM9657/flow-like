@@ -6,6 +6,15 @@ edition = "2024"
 [features]
 default = []
 local-ml = ["flow-like-catalog-core/local-ml"]
+# Execution feature - enables heavy dependencies for node execution
+execute = [
+    "flow-like-catalog-core/execute",
+    "dep:markitdown",
+    "dep:rake",
+    "dep:yake-rust",
+    "dep:whatlang",
+    "dep:rig-core",
+]
 
 [dependencies]
 flow-like-catalog-core.workspace = true
@@ -23,9 +32,12 @@ serde = { workspace = true, features = ["derive", "rc"] }
 tokio = { workspace = true, features = ["rt-multi-thread", "macros"] }
 uuid.workspace = true
 async-trait.workspace = true
-markitdown.workspace = true
-rake = "0.3.6"
-yake-rust = "1.0.3"
-whatlang = "0.18.0"
 dirs-next.workspace = true
-rig-core.workspace = true
+
+# Processing dependencies - only included when execute feature is enabled
+markitdown = { workspace = true, optional = true }
+rake = { version = "0.3.6", optional = true }
+yake-rust = { version = "1.0.3", optional = true }
+whatlang = { version = "0.18.0", optional = true }
+rig-core = { workspace = true, optional = true }
+regex = { workspace = true }

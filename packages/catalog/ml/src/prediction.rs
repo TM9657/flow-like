@@ -3,9 +3,12 @@
 //! This node loads a dataset (currently from a Database), transforms it into a prediction dataset,
 //! and uses the trained model to make predictions.
 //!
+//! Supports batch processing for large datasets.
 //! Adds / upserts predictions back into the Database.
 
-use crate::ml::{MAX_ML_PREDICTION_RECORDS, MLPrediction, NodeMLModel, make_new_field};
+#[cfg(feature = "execute")]
+use crate::ml::make_new_field;
+use crate::ml::{MLPrediction, NodeMLModel};
 use flow_like::flow::pin::ValueType;
 use flow_like::flow::{
     board::Board,
@@ -14,11 +17,18 @@ use flow_like::flow::{
     pin::PinOptions,
     variable::VariableType,
 };
+#[cfg(feature = "execute")]
 use flow_like_catalog_core::NodeDBConnection;
+#[cfg(feature = "execute")]
 use flow_like_storage::arrow_schema::Schema;
+#[cfg(feature = "execute")]
 use flow_like_storage::databases::vector::VectorStore;
+#[cfg(feature = "execute")]
 use flow_like_storage::lancedb::table::NewColumnTransform;
-use flow_like_types::{Result, Value, anyhow, async_trait, json::json};
+#[cfg(feature = "execute")]
+use flow_like_types::anyhow;
+use flow_like_types::{Result, Value, async_trait, json::json};
+#[cfg(feature = "execute")]
 use std::collections::HashSet;
 use std::sync::Arc;
 
@@ -83,6 +93,14 @@ impl NodeLogic for MLPredictNode {
         )
         .set_default_value(Some(json!("Database")));
 
+        node.add_input_pin(
+            "batch_size",
+            "Batch Size",
+            "Number of records to process per batch (default: 5000, 0 = process all at once)",
+            VariableType::Integer,
+        )
+        .set_default_value(Some(json!(5000)));
+
         node.add_output_pin(
             "exec_out",
             "Done",
@@ -93,6 +111,7 @@ impl NodeLogic for MLPredictNode {
         node
     }
 
+    #[cfg(feature = "execute")]
     async fn run(&self, context: &mut ExecutionContext) -> Result<()> {
         // fetch inputs
         context.deactivate_exec_pin("exec_out").await?;
@@ -106,76 +125,122 @@ impl NodeLogic for MLPredictNode {
                 let node_database: NodeDBConnection = context.evaluate_pin("database").await?;
                 let records_col: String = context.evaluate_pin("records").await?;
                 let predictions_col: String = context.evaluate_pin("predictions_col").await?;
+                let batch_size: i64 = context.evaluate_pin("batch_size").await.unwrap_or(5000);
+                let batch_size = if batch_size <= 0 {
+                    usize::MAX
+                } else {
+                    batch_size as usize
+                };
 
                 // fetch database
                 let database = node_database.load(context).await?.db.clone();
 
-                // fetch records
-                let t0 = std::time::Instant::now();
-                let (mut records, existing_cols) = {
+                // get schema and validate columns exist
+                let existing_cols: HashSet<String> = {
                     let database = database.read().await;
                     let schema = database.schema().await?;
-                    let existing_cols: HashSet<String> =
-                        schema.fields.iter().map(|f| f.name().clone()).collect();
-                    if !existing_cols.contains(&records_col) {
-                        return Err(anyhow!(format!(
-                            "Database doesn't contain input column `{}`!",
-                            records_col
-                        )));
-                    }
-                    let records = database
-                        .filter(
-                            "true",
-                            Some(vec![records_col.to_string()]),
-                            MAX_ML_PREDICTION_RECORDS,
-                            0,
-                        )
-                        .await?;
-                    (records, existing_cols)
-                }; // drop read guard
-                context.log_message(
-                    &format!(
-                        "Loaded {} records from database with columns {:?}",
-                        records.len(),
-                        &existing_cols
-                    ),
-                    LogLevel::Debug,
-                );
-                let elapsed = t0.elapsed();
-                context.log_message(&format!("Fetch records (db): {elapsed:?}"), LogLevel::Debug);
+                    schema.fields.iter().map(|f| f.name().clone()).collect()
+                };
+                if !existing_cols.contains(&records_col) {
+                    return Err(anyhow!(format!(
+                        "Database doesn't contain input column `{}`!",
+                        records_col
+                    )));
+                }
 
-                // predict
-                let t0 = std::time::Instant::now();
-                {
-                    let model = node_model.get_model(context).await?;
-                    let model_guard = model.lock().await;
-                    model_guard.predict_on_values(&mut records, &records_col, &predictions_col)?;
-                }; // drop model
-                let elapsed = t0.elapsed();
-                context.log_message(&format!("Predict: {elapsed:?}"), LogLevel::Debug);
+                // load model once for all batches
+                let model = node_model.get_model(context).await?;
 
-                // upsert
-                let t0 = std::time::Instant::now();
-                {
-                    let mut database = database.write().await;
-                    if !existing_cols.contains(&predictions_col) {
-                        // add new column for predictions
-                        let probe = records.first().ok_or_else(|| anyhow!("Got No Records!"))?;
-                        let new_field = make_new_field(probe, &predictions_col)?;
-                        let schema = Schema::new(vec![new_field]);
+                // add prediction column if missing (before batch loop)
+                let mut column_added = existing_cols.contains(&predictions_col);
+
+                let mut offset: usize = 0;
+                let mut total_processed: usize = 0;
+                loop {
+                    // fetch batch
+                    let t0 = std::time::Instant::now();
+                    let mut records = {
+                        let database = database.read().await;
                         database
-                            .add_columns(NewColumnTransform::AllNulls(schema.into()), None)
-                            .await?;
-                        context.log_message(
-                            &format!("Added {} as new column", predictions_col),
-                            LogLevel::Debug,
-                        );
+                            .filter(
+                                "true",
+                                Some(vec![records_col.to_string()]),
+                                batch_size,
+                                offset,
+                            )
+                            .await?
+                    };
+                    let batch_count = records.len();
+                    if batch_count == 0 {
+                        break; // no more records
                     }
-                    // upsert records with predictions
-                    database.upsert(records, records_col).await?;
-                } // drop database read/write guard
-                let elapsed = t0.elapsed();
-                context.log_message(&format!("Update database: {elapsed:?}"), LogLevel::Debug);
+                    context.log_message(
+                        &format!(
+                            "Batch {}: fetched {} records (offset {})",
+                            offset / batch_size.min(batch_count),
+                            batch_count,
+                            offset
+                        ),
+                        LogLevel::Debug,
+                    );
+                    context.log_message(
+                        &format!("Fetch records (db): {:?}", t0.elapsed()),
+                        LogLevel::Debug,
+                    );
+
+                    // predict on batch
+                    let t0 = std::time::Instant::now();
+                    {
+                        let model_guard = model.lock().await;
+                        model_guard.predict_on_values(
+                            &mut records,
+                            &records_col,
+                            &predictions_col,
+                        )?;
+                    }
+                    context.log_message(
+                        &format!("Predict batch: {:?}", t0.elapsed()),
+                        LogLevel::Debug,
+                    );
+
+                    // upsert batch
+                    let t0 = std::time::Instant::now();
+                    {
+                        let mut database = database.write().await;
+                        if !column_added {
+                            let probe =
+                                records.first().ok_or_else(|| anyhow!("Got No Records!"))?;
+                            let new_field = make_new_field(probe, &predictions_col)?;
+                            let schema = Schema::new(vec![new_field]);
+                            database
+                                .add_columns(NewColumnTransform::AllNulls(schema.into()), None)
+                                .await?;
+                            context.log_message(
+                                &format!("Added {} as new column", predictions_col),
+                                LogLevel::Debug,
+                            );
+                            column_added = true;
+                        }
+                        database.upsert(records, records_col.clone()).await?;
+                    }
+                    context.log_message(
+                        &format!("Upsert batch: {:?}", t0.elapsed()),
+                        LogLevel::Debug,
+                    );
+
+                    total_processed += batch_count;
+                    offset += batch_count;
+
+                    // if we got less than batch_size, we're done
+                    if batch_count < batch_size {
+                        break;
+                    }
+                }
+
+                context.log_message(
+                    &format!("Processed {} total records", total_processed),
+                    LogLevel::Info,
+                );
 
                 // set output
                 let database_value: Value = flow_like_types::json::to_value(&node_database)?;
@@ -209,7 +274,17 @@ impl NodeLogic for MLPredictNode {
         Ok(())
     }
 
+    #[cfg(not(feature = "execute"))]
+    async fn run(&self, _context: &mut ExecutionContext) -> Result<()> {
+        Err(flow_like_types::anyhow!(
+            "ML execution requires the 'execute' feature. Rebuild with --features execute"
+        ))
+    }
+
+    #[cfg(feature = "execute")]
     async fn on_update(&self, node: &mut Node, _board: Arc<Board>) {
+        use flow_like_catalog_core::NodeDBConnection;
+
         let source_pin: String = node
             .get_pin_by_name("source")
             .and_then(|pin| pin.default_value.clone())

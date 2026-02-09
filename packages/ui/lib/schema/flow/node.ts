@@ -17,6 +17,10 @@ export interface INode {
 	pins: { [key: string]: IPin };
 	scores?: null | INodeScores;
 	start?: boolean | null;
+	/** Schema version for node migration. When catalog version > placed version, pins are synced. */
+	version?: number | null;
+	/** If true, this node can only run locally (compute-intensive, RPA, browser automation) */
+	only_offline?: boolean;
 	[property: string]: any;
 }
 

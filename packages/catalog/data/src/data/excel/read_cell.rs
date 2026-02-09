@@ -2,6 +2,7 @@ use crate::data::{
     excel::{parse_col_1_based, parse_row_1_based},
     path::FlowPath,
 };
+#[cfg(feature = "execute")]
 use calamine::{Data, DataType, Reader, open_workbook_auto_from_rs};
 use flow_like::flow::{
     execution::context::ExecutionContext,
@@ -9,6 +10,7 @@ use flow_like::flow::{
     variable::VariableType,
 };
 use flow_like_types::{async_trait, json::json};
+#[cfg(feature = "execute")]
 use std::io::Cursor;
 
 /// Read a single cell from an Excel workbook (XLSX) located in object storage via `FlowPath`.
@@ -76,6 +78,7 @@ impl NodeLogic for ReadCellNode {
         node
     }
 
+    #[cfg(feature = "execute")]
     async fn run(&self, ctx: &mut ExecutionContext) -> flow_like_types::Result<()> {
         ctx.deactivate_exec_pin("exec_out").await?;
 
@@ -121,5 +124,12 @@ impl NodeLogic for ReadCellNode {
 
         ctx.activate_exec_pin("exec_out").await?;
         Ok(())
+    }
+
+    #[cfg(not(feature = "execute"))]
+    async fn run(&self, _context: &mut ExecutionContext) -> flow_like_types::Result<()> {
+        Err(flow_like_types::anyhow!(
+            "Data processing requires the 'execute' feature"
+        ))
     }
 }

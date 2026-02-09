@@ -1,9 +1,12 @@
 pub mod clear;
+pub mod clear_ref;
 pub mod difference;
 pub mod discard;
+pub mod discard_ref;
 pub mod from_array;
 pub mod has;
 pub mod insert;
+pub mod insert_ref;
 pub mod is_empty;
 pub mod is_subset;
 pub mod is_superset;

@@ -1,0 +1,47 @@
+---
+import "@tm9657/flow-like-ui/global.css";
+import LegalLayout from "../../../layouts/Legal-Layout.astro";
+import { SbomTable } from "../../../components/thirdparty/sbom-table";
+
+import cargoLicenses from "../../../../../../thirdparty/cargo-licenses.json";
+import npmLicenses from "../../../../../../thirdparty/npm-licenses.json";
+
+const title = "Tredjepartslicenser";
+const description = "Software Bill of Materials (SBOM) - Komplett lista över öppen källkodsbibliotek som används i Flow-Like";
+---
+
+<LegalLayout title={title} description={description} lastUpdated="04 februari 2026">
+	<p class="text-lg mb-8">
+		Flow-Like är byggt med många fantastiska projekt med öppen källkod.
+		Vi är tacksamma mot utvecklarna och underhållarna av dessa bibliotek som gör vårt arbete möjligt.
+		Denna sida fungerar som Software Bill of Materials (SBOM) och ger transparens om våra beroenden.
+	</p>
+
+	<div class="mb-8 p-4 rounded-lg bg-muted/30 border border-border/50">
+		<h3 class="font-semibold mb-2">Om denna SBOM</h3>
+		<p class="text-sm text-muted-foreground">
+			Denna lista genereras automatiskt från våra projektberoenden.
+			Den innehåller alla Rust crates från vår Cargo-arbetsyta och npm-paket från våra webbapplikationer.
+		</p>
+		<div class="flex flex-wrap gap-2 mt-3">
+			<a
+				href="https://github.com/TM9657/flow-like/blob/dev/thirdparty/cargo-licenses.json"
+				target="_blank"
+				rel="noreferrer"
+				class="text-sm px-3 py-1 rounded-full bg-primary/10 text-primary hover:bg-primary/20 transition-colors"
+			>
+				Rust Beroenden (JSON)
+			</a>
+			<a
+				href="https://github.com/TM9657/flow-like/blob/dev/thirdparty/npm-licenses.json"
+				target="_blank"
+				rel="noreferrer"
+				class="text-sm px-3 py-1 rounded-full bg-primary/10 text-primary hover:bg-primary/20 transition-colors"
+			>
+				NPM Beroenden (JSON)
+			</a>
+		</div>
+	</div>
+
+	<SbomTable client:load cargoLicenses={cargoLicenses} npmLicenses={npmLicenses} />
+</LegalLayout>

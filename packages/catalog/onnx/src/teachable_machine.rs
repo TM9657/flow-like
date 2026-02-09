@@ -4,22 +4,17 @@ use flow_like::flow::{
     pin::{PinOptions, ValueType},
     variable::VariableType,
 };
-use flow_like_catalog_core::{FlowPath, NodeImage};
+use flow_like_catalog_core::{ClassPrediction, FlowPath, NodeImage};
+use flow_like_types::{Result, async_trait, json::json};
+#[cfg(feature = "execute")]
 use flow_like_types::{
-    JsonSchema, Result, async_trait,
     image::{RgbImage, imageops, imageops::FilterType},
-    json::{Deserialize, Serialize, json},
     tokio,
 };
+#[cfg(feature = "execute")]
 use std::io::Cursor;
+#[cfg(feature = "execute")]
 use tract_tflite::prelude::*;
-
-#[derive(Default, Serialize, Deserialize, JsonSchema, Clone, Debug)]
-pub struct ClassPrediction {
-    pub class_idx: u32,
-    pub score: f32,
-    pub label: Option<String>,
-}
 
 #[crate::register_node]
 #[derive(Default)]
@@ -104,6 +99,7 @@ impl NodeLogic for TeachableMachineNode {
         node
     }
 
+    #[cfg(feature = "execute")]
     async fn run(&self, context: &mut ExecutionContext) -> Result<()> {
         context.deactivate_exec_pin("exec_out").await?;
 
@@ -243,8 +239,16 @@ impl NodeLogic for TeachableMachineNode {
         context.activate_exec_pin("exec_out").await?;
         Ok(())
     }
+
+    #[cfg(not(feature = "execute"))]
+    async fn run(&self, _context: &mut ExecutionContext) -> Result<()> {
+        Err(flow_like_types::anyhow!(
+            "TFLite execution requires the 'execute' feature. Rebuild with --features execute"
+        ))
+    }
 }
 
+#[cfg(feature = "execute")]
 fn find_tflite_slice(buf: &[u8]) -> Option<&[u8]> {
     if buf.len() < 8 {
         return None;
@@ -350,7 +354,7 @@ impl NodeLogic for PredictionScoreNode {
             "score",
             "Score",
             "Selected prediction score",
-            VariableType::Integer,
+            VariableType::Float,
         );
 
         node

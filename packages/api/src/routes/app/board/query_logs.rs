@@ -9,13 +9,14 @@ use flow_like_storage::lancedb::query::{ExecutableQuery, QueryBase};
 use flow_like_types::anyhow;
 use futures::TryStreamExt;
 use serde::Deserialize;
+use utoipa::{IntoParams, ToSchema};
 
 use crate::{
     credentials::CredentialsAccess, ensure_permission, error::ApiError, middleware::jwt::AppUser,
     permission::role_permission::RolePermissions, state::AppState,
 };
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, IntoParams, ToSchema)]
 pub struct QueryLogsRequest {
     pub run_id: String,
     #[serde(default)]
@@ -26,6 +27,21 @@ pub struct QueryLogsRequest {
     pub offset: Option<usize>,
 }
 
+#[utoipa::path(
+    get,
+    path = "/apps/{app_id}/board/{board_id}/logs",
+    tag = "execution",
+    params(
+        ("app_id" = String, Path, description = "Application ID"),
+        ("board_id" = String, Path, description = "Board ID"),
+        QueryLogsRequest
+    ),
+    responses(
+        (status = 200, description = "Log messages for the run", body = Vec<Object>),
+        (status = 401, description = "Unauthorized"),
+        (status = 500, description = "Failed to query logs")
+    )
+)]
 #[tracing::instrument(name = "GET /apps/{app_id}/board/{board_id}/logs", skip(state, user))]
 pub async fn query_logs(
     State(state): State<AppState>,
@@ -48,7 +64,7 @@ pub async fn query_logs(
     // Convert to SharedCredentials and build the logs database connection
     let shared_credentials = credentials.into_shared_credentials();
     let logs_db_builder = shared_credentials.to_logs_db_builder().map_err(|e| {
-        ApiError::InternalError(anyhow!("Failed to create logs db builder: {}", e).into())
+        ApiError::internal_error(anyhow!("Failed to create logs db builder: {}", e))
     })?;
 
     let base_path = StoragePath::from("runs")
@@ -60,12 +76,12 @@ pub async fn query_logs(
         .await
         .map_err(|e| {
             tracing::error!(error = %e, path = %base_path, "Failed to open log database");
-            ApiError::InternalError(anyhow!("Failed to open log database: {}", e).into())
+            ApiError::internal_error(anyhow!("Failed to open log database: {}", e))
         })?;
 
     let table = db.open_table(&params.run_id).execute().await.map_err(|e| {
         tracing::error!(error = %e, run_id = %params.run_id, "Failed to open run table");
-        ApiError::InternalError(anyhow!("Failed to open run table: {}", e).into())
+        ApiError::internal_error(anyhow!("Failed to open run table: {}", e))
     })?;
 
     let mut q = table.query();
@@ -81,13 +97,13 @@ pub async fn query_logs(
         .await
         .map_err(|e| {
             tracing::error!(error = %e, "Failed to execute query");
-            ApiError::InternalError(anyhow!("Failed to execute query: {}", e).into())
+            ApiError::internal_error(anyhow!("Failed to execute query: {}", e))
         })?
         .try_collect()
         .await
         .map_err(|e| {
             tracing::error!(error = %e, "Failed to collect query results");
-            ApiError::InternalError(anyhow!("Failed to collect query results: {}", e).into())
+            ApiError::internal_error(anyhow!("Failed to collect query results: {}", e))
         })?;
 
     use flow_like::flow::execution::log::StoredLogMessage;

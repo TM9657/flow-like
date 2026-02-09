@@ -13,6 +13,32 @@ use flow_like_storage::Path as FlowPath;
 use flow_like_types::{anyhow, create_id};
 use sea_orm::{ActiveModelTrait, ActiveValue::Set, TransactionTrait};
 
+#[utoipa::path(
+    delete,
+    path = "/apps/{app_id}/meta/media/{media_id}",
+    tag = "meta",
+    description = "Remove metadata media and delete the underlying file.",
+    params(
+        ("app_id" = String, Path, description = "Application ID"),
+        ("media_id" = String, Path, description = "Media ID"),
+        ("language" = Option<String>, Query, description = "Language code (default en)"),
+        ("template_id" = Option<String>, Query, description = "Template ID"),
+        ("course_id" = Option<String>, Query, description = "Course ID"),
+        ("item" = String, Query, description = "Media item: icon, thumbnail, preview"),
+        ("extension" = String, Query, description = "File extension")
+    ),
+    responses(
+        (status = 200, description = "Media removed", body = ()),
+        (status = 401, description = "Unauthorized"),
+        (status = 403, description = "Forbidden"),
+        (status = 404, description = "Not found")
+    ),
+    security(
+        ("bearer_auth" = []),
+        ("api_key" = []),
+        ("pat" = [])
+    )
+)]
 #[tracing::instrument(
     name = "DELETE /apps/{app_id}/meta/media/{media_id}",
     skip(state, user)
@@ -32,7 +58,7 @@ pub async fn remove_media(
     let existing_meta = mode
         .find_existing_meta(language, &txn)
         .await?
-        .ok_or_else(|| ApiError::NotFound)?;
+        .ok_or(ApiError::NOT_FOUND)?;
 
     let mut model: meta::ActiveModel = existing_meta.clone().into();
     model.updated_at = Set(chrono::Utc::now().naive_utc());
@@ -66,9 +92,10 @@ pub async fn remove_media(
         .child(item_name.clone());
     if let Err(e) = master_store.as_generic().delete(&path).await {
         tracing::error!("Failed to delete media file at {}: {:?}", path, e);
-        return Err(ApiError::InternalError(
-            anyhow!("Failed to delete media file, reference ID: {}", create_id()).into(),
-        ));
+        return Err(ApiError::internal_error(anyhow!(
+            "Failed to delete media file, reference ID: {}",
+            create_id()
+        )));
     }
     txn.commit().await?;
 

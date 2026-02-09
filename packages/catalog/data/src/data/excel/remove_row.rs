@@ -5,7 +5,9 @@ use flow_like::flow::{
     variable::VariableType,
 };
 use flow_like_types::{async_trait, json::json};
+#[cfg(feature = "execute")]
 use std::io::Cursor;
+#[cfg(feature = "execute")]
 use umya_spreadsheet::{self};
 
 /// Remove one or more rows from an XLSX worksheet (object-store aware).
@@ -62,6 +64,7 @@ impl NodeLogic for RemoveRowNode {
         node
     }
 
+    #[cfg(feature = "execute")]
     async fn run(&self, ctx: &mut ExecutionContext) -> flow_like_types::Result<()> {
         ctx.deactivate_exec_pin("exec_out").await?;
 
@@ -123,8 +126,16 @@ impl NodeLogic for RemoveRowNode {
         ctx.activate_exec_pin("exec_out").await?;
         Ok(())
     }
+
+    #[cfg(not(feature = "execute"))]
+    async fn run(&self, _context: &mut ExecutionContext) -> flow_like_types::Result<()> {
+        Err(flow_like_types::anyhow!(
+            "Data processing requires the 'execute' feature"
+        ))
+    }
 }
 
+#[cfg(feature = "execute")]
 fn parse_row_1_based(s: &str) -> flow_like_types::Result<u32> {
     let trimmed = s.trim();
     let n: u32 = trimmed

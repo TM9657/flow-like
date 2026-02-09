@@ -17,7 +17,6 @@ import { Avatar, AvatarFallback, AvatarImage } from "./avatar";
 import { Badge } from "./badge";
 
 interface AppCardProps {
-	apps: IApp[];
 	app: IApp;
 	metadata?: IMetadata;
 	variant: "extended" | "small";
@@ -25,10 +24,10 @@ interface AppCardProps {
 	onSettingsClick?: () => void;
 	multiSelected?: boolean;
 	className?: string;
+	isOwned?: boolean;
 }
 
 export function AppCard({
-	apps,
 	app,
 	metadata,
 	variant = "extended",
@@ -36,30 +35,31 @@ export function AppCard({
 	onSettingsClick,
 	multiSelected,
 	className = "",
+	isOwned,
 }: Readonly<AppCardProps>) {
 	if (variant === "small") {
 		return (
 			<SmallAppCard
-				apps={apps}
 				app={app}
 				metadata={metadata}
 				onClick={onClick}
 				onSettingsClick={onSettingsClick}
 				className={className}
 				multiSelected={multiSelected}
+				isOwned={isOwned}
 			/>
 		);
 	}
 
 	return (
 		<ExtendedAppCard
-			apps={apps}
 			app={app}
 			metadata={metadata}
 			onClick={onClick}
 			onSettingsClick={onSettingsClick}
 			className={className}
 			multiSelected={multiSelected}
+			isOwned={isOwned}
 		/>
 	);
 }
@@ -180,23 +180,23 @@ export function VisibilityIcon({
 }
 
 function SmallAppCard({
-	apps,
 	app,
 	metadata,
 	onClick,
 	onSettingsClick,
 	className,
 	multiSelected,
+	isOwned,
 }: Readonly<
 	Pick<
 		AppCardProps,
 		| "app"
-		| "apps"
 		| "metadata"
 		| "onClick"
 		| "onSettingsClick"
 		| "className"
 		| "multiSelected"
+		| "isOwned"
 	>
 >) {
 	const formatPrice = (price: number) => `€${(price / 100).toFixed(2)}`;
@@ -217,7 +217,7 @@ function SmallAppCard({
 			<button
 				type="button"
 				onClick={onClick}
-				className={`group cursor-pointer relative flex items-center gap-3 p-3 transition-all duration-200 rounded-xl border border-border/50 bg-card  w-full overflow-hidden ${className}`}
+				className={`group cursor-pointer relative flex items-center gap-3 p-3 transition-all duration-300 rounded-xl border border-border/40 bg-card/80 backdrop-blur-sm hover:border-primary/20 hover:bg-card/95 hover:shadow-md w-full overflow-hidden ${className}`}
 			>
 				{typeof multiSelected !== "undefined" && onClick && (
 					<div className="relative shrink-0 z-10">
@@ -278,7 +278,7 @@ function SmallAppCard({
 									<div className="bg-primary text-primary-foreground rounded-full px-2.5 py-0.5 text-xs font-semibold">
 										{formatPrice(app.price)}
 									</div>
-								) : apps.find((a) => a.id === app.id) ? (
+								) : isOwned ? (
 									<div className="bg-emerald-500/20 rounded-full px-2.5 py-0.5 text-xs text-emerald-500/80 border-emerald-500/80 border font-medium flex flex-row items-center gap-1">
 										<HeartFilledIcon className="size-3" />
 										Yours
@@ -313,35 +313,34 @@ function SmallAppCard({
 }
 
 function ExtendedAppCard({
-	apps,
 	app,
 	metadata,
 	onClick,
 	onSettingsClick,
 	className,
 	multiSelected,
+	isOwned,
 }: Readonly<
 	Pick<
 		AppCardProps,
 		| "app"
-		| "apps"
 		| "metadata"
 		| "onClick"
 		| "onSettingsClick"
 		| "className"
 		| "multiSelected"
+		| "isOwned"
 	>
 >) {
 	const formatPrice = (price: number) => `€${(price / 100).toFixed(2)}`;
 	const appName = metadata?.name ?? app.id;
 	const appIcon = metadata?.icon ?? "/app-logo.webp";
 	const hasRating = app.rating_count > 0;
-	const userOwnsApp = apps.find((a) => a.id === app.id);
 	const showSettingsButton =
 		onSettingsClick &&
 		(app.visibility === IAppVisibility.Offline ||
 			app.visibility === IAppVisibility.Private ||
-			userOwnsApp);
+			isOwned);
 
 	const itemVariants = {
 		hidden: { opacity: 0, y: 20 },
@@ -359,7 +358,7 @@ function ExtendedAppCard({
 			<button
 				type="button"
 				onClick={onClick}
-				className={`group cursor-pointer relative flex flex-col transition-all duration-300 rounded-xl border border-border/40 bg-card shadow-sm hover:bg-card/95 w-72 h-[375px] overflow-hidden ${className}`}
+				className={`group cursor-pointer relative flex flex-col transition-all duration-300 rounded-xl border border-border/40 bg-card/80 backdrop-blur-sm shadow-sm hover:shadow-lg hover:border-primary/20 hover:bg-card/95 w-72 h-[375px] overflow-hidden ${className}`}
 			>
 				{typeof multiSelected !== "undefined" && onClick && (
 					<div className="relative shrink-0 z-10">
@@ -428,7 +427,7 @@ function ExtendedAppCard({
 									<div className="bg-white/90 backdrop-blur-xs text-gray-900 rounded-full px-3 py-1 text-sm font-bold shadow-lg">
 										{formatPrice(app.price)}
 									</div>
-								) : apps.find((a) => a.id === app.id) ? (
+								) : isOwned ? (
 									<div className="bg-emerald-500/20 backdrop-blur-xs text-emerald-400/90 rounded-full px-3 py-1 text-sm font-medium shadow-lg border border-white/30 flex flex-row items-center gap-2">
 										<HeartFilledIcon className="size-4" />
 										Yours

@@ -1,3 +1,4 @@
+pub mod add_headers;
 pub mod branch;
 pub mod find_llm;
 pub mod history;

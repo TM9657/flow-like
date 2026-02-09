@@ -98,4 +98,7 @@ export class BitState implements IBitState {
 			bit: bit,
 		});
 	}
+	async getProfileBits(): Promise<IBit[]> {
+		return await invoke("get_bits_in_current_profile");
+	}
 }

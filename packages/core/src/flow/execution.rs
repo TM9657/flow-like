@@ -9,7 +9,7 @@ use crate::state::FlowLikeState;
 use ahash::{AHashMap, AHashSet, AHasher};
 use context::ExecutionContext;
 use flow_like_storage::arrow_array::{RecordBatch, RecordBatchIterator};
-use flow_like_storage::arrow_schema::FieldRef;
+use flow_like_storage::arrow_schema::{FieldRef, SchemaRef};
 use flow_like_storage::files::store::FlowLikeStore;
 use flow_like_storage::lancedb::Connection;
 use flow_like_storage::lancedb::index::scalar::BitmapIndexBuilder;
@@ -34,7 +34,7 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use std::hash::Hasher;
 use std::sync::atomic::Ordering;
-use std::time::Instant;
+use std::time::{Duration, Instant};
 use std::{
     sync::{Arc, Weak},
     time::SystemTime,
@@ -46,8 +46,12 @@ pub mod internal_node;
 pub mod internal_pin;
 pub mod log;
 pub mod trace;
+pub mod user_context;
+
+pub use user_context::{RoleContext, UserExecutionContext};
 
 const USE_DEPENDENCY_GRAPH: bool = false;
+const RUN_LOCK_TIMEOUT: Duration = Duration::from_secs(3);
 static STORED_META_FIELDS: Lazy<Vec<FieldRef>> = Lazy::new(|| {
     Vec::<FieldRef>::from_type::<StoredLogMeta>(
         TracingOptions::default()
@@ -56,6 +60,15 @@ static STORED_META_FIELDS: Lazy<Vec<FieldRef>> = Lazy::new(|| {
     )
     .expect("derive FieldRef for StoredLogMeta")
 });
+
+pub(super) async fn lock_with_timeout<'a, T>(
+    mutex: &'a Mutex<T>,
+    label: &str,
+) -> flow_like_types::Result<flow_like_types::tokio::sync::MutexGuard<'a, T>> {
+    flow_like_types::tokio::time::timeout(RUN_LOCK_TIMEOUT, mutex.lock())
+        .await
+        .map_err(|_| anyhow!("Timeout acquiring {}", label))
+}
 
 #[derive(
     Serialize, Deserialize, JsonSchema, Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord,
@@ -297,21 +310,24 @@ pub struct Run {
 }
 
 impl Run {
-    pub async fn flush_logs(&mut self, finalize: bool) -> flow_like_types::Result<Option<LogMeta>> {
+    pub(crate) fn prepare_flush(
+        &mut self,
+        finalize: bool,
+    ) -> flow_like_types::Result<Option<PreparedFlush>> {
         let db_fn = match self.log_db.as_ref() {
-            Some(db) => db,
+            Some(db) => db.clone(),
             None => {
                 tracing::debug!(
                     "No log database configured - logs will not be persisted to LanceDB"
                 );
-                return Ok(None); // No log database configured - skip silently
+                return Ok(None);
             }
         };
+
         let base_path = Path::from("runs")
             .child(self.app_id.clone())
             .child(self.board.id.clone());
-        tracing::debug!(path = %base_path, finalize, traces = self.traces.len(), "Flushing logs to database");
-        let db = db_fn(base_path.clone()).execute().await?;
+        tracing::debug!(path = %base_path, finalize, traces = self.traces.len(), "Preparing log flush");
 
         // 1) pre‑count total logs, reserve once, and find highest level in one pass
         let total = self.traces.iter().map(|t| t.logs.len()).sum();
@@ -340,67 +356,114 @@ impl Run {
         self.logs = self.logs.saturating_add(logs.len() as u64);
         self.highest_log_level = highest;
 
-        // 2) write arrow batches
+        // 2) build arrow batch in-memory
         let arrow_batch = LogMessage::into_arrow(logs)?;
         let schema = arrow_batch.schema();
-        let table = if self.log_initialized {
-            db.open_table(&self.id).execute().await?
-        } else {
-            let t = db
-                .create_empty_table(&self.id, schema.clone())
-                .execute()
-                .await?;
-            self.log_initialized = true;
-            t
-        };
-        let iter = RecordBatchIterator::new(vec![arrow_batch].into_iter().map(Ok), schema);
-        table.add(iter).execute().await?;
 
-        if !finalize {
+        let meta = if finalize {
+            let vs = &self.board.version;
+            let version_string = format!("v{}-{}-{}", vs.0, vs.1, vs.2);
+            let start_micros = self
+                .start
+                .duration_since(SystemTime::UNIX_EPOCH)?
+                .as_micros()
+                .try_into()
+                .map_err(|_| anyhow!("start timestamp overflowed u64"))?;
+            let end_micros = self
+                .end
+                .duration_since(SystemTime::UNIX_EPOCH)?
+                .as_micros()
+                .try_into()
+                .map_err(|_| anyhow!("end timestamp overflowed u64"))?;
+            let payload =
+                to_vec(&self.payload.payload.clone().unwrap_or(Value::Null)).unwrap_or_default();
+            let visited_nodes = self
+                .visited_nodes
+                .drain()
+                .map(|(k, v)| (k, v.to_u8()))
+                .collect::<Vec<(String, u8)>>();
+
+            Some(LogMeta {
+                app_id: self.app_id.clone(),
+                run_id: self.id.clone(),
+                board_id: self.board.id.clone(),
+                start: start_micros,
+                end: end_micros,
+                log_level: self.highest_log_level.to_u8(),
+                version: version_string,
+                nodes: Some(visited_nodes),
+                logs: Some(self.logs),
+                node_id: self.payload.id.clone(),
+                event_id: self.event_id.clone().unwrap_or("".to_string()),
+                event_version: self.event_version.clone(),
+                payload,
+                is_remote: false,
+            })
+        } else {
+            None
+        };
+
+        Ok(Some(PreparedFlush {
+            db_fn,
+            base_path,
+            run_id: self.id.clone(),
+            arrow_batch,
+            schema,
+            log_initialized: self.log_initialized,
+            meta,
+        }))
+    }
+
+    pub async fn flush_logs(&mut self, finalize: bool) -> flow_like_types::Result<Option<LogMeta>> {
+        let Some(prepared) = self.prepare_flush(finalize)? else {
             return Ok(None);
+        };
+
+        let result = prepared.write().await?;
+        if result.created_table {
+            self.log_initialized = true;
         }
 
-        // 3) write meta file
-        let vs = &self.board.version;
-        let version_string = format!("v{}-{}-{}", vs.0, vs.1, vs.2);
-        let start_micros = self
-            .start
-            .duration_since(SystemTime::UNIX_EPOCH)?
-            .as_micros()
-            .try_into()
-            .map_err(|_| anyhow!("start timestamp overflowed u64"))?;
-        let end_micros = self
-            .end
-            .duration_since(SystemTime::UNIX_EPOCH)?
-            .as_micros()
-            .try_into()
-            .map_err(|_| anyhow!("end timestamp overflowed u64"))?;
-        let payload =
-            to_vec(&self.payload.payload.clone().unwrap_or(Value::Null)).unwrap_or_default();
-        let visited_nodes = self
-            .visited_nodes
-            .drain()
-            .map(|(k, v)| (k, v.to_u8()))
-            .collect::<Vec<(String, u8)>>();
+        Ok(result.meta)
+    }
+}
 
-        let content = LogMeta {
-            app_id: self.app_id.clone(),
-            run_id: self.id.clone(),
-            board_id: self.board.id.clone(),
-            start: start_micros,
-            end: end_micros,
-            log_level: self.highest_log_level.to_u8(),
-            version: version_string,
-            nodes: Some(visited_nodes),
-            logs: Some(self.logs),
-            node_id: self.payload.id.clone(),
-            event_id: self.event_id.clone().unwrap_or("".to_string()),
-            event_version: self.event_version.clone(),
-            payload,
-            is_remote: false,
+pub(crate) struct PreparedFlush {
+    db_fn:
+        Arc<dyn Fn(Path) -> flow_like_storage::lancedb::connection::ConnectBuilder + Send + Sync>,
+    base_path: Path,
+    run_id: String,
+    arrow_batch: RecordBatch,
+    schema: SchemaRef,
+    log_initialized: bool,
+    meta: Option<LogMeta>,
+}
+
+pub(crate) struct FlushResult {
+    pub created_table: bool,
+    pub meta: Option<LogMeta>,
+}
+
+impl PreparedFlush {
+    pub async fn write(self) -> flow_like_types::Result<FlushResult> {
+        let db = (self.db_fn)(self.base_path.clone()).execute().await?;
+
+        let table = if self.log_initialized {
+            db.open_table(&self.run_id).execute().await?
+        } else {
+            db.create_empty_table(&self.run_id, self.schema.clone())
+                .execute()
+                .await?
         };
 
-        Ok(Some(content))
+        let iter =
+            RecordBatchIterator::new(vec![self.arrow_batch].into_iter().map(Ok), self.schema);
+        table.add(iter).execute().await?;
+
+        Ok(FlushResult {
+            created_table: !self.log_initialized,
+            meta: self.meta,
+        })
     }
 }
 
@@ -447,6 +510,8 @@ impl RunStack {
 pub type EventTrigger =
     Arc<dyn Fn(&InternalRun) -> BoxFuture<'_, flow_like_types::Result<()>> + Send + Sync>;
 
+use std::sync::atomic::AtomicU64;
+
 /// Cached immutable fields from Run to avoid locking during hot path execution
 #[derive(Clone)]
 pub struct RunMeta {
@@ -456,6 +521,19 @@ pub struct RunMeta {
     pub board_dir: Path,
     pub sub: String,
     pub stream_state: bool,
+    pub nodes_executed: Arc<AtomicU64>,
+}
+
+impl RunMeta {
+    pub fn increment_nodes_executed(&self) {
+        self.nodes_executed
+            .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    }
+
+    pub fn get_nodes_executed(&self) -> u64 {
+        self.nodes_executed
+            .load(std::sync::atomic::Ordering::Relaxed)
+    }
 }
 
 #[derive(Clone)]
@@ -471,6 +549,8 @@ pub struct InternalRun {
     pub credentials: Option<Arc<SharedCredentials>>,
     pub token: Option<String>,
     pub oauth_tokens: Arc<AHashMap<String, OAuthToken>>,
+    /// User context for this execution
+    pub user_context: Option<UserExecutionContext>,
 
     stack: Arc<RunStack>,
     concurrency_limit: u64,
@@ -487,6 +567,15 @@ pub struct InternalRun {
 pub struct RunPayload {
     pub id: String,
     pub payload: Option<Value>,
+    /// Runtime-configured variables and secrets (for local execution).
+    /// These override board variable defaults when present.
+    #[serde(default)]
+    pub runtime_variables: Option<std::collections::HashMap<String, Variable>>,
+    /// When true (default), secret variables from runtime_variables are ignored
+    /// unless they are also marked as runtime_configured.
+    /// Set to false only for trusted local (desktop) execution.
+    #[serde(default)]
+    pub filter_secrets: Option<bool>,
 }
 
 impl InternalRun {
@@ -594,10 +683,21 @@ impl InternalRun {
             .map(|e| e.variables.clone())
             .unwrap_or_default();
 
+        // Extract runtime_variables from payload
+        let runtime_variables = payload.runtime_variables.clone().unwrap_or_default();
+        let filter_secrets = payload.filter_secrets.unwrap_or(true);
+
         let variables = Arc::new(Mutex::new({
             let mut map = AHashMap::with_capacity(board.variables.len());
             for (variable_id, board_variable) in &board.variables {
-                let variable = if board_variable.exposed {
+                // Priority: runtime_configured/secret vars > event vars (for exposed) > board vars
+                // When filter_secrets is true, only runtime_configured vars may be overridden;
+                // secrets from untrusted callers are ignored to prevent injection.
+                let allow_runtime_override =
+                    board_variable.runtime_configured || (board_variable.secret && !filter_secrets);
+                let variable = if allow_runtime_override {
+                    runtime_variables.get(variable_id).unwrap_or(board_variable)
+                } else if board_variable.exposed {
                     event_variables.get(variable_id).unwrap_or(board_variable)
                 } else {
                     board_variable
@@ -779,6 +879,7 @@ impl InternalRun {
             log_level: board.log_level,
             profile: Arc::new(profile.clone()),
             completion_callbacks: Arc::new(RwLock::new(vec![])),
+            user_context: None,
             // Cached immutable fields from Run
             meta: RunMeta {
                 run_id: run_id.clone(),
@@ -787,9 +888,25 @@ impl InternalRun {
                 board_dir: board.board_dir.clone(),
                 sub: sub_value.clone(),
                 stream_state,
+                nodes_executed: Arc::new(AtomicU64::new(0)),
             },
             board: board.clone(),
         })
+    }
+
+    /// Set the user execution context for this run
+    pub fn set_user_context(&mut self, user_context: UserExecutionContext) {
+        self.user_context = Some(user_context);
+    }
+
+    /// Set the user execution context for offline/local execution
+    pub fn set_offline_user_context(&mut self) {
+        self.user_context = Some(UserExecutionContext::offline());
+    }
+
+    /// Get the user execution context if available
+    pub fn user_context(&self) -> Option<&UserExecutionContext> {
+        self.user_context.as_ref()
     }
 
     // Reuse the same run, but reset the states
@@ -803,10 +920,13 @@ impl InternalRun {
         self.cache.write().await.clear();
         self.stack = Arc::new(RunStack::with_capacity(self.stack.len()));
         self.concurrency_limit = 128_000;
-        self.run.lock().await.status = RunStatus::Running;
-        self.run.lock().await.traces.clear();
-        self.run.lock().await.start = SystemTime::now();
-        self.run.lock().await.end = SystemTime::now();
+        {
+            let mut run = lock_with_timeout(self.run.as_ref(), "run_fork").await?;
+            run.status = RunStatus::Running;
+            run.traces.clear();
+            run.start = SystemTime::now();
+            run.end = SystemTime::now();
+        }
         for node in self.nodes.values() {
             for pin in node.pins.values() {
                 // Reset is async but pin access is lock-free
@@ -839,6 +959,7 @@ impl InternalRun {
         let concurrency_limit = self.concurrency_limit;
         let callback = self.callback.clone();
         let meta = self.meta.clone();
+        let user_context = self.user_context.clone();
 
         let new_stack = futures::stream::iter(stack.stack.clone())
             .map(|target| {
@@ -856,6 +977,7 @@ impl InternalRun {
                 let token = self.token.clone();
                 let nodes = self.nodes.clone();
                 let oauth_tokens = self.oauth_tokens.clone();
+                let user_context = user_context.clone();
 
                 async move {
                     step_core(
@@ -876,6 +998,7 @@ impl InternalRun {
                         credentials,
                         token,
                         oauth_tokens,
+                        user_context,
                     )
                     .await
                 }
@@ -927,6 +1050,7 @@ impl InternalRun {
             self.credentials.clone(),
             self.token.clone(),
             self.oauth_tokens.clone(),
+            self.user_context.clone(),
         )
         .await;
 
@@ -963,8 +1087,14 @@ impl InternalRun {
         const FLUSH_INTERVAL_SECS: u64 = 5;
 
         {
-            let mut run = self.run.lock().await;
-            run.start = SystemTime::now();
+            match lock_with_timeout(self.run.as_ref(), "run_start").await {
+                Ok(mut run) => {
+                    run.start = SystemTime::now();
+                }
+                Err(err) => {
+                    eprintln!("[Error] {}", err);
+                }
+            }
         }
 
         // Spawn background flush task for long-running nodes
@@ -983,11 +1113,50 @@ impl InternalRun {
                     break;
                 }
 
-                let mut run = run_clone.lock().await;
-                if !run.traces.is_empty()
-                    && let Err(err) = run.flush_logs(false).await
-                {
-                    eprintln!("[Error] background log flush: {:?}", err);
+                let prepared: Option<PreparedFlush> =
+                    match lock_with_timeout(run_clone.as_ref(), "run_flush_prepare").await {
+                        Ok(mut run) => {
+                            if run.traces.is_empty() {
+                                None
+                            } else {
+                                match run.prepare_flush(false) {
+                                    Ok(prepared) => prepared,
+                                    Err(err) => {
+                                        eprintln!(
+                                            "[Error] preparing background log flush: {:?}",
+                                            err
+                                        );
+                                        None
+                                    }
+                                }
+                            }
+                        }
+                        Err(err) => {
+                            eprintln!("[Error] {}", err);
+                            None
+                        }
+                    };
+
+                if let Some(prepared) = prepared {
+                    match prepared.write().await {
+                        Ok(result) => {
+                            if result.created_table {
+                                match lock_with_timeout(run_clone.as_ref(), "run_flush_finalize")
+                                    .await
+                                {
+                                    Ok(mut run) => {
+                                        run.log_initialized = true;
+                                    }
+                                    Err(err) => {
+                                        eprintln!("[Error] {}", err);
+                                    }
+                                }
+                            }
+                        }
+                        Err(err) => {
+                            eprintln!("[Error] background log flush: {:?}", err);
+                        }
+                    }
                 }
             }
         });
@@ -1017,20 +1186,51 @@ impl InternalRun {
         self.drop_nodes().await;
 
         let meta = {
-            let mut run = self.run.lock().await;
-            run.end = SystemTime::now();
-            run.status = if errored {
-                RunStatus::Failed
-            } else {
-                RunStatus::Success
-            };
-            match run.flush_logs(true).await {
-                Ok(Some(meta)) => Some(meta),
-                Ok(None) => None,
-                Err(err) => {
-                    eprintln!("[Error] flushing logs (final): {:?}", err);
-                    None
+            let prepared: Option<PreparedFlush> =
+                match lock_with_timeout(self.run.as_ref(), "run_finalize").await {
+                    Ok(mut run) => {
+                        run.end = SystemTime::now();
+                        run.status = if errored {
+                            RunStatus::Failed
+                        } else {
+                            RunStatus::Success
+                        };
+                        match run.prepare_flush(true) {
+                            Ok(prepared) => prepared,
+                            Err(err) => {
+                                eprintln!("[Error] preparing logs (final): {:?}", err);
+                                None
+                            }
+                        }
+                    }
+                    Err(err) => {
+                        eprintln!("[Error] {}", err);
+                        None
+                    }
+                };
+
+            if let Some(prepared) = prepared {
+                match prepared.write().await {
+                    Ok(result) => {
+                        if result.created_table {
+                            match lock_with_timeout(self.run.as_ref(), "run_finalize_mark").await {
+                                Ok(mut run) => {
+                                    run.log_initialized = true;
+                                }
+                                Err(err) => {
+                                    eprintln!("[Error] {}", err);
+                                }
+                            }
+                        }
+                        result.meta
+                    }
+                    Err(err) => {
+                        eprintln!("[Error] flushing logs (final): {:?}", err);
+                        None
+                    }
                 }
+            } else {
+                None
             }
         };
 
@@ -1044,26 +1244,44 @@ impl InternalRun {
     pub async fn debug_step(&mut self, handler: Arc<FlowLikeState>) -> bool {
         let stack_hash = self.stack.hash();
         if self.stack.len() == 0 {
-            let mut run = self.run.lock().await;
-            run.end = SystemTime::now();
-            run.status = RunStatus::Success;
+            match lock_with_timeout(self.run.as_ref(), "run_debug_step_success").await {
+                Ok(mut run) => {
+                    run.end = SystemTime::now();
+                    run.status = RunStatus::Success;
+                }
+                Err(err) => {
+                    eprintln!("[Error] {}", err);
+                }
+            }
             return false;
         }
 
         self.step(handler.clone()).await;
 
         if self.stack.len() == 0 {
-            let mut run = self.run.lock().await;
-            run.end = SystemTime::now();
-            run.status = RunStatus::Success;
+            match lock_with_timeout(self.run.as_ref(), "run_debug_step_success").await {
+                Ok(mut run) => {
+                    run.end = SystemTime::now();
+                    run.status = RunStatus::Success;
+                }
+                Err(err) => {
+                    eprintln!("[Error] {}", err);
+                }
+            }
             return false;
         }
 
         let new_stack_hash = self.stack.hash();
         if new_stack_hash == stack_hash {
-            let mut run = self.run.lock().await;
-            run.end = SystemTime::now();
-            run.status = RunStatus::Failed;
+            match lock_with_timeout(self.run.as_ref(), "run_debug_step_failed").await {
+                Ok(mut run) => {
+                    run.end = SystemTime::now();
+                    run.status = RunStatus::Failed;
+                }
+                Err(err) => {
+                    eprintln!("[Error] {}", err);
+                }
+            }
             return false;
         }
 
@@ -1100,27 +1318,40 @@ impl InternalRun {
 
     // ONLY CALL THIS IF WE ARE BEING CANCELLED
     pub async fn flush_logs_cancelled(&mut self) -> flow_like_types::Result<Option<LogMeta>> {
-        let mut run = self.run.lock().await;
-        run.highest_log_level = LogLevel::Fatal;
-        run.status = RunStatus::Stopped;
-        run.end = SystemTime::now();
+        let prepared = {
+            let mut run = lock_with_timeout(self.run.as_ref(), "run_cancel").await?;
+            run.highest_log_level = LogLevel::Fatal;
+            run.status = RunStatus::Stopped;
+            run.end = SystemTime::now();
 
-        let cancel_log = LogMessage::new("Run cancelled", LogLevel::Fatal, None);
-        if let Some(trace) = run.traces.last_mut() {
-            trace.logs.push(cancel_log);
+            let cancel_log = LogMessage::new("Run cancelled", LogLevel::Fatal, None);
+            if let Some(trace) = run.traces.last_mut() {
+                trace.logs.push(cancel_log);
+            } else {
+                // Create a system trace if no traces exist
+                let mut system_trace = Trace::new(
+                    run.visited_nodes
+                        .keys()
+                        .next()
+                        .unwrap_or(&"system".to_string()),
+                );
+                system_trace.logs.push(cancel_log);
+                run.traces.push(system_trace);
+            }
+
+            run.prepare_flush(true)?
+        };
+
+        if let Some(prepared) = prepared {
+            let result = prepared.write().await?;
+            if result.created_table {
+                let mut run = lock_with_timeout(self.run.as_ref(), "run_cancel_mark").await?;
+                run.log_initialized = true;
+            }
+            Ok(result.meta)
         } else {
-            // Create a system trace if no traces exist
-            let mut system_trace = Trace::new(
-                run.visited_nodes
-                    .keys()
-                    .next()
-                    .unwrap_or(&"system".to_string()),
-            );
-            system_trace.logs.push(cancel_log);
-            run.traces.push(system_trace);
+            Ok(None)
         }
-
-        run.flush_logs(true).await
     }
 }
 
@@ -1189,6 +1420,7 @@ async fn step_core(
     credentials: Option<Arc<SharedCredentials>>,
     token: Option<String>,
     oauth_tokens: Arc<AHashMap<String, OAuthToken>>,
+    user_context: Option<UserExecutionContext>,
 ) -> flow_like_types::Result<Vec<ExecutionTarget>> {
     // Check Node State and Validate Execution Count (to stop infinite loops)
     {
@@ -1218,6 +1450,7 @@ async fn step_core(
         oauth_tokens,
     )
     .await;
+    context.user_context = user_context;
     context.started_by = if target.through_pins.is_empty() {
         None
     } else {
@@ -1236,7 +1469,7 @@ async fn step_core(
     }
 
     {
-        let mut run_locked = run.lock().await;
+        let mut run_locked = lock_with_timeout(run.as_ref(), "run_traces_merge").await?;
         run_locked.traces.extend(context.take_traces());
     }
 
@@ -1298,4 +1531,46 @@ pub fn extract_sub_from_jwt(token: &str) -> flow_like_types::Result<String> {
         flow_like_types::json::from_slice(&decoded).context("invalid JWT JSON payload")?;
 
     Ok(claims.sub)
+}
+
+pub async fn flush_run_cancelled(
+    run: &Arc<Mutex<Run>>,
+) -> flow_like_types::Result<Option<LogMeta>> {
+    let prepared = {
+        let mut run = flow_like_types::tokio::time::timeout(RUN_LOCK_TIMEOUT, run.lock())
+            .await
+            .map_err(|_| anyhow!("Timeout acquiring run lock for cancel flush"))?;
+        run.highest_log_level = LogLevel::Fatal;
+        run.status = RunStatus::Stopped;
+        run.end = std::time::SystemTime::now();
+
+        let cancel_log = LogMessage::new("Run cancelled", LogLevel::Fatal, None);
+        if let Some(trace) = run.traces.last_mut() {
+            trace.logs.push(cancel_log);
+        } else {
+            let mut system_trace = Trace::new(
+                run.visited_nodes
+                    .keys()
+                    .next()
+                    .unwrap_or(&"system".to_string()),
+            );
+            system_trace.logs.push(cancel_log);
+            run.traces.push(system_trace);
+        }
+
+        run.prepare_flush(true)?
+    };
+
+    if let Some(prepared) = prepared {
+        let result = prepared.write().await?;
+        if result.created_table {
+            let mut run = flow_like_types::tokio::time::timeout(RUN_LOCK_TIMEOUT, run.lock())
+                .await
+                .map_err(|_| anyhow!("Timeout acquiring run lock after cancel flush"))?;
+            run.log_initialized = true;
+        }
+        Ok(result.meta)
+    } else {
+        Ok(None)
+    }
 }

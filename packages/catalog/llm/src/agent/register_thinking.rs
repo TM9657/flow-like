@@ -28,6 +28,7 @@ impl NodeLogic for RegisterThinkingToolNode {
             "Enables Rig's built-in Thinking tool for reasoning capabilities",
             "AI/Agents/Builder",
         );
+        node.set_version(1);
         node.add_icon("/flow/icons/bot-invoke.svg");
 
         node.set_scores(

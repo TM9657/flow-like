@@ -170,8 +170,9 @@ export class TeamState implements ITeamState {
 		);
 	}
 	async getInvites(offset?: number, limit?: number): Promise<IInvite[]> {
+		// Return empty if not authenticated (invites require auth)
 		if (!this.backend.profile || !this.backend.auth) {
-			throw new Error("Profile or auth context not available");
+			return [];
 		}
 
 		let url = `user/invites`;

@@ -63,37 +63,37 @@ pub async fn add_solution_log(
 
     new_log.insert(&state.db).await?;
 
-    if body.notify_customer {
-        if let Some(mail_client) = &state.mail_client {
-            let frontend_url = std::env::var("FRONTEND_URL").unwrap_or_else(|_| {
-                format!(
-                    "https://{}",
-                    state
-                        .platform_config
-                        .web
-                        .clone()
-                        .unwrap_or_else(|| state.platform_config.domain.clone())
-                )
-            });
-            let tracking_url = format!("{}/solutions/track/{}", frontend_url, solution_id);
-            let (html, text) = solution_log_added(
-                &solution.name,
-                &solution_id,
-                &body.action,
-                body.details.as_deref(),
-                &tracking_url,
-            );
+    if body.notify_customer
+        && let Some(mail_client) = &state.mail_client
+    {
+        let frontend_url = std::env::var("FRONTEND_URL").unwrap_or_else(|_| {
+            format!(
+                "https://{}",
+                state
+                    .platform_config
+                    .web
+                    .clone()
+                    .unwrap_or_else(|| state.platform_config.domain.clone())
+            )
+        });
+        let tracking_url = format!("{}/solutions/track/{}", frontend_url, solution_id);
+        let (html, text) = solution_log_added(
+            &solution.name,
+            &solution_id,
+            &body.action,
+            body.details.as_deref(),
+            &tracking_url,
+        );
 
-            let email = EmailMessage {
-                to: solution.email.clone(),
-                subject: format!("Solution Update: {}", body.action),
-                body_html: Some(html),
-                body_text: Some(text),
-            };
+        let email = EmailMessage {
+            to: solution.email.clone(),
+            subject: format!("Solution Update: {}", body.action),
+            body_html: Some(html),
+            body_text: Some(text),
+        };
 
-            if let Err(e) = mail_client.send(email).await {
-                tracing::warn!(error = %e, "Failed to send log notification email");
-            }
+        if let Err(e) = mail_client.send(email).await {
+            tracing::warn!(error = %e, "Failed to send log notification email");
         }
     }
 

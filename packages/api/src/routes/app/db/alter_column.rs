@@ -8,14 +8,36 @@ use axum::{
 };
 use flow_like_storage::databases::vector::lancedb::LanceDBVectorStore;
 use flow_like_storage::lancedb::table::ColumnAlteration;
+use utoipa::ToSchema;
 
-#[derive(Debug, Clone, serde::Deserialize)]
+#[derive(Debug, Clone, serde::Deserialize, ToSchema)]
 pub struct AlterColumnPayload {
     pub column: String,
     pub rename: Option<String>,
     pub nullable: Option<bool>,
 }
 
+#[utoipa::path(
+    put,
+    path = "/apps/{app_id}/db/{table}/columns",
+    tag = "database",
+    description = "Alter a column name or nullability.",
+    params(
+        ("app_id" = String, Path, description = "Application ID"),
+        ("table" = String, Path, description = "Table name")
+    ),
+    request_body = AlterColumnPayload,
+    responses(
+        (status = 200, description = "Column altered", body = ()),
+        (status = 401, description = "Unauthorized"),
+        (status = 403, description = "Forbidden")
+    ),
+    security(
+        ("bearer_auth" = []),
+        ("api_key" = []),
+        ("pat" = [])
+    )
+)]
 #[tracing::instrument(name = "PUT /apps/{app_id}/db/{table}/columns", skip(state, user))]
 pub async fn alter_column(
     State(state): State<AppState>,

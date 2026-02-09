@@ -30,6 +30,12 @@ pub struct GcpSharedCredentials {
     #[serde(default = "default_write_access")]
     pub write_access: bool,
     pub expiration: Option<chrono::DateTime<chrono::Utc>>,
+    /// App-level content path prefix (e.g., "apps/{app_id}")
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub content_path_prefix: Option<String>,
+    /// User-level content path prefix (e.g., "users/{sub}/apps/{app_id}")
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub user_content_path_prefix: Option<String>,
 }
 
 fn default_write_access() -> bool {
@@ -100,10 +106,17 @@ impl SharedCredentialsTrait for GcpSharedCredentials {
 
     #[tracing::instrument(name = "GcpSharedCredentials::to_db", skip(self), level = "debug")]
     async fn to_db(&self, app_id: &str) -> Result<ConnectBuilder> {
-        let path = Path::from("apps")
-            .child(app_id)
-            .child("storage")
-            .child("db");
+        let base_path = self
+            .content_path_prefix
+            .clone()
+            .or_else(|| {
+                self.allowed_prefixes
+                    .iter()
+                    .find(|prefix| prefix.starts_with("apps/"))
+                    .cloned()
+            })
+            .unwrap_or_else(|| format!("apps/{}", app_id));
+        let path = Path::from(base_path).child("storage").child("db");
 
         // Prefer access token for scoped credentials
         if let Some(ref access_token) = self.access_token
@@ -115,6 +128,41 @@ impl SharedCredentialsTrait for GcpSharedCredentials {
         }
 
         // Fall back to service account key
+        if !self.service_account_key.is_empty() {
+            let connection = make_gcs_builder_with_key(
+                self.content_bucket.clone(),
+                self.service_account_key.clone(),
+            );
+            return Ok(connection(path.clone()));
+        }
+
+        Err(anyhow!("No GCP credentials available"))
+    }
+
+    async fn to_db_scoped(&self, app_id: &str) -> Result<ConnectBuilder> {
+        let inferred_prefix = |prefixes: &Vec<String>, target: &str| {
+            prefixes
+                .iter()
+                .find(|prefix| prefix.starts_with(target))
+                .cloned()
+        };
+
+        let base_path = self
+            .user_content_path_prefix
+            .clone()
+            .or_else(|| inferred_prefix(&self.allowed_prefixes, "users/"))
+            .unwrap_or_else(|| format!("apps/{}", app_id));
+
+        let path = Path::from(base_path).child("storage").child("db");
+
+        if let Some(ref access_token) = self.access_token
+            && !access_token.is_empty()
+        {
+            let connection =
+                make_gcs_builder_with_token(self.content_bucket.clone(), access_token.clone());
+            return Ok(connection(path.clone()));
+        }
+
         if !self.service_account_key.is_empty() {
             let connection = make_gcs_builder_with_key(
                 self.content_bucket.clone(),
@@ -198,6 +246,8 @@ mod tests {
             allowed_prefixes: Vec::new(),
             write_access: true,
             expiration: None,
+            content_path_prefix: None,
+            user_content_path_prefix: None,
         }
     }
 
@@ -211,6 +261,8 @@ mod tests {
             allowed_prefixes: vec!["apps/test-app".to_string()],
             write_access: false,
             expiration: Some(chrono::Utc::now() + chrono::Duration::hours(1)),
+            content_path_prefix: Some("apps/test-app".to_string()),
+            user_content_path_prefix: None,
         }
     }
 

@@ -21,3 +21,27 @@ To specify a variable *type*, open the variables menu, click the variable you wa
 
 To specify a variable *value* (*Single*, *Array*, *Set*, or *Map*), click the pill-shaped color indicator next to *Variable Types*:
 ![A screenshot showing how to set the value of a variable](../../../assets/SetVariableValue.webp)
+
+## Variable Settings
+
+Each variable has additional settings you can configure:
+
+### Editable
+When enabled, the variable can be modified by *Set Variable* nodes during execution.
+
+### Exposed
+When enabled, the variable becomes an input parameter when the board is used as a layer or triggered by an event.
+
+### Secret
+When enabled, the variable's value is masked in the UI. Useful for sensitive data like API keys. Combine with **Runtime Configured** for maximum security.
+
+### Runtime Configured
+When enabled, the variable's value is **not stored in the flow definition**. Instead, you configure it separately in your app's [Runtime Variables settings](/apps/runtime-variables/). This is the recommended approach for:
+- API keys and tokens
+- Passwords and secrets
+- Device-specific configuration
+- Values that differ between team members
+
+:::tip[Keeping Secrets Safe]
+For sensitive data, enable both **Secret** and **Runtime Configured**. This ensures the value is stored locally on your device, never synced to the cloud, and never sent during remote execution. Learn more in the [Runtime Variables guide](/apps/runtime-variables/).
+:::

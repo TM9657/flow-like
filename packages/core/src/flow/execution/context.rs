@@ -13,13 +13,14 @@ use crate::{
         variable::{Variable, VariableType},
     },
     profile::Profile,
-    state::{FlowLikeState, FlowLikeStores, ToastEvent, ToastLevel},
+    state::{FlowLikeState, FlowLikeStores, ProgressEvent, ToastEvent, ToastLevel},
 };
 use ahash::AHashMap;
 use flow_like_model_provider::provider::ModelProviderConfiguration;
 use flow_like_storage::object_store::path::Path;
 use flow_like_types::Value;
 use flow_like_types::intercom::{InterComCallback, InterComEvent};
+use flow_like_types::tokio_util::sync::CancellationToken;
 use flow_like_types::{
     Cacheable,
     json::from_value,
@@ -143,6 +144,7 @@ enum RunUpdateEventMethod {
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
+#[serde(rename_all = "camelCase")]
 struct RunUpdateEvent {
     run_id: String,
     node_ids: Vec<String>,
@@ -174,6 +176,9 @@ pub struct ExecutionContext {
     pub context_pin_overrides: Option<BTreeMap<String, Value>>,
     pub result: Option<Value>,
     pub oauth_tokens: Arc<AHashMap<String, OAuthToken>>,
+    /// User context containing information about who triggered the execution
+    pub user_context: Option<super::UserExecutionContext>,
+    cancellation_token: Option<CancellationToken>,
     run_id: String,
     state: NodeState,
     callback: InterComCallback,
@@ -240,7 +245,18 @@ impl ExecutionContext {
             result: None,
             delegated: false,
             oauth_tokens,
+            cancellation_token: None,
+            user_context: None,
         }
+    }
+    pub fn run_id(&self) -> &str {
+        &self.run_id
+    }
+
+    pub async fn event_id(&self) -> Option<String> {
+        let run = self.run.upgrade()?;
+        let run = run.lock().await;
+        run.event_id.clone()
     }
 
     /// Create ExecutionContext using cached RunMeta to avoid locking Run
@@ -298,6 +314,8 @@ impl ExecutionContext {
             result: None,
             delegated: false,
             oauth_tokens,
+            cancellation_token: None,
+            user_context: None,
         }
     }
 
@@ -332,6 +350,81 @@ impl ExecutionContext {
         }
     }
 
+    /// Set the user execution context
+    pub fn set_user_context(&mut self, user_context: super::UserExecutionContext) {
+        self.user_context = Some(user_context);
+    }
+
+    /// Get the user execution context, returning an error if not set
+    pub fn require_user_context(&self) -> flow_like_types::Result<&super::UserExecutionContext> {
+        self.user_context
+            .as_ref()
+            .ok_or_else(|| flow_like_types::anyhow!("User context not available - this execution was triggered by a sink that does not support user context"))
+    }
+
+    /// Get the user execution context if available
+    pub fn user_context(&self) -> Option<&super::UserExecutionContext> {
+        self.user_context.as_ref()
+    }
+
+    pub fn is_cancelled(&self) -> bool {
+        self.cancellation_token
+            .as_ref()
+            .is_some_and(|t| t.is_cancelled())
+    }
+
+    pub fn check_cancelled(&self) -> flow_like_types::Result<()> {
+        if self.is_cancelled() {
+            return Err(flow_like_types::anyhow!("Execution was cancelled"));
+        }
+        Ok(())
+    }
+
+    /// Run a long-running async operation that can be cancelled.
+    /// If the context's cancellation token is triggered, the operation will be aborted.
+    /// Use this for expensive operations like file parsing, API calls, etc.
+    pub async fn run_cancellable<F, T>(&self, future: F) -> flow_like_types::Result<T>
+    where
+        F: std::future::Future<Output = T> + Send + 'static,
+        T: Send + 'static,
+    {
+        use flow_like_types::tokio;
+
+        if let Some(token) = &self.cancellation_token {
+            // Spawn the future so we can abort it when cancelled
+            let handle = tokio::spawn(future);
+            let abort_handle = handle.abort_handle();
+
+            tokio::select! {
+                biased;
+                _ = token.cancelled() => {
+                    abort_handle.abort();
+                    Err(flow_like_types::anyhow!("Execution was cancelled"))
+                }
+                result = handle => {
+                    result.map_err(|e| {
+                        if e.is_cancelled() {
+                            flow_like_types::anyhow!("Execution was cancelled")
+                        } else {
+                            flow_like_types::anyhow!("Task failed: {}", e)
+                        }
+                    })
+                }
+            }
+        } else {
+            // No cancellation token - just run directly without spawning
+            Ok(future.await)
+        }
+    }
+
+    pub fn get_cancellation_token(&self) -> Option<CancellationToken> {
+        self.cancellation_token.clone()
+    }
+
+    pub fn set_cancellation_token(&mut self, token: CancellationToken) {
+        self.cancellation_token = Some(token);
+    }
+
     pub async fn create_sub_context(&self, node: &Arc<InternalNode>) -> ExecutionContext {
         let mut context = ExecutionContext::new(
             self.nodes.clone(),
@@ -352,6 +445,8 @@ impl ExecutionContext {
         .await;
 
         context.context_pin_overrides = self.context_pin_overrides.clone();
+        context.cancellation_token = self.cancellation_token.clone();
+        context.user_context = self.user_context.clone();
 
         context
     }
@@ -378,6 +473,72 @@ impl ExecutionContext {
             return Ok(payload);
         }
         Err(flow_like_types::anyhow!("Payload not found"))
+    }
+
+    /// Returns the run's payload without checking if this node is the entry point.
+    /// Use this for nodes that need to access payload data (like _elements) regardless
+    /// of where they are in the execution flow.
+    pub async fn get_run_payload(&self) -> flow_like_types::Result<Arc<RunPayload>> {
+        let payload = self
+            .run
+            .upgrade()
+            .ok_or_else(|| flow_like_types::anyhow!("Run not found"))?
+            .lock()
+            .await
+            .payload
+            .clone();
+
+        Ok(payload)
+    }
+
+    /// Returns the frontend elements map from the run payload.
+    /// This is used by A2UI nodes to access element data passed from the frontend.
+    /// Returns None if no elements are available.
+    pub async fn get_frontend_elements(
+        &self,
+    ) -> flow_like_types::Result<Option<flow_like_types::json::Map<String, Value>>> {
+        let payload = self.get_run_payload().await?;
+        let elements = payload
+            .payload
+            .as_ref()
+            .and_then(|p| p.get("_elements"))
+            .and_then(|e| e.as_object())
+            .cloned();
+        Ok(elements)
+    }
+
+    /// Returns the current route from the run payload.
+    pub async fn get_frontend_route(&self) -> flow_like_types::Result<Option<String>> {
+        let payload = self.get_run_payload().await?;
+        let route = payload
+            .payload
+            .as_ref()
+            .and_then(|p| p.get("_route"))
+            .and_then(|v| v.as_str())
+            .map(|s| s.to_string());
+        Ok(route)
+    }
+
+    /// Returns the route parameters from the run payload.
+    pub async fn get_frontend_route_params(&self) -> flow_like_types::Result<Option<Value>> {
+        let payload = self.get_run_payload().await?;
+        let params = payload
+            .payload
+            .as_ref()
+            .and_then(|p| p.get("_route_params"))
+            .cloned();
+        Ok(params)
+    }
+
+    /// Returns the query parameters from the run payload.
+    pub async fn get_frontend_query_params(&self) -> flow_like_types::Result<Option<Value>> {
+        let payload = self.get_run_payload().await?;
+        let params = payload
+            .payload
+            .as_ref()
+            .and_then(|p| p.get("_query_params"))
+            .cloned();
+        Ok(params)
     }
 
     pub async fn hook_completion_event(&mut self, cb: EventTrigger) {
@@ -680,23 +841,34 @@ impl ExecutionContext {
     /// logs are visible to users in real-time.
     pub async fn flush_logs(&mut self) -> flow_like_types::Result<()> {
         let run = self.try_get_run()?;
-        let mut run = run.lock().await;
+        let prepared: Option<super::PreparedFlush> = {
+            let mut run = super::lock_with_timeout(run.as_ref(), "execution_context_run").await?;
 
-        // Push current trace logs to run
-        if !self.trace.logs.is_empty() {
-            let mut trace_copy = self.trace.clone();
-            trace_copy.finish();
-            run.traces.push(trace_copy);
-            self.trace.logs.clear();
+            // Push current trace logs to run
+            if !self.trace.logs.is_empty() {
+                let mut trace_copy = self.trace.clone();
+                trace_copy.finish();
+                run.traces.push(trace_copy);
+                self.trace.logs.clear();
+            }
+
+            // Also push any sub-traces
+            for trace in self.sub_traces.drain(..) {
+                run.traces.push(trace);
+            }
+
+            run.prepare_flush(false)?
+        };
+
+        if let Some(prepared) = prepared {
+            let result = prepared.write().await?;
+            if result.created_table {
+                let mut run =
+                    super::lock_with_timeout(run.as_ref(), "execution_context_mark").await?;
+                run.log_initialized = true;
+            }
         }
 
-        // Also push any sub-traces
-        for trace in self.sub_traces.drain(..) {
-            run.traces.push(trace);
-        }
-
-        // Flush to database
-        run.flush_logs(false).await?;
         Ok(())
     }
 
@@ -755,6 +927,38 @@ impl ExecutionContext {
         Ok(())
     }
 
+    pub async fn progress_message(
+        &mut self,
+        id: &str,
+        message: &str,
+        progress: Option<u8>,
+    ) -> flow_like_types::Result<()> {
+        let event = InterComEvent::with_type("progress", ProgressEvent::new(id, message, progress));
+        if let Err(err) = event.call(&self.callback).await {
+            self.log_message(
+                &format!("Failed to send progress event: {}", err),
+                LogLevel::Error,
+            );
+        }
+        Ok(())
+    }
+
+    pub async fn progress_done(
+        &mut self,
+        id: &str,
+        message: &str,
+        success: bool,
+    ) -> flow_like_types::Result<()> {
+        let event = InterComEvent::with_type("progress", ProgressEvent::done(id, message, success));
+        if let Err(err) = event.call(&self.callback).await {
+            self.log_message(
+                &format!("Failed to send progress done event: {}", err),
+                LogLevel::Error,
+            );
+        }
+        Ok(())
+    }
+
     pub async fn stream_response<T>(
         &mut self,
         event_type: &str,
@@ -763,10 +967,157 @@ impl ExecutionContext {
     where
         T: Serialize + DeserializeOwned,
     {
+        tracing::debug!(event_type = %event_type, "Streaming response event");
         let event = InterComEvent::with_type(event_type, event);
         if let Err(err) = event.call(&self.callback).await {
             self.log_message(&format!("Failed to send event: {}", err), LogLevel::Error);
+            tracing::error!(error = %err, "Failed to send stream event");
+        } else {
+            tracing::debug!(event_type = %event_type, "Successfully sent stream event");
         }
         Ok(())
+    }
+
+    pub async fn stream_a2ui_update(
+        &mut self,
+        message: crate::a2ui::A2UIServerMessage,
+    ) -> flow_like_types::Result<()> {
+        tracing::debug!(message_type = ?message, "Streaming A2UI update");
+        self.stream_response("a2ui", message).await
+    }
+
+    pub async fn stream_a2ui_begin_rendering(
+        &mut self,
+        surface: &crate::a2ui::Surface,
+        data_model: &crate::a2ui::DataModel,
+    ) -> flow_like_types::Result<()> {
+        let message = crate::a2ui::A2UIServerMessage::begin_rendering(surface, data_model);
+        self.stream_a2ui_update(message).await
+    }
+
+    pub async fn stream_a2ui_surface_update(
+        &mut self,
+        surface_id: &str,
+        components: Vec<crate::a2ui::SurfaceComponent>,
+    ) -> flow_like_types::Result<()> {
+        let message = crate::a2ui::A2UIServerMessage::surface_update(surface_id, components);
+        self.stream_a2ui_update(message).await
+    }
+
+    pub async fn stream_a2ui_data_update(
+        &mut self,
+        surface_id: &str,
+        path: Option<String>,
+        value: Value,
+    ) -> flow_like_types::Result<()> {
+        let message = crate::a2ui::A2UIServerMessage::data_update(surface_id, path, value);
+        self.stream_a2ui_update(message).await
+    }
+
+    pub async fn stream_a2ui_delete_surface(
+        &mut self,
+        surface_id: &str,
+    ) -> flow_like_types::Result<()> {
+        let message = crate::a2ui::A2UIServerMessage::delete_surface(surface_id);
+        self.stream_a2ui_update(message).await
+    }
+
+    pub async fn request_elements(
+        &mut self,
+        element_ids: Vec<String>,
+    ) -> flow_like_types::Result<()> {
+        let message = crate::a2ui::A2UIServerMessage::request_elements(element_ids);
+        self.stream_a2ui_update(message).await
+    }
+
+    pub async fn upsert_element(
+        &mut self,
+        element_id: &str,
+        value: Value,
+    ) -> flow_like_types::Result<()> {
+        tracing::info!(element_id = %element_id, value = ?value, "[A2UI] upsert_element called");
+        self.log_message(
+            &format!("[A2UI] upsert_element: {} -> {:?}", element_id, value),
+            LogLevel::Debug,
+        );
+        let message = crate::a2ui::A2UIServerMessage::upsert_element(element_id, value);
+        self.stream_a2ui_update(message).await
+    }
+
+    pub async fn navigate_to(&mut self, route: &str, replace: bool) -> flow_like_types::Result<()> {
+        let message = crate::a2ui::A2UIServerMessage::navigate_to(route, replace);
+        self.stream_a2ui_update(message).await
+    }
+
+    pub async fn create_element(
+        &mut self,
+        surface_id: &str,
+        parent_id: &str,
+        component: crate::a2ui::SurfaceComponent,
+        index: Option<usize>,
+    ) -> flow_like_types::Result<()> {
+        let message =
+            crate::a2ui::A2UIServerMessage::create_element(surface_id, parent_id, component, index);
+        self.stream_a2ui_update(message).await
+    }
+
+    pub async fn remove_element(
+        &mut self,
+        surface_id: &str,
+        element_id: &str,
+    ) -> flow_like_types::Result<()> {
+        let message = crate::a2ui::A2UIServerMessage::remove_element(surface_id, element_id);
+        self.stream_a2ui_update(message).await
+    }
+
+    pub async fn set_global_state(
+        &mut self,
+        key: &str,
+        value: flow_like_types::Value,
+    ) -> flow_like_types::Result<()> {
+        let message = crate::a2ui::A2UIServerMessage::set_global_state(key, value);
+        self.stream_a2ui_update(message).await
+    }
+
+    pub async fn set_page_state(
+        &mut self,
+        page_id: &str,
+        key: &str,
+        value: flow_like_types::Value,
+    ) -> flow_like_types::Result<()> {
+        let message = crate::a2ui::A2UIServerMessage::set_page_state(page_id, key, value);
+        self.stream_a2ui_update(message).await
+    }
+
+    pub async fn clear_page_state(&mut self, page_id: &str) -> flow_like_types::Result<()> {
+        let message = crate::a2ui::A2UIServerMessage::clear_page_state(page_id);
+        self.stream_a2ui_update(message).await
+    }
+
+    pub async fn set_query_param(
+        &mut self,
+        key: &str,
+        value: Option<String>,
+        replace: bool,
+    ) -> flow_like_types::Result<()> {
+        let message = crate::a2ui::A2UIServerMessage::set_query_param(key, value, replace);
+        self.stream_a2ui_update(message).await
+    }
+
+    pub async fn open_dialog(
+        &mut self,
+        route: &str,
+        title: Option<String>,
+        query_params: Option<std::collections::HashMap<String, String>>,
+        dialog_id: Option<String>,
+    ) -> flow_like_types::Result<()> {
+        let message =
+            crate::a2ui::A2UIServerMessage::open_dialog(route, title, query_params, dialog_id);
+        self.stream_a2ui_update(message).await
+    }
+
+    pub async fn close_dialog(&mut self, dialog_id: Option<String>) -> flow_like_types::Result<()> {
+        let message = crate::a2ui::A2UIServerMessage::close_dialog(dialog_id);
+        self.stream_a2ui_update(message).await
     }
 }

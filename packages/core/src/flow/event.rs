@@ -12,7 +12,21 @@ use crate::{
     utils::compression::{compress_to_file, from_compressed},
 };
 
-use super::{board::VersionType, variable::Variable};
+use super::{board::VersionType, pin::PinType, variable::Variable};
+
+/// Simplified input pin metadata for events (used when board can't be fetched)
+#[derive(Serialize, Deserialize, JsonSchema, Clone, Debug)]
+pub struct EventInput {
+    pub id: String,
+    pub name: String,
+    pub friendly_name: String,
+    pub description: String,
+    pub data_type: String,
+    pub value_type: String,
+    pub schema: Option<String>,
+    pub default_value: Option<Vec<u8>>,
+    pub index: u16,
+}
 
 #[derive(Serialize, Deserialize, JsonSchema, Clone, Debug)]
 pub enum ReleaseNotes {
@@ -51,6 +65,21 @@ pub struct Event {
     pub event_version: (u32, u32, u32),
     pub created_at: std::time::SystemTime,
     pub updated_at: std::time::SystemTime,
+
+    // A2UI: default page to render for this event
+    pub default_page_id: Option<String>,
+
+    /// Input pins copied from the node (populated at upsert time)
+    #[serde(default)]
+    pub inputs: Vec<EventInput>,
+
+    /// URL route path that maps to this event (e.g., "/", "/dashboard")
+    #[serde(default)]
+    pub route: Option<String>,
+
+    /// Whether this is the default event/route for the app (shown at "/")
+    #[serde(default)]
+    pub is_default: bool,
 }
 
 #[derive(Serialize, Deserialize, JsonSchema, Clone, Debug)]
@@ -110,6 +139,49 @@ pub fn canary_equal(a: &Option<CanaryEvent>, b: &Option<CanaryEvent>) -> bool {
 }
 
 impl Event {
+    /// Populate the inputs field from the board's node pins
+    pub async fn populate_inputs(&mut self, app: &App) -> flow_like_types::Result<()> {
+        let board = app
+            .open_board(self.board_id.clone(), Some(true), self.board_version)
+            .await?;
+
+        let board_guard = board.lock().await;
+
+        if let Some(node) = board_guard.nodes.get(&self.node_id) {
+            // For page-target events (A2UI/generic form), we need Input pins (what user provides)
+            // For regular events, we need Output pins (what the event produces)
+            let target_pin_type = if self.default_page_id.is_some() {
+                PinType::Input
+            } else {
+                PinType::Output
+            };
+
+            let mut inputs: Vec<EventInput> = node
+                .pins
+                .values()
+                .filter(|pin| {
+                    pin.pin_type == target_pin_type
+                        && pin.data_type != super::variable::VariableType::Execution
+                })
+                .map(|pin| EventInput {
+                    id: pin.id.clone(),
+                    name: pin.name.clone(),
+                    friendly_name: pin.friendly_name.clone(),
+                    description: pin.description.clone(),
+                    data_type: format!("{:?}", pin.data_type),
+                    value_type: format!("{:?}", pin.value_type),
+                    schema: pin.schema.clone(),
+                    default_value: pin.default_value.clone(),
+                    index: pin.index,
+                })
+                .collect();
+            inputs.sort_by_key(|i| i.index);
+            self.inputs = inputs;
+        }
+
+        Ok(())
+    }
+
     pub async fn upsert(
         &mut self,
         app: &App,
@@ -123,6 +195,11 @@ impl Event {
         // If we set an event as deactivated, we do not have to validate the nodes and boards
         if self.active {
             self.validate_event_references(app).await?;
+        }
+
+        // Populate inputs from the board before saving
+        if let Err(e) = self.populate_inputs(app).await {
+            tracing::warn!("Failed to populate event inputs during upsert: {}", e);
         }
 
         let old_event = Event::load(&self.id, app, None).await;
@@ -203,6 +280,11 @@ impl Event {
     }
 
     pub async fn validate_event_references(&self, app: &App) -> flow_like_types::Result<()> {
+        // Page-target events don't require a board/node reference.
+        if self.default_page_id.is_some() {
+            return Ok(());
+        }
+
         let board = app
             .open_board(self.board_id.clone(), Some(false), self.board_version)
             .await?;

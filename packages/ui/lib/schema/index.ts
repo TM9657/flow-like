@@ -27,11 +27,13 @@ export {
 	type IComment,
 	ICommentType,
 	IExecutionStage,
+	IExecutionMode,
 	ILogLevel,
 	type ISystemTime,
 } from "./flow/board";
 export type {
 	IEvent,
+	IEventInput,
 	ICanaryEvent,
 	IReleaseNotes,
 } from "./flow/event";
@@ -87,3 +89,13 @@ export type {
 export * from "./profile/profile";
 export * from "./app/app";
 export * from "./solution/solution";
+export * from "./sink";
+
+// A2UI Copilot types
+export * from "./a2ui/copilot";
+// Unified Copilot types
+export * from "./copilot";
+// WASM Package types
+export * from "./wasm";
+// Usage tracking types
+export * from "./usage";

@@ -14,12 +14,38 @@ use axum::{
 use flow_like_storage::Path as FlowPath;
 use flow_like_types::{anyhow, create_id};
 use sea_orm::{ActiveModelTrait, ActiveValue::Set, TransactionTrait};
+use utoipa::ToSchema;
 
-#[derive(Debug, serde::Serialize)]
+#[derive(Debug, serde::Serialize, ToSchema)]
 pub struct PushMediaResponse {
     pub signed_url: String,
 }
 
+#[utoipa::path(
+    put,
+    path = "/apps/{app_id}/meta/media",
+    tag = "meta",
+    description = "Get a signed upload URL for metadata media.",
+    params(
+        ("app_id" = String, Path, description = "Application ID"),
+        ("language" = Option<String>, Query, description = "Language code (default en)"),
+        ("template_id" = Option<String>, Query, description = "Template ID"),
+        ("course_id" = Option<String>, Query, description = "Course ID"),
+        ("item" = String, Query, description = "Media item: icon, thumbnail, preview"),
+        ("extension" = String, Query, description = "File extension (e.g. png, webp)")
+    ),
+    responses(
+        (status = 200, description = "Signed upload URL", body = PushMediaResponse),
+        (status = 401, description = "Unauthorized"),
+        (status = 403, description = "Forbidden"),
+        (status = 404, description = "Not found")
+    ),
+    security(
+        ("bearer_auth" = []),
+        ("api_key" = []),
+        ("pat" = [])
+    )
+)]
 #[tracing::instrument(name = "PUT /apps/{app_id}/meta/media", skip(state, user))]
 pub async fn push_media(
     State(state): State<AppState>,
@@ -36,7 +62,7 @@ pub async fn push_media(
     let existing_meta = mode
         .find_existing_meta(language, &txn)
         .await?
-        .ok_or_else(|| ApiError::NotFound)?;
+        .ok_or(ApiError::NOT_FOUND)?;
 
     let mut existing_preview = existing_meta.preview_media.clone().unwrap_or_default();
 
@@ -97,9 +123,7 @@ pub async fn push_media(
                 item_name,
                 e
             );
-            ApiError::InternalError(
-                anyhow!("Failed to create signed URL, reference ID: {}", id).into(),
-            )
+            ApiError::internal_error(anyhow!("Failed to create signed URL, reference ID: {}", id))
         })?;
 
     txn.commit().await?;

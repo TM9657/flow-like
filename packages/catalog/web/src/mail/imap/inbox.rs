@@ -4,7 +4,11 @@ use flow_like::flow::{
     pin::{PinOptions, ValueType},
     variable::VariableType,
 };
+#[cfg(feature = "execute")]
 use flow_like_types::{async_trait, bail, json::json};
+#[cfg(not(feature = "execute"))]
+use flow_like_types::{async_trait, json::json};
+#[cfg(feature = "execute")]
 use futures::TryStreamExt;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -83,6 +87,7 @@ impl NodeLogic for ImapInboxNode {
         node
     }
 
+    #[cfg(feature = "execute")]
     async fn run(&self, context: &mut ExecutionContext) -> flow_like_types::Result<()> {
         context.deactivate_exec_pin("exec_out").await?;
 
@@ -95,6 +100,13 @@ impl NodeLogic for ImapInboxNode {
 
         context.activate_exec_pin("exec_out").await?;
         Ok(())
+    }
+
+    #[cfg(not(feature = "execute"))]
+    async fn run(&self, _context: &mut ExecutionContext) -> flow_like_types::Result<()> {
+        Err(flow_like_types::anyhow!(
+            "Web functionality requires the 'execute' feature"
+        ))
     }
 }
 
@@ -156,6 +168,7 @@ impl NodeLogic for ImapListInboxesNode {
         node
     }
 
+    #[cfg(feature = "execute")]
     async fn run(&self, context: &mut ExecutionContext) -> flow_like_types::Result<()> {
         context.deactivate_exec_pin("exec_out").await?;
 
@@ -185,6 +198,13 @@ impl NodeLogic for ImapListInboxesNode {
 
         context.activate_exec_pin("exec_out").await?;
         Ok(())
+    }
+
+    #[cfg(not(feature = "execute"))]
+    async fn run(&self, _context: &mut ExecutionContext) -> flow_like_types::Result<()> {
+        Err(flow_like_types::anyhow!(
+            "Web functionality requires the 'execute' feature"
+        ))
     }
 }
 
@@ -252,6 +272,7 @@ impl NodeLogic for ImapCreateMailboxNode {
         node
     }
 
+    #[cfg(feature = "execute")]
     async fn run(&self, context: &mut ExecutionContext) -> flow_like_types::Result<()> {
         // Deactivate both exec outs up front
         context.deactivate_exec_pin("exec_out").await?;
@@ -287,5 +308,12 @@ impl NodeLogic for ImapCreateMailboxNode {
 
         context.activate_exec_pin("exec_out").await?;
         Ok(())
+    }
+
+    #[cfg(not(feature = "execute"))]
+    async fn run(&self, _context: &mut ExecutionContext) -> flow_like_types::Result<()> {
+        Err(flow_like_types::anyhow!(
+            "Web functionality requires the 'execute' feature"
+        ))
     }
 }

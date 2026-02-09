@@ -34,7 +34,7 @@ export function VarVariable({
 	]);
 
 	return (
-		<div className="flex flex-row items-center justify-start w-fit ml-1">
+		<div className="flex flex-row items-center justify-start max-w-full ml-1 overflow-hidden">
 			<Select
 				defaultValue={parseUint8ArrayToJson(value)}
 				value={parseUint8ArrayToJson(value)}
@@ -43,15 +43,15 @@ export function VarVariable({
 				<SelectTrigger
 					noChevron
 					size="sm"
-					className="!w-fit !max-w-fit p-0 border-0 text-xs !bg-card text-nowrap text-start max-h-fit h-4 gap-0.5 flex-row items-center"
+					className="w-fit! max-w-full! p-0 border-0 text-xs bg-card! text-start max-h-fit h-4 gap-0.5 flex-row items-center overflow-hidden"
 				>
-					<small className="text-nowrap text-start text-[10px] !m-0 w-fit">
+					<small className="text-start text-[10px] m-0! truncate">
 						{!board.data && "Loading..."}
 						{board.data &&
 							(board?.data?.variables?.[parseUint8ArrayToJson(value)]?.name ??
 								"No Variable Selected")}
 					</small>
-					<ChevronDown className="size-2 min-w-2 min-h-2 text-card-foreground" />
+					<ChevronDown className="size-2 min-w-2 min-h-2 text-card-foreground shrink-0" />
 				</SelectTrigger>
 				<SelectContent className="bg-background">
 					<SelectGroup>

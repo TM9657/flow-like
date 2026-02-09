@@ -1,10 +1,10 @@
 ---
-title: Read Barcodes
-description: Detects and decodes barcodes from images.
+title: Read QR-/Barcode
+description: Detects and decodes QR codes and barcodes from images.
 ---
 
 ## Purpose of the Node
-This node is designed to read and decode barcodes from an input image. It can detect multiple barcodes of various types and return the results.
+This node reads and decodes QR codes and barcodes from an input image. It can detect multiple codes of various types and return the results.
 
 ## Pins
 | Pin Name | Pin Description | Pin Type | Value Type |

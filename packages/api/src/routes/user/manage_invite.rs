@@ -18,6 +18,21 @@ use sea_orm::{
     TransactionTrait,
 };
 
+#[utoipa::path(
+    delete,
+    path = "/user/invites/{invite_id}",
+    tag = "user",
+    params(
+        ("invite_id" = String, Path, description = "Invitation ID to reject")
+    ),
+    responses(
+        (status = 200, description = "Invitation rejected"),
+        (status = 401, description = "Unauthorized")
+    ),
+    security(
+        ("bearer_auth" = [])
+    )
+)]
 #[tracing::instrument(name = "DELETE /user/invites/{invite_id}", skip(state, user))]
 pub async fn reject_invite(
     State(state): State<AppState>,
@@ -35,6 +50,23 @@ pub async fn reject_invite(
     Ok(Json(()))
 }
 
+#[utoipa::path(
+    post,
+    path = "/user/invites/{invite_id}",
+    tag = "user",
+    params(
+        ("invite_id" = String, Path, description = "Invitation ID to accept")
+    ),
+    responses(
+        (status = 200, description = "Invitation accepted"),
+        (status = 401, description = "Unauthorized"),
+        (status = 403, description = "Forbidden - app is private or user limit reached"),
+        (status = 404, description = "Invitation not found")
+    ),
+    security(
+        ("bearer_auth" = [])
+    )
+)]
 #[tracing::instrument(name = "POST /user/invites/{invite_id}", skip(state, user))]
 pub async fn accept_invite(
     State(state): State<AppState>,
@@ -52,10 +84,10 @@ pub async fn accept_invite(
         .find_also_related(app::Entity)
         .one(&txn)
         .await?
-        .ok_or_else(|| ApiError::NotFound)?;
+        .ok_or(ApiError::NOT_FOUND)?;
 
-    let app = app.ok_or_else(|| ApiError::NotFound)?;
-    let default_role = app.default_role_id.ok_or_else(|| ApiError::NotFound)?;
+    let app = app.ok_or(ApiError::NOT_FOUND)?;
+    let default_role = app.default_role_id.ok_or(ApiError::NOT_FOUND)?;
 
     if matches!(app.visibility, Visibility::Offline | Visibility::Private) {
         tracing::warn!(
@@ -63,7 +95,7 @@ pub async fn accept_invite(
             sub,
             app.id
         );
-        return Err(ApiError::Forbidden);
+        return Err(ApiError::FORBIDDEN);
     }
 
     if max_prototype > 0 && app.visibility == Visibility::Prototype {
@@ -78,7 +110,7 @@ pub async fn accept_invite(
                 sub,
                 app.id
             );
-            return Err(ApiError::Forbidden);
+            return Err(ApiError::FORBIDDEN);
         }
     }
 

@@ -14,11 +14,14 @@
 
 use crate::{
     ensure_permission,
-    entity::{execution_run, prelude::*},
+    entity::{
+        execution_run,
+        sea_orm_active_enums::{RunMode, RunStatus},
+    },
     error::ApiError,
     execution::{
-        DispatchRequest, ExecutionJwtParams, TokenType, is_jwt_configured, payload_storage,
-        sign_execution_jwt,
+        DispatchRequest, ExecutionJwtParams, TokenType, fetch_profile_for_dispatch,
+        is_jwt_configured, payload_storage, sign_execution_jwt,
     },
     middleware::jwt::AppUser,
     permission::role_permission::RolePermissions,
@@ -31,9 +34,12 @@ use axum::{
 use flow_like_types::{anyhow, create_id};
 use sea_orm::{ActiveModelTrait, ActiveValue::Set};
 use serde::{Deserialize, Serialize};
+use utoipa::ToSchema;
+
+use super::db::get_event_from_db;
 
 /// Request body for async event invocation
-#[derive(Clone, Debug, Deserialize)]
+#[derive(Clone, Debug, Deserialize, ToSchema)]
 pub struct InvokeEventAsyncRequest {
     /// Optional board version to execute (defaults to latest)
     pub version: Option<String>,
@@ -43,10 +49,16 @@ pub struct InvokeEventAsyncRequest {
     pub token: Option<String>,
     /// OAuth tokens keyed by provider name
     pub oauth_tokens: Option<std::collections::HashMap<String, serde_json::Value>>,
+    /// Runtime-configured variables to override board variables
+    #[schema(value_type = Option<Object>)]
+    pub runtime_variables:
+        Option<std::collections::HashMap<String, flow_like::flow::variable::Variable>>,
+    /// Optional profile ID to select a specific user profile for execution
+    pub profile_id: Option<String>,
 }
 
 /// Response from async event invocation
-#[derive(Clone, Debug, Serialize)]
+#[derive(Clone, Debug, Serialize, ToSchema)]
 pub struct InvokeEventAsyncResponse {
     /// Unique run ID (use this to track progress)
     pub run_id: String,
@@ -68,6 +80,28 @@ fn get_credentials_access() -> crate::credentials::CredentialsAccess {
 ///
 /// Invoke async execution of an event workflow via queue.
 /// Uses EXECUTION_BACKEND env var to determine queue (redis, sqs, kafka).
+#[utoipa::path(
+    post,
+    path = "/apps/{app_id}/events/{event_id}/invoke/async",
+    tag = "events",
+    description = "Invoke an event asynchronously via queue.",
+    params(
+        ("app_id" = String, Path, description = "Application ID"),
+        ("event_id" = String, Path, description = "Event ID")
+    ),
+    request_body = InvokeEventAsyncRequest,
+    responses(
+        (status = 200, description = "Async invocation result", body = InvokeEventAsyncResponse),
+        (status = 400, description = "Bad request"),
+        (status = 401, description = "Unauthorized"),
+        (status = 403, description = "Forbidden")
+    ),
+    security(
+        ("bearer_auth" = []),
+        ("api_key" = []),
+        ("pat" = [])
+    )
+)]
 #[tracing::instrument(
     name = "POST /apps/{app_id}/events/{event_id}/invoke/async",
     skip(state, user, params)
@@ -81,17 +115,16 @@ pub async fn invoke_event_async(
     let permission = ensure_permission!(user, &app_id, &state, RolePermissions::ExecuteEvents);
     let sub = permission.sub()?;
 
-    // Get the event to find the associated board + serialize for executor
-    let app = state.master_app(&sub, &app_id, &state).await?;
-    let event = app.get_event(&event_id, None).await?;
+    // Get the event from database
+    let event = get_event_from_db(&state.db, &event_id).await?;
     let board_id = event.board_id.clone();
     let event_json =
         serde_json::to_string(&event).map_err(|e| anyhow!("Failed to serialize event: {}", e))?;
 
     if !is_jwt_configured() {
-        return Err(ApiError::InternalError(
-            anyhow!("Execution JWT signing not configured (missing EXECUTION_KEY/EXECUTION_PUB env vars)").into()
-        ));
+        return Err(ApiError::internal_error(anyhow!(
+            "Execution JWT signing not configured (missing EXECUTION_KEY/EXECUTION_PUB env vars)"
+        )));
     }
 
     let run_id = create_id();
@@ -109,21 +142,19 @@ pub async fn invoke_event_async(
 
     // Store payload in object storage if present (enables re-run)
     let input_payload_key = if let Some(ref payload) = params.payload {
-        let payload_bytes = serde_json::to_vec(payload).map_err(|e| {
-            ApiError::InternalError(anyhow!("Failed to serialize payload: {}", e).into())
-        })?;
+        let payload_bytes = serde_json::to_vec(payload)
+            .map_err(|e| ApiError::internal_error(anyhow!("Failed to serialize payload: {}", e)))?;
         let master_creds = state.master_credentials().await.map_err(|e| {
-            ApiError::InternalError(anyhow!("Failed to get master credentials: {}", e).into())
+            ApiError::internal_error(anyhow!("Failed to get master credentials: {}", e))
         })?;
-        let store = master_creds.to_store(false).await.map_err(|e| {
-            ApiError::InternalError(anyhow!("Failed to get object store: {}", e).into())
-        })?;
+        let store = master_creds
+            .to_store(false)
+            .await
+            .map_err(|e| ApiError::internal_error(anyhow!("Failed to get object store: {}", e)))?;
         let stored =
             payload_storage::store_payload(store.as_generic(), &app_id, &run_id, &payload_bytes)
                 .await
-                .map_err(|e| {
-                    ApiError::InternalError(anyhow!("Failed to store payload: {}", e).into())
-                })?;
+                .map_err(|e| ApiError::internal_error(anyhow!("Failed to store payload: {}", e)))?;
         Some(stored.key)
     } else {
         None
@@ -136,8 +167,8 @@ pub async fn invoke_event_async(
         version: Set(params.version.clone()),
         event_id: Set(Some(event_id.clone())),
         node_id: Set(Some(event.id.clone())),
-        status: Set(execution_run::RunStatus::Pending),
-        mode: Set(execution_run::RunMode::Queue),
+        status: Set(RunStatus::Pending),
+        mode: Set(RunMode::Queue),
         input_payload_len: Set(input_payload_len),
         input_payload_key: Set(input_payload_key),
         output_payload_len: Set(0),
@@ -156,7 +187,7 @@ pub async fn invoke_event_async(
 
     run.insert(&state.db).await.map_err(|e| {
         tracing::error!(error = %e, "Failed to create run record");
-        ApiError::InternalError(anyhow!("Failed to create run record: {}", e).into())
+        ApiError::internal_error(anyhow!("Failed to create run record: {}", e))
     })?;
 
     let poll_token = sign_execution_jwt(ExecutionJwtParams {
@@ -171,7 +202,7 @@ pub async fn invoke_event_async(
     })
     .map_err(|e| {
         tracing::error!(error = %e, "Failed to sign user JWT");
-        ApiError::InternalError(anyhow!("Failed to sign user JWT: {}", e).into())
+        ApiError::internal_error(anyhow!("Failed to sign user JWT: {}", e))
     })?;
 
     // Get scoped credentials based on user permissions
@@ -198,8 +229,11 @@ pub async fn invoke_event_async(
     })
     .map_err(|e| {
         tracing::error!(error = %e, "Failed to sign executor JWT");
-        ApiError::InternalError(anyhow!("Failed to sign executor JWT: {}", e).into())
+        ApiError::internal_error(anyhow!("Failed to sign executor JWT: {}", e))
     })?;
+
+    let profile =
+        fetch_profile_for_dispatch(&state.db, &sub, params.profile_id.as_deref(), &app_id).await;
 
     let request = DispatchRequest {
         run_id: run_id.clone(),
@@ -216,6 +250,9 @@ pub async fn invoke_event_async(
         token: params.token,
         oauth_tokens: params.oauth_tokens,
         stream_state: false,
+        runtime_variables: params.runtime_variables,
+        user_context: Some(permission.to_user_context()),
+        profile,
     };
 
     let response = state
@@ -224,7 +261,7 @@ pub async fn invoke_event_async(
         .await
         .map_err(|e| {
             tracing::error!(error = %e, "Failed to dispatch job to queue");
-            ApiError::InternalError(anyhow!("Failed to dispatch job: {}", e).into())
+            ApiError::internal_error(anyhow!("Failed to dispatch job: {}", e))
         })?;
 
     Ok(Json(InvokeEventAsyncResponse {

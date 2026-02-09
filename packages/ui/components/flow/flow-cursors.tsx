@@ -2,20 +2,27 @@
 import { useStore } from "@xyflow/react";
 import { ArrowRight } from "lucide-react";
 import { memo, useMemo } from "react";
+import {
+	type PeerUserInfo,
+	colorFromSub,
+	truncateName,
+} from "../../hooks/use-peer-users";
 import { Avatar, AvatarFallback, AvatarImage } from "../ui/avatar";
 
 interface CursorPeer {
 	clientId: number;
 	cursor?: { x: number; y: number };
-	user: { id?: string; name: string; color: string; avatar?: string };
+	/** The sub (subject) from the auth token */
+	sub?: string;
 	layerPath: string;
 }
 
 interface CursorDisplay {
 	key: string;
-	name: string;
+	sub?: string;
 	color: string;
-	avatar?: string;
+	name: string;
+	avatarUrl?: string;
 	x: number;
 	y: number;
 	offScreen: boolean;
@@ -79,10 +86,13 @@ function calculateEdgePosition(
 export const FlowCursors = memo(function FlowCursors({
 	peers,
 	currentLayerPath,
+	peerUsers,
 	className,
 }: {
 	peers: CursorPeer[];
 	currentLayerPath: string;
+	/** Map of sub -> user info for displaying names */
+	peerUsers: Map<string, PeerUserInfo>;
 	className?: string;
 }) {
 	const transform = useStore((state) => state.transform);
@@ -118,11 +128,15 @@ export const FlowCursors = memo(function FlowCursors({
 						)
 					: undefined;
 
+				// Get user info from cache
+				const userInfo = peer.sub ? peerUsers.get(peer.sub) : undefined;
+
 				return {
-					key: `${peer.user.id ?? "user"}-${peer.clientId}`,
-					name: peer.user.name,
-					color: peer.user.color,
-					avatar: peer.user.avatar,
+					key: `${peer.sub ?? "user"}-${peer.clientId}`,
+					sub: peer.sub,
+					color: userInfo?.color ?? colorFromSub(peer.sub),
+					name: userInfo?.truncatedName ?? truncateName(peer.sub?.slice(-8)),
+					avatarUrl: userInfo?.avatarUrl,
 					x: screenX,
 					y: screenY,
 					offScreen,
@@ -131,7 +145,7 @@ export const FlowCursors = memo(function FlowCursors({
 					angle: edge?.angle,
 				} satisfies CursorDisplay;
 			});
-	}, [peers, currentLayerPath, tx, ty, zoom]);
+	}, [peers, currentLayerPath, tx, ty, zoom, peerUsers]);
 
 	return (
 		<div
@@ -155,9 +169,9 @@ const EdgeIndicator = memo(function EdgeIndicator({
 }: {
 	cursor: {
 		key: string;
-		name: string;
 		color: string;
-		avatar?: string;
+		name: string;
+		avatarUrl?: string;
 		edgeX?: number;
 		edgeY?: number;
 		angle?: number;
@@ -167,33 +181,52 @@ const EdgeIndicator = memo(function EdgeIndicator({
 
 	return (
 		<div
-			className="absolute"
+			className="absolute transition-transform duration-150 ease-out"
 			style={{ transform: `translate(${cursor.edgeX}px, ${cursor.edgeY}px)` }}
 		>
 			<div
-				className="flex items-center gap-1.5 rounded-full border bg-card/95 px-2 py-1.5 shadow-lg backdrop-blur-sm animate-pulse"
-				style={{ borderColor: cursor.color }}
+				className="flex items-center gap-2 rounded-full border-2 bg-background/90 pl-1 pr-2.5 py-1.5 shadow-xl backdrop-blur-md ring-1 ring-white/20 animate-pulse"
+				style={{
+					borderColor: cursor.color,
+					boxShadow: `0 4px 20px -4px ${cursor.color}50, 0 8px 16px -8px rgba(0,0,0,0.3)`,
+				}}
 			>
 				<Avatar
-					className="h-4 w-4 border"
+					className="h-5 w-5 ring-2 ring-white/50 shadow-sm"
 					style={{ borderColor: cursor.color }}
 				>
-					<AvatarImage src={cursor.avatar} alt={cursor.name} />
+					{cursor.avatarUrl && (
+						<AvatarImage src={cursor.avatarUrl} className="object-cover" />
+					)}
 					<AvatarFallback
-						className="text-[8px] font-semibold"
-						style={{ backgroundColor: cursor.color, color: "white" }}
+						className="text-[9px] font-bold"
+						style={{
+							background: `linear-gradient(135deg, ${cursor.color}, ${cursor.color}dd)`,
+							color: "white",
+							textShadow: "0 1px 2px rgba(0,0,0,0.2)",
+						}}
 					>
-						{cursor.name.slice(0, 2).toUpperCase()}
+						{cursor.name.charAt(0).toUpperCase()}
 					</AvatarFallback>
 				</Avatar>
+				<span
+					className="text-xs font-semibold max-w-20 truncate tracking-tight"
+					style={{
+						color: cursor.color,
+						textShadow: `0 0 20px ${cursor.color}30`,
+					}}
+				>
+					{cursor.name}
+				</span>
 				<ArrowRight
-					className="h-3 w-3"
+					className="h-3.5 w-3.5 transition-transform"
 					style={{
 						color: cursor.color,
 						transform:
 							cursor.angle !== undefined
 								? `rotate(${cursor.angle}rad)`
 								: undefined,
+						filter: `drop-shadow(0 0 4px ${cursor.color}50)`,
 					}}
 				/>
 			</div>
@@ -206,37 +239,52 @@ const RemoteCursor = memo(function RemoteCursor({
 }: {
 	cursor: {
 		key: string;
-		name: string;
 		color: string;
-		avatar?: string;
+		name: string;
+		avatarUrl?: string;
 		x: number;
 		y: number;
 	};
 }) {
 	return (
 		<div
-			className="absolute"
+			className="absolute transition-transform duration-75 ease-out"
 			style={{ transform: `translate(${cursor.x}px, ${cursor.y}px)` }}
 		>
-			<div className="flex items-start gap-1.5 select-none">
+			<div className="flex items-start gap-0.5 select-none">
 				<CursorPointer color={cursor.color} />
 				<div
-					className="flex items-center gap-1.5 rounded-full border bg-card/95 px-2 py-1 shadow-lg backdrop-blur-sm"
-					style={{ borderColor: cursor.color }}
+					className="flex items-center gap-2 rounded-full border-2 bg-background/90 pl-1 pr-2.5 py-1 shadow-xl backdrop-blur-md ring-1 ring-white/20 transition-all duration-150"
+					style={{
+						borderColor: cursor.color,
+						boxShadow: `0 4px 20px -4px ${cursor.color}40, 0 8px 16px -8px rgba(0,0,0,0.3)`,
+					}}
 				>
 					<Avatar
-						className="h-4 w-4 border"
+						className="h-5 w-5 ring-2 ring-white/50 shadow-sm"
 						style={{ borderColor: cursor.color }}
 					>
-						<AvatarImage src={cursor.avatar} alt={cursor.name} />
+						{cursor.avatarUrl && (
+							<AvatarImage src={cursor.avatarUrl} className="object-cover" />
+						)}
 						<AvatarFallback
-							className="text-[8px] font-semibold"
-							style={{ backgroundColor: cursor.color, color: "white" }}
+							className="text-[9px] font-bold"
+							style={{
+								background: `linear-gradient(135deg, ${cursor.color}, ${cursor.color}dd)`,
+								color: "white",
+								textShadow: "0 1px 2px rgba(0,0,0,0.2)",
+							}}
 						>
-							{cursor.name.slice(0, 2).toUpperCase()}
+							{cursor.name.charAt(0).toUpperCase()}
 						</AvatarFallback>
 					</Avatar>
-					<span className="text-[10px] font-medium leading-none">
+					<span
+						className="text-xs font-semibold max-w-24 truncate tracking-tight"
+						style={{
+							color: cursor.color,
+							textShadow: `0 0 20px ${cursor.color}30`,
+						}}
+					>
 						{cursor.name}
 					</span>
 				</div>
@@ -250,18 +298,19 @@ const CursorPointer = memo(function CursorPointer({
 }: { color: string }) {
 	return (
 		<svg
-			width="20"
-			height="20"
-			viewBox="0 0 20 20"
+			width="24"
+			height="24"
+			viewBox="0 0 24 24"
 			fill="none"
 			xmlns="http://www.w3.org/2000/svg"
-			className="drop-shadow-md"
+			className="drop-shadow-lg"
+			style={{ filter: `drop-shadow(0 2px 4px ${color}50)` }}
 		>
 			<path
-				d="M3.5 2.5L16.5 10L9.5 11.5L6 18L3.5 2.5Z"
+				d="M4 3L19 12L11 13.5L7 21L4 3Z"
 				fill={color}
 				stroke="white"
-				strokeWidth="1.5"
+				strokeWidth="2"
 				strokeLinejoin="round"
 			/>
 		</svg>

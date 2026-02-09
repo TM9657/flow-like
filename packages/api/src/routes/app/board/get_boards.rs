@@ -8,6 +8,18 @@ use axum::{
 };
 use flow_like::flow::board::Board;
 
+#[utoipa::path(
+    get,
+    path = "/apps/{app_id}/board",
+    tag = "boards",
+    params(
+        ("app_id" = String, Path, description = "Application ID")
+    ),
+    responses(
+        (status = 200, description = "List of boards in the application", body = Vec<Object>),
+        (status = 401, description = "Unauthorized")
+    )
+)]
 #[tracing::instrument(name = "GET /apps/{app_id}/board", skip(state, user))]
 pub async fn get_boards(
     State(state): State<AppState>,
@@ -23,7 +35,13 @@ pub async fn get_boards(
     for board_id in app.boards.iter() {
         let board = app.open_board(board_id.clone(), Some(false), None).await;
         if let Ok(board) = board {
-            boards.push(board.lock().await.clone());
+            let mut board = board.lock().await.clone();
+            board.variables.iter_mut().for_each(|(_id, var)| {
+                if var.secret {
+                    var.default_value = None;
+                }
+            });
+            boards.push(board);
         }
     }
 

@@ -16,7 +16,64 @@ local-ml = [
     "flow-like-catalog-llm/local-ml",
     "flow-like-catalog-processing/local-ml",
 ]
+remote-ml = [
+    "flow-like-catalog-core/remote-ml",
+    "flow-like-catalog-llm/remote-ml",
+]
 mimalloc = ["dep:mimalloc"]
+
+
+# Execution feature - enables heavy dependencies for node execution
+# APIs that only serve catalog metadata should NOT enable this
+execute = [
+    "flow-like-catalog-core/execute",
+    "flow-like-catalog-std/execute",
+    "flow-like-catalog-data/execute",
+    "flow-like-catalog-web/execute",
+    "flow-like-catalog-media/execute",
+    "flow-like-catalog-ml/execute",
+    "flow-like-catalog-onnx/execute",
+    "flow-like-catalog-llm/execute",
+    "flow-like-catalog-processing/execute",
+    "flow-like-catalog-geo/execute"
+]
+
+# Data lake formats
+delta = ["flow-like-catalog-data/delta"]
+iceberg = ["flow-like-catalog-data/iceberg"]
+all-lakes = ["delta", "iceberg"]
+
+# Database providers
+postgres = ["flow-like-catalog-data/postgres"]
+mysql = ["flow-like-catalog-data/mysql"]
+sqlite = ["flow-like-catalog-data/sqlite"]
+duckdb = ["flow-like-catalog-data/duckdb"]
+clickhouse = ["flow-like-catalog-data/clickhouse"]
+flight = ["flow-like-catalog-data/flight"]
+odbc = ["flow-like-catalog-data/odbc"]
+# ODBC excluded by default - requires system library (unixodbc on macOS/Linux)
+all-databases = ["postgres", "mysql", "sqlite", "duckdb", "clickhouse", "flight"]
+all-databases-with-odbc = ["all-databases", "odbc"]
+
+# Federation support
+federation = ["flow-like-catalog-data/federation"]
+postgres-federation = ["flow-like-catalog-data/postgres-federation"]
+mysql-federation = ["flow-like-catalog-data/mysql-federation"]
+sqlite-federation = ["flow-like-catalog-data/sqlite-federation"]
+duckdb-federation = ["flow-like-catalog-data/duckdb-federation"]
+clickhouse-federation = ["flow-like-catalog-data/clickhouse-federation"]
+odbc-federation = ["flow-like-catalog-data/odbc-federation"]
+# ODBC excluded by default - requires system library (unixodbc on macOS/Linux)
+all-databases-federation = ["postgres-federation", "mysql-federation", "sqlite-federation", "duckdb-federation", "clickhouse-federation"]
+all-databases-federation-with-odbc = ["all-databases-federation", "odbc-federation"]
+
+# Full feature bundle (all databases + federation + data lakes) - catalog metadata only
+# ODBC excluded by default to avoid runtime crashes if unixodbc is not installed
+all = ["all-lakes", "all-databases", "all-databases-federation"]
+all-with-odbc = ["all-lakes", "all-databases-with-odbc", "all-databases-federation-with-odbc"]
+
+# Full with execution (for executors and desktop app)
+all-execute = ["all", "execute"]
 
 [dependencies]
 flow-like-catalog-core.workspace = true
@@ -28,7 +85,9 @@ flow-like-catalog-ml.workspace = true
 flow-like-catalog-onnx.workspace = true
 flow-like-catalog-llm.workspace = true
 flow-like-catalog-processing.workspace = true
+flow-like-catalog-geo.workspace = true
 mimalloc = { workspace = true, optional = true }
+tracing.workspace = true
 
 [dev-dependencies]
 criterion = { version = "0.7", features = ["html_reports", "async_tokio"] }

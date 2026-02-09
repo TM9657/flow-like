@@ -6,9 +6,13 @@ export interface IEvent {
 	config: number[];
 	created_at: ISystemTime;
 	description: string;
+	/** A2UI: default page to render for this event (page-target events). */
+	default_page_id?: string | null;
 	event_type: string;
 	event_version: number[];
 	id: string;
+	/** Input pins copied from the node */
+	inputs?: IEventInput[];
 	name: string;
 	node_id: string;
 	notes?: IReleaseNotes | null;
@@ -16,6 +20,19 @@ export interface IEvent {
 	updated_at: ISystemTime;
 	variables: { [key: string]: IVariable };
 	[property: string]: any;
+}
+
+/** Simplified input pin metadata for events */
+export interface IEventInput {
+	id: string;
+	name: string;
+	friendly_name: string;
+	description: string;
+	data_type: string;
+	value_type: string;
+	schema?: string | null;
+	default_value?: number[] | null;
+	index: number;
 }
 
 export interface ICanaryEvent {
@@ -45,6 +62,7 @@ export interface IVariable {
 	hash?: number | null;
 	id: string;
 	name: string;
+	schema?: null | string;
 	secret: boolean;
 	value_type: IValueType;
 	[property: string]: any;

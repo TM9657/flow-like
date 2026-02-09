@@ -12,12 +12,34 @@ use flow_like_types::create_id;
 use sea_orm::{
     ActiveModelTrait, ActiveValue::Set, ColumnTrait, EntityTrait, QueryFilter, TransactionTrait,
 };
+use utoipa::ToSchema;
 
-#[derive(Debug, Clone, serde::Deserialize)]
+#[derive(Debug, Clone, serde::Deserialize, ToSchema)]
 pub struct RequestJoinParams {
     pub comment: Option<String>,
 }
 
+#[utoipa::path(
+    put,
+    path = "/apps/{app_id}/team/queue",
+    tag = "team",
+    description = "Request to join an app.",
+    params(
+        ("app_id" = String, Path, description = "Application ID")
+    ),
+    request_body = RequestJoinParams,
+    responses(
+        (status = 200, description = "Join request submitted", body = ()),
+        (status = 401, description = "Unauthorized"),
+        (status = 403, description = "Forbidden"),
+        (status = 404, description = "Not found")
+    ),
+    security(
+        ("bearer_auth" = []),
+        ("api_key" = []),
+        ("pat" = [])
+    )
+)]
 #[tracing::instrument(name = "PUT /apps/{app_id}/team/queue", skip(state, user))]
 pub async fn request_join(
     State(state): State<AppState>,
@@ -40,18 +62,15 @@ pub async fn request_join(
             sub,
             app_id
         );
-        return Err(ApiError::Forbidden);
+        return Err(ApiError::FORBIDDEN);
     }
 
     let app = app::Entity::find_by_id(app_id.clone())
         .one(&txn)
         .await?
-        .ok_or_else(|| ApiError::NotFound)?;
+        .ok_or(ApiError::NOT_FOUND)?;
 
-    let default_role_id = app
-        .default_role_id
-        .clone()
-        .ok_or_else(|| ApiError::NotFound)?;
+    let default_role_id = app.default_role_id.clone().ok_or(ApiError::NOT_FOUND)?;
 
     if app.visibility == Visibility::Public && app.price <= 0 {
         let membership = membership::ActiveModel {
@@ -78,7 +97,7 @@ pub async fn request_join(
             sub,
             app_id
         );
-        return Err(ApiError::Forbidden);
+        return Err(ApiError::FORBIDDEN);
     }
 
     let existing_request = join_queue::Entity::find()

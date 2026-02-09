@@ -7,6 +7,7 @@ import "node.proto";
 import "pin.proto";
 import "variable.proto";
 import "comment.proto";
+import "a2ui.proto";
 
 enum ExecutionStage {
   DEV = 0;
@@ -22,6 +23,12 @@ enum LogLevel {
   WARN = 2;
   ERROR = 3;
   FATAL = 4;
+}
+
+enum ExecutionMode {
+  EXECUTION_MODE_HYBRID = 0;
+  EXECUTION_MODE_REMOTE = 1;
+  EXECUTION_MODE_LOCAL = 2;
 }
 
 enum LayerType {
@@ -74,4 +81,6 @@ message Board {
   google.protobuf.Timestamp created_at = 16;
   google.protobuf.Timestamp updated_at = 17;
   map<string, Layer> layers = 18;
+  repeated string page_ids = 19;
+  ExecutionMode execution_mode = 20;
 }

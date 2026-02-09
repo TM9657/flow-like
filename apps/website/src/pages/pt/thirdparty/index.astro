@@ -1,0 +1,47 @@
+---
+import "@tm9657/flow-like-ui/global.css";
+import LegalLayout from "../../../layouts/Legal-Layout.astro";
+import { SbomTable } from "../../../components/thirdparty/sbom-table";
+
+import cargoLicenses from "../../../../../../thirdparty/cargo-licenses.json";
+import npmLicenses from "../../../../../../thirdparty/npm-licenses.json";
+
+const title = "Licenças de Terceiros";
+const description = "Software Bill of Materials (SBOM) - Lista completa de bibliotecas de código aberto usadas no Flow-Like";
+---
+
+<LegalLayout title={title} description={description} lastUpdated="04 de fevereiro de 2026">
+	<p class="text-lg mb-8">
+		O Flow-Like é construído com muitos projetos de código aberto incríveis.
+		Somos gratos aos desenvolvedores e mantenedores dessas bibliotecas que tornam nosso trabalho possível.
+		Esta página serve como Software Bill of Materials (SBOM), fornecendo transparência sobre nossas dependências.
+	</p>
+
+	<div class="mb-8 p-4 rounded-lg bg-muted/30 border border-border/50">
+		<h3 class="font-semibold mb-2">Sobre este SBOM</h3>
+		<p class="text-sm text-muted-foreground">
+			Esta lista é gerada automaticamente a partir das dependências do nosso projeto.
+			Inclui todos os crates Rust do nosso workspace Cargo e pacotes npm das nossas aplicações web.
+		</p>
+		<div class="flex flex-wrap gap-2 mt-3">
+			<a
+				href="https://github.com/TM9657/flow-like/blob/dev/thirdparty/cargo-licenses.json"
+				target="_blank"
+				rel="noreferrer"
+				class="text-sm px-3 py-1 rounded-full bg-primary/10 text-primary hover:bg-primary/20 transition-colors"
+			>
+				Dependências Rust (JSON)
+			</a>
+			<a
+				href="https://github.com/TM9657/flow-like/blob/dev/thirdparty/npm-licenses.json"
+				target="_blank"
+				rel="noreferrer"
+				class="text-sm px-3 py-1 rounded-full bg-primary/10 text-primary hover:bg-primary/20 transition-colors"
+			>
+				Dependências NPM (JSON)
+			</a>
+		</div>
+	</div>
+
+	<SbomTable client:load cargoLicenses={cargoLicenses} npmLicenses={npmLicenses} />
+</LegalLayout>

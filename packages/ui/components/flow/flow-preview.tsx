@@ -11,17 +11,26 @@ import { useTheme } from "next-themes";
 import { memo, useCallback, useEffect, useMemo, useRef } from "react";
 import {
 	type IBoard,
+	type IComment,
+	IExecutionMode,
 	IExecutionStage,
 	ILogLevel,
 	type INode,
 	parseBoard,
 } from "../../lib";
+import type { ILayer } from "../../lib/schema/flow/board";
 import {
 	CommentNode,
 	type CommentNode as CommentNodeType,
 } from "./comment-node";
 import { FlowNode, type FlowNode as FlowNodeType } from "./flow-node";
 import { LayerNode, type LayerNode as LayerNodeType } from "./layer-node";
+
+interface FlowPreviewProps {
+	nodes: INode[];
+	comments?: { [key: string]: IComment };
+	layers?: { [key: string]: ILayer };
+}
 
 // Preview versions of nodes that don't show toolbars
 const PreviewFlowNode = memo((props: NodeProps<FlowNodeType>) => (
@@ -45,7 +54,11 @@ const PreviewCommentNode = memo((props: NodeProps<CommentNodeType>) => (
 ));
 PreviewCommentNode.displayName = "PreviewCommentNode";
 
-function FlowPreviewInner({ nodes }: Readonly<{ nodes: INode[] }>) {
+function FlowPreviewInner({
+	nodes,
+	comments,
+	layers,
+}: Readonly<FlowPreviewProps>) {
 	const { resolvedTheme } = useTheme();
 	const instanceRef = useRef<ReactFlowInstance | null>(null);
 	const colorMode = useMemo(
@@ -86,7 +99,7 @@ function FlowPreviewInner({ nodes }: Readonly<{ nodes: INode[] }>) {
 		});
 
 		const board: IBoard = {
-			comments: {},
+			comments: comments ?? {},
 			created_at: { nanos_since_epoch: 0, secs_since_epoch: 0 },
 			description: "",
 			id: "",
@@ -96,10 +109,12 @@ function FlowPreviewInner({ nodes }: Readonly<{ nodes: INode[] }>) {
 			refs: {},
 			stage: IExecutionStage.Dev,
 			updated_at: { nanos_since_epoch: 0, secs_since_epoch: 0 },
-			layers: {},
+			layers: layers ?? {},
 			version: [0, 0, 0],
 			variables: {},
 			viewport: [0, 0, 0, 0],
+			page_ids: [],
+			execution_mode: IExecutionMode.Hybrid,
 		};
 
 		const parsedBoard = parseBoard(
@@ -140,7 +155,11 @@ function FlowPreviewInner({ nodes }: Readonly<{ nodes: INode[] }>) {
 	);
 }
 
-export function FlowPreview({ nodes }: Readonly<{ nodes: INode[] }>) {
+export function FlowPreview({
+	nodes,
+	comments,
+	layers,
+}: Readonly<FlowPreviewProps>) {
 	if (!nodes || nodes.length === 0) {
 		return (
 			<div className="w-full h-full min-h-56 rounded-md flow-preview not-content flex items-center justify-center bg-muted/20">
@@ -152,7 +171,7 @@ export function FlowPreview({ nodes }: Readonly<{ nodes: INode[] }>) {
 	return (
 		<main className="w-full h-full min-h-56 rounded-md flow-preview not-content">
 			<ReactFlowProvider>
-				<FlowPreviewInner nodes={nodes} />
+				<FlowPreviewInner nodes={nodes} comments={comments} layers={layers} />
 			</ReactFlowProvider>
 		</main>
 	);

@@ -1,0 +1,205 @@
+---
+import type { Lang, TranslationKey } from "../i18n";
+import { translations, defaultLang } from "../i18n";
+
+interface Props {
+  lang?: Lang;
+  variant?: "section" | "inline" | "compact";
+}
+
+const { lang = defaultLang, variant = "section" } = Astro.props;
+const t = (key: TranslationKey): string => {
+  const langTranslations = translations[lang] as Record<string, string>;
+  const enTranslations = translations.en as Record<string, string>;
+  return langTranslations?.[key] ?? enTranslations[key] ?? key;
+};
+
+const formAction = "https://650afa0c.sibforms.com/serve/MUIFAFXOXcuOw6rHKrCvv5lDLbFzAZJDpDAfNCOt5PX8ibIwurqvFXXjTBiRQHJU9rldi-SiK988AtVd5MEKj1u2JhcKWMLmhfhbtq_aXC0IJGczM6v3mvf06FjJaUbU6_KXQIGVcbVQNYHAQuwlyT0EeHtx_NVrGtHOE4rlyg3PTicbGv2e_q4HrAnizfNvDIfAr9CtcGdyz0DsTQ==";
+const turnstileSiteKey = "0x4AAAAAACLfuGyDAsHciBgR";
+
+const isSection = variant === "section";
+const isCompact = variant === "compact";
+---
+
+<section
+  id="newsletter"
+  class:list={[
+    "relative",
+    isSection && "py-24",
+    !isSection && "py-8"
+  ]}
+>
+  {isSection && (
+    <div aria-hidden="true" class="pointer-events-none absolute inset-0 -z-10">
+      <div class="absolute inset-0 bg-[radial-gradient(50%_50%_at_50%_50%,hsl(var(--primary)/.04),transparent)]"></div>
+    </div>
+  )}
+
+  <div class:list={[
+    "mx-auto px-6 lg:px-8",
+    isSection && "max-w-2xl text-center",
+    isCompact && "max-w-md",
+    !isSection && !isCompact && "max-w-xl"
+  ]}>
+    {isSection && (
+      <p class="text-[11px] font-medium tracking-[0.3em] uppercase text-muted-foreground mb-4">
+        {t("newsletter.tagline")}
+      </p>
+    )}
+
+    <h2 class:list={[
+      "font-semibold tracking-tight text-foreground leading-[1.15]",
+      isSection && "text-3xl sm:text-4xl mb-4",
+      !isSection && "text-xl sm:text-2xl mb-3"
+    ]}>
+      {t("newsletter.headline")}
+    </h2>
+
+    <p class:list={[
+      "text-muted-foreground mb-6",
+      isSection && "text-base",
+      !isSection && "text-sm"
+    ]}>
+      {t("newsletter.description")}
+    </p>
+
+    <!-- Newsletter Form -->
+    <form
+      id="newsletter-form"
+      method="POST"
+      action={formAction}
+      data-type="subscription"
+      class="space-y-4"
+    >
+      <!-- Error Message -->
+      <div
+        id="newsletter-error"
+        class="hidden p-3 rounded-lg bg-destructive/10 border border-destructive/20 text-destructive text-sm"
+        role="alert"
+      >
+        <span>{t("newsletter.error")}</span>
+      </div>
+
+      <!-- Success Message -->
+      <div
+        id="newsletter-success"
+        class="hidden p-3 rounded-lg bg-green-500/10 border border-green-500/20 text-green-700 dark:text-green-400 text-sm"
+        role="status"
+      >
+        <span>{t("newsletter.success")}</span>
+      </div>
+
+      <div class="flex flex-col sm:flex-row gap-3">
+        <div class="flex-1">
+          <label for="newsletter-email" class="sr-only">{t("newsletter.email.label")}</label>
+          <input
+            type="email"
+            id="newsletter-email"
+            name="EMAIL"
+            required
+            autocomplete="email"
+            placeholder={t("newsletter.email.placeholder")}
+            class="w-full h-12 px-4 rounded-lg border border-border bg-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition"
+          />
+        </div>
+        <button
+          type="submit"
+          class="h-12 px-6 rounded-lg bg-foreground text-background font-medium hover:bg-foreground/90 transition-colors flex items-center justify-center gap-2 whitespace-nowrap disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          <span class="newsletter-btn-text">{t("newsletter.button")}</span>
+          <svg class="newsletter-btn-loader hidden w-5 h-5 animate-spin" viewBox="0 0 24 24" fill="none">
+            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+          </svg>
+        </button>
+      </div>
+
+      <!-- Opt-in checkbox -->
+      <div class="flex items-start gap-3">
+        <input
+          type="checkbox"
+          id="newsletter-optin"
+          name="OPT_IN"
+          value="1"
+          required
+          class="mt-1 h-4 w-4 rounded border-border text-primary focus:ring-primary/50"
+        />
+        <label for="newsletter-optin" class="text-sm text-muted-foreground">
+          {t("newsletter.optin")}
+        </label>
+      </div>
+
+      <!-- Turnstile CAPTCHA -->
+      <div
+        id="newsletter-captcha"
+        class="cf-turnstile"
+        data-sitekey={turnstileSiteKey}
+        data-callback="handleNewsletterCaptcha"
+        data-theme="auto"
+      ></div>
+
+      <!-- Hidden fields -->
+      <input type="text" name="email_address_check" value="" class="hidden" tabindex="-1" aria-hidden="true" />
+      <input type="hidden" name="locale" value={lang} />
+
+      <p class="text-xs text-muted-foreground/60">
+        {t("newsletter.privacy")}
+      </p>
+    </form>
+  </div>
+</section>
+
+<script is:inline src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
+
+<script>
+  // Handle newsletter form submission
+  const form = document.getElementById('newsletter-form') as HTMLFormElement;
+  const errorEl = document.getElementById('newsletter-error');
+  const successEl = document.getElementById('newsletter-success');
+
+  // Global callback for Turnstile
+  (window as any).handleNewsletterCaptcha = function() {
+    const event = new Event('captchaChange');
+    document.getElementById('newsletter-captcha')?.dispatchEvent(event);
+  };
+
+  form?.addEventListener('submit', async (e) => {
+    e.preventDefault();
+
+    const btn = form.querySelector('button[type="submit"]') as HTMLButtonElement;
+    const btnText = btn.querySelector('.newsletter-btn-text');
+    const btnLoader = btn.querySelector('.newsletter-btn-loader');
+
+    // Show loading state
+    btn.disabled = true;
+    btnText?.classList.add('hidden');
+    btnLoader?.classList.remove('hidden');
+    errorEl?.classList.add('hidden');
+    successEl?.classList.add('hidden');
+
+    try {
+      const formData = new FormData(form);
+      const response = await fetch(form.action, {
+        method: 'POST',
+        body: formData,
+        mode: 'no-cors'
+      });
+
+      // Since we're using no-cors, we can't read the response
+      // Show success message optimistically
+      successEl?.classList.remove('hidden');
+      form.reset();
+
+      // Reset Turnstile
+      if ((window as any).turnstile) {
+        (window as any).turnstile.reset();
+      }
+    } catch (error) {
+      errorEl?.classList.remove('hidden');
+    } finally {
+      btn.disabled = false;
+      btnText?.classList.remove('hidden');
+      btnLoader?.classList.add('hidden');
+    }
+  });
+</script>

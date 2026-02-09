@@ -10,7 +10,7 @@ interface AutoResizeTextProps extends React.HTMLAttributes<HTMLElement> {
 export function AutoResizeText({
 	text,
 	className,
-	maxChars = 20,
+	maxChars = 12,
 	minFontSize = 0.6,
 	...props
 }: AutoResizeTextProps) {

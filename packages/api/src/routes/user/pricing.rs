@@ -4,8 +4,9 @@ use crate::{error::ApiError, middleware::jwt::AppUser, state::AppState};
 use axum::{Extension, Json, extract::State};
 use flow_like::hub::UserTier;
 use serde::{Deserialize, Serialize};
+use utoipa::ToSchema;
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
 pub struct TierInfo {
     pub name: String,
     pub product_id: Option<String>,
@@ -20,14 +21,14 @@ pub struct TierInfo {
     pub price: Option<PriceInfo>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
 pub struct PriceInfo {
     pub amount: i64,
     pub currency: String,
     pub interval: Option<String>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
 pub struct PricingResponse {
     pub current_tier: String,
     pub tiers: HashMap<String, TierInfo>,
@@ -50,6 +51,18 @@ impl From<(&str, &UserTier)> for TierInfo {
     }
 }
 
+#[utoipa::path(
+    get,
+    path = "/user/pricing",
+    tag = "user",
+    responses(
+        (status = 200, description = "Returns pricing information for all tiers", body = PricingResponse),
+        (status = 401, description = "Unauthorized")
+    ),
+    security(
+        ("bearer_auth" = [])
+    )
+)]
 #[tracing::instrument(name = "GET /user/pricing", skip(state, user))]
 pub async fn get_pricing(
     State(state): State<AppState>,
@@ -71,8 +84,7 @@ pub async fn get_pricing(
 
         if let (Some(stripe_client), Some(product_id)) =
             (&state.stripe_client, &tier_config.product_id)
-        {
-            if let Ok(prices) = stripe::Price::list(
+            && let Ok(prices) = stripe::Price::list(
                 stripe_client,
                 &stripe::ListPrices {
                     product: Some(stripe::IdOrCreate::Id(product_id)),
@@ -82,18 +94,16 @@ pub async fn get_pricing(
                 },
             )
             .await
-            {
-                if let Some(price) = prices.data.first() {
-                    tier_info.price = Some(PriceInfo {
-                        amount: price.unit_amount.unwrap_or(0),
-                        currency: price
-                            .currency
-                            .map(|c| c.to_string())
-                            .unwrap_or_else(|| "usd".to_string()),
-                        interval: price.recurring.as_ref().map(|r| r.interval.to_string()),
-                    });
-                }
-            }
+            && let Some(price) = prices.data.first()
+        {
+            tier_info.price = Some(PriceInfo {
+                amount: price.unit_amount.unwrap_or(0),
+                currency: price
+                    .currency
+                    .map(|c| c.to_string())
+                    .unwrap_or_else(|| "usd".to_string()),
+                interval: price.recurring.as_ref().map(|r| r.interval.to_string()),
+            });
         }
 
         tiers.insert(tier_name.clone(), tier_info);

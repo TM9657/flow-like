@@ -43,21 +43,35 @@ pub struct Model {
     pub version: Option<String>,
     #[sea_orm(column_name = "executionMode")]
     pub execution_mode: ExecutionMode,
+    pub bits: Option<Vec<String>>,
     #[sea_orm(column_name = "createdAt")]
     pub created_at: DateTime,
     #[sea_orm(column_name = "updatedAt")]
     pub updated_at: DateTime,
-    pub bits: Option<Vec<String>>,
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
 pub enum Relation {
+    #[sea_orm(has_many = "super::app_discount::Entity")]
+    AppDiscount,
+    #[sea_orm(has_many = "super::app_purchase::Entity")]
+    AppPurchase,
+    #[sea_orm(has_many = "super::app_sales_daily::Entity")]
+    AppSalesDaily,
     #[sea_orm(has_many = "super::board_sync::Entity")]
     BoardSync,
     #[sea_orm(has_many = "super::comment::Entity")]
     Comment,
     #[sea_orm(has_many = "super::course_connection::Entity")]
     CourseConnection,
+    #[sea_orm(has_many = "super::embedding_usage_tracking::Entity")]
+    EmbeddingUsageTracking,
+    #[sea_orm(has_many = "super::event::Entity")]
+    Event,
+    #[sea_orm(has_many = "super::event_sink::Entity")]
+    EventSink,
+    #[sea_orm(has_many = "super::execution_run::Entity")]
+    ExecutionRun,
     #[sea_orm(has_many = "super::execution_usage_tracking::Entity")]
     ExecutionUsageTracking,
     #[sea_orm(has_many = "super::feedback::Entity")]
@@ -74,6 +88,10 @@ pub enum Relation {
     Membership,
     #[sea_orm(has_many = "super::meta::Entity")]
     Meta,
+    #[sea_orm(has_many = "super::notification::Entity")]
+    Notification,
+    #[sea_orm(has_many = "super::page::Entity")]
+    Page,
     #[sea_orm(has_many = "super::publication_request::Entity")]
     PublicationRequest,
     #[sea_orm(
@@ -96,6 +114,26 @@ pub enum Relation {
     TechnicalUser,
     #[sea_orm(has_many = "super::template::Entity")]
     Template,
+    #[sea_orm(has_many = "super::widget::Entity")]
+    Widget,
+}
+
+impl Related<super::app_discount::Entity> for Entity {
+    fn to() -> RelationDef {
+        Relation::AppDiscount.def()
+    }
+}
+
+impl Related<super::app_purchase::Entity> for Entity {
+    fn to() -> RelationDef {
+        Relation::AppPurchase.def()
+    }
+}
+
+impl Related<super::app_sales_daily::Entity> for Entity {
+    fn to() -> RelationDef {
+        Relation::AppSalesDaily.def()
+    }
 }
 
 impl Related<super::board_sync::Entity> for Entity {
@@ -113,6 +151,30 @@ impl Related<super::comment::Entity> for Entity {
 impl Related<super::course_connection::Entity> for Entity {
     fn to() -> RelationDef {
         Relation::CourseConnection.def()
+    }
+}
+
+impl Related<super::embedding_usage_tracking::Entity> for Entity {
+    fn to() -> RelationDef {
+        Relation::EmbeddingUsageTracking.def()
+    }
+}
+
+impl Related<super::event::Entity> for Entity {
+    fn to() -> RelationDef {
+        Relation::Event.def()
+    }
+}
+
+impl Related<super::event_sink::Entity> for Entity {
+    fn to() -> RelationDef {
+        Relation::EventSink.def()
+    }
+}
+
+impl Related<super::execution_run::Entity> for Entity {
+    fn to() -> RelationDef {
+        Relation::ExecutionRun.def()
     }
 }
 
@@ -164,6 +226,18 @@ impl Related<super::meta::Entity> for Entity {
     }
 }
 
+impl Related<super::notification::Entity> for Entity {
+    fn to() -> RelationDef {
+        Relation::Notification.def()
+    }
+}
+
+impl Related<super::page::Entity> for Entity {
+    fn to() -> RelationDef {
+        Relation::Page.def()
+    }
+}
+
 impl Related<super::publication_request::Entity> for Entity {
     fn to() -> RelationDef {
         Relation::PublicationRequest.def()
@@ -179,6 +253,12 @@ impl Related<super::technical_user::Entity> for Entity {
 impl Related<super::template::Entity> for Entity {
     fn to() -> RelationDef {
         Relation::Template.def()
+    }
+}
+
+impl Related<super::widget::Entity> for Entity {
+    fn to() -> RelationDef {
+        Relation::Widget.def()
     }
 }
 

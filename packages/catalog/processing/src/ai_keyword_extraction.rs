@@ -7,11 +7,17 @@ use flow_like::{
         variable::VariableType,
     },
 };
-use flow_like_types::{Value, anyhow, async_trait, json::json};
+#[cfg(feature = "execute")]
+use flow_like_types::anyhow;
+use flow_like_types::{Value, async_trait, json::json};
+#[cfg(feature = "execute")]
 use rig::completion::{Completion, ToolDefinition};
+#[cfg(feature = "execute")]
 use rig::message::{AssistantContent, ToolCall, ToolChoice, ToolFunction};
+#[cfg(feature = "execute")]
 use rig::tool::Tool;
 use std::collections::HashSet;
+#[cfg(feature = "execute")]
 use std::fmt;
 
 #[crate::register_node]
@@ -24,22 +30,27 @@ impl AiKeywordExtractionNode {
     }
 }
 
+#[cfg(feature = "execute")]
 #[derive(Debug)]
 struct KeywordSubmitTool {
     max_keywords: usize,
 }
 
+#[cfg(feature = "execute")]
 #[derive(Debug)]
 struct SubmitError(String);
 
+#[cfg(feature = "execute")]
 impl fmt::Display for SubmitError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "Keyword extraction failed: {}", self.0)
     }
 }
 
+#[cfg(feature = "execute")]
 impl std::error::Error for SubmitError {}
 
+#[cfg(feature = "execute")]
 impl Tool for KeywordSubmitTool {
     const NAME: &'static str = "submit_keywords";
     type Error = SubmitError;
@@ -169,6 +180,7 @@ impl NodeLogic for AiKeywordExtractionNode {
         node
     }
 
+    #[cfg(feature = "execute")]
     async fn run(&self, context: &mut ExecutionContext) -> flow_like_types::Result<()> {
         context.deactivate_exec_pin("exec_out").await?;
 
@@ -252,5 +264,12 @@ impl NodeLogic for AiKeywordExtractionNode {
         context.set_pin_value("keywords", json!(result)).await?;
         context.activate_exec_pin("exec_out").await?;
         Ok(())
+    }
+
+    #[cfg(not(feature = "execute"))]
+    async fn run(&self, _context: &mut ExecutionContext) -> flow_like_types::Result<()> {
+        Err(flow_like_types::anyhow!(
+            "Processing requires the 'execute' feature"
+        ))
     }
 }

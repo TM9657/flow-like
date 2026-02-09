@@ -34,6 +34,7 @@ pub mod r2_credentials;
 pub trait RuntimeCredentialsTrait {
     async fn to_state(&self, state: AppState) -> Result<FlowLikeState>;
     async fn to_db(&self, app_id: &str) -> Result<ConnectBuilder>;
+    async fn to_db_scoped(&self, app_id: &str) -> Result<ConnectBuilder>;
     fn into_shared_credentials(&self) -> SharedCredentials;
 }
 
@@ -73,6 +74,17 @@ pub enum RuntimeCredentials {
 }
 
 impl RuntimeCredentials {
+    pub fn is_azure(&self) -> bool {
+        #[cfg(feature = "azure")]
+        {
+            matches!(self, RuntimeCredentials::Azure(_))
+        }
+        #[cfg(not(feature = "azure"))]
+        {
+            false
+        }
+    }
+
     pub async fn scoped(
         sub: &str,
         app_id: &str,
@@ -180,6 +192,19 @@ impl RuntimeCredentials {
             RuntimeCredentials::Gcp(gcp) => gcp.to_db(app_id).await,
             #[cfg(feature = "r2")]
             RuntimeCredentials::R2(r2) => r2.to_db(app_id).await,
+        }
+    }
+
+    pub async fn to_db_scoped(&self, app_id: &str) -> Result<ConnectBuilder> {
+        match self {
+            #[cfg(feature = "aws")]
+            RuntimeCredentials::Aws(aws) => aws.to_db_scoped(app_id).await,
+            #[cfg(feature = "azure")]
+            RuntimeCredentials::Azure(azure) => azure.to_db_scoped(app_id).await,
+            #[cfg(feature = "gcp")]
+            RuntimeCredentials::Gcp(gcp) => gcp.to_db_scoped(app_id).await,
+            #[cfg(feature = "r2")]
+            RuntimeCredentials::R2(r2) => r2.to_db_scoped(app_id).await,
         }
     }
 

@@ -39,6 +39,7 @@ Full step-by-step documentation: **[docs.flow-like.com/self-hosting/kubernetes](
 | Component | Type | Description |
 |-----------|------|-------------|
 | API | Deployment | Flow-Like API with HPA |
+| Web | Deployment | Web application (Next.js static) |
 | Executor Pool | Deployment | Warm execution workers with HPA |
 | CockroachDB | StatefulSet | 3-node distributed SQL |
 | Redis | Deployment | Job queue and state |
@@ -85,6 +86,7 @@ After running `./scripts/k3d-setup.sh`, services are available at:
 | Service | URL | Notes |
 |---------|-----|-------|
 | API | http://localhost:8080 | NodePort (automatic) |
+| Web App | http://localhost:30001 | NodePort |
 | Grafana | http://localhost:30002 | NodePort, default login: admin/admin |
 | Registry | http://localhost:5111 | Local Docker registry |
 
@@ -96,5 +98,9 @@ For production, use port-forwarding or configure ingress:
 # Port-forward API
 kubectl port-forward -n flow-like svc/flow-like-api 8080:8080
 
+# Port-forward Web App
+kubectl port-forward -n flow-like svc/flow-like-web 3001:3001
+
 # Port-forward Grafana
 kubectl port-forward -n flow-like svc/flow-like-grafana 3000:80
+```

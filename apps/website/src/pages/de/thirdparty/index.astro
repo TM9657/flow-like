@@ -1,0 +1,47 @@
+---
+import "@tm9657/flow-like-ui/global.css";
+import LegalLayout from "../../../layouts/Legal-Layout.astro";
+import { SbomTable } from "../../../components/thirdparty/sbom-table";
+
+import cargoLicenses from "../../../../../../thirdparty/cargo-licenses.json";
+import npmLicenses from "../../../../../../thirdparty/npm-licenses.json";
+
+const title = "Drittanbieter-Lizenzen";
+const description = "Software Bill of Materials (SBOM) - Vollständige Liste der in Flow-Like verwendeten Open-Source-Bibliotheken";
+---
+
+<LegalLayout title={title} description={description} lastUpdated="04. Februar 2026">
+	<p class="text-lg mb-8">
+		Flow-Like basiert auf vielen großartigen Open-Source-Projekten.
+		Wir sind den Entwicklern und Maintainern dieser Bibliotheken dankbar, die unsere Arbeit ermöglichen.
+		Diese Seite dient als Software Bill of Materials (SBOM) und bietet Transparenz über unsere Abhängigkeiten.
+	</p>
+
+	<div class="mb-8 p-4 rounded-lg bg-muted/30 border border-border/50">
+		<h3 class="font-semibold mb-2">Über dieses SBOM</h3>
+		<p class="text-sm text-muted-foreground">
+			Diese Liste wird automatisch aus unseren Projektabhängigkeiten generiert.
+			Sie enthält alle Rust-Crates aus unserem Cargo-Workspace und npm-Pakete aus unseren Webanwendungen.
+		</p>
+		<div class="flex flex-wrap gap-2 mt-3">
+			<a
+				href="https://github.com/TM9657/flow-like/blob/dev/thirdparty/cargo-licenses.json"
+				target="_blank"
+				rel="noreferrer"
+				class="text-sm px-3 py-1 rounded-full bg-primary/10 text-primary hover:bg-primary/20 transition-colors"
+			>
+				Rust-Abhängigkeiten (JSON)
+			</a>
+			<a
+				href="https://github.com/TM9657/flow-like/blob/dev/thirdparty/npm-licenses.json"
+				target="_blank"
+				rel="noreferrer"
+				class="text-sm px-3 py-1 rounded-full bg-primary/10 text-primary hover:bg-primary/20 transition-colors"
+			>
+				NPM-Abhängigkeiten (JSON)
+			</a>
+		</div>
+	</div>
+
+	<SbomTable client:load cargoLicenses={cargoLicenses} npmLicenses={npmLicenses} />
+</LegalLayout>

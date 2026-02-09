@@ -8,12 +8,34 @@ use axum::{
 };
 use flow_like_storage::files::store::StorageItem;
 use flow_like_types::anyhow;
+use utoipa::ToSchema;
 
-#[derive(Debug, Clone, serde::Deserialize)]
+#[derive(Debug, Clone, serde::Deserialize, ToSchema)]
 pub struct ListFilesPayload {
     pub prefix: String,
 }
 
+#[utoipa::path(
+    post,
+    path = "/apps/{app_id}/data/list",
+    tag = "data",
+    description = "List files under a prefix.",
+    params(
+        ("app_id" = String, Path, description = "Application ID")
+    ),
+    request_body = ListFilesPayload,
+    responses(
+        (status = 200, description = "File list", body = String, content_type = "application/json"),
+        (status = 400, description = "Bad request"),
+        (status = 401, description = "Unauthorized"),
+        (status = 403, description = "Forbidden")
+    ),
+    security(
+        ("bearer_auth" = []),
+        ("api_key" = []),
+        ("pat" = [])
+    )
+)]
 #[tracing::instrument(name = "POST /apps/{app_id}/data/list", skip(state, user))]
 pub async fn list_files(
     State(state): State<AppState>,

@@ -7,6 +7,26 @@ use axum::{
     extract::{Path, State},
 };
 
+#[utoipa::path(
+    get,
+    path = "/apps/{app_id}/events/{event_id}/versions",
+    tag = "events",
+    description = "List available versions for an event.",
+    params(
+        ("app_id" = String, Path, description = "Application ID"),
+        ("event_id" = String, Path, description = "Event ID")
+    ),
+    responses(
+        (status = 200, description = "Event versions", body = Vec<(u32, u32, u32)>),
+        (status = 401, description = "Unauthorized"),
+        (status = 403, description = "Forbidden")
+    ),
+    security(
+        ("bearer_auth" = []),
+        ("api_key" = []),
+        ("pat" = [])
+    )
+)]
 #[tracing::instrument(
     name = "GET /apps/{app_id}/events/{event_id}/versions",
     skip(state, user)
@@ -16,7 +36,7 @@ pub async fn get_event_versions(
     Extension(user): Extension<AppUser>,
     Path((app_id, event_id)): Path<(String, String)>,
 ) -> Result<Json<Vec<(u32, u32, u32)>>, ApiError> {
-    let permission = ensure_permission!(user, &app_id, &state, RolePermissions::WriteEvents);
+    let permission = ensure_permission!(user, &app_id, &state, RolePermissions::ReadEvents);
     let sub = permission.sub()?;
 
     let app = state

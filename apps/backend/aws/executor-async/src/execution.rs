@@ -19,16 +19,21 @@ struct DispatchPayload {
     node_id: String,
     event_json: Option<String>,
     payload: Option<serde_json::Value>,
-    #[allow(dead_code)]
     user_id: String,
     credentials: serde_json::Value,
     executor_jwt: String,
-    #[allow(dead_code)]
     callback_url: String,
     token: Option<String>,
     oauth_tokens: Option<std::collections::HashMap<String, flow_like_executor::OAuthTokenInput>>,
     #[serde(default)]
     stream_state: bool,
+    #[serde(default)]
+    runtime_variables:
+        Option<std::collections::HashMap<String, flow_like::flow::variable::Variable>>,
+    #[serde(default)]
+    user_context: Option<flow_like::flow::execution::UserExecutionContext>,
+    #[serde(default)]
+    profile: Option<serde_json::Value>,
 }
 
 #[instrument(skip(body), fields(job_id, run_id, app_id))]
@@ -64,6 +69,9 @@ pub async fn execute(body: &str) -> flow_like_types::Result<()> {
         token: payload.token,
         oauth_tokens: payload.oauth_tokens,
         stream_state: payload.stream_state,
+        runtime_variables: payload.runtime_variables,
+        user_context: payload.user_context,
+        profile: payload.profile,
     };
 
     let config = ExecutorConfig::from_env();

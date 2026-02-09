@@ -34,6 +34,9 @@ model Meta {
   template   Template? @relation(fields: [templateId], references: [id], onDelete: Cascade)
   templateId String?
 
+  widget   Widget? @relation(fields: [widgetId], references: [id], onDelete: Cascade)
+  widgetId String?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -42,6 +45,7 @@ model Meta {
   @@index([bitId, lang])
   @@index([courseId, lang])
   @@index([templateId, lang])
+  @@index([widgetId, lang])
   @@index([lang])
   @@index([tags])
 }

@@ -10,8 +10,9 @@ use flow_like::hub::Lookup;
 use flow_like_types::Value;
 use sea_orm::{ColumnTrait, EntityTrait, QueryFilter, QuerySelect};
 use serde::{Deserialize, Serialize};
+use utoipa::ToSchema;
 
-#[derive(Debug, Clone, Deserialize, Serialize)]
+#[derive(Debug, Clone, Deserialize, Serialize, ToSchema)]
 pub struct UserLookupResponse {
     id: String,
     email: Option<String>,
@@ -60,6 +61,22 @@ impl UserLookupResponse {
     }
 }
 
+#[utoipa::path(
+    get,
+    path = "/user/lookup/{sub}",
+    tag = "user",
+    params(
+        ("sub" = String, Path, description = "User ID to look up")
+    ),
+    responses(
+        (status = 200, description = "User found", body = UserLookupResponse),
+        (status = 401, description = "Unauthorized"),
+        (status = 404, description = "User not found")
+    ),
+    security(
+        ("bearer_auth" = [])
+    )
+)]
 #[tracing::instrument(name = "GET /user/lookup/{sub}", skip(state, user))]
 pub async fn user_lookup(
     State(state): State<AppState>,
@@ -78,9 +95,25 @@ pub async fn user_lookup(
         return Ok(Json(response));
     }
 
-    Err(ApiError::NotFound)
+    Err(ApiError::NOT_FOUND)
 }
 
+#[utoipa::path(
+    get,
+    path = "/user/search/{query}",
+    tag = "user",
+    params(
+        ("query" = String, Path, description = "Search query (username, email, or name)")
+    ),
+    responses(
+        (status = 200, description = "Users matching the search query", body = Vec<UserLookupResponse>),
+        (status = 401, description = "Unauthorized"),
+        (status = 404, description = "No users found")
+    ),
+    security(
+        ("bearer_auth" = [])
+    )
+)]
 #[tracing::instrument(name = "GET /user/search/{query}", skip(state, user))]
 pub async fn user_search(
     State(state): State<AppState>,
@@ -127,7 +160,7 @@ pub async fn user_search(
         .await?;
 
     if fuzzy_matches.is_empty() {
-        return Err(ApiError::NotFound);
+        return Err(ApiError::NOT_FOUND);
     }
 
     let mut responses: Vec<UserLookupResponse> = Vec::with_capacity(fuzzy_matches.len());

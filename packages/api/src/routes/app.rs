@@ -3,20 +3,25 @@ use std::time::SystemTime;
 use crate::{entity::app, state::AppState};
 use axum::{
     Router,
-    routing::{get, patch},
+    routing::{get, patch, post},
 };
 
 pub mod internal;
 
+pub mod api;
 pub mod board;
 pub mod data;
 pub mod db;
 pub mod events;
 pub mod invoke;
 pub mod meta;
+pub mod notifications;
+pub mod page;
 pub mod roles;
+pub mod sales;
 pub mod team;
 pub mod template;
+pub mod widget;
 
 pub fn routes() -> Router<AppState> {
     Router::new()
@@ -33,15 +38,23 @@ pub fn routes() -> Router<AppState> {
             "/{app_id}/visibility",
             patch(internal::change_visibility::change_visibility),
         )
+        .route(
+            "/{app_id}/notifications/create",
+            post(notifications::create_notification),
+        )
         .nest("/{app_id}/templates", template::routes())
+        .nest("/{app_id}/widgets", widget::routes())
+        .nest("/{app_id}/pages", page::routes())
         .nest("/{app_id}/board", board::routes())
         .nest("/{app_id}/meta", meta::routes())
         .nest("/{app_id}/roles", roles::routes())
         .nest("/{app_id}/team", team::routes())
+        .nest("/{app_id}/sales", sales::routes())
         .nest("/{app_id}/events", events::routes())
         .nest("/{app_id}/data", data::routes())
         .nest("/{app_id}/invoke", invoke::routes())
         .nest("/{app_id}/db", db::routes())
+        .nest("/{app_id}/api", api::routes())
 }
 
 #[macro_export]
@@ -51,7 +64,7 @@ macro_rules! ensure_permission {
         if !sub.has_permission($perm) {
             let user_id = sub.sub()?;
             $state.invalidate_permission(&user_id, $app_id);
-            return Err($crate::error::ApiError::Forbidden);
+            return Err($crate::error::ApiError::FORBIDDEN);
         }
         sub
     }};
@@ -71,7 +84,7 @@ macro_rules! ensure_permissions {
         let sub = $user.app_permission($app_id, $state).await?;
         for perm in $perms.iter() {
             if !sub.has_permission(perm) {
-                return Err($crate::error::ApiError::Forbidden);
+                return Err($crate::error::ApiError::FORBIDDEN);
             }
         }
         sub
@@ -283,6 +296,8 @@ impl From<app::Model> for flow_like::app::App {
             version: model.version,
             frontend: None,
             app_state: None,
+            widget_ids: vec![],
+            page_ids: vec![],
         }
     }
 }

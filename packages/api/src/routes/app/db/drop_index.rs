@@ -8,6 +8,27 @@ use axum::{
 };
 use flow_like_storage::databases::vector::lancedb::LanceDBVectorStore;
 
+#[utoipa::path(
+    delete,
+    path = "/apps/{app_id}/db/{table}/index/{index_name}",
+    tag = "database",
+    description = "Remove an index from a table.",
+    params(
+        ("app_id" = String, Path, description = "Application ID"),
+        ("table" = String, Path, description = "Table name"),
+        ("index_name" = String, Path, description = "Index name")
+    ),
+    responses(
+        (status = 200, description = "Index dropped", body = ()),
+        (status = 401, description = "Unauthorized"),
+        (status = 403, description = "Forbidden")
+    ),
+    security(
+        ("bearer_auth" = []),
+        ("api_key" = []),
+        ("pat" = [])
+    )
+)]
 #[tracing::instrument(
     name = "DELETE /apps/{app_id}/db/{table}/index/{index_name}",
     skip(state, user)

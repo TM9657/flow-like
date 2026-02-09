@@ -1,0 +1,46 @@
+---
+interface Props {
+  t: (key: string) => string;
+}
+
+const { t } = Astro.props;
+---
+
+<section class="relative py-20 lg:py-28">
+  <div aria-hidden="true" class="pointer-events-none absolute inset-0 -z-10">
+    <div class="absolute inset-0 bg-[radial-gradient(60%_60%_at_50%_80%,hsl(var(--primary)/.08),transparent)]"></div>
+  </div>
+
+  <div class="mx-auto max-w-3xl px-6 lg:px-8 text-center">
+    <p class="text-[11px] font-medium tracking-[0.3em] uppercase text-muted-foreground mb-6">
+      {t("compare.cta.tagline")}
+    </p>
+
+    <h2 class="text-3xl sm:text-4xl lg:text-5xl font-bold tracking-tight mb-6">
+      {t("compare.cta.headline")}
+    </h2>
+
+    <p class="text-lg text-muted-foreground leading-relaxed mb-10 max-w-xl mx-auto">
+      {t("compare.cta.description")}
+    </p>
+
+    <div class="flex flex-wrap items-center justify-center gap-4 mb-8">
+      <a
+        href="/download"
+        class="inline-flex items-center justify-center rounded-full bg-primary text-primary-foreground px-8 py-4 text-base font-medium hover:bg-primary/90 transition-all hover:scale-[1.02] active:scale-[0.98] shadow-lg shadow-primary/25"
+      >
+        {t("compare.cta.download")}
+      </a>
+      <a
+        href="mailto:enterprise@flow-like.com?subject=Enterprise%20Demo%20Request"
+        class="inline-flex items-center justify-center rounded-full border border-border/80 bg-background/50 px-8 py-4 text-base font-medium text-foreground hover:bg-muted/50 hover:border-border transition-colors"
+      >
+        {t("compare.cta.enterprise")}
+      </a>
+    </div>
+
+    <p class="text-sm text-muted-foreground">
+      {t("compare.cta.note")}
+    </p>
+  </div>
+</section>

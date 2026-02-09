@@ -1,0 +1,100 @@
+---
+import { LuZap, LuShield, LuCpu, LuBrain, LuLayoutDashboard, LuPackage, LuUsers, LuMonitor, LuSmartphone, LuWifiOff, LuHardDrive, LuFileCode, LuFlaskConical, LuLock, LuServer, LuUnlink, LuWorkflow } from "react-icons/lu";
+
+interface Props {
+  t: (key: string) => string;
+}
+
+const { t } = Astro.props;
+
+const capabilities = [
+  { id: "visual_workflow", icon: LuWorkflow, color: "primary" },
+  { id: "deterministic", icon: LuShield, color: "emerald" },
+  { id: "high_volume", icon: LuZap, color: "amber" },
+  { id: "compiled", icon: LuCpu, color: "orange" },
+  { id: "ai_agents", icon: LuBrain, color: "purple" },
+  { id: "ui_builder", icon: LuLayoutDashboard, color: "blue" },
+  { id: "full_apps", icon: LuPackage, color: "indigo" },
+  { id: "customer_facing", icon: LuUsers, color: "pink" },
+  { id: "desktop", icon: LuMonitor, color: "cyan" },
+  { id: "mobile", icon: LuSmartphone, color: "rose" },
+  { id: "offline", icon: LuWifiOff, color: "slate" },
+  { id: "local_first", icon: LuHardDrive, color: "stone" },
+  { id: "file_native", icon: LuFileCode, color: "lime" },
+  { id: "data_science", icon: LuFlaskConical, color: "violet" },
+  { id: "governance", icon: LuLock, color: "red" },
+  { id: "self_hosted", icon: LuServer, color: "teal" },
+  { id: "lock_in", icon: LuUnlink, color: "green" },
+];
+---
+
+<section class="relative py-20 lg:py-28 bg-muted/20">
+  <div aria-hidden="true" class="pointer-events-none absolute inset-0 -z-10 opacity-30">
+    <div class="absolute inset-0 bg-[url('/grid.svg')] bg-center"></div>
+  </div>
+
+  <div class="mx-auto max-w-6xl px-6 lg:px-8">
+    <div class="text-center mb-16">
+      <p class="text-[11px] font-medium tracking-[0.3em] uppercase text-muted-foreground mb-4">
+        Deep Dive
+      </p>
+      <h2 class="text-3xl sm:text-4xl font-semibold tracking-tight">
+        What each capability means
+      </h2>
+    </div>
+
+    <div class="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+      {capabilities.map((cap) => {
+        const Icon = cap.icon;
+        return (
+          <article class="group relative rounded-2xl border border-border/40 bg-background/60 backdrop-blur-sm p-6 hover:border-border/80 hover:shadow-lg transition-all duration-300">
+            <!-- Icon -->
+            <div class:list={[
+              "w-10 h-10 rounded-xl flex items-center justify-center mb-4",
+              cap.color === "primary" && "bg-primary/10 text-primary",
+              cap.color === "emerald" && "bg-emerald-500/10 text-emerald-500",
+              cap.color === "amber" && "bg-amber-500/10 text-amber-500",
+              cap.color === "orange" && "bg-orange-500/10 text-orange-500",
+              cap.color === "purple" && "bg-purple-500/10 text-purple-500",
+              cap.color === "blue" && "bg-blue-500/10 text-blue-500",
+              cap.color === "indigo" && "bg-indigo-500/10 text-indigo-500",
+              cap.color === "pink" && "bg-pink-500/10 text-pink-500",
+              cap.color === "cyan" && "bg-cyan-500/10 text-cyan-500",
+              cap.color === "rose" && "bg-rose-500/10 text-rose-500",
+              cap.color === "slate" && "bg-slate-500/10 text-slate-500",
+              cap.color === "stone" && "bg-stone-500/10 text-stone-500",
+              cap.color === "lime" && "bg-lime-500/10 text-lime-500",
+              cap.color === "violet" && "bg-violet-500/10 text-violet-500",
+              cap.color === "red" && "bg-red-500/10 text-red-500",
+              cap.color === "teal" && "bg-teal-500/10 text-teal-500",
+              cap.color === "green" && "bg-green-500/10 text-green-500",
+            ]}>
+              <Icon className="w-5 h-5" />
+            </div>
+
+            <!-- Title -->
+            <h3 class="text-lg font-semibold mb-2">
+              {t(`compare.explain.${cap.id}.title`)}
+            </h3>
+
+            <!-- What it is -->
+            <p class="text-sm text-muted-foreground mb-4">
+              {t(`compare.explain.${cap.id}.what`)}
+            </p>
+
+            <!-- How Flow-Like does it -->
+            <div class="pt-4 border-t border-border/30">
+              <p class="text-xs font-medium text-primary mb-1.5">How Flow-Like does it</p>
+              <p class="text-sm text-muted-foreground/90 leading-relaxed">
+                {t(`compare.explain.${cap.id}.flow`)}
+              </p>
+            </div>
+
+            <!-- Hover glow -->
+            <div class="absolute inset-0 rounded-2xl bg-linear-to-br from-primary/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none" />
+          </article>
+        );
+      })}
+    </div>
+  </div>
+</section>

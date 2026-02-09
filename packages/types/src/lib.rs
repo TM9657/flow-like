@@ -66,6 +66,19 @@ pub mod futures {
 pub use async_stream;
 pub mod intercom;
 pub mod utils;
+
+/// OAuth token input for execution requests
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct OAuthTokenInput {
+    pub access_token: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub refresh_token: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub token_type: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub expires_at: Option<i64>,
+}
+
 pub use ab_glyph;
 pub use image;
 pub use imageproc;

@@ -1,5 +1,25 @@
 import type { IProfile } from "./lib/schema/profile/profile";
 
+// Re-export IProfile from schema
+export type { IProfile } from "./lib/schema/profile/profile";
+
+// Re-export common schema types
+export type { IApp, IFrontendConfiguration } from "./lib/schema/app/app";
+export {
+	IAppCategory,
+	IAppStatus,
+	IAppVisibility,
+	IAppExecutionMode,
+} from "./lib/schema/app/app";
+export type {
+	IEvent,
+	ICanaryEvent,
+	IReleaseNotes,
+} from "./lib/schema/flow/event";
+export type { IMetadata } from "./lib/schema/bit/bit-pack";
+export type { IOAuthProvider, IStoredOAuthToken } from "./lib/oauth/index";
+export { IConnectionMode } from "./lib/schema/profile/profile";
+
 export interface ISystemInfo {
 	cores: number;
 	vram: number;

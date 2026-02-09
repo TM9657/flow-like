@@ -20,6 +20,7 @@ use flow_like_types::{
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
+pub mod attachment_from_path;
 pub mod attachment_from_url;
 pub mod attachment_to_url;
 pub mod push_attachment;
@@ -111,11 +112,13 @@ pub mod url_processing {
     }
 
     pub fn extract_tauri_path(url: &str) -> flow_like_types::Result<PathBuf> {
-        let path_str = url
+        let without_scheme = url
             .replace("http://asset.localhost/", "")
             .replace("asset://localhost/", "");
 
-        let decoded = urlencoding::decode(&path_str)?;
+        let path_str = without_scheme.split('?').next().unwrap_or(&without_scheme);
+
+        let decoded = urlencoding::decode(path_str)?;
         let path = PathBuf::from(decoded.to_string());
 
         // Security check 1: Validate path components (no traversal, no hidden files, etc.)

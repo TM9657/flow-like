@@ -6,7 +6,9 @@ use flow_like::flow::{
 };
 use flow_like_types::{async_trait, json::json};
 use std::collections::HashSet;
+#[cfg(feature = "execute")]
 use whatlang::detect;
+#[cfg(feature = "execute")]
 use yake_rust::{Config, StopWords, get_n_best};
 
 #[crate::register_node]
@@ -114,6 +116,7 @@ impl NodeLogic for YakeExtractionNode {
         node
     }
 
+    #[cfg(feature = "execute")]
     async fn run(&self, context: &mut ExecutionContext) -> flow_like_types::Result<()> {
         let text: String = context.evaluate_pin("text").await?;
         let language: String = context.evaluate_pin("language").await?;
@@ -146,8 +149,16 @@ impl NodeLogic for YakeExtractionNode {
         context.set_pin_value("keywords", json!(result)).await?;
         Ok(())
     }
+
+    #[cfg(not(feature = "execute"))]
+    async fn run(&self, _context: &mut ExecutionContext) -> flow_like_types::Result<()> {
+        Err(flow_like_types::anyhow!(
+            "Processing requires the 'execute' feature"
+        ))
+    }
 }
 
+#[cfg(feature = "execute")]
 fn lang_to_code(lang: whatlang::Lang) -> &'static str {
     use whatlang::Lang::*;
     match lang {

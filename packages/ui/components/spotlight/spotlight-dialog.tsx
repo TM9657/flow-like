@@ -39,6 +39,7 @@ import {
 	DialogHeader,
 	DialogTitle,
 } from "../ui/dialog";
+import { FloatingOrbs } from "../ui/flow-background";
 import { SpotlightFlowPilot } from "./spotlight-flowpilot";
 import { QuickProjectCreate } from "./spotlight-quick-create";
 
@@ -511,7 +512,8 @@ export function SpotlightDialog({
 				)}
 				showCloseButton={false}
 			>
-				{renderModeContent()}
+				<FloatingOrbs count={4} className="opacity-50" />
+				<div className="relative z-10">{renderModeContent()}</div>
 			</DialogContent>
 		</Dialog>
 	);

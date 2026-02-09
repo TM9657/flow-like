@@ -1,6 +1,8 @@
 use crate::data::excel::CSVTable;
 use crate::data::path::FlowPath;
+#[cfg(feature = "execute")]
 use calamine::{Data, Range, Reader, open_workbook_auto_from_rs};
+#[cfg(feature = "execute")]
 use chrono::{Days, NaiveDate, NaiveDateTime, NaiveTime};
 use flow_like::flow::node::NodeLogic;
 use flow_like::flow::{
@@ -9,26 +11,75 @@ use flow_like::flow::{
     pin::{PinOptions, ValueType},
     variable::VariableType,
 };
+#[cfg(not(feature = "execute"))]
+use flow_like_types::Result;
+#[cfg(feature = "execute")]
 use flow_like_types::{Context, Error, Result};
 use flow_like_types::{JsonSchema, async_trait, json::json, tokio};
+#[cfg(feature = "execute")]
 use once_cell::sync::Lazy;
+#[cfg(feature = "execute")]
 use rayon::prelude::*;
+#[cfg(feature = "execute")]
 use regex::Regex;
 use serde::{Deserialize, Serialize};
+#[cfg(feature = "execute")]
 use std::cmp::{max, min};
+#[cfg(feature = "execute")]
 use std::collections::VecDeque;
+#[cfg(feature = "execute")]
 use std::io::Cursor;
+#[cfg(feature = "execute")]
 use strsim::jaro_winkler;
 
+#[cfg(feature = "execute")]
 static TOTALS_RE: Lazy<regex::Regex> =
     Lazy::new(|| regex::Regex::new(r"(?i)^\s*(total|summe|subtotal|gesamt)\b").unwrap());
 
+#[cfg(feature = "execute")]
+const MAX_SUPPORTED_ROWS: usize = 10_000_000;
+#[cfg(feature = "execute")]
+const MAX_SUPPORTED_COLS: usize = 50_000;
+#[cfg(feature = "execute")]
+const MIN_VALID_GRID_SIZE: usize = 1;
+
+#[cfg(feature = "execute")]
+#[inline]
+fn safe_grid_get(grid: &[Vec<String>], r: usize, c: usize) -> &str {
+    grid.get(r)
+        .and_then(|row| row.get(c))
+        .map(|s| s.as_str())
+        .unwrap_or("")
+}
+
+#[cfg(feature = "execute")]
+fn validate_grid_dimensions(height: usize, width: usize) -> Result<()> {
+    if height == 0 || width == 0 {
+        return Err(Error::msg("Grid has zero dimensions"));
+    }
+    if height > MAX_SUPPORTED_ROWS {
+        return Err(Error::msg(format!(
+            "Grid height {} exceeds maximum supported {}",
+            height, MAX_SUPPORTED_ROWS
+        )));
+    }
+    if width > MAX_SUPPORTED_COLS {
+        return Err(Error::msg(format!(
+            "Grid width {} exceeds maximum supported {}",
+            width, MAX_SUPPORTED_COLS
+        )));
+    }
+    Ok(())
+}
+
+#[cfg(feature = "execute")]
 fn build_occupancy(grid: &Vec<Vec<String>>) -> Vec<Vec<bool>> {
     grid.iter()
         .map(|row| row.iter().map(|s| !s.trim().is_empty()).collect())
         .collect()
 }
 
+#[cfg(feature = "execute")]
 #[inline]
 fn normalize(s: &str) -> String {
     let mut out = String::with_capacity(s.len());
@@ -151,20 +202,37 @@ impl Default for ExtractConfig {
 /// ============================ Public API ============================
 
 /// Extract raw tables (headers + rows of strings) from a sheet.
+#[cfg(feature = "execute")]
 pub fn extract_tables(
     data: Vec<u8>,
     sheet_name: &str,
     cfg_in: &ExtractConfig,
 ) -> Result<Vec<Table>> {
+    if data.is_empty() {
+        return Err(Error::msg("Input data is empty"));
+    }
+    if sheet_name.trim().is_empty() {
+        return Err(Error::msg("Sheet name cannot be empty"));
+    }
+
     let cursor = Cursor::new(data);
     let mut wb = open_workbook_auto_from_rs(cursor.clone())
-        .with_context(|| format!("Opening workbook {:?}", cursor.get_ref()))?;
-    let range: Range<Data> = wb.worksheet_range(sheet_name)?;
+        .with_context(|| "Opening workbook failed - file may be corrupted or unsupported format")?;
+
+    let range: Range<Data> = wb
+        .worksheet_range(sheet_name)
+        .with_context(|| format!("Sheet '{}' not found or unreadable", sheet_name))?;
 
     let height = range.get_size().0;
     let width = range.get_size().1;
-    let cell_count = height.saturating_mul(width);
 
+    if height < MIN_VALID_GRID_SIZE || width < MIN_VALID_GRID_SIZE {
+        return Ok(Vec::new());
+    }
+
+    validate_grid_dimensions(height, width)?;
+
+    let cell_count = height.saturating_mul(width);
     let huge_mode = cell_count >= cfg_in.huge_cells_threshold;
 
     let mut cfg = cfg_in.clone();
@@ -174,19 +242,30 @@ pub fn extract_tables(
         cfg.group_similar_headers = false;
         cfg.allow_internal_blank_rows = 0;
         cfg.allow_internal_blank_cols = 0;
-        cfg.gap_break_rows = usize::MAX; // disable segmentation
+        cfg.gap_break_rows = usize::MAX;
         cfg.gap_break_cols = usize::MAX;
         cfg.schema_sample_rows = cfg.huge_schema_sample_rows;
     }
 
     let (grid_raw, height, width) = read_sheet_grid_capped(range, cfg.huge_cap_rows, huge_mode)?;
+
+    if height == 0 || width == 0 {
+        return Ok(Vec::new());
+    }
+
     let cell_count = height.saturating_mul(width);
     let merges = if cfg.enable_merges && cell_count <= cfg.max_merge_map_cells {
-        read_merged_cells(cursor, sheet_name)
-            .with_context(|| "Reading merged cells with umya-spreadsheet failed")?
+        read_merged_cells(cursor, sheet_name).unwrap_or_else(|e| {
+            eprintln!(
+                "WARN: Failed to read merged cells, continuing without: {}",
+                e
+            );
+            Vec::new()
+        })
     } else {
         Vec::new()
     };
+
     let merge_map = if !merges.is_empty() {
         build_merge_map(height, width, &merges)
     } else {
@@ -196,34 +275,65 @@ pub fn extract_tables(
     let mut grid = apply_merges(grid_raw, &merges);
 
     let rects_coarse = segment_rectangles(&grid, height, width, &cfg);
-    let mut rects: Vec<Rect> = Vec::new();
+    let mut rects: Vec<Rect> = Vec::with_capacity(rects_coarse.len() * 2);
     for r in rects_coarse {
-        let parts = split_rect_by_connectivity(&grid, &r, &cfg);
-        rects.extend(parts);
+        if let Some(validated) = validate_rect(&r, height, width) {
+            let parts = split_rect_by_connectivity(&grid, &validated, &cfg);
+            rects.extend(parts);
+        }
     }
 
-    // Build tables
-    let mut built: Vec<TableWithRect> = Vec::new();
+    let mut built: Vec<TableWithRect> = Vec::with_capacity(rects.len());
     for rect in rects {
-        if count_nonempty_in_rect(&grid, &rect) < cfg.min_table_cells {
+        let nonempty = count_nonempty_in_rect(&grid, &rect);
+        if nonempty < cfg.min_table_cells {
             continue;
         }
-        let table = build_table_from_rect(&mut grid, &rect, &cfg, &merge_map);
-        built.push(TableWithRect { rect, table });
+        match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            build_table_from_rect(&mut grid, &rect, &cfg, &merge_map)
+        })) {
+            Ok(table) if !table.headers.is_empty() || !table.rows.is_empty() => {
+                built.push(TableWithRect { rect, table });
+            }
+            Ok(_) => {}
+            Err(_) => {
+                eprintln!("WARN: Failed to build table from rect {:?}, skipping", rect);
+            }
+        }
     }
 
-    // Stitch (skipped in huge mode by knobs above)
     let stitched = stitch_tables(&grid, built, &cfg);
     let grouped = if cfg.group_similar_headers {
         group_tables_by_header_similarity(stitched, &cfg)
     } else {
         stitched
     };
-    Ok(grouped.into_iter().map(|t| t.table).collect())
+
+    let tables: Vec<Table> = grouped
+        .into_iter()
+        .map(|t| t.table)
+        .filter(|t| !t.headers.is_empty() || !t.rows.is_empty())
+        .collect();
+
+    Ok(tables)
+}
+
+#[cfg(feature = "execute")]
+fn validate_rect(rect: &Rect, height: usize, width: usize) -> Option<Rect> {
+    if rect.r1 < rect.r0 || rect.c1 < rect.c0 {
+        return None;
+    }
+    Some(Rect {
+        r0: rect.r0.min(height.saturating_sub(1)),
+        c0: rect.c0.min(width.saturating_sub(1)),
+        r1: rect.r1.min(height.saturating_sub(1)),
+        c1: rect.c1.min(width.saturating_sub(1)),
+    })
 }
 
 /// ============================ Types ============================
 
+#[cfg(feature = "execute")]
 #[derive(Clone, Debug)]
 struct Rect {
     r0: usize,
@@ -232,6 +342,7 @@ struct Rect {
     c1: usize, // inclusive
 }
 
+#[cfg(feature = "execute")]
 #[derive(Clone, Debug)]
 pub struct Table {
     headers: Vec<String>,
@@ -240,6 +351,7 @@ pub struct Table {
 
 /// ============================ IO helpers ============================
 
+#[cfg(feature = "execute")]
 fn read_sheet_grid_capped(
     range: calamine::Range<Data>,
     cap_rows: usize,
@@ -248,16 +360,23 @@ fn read_sheet_grid_capped(
     let mut height = range.get_size().0;
     let width = range.get_size().1;
 
+    if height == 0 || width == 0 {
+        return Ok((Vec::new(), 0, 0));
+    }
+
     if huge_mode && cap_rows > 0 {
         height = height.min(cap_rows);
     }
 
+    height = height.min(MAX_SUPPORTED_ROWS);
+    let width = width.min(MAX_SUPPORTED_COLS);
+
     let mut grid = vec![vec![String::new(); width]; height];
-    // In huge mode, skip ISO conversion (hot).
     let is_1904 = false;
 
     for (r, row) in range.rows().take(height).enumerate() {
-        for (c, cell) in row.iter().enumerate() {
+        let row_len = row.len().min(width);
+        for (c, cell) in row.iter().take(row_len).enumerate() {
             grid[r][c] = if huge_mode {
                 data_to_string(cell)
             } else {
@@ -268,6 +387,7 @@ fn read_sheet_grid_capped(
     Ok((grid, height, width))
 }
 
+#[cfg(feature = "execute")]
 fn excel_serial_to_iso(serial: f64, is_1904: bool) -> String {
     let days = serial.floor() as i64;
     let secs = ((serial - serial.floor()) * 86_400.0).round() as i64;
@@ -293,6 +413,7 @@ fn excel_serial_to_iso(serial: f64, is_1904: bool) -> String {
         .to_string()
 }
 
+#[cfg(feature = "execute")]
 fn data_to_string_iso(v: &Data, is_1904: bool) -> String {
     match v {
         Data::DateTime(serial) => excel_serial_to_iso(serial.as_f64(), is_1904),
@@ -302,6 +423,7 @@ fn data_to_string_iso(v: &Data, is_1904: bool) -> String {
     }
 }
 
+#[cfg(feature = "execute")]
 fn data_to_string(v: &Data) -> String {
     match v {
         Data::Empty => String::new(),
@@ -330,6 +452,7 @@ fn data_to_string(v: &Data) -> String {
 
 /// ============================ Merges ============================
 
+#[cfg(feature = "execute")]
 #[derive(Clone, Copy, Debug)]
 struct Merge {
     r0: usize,
@@ -338,9 +461,10 @@ struct Merge {
     c1: usize,
 }
 
-// Lightweight merge map for quick lookup.
+#[cfg(feature = "execute")]
 type MergeMap = Vec<Vec<Option<Merge>>>;
 
+#[cfg(feature = "execute")]
 fn build_merge_map(height: usize, width: usize, merges: &[Merge]) -> MergeMap {
     let mut map = vec![vec![None; width]; height];
     if height == 0 || width == 0 {
@@ -365,7 +489,7 @@ fn build_merge_map(height: usize, width: usize, merges: &[Merge]) -> MergeMap {
     map
 }
 
-// Returns true when (r,c) belongs to a horizontally-merged area and is NOT the anchor (top-left).
+#[cfg(feature = "execute")]
 fn is_horiz_merged_non_anchor(mm: &MergeMap, r: usize, c: usize) -> bool {
     if mm.is_empty() {
         return false;
@@ -383,6 +507,7 @@ fn is_horiz_merged_non_anchor(mm: &MergeMap, r: usize, c: usize) -> bool {
     }
 }
 
+#[cfg(feature = "execute")]
 fn read_merged_cells<P: std::io::Read + std::io::Seek + Clone>(
     data: P,
     sheet: &str,
@@ -425,6 +550,7 @@ fn read_merged_cells<P: std::io::Read + std::io::Seek + Clone>(
 ///          end_col:   Some(ColumnReference { num: 24, ... }),
 ///          end_row:   Some(RowReference { num: 185, ... }) }`
 /// Returns zero-based (r0,c0,r1,c1).
+#[cfg(feature = "execute")]
 fn parse_umya_debug_range(s: &str) -> Option<(usize, usize, usize, usize)> {
     // Grab the first four `num: <int>` in order: start_col, start_row, end_col, end_row.
     let re = Regex::new(r"num:\s*(\d+)").ok()?;
@@ -453,6 +579,7 @@ fn parse_umya_debug_range(s: &str) -> Option<(usize, usize, usize, usize)> {
     ))
 }
 
+#[cfg(feature = "execute")]
 fn col_letters_to_idx(s: &str) -> Option<usize> {
     let mut val: usize = 0;
     for ch in s.chars() {
@@ -464,6 +591,7 @@ fn col_letters_to_idx(s: &str) -> Option<usize> {
     Some(val - 1)
 }
 
+#[cfg(feature = "execute")]
 fn parse_a1_cell(a1: &str) -> Option<(usize, usize)> {
     // e.g., "BC23" -> (22, 54) zero-based
     let mut letters = String::new();
@@ -485,6 +613,7 @@ fn parse_a1_cell(a1: &str) -> Option<(usize, usize)> {
     Some((r - 1, c))
 }
 
+#[cfg(feature = "execute")]
 fn parse_a1_range(r: &str) -> Option<(usize, usize, usize, usize)> {
     let parts: Vec<&str> = r.split(':').collect();
     if parts.len() != 2 {
@@ -495,6 +624,7 @@ fn parse_a1_range(r: &str) -> Option<(usize, usize, usize, usize)> {
     Some((min(r0, r1), min(c0, c1), max(r0, r1), max(c0, c1)))
 }
 
+#[cfg(feature = "execute")]
 fn apply_merges(mut grid: Vec<Vec<String>>, merges: &[Merge]) -> Vec<Vec<String>> {
     let height = grid.len();
     if height == 0 {
@@ -534,6 +664,7 @@ fn apply_merges(mut grid: Vec<Vec<String>>, merges: &[Merge]) -> Vec<Vec<String>
 
 /// ============================ Segmentation ============================
 
+#[cfg(feature = "execute")]
 fn segment_rectangles(
     grid: &Vec<Vec<String>>,
     height: usize,
@@ -588,6 +719,7 @@ fn segment_rectangles(
     rects
 }
 
+#[cfg(feature = "execute")]
 fn find_cuts(
     counts: &Vec<usize>,
     denom: usize,
@@ -630,6 +762,7 @@ fn find_cuts(
     out
 }
 
+#[cfg(feature = "execute")]
 #[inline]
 fn density(nz: usize, total: usize) -> f32 {
     if total == 0 {
@@ -639,12 +772,31 @@ fn density(nz: usize, total: usize) -> f32 {
     }
 }
 
-fn count_nonempty_in_rect(grid: &Vec<Vec<String>>, rect: &Rect) -> usize {
+#[cfg(feature = "execute")]
+fn count_nonempty_in_rect(grid: &[Vec<String>], rect: &Rect) -> usize {
+    let height = grid.len();
+    if height == 0 {
+        return 0;
+    }
+    let width = grid.first().map(|r| r.len()).unwrap_or(0);
+    if width == 0 {
+        return 0;
+    }
+
+    let r0 = rect.r0.min(height.saturating_sub(1));
+    let r1 = rect.r1.min(height.saturating_sub(1));
+    let c0 = rect.c0.min(width.saturating_sub(1));
+    let c1 = rect.c1.min(width.saturating_sub(1));
+
     let mut n = 0;
-    for r in rect.r0..=rect.r1 {
-        for c in rect.c0..=rect.c1 {
-            if !grid[r][c].trim().is_empty() {
-                n += 1;
+    for r in r0..=r1 {
+        if let Some(row) = grid.get(r) {
+            for c in c0..=c1 {
+                if let Some(cell) = row.get(c)
+                    && !cell.trim().is_empty()
+                {
+                    n += 1;
+                }
             }
         }
     }
@@ -653,6 +805,7 @@ fn count_nonempty_in_rect(grid: &Vec<Vec<String>>, rect: &Rect) -> usize {
 
 /// ============================ Table Build ============================
 
+#[cfg(feature = "execute")]
 fn build_table_from_rect(
     grid: &mut Vec<Vec<String>>,
     rect: &Rect,
@@ -755,6 +908,7 @@ fn build_table_from_rect(
 
 /// ============================ Units & Totals helpers ============================
 
+#[cfg(feature = "execute")]
 fn detect_unit_row(
     grid: &Vec<Vec<String>>,
     rect: &Rect,
@@ -796,6 +950,7 @@ fn detect_unit_row(
     }
 }
 
+#[cfg(feature = "execute")]
 fn merge_unit_into_headers(headers: &mut Vec<String>, unit_row: &Vec<String>) {
     for (h, u) in headers.iter_mut().zip(unit_row) {
         if u.trim().is_empty() {
@@ -809,6 +964,7 @@ fn merge_unit_into_headers(headers: &mut Vec<String>, unit_row: &Vec<String>) {
     }
 }
 
+#[cfg(feature = "execute")]
 fn drop_totals_column(t: &mut Table) {
     if t.headers.is_empty() {
         return;
@@ -825,6 +981,7 @@ fn drop_totals_column(t: &mut Table) {
     }
 }
 
+#[cfg(feature = "execute")]
 fn is_banner_row(grid: &Vec<Vec<String>>, rect: &Rect, r: usize, merge_map: &MergeMap) -> bool {
     if r < rect.r0 || r > rect.r1 {
         return false;
@@ -869,6 +1026,7 @@ fn is_banner_row(grid: &Vec<Vec<String>>, rect: &Rect, r: usize, merge_map: &Mer
     nonempty_count == 1
 }
 
+#[cfg(feature = "execute")]
 fn row_type_stats(row: &Vec<String>, c0: usize, c1: usize) -> (f32, f32, usize) {
     let mut alpha = 0usize;
     let mut numeric = 0usize;
@@ -892,6 +1050,7 @@ fn row_type_stats(row: &Vec<String>, c0: usize, c1: usize) -> (f32, f32, usize) 
     (alpha as f32 / w as f32, numeric as f32 / w as f32, nonempty)
 }
 
+#[cfg(feature = "execute")]
 fn detect_left_header_cols(
     grid: &Vec<Vec<String>>,
     rect: &Rect,
@@ -933,6 +1092,7 @@ fn detect_left_header_cols(
     count
 }
 
+#[cfg(feature = "execute")]
 fn flatten_headers(
     grid: &mut Vec<Vec<String>>,
     rect: &Rect,
@@ -1021,6 +1181,7 @@ fn flatten_headers(
     headers
 }
 
+#[cfg(feature = "execute")]
 fn project_row_for_headers(
     row: Vec<String>,
     _rect: &Rect,
@@ -1037,6 +1198,7 @@ fn project_row_for_headers(
     out
 }
 
+#[cfg(feature = "execute")]
 fn row_eq_headers(row: &Vec<String>, headers: &Vec<String>) -> bool {
     if row.len() != headers.len() {
         return false;
@@ -1049,6 +1211,7 @@ fn row_eq_headers(row: &Vec<String>, headers: &Vec<String>) -> bool {
     true
 }
 
+#[cfg(feature = "execute")]
 fn detect_header_rows(
     grid: &Vec<Vec<String>>,
     rect: &Rect,
@@ -1131,8 +1294,7 @@ fn detect_header_rows(
     (0..best_h).map(|i| banner_skip + i).collect()
 }
 
-/// Score how well rows starting from data_r0 maintain per-column kinds.
-/// Higher is better. Returns ~0.0 when weak/no signal.
+#[cfg(feature = "execute")]
 fn score_schema_fit(
     grid: &Vec<Vec<String>>,
     rect: &Rect,
@@ -1198,6 +1360,7 @@ fn score_schema_fit(
     0.7 * frac_ok + 0.3 * avg_ok
 }
 
+#[cfg(feature = "execute")]
 #[inline]
 fn detect_kind_idx(s: &str) -> usize {
     match detect_kind(s) {
@@ -1210,10 +1373,12 @@ fn detect_kind_idx(s: &str) -> usize {
 }
 /// ============================ Connectivity split ============================
 
+#[cfg(feature = "execute")]
 fn is_nonempty(s: &str) -> bool {
     !s.trim().is_empty()
 }
 
+#[cfg(feature = "execute")]
 fn split_rect_by_connectivity(
     grid: &Vec<Vec<String>>,
     rect: &Rect,
@@ -1392,12 +1557,14 @@ fn split_rect_by_connectivity(
 
 /// ============================ CSV render ============================
 
+#[cfg(feature = "execute")]
 #[derive(Clone, Debug)]
 struct TableWithRect {
     rect: Rect,
     table: Table,
 }
 
+#[cfg(feature = "execute")]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 enum Kind {
     Empty,
@@ -1408,6 +1575,7 @@ enum Kind {
     Mixed,
 }
 
+#[cfg(feature = "execute")]
 fn detect_kind(s: &str) -> Kind {
     let t = s.trim();
     if t.is_empty() {
@@ -1429,6 +1597,7 @@ fn detect_kind(s: &str) -> Kind {
     Kind::Text
 }
 
+#[cfg(feature = "execute")]
 fn infer_col_kinds(table: &Table, sample: usize) -> Vec<Kind> {
     let w = table.headers.len();
     let mut kinds = vec![Kind::Empty; w];
@@ -1455,6 +1624,7 @@ fn infer_col_kinds(table: &Table, sample: usize) -> Vec<Kind> {
     kinds
 }
 
+#[cfg(feature = "execute")]
 fn kinds_match_ratio(a: &[Kind], b: &[Kind]) -> f32 {
     let w = a.len().min(b.len());
     if w == 0 {
@@ -1484,6 +1654,7 @@ fn kinds_match_ratio(a: &[Kind], b: &[Kind]) -> f32 {
     }
 }
 
+#[cfg(feature = "execute")]
 fn col_overlap_ratio(a: &Rect, b: &Rect) -> f32 {
     let inter_c0 = std::cmp::max(a.c0, b.c0);
     let inter_c1 = std::cmp::min(a.c1, b.c1);
@@ -1502,6 +1673,7 @@ fn col_overlap_ratio(a: &Rect, b: &Rect) -> f32 {
     }
 }
 
+#[cfg(feature = "execute")]
 fn gap_has_headerish(grid: &Vec<Vec<String>>, a: &Rect, b: &Rect) -> bool {
     if b.r0 <= a.r1 + 1 {
         return false;
@@ -1521,6 +1693,7 @@ fn gap_has_headerish(grid: &Vec<Vec<String>>, a: &Rect, b: &Rect) -> bool {
     false
 }
 
+#[cfg(feature = "execute")]
 fn merge_tables(mut a: Table, mut b: Table) -> Table {
     let target_len = a.headers.len().max(b.headers.len());
 
@@ -1556,6 +1729,7 @@ fn merge_tables(mut a: Table, mut b: Table) -> Table {
     Table { headers, rows }
 }
 
+#[cfg(feature = "execute")]
 fn can_stitch(
     grid: &Vec<Vec<String>>,
     prev: &TableWithRect,
@@ -1579,6 +1753,7 @@ fn can_stitch(
     headers_ok || type_ratio >= cfg.stitch_min_type_match_ratio
 }
 
+#[cfg(feature = "execute")]
 fn stitch_tables(
     grid: &Vec<Vec<String>>,
     mut items: Vec<TableWithRect>,
@@ -1614,6 +1789,7 @@ fn stitch_tables(
 /// ============================ (Optional) Schema stitching ============================
 /// Example: if two rectangles are separated by 2 blank rows but headers are "the same",
 /// you could merge them. Hook this in `segment_rectangles` if desired.
+#[cfg(feature = "execute")]
 fn headers_similar(a: &[String], b: &[String]) -> bool {
     let w = min(a.len(), b.len());
     if w == 0 {
@@ -1629,6 +1805,7 @@ fn headers_similar(a: &[String], b: &[String]) -> bool {
 }
 
 /// Compute average Jaro-Winkler similarity of aligned headers (by index) between 0.0 and 1.0.
+#[cfg(feature = "execute")]
 fn headers_similarity(a: &[String], b: &[String]) -> f64 {
     let w = min(a.len(), b.len());
     if w == 0 {
@@ -1644,6 +1821,7 @@ fn headers_similarity(a: &[String], b: &[String]) -> f64 {
 }
 
 /// Merge tables with very similar headers (high threshold), preserving row order.
+#[cfg(feature = "execute")]
 fn group_tables_by_header_similarity(
     mut items: Vec<TableWithRect>,
     cfg: &ExtractConfig,
@@ -1709,6 +1887,7 @@ fn group_tables_by_header_similarity(
 /// ============================ De-dup helpers ============================
 
 /// Drop columns that are identical in data and whose headers only differ by an automatic " (n)" suffix.
+#[cfg(feature = "execute")]
 fn dedup_identical_columns(t: &mut Table) {
     let w = t.headers.len();
     if w <= 1 {
@@ -1767,6 +1946,7 @@ fn dedup_identical_columns(t: &mut Table) {
     t.rows = new_rows;
 }
 
+#[cfg(feature = "execute")]
 fn strip_header_dup_suffix(h: &str) -> String {
     let s = h.trim();
     if let Some(open) = s.rfind(" (")
@@ -1807,8 +1987,13 @@ impl NodeLogic for ExtractExcelTablesNode {
             .set_schema::<FlowPath>()
             .set_options(PinOptions::new().set_enforce_schema(true).build());
 
-        node.add_input_pin("sheet", "Sheet", "Worksheet name", VariableType::String)
-            .set_default_value(Some(json!("Sheet1")));
+        node.add_input_pin(
+            "sheet",
+            "Sheet",
+            "Worksheet name (optional - if empty, extracts from all sheets)",
+            VariableType::String,
+        )
+        .set_default_value(Some(json!("")));
 
         node.add_input_pin(
             "extract_config",
@@ -1833,35 +2018,55 @@ impl NodeLogic for ExtractExcelTablesNode {
         node
     }
 
+    #[cfg(feature = "execute")]
     async fn run(&self, context: &mut ExecutionContext) -> flow_like_types::Result<()> {
         context.deactivate_exec_pin("exec_out").await?;
 
         let flow_path: FlowPath = context.evaluate_pin("file").await?;
-        let sheet: String = context.evaluate_pin("sheet").await?;
-        let extract_config: ExtractConfig = context.evaluate_pin("extract_config").await?; // keep access so value flows
+        let sheet_input: String = context.evaluate_pin("sheet").await?;
+        let extract_config: ExtractConfig = context.evaluate_pin("extract_config").await?;
 
         let file_buffer = flow_path.get(context, false).await?;
+        let file_buffer_clone = file_buffer.clone();
+
+        // Determine which sheets to process
+        let sheets_to_process: Vec<String> = if sheet_input.trim().is_empty() {
+            tokio::task::spawn_blocking(move || -> Result<Vec<String>> {
+                let cursor = Cursor::new(&file_buffer_clone);
+                let wb = open_workbook_auto_from_rs(cursor)?;
+                Ok(wb.sheet_names().to_vec())
+            })
+            .await??
+        } else {
+            vec![sheet_input]
+        };
+
         let cfg_clone = extract_config.clone();
-        let sheet_clone = sheet.clone();
         let flow_path_clone = flow_path.clone();
 
         let csv_tables: Vec<CSVTable> =
             tokio::task::spawn_blocking(move || -> Result<Vec<CSVTable>> {
-                let tables = extract_tables(file_buffer, &sheet_clone, &cfg_clone)
-                    .map_err(|e| Error::msg(format!("Extraction failed: {e}")))?;
-                let mut out = Vec::with_capacity(tables.len());
-                for t in tables {
-                    let headers = t.headers.clone();
-                    let mut rows_json: Vec<Vec<flow_like_types::Value>> =
-                        Vec::with_capacity(t.rows.len());
-                    for r in t.rows {
-                        rows_json.push(r.into_iter().map(|s| json!(s)).collect());
+                let mut out = Vec::new();
+                for sheet_name in sheets_to_process.iter() {
+                    let tables = match extract_tables(file_buffer.clone(), sheet_name, &cfg_clone) {
+                        Ok(t) => t,
+                        Err(e) => {
+                            eprintln!("WARN: Failed to extract from sheet '{}': {}", sheet_name, e);
+                            continue;
+                        }
+                    };
+                    for (table_idx, t) in tables.into_iter().enumerate() {
+                        let headers = t.headers.clone();
+                        let mut rows_json: Vec<Vec<flow_like_types::Value>> =
+                            Vec::with_capacity(t.rows.len());
+                        for r in t.rows {
+                            rows_json.push(r.into_iter().map(|s| json!(s)).collect());
+                        }
+                        let mut csv_table =
+                            CSVTable::new(headers, rows_json, Some(flow_path_clone.clone()));
+                        csv_table.name = Some(format!("{}_{}", sheet_name, table_idx + 1));
+                        out.push(csv_table);
                     }
-                    out.push(CSVTable::new(
-                        headers,
-                        rows_json,
-                        Some(flow_path_clone.clone()),
-                    ));
                 }
                 Ok(out)
             })
@@ -1872,9 +2077,16 @@ impl NodeLogic for ExtractExcelTablesNode {
         context.activate_exec_pin("exec_out").await?;
         Ok(())
     }
+
+    #[cfg(not(feature = "execute"))]
+    async fn run(&self, _context: &mut ExecutionContext) -> flow_like_types::Result<()> {
+        Err(flow_like_types::anyhow!(
+            "Data processing requires the 'execute' feature"
+        ))
+    }
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "execute"))]
 mod tests {
     use super::*;
 

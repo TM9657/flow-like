@@ -27,7 +27,9 @@ impl ToProto<flow_like_types::proto::App> for App {
             templates: self.templates.clone(),
             created_at: Some(Timestamp::from(self.created_at)),
             updated_at: Some(Timestamp::from(self.updated_at)),
-            ..Default::default()
+            widget_ids: self.widget_ids.clone(),
+            page_ids: self.page_ids.clone(),
+            route_mappings: std::collections::HashMap::new(),
         }
     }
 }
@@ -63,6 +65,8 @@ impl FromProto<flow_like_types::proto::App> for App {
                 .updated_at
                 .map(|t| SystemTime::try_from(t).unwrap_or(SystemTime::UNIX_EPOCH))
                 .unwrap_or(SystemTime::UNIX_EPOCH),
+            widget_ids: proto.widget_ids,
+            page_ids: proto.page_ids,
             app_state: None,
             frontend: None,
         }

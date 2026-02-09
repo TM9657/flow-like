@@ -5,6 +5,7 @@ import type {
 	IUserState,
 } from "@tm9657/flow-like-ui";
 import type {
+	INotification,
 	INotificationsOverview,
 	IUserLookup,
 } from "@tm9657/flow-like-ui/state/backend-state/types";
@@ -14,7 +15,9 @@ import type {
 	ISubscribeRequest,
 	ISubscribeResponse,
 	IUserInfo,
+	IUserTemplateInfo,
 	IUserUpdate,
+	IUserWidgetInfo,
 } from "@tm9657/flow-like-ui/state/backend-state/user-state";
 
 export class EmptyUserState implements IUserState {
@@ -30,7 +33,13 @@ export class EmptyUserState implements IUserState {
 	getProfile(): Promise<IProfile> {
 		throw new Error("Method not implemented.");
 	}
+	getProfiles(): Promise<IProfile[]> {
+		throw new Error("Method not implemented.");
+	}
 	getSettingsProfile(): Promise<ISettingsProfile> {
+		throw new Error("Method not implemented.");
+	}
+	getAllSettingsProfiles(): Promise<ISettingsProfile[]> {
 		throw new Error("Method not implemented.");
 	}
 	updateUser(data: IUserUpdate, avatar?: File): Promise<void> {
@@ -81,5 +90,33 @@ export class EmptyUserState implements IUserState {
 
 	getBillingSession(): Promise<IBillingSession> {
 		throw new Error("Method not implemented.");
+	}
+
+	listNotifications(
+		unreadOnly?: boolean,
+		offset?: number,
+		limit?: number,
+	): Promise<INotification[]> {
+		throw new Error("Method not implemented.");
+	}
+
+	markNotificationRead(notificationId: string): Promise<void> {
+		throw new Error("Method not implemented.");
+	}
+
+	deleteNotification(notificationId: string): Promise<void> {
+		throw new Error("Method not implemented.");
+	}
+
+	markAllNotificationsRead(): Promise<number> {
+		throw new Error("Method not implemented.");
+	}
+
+	getUserWidgets(language?: string): Promise<IUserWidgetInfo[]> {
+		return Promise.resolve([]);
+	}
+
+	getUserTemplates(language?: string): Promise<IUserTemplateInfo[]> {
+		return Promise.resolve([]);
 	}
 }

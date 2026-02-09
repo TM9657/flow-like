@@ -142,6 +142,13 @@ async fn run_node_logic_only(
     ctx: &mut ExecutionContext,
     recursion_guard: &mut Option<AHashSet<String>>,
 ) -> flow_like_types::Result<(), InternalNodeError> {
+    // Check for cancellation before starting
+    if ctx.is_cancelled() {
+        ctx.log_message("Execution cancelled before node started", LogLevel::Warn);
+        ctx.set_state(NodeState::Error).await;
+        return Err(InternalNodeError::ExecutionFailed("Cancelled".to_string()));
+    }
+
     ctx.set_state(NodeState::Running).await;
     let node = ctx.read_node().await;
 
@@ -169,6 +176,16 @@ async fn run_node_logic_only(
 
     let result = logic.run(ctx).await;
 
+    // Check for cancellation after node execution
+    if ctx.is_cancelled() {
+        ctx.log_message("Execution cancelled after node completed", LogLevel::Warn);
+        log_message.end();
+        ctx.log(log_message);
+        ctx.end_trace();
+        ctx.set_state(NodeState::Error).await;
+        return Err(InternalNodeError::ExecutionFailed("Cancelled".to_string()));
+    }
+
     if let Err(e) = result {
         let err_string = format!("{:?}", e);
         ctx.log_message(
@@ -179,7 +196,6 @@ async fn run_node_logic_only(
         ctx.log(log_message);
         ctx.end_trace();
         ctx.set_state(NodeState::Error).await;
-        // NO handle_error() HERE — just bubble up
         return Err(InternalNodeError::ExecutionFailed(node.id));
     }
 

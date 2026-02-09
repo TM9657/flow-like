@@ -1,0 +1,393 @@
+---
+title: FlowPilot UI Generation
+description: Generate and refine user interfaces with AI-powered FlowPilot
+---
+
+import { Steps, Aside, Card, CardGrid, Tabs, TabItem } from '@astrojs/starlight/components';
+
+# FlowPilot UI Generation
+
+FlowPilot is an AI assistant that can generate, modify, and refine A2UI interfaces based on natural language descriptions.
+
+## Overview
+
+FlowPilot enables you to:
+
+- **Generate complete UIs** from text descriptions
+- **Modify existing components** with contextual understanding
+- **Iterate quickly** through conversational refinement
+- **Learn patterns** from your existing designs
+
+---
+
+## Getting Started
+
+### Accessing FlowPilot
+
+FlowPilot is available in multiple contexts:
+
+<CardGrid>
+  <Card title="Widget Builder" icon="pencil">
+    Click the FlowPilot icon in the toolbar while editing any widget.
+  </Card>
+  <Card title="Page Editor" icon="document">
+    Open FlowPilot from the page settings panel.
+  </Card>
+  <Card title="Flow Editor" icon="rocket">
+    Use FlowPilot within A2UI flow nodes.
+  </Card>
+  <Card title="Chat Interface" icon="comment">
+    Start a conversation from the main FlowPilot panel.
+  </Card>
+</CardGrid>
+
+### Your First UI Generation
+
+<Steps>
+
+1. **Open FlowPilot**
+
+   Click the FlowPilot icon or press `Cmd/Ctrl + Shift + P`.
+
+2. **Describe Your UI**
+
+   Type a natural language description:
+   ```
+   Create a user profile card with avatar on the left,
+   name and email on the right, and a follow button below
+   ```
+
+3. **Review the Result**
+
+   FlowPilot generates the A2UI structure and shows a preview.
+
+4. **Iterate**
+
+   Refine with follow-up requests:
+   ```
+   Make the avatar circular and add a verified badge
+   ```
+
+5. **Apply Changes**
+
+   Click **Apply** to insert the generated UI.
+
+</Steps>
+
+---
+
+## Writing Effective Prompts
+
+### Be Specific
+
+<Tabs>
+  <TabItem label="Good">
+    ```
+    Create a card with:
+    - Header showing product name and price
+    - Image gallery with 3 thumbnail images
+    - Add to cart button with quantity selector
+    - Shipping estimate text below
+    ```
+  </TabItem>
+  <TabItem label="Less Effective">
+    ```
+    Make a product card
+    ```
+  </TabItem>
+</Tabs>
+
+### Include Context
+
+Reference existing elements and data:
+
+```
+Using the /product data, create a details page with:
+- Hero image from /product/images/0
+- Title from /product/name
+- Price with discount badge if /product/onSale is true
+- Description collapsible section
+- Related products grid at the bottom
+```
+
+### Specify Styling
+
+Include visual requirements:
+
+```
+Create a modern dashboard card with:
+- Dark theme compatible (use dark: variants)
+- Subtle shadow and rounded corners
+- Gradient accent on the left border
+- Responsive: stack vertically on mobile
+```
+
+---
+
+## Generation Modes
+
+### Create New UI
+
+Generate a complete new interface:
+
+```
+Create a settings form with:
+- Profile section (avatar upload, name, email)
+- Notifications section (toggle switches)
+- Privacy section (checkboxes)
+- Save button at the bottom
+```
+
+### Modify Existing
+
+Select a component and request changes:
+
+```
+Add a loading skeleton to this card that shows when
+/isLoading is true
+```
+
+```
+Convert this list to a responsive grid with
+2 columns on tablet, 3 on desktop
+```
+
+### Extend Structure
+
+Add new elements to existing UI:
+
+```
+Add a footer to this card with:
+- Timestamp on the left
+- Share and bookmark icons on the right
+```
+
+---
+
+## Working with Data
+
+### Data Binding
+
+FlowPilot understands data paths and can create bindings:
+
+```
+Create a user list that iterates over /users and shows:
+- Avatar image from each user's profile
+- Name and role
+- Last active timestamp
+- Online status indicator
+```
+
+### Conditional Rendering
+
+Request conditional visibility:
+
+```
+Show an "Admin Badge" next to users where /user/isAdmin is true
+
+Add an error message that only appears when /form/errors
+has items
+```
+
+### Dynamic Styling
+
+Apply data-driven styles:
+
+```
+Color the status badge:
+- Green when /status is "active"
+- Yellow when "pending"
+- Red when "error"
+```
+
+---
+
+## Advanced Patterns
+
+### Form Generation
+
+```
+Create a checkout form with:
+- Shipping address fields (name, address, city, state, zip)
+- Payment method selection (credit card, PayPal)
+- Credit card fields with validation
+- Order summary with item list and totals
+- Place order button
+
+Validate required fields and show inline errors
+```
+
+### Dashboard Layouts
+
+```
+Create a analytics dashboard with:
+- 4 stat cards in a row (visitors, revenue, orders, conversion)
+- Line chart for traffic over time (full width)
+- Two columns below: recent orders table (left), top products (right)
+- All cards should have consistent styling and spacing
+```
+
+### List/Detail Patterns
+
+```
+Create a master-detail layout:
+- Left sidebar (1/3 width) with searchable list of /contacts
+- Right panel (2/3 width) showing selected contact details
+- Show placeholder when no contact is selected
+- Highlight the selected item in the list
+```
+
+---
+
+## Style Guide Integration
+
+### Using Design Tokens
+
+Reference your design system:
+
+```
+Use our brand colors:
+- Primary buttons should use bg-brand-500
+- Text should use text-gray-900 dark:text-gray-100
+- Cards use shadow-card with rounded-brand radius
+```
+
+### Component Patterns
+
+Request consistent patterns:
+
+```
+Follow our card pattern:
+- 24px padding, 8px border radius
+- Subtle border in light mode, no border in dark
+- Hover state with slight elevation
+```
+
+---
+
+## Iterative Refinement
+
+### Making Adjustments
+
+After initial generation, refine with follow-ups:
+
+```
+Initial: Create a pricing table with 3 tiers
+
+Refinement 1: Add a "Most Popular" badge to the middle tier
+
+Refinement 2: Make the middle tier slightly larger and highlighted
+
+Refinement 3: Add a toggle to switch between monthly/yearly pricing
+```
+
+### Undo and Variations
+
+Request alternatives:
+
+```
+Show me 3 different layout variations for this card
+
+Try a more minimal version with less visual elements
+
+What would this look like with a horizontal layout instead?
+```
+
+---
+
+## Best Practices
+
+### Do's
+
+- ✅ Provide specific requirements
+- ✅ Include data paths for dynamic content
+- ✅ Mention responsive and dark mode needs
+- ✅ Reference existing patterns in your app
+- ✅ Iterate in small steps
+
+### Don'ts
+
+- ❌ Expect pixel-perfect results first try
+- ❌ Skip accessibility requirements
+- ❌ Forget mobile/responsive needs
+- ❌ Generate overly complex nested structures
+- ❌ Ignore your design system
+
+---
+
+## Common Use Cases
+
+### Quick Prototyping
+
+```
+Quickly sketch out a:
+- User onboarding flow with 4 steps
+- Settings page with 5 sections
+- Product listing page with filters
+```
+
+### Component Creation
+
+```
+Create reusable components:
+- Alert banner with dismiss button
+- Empty state with icon and action
+- Loading skeleton for card content
+```
+
+### Layout Templates
+
+```
+Generate starter layouts:
+- Two-column layout with sidebar navigation
+- Dashboard grid with resizable panels
+- Full-screen modal with header/body/footer
+```
+
+---
+
+## Troubleshooting
+
+### Unexpected Results
+
+If the output doesn't match expectations:
+
+1. **Be more specific** - Add detail about structure
+2. **Show examples** - Reference existing components
+3. **Break it down** - Generate in smaller pieces
+4. **Check data paths** - Ensure paths are correct
+
+### Performance Issues
+
+For complex UIs:
+
+- Generate sections separately
+- Avoid deeply nested structures
+- Use list virtualization for long lists
+
+---
+
+## Integration with Development
+
+### Exporting to Code
+
+Generated A2UI can be:
+
+- Used directly in the Widget Builder
+- Exported as JSON for version control
+- Integrated into flow-based applications
+
+### Version Control
+
+Track FlowPilot-generated UIs:
+
+- Widgets are versioned automatically
+- Changes create new versions
+- Rollback to previous versions if needed
+
+---
+
+## Next Steps
+
+- [A2UI Component Reference](/reference/a2ui-components) - All available components
+- [Widget Builder Guide](/reference/widget-builder) - Visual widget creation

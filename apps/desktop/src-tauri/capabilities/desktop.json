@@ -1,9 +1,11 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "desktop",
-  "description": "Capability for the main window",
+  "description": "Capability for all windows including dynamically created ones",
   "windows": [
-    "main"
+    "main",
+    "sidebar-*",
+    "window-*"
   ],
   "permissions": [
     {
@@ -26,6 +28,15 @@
         },
         {
           "url": "http://localhost:*"
+        },
+        {
+          "url": "https://localhost:*"
+        },
+        {
+          "url": "http://127.0.0.1:*"
+        },
+        {
+          "url": "https://127.0.0.1:*"
         },
         {
           "url": "https://huggingface.co"
@@ -111,6 +122,10 @@
     "fs:read-all",
     "opener:default",
     "updater:default",
+    "notification:default",
+    "notification:allow-notify",
+    "notification:allow-request-permission",
+    "notification:allow-is-permission-granted",
     {
       "identifier": "fs:scope",
       "allow": [{ "path": "*" }, { "path": "**/*"} ]

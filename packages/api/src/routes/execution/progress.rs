@@ -7,6 +7,7 @@
 //! Events are stored with TTL and deleted after delivery.
 
 use crate::{
+    entity::{execution_usage_tracking, sea_orm_active_enums::ExecutionStatus},
     error::ApiError,
     execution::{
         state::{
@@ -23,15 +24,17 @@ use axum::{
     http::HeaderMap,
 };
 use flow_like_types::{anyhow, create_id, tokio};
+use sea_orm::{ActiveModelTrait, ActiveValue::Set};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
+use utoipa::{IntoParams, ToSchema};
 
 // ============================================================================
 // Executor endpoints (require executor JWT)
 // ============================================================================
 
 /// Request body for progress updates from executors
-#[derive(Clone, Debug, Deserialize)]
+#[derive(Clone, Debug, Deserialize, ToSchema)]
 pub struct ProgressUpdateRequest {
     /// Progress percentage (0-100)
     pub progress: Option<i32>,
@@ -46,14 +49,14 @@ pub struct ProgressUpdateRequest {
 }
 
 /// Request body for pushing streaming events from executors
-#[derive(Clone, Debug, Deserialize)]
+#[derive(Clone, Debug, Deserialize, ToSchema)]
 pub struct PushEventsRequest {
     /// Batch of events to push
     pub events: Vec<ExecutionEventInput>,
 }
 
 /// Single event input from executor
-#[derive(Clone, Debug, Deserialize)]
+#[derive(Clone, Debug, Deserialize, ToSchema)]
 pub struct ExecutionEventInput {
     /// Event type (log, progress, output, error, chunk, etc.)
     pub event_type: String,
@@ -62,7 +65,7 @@ pub struct ExecutionEventInput {
 }
 
 /// Status values that can be reported
-#[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, ToSchema)]
 #[serde(rename_all = "lowercase")]
 pub enum ProgressStatus {
     Running,
@@ -72,14 +75,14 @@ pub enum ProgressStatus {
 }
 
 /// Response from progress update
-#[derive(Clone, Debug, Serialize)]
+#[derive(Clone, Debug, Serialize, ToSchema)]
 pub struct ProgressUpdateResponse {
     pub accepted: bool,
     pub status: String,
 }
 
 /// Response from pushing events
-#[derive(Clone, Debug, Serialize)]
+#[derive(Clone, Debug, Serialize, ToSchema)]
 pub struct PushEventsResponse {
     pub accepted: i32,
     pub next_sequence: i32,
@@ -88,6 +91,20 @@ pub struct PushEventsResponse {
 /// POST /execution/progress
 ///
 /// Report execution progress. Requires executor JWT in Authorization header.
+#[utoipa::path(
+    post,
+    path = "/execution/progress",
+    tag = "execution",
+    request_body = ProgressUpdateRequest,
+    responses(
+        (status = 200, description = "Progress update accepted", body = ProgressUpdateResponse),
+        (status = 400, description = "Invalid request or JWT"),
+        (status = 404, description = "Run not found")
+    ),
+    security(
+        ("executor_jwt" = [])
+    )
+)]
 #[tracing::instrument(name = "POST /execution/progress", skip(state, headers, body))]
 pub async fn report_progress(
     State(state): State<AppState>,
@@ -98,7 +115,7 @@ pub async fn report_progress(
 
     let claims = verify_execution_jwt(token).map_err(|e| {
         tracing::warn!(error = %e, "Invalid execution JWT");
-        ApiError::BadRequest(format!("Invalid execution JWT: {}", e))
+        ApiError::bad_request(format!("Invalid execution JWT: {}", e))
     })?;
 
     let store = get_state_store(&state).await?;
@@ -106,8 +123,8 @@ pub async fn report_progress(
     let run = store
         .get_run_for_app(&claims.run_id, &claims.app_id)
         .await
-        .map_err(|e| ApiError::InternalError(anyhow!("Failed to get run: {}", e).into()))?
-        .ok_or_else(|| ApiError::NotFound)?;
+        .map_err(|e| ApiError::internal_error(anyhow!("Failed to get run: {}", e)))?
+        .ok_or(ApiError::NOT_FOUND)?;
 
     // Don't accept updates for terminal states
     if run.status.is_terminal() {
@@ -163,7 +180,42 @@ pub async fn report_progress(
     let updated = store
         .update_run(&claims.run_id, update)
         .await
-        .map_err(|e| ApiError::InternalError(anyhow!("Failed to update run: {}", e).into()))?;
+        .map_err(|e| ApiError::internal_error(anyhow!("Failed to update run: {}", e)))?;
+
+    if updated.status.is_terminal() {
+        let duration_us = match (updated.started_at, updated.completed_at) {
+            (Some(start), Some(end)) => (end - start) * 1000,
+            _ => 0,
+        };
+        let exec_status = match updated.status {
+            StateRunStatus::Completed => ExecutionStatus::Info,
+            StateRunStatus::Failed => ExecutionStatus::Error,
+            StateRunStatus::Cancelled => ExecutionStatus::Warn,
+            _ => ExecutionStatus::Info,
+        };
+        let db = state.db.clone();
+        let board_id = claims.board_id.clone();
+        let event_id = claims.event_id.clone().unwrap_or_default();
+        let app_id = claims.app_id.clone();
+        let user_id = claims.sub.clone();
+        let run_id = claims.run_id.clone();
+        tokio::spawn(async move {
+            if let Err(e) = track_execution_usage(
+                &db,
+                &board_id,
+                &event_id,
+                &run_id,
+                duration_us,
+                exec_status,
+                &user_id,
+                &app_id,
+            )
+            .await
+            {
+                tracing::warn!(error=%e, "Failed to track execution usage");
+            }
+        });
+    }
 
     Ok(Json(ProgressUpdateResponse {
         accepted: true,
@@ -174,6 +226,19 @@ pub async fn report_progress(
 /// POST /execution/events
 ///
 /// Push streaming events from executor. Requires executor JWT.
+#[utoipa::path(
+    post,
+    path = "/execution/events",
+    tag = "execution",
+    request_body = PushEventsRequest,
+    responses(
+        (status = 200, description = "Events pushed successfully", body = PushEventsResponse),
+        (status = 400, description = "Invalid request or JWT")
+    ),
+    security(
+        ("executor_jwt" = [])
+    )
+)]
 #[tracing::instrument(name = "POST /execution/events", skip(state, headers, body))]
 pub async fn push_events(
     State(state): State<AppState>,
@@ -183,14 +248,15 @@ pub async fn push_events(
     let token = extract_bearer_token(&headers)?;
 
     let claims = verify_execution_jwt(token)
-        .map_err(|e| ApiError::BadRequest(format!("Invalid execution JWT: {}", e)))?;
+        .map_err(|e| ApiError::bad_request(format!("Invalid execution JWT: {}", e)))?;
 
     let store = get_state_store(&state).await?;
 
     // Get current max sequence for this run
-    let max_seq = store.get_max_sequence(&claims.run_id).await.map_err(|e| {
-        ApiError::InternalError(anyhow!("Failed to get max sequence: {}", e).into())
-    })?;
+    let max_seq = store
+        .get_max_sequence(&claims.run_id)
+        .await
+        .map_err(|e| ApiError::internal_error(anyhow!("Failed to get max sequence: {}", e)))?;
 
     let expires_at = chrono::Utc::now().timestamp_millis() + 24 * 60 * 60 * 1000; // 24 hours
     let mut next_seq = max_seq.saturating_add(1);
@@ -215,7 +281,7 @@ pub async fn push_events(
     let accepted = store
         .push_events(events)
         .await
-        .map_err(|e| ApiError::InternalError(anyhow!("Failed to push events: {}", e).into()))?;
+        .map_err(|e| ApiError::internal_error(anyhow!("Failed to push events: {}", e)))?;
 
     Ok(Json(PushEventsResponse {
         accepted,
@@ -228,7 +294,7 @@ pub async fn push_events(
 // ============================================================================
 
 /// Query params for long polling
-#[derive(Clone, Debug, Deserialize)]
+#[derive(Clone, Debug, Deserialize, IntoParams, ToSchema)]
 pub struct PollParams {
     /// Last event sequence received (for pagination)
     pub after_sequence: Option<i32>,
@@ -237,7 +303,7 @@ pub struct PollParams {
 }
 
 /// Response with run status and events
-#[derive(Clone, Debug, Serialize)]
+#[derive(Clone, Debug, Serialize, ToSchema)]
 pub struct PollResponse {
     pub run_id: String,
     pub status: String,
@@ -250,7 +316,7 @@ pub struct PollResponse {
 }
 
 /// Event output for users
-#[derive(Clone, Debug, Serialize)]
+#[derive(Clone, Debug, Serialize, ToSchema)]
 pub struct ExecutionEventOutput {
     pub sequence: i32,
     pub event_type: String,
@@ -262,6 +328,20 @@ pub struct ExecutionEventOutput {
 ///
 /// Long poll for run status and events. Requires user JWT in Authorization header.
 /// The JWT is returned from invoke endpoints (poll_token).
+#[utoipa::path(
+    get,
+    path = "/execution/poll",
+    tag = "execution",
+    params(PollParams),
+    responses(
+        (status = 200, description = "Run status and events", body = PollResponse),
+        (status = 400, description = "Invalid request or JWT"),
+        (status = 404, description = "Run not found")
+    ),
+    security(
+        ("user_jwt" = [])
+    )
+)]
 #[tracing::instrument(name = "GET /execution/poll", skip(state, headers))]
 pub async fn poll_status(
     State(state): State<AppState>,
@@ -271,7 +351,7 @@ pub async fn poll_status(
     let token = extract_bearer_token(&headers)?;
 
     let claims = verify_user_jwt(token)
-        .map_err(|e| ApiError::BadRequest(format!("Invalid user JWT: {}", e)))?;
+        .map_err(|e| ApiError::bad_request(format!("Invalid user JWT: {}", e)))?;
 
     let store = get_state_store(&state).await?;
 
@@ -284,8 +364,8 @@ pub async fn poll_status(
         let run = store
             .get_run_for_app(&claims.run_id, &claims.app_id)
             .await
-            .map_err(|e| ApiError::InternalError(anyhow!("Failed to get run: {}", e).into()))?
-            .ok_or_else(|| ApiError::NotFound)?;
+            .map_err(|e| ApiError::internal_error(anyhow!("Failed to get run: {}", e)))?
+            .ok_or(ApiError::NOT_FOUND)?;
 
         // Get undelivered events
         let events = store
@@ -296,7 +376,7 @@ pub async fn poll_status(
                 limit: Some(100),
             })
             .await
-            .map_err(|e| ApiError::InternalError(anyhow!("Failed to get events: {}", e).into()))?;
+            .map_err(|e| ApiError::internal_error(anyhow!("Failed to get events: {}", e)))?;
 
         // Return immediately if terminal state or we have events
         let is_terminal = run.status.is_terminal();
@@ -341,6 +421,23 @@ pub async fn poll_status(
 /// GET /execution/run/{run_id}
 ///
 /// Get run status (requires app access via normal auth).
+#[utoipa::path(
+    get,
+    path = "/execution/run/{run_id}",
+    tag = "execution",
+    params(
+        ("run_id" = String, Path, description = "Run ID")
+    ),
+    responses(
+        (status = 200, description = "Run status details", body = RunStatusResponse),
+        (status = 401, description = "Unauthorized"),
+        (status = 403, description = "Forbidden"),
+        (status = 404, description = "Run not found")
+    ),
+    security(
+        ("bearer_auth" = [])
+    )
+)]
 #[tracing::instrument(name = "GET /execution/run/{run_id}", skip(state))]
 pub async fn get_run_status(
     State(state): State<AppState>,
@@ -352,8 +449,8 @@ pub async fn get_run_status(
     let run = store
         .get_run(&run_id)
         .await
-        .map_err(|e| ApiError::InternalError(anyhow!("Failed to get run: {}", e).into()))?
-        .ok_or_else(|| ApiError::NotFound)?;
+        .map_err(|e| ApiError::internal_error(anyhow!("Failed to get run: {}", e)))?
+        .ok_or(ApiError::NOT_FOUND)?;
 
     crate::ensure_permission!(
         user,
@@ -386,7 +483,7 @@ pub async fn get_run_status(
 }
 
 /// Response with run status details
-#[derive(Clone, Debug, Serialize)]
+#[derive(Clone, Debug, Serialize, ToSchema)]
 pub struct RunStatusResponse {
     pub run_id: String,
     pub board_id: String,
@@ -404,6 +501,39 @@ pub struct RunStatusResponse {
 }
 
 // ============================================================================
+// Tracking
+// ============================================================================
+
+async fn track_execution_usage(
+    db: &sea_orm::DatabaseConnection,
+    board_id: &str,
+    node_id: &str,
+    version: &str,
+    microseconds: i64,
+    status: ExecutionStatus,
+    user_id: &str,
+    app_id: &str,
+) -> Result<(), flow_like_types::Error> {
+    let now = chrono::Utc::now().naive_utc();
+    let instance = std::env::var("INSTANCE_ID").ok();
+    let record = execution_usage_tracking::ActiveModel {
+        id: Set(create_id()),
+        instance: Set(instance),
+        board_id: Set(board_id.to_string()),
+        node_id: Set(node_id.to_string()),
+        version: Set(version.to_string()),
+        microseconds: Set(microseconds),
+        status: Set(status),
+        user_id: Set(Some(user_id.to_string())),
+        app_id: Set(Some(app_id.to_string())),
+        created_at: Set(now),
+        updated_at: Set(now),
+    };
+    record.insert(db).await?;
+    Ok(())
+}
+
+// ============================================================================
 // Helpers
 // ============================================================================
 
@@ -411,9 +541,9 @@ fn extract_bearer_token(headers: &HeaderMap) -> Result<&str, ApiError> {
     headers
         .get("authorization")
         .and_then(|h| h.to_str().ok())
-        .ok_or_else(|| ApiError::BadRequest("Missing Authorization header".to_string()))?
+        .ok_or_else(|| ApiError::bad_request("Missing Authorization header".to_string()))?
         .strip_prefix("Bearer ")
-        .ok_or_else(|| ApiError::BadRequest("Invalid Authorization header format".to_string()))
+        .ok_or_else(|| ApiError::bad_request("Invalid Authorization header format".to_string()))
 }
 
 /// Get or create the execution state store from app state
@@ -435,5 +565,5 @@ async fn get_state_store(state: &AppState) -> Result<Arc<dyn ExecutionStateStore
 
     crate::execution::state::create_state_store(config)
         .await
-        .map_err(|e| ApiError::InternalError(anyhow!("Failed to create state store: {}", e).into()))
+        .map_err(|e| ApiError::internal_error(anyhow!("Failed to create state store: {}", e)))
 }

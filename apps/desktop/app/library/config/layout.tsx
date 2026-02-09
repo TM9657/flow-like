@@ -46,17 +46,18 @@ import {
 } from "@tm9657/flow-like-ui";
 import { useLiveQuery } from "dexie-react-hooks";
 import {
-	CableIcon,
 	ChartAreaIcon,
 	CogIcon,
 	CopyIcon,
 	CrownIcon,
 	DatabaseIcon,
+	DollarSignIcon,
 	DownloadIcon,
 	EyeIcon,
 	EyeOffIcon,
 	FolderClosedIcon,
 	GlobeIcon,
+	KeyIcon,
 	LayoutGridIcon,
 	LockIcon,
 	Maximize2Icon,
@@ -91,10 +92,22 @@ const navigationItems = [
 		description: "App configuration and environment variables",
 	},
 	{
+		href: "/library/config/runtime-vars",
+		label: "Runtime Variables",
+		icon: KeyIcon,
+		description: "User-specific runtime secrets and configurations",
+	},
+	{
 		href: "/library/config/flows",
 		label: "Flows",
 		icon: WorkflowIcon,
 		description: "Business logic and workflow definitions",
+	},
+	{
+		href: "/library/config/pages",
+		label: "Events",
+		icon: SparklesIcon,
+		description: "Events, pages, and path-based navigation",
 	},
 	{
 		href: "/library/config/templates",
@@ -103,10 +116,10 @@ const navigationItems = [
 		description: "Reusable Flow templates",
 	},
 	{
-		href: "/library/config/events",
-		label: "Events",
-		icon: CableIcon,
-		description: "Event handling and triggers",
+		href: "/library/config/widgets",
+		label: "Widgets",
+		icon: LayoutGridIcon,
+		description: "Reusable UI components and widgets",
 	},
 	{
 		href: "/library/config/storage",
@@ -141,6 +154,14 @@ const navigationItems = [
 			IAppVisibility.Prototype,
 			IAppVisibility.PublicRequestAccess,
 		],
+	},
+	{
+		href: "/library/config/sales",
+		label: "Sales",
+		icon: DollarSignIcon,
+		description: "Track sales, manage pricing and discounts",
+		visibilities: [IAppVisibility.Public, IAppVisibility.PublicRequestAccess],
+		requiresPaid: true,
 	},
 	{
 		href: "/library/config/analytics",
@@ -237,6 +258,14 @@ export default function Id({
 		(id ?? "") !== "",
 	);
 
+	// Fetch configured routes for this app
+	const routes = useInvoke(
+		backend.routeState.getRoutes,
+		backend.routeState,
+		[id ?? ""],
+		(id ?? "") !== "",
+	);
+
 	const { update } = useMobileHeader(
 		{
 			title:
@@ -262,7 +291,26 @@ export default function Id({
 		[events.data],
 	);
 
+	const usableEvents = useMemo(() => {
+		const set = new Set<string>();
+		Object.values(EVENT_CONFIG).forEach((config) => {
+			const usable = Object.keys(config.useInterfaces);
+			for (const eventType of usable) {
+				if (config.eventTypes.includes(eventType)) set.add(eventType);
+			}
+		});
+		return set;
+	}, []);
+
 	useEffect(() => {
+		const hasRoutes = !!routes.data?.length;
+		const hasUsableEvent = !!events.data?.find((e) =>
+			usableEvents.has(e.event_type),
+		);
+		const useHref = hasRoutes
+			? `/use?id=${id}`
+			: `/use?id=${id}&eventId=${events.data?.find((e) => usableEvents.has(e.event_type))?.id}`;
+
 		update({
 			title:
 				metadata.data?.name ??
@@ -282,19 +330,26 @@ export default function Id({
 				>
 					<MenuIcon className="w-4 h-4" />
 				</Button>,
-				<Link
-					key={"use-app"}
-					href={`/use?id=${id}&eventId=${events.data?.find((e) => usableEvents.has(e.event_type))?.id}`}
-					className="md:hidden"
-				>
-					<Button variant="default" size="sm" aria-label="Use App">
-						<SparklesIcon className="w-4 h-4" />
-						Use App
-					</Button>
-				</Link>,
+				...(hasRoutes || hasUsableEvent
+					? [
+							<Link key={"use-app"} href={useHref} className="md:hidden">
+								<Button variant="default" size="sm" aria-label="Use App">
+									<SparklesIcon className="w-4 h-4" />
+									Use App
+								</Button>
+							</Link>,
+						]
+					: []),
 			],
 		});
-	}, [events.data]);
+	}, [
+		events.data,
+		routes.data,
+		id,
+		metadata.data?.name,
+		metadata.isFetching,
+		usableEvents,
+	]);
 
 	const strength = useMemo(() => {
 		if (!encrypt) return 0;
@@ -331,17 +386,6 @@ export default function Id({
 			toast.dismiss(loader);
 		}
 	}, [id, encrypt, password]);
-
-	const usableEvents = useMemo(() => {
-		const set = new Set<string>();
-		Object.values(EVENT_CONFIG).forEach((config) => {
-			const usable = Object.keys(config.useInterfaces);
-			for (const eventType of usable) {
-				if (config.eventTypes.includes(eventType)) set.add(eventType);
-			}
-		});
-		return set;
-	}, []);
 
 	async function executeEvent(event: IEvent) {
 		if (!id) return;
@@ -396,10 +440,15 @@ export default function Id({
 								</BreadcrumbList>
 							</Breadcrumb>
 							<div className="flex items-center gap-2">
-								{events.data?.find((e) => usableEvents.has(e.event_type)) && (
+								{(routes.data?.length ||
+									events.data?.find((e) => usableEvents.has(e.event_type))) && (
 									<div className="hidden md:block">
 										<Link
-											href={`/use?id=${id}&eventId=${events.data?.find((e) => usableEvents.has(e.event_type))?.id}`}
+											href={
+												routes.data?.length
+													? `/use?id=${id}`
+													: `/use?id=${id}&eventId=${events.data?.find((e) => usableEvents.has(e.event_type))?.id}`
+											}
 											className="w-full"
 										>
 											<Button
@@ -414,9 +463,14 @@ export default function Id({
 								)}
 
 								{/* Mobile "Use App" quick action */}
-								{events.data?.find((e) => usableEvents.has(e.event_type)) && (
+								{(routes.data?.length ||
+									events.data?.find((e) => usableEvents.has(e.event_type))) && (
 									<Link
-										href={`/use?id=${id}&eventId=${events.data?.find((e) => usableEvents.has(e.event_type))?.id}`}
+										href={
+											routes.data?.length
+												? `/use?id=${id}`
+												: `/use?id=${id}&eventId=${events.data?.find((e) => usableEvents.has(e.event_type))?.id}`
+										}
 										className="md:hidden"
 									>
 										<Button variant="default" size="sm" aria-label="Use App">
@@ -457,10 +511,12 @@ export default function Id({
 								{navigationItems
 									.filter(
 										(item) =>
-											!item.visibilities ||
-											item.visibilities.includes(
-												online?.visibility ?? IAppVisibility.Offline,
-											),
+											(!item.visibilities ||
+												item.visibilities.includes(
+													online?.visibility ?? IAppVisibility.Offline,
+												)) &&
+											(!item.requiresPaid ||
+												(app.data?.price != null && app.data.price > 0)),
 									)
 									.map((item) => {
 										const Icon = item.icon;
@@ -734,10 +790,12 @@ export default function Id({
 										{navigationItems
 											.filter(
 												(item) =>
-													!item.visibilities ||
-													item.visibilities.includes(
-														online?.visibility ?? IAppVisibility.Offline,
-													),
+													(!item.visibilities ||
+														item.visibilities.includes(
+															online?.visibility ?? IAppVisibility.Offline,
+														)) &&
+													(!item.requiresPaid ||
+														(app.data?.price != null && app.data.price > 0)),
 											)
 											.map((item) => {
 												const Icon = item.icon;
@@ -898,9 +956,10 @@ export default function Id({
 							</div>
 						</CardHeader>
 						<CardContent className="flex-1 p-0 overflow-hidden min-h-0">
-							{currentRoute?.includes("/storage") ? (
+							{currentRoute?.includes("/storage") ||
+							currentRoute?.includes("/explore") ? (
 								<div className="h-full flex flex-col">
-									<div className="flex-1 min-h-0 p-6 pb-0 pt-0">
+									<div className="flex-1 min-h-0 p-6 pb-0 pt-0 overflow-auto">
 										<Suspense
 											fallback={
 												<div className="space-y-4">

@@ -5,12 +5,14 @@ use super::{
     variable::Variable,
 };
 use crate::{
+    a2ui::widget::Page,
     app::App,
     state::FlowLikeState,
     utils::compression::{compress_to_file, from_compressed},
 };
 use commands::GenericCommand;
 use flow_like_storage::object_store::{ObjectStore, path::Path};
+use flow_like_types::proto;
 use flow_like_types::{FromProto, ToProto, create_id, sync::Mutex};
 use futures::StreamExt;
 use highway::{HighwayHash, HighwayHasher};
@@ -38,6 +40,14 @@ pub enum ExecutionStage {
     QA,
     PreProd,
     Prod,
+}
+
+#[derive(Serialize, Deserialize, JsonSchema, Clone, Default, Debug)]
+pub enum ExecutionMode {
+    #[default]
+    Hybrid,
+    Remote,
+    Local,
 }
 #[derive(Serialize, Deserialize, JsonSchema, Clone, Debug)]
 pub enum LayerType {
@@ -164,8 +174,10 @@ pub struct Board {
     pub version: (u32, u32, u32),
     pub stage: ExecutionStage,
     pub log_level: LogLevel,
+    pub execution_mode: ExecutionMode,
     pub refs: HashMap<String, String>,
     pub layers: HashMap<String, Layer>,
+    pub page_ids: Vec<String>,
 
     pub created_at: SystemTime,
     pub updated_at: SystemTime,
@@ -205,11 +217,13 @@ impl Board {
             comments: HashMap::new(),
             log_level: LogLevel::Info,
             stage: ExecutionStage::Dev,
+            execution_mode: ExecutionMode::Hybrid,
             viewport: (0.0, 0.0, 0.0),
             version: (0, 0, 1),
             created_at: SystemTime::now(),
             updated_at: SystemTime::now(),
             layers: HashMap::new(),
+            page_ids: Vec::new(),
             refs: HashMap::new(),
             parent: None,
             board_dir,
@@ -221,6 +235,10 @@ impl Board {
     async fn node_updates(&mut self, state: Arc<FlowLikeState>) {
         let registry = state.node_registry().clone();
         let registry = registry.read().await;
+
+        // First, sync node schemas for any version mismatches
+        // This runs BEFORE on_update so dynamic nodes can still add their pins
+        cleanup::sync_node_schema::sync_board_node_schemas(self, &registry.node_registry).await;
 
         const MAX_PASSES: usize = 10;
         for _ in 0..MAX_PASSES {
@@ -388,34 +406,23 @@ impl Board {
         store: Option<Arc<dyn ObjectStore>>,
     ) -> flow_like_types::Result<(u32, u32, u32)> {
         let version = self.version;
+        let store = self.get_store(store).await?;
 
-        let to = self
+        let board_version_path = self
             .board_dir
             .child("versions")
             .child(self.id.clone())
-            .child(format!(
-                "{}_{}_{}.board",
-                self.version.0, self.version.1, self.version.2
-            ));
-
-        let store = match store {
-            Some(store) => store,
-            None => self
-                .app_state
-                .as_ref()
-                .expect("app_state should always be set")
-                .config
-                .read()
-                .await
-                .stores
-                .app_meta_store
-                .clone()
-                .ok_or(flow_like_types::anyhow!("Project store not found"))?
-                .as_generic(),
-        };
+            .child(format!("{}_{}_{}.board", version.0, version.1, version.2));
 
         let board = self.to_proto();
-        compress_to_file(store.clone(), to, &board).await?;
+        compress_to_file(store.clone(), board_version_path, &board).await?;
+
+        for page_id in &self.page_ids {
+            let src_path = self.page_path(page_id);
+            let dst_path = self.versioned_page_path(version, page_id);
+            let page_proto: proto::Page = from_compressed(store.clone(), src_path).await?;
+            compress_to_file(store.clone(), dst_path, &page_proto).await?;
+        }
 
         let new_version = match version_type {
             VersionType::Major => (version.0 + 1, 0, 0),
@@ -522,6 +529,11 @@ impl Board {
         board.board_dir = board_dir;
         board.app_state = Some(app_state.clone());
         board.logic_nodes = HashMap::new();
+
+        // Sync node schemas on load to handle version migrations and OAuth metadata
+        board.node_updates(app_state).await;
+        board.cleanup();
+
         Ok(board)
     }
 
@@ -548,6 +560,233 @@ impl Board {
         Ok(())
     }
 
+    /// PAGE FUNCTIONS
+
+    fn pages_dir(&self) -> Path {
+        self.board_dir.child(format!("_{}", self.id))
+    }
+
+    fn page_path(&self, page_id: &str) -> Path {
+        self.pages_dir().child(format!("{}.page", page_id))
+    }
+
+    fn versioned_pages_dir(&self, version: (u32, u32, u32)) -> Path {
+        self.board_dir
+            .child("versions")
+            .child(self.id.clone())
+            .child(format!("{}_{}_{}", version.0, version.1, version.2))
+    }
+
+    fn versioned_page_path(&self, version: (u32, u32, u32), page_id: &str) -> Path {
+        self.versioned_pages_dir(version)
+            .child(format!("{}.page", page_id))
+    }
+
+    fn template_pages_dir(&self, template_id: &str) -> Path {
+        self.board_dir.child(format!("_template_{}", template_id))
+    }
+
+    fn template_page_path(&self, template_id: &str, page_id: &str) -> Path {
+        self.template_pages_dir(template_id)
+            .child(format!("{}.page", page_id))
+    }
+
+    fn versioned_template_pages_dir(&self, template_id: &str, version: (u32, u32, u32)) -> Path {
+        self.board_dir
+            .child("templates")
+            .child("versions")
+            .child(template_id)
+            .child(format!("{}_{}_{}", version.0, version.1, version.2))
+    }
+
+    fn versioned_template_page_path(
+        &self,
+        template_id: &str,
+        version: (u32, u32, u32),
+        page_id: &str,
+    ) -> Path {
+        self.versioned_template_pages_dir(template_id, version)
+            .child(format!("{}.page", page_id))
+    }
+
+    async fn get_store(
+        &self,
+        store: Option<Arc<dyn ObjectStore>>,
+    ) -> flow_like_types::Result<Arc<dyn ObjectStore>> {
+        match store {
+            Some(s) => Ok(s),
+            None => self
+                .app_state
+                .as_ref()
+                .ok_or_else(|| flow_like_types::anyhow!("app_state not set"))?
+                .config
+                .read()
+                .await
+                .stores
+                .app_meta_store
+                .clone()
+                .ok_or_else(|| flow_like_types::anyhow!("Project store not found"))
+                .map(|s| s.as_generic()),
+        }
+    }
+
+    pub fn get_page_ids(&self) -> &[String] {
+        &self.page_ids
+    }
+
+    pub fn page_count(&self) -> usize {
+        self.page_ids.len()
+    }
+
+    pub async fn load_page(
+        &self,
+        page_id: &str,
+        store: Option<Arc<dyn ObjectStore>>,
+    ) -> flow_like_types::Result<Page> {
+        let store = self.get_store(store).await?;
+        let path = self.page_path(page_id);
+        let page_proto: proto::Page = from_compressed(store, path).await?;
+        Ok(page_proto.into())
+    }
+
+    pub async fn load_all_pages(
+        &self,
+        store: Option<Arc<dyn ObjectStore>>,
+    ) -> flow_like_types::Result<Vec<Page>> {
+        let store = self.get_store(store).await?;
+        let mut pages = Vec::with_capacity(self.page_ids.len());
+        for page_id in &self.page_ids {
+            let path = self.page_path(page_id);
+            let page_proto: proto::Page = from_compressed(store.clone(), path).await?;
+            pages.push(page_proto.into());
+        }
+        Ok(pages)
+    }
+
+    pub async fn load_versioned_page(
+        &self,
+        page_id: &str,
+        version: (u32, u32, u32),
+        store: Option<Arc<dyn ObjectStore>>,
+    ) -> flow_like_types::Result<Page> {
+        let store = self.get_store(store).await?;
+        let path = self.versioned_page_path(version, page_id);
+        let page_proto: proto::Page = from_compressed(store, path).await?;
+        Ok(page_proto.into())
+    }
+
+    pub async fn save_page(
+        &mut self,
+        page: &Page,
+        store: Option<Arc<dyn ObjectStore>>,
+    ) -> flow_like_types::Result<()> {
+        let store = self.get_store(store).await?;
+        let path = self.page_path(&page.id);
+        let page_proto: proto::Page = page.clone().into();
+        compress_to_file(store, path, &page_proto).await?;
+
+        if !self.page_ids.contains(&page.id) {
+            self.page_ids.push(page.id.clone());
+            self.updated_at = SystemTime::now();
+        }
+        Ok(())
+    }
+
+    pub async fn delete_page(
+        &mut self,
+        page_id: &str,
+        store: Option<Arc<dyn ObjectStore>>,
+    ) -> flow_like_types::Result<()> {
+        let store = self.get_store(store).await?;
+        let path = self.page_path(page_id);
+        store.delete(&path).await?;
+        self.page_ids.retain(|id| id != page_id);
+        self.updated_at = SystemTime::now();
+        Ok(())
+    }
+
+    pub fn get_required_element_ids(&self) -> std::collections::HashSet<String> {
+        let mut required_ids = std::collections::HashSet::new();
+        for node in self.nodes.values() {
+            Self::extract_element_refs_from_node(node, &mut required_ids);
+        }
+        for layer in self.layers.values() {
+            for node in layer.nodes.values() {
+                Self::extract_element_refs_from_node(node, &mut required_ids);
+            }
+        }
+        required_ids
+    }
+
+    fn extract_element_refs_from_node(
+        node: &Node,
+        required_ids: &mut std::collections::HashSet<String>,
+    ) {
+        for pin in node.pins.values() {
+            if pin.name == "element_ref"
+                && let Some(default_value) = &pin.default_value
+                && let Ok(value) =
+                    flow_like_types::json::from_slice::<flow_like_types::Value>(default_value)
+                && let Some(id) = value.as_str()
+                && !id.is_empty()
+            {
+                required_ids.insert(id.to_string());
+            }
+        }
+    }
+
+    pub async fn get_execution_elements(
+        &self,
+        page_id: &str,
+        wildcard: bool,
+        store: Option<Arc<dyn ObjectStore>>,
+    ) -> flow_like_types::Result<std::collections::HashMap<String, flow_like_types::Value>> {
+        let mut elements = std::collections::HashMap::new();
+
+        let page = match self.load_page(page_id, store).await {
+            Ok(p) => p,
+            Err(_) => return Ok(elements),
+        };
+
+        if wildcard {
+            for component in &page.components {
+                let full_id = format!("{}/{}", page_id, component.id);
+                if let Ok(value) = flow_like_types::json::to_value(component) {
+                    elements.insert(full_id, value);
+                }
+            }
+        } else {
+            let required_ids = self.get_required_element_ids();
+            let component_ids: std::collections::HashSet<String> = required_ids
+                .iter()
+                .filter_map(|id| {
+                    if id.starts_with(&format!("{}/", page_id)) {
+                        Some(
+                            id.strip_prefix(&format!("{}/", page_id))
+                                .unwrap()
+                                .to_string(),
+                        )
+                    } else if !id.contains('/') {
+                        Some(id.clone())
+                    } else {
+                        None
+                    }
+                })
+                .collect();
+
+            for component in &page.components {
+                if component_ids.contains(&component.id) {
+                    let full_id = format!("{}/{}", page_id, component.id);
+                    if let Ok(value) = flow_like_types::json::to_value(component) {
+                        elements.insert(full_id, value);
+                    }
+                }
+            }
+        }
+
+        Ok(elements)
+    }
+
     /// TEMPLATE FUNCTIONS
 
     pub async fn save_as_template(
@@ -555,25 +794,18 @@ impl Board {
         store: Option<Arc<dyn ObjectStore>>,
     ) -> flow_like_types::Result<()> {
         let to = self.board_dir.child(format!("{}.template", self.id));
-        println!("Saving template to: {:?}", to);
-        let store = match store {
-            Some(store) => store,
-            None => self
-                .app_state
-                .as_ref()
-                .expect("app_state should always be set")
-                .config
-                .read()
-                .await
-                .stores
-                .app_meta_store
-                .clone()
-                .ok_or(flow_like_types::anyhow!("Project store not found"))?
-                .as_generic(),
-        };
+        let store = self.get_store(store).await?;
 
         let board = self.to_proto();
-        compress_to_file(store, to, &board).await?;
+        compress_to_file(store.clone(), to, &board).await?;
+
+        for page_id in &self.page_ids {
+            let src_path = self.page_path(page_id);
+            let dst_path = self.template_page_path(&self.id, page_id);
+            let page_proto: proto::Page = from_compressed(store.clone(), src_path).await?;
+            compress_to_file(store.clone(), dst_path, &page_proto).await?;
+        }
+
         Ok(())
     }
 
@@ -582,6 +814,8 @@ impl Board {
         version: (u32, u32, u32),
         store: Option<Arc<dyn ObjectStore>>,
     ) -> flow_like_types::Result<()> {
+        let store = self.get_store(store).await?;
+
         let to = self
             .board_dir
             .child("templates")
@@ -592,24 +826,16 @@ impl Board {
                 version.0, version.1, version.2
             ));
 
-        let store = match store {
-            Some(store) => store,
-            None => self
-                .app_state
-                .as_ref()
-                .expect("app_state should always be set")
-                .config
-                .read()
-                .await
-                .stores
-                .app_meta_store
-                .clone()
-                .ok_or(flow_like_types::anyhow!("Project store not found"))?
-                .as_generic(),
-        };
-
         let board = self.to_proto();
-        compress_to_file(store, to, &board).await?;
+        compress_to_file(store.clone(), to, &board).await?;
+
+        for page_id in &self.page_ids {
+            let src_path = self.page_path(page_id);
+            let dst_path = self.versioned_template_page_path(&self.id, version, page_id);
+            let page_proto: proto::Page = from_compressed(store.clone(), src_path).await?;
+            compress_to_file(store.clone(), dst_path, &page_proto).await?;
+        }
+
         Ok(())
     }
 
@@ -620,46 +846,34 @@ impl Board {
         old_template: Option<Board>,
         store: Option<Arc<dyn ObjectStore>>,
     ) -> flow_like_types::Result<(u32, u32, u32)> {
-        // Either the old_template version or (0,0,0)
-        let version = {
-            if let Some(old_template) = &old_template {
-                old_template.version
-            } else {
-                (0, 0, 0)
-            }
-        };
+        let store = self.get_store(store).await?;
 
-        let to = self
-            .board_dir
-            .child("templates")
-            .child("versions")
-            .child(self.id.clone())
-            .child(format!(
-                "{}_{}_{}.template",
-                version.0, version.1, version.2
-            ));
-
-        let store = match store {
-            Some(store) => store,
-            None => self
-                .app_state
-                .as_ref()
-                .expect("app_state should always be set")
-                .config
-                .read()
-                .await
-                .stores
-                .app_meta_store
-                .clone()
-                .ok_or(flow_like_types::anyhow!("Project store not found"))?
-                .as_generic(),
-        };
+        let version = old_template
+            .as_ref()
+            .map(|t| t.version)
+            .unwrap_or((0, 0, 0));
 
         let mut new_version = (0, 0, 0);
 
         if let Some(old_template) = &old_template {
-            // If an old template is provided, we move it to the versions directory
+            let to = self
+                .board_dir
+                .child("templates")
+                .child("versions")
+                .child(self.id.clone())
+                .child(format!(
+                    "{}_{}_{}.template",
+                    version.0, version.1, version.2
+                ));
             compress_to_file(store.clone(), to, &old_template.to_proto()).await?;
+
+            for page_id in &old_template.page_ids {
+                let src_path = old_template.template_page_path(&old_template.id, page_id);
+                let dst_path = self.versioned_template_page_path(&self.id, version, page_id);
+                let page_proto: proto::Page = from_compressed(store.clone(), src_path).await?;
+                compress_to_file(store.clone(), dst_path, &page_proto).await?;
+            }
+
             new_version = match version_type {
                 VersionType::Major => (version.0 + 1, 0, 0),
                 VersionType::Minor => (version.0, version.1 + 1, 0),
@@ -716,7 +930,73 @@ impl Board {
         board.board_dir = board_dir;
         board.app_state = Some(app_state.clone());
         board.logic_nodes = HashMap::new();
+
+        // Sync node schemas on load to handle version migrations
+        board.node_updates(app_state).await;
+        board.cleanup();
+
         Ok(board)
+    }
+
+    pub async fn load_template_page(
+        &self,
+        template_id: &str,
+        page_id: &str,
+        version: Option<(u32, u32, u32)>,
+        store: Option<Arc<dyn ObjectStore>>,
+    ) -> flow_like_types::Result<Page> {
+        let store = self.get_store(store).await?;
+
+        let path = if let Some(v) = version {
+            self.versioned_template_page_path(template_id, v, page_id)
+        } else {
+            self.template_page_path(template_id, page_id)
+        };
+
+        let page_proto: proto::Page = from_compressed(store, path).await?;
+        Ok(page_proto.into())
+    }
+
+    pub async fn load_all_template_pages(
+        &self,
+        template_id: &str,
+        version: Option<(u32, u32, u32)>,
+        store: Option<Arc<dyn ObjectStore>>,
+    ) -> flow_like_types::Result<HashMap<String, Page>> {
+        let store = self.get_store(store).await?;
+
+        let mut pages = HashMap::new();
+        for page_id in &self.page_ids {
+            let path = if let Some(v) = version {
+                self.versioned_template_page_path(template_id, v, page_id)
+            } else {
+                self.template_page_path(template_id, page_id)
+            };
+            let page_proto: proto::Page = from_compressed(store.clone(), path).await?;
+            pages.insert(page_id.clone(), page_proto.into());
+        }
+        Ok(pages)
+    }
+
+    pub async fn copy_template_pages_to_board(
+        &self,
+        template_id: &str,
+        version: Option<(u32, u32, u32)>,
+        store: Option<Arc<dyn ObjectStore>>,
+    ) -> flow_like_types::Result<()> {
+        let store = self.get_store(store).await?;
+
+        for page_id in &self.page_ids {
+            let src_path = if let Some(v) = version {
+                self.versioned_template_page_path(template_id, v, page_id)
+            } else {
+                self.template_page_path(template_id, page_id)
+            };
+            let dst_path = self.page_path(page_id);
+            let page_proto: proto::Page = from_compressed(store.clone(), src_path).await?;
+            compress_to_file(store.clone(), dst_path, &page_proto).await?;
+        }
+        Ok(())
     }
 
     pub async fn get_template_versions(
@@ -730,21 +1010,7 @@ impl Board {
             .child("versions")
             .child(self.id.clone());
 
-        let store = match store {
-            Some(store) => store,
-            None => self
-                .app_state
-                .as_ref()
-                .expect("app_state should always be set")
-                .config
-                .read()
-                .await
-                .stores
-                .app_meta_store
-                .clone()
-                .ok_or(flow_like_types::anyhow!("Project store not found"))?
-                .as_generic(),
-        };
+        let store = self.get_store(store).await?;
 
         let mut versions = store.list(Some(&versions_dir));
         let mut version_list = Vec::new();
@@ -869,7 +1135,7 @@ mod tests {
         config.register_app_meta_store(FlowLikeStore::Other(Arc::new(
             object_store::memory::InMemory::new(),
         )));
-        let (http_client, _refetch_rx) = HTTPClient::new();
+        let http_client = HTTPClient::new_without_refetch();
         let flow_like_state = crate::state::FlowLikeState::new(config, http_client);
         Arc::new(flow_like_state)
     }

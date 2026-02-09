@@ -1,15 +1,33 @@
-use std::{any::Any, sync::Arc};
+use std::any::Any;
 
-use super::ModelLogic;
+use super::{ModelLogic, extract_headers};
 use crate::provider::random_provider;
 use crate::{
     llm::ModelConstructor,
     provider::{ModelProvider, ModelProviderConfiguration},
 };
 use flow_like_types::{Cacheable, Result, async_trait};
-use rig::client::ProviderClient;
+#[allow(deprecated)]
+use rig::client::completion::CompletionClientDyn;
+
+#[derive(Clone)]
+enum OpenAIClientType {
+    OpenAI(rig::providers::openai::Client),
+    Azure(rig::providers::azure::Client),
+}
+
+impl OpenAIClientType {
+    #[allow(deprecated)]
+    fn into_boxed(self) -> Box<dyn CompletionClientDyn + Send + Sync> {
+        match self {
+            OpenAIClientType::OpenAI(client) => Box::new(client),
+            OpenAIClientType::Azure(client) => Box::new(client),
+        }
+    }
+}
+
 pub struct OpenAIModel {
-    client: Arc<Box<dyn ProviderClient>>,
+    client: OpenAIClientType,
     default_model: Option<String>,
 }
 
@@ -24,7 +42,6 @@ impl OpenAIModel {
 
         let client = if provider.provider_name == "azure" {
             let endpoint = openai_config.endpoint.clone().unwrap_or_default();
-            // Ensure endpoint ends with /
             let endpoint = if endpoint.ends_with('/') {
                 endpoint.to_string()
             } else {
@@ -32,23 +49,25 @@ impl OpenAIModel {
             };
 
             let auth = rig::providers::azure::AzureOpenAIAuth::ApiKey(api_key.clone());
-            let mut builder = rig::providers::azure::Client::builder(auth, &endpoint);
+            let mut builder = rig::providers::azure::Client::builder()
+                .api_key(auth)
+                .azure_endpoint(endpoint);
             if let Some(version) = provider.version.as_deref() {
                 builder = builder.api_version(version);
             }
 
-            builder.build().boxed()
+            OpenAIClientType::Azure(builder.build()?)
         } else {
-            let mut builder = rig::providers::openai::Client::builder(&api_key);
+            let mut builder = rig::providers::openai::Client::builder().api_key(&api_key);
             if let Some(endpoint) = openai_config.endpoint.as_deref() {
                 builder = builder.base_url(endpoint);
             }
 
-            builder.build().boxed()
+            OpenAIClientType::OpenAI(builder.build()?)
         };
 
         Ok(OpenAIModel {
-            client: Arc::new(client),
+            client,
             default_model: model_id,
         })
     }
@@ -65,6 +84,7 @@ impl OpenAIModel {
 
         let is_azure = params.get("is_azure").cloned();
         let endpoint = params.get("endpoint").cloned();
+        let custom_headers = extract_headers(&params);
 
         let is_azure = match is_azure {
             Some(val) => val.as_bool().unwrap_or(false),
@@ -86,7 +106,6 @@ impl OpenAIModel {
         let client = if is_azure {
             let endpoint = endpoint.unwrap_or_default();
             let endpoint = endpoint.as_str().unwrap_or_default();
-            // Ensure endpoint ends with /
             let endpoint = if endpoint.ends_with('/') {
                 endpoint.to_string()
             } else {
@@ -94,21 +113,29 @@ impl OpenAIModel {
             };
 
             let auth = rig::providers::azure::AzureOpenAIAuth::ApiKey(api_key.to_string());
-            let mut builder = rig::providers::azure::Client::builder(auth, &endpoint);
+            let mut builder = rig::providers::azure::Client::builder()
+                .api_key(auth)
+                .azure_endpoint(endpoint);
             if let Some(version_str) = params.get("version").and_then(|v| v.as_str()) {
                 builder = builder.api_version(version_str);
             }
-            builder.build().boxed()
+            if !custom_headers.is_empty() {
+                builder = builder.http_headers(custom_headers);
+            }
+            OpenAIClientType::Azure(builder.build()?)
         } else {
-            let mut builder = rig::providers::openai::Client::builder(api_key);
+            let mut builder = rig::providers::openai::Client::builder().api_key(api_key);
             if let Some(endpoint) = endpoint.as_ref().and_then(|v| v.as_str()) {
                 builder = builder.base_url(endpoint);
             }
-            builder.build().boxed()
+            if !custom_headers.is_empty() {
+                builder = builder.http_headers(custom_headers);
+            }
+            OpenAIClientType::OpenAI(builder.build()?)
         };
 
         Ok(OpenAIModel {
-            client: Arc::new(client),
+            client,
             default_model: model_id,
         })
     }
@@ -126,9 +153,10 @@ impl Cacheable for OpenAIModel {
 
 #[async_trait]
 impl ModelLogic for OpenAIModel {
+    #[allow(deprecated)]
     async fn provider(&self) -> Result<ModelConstructor> {
         Ok(ModelConstructor {
-            inner: self.client.clone(),
+            inner: self.client.clone().into_boxed(),
         })
     }
 
@@ -138,8 +166,9 @@ impl ModelLogic for OpenAIModel {
 }
 
 #[cfg(test)]
+#[allow(deprecated)]
 mod tests {
-    use flow_like_types::{anyhow, tokio};
+    use flow_like_types::tokio;
     use rig::agent::MultiTurnStreamItem;
     use rig::completion::Chat;
     use rig::completion::ToolDefinition;
@@ -176,14 +205,11 @@ mod tests {
             .await
             .unwrap()
             .inner
-            .as_completion()
-            .ok_or(anyhow!("cant create completion model"))
-            .unwrap()
             .agent(&model.default_model.unwrap_or(history.model.clone()))
             .build();
 
         let (prompt, history_msgs) = history.extract_prompt_and_history().unwrap();
-        let response = agent.chat(prompt, history_msgs).await.unwrap();
+        let response: String = agent.chat(prompt, history_msgs).await.unwrap();
 
         assert!(!response.is_empty());
     }
@@ -234,16 +260,13 @@ mod tests {
             .await
             .unwrap()
             .inner
-            .as_completion()
-            .ok_or(anyhow!("cant create completion model"))
-            .unwrap()
             .agent(&model.default_model.unwrap_or(history.model.clone()))
             .temperature(1.0)
             .build();
 
         let (prompt, history) = history.extract_prompt_and_history().unwrap();
 
-        let response = agent.chat(prompt, history).await.unwrap();
+        let response: String = agent.chat(prompt, history).await.unwrap();
         println!("Final response: {:?}", response);
         assert!(!response.is_empty());
     }
@@ -285,9 +308,6 @@ mod tests {
             .await
             .unwrap()
             .inner
-            .as_completion()
-            .ok_or(anyhow!("cant create completion model"))
-            .unwrap()
             .agent(&model.default_model.unwrap_or(history.model.clone()))
             .build();
 
@@ -362,9 +382,6 @@ mod tests {
             .await
             .unwrap()
             .inner
-            .as_completion()
-            .ok_or(anyhow!("cant create completion model"))
-            .unwrap()
             .agent(&model.default_model.unwrap_or(history.model.clone()))
             .build();
 
@@ -526,15 +543,12 @@ mod tests {
             .await
             .unwrap()
             .inner
-            .as_completion()
-            .ok_or(anyhow!("cant create completion model"))
-            .unwrap()
             .agent(model_name)
             .preamble("You are a helpful assistant.")
             .tool(WeatherTool)
             .build();
 
-        let response = agent
+        let response: String = agent
             .chat(
                 "Call the tool to get the weather for San Francisco, CA in celsius.",
                 vec![],
@@ -566,9 +580,6 @@ mod tests {
             .await
             .unwrap()
             .inner
-            .as_completion()
-            .ok_or(anyhow!("cant create completion model"))
-            .unwrap()
             .agent(model_name)
             .preamble("You are a helpful assistant.")
             .tool(WeatherTool)
@@ -613,16 +624,13 @@ mod tests {
             .await
             .unwrap()
             .inner
-            .as_completion()
-            .ok_or(anyhow!("cant create completion model"))
-            .unwrap()
             .agent(model_name)
             .preamble("You are a helpful assistant.")
             .tool(WeatherTool)
             .build();
 
         // This will automatically call the tool and use its result
-        let response = agent
+        let response: String = agent
             .chat(
                 "What is the weather in Paris in celsius? Use the tool.",
                 vec![],
@@ -681,15 +689,12 @@ mod tests {
             .await
             .unwrap()
             .inner
-            .as_completion()
-            .ok_or(anyhow!("cant create completion model"))
-            .unwrap()
             .agent(&model.default_model.unwrap_or(history.model.clone()))
             .build();
 
         let (prompt, history_msgs) = history.extract_prompt_and_history().unwrap();
 
-        let response = match agent.chat(prompt, history_msgs).await {
+        let response: String = match agent.chat(prompt, history_msgs).await {
             Ok(r) => r,
             Err(e) => {
                 let msg = format!("{e}");
@@ -752,9 +757,6 @@ mod tests {
             .await
             .unwrap()
             .inner
-            .as_completion()
-            .ok_or(anyhow!("cant create completion model"))
-            .unwrap()
             .agent(&model.default_model.unwrap_or(history.model.clone()))
             .build();
 
@@ -834,15 +836,12 @@ mod tests {
             .await
             .unwrap()
             .inner
-            .as_completion()
-            .ok_or(anyhow!("cant create completion model"))
-            .unwrap()
             .agent(&model.default_model.unwrap_or("@preset/testing".to_string()))
             .preamble("You are a helpful assistant.")
             .tool(WeatherTool)
             .build();
 
-        let response = agent
+        let response: String = agent
             .chat(
                 "Call the tool to get the weather for San Francisco, CA in celsius.",
                 vec![],
@@ -869,9 +868,6 @@ mod tests {
             .await
             .unwrap()
             .inner
-            .as_completion()
-            .ok_or(anyhow!("cant create completion model"))
-            .unwrap()
             .agent(&model.default_model.unwrap_or("@preset/testing".to_string()))
             .preamble("You are a helpful assistant.")
             .tool(WeatherTool)
@@ -912,15 +908,12 @@ mod tests {
             .await
             .unwrap()
             .inner
-            .as_completion()
-            .ok_or(anyhow!("cant create completion model"))
-            .unwrap()
             .agent(&model.default_model.unwrap_or("@preset/testing".to_string()))
             .preamble("You are a helpful assistant.")
             .tool(WeatherTool)
             .build();
 
-        let response = agent
+        let response: String = agent
             .chat(
                 "What is the weather in Paris in celsius? Use the tool.",
                 vec![],
@@ -984,15 +977,12 @@ mod tests {
             .await
             .unwrap()
             .inner
-            .as_completion()
-            .ok_or(anyhow!("cant create completion model"))
-            .unwrap()
             .agent(&model.default_model.unwrap_or(history.model.clone()))
             .build();
 
         let (prompt, history_msgs) = history.extract_prompt_and_history().unwrap();
 
-        let response = match agent.chat(prompt, history_msgs).await {
+        let response: String = match agent.chat(prompt, history_msgs).await {
             Ok(r) => r,
             Err(e) => {
                 let msg = format!("{e}");
@@ -1056,9 +1046,6 @@ mod tests {
             .await
             .unwrap()
             .inner
-            .as_completion()
-            .ok_or(anyhow!("cant create completion model"))
-            .unwrap()
             .agent(&model.default_model.unwrap_or(history.model.clone()))
             .build();
 
@@ -1110,8 +1097,6 @@ mod tests {
             .await
             .unwrap()
             .inner
-            .as_completion()
-            .unwrap()
             .agent(model_name)
             .preamble("You are a helpful assistant.")
             .tool(WeatherTool)
@@ -1120,7 +1105,7 @@ mod tests {
 
         let prompt =
             "Call both weather and forecast tools for Berlin (3 days), return tool calls only.";
-        let response = agent.chat(prompt, vec![]).await.unwrap();
+        let response: String = agent.chat(prompt, vec![]).await.unwrap();
 
         assert!(!response.is_empty());
         assert!(response.contains("Berlin") || response.contains("berlin"));
@@ -1140,9 +1125,6 @@ mod tests {
             .await
             .unwrap()
             .inner
-            .as_completion()
-            .ok_or(anyhow!("cant create completion model"))
-            .unwrap()
             .agent(model_name)
             .preamble("You are a helpful assistant.")
             .tool(WeatherTool)
@@ -1181,8 +1163,6 @@ mod tests {
             .await
             .unwrap()
             .inner
-            .as_completion()
-            .unwrap()
             .agent(model_name)
             .preamble("You are a helpful assistant.")
             .tool(WeatherTool)
@@ -1191,7 +1171,7 @@ mod tests {
 
         let prompt =
             "Call both weather and forecast tools for Berlin (3 days), return tool calls only.";
-        let response = agent.chat(prompt, vec![]).await.unwrap();
+        let response: String = agent.chat(prompt, vec![]).await.unwrap();
 
         assert!(!response.is_empty());
         assert!(response.contains("Berlin") || response.contains("berlin"));
@@ -1207,9 +1187,6 @@ mod tests {
             .await
             .unwrap()
             .inner
-            .as_completion()
-            .ok_or(anyhow!("cant create completion model"))
-            .unwrap()
             .agent("@preset/testing")
             .preamble("You are a helpful assistant.")
             .tool(WeatherTool)

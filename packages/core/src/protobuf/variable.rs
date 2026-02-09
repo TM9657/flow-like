@@ -91,6 +91,8 @@ impl ToProto<flow_like_types::proto::Variable> for Variable {
             secret: self.secret,
             editable: self.editable,
             hash: self.hash,
+            schema: self.schema.clone(),
+            runtime_configured: self.runtime_configured,
         }
     }
 }
@@ -122,6 +124,8 @@ impl FromProto<flow_like_types::proto::Variable> for Variable {
             editable: proto.editable,
             value: Arc::new(Mutex::new(Value::Null)),
             hash: proto.hash,
+            schema: proto.schema,
+            runtime_configured: proto.runtime_configured,
         }
     }
 }

@@ -7,7 +7,7 @@ import type {
 	IMetadata,
 } from "@tm9657/flow-like-ui";
 import type { IAppSearchSort } from "@tm9657/flow-like-ui/lib/schema/app/app-search-query";
-import type { IMediaItem } from "../app-state";
+import type { IMediaItem, IPurchaseResponse } from "../app-state";
 
 export class EmptyAppState implements IAppState {
 	createApp(
@@ -69,6 +69,10 @@ export class EmptyAppState implements IAppState {
 	}
 
 	requestJoinApp(appId: string, comment?: string): Promise<void> {
+		throw new Error("Method not implemented.");
+	}
+
+	purchaseApp(appId: string): Promise<IPurchaseResponse> {
 		throw new Error("Method not implemented.");
 	}
 }

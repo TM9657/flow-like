@@ -13,8 +13,10 @@ pub use context::{
 };
 pub use provider::CatalogProvider;
 pub use tools::{
-    CatalogTool, EmitCommandsTool, FilterCategoryTool, GetNodeDetailsTool, QueryLogsTool,
-    SearchByPinTool, SearchTemplatesTool, get_tool_description,
+    CatalogTool, EmitCommandsArgs, EmitCommandsTool, FilterCategoryArgs, FilterCategoryTool,
+    GetNodeDetailsArgs, GetNodeDetailsTool, QueryLogsArgs, QueryLogsTool, SearchArgs,
+    SearchByPinArgs, SearchByPinTool, SearchTemplatesArgs, SearchTemplatesTool, ThinkingArgs,
+    get_tool_description,
 };
 pub use types::{
     AgentType, BoardCommand, ChatImage, ChatMessage, ChatRole, Connection, CopilotResponse, Edge,
@@ -46,10 +48,7 @@ use crate::profile::Profile;
 use crate::state::FlowLikeState;
 use flow_like_model_provider::provider::ModelProvider;
 
-use tools::{
-    EmitCommandsArgs, FilterCategoryArgs, GetNodeDetailsArgs, QueryLogsArgs, SearchArgs,
-    SearchByPinArgs, SearchTemplatesArgs, ThinkingArgs,
-};
+// Note: Tool args types are re-exported publicly from `pub use tools::{ ... }` above
 
 /// The main Copilot struct that provides AI-powered graph editing
 pub struct Copilot {
@@ -288,6 +287,25 @@ impl Copilot {
         let mut plan_step_counter = 0u32;
 
         for iteration in 0..max_iterations {
+            // Send iteration start event
+            if let Some(ref callback) = on_token {
+                plan_step_counter += 1;
+                let step_event = StreamEvent::PlanStep(PlanStep {
+                    id: format!("iteration_{}", iteration),
+                    description: if iteration == 0 {
+                        "Analyzing request...".to_string()
+                    } else {
+                        "Processing tool results...".to_string()
+                    },
+                    status: PlanStepStatus::InProgress,
+                    tool_name: Some("analyze".to_string()),
+                });
+                callback(format!(
+                    "<plan_step>{}</plan_step>",
+                    serde_json::to_string(&step_event).unwrap_or_default()
+                ));
+            }
+
             // Build completion request - tools are already attached via agent builder
             let request = agent
                 .completion(prompt.clone(), current_history.clone())
@@ -366,6 +384,28 @@ impl Copilot {
                         reasoning_step_id = None;
                         current_reasoning.clear();
                     }
+                    StreamedAssistantContent::ReasoningDelta { reasoning, .. } => {
+                        current_reasoning.push_str(&reasoning);
+
+                        if let Some(ref callback) = on_token {
+                            if reasoning_step_id.is_none() {
+                                plan_step_counter += 1;
+                                reasoning_step_id =
+                                    Some(format!("reasoning_{}", plan_step_counter));
+                            }
+
+                            let step_event = StreamEvent::PlanStep(PlanStep {
+                                id: reasoning_step_id.clone().unwrap(),
+                                description: current_reasoning.trim().to_string(),
+                                status: PlanStepStatus::InProgress,
+                                tool_name: Some("think".to_string()),
+                            });
+                            callback(format!(
+                                "<plan_step>{}</plan_step>",
+                                serde_json::to_string(&step_event).unwrap_or_default()
+                            ));
+                        }
+                    }
                 }
             }
 
@@ -376,6 +416,24 @@ impl Copilot {
                     description: current_reasoning.trim().to_string(),
                     status: PlanStepStatus::Completed,
                     tool_name: Some("think".to_string()),
+                });
+                callback(format!(
+                    "<plan_step>{}</plan_step>",
+                    serde_json::to_string(&step_event).unwrap_or_default()
+                ));
+            }
+
+            // Mark iteration analysis as complete
+            if let Some(ref callback) = on_token {
+                let step_event = StreamEvent::PlanStep(PlanStep {
+                    id: format!("iteration_{}", iteration),
+                    description: if iteration == 0 {
+                        "Analysis complete".to_string()
+                    } else {
+                        "Tool results processed".to_string()
+                    },
+                    status: PlanStepStatus::Completed,
+                    tool_name: Some("analyze".to_string()),
                 });
                 callback(format!(
                     "<plan_step>{}</plan_step>",
@@ -512,14 +570,32 @@ impl Copilot {
                 };
                 current_history.push(assistant_msg);
 
-                // Add tool results to history
-                for (tool_id, _tool_name, tool_output) in &tool_results {
+                // Add all tool results to history as a single User message
+                // This is required for Gemini API which expects tool results to immediately follow
+                // the assistant's tool call message in a single message
+                if !tool_results.is_empty() {
+                    let tool_result_contents: Vec<UserContent> = tool_results
+                        .iter()
+                        .map(|(tool_id, _tool_name, tool_output)| {
+                            UserContent::ToolResult(RigToolResult {
+                                id: tool_id.clone(),
+                                call_id: None,
+                                content: OneOrMany::one(ToolResultContent::text(
+                                    tool_output.clone(),
+                                )),
+                            })
+                        })
+                        .collect();
+
+                    let combined_tool_results = if tool_result_contents.len() == 1 {
+                        OneOrMany::one(tool_result_contents.into_iter().next().unwrap())
+                    } else {
+                        OneOrMany::many(tool_result_contents)
+                            .expect("tool_result_contents should have at least 2 elements")
+                    };
+
                     let tool_result_msg = rig::message::Message::User {
-                        content: OneOrMany::one(UserContent::ToolResult(RigToolResult {
-                            id: tool_id.clone(),
-                            call_id: None,
-                            content: OneOrMany::one(ToolResultContent::text(tool_output.clone())),
-                        })),
+                        content: combined_tool_results,
                     };
                     current_history.push(tool_result_msg);
                 }
@@ -1016,7 +1092,7 @@ ALWAYS emit commands in this order:
         &self,
         model_id: Option<String>,
         token: Option<String>,
-    ) -> Result<(String, Box<dyn CompletionClientDyn + 'a>)> {
+    ) -> Result<(String, Box<dyn CompletionClientDyn + Send + Sync + 'a>)> {
         let bit = if let Some(profile) = &self.profile {
             if let Some(id) = model_id {
                 profile
@@ -1058,10 +1134,7 @@ ALWAYS emit commands in this order:
             .await?;
         let default_model = model.default_model().await.unwrap_or("gpt-4o".to_string());
         let provider = model.provider().await?;
-        let client = provider.client();
-        let completion = client
-            .as_completion()
-            .ok_or_else(|| flow_like_types::anyhow!("Model does not support completion"))?;
+        let completion = provider.into_client();
 
         Ok((default_model, completion))
     }

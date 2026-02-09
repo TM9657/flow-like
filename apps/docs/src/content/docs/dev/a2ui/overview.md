@@ -3,14 +3,7 @@ title: A2UI Integration
 description: Building agent-driven interfaces with Google's A2UI protocol
 sidebar:
   order: 0
-  badge:
-    text: Coming Soon
-    variant: caution
 ---
-
-:::caution[Coming Soon]
-A2UI integration is currently under development. This documentation previews how Flow-Like will leverage A2UI.
-:::
 
 ## What is A2UI?
 

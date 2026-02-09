@@ -50,7 +50,10 @@ export function SpotlightWrapper({ children }: SpotlightWrapperProps) {
 		[],
 	);
 
-	const profiles = useTauriInvoke<ISettingsProfile[]>("get_profiles", {});
+	const profiles = useTauriInvoke<Record<string, ISettingsProfile>>(
+		"get_profiles",
+		{},
+	);
 
 	const appMetadata = useInvoke(backend.appState.getApps, backend.appState, []);
 
@@ -384,8 +387,9 @@ export function SpotlightWrapper({ children }: SpotlightWrapperProps) {
 		});
 
 		// Profile switching items
-		if (profiles.data && profiles.data.length > 1) {
-			for (const profile of profiles.data) {
+		const profileValues = profiles.data ? Object.values(profiles.data) : [];
+		if (profileValues.length > 1) {
+			for (const profile of profileValues) {
 				const isCurrentProfile =
 					profile.hub_profile.id === currentProfile.data?.hub_profile.id;
 				if (isCurrentProfile) continue;

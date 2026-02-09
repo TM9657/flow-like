@@ -8,6 +8,7 @@ use flow_like::flow::{
     variable::VariableType,
 };
 use flow_like_types::{async_trait, json::json};
+#[cfg(feature = "execute")]
 use umya_spreadsheet::{self};
 
 /// Write a single cell inside an Excel workbook (XLSX).
@@ -73,6 +74,7 @@ impl NodeLogic for WriteCellHtmlNode {
         node
     }
 
+    #[cfg(feature = "execute")]
     async fn run(&self, ctx: &mut ExecutionContext) -> flow_like_types::Result<()> {
         ctx.deactivate_exec_pin("exec_out").await?;
 
@@ -124,5 +126,12 @@ impl NodeLogic for WriteCellHtmlNode {
         ctx.set_pin_value("file_out", json!(file)).await?;
         ctx.activate_exec_pin("exec_out").await?;
         Ok(())
+    }
+
+    #[cfg(not(feature = "execute"))]
+    async fn run(&self, _context: &mut ExecutionContext) -> flow_like_types::Result<()> {
+        Err(flow_like_types::anyhow!(
+            "Data processing requires the 'execute' feature"
+        ))
     }
 }

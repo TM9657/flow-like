@@ -12,9 +12,12 @@ pub struct AzureSharedCredentials {
     /// SAS token for meta container
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub meta_sas_token: Option<String>,
-    /// SAS token for content container
+    /// SAS token for content container (app-level access: apps/{app_id})
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub content_sas_token: Option<String>,
+    /// SAS token for user-scoped content (users/{sub}/apps/{app_id})
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub user_content_sas_token: Option<String>,
     /// SAS token for logs container
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub logs_sas_token: Option<String>,
@@ -25,6 +28,12 @@ pub struct AzureSharedCredentials {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub account_key: Option<String>,
     pub expiration: Option<chrono::DateTime<chrono::Utc>>,
+    /// App-level content path prefix (e.g., "apps/{app_id}")
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub content_path_prefix: Option<String>,
+    /// User-level content path prefix (e.g., "users/{sub}/apps/{app_id}")
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub user_content_path_prefix: Option<String>,
 }
 
 impl AzureSharedCredentials {
@@ -102,11 +111,40 @@ impl SharedCredentialsTrait for AzureSharedCredentials {
 
     #[tracing::instrument(name = "AzureSharedCredentials::to_db", skip(self), level = "debug")]
     async fn to_db(&self, app_id: &str) -> Result<ConnectBuilder> {
-        let path = Path::from("apps")
-            .child(app_id)
-            .child("storage")
-            .child("db");
+        let base_path = self
+            .content_path_prefix
+            .clone()
+            .unwrap_or_else(|| format!("apps/{}", app_id));
         let sas_token = self.content_sas_token.clone().unwrap_or_default();
+
+        let path = Path::from(base_path).child("storage").child("db");
+        let connection = make_azure_builder(
+            self.account_name.clone(),
+            self.content_container.clone(),
+            sas_token,
+        );
+        let connection = connection(path.clone());
+        Ok(connection)
+    }
+
+    #[tracing::instrument(
+        name = "AzureSharedCredentials::to_db_scoped",
+        skip(self),
+        level = "debug"
+    )]
+    async fn to_db_scoped(&self, app_id: &str) -> Result<ConnectBuilder> {
+        let base_path = self
+            .user_content_path_prefix
+            .clone()
+            .or_else(|| self.content_path_prefix.clone())
+            .unwrap_or_else(|| format!("apps/{}", app_id));
+        let sas_token = self
+            .user_content_sas_token
+            .clone()
+            .or_else(|| self.content_sas_token.clone())
+            .unwrap_or_default();
+
+        let path = Path::from(base_path).child("storage").child("db");
         let connection = make_azure_builder(
             self.account_name.clone(),
             self.content_container.clone(),
@@ -157,6 +195,7 @@ mod tests {
         AzureSharedCredentials {
             meta_sas_token: Some("?sv=2022-11-02&ss=b&srt=sco&sp=rl&se=2025-01-15T20:00:00Z&st=2025-01-15T12:00:00Z&spr=https&sig=meta123".to_string()),
             content_sas_token: Some("?sv=2022-11-02&ss=b&srt=sco&sp=rwdlacyx&se=2025-01-15T20:00:00Z&st=2025-01-15T12:00:00Z&spr=https&sig=content456".to_string()),
+            user_content_sas_token: None,
             logs_sas_token: Some("?sv=2022-11-02&ss=b&srt=sco&sp=rl&se=2025-01-15T20:00:00Z&st=2025-01-15T12:00:00Z&spr=https&sig=logs789".to_string()),
             meta_container: "meta-container".to_string(),
             content_container: "content-container".to_string(),
@@ -164,6 +203,8 @@ mod tests {
             account_name: "mystorageaccount".to_string(),
             account_key: None,
             expiration: None,
+            content_path_prefix: None,
+            user_content_path_prefix: None,
         }
     }
 
