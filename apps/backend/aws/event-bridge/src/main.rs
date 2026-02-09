@@ -9,6 +9,7 @@ use std::env;
 use std::sync::OnceLock;
 
 static SINK_JWT: OnceLock<String> = OnceLock::new();
+static API_BASE_URL: OnceLock<String> = OnceLock::new();
 static HTTP_CLIENT: OnceLock<reqwest::Client> = OnceLock::new();
 
 fn get_http_client() -> &'static reqwest::Client {
@@ -25,6 +26,19 @@ fn get_sink_jwt() -> Result<&'static str, Error> {
     Ok(SINK_JWT
         .get()
         .expect("SINK_JWT value must be initialized")
+        .as_str())
+}
+
+fn get_api_base_url() -> Result<&'static str, Error> {
+    if let Some(value) = API_BASE_URL.get() {
+        return Ok(value.as_str());
+    }
+
+    let value = env::var("API_BASE_URL").map_err(|_| Error::from("API_BASE_URL not set"))?;
+    let _ = API_BASE_URL.set(value);
+    Ok(API_BASE_URL
+        .get()
+        .expect("API_BASE_URL value must be initialized")
         .as_str())
 }
 
@@ -48,8 +62,7 @@ async fn main() -> Result<(), Error> {
 async fn event_bridge_handler(
     event: LambdaEvent<CloudWatchEvent<EventDetail>>,
 ) -> Result<(), Error> {
-    let api_base_url = env::var("API_BASE_URL").map_err(|_| Error::from("API_BASE_URL not set"))?;
-
+    let api_base_url = get_api_base_url()?;
     let sink_jwt = get_sink_jwt()?;
 
     let detail = event
