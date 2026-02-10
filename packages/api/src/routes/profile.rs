@@ -15,19 +15,26 @@ pub mod upsert_profile;
 
 /// Generate a signed upload URL for a profile image and return the filename to store in DB.
 /// - Upload path: media/users/{sub}/{cuid}.{ext} (auto-converted to webp)
-/// - DB stores: just the filename ({cuid}.{ext})
+/// - DB stores: canonical webp filename ({cuid}.webp)
 pub(crate) async fn generate_upload_url(
     state: &AppState,
     sub: &str,
     extension: &str,
 ) -> Result<(String, String), ApiError> {
     let id = create_id();
-    let filename = format!("{}.{}", id, extension);
+    let upload_extension = extension.trim().trim_start_matches('.').to_ascii_lowercase();
+    let upload_extension = if upload_extension.is_empty() {
+        "webp".to_string()
+    } else {
+        upload_extension
+    };
+    let upload_filename = format!("{}.{}", id, upload_extension);
+    let db_filename = format!("{}.webp", id);
 
     let upload_path = flow_like_storage::Path::from("media")
         .child("users")
         .child(sub)
-        .child(filename.as_str());
+        .child(upload_filename.as_str());
 
     let master_store = state.master_credentials().await?;
     let master_store = master_store.to_store(false).await?;
@@ -35,7 +42,7 @@ pub(crate) async fn generate_upload_url(
         .sign("PUT", &upload_path, Duration::from_secs(60 * 60))
         .await?;
 
-    Ok((signed_url.to_string(), filename))
+    Ok((signed_url.to_string(), db_filename))
 }
 
 /// Delete an old profile image from the private content bucket
@@ -44,8 +51,8 @@ pub(crate) async fn delete_old_image(
     sub: &str,
     image_id: &str,
 ) -> Result<(), ApiError> {
-    let file_name = if image_id.contains('.') {
-        image_id.to_string()
+    let file_name = if let Some((stem, _ext)) = image_id.rsplit_once('.') {
+        format!("{}.webp", stem)
     } else {
         format!("{}.webp", image_id)
     };
@@ -73,8 +80,8 @@ pub async fn sign_profile_image(
 ) -> flow_like_types::Result<String> {
     let master_store = state.master_credentials().await?;
     let master_store = master_store.to_store(false).await?;
-    let file_name = if image_id.contains('.') {
-        image_id.to_string()
+    let file_name = if let Some((stem, _ext)) = image_id.rsplit_once('.') {
+        format!("{}.webp", stem)
     } else {
         format!("{}.webp", image_id)
     };

@@ -1,21 +1,39 @@
 "use client";
-import type { IOAuthProvider, IStoredOAuthToken } from "@tm9657/flow-like-ui";
+import {
+	type IOAuthProvider,
+	type IStoredOAuthToken,
+	useBackend,
+	useInvoke,
+} from "@tm9657/flow-like-ui";
 import EventsPage from "@tm9657/flow-like-ui/components/settings/events/events-page";
 import { useCallback, useMemo } from "react";
 import { EVENT_CONFIG } from "../../../../lib/event-config";
 import { oauthConsentStore, oauthTokenStore } from "../../../../lib/oauth-db";
-import { oauthService } from "../../../../lib/oauth-service";
+import {
+	getOAuthApiBaseUrl,
+	getOAuthService,
+} from "../../../../lib/oauth-service";
 
 export default function Page() {
+	const backend = useBackend();
+	const profile = useInvoke(
+		backend.userState.getProfile,
+		backend.userState,
+		[],
+	);
+	const oauthService = useMemo(() => {
+		return getOAuthService(getOAuthApiBaseUrl(profile.data?.hub));
+	}, [profile.data?.hub]);
+
 	const handleStartOAuth = useCallback(async (provider: IOAuthProvider) => {
 		await oauthService.startAuthorization(provider);
-	}, []);
+	}, [oauthService]);
 
 	const handleRefreshToken = useCallback(
 		async (provider: IOAuthProvider, token: IStoredOAuthToken) => {
 			return oauthService.refreshToken(provider, token);
 		},
-		[],
+		[oauthService],
 	);
 
 	const uiEventTypes = useMemo(() => {

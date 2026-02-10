@@ -19,6 +19,7 @@ crate-type = ["lib", "cdylib", "staticlib"]
 [build-dependencies]
 tauri-build = { version = "2.5.3", features = [] }
 serde_json = "1"
+plist = "1.8.0"
 
 [dependencies]
 flow-like = { workspace = true, features = ["tauri", "local-ml"] }
@@ -82,6 +83,9 @@ tauri-plugin-updater = "2.9.0"
 [target."cfg(target_os = \"macos\")".dependencies]
 cocoa = "0.26"
 macos-app-nap = "0.0.1"
+
+[target."cfg(target_os = \"ios\")".dependencies]
+objc2 = "0.6.3"
 
 [profile.release]
 panic = "abort"

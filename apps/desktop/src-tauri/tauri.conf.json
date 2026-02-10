@@ -106,6 +106,18 @@
 		"deep-link": {
 			"mobile": [
 				{
+					"scheme": ["https"],
+					"host": "app.flow-like.com",
+					"pathPrefix": [
+						"/callback",
+						"/thirdparty/callback",
+						"/trigger",
+						"/store",
+						"/join"
+					],
+					"appLink": true
+				},
+				{
 					"scheme": ["flow-like"],
 					"appLink": false
 				}

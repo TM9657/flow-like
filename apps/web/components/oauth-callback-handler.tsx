@@ -4,15 +4,16 @@ import type {
 	IOAuthCallbackData,
 	IOAuthPendingAuth,
 	IOAuthProvider,
+	OAuthService,
 } from "@tm9657/flow-like-ui";
 import { useCallback, useEffect } from "react";
 import { toast } from "sonner";
 import { oauthTokenStore } from "../lib/oauth-db";
-import { oauthService } from "../lib/oauth-service";
+import { getOAuthService } from "../lib/oauth-service";
 
 type OAuthCallbackListener = (
 	pending: IOAuthPendingAuth,
-	token: Awaited<ReturnType<typeof oauthService.handleCallback>>,
+	token: Awaited<ReturnType<OAuthService["handleCallback"]>>,
 ) => void;
 
 const listeners = new Set<OAuthCallbackListener>();
@@ -112,7 +113,8 @@ async function processCallback(payload: IOAuthCallbackData) {
 			return;
 		}
 
-		let token: Awaited<ReturnType<typeof oauthService.handleCallback>>;
+		const oauthService = getOAuthService(pending.apiBaseUrl);
+		let token: Awaited<ReturnType<OAuthService["handleCallback"]>>;
 
 		if (isImplicitFlow) {
 			token = await oauthService.handleImplicitCallback(pending, provider, {

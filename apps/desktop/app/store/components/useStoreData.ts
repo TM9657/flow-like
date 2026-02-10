@@ -11,6 +11,7 @@ import {
 import type { AppRouterInstance } from "next/dist/shared/lib/app-router-context.shared-runtime";
 import { useCallback, useMemo, useState } from "react";
 import { toast } from "sonner";
+import { EVENT_CONFIG } from "../../../lib/event-config";
 
 export function useStoreData(
 	id: string | undefined,
@@ -35,6 +36,53 @@ export function useStoreData(
 		() => !!(id && apps.data?.some(([a]) => a.id === id)),
 		[apps.data, id],
 	);
+	const routes = useInvoke(
+		backend.routeState.getRoutes,
+		backend.routeState,
+		[id!],
+		!!id && isMember,
+	);
+	const events = useInvoke(
+		backend.eventState.getEvents,
+		backend.eventState,
+		[id!],
+		!!id && isMember,
+	);
+	const usableEvents = useMemo(() => {
+		const set = new Set<string>();
+		Object.values(EVENT_CONFIG).forEach((config) => {
+			const usable = Object.keys(config.useInterfaces);
+			for (const eventType of usable) {
+				if (config.eventTypes.includes(eventType)) set.add(eventType);
+			}
+		});
+		return set;
+	}, []);
+	const useAppHref = useMemo(() => {
+		if (!id || !isMember) return null;
+
+		const activeEvents = (events.data ?? []).filter((event) => event.active);
+		const activeEventsById = new Map(
+			activeEvents.map((event) => [event.id, event] as const),
+		);
+
+		const hasUsableRoute = (routes.data ?? []).some((route) => {
+			const routeEvent = activeEventsById.get(route.eventId);
+			if (!routeEvent) return false;
+			return !!routeEvent.default_page_id || usableEvents.has(routeEvent.event_type);
+		});
+		if (hasUsableRoute) {
+			return `/use?id=${id}`;
+		}
+
+		const fallbackEvent = activeEvents.find((event) =>
+			usableEvents.has(event.event_type),
+		);
+		if (!fallbackEvent) return null;
+
+		return `/use?id=${id}&eventId=${fallbackEvent.id}`;
+	}, [id, isMember, events.data, routes.data, usableEvents]);
+	const canUseApp = !!useAppHref;
 
 	const formatPrice = useCallback((price?: number | null) => {
 		if (!price || price <= 0) return "Free";
@@ -42,9 +90,9 @@ export function useStoreData(
 	}, []);
 
 	const onUse = useCallback(() => {
-		if (!id) return;
-		router.push(`/use?id=${id}`);
-	}, [id, router]);
+		if (!useAppHref) return;
+		router.push(useAppHref);
+	}, [router, useAppHref]);
 
 	const onSettings = useCallback(() => {
 		if (!id) return;
@@ -85,14 +133,7 @@ export function useStoreData(
 		if (!data || !id) return;
 		try {
 			if (data.price && data.price > 0) {
-				await backend.appState.requestJoinApp(
-					data.id,
-					"Interested in trying out your app!",
-				);
-				toast.success(
-					"Request to join app sent! The author will review your request.",
-				);
-				await apps.refetch?.();
+				await onBuy();
 				return;
 			}
 
@@ -125,7 +166,7 @@ export function useStoreData(
 		} catch (e) {
 			toast.error("Failed to request to join app. Please try again later.");
 		}
-	}, [app.data, id, backend.appState, apps, router]);
+	}, [app.data, id, backend.appState, apps, router, onBuy]);
 
 	const coverUrl = meta.data?.thumbnail || "/placeholder-thumbnail.webp";
 	const iconUrl = meta.data?.icon || "/app-logo.webp";
@@ -142,6 +183,7 @@ export function useStoreData(
 		iconUrl,
 		appName,
 		priceLabel,
+		canUseApp,
 		onUse,
 		onSettings,
 		onBuy,

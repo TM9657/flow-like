@@ -1,0 +1,21 @@
+{
+  "applinks": {
+    "apps": [],
+    "details": [
+      {
+        "appID": "VVT9DYMA6M.com.flow-like.app",
+        "paths": [
+          "/callback",
+          "/callback/*",
+          "/thirdparty/callback",
+          "/thirdparty/callback/*",
+          "/trigger/*",
+          "/store",
+          "/store/*",
+          "/join",
+          "/join/*"
+        ]
+      }
+    ]
+  }
+}

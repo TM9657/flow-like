@@ -33,7 +33,7 @@ import type {
 import type { IPrerunBoardResponse } from "@tm9657/flow-like-ui/state/backend-state/types";
 import { toast } from "sonner";
 import { oauthConsentStore, oauthTokenStore } from "../oauth-db";
-import { oauthService } from "../oauth-service";
+import { getOAuthApiBaseUrl, getOAuthService } from "../oauth-service";
 import {
 	type WebBackendRef,
 	apiDelete,
@@ -292,6 +292,9 @@ export class WebBoardState implements IBoardState {
 		// Check OAuth tokens before execution
 		const board = await this.getBoard(appId, boardId);
 		const hub = await getHubConfig(this.backend.profile);
+		const oauthService = getOAuthService(
+			getOAuthApiBaseUrl(this.backend.profile?.hub),
+		);
 		const oauthResult = await checkOAuthTokens(board, oauthTokenStore, hub, {
 			refreshToken: oauthService.refreshToken.bind(oauthService),
 		});

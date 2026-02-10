@@ -26,6 +26,7 @@ export default function Page() {
 		iconUrl,
 		appName,
 		priceLabel,
+		canUseApp,
 		onUse,
 		onSettings,
 		onBuy,
@@ -102,6 +103,7 @@ export default function Page() {
 						price={app.data.price ?? 0}
 						visibility={app.data.visibility}
 						priceLabel={priceLabel}
+						canUseApp={canUseApp}
 						onUse={onUse}
 						onSettings={onSettings}
 						onJoinOrRequest={onJoinOrRequest}

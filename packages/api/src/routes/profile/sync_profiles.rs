@@ -120,7 +120,7 @@ pub async fn sync_profiles(
                 "[ProfileSync] Profile {} found in DB, updated_at={}",
                 profile_req.id, existing.updated_at
             );
-            // Update existing profile only if local is newer
+            // Update existing profile metadata only if local is newer.
             let should_update = if let Some(local_updated) = &profile_req.updated_at {
                 if let Ok(local_time) = chrono::DateTime::parse_from_rfc3339(local_updated) {
                     local_time.naive_utc() > existing.updated_at
@@ -191,6 +191,57 @@ pub async fn sync_profiles(
                     icon_upload_url,
                     thumbnail_upload_url,
                 });
+            } else {
+                // Timestamp says "do not update", but we may still need a one-time media backfill.
+                // This happens when local profile points to a local image path while DB has no media id.
+                let needs_icon_backfill =
+                    profile_req.icon_upload_ext.is_some() && existing.icon.is_none();
+                let needs_thumbnail_backfill =
+                    profile_req.thumbnail_upload_ext.is_some() && existing.thumbnail.is_none();
+
+                if needs_icon_backfill || needs_thumbnail_backfill {
+                    println!(
+                        "[ProfileSync] Backfilling media for profile {} (icon_missing={}, thumbnail_missing={})",
+                        profile_req.id, needs_icon_backfill, needs_thumbnail_backfill
+                    );
+
+                    let mut active_model: profile::ActiveModel = existing.clone().into();
+
+                    let icon_upload_url = if needs_icon_backfill {
+                        if let Some(ext) = &profile_req.icon_upload_ext {
+                            let (upload_url, image_id) =
+                                generate_upload_url(&state, &sub, ext).await?;
+                            active_model.icon = Set(Some(image_id));
+                            Some(upload_url)
+                        } else {
+                            None
+                        }
+                    } else {
+                        None
+                    };
+
+                    let thumbnail_upload_url = if needs_thumbnail_backfill {
+                        if let Some(ext) = &profile_req.thumbnail_upload_ext {
+                            let (upload_url, image_id) =
+                                generate_upload_url(&state, &sub, ext).await?;
+                            active_model.thumbnail = Set(Some(image_id));
+                            Some(upload_url)
+                        } else {
+                            None
+                        }
+                    } else {
+                        None
+                    };
+
+                    active_model.updated_at = Set(chrono::Utc::now().naive_utc());
+                    active_model.update(&state.db).await?;
+
+                    updated.push(UpdatedProfile {
+                        id: profile_req.id.clone(),
+                        icon_upload_url,
+                        thumbnail_upload_url,
+                    });
+                }
             }
         } else {
             // Create new profile with SERVER-GENERATED ID

@@ -11,6 +11,7 @@ import { ProfileSettingsPage } from "@tm9657/flow-like-ui/components/settings/pr
 import { useDebounce } from "@uidotdev/usehooks";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useAuth } from "react-oidc-context";
+import { toast } from "sonner";
 import AMBER_MINIMAL from "./themes/amber-minimal.json";
 import AMETHYST_HAZE from "./themes/amethyst-haze.json";
 import BOLD_TECH from "./themes/bold-tech.json";
@@ -86,6 +87,72 @@ const THEME_TRANSLATION: Record<IThemes, unknown> = {
 	[IThemes.VINTAGE_PAPER]: VINTAGE_PAPER,
 };
 
+type UpsertProfileResponse = {
+	icon_upload_url?: string | null;
+	thumbnail_upload_url?: string | null;
+};
+
+const IMAGE_MIME_TO_EXT: Record<string, string> = {
+	"image/jpeg": "jpg",
+	"image/png": "png",
+	"image/webp": "webp",
+	"image/gif": "gif",
+	"image/svg+xml": "svg",
+};
+
+function getImageExtension(file: File): string | null {
+	const fromName = file.name.split(".").pop()?.toLowerCase();
+	if (fromName) {
+		if (fromName === "jpeg") return "jpg";
+		return fromName;
+	}
+	return IMAGE_MIME_TO_EXT[file.type] ?? null;
+}
+
+function pickImageFile(): Promise<File | null> {
+	return new Promise((resolve) => {
+		const input = document.createElement("input");
+		let resolved = false;
+		const finish = (file: File | null) => {
+			if (resolved) return;
+			resolved = true;
+			window.removeEventListener("focus", onFocus, true);
+			resolve(file);
+		};
+		const onFocus = () => {
+			window.setTimeout(() => {
+				finish(input.files?.[0] ?? null);
+			}, 0);
+		};
+
+		input.type = "file";
+		input.accept = "image/*";
+		input.onchange = () => finish(input.files?.[0] ?? null);
+		window.addEventListener("focus", onFocus, true);
+		input.click();
+	});
+}
+
+async function uploadToSignedUrl(url: string, file: File): Promise<void> {
+	const headers: HeadersInit = {
+		"Content-Type": file.type || "application/octet-stream",
+	};
+
+	if (url.includes(".blob.core.windows.net")) {
+		headers["x-ms-blob-type"] = "BlockBlob";
+	}
+
+	const response = await fetch(url, {
+		method: "PUT",
+		body: file,
+		headers,
+	});
+
+	if (!response.ok) {
+		throw new Error(`Upload failed: ${response.status} ${response.statusText}`);
+	}
+}
+
 export default function SettingsProfilesPage() {
 	const backend = useBackend();
 	const invalidate = useInvalidateInvoke();
@@ -115,13 +182,6 @@ export default function SettingsProfilesPage() {
 		return !!id && !Object.values(IThemes).includes(id as IThemes);
 	}, [localProfile]);
 
-	useEffect(() => {
-		if (debouncedLocalProfile) {
-			upsertProfile(debouncedLocalProfile);
-			setHasChanges(false);
-		}
-	}, [debouncedLocalProfile]);
-
 	const updateProfile = useCallback(
 		(updates: Partial<ISettingsProfile>) => {
 			if (!localProfile) return;
@@ -132,41 +192,102 @@ export default function SettingsProfilesPage() {
 		[localProfile],
 	);
 
-	const upsertProfile = useCallback(
-		async (profile: ISettingsProfile) => {
-			if (!auth.user?.access_token || !profile.hub_profile.id) return;
+	const requestProfileUpsert = useCallback(
+		async (
+			profileId: string,
+			body: Record<string, unknown>,
+		): Promise<UpsertProfileResponse> => {
+			if (!auth.user?.access_token) {
+				throw new Error("Missing access token");
+			}
 			const baseUrl =
 				process.env.NEXT_PUBLIC_API_URL || "https://api.flow-like.com";
-			await fetch(`${baseUrl}/api/v1/profile/${profile.hub_profile.id}`, {
+			const response = await fetch(`${baseUrl}/api/v1/profile/${profileId}`, {
 				method: "POST",
 				headers: {
 					"Content-Type": "application/json",
 					Authorization: `Bearer ${auth.user.access_token}`,
 				},
-				body: JSON.stringify({
-					name: profile.hub_profile.name,
-					description: profile.hub_profile.description,
-					interests: profile.hub_profile.interests,
-					tags: profile.hub_profile.tags,
-					theme: profile.hub_profile.theme,
-					bit_ids: profile.hub_profile.bits,
-					apps: profile.hub_profile.apps,
-					hub: profile.hub_profile.hub,
-					hubs: profile.hub_profile.hubs,
-					settings: profile.execution_settings,
-				}),
+				body: JSON.stringify(body),
+			});
+			if (!response.ok) {
+				const message = await response.text().catch(() => "");
+				throw new Error(message || `Failed with status ${response.status}`);
+			}
+			return (await response.json()) as UpsertProfileResponse;
+		},
+		[auth.user?.access_token],
+	);
+
+	const upsertProfile = useCallback(
+		async (profile: ISettingsProfile) => {
+			if (!profile.hub_profile.id) return;
+			await requestProfileUpsert(profile.hub_profile.id, {
+				name: profile.hub_profile.name,
+				description: profile.hub_profile.description,
+				interests: profile.hub_profile.interests,
+				tags: profile.hub_profile.tags,
+				theme: profile.hub_profile.theme,
+				bit_ids: profile.hub_profile.bits,
+				apps: profile.hub_profile.apps,
+				hub: profile.hub_profile.hub,
+				hubs: profile.hub_profile.hubs,
+				settings: profile.execution_settings,
 			});
 			await invalidate(backend.userState.getProfile, []);
 			await invalidate(backend.userState.getAllSettingsProfiles, []);
 			await currentProfile.refetch();
 		},
-		[auth.user?.access_token, backend.userState, currentProfile, invalidate],
+		[backend.userState, currentProfile, invalidate, requestProfileUpsert],
 	);
 
+	useEffect(() => {
+		if (!debouncedLocalProfile) return;
+		void upsertProfile(debouncedLocalProfile)
+			.then(() => setHasChanges(false))
+			.catch((error) => {
+				console.error("Failed to save profile changes:", error);
+			});
+	}, [debouncedLocalProfile, upsertProfile]);
+
 	const handleProfileImageChange = useCallback(async () => {
-		// Profile image change not supported in web - would need file upload flow
-		console.warn("Profile image change not supported in web app");
-	}, []);
+		if (!localProfile?.hub_profile.id) return;
+
+		const file = await pickImageFile();
+		if (!file) return;
+
+		const extension = getImageExtension(file);
+		if (!extension) {
+			toast.error("Unsupported image format");
+			return;
+		}
+
+		try {
+			const result = await requestProfileUpsert(localProfile.hub_profile.id, {
+				icon_upload_ext: extension,
+			});
+
+			if (!result.icon_upload_url) {
+				throw new Error("No upload URL returned");
+			}
+
+			await uploadToSignedUrl(result.icon_upload_url, file);
+
+			await invalidate(backend.userState.getProfile, []);
+			await invalidate(backend.userState.getAllSettingsProfiles, []);
+			await currentProfile.refetch();
+			toast.success("Profile image updated");
+		} catch (error) {
+			console.error("Failed to update profile image:", error);
+			toast.error("Failed to update profile image");
+		}
+	}, [
+		backend.userState,
+		currentProfile,
+		invalidate,
+		localProfile?.hub_profile.id,
+		requestProfileUpsert,
+	]);
 
 	if (!localProfile) {
 		return (

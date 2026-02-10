@@ -514,6 +514,24 @@
 		inset: 0;
 	}
 
+	/* iOS Tauri app hardening: keep scroll containment inside intended containers only. */
+	html:where([data-ios-app]) {
+		height: var(--fl-ios-vvh, 100dvh);
+	}
+
+	body:where([data-desktop-app][data-ios-app]) {
+		height: var(--fl-ios-vvh, 100dvh);
+		width: 100dvw;
+	}
+
+	body:where([data-desktop-app][data-ios-app]) [data-slot="scroll-area-viewport"],
+	body:where([data-desktop-app][data-ios-app]) .overflow-auto,
+	body:where([data-desktop-app][data-ios-app]) .overflow-y-auto,
+	body:where([data-desktop-app][data-ios-app]) .overflow-x-auto {
+		overscroll-behavior: contain;
+		-webkit-overflow-scrolling: touch;
+	}
+
 	@supports (font: -apple-system-body) and (-webkit-appearance: none) {
 		[data-wrapper] {
 			@apply min-[1800px]:border-t;

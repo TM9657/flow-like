@@ -401,13 +401,34 @@ export function ProfileSyncer({
 			return;
 		}
 
-		const isLocalFilePath = (path?: string | null): boolean => {
+		const isHttpPath = (path?: string | null): boolean => {
+			if (!path) return false;
+			return path.startsWith("http://") || path.startsWith("https://");
+		};
+
+		const isAssetProxyPath = (path?: string | null): boolean => {
 			if (!path) return false;
 			return (
-				!path.startsWith("http://") &&
-				!path.startsWith("https://") &&
-				!path.startsWith("asset://")
+				path.startsWith("asset://") ||
+				path.startsWith("http://asset.localhost/") ||
+				path.startsWith("https://asset.localhost/")
 			);
+		};
+
+		const isLocalFilePath = (path?: string | null): boolean => {
+			if (!path) return false;
+			if (isAssetProxyPath(path)) return true;
+			if (isHttpPath(path)) return false;
+			return true;
+		};
+
+		const shouldReplaceWithServerImage = (
+			localPath?: string | null,
+		): boolean => {
+			if (!localPath) return true;
+			if (isAssetProxyPath(localPath)) return true;
+			if (isHttpPath(localPath)) return true;
+			return false;
 		};
 
 		const getExtension = (path: string): string => {
@@ -462,6 +483,64 @@ export function ProfileSyncer({
 			}
 		};
 
+		const requestProfileMediaUploadUrls = async (
+			profileId: string,
+			apiBase: string,
+			iconExt?: string,
+			thumbnailExt?: string,
+		): Promise<
+			| {
+					icon_upload_url?: string | null;
+					thumbnail_upload_url?: string | null;
+			  }
+			| null
+		> => {
+			if (!iconExt && !thumbnailExt) {
+				return null;
+			}
+
+			try {
+				const response = await tauriFetch(
+					`${apiBase}/api/v1/profile/${encodeURIComponent(profileId)}`,
+					{
+						method: "POST",
+						headers: {
+							"Content-Type": "application/json",
+							Authorization: `Bearer ${accessToken}`,
+						},
+						body: JSON.stringify({
+							icon_upload_ext: iconExt,
+							thumbnail_upload_ext: thumbnailExt,
+						}),
+					},
+				);
+
+				if (!response.ok) {
+					const errorBody = await response.text().catch(() => "<no body>");
+					console.error(
+						"[ProfileSync] Failed to request fallback media upload URLs:",
+						profileId,
+						response.status,
+						errorBody,
+					);
+					return null;
+				}
+
+				const result = (await response.json()) as {
+					icon_upload_url?: string | null;
+					thumbnail_upload_url?: string | null;
+				};
+				return result;
+			} catch (error) {
+				console.error(
+					"[ProfileSync] Error requesting fallback media upload URLs:",
+					profileId,
+					error,
+				);
+				return null;
+			}
+		};
+
 		const syncProfiles = async () => {
 			if (syncingRef.current) {
 				console.log("[ProfileSync] Already syncing, skipping");
@@ -473,11 +552,13 @@ export function ProfileSyncer({
 				console.log("[ProfileSync] Starting profile sync...");
 
 				const baseUrl =
-					hubUrl ?? process.env.NEXT_PUBLIC_API_URL ?? "api.flow-like.com";
+					process.env.NEXT_PUBLIC_API_URL ?? hubUrl ?? "api.flow-like.com";
 				const protocol = profile.data?.secure === false ? "http" : "https";
-				const apiBase = baseUrl.startsWith("http")
-					? baseUrl
-					: `${protocol}://${baseUrl}`;
+				const apiBase = (
+					baseUrl.startsWith("http")
+						? baseUrl
+						: `${protocol}://${baseUrl}`
+				).replace(/\/+$/, "");
 				console.log(
 					"[ProfileSync] API base:",
 					apiBase,
@@ -606,6 +687,10 @@ export function ProfileSyncer({
 					string,
 					{ icon: boolean; thumbnail: boolean }
 				> = new Map();
+				const profileLocalImageExts: Map<
+					string,
+					{ icon?: string; thumbnail?: string }
+				> = new Map();
 
 				const profilesToSync = Object.values(rawProfiles).map((p) => {
 					const hubProfile = p.hub_profile;
@@ -615,11 +700,23 @@ export function ProfileSyncer({
 
 					const hasLocalIcon = isLocalFilePath(hubProfile.icon);
 					const hasLocalThumbnail = isLocalFilePath(hubProfile.thumbnail);
+					const iconExt =
+						hasLocalIcon && hubProfile.icon
+							? getExtension(hubProfile.icon)
+							: undefined;
+					const thumbnailExt =
+						hasLocalThumbnail && hubProfile.thumbnail
+							? getExtension(hubProfile.thumbnail)
+							: undefined;
 
 					if ((hasLocalIcon || hasLocalThumbnail) && hubProfile.id) {
 						profilesWithLocalImages.set(hubProfile.id, {
 							icon: hasLocalIcon,
 							thumbnail: hasLocalThumbnail,
+						});
+						profileLocalImageExts.set(hubProfile.id, {
+							icon: iconExt,
+							thumbnail: thumbnailExt,
 						});
 					}
 
@@ -638,12 +735,8 @@ export function ProfileSyncer({
 						id: hubProfile.id,
 						name: hubProfile.name,
 						description: hubProfile.description,
-						icon_upload_ext: hasLocalIcon
-							? getExtension(hubProfile.icon!)
-							: undefined,
-						thumbnail_upload_ext: hasLocalThumbnail
-							? getExtension(hubProfile.thumbnail!)
-							: undefined,
+						icon_upload_ext: iconExt,
+						thumbnail_upload_ext: thumbnailExt,
 						interests: hubProfile.interests,
 						tags: hubProfile.tags,
 						theme: hubProfile.theme,
@@ -678,17 +771,6 @@ export function ProfileSyncer({
 					body: JSON.stringify(profilesToSync),
 				});
 
-				if (!response.ok) {
-					const errorBody = await response.text().catch(() => "<no body>");
-					console.error(
-						"[ProfileSync] Sync request failed:",
-						response.status,
-						response.statusText,
-						errorBody,
-					);
-					return;
-				}
-
 				type SyncResult = {
 					synced: string[];
 					created: Array<{
@@ -705,11 +787,28 @@ export function ProfileSyncer({
 					skipped: string[];
 				};
 
-				const result = (await response.json()) as SyncResult;
-				console.log(
-					"[ProfileSync] Sync result:",
-					JSON.stringify(result, null, 2),
-				);
+				let result: SyncResult = {
+					synced: [],
+					created: [],
+					updated: [],
+					skipped: [],
+				};
+
+				if (!response.ok) {
+					const errorBody = await response.text().catch(() => "<no body>");
+					console.error(
+						"[ProfileSync] Sync request failed:",
+						response.status,
+						response.statusText,
+						errorBody,
+					);
+				} else {
+					result = (await response.json()) as SyncResult;
+					console.log(
+						"[ProfileSync] Sync result:",
+						JSON.stringify(result, null, 2),
+					);
+				}
 
 				for (const created of result.created) {
 					console.log(
@@ -806,8 +905,61 @@ export function ProfileSyncer({
 
 					const onlineProfiles =
 						(await profilesResponse.json()) as OnlineProfile[];
+					const onlineProfilesById = new Map(
+						onlineProfiles.map((p) => [p.id, p]),
+					);
 
 					const onlineProfileIds = new Set(onlineProfiles.map((p) => p.id));
+
+					// Fallback media sync path:
+					// if the bulk sync endpoint returns no upload URLs, backfill media for profiles
+					// that still have local files but missing media on the server.
+					for (const [profileId, localImages] of profilesWithLocalImages) {
+						const remoteProfile = onlineProfilesById.get(profileId);
+						if (!remoteProfile) continue;
+
+						const localExts = profileLocalImageExts.get(profileId);
+						const needsIconUpload =
+							localImages.icon && !remoteProfile.icon && !!localExts?.icon;
+						const needsThumbnailUpload =
+							localImages.thumbnail &&
+							!remoteProfile.thumbnail &&
+							!!localExts?.thumbnail;
+
+						if (!needsIconUpload && !needsThumbnailUpload) continue;
+
+						console.log(
+							"[ProfileSync] Fallback media upload requested for profile:",
+							profileId,
+							"needsIconUpload:",
+							needsIconUpload,
+							"needsThumbnailUpload:",
+							needsThumbnailUpload,
+						);
+
+						const fallbackUrls = await requestProfileMediaUploadUrls(
+							profileId,
+							apiBase,
+							needsIconUpload ? localExts?.icon : undefined,
+							needsThumbnailUpload ? localExts?.thumbnail : undefined,
+						);
+						if (!fallbackUrls) continue;
+
+						if (needsIconUpload && fallbackUrls.icon_upload_url) {
+							await uploadIconByProfileId(
+								profileId,
+								"icon",
+								fallbackUrls.icon_upload_url,
+							);
+						}
+						if (needsThumbnailUpload && fallbackUrls.thumbnail_upload_url) {
+							await uploadIconByProfileId(
+								profileId,
+								"thumbnail",
+								fallbackUrls.thumbnail_upload_url,
+							);
+						}
+					}
 
 					const currentLocalProfiles =
 						await invoke<Record<string, { hub_profile: IProfile }>>(
@@ -944,13 +1096,15 @@ export function ProfileSyncer({
 								localProfile.hub_profile.updated = onlineProfile.updated_at;
 
 								if (
-									!isLocalFilePath(localProfile.hub_profile.icon) &&
+									shouldReplaceWithServerImage(localProfile.hub_profile.icon) &&
 									onlineProfile.icon
 								) {
 									localProfile.hub_profile.icon = onlineProfile.icon;
 								}
 								if (
-									!isLocalFilePath(localProfile.hub_profile.thumbnail) &&
+									shouldReplaceWithServerImage(
+										localProfile.hub_profile.thumbnail,
+									) &&
 									onlineProfile.thumbnail
 								) {
 									localProfile.hub_profile.thumbnail = onlineProfile.thumbnail;
@@ -974,14 +1128,16 @@ export function ProfileSyncer({
 								let needsUpdate = false;
 								if (
 									onlineProfile.icon &&
-									!isLocalFilePath(localProfile.hub_profile.icon)
+									shouldReplaceWithServerImage(localProfile.hub_profile.icon)
 								) {
 									localProfile.hub_profile.icon = onlineProfile.icon;
 									needsUpdate = true;
 								}
 								if (
 									onlineProfile.thumbnail &&
-									!isLocalFilePath(localProfile.hub_profile.thumbnail)
+									shouldReplaceWithServerImage(
+										localProfile.hub_profile.thumbnail,
+									)
 								) {
 									localProfile.hub_profile.thumbnail = onlineProfile.thumbnail;
 									needsUpdate = true;
@@ -1048,7 +1204,7 @@ export function ProfileSyncer({
 		};
 
 		syncProfiles();
-	}, [backend, isAuthenticated, accessToken, hubUrl]);
+	}, [backend, isAuthenticated, accessToken, hubUrl, profile.data?.updated]);
 
 	return null;
 }

@@ -50,6 +50,35 @@ fn disable_app_nap() {
 #[cfg(not(target_os = "macos"))]
 fn disable_app_nap() {}
 
+#[cfg(target_os = "ios")]
+fn harden_ios_webview_scroll(window: &tauri::WebviewWindow) {
+    if let Err(err) = window.with_webview(|webview| {
+        unsafe {
+            use objc2::runtime::AnyObject;
+
+            let wk_webview: *mut AnyObject = webview.inner().cast();
+            if wk_webview.is_null() {
+                return;
+            }
+
+            // WKWebView.scrollView
+            let scroll_view: *mut AnyObject = objc2::msg_send![wk_webview, scrollView];
+            if scroll_view.is_null() {
+                return;
+            }
+
+            // Disable rubber-band style overscroll and force stable insets in app mode.
+            let _: () = objc2::msg_send![scroll_view, setBounces: false];
+            let _: () = objc2::msg_send![scroll_view, setAlwaysBounceVertical: false];
+            let _: () = objc2::msg_send![scroll_view, setAlwaysBounceHorizontal: false];
+            // UIScrollViewContentInsetAdjustmentNever = 2
+            let _: () = objc2::msg_send![scroll_view, setContentInsetAdjustmentBehavior: 2isize];
+        }
+    }) {
+        tracing::warn!("Failed to apply iOS webview scroll hardening: {}", err);
+    }
+}
+
 // --- iOS Release logging -----------------------------------------------------
 #[cfg(all(target_os = "ios", not(debug_assertions)))]
 mod ios_release_logging {
@@ -348,6 +377,21 @@ pub fn run() {
             let refetch_handle = relay_handle.clone();
             let deep_link_handle = relay_handle.clone();
             let event_bus_handle = relay_handle.clone();
+
+            #[cfg(target_os = "ios")]
+            {
+                if let Some(main) = app.get_webview_window("main") {
+                    harden_ios_webview_scroll(&main);
+                }
+
+                let ios_handle = app.app_handle().clone();
+                tauri::async_runtime::spawn(async move {
+                    flow_like_types::tokio::time::sleep(Duration::from_millis(700)).await;
+                    if let Some(main) = ios_handle.get_webview_window("main") {
+                        harden_ios_webview_scroll(&main);
+                    }
+                });
+            }
 
             #[cfg(desktop)]
             {
