@@ -269,7 +269,7 @@ export function AppSidebar({
 						<FlowBackground
 							intensity="subtle"
 							interactive
-							className="flex flex-col flex-1 min-h-0"
+							className="flex flex-col flex-1 min-h-0 pb-(--fl-safe-bottom)"
 						>
 							{children}
 						</FlowBackground>
