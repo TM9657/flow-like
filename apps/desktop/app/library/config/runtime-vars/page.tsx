@@ -117,7 +117,7 @@ export default function RuntimeVariablesPage() {
 	return (
 		<main className="flex flex-col w-full flex-1 max-h-full overflow-y-auto gap-8 pb-8">
 			{/* Header */}
-			<header className="sticky top-[env(safe-area-inset-top)] z-10 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 border-b">
+			<header className="sticky top-[var(--fl-safe-top)] z-10 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 border-b">
 				<div className="py-6 space-y-4">
 					<div className="flex items-start justify-between gap-4">
 						<div className="space-y-1">

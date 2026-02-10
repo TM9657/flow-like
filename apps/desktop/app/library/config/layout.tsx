@@ -485,11 +485,11 @@ export default function Id({
 
 	return (
 		<TooltipProvider>
-			<main className="flex overflow-hidden flex-col w-full p-4 pt-[max(theme(spacing.4),env(safe-area-inset-top))] sm:p-6 sm:pt-[max(theme(spacing.6),env(safe-area-inset-top))] gap-4 sm:gap-6 flex-1 min-h-0 h-full">
+			<main className="flex overflow-hidden flex-col w-full p-4 pt-[max(theme(spacing.4),var(--fl-safe-top))] sm:p-6 sm:pt-[max(theme(spacing.6),var(--fl-safe-top))] gap-4 sm:gap-6 flex-1 min-h-0 h-full">
 				{isIosTauri && !mobileNavOpen && (
 					<div
 						className="md:hidden fixed right-3 z-[70]"
-						style={{ top: "calc(env(safe-area-inset-top) + 10px)" }}
+						style={{ top: "calc(var(--fl-safe-top, 0px) + 10px)" }}
 					>
 						<Button
 							size="icon"

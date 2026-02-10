@@ -348,7 +348,7 @@ function IOSQuickMenuTrigger() {
 	return (
 		<div
 			className="md:hidden fixed left-3 z-[70]"
-			style={{ top: "calc(env(safe-area-inset-top) + 10px)" }}
+			style={{ top: "calc(var(--fl-safe-top, 0px) + 10px)" }}
 		>
 			<Button
 				size="icon"

@@ -1,8 +1,9 @@
 "use client";
 import { listen } from "@tauri-apps/api/event";
 import { getAllWindows } from "@tauri-apps/api/window";
+import { getCurrent } from "@tauri-apps/plugin-deep-link";
 import { openUrl } from "@tauri-apps/plugin-opener";
-import { useBackend, useInvoke } from "@tm9657/flow-like-ui";
+import { useBackend, useInvalidateInvoke, useInvoke } from "@tm9657/flow-like-ui";
 import type { IProfile } from "@tm9657/flow-like-ui";
 import { Amplify } from "aws-amplify";
 import {
@@ -144,76 +145,149 @@ export function DesktopAuthProvider({
 
 	useEffect(() => {
 		if (!openIdAuthConfig) return;
+		const seenUrls = new Set<string>();
 
-		async function debugListener(event: Event) {
-			const url = (event as CustomEvent).detail.url;
-			console.log("Debug OIDC URL:", url);
-			await userManager?.signinRedirectCallback(url);
+		const normalizeTo = (target: string, source: string) => {
+			try {
+				const targetUrl = new URL(target);
+				const sourceUrl = new URL(source);
+				targetUrl.search = sourceUrl.search;
+				targetUrl.hash = sourceUrl.hash;
+				return targetUrl.toString();
+			} catch {
+				return source;
+			}
+		};
+
+		const isUniversalAuthCallback = (rawUrl: string): boolean => {
+			try {
+				const parsed = new URL(rawUrl);
+				if (!(parsed.protocol === "https:" || parsed.protocol === "http:")) {
+					return false;
+				}
+
+				const host = parsed.hostname.toLowerCase();
+				if (
+					host !== "app.flow-like.com" &&
+					host !== "flow-like.com" &&
+					host !== "localhost" &&
+					host !== "127.0.0.1"
+				) {
+					return false;
+				}
+
+				const path = parsed.pathname.replace(/^\/+|\/+$/g, "");
+				return path === "callback" || path === "desktop/callback";
+			} catch {
+				return false;
+			}
+		};
+
+		const isUniversalLogoutCallback = (rawUrl: string): boolean => {
+			try {
+				const parsed = new URL(rawUrl);
+				if (!(parsed.protocol === "https:" || parsed.protocol === "http:")) {
+					return false;
+				}
+
+				const host = parsed.hostname.toLowerCase();
+				if (
+					host !== "app.flow-like.com" &&
+					host !== "flow-like.com" &&
+					host !== "localhost" &&
+					host !== "127.0.0.1"
+				) {
+					return false;
+				}
+
+				const path = parsed.pathname.replace(/^\/+|\/+$/g, "");
+				return path === "logout" || path === "desktop/logout";
+			} catch {
+				return false;
+			}
+		};
+
+		const closeOidcFlowWindows = async () => {
 			const windows = await getAllWindows();
 			for (const window of windows) {
 				if (window.label === "oidcFlow") {
 					window.close();
 				}
 			}
+		};
+
+		const handleIncomingOidcUrl = async (rawUrl: string) => {
+			if (!rawUrl || seenUrls.has(rawUrl)) return;
+			seenUrls.add(rawUrl);
+
+			try {
+				const isDeepLink = rawUrl.startsWith("flow-like://");
+				const signinUrl =
+					isDeepLink || isUniversalAuthCallback(rawUrl)
+						? normalizeTo(openIdAuthConfig.redirect_uri, rawUrl)
+						: rawUrl;
+				const logoutUrl =
+					openIdAuthConfig.post_logout_redirect_uri &&
+					(isDeepLink || isUniversalLogoutCallback(rawUrl))
+						? normalizeTo(openIdAuthConfig.post_logout_redirect_uri, rawUrl)
+						: rawUrl;
+
+				console.log("[OIDC] Processing callback URL:", {
+					rawUrl,
+					signinUrl,
+					logoutUrl,
+				});
+
+				if (signinUrl.startsWith(openIdAuthConfig.redirect_uri)) {
+					await userManager?.signinRedirectCallback(signinUrl);
+					await closeOidcFlowWindows();
+				}
+
+				if (
+					openIdAuthConfig.post_logout_redirect_uri &&
+					logoutUrl.startsWith(openIdAuthConfig.post_logout_redirect_uri)
+				) {
+					await closeOidcFlowWindows();
+				}
+
+				if (signinUrl.includes("/login?id_token_hint=")) {
+					await closeOidcFlowWindows();
+				}
+			} catch (error) {
+				seenUrls.delete(rawUrl);
+				console.error("Failed to process OIDC callback URL:", rawUrl, error);
+			}
+		};
+
+		const processStartupDeepLinks = async () => {
+			try {
+				const startupUrls = await getCurrent();
+				if (!startupUrls || startupUrls.length === 0) {
+					return;
+				}
+
+				for (const startupUrl of startupUrls) {
+					await handleIncomingOidcUrl(startupUrl);
+				}
+			} catch (error) {
+				console.warn("Failed to process startup deep links for OIDC:", error);
+			}
+		};
+
+		async function debugListener(event: Event) {
+			const url = (event as CustomEvent<{ url?: string }>).detail?.url;
+			if (!url) return;
+			console.log("Debug OIDC URL:", url);
+			await handleIncomingOidcUrl(url);
 		}
 
-		const globalListen = window.addEventListener("debug-oidc", debugListener);
+		window.addEventListener("debug-oidc", debugListener);
 
 		const unlisten = listen<{ url: string }>("oidc/url", async (event) => {
-			const rawUrl = event.payload.url;
-
-			const normalizeTo = (target: string) => {
-				try {
-					const targetUrl = new URL(target);
-					const sourceUrl = new URL(rawUrl);
-					targetUrl.search = sourceUrl.search;
-					targetUrl.hash = sourceUrl.hash;
-					return targetUrl.toString();
-				} catch {
-					return rawUrl;
-				}
-			};
-
-			const isDeepLink = rawUrl.startsWith("flow-like://");
-			const signinUrl = isDeepLink
-				? normalizeTo(openIdAuthConfig.redirect_uri)
-				: rawUrl;
-			const logoutUrl =
-				isDeepLink && openIdAuthConfig.post_logout_redirect_uri
-					? normalizeTo(openIdAuthConfig.post_logout_redirect_uri)
-					: rawUrl;
-
-			if (signinUrl.startsWith(openIdAuthConfig.redirect_uri)) {
-				await userManager?.signinRedirectCallback(signinUrl);
-				const windows = await getAllWindows();
-				for (const window of windows) {
-					if (window.label === "oidcFlow") {
-						window.close();
-					}
-				}
-			}
-
-			if (
-				openIdAuthConfig.post_logout_redirect_uri &&
-				logoutUrl.startsWith(openIdAuthConfig.post_logout_redirect_uri)
-			) {
-				const windows = await getAllWindows();
-				for (const window of windows) {
-					if (window.label === "oidcFlow") {
-						window.close();
-					}
-				}
-			}
-
-			if (signinUrl.includes("/login?id_token_hint=")) {
-				const windows = await getAllWindows();
-				for (const window of windows) {
-					if (window.label === "oidcFlow") {
-						window.close();
-					}
-				}
-			}
+			await handleIncomingOidcUrl(event.payload.url);
 		});
+
+		void processStartupDeepLinks();
 
 		return () => {
 			unlisten.then((unsub) => unsub());
@@ -243,6 +317,7 @@ export function DesktopAuthProvider({
 function AuthInner({ children }: Readonly<{ children: React.ReactNode }>) {
 	const auth = useAuth();
 	const backend = useBackend();
+	const invalidate = useInvalidateInvoke();
 
 	useEffect(() => {
 		if (!auth) return;
@@ -302,6 +377,19 @@ function AuthInner({ children }: Readonly<{ children: React.ReactNode }>) {
 			}
 		})();
 	}, [auth.user?.profile?.sub]);
+
+	useEffect(() => {
+		if (!(backend instanceof TauriBackend)) return;
+
+		void Promise.allSettled([
+			invalidate(backend.userState.getInfo, []),
+			invalidate(backend.userState.getNotifications, []),
+			invalidate(backend.userState.getProfile, []),
+			invalidate(backend.userState.getSettingsProfile, []),
+			invalidate(backend.userState.getProfiles, []),
+			invalidate(backend.appState.getApps, []),
+		]);
+	}, [backend, auth?.isAuthenticated, auth?.user?.profile?.sub, invalidate]);
 
 	return (
 		<>

@@ -272,7 +272,7 @@ const ChatInner = forwardRef<IChatRef, IChatProps>(
 					<div
 						ref={scrollContainerRef}
 						onScroll={handleScroll}
-						className="flex-1 overflow-y-auto overscroll-contain p-4 pb-[max(theme(spacing.4),env(safe-area-inset-bottom))] space-y-8 flex flex-col items-center flex-grow max-h-full"
+						className="flex-1 overflow-y-auto overscroll-contain p-4 pb-[max(theme(spacing.4),var(--fl-safe-bottom))] space-y-8 flex flex-col items-center flex-grow max-h-full"
 						style={{ WebkitOverflowScrolling: "touch" }}
 					>
 						{localMessages.map((message) => (
@@ -324,7 +324,7 @@ const ChatInner = forwardRef<IChatRef, IChatProps>(
 					</div>
 
 					{/* ChatBox */}
-					<div className="bg-transparent pb-[max(theme(spacing.4),env(safe-area-inset-bottom))] max-w-screen-lg w-full mx-auto">
+					<div className="bg-transparent pb-[max(theme(spacing.4),var(--fl-safe-bottom))] max-w-screen-lg w-full mx-auto">
 						{defaultActiveTools && (
 							<ChatBox
 								ref={chatBox}

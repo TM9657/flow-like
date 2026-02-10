@@ -204,7 +204,7 @@ const PatManagementPage = () => {
 
 			{/* Tokens List */}
 			<div className="space-y-4 overflow-y-auto flex-grow flex flex-col pr-2">
-				<div className="flex items-center justify-between mb-4 sticky top-[env(safe-area-inset-top)] bg-background z-10 pb-2">
+				<div className="flex items-center justify-between mb-4 sticky top-[var(--fl-safe-top)] bg-background z-10 pb-2">
 					<h2 className="text-2xl font-semibold">Your Tokens</h2>
 					<div className="text-sm text-muted-foreground">
 						{pats.data?.length} {pats.data?.length === 1 ? "token" : "tokens"}

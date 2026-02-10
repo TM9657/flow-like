@@ -64,6 +64,8 @@
 	--shadow-2xl: 0 1px 3px 0px hsl(0 0% 0% / 0.25);
 	--tracking-normal: 0em;
 	--spacing: 0.25rem;
+	--fl-safe-top: env(safe-area-inset-top, 0px);
+	--fl-safe-bottom: env(safe-area-inset-bottom, 0px);
 
 	--pin-string: oklch(71.8% 0.202 349.761);
 	--pin-integer: oklch(78.9% 0.154 211.53);
@@ -517,6 +519,14 @@
 	/* iOS Tauri app hardening: keep scroll containment inside intended containers only. */
 	html:where([data-ios-app]) {
 		height: var(--fl-ios-vvh, 100dvh);
+		--fl-safe-top: max(
+			env(safe-area-inset-top, 0px),
+			var(--fl-ios-safe-top, 0px)
+		);
+		--fl-safe-bottom: max(
+			env(safe-area-inset-bottom, 0px),
+			var(--fl-ios-safe-bottom, 0px)
+		);
 	}
 
 	body:where([data-desktop-app][data-ios-app]) {
