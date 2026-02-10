@@ -534,6 +534,13 @@
 		width: 100dvw;
 	}
 
+	/* Prevent sidebar-wrapper min-h-svh from causing body overflow on iOS */
+	body:where([data-desktop-app][data-ios-app]) [data-slot="sidebar-wrapper"] {
+		min-height: 0;
+		height: 100%;
+		max-height: 100%;
+	}
+
 	body:where([data-desktop-app][data-ios-app]) [data-slot="scroll-area-viewport"],
 	body:where([data-desktop-app][data-ios-app]) .overflow-auto,
 	body:where([data-desktop-app][data-ios-app]) .overflow-y-auto,

@@ -523,9 +523,9 @@ export const ChatBox = forwardRef<ChatBoxRef, ChatBoxProps>(
 								onChange={(e) => setInput(e.target.value)}
 								onKeyDown={handleKeyDown}
 								onPaste={handlePaste}
-								placeholder="Type your message... (Enter to send, Shift+Enter for new line)"
-								className="border-0 focus:ring-0 resize-none bg-transparent! placeholder:text-muted-foreground text-[16px] sm:text-sm leading-relaxed min-h-[48px] max-h-[180px] overflow-y-auto w-full"
-								rows={Math.min(5, Math.max(2, input.split("\n").length))}
+								placeholder="Type a message..."
+								className="border-0 focus:ring-0 resize-none bg-transparent! placeholder:text-muted-foreground text-[16px] sm:text-sm leading-relaxed min-h-[44px] max-h-[180px] overflow-y-auto w-full"
+								rows={Math.min(5, Math.max(1, input.split("\n").length))}
 								style={{
 									boxShadow: "none",
 									outline: "none",
@@ -542,7 +542,7 @@ export const ChatBox = forwardRef<ChatBoxRef, ChatBoxProps>(
 						{/* Tool bar and settings */}
 						<div className="flex items-center justify-between w-full bg-background rounded-b-2xl">
 							{/* Left side buttons */}
-							<div className="flex items-center gap-1 p-2">
+							<div className="flex items-center gap-1 p-2 pt-0">
 								{/* File Upload Button */}
 								{fileUpload && (
 									<Popover>
@@ -677,7 +677,7 @@ export const ChatBox = forwardRef<ChatBoxRef, ChatBoxProps>(
 							</div>
 
 							{/* Send Button & Audio Recorder */}
-							<div className="p-2 flex items-center gap-2">
+							<div className="p-2 pt-0 flex items-center gap-2">
 								{/* Audio Recording Button */}
 								{audioInput && (
 									<div className="flex items-center gap-1">
@@ -731,7 +731,7 @@ export const ChatBox = forwardRef<ChatBoxRef, ChatBoxProps>(
 									variant={
 										input.trim() || recordedAudio ? "default" : "secondary"
 									}
-									className="h-8 w-8 p-0 rounded-full transition-all duration-200"
+									className="h-9 w-9 sm:h-8 sm:w-8 p-0 rounded-full transition-all duration-200"
 								>
 									<Send className="w-4 h-4" />
 								</Button>

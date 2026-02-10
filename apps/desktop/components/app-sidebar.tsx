@@ -271,11 +271,17 @@ export function AppSidebar({
 			<IOSQuickMenuTrigger />
 			<main
 				className="w-full h-dvh flex flex-col overflow-hidden"
-				style={{ height: "var(--fl-ios-vvh, 100dvh)" }}
+				style={{
+					height: "var(--fl-ios-vvh, 100dvh)",
+					paddingTop: "var(--fl-safe-top, env(safe-area-inset-top, 0px))",
+				}}
 			>
 				<MobileHeaderProvider>
 					<MobileHeader />
-					<SidebarInset className="relative flex flex-col flex-1 min-h-0 h-full overflow-hidden pb-[var(--fl-safe-bottom)]">
+					<SidebarInset
+						className="relative flex flex-col flex-1 min-h-0 h-full overflow-hidden"
+						style={{ paddingBottom: "var(--fl-safe-bottom, env(safe-area-inset-bottom, 0px))" }}
+					>
 						<FlowBackground
 							intensity="subtle"
 							interactive

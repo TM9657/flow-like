@@ -9,6 +9,7 @@ use flow_like_types::create_id;
 
 pub mod create_default;
 pub mod delete_profile;
+pub mod get_profile_bits;
 pub mod get_profiles;
 pub mod sync_profiles;
 pub mod upsert_profile;
@@ -102,5 +103,9 @@ pub fn routes() -> Router<AppState> {
         .route(
             "/{profile_id}",
             post(upsert_profile::upsert_profile).delete(delete_profile::delete_profile),
+        )
+        .route(
+            "/{profile_id}/bits",
+            get(get_profile_bits::get_profile_bits),
         )
 }

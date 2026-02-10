@@ -9,6 +9,7 @@ default = ["execute"]
 execute = ["flow-like-catalog/execute"]
 all-execute = ["flow-like-catalog/all-execute"]
 local-ml = ["flow-like-catalog/local-ml"]
+tauri = ["flow-like-catalog/tauri"]
 
 [dependencies]
 flow-like.workspace = true

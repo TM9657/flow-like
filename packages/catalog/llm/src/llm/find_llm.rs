@@ -77,9 +77,10 @@ impl NodeLogic for FindLLMNode {
         preference.enforce_bounds();
 
         let http_client = context.app_state.http_client.clone();
+        let only_hosted = cfg!(target_os = "ios") || !cfg!(feature = "tauri");
         let bit = context
             .profile
-            .get_best_model(&preference, false, false, http_client)
+            .get_best_model_filtered(&preference, false, false, only_hosted, http_client)
             .await?;
 
         for meta in bit.meta.values() {

@@ -262,14 +262,22 @@ export function AppSidebar({
 	return (
 		<SidebarProvider defaultOpen={defaultOpen}>
 			<InnerSidebar />
-			<main className="w-full h-dvh flex flex-col overflow-hidden">
+			<main
+				className="w-full h-dvh flex flex-col overflow-hidden"
+				style={{
+					paddingTop: "var(--fl-safe-top, env(safe-area-inset-top, 0px))",
+				}}
+			>
 				<MobileHeaderProvider>
 					<MobileHeader />
-					<SidebarInset className="relative flex flex-col flex-1 min-h-0 h-full overflow-hidden">
+					<SidebarInset
+						className="relative flex flex-col flex-1 min-h-0 h-full overflow-hidden"
+						style={{ paddingBottom: "var(--fl-safe-bottom, env(safe-area-inset-bottom, 0px))" }}
+					>
 						<FlowBackground
 							intensity="subtle"
 							interactive
-							className="flex flex-col flex-1 min-h-0 pb-(--fl-safe-bottom)"
+							className="flex flex-col flex-1 min-h-0"
 						>
 							{children}
 						</FlowBackground>

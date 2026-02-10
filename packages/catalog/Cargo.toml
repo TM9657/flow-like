@@ -20,6 +20,9 @@ remote-ml = [
     "flow-like-catalog-core/remote-ml",
     "flow-like-catalog-llm/remote-ml",
 ]
+tauri = [
+    "flow-like-catalog-llm/tauri",
+]
 mimalloc = ["dep:mimalloc"]
 
 

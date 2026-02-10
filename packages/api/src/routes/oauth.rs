@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 use std::sync::OnceLock;
+use std::time::Duration;
 
 use axum::{
     Json, Router,
@@ -13,11 +14,32 @@ use utoipa::ToSchema;
 
 use crate::state::AppState;
 
+const OAUTH_REQUEST_TIMEOUT: Duration = Duration::from_secs(30);
+
 /// OAuth configs loaded at build time (without secrets)
 static OAUTH_CONFIG: &str = include_str!(concat!(env!("OUT_DIR"), "/oauth_config.json"));
 
 /// Cached resolved configs with secrets from env
 static RESOLVED_CONFIGS: OnceLock<HashMap<String, ResolvedOAuthConfig>> = OnceLock::new();
+
+/// How the provider expects credentials on token requests
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+enum AuthMethod {
+    /// POST form-encoded with client_id (+ optional client_secret) in body
+    #[default]
+    FormPost,
+    /// HTTP Basic header with JSON body (e.g. Notion)
+    BasicJson,
+}
+
+impl AuthMethod {
+    fn from_str_opt(s: Option<&str>) -> Self {
+        match s {
+            Some("basic_json") => Self::BasicJson,
+            _ => Self::FormPost,
+        }
+    }
+}
 
 /// Config as stored in flow-like.config.json (without resolved secrets)
 #[derive(Debug, Clone, Deserialize)]
@@ -30,6 +52,7 @@ struct OAuthProviderConfig {
     revoke_url: Option<String>,
     userinfo_url: Option<String>,
     device_auth_url: Option<String>,
+    auth_method: Option<String>,
 }
 
 /// Resolved config with secrets loaded from env at runtime
@@ -41,6 +64,7 @@ struct ResolvedOAuthConfig {
     revoke_url: Option<String>,
     userinfo_url: Option<String>,
     device_auth_url: Option<String>,
+    auth_method: AuthMethod,
 }
 
 fn get_oauth_configs() -> &'static HashMap<String, ResolvedOAuthConfig> {
@@ -58,6 +82,8 @@ fn get_oauth_configs() -> &'static HashMap<String, ResolvedOAuthConfig> {
                     .and_then(|env_name| std::env::var(env_name).ok())
                     .filter(|s| !s.is_empty());
 
+                let auth_method = AuthMethod::from_str_opt(cfg.auth_method.as_deref());
+
                 let resolved = ResolvedOAuthConfig {
                     client_id: cfg.client_id,
                     client_secret,
@@ -65,6 +91,7 @@ fn get_oauth_configs() -> &'static HashMap<String, ResolvedOAuthConfig> {
                     revoke_url: cfg.revoke_url,
                     userinfo_url: cfg.userinfo_url,
                     device_auth_url: cfg.device_auth_url,
+                    auth_method,
                 };
 
                 (provider_id, resolved)
@@ -322,6 +349,14 @@ fn require_client_secret<'a>(
     })
 }
 
+fn build_oauth_client() -> Result<flow_like_types::reqwest::Client, OAuthProxyError> {
+    flow_like_types::reqwest::Client::builder()
+        .timeout(OAUTH_REQUEST_TIMEOUT)
+        .connect_timeout(Duration::from_secs(10))
+        .build()
+        .map_err(|e| OAuthProxyError::new(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))
+}
+
 #[utoipa::path(
     post,
     path = "/oauth/token/{provider_id}",
@@ -347,58 +382,59 @@ pub async fn token_exchange(
     let provider_config = require_provider_config(&provider_id, configs)?;
     let client_id = require_client_id(&provider_id, provider_config)?;
 
-    let client = flow_like_types::reqwest::Client::new();
+    let client = build_oauth_client()?;
 
-    let response = if provider_id == "notion" {
-        // Notion uses HTTP Basic auth + JSON payload
-        let client_secret = require_client_secret(&provider_id, provider_config)?;
-        let credentials = flow_like_types::base64::Engine::encode(
-            &flow_like_types::base64::engine::general_purpose::STANDARD,
-            format!("{}:{}", client_id, client_secret),
-        );
+    let response = match provider_config.auth_method {
+        AuthMethod::BasicJson => {
+            let client_secret = require_client_secret(&provider_id, provider_config)?;
+            let credentials = flow_like_types::base64::Engine::encode(
+                &flow_like_types::base64::engine::general_purpose::STANDARD,
+                format!("{}:{}", client_id, client_secret),
+            );
 
-        let mut json_payload = serde_json::json!({
-            "grant_type": "authorization_code",
-            "code": request.code,
-            "redirect_uri": request.redirect_uri,
-        });
-        if let Some(code_verifier) = request.code_verifier {
-            json_payload["code_verifier"] = serde_json::Value::String(code_verifier);
+            let mut json_payload = serde_json::json!({
+                "grant_type": "authorization_code",
+                "code": request.code,
+                "redirect_uri": request.redirect_uri,
+            });
+            if let Some(code_verifier) = request.code_verifier {
+                json_payload["code_verifier"] = serde_json::Value::String(code_verifier);
+            }
+
+            client
+                .post(&provider_config.token_url)
+                .header("Authorization", format!("Basic {}", credentials))
+                .header("Content-Type", "application/json")
+                .header("Accept", "application/json")
+                .json(&json_payload)
+                .send()
+                .await
+                .map_err(|e| OAuthProxyError::new(StatusCode::BAD_GATEWAY, e.to_string()))?
         }
+        AuthMethod::FormPost => {
+            let mut params = vec![
+                ("grant_type", "authorization_code".to_string()),
+                ("code", request.code),
+                ("redirect_uri", request.redirect_uri),
+                ("client_id", client_id.to_string()),
+            ];
 
-        client
-            .post(&provider_config.token_url)
-            .header("Authorization", format!("Basic {}", credentials))
-            .header("Content-Type", "application/json")
-            .header("Accept", "application/json")
-            .json(&json_payload)
-            .send()
-            .await
-            .map_err(|e| OAuthProxyError::new(StatusCode::BAD_GATEWAY, e.to_string()))?
-    } else {
-        // Other providers use form encoding with client_id and optional client_secret
-        let mut params = vec![
-            ("grant_type", "authorization_code".to_string()),
-            ("code", request.code),
-            ("redirect_uri", request.redirect_uri),
-            ("client_id", client_id.to_string()),
-        ];
+            if let Some(code_verifier) = request.code_verifier {
+                params.push(("code_verifier", code_verifier));
+            }
+            if let Some(client_secret) = provider_config.client_secret.as_ref() {
+                params.push(("client_secret", client_secret.clone()));
+            }
 
-        if let Some(code_verifier) = request.code_verifier {
-            params.push(("code_verifier", code_verifier));
+            client
+                .post(&provider_config.token_url)
+                .header("Content-Type", "application/x-www-form-urlencoded")
+                .header("Accept", "application/json")
+                .form(&params)
+                .send()
+                .await
+                .map_err(|e| OAuthProxyError::new(StatusCode::BAD_GATEWAY, e.to_string()))?
         }
-        if let Some(client_secret) = provider_config.client_secret.as_ref() {
-            params.push(("client_secret", client_secret.clone()));
-        }
-
-        client
-            .post(&provider_config.token_url)
-            .header("Content-Type", "application/x-www-form-urlencoded")
-            .header("Accept", "application/json")
-            .form(&params)
-            .send()
-            .await
-            .map_err(|e| OAuthProxyError::new(StatusCode::BAD_GATEWAY, e.to_string()))?
     };
 
     let status = response.status();
@@ -447,45 +483,48 @@ pub async fn token_refresh(
     let provider_config = require_provider_config(&provider_id, configs)?;
     let client_id = require_client_id(&provider_id, provider_config)?;
 
-    let client = flow_like_types::reqwest::Client::new();
+    let client = build_oauth_client()?;
 
-    let response = if provider_id == "notion" {
-        let client_secret = require_client_secret(&provider_id, provider_config)?;
-        let credentials = flow_like_types::base64::Engine::encode(
-            &flow_like_types::base64::engine::general_purpose::STANDARD,
-            format!("{}:{}", client_id, client_secret),
-        );
+    let response = match provider_config.auth_method {
+        AuthMethod::BasicJson => {
+            let client_secret = require_client_secret(&provider_id, provider_config)?;
+            let credentials = flow_like_types::base64::Engine::encode(
+                &flow_like_types::base64::engine::general_purpose::STANDARD,
+                format!("{}:{}", client_id, client_secret),
+            );
 
-        client
-            .post(&provider_config.token_url)
-            .header("Authorization", format!("Basic {}", credentials))
-            .header("Content-Type", "application/json")
-            .header("Accept", "application/json")
-            .json(&serde_json::json!({
-                "grant_type": "refresh_token",
-                "refresh_token": request.refresh_token,
-            }))
-            .send()
-            .await
-            .map_err(|e| OAuthProxyError::new(StatusCode::BAD_GATEWAY, e.to_string()))?
-    } else {
-        let mut params = vec![
-            ("grant_type", "refresh_token".to_string()),
-            ("refresh_token", request.refresh_token),
-            ("client_id", client_id.to_string()),
-        ];
-        if let Some(client_secret) = provider_config.client_secret.as_ref() {
-            params.push(("client_secret", client_secret.clone()));
+            client
+                .post(&provider_config.token_url)
+                .header("Authorization", format!("Basic {}", credentials))
+                .header("Content-Type", "application/json")
+                .header("Accept", "application/json")
+                .json(&serde_json::json!({
+                    "grant_type": "refresh_token",
+                    "refresh_token": request.refresh_token,
+                }))
+                .send()
+                .await
+                .map_err(|e| OAuthProxyError::new(StatusCode::BAD_GATEWAY, e.to_string()))?
         }
+        AuthMethod::FormPost => {
+            let mut params = vec![
+                ("grant_type", "refresh_token".to_string()),
+                ("refresh_token", request.refresh_token),
+                ("client_id", client_id.to_string()),
+            ];
+            if let Some(client_secret) = provider_config.client_secret.as_ref() {
+                params.push(("client_secret", client_secret.clone()));
+            }
 
-        client
-            .post(&provider_config.token_url)
-            .header("Content-Type", "application/x-www-form-urlencoded")
-            .header("Accept", "application/json")
-            .form(&params)
-            .send()
-            .await
-            .map_err(|e| OAuthProxyError::new(StatusCode::BAD_GATEWAY, e.to_string()))?
+            client
+                .post(&provider_config.token_url)
+                .header("Content-Type", "application/x-www-form-urlencoded")
+                .header("Accept", "application/json")
+                .form(&params)
+                .send()
+                .await
+                .map_err(|e| OAuthProxyError::new(StatusCode::BAD_GATEWAY, e.to_string()))?
+        }
     };
 
     let status = response.status();
@@ -535,7 +574,7 @@ pub async fn device_start(
         params.push(("client_secret", client_secret.clone()));
     }
 
-    let client = flow_like_types::reqwest::Client::new();
+    let client = build_oauth_client()?;
     let response = client
         .post(device_auth_url)
         .header("Content-Type", "application/x-www-form-urlencoded")
@@ -600,7 +639,7 @@ pub async fn device_poll(
         params.push(("client_secret", client_secret.clone()));
     }
 
-    let client = flow_like_types::reqwest::Client::new();
+    let client = build_oauth_client()?;
     let response = client
         .post(&provider_config.token_url)
         .header("Content-Type", "application/x-www-form-urlencoded")
@@ -639,7 +678,7 @@ pub async fn userinfo(
         )
     })?;
 
-    let client = flow_like_types::reqwest::Client::new();
+    let client = build_oauth_client()?;
     let response = client
         .get(userinfo_url)
         .header("Accept", "application/json")
@@ -694,7 +733,7 @@ pub async fn revoke_token(
         params.push(("client_secret", client_secret.clone()));
     }
 
-    let client = flow_like_types::reqwest::Client::new();
+    let client = build_oauth_client()?;
     let response = client
         .post(revoke_url)
         .header("Content-Type", "application/x-www-form-urlencoded")

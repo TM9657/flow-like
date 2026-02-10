@@ -23,7 +23,7 @@ plist = "1.8.0"
 
 [dependencies]
 flow-like = { workspace = true, features = ["tauri", "local-ml"] }
-flow-like-catalog = { workspace = true, features = ["local-ml", "all-execute"] }
+flow-like-catalog = { workspace = true, features = ["local-ml", "all-execute", "tauri"] }
 flow-like-types.workspace = true
 flow-like-wasm.workspace = true
 tauri = { version = "2.9.5", features = [

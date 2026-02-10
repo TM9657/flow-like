@@ -80,7 +80,14 @@ export class WebBitState implements IBitState {
 
 	async getProfileBits(): Promise<IBit[]> {
 		try {
-			return await apiGet<IBit[]>("profile/bits", this.backend.auth);
+			const profileId = this.backend.profile?.id;
+			if (!profileId) return [];
+			return (
+				(await apiGet<IBit[]>(
+					`profile/${profileId}/bits?limit=100`,
+					this.backend.auth,
+				)) ?? []
+			);
 		} catch {
 			return [];
 		}

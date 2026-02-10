@@ -143,6 +143,7 @@ impl Modify for SecurityAddon {
         crate::routes::profile::upsert_profile::upsert_profile,
         crate::routes::profile::delete_profile::delete_profile,
         crate::routes::profile::sync_profiles::sync_profiles,
+        crate::routes::profile::get_profile_bits::get_profile_bits,
         // App routes
         crate::routes::app::internal::get_app::get_app,
         crate::routes::app::internal::get_apps::get_apps,

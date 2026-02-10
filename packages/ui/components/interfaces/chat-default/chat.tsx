@@ -261,22 +261,22 @@ const ChatInner = forwardRef<IChatRef, IChatProps>(
 
 		return (
 			<main
-				className="flex flex-col h-dvh w-full items-center flex-grow bg-background max-h-dvh overflow-hidden"
+				className="flex flex-col h-full w-full items-center flex-grow bg-background max-h-full overflow-hidden"
 				style={{
 					WebkitOverflowScrolling: "touch",
 					touchAction: "manipulation",
 				}}
 			>
-				<div className="h-full flex-grow flex flex-col bg-background max-h-dvh w-full overflow-hidden">
+				<div className="h-full flex-grow flex flex-col bg-background max-h-full w-full overflow-hidden">
 					{/* Messages Container */}
 					<div
 						ref={scrollContainerRef}
 						onScroll={handleScroll}
-						className="flex-1 overflow-y-auto overscroll-contain p-4 pb-[max(theme(spacing.4),var(--fl-safe-bottom))] space-y-8 flex flex-col items-center flex-grow max-h-full"
+						className="flex-1 overflow-y-auto overscroll-contain p-4 pb-2 space-y-8 flex flex-col items-center flex-grow max-h-full"
 						style={{ WebkitOverflowScrolling: "touch" }}
 					>
 						{localMessages.map((message) => (
-							<div className="w-full max-w-screen-lg px-4" key={message.id}>
+							<div className="w-full max-w-screen-lg px-1 sm:px-4" key={message.id}>
 								<MessageComponent
 									message={message}
 									onMessageUpdate={onMessageUpdate}
@@ -324,7 +324,7 @@ const ChatInner = forwardRef<IChatRef, IChatProps>(
 					</div>
 
 					{/* ChatBox */}
-					<div className="bg-transparent pb-[max(theme(spacing.4),var(--fl-safe-bottom))] max-w-screen-lg w-full mx-auto">
+					<div className="bg-transparent px-2 pb-2 max-w-screen-lg w-full mx-auto">
 						{defaultActiveTools && (
 							<ChatBox
 								ref={chatBox}
