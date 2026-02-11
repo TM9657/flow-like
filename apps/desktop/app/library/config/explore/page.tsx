@@ -192,6 +192,12 @@ function TableView({
 		[backend.dbState, appId, table, handleRefresh],
 	);
 
+	const isLoadingData = schema.isLoading || list.isLoading;
+
+	if (isLoadingData && !schema.data) {
+		return <TableViewLoadingState />;
+	}
+
 	return (
 		<div className="flex flex-col h-full flex-grow max-h-full min-w-0">
 			{schema.data && list.data && (
@@ -509,6 +515,23 @@ const LoadingState: React.FC = () => (
 				<Card key={i} className="h-20 animate-pulse bg-muted/50" />
 			))}
 		</div>
+	</div>
+);
+
+const TableViewLoadingState: React.FC = () => (
+	<div className="flex flex-col h-full flex-grow max-h-full min-w-0 p-4 gap-4">
+		<div className="flex items-center gap-4">
+			<div className="h-8 w-8 bg-muted animate-pulse rounded" />
+			<div className="flex-1">
+				<div className="h-6 w-48 bg-muted animate-pulse rounded mb-2" />
+				<div className="h-4 w-32 bg-muted animate-pulse rounded" />
+			</div>
+		</div>
+		<div className="flex items-center gap-2">
+			<div className="h-9 w-24 bg-muted animate-pulse rounded" />
+			<div className="h-9 flex-1 bg-muted animate-pulse rounded" />
+		</div>
+		<div className="flex-1 bg-muted/30 animate-pulse rounded border" />
 	</div>
 );
 
