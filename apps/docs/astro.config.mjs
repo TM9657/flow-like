@@ -14,15 +14,23 @@ export default defineConfig({
 	integrations: [
 		react(),
 		starlight({
-			title: "Flow-Like",
+			title: "Flow-Like Docs",
 			favicon: "/ico-light.svg",
 			description:
-				"Build typed, scalable workflows with visual design, Rust performance, and production-ready governance.",
+				"Documentation for Flow-Like, the open source local-first workflow engine. Build type-safe, self-hosted automation with Rust performance.",
 			components: {
 				Hero: "./src/components/docs/Hero.astro",
 				SiteTitle: "./src/components/docs/SiteTitle.astro",
 			},
 			head: [
+				{
+					tag: "meta",
+					attrs: {
+						name: "robots",
+						content:
+							"index,follow,max-image-preview:large,max-snippet:-1,max-video-preview:-1",
+					},
+				},
 				{
 					tag: "link",
 					attrs: {

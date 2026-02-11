@@ -20,7 +20,7 @@ const displayTags = (tags ?? []).slice(0, 3);
 ---
 
 {variant === "lead" ? (
-  <a href={href} class="group block">
+  <a href={href} class="group block no-underline">
     <article class="relative overflow-hidden rounded-2xl border border-border/50 bg-card/50 backdrop-blur-sm transition-all duration-300 hover:border-border hover:shadow-xl hover:shadow-primary/5">
       <div class="grid md:grid-cols-2">
         <div class="relative aspect-[16/10] md:aspect-auto overflow-hidden">
@@ -75,7 +75,7 @@ const displayTags = (tags ?? []).slice(0, 3);
     </article>
   </a>
 ) : (
-  <a href={href} class="group block h-full">
+  <a href={href} class="group block h-full no-underline">
     <article class="relative flex flex-col h-full overflow-hidden rounded-2xl border border-border/50 bg-card/50 backdrop-blur-sm transition-all duration-300 hover:border-border hover:shadow-lg hover:shadow-primary/5 hover:-translate-y-0.5">
       <div class="relative aspect-[16/10] overflow-hidden">
         {cover ? (

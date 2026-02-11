@@ -2,7 +2,7 @@
 import { getCollection } from 'astro:content';
 import PostCard from '../../components/post-card.astro';
 import "@tm9657/flow-like-ui/global.css";
-import "../../styles/Blog.css";
+import "../../styles/blog.css";
 import BlogLayout from '../../layouts/Blog-Layout.astro';
 export async function getStaticPaths() {
   const posts = await getCollection('blog', ({ data }) => import.meta.env.PROD ? !data.draft : true);
@@ -14,10 +14,40 @@ const { tag } = Astro.params;
 const posts = (await getCollection('blog', ({ data }) => import.meta.env.PROD ? !data.draft : true))
   .filter(p => p.data.tags.includes(tag))
   .sort((a,b) => b.data.date.getTime() - a.data.date.getTime());
+const first = posts[0];
+const rest = posts.slice(1);
 ---
 <BlogLayout data={{ title: "Blog", description: "Latest blog posts", slug: "blog" }}>
-    <main class="mx-auto max-w-3xl p-2 flex flex-grow flex-col items-start justify-start gap-4">
-        <h1 class="mt-4!">#{tag}</h1>
-        {posts.map(p => <PostCard entry={p} />)}
-</main>
+  <div class="mx-auto w-full max-w-6xl px-4 sm:px-6 lg:px-8 pb-12 sm:pb-14 lg:pb-16">
+    <a
+      href="/tags/"
+      class="mb-8 inline-flex items-center gap-2 rounded-full border border-border/60 bg-background/80 px-3.5 py-1.5 text-sm text-muted-foreground transition hover:border-border hover:text-foreground"
+    >
+      <span aria-hidden="true">←</span>
+      All tags
+    </a>
+
+    <header class="mb-10 rounded-2xl border border-border/50 bg-card/50 p-7 backdrop-blur-sm sm:mb-12 sm:p-9 lg:p-11">
+      <p class="mb-3 text-[11px] font-medium tracking-[0.3em] uppercase text-primary">Tag</p>
+      <h1 class="text-4xl font-bold tracking-tight sm:text-5xl">#{tag}</h1>
+      <p class="mt-4 text-base leading-relaxed text-muted-foreground sm:text-lg">
+        {posts.length} {posts.length === 1 ? "post" : "posts"} in this topic.
+      </p>
+    </header>
+
+    {posts.length === 0 ? (
+      <div class="rounded-2xl border border-border/50 bg-card/40 p-8 text-muted-foreground">
+        No posts found for this tag.
+      </div>
+    ) : (
+      <div class="space-y-8 sm:space-y-9 lg:space-y-10">
+        {first && <PostCard entry={first} variant="lead" />}
+        {rest.length > 0 && (
+          <section class="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+            {rest.map(p => <PostCard entry={p} variant="compact" />)}
+          </section>
+        )}
+      </div>
+    )}
+  </div>
 </BlogLayout>

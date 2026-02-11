@@ -32,7 +32,6 @@ export default defineConfig({
 			remarkRehype: { footnoteLabel: "Footnotes" },
 			gfm: true,
 		}),
-		sitemap(),
 		(await import("@playform/compress")).default(),
 		compressor(),
 	],

@@ -2228,12 +2228,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "az"
-version = "1.3.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "be5eb007b7cacc6c660343e96f650fedf4b5a77512399eb952ca6642cf8d13f7"
-
-[[package]]
 name = "backoff"
 version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6479,12 +6473,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "extended"
-version = "0.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "af9673d8203fcb076b19dfd17e38b3d4ae9f44959416ea532ce72415a6020365"
-
-[[package]]
 name = "fake"
 version = "4.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6760,18 +6748,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "fixed"
-version = "1.30.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c566da967934c6c7ee0458a9773de9b2a685bd2ce26a3b28ddfc740e640182f5"
-dependencies = [
- "az",
- "bytemuck",
- "half",
- "typenum",
-]
-
-[[package]]
 name = "fixedbitset"
 version = "0.4.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -7025,7 +7001,7 @@ dependencies = [
  "serde",
  "sqlx",
  "strsim 0.11.1",
- "tdms",
+ "tdms-rs",
  "tempfile",
  "tokio",
  "tokio-postgres",
@@ -12030,7 +12006,7 @@ checksum = "3e2e65a1a2e43cfcb47a895c4c8b10d1f4a61097f9f254f183aee60cad9c651d"
 [[package]]
 name = "markitdown"
 version = "0.2.0"
-source = "git+https://github.com/TM9657/markitdown-rs.git?rev=73fe271#73fe27174864b7d7c0d1d64cc5ee93993dcbe6c9"
+source = "git+https://github.com/TM9657/markitdown-rs.git?rev=6501298#65012986e7aae89093c3462a396f023f74a21cf9"
 dependencies = [
  "async-trait",
  "base64 0.22.1",
@@ -20442,16 +20418,15 @@ dependencies = [
 ]
 
 [[package]]
-name = "tdms"
-version = "0.3.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "29b726d98c8c02292cc57828ba2e437bc4a41895340e5e127e22aa86151f50b5"
+name = "tdms-rs"
+version = "2.0.0"
+source = "git+https://github.com/TM9657/tdms-rs?rev=620318f#620318f467fc97f01f3c772e212dd8a820df0748"
 dependencies = [
- "extended",
- "fixed",
- "hex",
+ "byteorder",
  "indexmap 1.9.3",
- "log",
+ "ordered-float 5.1.0",
+ "serde",
+ "serde_json",
  "thiserror 1.0.69",
 ]
 

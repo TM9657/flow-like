@@ -511,14 +511,14 @@
 		width: 100%;
 	}
 	body:where([data-desktop-app]) {
-		overflow: hidden;
-		position: fixed;
-		inset: 0;
+		overflow: hidden !important;
+		position: fixed !important;
+		inset: 0 !important;
 	}
 
-	/* iOS Tauri app hardening: keep scroll containment inside intended containers only. */
-	html:where([data-ios-app]) {
-		height: var(--fl-ios-vvh, 100dvh);
+	/* Desktop app hardening: safe area support & scroll containment. */
+	html:where([data-desktop-app]) {
+		height: var(--fl-ios-vvh, 100dvh) !important;
 		--fl-safe-top: max(
 			env(safe-area-inset-top, 0px),
 			var(--fl-ios-safe-top, 0px)
@@ -529,22 +529,22 @@
 		);
 	}
 
-	body:where([data-desktop-app][data-ios-app]) {
-		height: var(--fl-ios-vvh, 100dvh);
-		width: 100dvw;
+	body:where([data-desktop-app]) {
+		height: var(--fl-ios-vvh, 100dvh) !important;
+		width: 100dvw !important;
 	}
 
-	/* Prevent sidebar-wrapper min-h-svh from causing body overflow on iOS */
-	body:where([data-desktop-app][data-ios-app]) [data-slot="sidebar-wrapper"] {
-		min-height: 0;
-		height: 100%;
-		max-height: 100%;
+	/* Prevent sidebar-wrapper min-h-svh from causing body overflow */
+	body:where([data-desktop-app]) [data-slot="sidebar-wrapper"] {
+		min-height: 0 !important;
+		height: 100% !important;
+		max-height: 100% !important;
 	}
 
-	body:where([data-desktop-app][data-ios-app]) [data-slot="scroll-area-viewport"],
-	body:where([data-desktop-app][data-ios-app]) .overflow-auto,
-	body:where([data-desktop-app][data-ios-app]) .overflow-y-auto,
-	body:where([data-desktop-app][data-ios-app]) .overflow-x-auto {
+	body:where([data-desktop-app]) [data-slot="scroll-area-viewport"],
+	body:where([data-desktop-app]) .overflow-auto,
+	body:where([data-desktop-app]) .overflow-y-auto,
+	body:where([data-desktop-app]) .overflow-x-auto {
 		overscroll-behavior: contain;
 		-webkit-overflow-scrolling: touch;
 	}

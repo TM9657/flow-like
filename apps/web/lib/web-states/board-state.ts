@@ -688,7 +688,7 @@ export class WebBoardState implements IBoardState {
 		actionContext?: UIActionContext,
 	): Promise<UnifiedCopilotResponse> {
 		const baseUrl = getApiBaseUrl();
-		const url = `${baseUrl}/api/v1/chat/copilot`;
+		const url = `${baseUrl}/api/v1/ai/copilot/chat`;
 
 		const headers: HeadersInit = {
 			"Content-Type": "application/json",
