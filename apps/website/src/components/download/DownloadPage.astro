@@ -7,6 +7,7 @@ import Hero from "./Hero.astro";
 import Config from "./Config.astro";
 import Assets from "./Assets.astro";
 import { tDownload } from "../../i18n/locales/pages/download";
+import { buildAlternateLinks } from "../../lib/seo";
 
 interface Props {
   lang: string;
@@ -19,8 +20,10 @@ export const prerender = true;
 
 const title = t("download.meta.title");
 const description = t("download.meta.description");
-const site = Astro.site ?? import.meta.env.SITE;
-const canonical = site ? new URL(Astro.url.pathname, site).toString() : "";
+const site = Astro.site ?? import.meta.env.SITE ?? "https://flow-like.com";
+const siteUrl = typeof site === "string" ? site : site.toString();
+const canonical = new URL(Astro.url.pathname, siteUrl).toString();
+const alternateLinks = buildAlternateLinks(siteUrl, Astro.url.pathname);
 
 const ownerRepo = "TM9657/flow-like";
 const listUrl = `https://api.github.com/repos/${ownerRepo}/releases`;
@@ -54,6 +57,9 @@ const Content = (() => null) as any;
 const data = {
   title,
   description,
+  canonical,
+  lang,
+  alternateLinks,
   date: new Date().toISOString(),
   tags: ["download"],
   cover: null,

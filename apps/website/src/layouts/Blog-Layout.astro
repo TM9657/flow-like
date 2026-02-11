@@ -5,12 +5,15 @@ import { BlogFooter } from "../components/blog-footer";
 import { Header } from "../components/header";
 import PostHog from "../components/posthog.astro";
 import type { CollectionEntry } from "astro:content";
+import { getOgLocale, type HreflangLink } from "../lib/seo";
 
 type BlogLayoutData = Partial<CollectionEntry<"blog">["data"]> & {
 	title?: string;
 	description?: string;
 	canonical?: string;
 	noindex?: boolean;
+	lang?: string;
+	alternateLinks?: HreflangLink[];
 };
 
 const { data } = Astro.props as { data: BlogLayoutData };
@@ -18,6 +21,9 @@ const { data } = Astro.props as { data: BlogLayoutData };
 const site = Astro.site ?? import.meta.env.SITE ?? "https://flow-like.com";
 const siteUrl = typeof site === "string" ? site : site.toString();
 const canonical = data.canonical ?? new URL(Astro.url.pathname, siteUrl).toString();
+const htmlLang = data.lang ?? "en";
+const ogLocale = getOgLocale(htmlLang);
+const alternateLinks = data.alternateLinks ?? [];
 
 const title = data.title ?? "Flow-Like Blog";
 const desc = data.description ?? "Enterprise-grade workflow automation built for scale.";
@@ -109,7 +115,7 @@ const ldStructuredData = isArticle
 ---
 
 <!doctype html>
-<html lang="en">
+<html lang={htmlLang}>
 	<head>
 		<meta charset="UTF-8" />
 		<meta name="viewport" content="width=device-width" />
@@ -122,6 +128,11 @@ const ldStructuredData = isArticle
 		<meta name="robots" content={robots} />
 		<meta name="referrer" content="strict-origin-when-cross-origin" />
 		<link rel="canonical" href={canonical} />
+		{
+			alternateLinks.map((alt) => (
+				<link rel="alternate" hreflang={alt.hreflang} href={alt.href} />
+			))
+		}
 		<link rel="sitemap" href="/sitemap-index.xml" />
 		<link rel="alternate" type="application/rss+xml" title="Flow-Like Blog" href="/rss.xml" />
 
@@ -135,7 +146,7 @@ const ldStructuredData = isArticle
 		<meta property="og:image:secure_url" content={ogImage} />
 		<meta property="og:image:alt" content={ogImageAlt} />
 		{ogImageType && <meta property="og:image:type" content={ogImageType} />}
-		<meta property="og:locale" content="en_US" />
+		<meta property="og:locale" content={ogLocale} />
 		{
 			isArticle && pubISO && (
 				<meta property="article:published_time" content={pubISO} />
