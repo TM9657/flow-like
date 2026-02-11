@@ -5,6 +5,8 @@ use flow_like::flow::{
     variable::VariableType,
 };
 #[cfg(feature = "execute")]
+use futures::StreamExt;
+#[cfg(feature = "execute")]
 use flow_like_storage::arrow_array::{
     ArrayRef, BooleanArray, Float32Array, Float64Array, Int8Array, Int16Array, Int32Array,
     Int64Array, RecordBatch, UInt8Array, UInt16Array, UInt32Array, UInt64Array,
@@ -13,6 +15,10 @@ use flow_like_storage::arrow_array::{
 #[cfg(feature = "execute")]
 use flow_like_storage::arrow_schema::{DataType, Field, Schema};
 use flow_like_types::{async_trait, json::json};
+#[cfg(feature = "execute")]
+use std::io::Write;
+#[cfg(feature = "execute")]
+use std::path::{Path, PathBuf};
 #[cfg(feature = "execute")]
 use std::sync::Arc;
 #[cfg(feature = "execute")]
@@ -31,6 +37,54 @@ impl BatchInsertTdmsLocalDatabaseNode {
     pub fn new() -> Self {
         BatchInsertTdmsLocalDatabaseNode {}
     }
+}
+
+#[cfg(feature = "execute")]
+const TDMS_MAX_CHUNK_SIZE: usize = 20_000;
+
+#[cfg(feature = "execute")]
+enum TdmsSourceFile {
+    Direct(PathBuf),
+    Temp(tempfile::NamedTempFile),
+}
+
+#[cfg(feature = "execute")]
+impl TdmsSourceFile {
+    fn path(&self) -> &Path {
+        match self {
+            Self::Direct(path) => path.as_path(),
+            Self::Temp(file) => file.path(),
+        }
+    }
+}
+
+#[cfg(feature = "execute")]
+async fn resolve_tdms_source_file(
+    tdms_path: &FlowPath,
+    context: &mut ExecutionContext,
+) -> flow_like_types::Result<TdmsSourceFile> {
+    let runtime = tdms_path.to_runtime(context).await?;
+    let object_path = flow_like_storage::Path::from(runtime.path.as_ref());
+
+    if let flow_like_storage::files::store::FlowLikeStore::Local(local_store) =
+        runtime.store.as_ref()
+        && let Ok(local_path) = local_store.path_to_filesystem(&object_path)
+        && local_path.exists()
+    {
+        return Ok(TdmsSourceFile::Direct(local_path));
+    }
+
+    let mut stream = runtime.store.as_generic().get(&object_path).await?.into_stream();
+    let tmp_file = tempfile::NamedTempFile::new()?;
+    let mut writer = std::fs::File::create(tmp_file.path())?;
+
+    while let Some(chunk_result) = stream.next().await {
+        let chunk = chunk_result?;
+        writer.write_all(&chunk)?;
+    }
+    writer.flush()?;
+
+    Ok(TdmsSourceFile::Temp(tmp_file))
 }
 
 #[cfg(feature = "execute")]
@@ -436,16 +490,21 @@ impl NodeLogic for BatchInsertTdmsLocalDatabaseNode {
         let database: NodeDBConnection = context.evaluate_pin("database").await?;
         let database = database.load(context).await?.db.clone();
         let mut database = database.write().await;
-        let chunk_size: usize = context.evaluate_pin::<u64>("chunk_size").await?.max(1) as usize;
-
-        let tdms_path: FlowPath = context.evaluate_pin("tdms_path").await?;
-        let tmp_file = tempfile::NamedTempFile::new()?;
-        {
-            let bytes = tdms_path.get(context, false).await?;
-            std::fs::write(tmp_file.path(), &bytes)?;
+        let chunk_size_input: u64 = context.evaluate_pin("chunk_size").await?;
+        let chunk_size = chunk_size_input.clamp(1, TDMS_MAX_CHUNK_SIZE as u64) as usize;
+        if chunk_size_input > TDMS_MAX_CHUNK_SIZE as u64 {
+            context.log_message(
+                &format!(
+                    "TDMS chunk_size={} is above safe limit; clamped to {}",
+                    chunk_size_input, TDMS_MAX_CHUNK_SIZE
+                ),
+                LogLevel::Warn,
+            );
         }
 
-        let file = TdmsFile::open(tmp_file.path())
+        let tdms_path: FlowPath = context.evaluate_pin("tdms_path").await?;
+        let source_file = resolve_tdms_source_file(&tdms_path, context).await?;
+        let file = TdmsFile::open(source_file.path())
             .map_err(|e| flow_like_types::anyhow!("Failed to parse TDMS file: {:?}", e))?;
 
         let mut total_rows_inserted: u64 = 0;
