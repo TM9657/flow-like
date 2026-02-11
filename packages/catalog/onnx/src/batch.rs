@@ -226,6 +226,6 @@ impl NodeLogic for BatchImageInferenceNode {
         }
 
         #[cfg(not(feature = "execute"))]
-        Err(anyhow!("Execute feature not enabled"))
+        Err(flow_like_types::anyhow!("Execute feature not enabled"))
     }
 }

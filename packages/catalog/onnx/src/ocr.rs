@@ -277,7 +277,7 @@ impl NodeLogic for TextDetectionNode {
         }
 
         #[cfg(not(feature = "execute"))]
-        Err(anyhow!("Execute feature not enabled"))
+        Err(flow_like_types::anyhow!("Execute feature not enabled"))
     }
 }
 
@@ -467,7 +467,7 @@ impl NodeLogic for TextRecognitionNode {
         }
 
         #[cfg(not(feature = "execute"))]
-        Err(anyhow!("Execute feature not enabled"))
+        Err(flow_like_types::anyhow!("Execute feature not enabled"))
     }
 }
 
@@ -560,6 +560,6 @@ impl NodeLogic for CropTextRegionsNode {
         }
 
         #[cfg(not(feature = "execute"))]
-        Err(anyhow!("Execute feature not enabled"))
+        Err(flow_like_types::anyhow!("Execute feature not enabled"))
     }
 }

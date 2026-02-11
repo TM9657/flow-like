@@ -172,7 +172,7 @@ impl NodeLogic for ModelInfoNode {
 
         #[cfg(not(feature = "execute"))]
         {
-            Err(anyhow!(
+            Err(flow_like_types::anyhow!(
                 "ONNX execution requires the 'execute' feature. Rebuild with --features execute"
             ))
         }
@@ -259,7 +259,7 @@ impl NodeLogic for UnloadOnnxNode {
 
         #[cfg(not(feature = "execute"))]
         {
-            Err(anyhow!(
+            Err(flow_like_types::anyhow!(
                 "ONNX execution requires the 'execute' feature. Rebuild with --features execute"
             ))
         }
@@ -397,7 +397,7 @@ impl NodeLogic for SessionInfoNode {
 
         #[cfg(not(feature = "execute"))]
         {
-            Err(anyhow!(
+            Err(flow_like_types::anyhow!(
                 "ONNX execution requires the 'execute' feature. Rebuild with --features execute"
             ))
         }

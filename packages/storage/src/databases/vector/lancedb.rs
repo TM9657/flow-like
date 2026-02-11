@@ -1,4 +1,4 @@
-use arrow_array::RecordBatch;
+use arrow_array::{RecordBatch, RecordBatchIterator};
 use datafusion::prelude::*;
 use flow_like_types::Cacheable;
 use flow_like_types::async_trait;
@@ -234,6 +234,38 @@ impl LanceDBVectorStore {
         let results = ctx.sql(sql).await?;
 
         Ok(results)
+    }
+
+    pub async fn insert_record_batch(&mut self, batch: RecordBatch) -> Result<()> {
+        let schema = batch.schema();
+        let items = RecordBatchIterator::new(
+            vec![Ok::<RecordBatch, arrow_schema::ArrowError>(batch)].into_iter(),
+            schema,
+        );
+
+        if self.table.is_none() {
+            match self
+                .connection
+                .create_table(&self.table_name, items)
+                .execute()
+                .await
+            {
+                Ok(table) => {
+                    self.table = Some(table);
+                    return Ok(());
+                }
+                Err(err) => {
+                    println!("Error creating table: {:?}", err);
+                    return Err(anyhow!("Error creating table"));
+                }
+            }
+        }
+
+        let table = self.table.clone().unwrap();
+        match table.add(items).execute().await {
+            Ok(_) => Ok(()),
+            Err(err) => Err(anyhow!(err.to_string())),
+        }
     }
 }
 

@@ -20,7 +20,7 @@ execute = [
     "dep:rayon",
     "dep:rig-core",
     "dep:bincode",
-    "dep:tdms",
+    "dep:tdms-rs",
     "dep:tempfile",
 ]
 
@@ -86,7 +86,7 @@ rig-core = { workspace = true, optional = true }
 bincode = { version = "1.3.3", optional = true }
 jsonschema = { workspace = true, optional = true }
 rayon = { version = "1.11.0", optional = true }
-tdms = { version = "0.3.0", optional = true }
+tdms-rs = { git = "https://github.com/TM9657/tdms-rs", rev = "620318f", optional = true }
 tempfile = { version = "3", optional = true }
 
 # Database table providers for DataFusion (TM9657 fork with Arrow 56.2 + DataFusion 50 support)

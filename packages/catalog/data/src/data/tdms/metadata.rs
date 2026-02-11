@@ -49,13 +49,32 @@ impl TdmsMetadataNode {
 }
 
 #[cfg(feature = "execute")]
-fn format_data_type(dt: &tdms::data_type::TdmsDataType) -> String {
+fn format_data_type(dt: &tdms_rs::DataType) -> String {
     format!("{:?}", dt)
 }
 
 #[cfg(feature = "execute")]
-fn format_value(val: &tdms::data_type::TDMSValue) -> String {
-    format!("{:?}", val.value)
+fn property_value_type(value: &tdms_rs::PropertyValue) -> String {
+    match value {
+        tdms_rs::PropertyValue::I8(_) => "I8".to_string(),
+        tdms_rs::PropertyValue::I16(_) => "I16".to_string(),
+        tdms_rs::PropertyValue::I32(_) => "I32".to_string(),
+        tdms_rs::PropertyValue::I64(_) => "I64".to_string(),
+        tdms_rs::PropertyValue::U8(_) => "U8".to_string(),
+        tdms_rs::PropertyValue::U16(_) => "U16".to_string(),
+        tdms_rs::PropertyValue::U32(_) => "U32".to_string(),
+        tdms_rs::PropertyValue::U64(_) => "U64".to_string(),
+        tdms_rs::PropertyValue::Float(_) => "Float".to_string(),
+        tdms_rs::PropertyValue::Double(_) => "Double".to_string(),
+        tdms_rs::PropertyValue::String(_) => "String".to_string(),
+        tdms_rs::PropertyValue::Boolean(_) => "Boolean".to_string(),
+        tdms_rs::PropertyValue::TimeStamp(_) => "TimeStamp".to_string(),
+    }
+}
+
+#[cfg(feature = "execute")]
+fn format_value(val: &tdms_rs::PropertyValue) -> String {
+    format!("{}", val)
 }
 
 #[async_trait]
@@ -107,43 +126,41 @@ impl NodeLogic for TdmsMetadataNode {
         let tmp_file = tempfile::NamedTempFile::new()?;
         std::fs::write(tmp_file.path(), &bytes)?;
 
-        let file = tdms::TDMSFile::from_path(tmp_file.path())
+        let file = tdms_rs::TdmsFile::open(tmp_file.path())
             .map_err(|e| flow_like_types::anyhow!("Failed to parse TDMS file: {:?}", e))?;
 
-        let group_names = file.groups();
-        let mut groups = Vec::with_capacity(group_names.len());
+        let mut groups = Vec::new();
 
-        for group_name in &group_names {
-            let channels_map = file.channels(group_name);
-            let mut channels = Vec::with_capacity(channels_map.len());
+        for group in file.groups() {
+            let group_name = group.name().to_string();
+            let mut channels = Vec::new();
 
-            for (_path, channel) in &channels_map {
+            for channel in group.channels() {
                 let properties: Vec<TdmsPropertyInfo> = channel
-                    .properties
-                    .iter()
-                    .map(|p| TdmsPropertyInfo {
-                        name: p.name.clone(),
-                        data_type: format_data_type(&p.data_type),
-                        value: format_value(&p.value),
+                    .properties()
+                    .map(|(name, value)| TdmsPropertyInfo {
+                        name: name.to_string(),
+                        data_type: property_value_type(value),
+                        value: format_value(value),
                     })
                     .collect();
 
                 channels.push(TdmsChannelInfo {
-                    name: channel.path.clone(),
-                    group: channel.group_path.clone(),
-                    data_type: format_data_type(&channel.data_type),
+                    name: channel.name().to_string(),
+                    group: group_name.clone(),
+                    data_type: format_data_type(&channel.dtype()),
                     properties,
                 });
             }
 
             groups.push(TdmsGroupInfo {
-                name: group_name.clone(),
+                name: group_name,
                 channels,
             });
         }
 
         let metadata = TdmsFileMetadata {
-            segment_count: file.segments.len() as u64,
+            segment_count: file.segment_count() as u64,
             groups,
         };
 
