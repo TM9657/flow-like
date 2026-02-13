@@ -9,6 +9,7 @@ import {
 	useImperativeHandle,
 	useRef,
 	useState,
+	useTransition,
 } from "react";
 import PuffLoader from "react-spinners/PuffLoader";
 import type { IEventPayloadChat } from "../../../lib";
@@ -60,14 +61,32 @@ const ChatInner = forwardRef<IChatRef, IChatProps>(
 		const isScrollingProgrammatically = useRef(false);
 		const [defaultActiveTools, setDefaultActiveTools] = useState<string[]>();
 		const [isSending, setIsSending] = useState(false);
+		const isSendingRef = useRef(false);
 		const [sendingContent, setSendingContent] = useState("");
+		const [, startMessagesTransition] = useTransition();
+
+		useEffect(() => {
+			isSendingRef.current = isSending;
+		}, [isSending]);
+
+		// Reset state when switching sessions (avoids expensive key-based remount)
+		useEffect(() => {
+			setCurrentMessage(null);
+			setLocalMessages([]);
+			setShouldAutoScroll(true);
+			setHasInitiallyScrolled(false);
+			setIsSending(false);
+			setSendingContent("");
+		}, [sessionId]);
 
 		// Sync external messages with local state
 		useEffect(() => {
-			setLocalMessages(messages);
+			startMessagesTransition(() => {
+				setLocalMessages(messages);
+			});
 
 			// Clear optimistic sending state when the user message appears in DB
-			if (isSending) {
+			if (isSendingRef.current) {
 				const lastMessage = messages[messages.length - 1];
 				if (lastMessage?.inner.role === "user") {
 					setIsSending(false);
@@ -92,7 +111,7 @@ const ChatInner = forwardRef<IChatRef, IChatProps>(
 			}
 
 			setDefaultActiveTools(config?.default_tools ?? []);
-		}, [messages, config?.tools, isSending]);
+		}, [messages, config?.tools]);
 
 		// Initial scroll to bottom when messages first load
 		useEffect(() => {
@@ -127,17 +146,13 @@ const ChatInner = forwardRef<IChatRef, IChatProps>(
 		}, []);
 
 		const handleScroll = useCallback(() => {
-			// Don't update auto-scroll state if we're programmatically scrolling
 			const atBottom = isAtBottom();
 			if (isScrollingProgrammatically.current) {
-				console.log("Ignoring scroll - programmatic");
 				if (!atBottom) {
 					setShouldAutoScroll(false);
 				}
 				return;
 			}
-
-			console.log("Scroll event detected, at bottom:", atBottom);
 
 			setShouldAutoScroll(atBottom);
 		}, [isAtBottom]);

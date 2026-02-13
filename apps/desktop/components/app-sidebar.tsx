@@ -272,7 +272,7 @@ export function AppSidebar({
 			<main
 				className="w-full h-dvh flex flex-col overflow-hidden"
 				style={{
-					height: "var(--fl-ios-vvh, 100dvh)",
+					height: "var(--fl-mobile-vvh, 100dvh)",
 					paddingTop: "var(--fl-safe-top, env(safe-area-inset-top, 0px))",
 				}}
 			>

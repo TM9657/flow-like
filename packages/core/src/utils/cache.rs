@@ -20,6 +20,8 @@ pub fn get_cache_dir() -> PathBuf {
         cache_dir.join(CACHE_KEY)
     } else if let Some(data_dir) = dirs_next::data_dir() {
         data_dir.join(CACHE_KEY)
+    } else if let Some(home) = std::env::var_os("HOME") {
+        PathBuf::from(home).join(".cache").join(CACHE_KEY)
     } else {
         PathBuf::from(CACHE_KEY)
     }

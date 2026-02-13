@@ -138,3 +138,12 @@ flate2 = { version = "1.1", default-features = false, features = ["rust_backend"
 [patch.crates-io]
 esaxx-rs = { git = "https://github.com/thewh1teagle/esaxx-rs.git", branch = "feat/dynamic-msvc-link" }
 
+# Use line-tables-only debug info and strip debuginfo to keep .so under 4GB for Android APK ZIP32 limit
+[profile.dev]
+debug = 1
+strip = "debuginfo"
+incremental = true
+
+[profile.dev.package."*"]
+opt-level = 1
+

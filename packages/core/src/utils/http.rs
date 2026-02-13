@@ -5,7 +5,7 @@ use flow_like_types::{
     sync::{DashMap, mpsc},
 };
 use serde::{Deserialize, Serialize};
-use std::{sync::Arc, time::Duration};
+use std::{sync::{Arc, OnceLock}, time::Duration};
 
 use super::cache::{cache_file_exists, read_cache_file, write_cache_file};
 
@@ -27,8 +27,10 @@ pub struct HTTPClient {
     #[serde(skip)]
     sender: Option<mpsc::Sender<Request>>,
 
+    /// Lazily initialized to avoid triggering iOS Network.framework
+    /// before the run loop is active (causes `nw_dictionary_copy null`).
     #[serde(skip)]
-    client: reqwest::Client,
+    client: OnceLock<reqwest::Client>,
 }
 
 impl HTTPClient {
@@ -59,7 +61,7 @@ impl HTTPClient {
     where
         for<'de> T: Deserialize<'de> + Clone + Serialize,
     {
-        let response = self.client.execute(request).await?;
+        let response = self.client().execute(request).await?;
         let status = response.status();
 
         if !status.is_success() {
@@ -83,7 +85,7 @@ impl HTTPClient {
             HTTPClient {
                 cache: Arc::new(DashMap::new()),
                 sender: Some(tx),
-                client: reqwest::Client::new(),
+                client: OnceLock::new(),
             },
             rx,
         )
@@ -93,7 +95,7 @@ impl HTTPClient {
         HTTPClient {
             cache: Arc::new(DashMap::new()),
             sender: None,
-            client: reqwest::Client::new(),
+            client: OnceLock::new(),
         }
     }
 
@@ -194,7 +196,7 @@ impl HTTPClient {
     }
 
     pub fn client(&self) -> reqwest::Client {
-        self.client.clone()
+        self.client.get_or_init(reqwest::Client::new).clone()
     }
 
     pub async fn hashed_request<T>(&self, request: Request) -> flow_like_types::Result<T>

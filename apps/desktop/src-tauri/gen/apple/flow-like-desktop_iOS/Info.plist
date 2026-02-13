@@ -19,10 +19,12 @@
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
-	<string>0.0.8</string>
+	<string>0.0.9</string>
 	<key>CFBundleVersion</key>
-	<string>0.0.8</string>
+	<string>0.0.9</string>
 	<key>LSRequiresIPhoneOS</key>
+	<true/>
+	<key>UIViewControllerBasedStatusBarAppearance</key>
 	<true/>
 	<key>NSAppleEventsUsageDescription</key>
 	<string>Flow Like automates and integrates with other apps you choose (e.g., Finder) to manage files.</string>

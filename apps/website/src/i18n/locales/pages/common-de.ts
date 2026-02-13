@@ -47,6 +47,7 @@ export const deCommon = {
 	"footer.eula": "EULA",
 	"footer.privacy": "Datenschutz",
 	"footer.legal": "Impressum",
+	"footer.dataDeletion": "Datenlöschung",
 
 	// BI Preview Section
 	"bi.preview.badge": "Business Intelligence",

@@ -525,16 +525,25 @@ export function MessageComponent({
 	}, [processedAttachments]);
 
 	useEffect(() => {
-		if (isUser && contentRef.current) {
-			const timer = setTimeout(() => {
-				if (contentRef.current) {
-					const actualHeight = contentRef.current.scrollHeight;
-					const maxHeight = Number.parseFloat(maxCollapsedHeight) * 16;
-					setShowToggle(actualHeight > maxHeight);
-				}
-			}, 100);
-			return () => clearTimeout(timer);
+		if (!isUser || !contentRef.current) return;
+
+		const el = contentRef.current;
+		const maxHeight = Number.parseFloat(maxCollapsedHeight) * 16;
+
+		if (el.scrollHeight > maxHeight) {
+			setShowToggle(true);
+			return;
 		}
+
+		const observer = new ResizeObserver(() => {
+			if (el.scrollHeight > maxHeight) {
+				setShowToggle(true);
+				observer.disconnect();
+			}
+		});
+		observer.observe(el);
+
+		return () => observer.disconnect();
 	}, [message.inner, isUser]);
 
 	const handleFileClick = useCallback((file: ProcessedAttachment) => {

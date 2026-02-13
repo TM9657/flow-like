@@ -45,6 +45,7 @@ export const jaCommon = {
 	"footer.eula": "EULA",
 	"footer.privacy": "プライバシーポリシー",
 	"footer.legal": "法的通知",
+	"footer.dataDeletion": "データ削除",
 
 	// BI Preview Section
 	"bi.preview.badge": "ビジネスインテリジェンス",

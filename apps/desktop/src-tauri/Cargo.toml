@@ -23,7 +23,7 @@ plist = "1.8.0"
 
 [dependencies]
 flow-like = { workspace = true, features = ["tauri", "local-ml"] }
-flow-like-catalog = { workspace = true, features = ["local-ml", "all-execute", "tauri"] }
+flow-like-catalog = { workspace = true, features = ["all-execute", "tauri", "local-ml"] }
 flow-like-types.workspace = true
 flow-like-wasm.workspace = true
 tauri = { version = "2.9.5", features = [
@@ -33,7 +33,7 @@ tauri = { version = "2.9.5", features = [
 ] }
 window-vibrancy = "0.6.0"
 anyhow = "1.0.95"
-sentry = { version = "0.42.0", features = ["anyhow"] }
+sentry = { version = "0.42.0", default-features = false, features = ["anyhow", "backtrace", "contexts", "debug-images", "panic", "release-health", "reqwest", "rustls", "tokio"] }
 sentry-tracing = "0.42.0"
 tracing-subscriber = { version = "0.3.19", features = ["env-filter", "json"] }
 tracing = { version = "0.1.41", features = ["async-await", "attributes"] }
@@ -58,8 +58,8 @@ urlencoding.workspace = true
 tauri-plugin-opener = "2.5.3"
 tracing-oslog = "0.3.0"
 rusqlite = { version = "0.32.0", features = ["bundled-full", "serde_json"] }
-serenity = "0.12.4"
-teloxide = { version = "0.17", features = ["macros"] }
+serenity = { version = "0.12.4", default-features = false, features = ["client", "gateway", "model", "rustls_backend", "cache"] }
+teloxide = { version = "0.17", default-features = false, features = ["macros", "rustls", "ctrlc_handler"] }
 pulldown-cmark = "0.12"
 lazy_static = "1.5.0"
 async-trait.workspace = true
@@ -108,3 +108,5 @@ incremental = true
 
 [profile.dev.package."*"]
 opt-level = 0
+
+

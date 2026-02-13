@@ -172,7 +172,17 @@ impl NodeLogic for CreateLocalDatabaseNode {
             };
 
             let db = db.execute().await?;
-            let intermediate = LanceDBVectorStore::from_connection(db, table).await;
+            let mut intermediate = LanceDBVectorStore::from_connection(db, table).await;
+            if let Some(opts) = &context
+                .app_state
+                .config
+                .read()
+                .await
+                .callbacks
+                .lance_write_options
+            {
+                intermediate.set_write_options(opts.clone());
+            }
             let intermediate = CachedDB {
                 db: Arc::new(RwLock::new(intermediate)),
             };

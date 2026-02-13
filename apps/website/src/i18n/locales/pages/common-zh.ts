@@ -44,6 +44,7 @@ export const zhCommon = {
 	"footer.eula": "最终用户许可协议",
 	"footer.privacy": "隐私政策",
 	"footer.legal": "法律声明",
+	"footer.dataDeletion": "数据删除",
 
 	// BI Preview Section
 	"bi.preview.badge": "商业智能",

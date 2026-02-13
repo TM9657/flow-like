@@ -13,6 +13,7 @@ use lancedb::table::AddColumnsResult;
 use lancedb::table::AlterColumnsResult;
 use lancedb::table::ColumnAlteration;
 use lancedb::table::NewColumnTransform;
+use lancedb::table::WriteOptions;
 use lancedb::{
     Connection, Table, connect,
     index::{
@@ -52,6 +53,7 @@ pub struct LanceDBVectorStore {
     connection: Connection,
     table: Option<Table>,
     table_name: String,
+    write_options: Option<WriteOptions>,
 }
 
 impl Cacheable for LanceDBVectorStore {
@@ -78,6 +80,7 @@ impl LanceDBVectorStore {
             connection,
             table,
             table_name,
+            write_options: None,
         })
     }
 
@@ -88,7 +91,12 @@ impl LanceDBVectorStore {
             connection,
             table,
             table_name,
+            write_options: None,
         }
+    }
+
+    pub fn set_write_options(&mut self, options: WriteOptions) {
+        self.write_options = Some(options);
     }
 
     pub async fn list_tables(&self) -> Result<Vec<String>> {
@@ -244,12 +252,11 @@ impl LanceDBVectorStore {
         );
 
         if self.table.is_none() {
-            match self
-                .connection
-                .create_table(&self.table_name, items)
-                .execute()
-                .await
-            {
+            let mut builder = self.connection.create_table(&self.table_name, items);
+            if let Some(opts) = &self.write_options {
+                builder = builder.write_options(opts.clone());
+            }
+            match builder.execute().await {
                 Ok(table) => {
                     self.table = Some(table);
                     return Ok(());
@@ -262,7 +269,11 @@ impl LanceDBVectorStore {
         }
 
         let table = self.table.clone().unwrap();
-        match table.add(items).execute().await {
+        let mut add = table.add(items);
+        if let Some(opts) = &self.write_options {
+            add = add.write_options(opts.clone());
+        }
+        match add.execute().await {
             Ok(_) => Ok(()),
             Err(err) => Err(anyhow!(err.to_string())),
         }
@@ -460,12 +471,11 @@ impl VectorStore for LanceDBVectorStore {
         };
 
         if self.table.is_none() {
-            match self
-                .connection
-                .create_table(&self.table_name, items)
-                .execute()
-                .await
-            {
+            let mut builder = self.connection.create_table(&self.table_name, items);
+            if let Some(opts) = &self.write_options {
+                builder = builder.write_options(opts.clone());
+            }
+            match builder.execute().await {
                 Ok(table) => {
                     self.table = Some(table);
                     return Ok(());
@@ -497,12 +507,11 @@ impl VectorStore for LanceDBVectorStore {
         };
 
         if self.table.is_none() {
-            match self
-                .connection
-                .create_table(&self.table_name, items)
-                .execute()
-                .await
-            {
+            let mut builder = self.connection.create_table(&self.table_name, items);
+            if let Some(opts) = &self.write_options {
+                builder = builder.write_options(opts.clone());
+            }
+            match builder.execute().await {
                 Ok(table) => {
                     self.table = Some(table);
                     return Ok(());
@@ -515,7 +524,11 @@ impl VectorStore for LanceDBVectorStore {
         }
 
         let table = self.table.clone().unwrap();
-        match table.add(items).execute().await {
+        let mut add = table.add(items);
+        if let Some(opts) = &self.write_options {
+            add = add.write_options(opts.clone());
+        }
+        match add.execute().await {
             Ok(_) => return Ok(()),
             Err(err) => {
                 return Err(anyhow!(err.to_string()));

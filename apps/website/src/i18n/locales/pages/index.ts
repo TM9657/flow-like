@@ -20,3 +20,6 @@ export { deCompare } from "./compare-de";
 export { frCompare } from "./compare-fr";
 export { esCompare } from "./compare-es";
 export { tCompare, translationsCompare } from "./compare";
+
+// Data Deletion Page
+export { tDataDeletion, translationsDataDeletion } from "./data-deletion";

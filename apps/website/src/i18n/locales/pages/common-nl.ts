@@ -45,6 +45,7 @@ export const nlCommon = {
 	"footer.eula": "EULA",
 	"footer.privacy": "Privacybeleid",
 	"footer.legal": "Juridische kennisgeving",
+	"footer.dataDeletion": "Gegevens verwijderen",
 
 	// BI Preview Section
 	"bi.preview.badge": "Business Intelligence",

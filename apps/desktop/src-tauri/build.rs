@@ -180,10 +180,16 @@ fn ensure_ios_associated_domain(domain: &str) -> Result<(), String> {
 }
 
 fn main() {
-    // Link against system zlib on iOS (needed by flate2 with zlib feature)
     let target_os = std::env::var("CARGO_CFG_TARGET_OS").unwrap_or_default();
+
+    // Link against system zlib on iOS (needed by flate2 with zlib feature)
     if target_os == "ios" {
         println!("cargo:rustc-link-lib=z");
+    }
+
+    if target_os == "android" {
+        println!("cargo:rustc-link-lib=z");
+        println!("cargo:rustc-link-lib=log");
     }
 
     println!("cargo:rerun-if-changed=../../../flow-like.config.json");

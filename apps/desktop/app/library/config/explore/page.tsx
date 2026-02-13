@@ -490,9 +490,11 @@ const TableCard: React.FC<TableCardProps> = ({ appId, table, onSelect }) => {
 							{table.name}
 						</CardTitle>
 						<p className="text-sm text-muted-foreground">
-							{count.data !== undefined
-								? `${count.data.toLocaleString()} items`
-								: "Loading..."}
+							{count.error
+								? "Error loading count"
+								: count.data !== undefined
+									? `${count.data.toLocaleString()} items`
+									: "Loading..."}
 						</p>
 					</div>
 				</CardHeader>

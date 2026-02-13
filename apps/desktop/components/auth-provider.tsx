@@ -1,6 +1,5 @@
 "use client";
 import { listen } from "@tauri-apps/api/event";
-import { getAllWindows } from "@tauri-apps/api/window";
 import { getCurrent } from "@tauri-apps/plugin-deep-link";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { useBackend, useInvalidateInvoke, useInvoke } from "@tm9657/flow-like-ui";
@@ -19,10 +18,18 @@ import {
 	type UserManagerSettings,
 	WebStorageStateStore,
 } from "oidc-client-ts";
-import { useEffect, useState } from "react";
+import { createContext, useContext, useEffect, useRef, useState } from "react";
 import { AuthProvider, useAuth } from "react-oidc-context";
 import { get } from "../lib/api";
 import { ProfileSyncer, TauriBackend } from "./tauri-provider";
+
+const AUTH_CHANGED_EVENT = "fl-auth-changed";
+
+function emitAuthChanged() {
+	window.dispatchEvent(new CustomEvent(AUTH_CHANGED_EVENT));
+}
+
+const UserManagerContext = createContext<UserManager | null>(null);
 
 export class OIDCTokenProvider implements TokenProvider {
 	constructor(private readonly userManager: UserManager) {}
@@ -84,18 +91,18 @@ export function DesktopAuthProvider({
 		[],
 	);
 
+	const hubUrl = currentProfile.data?.hub ?? "api.flow-like.com";
+	const hubSecure = currentProfile.data?.secure ?? true;
+
 	useEffect(() => {
-		const profileData = currentProfile.data;
-		const effectiveProfile =
-			profileData ??
-			({
-				hub: "api.flow-like.com",
-				secure: true,
-				bits: [],
-				created: new Date().toISOString(),
-				updated: new Date().toISOString(),
-				name: "default",
-			} as IProfile);
+		const effectiveProfile = {
+			hub: hubUrl,
+			secure: hubSecure,
+			bits: [],
+			created: new Date().toISOString(),
+			updated: new Date().toISOString(),
+			name: "default",
+		} as IProfile;
 
 		(async () => {
 			try {
@@ -141,7 +148,7 @@ export function DesktopAuthProvider({
 				console.error("Failed to fetch OpenID config:", error);
 			}
 		})();
-	}, [currentProfile.data]);
+	}, [hubUrl, hubSecure]);
 
 	useEffect(() => {
 		if (!openIdAuthConfig) return;
@@ -208,11 +215,16 @@ export function DesktopAuthProvider({
 		};
 
 		const closeOidcFlowWindows = async () => {
-			const windows = await getAllWindows();
-			for (const window of windows) {
-				if (window.label === "oidcFlow") {
-					window.close();
+			try {
+				const { getAllWindows } = await import("@tauri-apps/api/window");
+				const windows = await getAllWindows();
+				for (const window of windows) {
+					if (window.label === "oidcFlow") {
+						window.close();
+					}
 				}
+			} catch {
+				// Window API not available on mobile — no-op since mobile uses system browser
 			}
 		};
 
@@ -240,6 +252,7 @@ export function DesktopAuthProvider({
 
 				if (signinUrl.startsWith(openIdAuthConfig.redirect_uri)) {
 					await userManager?.signinRedirectCallback(signinUrl);
+					emitAuthChanged();
 					await closeOidcFlowWindows();
 				}
 
@@ -247,6 +260,7 @@ export function DesktopAuthProvider({
 					openIdAuthConfig.post_logout_redirect_uri &&
 					logoutUrl.startsWith(openIdAuthConfig.post_logout_redirect_uri)
 				) {
+					emitAuthChanged();
 					await closeOidcFlowWindows();
 				}
 
@@ -299,18 +313,20 @@ export function DesktopAuthProvider({
 		return <AuthProvider key="loading-auth-config">{children}</AuthProvider>;
 
 	return (
-		<AuthProvider
-			key={openIdAuthConfig.client_id}
-			{...openIdAuthConfig}
-			automaticSilentRenew={true}
-			userStore={
-				new WebStorageStateStore({
-					store: localStorage,
-				})
-			}
-		>
-			<AuthInner>{children}</AuthInner>
-		</AuthProvider>
+		<UserManagerContext.Provider value={userManager ?? null}>
+			<AuthProvider
+				key={openIdAuthConfig.client_id}
+				{...openIdAuthConfig}
+				automaticSilentRenew={true}
+				userStore={
+					new WebStorageStateStore({
+						store: localStorage,
+					})
+				}
+			>
+				<AuthInner>{children}</AuthInner>
+			</AuthProvider>
+		</UserManagerContext.Provider>
 	);
 }
 
@@ -318,7 +334,37 @@ function AuthInner({ children }: Readonly<{ children: React.ReactNode }>) {
 	const auth = useAuth();
 	const backend = useBackend();
 	const invalidate = useInvalidateInvoke();
+	const userManager = useContext(UserManagerContext);
 
+	// auth.events belongs to the AuthProvider's internal UserManager (captured
+	// via useState on mount). userManager from context may be a newer instance
+	// created after a profile refetch. We must fire userLoaded on the
+	// AuthProvider's instance so react-oidc-context picks up the change.
+	const authEventsRef = useRef(auth?.events);
+	useEffect(() => {
+		authEventsRef.current = auth?.events;
+	});
+
+	useEffect(() => {
+		const onAuthChanged = async () => {
+			if (!userManager) return;
+			try {
+				const user = await userManager.getUser();
+				if (user && !user.expired) {
+					console.log("[AuthInner] fl-auth-changed: reloading user into context");
+					const events = authEventsRef.current;
+					if (events) {
+						await events.load(user);
+					}
+				}
+			} catch (err) {
+				console.warn("[AuthInner] Failed to reload user on auth change:", err);
+			}
+		};
+
+		window.addEventListener(AUTH_CHANGED_EVENT, onAuthChanged);
+		return () => window.removeEventListener(AUTH_CHANGED_EVENT, onAuthChanged);
+	}, [userManager]);
 	useEffect(() => {
 		if (!auth) return;
 		if (!auth.isAuthenticated) {
