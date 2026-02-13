@@ -1,18 +1,20 @@
 "use client";
 
-import { useReactFlow } from "@xyflow/react";
 import {
 	BanIcon,
 	CheckCircle2Icon,
 	CircleXIcon,
+	CloudIcon,
 	CornerRightUpIcon,
 	EllipsisVerticalIcon,
+	HardDriveIcon,
+	Loader2Icon,
 	LogsIcon,
 	RefreshCcwIcon,
 	ScrollIcon,
 	TriangleAlertIcon,
 } from "lucide-react";
-import { memo, useCallback, useEffect, useState } from "react";
+import { memo, useEffect, useState } from "react";
 import { toast } from "sonner";
 import {
 	ILogLevel,
@@ -50,6 +52,7 @@ const FlowRunsComponent = ({
 	version,
 	executeBoard,
 	onVersionChange,
+	onFocusNode,
 }: {
 	appId: string;
 	boardId: string;
@@ -59,6 +62,7 @@ const FlowRunsComponent = ({
 	version: [number, number, number];
 	executeBoard: (node: INode, payload?: object) => Promise<void>;
 	onVersionChange: (version?: [number, number, number]) => void;
+	onFocusNode: (nodeId: string) => void;
 }) => {
 	const backend = useBackend();
 	const {
@@ -67,8 +71,8 @@ const FlowRunsComponent = ({
 		currentLogs,
 		setFilter,
 		refetchLogs,
+		isLoading,
 	} = useLogAggregation();
-	const { fitView } = useReactFlow();
 	const [localFilter, setLocalFilter] = useState<ILogAggregationFilter>({
 		appId,
 		boardId,
@@ -119,20 +123,6 @@ const FlowRunsComponent = ({
 			from: from ? from * 1000 : undefined,
 		}));
 	}, [timeRange]);
-
-	const zoomNode = useCallback(
-		(nodeId: string) => {
-			fitView({
-				nodes: [
-					{
-						id: nodeId,
-					},
-				],
-				duration: 500,
-			});
-		},
-		[fitView],
-	);
 
 	return (
 		<div className="flex flex-col gap-2 p-4 bg-background grow h-full max-h-full overflow-hidden">
@@ -225,7 +215,13 @@ const FlowRunsComponent = ({
 					</SelectContent>
 				</Select>
 			</div>
-			{(!currentLogs || currentLogs.length === 0) && (
+			{isLoading && (
+				<div className="flex flex-col items-center justify-center gap-2 py-8 h-full">
+					<Loader2Icon className="w-6 h-6 animate-spin text-muted-foreground" />
+					<p className="text-sm text-muted-foreground">Loading runs...</p>
+				</div>
+			)}
+			{!isLoading && (!currentLogs || currentLogs.length === 0) && (
 				<EmptyState
 					className="mt-2 h-full"
 					icons={[LogsIcon, ScrollIcon, CheckCircle2Icon]}
@@ -234,7 +230,7 @@ const FlowRunsComponent = ({
 				/>
 			)}
 			<div className="flex flex-col gap-2 max-h-full overflow-y-auto">
-				{currentLogs.map((run) => (
+				{currentLogs?.map((run) => (
 					<button
 						key={run.run_id}
 						className={`flex flex-row gap-2 items-center justify-between border p-2 rounded-md ${currentMetadata?.run_id === run.run_id ? "bg-muted/50" : "hover:bg-muted/50"}`}
@@ -246,19 +242,40 @@ const FlowRunsComponent = ({
 							}
 
 							setCurrentMetadata(run);
+
+							// Parse version string safely - handle cases like "v1", "v1-0", "v1-0-0"
+							const parseVersion = (
+								versionStr: string,
+							): [number, number, number] | undefined => {
+								const parts = versionStr
+									.replace("v", "")
+									.split("-")
+									.map(Number);
+								if (parts.length >= 3 && parts.every((n) => !isNaN(n))) {
+									return [parts[0], parts[1], parts[2]];
+								}
+								// If version doesn't have 3 parts, return undefined (use latest)
+								return undefined;
+							};
+
 							onVersionChange(
 								run.version === `v${version.join("-")}`
 									? undefined
-									: (run.version.replace("v", "").split("-").map(Number) as [
-											number,
-											number,
-											number,
-										]),
+									: parseVersion(run.version),
 							);
 						}}
 					>
 						<div className="flex flex-col gap-2 items-start justify-center">
 							<div className="flex flex-row gap-2 items-center">
+								{run.is_remote ? (
+									<span title="Remote execution">
+										<CloudIcon className="w-3 h-3 text-blue-500" />
+									</span>
+								) : (
+									<span title="Local execution">
+										<HardDriveIcon className="w-3 h-3 text-muted-foreground" />
+									</span>
+								)}
 								<small className="leading-none">
 									{nodes[run.node_id]?.friendly_name ?? "Deleted Event"}
 								</small>
@@ -319,7 +336,7 @@ const FlowRunsComponent = ({
 									<DropdownMenuSeparator />
 									<DropdownMenuItem
 										onClick={() => {
-											zoomNode(run.node_id);
+											onFocusNode(run.node_id);
 										}}
 										className="flex flex-row gap-2 items-center"
 									>
@@ -336,9 +353,19 @@ const FlowRunsComponent = ({
 											executeBoard(node, parseUint8ArrayToJson(run.payload));
 										}}
 										className="flex flex-row gap-2 items-center"
+										disabled={
+											run.is_remote &&
+											(!run.payload || run.payload.length === 0)
+										}
 									>
 										<RefreshCcwIcon className="w-4 h-4" />
 										Re-Run
+										{run.is_remote &&
+											(!run.payload || run.payload.length === 0) && (
+												<span className="text-xs text-muted-foreground">
+													(no payload)
+												</span>
+											)}
 									</DropdownMenuItem>
 								</DropdownMenuContent>
 							</DropdownMenu>
@@ -356,6 +383,7 @@ export const FlowRuns = memo(
 		prev.appId === next.appId &&
 		prev.boardId === next.boardId &&
 		prev.executeBoard === next.executeBoard &&
+		prev.onFocusNode === next.onFocusNode &&
 		// shallow compare nodes object by reference
 		prev.nodes === next.nodes,
 );

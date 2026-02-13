@@ -1,0 +1,210 @@
+---
+import "@tm9657/flow-like-ui/global.css";
+import "../../styles/website-base.css";
+import { Header } from "../../components/header";
+
+import AmbientGlow from "../../components/ambient-glow.astro";
+import SoftSeam from "../../components/soft-seam.astro";
+
+import DesignWorkflowsVisually from "../../sections/design-workflows-visually.astro";
+import ZeroToProd from "../../sections/zero-to-prod.astro";
+import Portability from "../../sections/portability.astro";
+import Performance from "../../sections/performance.astro";
+import Extensibility from "../../sections/extensibility.astro";
+import Theming from "../../sections/theming.astro";
+import ProcessCombination from "../../sections/process-combination.astro";
+import Storage from "../../sections/storage.astro";
+import Reading from "../../sections/reading.astro";
+import FlowPilot from "../../sections/flowpilot.astro";
+import Integrations from "../../sections/integrations.astro";
+import UseCases from "../../sections/use-cases.astro";
+import TwentyFourHourBanner from "../../sections/24-hour-solution-banner.astro";
+import EnterpriseStack from "../../sections/enterprise-stack.astro";
+import BiPreview from "../../sections/bi-preview.astro";
+import ProblemSolution from "../../sections/problem-solution.astro";
+import TargetAudience from "../../sections/target-audience.astro";
+import CtaAutomate from "../../sections/cta-automate.astro";
+import FAQ from "../../sections/faq.astro";
+import Newsletter from "../../sections/newsletter.astro";
+import { BlogFooter } from "../../components/blog-footer";
+
+import Hero from "../../sections/hero.astro";
+import { translations } from "../../i18n";
+
+const lang = "ko";
+const t = translations[lang];
+
+const site = "https://flow-like.com";
+const title = t["meta.title"];
+const description = t["meta.description"];
+const keywords = [
+  "엔터프라이즈 자동화","워크플로우 자동화","온프레미스 자동화","감사 가능 워크플로우",
+  "비주얼 프로그래밍","타입 워크플로우","Rust","컴플라이언스","거버넌스","보안 자동화"
+].join(", ");
+const appName = "Flow-Like";
+const orgName = "TM9657 GmbH";
+const canonicalUrl = `${site}/ko`;
+const ogImage = `${site}/og.png`;
+const twitterCard = "summary_large_image";
+
+const github = "https://github.com/TM9657/flow-like";
+const docs = "https://docs.flow-like.com";
+const download = "https://github.com/TM9657/flow-like/releases";
+
+const ldOrganization = {
+  "@context": "https://schema.org",
+  "@type": "Organization",
+  name: orgName,
+  url: site,
+  logo: `${site}/favicon.svg`,
+  sameAs: [github, docs]
+};
+
+const ldSoftware = {
+  "@context": "https://schema.org",
+  "@type": "SoftwareApplication",
+  name: appName,
+  applicationCategory: "DeveloperApplication",
+  applicationSubCategory: "Workflow automation",
+  operatingSystem: "macOS, Windows, Linux",
+  url: site,
+  downloadUrl: download,
+  image: ogImage,
+  description,
+  license: `${github}/blob/main/LICENSE`
+};
+
+const ldWebSite = {
+  "@context": "https://schema.org",
+  "@type": "WebSite",
+  name: appName,
+  url: site,
+  publisher: { "@type": "Organization", name: orgName },
+  inLanguage: "ko"
+};
+
+const ldWebPage = {
+  "@context": "https://schema.org",
+  "@type": "WebPage",
+  url: canonicalUrl,
+  name: title,
+  description,
+  isPartOf: { "@type": "WebSite", url: site, name: appName },
+  inLanguage: "ko"
+};
+
+const alternateLinks = [
+  { hreflang: "en", href: site },
+  { hreflang: "de", href: `${site}/de` },
+  { hreflang: "es", href: `${site}/es` },
+  { hreflang: "fr", href: `${site}/fr` },
+  { hreflang: "zh", href: `${site}/zh` },
+  { hreflang: "ja", href: `${site}/ja` },
+  { hreflang: "ko", href: `${site}/ko` },
+  { hreflang: "pt", href: `${site}/pt` },
+  { hreflang: "it", href: `${site}/it` },
+  { hreflang: "nl", href: `${site}/nl` },
+  { hreflang: "sv", href: `${site}/sv` },
+  { hreflang: "x-default", href: site }
+];
+---
+
+<!doctype html>
+<html lang={lang} class="scroll-smooth">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+
+    <title>{title}</title>
+    <meta name="description" content={description} />
+    <meta name="keywords" content={keywords} />
+    <meta name="application-name" content={appName} />
+    <meta name="robots" content="index,follow" />
+    <meta name="generator" content={Astro.generator} />
+
+    <link rel="canonical" href={canonicalUrl} />
+    {alternateLinks.map(alt => (
+      <link rel="alternate" hreflang={alt.hreflang} href={alt.href} />
+    ))}
+    <link rel="alternate" type="application/rss+xml" title="Flow-Like Blog" href="/rss.xml" />
+
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png" />
+    <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
+    <link rel="manifest" href="/site.webmanifest" />
+    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#0b0f19" media="(prefers-color-scheme: dark)" />
+
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content={appName} />
+    <meta property="og:title" content={title} />
+    <meta property="og:description" content={description} />
+    <meta property="og:url" content={canonicalUrl} />
+    <meta property="og:image" content={ogImage} />
+    <meta property="og:locale" content="ko_KR" />
+
+    <meta name="twitter:card" content={twitterCard} />
+    <meta name="twitter:title" content={title} />
+    <meta name="twitter:description" content={description} />
+    <meta name="twitter:image" content={ogImage} />
+
+    <script type="application/ld+json" is:inline set:html={JSON.stringify(ldOrganization)} />
+    <script type="application/ld+json" is:inline set:html={JSON.stringify(ldSoftware)} />
+    <script type="application/ld+json" is:inline set:html={JSON.stringify(ldWebSite)} />
+    <script type="application/ld+json" is:inline set:html={JSON.stringify(ldWebPage)} />
+
+    <style is:global>
+      body {
+        background-image: radial-gradient(
+          color-mix(in srgb, var(--muted) 20%, transparent) 1px,
+          transparent 1px
+        ) !important;
+        background-size: 16px 16px !important;
+        background-attachment: scroll !important;
+      }
+      @media (hover: none) and (pointer: coarse) {
+        [data-overlay], [data-visual], .overlay, .backdrop {
+          pointer-events: none;
+          touch-action: pan-y;
+        }
+        * { scroll-snap-type: none !important; }
+        html { scroll-behavior: auto !important; }
+      }
+    </style>
+  </head>
+
+  <body class="bg-background text-foreground antialiased selection:bg-primary/30">
+    <main id="content" class="w-full max-w-[100vw] overflow-x-clip">
+      <AmbientGlow />
+      <Header client:load/>
+      <Hero lang={lang} />
+
+      <EnterpriseStack lang={lang} />
+      <BiPreview lang={lang} />
+      <CtaAutomate lang={lang} />
+      <ProblemSolution lang={lang} />
+      <UseCases lang={lang} />
+      <DesignWorkflowsVisually lang={lang} />
+      <TargetAudience lang={lang} />
+      <TwentyFourHourBanner lang={lang} />
+      <Portability lang={lang} />
+      <SoftSeam />
+      <Performance lang={lang} />
+      <FlowPilot lang={lang} />
+      <Extensibility lang={lang} />
+      <ZeroToProd lang={lang} />
+      <Integrations lang={lang} />
+      <SoftSeam />
+      <Theming lang={lang} />
+      <SoftSeam />
+      <ProcessCombination lang={lang} />
+      <SoftSeam />
+      <Storage lang={lang} />
+      <Reading lang={lang} />
+      <Newsletter lang={lang} />
+      <FAQ lang={lang} />
+    </main>
+
+    <BlogFooter />
+  </body>
+</html>

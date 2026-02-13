@@ -1,0 +1,307 @@
+{{- if .Values.monitoring.enabled }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "flow-like.fullname" . }}-grafana-config
+  labels:
+    {{- include "flow-like.labels" . | nindent 4 }}
+    app.kubernetes.io/component: grafana
+data:
+  grafana.ini: |
+    [analytics]
+    check_for_updates = false
+    reporting_enabled = false
+
+    [server]
+    domain = {{ .Values.monitoring.grafana.domain | default "localhost" }}
+    root_url = %(protocol)s://%(domain)s:%(http_port)s/
+    serve_from_sub_path = false
+
+    [security]
+    admin_user = {{ .Values.monitoring.grafana.adminUser | default "admin" }}
+    disable_gravatar = true
+
+    [users]
+    allow_sign_up = false
+
+    [auth.anonymous]
+    enabled = {{ .Values.monitoring.grafana.anonymous.enabled | default false }}
+    org_name = Main Org.
+    org_role = Viewer
+
+    [dashboards]
+    default_home_dashboard_path = /var/lib/grafana/dashboards/flow-like-overview.json
+
+    [log]
+    mode = console
+    level = info
+
+  datasources.yaml: |
+    apiVersion: 1
+    datasources:
+      - name: Prometheus
+        type: prometheus
+        access: proxy
+        url: http://{{ include "flow-like.fullname" . }}-prometheus:9090
+        isDefault: true
+        editable: false
+        jsonData:
+          timeInterval: "15s"
+      {{- if .Values.monitoring.tracing.enabled }}
+      - name: Tempo
+        type: tempo
+        access: proxy
+        url: http://{{ include "flow-like.fullname" . }}-tempo:3200
+        editable: false
+        jsonData:
+          tracesToLogsV2:
+            datasourceUid: ''
+          tracesToMetrics:
+            datasourceUid: 'Prometheus'
+          serviceMap:
+            datasourceUid: 'Prometheus'
+          nodeGraph:
+            enabled: true
+          search:
+            hide: false
+          lokiSearch:
+            datasourceUid: ''
+      {{- end }}
+
+  dashboards.yaml: |
+    apiVersion: 1
+    providers:
+      - name: 'flow-like'
+        orgId: 1
+        folder: 'Flow-Like'
+        folderUid: ''
+        type: file
+        disableDeletion: true
+        editable: false
+        options:
+          path: /var/lib/grafana/dashboards
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "flow-like.fullname" . }}-grafana
+  labels:
+    {{- include "flow-like.labels" . | nindent 4 }}
+    app.kubernetes.io/component: grafana
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "flow-like.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: grafana
+  template:
+    metadata:
+      labels:
+        {{- include "flow-like.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: grafana
+      annotations:
+        checksum/config: {{ .Values.monitoring.grafana | toYaml | sha256sum }}
+        checksum/dashboards: {{ .Values.monitoring | toYaml | sha256sum }}
+    spec:
+      securityContext:
+        fsGroup: 472
+        runAsNonRoot: true
+        runAsUser: 472
+      initContainers:
+        - name: init-chown-data
+          image: busybox:1.36
+          imagePullPolicy: IfNotPresent
+          securityContext:
+            runAsNonRoot: false
+            runAsUser: 0
+          command: ["chown", "-R", "472:472", "/var/lib/grafana"]
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/grafana
+      containers:
+        - name: grafana
+          image: "{{ .Values.monitoring.grafana.image.repository }}:{{ .Values.monitoring.grafana.image.tag }}"
+          imagePullPolicy: {{ .Values.monitoring.grafana.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: 3000
+              protocol: TCP
+          env:
+            - name: GF_SECURITY_ADMIN_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "flow-like.fullname" . }}-grafana
+                  key: admin-password
+          livenessProbe:
+            httpGet:
+              path: /api/health
+              port: http
+            initialDelaySeconds: 60
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /api/health
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          resources:
+            {{- toYaml .Values.monitoring.grafana.resources | nindent 12 }}
+          volumeMounts:
+            - name: config
+              mountPath: /etc/grafana/grafana.ini
+              subPath: grafana.ini
+            - name: config
+              mountPath: /etc/grafana/provisioning/datasources/datasources.yaml
+              subPath: datasources.yaml
+            - name: config
+              mountPath: /etc/grafana/provisioning/dashboards/dashboards.yaml
+              subPath: dashboards.yaml
+            - name: dashboards
+              mountPath: /var/lib/grafana/dashboards
+            - name: data
+              mountPath: /var/lib/grafana
+      volumes:
+        - name: config
+          configMap:
+            name: {{ include "flow-like.fullname" . }}-grafana-config
+        - name: dashboards
+          projected:
+            sources:
+              - configMap:
+                  name: {{ include "flow-like.fullname" . }}-grafana-dashboards
+              - configMap:
+                  name: {{ include "flow-like.fullname" . }}-grafana-dashboard-api
+              - configMap:
+                  name: {{ include "flow-like.fullname" . }}-grafana-dashboard-executor
+              {{- if eq .Values.database.type "internal" }}
+              - configMap:
+                  name: {{ include "flow-like.fullname" . }}-grafana-dashboard-database
+              {{- end }}
+              {{- if .Values.redis.enabled }}
+              - configMap:
+                  name: {{ include "flow-like.fullname" . }}-grafana-dashboard-redis
+              {{- end }}
+              {{- if .Values.monitoring.tracing.enabled }}
+              - configMap:
+                  name: {{ include "flow-like.fullname" . }}-grafana-dashboard-tracing
+              {{- end }}
+        - name: data
+          {{- if .Values.monitoring.grafana.persistence.enabled }}
+          persistentVolumeClaim:
+            claimName: {{ include "flow-like.fullname" . }}-grafana
+          {{- else }}
+          emptyDir: {}
+          {{- end }}
+      {{- with .Values.monitoring.grafana.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.monitoring.grafana.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "flow-like.fullname" . }}-grafana
+  labels:
+    {{- include "flow-like.labels" . | nindent 4 }}
+    app.kubernetes.io/component: grafana
+spec:
+  type: {{ .Values.monitoring.grafana.service.type }}
+  ports:
+    - port: 80
+      targetPort: http
+      protocol: TCP
+      name: http
+      {{- if and (eq .Values.monitoring.grafana.service.type "NodePort") .Values.monitoring.grafana.service.nodePort }}
+      nodePort: {{ .Values.monitoring.grafana.service.nodePort }}
+      {{- end }}
+  selector:
+    {{- include "flow-like.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: grafana
+
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: {{ include "flow-like.fullname" . }}-grafana
+  labels:
+    {{- include "flow-like.labels" . | nindent 4 }}
+    app.kubernetes.io/component: grafana
+type: Opaque
+data:
+  {{- if .Values.monitoring.grafana.adminPassword }}
+  admin-password: {{ .Values.monitoring.grafana.adminPassword | b64enc | quote }}
+  {{- else }}
+  admin-password: {{ randAlphaNum 16 | b64enc | quote }}
+  {{- end }}
+
+{{- if .Values.monitoring.grafana.persistence.enabled }}
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "flow-like.fullname" . }}-grafana
+  labels:
+    {{- include "flow-like.labels" . | nindent 4 }}
+    app.kubernetes.io/component: grafana
+spec:
+  accessModes:
+    - ReadWriteOnce
+  {{- if .Values.monitoring.grafana.persistence.storageClass }}
+  storageClassName: {{ .Values.monitoring.grafana.persistence.storageClass }}
+  {{- end }}
+  resources:
+    requests:
+      storage: {{ .Values.monitoring.grafana.persistence.size }}
+{{- end }}
+
+{{- if .Values.monitoring.grafana.ingress.enabled }}
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ include "flow-like.fullname" . }}-grafana
+  labels:
+    {{- include "flow-like.labels" . | nindent 4 }}
+    app.kubernetes.io/component: grafana
+  {{- with .Values.monitoring.grafana.ingress.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  {{- if .Values.monitoring.grafana.ingress.className }}
+  ingressClassName: {{ .Values.monitoring.grafana.ingress.className }}
+  {{- end }}
+  {{- if .Values.monitoring.grafana.ingress.tls }}
+  tls:
+    {{- range .Values.monitoring.grafana.ingress.tls }}
+    - hosts:
+        {{- range .hosts }}
+        - {{ . | quote }}
+        {{- end }}
+      secretName: {{ .secretName }}
+    {{- end }}
+  {{- end }}
+  rules:
+    {{- range .Values.monitoring.grafana.ingress.hosts }}
+    - host: {{ .host | quote }}
+      http:
+        paths:
+          {{- range .paths }}
+          - path: {{ .path }}
+            pathType: {{ .pathType }}
+            backend:
+              service:
+                name: {{ include "flow-like.fullname" $ }}-grafana
+                port:
+                  name: http
+          {{- end }}
+    {{- end }}
+{{- end }}
+{{- end }}

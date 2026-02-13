@@ -18,19 +18,83 @@ use flow_like::hub::UserTier;
 use flow_like_types::Result;
 use flow_like_types::anyhow;
 use hyper::header::AUTHORIZATION;
-use sea_orm::{
-    ColumnTrait, EntityTrait, JoinType, QueryFilter, QuerySelect, RelationTrait,
-    sqlx::types::chrono,
-};
+use sea_orm::{ColumnTrait, EntityTrait, JoinType, QueryFilter, QuerySelect, RelationTrait};
+use serde::de::{self, Unexpected};
+use serde::{Deserialize, Deserializer};
 
 use crate::state::AppState;
+
+fn deserialize_opt_bool<'de, D>(deserializer: D) -> Result<Option<bool>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let opt = Option::<serde_json::Value>::deserialize(deserializer)?;
+    let Some(value) = opt else {
+        return Ok(None);
+    };
+    match value {
+        serde_json::Value::Bool(b) => Ok(Some(b)),
+        serde_json::Value::String(s) => {
+            let sl = s.to_ascii_lowercase();
+            match sl.as_str() {
+                "true" => Ok(Some(true)),
+                "false" => Ok(Some(false)),
+                other => Err(de::Error::invalid_value(
+                    Unexpected::Str(other),
+                    &"true or false",
+                )),
+            }
+        }
+        serde_json::Value::Number(n) => {
+            if let Some(i) = n.as_i64() {
+                match i {
+                    0 => Ok(Some(false)),
+                    1 => Ok(Some(true)),
+                    other => Err(de::Error::invalid_value(
+                        Unexpected::Signed(other),
+                        &"0 or 1 for boolean",
+                    )),
+                }
+            } else {
+                Err(de::Error::custom("invalid numeric value for boolean"))
+            }
+        }
+        other => Err(de::Error::custom(format!(
+            "invalid type for boolean field: expected bool | 'true' | 'false' | 0 | 1, got {}",
+            other
+        ))),
+    }
+}
+
+#[derive(Debug, Deserialize)]
+pub struct UserInfo {
+    pub sub: String,
+
+    // Standard OIDC claims (all optional; presence depends on granted scopes & attributes)
+    pub email: Option<String>,
+    #[serde(default, deserialize_with = "deserialize_opt_bool")]
+    pub email_verified: Option<bool>,
+    pub given_name: Option<String>,
+    pub family_name: Option<String>,
+    pub middle_name: Option<String>,
+    pub preferred_username: Option<String>,
+    pub phone_number: Option<String>,
+    #[serde(default, deserialize_with = "deserialize_opt_bool")]
+    pub phone_number_verified: Option<bool>,
+    pub picture: Option<String>,
+    pub birthdate: Option<String>,
+    pub updated_at: Option<u64>,
+
+    pub username: Option<String>,
+
+    #[serde(flatten)]
+    pub extra: serde_json::Value,
+}
 
 #[derive(Debug, Clone)]
 pub struct OpenIDUser {
     pub sub: String,
-    pub username: String,
-    pub preferred_username: String,
-    pub email: Option<String>,
+    pub access_token: String,
 }
 
 #[derive(Debug, Clone)]
@@ -76,6 +140,37 @@ impl AppPermissionResponse {
     pub fn identifier(&self) -> String {
         self.identifier.clone()
     }
+
+    /// Convert to UserExecutionContext for execution
+    pub fn to_user_context(&self) -> flow_like::flow::execution::UserExecutionContext {
+        use flow_like::flow::execution::{RoleContext, UserExecutionContext};
+
+        let role_context = RoleContext {
+            id: self.role.id.clone(),
+            name: self.role.name.clone(),
+            permissions: self.role.permissions,
+            attributes: self.role.attributes.clone().unwrap_or_default(),
+            custom_attributes: std::collections::HashMap::new(),
+        };
+
+        // Check if this is a technical user (API key) - sub is None for API keys
+        let is_technical_user = self.sub.is_none();
+
+        if is_technical_user {
+            // For API keys, use the technical user constructor with key_id
+            UserExecutionContext::technical(
+                self.identifier.clone(),
+                self.role.id.clone(),
+                self.role.name.clone(),
+                self.role.permissions,
+                self.role.attributes.clone().unwrap_or_default(),
+                std::collections::HashMap::new(),
+            )
+        } else {
+            let sub = self.sub.clone().unwrap_or_default();
+            UserExecutionContext::new(sub).with_role(role_context)
+        }
+    }
 }
 
 impl AppUser {
@@ -90,6 +185,18 @@ impl AppUser {
                 "Unauthorized user does not have a sub"
             ))),
         }
+    }
+
+    pub async fn tracking_id(
+        &self,
+        state: &AppState,
+    ) -> Result<Option<String>, AuthorizationError> {
+        let sub = self.sub()?;
+        let user = user::Entity::find_by_id(&sub)
+            .one(&state.db)
+            .await?
+            .ok_or_else(|| AuthorizationError::from(anyhow!("User not found")))?;
+        Ok(user.tracking_id)
     }
 
     pub async fn tier(&self, state: &AppState) -> Result<UserTier, AuthorizationError> {
@@ -123,30 +230,44 @@ impl AppUser {
             .ok_or_else(|| AuthorizationError::from(anyhow!("User not found")))
     }
 
-    pub fn email(&self) -> Option<String> {
-        match self {
-            AppUser::OpenID(user) => user.email.clone(),
-            AppUser::PAT(_) => None,
-            AppUser::APIKey(_) => None,
-            AppUser::Unauthorized => None,
-        }
-    }
+    pub async fn user_info(&self, state: &AppState) -> flow_like_types::Result<UserInfo> {
+        let user = match self {
+            AppUser::OpenID(user) => user,
+            AppUser::PAT(_) => return Err(anyhow!("PAT user does not have user info")),
+            AppUser::APIKey(_) => return Err(anyhow!("APIKey user does not have user info")),
+            AppUser::Unauthorized => {
+                return Err(anyhow!("Unauthorized user does not have user info"));
+            }
+        };
 
-    pub fn username(&self) -> Option<String> {
-        match self {
-            AppUser::OpenID(user) => Some(user.username.clone()),
-            AppUser::PAT(_) => None,
-            AppUser::APIKey(_) => None,
-            AppUser::Unauthorized => None,
-        }
-    }
+        let endpoint: &str = state
+            .platform_config
+            .authentication
+            .as_ref()
+            .and_then(|c| c.openid.as_ref())
+            .and_then(|o| o.user_info_url.as_deref())
+            .ok_or_else(|| anyhow!("User info URL not configured"))?;
 
-    pub fn preferred_username(&self) -> Option<String> {
-        match self {
-            AppUser::OpenID(user) => Some(user.preferred_username.clone()),
-            AppUser::PAT(_) => None,
-            AppUser::APIKey(_) => None,
-            AppUser::Unauthorized => None,
+        let client = flow_like_types::reqwest::Client::new();
+        let res = match client
+            .get(endpoint)
+            .bearer_auth(&user.access_token)
+            .send()
+            .await
+        {
+            Ok(res) => res,
+            Err(err) => {
+                tracing::error!("Failed to fetch user info from {}: {}", endpoint, err);
+                return Err(anyhow!("Failed to fetch user info"));
+            }
+        };
+
+        match res.status() {
+            flow_like_types::reqwest::StatusCode::OK => Ok(res.json::<UserInfo>().await?),
+            status => {
+                let body = res.text().await.unwrap_or_default();
+                flow_like_types::bail!("UserInfo error {}: {}", status, body)
+            }
         }
     }
 
@@ -172,7 +293,7 @@ impl AppUser {
         if has_permission {
             Ok(global_permission)
         } else {
-            Err(ApiError::Forbidden)
+            Err(ApiError::FORBIDDEN)
         }
     }
 
@@ -183,7 +304,7 @@ impl AppUser {
     ) -> Result<AppPermissionResponse, ApiError> {
         let sub = self.sub();
         if let Ok(sub) = sub {
-            let cached_permission = state.permission_cache.get(&sub);
+            let cached_permission = state.check_permission(&sub, app_id);
 
             if let Some(role_model) = cached_permission {
                 let permissions = RolePermissions::from_bits(role_model.permissions)
@@ -214,9 +335,7 @@ impl AppUser {
             let permissions = RolePermissions::from_bits(role_model.permissions)
                 .ok_or_else(|| anyhow!("Invalid role permission bits"))?;
 
-            state
-                .permission_cache
-                .insert(sub.clone(), Arc::new(role_model.clone()));
+            state.put_permission(&sub, app_id, Arc::new(role_model.clone()));
 
             return Ok(AppPermissionResponse {
                 state: state.clone(),
@@ -257,63 +376,139 @@ impl AppUser {
     }
 }
 
+use crate::state::CachedAuth;
+
+fn hash_token(token: &str) -> String {
+    let mut hasher = blake3::Hasher::new();
+    hasher.update(token.as_bytes());
+    hasher.finalize().to_hex().to_string()
+}
+
 pub async fn jwt_middleware(
     State(state): State<AppState>,
     request: Request,
     next: Next,
 ) -> Result<Response<Body>, AuthorizationError> {
     let mut request = request;
+
+    // Try OpenID/JWT auth
     if let Some(auth_header) = request.headers().get(AUTHORIZATION)
         && let Ok(token) = auth_header.to_str()
+        && !token.starts_with("pat_")
     {
         let token = if token.starts_with("Bearer ") {
             &token[7..]
         } else {
             token
         };
-
         let token = token.trim();
+        let cache_key = hash_token(token);
+
+        // Check cache first
+        if let Some(cached) = state.auth_cache.get(&cache_key)
+            && let CachedAuth::OpenID { sub } = cached
+        {
+            let user = AppUser::OpenID(OpenIDUser {
+                sub,
+                access_token: token.to_string(),
+            });
+            request.extensions_mut().insert::<AppUser>(user);
+            return Ok(next.run(request).await);
+        }
+
+        // Cache miss - validate token
         let claims = state.validate_token(token)?;
         let sub = claims.get("sub").ok_or(anyhow!("sub not found"))?;
         let sub = sub.as_str().ok_or(anyhow!("sub not a string"))?;
-        let email = claims
-            .get("email")
-            .and_then(|v| v.as_str())
-            .map(String::from);
-        let username = claims
-            .get("username")
-            .and_then(|v| v.as_str())
-            .map(String::from)
-            .or_else(|| {
-                claims
-                    .get("cognito:username")
-                    .and_then(|v| v.as_str())
-                    .map(String::from)
-            })
-            .unwrap_or_else(|| sub.to_string());
-        let preferred_username = claims
-            .get("preferred_username")
-            .and_then(|v| v.as_str())
-            .map(String::from)
-            .unwrap_or_else(|| username.clone());
+
+        // Cache the result
+        state.auth_cache.insert(
+            cache_key,
+            CachedAuth::OpenID {
+                sub: sub.to_string(),
+            },
+        );
+
         let user = AppUser::OpenID(OpenIDUser {
             sub: sub.to_string(),
-            username,
-            email,
-            preferred_username,
+            access_token: token.to_string(),
         });
         request.extensions_mut().insert::<AppUser>(user);
         return Ok(next.run(request).await);
     }
 
-    if let Some(pat_header) = request.headers().get("x-pat")
-        && let Ok(pat_str) = pat_header.to_str()
+    // Try PAT auth
+    if let Some(auth_header) = request.headers().get(AUTHORIZATION)
+        && let Ok(token) = auth_header.to_str()
+        && token.starts_with("pat_")
     {
+        let pat_str = token.trim();
+        let cache_key = hash_token(pat_str);
+
+        // Check cache first
+        if let Some(cached) = state.auth_cache.get(&cache_key) {
+            match cached {
+                CachedAuth::PAT { sub } => {
+                    let pat_user = AppUser::PAT(PATUser {
+                        pat: pat_str.to_string(),
+                        sub,
+                    });
+                    request.extensions_mut().insert::<AppUser>(pat_user);
+                    return Ok(next.run(request).await);
+                }
+                CachedAuth::Invalid => {
+                    // Token was previously validated as invalid/expired
+                    request
+                        .extensions_mut()
+                        .insert::<AppUser>(AppUser::Unauthorized);
+                    return Ok(next.run(request).await);
+                }
+                _ => {}
+            }
+        }
+
+        // Cache miss - validate PAT
+        if !pat_str.starts_with("pat_") {
+            return Err(AuthorizationError::from(anyhow!("Invalid PAT format")));
+        }
+        let pat_parts = &pat_str[4..];
+        let parts: Vec<&str> = pat_parts.split('.').collect();
+        if parts.len() != 2 {
+            return Err(AuthorizationError::from(anyhow!("Invalid PAT format")));
+        }
+        let pat_id = parts[0];
+        let pat_secret = parts[1];
+
+        let mut hasher = blake3::Hasher::new();
+        hasher.update(pat_secret.as_bytes());
+        let secret_hash = hasher.finalize().to_hex().to_string().to_lowercase();
+
         let db_pat = Pat::find()
-            .filter(pat::Column::Key.eq(pat_str))
+            .filter(
+                pat::Column::Id
+                    .eq(pat_id)
+                    .and(pat::Column::Key.eq(secret_hash)),
+            )
             .one(&state.db)
             .await?;
+
         if let Some(pat) = db_pat {
+            if let Some(valid_until) = pat.valid_until {
+                let now = chrono::Utc::now().naive_utc();
+                if valid_until < now {
+                    state.auth_cache.insert(cache_key, CachedAuth::Invalid);
+                    return Err(AuthorizationError::from(anyhow!("PAT is expired")));
+                }
+            }
+
+            // Cache valid PAT
+            state.auth_cache.insert(
+                cache_key,
+                CachedAuth::PAT {
+                    sub: pat.user_id.clone(),
+                },
+            );
+
             let pat_user = AppUser::PAT(PATUser {
                 pat: pat_str.to_string(),
                 sub: pat.user_id.clone(),
@@ -323,11 +518,69 @@ pub async fn jwt_middleware(
         }
     }
 
+    // Try API key auth
     if let Some(api_key_header) = request.headers().get("x-api-key")
         && let Ok(api_key_str) = api_key_header.to_str()
     {
+        let cache_key = hash_token(api_key_str);
+
+        // Check cache first
+        if let Some(cached) = state.auth_cache.get(&cache_key) {
+            match cached {
+                CachedAuth::ApiKey { key_id, app_id } => {
+                    let app_user = AppUser::APIKey(ApiKey {
+                        key_id,
+                        api_key: api_key_str.to_string(),
+                        app_id,
+                    });
+                    request.extensions_mut().insert::<AppUser>(app_user);
+                    return Ok(next.run(request).await);
+                }
+                CachedAuth::Invalid => {
+                    request
+                        .extensions_mut()
+                        .insert::<AppUser>(AppUser::Unauthorized);
+                    return Ok(next.run(request).await);
+                }
+                _ => {}
+            }
+        }
+
+        // Cache miss - parse and validate API key
+        // Format: flk_{app_id}.{key_id}.{secret}
+        if !api_key_str.starts_with("flk_") {
+            state.auth_cache.insert(cache_key, CachedAuth::Invalid);
+            request
+                .extensions_mut()
+                .insert::<AppUser>(AppUser::Unauthorized);
+            return Ok(next.run(request).await);
+        }
+
+        let key_parts = &api_key_str[4..];
+        let parts: Vec<&str> = key_parts.split('.').collect();
+        if parts.len() != 3 {
+            state.auth_cache.insert(cache_key, CachedAuth::Invalid);
+            request
+                .extensions_mut()
+                .insert::<AppUser>(AppUser::Unauthorized);
+            return Ok(next.run(request).await);
+        }
+
+        let _app_id_from_key = parts[0];
+        let key_id = parts[1];
+        let key_secret = parts[2];
+
+        // Hash the secret for lookup
+        let mut hasher = blake3::Hasher::new();
+        hasher.update(key_secret.as_bytes());
+        let secret_hash = hasher.finalize().to_hex().to_string().to_lowercase();
+
         let db_app = TechnicalUser::find()
-            .filter(technical_user::Column::Key.eq(api_key_str))
+            .filter(
+                technical_user::Column::Id
+                    .eq(key_id)
+                    .and(technical_user::Column::Key.eq(secret_hash)),
+            )
             .one(&state.db)
             .await?;
 
@@ -335,9 +588,19 @@ pub async fn jwt_middleware(
             if let Some(valid_until) = app.valid_until {
                 let now = chrono::Utc::now().naive_utc();
                 if valid_until < now {
+                    state.auth_cache.insert(cache_key, CachedAuth::Invalid);
                     return Err(AuthorizationError::from(anyhow!("API Key is expired")));
                 }
             }
+
+            // Cache valid API key
+            state.auth_cache.insert(
+                cache_key,
+                CachedAuth::ApiKey {
+                    key_id: app.id.clone(),
+                    app_id: app.app_id.clone(),
+                },
+            );
 
             let app_user = AppUser::APIKey(ApiKey {
                 key_id: app.id.clone(),

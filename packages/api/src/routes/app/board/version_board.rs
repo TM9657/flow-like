@@ -8,12 +8,29 @@ use axum::{
 };
 use flow_like::flow::board::VersionType;
 use serde::Deserialize;
+use utoipa::IntoParams;
 
-#[derive(Clone, Deserialize)]
+#[derive(Clone, Deserialize, IntoParams)]
 pub struct CreateVersionQuery {
+    #[param(value_type = Option<String>)]
     pub version_type: Option<VersionType>,
 }
 
+#[utoipa::path(
+    patch,
+    path = "/apps/{app_id}/board/{board_id}",
+    tag = "boards",
+    params(
+        ("app_id" = String, Path, description = "Application ID"),
+        ("board_id" = String, Path, description = "Board ID"),
+        CreateVersionQuery
+    ),
+    responses(
+        (status = 200, description = "New version created as (major, minor, patch) tuple", body = (u32, u32, u32)),
+        (status = 401, description = "Unauthorized"),
+        (status = 403, description = "Forbidden")
+    )
+)]
 #[tracing::instrument(
     name = "PATCH /apps/{app_id}/board/{board_id}",
     skip(state, user, params)

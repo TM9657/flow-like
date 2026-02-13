@@ -90,7 +90,7 @@ export function FlowPinInner({
 				pin.name !== "exec_out" &&
 				pin.name !== "var_ref" && (
 					<div
-						className={`flex flex-row items-center transition-all gap-1 max-w-1/2 ${pin.pin_type === "Input" ? "ml-2" : "translate-x-[-115%]"}`}
+						className={`flex flex-row items-center transition-all gap-1 max-w-40 ${pin.pin_type === "Input" ? "ml-2" : "translate-x-[-115%]"}`}
 					>
 						<PinPreviewEdit
 							pin={pin}

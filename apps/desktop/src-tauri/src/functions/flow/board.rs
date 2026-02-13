@@ -15,7 +15,7 @@ pub async fn save_board(handler: AppHandle, board_id: String) -> Result<(), Taur
     let file_path = handler.dialog().file().blocking_save_file();
     if let Some(file_path) = file_path {
         let board_state = TauriFlowLikeState::construct(&handler).await?;
-        let board = board_state.lock().await.get_board(&board_id, None)?;
+        let board = board_state.get_board(&board_id, None)?;
         let board = board.lock().await.clone();
         let board_string = serde_json::to_string(&board)
             .map_err(|e| TauriFunctionError::from(anyhow::Error::new(e)))?;
@@ -36,7 +36,7 @@ pub async fn create_board_version(
     version_type: VersionType,
 ) -> Result<(u32, u32, u32), TauriFunctionError> {
     let board_state = TauriFlowLikeState::construct(&handler).await?;
-    let board = board_state.lock().await.get_board(&board_id, None);
+    let board = board_state.get_board(&board_id, None);
     if let Ok(board) = board {
         let mut board = board.lock().await;
         let version = board.create_version(version_type, None).await?;
@@ -65,7 +65,7 @@ pub async fn get_board_versions(
     board_id: String,
 ) -> Result<Vec<(u32, u32, u32)>, TauriFunctionError> {
     let board_state = TauriFlowLikeState::construct(&handler).await?;
-    let board = board_state.lock().await.get_board(&board_id, None);
+    let board = board_state.get_board(&board_id, None);
     if let Ok(board) = board {
         let board = board.lock().await;
         let versions = board.get_versions(None).await?;
@@ -91,7 +91,7 @@ pub async fn get_board(
     version: Option<(u32, u32, u32)>,
 ) -> Result<Board, TauriFunctionError> {
     let board_state = TauriFlowLikeState::construct(&handler).await?;
-    let board = board_state.lock().await.get_board(&board_id, version);
+    let board = board_state.get_board(&board_id, version);
     if let Ok(board) = board {
         let board = board.lock().await.clone();
         return Ok(board);
@@ -112,7 +112,7 @@ pub async fn close_board(handler: AppHandle, board_id: String) -> Result<(), Tau
     let board_state = TauriFlowLikeState::construct(&handler).await?;
     let store = TauriFlowLikeState::get_project_meta_store(&handler).await?;
 
-    let board = { board_state.lock().await.remove_board(&board_id)? };
+    let board = { board_state.remove_board(&board_id)? };
 
     if let Some(board) = board {
         let board = board.lock().await;
@@ -141,7 +141,7 @@ pub async fn get_open_boards(
         }
     }
 
-    let board_state = flow_like_state.lock().await.board_registry.clone();
+    let board_state = flow_like_state.board_registry.clone();
     let mut boards = Vec::with_capacity(board_state.len());
     for entry in board_state.iter() {
         let value = entry.value();
@@ -158,12 +158,12 @@ pub async fn get_open_boards(
 #[tauri::command(async)]
 pub async fn undo_board(
     handler: AppHandle,
-    app_id: String,
+    _app_id: String,
     board_id: String,
     commands: Vec<GenericCommand>,
 ) -> Result<Board, TauriFunctionError> {
     let flow_like_state = TauriFlowLikeState::construct(&handler).await?;
-    let board = flow_like_state.lock().await.get_board(&board_id, None)?;
+    let board = flow_like_state.get_board(&board_id, None)?;
     let store = TauriFlowLikeState::get_project_meta_store(&handler).await?;
     let mut board = board.lock().await;
     let _ = board.undo(commands, flow_like_state).await;
@@ -174,13 +174,13 @@ pub async fn undo_board(
 #[tauri::command(async)]
 pub async fn redo_board(
     handler: AppHandle,
-    app_id: String,
+    _app_id: String,
     board_id: String,
     commands: Vec<GenericCommand>,
 ) -> Result<Board, TauriFunctionError> {
     let store = TauriFlowLikeState::get_project_meta_store(&handler).await?;
     let flow_like_state = TauriFlowLikeState::construct(&handler).await?;
-    let board = flow_like_state.lock().await.get_board(&board_id, None)?;
+    let board = flow_like_state.get_board(&board_id, None)?;
     let mut board = board.lock().await;
     let _ = board.redo(commands, flow_like_state).await;
     board.save(Some(store.clone())).await?;
@@ -190,14 +190,14 @@ pub async fn redo_board(
 #[tauri::command(async)]
 pub async fn execute_command(
     handler: AppHandle,
-    app_id: String,
+    _app_id: String,
     board_id: String,
     command: GenericCommand,
 ) -> Result<GenericCommand, TauriFunctionError> {
     let flow_like_state = TauriFlowLikeState::construct(&handler).await?;
     let store = TauriFlowLikeState::get_project_meta_store(&handler).await?;
 
-    let board = flow_like_state.lock().await.get_board(&board_id, None)?;
+    let board = flow_like_state.get_board(&board_id, None)?;
 
     let mut board = board.lock().await;
     let command = board.execute_command(command, flow_like_state).await?;
@@ -209,18 +209,39 @@ pub async fn execute_command(
 #[tauri::command(async)]
 pub async fn execute_commands(
     handler: AppHandle,
-    app_id: String,
+    _app_id: String,
     board_id: String,
     commands: Vec<GenericCommand>,
 ) -> Result<Vec<GenericCommand>, TauriFunctionError> {
     let flow_like_state = TauriFlowLikeState::construct(&handler).await?;
     let store = TauriFlowLikeState::get_project_meta_store(&handler).await?;
 
-    let board = flow_like_state.lock().await.get_board(&board_id, None)?;
+    let board = flow_like_state.get_board(&board_id, None)?;
 
     let mut board = board.lock().await;
     let commands = board.execute_commands(commands, flow_like_state).await?;
 
     board.save(Some(store)).await?;
     Ok(commands)
+}
+
+/// Gets the elements required for executing a workflow on a specific page.
+///
+/// This returns only the elements that are referenced by nodes in the board,
+/// along with their children. Use `wildcard: true` to get all elements.
+#[tauri::command(async)]
+pub async fn get_execution_elements(
+    handler: AppHandle,
+    board_id: String,
+    page_id: String,
+    wildcard: bool,
+) -> Result<std::collections::HashMap<String, flow_like_types::Value>, TauriFunctionError> {
+    let flow_like_state = TauriFlowLikeState::construct(&handler).await?;
+    let board = flow_like_state.get_board(&board_id, None)?;
+    let board = board.lock().await;
+
+    let elements = board
+        .get_execution_elements(&page_id, wildcard, None)
+        .await?;
+    Ok(elements)
 }

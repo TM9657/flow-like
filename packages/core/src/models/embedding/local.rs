@@ -1,5 +1,7 @@
+#![cfg(feature = "local-ml")]
 use crate::{
     bit::{Bit, BitPack, BitTypes},
+    models::local_utils::ensure_local_weights,
     state::FlowLikeState,
 };
 use flow_like_model_provider::{
@@ -18,7 +20,7 @@ use std::{any::Any, sync::Arc};
 #[derive(Clone)]
 pub struct LocalEmbeddingModel {
     pub bit: Arc<Bit>,
-    pub embedding_model: Arc<fastembed::TextEmbedding>,
+    pub embedding_model: Arc<Mutex<fastembed::TextEmbedding>>,
     pub tokenizer_files: Arc<TokenizerFiles>,
 }
 
@@ -33,7 +35,7 @@ impl Cacheable for LocalEmbeddingModel {
 }
 
 impl LocalEmbeddingModel {
-    pub async fn new(bit: &Bit, app_state: Arc<Mutex<FlowLikeState>>) -> Result<Arc<Self>> {
+    pub async fn new(bit: &Bit, app_state: Arc<FlowLikeState>) -> Result<Arc<Self>> {
         let bit = Arc::new(bit.clone());
         let bit_store = FlowLikeState::bit_store(&app_state).await?;
 
@@ -43,7 +45,7 @@ impl LocalEmbeddingModel {
         };
 
         let pack = bit.pack(app_state.clone()).await?;
-        pack.download(app_state.clone(), None).await?;
+        ensure_local_weights(&pack, &app_state, bit.id.as_str(), "embedding model").await?;
 
         let model_path = bit.to_path(&bit_store).ok_or(anyhow!("No model path"))?;
         let loaded_model = std::fs::read(model_path)?;
@@ -72,7 +74,7 @@ impl LocalEmbeddingModel {
 
         let default_return_model = LocalEmbeddingModel {
             bit,
-            embedding_model: Arc::new(loaded_model),
+            embedding_model: Arc::new(Mutex::new(loaded_model)),
             tokenizer_files: Arc::new(loaded_tokenizer),
         };
 
@@ -125,13 +127,14 @@ impl EmbeddingModelLogic for LocalEmbeddingModel {
             .map(|text| format!("{}{}", params.prefix.query, text))
             .collect::<Vec<String>>();
 
-        let embeddings = match self.embedding_model.embed(prefixed_array.to_vec(), None) {
-            Ok(embeddings) => embeddings,
-            Err(e) => {
-                println!("Error embedding text: {}", e);
-                return Err(anyhow!("Error embedding text"));
-            }
-        };
+        let model = self.embedding_model.clone();
+        let embeddings = flow_like_types::tokio::task::spawn_blocking(move || {
+            model.blocking_lock().embed(prefixed_array, None)
+        })
+        .await
+        .map_err(|e| anyhow!("Blocking task failed: {}", e))?
+        .map_err(|e| anyhow!("Error embedding text: {}", e))?;
+
         Ok(embeddings)
     }
 
@@ -148,13 +151,15 @@ impl EmbeddingModelLogic for LocalEmbeddingModel {
             .iter()
             .map(|text| format!("{}{}", params.prefix.paragraph, text))
             .collect::<Vec<String>>();
-        let embeddings = match self.embedding_model.embed(prefixed_array, None) {
-            Ok(embeddings) => embeddings,
-            Err(e) => {
-                println!("Error embedding text: {}", e);
-                return Err(anyhow!("Error embedding text"));
-            }
-        };
+
+        let model = self.embedding_model.clone();
+        let embeddings = flow_like_types::tokio::task::spawn_blocking(move || {
+            model.blocking_lock().embed(prefixed_array, None)
+        })
+        .await
+        .map_err(|e| anyhow!("Blocking task failed: {}", e))?
+        .map_err(|e| anyhow!("Error embedding text: {}", e))?;
+
         Ok(embeddings)
     }
 
@@ -221,7 +226,7 @@ mod tests {
     };
     use std::{mem, path::PathBuf, ptr};
 
-    async fn flow_state() -> Arc<Mutex<crate::state::FlowLikeState>> {
+    async fn flow_state() -> Arc<crate::state::FlowLikeState> {
         let temp_dir = tempfile::tempdir().unwrap();
         let mut config: FlowLikeConfig = FlowLikeConfig::new();
         let current_dir = temp_dir.path().to_path_buf();
@@ -229,9 +234,9 @@ mod tests {
         let store = Arc::new(store);
         config.register_app_storage_store(FlowLikeStore::Local(store.clone()));
         config.register_bits_store(FlowLikeStore::Local(store));
-        let (http_client, _refetch_rx) = HTTPClient::new();
+        let http_client = HTTPClient::new_without_refetch();
         let flow_like_state = crate::state::FlowLikeState::new(config, http_client);
-        Arc::new(Mutex::new(flow_like_state))
+        Arc::new(flow_like_state)
     }
 
     #[tokio::test]

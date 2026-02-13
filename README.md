@@ -1,133 +1,320 @@
 <p align="center">
-   <a href="https://flow-like.com" target="_blank">
-      <picture>
-         <source width=200 srcset="./apps/desktop/public/app-logo-light.webp" media="(prefers-color-scheme: dark)">
-         <img width=200 src="./apps/desktop/public/app-logo.webp" alt="Icon">
-      </picture>
-   </a>
+  <a href="https://flow-like.com">
+    <img src="apps/desktop/public/app-logo.webp" alt="Flow-Like Logo" width="80" />
+  </a>
+</p>
+<h1 align="center">Flow-Like</h1>
+<p align="center">
+  <strong>If you can't see it, you can't trust it.</strong><br/>
+  A Rust-powered workflow engine that runs on your device — laptop, server, or phone.<br/>
+  Fully typed. Fully traceable. Fully yours.
+</p>
+<p align="center">
+  <a href="https://app.codacy.com/gh/TM9657/flow-like/dashboard?utm_source=gh&utm_medium=referral"><img src="https://app.codacy.com/project/badge/Grade/244d2db2a84f4e79b64d984639a2b18f" alt="Codacy Badge" /></a>
+  <a href="https://discord.com/invite/mdBA9kMjFJ"><img src="https://img.shields.io/discord/673169081704120334" alt="Discord" /></a>
+  <a href="https://app.fossa.com/projects/custom%2B49014%2Fflow-like?ref=badge_small"><img src="https://app.fossa.com/api/projects/custom%2B49014%2Fflow-like.svg?type=small" alt="FOSSA Status" /></a>
+  <a href="https://flow-like.com"><img src="https://img.shields.io/badge/website-flow--like.com-0a7cff?logo=google-chrome&logoColor=white" alt="Website" /></a>
+  <a href="https://docs.flow-like.com"><img src="https://img.shields.io/badge/docs-docs.flow--like.com-0a7cff?logo=readthedocs&logoColor=white" alt="Docs" /></a>
+  <a href="https://flow-like.com/download"><img src="https://img.shields.io/badge/download-Desktop%20App-28a745?logo=tauri&logoColor=white" alt="Download" /></a>
+</p>
+<p align="center">
+  <a href="https://github.com/TM9657/flow-like/stargazers"><strong>⭐ Star on GitHub</strong></a> ·
+  <a href="https://docs.flow-like.com"><strong>📖 Docs</strong></a> ·
+  <a href="https://discord.com/invite/mdBA9kMjFJ"><strong>💬 Discord</strong></a> ·
+  <a href="https://flow-like.com/download"><strong>📥 Download</strong></a>
 </p>
 
-<div align="center">
+---
 
-[![Codacy Badge](https://app.codacy.com/project/badge/Grade/244d2db2a84f4e79b64d984639a2b18f)](https://app.codacy.com/gh/TM9657/flow-like/dashboard?utm_source=gh&utm_medium=referral&utm_content=&utm_campaign=Badge_grade)
-![Discord](https://img.shields.io/discord/673169081704120334)
-![GitHub package.json version](https://img.shields.io/github/package-json/v/TM9657/flow-like)
-[![FOSSA Status](https://app.fossa.com/api/projects/custom%2B49014%2Fflow-like.svg?type=small)](https://app.fossa.com/projects/custom%2B49014%2Fflow-like?ref=badge_small)
+Flow-Like is a **visual workflow automation platform** that runs entirely on your hardware. Build workflows with drag-and-drop blocks, run them on your laptop, phone, or server, and get a clear record of where data came from, what changed, and what came out — no cloud dependency, no black boxes, no guesswork.
 
-</div>
+<p align="center">
+  <img src="assets/recording.gif" alt="Flow-Like Visual Workflow Studio" width="100%" />
+</p>
 
-<a name="Headline"></a>
+---
 
-# Flow-Like: Your Next Generation Typed Workflow OS.
+## Why Flow-Like?
 
-> *Any flow you like.*
+### Your workflows run on *your* device. Nowhere else.
 
-🚀 With **Typed** Workflows, Flow-Like is ready for projects of any size.
+Most workflow tools run in someone else's cloud. Your data leaves your machine, passes through third-party servers, and you hope for the best. If you're offline, you're stuck.
 
-🔀 Flow-Like is an enterprise-grade **workflow operating system**.
+Flow-Like runs **entirely on your hardware** — your laptop, your server, your phone. Your data never leaves your device unless you want it to. No cloud dependency, no vendor holding your workflows hostage, no "please upgrade to enterprise for self-hosting."
 
-✨ It comes with a modular frontend for apps, a rich set of events, a **node catalog**, a powerful **no-code** workflow IDE, and an extensive suite to manage teams, templates and projects within your organization.
+This isn't just a privacy feature. It means you can automate in air-gapped environments, on factory floors, in hospital networks, on mobile devices in the field, or simply on your couch without Wi-Fi. **Write once, run anywhere you have a device.**
 
-🤖 Flow-Like lives in a seamless, unopinionated integration of **LLM**, ML-based, and deterministic decision making instances to **automate** any process.
+### A Rust engine fast enough to run on a phone
 
-⚡️ We build Flow-Like upon Rust 🦀 for uncompromising **performance**, efficiency and code safety.
+The reason this works is raw performance. Flow-Like's engine is built in Rust — compiled to native code, no garbage collector, no runtime overhead. The same workflow that takes 500ms in a Node.js engine takes **0.6ms** in Flow-Like.
 
-🤝 It is **Open Source**.
+| Metric | Flow-Like | Typical workflow engines |
+|--------|-----------|------------------------|
+| **Execution speed** | ~244,000 workflows/sec | ~200 workflows/sec |
+| **Latency per workflow** | ~0.6ms | ~50-500ms |
+| **Engine** | Rust (native compiled) | Python / Node.js (interpreted) |
 
-## Typed Workflows 📑
+That 1000x performance gap means real workflows can run on resource-constrained devices — phones, edge hardware, Raspberry Pis — not just beefy cloud servers. And on powerful machines, it means processing millions of executions without breaking a sweat.
 
-In Flow-Like, workflows are **fully typed** — they don’t just describe *what happens*, but also *what data flows where*.
-Compared to tools like *n8n*, Flow-Like explicitly shows:
+### Full visibility into every execution
 
-* **Data origins** – e.g., where the email being sent is coming from.
-* **Transformations** – every step where data is validated, enriched, or reformatted.
-* **Contracts** – clear input/output definitions for each node, preventing runtime surprises.
+Most workflow tools show a green checkmark and move on. You're left guessing where data came from and why the result looks the way it does.
 
-This typing system is essential for **complex, large-scale workflows** where correctness, maintainability, and scalability matter. You can quickly inspect a flow and understand *both* the logic path *and* the underlying data movement.
+Flow-Like workflows are **fully typed** — they track *what data flows where* and *why*. Every input, transformation, and output is recorded with complete lineage and audit trails.
 
-## Quick Start 🚀
-Try and use Flow-Like:
-- [Download ⬇️](https://github.com/TM9657/flow-like/releases) and run the latest stable build of our standalone desktop app, *or*
-- Skip the setup and [try our hosted version in the cloud ☁️](https://flow-like.com/) (to be available soon), *or*
-- [Build the desktop app from source ⚙️](#build-from-source) (see instructions below).
+- **Data Origins** — See exactly where each value came from: the API response, the file, the user input.
+- **Transformations** — Every validation, enrichment, and reformatting step is visible and traceable.
+- **Clear Contracts** — Type-safe input/output definitions catch errors before deployment, not in production.
+- **Three Perspectives** — Process view for business, Data view for analysts, Execution view for engineers. Same workflow, different lenses.
 
-## Flow-Like’s Ecosystem 🌐
-### Apps
-Manage your workflows and storages with apps that you can share with others. Create apps offline, online, run them locally or in the cloud:
-<p align="center"><img width="800" src="https://cdn.flow-like.com/website/CreateApp.webp" alt="Create a Flow-Like App"></p>
+### And everything else
 
-### Studio
-Our innovative, no-code workflow builder IDE. Connect, collapse, and annotate. Get automated predictions for matching nodes. Trace execution logs and triggering events:
-<p align="center"><img width="800" src="./assets/recording.gif" alt="Recording"></p>
+- **AI-Native** — Run LLMs locally or in the cloud with guardrails, approval gates, and full execution tracing on every call.
+- **White-Label Ready** — Embed the editor in your product. Your logo, your colors, your brand. SSO, usage metering, and per-tenant scoping included.
+- **Source Available** — BSL license, free for the vast majority of users (<2,000 employees and <$300M ARR).
 
-### Node Catalog
-- Build your workflows from a rich set of execution nodes - from branching, databases to object detection and higher-order agent nodes.
-- Link your application to frontends, backends, and third party apps, for example to chat interfaces or incoming mails.
-- Check out the full catalog in our [docs 📄](https://docs.flow-like.com/).
+---
 
-### Templates
-Reuse and share your workflows as templates:
-<p align="center"><img width="800" src="https://cdn.flow-like.com/website/Store.webp" alt="Browse Public Apps in the Store"></p>
+## How it compares
 
-### AI Models
-Download and run LLMs, VLMs, Deep Learning Models, and Embeddings locally or in the cloud. Boost your workflows with intelligent nodes:
-<p align="center"><img width="800" src="https://cdn.flow-like.com/website/SelectYourModel.webp" alt="Select AI Models from the Model Catalog"></p>
+| Feature | Flow-Like | n8n | Zapier / Make | Temporal |
+|---------|-----------|-----|---------------|----------|
+| Runs on your device | ✅ Desktop, phone, edge, server | ⚠️ Needs a server | ❌ Cloud only | ⚠️ Needs infrastructure |
+| Works 100% offline | ✅ Full capability | ⚠️ Partial | ❌ Requires internet | ✅ Self-hosted |
+| Type safety | ✅ Fully typed | ❌ Runtime only | ❌ None | ⚠️ Language-level |
+| Data lineage / audit trail | ✅ Complete | ❌ Limited | ❌ None | ⚠️ Via logging |
+| Performance | ✅ ~244K/sec (Rust) | ⚠️ ~200/sec (Node) | ⚠️ Cloud-limited | ⚠️ Go-based |
+| Visual builder | ✅ Full IDE | ✅ Good | ✅ Simple | ❌ Code only |
+| UI builder | ✅ Built-in | ❌ None | ❌ None | ❌ None |
+| LLM orchestration | ✅ Built-in + guardrails | ⚠️ Via nodes | ⚠️ Via integrations | ❌ Manual |
+| White-label / embed | ✅ Full customization | ❌ Branded | ❌ Branded | ❌ No UI |
+| Business process views | ✅ Process / Data / Execution | ❌ Single view | ❌ Single view | ❌ Code only |
+| License | Source Available (BSL) | Sustainable Use | Proprietary | MIT |
 
-## Why Use Flow-Like? 💡
-Flow-Like helps *developers and individuals* to efficiently craft highly individualized workflow automations:
-- Choose from a wide node and event catalog for different computational tasks and triggers
-- Efficiently synthesize automations via standardized interfaces, data objects using a powerful builder interface
-- Share and copy workflows as templates and projects to streamline collaboration.
-- Contribute project or enterprise specific nodes and events to the core catalog
+---
 
-Flow-Like helps *business responsibles* to express application logic in a natural way:
-- Build workflows without coding. Flows act both as documentation and execution.
-- Collapse lower-level flows into meaningful hierarchical abstractions.
-- Fine-grained access controls for teams and projects.
+## Quick Start
 
-Flow-Like helps *IT* to manage and operate application stacks:
-- Bring your applications to a unified set of nodes that eases operations, incidence management, governance, and compliance.
-- Transition seamlessly from Proof-of-Concepts to productive, production-ready applications
-- Run your applications efficiently thanks to Rust’s performance guarantees
-- Built-in version control
+| 💻 Desktop App | ☁️ Web App | 📱 Mobile App | ⚙️ From Source |
+|:---:|:---:|:---:|:---:|
+| **[Download Now](https://flow-like.com/download)** | **[Try Online](https://app.flow-like.com)** | **[Coming Soon](https://flow-like.com)** | **[Build Yourself](#build-from-source)** |
+| macOS · Windows · Linux | Available now | iOS · Android | Latest features |
 
-## Process Orchestration 🎛️
+---
 
-Flow-Like goes beyond simple task automation — it’s built for **end-to-end process orchestration**.
-With our **Layer Drill Down** capability, you can:
+## The Ecosystem
 
-* Show high-level business processes for stakeholders.
-* Seamlessly reveal the detailed **technical implementation** just one layer below.
-* Manage **cross-team** and **cross-system** workflows without losing visibility or control.
+### 🎨 Visual Workflow Studio
 
-This makes Flow-Like ideal for organizations that need to keep **business logic** and **technical execution** aligned, from strategy to deployment.
+A no-code IDE for building workflows. Smart wiring with type-aware pins, inline execution feedback, live validation, and snapshot-based debugging.
 
-## Build From Source ⚙️
-For the latest features, you can build the standalone desktop app yourself:
-1. Install Rust: https://www.rust-lang.org/tools/install
-2. Install Bun: https://bun.com/docs/installation
-3. Install Tauri prerequisites: https://tauri.app/start/prerequisites/
-4. Install Protobuf: https://protobuf.dev/installation/
-5. Clone this repository
-6. Run `bun install && bun run build:desktop`
+<p align="center">
+  <img src="assets/recording.gif" alt="Visual Studio" width="100%" />
+</p>
 
-Check out our docs for specific hints for MacOS, Windows and Linux.
+### 🧩 900+ Built-in Nodes
 
-## Gallery 📸
-<p align="center"><img width="800" src="https://cdn.flow-like.com/website/RightsAndRoles.webp" alt="Set Rights and Roles for Your Apps"></p>
+APIs & webhooks, databases, file processing (Excel, CSV, PDF), AI models & computer vision, messaging (Slack, Discord, email), IoT, logic & control flow, security & auth — and growing.
 
-<p align="center"><img width="800" src="https://cdn.flow-like.com/website/Storage.webp" alt="Manage App Storage"></p>
+**[→ Explore the Node Catalog](https://docs.flow-like.com/)**
 
-<p align="center"><img width="800" src="https://cdn.flow-like.com/website/TeamManagement.webp" alt="Manage Team Members"></p>
+### 🤖 AI-Powered Workflows
 
-## Contribute 🤝
-You can either contribute to Flow-Like itself by [creating an issue 📄](https://github.com/TM9657/flow-like/issues), or by forking this repo and making a PR ↩️.
+Download and run LLMs, vision models, and embeddings locally or in the cloud. Every AI decision is logged with full context — inputs, outputs, model version, and reasoning trace.
 
-Please also check our [discussions page 💬](https://github.com/TM9657/flow-like/discussions) for general features and conceptual brainstorming. [Join us on discord](https://discord.com/invite/mdBA9kMjFJ) as well!
+<p align="center">
+  <img src="https://cdn.flow-like.com/website/SelectYourModel.webp" alt="AI Model Catalog" width="100%" />
+</p>
 
-Or, contribute your Flows as [templates](#templates) to the community! We'd love to see what you've built!
+### 📦 Apps & Templates
 
-!["Repobeats analytics image"](https://repobeats.axiom.co/api/embed/6fe5df31b9a96f584f8898beb4457bd8aa3852f1.svg)
+Package workflows as shareable applications with built-in storage. Run them offline or in the cloud. Browse the template store or share your own.
 
+<p align="center">
+  <img src="https://cdn.flow-like.com/website/CreateApp.webp" alt="Create Apps" width="48%" />
+  <img src="https://cdn.flow-like.com/website/Store.webp" alt="Template Store" width="48%" />
+</p>
 
-<p align="center">Made with ❤️ in Munich, Germany.</p>
+---
+
+## Who it's for
+
+<table>
+<tr>
+<td width="33%" valign="top">
+
+### 👨‍💻 Developers
+
+- Runs on any device — laptop, phone, edge, server
+- Type-safe data contracts
+- Custom node SDK (Rust)
+- Git-based version control
+- Source available codebase
+
+</td>
+<td width="33%" valign="top">
+
+### 📊 Business & Analysts
+
+- No-code drag-and-drop builder
+- Process, Data, and Technical views
+- Approval workflows and change tracking
+- Shareable apps and templates
+
+</td>
+<td width="33%" valign="top">
+
+### 🏢 IT & Operations
+
+- RBAC and enterprise governance
+- Complete audit trails
+- Air-gap and offline deployment
+- SSO / OIDC integration
+- Compliance-ready (GDPR, SOC2)
+
+</td>
+</tr>
+</table>
+
+---
+
+## Build from Source
+
+```bash
+# Prerequisites: Rust, Bun, Tauri prerequisites, Protobuf compiler
+# Full guide: https://docs.flow-like.com/contributing/getting-started/
+
+git clone https://github.com/TM9657/flow-like.git
+cd flow-like
+bun install
+bun run build:desktop
+```
+
+> 💡 Platform-specific hints for macOS, Windows, and Linux are in the [docs](https://docs.flow-like.com/).
+
+---
+
+## White-Label & Customization
+
+Embed the visual editor in your application, or run the engine headlessly behind the scenes.
+
+- **Themes** — Catppuccin, Cosmic Night, Neo-Brutalism, Soft Pop, Doom, or create your own
+- **Design Tokens** — Map your brand palette with dark/light mode support
+- **SSO** — OIDC/JWT with scoped secrets per tenant
+- **Usage Metering** — Per-tenant quotas, event tracking, audit trails
+- **SDKs & APIs** — Control workflows programmatically
+
+Perfect for SaaS platforms, internal tools, client portals, and embedded automation.
+
+---
+
+## Contributing
+
+We welcome contributions of all kinds — new nodes, bug fixes, docs, themes, and ideas.
+
+**→ [Read CONTRIBUTING.md](./CONTRIBUTING.md)** for setup instructions and guidelines.
+
+**→ [Browse `good first issue`](https://github.com/TM9657/flow-like/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22)** to find a place to start.
+
+**→ [Join Discord](https://discord.com/invite/mdBA9kMjFJ)** for questions and discussion.
+
+---
+
+<details>
+<summary><strong>📸 Screenshots & Gallery</strong></summary>
+<br/>
+
+**Team & Access Management**
+
+<p align="center">
+  <img src="https://cdn.flow-like.com/website/TeamManagement.webp" alt="Team Management" width="100%" />
+</p>
+
+<p align="center">
+  <img src="https://cdn.flow-like.com/website/RightsAndRoles.webp" alt="Rights and Roles" width="100%" />
+</p>
+
+**Built-in Storage & Search**
+
+<p align="center">
+  <img src="https://cdn.flow-like.com/website/Storage.webp" alt="Storage" width="100%" />
+</p>
+
+*Files, tables, and hybrid keyword+vector search — right on the canvas. No extra services needed.*
+
+</details>
+
+<details>
+<summary><strong>❓ FAQ</strong></summary>
+<br/>
+
+**Is Flow-Like free to use?**
+Most likely, yes. Flow-Like uses the Business Source License (BSL), which is free if your organization has fewer than 2,000 employees and less than $300M in annual recurring revenue. This covers startups, SMBs, and most enterprises. [Read the full license](./LICENSE).
+
+**Can I run it completely offline?**
+Yes, 100%. Flow-Like works fully offline on your local machine — ideal for air-gapped networks and secure environments. Switch to online mode anytime to collaborate.
+
+**Can I embed it in my product?**
+Yes. Flow-Like is white-label ready — embed the visual editor, customize the theme to your brand, integrate SSO, or run just the engine headlessly.
+
+**What languages can I use?**
+The visual builder is no-code. For custom nodes, you write Rust. SDKs and REST APIs are available for programmatic control.
+
+**Is it production-ready?**
+Flow-Like is actively developed and used in production. We recommend thorough testing for mission-critical workflows. See the [releases page](https://github.com/TM9657/flow-like/releases) for version stability.
+
+**How do I get support?**
+[Discord](https://discord.com/invite/mdBA9kMjFJ) for quick help, [Docs](https://docs.flow-like.com) for guides, or [GitHub Issues](https://github.com/TM9657/flow-like/issues) for bugs and features.
+
+</details>
+
+<details>
+<summary><strong>🏗️ Built With</strong></summary>
+<br/>
+
+Flow-Like stands on the shoulders of incredible open-source projects:
+
+**Frontend:** [React Flow](https://github.com/xyflow/xyflow) · [Radix UI](https://github.com/radix-ui/primitives) · [shadcn/ui](https://github.com/shadcn-ui/ui) · [Next.js](https://github.com/vercel/next.js) · [Tailwind CSS](https://github.com/tailwindlabs/tailwindcss) · [Framer Motion](https://github.com/framer/motion)
+
+**Desktop & Runtime:** [Tauri](https://github.com/tauri-apps/tauri) · [Rust](https://github.com/rust-lang/rust) · [Tokio](https://github.com/tokio-rs/tokio) · [Axum](https://github.com/tokio-rs/axum)
+
+**AI & ML:** [llama.cpp](https://github.com/ggerganov/llama.cpp) · [Candle](https://github.com/huggingface/candle) · [ONNX Runtime](https://github.com/microsoft/onnxruntime)
+
+**Data:** [Zustand](https://github.com/pmndrs/zustand) · [TanStack Query](https://github.com/TanStack/query) · [Dexie.js](https://github.com/dexie/Dexie.js) · [SeaORM](https://github.com/SeaQL/sea-orm) · [Zod](https://github.com/colinhacks/zod)
+
+**Tooling:** [Bun](https://github.com/oven-sh/bun) · [Vite](https://github.com/vitejs/vite) · [Biome](https://github.com/biomejs/biome)
+
+Thank you to all maintainers and contributors of these projects! 🙏
+
+</details>
+
+---
+
+## 📊 Project Stats
+
+<p align="center">
+  <picture>
+    <img src="https://repobeats.axiom.co/api/embed/6fe5df31b9a96f584f8898beb4457bd8aa3852f1.svg" alt="Repobeats analytics" width="48%" />
+  </picture>
+  <picture>
+    <img src="https://api.star-history.com/svg?repos=TM9657/flow-like&type=Date" alt="Star History" width="48%" />
+  </picture>
+</p>
+
+---
+
+<p align="center">
+  <a href="https://flow-like.com">Website</a> ·
+  <a href="https://docs.flow-like.com">Docs</a> ·
+  <a href="https://flow-like.com/download">Download</a> ·
+  <a href="https://flow-like.com/blog">Blog</a>
+</p>
+
+<p align="center">
+  <strong>Made with ❤️ in Munich, Germany</strong><br/>
+  <sub>
+    <a href="./LICENSE">License</a> ·
+    <a href="./CODE_OF_CONDUCT.md">Code of Conduct</a> ·
+    <a href="./SECURITY.md">Security</a>
+  </sub>
+</p>

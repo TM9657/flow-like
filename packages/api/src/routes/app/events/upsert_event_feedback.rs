@@ -12,8 +12,9 @@ use sea_orm::{
     TransactionTrait,
 };
 use serde::{Deserialize, Serialize};
+use utoipa::ToSchema;
 
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Debug, ToSchema)]
 pub struct FeedbackBody {
     pub rating: i64,
     pub context: Option<Value>,
@@ -21,11 +22,32 @@ pub struct FeedbackBody {
     pub feedback_id: String,
 }
 
-#[derive(Serialize, Debug)]
+#[derive(Serialize, Debug, ToSchema)]
 pub struct FeedbackResponse {
     pub feedback_id: String,
 }
 
+#[utoipa::path(
+    put,
+    path = "/apps/{app_id}/events/{event_id}/feedback",
+    tag = "events",
+    description = "Submit feedback for an event run.",
+    params(
+        ("app_id" = String, Path, description = "Application ID"),
+        ("event_id" = String, Path, description = "Event ID")
+    ),
+    request_body = FeedbackBody,
+    responses(
+        (status = 200, description = "Feedback stored", body = FeedbackResponse),
+        (status = 401, description = "Unauthorized"),
+        (status = 403, description = "Forbidden")
+    ),
+    security(
+        ("bearer_auth" = []),
+        ("api_key" = []),
+        ("pat" = [])
+    )
+)]
 #[tracing::instrument(
     name = "PUT /apps/{app_id}/events/{event_id}/feedback",
     skip(state, user)
@@ -50,7 +72,7 @@ pub async fn upsert_event_feedback(
 
     if let Some(existing) = existing_feedback {
         if existing.user_id.as_ref() != Some(&sub) {
-            return Err(ApiError::Forbidden);
+            return Err(ApiError::FORBIDDEN);
         }
 
         // Update existing feedback
@@ -75,7 +97,7 @@ pub async fn upsert_event_feedback(
         event_id: Some(event_id.clone()),
         context: body.context,
         comment: body.comment,
-        rating: body.rating.clamp(0, 5) as i64,
+        rating: body.rating.clamp(0, 5),
         template_id: None,
         created_at: chrono::Utc::now().naive_utc(),
         updated_at: chrono::Utc::now().naive_utc(),

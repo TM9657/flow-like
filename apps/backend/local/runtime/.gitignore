@@ -1,0 +1,5 @@
+.env
+.env.dev
+.env.prod
+api.config.json
+jwks.json

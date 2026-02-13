@@ -100,6 +100,8 @@ export interface INode {
 	pins: { [key: string]: IPin };
 	scores?: null | INodeScores;
 	start?: boolean | null;
+	/** Schema version for node migration. When catalog version > placed version, pins are synced. */
+	version?: number | null;
 	[property: string]: any;
 }
 
@@ -169,6 +171,8 @@ export interface INodeScores {
 	performance: number;
 	privacy: number;
 	security: number;
+	reliability: number;
+	cost: number;
 	[property: string]: any;
 }
 
@@ -207,6 +211,7 @@ export interface IVariable {
 	hash?: number | null;
 	id: string;
 	name: string;
+	schema?: null | string;
 	secret: boolean;
 	value_type: IValueType;
 	[property: string]: any;

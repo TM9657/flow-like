@@ -1,4 +1,4 @@
-use flow_like_types::{async_trait, sync::Mutex};
+use flow_like_types::async_trait;
 use schemars::JsonSchema;
 use std::sync::Arc;
 
@@ -31,8 +31,13 @@ impl Command for UpdateNodeCommand {
     async fn execute(
         &mut self,
         board: &mut Board,
-        _state: Arc<Mutex<FlowLikeState>>,
+        _state: Arc<FlowLikeState>,
     ) -> flow_like_types::Result<()> {
+        // Validate and deduplicate fn_refs - never trust the frontend!
+        if let Some(fn_refs) = &mut self.node.fn_refs {
+            super::validate_and_deduplicate_fn_refs(fn_refs, board);
+        }
+
         self.old_node = board.nodes.insert(self.node.id.clone(), self.node.clone());
         Ok(())
     }
@@ -40,7 +45,7 @@ impl Command for UpdateNodeCommand {
     async fn undo(
         &mut self,
         board: &mut Board,
-        _state: Arc<Mutex<FlowLikeState>>,
+        _state: Arc<FlowLikeState>,
     ) -> flow_like_types::Result<()> {
         if let Some(old_node) = self.old_node.take() {
             board.nodes.insert(old_node.id.clone(), old_node.clone());

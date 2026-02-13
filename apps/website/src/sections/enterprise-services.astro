@@ -1,0 +1,116 @@
+---
+import { LuTarget, LuSearch, LuHeadphones, LuClock } from "react-icons/lu";
+
+const services = [
+  {
+    icon: LuTarget,
+    title: "White-Glove Onboarding",
+    description: "We don't just hand you software.",
+    features: [
+      "Review your automation architecture",
+      "Build your first production workflow together",
+      "Ensure best practices from day one",
+    ],
+  },
+  {
+    icon: LuSearch,
+    title: "Automation Risk Review",
+    description: "Before you commit, we analyze your stack.",
+    features: [
+      "Analyze existing automations",
+      "Identify hidden failure points",
+      "Show where risk can be eliminated",
+    ],
+    note: "No sales pressure. Just clarity.",
+  },
+  {
+    icon: LuHeadphones,
+    title: "Priority Support & SLA",
+    description: "Enterprise-grade support when you need it.",
+    features: [
+      "Defined response times",
+      "Direct access to engineering",
+      "Clear escalation paths",
+    ],
+  },
+  {
+    icon: LuClock,
+    title: "Time-to-Value Guarantee",
+    description: "Your first production-ready workflow in ≤14 days.",
+    features: [
+      "Guided implementation",
+      "We continue onboarding until it runs safely",
+      "No excuses, just results",
+    ],
+  },
+];
+---
+
+<section class="relative py-24 border-t border-border/30">
+  <div class="mx-auto max-w-6xl px-6 lg:px-8">
+    <!-- Header -->
+    <div class="mb-16">
+      <p class="text-[11px] font-medium tracking-[0.3em] uppercase text-primary mb-4">
+        🎁 Enterprise Services
+      </p>
+      <h2 class="text-3xl sm:text-4xl font-semibold tracking-tight text-foreground leading-[1.15] mb-4">
+        Everything you need to succeed
+      </h2>
+      <p class="text-lg text-muted-foreground max-w-2xl">
+        Beyond software — we ensure your automation becomes a strategic advantage, not a liability.
+      </p>
+    </div>
+
+    <!-- Services Grid -->
+    <div class="grid md:grid-cols-2 gap-8">
+      {services.map((service) => (
+        <div class="rounded-2xl border border-border/50 bg-card/30 p-8">
+          <div class="flex items-start gap-4 mb-6">
+            <div class="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
+              <service.icon className="w-5 h-5 text-primary" />
+            </div>
+            <div>
+              <h3 class="text-lg font-semibold text-foreground mb-1">{service.title}</h3>
+              <p class="text-sm text-muted-foreground">{service.description}</p>
+            </div>
+          </div>
+          <ul class="space-y-2 mb-4">
+            {service.features.map((feature) => (
+              <li class="flex items-start gap-2 text-sm text-muted-foreground">
+                <span class="text-primary mt-1">→</span>
+                <span>{feature}</span>
+              </li>
+            ))}
+          </ul>
+          {service.note && (
+            <p class="text-xs text-emerald-500 font-medium mt-4 pt-4 border-t border-border/30">
+              {service.note}
+            </p>
+          )}
+        </div>
+      ))}
+    </div>
+
+    <!-- Risk Reversal -->
+    <div class="mt-12 rounded-2xl border border-emerald-500/30 bg-emerald-500/5 p-8 md:p-10">
+      <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-6">
+        <div>
+          <p class="text-[11px] font-medium tracking-[0.3em] uppercase text-emerald-500 mb-3">
+            🛡 Risk Reversal
+          </p>
+          <h3 class="text-2xl font-semibold text-foreground mb-2">
+            Pilot before commitment
+          </h3>
+          <ul class="space-y-1 text-sm text-muted-foreground">
+            <li>• 30–60 day pilot phase</li>
+            <li>• Replace or stabilize at least one critical automation</li>
+            <li>• No long-term contract until value is proven</li>
+          </ul>
+          <p class="text-sm text-emerald-500 font-medium mt-4">
+            If Flow-Like doesn't reduce risk, you don't continue.
+          </p>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>

@@ -15,13 +15,35 @@ use sea_orm::{
     ActiveModelTrait, ActiveValue::Set, ColumnTrait, EntityTrait, PaginatorTrait, QueryFilter,
     TransactionTrait,
 };
+use utoipa::ToSchema;
 
-#[derive(Debug, Clone, serde::Deserialize)]
+#[derive(Debug, Clone, serde::Deserialize, ToSchema)]
 pub struct InviteUserParams {
     pub message: Option<String>,
     pub sub: String,
 }
 
+#[utoipa::path(
+    put,
+    path = "/apps/{app_id}/team/invite",
+    tag = "team",
+    description = "Invite a user to the app.",
+    params(
+        ("app_id" = String, Path, description = "Application ID")
+    ),
+    request_body = InviteUserParams,
+    responses(
+        (status = 200, description = "Invite created", body = ()),
+        (status = 401, description = "Unauthorized"),
+        (status = 403, description = "Forbidden"),
+        (status = 404, description = "Not found")
+    ),
+    security(
+        ("bearer_auth" = []),
+        ("api_key" = []),
+        ("pat" = [])
+    )
+)]
 #[tracing::instrument(name = "PUT /apps/{app_id}/team/invite", skip(state, user))]
 pub async fn invite_user(
     State(state): State<AppState>,
@@ -37,7 +59,7 @@ pub async fn invite_user(
             user.sub()?,
             app_id
         );
-        return Err(ApiError::Forbidden);
+        return Err(ApiError::FORBIDDEN);
     }
 
     let txn = state.db.begin().await?;
@@ -49,16 +71,16 @@ pub async fn invite_user(
         .filter(meta::Column::Lang.eq("en"))
         .one(&txn)
         .await?
-        .ok_or_else(|| ApiError::NotFound)?;
+        .ok_or(ApiError::NOT_FOUND)?;
 
     if app.default_role_id.is_none() {
         tracing::warn!(
             "App {} does not have a default role set, cannot invite user",
             app_id
         );
-        return Err(ApiError::InternalError(
-            anyhow!("App does not have a default role set").into(),
-        ));
+        return Err(ApiError::internal_error(anyhow!(
+            "App does not have a default role set"
+        )));
     }
 
     if matches!(app.visibility, Visibility::Private | Visibility::Offline) {
@@ -67,7 +89,7 @@ pub async fn invite_user(
             user.sub()?,
             app_id
         );
-        return Err(ApiError::Forbidden);
+        return Err(ApiError::FORBIDDEN);
     }
 
     let member = membership::Entity::find()
@@ -75,7 +97,7 @@ pub async fn invite_user(
         .filter(membership::Column::UserId.eq(user.sub()?))
         .one(&txn)
         .await?
-        .ok_or(ApiError::Forbidden)?;
+        .ok_or(ApiError::FORBIDDEN)?;
 
     let user_already_member = membership::Entity::find()
         .filter(membership::Column::AppId.eq(app_id.clone()))
@@ -90,7 +112,7 @@ pub async fn invite_user(
             params.sub,
             app_id
         );
-        return Err(ApiError::Forbidden);
+        return Err(ApiError::FORBIDDEN);
     }
 
     if max_prototype > 0
@@ -110,7 +132,7 @@ pub async fn invite_user(
                 user.sub()?,
                 app_id
             );
-            return Err(ApiError::Forbidden);
+            return Err(ApiError::FORBIDDEN);
         }
     }
 
@@ -127,7 +149,7 @@ pub async fn invite_user(
             params.sub,
             app_id
         );
-        return Err(ApiError::Forbidden);
+        return Err(ApiError::FORBIDDEN);
     }
 
     let invitation = invitation::ActiveModel {

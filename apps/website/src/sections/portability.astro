@@ -1,9 +1,22 @@
 ---
 import { Image } from "astro:assets";
+import type { Lang, TranslationKey } from "../i18n";
+import { translations, defaultLang } from "../i18n";
 
 import portabilityInvite from "../images/index/portability-invite.png";
 import portabilityOffline from "../images/index/portability-offline.png";
 import portabilityShare from "../images/index/portability-share.png";
+
+interface Props {
+  lang?: Lang;
+}
+
+const { lang = defaultLang } = Astro.props;
+const t = (key: TranslationKey): string => {
+  const langTranslations = translations[lang] as Record<string, string>;
+  const enTranslations = translations.en as Record<string, string>;
+  return langTranslations?.[key] ?? enTranslations[key] ?? key;
+};
 ---
 
 <section
@@ -27,6 +40,9 @@ import portabilityShare from "../images/index/portability-share.png";
       class="absolute inset-0 [mask-image:radial-gradient(70%_70%_at_50%_40%,black,transparent)] bg-[linear-gradient(to_right,theme(colors.muted.DEFAULT/.12)_1px,transparent_1px),linear-gradient(to_bottom,theme(colors.muted.DEFAULT/.12)_1px,transparent_1px)] bg-[size:36px_36px]"
     >
     </div>
+    <!-- Animated glow orbs -->
+    <div class="port-glow port-glow-1"></div>
+    <div class="port-glow port-glow-2"></div>
   </div>
 
   <div class="relative z-10 grid items-center gap-14 lg:gap-16 lg:grid-cols-12">
@@ -34,22 +50,23 @@ import portabilityShare from "../images/index/portability-share.png";
     <div class="space-y-8 lg:col-span-5 reveal">
       <div>
         <div
-          class="inline-flex items-center gap-2 rounded-full border border-primary/20 bg-primary/10 backdrop-blur-sm px-4 py-2 text-sm font-medium text-primary mb-6"
+          class="inline-flex items-center gap-2.5 rounded-full border border-primary/30 bg-primary/10 backdrop-blur-xl px-5 py-2.5 text-sm font-semibold text-primary mb-8 shadow-[0_0_30px_-8px_hsl(var(--primary)/.4)] hover:shadow-[0_0_40px_-5px_hsl(var(--primary)/.5)] transition-all duration-500 group"
         >
-          <div class="w-2 h-2 bg-primary rounded-full animate-pulse"></div>
-          Lifecycle with context
+          <div class="relative">
+            <span class="absolute inline-flex h-full w-full rounded-full bg-primary opacity-60 animate-ping"></span>
+            <span class="relative flex h-2 w-2 rounded-full bg-primary"></span>
+          </div>
+          <span>{t("portability.tagline")}</span>
         </div>
 
         <h2 class="text-4xl font-bold sm:text-5xl leading-tight">
-          Start <span class="text-primary">offline</span>. Go <span
-            class="text-secondary">online</span
-          > later. <span class="text-tertiary">Deploy</span> with one click.
+          {t("portability.headline.start")} <span class="text-primary">{t("portability.headline.offline")}</span>. {t("portability.headline.go")} <span
+            class="text-secondary">{t("portability.headline.online")}</span
+          > {t("portability.headline.later")} <span class="text-tertiary">{t("portability.headline.deploy")}</span> {t("portability.headline.click")}
         </h2>
 
         <p class="mt-6 text-lg text-muted-foreground max-w-prose">
-          Manage the whole journey without losing visibility. Start a private
-          draft, invite your team when it’s ready, and go live — with the same
-          saved “what went in, what changed, what came out” at every step.
+          {t("portability.description")}
         </p>
       </div>
 
@@ -63,21 +80,21 @@ import portabilityShare from "../images/index/portability-share.png";
             data-tab="offline"
             class="stage-tab aria-selected:shadow-sm aria-selected:border-primary/40 aria-selected:bg-primary/10 aria-selected:text-primary flex-1 rounded-xl border border-transparent px-4 py-2 text-sm font-medium transition"
           >
-            Solo
+            {t("portability.tab.solo")}
           </button>
           <button
             type="button"
             data-tab="team"
             class="stage-tab aria-selected:shadow-sm aria-selected:border-secondary/40 aria-selected:bg-secondary/10 aria-selected:text-secondary flex-1 rounded-xl border border-transparent px-4 py-2 text-sm font-medium transition"
           >
-            Team
+            {t("portability.tab.team")}
           </button>
           <button
             type="button"
             data-tab="prod"
             class="stage-tab aria-selected:shadow-sm aria-selected:border-tertiary/40 aria-selected:bg-tertiary/10 aria-selected:text-tertiary flex-1 rounded-xl border border-transparent px-4 py-2 text-sm font-medium transition"
           >
-            Live
+            {t("portability.tab.prod")}
           </button>
         </div>
 
@@ -86,7 +103,7 @@ import portabilityShare from "../images/index/portability-share.png";
           <ol class="flex items-center gap-3">
             <li class="flex items-center gap-2">
               <span class="size-2 rounded-full bg-primary animate-pulse"></span>
-              <span class="text-xs font-medium">Solo</span>
+              <span class="text-xs font-medium">{t("portability.tab.solo")}</span>
             </li>
             <div class="relative h-1 flex-1">
               <div class="absolute inset-0 rounded-full bg-muted/50"></div>
@@ -101,7 +118,7 @@ import portabilityShare from "../images/index/portability-share.png";
               <span
                 class="size-2 rounded-full bg-secondary animate-pulse [animation-delay:.25s]"
               ></span>
-              <span class="text-xs font-medium">Team</span>
+              <span class="text-xs font-medium">{t("portability.tab.team")}</span>
             </li>
             <div class="relative h-1 flex-1">
               <div class="absolute inset-0 rounded-full bg-muted/50"></div>
@@ -116,11 +133,11 @@ import portabilityShare from "../images/index/portability-share.png";
               <span
                 class="size-2 rounded-full bg-tertiary animate-pulse [animation-delay:.4s]"
               ></span>
-              <span class="text-xs font-medium">Live</span>
+              <span class="text-xs font-medium">{t("portability.tab.prod")}</span>
             </li>
           </ol>
           <p class="mt-2 text-xs text-muted-foreground">
-            Same behavior at every stage.
+            {t("portability.track.behavior")}
           </p>
         </div>
       </div>
@@ -142,10 +159,9 @@ import portabilityShare from "../images/index/portability-share.png";
               1
             </div>
             <div>
-              <h3 class="text-xl font-semibold mb-1.5">Sketch privately</h3>
+              <h3 class="text-xl font-semibold mb-1.5">{t("portability.step1.title")}</h3>
               <p class="text-muted-foreground">
-                Try ideas on your machine. Each step saves what went in and what
-                came out, so you can see what changed — no guesswork.
+                {t("portability.step1.description")}
               </p>
             </div>
           </div>
@@ -167,11 +183,10 @@ import portabilityShare from "../images/index/portability-share.png";
             </div>
             <div>
               <h3 class="text-xl font-semibold mb-1.5">
-                Make it Online & Invite
+                {t("portability.step2.title")}
               </h3>
               <p class="text-muted-foreground">
-                Flip the project online and invite colleagues. Roles and
-                approvals come along for the ride.
+                {t("portability.step2.description")}
               </p>
             </div>
           </div>
@@ -193,11 +208,10 @@ import portabilityShare from "../images/index/portability-share.png";
             </div>
             <div>
               <h3 class="text-xl font-semibold mb-1.5">
-                Go live with confidence
+                {t("portability.step3.title")}
               </h3>
               <p class="text-muted-foreground">
-                Choose your target — Edge, Cloud, or on-prem. Click deploy. Same
-                validated graph, different runtime target.
+                {t("portability.step3.description")}
               </p>
             </div>
           </div>
@@ -531,6 +545,48 @@ import portabilityShare from "../images/index/portability-share.png";
       border-color: color-mix(in oklch, currentColor 40%, transparent);
     }
 
+    /* glow orb animation - bigger and more dramatic */
+    @keyframes glow-float {
+      0%, 100% { transform: translate(0, 0) scale(1); }
+      33% { transform: translate(40px, -30px) scale(1.15); }
+      66% { transform: translate(-25px, 20px) scale(0.88); }
+    }
+
+    #portability .glow-orb {
+      position: absolute;
+      border-radius: 50%;
+      filter: blur(100px);
+      opacity: 0.5;
+      animation: glow-float 10s ease-in-out infinite;
+      pointer-events: none;
+    }
+
+    .port-glow {
+      position: absolute;
+      border-radius: 50%;
+      filter: blur(120px);
+      opacity: 0.45;
+      animation: glow-float 12s ease-in-out infinite;
+      pointer-events: none;
+    }
+
+    .port-glow-1 {
+      width: 600px;
+      height: 600px;
+      background: radial-gradient(circle, hsl(var(--primary) / 0.5) 0%, transparent 60%);
+      top: 5%;
+      left: 0%;
+    }
+
+    .port-glow-2 {
+      width: 550px;
+      height: 550px;
+      background: radial-gradient(circle, hsl(var(--secondary) / 0.4) 0%, transparent 60%);
+      bottom: 10%;
+      right: 5%;
+      animation-delay: 6s;
+    }
+
     /* reduced motion */
     @media (prefers-reduced-motion: reduce) {
       #portability article.group,
@@ -545,6 +601,10 @@ import portabilityShare from "../images/index/portability-share.png";
         filter: none !important;
         transform: none !important;
         opacity: 0.08 !important;
+      }
+      #portability .glow-orb,
+      .port-glow {
+        animation: none !important;
       }
     }
   </style>

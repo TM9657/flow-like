@@ -1,0 +1,597 @@
+# Default values for flow-like Kubernetes deployment
+
+nameOverride: ""
+fullnameOverride: ""
+
+# Global settings
+global:
+  imageRegistry: ""
+  imagePullSecrets: []
+
+# API Service Configuration
+api:
+  enabled: true
+  replicaCount: 1
+  image:
+    repository: k3d-flow-like.localhost:5000/flow-like-k8s-api
+    tag: latest
+    pullPolicy: Never
+
+  service:
+    type: ClusterIP
+    port: 8080
+
+  resources:
+    requests:
+      memory: "256Mi"
+      cpu: "100m"
+    limits:
+      memory: "1Gi"
+      cpu: "1"
+
+  autoscaling:
+    enabled: false
+    minReplicas: 1
+    maxReplicas: 10
+    targetCPUUtilization: 70
+    targetMemoryUtilization: 80
+
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+
+  env: []
+  envFrom: []
+
+# Web Application Configuration (Next.js Static Export)
+web:
+  enabled: true
+  replicaCount: 1
+  image:
+    repository: k3d-flow-like.localhost:5000/flow-like-k8s-web
+    tag: latest
+    pullPolicy: Never
+
+  service:
+    type: ClusterIP
+    port: 3001
+    # NodePort for local dev (use with type: NodePort)
+    nodePort: ""
+
+  resources:
+    requests:
+      memory: "64Mi"
+      cpu: "10m"
+    limits:
+      memory: "128Mi"
+      cpu: "100m"
+
+  autoscaling:
+    enabled: false
+    minReplicas: 1
+    maxReplicas: 5
+    targetCPUUtilization: 70
+    targetMemoryUtilization: 80
+
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+
+# Executor Configuration (for Kubernetes Jobs)
+executor:
+  image:
+    repository: k3d-flow-like.localhost:5000/flow-like-k8s-executor
+    tag: latest
+    pullPolicy: Never
+
+  runtimeClass: kata
+  timeout: 3600
+  maxRetries: 3
+  ttlSecondsAfterFinished: 3600
+
+  resources:
+    requests:
+      memory: "256Mi"
+      cpu: "100m"
+    limits:
+      memory: "2Gi"
+      cpu: "2"
+
+  maxConcurrentJobs: 100
+
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 1000
+    readOnlyRootFilesystem: true
+
+# Executor pool (standard mode) — reusable workers behind a Service
+executorPool:
+  enabled: true
+  replicaCount: 1
+  image:
+    repository: k3d-flow-like.localhost:5000/flow-like-k8s-executor
+    tag: latest
+    pullPolicy: Never
+  service:
+    port: 8080
+  resources:
+    requests:
+      memory: "256Mi"
+      cpu: "100m"
+    limits:
+      memory: "1Gi"
+      cpu: "1"
+  autoscaling:
+    enabled: false
+    minReplicas: 1
+    maxReplicas: 10
+    targetCPUUtilization: 70
+    targetMemoryUtilization: 80
+
+# =============================================================================
+# Backend JWT Configuration (Required for execution)
+# =============================================================================
+# ES256 keypair for signing execution JWTs
+# Generate with: ./scripts/gen-execution-keys.sh
+#
+# IMPORTANT: Do NOT commit real keys here! Use one of these methods:
+#   1. Use --set-file when installing:
+#      helm install flow-like ./helm --set-file jwt.backendKey=./secrets/backend.key
+#   2. Create a separate values-secrets.yaml (add to .gitignore):
+#      helm install flow-like ./helm -f values.yaml -f values-secrets.yaml
+#   3. Use existingSecret to reference a pre-created Kubernetes secret
+#
+jwt:
+  # Base64-encoded PEM private key (set via --set or values-secrets.yaml)
+  backendKey: ""
+  # Base64-encoded PEM public key (set via --set or values-secrets.yaml)
+  backendPub: ""
+  # Key identifier
+  backendKid: "backend-es256-v1"
+  # Use existing secret instead of creating one
+  existingSecret: ""
+
+# =============================================================================
+# Execution Backend Configuration
+# =============================================================================
+# Controls how flow executions are dispatched
+execution:
+  # Backend for sync/streaming requests (/invoke endpoints)
+  # Options: http, kubernetes_job, redis
+  #   http           - HTTP to warm executor pool (default, fastest)
+  #   kubernetes_job - Create isolated K8s Job per execution (slower, more isolated)
+  #   redis          - Queue to Redis (consumed by executor pool)
+  backend: http
+
+  # Backend for async requests (/invoke/async endpoints)
+  # Options: redis, http, kubernetes_job
+  #   redis          - Queue to Redis (default, recommended for background jobs)
+  #   http           - Direct HTTP to executor pool
+  #   kubernetes_job - Create isolated K8s Job per execution
+  asyncBackend: redis
+
+  # Executor pool URL (auto-configured when executorPool.enabled=true)
+  # Override if using external executor service
+  executorUrl: ""
+
+# =============================================================================
+# Storage Configuration
+# =============================================================================
+# provider: aws | azure | gcp | r2 | s3
+#   - aws: Native AWS S3 with STS credentials
+#   - azure: Native Azure Blob Storage with SAS tokens
+#   - gcp: Native Google Cloud Storage
+#   - r2: Cloudflare R2 storage
+#   - s3: Generic S3-compatible storage
+#
+# IMPORTANT: Do NOT commit credentials here! Use values-secrets.yaml or --set
+#
+storage:
+  provider: "azure"
+
+  # AWS S3 Configuration (when provider=aws)
+  aws:
+    accessKeyId: ""
+    secretAccessKey: ""
+    region: "us-east-1"
+    metaBucket: "flow-like-meta"
+    contentBucket: "flow-like-content"
+    logBucket: "flow-like-logs"  # Bucket for execution logs
+    usePathStyle: false
+    # Role ARN for generating scoped STS credentials (optional but recommended)
+    runtimeRoleArn: ""
+    existingSecret: ""
+
+  # Cloudflare R2 Configuration (when provider=r2)
+  r2:
+    accountId: ""
+    accessKeyId: ""
+    secretAccessKey: ""
+    metaBucket: "flow-like-meta"
+    contentBucket: "flow-like-content"
+    logBucket: "flow-like-logs"  # Bucket for execution logs
+    existingSecret: ""
+
+  # Azure Blob Storage Configuration (when provider=azure)
+  azure:
+    accountName: ""
+    accountKey: ""
+    metaContainer: "meta"
+    contentContainer: "content"
+    logContainer: "logs"  # Container for execution logs
+    existingSecret: ""
+
+  # Google Cloud Storage Configuration (when provider=gcp)
+  gcp:
+    projectId: ""
+    serviceAccountKey: ""  # Base64-encoded service account JSON
+    metaBucket: "flow-like-meta"
+    contentBucket: "flow-like-content"
+    logBucket: "flow-like-logs"  # Bucket for execution logs
+    existingSecret: ""
+
+  # S3-Compatible Storage Configuration (when provider=s3)
+  s3:
+    endpoint: ""
+    region: "us-east-1"
+    accessKeyId: ""
+    secretAccessKey: ""
+    metaBucket: "flow-like-meta"
+    contentBucket: "flow-like-content"
+    logBucket: "flow-like-logs"  # Bucket for execution logs
+    usePathStyle: true
+    existingSecret: ""
+
+# =============================================================================
+# LLM Provider Configuration
+# =============================================================================
+# Configure API keys for LLM providers used by the executor
+# IMPORTANT: Do NOT commit credentials here! Use values-secrets.yaml or --set
+#
+llm:
+  # OpenRouter Configuration (recommended default)
+  openrouter:
+    enabled: true
+    apiKey: ""
+    endpoint: "https://openrouter.ai/api"
+    existingSecret: ""
+
+  # OpenAI Configuration
+  openai:
+    enabled: false
+    apiKey: ""
+    endpoint: "https://api.openai.com/v1"
+    existingSecret: ""
+
+# =============================================================================
+# Database Configuration
+# =============================================================================
+# type: internal | external
+#   - internal: Deploy CockroachDB within the cluster (recommended for self-hosting)
+#   - external: Use an external PostgreSQL/CockroachDB database
+database:
+  type: internal
+
+  # Database migration job (runs on install/upgrade)
+  migration:
+    enabled: true
+    image:
+      repository: flow-like/migration
+      tag: "dev"
+      pullPolicy: Always
+    backoffLimit: 5
+    ttlSecondsAfterFinished: 300
+    resources:
+      requests:
+        memory: "256Mi"
+        cpu: "100m"
+      limits:
+        memory: "512Mi"
+        cpu: "500m"
+
+  # Internal CockroachDB configuration (when type=internal)
+  internal:
+    replicas: 3
+    image:
+      repository: cockroachdb/cockroach
+      tag: v24.2.0
+      pullPolicy: IfNotPresent
+    auth:
+      username: flowlike
+      password: ""  # Auto-generated if empty
+      database: flowlike
+    persistence:
+      storageClass: ""
+      size: 10Gi
+    resources:
+      requests:
+        memory: "512Mi"
+        cpu: "250m"
+      limits:
+        memory: "2Gi"
+        cpu: "2"
+    cache: "25%"
+    maxSqlMemory: "25%"
+    tls:
+      enabled: false
+      existingSecret: ""
+
+  # External database configuration (when type=external)
+  external:
+    connectionString: ""
+    existingSecret: ""
+
+# Redis Configuration (for job queue)
+redis:
+  enabled: true
+  architecture: standalone
+  auth:
+    enabled: true
+    existingSecret: ""
+    password: ""
+  master:
+    persistence:
+      enabled: true
+      storageClass: ""
+      size: 8Gi
+    resources:
+      requests:
+        memory: "128Mi"
+        cpu: "50m"
+
+# Ingress Configuration
+ingress:
+  enabled: false
+  className: ""
+  annotations: {}
+  # Example with separate hosts for API and web:
+  # hosts:
+  #   - host: api.flow-like.local
+  #     paths:
+  #       - path: /
+  #         pathType: Prefix
+  #         service: api
+  #   - host: app.flow-like.local
+  #     paths:
+  #       - path: /
+  #         pathType: Prefix
+  #         service: web
+  # Example with path-based routing on single host:
+  # hosts:
+  #   - host: flow-like.local
+  #     paths:
+  #       - path: /api
+  #         pathType: Prefix
+  #         service: api
+  #       - path: /
+  #         pathType: Prefix
+  #         service: web
+  hosts:
+    - host: flow-like.local
+      paths:
+        - path: /
+          pathType: Prefix
+          # service: api (default) or web
+  tls: []
+
+# Network Policies
+networkPolicy:
+  enabled: true
+
+  # Executor network restrictions
+  executor:
+    allowedEgress:
+      - to:
+          - namespaceSelector:
+              matchLabels:
+                name: flow-like
+        ports:
+          - protocol: TCP
+            port: 443   # External S3
+
+# Service Account
+serviceAccount:
+  create: true
+  annotations: {}
+  name: ""
+
+# Pod Security
+podSecurityPolicy:
+  enabled: false
+
+# =============================================================================
+# Monitoring Configuration
+# =============================================================================
+# Deploys Prometheus and Grafana with pre-configured dashboards
+monitoring:
+  enabled: true
+
+  # Distributed Tracing Configuration
+  # Traces are exported via OTLP (OpenTelemetry Protocol) to Grafana Tempo
+  tracing:
+    enabled: true
+    # Retention period for traces
+    retention: 72h
+
+  # Tempo Configuration (trace backend)
+  tempo:
+    image:
+      repository: grafana/tempo
+      tag: "2.3.1"
+      pullPolicy: IfNotPresent
+
+    resources:
+      requests:
+        memory: "256Mi"
+        cpu: "100m"
+      limits:
+        memory: "1Gi"
+        cpu: "500m"
+
+    persistence:
+      enabled: false
+      storageClass: ""
+      size: 10Gi
+
+  # ServiceMonitor for external Prometheus Operator (optional)
+  serviceMonitor:
+    enabled: false
+    interval: 30s
+    scrapeTimeout: 10s
+
+  prometheusRule:
+    enabled: false
+    rules: []
+
+  # Prometheus Configuration
+  prometheus:
+    image:
+      repository: prom/prometheus
+      tag: v2.48.0
+      pullPolicy: IfNotPresent
+
+    service:
+      type: ClusterIP
+
+    # Scrape and evaluation intervals
+    scrapeInterval: 15s
+    evaluationInterval: 15s
+
+    # Data retention period
+    retention: 15d
+
+    # Persistence for metrics data
+    persistence:
+      enabled: true
+      storageClass: ""
+      size: 50Gi
+
+    resources:
+      requests:
+        memory: "512Mi"
+        cpu: "250m"
+      limits:
+        memory: "2Gi"
+        cpu: "1"
+
+    nodeSelector: {}
+    tolerations: []
+
+  # Grafana Configuration
+  grafana:
+    image:
+      repository: grafana/grafana
+      tag: "10.2.2"
+      pullPolicy: IfNotPresent
+
+    service:
+      type: ClusterIP
+      # NodePort for local dev (use with type: NodePort)
+      nodePort: ""
+
+    # Admin credentials (password auto-generated if empty)
+    adminUser: admin
+    adminPassword: ""
+
+    # Domain for Grafana (used in URLs)
+    domain: localhost
+
+    # Anonymous access (read-only dashboards without login)
+    anonymous:
+      enabled: false
+
+    # Persistence for dashboards and settings
+    persistence:
+      enabled: true
+      storageClass: ""
+      size: 10Gi
+
+    resources:
+      requests:
+        memory: "256Mi"
+        cpu: "100m"
+      limits:
+        memory: "512Mi"
+        cpu: "500m"
+
+    # Ingress for external access to Grafana
+    ingress:
+      enabled: false
+      className: ""
+      annotations: {}
+      hosts:
+        - host: grafana.flow-like.local
+          paths:
+            - path: /
+              pathType: Prefix
+      tls: []
+
+    nodeSelector: {}
+    tolerations: []
+
+  # Alertmanager Configuration (optional)
+  alertmanager:
+    enabled: false
+
+# =============================================================================
+# Sink Services Configuration
+# =============================================================================
+# Manages event sinks (cron, webhooks, bots) that trigger flow executions
+sinkServices:
+  enabled: false
+
+  # Image for the sink-trigger CronJob (ultra-lean ~500KB binary)
+  image:
+    repository: flow-like/sink-trigger
+    tag: latest
+    pullPolicy: IfNotPresent
+
+  # Scoped JWT for authenticating sink trigger calls to the API
+  # Generate with: bun run tools/gen-sink-jwt.ts --type cron --secret $SECRET
+  triggerJwt: ""
+
+  # Use existing secret instead of creating one
+  # Secret must have key 'trigger-jwt' containing the JWT
+  existingSecret: ""
+
+  # API base URL for sink triggers (auto-configured if empty)
+  apiBaseUrl: ""
+
+  # CronJob configuration
+  cronJob:
+    # Concurrency policy: Allow, Forbid, Replace
+    concurrencyPolicy: Forbid
+    # How many successful job history to keep
+    successfulJobsHistoryLimit: 3
+    # How many failed job history to keep
+    failedJobsHistoryLimit: 1
+    # TTL for cleaning up completed jobs
+    ttlSecondsAfterFinished: 86400
+
+    resources:
+      requests:
+        memory: "8Mi"
+        cpu: "5m"
+      limits:
+        memory: "32Mi"
+        cpu: "50m"
+
+  # Bot services (run as deployment, not CronJobs)
+  bots:
+    enabled: false
+    # Discord bot configuration
+    discord:
+      enabled: false
+      token: ""
+      existingSecret: ""
+    # Telegram bot configuration
+    telegram:
+      enabled: false
+      token: ""
+      existingSecret: ""
+
+# Runtime Class for Kata Containers
+runtimeClass:
+  create: true
+  name: kata
+  handler: kata

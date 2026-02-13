@@ -1,0 +1,316 @@
+---
+title: Storage Configuration
+description: Configure object storage for Flow-Like Kubernetes deployment.
+sidebar:
+  order: 22
+---
+
+Flow-Like requires S3-compatible object storage for workflow data, execution state, and logs. This page covers storage configuration specific to Kubernetes deployments.
+
+## Storage Buckets
+
+Flow-Like requires S3-compatible object storage for workflow data, execution state, and logs. This page covers storage configuration specific to Kubernetes deployments.
+
+:::caution[Required Buckets]
+All three buckets (meta, content, logs) must be configured. Missing the logs bucket will cause executions to fail when trying to store execution logs.
+:::
+
+| Bucket | Purpose | Recommended Storage Class |
+|--------|---------|---------------------------|
+| Meta | App metadata, execution state | S3 Express One Zone |
+| Content | User files, workflow data | Standard S3 |
+| Logs | Execution logs | Standard S3 / S3 IA |
+
+## AWS S3 Configuration
+
+### Basic Setup
+
+```yaml
+# In your Kubernetes Secret
+apiVersion: v1
+kind: Secret
+metadata:
+  name: flow-like-s3
+  namespace: flow-like
+type: Opaque
+stringData:
+  AWS_ACCESS_KEY_ID: "AKIAIOSFODNN7EXAMPLE"
+  AWS_SECRET_ACCESS_KEY: "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"
+  AWS_REGION: "us-west-2"
+  META_BUCKET: "flow-like-meta"
+  CONTENT_BUCKET: "flow-like-content"
+  LOG_BUCKET: "flow-like-logs"
+```
+
+### S3 Express One Zone
+
+S3 Express One Zone provides significantly better performance for metadata-heavy workloads:
+
+| Metric | Standard S3 | S3 Express |
+|--------|-------------|------------|
+| Latency | 100-200ms | 1-10ms |
+| Request Cost | $0.0004/1k | $0.0002/1k |
+| Storage Cost | $0.023/GB | $0.16/GB |
+
+**Best for:** Execution state store, app metadata, high-frequency reads/writes.
+
+Express buckets are automatically created in a specific availability zone:
+
+```bash
+# Create Express bucket in us-west-2 AZ 1
+aws s3api create-bucket \
+  --bucket flow-like-meta--usw2-az1--x-s3 \
+  --create-bucket-configuration \
+    LocationConstraint=us-west-2 \
+    Location={Type=AvailabilityZone,Name=usw2-az1} \
+    Bucket={DataRedundancy=SingleAvailabilityZone,Type=Directory}
+```
+
+Enable Express mode via environment variable:
+
+```yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: flow-like-storage-config
+  namespace: flow-like
+data:
+  META_BUCKET_EXPRESS_ZONE: "true"
+  CONTENT_BUCKET_EXPRESS_ZONE: "false"
+  LOGS_BUCKET_EXPRESS_ZONE: "false"
+```
+
+:::caution[Availability Zone]
+S3 Express buckets are single-AZ. Deploy your API pods in the same AZ for optimal latency. Use pod affinity or topology spread constraints.
+:::
+
+### IAM Permissions
+
+For S3 Express buckets, you need additional permissions:
+
+```json
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Action": [
+        "s3:GetObject",
+        "s3:PutObject",
+        "s3:DeleteObject",
+        "s3:ListBucket"
+      ],
+      "Resource": [
+        "arn:aws:s3:::flow-like-*",
+        "arn:aws:s3:::flow-like-*/*"
+      ]
+    },
+    {
+      "Effect": "Allow",
+      "Action": [
+        "s3express:CreateSession"
+      ],
+      "Resource": [
+        "arn:aws:s3express:*:*:bucket/flow-like-*--*--x-s3"
+      ]
+    }
+  ]
+}
+```
+
+## Execution State Store
+
+The execution state store tracks running workflows and their events. By default, it uses the **meta bucket** for storage.
+
+```yaml
+# ConfigMap
+data:
+  # Uses META_BUCKET by default, falls back to S3_STATE_BUCKET
+  EXECUTION_STATE_BACKEND: "s3"
+```
+
+This reuses the meta bucket configuration, so you don't need a separate bucket. If using S3 Express for the meta bucket, the state store automatically benefits from the lower latency.
+
+:::tip[Cost Optimization]
+S3 Express has higher storage costs but lower request costs. For execution state (many small reads/writes), Express is typically cheaper overall.
+:::
+
+## Scoped Runtime Credentials
+
+Flow-Like generates scoped credentials for every workflow execution using STS AssumeRole. This ensures users can only access their own prefix-isolated storage paths.
+
+:::caution[STS Compatibility Required]
+Scoped credentials require credential scoping support from your S3-compatible provider:
+- **AWS S3** ✅ Full support (STS AssumeRole)
+- **MinIO** ✅ Supported ([requires STS configuration](https://min.io/docs/minio/linux/developers/security-token-service.html))
+- **Cloudflare R2** ✅ Supported (uses [proprietary temp credentials API](https://developers.cloudflare.com/api/node/resources/r2/subresources/temporary_credentials/))
+- **Hetzner Object Storage** ❌ Not supported
+
+Providers without credential scoping support cannot be used with Flow-Like.
+:::
+
+### Setup
+
+1. Create a runtime role:
+
+```json
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Action": [
+        "s3:GetObject",
+        "s3:PutObject",
+        "s3:DeleteObject",
+        "s3:ListBucket"
+      ],
+      "Resource": [
+        "arn:aws:s3:::flow-like-content",
+        "arn:aws:s3:::flow-like-content/*",
+        "arn:aws:s3:::flow-like-meta",
+        "arn:aws:s3:::flow-like-meta/*",
+        "arn:aws:s3:::flow-like-logs",
+        "arn:aws:s3:::flow-like-logs/*"
+      ]
+    }
+  ]
+}
+```
+
+2. Add trust policy for the API service account:
+
+```json
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Principal": {
+        "Federated": "arn:aws:iam::123456789012:oidc-provider/oidc.eks.us-west-2.amazonaws.com/id/EXAMPLED539D4633E53DE1B71EXAMPLE"
+      },
+      "Action": "sts:AssumeRoleWithWebIdentity",
+      "Condition": {
+        "StringEquals": {
+          "oidc.eks.us-west-2.amazonaws.com/id/EXAMPLED539D4633E53DE1B71EXAMPLE:sub": "system:serviceaccount:flow-like:flow-like-api"
+        }
+      }
+    }
+  ]
+}
+```
+
+3. Configure the API:
+
+```yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: flow-like-runtime
+  namespace: flow-like
+type: Opaque
+stringData:
+  RUNTIME_ROLE_ARN: "arn:aws:iam::123456789012:role/FlowLikeRuntimeRole"
+```
+
+### Credential Scoping
+
+When `RUNTIME_ROLE_ARN` is set, each execution receives temporary credentials (valid 1 hour) scoped to:
+
+| Path Pattern | Access | Purpose |
+|--------------|--------|---------|
+| `apps/{app_id}/*` | Read/Write | App data |
+| `users/{user_id}/apps/{app_id}/*` | Read/Write | User's app data |
+| `runs/{app_id}/*` | Write | Execution logs |
+| `tmp/user/{user_id}/apps/{app_id}/*` | Read/Write | Temporary files |
+| `tmp/global/apps/{app_id}/*` | Read | Shared temporary files |
+
+## Cloudflare R2
+
+R2 is S3-compatible and supports prefix-scoped temporary credentials through Cloudflare's [proprietary API](https://developers.cloudflare.com/api/node/resources/r2/subresources/temporary_credentials/):
+
+```yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: flow-like-r2
+  namespace: flow-like
+type: Opaque
+stringData:
+  # R2 credentials for S3 API access
+  R2_ACCESS_KEY_ID: "your-r2-access-key-id"
+  R2_SECRET_ACCESS_KEY: "your-r2-secret-access-key"
+  R2_ENDPOINT: "https://<account-id>.r2.cloudflarestorage.com"
+  # R2 Temp Credentials API (required for scoped credentials)
+  R2_ACCOUNT_ID: "your-cloudflare-account-id"
+  R2_API_TOKEN: "your-cloudflare-api-token"
+  # Bucket names
+  META_BUCKET: "flow-like-meta"
+  CONTENT_BUCKET: "flow-like-content"
+  LOG_BUCKET: "flow-like-logs"
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: flow-like-storage-config
+  namespace: flow-like
+data:
+  STORAGE_PROVIDER: "r2"
+```
+
+### R2 API Token Setup
+
+The API token needs the `Workers R2 Storage:Edit` permission:
+
+1. Go to [Cloudflare Dashboard](https://dash.cloudflare.com/) → **Manage Account** → **API Tokens**
+2. Create a custom token with:
+   - **Permissions**: `Account` → `Workers R2 Storage` → `Edit`
+   - **Account Resources**: Include your account
+
+## MinIO (Self-hosted S3)
+
+For air-gapped environments or local development:
+
+```yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: flow-like-s3
+  namespace: flow-like
+type: Opaque
+stringData:
+  AWS_ACCESS_KEY_ID: "minioadmin"
+  AWS_SECRET_ACCESS_KEY: "minioadmin"
+  AWS_ENDPOINT: "http://minio.flow-like.svc:9000"
+  AWS_REGION: "us-east-1"
+  META_BUCKET: "flow-like-meta"
+  CONTENT_BUCKET: "flow-like-content"
+  LOG_BUCKET: "flow-like-logs"
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: flow-like-storage-config
+  namespace: flow-like
+data:
+  AWS_USE_PATH_STYLE: "true"
+  # Express zone not supported with MinIO
+  META_BUCKET_EXPRESS_ZONE: "false"
+```
+
+## Environment Variables Reference
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `STORAGE_PROVIDER` | Storage backend (`aws`, `r2`, `azure`, `gcp`) | `aws` |
+| `META_BUCKET` | Bucket for app metadata and execution state | Required |
+| `CONTENT_BUCKET` | Bucket for user content and workflow data | Required |
+| `LOG_BUCKET` | Bucket for execution logs | Required |
+| `META_BUCKET_EXPRESS_ZONE` | Enable S3 Express for meta bucket | `false` |
+| `CONTENT_BUCKET_EXPRESS_ZONE` | Enable S3 Express for content bucket | `false` |
+| `LOGS_BUCKET_EXPRESS_ZONE` | Enable S3 Express for logs bucket | `false` |
+| `RUNTIME_ROLE_ARN` | IAM role ARN for scoped runtime credentials (AWS/MinIO) | Optional |
+| `R2_ACCOUNT_ID` | Cloudflare account ID for R2 temp credentials | R2 only |
+| `R2_API_TOKEN` | Cloudflare API token for R2 temp credentials | R2 only |
+| `EXECUTION_STATE_BACKEND` | State store backend (`postgres`, `redis`, `s3`) | `postgres` |
+| `AWS_USE_PATH_STYLE` | Use path-style URLs (for MinIO/R2) | `false` |

@@ -1,0 +1,148 @@
+---
+import "@tm9657/flow-like-ui/global.css";
+import Layout from "../../layouts/Layout.astro";
+---
+
+<Layout>
+    <div class="flex flex-col items-center justify-center h-screen gap-4">
+        <div class="flex items-center gap-3">
+            <svg class="w-8 h-8 animate-spin text-blue-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+            </svg>
+            <h1 class="text-xl font-semibold">Connecting to Flow-Like...</h1>
+        </div>
+        <p class="text-sm text-gray-500">
+            If the app doesn't open automatically,
+            <a id="deeplink" class="underline text-blue-500 hover:text-blue-600" href="#">click here to open Flow-Like</a>.
+        </p>
+        <p id="error" class="hidden text-sm text-red-500 mt-4"></p>
+    </div>
+    <script>
+        /**
+         * Platform targets for OAuth callback routing.
+         * Maps to hardcoded, trusted URLs for security.
+         */
+        type OAuthPlatform = "desktop" | "web-dev" | "web-prod";
+
+        const WEB_PLATFORM_URLS: Record<Exclude<OAuthPlatform, "desktop">, string> = {
+            "web-dev": "http://localhost:3001/thirdparty/callback",
+            "web-prod": "https://app.flow-like.com/thirdparty/callback",
+        };
+        const DESKTOP_UNIVERSAL_LINK = "https://app.flow-like.com/thirdparty/callback";
+        const DESKTOP_LEGACY_DEEPLINK = "flow-like://thirdparty/callback";
+
+        function isIOSDevice(): boolean {
+            return (
+                /iPad|iPhone|iPod/.test(navigator.userAgent) ||
+                (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1)
+            );
+        }
+
+        /**
+         * Decodes platform info from the OAuth state parameter.
+         */
+        function decodeStateWithPlatform(state: string): {
+            platform: OAuthPlatform;
+            randomState: string;
+        } {
+            const platforms: OAuthPlatform[] = ["desktop", "web-dev", "web-prod"];
+            for (const platform of platforms) {
+                if (state.startsWith(`${platform}_`)) {
+                    return {
+                        platform,
+                        randomState: state.substring(platform.length + 1),
+                    };
+                }
+            }
+            // Legacy state without platform prefix - assume desktop
+            return { platform: "desktop", randomState: state };
+        }
+
+        (function () {
+            try {
+                var search = new URLSearchParams(window.location.search);
+
+                // Also check for hash/fragment params (OIDC implicit flow returns tokens in fragment)
+                // This handles: #access_token=...&id_token=...&token_type=Bearer&expires_in=3600
+                var hash = window.location.hash ? window.location.hash.substring(1) : "";
+                if (hash) {
+                    var hashParams = new URLSearchParams(hash);
+                    hashParams.forEach(function (v, k) {
+                        // Don't overwrite query params with hash params
+                        if (!search.has(k)) {
+                            search.set(k, v);
+                        }
+                    });
+                }
+
+                // Check for OAuth/OIDC errors
+                var error = search.get("error");
+                var errorDescription = search.get("error_description");
+                if (error) {
+                    var errorEl = document.getElementById("error");
+                    if (errorEl) {
+                        errorEl.textContent = "Authorization failed: " + (errorDescription || error);
+                        errorEl.classList.remove("hidden");
+                    }
+                    return;
+                }
+
+                // Decode platform from state parameter
+                var state = search.get("state") || "";
+                var decoded = decodeStateWithPlatform(state);
+
+                var qs = search.toString();
+                var isIOS = isIOSDevice();
+
+                var primaryTarget: string;
+                var fallbackTarget: string | null = null;
+
+                if (decoded.platform === "desktop") {
+                    primaryTarget = (isIOS ? DESKTOP_UNIVERSAL_LINK : DESKTOP_LEGACY_DEEPLINK) + (qs ? "?" + qs : "");
+                    fallbackTarget = isIOS ? DESKTOP_LEGACY_DEEPLINK + (qs ? "?" + qs : "") : null;
+                } else {
+                    primaryTarget = WEB_PLATFORM_URLS[decoded.platform] + (qs ? "?" + qs : "");
+                }
+
+                // Set the manual link
+                var link = document.getElementById("deeplink");
+                if (link) {
+                    link.setAttribute("href", primaryTarget);
+                    if (decoded.platform !== "desktop") {
+                        link.textContent = "click here to continue";
+                    }
+                }
+
+                var leftPage = false;
+                var markLeftPage = function () { leftPage = true; };
+                window.addEventListener("pagehide", markLeftPage, { once: true });
+                document.addEventListener("visibilitychange", function () {
+                    if (document.visibilityState === "hidden") {
+                        leftPage = true;
+                    }
+                });
+
+                // Redirect to the appropriate destination
+                window.location.replace(primaryTarget);
+
+                // iOS native path first; keep legacy scheme fallback for older app versions.
+                if (fallbackTarget) {
+                    window.setTimeout(function () {
+                        var fallback = fallbackTarget;
+                        if (!fallback) return;
+                        if (leftPage || document.visibilityState === "hidden") return;
+                        if (link) link.setAttribute("href", fallback);
+                        window.location.replace(fallback);
+                    }, 1200);
+                }
+            } catch (e) {
+                var errorEl = document.getElementById("error");
+                if (errorEl) {
+                    errorEl.textContent = "Failed to process callback: " + (e instanceof Error ? e.message : String(e));
+                    errorEl.classList.remove("hidden");
+                }
+            }
+        })();
+    </script>
+</Layout>

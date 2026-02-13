@@ -1,0 +1,47 @@
+---
+import "@tm9657/flow-like-ui/global.css";
+import LegalLayout from "../../../layouts/Legal-Layout.astro";
+import { SbomTable } from "../../../components/thirdparty/sbom-table";
+
+import cargoLicenses from "../../../../../../thirdparty/cargo-licenses.json";
+import npmLicenses from "../../../../../../thirdparty/npm-licenses.json";
+
+const title = "Licenze Terze Parti";
+const description = "Software Bill of Materials (SBOM) - Elenco completo delle librerie open source utilizzate in Flow-Like";
+---
+
+<LegalLayout title={title} description={description} lastUpdated="04 febbraio 2026">
+	<p class="text-lg mb-8">
+		Flow-Like è costruito con molti fantastici progetti open source.
+		Siamo grati agli sviluppatori e ai manutentori di queste librerie che rendono possibile il nostro lavoro.
+		Questa pagina serve come Software Bill of Materials (SBOM), fornendo trasparenza sulle nostre dipendenze.
+	</p>
+
+	<div class="mb-8 p-4 rounded-lg bg-muted/30 border border-border/50">
+		<h3 class="font-semibold mb-2">Informazioni su questo SBOM</h3>
+		<p class="text-sm text-muted-foreground">
+			Questo elenco è generato automaticamente dalle dipendenze del nostro progetto.
+			Include tutti i crate Rust dal nostro workspace Cargo e i pacchetti npm dalle nostre applicazioni web.
+		</p>
+		<div class="flex flex-wrap gap-2 mt-3">
+			<a
+				href="https://github.com/TM9657/flow-like/blob/dev/thirdparty/cargo-licenses.json"
+				target="_blank"
+				rel="noreferrer"
+				class="text-sm px-3 py-1 rounded-full bg-primary/10 text-primary hover:bg-primary/20 transition-colors"
+			>
+				Dipendenze Rust (JSON)
+			</a>
+			<a
+				href="https://github.com/TM9657/flow-like/blob/dev/thirdparty/npm-licenses.json"
+				target="_blank"
+				rel="noreferrer"
+				class="text-sm px-3 py-1 rounded-full bg-primary/10 text-primary hover:bg-primary/20 transition-colors"
+			>
+				Dipendenze NPM (JSON)
+			</a>
+		</div>
+	</div>
+
+	<SbomTable client:load cargoLicenses={cargoLicenses} npmLicenses={npmLicenses} />
+</LegalLayout>

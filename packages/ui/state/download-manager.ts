@@ -1,5 +1,5 @@
 import { type StoreApi, type UseBoundStore, create } from "zustand";
-import { Bit, type Download, type IBit } from "../lib";
+import { Bit, Download, type IBit } from "../lib";
 import type { IBackendState } from "./backend-state";
 
 declare global {
@@ -13,10 +13,15 @@ function getManagerSingleton(): DownloadManager {
 }
 
 type ProgressListener = (dl: Download) => void;
+export type DownloadCompleteListener = (
+	bit: IBit,
+	downloadedBits: IBit[],
+) => void;
 
 export class DownloadManager {
 	private readonly downloads = new Map<string, Download>();
 	private readonly listeners = new Map<string, Set<ProgressListener>>();
+	private readonly completionListeners = new Set<DownloadCompleteListener>();
 	private readonly pending = new Map<string, Download>();
 	private readonly lastEmit = new Map<string, number>();
 	private readonly timers = new Map<string, number>();
@@ -35,6 +40,21 @@ export class DownloadManager {
 			window.addEventListener("beforeunload", this.beforeUnloadBound, {
 				once: true,
 			});
+		}
+	}
+
+	public onComplete(listener: DownloadCompleteListener): () => void {
+		this.completionListeners.add(listener);
+		return () => {
+			this.completionListeners.delete(listener);
+		};
+	}
+
+	private notifyComplete(bit: IBit, downloadedBits: IBit[]) {
+		for (const listener of this.completionListeners) {
+			try {
+				listener(bit, downloadedBits);
+			} catch {}
 		}
 	}
 
@@ -98,6 +118,28 @@ export class DownloadManager {
 	): Promise<IBit[]> {
 		const key = bit.hash;
 
+		// Virtual / hosted bit: no real artifact to download -> immediately resolve.
+		if (!bit.download_link || bit.size === 0) {
+			// Clear any leftover queued state just in case.
+			this.cleanupForKey(key);
+			if (cb) {
+				try {
+					// Use a real Download instance so downstream logic relying on class methods stays intact.
+					const virtualDownload = new Download(bit, [bit]);
+					// Mark as instantly complete (1/1) so progress() => 1.
+					virtualDownload.push({
+						hash: bit.hash,
+						max: 1,
+						downloaded: 1,
+						path: bit.file_name ?? bit.hash,
+					});
+					cb(virtualDownload);
+				} catch {}
+			}
+			// Virtual bits don't need completion notification as they weren't actually downloaded
+			return [bit];
+		}
+
 		const existing = this.inFlight.get(key);
 		if (existing) {
 			const off = cb ? this.onProgress(key, cb) : undefined;
@@ -128,7 +170,10 @@ export class DownloadManager {
 
 		const promise = pack
 			.download(wrappedCb)
-			.then((bits) => bits)
+			.then((bits) => {
+				this.notifyComplete(bit, bits);
+				return bits;
+			})
 			.finally(() => {
 				off?.();
 				this.inFlight.delete(key);
@@ -261,6 +306,7 @@ interface IDownloadManager {
 	setDownloadBackend: (backend: IBackendState) => void;
 	download: (bit: IBit, cb?: (dl: Download) => void) => Promise<IBit[]>;
 	onProgress: (hash: string, cb: (dl: Download) => void) => () => void;
+	onComplete: (cb: DownloadCompleteListener) => () => void;
 	isQueued: (hash: string) => boolean;
 	getLatestPct: (hash: string) => number | undefined;
 }
@@ -279,6 +325,10 @@ const createStore = () =>
 		onProgress: (hash: string, cb: (dl: Download) => void) => {
 			const { manager } = get();
 			return manager.onProgress(hash, cb);
+		},
+		onComplete: (cb: DownloadCompleteListener) => {
+			const { manager } = get();
+			return manager.onComplete(cb);
 		},
 		isQueued: (hash: string) => {
 			const { manager } = get();

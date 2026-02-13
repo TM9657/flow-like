@@ -23,10 +23,10 @@ pub async fn put_http(parsed: Url, store: Arc<dyn ObjectStore>) -> Result<(Path,
     // Buffer the body (switch to multipart upload if you expect huge files)
     let body = resp.bytes().await?;
 
-    // Filename candidates
-    let mut name = filename_from_url_path(&parsed)
+    // Filename candidates (Content-Disposition first — it's explicitly set by the uploader)
+    let mut name = filename_from_content_disposition(&headers)
         .or_else(|| filename_from_query(&parsed))
-        .or_else(|| filename_from_content_disposition(&headers))
+        .or_else(|| filename_from_url_path(&parsed))
         .unwrap_or_else(|| hash_name(&body)); // stable name if none present
 
     // Extension candidates

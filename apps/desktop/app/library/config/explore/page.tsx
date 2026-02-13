@@ -4,6 +4,7 @@ import {
 	Card,
 	CardHeader,
 	CardTitle,
+	IIndexType,
 	Input,
 	ScrollArea,
 	useBackend,
@@ -71,6 +72,19 @@ function TableView({
 	onBack,
 }: Readonly<{ table: string; appId: string; onBack: () => void }>) {
 	const backend = useBackend();
+	const router = useRouter();
+	const pathname = usePathname();
+	const searchParams = useSearchParams();
+
+	// Get page and pageSize from URL params
+	const pageParam = searchParams?.get("page");
+	const pageSizeParam = searchParams?.get("pageSize");
+	const page = pageParam ? Math.max(1, Number.parseInt(pageParam, 10) || 1) : 1;
+	const pageSize = pageSizeParam
+		? Number.parseInt(pageSizeParam, 10) || 25
+		: 25;
+	const offset = (page - 1) * pageSize;
+
 	const schema = useInvoke(backend.dbState.getSchema, backend.dbState, [
 		appId,
 		table,
@@ -79,29 +93,135 @@ function TableView({
 		appId,
 		table,
 	]);
-	const [offset, setOffset] = useState(0);
-	const [limit, setLimit] = useState(25);
 	const list = useInvoke(backend.dbState.listItems, backend.dbState, [
 		appId,
 		table,
 		offset,
-		limit,
+		pageSize,
 	]);
 
+	const updateUrlParams = useCallback(
+		(newPage: number, newPageSize: number) => {
+			const params = new URLSearchParams(searchParams?.toString() ?? "");
+			if (newPage > 1) {
+				params.set("page", String(newPage));
+			} else {
+				params.delete("page");
+			}
+			if (newPageSize !== 25) {
+				params.set("pageSize", String(newPageSize));
+			} else {
+				params.delete("pageSize");
+			}
+			router.replace(`${pathname}?${params.toString()}`, { scroll: false });
+		},
+		[router, pathname, searchParams],
+	);
+
+	const handleRefresh = useCallback(() => {
+		schema.refetch();
+		count.refetch();
+		list.refetch();
+	}, [schema, count, list]);
+
+	const handleOptimize = useCallback(async () => {
+		await backend.dbState.optimize(appId, table);
+		handleRefresh();
+	}, [backend.dbState, appId, table, handleRefresh]);
+
+	const handleUpdateItem = useCallback(
+		async (filter: string, updates: Record<string, unknown>) => {
+			await backend.dbState.updateItem(appId, table, filter, updates);
+			handleRefresh();
+		},
+		[backend.dbState, appId, table, handleRefresh],
+	);
+
+	const handleDropColumns = useCallback(
+		async (columns: string[]) => {
+			await backend.dbState.dropColumns(appId, table, columns);
+			handleRefresh();
+		},
+		[backend.dbState, appId, table, handleRefresh],
+	);
+
+	const handleAddColumn = useCallback(
+		async (name: string, sqlExpression: string) => {
+			await backend.dbState.addColumn(appId, table, {
+				name,
+				sql_expression: sqlExpression,
+			});
+			handleRefresh();
+		},
+		[backend.dbState, appId, table, handleRefresh],
+	);
+
+	const handleAlterColumn = useCallback(
+		async (column: string, nullable: boolean) => {
+			await backend.dbState.alterColumn(appId, table, column, nullable);
+			handleRefresh();
+		},
+		[backend.dbState, appId, table, handleRefresh],
+	);
+
+	const handleGetIndices = useCallback(async () => {
+		return backend.dbState.getIndices(appId, table);
+	}, [backend.dbState, appId, table]);
+
+	const handleDropIndex = useCallback(
+		async (indexName: string) => {
+			await backend.dbState.dropIndex(appId, table, indexName);
+			handleRefresh();
+		},
+		[backend.dbState, appId, table, handleRefresh],
+	);
+
+	const handleBuildIndex = useCallback(
+		async (column: string, indexType: string) => {
+			const typeMap: Record<string, IIndexType> = {
+				fulltext: IIndexType.FullText,
+				btree: IIndexType.BTree,
+				bitmap: IIndexType.Bitmap,
+				labellist: IIndexType.LabelList,
+				auto: IIndexType.Auto,
+			};
+			const enumType = typeMap[indexType.toLowerCase()] ?? IIndexType.Auto;
+			await backend.dbState.buildIndex(appId, table, column, enumType);
+			handleRefresh();
+		},
+		[backend.dbState, appId, table, handleRefresh],
+	);
+
+	const isLoadingData = schema.isLoading || list.isLoading;
+
+	if (isLoadingData && !schema.data) {
+		return <TableViewLoadingState />;
+	}
+
 	return (
-		<div className="flex flex-col h-full flex-grow max-h-full overflow-hidden">
+		<div className="flex flex-col h-full flex-grow max-h-full min-w-0">
 			{schema.data && list.data && (
 				<LanceDBExplorer
 					total={count.data}
 					tableName={table}
 					arrowSchema={schema.data}
 					rows={list.data}
+					initialPage={page}
+					initialPageSize={pageSize}
 					onPageRequest={(args) => {
-						setOffset((args.page - 1) * args.pageSize);
-						setLimit(args.pageSize);
+						updateUrlParams(args.page, args.pageSize);
 					}}
 					loading={list.isLoading}
 					error={list.error?.message}
+					onRefresh={handleRefresh}
+					onOptimize={handleOptimize}
+					onUpdateItem={handleUpdateItem}
+					onDropColumns={handleDropColumns}
+					onAddColumn={handleAddColumn}
+					onAlterColumn={handleAlterColumn}
+					onGetIndices={handleGetIndices}
+					onDropIndex={handleDropIndex}
+					onBuildIndex={handleBuildIndex}
 				>
 					<Button
 						variant={"default"}
@@ -344,42 +464,43 @@ interface TableCardProps {
 }
 
 const TableCard: React.FC<TableCardProps> = ({ appId, table, onSelect }) => {
-    const backend = useBackend();
-    const count = useInvoke(backend.dbState.countItems, backend.dbState, [
-        appId,
-        table.name
-    ]);
+	const backend = useBackend();
+	const count = useInvoke(backend.dbState.countItems, backend.dbState, [
+		appId,
+		table.name,
+	]);
 
-    return (
-        <Card className="group cursor-pointer transition-all duration-200 hover:shadow-lg hover:-translate-y-1 hover:bg-accent/50 border">
-            <button
-                onClick={onSelect}
-                className="w-full h-full p-0 text-left"
-                title={`Open table: ${table.name}`}
-            >
-                <CardHeader className="py-2 px-6">
-                    <div className="flex items-start justify-between gap-4 mb-4">
-                        <div className="flex-shrink-0 rounded-xl bg-primary/10 p-3 transition-colors group-hover:bg-primary/20">
-                            <Columns className="h-5 w-5 text-primary" />
-                        </div>
-                        <ChevronRight className="h-5 w-5 text-muted-foreground transition-all group-hover:translate-x-1 group-hover:text-primary flex-shrink-0 mt-0.5" />
-                    </div>
+	return (
+		<Card className="group cursor-pointer transition-all duration-200 hover:shadow-lg hover:-translate-y-1 hover:bg-accent/50 border">
+			<button
+				onClick={onSelect}
+				className="w-full h-full p-0 text-left"
+				title={`Open table: ${table.name}`}
+			>
+				<CardHeader className="py-2 px-6">
+					<div className="flex items-start justify-between gap-4 mb-4">
+						<div className="flex-shrink-0 rounded-xl bg-primary/10 p-3 transition-colors group-hover:bg-primary/20">
+							<Columns className="h-5 w-5 text-primary" />
+						</div>
+						<ChevronRight className="h-5 w-5 text-muted-foreground transition-all group-hover:translate-x-1 group-hover:text-primary flex-shrink-0 mt-0.5" />
+					</div>
 
-                    <div className="space-y-2">
-                        <CardTitle className="text-base font-semibold leading-tight">
-                            {table.name}
-                        </CardTitle>
-                        <p className="text-sm text-muted-foreground">
-                            {count.data !== undefined
-                                ? `${count.data.toLocaleString()} items`
-                                : "Loading..."
-                            }
-                        </p>
-                    </div>
-                </CardHeader>
-            </button>
-        </Card>
-    );
+					<div className="space-y-2">
+						<CardTitle className="text-base font-semibold leading-tight">
+							{table.name}
+						</CardTitle>
+						<p className="text-sm text-muted-foreground">
+							{count.error
+								? "Error loading count"
+								: count.data !== undefined
+									? `${count.data.toLocaleString()} items`
+									: "Loading..."}
+						</p>
+					</div>
+				</CardHeader>
+			</button>
+		</Card>
+	);
 };
 
 const LoadingState: React.FC = () => (
@@ -396,6 +517,23 @@ const LoadingState: React.FC = () => (
 				<Card key={i} className="h-20 animate-pulse bg-muted/50" />
 			))}
 		</div>
+	</div>
+);
+
+const TableViewLoadingState: React.FC = () => (
+	<div className="flex flex-col h-full flex-grow max-h-full min-w-0 p-4 gap-4">
+		<div className="flex items-center gap-4">
+			<div className="h-8 w-8 bg-muted animate-pulse rounded" />
+			<div className="flex-1">
+				<div className="h-6 w-48 bg-muted animate-pulse rounded mb-2" />
+				<div className="h-4 w-32 bg-muted animate-pulse rounded" />
+			</div>
+		</div>
+		<div className="flex items-center gap-2">
+			<div className="h-9 w-24 bg-muted animate-pulse rounded" />
+			<div className="h-9 flex-1 bg-muted animate-pulse rounded" />
+		</div>
+		<div className="flex-1 bg-muted/30 animate-pulse rounded border" />
 	</div>
 );
 

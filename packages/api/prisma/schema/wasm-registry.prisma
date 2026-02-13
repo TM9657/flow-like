@@ -1,0 +1,138 @@
+// WASM Package Registry - stores custom node packages
+// Custom nodes are public and usable by anyone after admin approval
+
+enum WasmPackageStatus {
+  PENDING_REVIEW // Awaiting admin approval
+  ACTIVE // Approved and usable
+  REJECTED // Rejected by admin
+  DEPRECATED // Still usable but shows warning
+  DISABLED // Not usable
+}
+
+model WasmPackage {
+  id String @id
+
+  // Manifest fields
+  name        String
+  description String
+  version     String
+  authors     WasmPackageAuthor[]
+  license     String?
+  homepage    String?
+  repository  String? // Link to GitHub/GitLab repo
+  keywords    String[]
+
+  // Registry metadata
+  status        WasmPackageStatus @default(PENDING_REVIEW)
+  verified      Boolean           @default(false)
+  downloadCount BigInt            @default(0)
+
+  // Storage references (CDN paths)
+  wasmPath String // CDN path to WASM binary
+  wasmHash String // blake3 hash
+  wasmSize BigInt
+
+  // Node definitions (stored as JSON for flexibility)
+  nodes Json // Array of node definitions from manifest
+
+  // Permissions declared by the package
+  permissions Json // Array of permission strings
+
+  // Timestamps
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  publishedAt DateTime? // Only set when approved
+
+  // Relations
+  versions WasmPackageVersion[]
+  reviews  WasmPackageReview[]
+
+  @@unique([id, version])
+  @@index([name])
+  @@index([status])
+  @@index([verified])
+  @@index([downloadCount])
+  @@index([createdAt])
+  @@index([keywords])
+}
+
+model WasmPackageVersion {
+  id String @id @default(cuid())
+
+  package   WasmPackage @relation(fields: [packageId], references: [id], onDelete: Cascade)
+  packageId String
+
+  version  String
+  wasmPath String
+  wasmHash String
+  wasmSize BigInt
+
+  releaseNotes       String?
+  minFlowLikeVersion String?
+  yanked             Boolean           @default(false)
+  status             WasmPackageStatus @default(PENDING_REVIEW) // Each version needs approval
+
+  publishedAt DateTime  @default(now())
+  approvedAt  DateTime?
+
+  @@unique([packageId, version])
+  @@index([packageId])
+  @@index([version])
+  @@index([publishedAt])
+  @@index([status])
+}
+
+// Admin review records for package submissions
+model WasmPackageReview {
+  id String @id @default(cuid())
+
+  package   WasmPackage @relation(fields: [packageId], references: [id], onDelete: Cascade)
+  packageId String
+
+  reviewer     User             @relation(fields: [reviewerId], references: [id], onDelete: Cascade)
+  reviewerId   String
+  action       WasmReviewAction
+  comment      String? // Optional feedback to submitter
+  internalNote String? // Internal notes not shown to submitter
+
+  // Review decision details
+  securityScore      Int? // 1-5 score for security assessment
+  codeQualityScore   Int? // 1-5 score for code quality
+  documentationScore Int? // 1-5 score for documentation
+
+  createdAt DateTime @default(now())
+
+  @@index([packageId])
+  @@index([reviewerId])
+  @@index([action])
+  @@index([createdAt])
+}
+
+enum WasmReviewAction {
+  SUBMITTED // Initial submission
+  APPROVED // Admin approved
+  REJECTED // Admin rejected
+  REQUESTED_CHANGES // Admin requested changes
+  COMMENTED // Admin added a comment
+  FLAGGED // Flagged for further review
+}
+
+// Junction table connecting packages to their authors (users)
+model WasmPackageAuthor {
+  id String @id @default(cuid())
+
+  package   WasmPackage @relation(fields: [packageId], references: [id], onDelete: Cascade)
+  packageId String
+
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId String
+
+  // Author role/contribution type
+  role String? // e.g., "maintainer", "contributor", "creator"
+
+  addedAt DateTime @default(now())
+
+  @@unique([packageId, userId])
+  @@index([packageId])
+  @@index([userId])
+}

@@ -1,11 +1,12 @@
 {
-	"name": "flow-like-backend",
+	"name": "flow-like-backend-api",
 	"private": true,
 	"version": "0.0.2",
 	"type": "module",
 	"scripts": {
-		"dev": "cargo watch -x run",
-		"dev:nightly": "RUSTFLAGS='-Z threads=8' cargo +nightly watch -x run",
+		"start_services": "cd .. && docker compose up -d",
+		"dev": "bun run start_services && cargo watch -x run",
+		"dev:nightly": "bun run start_services && RUSTFLAGS='-Z threads=8' cargo +nightly watch -x run",
 		"dev:zero-downtime": "systemfd --no-pid -s http::3000 -- cargo watch -x run",
 		"build": "bun run --cwd ./apps/desktop build",
 		"build:docker": "cd ../.. && docker build -f apps/backend/docker/api/Dockerfile -t flow-like-backend ."

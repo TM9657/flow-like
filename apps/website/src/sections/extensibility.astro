@@ -7,13 +7,26 @@ import {
   LuPlug2,
   LuArrowRight,
 } from "react-icons/lu";
+import type { Lang, TranslationKey } from "../i18n";
+import { translations, defaultLang } from "../i18n";
+
+interface Props {
+  lang?: Lang;
+}
+
+const { lang = defaultLang } = Astro.props;
+const t = (key: TranslationKey): string => {
+  const langTranslations = translations[lang] as Record<string, string>;
+  const enTranslations = translations.en as Record<string, string>;
+  return langTranslations?.[key] ?? enTranslations[key] ?? key;
+};
 ---
 
 <section
   id="extensible"
   data-c1="hsl(200 90% 60% / .10)"
   data-c2="hsl(150 80% 60% / .10)"
-  class="relative mx-auto max-w-7xl px-4 py-28 lg:px-8 mb-6"
+  class="relative mx-auto max-w-7xl px-4 py-28 lg:px-8 mb-6 overflow-hidden md:overflow-visible"
 >
   <!-- bg decor -->
   <div aria-hidden="true" class="pointer-events-none absolute inset-0">
@@ -35,6 +48,9 @@ import {
       >
       </div>
     </div>
+    <!-- Animated glow orbs -->
+    <div class="ext-glow ext-glow-1"></div>
+    <div class="ext-glow ext-glow-2"></div>
   </div>
 
   <div
@@ -44,22 +60,23 @@ import {
     <div class="space-y-8">
       <div>
         <div
-          class="inline-flex items-center gap-2 rounded-full border border-secondary/20 bg-secondary/10 backdrop-blur px-4 py-2 text-sm font-medium text-secondary mb-6"
+          class="inline-flex items-center gap-2.5 rounded-full border border-secondary/30 bg-secondary/10 backdrop-blur-xl px-5 py-2.5 text-sm font-semibold text-secondary mb-8 shadow-[0_0_30px_-8px_hsl(var(--secondary)/.4)] hover:shadow-[0_0_40px_-5px_hsl(var(--secondary)/.5)] transition-all duration-500 group"
         >
-          <span class="w-2 h-2 bg-secondary rounded-full animate-pulse"></span>
-          <span>Reusable building blocks</span>
+          <div class="relative">
+            <span class="absolute inline-flex h-full w-full rounded-full bg-secondary opacity-60 animate-ping"></span>
+            <span class="relative flex h-2 w-2 rounded-full bg-secondary"></span>
+          </div>
+          <span>{t("extensibility.tagline")}</span>
         </div>
 
         <h2
           class="text-4xl font-extrabold sm:text-5xl bg-gradient-to-r from-foreground via-secondary to-tertiary bg-clip-text text-transparent leading-tight"
         >
-          Turn any system into a node you can trust
+          {t("extensibility.headline")}
         </h2>
 
         <p class="mt-6 text-lg text-muted-foreground">
-          Connect APIs, databases, devices, or spreadsheets without guesswork.
-          Each node has a clear interface, tests, and versions — so what worked
-          yesterday works tomorrow, for you and your team.
+          {t("extensibility.description")}
         </p>
 
         <!-- connector categories -->
@@ -203,3 +220,41 @@ import {
     </div>
   </div>
 </section>
+
+<style>
+  /* Background glows - BIGGER and more dramatic */
+  .ext-glow {
+    position: absolute;
+    border-radius: 50%;
+    filter: blur(120px);
+    opacity: 0.4;
+    animation: ext-float 12s ease-in-out infinite;
+  }
+
+  .ext-glow-1 {
+    width: 600px;
+    height: 600px;
+    background: radial-gradient(circle, hsl(200 90% 60% / 0.5) 0%, transparent 60%);
+    top: 10%;
+    left: 5%;
+  }
+
+  .ext-glow-2 {
+    width: 550px;
+    height: 550px;
+    background: radial-gradient(circle, hsl(150 80% 60% / 0.4) 0%, transparent 60%);
+    bottom: 15%;
+    right: 0%;
+    animation-delay: 6s;
+  }
+
+  @keyframes ext-float {
+    0%, 100% { transform: translate(0, 0) scale(1); }
+    33% { transform: translate(35px, -25px) scale(1.12); }
+    66% { transform: translate(-20px, 18px) scale(0.9); }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .ext-glow { animation: none; }
+  }
+</style>

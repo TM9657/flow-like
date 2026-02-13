@@ -1,12 +1,79 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" data-desktop-app="true">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, viewport-fit=cover, interactive-widget=resizes-content" />
     <title>Flow-Like</title>
+    <!-- Early safe-area probe: runs before React to prevent first-render shift on mobile -->
+    <script>
+      (function(){
+        if(typeof navigator==='undefined')return;
+        var ua=navigator.userAgent||'';
+        var isIOS=/iPad|iPhone|iPod/.test(ua)||(navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1);
+        var isAndroid=/Android/i.test(ua);
+        if(!isIOS&&!isAndroid)return;
+        var r=document.documentElement;
+        // Android: try the synchronous native bridge first (no race condition)
+        if(isAndroid&&typeof FlowLikeInsets!=='undefined'){
+          try{
+            var tp=FlowLikeInsets.getTopPx();
+            var bp=FlowLikeInsets.getBottomPx();
+            if(tp>0||bp>0){
+              var dpr=window.devicePixelRatio||1;
+              var tt=Math.ceil(tp/dpr);
+              var bb=Math.ceil(bp/dpr);
+              r.style.setProperty('--fl-native-safe-top',tt+'px');
+              r.style.setProperty('--fl-native-safe-bottom',bb+'px');
+              window.__FL_NATIVE_SAFE_TOP=Math.max(window.__FL_NATIVE_SAFE_TOP||0,tt);
+              window.__FL_NATIVE_SAFE_BOTTOM=Math.max(window.__FL_NATIVE_SAFE_BOTTOM||0,bb);
+              return;
+            }
+          }catch(e){}
+        }
+        function probe(){
+          if(!document.body)return false;
+          // Android: re-check the native bridge on each poll tick
+          if(isAndroid&&typeof FlowLikeInsets!=='undefined'){
+            try{
+              var tp2=FlowLikeInsets.getTopPx();
+              var bp2=FlowLikeInsets.getBottomPx();
+              if(tp2>0||bp2>0){
+                var dpr2=window.devicePixelRatio||1;
+                var t2=Math.ceil(tp2/dpr2);
+                var b2=Math.ceil(bp2/dpr2);
+                r.style.setProperty('--fl-native-safe-top',t2+'px');
+                r.style.setProperty('--fl-native-safe-bottom',b2+'px');
+                window.__FL_NATIVE_SAFE_TOP=Math.max(window.__FL_NATIVE_SAFE_TOP||0,t2);
+                window.__FL_NATIVE_SAFE_BOTTOM=Math.max(window.__FL_NATIVE_SAFE_BOTTOM||0,b2);
+                return true;
+              }
+            }catch(e){}
+          }
+          var d=document.createElement('div');
+          d.style.cssText='position:fixed;left:-9999px;top:0;width:1px;height:1px;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);visibility:hidden;pointer-events:none';
+          document.body.appendChild(d);
+          var cs=getComputedStyle(d);
+          var t=Math.round(parseFloat(cs.paddingTop)||0);
+          var b=Math.round(parseFloat(cs.paddingBottom)||0);
+          d.remove();
+          if(t>0||b>0){
+            r.style.setProperty('--fl-native-safe-top',t+'px');
+            r.style.setProperty('--fl-native-safe-bottom',b+'px');
+            window.__FL_NATIVE_SAFE_TOP=Math.max(window.__FL_NATIVE_SAFE_TOP||0,t);
+            window.__FL_NATIVE_SAFE_BOTTOM=Math.max(window.__FL_NATIVE_SAFE_BOTTOM||0,b);
+            return true;
+          }
+          return false;
+        }
+        if(document.body){probe();}
+        else{document.addEventListener('DOMContentLoaded',function(){
+          if(!probe()){var n=0;(function p(){if(probe()||++n>30)return;setTimeout(p,60)})();}
+        });}
+      })();
+    </script>
   </head>
 
-  <body>
+  <body data-desktop-app>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>

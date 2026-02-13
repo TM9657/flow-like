@@ -7,6 +7,8 @@ import {
 	CardDescription,
 	CardHeader,
 	CardTitle,
+	Dialog,
+	DialogContent,
 	type IApp,
 	IAppCategory,
 	IAppStatus,
@@ -19,8 +21,10 @@ import {
 	SelectItem,
 	SelectTrigger,
 	SelectValue,
+	TextEditor,
 	Textarea,
 	VerificationDialog,
+	sanitizeImageUrl,
 	toastError,
 	useBackend,
 	useInvalidateInvoke,
@@ -42,7 +46,7 @@ import {
 	XIcon,
 } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { useTauriInvoke } from "../../../components/useInvoke";
 import { VisibilityStatusSwitcher } from "./visibility-status-switcher";
@@ -80,6 +84,29 @@ export default function Id() {
 		[],
 		true,
 	);
+	// Add state for fullscreen long description editor
+	const [isLongDescEditorOpen, setLongDescEditorOpen] = useState(false);
+	const [longDescInit, setLongDescInit] = useState<string>("");
+	const [longDescDraft, setLongDescDraft] = useState<string>("");
+	const editorAreaRef = useRef<HTMLDivElement | null>(null);
+
+	const openLongDescEditor = useCallback(() => {
+		if (!localMetadata) return;
+		const initial = localMetadata.long_description || "";
+		setLongDescInit(initial);
+		setLongDescDraft(initial);
+		setLongDescEditorOpen(true);
+	}, [localMetadata]);
+
+	// Lock document scroll when fullscreen editor is open
+	useEffect(() => {
+		if (!isLongDescEditorOpen) return;
+		const prev = document.body.style.overflow;
+		document.body.style.overflow = "hidden";
+		return () => {
+			document.body.style.overflow = prev;
+		};
+	}, [isLongDescEditorOpen]);
 
 	useEffect(() => {
 		if (!metadata.data) return;
@@ -364,7 +391,7 @@ export default function Id() {
 	}
 
 	return (
-		<div className="w-full max-w-6xl mx-auto p-6 pt-0 space-y-6 flex flex-col flex-grow max-h-full overflow-auto">
+		<div className="w-full max-w-6xl mx-auto p-2 md:p-6 pt-0 space-y-6 flex flex-col flex-grow max-h-full min-h-0 overflow-auto md:overflow-visible">
 			{/* Header with Save Button - Made Sticky */}
 			{hasChanges && canEdit && (
 				<div className="sticky top-0 z-10 mb-6">
@@ -463,23 +490,31 @@ export default function Id() {
 							}}
 						/>
 					</div>
+					{/* Long Description with fullscreen markdown editor trigger */}
 					<div className="space-y-2">
-						<Label htmlFor="long-description">Long Description</Label>
-						<Textarea
-							id="long-description"
-							placeholder="Detailed description of your application, its features, and capabilities..."
-							rows={6}
-							value={localMetadata?.long_description ?? ""}
-							disabled={!canEdit}
-							onChange={(e) => {
-								if (localMetadata && canEdit) {
-									setLocalMetadata({
-										...localMetadata,
-										long_description: e.target.value,
-									});
+						<div className="flex items-center justify-between">
+							<Label htmlFor="long-description">Long Description</Label>
+							{canEdit && (
+								<Button
+									variant="outline"
+									size="sm"
+									onClick={openLongDescEditor}
+								>
+									Open Markdown Editor
+								</Button>
+							)}
+						</div>
+						{/* Preview-only renderer for the long description */}
+						<div id="long-description" className="rounded-md">
+							<TextEditor
+								isMarkdown
+								editable={false}
+								initialContent={
+									localMetadata?.long_description ||
+									"*No detailed description available.*"
 								}
-							}}
-						/>
+							/>
+						</div>
 					</div>
 				</CardContent>
 			</Card>
@@ -526,9 +561,10 @@ export default function Id() {
 								{/* Current thumbnail or placeholder */}
 								<div className="absolute inset-0">
 									<img
-										src={
-											localMetadata?.thumbnail ?? "/placeholder-thumbnail.webp"
-										}
+										src={sanitizeImageUrl(
+											localMetadata?.thumbnail ?? undefined,
+											"/placeholder-thumbnail.webp",
+										)}
 										alt="App thumbnail"
 										className="w-full h-full object-cover"
 									/>
@@ -580,7 +616,10 @@ export default function Id() {
 									{/* Current icon or placeholder */}
 									<div className="absolute inset-0">
 										<img
-											src={localMetadata?.icon ?? "/app-logo.webp"}
+											src={sanitizeImageUrl(
+												localMetadata?.icon ?? undefined,
+												"/app-logo.webp",
+											)}
 											alt="App icon"
 											className="w-full h-full object-cover rounded-lg"
 										/>
@@ -1016,6 +1055,72 @@ export default function Id() {
 					</CardContent>
 				</Card>
 			)}
+
+			{/* Fullscreen Markdown Editor Overlay */}
+			<Dialog open={isLongDescEditorOpen} onOpenChange={setLongDescEditorOpen}>
+				<DialogContent
+					className="w-dvw min-w-dvw max-w-dvw min-h-[100svh] max-h-[100svh] flex flex-col"
+					onEscapeKeyDown={(e) => {
+						const target = e.target as Node | null;
+						if (target && editorAreaRef.current?.contains(target)) {
+							e.preventDefault();
+						}
+					}}
+				>
+					<div className="flex items-center justify-between px-6 py-2 h-20 border-b bg-background">
+						<div>
+							<div className="text-lg font-semibold">Edit Long Description</div>
+							<div className="text-sm text-muted-foreground">
+								Markdown supported
+							</div>
+						</div>
+						<div className="flex gap-2">
+							<Button
+								variant="outline"
+								onClick={() => setLongDescEditorOpen(false)}
+							>
+								Cancel
+							</Button>
+							<Button
+								onClick={() => {
+									if (localMetadata) {
+										setLocalMetadata({
+											...localMetadata,
+											long_description: longDescDraft,
+										});
+									}
+									setLongDescEditorOpen(false);
+								}}
+							>
+								Done
+							</Button>
+						</div>
+					</div>
+					<div className="flex-grow overflow-hidden relative">
+						<div className="h-full overflow-auto p-6">
+							<div
+								ref={editorAreaRef}
+								onKeyDown={(e) => {
+									if (e.key === "Escape") {
+										e.stopPropagation();
+									}
+								}}
+							>
+								<TextEditor
+									editable={canEdit}
+									isMarkdown
+									initialContent={
+										longDescInit || "*No detailed description available.*"
+									}
+									onChange={(content) => {
+										setLongDescDraft(content);
+									}}
+								/>
+							</div>
+						</div>
+					</div>
+				</DialogContent>
+			</Dialog>
 		</div>
 	);
 }

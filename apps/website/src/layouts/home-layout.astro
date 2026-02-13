@@ -1,0 +1,292 @@
+---
+import "@tm9657/flow-like-ui/global.css";
+import "../styles/website-base.css";
+import { Header } from "../components/header";
+
+import AmbientGlow from "../components/ambient-glow.astro";
+import SoftSeam from "../components/soft-seam.astro";
+import LanguageSwitcher from "../components/language-switcher.astro";
+
+import DesignWorkflowsVisually from "../sections/design-workflows-visually.astro";
+import ZeroToProd from "../sections/zero-to-prod.astro";
+import FAQ from "../sections/faq.astro";
+import Portability from "../sections/portability.astro";
+import Performance from "../sections/performance.astro";
+import Extensibility from "../sections/extensibility.astro";
+import Theming from "../sections/theming.astro";
+import ProcessCombination from "../sections/process-combination.astro";
+import Storage from "../sections/storage.astro";
+import ProblemSolution from "../sections/problem-solution.astro";
+import Reading from "../sections/reading.astro";
+import FlowPilot from "../sections/flowpilot.astro";
+import Integrations from "../sections/integrations.astro";
+import UseCases from "../sections/use-cases.astro";
+import CtaAutomate from "../sections/cta-automate.astro";
+import TwentyFourHourBanner from "../sections/24-hour-solution-banner.astro";
+import EnterpriseStack from "../sections/enterprise-stack.astro";
+import EnterpriseServices from "../sections/enterprise-services.astro";
+import TargetAudience from "../sections/target-audience.astro";
+import { BlogFooter } from "../components/blog-footer";
+
+import type { Lang, TranslationKey } from "../i18n";
+import { translations, defaultLang, languages } from "../i18n";
+
+interface Props {
+  lang?: Lang;
+}
+
+const { lang = defaultLang } = Astro.props;
+const t = (key: TranslationKey): string => {
+  const langTranslations = translations[lang] as Record<string, string>;
+  const enTranslations = translations.en as Record<string, string>;
+  return langTranslations?.[key] ?? enTranslations[key] ?? key;
+};
+
+// --- SEO constants ---
+const site = "https://flow-like.com";
+const title = t("meta.title");
+const description = t("meta.description");
+const keywords = [
+  "enterprise automation","workflow automation","on-premise automation","auditable workflows",
+  "visual programming","typed workflows","Rust","compliance","governance","secure automation"
+].join(", ");
+const appName = "Flow-Like";
+const orgName = "TM9657 GmbH";
+const canonicalUrl = lang === defaultLang ? site : `${site}/${lang}`;
+const ogImage = `${site}/og.png`;
+const ogImageAlt = "Flow-Like — Enterprise Automation You Can Trust";
+const twitterCard = "summary_large_image";
+
+const github = "https://github.com/TM9657/flow-like";
+const docs = "https://docs.flow-like.com";
+const download = "https://github.com/TM9657/flow-like/releases";
+
+const langCode = lang === "de" ? "de_DE" : lang === "es" ? "es_ES" : lang === "fr" ? "fr_FR" : "en_US";
+
+// --- JSON-LD blocks ---
+const ldOrganization = {
+  "@context": "https://schema.org",
+  "@type": "Organization",
+  name: orgName,
+  url: site,
+  logo: `${site}/favicon.svg`,
+  sameAs: [github, docs]
+};
+
+const ldSoftware = {
+  "@context": "https://schema.org",
+  "@type": "SoftwareApplication",
+  name: appName,
+  applicationCategory: "DeveloperApplication",
+  applicationSubCategory: "Workflow automation",
+  operatingSystem: "macOS, Windows, Linux",
+  url: site,
+  downloadUrl: download,
+  image: ogImage,
+  description,
+  license: `${github}/blob/main/LICENSE`
+};
+
+const ldWebSite = {
+  "@context": "https://schema.org",
+  "@type": "WebSite",
+  name: appName,
+  url: site,
+  publisher: {
+    "@type": "Organization",
+    name: orgName
+  },
+  inLanguage: lang
+};
+
+const ldWebPage = {
+  "@context": "https://schema.org",
+  "@type": "WebPage",
+  url: canonicalUrl,
+  name: title,
+  description,
+  isPartOf: {
+    "@type": "WebSite",
+    url: site,
+    name: appName
+  },
+  inLanguage: lang
+};
+
+// Alternate language links
+const alternateLinks = Object.keys(languages).map(l => ({
+  hreflang: l,
+  href: l === defaultLang ? site : `${site}/${l}`
+}));
+---
+
+<!doctype html>
+<html lang={lang} class="scroll-smooth">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+
+    <title>{title}</title>
+    <meta name="description" content={description} />
+    <meta name="keywords" content={keywords} />
+    <meta name="application-name" content={appName} />
+    <meta name="apple-mobile-web-app-title" content={appName} />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <meta name="color-scheme" content="light dark" />
+    <meta name="format-detection" content="telephone=no, address=no, email=no, url=no" />
+    <meta name="referrer" content="strict-origin-when-cross-origin" />
+    <meta name="robots" content="index,follow,max-image-preview:large,max-snippet:-1,max-video-preview:-1" />
+    <meta name="generator" content={Astro.generator} />
+
+    <!-- Canonical & alternates -->
+    <link rel="canonical" href={canonicalUrl} />
+    {alternateLinks.map(alt => (
+      <link rel="alternate" hreflang={alt.hreflang} href={alt.href} />
+    ))}
+    <link rel="alternate" hreflang="x-default" href={site} />
+    <link rel="alternate" type="application/rss+xml" title="Flow-Like Blog" href="/rss.xml" />
+
+    <!-- Favicons / PWA -->
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png" />
+    <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png" />
+    <link rel="icon" href="/favicon.ico" sizes="any" />
+    <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
+    <link rel="manifest" href="/site.webmanifest" />
+    <link rel="mask-icon" href="/safari-pinned-tab.svg" color="#0ea5e9" />
+    <meta name="msapplication-TileColor" content="#0ea5e9" />
+    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#0b0f19" media="(prefers-color-scheme: dark)" />
+
+    <!-- Open Graph -->
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content={appName} />
+    <meta property="og:title" content={title} />
+    <meta property="og:description" content={description} />
+    <meta property="og:url" content={canonicalUrl} />
+    <meta property="og:image" content={ogImage} />
+    <meta property="og:image:alt" content={ogImageAlt} />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:locale" content={langCode} />
+
+    <!-- Twitter -->
+    <meta name="twitter:card" content={twitterCard} />
+    <meta name="twitter:title" content={title} />
+    <meta name="twitter:description" content={description} />
+    <meta name="twitter:image" content={ogImage} />
+    <meta name="twitter:image:alt" content={ogImageAlt} />
+
+    <!-- Resource Hints -->
+    <link rel="preconnect" href="https://docs.flow-like.com" crossorigin />
+    <link rel="preconnect" href="https://github.com" crossorigin />
+
+    <!-- Structured Data (inline, non-blocking) -->
+    <script type="application/ld+json" is:inline set:html={JSON.stringify(ldOrganization)} />
+    <script type="application/ld+json" is:inline set:html={JSON.stringify(ldSoftware)} />
+    <script type="application/ld+json" is:inline set:html={JSON.stringify(ldWebSite)} />
+    <script type="application/ld+json" is:inline set:html={JSON.stringify(ldWebPage)} />
+
+    <!-- Performance helpers -->
+    <style is:global>
+     body {
+        background-image: radial-gradient(
+          color-mix(in srgb, var(--muted) 20%, transparent) 1px,
+          transparent 1px
+        ) !important;
+        background-size: 16px 16px !important;
+        background-attachment: scroll !important;
+      }
+      @media (hover: none) and (pointer: coarse) {
+        [data-overlay], [data-visual], .overlay, .backdrop {
+          pointer-events: none;
+          touch-action: pan-y;
+        }
+        * { scroll-snap-type: none !important; }
+        html { scroll-behavior: auto !important; }
+      }
+    </style>
+  </head>
+
+  <body
+    class="bg-background text-foreground antialiased selection:bg-primary/30 selection:text-primary-foreground
+            bg-[radial-gradient(var(--muted)_1px,transparent_1px)] [background-size:16px_16px]"
+  >
+    <main id="content" class="w-full max-w-[100vw] overflow-x-clip pt-16">
+      <AmbientGlow />
+      <Header client:load/>
+
+      <!-- Language-specific hero -->
+      <slot name="hero" />
+
+      <!-- Enterprise Stack - what you get -->
+      <slot name="stack">
+        <EnterpriseStack />
+      </slot>
+
+      <!-- CTA -->
+      <slot name="cta">
+        <CtaAutomate />
+      </slot>
+
+      <!-- Problem/Solution - the hidden risk & flow-like difference -->
+      <slot name="problem">
+        <ProblemSolution />
+      </slot>
+
+      <!-- Use Cases -->
+      <UseCases />
+
+      <!-- Visual builder showcase -->
+      <DesignWorkflowsVisually />
+
+      <!-- Target Audience -->
+      <slot name="audience">
+        <TargetAudience />
+      </slot>
+
+      <!-- Enterprise Services -->
+      <slot name="services">
+        <EnterpriseServices />
+      </slot>
+
+      <!-- 24 Hour Solution Banner -->
+      <TwentyFourHourBanner />
+
+      <!-- Core features: Portability -->
+      <Portability />
+
+      <SoftSeam />
+      <Performance />
+
+      <!-- FlowPilot - prominent AI feature -->
+      <FlowPilot />
+
+      <Extensibility />
+
+      <!-- Zero to Prod -->
+      <ZeroToProd />
+
+      <!-- Dark section: Integrations -->
+      <Integrations />
+
+      <SoftSeam />
+      <Theming />
+
+      <SoftSeam />
+      <ProcessCombination />
+
+      <SoftSeam />
+      <Storage />
+
+      <Reading />
+
+      <slot name="faq">
+        <FAQ />
+      </slot>
+    </main>
+
+    <BlogFooter />
+  </body>
+</html>

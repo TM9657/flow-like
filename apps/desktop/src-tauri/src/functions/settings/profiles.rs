@@ -12,7 +12,8 @@ use flow_like::{
 use flow_like_types::tokio::task::JoinHandle;
 use futures::future::join_all;
 use serde::Deserialize;
-use std::{collections::HashMap, path::PathBuf, sync::Arc};
+use std::path::PathBuf;
+use std::{collections::HashMap, sync::Arc};
 use tauri::{AppHandle, Url};
 use tauri_plugin_dialog::DialogExt;
 use tracing::instrument;
@@ -34,10 +35,38 @@ fn presign_icon(icon: &str) -> Result<String, TauriFunctionError> {
     Ok(url.to_string())
 }
 
+fn decode_asset_proxy_path(path: &str) -> Option<String> {
+    let url = Url::parse(path).ok()?;
+    let host = url.host_str()?;
+    let is_asset_proxy = (url.scheme() == "asset" && host == "localhost")
+        || ((url.scheme() == "http" || url.scheme() == "https") && host == "asset.localhost");
+    if !is_asset_proxy {
+        return None;
+    }
+
+    let encoded_path = url.path().trim_start_matches('/');
+    if encoded_path.is_empty() {
+        return None;
+    }
+
+    let decoded_path = urlencoding::decode(encoded_path).ok()?.into_owned();
+    if decoded_path.is_empty() {
+        return None;
+    }
+
+    Some(decoded_path)
+}
+
+fn now_iso() -> String {
+    chrono::Utc::now().to_rfc3339()
+}
+
 #[instrument(skip_all)]
 #[tauri::command(async)]
-pub async fn get_profiles(app_handle: AppHandle) -> HashMap<String, UserProfile> {
-    let settings = TauriSettingsState::construct(&app_handle).await.unwrap();
+pub async fn get_profiles(
+    app_handle: AppHandle,
+) -> Result<HashMap<String, UserProfile>, TauriFunctionError> {
+    let settings = TauriSettingsState::construct(&app_handle).await?;
 
     let mut profiles = {
         let settings_guard = settings.lock().await;
@@ -45,16 +74,34 @@ pub async fn get_profiles(app_handle: AppHandle) -> HashMap<String, UserProfile>
     };
 
     for profile in profiles.values_mut() {
-        if let Some(icon) = profile.hub_profile.icon.clone() {
-            if !icon.starts_with("http://") && !icon.starts_with("https://") {
-                if let Ok(icon) = presign_icon(&icon) {
-                    profile.hub_profile.icon = Some(icon);
-                }
-            }
+        if let Some(icon) = profile.hub_profile.icon.clone()
+            && !icon.starts_with("http://")
+            && !icon.starts_with("https://")
+            && let Ok(icon) = presign_icon(&icon)
+        {
+            profile.hub_profile.icon = Some(icon);
         }
     }
 
-    profiles
+    Ok(profiles)
+}
+
+#[instrument(skip_all)]
+#[tauri::command(async)]
+pub async fn get_profiles_raw(
+    app_handle: AppHandle,
+) -> Result<HashMap<String, UserProfile>, TauriFunctionError> {
+    let settings = TauriSettingsState::construct(&app_handle).await?;
+    let profiles = {
+        let settings_guard = settings.lock().await;
+        settings_guard.profiles.clone()
+    };
+    println!(
+        "[ProfileSync] get_profiles_raw: returning {} profiles: {:?}",
+        profiles.len(),
+        profiles.keys().collect::<Vec<_>>()
+    );
+    Ok(profiles)
 }
 
 #[instrument(skip_all)]
@@ -138,19 +185,17 @@ pub async fn get_current_profile(app_handle: AppHandle) -> Result<UserProfile, T
         .clone();
 
     state
-        .lock()
-        .await
         .model_factory
         .lock()
         .await
         .set_execution_settings(profile.execution_settings.clone());
 
-    if let Some(icon) = profile.hub_profile.icon.clone() {
-        if !icon.starts_with("http://") && !icon.starts_with("https://") {
-            if let Ok(icon) = presign_icon(&icon) {
-                profile.hub_profile.icon = Some(icon);
-            }
-        }
+    if let Some(icon) = profile.hub_profile.icon.clone()
+        && !icon.starts_with("http://")
+        && !icon.starts_with("https://")
+        && let Ok(icon) = presign_icon(&icon)
+    {
+        profile.hub_profile.icon = Some(icon);
     }
 
     Ok(profile)
@@ -193,6 +238,15 @@ pub async fn get_bits_in_current_profile(
 
 #[instrument(skip_all)]
 #[tauri::command(async)]
+pub async fn get_current_profile_id(app_handle: AppHandle) -> Result<String, TauriFunctionError> {
+    let settings = TauriSettingsState::construct(&app_handle).await?;
+    let settings = settings.lock().await;
+    let current_profile = settings.get_current_profile()?;
+    Ok(current_profile.hub_profile.id)
+}
+
+#[instrument(skip_all)]
+#[tauri::command(async)]
 pub async fn set_current_profile(
     app_handle: AppHandle,
     profile_id: String,
@@ -229,6 +283,42 @@ pub async fn upsert_profile(
     Ok(profile.clone())
 }
 
+/// Remap a profile's ID from local to server ID after sync
+#[instrument(skip_all)]
+#[tauri::command(async)]
+pub async fn remap_profile_id(
+    app_handle: AppHandle,
+    local_id: String,
+    server_id: String,
+) -> Result<(), TauriFunctionError> {
+    println!(
+        "[ProfileSync] remap_profile_id: {} -> {}",
+        local_id, server_id
+    );
+    let settings = TauriSettingsState::construct(&app_handle).await?;
+    let mut settings = settings.lock().await;
+
+    // Get and remove the profile with old ID
+    let mut profile = settings
+        .profiles
+        .remove(&local_id)
+        .ok_or(anyhow::anyhow!("Profile not found"))?;
+
+    // Update the profile's ID
+    profile.hub_profile.id = server_id.clone();
+
+    // Re-insert with new ID
+    settings.profiles.insert(server_id.clone(), profile);
+
+    // Update current_profile if it was pointing to the old ID
+    if settings.current_profile == local_id {
+        settings.current_profile = server_id;
+    }
+
+    settings.serialize();
+    Ok(())
+}
+
 #[instrument(skip_all)]
 #[tauri::command(async)]
 pub async fn delete_profile(
@@ -260,6 +350,9 @@ pub async fn add_bit(
         .get_mut(&profile.hub_profile.id)
         .ok_or(anyhow::anyhow!("Profile not found"))?;
     profile.hub_profile.add_bit(&bit).await;
+    let now = now_iso();
+    profile.hub_profile.updated = now.clone();
+    profile.updated = now;
     settings.serialize();
     Ok(())
 }
@@ -278,6 +371,9 @@ pub async fn remove_bit(
         .get_mut(&profile.hub_profile.id)
         .ok_or(anyhow::anyhow!("Profile not found"))?;
     profile.hub_profile.remove_bit(&bit);
+    let now = now_iso();
+    profile.hub_profile.updated = now.clone();
+    profile.updated = now;
     settings.serialize();
     Ok(())
 }
@@ -289,7 +385,7 @@ pub async fn change_profile_image(
     profile: UserProfile,
 ) -> Result<(), TauriFunctionError> {
     let dir = get_cache_dir();
-    let dir = PathBuf::from(dir).join("icons");
+    let dir = dir.join("icons");
     let file_path = app_handle
         .dialog()
         .file()
@@ -318,14 +414,18 @@ pub async fn change_profile_image(
         .ok_or(anyhow::anyhow!("Profile not found"))?;
 
     let mut icon_to_delete = None;
-    if let Some(old_icon) = profile.hub_profile.icon.take() {
-        if !old_icon.starts_with("http://") && !old_icon.starts_with("https://") {
-            icon_to_delete = Some(old_icon);
-        }
+    if let Some(old_icon) = profile.hub_profile.icon.take()
+        && !old_icon.starts_with("http://")
+        && !old_icon.starts_with("https://")
+    {
+        icon_to_delete = Some(old_icon);
     }
 
     println!("Setting icon to {}", icon);
     profile.hub_profile.icon = Some(icon);
+    let now = now_iso();
+    profile.hub_profile.updated = now.clone();
+    profile.updated = now;
     settings.serialize();
 
     if let Some(icon) = icon_to_delete {
@@ -364,18 +464,88 @@ pub async fn profile_update_app(
         .ok_or(anyhow::anyhow!("Profile not found"))?;
     match operation {
         ProfileAppUpdateOperation::Upsert => {
-            profile.hub_profile.apps.as_mut().map(|apps| {
+            if let Some(apps) = profile.hub_profile.apps.as_mut() {
                 apps.retain(|a| a.app_id != app.app_id);
-            });
+            }
 
             profile.hub_profile.apps.get_or_insert(vec![]).push(app);
         }
         ProfileAppUpdateOperation::Remove => {
-            profile.hub_profile.apps.as_mut().map(|apps| {
+            if let Some(apps) = profile.hub_profile.apps.as_mut() {
                 apps.retain(|a| a.app_id != app.app_id);
-            });
+            }
         }
     }
+
+    let now = now_iso();
+    profile.hub_profile.updated = now.clone();
+    profile.updated = now;
     settings.serialize();
     Ok(())
+}
+
+/// Read a profile icon file and return its bytes
+#[instrument(skip_all)]
+#[tauri::command(async)]
+pub async fn read_profile_icon(icon_path: String) -> Result<Vec<u8>, TauriFunctionError> {
+    let decoded_path = urlencoding::decode(&icon_path)
+        .map_err(|e| TauriFunctionError::new(&format!("Failed to decode path: {}", e)))?;
+
+    let resolved_path =
+        decode_asset_proxy_path(decoded_path.as_ref()).unwrap_or_else(|| decoded_path.into_owned());
+    let path = PathBuf::from(resolved_path);
+
+    if !path.exists() {
+        return Err(TauriFunctionError::new(&format!(
+            "Icon file not found: {}",
+            path.display()
+        )));
+    }
+
+    let bytes = std::fs::read(&path)
+        .map_err(|e| TauriFunctionError::new(&format!("Failed to read icon file: {}", e)))?;
+
+    Ok(bytes)
+}
+
+/// Get the raw filesystem path for a profile's icon or thumbnail
+#[instrument(skip_all)]
+#[tauri::command(async)]
+pub async fn get_profile_icon_path(
+    app_handle: AppHandle,
+    profile_id: String,
+    field: String,
+) -> Result<Option<String>, TauriFunctionError> {
+    println!(
+        "[ProfileSync] get_profile_icon_path: profile_id={}, field={}",
+        profile_id, field
+    );
+    let settings = TauriSettingsState::construct(&app_handle).await?;
+    let settings = settings.lock().await;
+
+    let profile = settings
+        .profiles
+        .get(&profile_id)
+        .ok_or(anyhow::anyhow!("Profile not found"))?;
+
+    let path = match field.as_str() {
+        "icon" => profile.hub_profile.icon.clone(),
+        "thumbnail" => profile.hub_profile.thumbnail.clone(),
+        _ => None,
+    };
+
+    match path {
+        Some(p) => {
+            if let Some(decoded_path) = decode_asset_proxy_path(&p) {
+                return Ok(Some(decoded_path));
+            }
+
+            if p.starts_with("http://") || p.starts_with("https://") {
+                return Ok(None);
+            }
+
+            Ok(Some(p))
+        }
+        None => Ok(None),
+    }
 }

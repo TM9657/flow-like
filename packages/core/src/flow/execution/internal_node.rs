@@ -20,7 +20,7 @@ pub enum InternalNodeError {
 #[derive(Clone)]
 pub struct ExecutionTarget {
     pub node: Arc<InternalNode>,
-    pub through_pins: Vec<Arc<Mutex<InternalPin>>>,
+    pub through_pins: Vec<Arc<InternalPin>>,
 }
 
 impl ExecutionTarget {
@@ -77,10 +77,8 @@ async fn exec_deps_from_map(
                 }
                 stack.push((n.clone(), Phase::Exit));
 
-                let dep_id = {
-                    let g = n.node.lock().await;
-                    g.id.clone()
-                };
+                // Use cached node_id instead of locking
+                let dep_id = n.node_id().to_string();
                 if let Some(children) = dependencies.get(&dep_id) {
                     for c in children.iter() {
                         let c_ptr = ptr_key(c);
@@ -97,11 +95,9 @@ async fn exec_deps_from_map(
                     continue;
                 }
 
-                // Guard & run the dependency node itself (no successors)
-                let (dep_id, dep_name) = {
-                    let g = n.node.lock().await;
-                    (g.id.clone(), g.friendly_name.clone())
-                };
+                // Use cached metadata instead of locking
+                let dep_id = n.node_id().to_string();
+                let dep_name = n.node_name().to_string();
 
                 if let Some(guard) = recursion_guard
                     && guard.contains(&dep_id)
@@ -146,6 +142,13 @@ async fn run_node_logic_only(
     ctx: &mut ExecutionContext,
     recursion_guard: &mut Option<AHashSet<String>>,
 ) -> flow_like_types::Result<(), InternalNodeError> {
+    // Check for cancellation before starting
+    if ctx.is_cancelled() {
+        ctx.log_message("Execution cancelled before node started", LogLevel::Warn);
+        ctx.set_state(NodeState::Error).await;
+        return Err(InternalNodeError::ExecutionFailed("Cancelled".to_string()));
+    }
+
     ctx.set_state(NodeState::Running).await;
     let node = ctx.read_node().await;
 
@@ -173,6 +176,16 @@ async fn run_node_logic_only(
 
     let result = logic.run(ctx).await;
 
+    // Check for cancellation after node execution
+    if ctx.is_cancelled() {
+        ctx.log_message("Execution cancelled after node completed", LogLevel::Warn);
+        log_message.end();
+        ctx.log(log_message);
+        ctx.end_trace();
+        ctx.set_state(NodeState::Error).await;
+        return Err(InternalNodeError::ExecutionFailed("Cancelled".to_string()));
+    }
+
     if let Err(e) = result {
         let err_string = format!("{:?}", e);
         ctx.log_message(
@@ -183,7 +196,6 @@ async fn run_node_logic_only(
         ctx.log(log_message);
         ctx.end_trace();
         ctx.set_state(NodeState::Error).await;
-        // NO handle_error() HERE — just bubble up
         return Err(InternalNodeError::ExecutionFailed(node.id));
     }
 
@@ -205,27 +217,23 @@ async fn pure_parents_for_memo(
     }
 
     let mut result: Vec<Arc<InternalNode>> = Vec::new();
-    let pins = node.pins.clone();
 
     // Iterate only input, non-exec pins. Relay through standalone pins.
-    for pin in pins.values() {
-        let (is_input, is_exec, depends_on_len, depends_on) = {
-            let pin_guard = pin.lock().await;
-            let inner_pin = pin_guard.pin.lock().await;
-            let is_input = inner_pin.pin_type == PinType::Input;
-            let is_exec = inner_pin.data_type == VariableType::Execution;
-            let deps_len = pin_guard.depends_on.len();
-            (is_input, is_exec, deps_len, pin_guard.depends_on.clone())
-        };
+    for pin in node.pins.values() {
+        // Direct access to immutable fields - no lock needed
+        let is_input = pin.pin_type == PinType::Input;
+        let is_exec = pin.data_type == VariableType::Execution;
 
         if !is_input || is_exec {
             continue;
         }
 
         // Pointer-keyed visited for pins; reserve generously to avoid rehash
+        let deps = pin.depends_on();
+        let depends_on_len = deps.len();
         let mut visited_pins: AHashSet<usize> =
             AHashSet::with_capacity(depends_on_len.saturating_mul(4));
-        let mut stack: Vec<Weak<Mutex<InternalPin>>> = depends_on;
+        let mut stack: Vec<Weak<InternalPin>> = deps.to_vec();
 
         while let Some(dep_weak) = stack.pop() {
             let Some(dep_arc) = dep_weak.upgrade() else {
@@ -236,23 +244,19 @@ async fn pure_parents_for_memo(
                 continue;
             }
 
-            let parent_opt = {
-                let dep_guard = dep_arc.lock().await;
-                if let Some(node_weak) = &dep_guard.node {
-                    node_weak.upgrade()
-                } else {
-                    // standalone/relay pin => follow further upstream
-                    if !dep_guard.depends_on.is_empty() {
-                        stack.extend(dep_guard.depends_on.iter().cloned());
-                    }
-                    None
+            // Direct access - no lock needed
+            if let Some(node_weak) = dep_arc.node() {
+                if let Some(parent) = node_weak.upgrade()
+                    && parent.is_pure().await
+                {
+                    result.push(parent);
                 }
-            };
-
-            if let Some(parent) = parent_opt
-                && parent.is_pure().await
-            {
-                result.push(parent);
+            } else {
+                // standalone/relay pin => follow further upstream
+                let dep_deps = dep_arc.depends_on();
+                if !dep_deps.is_empty() {
+                    stack.extend(dep_deps.iter().cloned());
+                }
             }
         }
     }
@@ -267,28 +271,68 @@ async fn pure_parents_for_memo(
     Ok(result)
 }
 
+/// Cached immutable metadata from Node to avoid locking
+#[derive(Clone)]
+pub struct NodeMeta {
+    pub id: String,
+    pub name: String,
+    pub is_pure: bool,
+}
+
+impl NodeMeta {
+    pub fn from_node(node: &Node) -> Self {
+        Self {
+            id: node.id.clone(),
+            name: node.name.clone(),
+            is_pure: node.is_pure(),
+        }
+    }
+}
+
 pub struct InternalNode {
     pub node: Arc<Mutex<Node>>,
-    pub pins: AHashMap<String, Arc<Mutex<InternalPin>>>,
+    /// Cached immutable metadata - no lock needed for access
+    pub meta: NodeMeta,
+    pub pins: AHashMap<String, Arc<InternalPin>>,
     pub logic: Arc<dyn NodeLogic>,
     pub exec_calls: AtomicU64,
-    pin_name_cache: Mutex<AHashMap<String, Vec<Arc<Mutex<InternalPin>>>>>,
+    pin_name_cache: Mutex<AHashMap<String, Vec<Arc<InternalPin>>>>,
 }
 
 impl InternalNode {
     pub fn new(
         node: Node,
-        pins: AHashMap<String, Arc<Mutex<InternalPin>>>,
+        pins: AHashMap<String, Arc<InternalPin>>,
         logic: Arc<dyn NodeLogic>,
-        name_cache: AHashMap<String, Vec<Arc<Mutex<InternalPin>>>>,
+        name_cache: AHashMap<String, Vec<Arc<InternalPin>>>,
     ) -> Self {
+        let meta = NodeMeta::from_node(&node);
         InternalNode {
             node: Arc::new(Mutex::new(node)),
+            meta,
             pins,
             logic,
             pin_name_cache: Mutex::new(name_cache),
             exec_calls: AtomicU64::new(0),
         }
+    }
+
+    /// Get cached node ID without locking
+    #[inline]
+    pub fn node_id(&self) -> &str {
+        &self.meta.id
+    }
+
+    /// Get cached node name without locking
+    #[inline]
+    pub fn node_name(&self) -> &str {
+        &self.meta.name
+    }
+
+    /// Get cached is_pure without locking
+    #[inline]
+    pub fn is_pure_cached(&self) -> bool {
+        self.meta.is_pure
     }
 
     pub async fn ensure_cache(&self, name: &str) {
@@ -301,11 +345,8 @@ impl InternalNode {
 
         let mut pins_by_name = AHashMap::new();
         for pin_ref in self.pins.values() {
-            let pin_name = {
-                let pin_guard = pin_ref.lock().await;
-                let pin = pin_guard.pin.lock().await;
-                pin.name.clone()
-            };
+            // Use cached pin name - no lock needed
+            let pin_name = pin_ref.name().to_string();
 
             pins_by_name
                 .entry(pin_name)
@@ -319,10 +360,7 @@ impl InternalNode {
         }
     }
 
-    pub async fn get_pin_by_name(
-        &self,
-        name: &str,
-    ) -> flow_like_types::Result<Arc<Mutex<InternalPin>>> {
+    pub async fn get_pin_by_name(&self, name: &str) -> flow_like_types::Result<Arc<InternalPin>> {
         self.ensure_cache(name).await;
 
         let pin = {
@@ -339,7 +377,7 @@ impl InternalNode {
     pub async fn get_pins_by_name(
         &self,
         name: &str,
-    ) -> flow_like_types::Result<Vec<Arc<Mutex<InternalPin>>>> {
+    ) -> flow_like_types::Result<Vec<Arc<InternalPin>>> {
         self.ensure_cache(name).await;
         let cache = self.pin_name_cache.lock().await;
         if let Some(pins_ref) = cache.get(name) {
@@ -349,7 +387,7 @@ impl InternalNode {
         Err(flow_like_types::anyhow!("Pin {} not found", name))
     }
 
-    pub fn get_pin_by_id(&self, id: &str) -> flow_like_types::Result<Arc<Mutex<InternalPin>>> {
+    pub fn get_pin_by_id(&self, id: &str) -> flow_like_types::Result<Arc<InternalPin>> {
         if let Some(pin) = self.pins.get(id) {
             return Ok(pin.clone());
         }
@@ -359,14 +397,12 @@ impl InternalNode {
 
     pub async fn orphaned(&self) -> bool {
         for pin in self.pins.values() {
-            let pin_guard = pin.lock().await.pin.clone();
-            let pin = pin_guard.lock().await;
-
+            // No lock needed - direct access to immutable fields
             if pin.pin_type != PinType::Input {
                 continue;
             }
 
-            if pin.depends_on.is_empty() && pin.default_value.is_none() {
+            if pin.depends_on().is_empty() && pin.default_value.is_none() {
                 return true;
             }
         }
@@ -376,37 +412,39 @@ impl InternalNode {
 
     pub async fn is_ready(&self) -> flow_like_types::Result<bool> {
         for pin in self.pins.values() {
-            let pin_guard = pin.lock().await;
-            let pin = pin_guard.pin.lock().await;
+            // Direct access to immutable fields - no lock needed
+            let pin_type = &pin.pin_type;
+            let data_type = &pin.data_type;
 
-            if pin.pin_type != PinType::Input {
+            if *pin_type != PinType::Input {
                 continue;
             }
 
-            if pin.depends_on.is_empty() && pin.default_value.is_none() {
+            let has_default = pin.has_default;
+            let deps = pin.depends_on();
+
+            if deps.is_empty() && !has_default {
                 return Ok(false);
             }
 
             // execution pins can have multiple inputs for different paths leading to it. We only need to make sure that one of them is valid!
-            let is_execution = pin.data_type == VariableType::Execution;
+            let is_execution = *data_type == VariableType::Execution;
             let mut execution_valid = false;
-            let depends_on = pin_guard.depends_on.clone();
-            drop(pin);
-            drop(pin_guard);
 
-            for depends_on_pin in depends_on {
+            for depends_on_pin in deps {
                 let depends_on_pin = depends_on_pin
                     .upgrade()
                     .ok_or(flow_like_types::anyhow!("Failed to lock Pin"))?;
-                let depends_on_pin_guard = depends_on_pin.lock().await;
-                let depends_on_pin = depends_on_pin_guard.pin.lock().await;
+
+                // Only value access needs locking
+                let has_value = depends_on_pin.value.read().await.is_some();
 
                 // non execution pins need all inputs to be valid
-                if depends_on_pin.value.is_none() && !is_execution {
+                if !has_value && !is_execution {
                     return Ok(false);
                 }
 
-                if depends_on_pin.value.is_some() {
+                if has_value {
                     execution_valid = true;
                 }
             }
@@ -423,27 +461,22 @@ impl InternalNode {
         let mut connected = Vec::with_capacity(self.pins.len());
         let mut seen_nodes: AHashSet<usize> = AHashSet::new();
         let mut visited_pins: AHashSet<usize> = AHashSet::new();
-        let mut stack: Vec<Weak<Mutex<InternalPin>>> = Vec::new();
+        let mut stack: Vec<Weak<InternalPin>> = Vec::new();
 
         for pin in self.pins.values() {
-            let pin_guard = pin.lock().await;
-            let pin = pin_guard.pin.lock().await;
-
+            // Direct access to immutable fields - no lock needed
             if pin.pin_type != PinType::Output {
                 continue;
             }
-            drop(pin);
 
-            let seeds = pin_guard.connected_to.clone();
-            drop(pin_guard);
-
-            let cap = seeds.len();
+            let conn = pin.connected_to();
+            let cap = conn.len();
             visited_pins.clear();
             stack.clear();
             if stack.capacity() < cap {
                 stack.reserve(cap - stack.capacity());
             }
-            stack.extend(seeds);
+            stack.extend(conn.iter().cloned());
 
             while let Some(next_weak) = stack.pop() {
                 let pin_arc = next_weak
@@ -455,21 +488,16 @@ impl InternalNode {
                     continue;
                 }
 
-                let parent_opt = {
-                    let guard = pin_arc.lock().await;
-                    if let Some(node_weak) = &guard.node {
-                        node_weak.upgrade()
-                    } else {
-                        stack.extend(guard.connected_to.iter().cloned());
-                        None
+                // Direct access - no lock needed
+                if let Some(node_weak) = pin_arc.node() {
+                    if let Some(parent) = node_weak.upgrade() {
+                        let node_key = Arc::as_ptr(&parent) as usize;
+                        if seen_nodes.insert(node_key) {
+                            connected.push(parent);
+                        }
                     }
-                };
-
-                if let Some(parent) = parent_opt {
-                    let node_key = Arc::as_ptr(&parent) as usize;
-                    if seen_nodes.insert(node_key) {
-                        connected.push(parent);
-                    }
+                } else {
+                    stack.extend(pin_arc.connected_to().iter().cloned());
                 }
             }
         }
@@ -480,41 +508,33 @@ impl InternalNode {
     pub async fn get_connected_exec(
         &self,
         filter_valid: bool,
+        context: &ExecutionContext,
     ) -> flow_like_types::Result<Vec<ExecutionTarget>> {
         // node_ptr -> (node_arc, pins_vec, seen_pin_ptrs)
         let mut groups: AHashMap<
             usize,
-            (
-                Arc<InternalNode>,
-                Vec<Arc<Mutex<InternalPin>>>,
-                AHashSet<usize>,
-            ),
+            (Arc<InternalNode>, Vec<Arc<InternalPin>>, AHashSet<usize>),
         > = AHashMap::with_capacity(16);
 
         let mut visited_pins: AHashSet<usize> = AHashSet::with_capacity(64);
-        let mut stack: Vec<Weak<Mutex<InternalPin>>> = Vec::with_capacity(64);
+        let mut stack: Vec<Weak<InternalPin>> = Vec::with_capacity(64);
 
         for pin in self.pins.values() {
             if filter_valid {
-                match evaluate_pin_value(pin.clone()).await {
+                match evaluate_pin_value(pin.clone(), &context.context_pin_overrides).await {
                     Ok(Value::Bool(true)) => {}
                     _ => continue,
                 }
             }
 
-            let pin_g = pin.lock().await;
-            let meta = pin_g.pin.lock().await;
-            if meta.pin_type != PinType::Output || meta.data_type != VariableType::Execution {
+            // Direct access to immutable fields - no lock needed
+            if pin.pin_type != PinType::Output || pin.data_type != VariableType::Execution {
                 continue;
             }
-            drop(meta);
-
-            let seeds = pin_g.connected_to.clone();
-            drop(pin_g);
 
             visited_pins.clear();
             stack.clear();
-            stack.extend(seeds);
+            stack.extend(pin.connected_to().iter().cloned());
 
             while let Some(next_weak) = stack.pop() {
                 let Some(pin_arc) = next_weak.upgrade() else {
@@ -525,30 +545,25 @@ impl InternalNode {
                     continue;
                 }
 
-                let parent_opt = {
-                    let g = pin_arc.lock().await;
-                    if let Some(node_w) = &g.node {
-                        node_w.upgrade()
-                    } else {
-                        // relay pin; keep walking
-                        stack.extend(g.connected_to.iter().cloned());
-                        None
+                // Direct access - no lock needed
+                if let Some(node_w) = pin_arc.node() {
+                    if let Some(parent) = node_w.upgrade() {
+                        let nkey = ptr_key(&parent);
+                        let entry = groups.entry(nkey).or_insert_with(|| {
+                            (
+                                parent.clone(),
+                                Vec::with_capacity(2),
+                                AHashSet::with_capacity(4),
+                            )
+                        });
+                        // dedup pin within the node group
+                        if entry.2.insert(pkey) {
+                            entry.1.push(pin_arc.clone());
+                        }
                     }
-                };
-
-                if let Some(parent) = parent_opt {
-                    let nkey = ptr_key(&parent);
-                    let entry = groups.entry(nkey).or_insert_with(|| {
-                        (
-                            parent.clone(),
-                            Vec::with_capacity(2),
-                            AHashSet::with_capacity(4),
-                        )
-                    });
-                    // dedup pin within the node group
-                    if entry.2.insert(pkey) {
-                        entry.1.push(pin_arc.clone());
-                    }
+                } else {
+                    // relay pin; keep walking
+                    stack.extend(pin_arc.connected_to().iter().cloned());
                 }
             }
         }
@@ -564,9 +579,12 @@ impl InternalNode {
         Ok(out)
     }
 
-    pub async fn get_error_handled_nodes(&self) -> flow_like_types::Result<Vec<Arc<InternalNode>>> {
+    pub async fn get_error_handled_nodes(
+        &self,
+        context: &ExecutionContext,
+    ) -> flow_like_types::Result<Vec<Arc<InternalNode>>> {
         let pin = self.get_pin_by_name("auto_handle_error").await?;
-        let active = evaluate_pin_value(pin.clone()).await?;
+        let active = evaluate_pin_value(pin.clone(), &context.context_pin_overrides).await?;
         let active = match active {
             Value::Bool(b) => b,
             _ => false,
@@ -575,24 +593,20 @@ impl InternalNode {
             return Err(flow_like_types::anyhow!("Error Pin not active"));
         }
 
-        let pin_guard = pin.lock().await;
-        let pin_meta = pin_guard.pin.lock().await;
-        if pin_meta.pin_type != PinType::Output {
+        // Direct access to immutable fields - no lock needed
+        if pin.pin_type != PinType::Output {
             return Err(flow_like_types::anyhow!("Pin is not an output pin"));
         }
-        if pin_meta.data_type != VariableType::Execution {
+        if pin.data_type != VariableType::Execution {
             return Err(flow_like_types::anyhow!("Pin is not an execution pin"));
         }
-        drop(pin_meta);
 
-        let seeds = pin_guard.connected_to.clone();
-        drop(pin_guard);
-
-        let cap = seeds.len();
+        let conn = pin.connected_to();
+        let cap = conn.len();
         let mut connected = Vec::with_capacity(cap);
         let mut seen_nodes: AHashSet<usize> = AHashSet::with_capacity(cap.saturating_mul(2));
         let mut visited_pins: AHashSet<usize> = AHashSet::with_capacity(cap.saturating_mul(4));
-        let mut stack: Vec<Weak<Mutex<InternalPin>>> = seeds;
+        let mut stack: Vec<Weak<InternalPin>> = conn.to_vec();
 
         while let Some(next_weak) = stack.pop() {
             let pin_arc = next_weak
@@ -604,22 +618,17 @@ impl InternalNode {
                 continue;
             }
 
-            let parent_opt = {
-                let guard = pin_arc.lock().await;
-                if let Some(node_weak) = &guard.node {
-                    node_weak.upgrade()
-                } else {
-                    // relay through standalone pins
-                    stack.extend(guard.connected_to.iter().cloned());
-                    None
+            // Direct access - no lock needed
+            if let Some(node_weak) = pin_arc.node() {
+                if let Some(parent) = node_weak.upgrade() {
+                    let node_key = Arc::as_ptr(&parent) as usize;
+                    if seen_nodes.insert(node_key) {
+                        connected.push(parent);
+                    }
                 }
-            };
-
-            if let Some(parent) = parent_opt {
-                let node_key = Arc::as_ptr(&parent) as usize;
-                if seen_nodes.insert(node_key) {
-                    connected.push(parent);
-                }
+            } else {
+                // relay through standalone pins
+                stack.extend(pin_arc.connected_to().iter().cloned());
             }
         }
 
@@ -630,27 +639,22 @@ impl InternalNode {
         let mut dependencies = Vec::with_capacity(self.pins.len());
         let mut seen_nodes: AHashSet<usize> = AHashSet::new();
         let mut visited_pins: AHashSet<usize> = AHashSet::new();
-        let mut stack: Vec<Weak<Mutex<InternalPin>>> = Vec::new();
+        let mut stack: Vec<Weak<InternalPin>> = Vec::new();
 
         for pin in self.pins.values() {
-            let pin_guard = pin.lock().await;
-            let pin_meta = pin_guard.pin.lock().await;
-
-            if pin_meta.pin_type != PinType::Input {
+            // Direct access to immutable fields - no lock needed
+            if pin.pin_type != PinType::Input {
                 continue;
             }
-            drop(pin_meta);
 
-            let seeds = pin_guard.depends_on.clone();
-            drop(pin_guard);
-
-            let cap = seeds.len();
+            let deps = pin.depends_on();
+            let cap = deps.len();
             visited_pins.clear();
             stack.clear();
             if stack.capacity() < cap {
                 stack.reserve(cap - stack.capacity());
             }
-            stack.extend(seeds);
+            stack.extend(deps.iter().cloned());
 
             while let Some(dep_weak) = stack.pop() {
                 let dep_arc = dep_weak
@@ -662,21 +666,16 @@ impl InternalNode {
                     continue;
                 }
 
-                let parent_opt = {
-                    let dep_guard = dep_arc.lock().await;
-                    if let Some(node_weak) = &dep_guard.node {
-                        node_weak.upgrade()
-                    } else {
-                        stack.extend(dep_guard.depends_on.iter().cloned());
-                        None
+                // Direct access - no lock needed
+                if let Some(node_weak) = dep_arc.node() {
+                    if let Some(parent) = node_weak.upgrade() {
+                        let node_key = Arc::as_ptr(&parent) as usize;
+                        if seen_nodes.insert(node_key) {
+                            dependencies.push(parent);
+                        }
                     }
-                };
-
-                if let Some(parent) = parent_opt {
-                    let node_key = Arc::as_ptr(&parent) as usize;
-                    if seen_nodes.insert(node_key) {
-                        dependencies.push(parent);
-                    }
+                } else {
+                    stack.extend(dep_arc.depends_on().iter().cloned());
                 }
             }
         }
@@ -684,13 +683,9 @@ impl InternalNode {
         Ok(dependencies)
     }
 
+    /// Use cached is_pure for performance
     pub async fn is_pure(&self) -> bool {
-        let node = self.node.lock().await;
-        let pins = node
-            .pins
-            .values()
-            .find(|pin| pin.data_type == VariableType::Execution);
-        pins.is_none()
+        self.meta.is_pure
     }
 
     pub async fn trigger_missing_dependencies(
@@ -774,11 +769,9 @@ impl InternalNode {
                         continue;
                     }
 
-                    // Get id/name once (short lock scope).
-                    let (node_id, node_name) = {
-                        let parent_node = node_arc.node.lock().await;
-                        (parent_node.id.clone(), parent_node.friendly_name.clone())
-                    };
+                    // Use cached metadata instead of locking
+                    let node_id = node_arc.node_id().to_string();
+                    let node_name = node_arc.node_name().to_string();
 
                     if let Some(guard) = recursion_guard
                         && guard.contains(&node_id)
@@ -832,7 +825,7 @@ impl InternalNode {
 
         let connected = context
             .node
-            .get_error_handled_nodes()
+            .get_error_handled_nodes(context)
             .await
             .map_err(|err| {
                 context.log_message(
@@ -878,18 +871,19 @@ impl InternalNode {
             }
 
             // walk successors of the error handler (still using the same guard)
-            let mut stack: Vec<ExecutionTarget> = match handler.get_connected_exec(true).await {
-                Ok(v) => v,
-                Err(err) => {
-                    let err_string = format!("{:?}", err);
-                    let _ = sub
-                        .set_pin_value("auto_handle_error_string", json!(err_string))
-                        .await;
-                    sub.end_trace();
-                    context.push_sub_context(&mut sub);
-                    return Err(InternalNodeError::ExecutionFailed(context.id.clone()));
-                }
-            };
+            let mut stack: Vec<ExecutionTarget> =
+                match handler.get_connected_exec(true, context).await {
+                    Ok(v) => v,
+                    Err(err) => {
+                        let err_string = format!("{:?}", err);
+                        let _ = sub
+                            .set_pin_value("auto_handle_error_string", json!(err_string))
+                            .await;
+                        sub.end_trace();
+                        context.push_sub_context(&mut sub);
+                        return Err(InternalNodeError::ExecutionFailed(context.id.clone()));
+                    }
+                };
 
             let mut seen_exec_ptrs: ahash::AHashSet<usize> =
                 ahash::AHashSet::with_capacity(stack.len().saturating_mul(2));
@@ -935,7 +929,7 @@ impl InternalNode {
                     return Err(InternalNodeError::ExecutionFailed(context.id.clone()));
                 }
 
-                match next.node.get_connected_exec(true).await {
+                match next.node.get_connected_exec(true, context).await {
                     Ok(more) => {
                         for s in more {
                             stack.push(s);
@@ -991,6 +985,10 @@ impl InternalNode {
         // this node
         if let Err(e) = run_node_logic_only(context, recursion_guard).await {
             let err_string = format!("{:?}", e);
+            context.log_message(
+                &format!("Failed to execute node: {}", err_string),
+                LogLevel::Error,
+            );
             InternalNode::handle_error(context, &err_string, recursion_guard).await?;
             let node = context.read_node().await;
             return Err(InternalNodeError::ExecutionFailed(node.id));
@@ -998,7 +996,7 @@ impl InternalNode {
 
         // successors (DFS; fresh guard per successor to mirror old semantics)
         if with_successors {
-            let successors = match context.node.get_connected_exec(true).await {
+            let successors = match context.node.get_connected_exec(true, context).await {
                 Ok(nodes) => nodes,
                 Err(err) => {
                     let err_string = format!("{:?}", err);
@@ -1050,7 +1048,7 @@ impl InternalNode {
                     return Err(InternalNodeError::ExecutionFailed(node.id));
                 }
 
-                match next.node.get_connected_exec(true).await {
+                match next.node.get_connected_exec(true, context).await {
                     Ok(more) => {
                         for s in more {
                             stack.push(s);
@@ -1136,7 +1134,7 @@ impl InternalNode {
 
         // 3) Walk successors iteratively (DFS), like your non-recursive `trigger`
         if with_successors {
-            let successors = match context.node.get_connected_exec(true).await {
+            let successors = match context.node.get_connected_exec(true, context).await {
                 Ok(nodes) => nodes,
                 Err(err) => {
                     let err_string = format!("{:?}", err);
@@ -1188,7 +1186,7 @@ impl InternalNode {
                 }
 
                 // Enqueue its successors (DFS)
-                match next.node.get_connected_exec(true).await {
+                match next.node.get_connected_exec(true, context).await {
                     Ok(more) => {
                         for s in more {
                             stack.push(s);

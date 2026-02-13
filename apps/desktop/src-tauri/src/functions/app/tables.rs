@@ -33,8 +33,6 @@ async fn db_connection(
         credentials.to_db(&app_id).await?
     } else {
         flow_like_state
-            .lock()
-            .await
             .config
             .read()
             .await
@@ -45,7 +43,16 @@ async fn db_connection(
     };
 
     let db = db.execute().await?;
-    let db = LanceDBVectorStore::from_connection(db, table_name).await;
+    let mut db = LanceDBVectorStore::from_connection(db, table_name).await;
+    if let Some(opts) = &flow_like_state
+        .config
+        .read()
+        .await
+        .callbacks
+        .lance_write_options
+    {
+        db.set_write_options(opts.clone());
+    }
     Ok(db)
 }
 
@@ -159,7 +166,7 @@ pub async fn db_query(
         (None, Some(fts_term), filter) => {
             let filter_str = filter.as_deref();
             let items = db
-                .fts_search(&fts_term, filter_str, payload.select, limit, offset)
+                .fts_search(&fts_term, filter_str, payload.select, None, limit, offset)
                 .await?;
             Ok(items)
         }
@@ -171,6 +178,7 @@ pub async fn db_query(
                     &fts_term,
                     filter_str,
                     payload.select,
+                    None,
                     limit,
                     offset,
                     payload.rerank.unwrap_or(true),
@@ -236,5 +244,92 @@ pub async fn build_index(
 ) -> Result<(), TauriFunctionError> {
     let db = db_connection(&app_handle, app_id, Some(table_name), credentials).await?;
     db.index(&column, Some(&index_type)).await?;
+    Ok(())
+}
+
+#[tauri::command(async)]
+pub async fn db_optimize(
+    app_handle: AppHandle,
+    app_id: String,
+    table_name: String,
+    credentials: Option<Arc<SharedCredentials>>,
+    keep_versions: Option<bool>,
+) -> Result<(), TauriFunctionError> {
+    let db = db_connection(&app_handle, app_id, Some(table_name), credentials).await?;
+    db.optimize(keep_versions.unwrap_or(false)).await?;
+    Ok(())
+}
+
+#[tauri::command(async)]
+pub async fn db_update(
+    app_handle: AppHandle,
+    app_id: String,
+    table_name: String,
+    credentials: Option<Arc<SharedCredentials>>,
+    filter: String,
+    updates: std::collections::HashMap<String, flow_like_types::Value>,
+) -> Result<(), TauriFunctionError> {
+    let db = db_connection(&app_handle, app_id, Some(table_name), credentials).await?;
+    db.update(&filter, updates).await?;
+    Ok(())
+}
+
+#[tauri::command(async)]
+pub async fn db_drop_columns(
+    app_handle: AppHandle,
+    app_id: String,
+    table_name: String,
+    credentials: Option<Arc<SharedCredentials>>,
+    columns: Vec<String>,
+) -> Result<(), TauriFunctionError> {
+    let db = db_connection(&app_handle, app_id, Some(table_name), credentials).await?;
+    let column_refs: Vec<&str> = columns.iter().map(|s| s.as_str()).collect();
+    db.drop_columns(&column_refs).await?;
+    Ok(())
+}
+
+#[derive(Debug, Clone, serde::Deserialize)]
+pub struct AddColumnPayload {
+    pub name: String,
+    pub sql_expression: String,
+}
+
+#[tauri::command(async)]
+pub async fn db_add_column(
+    app_handle: AppHandle,
+    app_id: String,
+    table_name: String,
+    credentials: Option<Arc<SharedCredentials>>,
+    column: AddColumnPayload,
+) -> Result<(), TauriFunctionError> {
+    let db = db_connection(&app_handle, app_id, Some(table_name), credentials).await?;
+    db.add_column(&column.name, &column.sql_expression).await?;
+    Ok(())
+}
+
+#[tauri::command(async)]
+pub async fn db_alter_column(
+    app_handle: AppHandle,
+    app_id: String,
+    table_name: String,
+    credentials: Option<Arc<SharedCredentials>>,
+    column: String,
+    nullable: bool,
+) -> Result<(), TauriFunctionError> {
+    let db = db_connection(&app_handle, app_id, Some(table_name), credentials).await?;
+    db.make_column_nullable(&column, nullable).await?;
+    Ok(())
+}
+
+#[tauri::command(async)]
+pub async fn db_drop_index(
+    app_handle: AppHandle,
+    app_id: String,
+    table_name: String,
+    credentials: Option<Arc<SharedCredentials>>,
+    index_name: String,
+) -> Result<(), TauriFunctionError> {
+    let db = db_connection(&app_handle, app_id, Some(table_name), credentials).await?;
+    db.drop_index(&index_name).await?;
     Ok(())
 }

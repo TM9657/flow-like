@@ -1,6 +1,8 @@
 ---
 import { Image } from "astro:assets";
 import { LuCircleGauge, LuCodeXml, LuLock, LuPaintbrush } from "react-icons/lu";
+import type { Lang, TranslationKey } from "../i18n";
+import { translations, defaultLang } from "../i18n";
 
 import designBubblegumLight from "../images/index/theme-bubblegum-light.png";
 import designBubblegum from "../images/index/theme-bubblegum.png";
@@ -9,13 +11,24 @@ import designCosmicNight from "../images/index/theme-cosmic-night.png";
 import designDoom from "../images/index/theme-doom.png";
 import designNeoBrutalism from "../images/index/theme-neo-brutalism.png";
 import designSoftPop from "../images/index/theme-soft-pop.png";
+
+interface Props {
+  lang?: Lang;
+}
+
+const { lang = defaultLang } = Astro.props;
+const t = (key: TranslationKey): string => {
+  const langTranslations = translations[lang] as Record<string, string>;
+  const enTranslations = translations.en as Record<string, string>;
+  return langTranslations?.[key] ?? enTranslations[key] ?? key;
+};
 ---
 
 <section
 	id="whitelabel"
 	data-c1="hsl(262 83% 66% / .10)"
 	data-c2="hsl(292 84% 65% / .10)"
-	class="relative mx-auto max-w-7xl px-4 py-24 sm:py-28 lg:px-8 mb-6 overflow-x-clip"
+	class="relative mx-auto max-w-7xl px-4 py-24 sm:py-28 lg:px-8 mb-6 overflow-hidden lg:overflow-visible"
 >
 	<!-- decorative bg -->
 	<div aria-hidden="true" class="pointer-events-none absolute inset-0">
@@ -27,22 +40,25 @@ import designSoftPop from "../images/index/theme-soft-pop.png";
 			>
 			</div>
 		</div>
+		<!-- Enhanced glow orbs - BIGGER -->
 		<div
-			class="absolute -top-24 -left-24 h-72 w-72 rounded-full blur-3xl opacity-40"
-			style="background: radial-gradient(60% 60% at 50% 50%, var(--c1, hsl(262,83%,66%)) 0%, transparent 70%);"
-		>
-		</div>
+			class="glow-orb absolute -top-32 -left-32 h-[28rem] w-[28rem]"
+			style="background: radial-gradient(60% 60% at 50% 50%, hsl(262 83% 66% / 0.6) 0%, transparent 60%);"
+		></div>
 		<div
-			class="absolute -bottom-24 -right-24 h-72 w-72 rounded-full blur-3xl opacity-40"
-			style="background: radial-gradient(60% 60% at 50% 50%, var(--c2, hsl(292,84%,65%)) 0%, transparent 70%);"
-		>
-		</div>
+			class="glow-orb absolute -bottom-32 -right-32 h-[26rem] w-[26rem]"
+			style="background: radial-gradient(60% 60% at 50% 50%, hsl(292 84% 65% / 0.55) 0%, transparent 60%); animation-delay: -4s;"
+		></div>
+		<div
+			class="glow-orb absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 h-[32rem] w-[32rem]"
+			style="background: radial-gradient(60% 60% at 50% 50%, hsl(280 80% 60% / 0.35) 0%, transparent 60%); animation-delay: -2s;"
+		></div>
 	</div>
 
 	<div class="relative z-10">
 		<!-- ensure nothing exceeds viewport on mobile -->
 		<div
-			class="relative rounded-3xl p-5 sm:p-8 lg:p-14 border border-border/40 bg-card/50 backdrop-blur-md overflow-visible sm:overflow-hidden max-w-[min(100%,100vw-2rem)] sm:max-w-none mx-auto"
+			class="relative rounded-3xl p-5 sm:p-8 lg:p-14 border border-border/40 bg-card/50 backdrop-blur-md overflow-hidden lg:overflow-visible max-w-[min(100%,100vw-2rem)] sm:max-w-none mx-auto"
 		>
 			<div
 				aria-hidden="true"
@@ -56,38 +72,36 @@ import designSoftPop from "../images/index/theme-soft-pop.png";
 				<div class="space-y-8 min-w-0">
 					<div>
 						<div
-							class="inline-flex items-center gap-2 rounded-full border border-violet-500/20 bg-violet-500/10 backdrop-blur px-4 py-1.5 text-sm font-medium text-violet-600 dark:text-violet-400 mb-5"
+							class="inline-flex items-center gap-2 rounded-full border border-violet-500/30 bg-violet-500/10 backdrop-blur-2xl px-4 py-1.5 text-sm font-medium text-violet-600 dark:text-violet-400 mb-5 shadow-[0_0_40px_-8px_rgba(139,92,246,0.4)]"
 						>
 							<span
-								class="w-2 h-2 bg-violet-500 rounded-full animate-pulse"
+								class="w-2 h-2 bg-violet-500 rounded-full animate-pulse shadow-[0_0_12px_rgba(139,92,246,0.8)]"
 							></span>
-							Under your brand
+							{t("theming.tagline")}
 						</div>
 
 						<h2
 							class="text-3xl sm:text-4xl lg:text-5xl font-bold leading-tight break-words"
 						>
 							<span
-								class="bg-gradient-to-r from-foreground via-violet-500 to-purple-500 bg-clip-text text-transparent"
-								>Add the editor or just the engine</span
+								class="bg-gradient-to-r from-foreground via-violet-500 to-purple-500 bg-clip-text text-transparent drop-shadow-sm"
+								>{t("theming.headline")}</span
 							>
 						</h2>
 
 						<p
-							class="mt-4 sm:mt-5 text-base sm:text-lg text-muted-foreground"
+							class="mt-4 sm:mt-5 text-base sm:text-lg text-muted-foreground leading-relaxed"
 						>
-							Drop the visual editor into your app, run the engine
-							behind the scenes, or combine both. Your logo, your
-							colors — with the same visibility and audit trail.
+							{t("theming.description")}
 						</p>
 					</div>
 
 					<!-- MODE SWITCHER -->
 					<div id="wl-mode" class="space-y-4" data-mode="embed">
 						<div
-							class="grid grid-cols-1 sm:grid-cols-3 gap-2 rounded-2xl border border-border/60 bg-muted/40 p-1 shadow-sm"
+							class="flex flex-col sm:flex-row gap-2 rounded-2xl border border-border/60 bg-muted/40 p-1.5 shadow-sm"
 						>
-							<label class="group relative">
+							<label class="group relative flex-1">
 								<input
 									type="radio"
 									name="wl-mode"
@@ -96,12 +110,12 @@ import designSoftPop from "../images/index/theme-soft-pop.png";
 									checked
 								/>
 								<span
-									class="block w-full text-center cursor-pointer select-none rounded-xl px-3 py-2 text-sm font-medium text-muted-foreground transition peer-checked:text-foreground peer-checked:bg-background peer-checked:shadow group-hover:text-foreground"
+									class="flex items-center justify-center h-full w-full text-center cursor-pointer select-none rounded-xl px-4 py-3 text-sm font-medium text-muted-foreground transition peer-checked:text-foreground peer-checked:bg-background peer-checked:shadow-md group-hover:text-foreground"
 								>
 									Drop-in editor
 								</span>
 							</label>
-							<label class="group relative">
+							<label class="group relative flex-1">
 								<input
 									type="radio"
 									name="wl-mode"
@@ -109,12 +123,12 @@ import designSoftPop from "../images/index/theme-soft-pop.png";
 									class="peer sr-only"
 								/>
 								<span
-									class="block w-full text-center cursor-pointer select-none rounded-xl px-3 py-2 text-sm font-medium text-muted-foreground transition peer-checked:text-foreground peer-checked:bg-background peer-checked:shadow group-hover:text-foreground"
+									class="flex items-center justify-center h-full w-full text-center cursor-pointer select-none rounded-xl px-4 py-3 text-sm font-medium text-muted-foreground transition peer-checked:text-foreground peer-checked:bg-background peer-checked:shadow-md group-hover:text-foreground"
 								>
-									Run behind the scenes
+									Run headless
 								</span>
 							</label>
-							<label class="group relative">
+							<label class="group relative flex-1">
 								<input
 									type="radio"
 									name="wl-mode"
@@ -122,9 +136,9 @@ import designSoftPop from "../images/index/theme-soft-pop.png";
 									class="peer sr-only"
 								/>
 								<span
-									class="block w-full text-center cursor-pointer select-none rounded-xl px-3 py-2 text-sm font-medium text-muted-foreground transition peer-checked:text-foreground peer-checked:bg-background peer-checked:shadow group-hover:text-foreground"
+									class="flex items-center justify-center h-full w-full text-center cursor-pointer select-none rounded-xl px-4 py-3 text-sm font-medium text-muted-foreground transition peer-checked:text-foreground peer-checked:bg-background peer-checked:shadow-md group-hover:text-foreground"
 								>
-									Edit here, run there
+									Hybrid mode
 								</span>
 							</label>
 						</div>
@@ -199,7 +213,7 @@ import designSoftPop from "../images/index/theme-soft-pop.png";
 					<!-- FEATURES -->
 					<div class="grid gap-3 sm:grid-cols-2">
 						<div
-							class="group rounded-2xl border border-violet-500/20 bg-violet-500/10 p-5 transition hover:-translate-y-0.5 hover:shadow-xl"
+							class="group rounded-2xl border border-violet-500/20 bg-violet-500/10 p-5 transition hover:-translate-y-0.5"
 						>
 							<div class="flex items-center gap-3">
 								<div
@@ -219,7 +233,7 @@ import designSoftPop from "../images/index/theme-soft-pop.png";
 						</div>
 
 						<div
-							class="group rounded-2xl border border-blue-500/20 bg-blue-500/10 p-5 transition hover:-translate-y-0.5 hover:shadow-xl"
+							class="group rounded-2xl border border-blue-500/20 bg-blue-500/10 p-5 transition hover:-translate-y-0.5"
 						>
 							<div class="flex items-center gap-3">
 								<div
@@ -235,7 +249,7 @@ import designSoftPop from "../images/index/theme-soft-pop.png";
 						</div>
 
 						<div
-							class="group rounded-2xl border border-emerald-500/20 bg-emerald-500/10 p-5 transition hover:-translate-y-0.5 hover:shadow-xl"
+							class="group rounded-2xl border border-emerald-500/20 bg-emerald-500/10 p-5 transition hover:-translate-y-0.5"
 						>
 							<div class="flex items-center gap-3">
 								<div
@@ -253,7 +267,7 @@ import designSoftPop from "../images/index/theme-soft-pop.png";
 						</div>
 
 						<div
-							class="group rounded-2xl border border-orange-500/20 bg-orange-500/10 p-5 transition hover:-translate-y-0.5 hover:shadow-xl"
+							class="group rounded-2xl border border-orange-500/20 bg-orange-500/10 p-5 transition hover:-translate-y-0.5"
 						>
 							<div class="flex items-center gap-3">
 								<div
@@ -457,6 +471,53 @@ import designSoftPop from "../images/index/theme-soft-pop.png";
 		</div>
 	</div>
 </section>
+
+<style>
+	/* Glow orb animation - bigger and more dramatic */
+	@keyframes glow-float {
+		0%, 100% { transform: translate(0, 0) scale(1); }
+		33% { transform: translate(40px, -30px) scale(1.15); }
+		66% { transform: translate(-25px, 20px) scale(0.88); }
+	}
+
+	#whitelabel .glow-orb {
+		position: absolute;
+		border-radius: 50%;
+		filter: blur(100px);
+		opacity: 0.6;
+		animation: glow-float 10s ease-in-out infinite;
+		pointer-events: none;
+	}
+
+	/* Card hover effects - subtle */
+	#whitelabel .group {
+		transition: transform 0.3s ease;
+	}
+
+	#whitelabel .group:hover {
+		transform: translateY(-2px);
+	}
+
+	/* Gallery item - subtle hover */
+	#whitelabel figure img {
+		transition: transform 0.3s ease;
+	}
+
+	#whitelabel figure:hover img {
+		transform: scale(1.02);
+	}
+
+	/* Reduced motion */
+	@media (prefers-reduced-motion: reduce) {
+		#whitelabel .glow-orb {
+			animation: none !important;
+		}
+		#whitelabel .group,
+		#whitelabel figure img {
+			transition: none !important;
+		}
+	}
+</style>
 
 <script type="module">
 	// compare slider (clamped + resize safe)

@@ -11,7 +11,7 @@ import {
 	upsertLayerCommand,
 } from "./command/generic-command";
 import { toastSuccess } from "./messages";
-import type { IGenericCommand, IValueType } from "./schema";
+import type { IGenericCommand, IValueType, IVariable } from "./schema";
 import {
 	type IBoard,
 	type IComment,
@@ -19,8 +19,25 @@ import {
 	type ILayer,
 } from "./schema/flow/board";
 import { IVariableType } from "./schema/flow/node";
-import type { INode } from "./schema/flow/node";
+import type { IFnRefs, INode } from "./schema/flow/node";
 import { type IPin, IPinType } from "./schema/flow/pin";
+
+export function hexToRgba(hex: string, alpha = 0.3): string {
+	let c = hex.replace("#", "");
+	if (c.length === 3) c = c[0] + c[0] + c[1] + c[1] + c[2] + c[2];
+	const num = Number.parseInt(c, 16);
+	const r = (num >> 16) & 255;
+	const g = (num >> 8) & 255;
+	const b = num & 255;
+	return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}
+
+export function normalizeSelectionNodes(value: unknown): string[] {
+	if (!Array.isArray(value)) return [];
+	return value.filter(
+		(nodeId: unknown): nodeId is string => typeof nodeId === "string",
+	);
+}
 
 interface ISerializedPin {
 	id: string;
@@ -44,6 +61,7 @@ interface ISerializedNode {
 		[key: string]: ISerializedPin;
 	};
 	layer?: string;
+	fn_refs?: IFnRefs;
 }
 
 function serializeNode(node: INode): ISerializedNode {
@@ -74,6 +92,7 @@ function serializeNode(node: INode): ISerializedNode {
 		coordinates: node.coordinates ?? undefined,
 		pins: pins,
 		layer: node.layer ?? undefined,
+		fn_refs: node.fn_refs ?? undefined,
 	};
 }
 
@@ -109,6 +128,7 @@ function deserializeNode(node: ISerializedNode): INode {
 		comment: node.comment ?? "",
 		pins: pins,
 		layer: node.layer ?? "",
+		fn_refs: node.fn_refs ?? undefined,
 	};
 }
 
@@ -117,6 +137,17 @@ export function isValidConnection(
 	cache: Map<string, [IPin, INode | ILayer, boolean]>,
 	refs: { [key: string]: string },
 ) {
+	const refIn =
+		connection.sourceHandle.startsWith("ref_in_") ||
+		connection.targetHandle.startsWith("ref_in_");
+	const refOut =
+		connection.sourceHandle.startsWith("ref_out_") ||
+		connection.targetHandle.startsWith("ref_out_");
+
+	if (refIn || refOut) {
+		return refIn && refOut;
+	}
+
 	const [sourcePin, sourceNode] = cache.get(connection.sourceHandle) || [];
 	const [targetPin, targetNode] = cache.get(connection.targetHandle) || [];
 
@@ -145,6 +176,29 @@ export function isValidConnection(
 
 function invertPinType(type: IPinType): IPinType {
 	return type === IPinType.Input ? IPinType.Output : IPinType.Input;
+}
+
+/** Prefix for break struct field pins */
+const BREAK_STRUCT_PIN_PREFIX = "__break_struct_field__";
+/** Prefix for make struct field pins */
+const MAKE_STRUCT_PIN_PREFIX = "__make_struct_field__";
+
+/**
+ * Check if a pin is a break/make struct field pin.
+ * These pins have special connection rules for schema matching.
+ */
+function isStructFieldPin(pin: IPin): boolean {
+	return (
+		pin.name.startsWith(BREAK_STRUCT_PIN_PREFIX) ||
+		pin.name.startsWith(MAKE_STRUCT_PIN_PREFIX)
+	);
+}
+
+/**
+ * Check if this is a struct_in or struct_out pin from break/make struct nodes.
+ */
+function isStructIOPin(pin: IPin): boolean {
+	return pin.name === "struct_in" || pin.name === "struct_out";
 }
 
 export function doPinsMatch(
@@ -206,11 +260,16 @@ export function doPinsMatch(
 		if (schemaSource !== schemaTarget) return false;
 	}
 
-	if (
-		targetPin.options?.enforce_generic_value_type ||
-		sourcePin.options?.enforce_generic_value_type
-	) {
-		if (targetPin.value_type !== sourcePin.value_type) return false;
+	if (targetPin.value_type !== sourcePin.value_type) {
+		const sourceEnforces =
+			sourcePin.options?.enforce_generic_value_type ?? false;
+		const targetEnforces =
+			targetPin.options?.enforce_generic_value_type ?? false;
+		if (sourceEnforces || targetEnforces) {
+			if (sourceEnforces && targetEnforces) return false;
+			if (sourceEnforces && targetPin.data_type !== "Generic") return false;
+			if (targetEnforces && sourcePin.data_type !== "Generic") return false;
+		}
 	}
 
 	if (
@@ -219,6 +278,21 @@ export function doPinsMatch(
 		targetPin.data_type !== "Execution"
 	)
 		return true;
+
+	// Special handling for break/make struct I/O pins
+	// These pins (struct_in, struct_out) should be able to connect to any struct with a schema
+	// The schema will be adopted dynamically via on_update
+	if (
+		(isStructIOPin(sourcePin) || isStructIOPin(targetPin)) &&
+		sourcePin.data_type === IVariableType.Struct &&
+		targetPin.data_type === IVariableType.Struct
+	) {
+		// Allow connection if one side has a schema (the break/make node will adopt it)
+		if (sourcePin.schema || targetPin.schema) {
+			if (sourcePin.value_type !== targetPin.value_type) return false;
+			return true;
+		}
+	}
 
 	if (
 		(targetPin.options?.enforce_schema || sourcePin.options?.enforce_schema) &&
@@ -252,6 +326,13 @@ export function parseBoard(
 	oldEdges?: any[],
 	currentLayer?: string,
 	boardRef?: RefObject<IBoard | undefined>,
+	version?: [number, number, number],
+	onOpenInfo?: (node: INode) => void,
+	onExplain?: (nodeIds: string[]) => void,
+	remoteBoardExecution?: {
+		isOffline: boolean;
+		onRemoteExecute?: (node: INode, payload?: object) => Promise<void>;
+	},
 ) {
 	const nodes: any[] = [];
 	const edges: any[] = [];
@@ -259,8 +340,19 @@ export function parseBoard(
 	const oldNodesMap = new Map<number, any>();
 	const oldEdgesMap = new Map<string, any>();
 
+	// Compute a hash of all fn_refs to detect changes
+	const fnRefsHash = Object.values(board.nodes)
+		.map((n) => `${n.id}:${n.fn_refs?.fn_refs?.join(",") ?? ""}`)
+		.join(";");
+
 	for (const oldNode of oldNodes ?? []) {
 		oldNode.data.boardRef = boardRef;
+		oldNode.data.fnRefsHash = fnRefsHash;
+		// Update the node reference so fn_refs changes are reflected
+		const updatedNode = board.nodes[oldNode.id];
+		if (updatedNode) {
+			oldNode.data.node = updatedNode;
+		}
 		if (oldNode.data?.hash) oldNodesMap.set(oldNode.data?.hash, oldNode);
 	}
 
@@ -277,7 +369,17 @@ export function parseBoard(
 		const hash = node.hash ?? -1;
 		const oldNode = hash === -1 ? undefined : oldNodesMap.get(hash);
 		if (oldNode) {
-			nodes.push(oldNode);
+			// Reuse old node but create new data object to ensure React detects changes
+			// Update the hash to reflect the current node state
+			nodes.push({
+				...oldNode,
+				data: {
+					...oldNode.data,
+					node: node,
+					hash: hash,
+				},
+				selected: selected.has(node.id),
+			});
 		} else {
 			nodes.push({
 				id: node.id,
@@ -290,16 +392,27 @@ export function parseBoard(
 				data: {
 					label: node.name,
 					boardRef: boardRef,
+					fnRefsHash: fnRefsHash,
 					node: node,
 					hash: hash,
 					boardId: board.id,
 					appId: appId,
+					version: version,
 					onExecute: async (node: INode, payload?: object) => {
 						await executeBoard(node, payload);
 					},
+					onRemoteExecute: remoteBoardExecution?.onRemoteExecute
+						? async (node: INode, payload?: object) => {
+								await remoteBoardExecution.onRemoteExecute?.(node, payload);
+							}
+						: undefined,
+					isOffline: remoteBoardExecution?.isOffline ?? true,
 					onCopy: async () => {
 						handleCopy();
 					},
+					onOpenInfo: onOpenInfo,
+					onExplain: onExplain,
+					executionMode: board.execution_mode,
 				},
 				selected: selected.has(node.id),
 			});
@@ -469,6 +582,7 @@ export function parseBoard(
 						});
 						await executeCommand(command, false);
 					},
+					onExplain: onExplain,
 				},
 				selected: selected.has(layer.id),
 			});
@@ -558,13 +672,15 @@ export function parseBoard(
 					data: {
 						fromLayer: (node as any).layer,
 						toLayer: (connectedNode as any).layer,
+						pathType: connectionMode,
+						data_type: pin.data_type,
 					},
 					animated: pin.data_type !== "Execution",
 					reconnectable: true,
 					target: targetNodeId,
 					targetHandle: conntectedPin.id,
 					style: { stroke: typeToColor(pin.data_type) },
-					type: connectionMode ?? "default",
+					type: pin.data_type === "Execution" ? "execution" : "data",
 					data_type: pin.data_type,
 					selected: selected.has(`${pin.id}-${connectedTo}`),
 				});
@@ -574,6 +690,54 @@ export function parseBoard(
 		}
 	}
 
+	// Create edges for function references
+	for (const node of Object.values(board.nodes)) {
+		const nodeLayer = (node.layer ?? "") === "" ? undefined : node.layer;
+		if (nodeLayer !== currentLayer) continue;
+
+		if (node.fn_refs?.can_reference_fns && node.fn_refs.fn_refs.length > 0) {
+			for (const refNodeId of node.fn_refs.fn_refs) {
+				const targetNode = board.nodes[refNodeId];
+				if (!targetNode) continue;
+
+				const targetLayer =
+					(targetNode.layer ?? "") === "" ? undefined : targetNode.layer;
+				if (targetLayer !== currentLayer) continue;
+
+				const sourceHandle = `ref_out_${node.id}`;
+				const targetHandle = `ref_in_${refNodeId}`;
+				const edgeId = `${sourceHandle}-${targetHandle}`;
+
+				const existingEdge = oldEdgesMap.get(edgeId);
+
+				if (existingEdge) {
+					edges.push(existingEdge);
+				} else {
+					edges.push({
+						id: edgeId,
+						source: node.id,
+						sourceHandle: sourceHandle,
+						target: refNodeId,
+						targetHandle: targetHandle,
+						zIndex: 18,
+						data: {
+							fromLayer: nodeLayer,
+							toLayer: targetLayer,
+							isFnRef: true,
+							pathType: connectionMode,
+						},
+						animated: true,
+						reconnectable: true,
+						style: {
+							stroke: "var(--pin-fn-ref)",
+						},
+						type: "veil",
+						selected: selected.has(edgeId),
+					});
+				}
+			}
+		}
+	}
 	for (const comment of Object.values(board.comments)) {
 		const commentLayer =
 			(comment.layer ?? "") === "" ? undefined : comment.layer;
@@ -585,26 +749,33 @@ export function parseBoard(
 			continue;
 		}
 
+		// Use mediaNode for Image/Video comment types, commentNode for Text
+		const isMedia =
+			comment.comment_type === ICommentType.Image ||
+			comment.comment_type === ICommentType.Video;
+
 		nodes.push({
 			id: comment.id,
-			type: "commentNode",
+			type: isMedia ? "mediaNode" : "commentNode",
 			position: { x: comment.coordinates[0], y: comment.coordinates[1] },
-			width: comment.width ?? 200,
-			height: comment.height ?? 80,
+			width: comment.width ?? (isMedia ? 400 : 200),
+			height: comment.height ?? (isMedia ? 300 : 80),
 			zIndex: comment.z_index ?? 1,
 			draggable: !(comment.is_locked ?? false),
 			data: {
 				label: comment.id,
 				boardId: board.id,
+				appId: appId,
 				hash: hash,
 				boardRef: boardRef,
 				comment: { ...comment, is_locked: comment.is_locked ?? false },
-				onUpsert: (comment: IComment) => {
+				presignedUrl: comment.presigned_url,
+				onUpsert: async (comment: IComment) => {
 					const command = upsertCommentCommand({
 						comment: comment,
 						current_layer: currentLayer,
 					});
-					executeCommand(command, false);
+					await executeCommand(command, false);
 				},
 			},
 			selected: selected.has(comment.id),
@@ -681,6 +852,30 @@ export function handleCopy(
 					: comment.layer,
 		}));
 
+	// Collect variables referenced by the selected nodes
+	const referencedVarIds = new Set<string>();
+	for (const node of selectedNodes) {
+		for (const pin of Object.values(node.pins)) {
+			if (pin.name === "var_ref" && pin.default_value) {
+				try {
+					const varRef =
+						typeof pin.default_value === "string"
+							? JSON.parse(pin.default_value)
+							: pin.default_value;
+					if (typeof varRef === "string") {
+						referencedVarIds.add(varRef);
+					}
+				} catch {
+					// Ignore parse errors
+				}
+			}
+		}
+	}
+
+	const selectedVariables = Object.values(board.variables).filter((v) =>
+		referencedVarIds.has(v.id),
+	);
+
 	try {
 		navigator.clipboard.writeText(
 			JSON.stringify(
@@ -689,6 +884,7 @@ export function handleCopy(
 					comments: selectedComments,
 					cursorPosition,
 					layers: Array.from(foundLayer.values()),
+					variables: selectedVariables,
 				},
 				null,
 				2,
@@ -731,11 +927,13 @@ export async function handlePaste(
 		);
 		const comments: any[] = data.comments;
 		const layers: ILayer[] = data.layers ?? [];
+		const variables: IVariable[] = data.variables ?? [];
 
 		const command = copyPasteCommand({
 			original_comments: comments,
 			original_nodes: nodes,
 			original_layers: layers,
+			original_variables: variables,
 			new_comments: [],
 			new_nodes: [],
 			new_layers: [],

@@ -1,7 +1,11 @@
+pub mod db;
 pub mod delete_event;
 pub mod get_event;
 pub mod get_event_versions;
 pub mod get_events;
+pub mod invoke_event;
+pub mod invoke_event_async;
+pub mod prerun_event;
 pub mod upsert_event;
 pub mod upsert_event_feedback;
 pub mod validate_event;
@@ -27,6 +31,12 @@ pub fn routes() -> Router<AppState> {
             get(get_event_versions::get_event_versions),
         )
         .route("/{event_id}/validate", post(validate_event::validate_event))
+        .route("/{event_id}/prerun", get(prerun_event::prerun_event))
+        .route("/{event_id}/invoke", post(invoke_event::invoke_event))
+        .route(
+            "/{event_id}/invoke/async",
+            post(invoke_event_async::invoke_event_async),
+        )
         .route(
             "/{board_id}/feedback",
             put(upsert_event_feedback::upsert_event_feedback),

@@ -8,6 +8,7 @@ export interface INode {
 	event_callback?: boolean | null;
 	friendly_name: string;
 	hash?: number | null;
+	fn_refs?: IFnRefs | null;
 	icon?: null | string;
 	id: string;
 	layer?: null | string;
@@ -16,6 +17,10 @@ export interface INode {
 	pins: { [key: string]: IPin };
 	scores?: null | INodeScores;
 	start?: boolean | null;
+	/** Schema version for node migration. When catalog version > placed version, pins are synced. */
+	version?: number | null;
+	/** If true, this node can only run locally (compute-intensive, RPA, browser automation) */
+	only_offline?: boolean;
 	[property: string]: any;
 }
 
@@ -72,18 +77,30 @@ export enum IValueType {
 }
 
 /**
- * Represents quality metrics for a node, with scores ranging from 0 to 10. Higher scores
- * indicate worse performance in each category.
+ * Represents quality metrics for a node. Scores range from 0 to 10 (low - high).
+ * A higher score indicates a larger issue or resource impact in the category.
  *
- * # Score Categories * `privacy` - Measures data protection and confidentiality level *
- * `security` - Assesses resistance against potential attacks * `performance` - Evaluates
- * computational efficiency and speed * `governance` - Indicates compliance with policies
- * and regulations
+ * Score Categories:
+ * - `privacy` — Data protection and confidentiality (0 low - 10 high)
+ * - `security` — Resistance to attack and exposure
+ * - `performance` — Computational cost / latency (high values mean worse performance)
+ * - `governance` — Compliance, auditability and policy alignment
+ * - `reliability` — Stability, error rates and recoverability
+ * - `cost` — Resource / financial impact of running this node
  */
 export interface INodeScores {
 	governance: number;
 	performance: number;
 	privacy: number;
 	security: number;
+	reliability: number;
+	cost: number;
+	[property: string]: any;
+}
+
+export interface IFnRefs {
+	fn_refs: string[];
+	can_reference_fns: boolean;
+	can_be_referenced_by_fns: boolean;
 	[property: string]: any;
 }

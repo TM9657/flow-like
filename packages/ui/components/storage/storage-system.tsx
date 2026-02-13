@@ -12,6 +12,7 @@ import {
 	SearchIcon,
 	SortAscIcon,
 	UploadIcon,
+	XIcon,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
@@ -34,6 +35,8 @@ import {
 	Tooltip,
 	TooltipContent,
 	TooltipTrigger,
+	isCode,
+	isText,
 } from "../ui";
 import { StorageBreadcrumbs } from "./storage-breadcrumbs";
 import { FileOrFolder } from "./storage-file-or-folder";
@@ -49,6 +52,37 @@ export function StorageSystem({
 	updatePrefix: (prefix: string) => void;
 	fileToUrl: (prefix: string) => Promise<string>;
 }>) {
+	// Responsive helper: detect small screens (<= Tailwind 'sm')
+	const useIsSmallScreen = () => {
+		const [isSmall, setIsSmall] = useState(false);
+		useEffect(() => {
+			if (typeof window === "undefined") return;
+			const mql = window.matchMedia("(max-width: 640px)");
+			const onChange = (e: MediaQueryListEvent) => setIsSmall(e.matches);
+			const legacyOnChange = () => setIsSmall(mql.matches);
+			// Set initial
+			setIsSmall(mql.matches);
+			// Subscribe (support older Safari)
+			try {
+				mql.addEventListener("change", onChange);
+			} catch {
+				// Fallback for Safari < 14
+				// @ts-ignore
+				mql.addListener(legacyOnChange);
+			}
+			return () => {
+				try {
+					mql.removeEventListener("change", onChange);
+				} catch {
+					// Fallback for Safari < 14
+					// @ts-ignore
+					mql.removeListener(legacyOnChange);
+				}
+			};
+		}, []);
+		return isSmall;
+	};
+	const isSmallScreen = useIsSmallScreen();
 	const fileReference = useRef<HTMLInputElement>(null);
 	const folderReference = useRef<HTMLInputElement>(null);
 	const backend = useBackend();
@@ -257,6 +291,38 @@ export function StorageSystem({
 		[appId, preview],
 	);
 
+	const saveFile = useCallback(
+		async (fileContent: string) => {
+			if (!preview.file) {
+				toast.error("No file selected");
+				return;
+			}
+
+			try {
+				const blob = new Blob([fileContent], { type: "text/plain" });
+				const fileName = preview.file.split("/").pop() || "file";
+				const file = new File([blob], fileName, { type: "text/plain" });
+
+				await backend.storageState.uploadStorageItems(
+					appId,
+					prefix,
+					[file],
+					undefined,
+				);
+
+				await files.refetch();
+			} catch (error) {
+				console.error("Failed to save file:", error);
+				throw error;
+			}
+		},
+		[appId, prefix, preview.file, backend.storageState, files],
+	);
+
+	const isFileEditable = useCallback((fileUrl: string) => {
+		return isCode(fileUrl) || isText(fileUrl);
+	}, []);
+
 	const downloadFile = useCallback(
 		async (file: string) => {
 			if (preview.file === file) {
@@ -351,7 +417,7 @@ export function StorageSystem({
 	const folderCount = filesWithVirtual?.filter((f) => f.is_dir).length ?? 0;
 
 	return (
-		<div className="flex grow flex-col gap-4 min-h-full h-full max-h-full overflow-hidden w-full">
+		<div className="flex flex-col w-full h-full max-h-full overflow-hidden">
 			<input
 				ref={fileReference}
 				type="file"
@@ -371,9 +437,9 @@ export function StorageSystem({
 				type="file"
 				className="hidden"
 				id="folder-upload"
-				// @ts-ignore
-				webkitdirectory={"true"}
-				directory
+				// @ts-ignore - webkitdirectory and directory are non-standard attributes
+				webkitdirectory=""
+				directory=""
 				multiple
 				onChange={(e) => {
 					if (!e.target.files) return;
@@ -385,7 +451,7 @@ export function StorageSystem({
 
 			{/* Upload Progress Indicator */}
 			{uploadProgress.isUploading && (
-				<div className="mx-4 mt-4 p-4 border rounded-lg bg-card">
+				<div className="mx-4 mt-4 p-4 border rounded-lg bg-card shrink-0">
 					<div className="flex items-center justify-between mb-2">
 						<div className="flex items-center gap-2">
 							<UploadIcon className="h-4 w-4 text-primary animate-pulse" />
@@ -406,11 +472,11 @@ export function StorageSystem({
 			)}
 
 			{/* Header Section */}
-			<div className="flex flex-col gap-4 px-4 pt-4">
-				<div className="flex flex-row items-center justify-between">
+			<div className="flex flex-col gap-4 px-4 pt-4 shrink-0">
+				<div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
 					<h2 className="text-2xl font-semibold tracking-tight">Storage</h2>
-					<div className="flex items-center gap-2">
-						<div className="flex items-center gap-2">
+					<div className="flex items-center gap-2 flex-wrap justify-end">
+						<div className="hidden sm:flex items-center gap-2">
 							<div className="flex items-center gap-1 text-sm text-muted-foreground">
 								<span>Sort by:</span>
 								<span className="font-medium text-foreground capitalize">
@@ -535,7 +601,7 @@ export function StorageSystem({
 									onClick={() => setCreatingFolder((v) => !v)}
 								>
 									<FolderPlusIcon className="h-4 w-4" />
-									New Folder
+									<span className="hidden sm:inline">New Folder</span>
 								</Button>
 							</TooltipTrigger>
 							<TooltipContent>
@@ -551,7 +617,7 @@ export function StorageSystem({
 									onClick={() => fileReference.current?.click()}
 								>
 									<UploadIcon className="h-4 w-4" />
-									Upload Files
+									<span className="hidden sm:inline">Upload Files</span>
 								</Button>
 							</TooltipTrigger>
 							<TooltipContent>Upload files to current folder</TooltipContent>
@@ -565,7 +631,7 @@ export function StorageSystem({
 									onClick={() => folderReference.current?.click()}
 								>
 									<FolderPlusIcon className="h-4 w-4" />
-									Upload Folder
+									<span className="hidden sm:inline">Upload Folder</span>
 								</Button>
 							</TooltipTrigger>
 							<TooltipContent>Upload entire folder</TooltipContent>
@@ -573,18 +639,20 @@ export function StorageSystem({
 					</div>
 				</div>
 
-				<div className="flex items-end gap-2 mt-2 justify-between">
-					<StorageBreadcrumbs
-						appId={appId}
-						prefix={prefix}
-						updatePrefix={(prefix) => updatePrefix(prefix)}
-					/>
+				<div className="flex flex-col sm:flex-row sm:items-end gap-2 mt-2 sm:justify-between">
+					<div className="overflow-x-auto whitespace-nowrap max-w-full">
+						<StorageBreadcrumbs
+							appId={appId}
+							prefix={prefix}
+							updatePrefix={(prefix) => updatePrefix(prefix)}
+						/>
+					</div>
 					{(filesWithVirtual.length ?? 0) > 0 && (
-						<div className="relative">
+						<div className="relative w-full sm:w-auto">
 							<SearchIcon className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
 							<Input
 								placeholder="Search files and folders..."
-								className="pl-10"
+								className="pl-10 w-full"
 								value={searchQuery}
 								onChange={(e) => setSearchQuery(e.target.value)}
 							/>
@@ -636,11 +704,11 @@ export function StorageSystem({
 				)}
 			</div>
 
-			<Separator />
+			<Separator className="shrink-0 my-4" />
 
 			{/* Content Section */}
 			{(filesWithVirtual.length ?? 0) === 0 && (
-				<div className="flex flex-col h-full w-full grow relative px-4">
+				<div className="flex flex-col flex-1 min-h-0 w-full relative px-4 pb-4">
 					<EmptyState
 						className="w-full h-full max-w-full border-2 border-dashed border-muted-foreground/25 rounded-lg"
 						title="No Files Found"
@@ -665,43 +733,58 @@ export function StorageSystem({
 			)}
 
 			{(filesWithVirtual.length ?? 0) > 0 && (
-				<div className="flex flex-col gap-4 grow max-h-full h-full overflow-y-hidden px-4 pb-4">
+				<div className="flex flex-col flex-1 min-h-0 px-4 pb-4">
 					{preview.url !== "" && (
 						<>
-							{isPreviewMaximized && (
+							{(isSmallScreen || isPreviewMaximized) && (
 								<div className="fixed inset-0 z-50 bg-background">
 									<div className="flex flex-col h-full w-full">
-										<div className="p-4 border-b bg-background flex items-center justify-between">
+										<div className="p-4 border-b bg-background flex items-center justify-between shrink-0">
 											<h3 className="font-medium text-lg">
 												Preview - {preview.file.split("/").pop()}
 											</h3>
 											<Button
 												variant="ghost"
 												size="sm"
-												onClick={() => setIsPreviewMaximized(false)}
+												onClick={() => {
+													if (isSmallScreen) {
+														setPreview((p) => ({ ...p, url: "", file: "" }));
+													} else {
+														setIsPreviewMaximized(false);
+													}
+												}}
 												className="h-8 w-8 p-0"
 											>
-												<MinimizeIcon className="h-4 w-4" />
+												{isSmallScreen ? (
+													<XIcon className="h-4 w-4" />
+												) : (
+													<MinimizeIcon className="h-4 w-4" />
+												)}
 											</Button>
 										</div>
-										<div className="grow overflow-auto">
-											<FilePreviewer url={preview.url} page={2} />
+										<div className="flex-1 min-h-0 overflow-auto">
+											<FilePreviewer
+												url={preview.url}
+												page={2}
+												editable={isFileEditable(preview.url)}
+												onSave={saveFile}
+											/>
 										</div>
 									</div>
 								</div>
 							)}
-							{!isPreviewMaximized && (
+							{!isSmallScreen && !isPreviewMaximized && (
 								<ResizablePanelGroup
 									direction="horizontal"
 									autoSaveId={"file_viewer"}
-									className="border rounded-lg"
+									className="border rounded-lg flex-1 min-h-0"
 								>
-									<ResizablePanel className="flex flex-col gap-2 grow overflow-y-hidden max-h-full h-full p-4 bg-background">
+									<ResizablePanel className="flex flex-col p-4 bg-background min-h-0">
 										<div
 											key={sortBy}
-											className="flex flex-col grow max-h-full h-full overflow-hidden gap-2"
+											className="flex flex-col flex-1 min-h-0 gap-2"
 										>
-											<div className="flex items-center gap-2 mb-2">
+											<div className="flex items-center gap-2 shrink-0">
 												<h3 className="font-medium text-sm text-muted-foreground">
 													Files & Folders
 												</h3>
@@ -718,7 +801,7 @@ export function StorageSystem({
 													{folderCount} folders
 												</Badge>
 											</div>
-											<div className="flex flex-col gap-2 grow max-h-full h-full overflow-auto">
+											<div className="flex flex-col gap-2 flex-1 min-h-0 overflow-y-auto">
 												{sortedFiles.map((file) => (
 													<FileOrFolder
 														highlight={preview.file === file.location}
@@ -729,13 +812,19 @@ export function StorageSystem({
 														}
 														loadFile={(file) => loadFile(file)}
 														deleteFile={async (file) => {
-															const filePrefix = `${prefix}/${file}`;
-															await backend.storageState.deleteStorageItems(
-																appId,
-																[filePrefix],
-															);
-															await files.refetch();
-															toast.success("File deleted successfully");
+															try {
+																const filePrefix = `${prefix}/${file}`;
+																await backend.storageState.deleteStorageItems(
+																	appId,
+																	[filePrefix],
+																);
+																toast.success("Deleted successfully");
+															} catch (error) {
+																console.error(error);
+																toast.error("Failed to delete");
+															} finally {
+																await files.refetch();
+															}
 														}}
 														shareFile={async (file) => {
 															const downloadLinks =
@@ -775,9 +864,9 @@ export function StorageSystem({
 										</div>
 									</ResizablePanel>
 									<ResizableHandle className="mx-2" />
-									<ResizablePanel className="flex flex-col gap-2 grow overflow-y-hidden max-h-full h-full p-4 bg-background">
-										<div className="flex flex-col grow overflow-auto max-h-full h-full bg-muted/50 rounded-md border">
-											<div className="p-2 border-b bg-background rounded-t-md flex items-center justify-between">
+									<ResizablePanel className="flex flex-col p-4 bg-background min-h-0">
+										<div className="flex flex-col flex-1 min-h-0 bg-muted/50 rounded-md border">
+											<div className="p-2 border-b bg-background rounded-t-md flex items-center justify-between shrink-0">
 												<h3 className="font-medium text-sm">Preview</h3>
 												<Button
 													variant="ghost"
@@ -788,8 +877,13 @@ export function StorageSystem({
 													<MaximizeIcon className="h-3 w-3" />
 												</Button>
 											</div>
-											<div className="grow overflow-auto">
-												<FilePreviewer url={preview.url} page={2} />
+											<div className="flex-1 min-h-0 overflow-auto">
+												<FilePreviewer
+													url={preview.url}
+													page={2}
+													editable={isFileEditable(preview.url)}
+													onSave={saveFile}
+												/>
 											</div>
 										</div>
 									</ResizablePanel>
@@ -798,8 +892,8 @@ export function StorageSystem({
 						</>
 					)}
 					{preview.url === "" && (
-						<div className="flex flex-col grow max-h-full h-full overflow-auto gap-2 border rounded-lg p-4 bg-background">
-							<div className="flex items-center gap-2 mb-2">
+						<div className="flex flex-col flex-1 min-h-0 border rounded-lg p-3 sm:p-4 bg-background">
+							<div className="flex items-center gap-2 mb-2 shrink-0">
 								<h3 className="font-medium text-sm text-muted-foreground">
 									Files & Folders
 								</h3>
@@ -810,54 +904,63 @@ export function StorageSystem({
 									{folderCount} folders
 								</Badge>
 							</div>
-							<div
-								className={`grid gap-2 ${viewMode === "grid" ? "grid-cols-2 md:grid-cols-3 lg:grid-cols-4" : "grid-cols-1"}`}
-							>
-								{sortedFiles.map((file) => (
-									<FileOrFolder
-										highlight={preview.file === file.location}
-										key={file.location}
-										file={file}
-										changePrefix={(new_prefix) => {
-											setPreview({ url: "", file: "" });
-											updatePrefix(`${prefix}/${new_prefix}`);
-										}}
-										loadFile={loadFile}
-										deleteFile={async (file) => {
-											const filePrefix = `${prefix}/${file}`;
-											await backend.storageState.deleteStorageItems(appId, [
-												filePrefix,
-											]);
-											await files.refetch();
-											toast.success("File deleted successfully");
-										}}
-										shareFile={async (file) => {
-											const downloadLinks =
-												await backend.storageState.downloadStorageItems(appId, [
-													file,
-												]);
-											if (downloadLinks.length === 0) {
-												return;
-											}
-											const firstItem = downloadLinks[0];
-											if (!firstItem?.url) {
-												return;
-											}
-											try {
-												await navigator.clipboard.writeText(firstItem.url);
-												toast.success("Copied download link to clipboard");
-											} catch (error) {
-												console.error(
-													"Failed to copy link to clipboard:",
-													error,
-												);
-											}
-										}}
-										downloadFile={async (file) => {
-											downloadFile(file);
-										}}
-									/>
-								))}
+							<div className="flex-1 min-h-0 overflow-y-auto">
+								<div
+									className={`grid gap-2 ${viewMode === "grid" ? "grid-cols-2 md:grid-cols-3 lg:grid-cols-4" : "grid-cols-1"}`}
+								>
+									{sortedFiles.map((file) => (
+										<FileOrFolder
+											highlight={preview.file === file.location}
+											key={file.location}
+											file={file}
+											changePrefix={(new_prefix) => {
+												setPreview({ url: "", file: "" });
+												updatePrefix(`${prefix}/${new_prefix}`);
+											}}
+											loadFile={loadFile}
+											deleteFile={async (file) => {
+												try {
+													const filePrefix = `${prefix}/${file}`;
+													await backend.storageState.deleteStorageItems(appId, [
+														filePrefix,
+													]);
+													toast.success("Deleted successfully");
+												} catch (error) {
+													console.error(error);
+													toast.error("Failed to delete");
+												} finally {
+													await files.refetch();
+												}
+											}}
+											shareFile={async (file) => {
+												const downloadLinks =
+													await backend.storageState.downloadStorageItems(
+														appId,
+														[file],
+													);
+												if (downloadLinks.length === 0) {
+													return;
+												}
+												const firstItem = downloadLinks[0];
+												if (!firstItem?.url) {
+													return;
+												}
+												try {
+													await navigator.clipboard.writeText(firstItem.url);
+													toast.success("Copied download link to clipboard");
+												} catch (error) {
+													console.error(
+														"Failed to copy link to clipboard:",
+														error,
+													);
+												}
+											}}
+											downloadFile={async (file) => {
+												downloadFile(file);
+											}}
+										/>
+									))}
+								</div>
 							</div>
 						</div>
 					)}

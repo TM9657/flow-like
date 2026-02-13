@@ -13,3 +13,30 @@ rustflags = ["-C", "link-arg=-fuse-ld=lld"]
 
 [target.aarch64-apple-darwin]
 rustflags = ["-C", "link-arg=-fuse-ld=/usr/bin/ld"]
+
+[target.aarch64-apple-ios]
+rustflags = [
+  "-C", "debug-assertions=yes",
+  "-C", "debuginfo=0",
+  "-C", "strip=symbols",
+  "-C", "opt-level=z",
+  "-C", "panic=abort",
+]
+
+[target.aarch64-apple-ios-sim]
+rustflags = [
+  "-C", "debug-assertions=yes",
+  "-C", "debuginfo=0",
+  "-C", "strip=symbols",
+  "-C", "opt-level=z",
+  "-C", "panic=abort",
+]
+
+[target.x86_64-apple-ios]
+rustflags = [
+  "-C", "debug-assertions=yes",
+  "-C", "debuginfo=0",
+  "-C", "strip=symbols",
+  "-C", "opt-level=z",
+  "-C", "panic=abort",
+]

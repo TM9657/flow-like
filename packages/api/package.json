@@ -4,9 +4,8 @@
 	"version": "0.0.2",
 	"type": "module",
 	"scripts": {
-		"postinstall": "cargo install sea-orm-cli@1.1.15",
 		"db:push:sync": "bun run db:push && bun run db:sync",
-		"db:sync": "sea-orm-cli generate entity -o src/entity --max-connections 10 --with-serde both",
+		"db:sync": "docker compose up postgres tools && cd ../.. && cargo fmt --all",
 		"db:push": "bunx prisma db push --schema prisma/schema",
 		"db:migration:create": "bunx prisma migrate dev --name",
 		"db:migration:deploy": "bunx prisma migrate deploy",
@@ -15,14 +14,14 @@
 	"devDependencies": {
 		"@types/node": "^22.10.10",
 		"dotenv": "^17.2.2",
-		"drizzle-kit": "^0.31.4",
+		"drizzle-kit": "^0.31.8",
 		"drizzle-orm": "^0.44.5",
 		"pg": "^8.16.3",
-		"prisma": "^6.8.2",
+		"prisma": "^7.2.0",
 		"tsx": "^4.19.2",
 		"typescript": "^5.7.3"
 	},
 	"dependencies": {
-		"@prisma/client": "^6.8.2"
+		"@prisma/client": "^7.2.0"
 	}
 }

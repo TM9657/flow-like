@@ -12,6 +12,29 @@ use flow_like::bit::Metadata;
 use flow_like_storage::Path as FlowPath;
 use sea_orm::TransactionTrait;
 
+#[utoipa::path(
+    get,
+    path = "/apps/{app_id}/meta",
+    tag = "meta",
+    description = "Get metadata for an app, template, or course.",
+    params(
+        ("app_id" = String, Path, description = "Application ID"),
+        ("language" = Option<String>, Query, description = "Language code (default en)"),
+        ("template_id" = Option<String>, Query, description = "Template ID"),
+        ("course_id" = Option<String>, Query, description = "Course ID")
+    ),
+    responses(
+        (status = 200, description = "Metadata", body = String, content_type = "application/json"),
+        (status = 401, description = "Unauthorized"),
+        (status = 403, description = "Forbidden"),
+        (status = 404, description = "Not found")
+    ),
+    security(
+        ("bearer_auth" = []),
+        ("api_key" = []),
+        ("pat" = [])
+    )
+)]
 #[tracing::instrument(name = "GET /apps/{app_id}/meta", skip(state, user, query))]
 pub async fn get_meta(
     State(state): State<AppState>,
@@ -28,7 +51,7 @@ pub async fn get_meta(
     let existing_meta = mode
         .find_existing_meta(&language, &txn)
         .await?
-        .ok_or_else(|| ApiError::NotFound)?;
+        .ok_or(ApiError::NOT_FOUND)?;
 
     let mut metadata = Metadata::from(existing_meta.clone());
 

@@ -1,47 +1,47 @@
 "use client";
-
 import { createId } from "@paralleldrive/cuid2";
 import { useDebounce } from "@uidotdev/usehooks";
-import { type Node, type NodeProps, useReactFlow } from "@xyflow/react";
 import {
-	AlignCenterVerticalIcon,
-	AlignEndVerticalIcon,
-	AlignStartVerticalIcon,
-	AlignVerticalJustifyCenterIcon,
-	AlignVerticalJustifyEndIcon,
-	AlignVerticalJustifyStartIcon,
+	Handle,
+	type Node,
+	type NodeProps,
+	Position,
+	useReactFlow,
+	useUpdateNodeInternals,
+} from "@xyflow/react";
+import {
 	BanIcon,
 	CircleStopIcon,
 	CircleXIcon,
 	ClockIcon,
-	CopyIcon,
-	FoldVerticalIcon,
-	MessageSquareIcon,
+	CloudCog,
+	MonitorIcon,
 	PlayCircleIcon,
 	ScrollTextIcon,
 	SquareCheckIcon,
-	SquarePenIcon,
-	Trash2Icon,
 	TriangleAlertIcon,
 	WorkflowIcon,
 } from "lucide-react";
 import { useTheme } from "next-themes";
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+	type RefObject,
+	memo,
+	useCallback,
+	useEffect,
+	useMemo,
+	useRef,
+	useState,
+} from "react";
 import PuffLoader from "react-spinners/PuffLoader";
 import { useLogAggregation } from "../..";
-import {
-	ContextMenu,
-	ContextMenuContent,
-	ContextMenuItem,
-	ContextMenuLabel,
-	ContextMenuSeparator,
-	ContextMenuSub,
-	ContextMenuSubContent,
-	ContextMenuSubTrigger,
-	ContextMenuTrigger,
-} from "../../components/ui/context-menu";
 import { useInvalidateInvoke } from "../../hooks";
+import { colorFromSub } from "../../hooks/use-peer-users";
 import {
+	getActivityColorClasses,
+	useRunActivity,
+} from "../../hooks/use-run-activity";
+import {
+	IExecutionMode,
 	ILogLevel,
 	IPinType,
 	IValueType,
@@ -51,31 +51,39 @@ import {
 	upsertLayerCommand,
 	upsertPinCommand,
 } from "../../lib";
+import type { INode } from "../../lib";
 import { logLevelFromNumber } from "../../lib/log-level";
-import type { IComment, ILayer } from "../../lib/schema/flow/board";
+import type { IBoard, IComment, ILayer } from "../../lib/schema/flow/board";
 import { ILayerType } from "../../lib/schema/flow/board/commands/upsert-layer";
-import type { INode } from "../../lib/schema/flow/node";
 import { type IPin, IVariableType } from "../../lib/schema/flow/pin";
 import { convertJsonToUint8Array } from "../../lib/uint8";
 import { useBackendStore } from "../../state/backend-state";
 import { useRunExecutionStore } from "../../state/run-execution-state";
 import {
-	Button,
 	Dialog,
 	DialogContent,
 	DialogDescription,
 	DialogHeader,
 	DialogTitle,
 	DialogTrigger,
-	Textarea,
 } from "../ui";
-import { DynamicImage } from "../ui/dynamic-image";
+import { DynamicImage } from "../ui";
+import { AutoResizeText } from "./auto-resize-text";
 import { useUndoRedo } from "./flow-history";
+import { EventPayloadForm } from "./flow-node/event-payload-form";
 import { FlowNodeCommentMenu } from "./flow-node/flow-node-comment-menu";
 import { FlowPinAction } from "./flow-node/flow-node-pin-action";
 import { FlowNodeRenameMenu } from "./flow-node/flow-node-rename-menu";
+import { FlowNodeToolbar } from "./flow-node/flow-node-toolbar";
 import { FlowPin } from "./flow-pin";
+import { LayerEditMenu } from "./layer-editing-menu";
 import { typeToColor } from "./utils";
+
+export interface RemoteSelectionParticipant {
+	clientId: number;
+	/** The sub (subject) from the auth token - use to resolve user info via API */
+	sub?: string;
+}
 
 export interface IPinAction {
 	action: "create";
@@ -90,8 +98,17 @@ export type FlowNode = Node<
 		boardId: string;
 		appId: string;
 		transparent?: boolean;
+		boardRef: RefObject<IBoard | undefined>;
+		fnRefsHash?: string;
+		version?: [number, number, number];
 		onExecute: (node: INode, payload?: object) => Promise<void>;
+		onRemoteExecute?: (node: INode, payload?: object) => Promise<void>;
+		isOffline?: boolean;
 		onCopy: () => Promise<void>;
+		remoteSelections?: RemoteSelectionParticipant[];
+		onOpenInfo?: (node: INode) => void;
+		onExplain?: (nodeIds: string[]) => void;
+		executionMode?: IExecutionMode;
 	},
 	"node"
 >;
@@ -117,15 +134,38 @@ const FlowNodeInner = memo(
 		const [isExec, setIsExec] = useState(false);
 		const [inputPins, setInputPins] = useState<(IPin | IPinAction)[]>([]);
 		const [outputPins, setOutputPins] = useState<(IPin | IPinAction)[]>([]);
-		const { runs } = useRunExecutionStore();
-		const [executionState, setExecutionState] = useState<
-			"done" | "running" | "none"
-		>("none");
-		const [runId, setRunId] = useState<string | undefined>(undefined);
-		const debouncedExecutionState = useDebounce(executionState, 100);
+
+		// Use separate selectors returning primitives to avoid infinite re-renders
+		const executionStatus = useRunExecutionStore((state) => {
+			for (const [, run] of state.runs) {
+				if (run.nodes.has(props.id)) return "running" as const;
+				if (run.already_executed.has(props.id)) return "done" as const;
+			}
+			return "none" as const;
+		});
+
+		const activeRunId = useRunExecutionStore((state) => {
+			for (const [runId, run] of state.runs) {
+				if (run.nodes.has(props.id) || run.already_executed.has(props.id)) {
+					return runId;
+				}
+			}
+			return undefined;
+		});
+
+		const debouncedExecutionState = useDebounce(executionStatus, 100);
+		const runActivity = useRunActivity(activeRunId);
 		const div = useRef<HTMLDivElement>(null);
 		const reactFlow = useReactFlow();
 		const { getNode } = useReactFlow();
+		const updateNodeInternals = useUpdateNodeInternals();
+		const remoteSelections = props.data.remoteSelections ?? [];
+		const displayedRemoteSelections = useMemo(
+			() => remoteSelections.slice(0, 3),
+			[remoteSelections],
+		);
+		const extraRemoteSelections =
+			remoteSelections.length - displayedRemoteSelections.length;
 		const [executed, severity] = useMemo(() => {
 			const severity = ILogLevel.Debug;
 
@@ -184,46 +224,14 @@ const FlowNodeInner = memo(
 				div.current.style.height = `calc(${height * 15}px + 1.25rem + 0.5rem)`;
 		}, [isReroute, inputPins, outputPins]);
 
-		useEffect(() => {
-			parsePins(Object.values(props.data.node?.pins || []));
-		}, [
-			props.data.node.pins,
-			props.positionAbsoluteX,
-			props.positionAbsoluteY,
-		]);
-
-		useEffect(() => {
-			let isRunning = false;
-			let already_executed = false;
-
-			for (const [runId, run] of runs) {
-				if (run.nodes.has(props.id)) {
-					isRunning = true;
-					setRunId(runId);
-					break;
-				}
-
-				if (run.already_executed.has(props.id)) {
-					already_executed = true;
-					setRunId(runId);
-				}
-			}
-
-			if (isRunning) {
-				setExecutionState("running");
-				return;
-			}
-
-			if (already_executed) {
-				setExecutionState("done");
-				return;
-			}
-
-			setExecutionState("none");
-		}, [runs, props.id]);
+		// Execution state is now computed directly from the selector above
 
 		const addPin = useCallback(
 			async (node: INode, pin: IPin, index: number) => {
+				if (typeof props.data.version !== "undefined") {
+					return;
+				}
+
 				const backend = useBackendStore.getState().backend;
 				if (!backend) return;
 				const nodeGuard = reactFlow
@@ -294,10 +302,14 @@ const FlowNodeInner = memo(
 					props.data.boardId,
 				]);
 			},
-			[reactFlow, sortPins, pushCommand, invalidate],
+			[reactFlow, sortPins, pushCommand, invalidate, props.data.version],
 		);
 		const pinRemoveCallback = useCallback(
 			async (pinToRemove: IPin) => {
+				if (typeof props.data.version !== "undefined") {
+					return;
+				}
+
 				const backend = useBackendStore.getState().backend;
 				if (!backend) return;
 
@@ -345,7 +357,7 @@ const FlowNodeInner = memo(
 					props.data.boardId,
 				]);
 			},
-			[inputPins, outputPins, getNode],
+			[inputPins, outputPins, getNode, props.data.version],
 		);
 
 		const parsePins = useCallback(
@@ -423,8 +435,15 @@ const FlowNodeInner = memo(
 				setOutputPins(outputPins);
 				setIsExec(isExec);
 			},
-			[props.data.node.pins],
+			[addPin, sortPins, props.data.node],
 		);
+
+		// Parse pins when node pins change
+		useEffect(() => {
+			parsePins(Object.values(props.data.node?.pins || []));
+			// Update React Flow internals when pins change (handles may have changed)
+			updateNodeInternals(props.id);
+		}, [props.data.node.pins, props.id]);
 
 		function isPinAction(pin: IPin | IPinAction): pin is IPinAction {
 			return typeof (pin as IPinAction).onAction === "function";
@@ -452,6 +471,7 @@ const FlowNodeInner = memo(
 								pin={pin}
 								onPinRemove={pinRemoveCallback}
 								skipOffset={isReroute}
+								version={props.data.version}
 							/>
 						);
 					}),
@@ -461,6 +481,7 @@ const FlowNodeInner = memo(
 				props.data.boardId,
 				pinRemoveCallback,
 				isReroute,
+				props.data.version,
 			],
 		);
 
@@ -483,6 +504,7 @@ const FlowNodeInner = memo(
 							key={pin.id}
 							onPinRemove={pinRemoveCallback}
 							skipOffset={isReroute}
+							version={props.data.version}
 						/>
 					);
 				}),
@@ -492,37 +514,173 @@ const FlowNodeInner = memo(
 				props.data.boardId,
 				pinRemoveCallback,
 				isReroute,
+				props.data.version,
 			],
 		);
 
+		// Compute connection states efficiently - only track the specific fn_refs we care about
+		const refInConnected = useMemo(() => {
+			const board = props.data.boardRef?.current;
+			if (!board) return false;
+			const currentNodeId = props.data.node.id;
+			// Only check nodes, return boolean to avoid object reference changes
+			return Object.values(board.nodes || {}).some((node) =>
+				node.fn_refs?.fn_refs?.includes(currentNodeId),
+			);
+		}, [props.data.node.id, props.data.fnRefsHash]);
+
+		const refOutConnected = useMemo(() => {
+			return (props.data.node.fn_refs?.fn_refs?.length ?? 0) > 0;
+		}, [props.data.node.fn_refs?.fn_refs?.length]);
+
+		const renderFnRefInputs = useMemo(() => {
+			const canBeReferencedByFns =
+				props.data.node.fn_refs?.can_be_referenced_by_fns ?? false;
+			if (!canBeReferencedByFns) return null;
+
+			return (
+				<Handle
+					position={Position.Top}
+					type={"target"}
+					className={`relative ml-auto right-0 z-50 mt-2 -mr-1`}
+					id={`ref_in_${props.data.node.id}`}
+					style={{
+						width: 12,
+						height: 12,
+						borderRadius: 2,
+						background: refInConnected
+							? `
+				linear-gradient(
+					135deg,
+					var(--pin-fn-ref) 0%,
+					color-mix(in oklch, var(--pin-fn-ref) 90%, white) 50%,
+					var(--pin-fn-ref) 100%
+				)
+			`
+							: "var(--background)",
+						border: "1px solid var(--pin-fn-ref)",
+						padding: 0,
+						boxShadow: refInConnected
+							? `
+		0 0 6px color-mix(in oklch, var(--pin-fn-ref) 30%, transparent),
+		inset 0 1px 1px color-mix(in oklch, white 15%, transparent)
+	`
+							: "none",
+					}}
+				/>
+			);
+		}, [
+			props.data.node.fn_refs?.can_be_referenced_by_fns,
+			refInConnected,
+			props.data.node.id,
+		]);
+		const renderFnRefOutputs = useMemo(() => {
+			const canBeReferencedByFns =
+				props.data.node.fn_refs?.can_reference_fns ?? false;
+			if (!canBeReferencedByFns) return null;
+
+			return (
+				<Handle
+					position={Position.Bottom}
+					type={"source"}
+					className={`relative z-50`}
+					id={`ref_out_${props.data.node.id}`}
+					style={{
+						width: 12,
+						height: 12,
+						borderRadius: 2,
+						background: refOutConnected
+							? `
+			radial-gradient(
+				circle at 30% 30%,
+				color-mix(in oklch, var(--pin-fn-ref) 100%, white 20%),
+				var(--pin-fn-ref) 70%
+			)
+		`
+							: "var(--background)",
+						border: "1px solid var(--pin-fn-ref)",
+						padding: 0,
+						boxShadow: refOutConnected
+							? `
+			0 0 8px color-mix(in oklch, var(--pin-fn-ref) 40%, transparent),
+			0 1px 2px color-mix(in oklch, black 20%, transparent),
+			inset 0 1px 1px color-mix(in oklch, white 20%, transparent)
+		`
+							: "none",
+					}}
+				/>
+			);
+		}, [
+			props.data.node.fn_refs?.can_reference_fns,
+			refOutConnected,
+			props.data.node.id,
+		]);
 		const playNode = useMemo(() => {
 			if (!props.data.node.start) return null;
-			if (executionState === "done" || executing)
+
+			const executionMode = props.data.executionMode ?? IExecutionMode.Hybrid;
+			const canRemoteExecuteBase =
+				!props.data.isOffline && props.data.onRemoteExecute !== undefined;
+
+			// Apply execution mode restrictions
+			// only_offline nodes can never run remotely
+			const canLocalExecute = executionMode !== IExecutionMode.Remote;
+			const canRemoteExecute =
+				canRemoteExecuteBase &&
+				executionMode !== IExecutionMode.Local &&
+				!props.data.node.only_offline;
+
+			if (executionStatus === "done" || executing)
 				return (
 					<button
 						className="bg-background hover:bg-card group/play transition-all rounded-md hover:rounded-lg border p-1 absolute left-0 top-0 translate-x-[calc(-120%)] opacity-200!"
 						onClick={async (e) => {
 							const backend = useBackendStore.getState().backend;
 							if (!backend) return;
-							if (runId) await backend.eventState.cancelExecution(runId);
+							if (activeRunId)
+								await backend.eventState.cancelExecution(activeRunId);
 						}}
 					>
 						<CircleStopIcon className="w-3 h-3 group-hover/play:scale-110 text-primary" />
 					</button>
 				);
+
+			const handleLocalExecute = async (payloadObj?: object) => {
+				if (executing) return;
+				setExecuting(true);
+				await props.data.onExecute(props.data.node, payloadObj);
+				setExecuting(false);
+			};
+
+			const handleRemoteExecute = async (payloadObj?: object) => {
+				if (executing || !props.data.onRemoteExecute) return;
+				setExecuting(true);
+				await props.data.onRemoteExecute(props.data.node, payloadObj);
+				setExecuting(false);
+			};
+
 			if (Object.keys(props.data.node.pins).length <= 1)
 				return (
-					<button
-						className="bg-background hover:bg-card group/play transition-all rounded-md hover:rounded-lg border p-1 absolute left-0 top-0 translate-x-[calc(-120%)]"
-						onClick={async (e) => {
-							if (executing) return;
-							setExecuting(true);
-							await props.data.onExecute(props.data.node);
-							setExecuting(false);
-						}}
-					>
-						<PlayCircleIcon className="w-3 h-3 group-hover/play:scale-110" />
-					</button>
+					<div className="absolute left-0 top-0 translate-x-[calc(-120%)] flex flex-col gap-1">
+						{canLocalExecute && (
+							<button
+								className="bg-background hover:bg-card group/play transition-all rounded-md hover:rounded-lg border p-1"
+								onClick={() => handleLocalExecute()}
+								title="Execute locally"
+							>
+								<PlayCircleIcon className="w-3 h-3 group-hover/play:scale-110" />
+							</button>
+						)}
+						{canRemoteExecute && (
+							<button
+								className="bg-background hover:bg-card group/play transition-all rounded-md hover:rounded-lg border p-1 relative"
+								onClick={() => handleRemoteExecute()}
+								title="Execute on server"
+							>
+								<CloudCog className="w-3 h-3 group-hover/play:scale-110" />
+							</button>
+						)}
+					</div>
 				);
 
 			return (
@@ -530,72 +688,109 @@ const FlowNodeInner = memo(
 					open={payload.open}
 					onOpenChange={(open) => setPayload((old) => ({ ...old, open }))}
 				>
-					<DialogTrigger>
-						<button className="bg-background hover:bg-card group/play transition-all rounded-md hover:rounded-lg border p-1 absolute left-0 top-0 translate-x-[calc(-120%)]">
-							<PlayCircleIcon className="w-3 h-3 group-hover/play:scale-110" />
-						</button>
+					<DialogTrigger asChild>
+						<div className="absolute left-0 top-0 translate-x-[calc(-120%)] flex flex-col gap-1">
+							<button
+								className="bg-background hover:bg-card group/play transition-all rounded-md hover:rounded-lg border p-1"
+								title={
+									canLocalExecute ? "Execute locally" : "Execute on server"
+								}
+							>
+								{canLocalExecute ? (
+									<PlayCircleIcon className="w-3 h-3 group-hover/play:scale-110" />
+								) : (
+									<CloudCog className="w-3 h-3 group-hover/play:scale-110" />
+								)}
+							</button>
+						</div>
 					</DialogTrigger>
-					<DialogContent>
+					<DialogContent className="max-w-lg">
 						<DialogHeader>
-							<DialogTitle>Execution Payload</DialogTitle>
+							<DialogTitle>Execute {props.data.node.friendly_name}</DialogTitle>
 							<DialogDescription>
-								JSON Payload for the Event. Please have a look at the
-								documentation for example Payloads.
+								Provide input values for the event payload.
 							</DialogDescription>
 						</DialogHeader>
-						<Textarea
-							rows={10}
-							placeholder="JSON payload"
-							value={payload.payload}
-							onChange={(e) =>
-								setPayload((old) => ({
-									...old,
-									payload: e.target.value,
-								}))
+						<EventPayloadForm
+							node={props.data.node}
+							boardRef={props.data.boardRef}
+							onLocalExecute={canLocalExecute ? handleLocalExecute : undefined}
+							onRemoteExecute={
+								canRemoteExecute ? handleRemoteExecute : undefined
 							}
+							canLocalExecute={canLocalExecute}
+							canRemoteExecute={canRemoteExecute}
+							onClose={() => setPayload((old) => ({ ...old, open: false }))}
 						/>
-						<Button
-							onClick={async () => {
-								if (executing) return;
-								setExecuting(true);
-								await props.data.onExecute(
-									props.data.node,
-									JSON.parse(payload.payload),
-								);
-								setExecuting(false);
-								setPayload((old) => ({ ...old, open: false }));
-							}}
-						>
-							Send
-						</Button>
 					</DialogContent>
 				</Dialog>
 			);
 		}, [
 			props.data.node.start,
 			payload,
-			runId,
+			activeRunId,
 			executing,
-			executionState,
+			executionStatus,
 			props.data.onExecute,
+			props.data.onRemoteExecute,
+			props.data.isOffline,
 			props.data.node,
+			props.data.executionMode,
 		]);
 
 		return (
 			<div
 				key={`${props.id}__node`}
 				ref={div}
-				className={`bg-card! p-2 react-flow__node-default rounded-md! selectable focus:ring-2 relative group ${props.selected && "border-primary! border-2"} ${executionState === "done" ? "opacity-60" : "opacity-100"} ${isReroute && "w-4 max-w-4 max-h-3! overflow-y rounded-lg! p-[0.4rem]!"} ${!isReroute && "border-border!"}`}
+				className={`bg-card! p-2 react-flow__node-default rounded-md! selectable focus:ring-2 relative group ${props.selected && "border-primary! border-2"} ${executionStatus === "done" ? "opacity-60" : "opacity-100"} ${isReroute && "w-4 max-w-4 max-h-3! overflow-y rounded-lg! p-[0.4rem]!"} ${!isReroute && "border-border!"}`}
 				style={isReroute ? nodeStyle : {}}
 				onMouseEnter={() => onHover(true)}
 				onMouseLeave={() => onHover(false)}
 			>
+				{remoteSelections.length > 0 && (
+					<div className="pointer-events-none absolute -top-3 left-0 flex flex-col gap-1">
+						{displayedRemoteSelections.map((participant) => {
+							const color = colorFromSub(participant.sub);
+							return (
+								<div
+									key={`${participant.clientId}-${participant.sub ?? "unknown"}`}
+									className="flex items-center gap-1 rounded-md border bg-background/80 px-1.5 py-0.5 text-[0.625rem] leading-none shadow-sm"
+									style={{ borderColor: color }}
+									title={participant.sub}
+								>
+									<span
+										className="h-1.5 w-1.5 rounded-full"
+										style={{ backgroundColor: color }}
+									/>
+								</div>
+							);
+						})}
+						{extraRemoteSelections > 0 && (
+							<div className="rounded-md border bg-background/80 px-1.5 py-0.5 text-[0.625rem] leading-none shadow-sm">
+								+{extraRemoteSelections}
+							</div>
+						)}
+					</div>
+				)}
 				{playNode}
 				{props.data.node.long_running && (
 					<div className="absolute top-0 z-10 translate-y-[calc(-50%)] translate-x-[calc(-50%)] left-0 text-center bg-background rounded-full">
 						{useMemo(
 							() => (
 								<ClockIcon className="w-2 h-2 text-foreground" />
+							),
+							[],
+						)}
+					</div>
+				)}
+				{props.data.node.only_offline && (
+					<div
+						className="absolute bottom-0 z-10 translate-y-[calc(50%)] translate-x-[calc(-50%)] left-0 text-center bg-background rounded-full"
+						title="This node can only run locally"
+					>
+						{useMemo(
+							() => (
+								<MonitorIcon className="w-2 h-2 text-blue-500" />
 							),
 							[],
 						)}
@@ -641,25 +836,30 @@ const FlowNodeInner = memo(
 					</div>
 				)}
 				{renderInputPins}
+				{renderFnRefInputs}
+				{renderFnRefOutputs}
 				{!isReroute && (
 					<div
 						className={`header absolute top-0 left-0 right-0 h-4 gap-1 flex flex-row items-center border-b p-1 justify-between rounded-md rounded-b-none bg-card ${props.data.node.event_callback && "bg-linear-to-l  from-card via-primary/50 to-primary"} ${!isExec && "bg-linear-to-r  from-card via-tertiary/50 to-tertiary"} ${props.data.node.start && "bg-linear-to-r  from-card via-primary/50 to-primary"} ${isReroute && "w-6"}`}
 					>
-						<div className={"flex flex-row items-center gap-1"}>
+						<div className={"flex flex-row items-center gap-1 min-w-0"}>
 							{useMemo(
 								() =>
 									props.data.node?.icon ? (
 										<DynamicImage
-											className="w-2 h-2 bg-foreground"
+											className="w-2 h-2 bg-foreground shrink-0"
 											url={props.data.node.icon}
 										/>
 									) : (
-										<WorkflowIcon className="w-2 h-2" />
+										<WorkflowIcon className="w-2 h-2 shrink-0" />
 									),
 								[props.data.node?.icon],
 							)}
-							<small className="font-medium leading-none text-start line-clamp-1">
-								{props.data.node?.friendly_name}
+							<small className="font-medium leading-none text-start truncate">
+								<AutoResizeText
+									text={props.data.node?.friendly_name}
+									maxChars={30}
+								/>
 							</small>
 						</div>
 						<div className="flex flex-row items-center gap-1">
@@ -669,22 +869,23 @@ const FlowNodeInner = memo(
 									className="w-2 h-2 cursor-pointer hover:text-primary"
 								/>
 							)}
-							{useMemo(() => {
-								if (debouncedExecutionState !== "running") return null;
-								return (
-									<PuffLoader
-										color={resolvedTheme === "dark" ? "white" : "black"}
-										size={10}
-										speedMultiplier={1}
-									/>
-								);
-							}, [debouncedExecutionState, resolvedTheme])}
-
-							{useMemo(() => {
-								return debouncedExecutionState === "done" ? (
-									<SquareCheckIcon className="w-2 h-2 text-primary" />
-								) : null;
-							}, [debouncedExecutionState])}
+							{debouncedExecutionState === "running" && (
+								<PuffLoader
+									color={resolvedTheme === "dark" ? "white" : "black"}
+									size={10}
+									speedMultiplier={1}
+								/>
+							)}
+							{debouncedExecutionState === "running" && (
+								<span
+									className={`text-[8px] ${getActivityColorClasses(runActivity.status).text}`}
+								>
+									{runActivity.formattedTime}
+								</span>
+							)}
+							{debouncedExecutionState === "done" && (
+								<SquareCheckIcon className="w-2 h-2 text-primary" />
+							)}
 						</div>
 					</div>
 				)}
@@ -696,33 +897,25 @@ const FlowNodeInner = memo(
 
 function FlowNode(props: NodeProps<FlowNode>) {
 	const [isHovered, setIsHovered] = useState(false);
-	const [isOpen, setIsOpen] = useState(false);
 	const [commentMenu, setCommentMenu] = useState(false);
 	const [renameMenu, setRenameMenu] = useState(false);
+	const [editingMenu, setEditingMenu] = useState(false);
 	const flow = useReactFlow();
 	const { pushCommand, pushCommands } = useUndoRedo(
 		props.data.appId,
 		props.data.boardId,
 	);
 	const invalidate = useInvalidateInvoke();
-	const errorHandled = useMemo(() => {
-		return Object.values(props.data.node.pins).some(
-			(pin) =>
-				pin.name === "auto_handle_error" && pin.pin_type === IPinType.Output,
-		);
-	}, [props.data.node.pins]);
-
-	const isExec = useMemo(() => {
-		return Object.values(props.data.node.pins).some(
-			(pin) => pin.data_type === IVariableType.Execution,
-		);
-	}, [props.data.node.pins]);
 
 	const copy = useCallback(async () => {
 		props.data.onCopy();
 	}, [flow]);
 
 	const handleError = useCallback(async () => {
+		if (typeof props.data.version !== "undefined") {
+			return;
+		}
+
 		const node = flow.getNodes().find((node) => node.id === props.id);
 		if (!node) return;
 
@@ -822,13 +1015,23 @@ function FlowNode(props: NodeProps<FlowNode>) {
 	}, [props.data.node, props.data.appId, props.data.boardId, flow]);
 
 	const handleCollapse = useCallback(
-		async (x: number, y: number) => {
+		async (_x: number, _y: number) => {
+			if (typeof props.data.version !== "undefined") {
+				return;
+			}
+
 			const selectedNodes = flow.getNodes().filter((node) => node.selected);
-			const flowCords = flow.screenToFlowPosition({
-				x: x,
-				y: y,
-			});
 			if (selectedNodes.length <= 1) return;
+
+			// Calculate bounding box of selected nodes to position the collapsed layer
+			let minX = Number.POSITIVE_INFINITY;
+			let minY = Number.POSITIVE_INFINITY;
+			for (const node of selectedNodes) {
+				const x = node.position.x;
+				const y = node.position.y;
+				if (x < minX) minX = x;
+				if (y < minY) minY = y;
+			}
 
 			const nodeIds = selectedNodes.map((node) => {
 				const isNode = node.data.node as INode;
@@ -846,7 +1049,7 @@ function FlowNode(props: NodeProps<FlowNode>) {
 					nodes: {},
 					pins: {},
 					parent_id: (selectedNodes[0].data.node as INode).layer,
-					coordinates: [flowCords.x, flowCords.y, 0],
+					coordinates: [minX, minY, 0],
 					in_coordinates: undefined,
 					name: "Collapsed",
 					type: ILayerType.Collapsed,
@@ -874,6 +1077,10 @@ function FlowNode(props: NodeProps<FlowNode>) {
 	);
 
 	const deleteNodes = useCallback(async () => {
+		if (typeof props.data.version !== "undefined") {
+			return;
+		}
+
 		const nodes = flow.getNodes().filter((node) => node.selected);
 		if (!nodes || nodes.length === 0) return;
 
@@ -890,7 +1097,6 @@ function FlowNode(props: NodeProps<FlowNode>) {
 			props.data.boardId,
 			commands,
 		);
-		setIsOpen(false);
 		await pushCommands(result);
 		await invalidate(backend.boardState.getBoard, [
 			props.data.appId,
@@ -900,6 +1106,10 @@ function FlowNode(props: NodeProps<FlowNode>) {
 
 	const orderNodes = useCallback(
 		async (type: "align" | "justify", dir: "start" | "end" | "center") => {
+			if (typeof props.data.version !== "undefined") {
+				return;
+			}
+
 			const selectedNodes = flow.getNodes().filter((node) => node.selected);
 			if (selectedNodes.length <= 1) return;
 			let currentLayer: string | undefined = undefined;
@@ -972,151 +1182,25 @@ function FlowNode(props: NodeProps<FlowNode>) {
 		[props.data.node, invalidate, pushCommands, flow],
 	);
 
-	if (isOpen || isHovered) {
-		return (
-			<ContextMenu
-				onOpenChange={(open) => {
-					setIsOpen(open);
-				}}
-				key={props.id}
-			>
-				<ContextMenuTrigger>
-					<FlowNodeInner props={props} onHover={setIsHovered} />
-				</ContextMenuTrigger>
-				<ContextMenuContent className="">
-					<ContextMenuLabel>Node Actions</ContextMenuLabel>
-					{flow.getNodes().filter((node) => node.selected).length <= 1 &&
-						props.data.node.start && (
-							<ContextMenuItem onClick={() => setRenameMenu(true)}>
-								<div className="flex flex-row items-center gap-2 text-nowrap">
-									<SquarePenIcon className="w-4 h-4" />
-									Rename
-								</div>
-							</ContextMenuItem>
-						)}
-					{flow.getNodes().filter((node) => node.selected).length <= 1 && (
-						<ContextMenuItem onClick={() => setCommentMenu(true)}>
-							<div className="flex flex-row items-center gap-2 text-nowrap">
-								<MessageSquareIcon className="w-4 h-4" />
-								Comment
-							</div>
-						</ContextMenuItem>
-					)}
-					{flow.getNodes().filter((node) => node.selected).length > 1 && (
-						<ContextMenuItem
-							onClick={(e) => {
-								e.preventDefault();
-								const screenCoords = e.currentTarget.getBoundingClientRect();
-								const x = screenCoords.x + screenCoords.width / 2;
-								const y = screenCoords.y + screenCoords.height / 2;
-								handleCollapse(x, y);
-							}}
-						>
-							<div className="flex flex-row items-center gap-2 text-nowrap">
-								<FoldVerticalIcon className="w-4 h-4" />
-								Collapse
-							</div>
-						</ContextMenuItem>
-					)}
+	const selectedCount = useMemo(
+		() => flow.getNodes().filter((node) => node.selected).length,
+		[flow.getNodes()],
+	);
 
-					<ContextMenuItem onClick={async () => await copy()}>
-						<div className="flex flex-row items-center gap-2 text-nowrap">
-							<CopyIcon className="w-4 h-4" />
-							Copy
-						</div>
-					</ContextMenuItem>
-					{isExec &&
-						flow.getNodes().filter((node) => node.selected).length <= 1 && (
-							<>
-								<ContextMenuSeparator />
-								<ContextMenuItem onClick={() => handleError()}>
-									<div className="flex flex-row items-center gap-2 text-nowrap">
-										<CircleXIcon className="w-4 h-4" />
-										{errorHandled ? "Remove Handling" : "Handle Errors"}
-									</div>
-								</ContextMenuItem>
-							</>
-						)}
-					<ContextMenuSeparator />
-					<ContextMenuItem onClick={async () => await deleteNodes()}>
-						<div className="flex flex-row items-center gap-2 text-nowrap">
-							<Trash2Icon className="w-4 h-4" />
-							Delete
-						</div>
-					</ContextMenuItem>
-					{flow.getNodes().filter((node) => node.selected).length > 1 && (
-						<>
-							<ContextMenuSeparator />
-							<ContextMenuSub>
-								<ContextMenuSubTrigger>
-									<div className="flex flex-row items-center gap-2 text-nowrap">
-										<AlignStartVerticalIcon className="w-4 h-4" />
-										Align
-									</div>
-								</ContextMenuSubTrigger>
-								<ContextMenuSubContent>
-									<ContextMenuItem onClick={() => orderNodes("align", "start")}>
-										<div className="flex flex-row items-center gap-2 text-nowrap">
-											<AlignStartVerticalIcon className="w-4 h-4" />
-											Start
-										</div>
-									</ContextMenuItem>
-									<ContextMenuItem
-										onClick={() => orderNodes("align", "center")}
-									>
-										<div className="flex flex-row items-center gap-2 text-nowrap">
-											<AlignCenterVerticalIcon className="w-4 h-4" />
-											Center
-										</div>
-									</ContextMenuItem>
-									<ContextMenuItem onClick={() => orderNodes("align", "end")}>
-										<div className="flex flex-row items-center gap-2 text-nowrap">
-											<AlignEndVerticalIcon className="w-4 h-4" />
-											End
-										</div>
-									</ContextMenuItem>
-								</ContextMenuSubContent>
-							</ContextMenuSub>
+	const isReadOnly = typeof props.data.version !== "undefined";
 
-							<ContextMenuSeparator />
-							<ContextMenuSub>
-								<ContextMenuSubTrigger>
-									<div className="flex flex-row items-center gap-2 text-nowrap">
-										<AlignVerticalJustifyStartIcon className="w-4 h-4" />
-										Justify
-									</div>
-								</ContextMenuSubTrigger>
-								<ContextMenuSubContent>
-									<ContextMenuItem
-										onClick={() => orderNodes("justify", "start")}
-									>
-										<div className="flex flex-row items-center gap-2 text-nowrap">
-											<AlignVerticalJustifyStartIcon className="w-4 h-4" />
-											Start
-										</div>
-									</ContextMenuItem>
-									<ContextMenuItem
-										onClick={() => orderNodes("justify", "center")}
-									>
-										<div className="flex flex-row items-center gap-2 text-nowrap">
-											<AlignVerticalJustifyCenterIcon className="w-4 h-4" />
-											Center
-										</div>
-									</ContextMenuItem>
-									<ContextMenuItem onClick={() => orderNodes("justify", "end")}>
-										<div className="flex flex-row items-center gap-2 text-nowrap">
-											<AlignVerticalJustifyEndIcon className="w-4 h-4" />
-											End
-										</div>
-									</ContextMenuItem>
-								</ContextMenuSubContent>
-							</ContextMenuSub>
-						</>
-					)}
-				</ContextMenuContent>
-			</ContextMenu>
-		);
-	}
+	const handleOpenInfo = useCallback(() => {
+		props.data.onOpenInfo?.(props.data.node);
+	}, [props.data.onOpenInfo, props.data.node]);
+
+	const handleExplain = useCallback(() => {
+		const selectedNodes = flow.getNodes().filter((node) => node.selected);
+		const nodeIds =
+			selectedNodes.length > 0
+				? selectedNodes.map((node) => node.id)
+				: [props.data.node.id];
+		props.data.onExplain?.(nodeIds);
+	}, [flow, props.data.node.id, props.data.onExplain]);
 
 	return (
 		<>
@@ -1138,7 +1222,73 @@ function FlowNode(props: NodeProps<FlowNode>) {
 					onOpenChange={(open) => setRenameMenu(open)}
 				/>
 			)}
-			<FlowNodeInner props={props} onHover={setIsHovered} />
+			{editingMenu && props.data.node.name === "events_generic" && (
+				<LayerEditMenu
+					open={editingMenu}
+					onOpenChange={setEditingMenu}
+					node={props.data.node}
+					boardRef={props.data.boardRef}
+					onApply={async (updated) => {
+						const backend = useBackendStore.getState().backend;
+						if (!backend) return;
+
+						const currentNode = flow.getNode(props.id);
+						if (!currentNode) return;
+
+						const updatedNode = updated as INode;
+						const command = updateNodeCommand({
+							node: {
+								...updatedNode,
+								coordinates: [
+									currentNode.position.x,
+									currentNode.position.y,
+									0,
+								],
+							},
+						});
+
+						const result = await backend.boardState.executeCommand(
+							props.data.appId,
+							props.data.boardId,
+							command,
+						);
+
+						await pushCommand(result, false);
+						await invalidate(backend.boardState.getBoard, [
+							props.data.appId,
+							props.data.boardId,
+						]);
+						setEditingMenu(false);
+					}}
+					mode="node"
+				/>
+			)}
+			<div
+				className="relative"
+				onMouseEnter={() => setIsHovered(true)}
+				onMouseLeave={() => setIsHovered(false)}
+			>
+				{(isHovered || props.selected) && (
+					<FlowNodeToolbar
+						node={props.data.node}
+						appId={props.data.appId}
+						boardId={props.data.boardId}
+						selectedCount={selectedCount}
+						isReadOnly={isReadOnly}
+						onCopy={copy}
+						onDelete={deleteNodes}
+						onComment={() => setCommentMenu(true)}
+						onRename={() => setRenameMenu(true)}
+						onEdit={() => setEditingMenu(true)}
+						onInfo={handleOpenInfo}
+						onHandleError={handleError}
+						onCollapse={handleCollapse}
+						onAlign={orderNodes}
+						onExplain={handleExplain}
+					/>
+				)}
+				<FlowNodeInner props={props} onHover={() => {}} />
+			</div>
 		</>
 	);
 }

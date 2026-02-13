@@ -1,0 +1,29 @@
+[package]
+name = "flow-like-catalog-core"
+version = "0.1.0"
+edition = "2024"
+
+[features]
+default = []
+local-ml = ["flow-like-model-provider/local-ml", "flow-like/local-ml"]
+remote-ml = ["flow-like-model-provider/remote-ml", "flow-like/remote-ml"]
+tauri = ["flow-like/tauri"]
+# Execution feature - enables heavy dependencies for node execution
+execute = []
+
+[dependencies]
+flow-like.workspace = true
+flow-like-types.workspace = true
+flow-like-model-provider.workspace = true
+flow-like-storage.workspace = true
+flow-like-catalog-macros.workspace = true
+inventory = "0.3"
+ahash.workspace = true
+tracing.workspace = true
+schemars.workspace = true
+futures.workspace = true
+serde = { workspace = true, features = ["derive", "rc"] }
+tokio = { workspace = true, features = ["rt-multi-thread", "macros"] }
+uuid.workspace = true
+async-trait.workspace = true
+

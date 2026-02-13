@@ -17,6 +17,12 @@ const Toaster = ({ ...props }: ToasterProps) => {
 					"--normal-border": "var(--border)",
 				} as React.CSSProperties
 			}
+			toastOptions={{
+				classNames: {
+					toast: "[&>[data-content]]:flex-1 [&>[data-content]]:min-w-0",
+					description: "w-full",
+				},
+			}}
 			{...props}
 		/>
 	);

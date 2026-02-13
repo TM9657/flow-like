@@ -1,13 +1,14 @@
+#![cfg(feature = "local-ml")]
 use crate::{
     bit::{Bit, BitTypes},
-    models::embedding_factory::EmbeddingFactory,
+    models::{embedding_factory::EmbeddingFactory, local_utils::ensure_local_weights},
     state::FlowLikeState,
+};
+use flow_like_model_provider::fastembed::{
+    self, ImageEmbedding, ImageInitOptionsUserDefined, UserDefinedImageEmbeddingModel,
 };
 use flow_like_model_provider::{
     embedding::{EmbeddingModelLogic, GeneralTextSplitter},
-    fastembed::{
-        self, ImageEmbedding, ImageInitOptionsUserDefined, UserDefinedImageEmbeddingModel,
-    },
     image_embedding::ImageEmbeddingModelLogic,
 };
 use flow_like_storage::files::store::FlowLikeStore;
@@ -18,7 +19,7 @@ use std::{any::Any, sync::Arc};
 #[derive(Clone)]
 pub struct LocalImageEmbeddingModel {
     pub bit: Arc<Bit>,
-    image_embedding_model: Arc<fastembed::ImageEmbedding>,
+    image_embedding_model: Arc<Mutex<fastembed::ImageEmbedding>>,
     text_model: Arc<dyn EmbeddingModelLogic>,
 }
 
@@ -35,7 +36,7 @@ impl Cacheable for LocalImageEmbeddingModel {
 impl LocalImageEmbeddingModel {
     pub async fn new(
         bit: &Bit,
-        app_state: Arc<Mutex<FlowLikeState>>,
+        app_state: Arc<FlowLikeState>,
         factory: &mut EmbeddingFactory,
     ) -> flow_like_types::Result<Arc<Self>> {
         let bit = Arc::new(bit.clone());
@@ -47,7 +48,7 @@ impl LocalImageEmbeddingModel {
         };
 
         let pack = bit.pack(app_state.clone()).await?;
-        pack.download(app_state.clone(), None).await?;
+        ensure_local_weights(&pack, &app_state, bit.id.as_str(), "image embedding model").await?;
         let embedding_model = pack
             .bits
             .iter()
@@ -83,7 +84,7 @@ impl LocalImageEmbeddingModel {
 
         let default_return_model = LocalImageEmbeddingModel {
             bit,
-            image_embedding_model: Arc::new(loaded_model),
+            image_embedding_model: Arc::new(Mutex::new(loaded_model)),
             text_model,
         };
 
@@ -110,13 +111,13 @@ impl ImageEmbeddingModelLogic for LocalImageEmbeddingModel {
     }
 
     async fn image_embed(&self, images: Vec<DynamicImage>) -> Result<Vec<Vec<f32>>> {
-        let embeddings = match self.image_embedding_model.embed_images(images) {
-            Ok(embeddings) => embeddings,
-            Err(e) => {
-                println!("Error embedding image: {}", e);
-                return Err(flow_like_types::anyhow!("Error embedding image"));
-            }
-        };
+        let model = self.image_embedding_model.clone();
+        let embeddings = flow_like_types::tokio::task::spawn_blocking(move || {
+            model.blocking_lock().embed_images(images)
+        })
+        .await
+        .map_err(|e| flow_like_types::anyhow!("Blocking task failed: {}", e))?
+        .map_err(|e| flow_like_types::anyhow!("Error embedding image: {}", e))?;
 
         Ok(embeddings)
     }

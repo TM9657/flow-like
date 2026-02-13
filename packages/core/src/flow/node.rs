@@ -7,8 +7,6 @@ use std::{
     sync::Arc,
 };
 
-use crate::state::FlowLikeState;
-
 use super::{
     board::Board,
     execution::context::ExecutionContext,
@@ -24,20 +22,79 @@ pub enum NodeState {
     Error,
 }
 
-/// Represents quality metrics for a node, with scores ranging from 0 to 10.
-/// Higher scores indicate worse performance in each category.
+/// Represents quality metrics for a node, with scores ranging from 0 to 10 (low - high).
+/// Higher values indicate higher risk/impact in the given category. Use 0 for "none/low"
+/// and 10 for "very high".
 ///
 /// # Score Categories
-/// * `privacy` - Measures data protection and confidentiality level
-/// * `security` - Assesses resistance against potential attacks
-/// * `performance` - Evaluates computational efficiency and speed
-/// * `governance` - Indicates compliance with policies and regulations
+/// * `privacy` - Measures data protection and confidentiality (0 low - 10 high).
+/// * `security` - Assesses resistance against potential attacks and exposure (0 low - 10 high).
+/// * `performance` - Evaluates computational efficiency and speed. Higher means worse performance.
+/// * `governance` - Indicates compliance and auditability with policies and regulations.
+/// * `reliability` - Measures stability, error rates and recoverability.
+/// * `cost` - Represents resource/cost impact for running this node.
 #[derive(Serialize, Deserialize, JsonSchema, Debug, Clone)]
 pub struct NodeScores {
     pub privacy: u8,
     pub security: u8,
     pub performance: u8,
     pub governance: u8,
+    pub reliability: u8,
+    pub cost: u8,
+}
+
+impl Default for NodeScores {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl NodeScores {
+    pub fn new() -> Self {
+        NodeScores {
+            privacy: 0,
+            security: 0,
+            performance: 0,
+            governance: 0,
+            reliability: 0,
+            cost: 0,
+        }
+    }
+
+    pub fn set_privacy(&mut self, score: u8) -> &mut Self {
+        self.privacy = score;
+        self
+    }
+    pub fn set_security(&mut self, score: u8) -> &mut Self {
+        self.security = score;
+        self
+    }
+    pub fn set_performance(&mut self, score: u8) -> &mut Self {
+        self.performance = score;
+        self
+    }
+    pub fn set_governance(&mut self, score: u8) -> &mut Self {
+        self.governance = score;
+        self
+    }
+    pub fn set_reliability(&mut self, score: u8) -> &mut Self {
+        self.reliability = score;
+        self
+    }
+    pub fn set_cost(&mut self, score: u8) -> &mut Self {
+        self.cost = score;
+        self
+    }
+    pub fn build(&self) -> Self {
+        self.clone()
+    }
+}
+
+#[derive(Serialize, Deserialize, JsonSchema, Debug, Clone)]
+pub struct FnRefs {
+    pub fn_refs: Vec<String>,
+    pub can_reference_fns: bool,
+    pub can_be_referenced_by_fns: bool,
 }
 
 #[derive(Serialize, Deserialize, JsonSchema, Debug, Clone)]
@@ -59,6 +116,17 @@ pub struct Node {
     pub event_callback: Option<bool>,
     pub layer: Option<String>,
     pub hash: Option<u64>,
+    pub fn_refs: Option<FnRefs>,
+    /// OAuth provider IDs this node requires (references Hub's oauth_providers config)
+    pub oauth_providers: Option<Vec<String>>,
+    /// OAuth scopes required by this node (provider_id -> scopes)
+    pub required_oauth_scopes: Option<HashMap<String, Vec<String>>>,
+    /// If true, this node can only run locally (compute-intensive, RPA, browser automation)
+    #[serde(default)]
+    pub only_offline: bool,
+    /// Schema version for node migration. When catalog version > placed version, pins are synced.
+    /// None means unversioned (legacy). Bump this when changing pins in get_node().
+    pub version: Option<u32>,
 }
 
 impl Node {
@@ -81,11 +149,20 @@ impl Node {
             event_callback: None,
             layer: None,
             hash: None,
+            fn_refs: None,
+            oauth_providers: None,
+            required_oauth_scopes: None,
+            only_offline: false,
+            version: None,
         }
     }
 
     pub fn add_comment(&mut self, comment: &str) {
         self.comment = Some(comment.to_string());
+    }
+
+    pub fn set_version(&mut self, version: u32) {
+        self.version = Some(version);
     }
 
     pub fn add_icon(&mut self, icon: &str) {
@@ -98,6 +175,81 @@ impl Node {
 
     pub fn set_event_callback(&mut self, callback: bool) {
         self.event_callback = Some(callback);
+    }
+
+    pub fn set_can_be_referenced_by_fns(&mut self, can_be_referenced: bool) {
+        if let Some(fn_refs) = &mut self.fn_refs {
+            fn_refs.can_be_referenced_by_fns = can_be_referenced;
+        } else {
+            self.fn_refs = Some(FnRefs {
+                fn_refs: Vec::new(),
+                can_reference_fns: false,
+                can_be_referenced_by_fns: can_be_referenced,
+            });
+        }
+    }
+
+    pub fn set_can_reference_fns(&mut self, can_reference: bool) {
+        if let Some(fn_refs) = &mut self.fn_refs {
+            fn_refs.can_reference_fns = can_reference;
+        } else {
+            self.fn_refs = Some(FnRefs {
+                fn_refs: Vec::new(),
+                can_reference_fns: can_reference,
+                can_be_referenced_by_fns: false,
+            });
+        }
+    }
+
+    /// Add an OAuth provider ID requirement to this node
+    pub fn add_oauth_provider(&mut self, provider_id: &str) {
+        if let Some(providers) = &mut self.oauth_providers {
+            if !providers.contains(&provider_id.to_string()) {
+                providers.push(provider_id.to_string());
+            }
+        } else {
+            self.oauth_providers = Some(vec![provider_id.to_string()]);
+        }
+    }
+
+    /// Get all OAuth provider IDs required by this node
+    pub fn get_oauth_provider_ids(&self) -> Vec<String> {
+        self.oauth_providers.clone().unwrap_or_default()
+    }
+
+    /// Add required OAuth scopes for a specific provider.
+    /// These scopes will be merged with the provider's base scopes when OAuth is initiated.
+    pub fn add_required_oauth_scopes(&mut self, provider_id: &str, scopes: Vec<&str>) {
+        let scopes: Vec<String> = scopes.into_iter().map(|s| s.to_string()).collect();
+        if let Some(ref mut required_scopes) = self.required_oauth_scopes {
+            if let Some(existing) = required_scopes.get_mut(provider_id) {
+                for scope in scopes {
+                    if !existing.contains(&scope) {
+                        existing.push(scope);
+                    }
+                }
+            } else {
+                required_scopes.insert(provider_id.to_string(), scopes);
+            }
+        } else {
+            let mut map = HashMap::new();
+            map.insert(provider_id.to_string(), scopes);
+            self.required_oauth_scopes = Some(map);
+        }
+    }
+
+    /// Get required OAuth scopes for a specific provider
+    pub fn get_required_oauth_scopes(&self, provider_id: &str) -> Vec<String> {
+        self.required_oauth_scopes
+            .as_ref()
+            .and_then(|scopes| scopes.get(provider_id))
+            .cloned()
+            .unwrap_or_default()
+    }
+
+    /// Set whether this node can only run locally (offline)
+    pub fn set_only_offline(&mut self, only_offline: bool) {
+        self.only_offline = only_offline;
     }
 
     pub fn add_input_pin(
@@ -196,6 +348,10 @@ impl Node {
         self.scores.as_mut().unwrap()
     }
 
+    pub fn set_scores(&mut self, scores: NodeScores) {
+        self.scores = Some(scores);
+    }
+
     pub fn harmonize_schema(&mut self, pins: Vec<&str>) -> Option<String> {
         let schema = match self
             .pins
@@ -216,7 +372,7 @@ impl Node {
     }
 
     pub fn harmonize_type(&mut self, pins: Vec<&str>, schema: bool) -> Option<VariableType> {
-        let mut found_schema = None;
+        let mut found_schema: Option<String> = None;
         let variable_type = match self.pins.iter().find(|(_, pin)| {
             pins.contains(&pin.name.as_str()) && pin.data_type != VariableType::Generic
         }) {
@@ -232,13 +388,30 @@ impl Node {
         for pin in self.pins.values_mut() {
             if pins.contains(&pin.name.as_str()) {
                 pin.data_type = variable_type.clone();
-                if let Some(schema) = &found_schema {
-                    pin.schema = Some(schema.clone());
+                if schema {
+                    pin.schema = found_schema.clone();
                 }
             }
         }
 
         Some(variable_type)
+    }
+
+    pub fn harmonize_value_type(&mut self, pins: Vec<&str>) -> Option<ValueType> {
+        let value_type = match self.pins.iter().find(|(_, pin)| {
+            pins.contains(&pin.name.as_str()) && pin.value_type != ValueType::Normal
+        }) {
+            Some((_, pin)) => pin.value_type.clone(),
+            None => return None,
+        };
+
+        for pin in self.pins.values_mut() {
+            if pins.contains(&pin.name.as_str()) {
+                pin.value_type = value_type.clone();
+            }
+        }
+
+        Some(value_type)
     }
 
     pub fn match_type(
@@ -314,6 +487,8 @@ impl Node {
                 scores.security,
                 scores.performance,
                 scores.governance,
+                scores.reliability,
+                scores.cost,
             ]);
         }
 
@@ -398,7 +573,11 @@ impl Node {
 
 #[async_trait]
 pub trait NodeLogic: Send + Sync {
-    async fn get_node(&self, handler: &FlowLikeState) -> Node;
+    /// Returns the node definition. This is a sync function that constructs
+    /// the node's metadata, pins, and configuration.
+    /// For dynamic updates based on board state, use `on_update()` instead.
+    fn get_node(&self) -> Node;
+
     async fn run(&self, context: &mut ExecutionContext) -> flow_like_types::Result<()>;
     async fn on_drop(&self) {}
 
@@ -447,5 +626,32 @@ mod tests {
             super::Node::from_proto(flow_like_types::proto::Node::decode(&buf[..]).unwrap());
 
         assert_eq!(node.id, deser_node.id);
+    }
+
+    #[test]
+    fn node_hash_changes_with_scores() {
+        use super::NodeScores;
+
+        let mut node = super::Node::new("test_node", "Test", "desc", "Cat");
+        node.scores = Some(NodeScores {
+            privacy: 0,
+            security: 0,
+            performance: 0,
+            governance: 0,
+            reliability: 0,
+            cost: 0,
+        });
+        node.hash();
+        let first = node.hash.unwrap();
+
+        // change reliability and cost only
+        if let Some(scores) = &mut node.scores {
+            scores.reliability = 9;
+            scores.cost = 3;
+        }
+        node.hash();
+        let second = node.hash.unwrap();
+
+        assert_ne!(first, second, "Node hash should change when scores change");
     }
 }

@@ -3,47 +3,101 @@ name = "flow-like-catalog"
 version = "0.1.0"
 edition = "2024"
 
+[features]
+default = []
+local-ml = [
+    "flow-like-catalog-core/local-ml",
+    "flow-like-catalog-std/local-ml",
+    "flow-like-catalog-data/local-ml",
+    "flow-like-catalog-web/local-ml",
+    "flow-like-catalog-media/local-ml",
+    "flow-like-catalog-ml/local-ml",
+    "flow-like-catalog-onnx/local-ml",
+    "flow-like-catalog-llm/local-ml",
+    "flow-like-catalog-processing/local-ml",
+]
+remote-ml = [
+    "flow-like-catalog-core/remote-ml",
+    "flow-like-catalog-llm/remote-ml",
+]
+tauri = [
+    "flow-like-catalog-llm/tauri",
+]
+mimalloc = ["dep:mimalloc"]
+
+
+# Execution feature - enables heavy dependencies for node execution
+# APIs that only serve catalog metadata should NOT enable this
+execute = [
+    "flow-like-catalog-core/execute",
+    "flow-like-catalog-std/execute",
+    "flow-like-catalog-data/execute",
+    "flow-like-catalog-web/execute",
+    "flow-like-catalog-media/execute",
+    "flow-like-catalog-ml/execute",
+    "flow-like-catalog-onnx/execute",
+    "flow-like-catalog-llm/execute",
+    "flow-like-catalog-processing/execute",
+    "flow-like-catalog-geo/execute"
+]
+
+# Data lake formats
+delta = ["flow-like-catalog-data/delta"]
+iceberg = ["flow-like-catalog-data/iceberg"]
+all-lakes = ["delta", "iceberg"]
+
+# Database providers
+postgres = ["flow-like-catalog-data/postgres"]
+mysql = ["flow-like-catalog-data/mysql"]
+sqlite = ["flow-like-catalog-data/sqlite"]
+duckdb = ["flow-like-catalog-data/duckdb"]
+clickhouse = ["flow-like-catalog-data/clickhouse"]
+flight = ["flow-like-catalog-data/flight"]
+odbc = ["flow-like-catalog-data/odbc"]
+# ODBC excluded by default - requires system library (unixodbc on macOS/Linux)
+all-databases = ["postgres", "mysql", "sqlite", "duckdb", "clickhouse", "flight"]
+all-databases-with-odbc = ["all-databases", "odbc"]
+
+# Federation support
+federation = ["flow-like-catalog-data/federation"]
+postgres-federation = ["flow-like-catalog-data/postgres-federation"]
+mysql-federation = ["flow-like-catalog-data/mysql-federation"]
+# Explicit rustls variants (transparent — postgres/mysql already use rustls under the hood)
+sqlite-federation = ["flow-like-catalog-data/sqlite-federation"]
+duckdb-federation = ["flow-like-catalog-data/duckdb-federation"]
+clickhouse-federation = ["flow-like-catalog-data/clickhouse-federation"]
+odbc-federation = ["flow-like-catalog-data/odbc-federation"]
+# ODBC excluded by default - requires system library (unixodbc on macOS/Linux)
+all-databases-federation = ["postgres-federation", "mysql-federation", "sqlite-federation", "duckdb-federation", "clickhouse-federation"]
+all-databases-federation-with-odbc = ["all-databases-federation", "odbc-federation"]
+
+# Full feature bundle (all databases + federation + data lakes) - catalog metadata only
+# ODBC excluded by default to avoid runtime crashes if unixodbc is not installed
+all = ["all-lakes", "all-databases", "all-databases-federation"]
+all-with-odbc = ["all-lakes", "all-databases-with-odbc", "all-databases-federation-with-odbc"]
+
+# Full with execution (for executors and desktop app)
+all-execute = ["all", "execute"]
+
 [dependencies]
-flow-like.workspace = true
-flow-like-types.workspace = true
-flow-like-model-provider.workspace = true
-flow-like-storage.workspace = true
-ahash.workspace = true
-base64.workspace=true
-fasteval = "0.2.4"
-strsim = "0.11.1"
-regex.workspace = true
-chrono.workspace = true
-calamine = { version = "0.30", default-features = false, features = ["dates"] }
-umya-spreadsheet = "2.3.2"
-nalgebra = "0.34.0"
-schemars.workspace = true
-futures.workspace = true
-serde = { workspace = true, features = ["derive", "rc"] }
-csv-async = {version="1.3.0", features = ["tokio"]}
-csv = "1.3"
-htmd = "0.3.0"
-scraper = "0.23.1"
-async-imap = {version = "0.11.1", default-features = false, features = ["runtime-tokio", "tokio"]}
-async-native-tls = { version = "0.5", default-features = false, features = ["runtime-tokio"] }
-async-smtp = { version = "0.10.2", default-features = false, features = ["runtime-tokio", "tokio"] }
-tokio = { workspace = true, features = ["rt-multi-thread", "macros"] }
-mail-parser = "0.11.0"
-tract-tflite = { git = "https://github.com/TM9657/tract", rev = "ed3b020" }
-linfa = { git = "https://github.com/TM9657/linfa", rev = "071fb43", features = ["serde"]}
-linfa-datasets = { git = "https://github.com/TM9657/linfa", rev = "071fb43", features = ["generate"]}
-linfa-clustering = { git = "https://github.com/TM9657/linfa", rev = "071fb43", features = ["serde"]}
-linfa-nn = { git = "https://github.com/TM9657/linfa", rev = "071fb43", features = ["serde"]}
-linfa-linear = { git = "https://github.com/TM9657/linfa", rev = "071fb43", features = ["serde"]}
-linfa-reduction = { git = "https://github.com/TM9657/linfa", rev = "071fb43", features = ["serde"]}
-linfa-svm = { git = "https://github.com/TM9657/linfa", rev = "071fb43", features = ["serde"]}
-ndarray.workspace = true
-dirs-next.workspace = true
-rayon = "1.11.0"
-once_cell = "1.21.3"
+flow-like-catalog-core.workspace = true
+flow-like-catalog-std.workspace = true
+flow-like-catalog-data.workspace = true
+flow-like-catalog-web.workspace = true
+flow-like-catalog-media.workspace = true
+flow-like-catalog-ml.workspace = true
+flow-like-catalog-onnx.workspace = true
+flow-like-catalog-llm.workspace = true
+flow-like-catalog-processing.workspace = true
+flow-like-catalog-geo.workspace = true
+mimalloc = { workspace = true, optional = true }
+tracing.workspace = true
 
 [dev-dependencies]
 criterion = { version = "0.7", features = ["html_reports", "async_tokio"] }
+flow-like.workspace = true
+flow-like-types.workspace = true
+flow-like-storage.workspace = true
 
 [[bench]]
 name = "flow_bench"
@@ -51,6 +105,10 @@ harness = false
 
 [[bench]]
 name = "throughput_bench"
+harness = false
+
+[[bench]]
+name = "allocator_bench"
 harness = false
 
 [profile.bench]

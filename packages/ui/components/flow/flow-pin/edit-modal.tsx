@@ -2,9 +2,9 @@
 
 import { useInternalNode } from "@xyflow/react";
 import { isEqual } from "lodash-es";
-import { useCallback, useEffect, useState } from "react";
-import { useInvalidateInvoke } from "../../../hooks";
-import { type INode, updateNodeCommand } from "../../../lib";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { useInvalidateInvoke, useInvoke } from "../../../hooks";
+import { updateNodeCommand, upsertLayerCommand } from "../../../lib";
 import { useBackend } from "../../../state/backend-state";
 import useFlowControlState from "../../../state/flow-control-state";
 import {
@@ -20,13 +20,44 @@ import { VariablesMenuEdit } from "../variables/variables-menu-edit";
 export function PinEditModal({
 	appId,
 	boardId,
-}: Readonly<{ appId: string; boardId: string }>) {
+	version,
+}: Readonly<{
+	appId: string;
+	boardId: string;
+	version?: [number, number, number];
+}>) {
 	const backend = useBackend();
 	const invalidate = useInvalidateInvoke();
 	const { pushCommand } = useUndoRedo(appId, boardId);
 	const [defaultValueState, setDefaultValueState] = useState<any>(null);
 	const { editedPin, stopEditPin } = useFlowControlState();
-	const currentNode = useInternalNode(editedPin?.node ?? "");
+
+	// Fetch the board to get the original layer/node data
+	const board = useInvoke(backend.boardState.getBoard, backend.boardState, [
+		appId,
+		boardId,
+	]);
+
+	// Try to find the node directly via React Flow (for regular nodes)
+	const directNode = useInternalNode(editedPin?.node ?? "");
+
+	// Determine if editedPin.node refers to a layer or a regular node
+	const isLayerPin = useMemo(() => {
+		if (!editedPin?.node || !board.data) return false;
+		return !!board.data.layers?.[editedPin.node];
+	}, [editedPin?.node, board.data]);
+
+	// Get the layer from board data (if it's a layer pin)
+	const layer = useMemo(() => {
+		if (!isLayerPin || !editedPin?.node || !board.data?.layers) return null;
+		return board.data.layers[editedPin.node];
+	}, [isLayerPin, editedPin?.node, board.data?.layers]);
+
+	// Get the node from board data (if it's a regular node pin)
+	const node = useMemo(() => {
+		if (isLayerPin || !editedPin?.node || !board.data?.nodes) return null;
+		return board.data.nodes[editedPin.node];
+	}, [isLayerPin, editedPin?.node, board.data?.nodes]);
 
 	useEffect(() => {
 		if (editedPin) {
@@ -42,66 +73,141 @@ export function PinEditModal({
 	}, [appId, boardId, backend, invalidate]);
 
 	const onChangeDefaultValue = useCallback(async () => {
-		if (!editedPin?.node || !currentNode || !editedPin?.pin) {
+		console.log("[PinEditModal] onChangeDefaultValue called", {
+			version,
+			editedPin,
+			isLayerPin,
+			layer,
+			node,
+			directNode,
+			defaultValueState,
+		});
+
+		if (typeof version !== "undefined") {
+			console.log("[PinEditModal] Early exit: version defined");
+			stopEditPin();
+			return;
+		}
+
+		if (!editedPin?.node || !editedPin?.pin) {
+			console.log("[PinEditModal] Early exit: no editedPin");
 			stopEditPin();
 			return;
 		}
 
 		const hasChanged = !isEqual(defaultValueState, editedPin.pin.default_value);
+		console.log("[PinEditModal] hasChanged:", hasChanged, {
+			defaultValueState,
+			originalValue: editedPin.pin.default_value,
+		});
+
 		if (!hasChanged) {
 			stopEditPin();
 			return;
 		}
 
-		const node = currentNode.data.node as INode;
+		// Handle layer pins
+		if (isLayerPin && layer) {
+			console.log("[PinEditModal] Handling layer pin");
+			const originalPin = layer.pins[editedPin.pin.id];
+			if (!originalPin) {
+				console.log("[PinEditModal] Early exit: originalPin not found", {
+					pinId: editedPin.pin.id,
+					layerPins: Object.keys(layer.pins),
+				});
+				stopEditPin();
+				return;
+			}
 
-		if (!node) {
+			const command = upsertLayerCommand({
+				current_layer: null,
+				layer: {
+					...layer,
+					pins: {
+						...layer.pins,
+						[editedPin.pin.id]: {
+							...originalPin,
+							default_value: defaultValueState,
+						},
+					},
+				},
+				node_ids: [],
+			});
+
+			console.log("[PinEditModal] Executing layer command", command);
+			const result = await backend.boardState.executeCommand(
+				appId,
+				boardId,
+				command,
+			);
+			await pushCommand(result, false);
+			await refetchBoard();
 			stopEditPin();
 			return;
 		}
 
-		const command = updateNodeCommand({
-			node: {
-				...node,
-				coordinates: [currentNode.position.x, currentNode.position.y, 0],
-				pins: {
-					...node.pins,
-					[editedPin.pin.id]: {
-						...editedPin.pin,
-						default_value: defaultValueState,
+		// Handle regular node pins
+		if (node && directNode) {
+			console.log("[PinEditModal] Handling regular node pin");
+			const command = updateNodeCommand({
+				node: {
+					...node,
+					coordinates: [directNode.position.x, directNode.position.y, 0],
+					pins: {
+						...node.pins,
+						[editedPin.pin.id]: {
+							...editedPin.pin,
+							default_value: defaultValueState,
+						},
 					},
 				},
-			},
-		});
+			});
 
-		const result = await backend.boardState.executeCommand(
-			appId,
-			boardId,
-			command,
-		);
-		await pushCommand(result, false);
-		await refetchBoard();
+			const result = await backend.boardState.executeCommand(
+				appId,
+				boardId,
+				command,
+			);
+			await pushCommand(result, false);
+			await refetchBoard();
+			stopEditPin();
+			return;
+		}
+
+		console.log("[PinEditModal] No handler matched - falling through", {
+			isLayerPin,
+			hasLayer: !!layer,
+			hasNode: !!node,
+			hasDirectNode: !!directNode,
+		});
 		stopEditPin();
 	}, [
 		appId,
-		currentNode,
+		boardId,
+		backend,
+		defaultValueState,
+		directNode,
 		editedPin?.node,
 		editedPin?.pin,
-		defaultValueState,
-		refetchBoard,
+		isLayerPin,
+		layer,
+		node,
 		pushCommand,
-		backend,
-		boardId,
+		refetchBoard,
 		stopEditPin,
+		version,
 	]);
 
-	if (!editedPin?.pin || !currentNode) {
+	// Check if we have enough data to show the modal
+	const canShowModal = editedPin?.pin && (isLayerPin ? !!layer : !!node);
+
+	if (!canShowModal) {
 		return null;
 	}
 
 	return (
 		<Dialog
-			open={!!editedPin.pin && !!currentNode}
+			open={!!editedPin?.pin && canShowModal}
 			onOpenChange={async (open) => {
 				if (!open) {
 					await onChangeDefaultValue();

@@ -1,0 +1,467 @@
+{{- if .Values.monitoring.enabled }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "flow-like.fullname" . }}-prometheus-config
+  labels:
+    {{- include "flow-like.labels" . | nindent 4 }}
+    app.kubernetes.io/component: prometheus
+data:
+  prometheus.yml: |
+    global:
+      scrape_interval: {{ .Values.monitoring.prometheus.scrapeInterval | default "15s" }}
+      evaluation_interval: {{ .Values.monitoring.prometheus.evaluationInterval | default "15s" }}
+
+    {{- if .Values.monitoring.alertmanager.enabled }}
+    alerting:
+      alertmanagers:
+        - static_configs:
+            - targets:
+                - {{ include "flow-like.fullname" . }}-alertmanager:9093
+    {{- end }}
+
+    rule_files:
+      - /etc/prometheus/rules/*.yml
+
+    scrape_configs:
+      # Prometheus self-monitoring
+      - job_name: 'prometheus'
+        static_configs:
+          - targets: ['localhost:9090']
+
+      # Kubernetes API server metrics
+      - job_name: 'kubernetes-apiservers'
+        kubernetes_sd_configs:
+          - role: endpoints
+        scheme: https
+        tls_config:
+          ca_file: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+          insecure_skip_verify: true
+        bearer_token_file: /var/run/secrets/kubernetes.io/serviceaccount/token
+        relabel_configs:
+          - source_labels: [__meta_kubernetes_namespace, __meta_kubernetes_service_name, __meta_kubernetes_endpoint_port_name]
+            action: keep
+            regex: default;kubernetes;https
+
+      # Kubernetes nodes (kubelet)
+      - job_name: 'kubernetes-nodes'
+        scheme: https
+        tls_config:
+          ca_file: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+          insecure_skip_verify: true
+        bearer_token_file: /var/run/secrets/kubernetes.io/serviceaccount/token
+        kubernetes_sd_configs:
+          - role: node
+        relabel_configs:
+          - action: labelmap
+            regex: __meta_kubernetes_node_label_(.+)
+          - target_label: __address__
+            replacement: kubernetes.default.svc:443
+          - source_labels: [__meta_kubernetes_node_name]
+            regex: (.+)
+            target_label: __metrics_path__
+            replacement: /api/v1/nodes/${1}/proxy/metrics
+
+      # Kubernetes cAdvisor (container metrics)
+      - job_name: 'kubernetes-cadvisor'
+        scheme: https
+        tls_config:
+          ca_file: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+          insecure_skip_verify: true
+        bearer_token_file: /var/run/secrets/kubernetes.io/serviceaccount/token
+        kubernetes_sd_configs:
+          - role: node
+        relabel_configs:
+          - action: labelmap
+            regex: __meta_kubernetes_node_label_(.+)
+          - target_label: __address__
+            replacement: kubernetes.default.svc:443
+          - source_labels: [__meta_kubernetes_node_name]
+            regex: (.+)
+            target_label: __metrics_path__
+            replacement: /api/v1/nodes/${1}/proxy/metrics/cadvisor
+        metric_relabel_configs:
+          - source_labels: [namespace]
+            action: keep
+            regex: {{ .Release.Namespace }}
+
+      # CockroachDB metrics
+      {{- if eq .Values.database.type "internal" }}
+      - job_name: 'cockroachdb'
+        metrics_path: /_status/vars
+        kubernetes_sd_configs:
+          - role: endpoints
+            namespaces:
+              names:
+                - {{ .Release.Namespace }}
+        relabel_configs:
+          - source_labels: [__meta_kubernetes_service_label_app_kubernetes_io_component]
+            action: keep
+            regex: cockroachdb
+          - source_labels: [__address__]
+            action: replace
+            regex: ([^:]+):.*
+            replacement: $1:8080
+            target_label: __address__
+          - source_labels: [__meta_kubernetes_namespace]
+            target_label: namespace
+          - source_labels: [__meta_kubernetes_pod_name]
+            target_label: pod
+      {{- end }}
+
+      # Flow-Like API metrics (internal port 9090)
+      - job_name: 'flow-like-api'
+        kubernetes_sd_configs:
+          - role: endpoints
+            namespaces:
+              names:
+                - {{ .Release.Namespace }}
+        relabel_configs:
+          - source_labels: [__meta_kubernetes_service_label_app_kubernetes_io_component]
+            action: keep
+            regex: api
+          - source_labels: [__meta_kubernetes_endpoint_port_name]
+            action: keep
+            regex: metrics
+          - source_labels: [__meta_kubernetes_namespace]
+            target_label: namespace
+          - source_labels: [__meta_kubernetes_pod_name]
+            target_label: pod
+
+      # Flow-Like Executor Pool metrics (internal port 9090)
+      - job_name: 'flow-like-executor'
+        kubernetes_sd_configs:
+          - role: endpoints
+            namespaces:
+              names:
+                - {{ .Release.Namespace }}
+        relabel_configs:
+          - source_labels: [__meta_kubernetes_service_label_app_kubernetes_io_component]
+            action: keep
+            regex: executor-pool
+          - source_labels: [__meta_kubernetes_endpoint_port_name]
+            action: keep
+            regex: metrics
+          - source_labels: [__meta_kubernetes_namespace]
+            target_label: namespace
+          - source_labels: [__meta_kubernetes_pod_name]
+            target_label: pod
+
+      # Kubernetes pod metrics
+      - job_name: 'kubernetes-pods'
+        kubernetes_sd_configs:
+          - role: pod
+            namespaces:
+              names:
+                - {{ .Release.Namespace }}
+        relabel_configs:
+          - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_scrape]
+            action: keep
+            regex: true
+          - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_path]
+            action: replace
+            target_label: __metrics_path__
+            regex: (.+)
+          - source_labels: [__address__, __meta_kubernetes_pod_annotation_prometheus_io_port]
+            action: replace
+            regex: ([^:]+)(?::\d+)?;(\d+)
+            replacement: $1:$2
+            target_label: __address__
+          - source_labels: [__meta_kubernetes_namespace]
+            target_label: namespace
+          - source_labels: [__meta_kubernetes_pod_name]
+            target_label: pod
+
+  recording_rules.yml: |
+    groups:
+      - name: flow-like-recording
+        rules:
+          # API request rate
+          - record: flow_like:api_request_rate:5m
+            expr: sum(rate(http_requests_total{job="flow-like-api"}[5m])) by (method, status_code)
+
+          # API latency percentiles
+          - record: flow_like:api_latency_p99:5m
+            expr: histogram_quantile(0.99, sum(rate(http_request_duration_seconds_bucket{job="flow-like-api"}[5m])) by (le, method))
+
+          - record: flow_like:api_latency_p95:5m
+            expr: histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket{job="flow-like-api"}[5m])) by (le, method))
+
+          - record: flow_like:api_latency_p50:5m
+            expr: histogram_quantile(0.50, sum(rate(http_request_duration_seconds_bucket{job="flow-like-api"}[5m])) by (le, method))
+
+          # Execution metrics
+          - record: flow_like:execution_rate:5m
+            expr: sum(rate(flow_executions_total[5m])) by (status, backend)
+
+          - record: flow_like:execution_duration_p99:5m
+            expr: histogram_quantile(0.99, sum(rate(flow_execution_duration_seconds_bucket[5m])) by (le))
+
+  alerting_rules.yml: |
+    groups:
+      - name: flow-like-alerts
+        rules:
+          # High error rate
+          - alert: FlowLikeHighErrorRate
+            expr: sum(rate(http_requests_total{job="flow-like-api",status_code=~"5.."}[5m])) / sum(rate(http_requests_total{job="flow-like-api"}[5m])) > 0.05
+            for: 5m
+            labels:
+              severity: critical
+            annotations:
+              summary: "High error rate detected"
+              description: "Error rate is {{ "{{" }} $value | humanizePercentage {{ "}}" }} over the last 5 minutes"
+
+          # High latency
+          - alert: FlowLikeHighLatency
+            expr: flow_like:api_latency_p99:5m > 2
+            for: 5m
+            labels:
+              severity: warning
+            annotations:
+              summary: "High API latency detected"
+              description: "P99 latency is {{ "{{" }} $value | humanizeDuration {{ "}}" }}"
+
+          # API pods down
+          - alert: FlowLikeAPIPodDown
+            expr: kube_deployment_status_replicas_available{deployment="{{ include "flow-like.fullname" . }}-api"} < kube_deployment_spec_replicas{deployment="{{ include "flow-like.fullname" . }}-api"}
+            for: 5m
+            labels:
+              severity: warning
+            annotations:
+              summary: "API pods unavailable"
+              description: "{{ "{{" }} $value {{ "}}" }} API pods are unavailable"
+
+          # Executor pool exhausted
+          - alert: FlowLikeExecutorPoolExhausted
+            expr: sum(flow_executor_pool_available) == 0
+            for: 2m
+            labels:
+              severity: critical
+            annotations:
+              summary: "Executor pool exhausted"
+              description: "No executor workers available"
+
+          # Redis connection issues
+          {{- if .Values.redis.enabled }}
+          - alert: FlowLikeRedisDown
+            expr: redis_up == 0
+            for: 1m
+            labels:
+              severity: critical
+            annotations:
+              summary: "Redis is down"
+              description: "Redis instance is not responding"
+
+          - alert: FlowLikeRedisHighMemory
+            expr: redis_memory_used_bytes / redis_memory_max_bytes > 0.9
+            for: 5m
+            labels:
+              severity: warning
+            annotations:
+              summary: "Redis high memory usage"
+              description: "Redis memory usage is above 90%"
+          {{- end }}
+
+          # CockroachDB alerts
+          {{- if eq .Values.database.type "internal" }}
+          - alert: FlowLikeCockroachDBNodeDown
+            expr: count(cockroachdb_node_id) < {{ .Values.database.internal.replicas }}
+            for: 5m
+            labels:
+              severity: critical
+            annotations:
+              summary: "CockroachDB node down"
+              description: "Expected {{ .Values.database.internal.replicas }} nodes but only {{ "{{" }} $value {{ "}}" }} are up"
+
+          - alert: FlowLikeCockroachDBHighLatency
+            expr: histogram_quantile(0.99, sum(rate(sql_service_latency_bucket[5m])) by (le)) > 1
+            for: 5m
+            labels:
+              severity: warning
+            annotations:
+              summary: "CockroachDB high query latency"
+              description: "P99 SQL latency is {{ "{{" }} $value | humanizeDuration {{ "}}" }}"
+          {{- end }}
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "flow-like.fullname" . }}-prometheus
+  labels:
+    {{- include "flow-like.labels" . | nindent 4 }}
+    app.kubernetes.io/component: prometheus
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "flow-like.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: prometheus
+  template:
+    metadata:
+      labels:
+        {{- include "flow-like.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: prometheus
+      annotations:
+        checksum/config: {{ .Values.monitoring.prometheus | toYaml | sha256sum }}
+    spec:
+      serviceAccountName: {{ include "flow-like.fullname" . }}-prometheus
+      securityContext:
+        fsGroup: 65534
+        runAsNonRoot: true
+        runAsUser: 65534
+      containers:
+        - name: prometheus
+          image: "{{ .Values.monitoring.prometheus.image.repository }}:{{ .Values.monitoring.prometheus.image.tag }}"
+          imagePullPolicy: {{ .Values.monitoring.prometheus.image.pullPolicy }}
+          args:
+            - "--config.file=/etc/prometheus/prometheus.yml"
+            - "--storage.tsdb.path=/prometheus"
+            - "--storage.tsdb.retention.time={{ .Values.monitoring.prometheus.retention }}"
+            - "--web.console.libraries=/usr/share/prometheus/console_libraries"
+            - "--web.console.templates=/usr/share/prometheus/consoles"
+            - "--web.enable-lifecycle"
+          ports:
+            - name: http
+              containerPort: 9090
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /-/healthy
+              port: http
+            initialDelaySeconds: 30
+            periodSeconds: 15
+          readinessProbe:
+            httpGet:
+              path: /-/ready
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          resources:
+            {{- toYaml .Values.monitoring.prometheus.resources | nindent 12 }}
+          volumeMounts:
+            - name: config
+              mountPath: /etc/prometheus
+            - name: rules
+              mountPath: /etc/prometheus/rules
+            - name: data
+              mountPath: /prometheus
+      volumes:
+        - name: config
+          configMap:
+            name: {{ include "flow-like.fullname" . }}-prometheus-config
+        - name: rules
+          configMap:
+            name: {{ include "flow-like.fullname" . }}-prometheus-config
+            items:
+              - key: alerting_rules.yml
+                path: alerting_rules.yml
+              - key: recording_rules.yml
+                path: recording_rules.yml
+        - name: data
+          {{- if .Values.monitoring.prometheus.persistence.enabled }}
+          persistentVolumeClaim:
+            claimName: {{ include "flow-like.fullname" . }}-prometheus
+          {{- else }}
+          emptyDir: {}
+          {{- end }}
+      {{- with .Values.monitoring.prometheus.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.monitoring.prometheus.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "flow-like.fullname" . }}-prometheus
+  labels:
+    {{- include "flow-like.labels" . | nindent 4 }}
+    app.kubernetes.io/component: prometheus
+spec:
+  type: {{ .Values.monitoring.prometheus.service.type }}
+  ports:
+    - port: 9090
+      targetPort: http
+      protocol: TCP
+      name: http
+  selector:
+    {{- include "flow-like.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: prometheus
+
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ include "flow-like.fullname" . }}-prometheus
+  labels:
+    {{- include "flow-like.labels" . | nindent 4 }}
+    app.kubernetes.io/component: prometheus
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ include "flow-like.fullname" . }}-prometheus
+  labels:
+    {{- include "flow-like.labels" . | nindent 4 }}
+    app.kubernetes.io/component: prometheus
+rules:
+  - apiGroups: [""]
+    resources:
+      - nodes
+      - nodes/proxy
+      - nodes/metrics
+      - services
+      - endpoints
+      - pods
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["extensions", "networking.k8s.io"]
+    resources:
+      - ingresses
+    verbs: ["get", "list", "watch"]
+  - nonResourceURLs: ["/metrics", "/metrics/cadvisor"]
+    verbs: ["get"]
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: {{ include "flow-like.fullname" . }}-prometheus
+  labels:
+    {{- include "flow-like.labels" . | nindent 4 }}
+    app.kubernetes.io/component: prometheus
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: {{ include "flow-like.fullname" . }}-prometheus
+subjects:
+  - kind: ServiceAccount
+    name: {{ include "flow-like.fullname" . }}-prometheus
+    namespace: {{ .Release.Namespace }}
+
+{{- if .Values.monitoring.prometheus.persistence.enabled }}
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "flow-like.fullname" . }}-prometheus
+  labels:
+    {{- include "flow-like.labels" . | nindent 4 }}
+    app.kubernetes.io/component: prometheus
+spec:
+  accessModes:
+    - ReadWriteOnce
+  {{- if .Values.monitoring.prometheus.persistence.storageClass }}
+  storageClassName: {{ .Values.monitoring.prometheus.persistence.storageClass }}
+  {{- end }}
+  resources:
+    requests:
+      storage: {{ .Values.monitoring.prometheus.persistence.size }}
+{{- end }}
+{{- end }}

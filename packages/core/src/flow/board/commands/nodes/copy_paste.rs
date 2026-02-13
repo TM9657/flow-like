@@ -9,7 +9,7 @@ use crate::{
     },
     state::FlowLikeState,
 };
-use flow_like_types::{async_trait, sync::Mutex};
+use flow_like_types::async_trait;
 use flow_like_types::{create_id, json::from_slice};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -19,6 +19,8 @@ pub struct CopyPasteCommand {
     pub original_nodes: Vec<Node>,
     pub original_comments: Vec<Comment>,
     pub original_layers: Vec<Layer>,
+    #[serde(default)]
+    pub original_variables: Vec<Variable>,
     pub new_comments: Vec<Comment>,
     pub new_nodes: Vec<Node>,
     pub new_layers: Vec<Layer>,
@@ -38,6 +40,7 @@ impl CopyPasteCommand {
             original_nodes,
             original_comments: comments,
             original_layers: layers,
+            original_variables: vec![],
             old_mouse: None,
             current_layer: None,
             offset,
@@ -53,12 +56,9 @@ impl Command for CopyPasteCommand {
     async fn execute(
         &mut self,
         board: &mut Board,
-        state: Arc<Mutex<FlowLikeState>>,
+        state: Arc<FlowLikeState>,
     ) -> flow_like_types::Result<()> {
-        let node_registry = {
-            let state_guard = state.lock().await;
-            state_guard.node_registry.read().await.node_registry.clone()
-        };
+        let node_registry = state.node_registry.read().await.node_registry.clone();
         let mut translated_connection = HashMap::with_capacity(self.original_nodes.len());
         let mut intermediate_nodes = Vec::with_capacity(self.original_nodes.len());
         let mut intermediate_layers = Vec::with_capacity(self.original_layers.len());
@@ -98,6 +98,7 @@ impl Command for CopyPasteCommand {
 
         let mut layer_translation = HashMap::with_capacity(self.original_layers.len());
 
+        // First pass: create new IDs and build translation map
         for layer in self.original_layers.iter() {
             let layer_id = create_id();
             layer_translation.insert(layer.id.clone(), layer_id.clone());
@@ -109,8 +110,13 @@ impl Command for CopyPasteCommand {
                 new_layer.coordinates.2 + offset.2,
             );
 
+            // Handle parent_id translation for nested layers
             if new_layer.parent_id.is_none() || new_layer.parent_id == Some("".to_string()) {
                 new_layer.parent_id = self.current_layer.clone();
+            } else if let Some(parent_id) = new_layer.parent_id.clone() {
+                // If parent is also being pasted, it will be translated in the second pass
+                // For now, keep the original parent_id - it will be updated below
+                new_layer.parent_id = Some(parent_id);
             }
 
             new_layer.pins = layer
@@ -126,8 +132,17 @@ impl Command for CopyPasteCommand {
                 })
                 .collect();
 
-            board.layers.insert(new_layer.id.clone(), new_layer.clone());
             intermediate_layers.push(new_layer.clone());
+        }
+
+        // Second pass: translate parent_ids now that all layer IDs are known
+        for layer in intermediate_layers.iter_mut() {
+            if let Some(parent_id) = &layer.parent_id
+                && let Some(new_parent_id) = layer_translation.get(parent_id)
+            {
+                layer.parent_id = Some(new_parent_id.clone());
+            }
+            // Don't insert yet - pin connections need to be translated first in the final pass
         }
 
         for comment in self.original_comments.iter() {
@@ -165,11 +180,16 @@ impl Command for CopyPasteCommand {
             new_node.id = new_id.clone();
             new_node.category = blueprint_node.category.clone();
             new_node.docs = blueprint_node.docs.clone();
-            new_node.description = blueprint_node.description.clone();
             new_node.icon = blueprint_node.icon.clone();
             new_node.scores = blueprint_node.scores.clone();
             new_node.start = blueprint_node.start;
             new_node.event_callback = blueprint_node.event_callback;
+
+            // Preserve user-customized friendly_name and description for start nodes (events)
+            let is_start_node = blueprint_node.start.unwrap_or(false);
+            if !is_start_node {
+                new_node.description = blueprint_node.description.clone();
+            }
             new_node.coordinates = Some((
                 new_node.coordinates.unwrap_or((0.0, 0.0, 0.0)).0 + offset.0,
                 new_node.coordinates.unwrap_or((0.0, 0.0, 0.0)).1 + offset.1,
@@ -208,29 +228,41 @@ impl Command for CopyPasteCommand {
                         if let Ok(var_ref) = var_ref {
                             let variable_ref = board.variables.get(&var_ref);
                             if variable_ref.is_none() {
-                                let var_name = if new_node.friendly_name.starts_with("Get ") {
-                                    new_node.friendly_name.replace("Get ", "")
-                                } else if new_node.friendly_name.starts_with("Set ") {
-                                    new_node.friendly_name.replace("Set ", "")
+                                // Try to find the original variable from the template/copy source
+                                let original_var =
+                                    self.original_variables.iter().find(|v| v.id == var_ref);
+
+                                if let Some(orig) = original_var {
+                                    // Clone the original variable to preserve all properties including category
+                                    let mut new_var = orig.clone();
+                                    new_var.id = var_ref.clone();
+                                    board.variables.insert(var_ref.clone(), new_var);
                                 } else {
-                                    new_node.friendly_name.clone()
-                                };
-                                println!(
-                                    "Creating new variable: {}, friendly name: {}",
-                                    var_name, new_node.friendly_name
-                                );
-                                let (_id, value_ref_pin) = new_node
-                                    .pins
-                                    .iter()
-                                    .find(|(_, p)| p.name == "value_ref")
-                                    .unwrap_or((&String::new(), &pin));
-                                let mut new_var = Variable::new(
-                                    &var_name,
-                                    value_ref_pin.data_type.clone(),
-                                    value_ref_pin.value_type.clone(),
-                                );
-                                new_var.id = var_ref.clone();
-                                board.variables.insert(var_ref.clone(), new_var);
+                                    // Fallback: create a new variable with basic info
+                                    let var_name = if new_node.friendly_name.starts_with("Get ") {
+                                        new_node.friendly_name.replace("Get ", "")
+                                    } else if new_node.friendly_name.starts_with("Set ") {
+                                        new_node.friendly_name.replace("Set ", "")
+                                    } else {
+                                        new_node.friendly_name.clone()
+                                    };
+                                    println!(
+                                        "Creating new variable: {}, friendly name: {}",
+                                        var_name, new_node.friendly_name
+                                    );
+                                    let (_id, value_ref_pin) = new_node
+                                        .pins
+                                        .iter()
+                                        .find(|(_, p)| p.name == "value_ref")
+                                        .unwrap_or((&String::new(), &pin));
+                                    let mut new_var = Variable::new(
+                                        &var_name,
+                                        value_ref_pin.data_type.clone(),
+                                        value_ref_pin.value_type.clone(),
+                                    );
+                                    new_var.id = var_ref.clone();
+                                    board.variables.insert(var_ref.clone(), new_var);
+                                }
                             }
                         }
                     }
@@ -249,7 +281,10 @@ impl Command for CopyPasteCommand {
                 })
                 .collect();
 
-            new_node.friendly_name = blueprint_node.friendly_name.clone();
+            // Preserve user-customized friendly_name for start nodes (events)
+            if !is_start_node {
+                new_node.friendly_name = blueprint_node.friendly_name.clone();
+            }
             intermediate_nodes.push(new_node);
         }
 
@@ -269,6 +304,19 @@ impl Command for CopyPasteCommand {
                     .filter(|dep_id| translated_connection.contains_key(*dep_id))
                     .map(|dep_id| translated_connection.get(dep_id).unwrap_or(dep_id).clone())
                     .collect();
+            }
+
+            // Remap fn_refs to new node IDs, then validate and deduplicate
+            if let Some(fn_refs) = &mut new_node.fn_refs {
+                // First, remap to new IDs
+                fn_refs.fn_refs = fn_refs
+                    .fn_refs
+                    .iter()
+                    .filter_map(|ref_id| translated_connection.get(ref_id).cloned())
+                    .collect();
+
+                // Then validate and deduplicate - never trust the frontend!
+                super::validate_and_deduplicate_fn_refs(fn_refs, board);
             }
 
             board.nodes.insert(new_node.id.clone(), new_node.clone());
@@ -302,7 +350,7 @@ impl Command for CopyPasteCommand {
     async fn undo(
         &mut self,
         board: &mut Board,
-        _: Arc<Mutex<FlowLikeState>>,
+        _: Arc<FlowLikeState>,
     ) -> flow_like_types::Result<()> {
         for node in self.new_nodes.iter() {
             board.nodes.remove(&node.id);

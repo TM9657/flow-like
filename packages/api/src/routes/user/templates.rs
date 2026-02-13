@@ -16,6 +16,23 @@ use sea_orm::{
     RelationTrait, TransactionTrait,
 };
 
+#[utoipa::path(
+    get,
+    path = "/user/templates",
+    tag = "user",
+    params(
+        ("language" = Option<String>, Query, description = "Language code"),
+        ("limit" = Option<u64>, Query, description = "Maximum number of results"),
+        ("offset" = Option<u64>, Query, description = "Offset for pagination")
+    ),
+    responses(
+        (status = 200, description = "List of accessible templates with metadata"),
+        (status = 401, description = "Unauthorized")
+    ),
+    security(
+        ("bearer_auth" = [])
+    )
+)]
 #[tracing::instrument(name = "GET /user/templates", skip(state, user))]
 pub async fn get_templates(
     State(state): State<AppState>,

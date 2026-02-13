@@ -2,8 +2,9 @@ import { memo, useEffect, useRef } from "react";
 
 export const DynamicImage = memo(function DynamicImage({
 	url,
+	style,
 	className,
-}: Readonly<{ url: string; className: string }>) {
+}: Readonly<{ url: string; className: string; style?: React.CSSProperties }>) {
 	const ref = useRef<HTMLDivElement>(null);
 
 	useEffect(() => {
@@ -16,8 +17,13 @@ export const DynamicImage = memo(function DynamicImage({
 
 	if (!url.includes(".svg"))
 		return (
-			<img alt="dynamic_icon" src={url} className={`border-0 ${className}`} />
+			<img
+				alt="dynamic_icon"
+				src={url}
+				className={`border-0 ${className}`}
+				style={style}
+			/>
 		);
 
-	return <div ref={ref} className={`border-0 ${className}`} />;
+	return <div ref={ref} className={`border-0 ${className}`} style={style} />;
 });

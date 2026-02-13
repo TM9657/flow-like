@@ -10,6 +10,13 @@ import sitemap from "@astrojs/sitemap";
 // https://astro.build/config
 export default defineConfig({
 	site: "https://flow-like.com",
+	i18n: {
+		defaultLocale: "en",
+		locales: ["en", "de", "es", "fr", "zh", "ja", "ko", "pt", "it", "nl", "sv"],
+		routing: {
+			prefixDefaultLocale: false,
+		},
+	},
 	integrations: [
 		// markdoc(),
 		// robotsTxt(),
@@ -18,11 +25,13 @@ export default defineConfig({
 		react(),
 		mdx({
 			syntaxHighlight: "shiki",
-			shikiConfig: { theme: "dracula" },
+			shikiConfig: {
+				theme: "dracula",
+				wrap: true,
+			},
 			remarkRehype: { footnoteLabel: "Footnotes" },
-			gfm: false,
+			gfm: true,
 		}),
-		sitemap(),
 		(await import("@playform/compress")).default(),
 		compressor(),
 	],

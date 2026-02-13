@@ -8,6 +8,25 @@ use axum::{
 };
 use flow_like::credentials::SharedCredentials;
 
+#[utoipa::path(
+    get,
+    path = "/apps/{app_id}/invoke/presign",
+    tag = "execution",
+    description = "Get shared credentials for runtime execution.",
+    params(
+        ("app_id" = String, Path, description = "Application ID")
+    ),
+    responses(
+        (status = 200, description = "Shared credentials", body = String, content_type = "application/json"),
+        (status = 401, description = "Unauthorized"),
+        (status = 403, description = "Forbidden")
+    ),
+    security(
+        ("bearer_auth" = []),
+        ("api_key" = []),
+        ("pat" = [])
+    )
+)]
 #[tracing::instrument(name = "GET /apps/{app_id}/invoke/presign", skip(state, user))]
 pub async fn presign(
     State(state): State<AppState>,

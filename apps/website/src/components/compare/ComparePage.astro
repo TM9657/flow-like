@@ -1,0 +1,83 @@
+---
+import "@tm9657/flow-like-ui/global.css";
+import "../../styles/website-base.css";
+import PostHog from "../posthog.astro";
+import { Header } from "../header";
+import { BlogFooter } from "../blog-footer";
+
+import CompareHero from "./CompareHero.astro";
+import CompareMatrix from "./CompareMatrix.astro";
+import CapabilityDeepDive from "./CapabilityDeepDive.astro";
+import CompareInsight from "./CompareInsight.astro";
+import CompareCTA from "./CompareCTA.astro";
+
+import { tCompare } from "../../i18n/locales/pages/compare";
+import { buildAlternateLinks, getOgLocale } from "../../lib/seo";
+
+interface Props {
+  lang: string;
+}
+
+const { lang } = Astro.props;
+const t = (key: string) => tCompare(lang, key);
+
+const site = Astro.site ?? import.meta.env.SITE ?? "https://flow-like.com";
+const siteUrl = typeof site === "string" ? site : site.toString();
+const canonical = new URL(Astro.url.pathname, siteUrl).toString();
+const alternateLinks = buildAlternateLinks(siteUrl, Astro.url.pathname);
+const ogLocale = getOgLocale(lang);
+
+const title = t("compare.meta.title");
+const desc = t("compare.meta.description");
+const cover = "/og.png";
+---
+
+<!doctype html>
+<html lang={lang} class="scroll-smooth">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="generator" content={Astro.generator} />
+
+    <title>{title}</title>
+    <meta name="description" content={desc} />
+    <meta name="robots" content="index, follow" />
+    <link rel="canonical" href={canonical} />
+    {alternateLinks.map((alt) => (
+      <link rel="alternate" hreflang={alt.hreflang} href={alt.href} />
+    ))}
+    <meta name="theme-color" content="#ffffff" />
+    <link rel="sitemap" href="/sitemap-index.xml" />
+
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Flow-Like" />
+    <meta property="og:url" content={canonical} />
+    <meta property="og:title" content={title} />
+    <meta property="og:description" content={desc} />
+    <meta property="og:image" content={cover} />
+    <meta property="og:locale" content={ogLocale} />
+
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content={title} />
+    <meta name="twitter:description" content={desc} />
+    <meta name="twitter:image" content={cover} />
+
+    <PostHog />
+
+
+  </head>
+  <body class="bg-background text-foreground antialiased overflow-x-hidden max-w-full">
+    <Header client:load />
+
+    <main class="pt-16">
+      <CompareHero t={t} />
+      <CompareMatrix t={t} />
+      <CapabilityDeepDive t={t} />
+      <CompareInsight t={t} />
+      <CompareCTA t={t} />
+    </main>
+
+    <BlogFooter />
+  </body>
+</html>

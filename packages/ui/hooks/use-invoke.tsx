@@ -32,6 +32,7 @@ export function useInvoke<T, Args extends any[]>(
 	args: Args,
 	enabled = true,
 	additionalDeps: any[] = [],
+	staleTime?: number,
 ): UseQueryResult<T, Error> {
 	const backend = useBackend();
 	const query = useQuery<T, Error>({
@@ -40,7 +41,6 @@ export function useInvoke<T, Args extends any[]>(
 			...args,
 			...additionalDeps,
 		].filter((arg) => typeof arg !== "undefined"),
-		staleTime: 1000,
 		queryFn: async () => {
 			try {
 				console.log(
@@ -61,6 +61,9 @@ export function useInvoke<T, Args extends any[]>(
 			}
 		},
 		enabled,
+		staleTime,
+		// Use defaults from QueryClient, but allow individual overrides if needed
+		// This ensures consistency with global cache settings
 	});
 
 	return query;
@@ -86,6 +89,7 @@ type BackendFunctionWithPagination<T, Args extends any[]> = (
  * @param {number} [pageSize=20] The number of items to fetch per page (limit parameter).
  * @param {boolean} [enabled=true] Whether the query should be enabled and run automatically.
  * @param {any[]} [additionalDeps=[]] Optional additional dependencies to include in the queryKey.
+ * @param {number} [staleTime] Optional staleTime override for this query.
  * @returns {UseInfiniteQueryResult<T, Error>} The result object from React Query infinite query.
  */
 export function useInfiniteInvoke<T, Args extends any[]>(
@@ -95,6 +99,7 @@ export function useInfiniteInvoke<T, Args extends any[]>(
 	pageSize = 50,
 	enabled = true,
 	additionalDeps: any[] = [],
+	staleTime?: number,
 ) {
 	const backend = useBackend();
 
@@ -152,6 +157,7 @@ export function useInfiniteInvoke<T, Args extends any[]>(
 		},
 		initialPageParam: 0,
 		enabled,
+		...(staleTime !== undefined && { staleTime }),
 	});
 
 	return query;

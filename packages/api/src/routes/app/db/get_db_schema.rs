@@ -11,6 +11,26 @@ use flow_like_storage::{
     databases::vector::{VectorStore, lancedb::LanceDBVectorStore},
 };
 
+#[utoipa::path(
+    get,
+    path = "/apps/{app_id}/db/{table}/schema",
+    tag = "database",
+    description = "Get the table schema.",
+    params(
+        ("app_id" = String, Path, description = "Application ID"),
+        ("table" = String, Path, description = "Table name")
+    ),
+    responses(
+        (status = 200, description = "Table schema (Arrow JSON)", body = String, content_type = "application/json"),
+        (status = 401, description = "Unauthorized"),
+        (status = 403, description = "Forbidden")
+    ),
+    security(
+        ("bearer_auth" = []),
+        ("api_key" = []),
+        ("pat" = [])
+    )
+)]
 #[tracing::instrument(name = "GET /apps/{app_id}/db/{table}/schema", skip(state, user))]
 pub async fn get_db_schema(
     State(state): State<AppState>,

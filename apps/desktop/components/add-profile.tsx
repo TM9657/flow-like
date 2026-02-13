@@ -60,7 +60,11 @@ export const CreateProfileDialog: React.FC<CreateProfileDialogProps> = ({
 				interests: [],
 				thumbnail: null,
 				theme: null,
+				created: now,
+				updated: now,
 			},
+			created: now,
+			updated: now,
 		};
 		await onCreate(payload);
 		setName("");

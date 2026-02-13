@@ -1,0 +1,135 @@
+# Example production values for Flow-Like Kubernetes deployment
+# Copy this file and customize for your environment
+
+nameOverride: ""
+fullnameOverride: "flow-like"
+
+global:
+  imageRegistry: "ghcr.io/tm9657/"
+  imagePullSecrets:
+    - name: ghcr-pull-secret
+
+api:
+  enabled: true
+  replicaCount: 3
+  image:
+    repository: flow-like-k8s-api
+    tag: "v1.0.0"
+    pullPolicy: IfNotPresent
+
+  resources:
+    requests:
+      memory: "512Mi"
+      cpu: "250m"
+    limits:
+      memory: "2Gi"
+      cpu: "2"
+
+  autoscaling:
+    enabled: true
+    minReplicas: 3
+    maxReplicas: 20
+    targetCPUUtilization: 70
+    targetMemoryUtilization: 80
+
+executor:
+  image:
+    repository: flow-like-k8s-executor
+    tag: "v1.0.0"
+    pullPolicy: IfNotPresent
+
+  runtimeClass: kata
+  timeout: 3600
+  maxRetries: 3
+
+  resources:
+    requests:
+      memory: "512Mi"
+      cpu: "250m"
+    limits:
+      memory: "4Gi"
+      cpu: "4"
+
+# =============================================================================
+# Database Configuration
+# =============================================================================
+# Option 1: Internal CockroachDB (recommended for self-hosting)
+database:
+  type: internal
+  internal:
+    replicas: 3
+    persistence:
+      storageClass: "gp3"
+      size: 50Gi
+    resources:
+      requests:
+        memory: "1Gi"
+        cpu: "500m"
+      limits:
+        memory: "4Gi"
+        cpu: "4"
+    tls:
+      enabled: true
+      existingSecret: "flow-like-cockroachdb-certs"
+
+# Option 2: External database (uncomment to use)
+# database:
+#   type: external
+#   external:
+#     existingSecret: "flow-like-db-credentials"
+#     # connectionString is read from secret key "DATABASE_URL"
+
+# External S3-compatible storage (required)
+storage:
+  external:
+    endpoint: "https://s3.us-east-1.amazonaws.com"
+    region: "us-east-1"
+    metaBucket: "my-company-flow-like-meta"
+    contentBucket: "my-company-flow-like-content"
+    usePathStyle: false
+    existingSecret: "flow-like-s3-credentials"
+
+# Redis (deployed internally for job queue)
+redis:
+  enabled: true
+  architecture: standalone
+  auth:
+    enabled: true
+    existingSecret: "flow-like-redis-credentials"
+  master:
+    persistence:
+      enabled: true
+      storageClass: "gp3"
+      size: 10Gi
+
+ingress:
+  enabled: true
+  className: "nginx"
+  annotations:
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"
+    nginx.ingress.kubernetes.io/proxy-body-size: "100m"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
+  hosts:
+    - host: api.flow-like.example.com
+      paths:
+        - path: /
+          pathType: Prefix
+  tls:
+    - secretName: flow-like-tls
+      hosts:
+        - api.flow-like.example.com
+
+networkPolicy:
+  enabled: true
+
+monitoring:
+  enabled: true
+  serviceMonitor:
+    enabled: true
+    interval: 30s
+    scrapeTimeout: 10s
+
+runtimeClass:
+  create: false  # Assume Kata is already installed
+  name: kata

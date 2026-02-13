@@ -1,4 +1,3 @@
-
 enum BitType {
   COURSE
   LLM
@@ -23,30 +22,30 @@ enum BitType {
 model Bit {
   id String @id
 
-  authors String[]
-  type BitType
-  meta Meta[]
-  repository String?
+  authors      String[]
+  type         BitType
+  meta         Meta[]
+  repository   String?
   downloadLink String?
-  fileName String?
-  hash String
-  parameters Json?
+  fileName     String?
+  hash         String?
+  parameters   Json?
 
   size BigInt?
-  hub String
+  hub  String
 
   version String?
   license String?
 
-  dependencies String[]
-  dependencyTreeHash String @unique
+  dependencies       String[]
+  dependencyTreeHash String?  @unique
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   featuredSwimlane SwimlaneItem[]
 
-  cache BitTreeCache?
+  cache  BitTreeCache?
   caches BitCache[]
 
   @@index([type])
@@ -59,12 +58,12 @@ model Bit {
 model BitCache {
   id String @id
 
-  bit Bit? @relation(fields: [bitId], references: [id], onDelete: Cascade)
+  bit   Bit?    @relation(fields: [bitId], references: [id], onDelete: Cascade)
   bitId String?
 
   externalBit Json?
 
-  bitTreeCache BitTreeCache @relation(fields: [dependencyTreeHash], references: [dependencyTreeHash], onDelete: Cascade)
+  bitTreeCache       BitTreeCache @relation(fields: [dependencyTreeHash], references: [dependencyTreeHash], onDelete: Cascade)
   dependencyTreeHash String
 
   updatedAt DateTime @updatedAt
@@ -75,33 +74,33 @@ model BitCache {
 
 model BitTreeCache {
   dependencyTreeHash String @id
-  bit Bit @relation(fields: [dependencyTreeHash], references: [dependencyTreeHash], onDelete: Cascade)
+  bit                Bit    @relation(fields: [dependencyTreeHash], references: [dependencyTreeHash], onDelete: Cascade)
 
   bits BitCache[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
-
 }
 
 model TemplateProfile {
   id String @id
 
-  name String
-  thumbnail String?
-  icon String?
+  name        String
+  thumbnail   String?
+  icon        String?
   description String?
-  interests String[]
-  tags String[]
+  secure      Boolean  @default(true)
+  interests   String[]
+  tags        String[]
 
-  theme Json?
+  theme    Json?
   settings Json?
 
   // JSON with the apps that are part of the profile. Contains the app ID, if it is favorite, pinned and position of the two
-  apps Json?
+  apps   Json?
   bitIds String[]
-  hub String
-  hubs String[]
+  hub    String
+  hubs   String[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

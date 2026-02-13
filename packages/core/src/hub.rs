@@ -2,6 +2,7 @@ use std::{collections::HashMap, sync::Arc};
 
 use crate::{
     bit::{Bit, BitTypes},
+    credentials::SharedCredentials,
     profile::Profile,
     utils::{http::HTTPClient, recursion::RecursionGuard},
 };
@@ -11,16 +12,57 @@ use serde::{Deserialize, Serialize};
 use url::Url;
 
 #[derive(Clone, Debug, Serialize, JsonSchema, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum MailProviderType {
+    Ses,
+    Sendgrid,
+    Smtp,
+}
+
+#[derive(Clone, Debug, Serialize, JsonSchema, Deserialize)]
+pub struct SmtpSettings {
+    pub host_env: String,
+    pub port_env: String,
+    pub username_env: String,
+    pub password_env: String,
+}
+
+#[derive(Clone, Debug, Serialize, JsonSchema, Deserialize)]
+pub struct SendgridSettings {
+    pub api_key_env: String,
+}
+
+#[derive(Clone, Debug, Serialize, JsonSchema, Deserialize)]
+pub struct MailConfig {
+    pub provider: MailProviderType,
+    pub from_email: String,
+    pub from_name: String,
+    pub smtp: Option<SmtpSettings>,
+    pub sendgrid: Option<SendgridSettings>,
+}
+
+#[derive(Clone, Debug, Serialize, JsonSchema, Deserialize)]
+pub struct AlertingConfig {
+    pub mail: String,
+}
+
+#[derive(Clone, Debug, Serialize, JsonSchema, Deserialize)]
 pub struct UserTier {
     pub max_non_visible_projects: i32,
     pub max_remote_executions: i32,
     pub execution_tier: String,
     pub max_total_size: i64,
-    pub max_llm_calls: i32,
+    pub max_llm_cost: i32,
+    pub max_llm_calls: Option<i32>,
     pub llm_tiers: Vec<String>,
+    pub product_id: Option<String>,
 }
 
 pub type UserTiers = HashMap<String, UserTier>;
+
+fn default_secure() -> bool {
+    true
+}
 
 #[derive(Clone, Debug, Serialize, JsonSchema, Deserialize)]
 pub struct Hub {
@@ -30,13 +72,19 @@ pub struct Hub {
     pub icon: Option<String>,
     pub authentication: Option<Authentication>,
     pub features: Features,
-    pub hubs: Vec<String>, // Assuming hubs might contain strings, adjust if needed
+    pub hubs: Vec<String>,
     pub provider: Option<String>,
     pub domain: String,
+    #[serde(default = "default_secure")]
+    pub secure: bool,
     pub region: Option<String>,
     pub terms_of_service: String,
+    pub signaling: Option<Vec<String>>,
     pub cdn: Option<String>,
     pub app: Option<String>,
+    pub web: Option<String>,
+    pub mail: Option<MailConfig>,
+    pub alerting: Option<AlertingConfig>,
     pub legal_notice: String,
     pub privacy_policy: String,
     pub contact: Contact,
@@ -46,6 +94,14 @@ pub struct Hub {
     pub tiers: UserTiers,
     #[serde(default)]
     pub lookup: Lookup,
+    /// OAuth provider configurations
+    #[serde(default)]
+    pub oauth_providers: OAuthProviderConfigs,
+
+    /// Supported server-side event sinks (e.g., discord, telegram, cron, http)
+    /// If None, defaults to basic sinks like http, webhook, cron
+    #[serde(default)]
+    pub supported_sinks: Option<SupportedSinks>,
 
     #[serde(skip)]
     recursion_guard: Option<Arc<Mutex<RecursionGuard>>>,
@@ -118,6 +174,7 @@ pub struct OpenIdConfig {
     pub response_type: Option<String>,
     pub scope: Option<String>,
     pub discovery_url: Option<String>,
+    pub user_info_url: Option<String>,
     pub jwks_url: String,
     pub proxy: Option<OpenIdProxy>,
     pub cognito: Option<CognitoConfig>,
@@ -130,6 +187,171 @@ pub struct OAuth2Config {
     pub client_id: String,
 }
 
+/// OAuth provider configuration from the config file.
+/// This is used to configure OAuth providers centrally.
+/// The client_secret is resolved from environment variables at build time for providers that need it.
+#[derive(Clone, Debug, Serialize, JsonSchema, Deserialize)]
+pub struct OAuthProviderConfig {
+    /// Display name shown to users
+    pub name: String,
+    /// The client ID (public, not secret)
+    #[serde(default)]
+    pub client_id: String,
+    /// Environment variable name containing the client secret (resolved at build time)
+    /// If null, no secret is needed (PKCE-based flow)
+    pub client_secret_env: Option<String>,
+    /// The resolved client secret (populated at build time from the env var)
+    #[serde(default)]
+    pub client_secret: Option<String>,
+    /// OAuth authorization endpoint URL
+    pub auth_url: String,
+    /// OAuth token endpoint URL
+    pub token_url: String,
+    /// Base OAuth scopes (node-specific scopes will be added by the frontend)
+    #[serde(default)]
+    pub scopes: Vec<String>,
+    /// Whether PKCE is required
+    #[serde(default)]
+    pub pkce_required: bool,
+    /// Whether this provider requires the secret proxy for token exchange
+    /// If true, token exchange requests go through the API server which adds the secret
+    #[serde(default)]
+    pub requires_secret_proxy: bool,
+    /// Optional: URL for token revocation
+    pub revoke_url: Option<String>,
+    /// Optional: URL for user info endpoint
+    pub userinfo_url: Option<String>,
+    /// Optional: Device authorization URL for device flow
+    pub device_auth_url: Option<String>,
+    /// Whether to use device flow
+    #[serde(default)]
+    pub use_device_flow: bool,
+    #[serde(default)]
+    pub use_implicit_flow: bool,
+    /// Optional: Audience claim for token validation
+    pub audience: Option<String>,
+}
+
+pub type OAuthProviderConfigs = HashMap<String, OAuthProviderConfig>;
+
+/// Configuration for supported server-side event sinks.
+/// When a hub is deployed, only sinks listed here will be available for server-side execution.
+/// The desktop app always has access to all sinks.
+#[derive(Debug, Serialize, Deserialize, JsonSchema, Clone, Default)]
+pub struct SupportedSinks {
+    /// HTTP/REST API endpoint sink
+    #[serde(default)]
+    pub http: bool,
+    /// Incoming webhook from external service
+    #[serde(default)]
+    pub webhook: bool,
+    /// Cron scheduled trigger
+    #[serde(default)]
+    pub cron: bool,
+    /// MQTT message broker
+    #[serde(default)]
+    pub mqtt: bool,
+    /// GitHub repository webhook
+    #[serde(default)]
+    pub github: bool,
+    /// RSS feed polling
+    #[serde(default)]
+    pub rss: bool,
+    /// Discord bot integration
+    #[serde(default)]
+    pub discord: bool,
+    /// Slack bot integration
+    #[serde(default)]
+    pub slack: bool,
+    /// Telegram bot integration
+    #[serde(default)]
+    pub telegram: bool,
+    /// Email/IMAP polling
+    #[serde(default)]
+    pub email: bool,
+}
+
+impl SupportedSinks {
+    /// Returns a list of enabled sink types as strings
+    pub fn enabled_sinks(&self) -> Vec<&'static str> {
+        let mut sinks = Vec::new();
+        if self.http {
+            sinks.push("http");
+        }
+        if self.webhook {
+            sinks.push("webhook");
+        }
+        if self.cron {
+            sinks.push("cron");
+        }
+        if self.mqtt {
+            sinks.push("mqtt");
+        }
+        if self.github {
+            sinks.push("github");
+        }
+        if self.rss {
+            sinks.push("rss");
+        }
+        if self.discord {
+            sinks.push("discord");
+        }
+        if self.slack {
+            sinks.push("slack");
+        }
+        if self.telegram {
+            sinks.push("telegram");
+        }
+        if self.email {
+            sinks.push("email");
+        }
+        sinks
+    }
+
+    /// Returns true if the given sink type is supported
+    pub fn is_supported(&self, sink_type: &str) -> bool {
+        match sink_type.to_lowercase().as_str() {
+            "http" | "api" => self.http,
+            "webhook" => self.webhook,
+            "cron" => self.cron,
+            "mqtt" => self.mqtt,
+            "github" => self.github,
+            "rss" => self.rss,
+            "discord" => self.discord,
+            "slack" => self.slack,
+            "telegram" => self.telegram,
+            "email" => self.email,
+            _ => false,
+        }
+    }
+
+    /// Default configuration for basic server setups (http, webhook, cron)
+    pub fn basic() -> Self {
+        Self {
+            http: true,
+            webhook: true,
+            cron: true,
+            ..Default::default()
+        }
+    }
+
+    /// Configuration with all sinks enabled
+    pub fn all() -> Self {
+        Self {
+            http: true,
+            webhook: true,
+            cron: true,
+            mqtt: true,
+            github: true,
+            rss: true,
+            discord: true,
+            slack: true,
+            telegram: true,
+            email: true,
+        }
+    }
+}
+
 #[derive(Debug, Serialize, Deserialize, JsonSchema, Clone)]
 pub struct Features {
     pub model_hosting: bool,
@@ -139,6 +361,8 @@ pub struct Features {
     pub unauthorized_read: bool,
     pub admin_interface: bool,
     pub premium: bool,
+    #[serde(default)]
+    pub wasm_registry: bool,
 }
 
 #[derive(Debug, Serialize, Deserialize, JsonSchema, Clone)]
@@ -149,6 +373,7 @@ pub struct Contact {
 }
 
 #[derive(Debug, Serialize, Deserialize, JsonSchema, Clone)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 pub struct BitSearchQuery {
     pub search: Option<String>,
     pub limit: Option<u64>,
@@ -208,8 +433,7 @@ impl Hub {
 
         let url = match Url::parse(&url) {
             Ok(url) => url,
-            Err(e) => {
-                println!("Error parsing URL: {:?}", e);
+            Err(_e) => {
                 return Err(flow_like_types::Error::msg("Invalid URL"));
             }
         };
@@ -244,6 +468,48 @@ impl Hub {
             .map_err(|e| flow_like_types::Error::msg(format!("Invalid URL: {}", e)))?;
 
         Ok(url)
+    }
+
+    pub async fn shared_credentials(&self, token: &str, app_id: &str) -> Result<SharedCredentials> {
+        let presign_path = format!("api/v1/apps/{}/invoke/presign", app_id);
+
+        let presign_url = self.construct_url(&presign_path)?;
+
+        let auth_val = if token.starts_with("pat_") {
+            token.to_string()
+        } else if token.starts_with("Bearer ") {
+            token.to_string()
+        } else {
+            format!("Bearer {}", token)
+        };
+
+        let client = self.http_client().client();
+
+        let request = client
+            .get(presign_url.clone())
+            .header("Authorization", &auth_val)
+            .build()
+            .map_err(flow_like_types::Error::from)?;
+
+        let resp = client
+            .execute(request)
+            .await
+            .map_err(flow_like_types::Error::from)?;
+
+        let status = resp.status();
+        let body_text = resp.text().await.map_err(flow_like_types::Error::from)?;
+
+        if !status.is_success() {
+            return Err(flow_like_types::Error::msg(format!(
+                "presign failed: status={} body={}",
+                status, body_text
+            )));
+        }
+
+        let shared_credentials: SharedCredentials = flow_like_types::json::from_str(&body_text)
+            .map_err(|e| flow_like_types::Error::msg(format!("JSON parse error: {}", e)))?;
+
+        Ok(shared_credentials)
     }
 
     pub async fn get_bit(&self, bit_id: &str) -> Result<Bit> {
@@ -310,9 +576,7 @@ impl Hub {
 
     pub async fn get_profiles(&self) -> Result<Vec<Profile>> {
         let profiles_url = self.construct_url("api/v1/info/profiles")?;
-        println!("Requesting profiles from: {}", profiles_url);
         let request = self.http_client().client().get(profiles_url).build()?;
-        println!("Request: {:?}", request);
         let bits = self
             .http_client()
             .hashed_request::<Vec<Profile>>(request)

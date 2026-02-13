@@ -1,0 +1,55 @@
+services:
+  postgres:
+    image: postgres:16
+    container_name: local_postgres
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_DB: ${POSTGRES_DB:-app}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 2s
+      timeout: 2s
+      retries: 20
+
+  tools:
+    build:
+      context: .
+      dockerfile: Dockerfile.tools
+    depends_on:
+      postgres:
+        condition: service_healthy
+    working_dir: /workspace
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_DB: ${POSTGRES_DB:-app}
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+    volumes:
+      - ./:/workspace
+    entrypoint: ["/usr/local/bin/export-database-url.sh"]
+    command:
+      - bash
+      - -lc
+      - |
+        wait-for-postgres.sh &&
+        bun install || true &&
+        make-postgres-prisma-mirror.sh &&
+        bunx prisma db push --schema=prisma-postgres-mirror/schema --accept-data-loss || true &&
+        sea-orm-cli generate entity -o src/entity --max-connections 10 --with-serde both --ignore-tables _prisma_migrations -s public || true &&
+        echo '✅ Entities generated successfully!' &&
+        echo '🧹 Cleaning up...' &&
+        rm -f bun.lockb &&
+        rm -f bun.lock &&
+        rm -rf node_modules &&
+        rm -rf prisma-postgres-mirror &&
+        echo '✅ Cleanup complete!'
+
+
+volumes:
+  pg_data:

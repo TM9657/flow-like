@@ -1,4 +1,4 @@
-use flow_like_types::{async_trait, sync::Mutex};
+use flow_like_types::async_trait;
 use schemars::JsonSchema;
 use std::sync::Arc;
 
@@ -34,7 +34,7 @@ impl Command for DisconnectPinsCommand {
     async fn execute(
         &mut self,
         board: &mut Board,
-        _state: Arc<Mutex<FlowLikeState>>,
+        _state: Arc<FlowLikeState>,
     ) -> flow_like_types::Result<()> {
         disconnect_pins(
             board,
@@ -71,7 +71,7 @@ impl Command for DisconnectPinsCommand {
     async fn undo(
         &mut self,
         board: &mut Board,
-        _state: Arc<Mutex<FlowLikeState>>,
+        _state: Arc<FlowLikeState>,
     ) -> flow_like_types::Result<()> {
         connect_pins(
             board,

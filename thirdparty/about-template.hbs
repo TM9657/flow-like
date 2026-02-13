@@ -1,0 +1,8 @@
+[{{#each overview.used_by as |crate|}}
+{
+  "name": "{{crate.name}}",
+  "version": "{{crate.version}}",
+  "license": "{{#each crate.licenses}}{{@key}}{{#unless @last}} OR {{/unless}}{{/each}}",
+  "license_text": {{#each crate.licenses}}{{json (lookup ../this @key).text}}{{#unless @last}},{{/unless}}{{/each}}
+}{{#unless @last}},{{/unless}}
+{{/each}}]

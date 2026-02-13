@@ -13,26 +13,27 @@ readme = "README.md"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [lib]
-name = "flow_like_desktop_lib"
-crate-type = ["lib", "cdylib"]
+name = "app"
+crate-type = ["lib", "cdylib", "staticlib"]
 
 [build-dependencies]
-tauri-build = { version = "2.3.1", features = [] }
+tauri-build = { version = "2.5.3", features = [] }
+serde_json = "1"
+plist = "1.8.0"
 
 [dependencies]
-flow-like = {workspace = true, features = ["tauri"] }
-flow-like-catalog.workspace = true
+flow-like = { workspace = true, features = ["tauri", "local-ml"] }
+flow-like-catalog = { workspace = true, features = ["all-execute", "tauri", "local-ml"] }
 flow-like-types.workspace = true
-tauri = { version = "2.7.0", features = [ "protocol-asset", "macos-private-api", "devtools"] }
-tauri-plugin-shell = "2.3.0"
-tauri-plugin-log = "2.6.0"
-tauri-plugin-notification = "2.3.0"
+flow-like-wasm.workspace = true
+tauri = { version = "2.9.5", features = [
+    "protocol-asset",
+    "macos-private-api",
+    "tray-icon",
+] }
 window-vibrancy = "0.6.0"
 anyhow = "1.0.95"
-sentry = { version = "0.42.0", features = ["anyhow"] }
-tauri-plugin-dialog = "2.3.2"
-tauri-plugin-updater = "2.9.0"
-tauri-plugin-deep-link = "2.4.1"
+sentry = { version = "0.42.0", default-features = false, features = ["anyhow", "backtrace", "contexts", "debug-images", "panic", "release-health", "reqwest", "rustls", "tokio"] }
 sentry-tracing = "0.42.0"
 tracing-subscriber = { version = "0.3.19", features = ["env-filter", "json"] }
 tracing = { version = "0.1.41", features = ["async-await", "attributes"] }
@@ -43,19 +44,48 @@ serde_json.workspace = true
 image.workspace = true
 imageproc.workspace = true
 webp.workspace = true
-tauri-plugin = "2.3.1"
-tauri-plugin-clipboard-manager = "2.2.2"
-tauri-plugin-http = "2.5.1"
+tauri-plugin = "2.5.2"
+tauri-plugin-shell = "2.3.4"
+tauri-plugin-log = "2.8.0"
+tauri-plugin-notification = "2.3.3"
+tauri-plugin-dialog = "2.6.0"
+tauri-plugin-deep-link = "2.4.6"
+tauri-plugin-clipboard-manager = "2.3.2"
+tauri-plugin-http = "2.5.6"
 tauri-plugin-devtools = "2.0.1"
-tauri-plugin-fs = "2.4.1"
+tauri-plugin-fs = "2.4.5"
 urlencoding.workspace = true
+tauri-plugin-opener = "2.5.3"
+tracing-oslog = "0.3.0"
+rusqlite = { version = "0.32.0", features = ["bundled-full", "serde_json"] }
+serenity = { version = "0.12.4", default-features = false, features = ["client", "gateway", "model", "rustls_backend", "cache"] }
+teloxide = { version = "0.17", default-features = false, features = ["macros", "rustls", "ctrlc_handler"] }
+pulldown-cmark = "0.12"
+lazy_static = "1.5.0"
+async-trait.workspace = true
+cron = "0.15.0"
+chrono.workspace = true
+axum = "0.8.6"
+tower = "0.5.2"
+chrono-tz.workspace = true
+mimalloc.workspace = true
+sysinfo = "0.37.2"
+copilot-sdk.workspace = true
+once_cell = "1.21.3"
+tokio.workspace = true
+rayon = "1.11.0"
 
 [target."cfg(any(target_os = \"macos\", windows, target_os = \"linux\"))".dependencies]
-tauri-plugin-single-instance = { version = "2.3.2", features = ["deep-link"] }
-tauri-plugin-window-state = "2.4.0"
+tauri-plugin-single-instance = { version = "2.3.7", features = ["deep-link"] }
+tauri-plugin-window-state = "2.4.1"
+tauri-plugin-updater = "2.9.0"
 
 [target."cfg(target_os = \"macos\")".dependencies]
 cocoa = "0.26"
+macos-app-nap = "0.0.1"
+
+[target."cfg(target_os = \"ios\")".dependencies]
+objc2 = "0.6.3"
 
 [profile.release]
 panic = "abort"
@@ -64,12 +94,19 @@ lto = "fat"
 opt-level = "z"
 strip = true
 incremental = false
+split-debuginfo = "unpacked" # macOS
+debug = 0
+
+[profile.release.package."*"]
+opt-level = "z"
 
 [profile.dev]
 opt-level = 1
 debug = 1
-split-debuginfo = "unpacked"  # macOS
+split-debuginfo = "unpacked" # macOS
 incremental = true
 
 [profile.dev.package."*"]
 opt-level = 0
+
+

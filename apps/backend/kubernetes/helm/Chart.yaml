@@ -1,0 +1,12 @@
+apiVersion: v2
+name: flow-like
+description: Flow-Like Kubernetes Backend Helm Chart
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
+keywords:
+  - workflow
+  - automation
+  - kubernetes
+maintainers:
+  - name: Flow-Like Team

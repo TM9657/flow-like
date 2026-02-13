@@ -1,0 +1,1455 @@
+syntax = "proto3";
+
+package flow_like_types;
+
+import "google/protobuf/timestamp.proto";
+
+// ============================================================================
+// A2UI - Agent to UI Protocol
+// Based on A2UI Specification v0.8: https://a2ui.org/specification/v0.8-a2ui/
+// ============================================================================
+
+// ============================================================================
+// CORE TYPES
+// ============================================================================
+
+// BoundValue - Either a literal value or a data path binding
+message BoundValue {
+  oneof value {
+    string literal_string = 1;
+    double literal_number = 2;
+    bool literal_bool = 3;
+    string path = 4;                    // Data path like "/user/name"
+  }
+}
+
+// BoundValueArray - Array of bound values
+message BoundValueArray {
+  repeated BoundValue values = 1;
+}
+
+// Action - User interaction definition with context
+message Action {
+  string name = 1;                      // Action identifier
+  map<string, BoundValue> context = 2;  // Key-value pairs sent with action
+  optional string target_surface_id = 3; // Target surface for the action
+}
+
+// Children - Either explicit list or template for dynamic rendering
+message Children {
+  oneof children_type {
+    ExplicitList explicit_list = 1;
+    Template template = 2;
+  }
+}
+
+message ExplicitList {
+  repeated string component_ids = 1;
+}
+
+message Template {
+  string data_binding = 1;              // Path to array in data model
+  string component_id = 2;              // Component to repeat for each item
+  optional string item_id_path = 3;     // Path within item for unique ID
+}
+
+// DataEntry - Key-value entry for data model
+message DataEntry {
+  string key = 1;
+  bytes value = 2;                      // JSON-serialized value
+}
+
+// Surface - UI region with its own component tree and data model
+message Surface {
+  string id = 1;
+  string root_component_id = 2;
+  repeated Component components = 3;    // Flat adjacency list
+  repeated DataEntry data_model = 4;    // Initial data
+  optional string catalog_id = 5;       // Custom component catalog
+}
+
+// ============================================================================
+// STYLE SYSTEM
+// ============================================================================
+
+message Style {
+  // Tailwind CSS classes - PREFERRED for styling
+  optional string class_name = 1;
+
+  // Background styling
+  optional Background background = 2;
+
+  // Border styling
+  optional Border border = 3;
+
+  // Shadow styling
+  optional Shadow shadow = 4;
+
+  // Spacing
+  optional Spacing padding = 5;
+  optional Spacing margin = 6;
+
+  // Size
+  optional Size width = 7;
+  optional Size height = 8;
+  optional Size min_width = 9;
+  optional Size max_width = 10;
+  optional Size min_height = 11;
+  optional Size max_height = 12;
+
+  // Position
+  optional Position position = 13;
+  optional int32 z_index = 14;
+
+  // Transform
+  optional Transform transform = 15;
+
+  // Opacity (0.0 - 1.0)
+  optional float opacity = 16;
+
+  // Overflow
+  optional Overflow overflow = 17;
+
+  // Cursor
+  optional string cursor = 18;
+
+  // Responsive breakpoint overrides
+  optional ResponsiveOverrides responsive = 19;
+
+  // Flex item properties
+  optional string flex = 20;            // "1", "none", "auto", "1 1 0%"
+  optional string align_self = 21;      // "start", "center", "end", "stretch"
+
+  // Grid item properties
+  optional string grid_column = 22;     // "span 2", "1 / 3"
+  optional string grid_row = 23;
+}
+
+// Background types
+message Background {
+  oneof background_type {
+    string color = 1;                   // "#FF5733" or "rgba(255,87,51,0.5)"
+    Gradient gradient = 2;              // linear/radial gradient
+    BackgroundImage image = 3;          // url + sizing
+    string blur = 4;                    // backdrop blur "10px"
+  }
+}
+
+message BackgroundImage {
+  BoundValue url = 1;
+  optional string size = 2;             // "cover", "contain", "100% 100%"
+  optional string position = 3;         // "center", "top left"
+  optional string repeat = 4;           // "no-repeat", "repeat-x"
+}
+
+message Gradient {
+  string gradient_type = 1;             // "linear" | "radial" | "conic"
+  optional string direction = 2;        // "to right", "45deg", "circle at center"
+  repeated GradientStop stops = 3;
+}
+
+message GradientStop {
+  string color = 1;
+  float position = 2;                   // 0.0 - 1.0
+}
+
+message Border {
+  optional string width = 1;            // "1px", "2px 4px"
+  optional string style = 2;            // "solid", "dashed", "dotted"
+  optional string color = 3;
+  optional string radius = 4;           // "8px", "50%", "8px 0 0 8px"
+}
+
+message Shadow {
+  repeated string box_shadows = 1;      // "0 4px 6px rgba(0,0,0,0.1)"
+  optional string text_shadow = 2;
+}
+
+message Spacing {
+  string value = 1;                     // "16px", "8px 16px", "8px 16px 8px 16px"
+}
+
+message Size {
+  string value = 1;                     // "100px", "50%", "auto", "fit-content"
+}
+
+message Position {
+  optional string top = 1;
+  optional string right = 2;
+  optional string bottom = 3;
+  optional string left = 4;
+  string position_type = 5;             // "absolute" | "relative" | "fixed" | "sticky"
+}
+
+message Transform {
+  optional string translate = 1;        // "10px, 20px" or "50%, -50%"
+  optional float rotate = 2;            // degrees
+  optional string scale = 3;            // "1.5" or "1.5, 2"
+  optional string transform_origin = 4; // "center", "top left"
+  optional string skew = 5;             // "10deg, 5deg"
+}
+
+enum Overflow {
+  OVERFLOW_VISIBLE = 0;
+  OVERFLOW_HIDDEN = 1;
+  OVERFLOW_SCROLL = 2;
+  OVERFLOW_AUTO = 3;
+}
+
+// Responsive overrides - allows manual control per breakpoint
+message ResponsiveOverrides {
+  optional BreakpointStyle sm = 1;      // >= 640px
+  optional BreakpointStyle md = 2;      // >= 768px
+  optional BreakpointStyle lg = 3;      // >= 1024px
+  optional BreakpointStyle xl = 4;      // >= 1280px
+  optional BreakpointStyle xxl = 5;     // >= 1536px
+}
+
+// Style overrides for a specific breakpoint
+message BreakpointStyle {
+  // Tailwind classes for this breakpoint (merged, not replaced)
+  optional string class_name = 1;
+
+  // Layout overrides
+  optional string display = 2;          // "flex", "grid", "block", "hidden"
+  optional string flex_direction = 3;   // "row", "column", "row-reverse"
+  optional string justify_content = 4;  // "start", "center", "between", "around"
+  optional string align_items = 5;      // "start", "center", "end", "stretch"
+  optional string gap = 6;
+  optional int32 grid_cols = 7;         // Number of grid columns
+
+  // Size overrides
+  optional Size width = 8;
+  optional Size height = 9;
+
+  // Spacing overrides
+  optional Spacing padding = 10;
+  optional Spacing margin = 11;
+
+  // Visibility
+  optional bool hidden = 12;
+
+  // Text
+  optional string font_size = 13;
+  optional string text_align = 14;
+
+  // Order (for reordering in flex/grid)
+  optional int32 order = 15;
+}
+
+// ============================================================================
+// COMPONENT - Base wrapper
+// ============================================================================
+
+message Component {
+  string id = 1;
+  optional Style style = 2;
+
+  // JSON-serialized component data for flexible storage
+  // Used when the specific component type conversion isn't needed
+  optional bytes component_json = 3;
+
+  oneof component {
+    // Layout Components
+    RowComponent row = 10;
+    ColumnComponent column = 11;
+    StackComponent stack = 12;
+    GridComponent grid = 13;
+    OverlayComponent overlay = 14;
+    AbsoluteComponent absolute = 15;
+    AspectRatioComponent aspect_ratio = 16;
+    ScrollAreaComponent scroll_area = 17;
+    ListComponent list = 18;
+
+    // Display Components
+    TextComponent text = 30;
+    ImageComponent image = 31;
+    IconComponent icon = 32;
+    VideoComponent video = 33;
+    LottieComponent lottie = 34;
+    MarkdownComponent markdown = 35;
+    DividerComponent divider = 36;
+
+    // Interactive Components
+    ButtonComponent button = 50;
+    TextFieldComponent text_field = 51;
+    SelectComponent select = 52;
+    SliderComponent slider = 53;
+    CheckboxComponent checkbox = 54;
+    SwitchComponent switch_component = 55;
+    RadioGroupComponent radio_group = 56;
+    DateTimeInputComponent date_time_input = 57;
+
+    // Container Components
+    CardComponent card = 70;
+    ModalComponent modal = 71;
+    TabsComponent tabs = 72;
+    AccordionComponent accordion = 73;
+    DrawerComponent drawer = 74;
+
+    // Game/Visual Components
+    Canvas2DComponent canvas_2d = 90;
+    SpriteComponent sprite = 91;
+    ShapeComponent shape = 92;
+    Scene3DComponent scene_3d = 93;
+    Model3DComponent model_3d = 94;
+    DialogueComponent dialogue = 95;
+    CharacterPortraitComponent character_portrait = 96;
+    ChoiceMenuComponent choice_menu = 97;
+    InventoryGridComponent inventory_grid = 98;
+    HealthBarComponent health_bar = 99;
+    MiniMapComponent mini_map = 100;
+
+    // Rich Composite Components
+    ProgressBarComponent progress_bar = 110;
+    CircularProgressComponent circular_progress = 111;
+    SpinnerComponent spinner = 112;
+    AvatarComponent avatar = 113;
+    BadgeComponent badge = 114;
+    TooltipComponent tooltip = 115;
+    BreadcrumbComponent breadcrumb = 116;
+    PaginationComponent pagination = 117;
+    DataTableComponent data_table = 118;
+    TreeViewComponent tree_view = 119;
+    StepperComponent stepper = 120;
+    RatingComponent rating = 121;
+    ColorPickerComponent color_picker = 122;
+    FileDropzoneComponent file_dropzone = 123;
+    ChartComponent chart = 124;
+    MapComponent map = 125;
+    CodeEditorComponent code_editor = 126;
+    TerminalComponent terminal = 127;
+    IframeComponent iframe = 128;
+    PlotlyChartComponent plotly_chart = 129;
+  }
+}
+
+// ============================================================================
+// LAYOUT COMPONENTS
+// ============================================================================
+
+message RowComponent {
+  Children children = 1;
+  optional string distribution = 2;     // "start", "center", "end", "spaceBetween", "spaceAround", "spaceEvenly"
+  optional string alignment = 3;        // "start", "center", "end", "stretch", "baseline"
+  optional BoundValue gap = 4;          // "8px", "1rem"
+  optional bool wrap = 5;               // allow wrapping
+  optional bool reverse = 6;            // reverse order
+}
+
+message ColumnComponent {
+  Children children = 1;
+  optional string distribution = 2;     // "start", "center", "end", "spaceBetween", "spaceAround", "spaceEvenly"
+  optional string alignment = 3;        // "start", "center", "end", "stretch"
+  optional BoundValue gap = 4;
+  optional bool reverse = 5;
+}
+
+message StackComponent {
+  Children children = 1;                // children stack on top of each other
+  optional string alignment = 2;        // "topLeft", "topCenter", "topRight", "centerLeft", "center", etc.
+}
+
+message GridComponent {
+  Children children = 1;
+  optional BoundValue columns = 2;      // "3", "repeat(3, 1fr)", "auto-fill, minmax(200px, 1fr)"
+  optional BoundValue rows = 3;
+  optional BoundValue gap = 4;
+  optional BoundValue column_gap = 5;
+  optional BoundValue row_gap = 6;
+  optional string auto_flow = 7;        // "row", "column", "dense"
+}
+
+message OverlayComponent {
+  string base = 1;                      // component ID for base layer
+  repeated OverlayItem overlays = 2;    // positioned overlays
+}
+
+message OverlayItem {
+  string child = 1;                     // component ID
+  OverlayPosition position = 2;
+  optional int32 z_index = 3;
+}
+
+message OverlayPosition {
+  optional string anchor = 1;           // "topLeft", "topCenter", "topRight", etc.
+  optional OverlayOffset offset = 2;
+}
+
+message OverlayOffset {
+  optional string x = 1;                // "10px", "-50%"
+  optional string y = 2;
+}
+
+message AbsoluteComponent {
+  Children children = 1;                // each child uses style.position
+  BoundValue width = 2;
+  BoundValue height = 3;
+}
+
+message AspectRatioComponent {
+  BoundValue ratio = 1;                 // 16/9 = 1.777, 1 = square
+  string child = 2;                     // component ID
+}
+
+message ScrollAreaComponent {
+  string child = 1;
+  optional string direction = 2;        // "vertical", "horizontal", "both"
+  optional string show_scrollbar = 3;   // "auto", "always", "hover", "never"
+  optional BoundValue scrollbar_size = 4;
+  optional Action on_scroll = 5;        // context includes scrollTop, scrollLeft
+  optional Action on_scroll_end = 6;    // reached end
+}
+
+message ListComponent {
+  Children children = 1;
+  optional BoundValue gap = 2;
+  optional string direction = 3;        // "vertical", "horizontal"
+  optional bool virtualized = 4;        // for long lists
+  optional BoundValue item_height = 5;  // required for virtualization
+}
+
+// ============================================================================
+// DISPLAY COMPONENTS
+// ============================================================================
+
+message TextComponent {
+  BoundValue text = 1;
+  optional string usage_hint = 2;       // "h1", "h2", "h3", "h4", "h5", "h6", "body", "caption", "label", "code"
+  optional BoundValue color = 3;
+  optional BoundValue font_size = 4;
+  optional BoundValue font_weight = 5;
+  optional BoundValue font_family = 6;
+  optional BoundValue line_height = 7;
+  optional BoundValue letter_spacing = 8;
+  optional string text_align = 9;       // "left", "center", "right", "justify"
+  optional string text_decoration = 10; // "none", "underline", "line-through"
+  optional int32 truncate = 11;         // 0 = none, 1+ = max lines
+  optional bool selectable = 12;
+}
+
+message ImageComponent {
+  BoundValue url = 1;
+  optional BoundValue alt = 2;
+  optional string fit = 3;              // "cover", "contain", "fill", "none", "scaleDown"
+  optional BoundValue position = 4;     // "center", "top left"
+  optional string fallback = 5;         // component ID for fallback
+  optional string loading = 6;          // "lazy", "eager"
+  optional Action on_error = 7;
+  optional Action on_load = 8;
+}
+
+message IconComponent {
+  BoundValue name = 1;                  // icon name from icon set
+  optional string icon_set = 2;         // "lucide", "material", "heroicons", "custom"
+  optional BoundValue size = 3;         // "16px", "1.5rem", "sm", "md", "lg"
+  optional BoundValue color = 4;
+  optional BoundValue stroke_width = 5;
+  optional bool fill = 6;
+}
+
+message VideoComponent {
+  BoundValue url = 1;
+  optional BoundValue poster = 2;       // thumbnail image
+  optional bool autoplay = 3;
+  optional bool loop = 4;
+  optional bool muted = 5;
+  optional bool controls = 6;
+  optional string fit = 7;              // "cover", "contain", "fill"
+  optional Action on_play = 8;
+  optional Action on_pause = 9;
+  optional Action on_ended = 10;
+  optional Action on_time_update = 11;  // context includes currentTime
+}
+
+message LottieComponent {
+  BoundValue src = 1;                   // JSON URL or inline data path
+  optional bool autoplay = 2;
+  optional int32 loop = 3;              // -1 = infinite, 0 = false, 1+ = loop count
+  optional BoundValue speed = 4;        // 1 = normal, 2 = 2x
+  optional int32 direction = 5;         // 1 = forward, -1 = reverse
+  optional LottieSegment segment = 6;   // play specific frames
+  optional Action on_complete = 7;
+}
+
+message LottieSegment {
+  int32 start = 1;
+  int32 end = 2;
+}
+
+message MarkdownComponent {
+  BoundValue content = 1;
+  optional bool allow_html = 2;
+  optional bool syntax_highlight = 3;
+  optional string link_target = 4;      // "_blank", "_self"
+  optional Action on_link_click = 5;    // context includes href
+}
+
+message DividerComponent {
+  optional string orientation = 1;      // "horizontal", "vertical"
+  optional BoundValue thickness = 2;
+  optional BoundValue color = 3;
+  optional BoundValue spacing = 4;      // margin around divider
+}
+
+// ============================================================================
+// INTERACTIVE COMPONENTS
+// ============================================================================
+
+message ButtonComponent {
+  string child = 1;                     // component ID (usually Text or Row with Icon+Text)
+  optional string variant = 2;          // "primary", "secondary", "outline", "ghost", "destructive", "link"
+  optional string size = 3;             // "xs", "sm", "md", "lg", "xl"
+  optional BoundValue disabled = 4;
+  optional BoundValue loading = 5;
+  optional BoundValue loading_text = 6;
+  optional string left_icon = 7;        // component ID
+  optional string right_icon = 8;       // component ID
+  optional bool full_width = 9;
+  Action action = 10;
+}
+
+message TextFieldComponent {
+  BoundValue text = 1;                  // two-way binding
+  optional BoundValue label = 2;
+  optional BoundValue placeholder = 3;
+  optional string text_field_type = 4;  // "shortText", "longText", "number", "email", "password", "tel", "url", "search", "date", "time", "datetime"
+  optional BoundValue disabled = 5;
+  optional BoundValue read_only = 6;
+  optional bool required = 7;
+  optional int32 min_length = 8;
+  optional int32 max_length = 9;
+  optional double min = 10;             // for number type
+  optional double max = 11;
+  optional double step = 12;
+  optional string pattern = 13;         // regex
+  optional BoundValue error = 14;
+  optional BoundValue helper_text = 15;
+  optional string prefix = 16;          // component ID
+  optional string suffix = 17;          // component ID
+  optional bool auto_focus = 18;
+  optional string auto_complete = 19;
+  optional Action on_change = 20;       // context includes value
+  optional Action on_blur = 21;
+  optional Action on_focus = 22;
+  optional Action on_submit = 23;       // Enter key
+}
+
+message SelectComponent {
+  BoundValue value = 1;                 // string or string[] for multiple
+  optional BoundValue options = 2;      // JSON array of SelectOption
+  optional Template options_template = 3; // alternative: template rendering
+  optional BoundValue label = 4;
+  optional BoundValue placeholder = 5;
+  optional bool multiple = 6;
+  optional bool searchable = 7;
+  optional bool clearable = 8;
+  optional BoundValue disabled = 9;
+  optional BoundValue error = 10;
+  optional Action on_change = 11;
+}
+
+message SliderComponent {
+  BoundValue value = 1;                 // number or [number, number] for range
+  optional double min = 2;
+  optional double max = 3;
+  optional double step = 4;
+  optional BoundValue label = 5;
+  optional bool show_value = 6;
+  optional bool show_marks = 7;
+  optional BoundValue marks = 8;        // JSON array of { value: number, label?: string }
+  optional BoundValue disabled = 9;
+  optional string orientation = 10;     // "horizontal", "vertical"
+  optional Action on_change = 11;
+  optional Action on_change_end = 12;
+}
+
+message CheckboxComponent {
+  BoundValue value = 1;
+  optional BoundValue label = 2;
+  optional BoundValue description = 3;
+  optional BoundValue disabled = 4;
+  optional BoundValue indeterminate = 5;
+  optional BoundValue error = 6;
+  optional Action on_change = 7;
+}
+
+message SwitchComponent {
+  BoundValue value = 1;
+  optional BoundValue label = 2;
+  optional BoundValue description = 3;
+  optional BoundValue disabled = 4;
+  optional string size = 5;             // "sm", "md", "lg"
+  optional Action on_change = 6;
+}
+
+message RadioGroupComponent {
+  BoundValue value = 1;
+  BoundValue options = 2;               // JSON array of RadioOption
+  optional BoundValue label = 3;
+  optional string orientation = 4;      // "horizontal", "vertical"
+  optional BoundValue disabled = 5;
+  optional BoundValue error = 6;
+  optional Action on_change = 7;
+}
+
+message DateTimeInputComponent {
+  BoundValue value = 1;
+  optional BoundValue label = 2;
+  optional string input_type = 3;       // "date", "time", "datetime", "dateRange"
+  optional BoundValue min = 4;          // min date/time
+  optional BoundValue max = 5;          // max date/time
+  optional BoundValue disabled = 6;
+  optional BoundValue error = 7;
+  optional string locale = 8;
+  optional Action on_change = 9;
+}
+
+// ============================================================================
+// CONTAINER COMPONENTS
+// ============================================================================
+
+message CardComponent {
+  string child = 1;                     // component ID
+  optional string variant = 2;          // "elevated", "outlined", "filled"
+  optional bool interactive = 3;        // hover/press effects
+  optional Action action = 4;           // click action
+}
+
+message ModalComponent {
+  string entry_point_child = 1;         // trigger component ID
+  string content_child = 2;             // modal content component ID
+  optional BoundValue open = 3;         // controlled mode
+  optional BoundValue title = 4;
+  optional BoundValue description = 5;
+  optional string size = 6;             // "sm", "md", "lg", "xl", "fullscreen"
+  optional bool close_on_overlay_click = 7;
+  optional bool close_on_escape = 8;
+  optional bool show_close_button = 9;
+  optional Action on_open = 10;
+  optional Action on_close = 11;
+}
+
+message TabsComponent {
+  repeated TabItem tab_items = 1;
+  optional BoundValue active_tab = 2;
+  optional string variant = 3;          // "line", "enclosed", "pills"
+  optional string orientation = 4;      // "horizontal", "vertical"
+  optional bool full_width = 5;
+  optional Action on_change = 6;        // context includes tabId
+}
+
+message TabItem {
+  string id = 1;
+  BoundValue title = 2;
+  optional string icon = 3;             // component ID
+  string child = 4;                     // content component ID
+  optional bool disabled = 5;
+  optional BoundValue badge = 6;
+}
+
+message AccordionComponent {
+  repeated AccordionItem items = 1;
+  optional bool allow_multiple = 2;
+  repeated string default_expanded = 3;
+  optional string variant = 4;          // "default", "bordered", "separated"
+  optional Action on_change = 5;
+}
+
+message AccordionItem {
+  string id = 1;
+  BoundValue title = 2;
+  optional BoundValue subtitle = 3;
+  optional string icon = 4;             // component ID
+  string child = 5;                     // content component ID
+  optional bool disabled = 6;
+}
+
+message DrawerComponent {
+  string entry_point_child = 1;
+  string content_child = 2;
+  optional BoundValue open = 3;
+  optional string side = 4;             // "left", "right", "top", "bottom"
+  optional BoundValue size = 5;         // "300px", "50%"
+  optional bool overlay = 6;
+  optional bool close_on_overlay_click = 7;
+  optional Action on_open = 8;
+  optional Action on_close = 9;
+}
+
+// ============================================================================
+// GAME/VISUAL COMPONENTS
+// ============================================================================
+
+message Canvas2DComponent {
+  BoundValue width = 1;
+  BoundValue height = 2;
+  Children children = 3;                // Sprite, Shape, etc.
+  optional Camera2D camera = 4;
+  optional BoundValue background_color = 5;
+  optional bool pixel_perfect = 6;      // disable anti-aliasing
+  optional Action on_tick = 7;          // game loop, context includes deltaTime
+  optional Action on_click = 8;         // context includes x, y
+  optional Action on_pointer_move = 9;
+}
+
+message Camera2D {
+  BoundValue x = 1;
+  BoundValue y = 2;
+  BoundValue zoom = 3;
+}
+
+message SpriteComponent {
+  BoundValue src = 1;                   // sprite sheet or single image
+  BoundValue x = 2;
+  BoundValue y = 3;
+  optional BoundValue width = 4;
+  optional BoundValue height = 5;
+  optional SpriteAnchor anchor = 6;     // pivot point
+  optional BoundValue rotation = 7;     // degrees
+  optional BoundValue scale = 8;
+  optional BoundValue opacity = 9;
+  optional BoundValue flip_x = 10;
+  optional BoundValue flip_y = 11;
+  optional BoundValue z_index = 12;
+  optional SpriteAnimation animation = 13;
+  optional bool interactive = 14;
+  optional SpriteHitArea hit_area = 15;
+  optional Action on_click = 16;
+  optional Action on_pointer_over = 17;
+  optional Action on_pointer_out = 18;
+  optional Action on_drag = 19;
+  optional bool draggable = 20;
+}
+
+message SpriteAnchor {
+  float x = 1;                          // 0-1
+  float y = 2;                          // 0-1
+}
+
+message SpriteHitArea {
+  float x = 1;
+  float y = 2;
+  float width = 3;
+  float height = 4;
+}
+
+message SpriteAnimation {
+  repeated SpriteFrame frames = 1;
+  float frame_rate = 2;
+  optional bool loop = 3;
+  optional BoundValue playing = 4;
+}
+
+message SpriteFrame {
+  float x = 1;
+  float y = 2;
+  float width = 3;
+  float height = 4;
+}
+
+message ShapeComponent {
+  string shape_type = 1;                // "rectangle", "circle", "ellipse", "polygon", "line", "path"
+  BoundValue x = 2;
+  BoundValue y = 3;
+
+  // Rectangle
+  optional BoundValue width = 4;
+  optional BoundValue height = 5;
+  optional BoundValue corner_radius = 6;
+
+  // Circle
+  optional BoundValue radius = 7;
+
+  // Ellipse
+  optional BoundValue radius_x = 8;
+  optional BoundValue radius_y = 9;
+
+  // Polygon/Path
+  optional BoundValue points = 10;      // JSON array of [x, y]
+  optional BoundValue path = 11;        // SVG path string
+
+  // Line
+  optional BoundValue to_x = 12;
+  optional BoundValue to_y = 13;
+
+  // Style
+  optional BoundValue fill = 14;
+  optional BoundValue stroke = 15;
+  optional BoundValue stroke_width = 16;
+  optional BoundValue shape_opacity = 17;
+  optional BoundValue rotation = 18;
+  optional BoundValue z_index = 19;
+
+  optional bool interactive = 20;
+  optional Action on_click = 21;
+}
+
+message Scene3DComponent {
+  BoundValue width = 1;
+  BoundValue height = 2;
+  optional Camera3D camera = 3;
+  optional Controls3D controls = 4;
+  optional Environment3D environment = 5;
+  Children children = 6;                // Model3D, Light3D, etc.
+  optional Action on_load = 7;
+  optional Action on_click = 8;         // context includes intersection point
+  optional Action on_pointer_move = 9;
+}
+
+message Camera3D {
+  string camera_type = 1;               // "perspective", "orthographic"
+  repeated float position = 2;          // [x, y, z]
+  repeated float look_at = 3;           // [x, y, z]
+  optional float fov = 4;
+  optional float near = 5;
+  optional float far = 6;
+}
+
+message Controls3D {
+  string control_type = 1;              // "orbit", "fly", "pointer-lock", "none"
+  optional bool enable_zoom = 2;
+  optional bool enable_pan = 3;
+  optional bool enable_rotate = 4;
+  optional float min_distance = 5;
+  optional float max_distance = 6;
+}
+
+message Environment3D {
+  optional BoundValue background = 1;   // color or HDR URL
+  optional Light3D ambient_light = 2;
+  optional DirectionalLight3D directional_light = 3;
+}
+
+message Light3D {
+  string color = 1;
+  float intensity = 2;
+}
+
+message DirectionalLight3D {
+  string color = 1;
+  float intensity = 2;
+  repeated float position = 3;          // [x, y, z]
+}
+
+message Model3DComponent {
+  BoundValue src = 1;                   // GLTF/GLB URL
+  optional BoundValue position = 2;     // JSON [x, y, z]
+  optional BoundValue rotation = 3;     // JSON [x, y, z] Euler angles
+  optional BoundValue scale = 4;        // number or JSON [x, y, z]
+  optional Animation3D animation = 5;
+  optional bool cast_shadow = 6;
+  optional bool receive_shadow = 7;
+  optional bool interactive = 8;
+  optional Action on_click = 9;
+  optional Action on_pointer_over = 10;
+}
+
+message Animation3D {
+  optional string name = 1;             // animation clip name
+  optional BoundValue playing = 2;
+  optional bool loop = 3;
+  optional float time_scale = 4;
+}
+
+message DialogueComponent {
+  optional DialogueSpeaker speaker = 1;
+  BoundValue text = 2;
+  optional DialogueTypewriter typewriter = 3;
+  optional BoundValue voice_over = 4;   // audio URL
+  optional Action on_complete = 5;      // text fully shown
+  optional Action on_click = 6;         // advance dialogue
+}
+
+message DialogueSpeaker {
+  BoundValue name = 1;
+  optional string portrait = 2;         // component ID
+  optional BoundValue name_color = 3;
+  optional string position = 4;         // "left", "right", "center"
+}
+
+message DialogueTypewriter {
+  bool enabled = 1;
+  optional float speed = 2;             // chars per second
+  optional bool skip_on_click = 3;
+}
+
+message CharacterPortraitComponent {
+  BoundValue image = 1;
+  optional BoundValue expression = 2;   // switches image variant
+  optional string position = 3;         // "left", "right", "center"
+  optional string size = 4;             // "small", "medium", "large", "fullHeight"
+  optional string enter = 5;            // "fade", "slideLeft", "slideRight", "slideUp", "bounce"
+  optional string exit = 6;             // "fade", "slideLeft", "slideRight", "slideDown"
+  optional BoundValue dimmed = 7;       // inactive speaker
+  optional BoundValue highlighted = 8;
+  optional BoundValue shake = 9;        // emotion effect
+  optional Action on_click = 10;
+}
+
+message ChoiceMenuComponent {
+  BoundValue choices = 1;               // JSON array of Choice
+  optional Template choices_template = 2;
+  optional BoundValue title = 3;
+  optional string layout = 4;           // "vertical", "horizontal", "grid"
+  optional int32 columns = 5;           // for grid layout
+  optional ChoiceTimer timer = 6;
+  optional BoundValue disabled = 7;
+  optional Action on_select = 8;        // context includes choiceId, choiceIndex
+}
+
+message ChoiceTimer {
+  float duration = 1;                   // seconds
+  optional string default_choice = 2;   // choice ID if time runs out
+  optional bool show_timer = 3;
+}
+
+message InventoryGridComponent {
+  BoundValue items = 1;                 // JSON array of InventoryItem
+  optional int32 columns = 2;
+  optional int32 rows = 3;
+  optional BoundValue cell_size = 4;
+  optional bool show_empty = 5;
+  optional bool draggable = 6;
+  optional bool droppable = 7;
+  optional Action on_drag_start = 8;
+  optional Action on_drag_end = 9;
+  optional Action on_drop = 10;
+  optional bool selectable = 11;
+  optional bool multi_select = 12;
+  optional BoundValue selected_ids = 13;
+  optional Action on_select = 14;
+  optional Action on_item_click = 15;
+  optional Action on_item_right_click = 16;
+  optional Action on_item_hover = 17;
+}
+
+message HealthBarComponent {
+  BoundValue value = 1;
+  BoundValue max_value = 2;
+  optional BoundValue min_value = 3;
+  optional BoundValue label = 4;
+  optional bool show_value = 5;
+  optional bool show_percentage = 6;
+  optional string variant = 7;          // "bar", "segmented", "circular"
+  optional int32 segments = 8;          // for segmented variant
+  optional BoundValue fill_color = 9;
+  optional BoundValue background_color = 10;
+  optional bool animated = 11;
+  optional float animation_duration = 12;
+  optional BoundValue thresholds = 13;  // JSON array of { value: number, color: string }
+}
+
+message MiniMapComponent {
+  optional BoundValue map_image = 1;    // static map image
+  BoundValue width = 2;
+  BoundValue height = 3;
+  optional MiniMapViewport viewport = 4;
+  BoundValue markers = 5;               // JSON array of MapMarker
+  optional MiniMapPlayer player = 6;
+  optional bool clickable = 7;
+  optional Action on_click = 8;         // context includes mapX, mapY
+}
+
+message MiniMapViewport {
+  BoundValue x = 1;
+  BoundValue y = 2;
+  BoundValue width = 3;
+  BoundValue height = 4;
+}
+
+message MiniMapPlayer {
+  BoundValue x = 1;
+  BoundValue y = 2;
+  optional BoundValue rotation = 3;
+  optional string icon = 4;
+}
+
+// ============================================================================
+// RICH COMPOSITE COMPONENTS
+// ============================================================================
+
+message ProgressBarComponent {
+  BoundValue value = 1;                 // 0-100 or 0-max
+  optional BoundValue max = 2;
+  optional bool indeterminate = 3;
+  optional BoundValue label = 4;
+  optional bool show_value = 5;
+  optional string size = 6;             // "xs", "sm", "md", "lg"
+  optional BoundValue color = 7;
+}
+
+message CircularProgressComponent {
+  BoundValue value = 1;
+  optional BoundValue max = 2;
+  optional bool indeterminate = 3;
+  optional BoundValue label = 4;
+  optional bool show_value = 5;
+  optional BoundValue size = 6;         // "32px", "64px"
+  optional BoundValue thickness = 7;
+  optional BoundValue color = 8;
+}
+
+message SpinnerComponent {
+  optional string size = 1;             // "xs", "sm", "md", "lg", "xl"
+  optional BoundValue color = 2;
+  optional BoundValue label = 3;
+}
+
+message AvatarComponent {
+  optional BoundValue src = 1;
+  optional BoundValue alt = 2;
+  optional BoundValue fallback = 3;     // initials or icon name
+  optional string size = 4;             // "xs", "sm", "md", "lg", "xl"
+  optional string shape = 5;            // "circle", "square", "rounded"
+  optional string badge = 6;            // component ID for badge overlay
+  optional Action on_click = 7;
+}
+
+message BadgeComponent {
+  BoundValue content = 1;               // text, number, or empty for dot
+  optional string variant = 2;          // "default", "success", "warning", "error", "info"
+  optional string size = 3;             // "sm", "md", "lg"
+  optional bool dot = 4;                // show as dot only
+  optional BoundValue max = 5;          // max number to show (e.g., 99+)
+}
+
+message TooltipComponent {
+  string trigger_child = 1;             // component ID
+  BoundValue content = 2;               // text or component ID
+  optional string side = 3;             // "top", "right", "bottom", "left"
+  optional string align = 4;            // "start", "center", "end"
+  optional int32 delay_ms = 5;
+}
+
+message BreadcrumbComponent {
+  BoundValue items = 1;                 // JSON array of { label: string, href?: string }
+  optional string separator = 2;        // "/", ">", or component ID
+  optional Action on_navigate = 3;      // context includes href
+}
+
+message PaginationComponent {
+  BoundValue current_page = 1;
+  BoundValue total_pages = 2;
+  optional int32 siblings = 3;          // pages to show around current
+  optional bool show_edges = 4;         // show first/last buttons
+  optional Action on_change = 5;        // context includes page
+}
+
+message DataTableComponent {
+  BoundValue data = 1;                  // JSON array of rows
+  BoundValue columns = 2;               // JSON array of column definitions
+  optional bool sortable = 3;
+  optional bool filterable = 4;
+  optional bool selectable = 5;
+  optional BoundValue selected_rows = 6;
+  optional BoundValue sort_by = 7;
+  optional string sort_direction = 8;   // "asc", "desc"
+  optional Action on_sort = 9;
+  optional Action on_filter = 10;
+  optional Action on_select = 11;
+  optional Action on_row_click = 12;
+}
+
+message TreeViewComponent {
+  BoundValue data = 1;                  // JSON tree structure
+  optional BoundValue expanded = 2;     // array of expanded node IDs
+  optional BoundValue selected = 3;     // selected node ID
+  optional bool multi_select = 4;
+  optional bool checkable = 5;
+  optional BoundValue checked = 6;      // array of checked node IDs
+  optional Action on_expand = 7;
+  optional Action on_select = 8;
+  optional Action on_check = 9;
+}
+
+message StepperComponent {
+  BoundValue current_step = 1;
+  BoundValue steps = 2;                 // JSON array of step definitions
+  optional string orientation = 3;      // "horizontal", "vertical"
+  optional bool clickable = 4;          // can click to navigate
+  optional Action on_step_click = 5;    // context includes stepIndex
+}
+
+message RatingComponent {
+  BoundValue value = 1;
+  optional int32 max = 2;               // default 5
+  optional string icon = 3;             // "star", "heart", custom
+  optional BoundValue size = 4;
+  optional BoundValue color = 5;
+  optional bool read_only = 6;
+  optional bool allow_half = 7;
+  optional Action on_change = 8;
+}
+
+message ColorPickerComponent {
+  BoundValue value = 1;                 // hex color
+  optional string format = 2;           // "hex", "rgb", "hsl"
+  optional BoundValue swatches = 3;     // preset colors
+  optional bool show_alpha = 4;
+  optional BoundValue disabled = 5;
+  optional Action on_change = 6;
+}
+
+message FileDropzoneComponent {
+  optional BoundValue accept = 1;       // ".jpg,.png" or "image/*"
+  optional int32 max_files = 2;
+  optional BoundValue max_size = 3;     // bytes
+  optional bool multiple = 4;
+  optional BoundValue label = 5;
+  optional string hint = 6;             // component ID for custom hint
+  optional BoundValue disabled = 7;
+  optional Action on_drop = 8;          // context includes files
+  optional Action on_reject = 9;        // context includes errors
+}
+
+message ChartComponent {
+  string chart_type = 1;                // "line", "bar", "pie", "area", "scatter", "donut"
+  BoundValue data = 2;                  // chart data
+  optional BoundValue options = 3;      // chart options
+  optional BoundValue width = 4;
+  optional BoundValue height = 5;
+  optional bool responsive = 6;
+  optional Action on_click = 7;         // context includes dataPoint
+}
+
+message MapComponent {
+  BoundValue center = 1;                // [lat, lng]
+  BoundValue zoom = 2;
+  optional BoundValue markers = 3;      // JSON array of markers
+  optional string map_style = 4;        // mapbox style URL
+  optional bool interactive = 5;
+  optional Action on_move = 6;
+  optional Action on_marker_click = 7;
+}
+
+message CodeEditorComponent {
+  BoundValue value = 1;
+  optional string language = 2;         // "javascript", "python", etc.
+  optional string theme = 3;            // "vs-dark", "light"
+  optional bool read_only = 4;
+  optional bool line_numbers = 5;
+  optional bool minimap = 6;
+  optional BoundValue height = 7;
+  optional Action on_change = 8;
+}
+
+message TerminalComponent {
+  BoundValue lines = 1;                 // JSON array of terminal lines
+  optional bool scrollback = 2;
+  optional int32 max_lines = 3;
+  optional string font_family = 4;
+  optional BoundValue font_size = 5;
+  optional BoundValue background_color = 6;
+  optional BoundValue text_color = 7;
+}
+
+message IframeComponent {
+  BoundValue src = 1;                   // URL to embed
+  optional BoundValue width = 2;        // "100%", "800px"
+  optional BoundValue height = 3;       // "600px", "100%"
+  optional string sandbox = 4;          // sandbox attribute: "allow-scripts allow-same-origin"
+  optional string allow = 5;            // permissions policy: "fullscreen; camera; microphone"
+  optional BoundValue title = 6;        // accessibility title
+  optional string loading = 7;          // "lazy", "eager"
+  optional string referrer_policy = 8;  // "no-referrer", "origin", etc.
+  optional bool border = 9;             // show border (default false)
+  optional Action on_load = 10;
+  optional Action on_error = 11;
+}
+
+message PlotlyChartComponent {
+  BoundValue data = 1;                  // Plotly data array (JSON)
+  optional BoundValue layout = 2;       // Plotly layout object (JSON)
+  optional BoundValue config = 3;       // Plotly config object (JSON)
+  optional BoundValue width = 4;
+  optional BoundValue height = 5;
+  optional bool responsive = 6;         // auto-resize (default true)
+  optional Action on_click = 7;         // context includes point data
+  optional Action on_hover = 8;
+  optional Action on_unhover = 9;
+  optional Action on_selected = 10;     // box/lasso select
+  optional Action on_relayout = 11;     // zoom/pan events
+}
+
+// ============================================================================
+// WIDGET & PAGE DEFINITIONS
+// ============================================================================
+
+message WidgetVersion {
+  uint32 major = 1;
+  uint32 minor = 2;
+  uint32 patch = 3;
+}
+
+message Widget {
+  string id = 1;
+  string name = 2;
+  optional string description = 3;
+  string root_component_id = 4;
+  repeated Component components = 5;    // flat adjacency list
+  repeated DataEntry data_model = 6;    // initial data
+  repeated CustomizationOption customization_options = 7;
+  optional string catalog_id = 8;
+  optional string thumbnail = 9;
+  repeated string tags = 10;
+  // Versioning
+  optional WidgetVersion version = 11;
+  google.protobuf.Timestamp created_at = 12;
+  google.protobuf.Timestamp updated_at = 13;
+  // Exposed props for page customization
+  repeated ExposedProp exposed_props = 14;
+  // Widget actions - actions that can be triggered by elements within the widget
+  repeated WidgetAction actions = 15;
+}
+
+// Widget action definition - an action that can be triggered by elements and bound to workflows
+message WidgetAction {
+  string id = 1;                        // e.g., "clicked_delete", "clicked_open"
+  string label = 2;                     // Display label for UI
+  optional string description = 3;      // Description of what this action does
+  optional string icon = 4;             // Icon name for UI
+  // Context schema - defines what data is passed with the action
+  repeated WidgetActionContextField context_schema = 5;
+}
+
+// Field definition for widget action context
+message WidgetActionContextField {
+  string name = 1;                      // Field name in context
+  string label = 2;                     // Display label
+  ExposedPropType field_type = 3;       // Type of the field value
+  optional string description = 4;      // Description of the field
+  optional string default_path = 5;     // Default data path binding
+}
+
+// Exposed property from widget component that can be customized in pages
+message ExposedProp {
+  string id = 1;
+  string label = 2;
+  optional string description = 3;
+  string target_component_id = 4;       // which component this targets
+  string property_path = 5;             // e.g., "content", "style.className", "data"
+  ExposedPropType prop_type = 6;
+  optional bytes default_value = 7;     // JSON-serialized
+  optional string group = 8;            // for grouping in UI
+  repeated string enum_choices = 9;     // for enum type
+}
+
+enum ExposedPropType {
+  EXPOSED_PROP_STRING = 0;
+  EXPOSED_PROP_NUMBER = 1;
+  EXPOSED_PROP_BOOLEAN = 2;
+  EXPOSED_PROP_COLOR = 3;
+  EXPOSED_PROP_IMAGE_URL = 4;
+  EXPOSED_PROP_ICON = 5;
+  EXPOSED_PROP_ENUM = 6;
+  EXPOSED_PROP_JSON = 7;
+  EXPOSED_PROP_TAILWIND_CLASS = 8;
+  EXPOSED_PROP_STYLE_OBJECT = 9;
+  EXPOSED_PROP_BOUND_VALUE = 10;
+}
+
+message CustomizationOption {
+  string id = 1;
+  string label = 2;
+  optional string description = 3;
+  CustomizationType customization_type = 4;
+  optional bytes default_value = 5;     // JSON-serialized
+  repeated ValidationRule validations = 6;
+  optional string group = 7;            // for grouping in UI
+}
+
+enum CustomizationType {
+  CUSTOMIZATION_STRING = 0;
+  CUSTOMIZATION_NUMBER = 1;
+  CUSTOMIZATION_BOOLEAN = 2;
+  CUSTOMIZATION_COLOR = 3;
+  CUSTOMIZATION_IMAGE_URL = 4;
+  CUSTOMIZATION_ICON = 5;
+  CUSTOMIZATION_ENUM = 6;
+  CUSTOMIZATION_JSON = 7;
+}
+
+message ValidationRule {
+  string rule_type = 1;                 // "required", "min", "max", "pattern", "custom"
+  optional bytes value = 2;             // JSON-serialized
+  optional string message = 3;          // error message
+}
+
+message PageVersion {
+  uint32 major = 1;
+  uint32 minor = 2;
+  uint32 patch = 3;
+}
+
+message Page {
+  string id = 1;
+  string name = 2;
+  string route = 3;                     // "/dashboard", "/game/:id"
+  optional string title = 4;            // browser/app title
+  optional CanvasSettings canvas_settings = 5;  // page styling
+  repeated PageContent content = 6;
+  PageLayoutType layout_type = 7;
+  optional string attached_element_id = 8;
+  optional PageMeta meta = 9;
+  repeated Component components = 10;   // page-level component definitions
+  // Versioning
+  optional PageVersion version = 11;
+  google.protobuf.Timestamp created_at = 12;
+  google.protobuf.Timestamp updated_at = 13;
+  optional string board_id = 14;        // parent board reference
+  // Behavior hooks - node IDs from events_simple nodes
+  optional string on_load_event_id = 15;
+  optional string on_unload_event_id = 16;
+  optional string on_interval_event_id = 17;
+  optional uint32 on_interval_seconds = 18;
+  // Widget definitions referenced by widget instances on this page
+  // Key is the instance ID, value is the widget definition
+  map<string, Widget> widget_refs = 19;
+}
+
+// Canvas settings for page styling
+message CanvasSettings {
+  optional string background_color = 1;
+  optional string background_image = 2;
+  optional string padding = 3;
+  optional string custom_css = 4;       // Custom CSS (scoped to page container)
+}
+
+message PageContent {
+  oneof content_type {
+    WidgetInstance widget = 1;          // embedded widget
+    Component component = 2;            // direct component (base element)
+    string component_id = 3;            // reference to component in page's component list
+  }
+  optional GridPlacement grid_placement = 4;
+  optional string region = 5;           // "header", "sidebar", "main", "footer"
+}
+
+message WidgetInstance {
+  string widget_id = 1;
+  string instance_id = 2;
+  optional Position position = 3;
+  map<string, bytes> customization_values = 4;  // JSON-serialized values
+  optional Style style_override = 5;
+  map<string, bytes> exposed_prop_values = 6;   // values for exposed props
+  // Action bindings - map action_id to binding configuration
+  map<string, ActionBinding> action_bindings = 7;
+  // Widget reference for cross-app widgets (optional - if not same app)
+  optional WidgetRef widget_ref = 8;
+}
+
+// Reference to a widget in another app
+message WidgetRef {
+  string app_id = 1;
+  string widget_id = 2;
+  optional WidgetVersion version = 3;   // Pin to specific version, or latest if null
+}
+
+// Binding configuration for a widget action
+message ActionBinding {
+  oneof binding_type {
+    string workflow_event_id = 1;       // Node ID from events_simple to trigger
+    string page_id = 2;                 // Page ID to navigate to
+    string external_url = 3;            // External URL to open
+    string custom_action = 4;           // Custom action name to emit
+  }
+  // Context data to pass with the action
+  map<string, BoundValue> context_mapping = 5;
+}
+
+message GridPlacement {
+  int32 column = 1;
+  int32 row = 2;
+  optional int32 column_span = 3;
+  optional int32 row_span = 4;
+}
+
+enum PageLayoutType {
+  PAGE_LAYOUT_FREEFORM = 0;             // absolute positioning
+  PAGE_LAYOUT_STACK = 1;                // vertical stack
+  PAGE_LAYOUT_GRID = 2;                 // CSS grid
+  PAGE_LAYOUT_SIDEBAR = 3;              // sidebar + main
+  PAGE_LAYOUT_HOLY_GRAIL = 4;           // header + sidebar + main + footer
+}
+
+message PageMeta {
+  optional string description = 1;
+  optional string og_image = 2;
+  repeated string keywords = 3;
+  optional string favicon = 4;
+  optional string theme_color = 5;
+}
+
+// ============================================================================
+// STREAMING MESSAGES
+// ============================================================================
+
+// Server -> Client Messages
+
+message SurfaceUpdate {
+  string surface_id = 1;
+  repeated Component components = 2;    // updated components
+  optional string parent_id = 3;        // for scoped updates
+}
+
+message DataModelUpdate {
+  string surface_id = 1;
+  optional string path = 2;             // specific path to update, or root if empty
+  repeated DataEntry contents = 3;
+}
+
+message BeginRendering {
+  string surface_id = 1;
+  string root_component_id = 2;
+  optional string catalog_id = 3;
+  repeated Component components = 4;
+  repeated DataEntry data_model = 5;
+}
+
+message DeleteSurface {
+  string surface_id = 1;
+}
+
+// Client -> Server Messages
+
+message UserAction {
+  string name = 1;
+  string surface_id = 2;
+  string source_component_id = 3;
+  int64 timestamp = 4;
+  map<string, bytes> context = 5;       // JSON-serialized bound values
+}
+
+message ClientError {
+  string surface_id = 1;
+  optional string component_id = 2;
+  string message = 3;
+  string code = 4;
+}
+
+// Element Request/Response for pre-fetch pattern
+
+message ElementRequest {
+  string element_id = 1;                // e.g., "main/user-profile"
+  bool required = 2;
+  optional bytes default_value = 3;     // JSON-serialized
+}
+
+message ElementState {
+  string element_id = 1;
+  bytes value = 2;                      // JSON-serialized current state
+  int64 timestamp = 3;
+}
+
+// A2UI Message wrapper for streaming
+message A2UIMessage {
+  oneof message {
+    SurfaceUpdate surface_update = 1;
+    DataModelUpdate data_model_update = 2;
+    BeginRendering begin_rendering = 3;
+    DeleteSurface delete_surface = 4;
+    UserAction user_action = 5;
+    ClientError client_error = 6;
+  }
+}

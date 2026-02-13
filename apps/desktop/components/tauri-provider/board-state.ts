@@ -1,30 +1,107 @@
 import { Channel, invoke } from "@tauri-apps/api/core";
 import {
+	type CopilotScope,
 	type IBoard,
 	type IBoardState,
+	ICommentType,
 	IConnectionMode,
+	IExecutionMode,
 	type IExecutionStage,
 	type IGenericCommand,
+	type IHub,
 	type IIntercomEvent,
 	type ILog,
 	type ILogLevel,
 	type ILogMetadata,
 	type INode,
+	type IOAuthProvider,
+	type IPrerunBoardResponse,
+	type IRunContext,
 	type IRunPayload,
 	type ISettingsProfile,
 	type IVersionType,
+	type ProgressToastData,
+	type UIActionContext,
+	type UnifiedChatMessage,
+	type UnifiedCopilotResponse,
+	checkOAuthTokens,
+	extractOAuthRequirementsFromBoard,
+	finishAllProgressToasts,
 	injectDataFunction,
 	isEqual,
+	showProgressToast,
 } from "@tm9657/flow-like-ui";
+import type { IJwks, IRealtimeAccess } from "@tm9657/flow-like-ui";
+import type { SurfaceComponent } from "@tm9657/flow-like-ui/components/a2ui/types";
 import { isObject } from "lodash-es";
 import { toast } from "sonner";
-import { fetcher } from "../../lib/api";
+import { fetcher, streamFetcher } from "../../lib/api";
+import { oauthConsentStore, oauthTokenStore } from "../../lib/oauth-db";
+import { oauthService } from "../../lib/oauth-service";
 import type { TauriBackend } from "../tauri-provider";
 
 interface DiffEntry {
 	path: string;
 	local: any;
 	remote: any;
+}
+
+// Hub configuration cache
+let hubCache: IHub | undefined;
+let hubCachePromise: Promise<IHub | undefined> | undefined;
+
+async function getHubConfig(profile?: { hub?: string }): Promise<
+	IHub | undefined
+> {
+	if (hubCache) return hubCache;
+	if (hubCachePromise) return hubCachePromise;
+
+	const hubUrl = profile?.hub;
+	if (!hubUrl) return undefined;
+
+	hubCachePromise = fetch(`https://${hubUrl}/api/v1`)
+		.then((res) => res.json() as Promise<IHub>)
+		.then((hub) => {
+			hubCache = hub;
+			return hub;
+		})
+		.catch((e) => {
+			console.warn("[OAuth] Failed to fetch Hub config:", e);
+			return undefined;
+		});
+
+	return hubCachePromise;
+}
+
+// Toast and Progress event handling for remote execution
+interface ToastEventPayload {
+	message: string;
+	level: "success" | "error" | "info" | "warning";
+}
+
+function handleToastEvent(event: IIntercomEvent): void {
+	const payload = event.payload as ToastEventPayload;
+	if (!payload?.message) return;
+
+	switch (payload.level) {
+		case "success":
+			toast.success(payload.message);
+			break;
+		case "error":
+			toast.error(payload.message);
+			break;
+		case "warning":
+			toast.warning(payload.message);
+			break;
+		default:
+			toast.info(payload.message);
+	}
+}
+
+function handleProgressEvent(event: IIntercomEvent): void {
+	const payload = event.payload as ProgressToastData;
+	if (!payload?.id) return;
+	showProgressToast(payload);
 }
 
 const getDeepDifferences = (
@@ -94,6 +171,27 @@ const logBoardDifferences = (localBoard: IBoard, remoteBoard: IBoard) => {
 		console.groupEnd();
 	});
 };
+const preserveSecretValues = (
+	remoteBoard: IBoard,
+	localBoard?: IBoard,
+): IBoard => {
+	if (!localBoard) return remoteBoard;
+
+	for (const [varId, remoteVar] of Object.entries(remoteBoard.variables)) {
+		const localVar = localBoard.variables[varId];
+		if (
+			localVar?.secret &&
+			remoteVar.secret &&
+			remoteVar.default_value == null &&
+			localVar.default_value != null
+		) {
+			remoteVar.default_value = localVar.default_value;
+		}
+	}
+
+	return remoteBoard;
+};
+
 export class BoardState implements IBoardState {
 	constructor(private readonly backend: TauriBackend) {}
 
@@ -114,9 +212,10 @@ export class BoardState implements IBoardState {
 			!this.backend.auth ||
 			!this.backend.queryClient
 		) {
-			throw new Error(
-				"Profile, auth or query client not set. Cannot fetch boards.",
+			console.warn(
+				"Profile, auth or query client not set. Returning local boards only.",
 			);
+			return boards;
 		}
 
 		const promise = injectDataFunction(
@@ -136,18 +235,20 @@ export class BoardState implements IBoardState {
 				}
 
 				for (const board of remoteData) {
-					if (!isEqual(board, mergedBoards.get(board.id))) {
+					const localBoard = mergedBoards.get(board.id);
+					const merged = preserveSecretValues(board, localBoard);
+					if (!isEqual(merged, localBoard)) {
 						console.log("Board data changed, updating local state:");
 						await invoke("upsert_board", {
 							appId: appId,
-							boardId: board.id,
-							name: board.name,
-							description: board.description,
-							boardData: board,
+							boardId: merged.id,
+							name: merged.name,
+							description: merged.description,
+							boardData: merged,
 						});
 					}
 
-					mergedBoards.set(board.id, board);
+					mergedBoards.set(board.id, merged);
 				}
 
 				return Array.from(mergedBoards.values());
@@ -180,6 +281,9 @@ export class BoardState implements IBoardState {
 		});
 
 		const isOffline = await this.backend.isOffline(appId);
+
+		// Presign media comments for display
+		await this.presignMediaComments(appId, boardId, board, isOffline);
 
 		if (
 			isOffline ||
@@ -244,24 +348,25 @@ export class BoardState implements IBoardState {
 				}
 
 				remoteData.updated_at = board.updated_at;
+				const merged = preserveSecretValues(remoteData, board);
 
-				if (!isEqual(remoteData, board) && typeof version === "undefined") {
+				if (!isEqual(merged, board) && typeof version === "undefined") {
 					console.log("Board Missmatch, updating local state:");
 
-					logBoardDifferences(board, remoteData);
+					logBoardDifferences(board, merged);
 
 					await invoke("upsert_board", {
 						appId: appId,
 						boardId: boardId,
-						name: remoteData.name,
-						description: remoteData.description,
-						boardData: remoteData,
+						name: merged.name,
+						description: merged.description,
+						boardData: merged,
 					});
 				} else {
 					console.log("Board data is up to date, no update needed.");
 				}
 
-				return remoteData;
+				return merged;
 			},
 			this,
 			this.backend.queryClient,
@@ -275,6 +380,150 @@ export class BoardState implements IBoardState {
 
 		return board;
 	}
+
+	async getRealtimeAccess(
+		appId: string,
+		boardId: string,
+	): Promise<IRealtimeAccess> {
+		const isOffline = await this.backend.isOffline(appId);
+		if (isOffline) throw new Error("Realtime is unavailable offline");
+		if (!this.backend.profile || !this.backend.auth)
+			throw new Error("Missing auth/profile for realtime access");
+
+		const access = await fetcher<IRealtimeAccess>(
+			this.backend.profile,
+			`apps/${appId}/board/${boardId}/realtime`,
+			{ method: "POST" },
+			this.backend.auth,
+		);
+
+		return access;
+	}
+
+	async getRealtimeJwks(appId: string, boardId: string): Promise<IJwks> {
+		const isOffline = await this.backend.isOffline(appId);
+		if (isOffline) throw new Error("Realtime is unavailable offline");
+		if (!this.backend.profile || !this.backend.auth)
+			throw new Error("Missing auth/profile for realtime JWKS");
+
+		const jwks = await fetcher<IJwks>(
+			this.backend.profile,
+			`apps/${appId}/board/${boardId}/realtime`,
+			{ method: "GET" },
+			this.backend.auth,
+		);
+		return jwks;
+	}
+
+	private async presignMediaComments(
+		appId: string,
+		boardId: string,
+		board: IBoard,
+		isOffline: boolean,
+	): Promise<void> {
+		const mediaComments = Object.values(board.comments).filter(
+			(comment) =>
+				comment.comment_type === ICommentType.Image ||
+				comment.comment_type === ICommentType.Video,
+		);
+
+		// Collect layer media comments as well
+		const layerMediaComments: { comment: any; layer: any }[] = [];
+		for (const layer of Object.values(board.layers)) {
+			for (const comment of Object.values(layer.comments)) {
+				if (
+					comment.comment_type === ICommentType.Image ||
+					comment.comment_type === ICommentType.Video
+				) {
+					layerMediaComments.push({ comment, layer });
+				}
+			}
+		}
+
+		if (mediaComments.length === 0 && layerMediaComments.length === 0) return;
+
+		if (isOffline) {
+			// For offline mode, use Tauri's storage_get to get file URLs
+			try {
+				const prefixes = [
+					...mediaComments.map((c) => `boards/${boardId}/${c.content}`),
+					...layerMediaComments.map(
+						({ comment }) => `boards/${boardId}/${comment.content}`,
+					),
+				];
+
+				const results = await invoke<{ prefix: string; url?: string }[]>(
+					"storage_get",
+					{ appId, prefixes },
+				);
+
+				const urlMap = new Map(
+					results.filter((r) => r.url).map((r) => [r.prefix, r.url as string]),
+				);
+
+				for (const comment of mediaComments) {
+					const prefix = `boards/${boardId}/${comment.content}`;
+					const url = urlMap.get(prefix);
+					if (url) {
+						(comment as any).presigned_url = url;
+					}
+				}
+
+				for (const { comment } of layerMediaComments) {
+					const prefix = `boards/${boardId}/${comment.content}`;
+					const url = urlMap.get(prefix);
+					if (url) {
+						(comment as any).presigned_url = url;
+					}
+				}
+			} catch (error) {
+				console.warn("Failed to presign media comments (offline):", error);
+			}
+		} else if (this.backend.profile && this.backend.auth) {
+			// For online mode, use the API to get presigned URLs
+			try {
+				const prefixes = [
+					...mediaComments.map((c) => `boards/${boardId}/${c.content}`),
+					...layerMediaComments.map(
+						({ comment }) => `boards/${boardId}/${comment.content}`,
+					),
+				];
+
+				const results = await fetcher<{ prefix: string; url?: string }[]>(
+					this.backend.profile,
+					`apps/${appId}/data/download`,
+					{
+						method: "POST",
+						body: JSON.stringify({ prefixes }),
+					},
+					this.backend.auth,
+				);
+
+				const urlMap = new Map(
+					results.filter((r) => r.url).map((r) => [r.prefix, r.url as string]),
+				);
+
+				for (const comment of mediaComments) {
+					const prefix = `boards/${boardId}/${comment.content}`;
+					const url = urlMap.get(prefix);
+					if (url) {
+						(comment as any).presigned_url = url;
+					}
+				}
+
+				for (const { comment } of layerMediaComments) {
+					const prefix = `boards/${boardId}/${comment.content}`;
+					const url = urlMap.get(prefix);
+					if (url) {
+						(comment as any).presigned_url = url;
+					}
+				}
+			} catch (error) {
+				console.warn("Failed to presign media comments (online):", error);
+			}
+		}
+	}
+
 	async createBoardVersion(
 		appId: string,
 		boardId: string,
@@ -426,6 +675,7 @@ export class BoardState implements IBoardState {
 		streamState?: boolean,
 		eventId?: (id: string) => void,
 		cb?: (event: IIntercomEvent[]) => void,
+		skipConsentCheck?: boolean,
 	): Promise<ILogMetadata | undefined> {
 		const channel = new Channel<IIntercomEvent[]>();
 		let closed = false;
@@ -449,6 +699,79 @@ export class BoardState implements IBoardState {
 			}
 		}
 
+		// Collect OAuth tokens from board nodes using shared helper
+		let oauthTokens:
+			| Record<
+					string,
+					{
+						access_token: string;
+						refresh_token?: string;
+						expires_at?: number;
+						token_type?: string;
+					}
+			  >
+			| undefined;
+		const board = await this.getBoard(appId, boardId);
+		const hub = await getHubConfig(this.backend.profile);
+		const oauthResult = await checkOAuthTokens(board, oauthTokenStore, hub, {
+			refreshToken: oauthService.refreshToken.bind(oauthService),
+		});
+
+		console.log("[OAuth] Board check result:", {
+			requiredProviders: oauthResult.requiredProviders.map((p) => p.id),
+			missingProviders: oauthResult.missingProviders.map((p) => p.id),
+			hasTokens: Object.keys(oauthResult.tokens),
+			skipConsentCheck,
+		});
+
+		// Check consent for providers that have tokens but might not have consent for this app
+		// Skip this check if explicitly told to (e.g., after user consented in dialog)
+		if (!skipConsentCheck) {
+			const consentedIds =
+				await oauthConsentStore.getConsentedProviderIds(appId);
+			const providersNeedingConsent: IOAuthProvider[] = [];
+
+			// Add providers that are missing tokens
+			providersNeedingConsent.push(...oauthResult.missingProviders);
+
+			// Also add providers that have tokens but no consent for this specific app
+			for (const provider of oauthResult.requiredProviders) {
+				const hasToken = oauthResult.tokens[provider.id] !== undefined;
+				const hasConsent = consentedIds.has(provider.id);
+
+				if (hasToken && !hasConsent) {
+					console.log(
+						`[OAuth] Provider ${provider.id} has token but no consent for app ${appId}`,
+					);
+					providersNeedingConsent.push(provider);
+				}
+			}
+
+			if (providersNeedingConsent.length > 0) {
+				// Throw a special error that the UI can catch to show consent dialog
+				const error = new Error(
+					`Missing OAuth authorization for: ${providersNeedingConsent.map((p) => p.name).join(", ")}`,
+				);
+				(error as any).missingProviders = providersNeedingConsent;
+				(error as any).isOAuthError = true;
+				throw error;
+			}
+		} else {
+			// Still need to check for missing tokens even if skipping consent
+			if (oauthResult.missingProviders.length > 0) {
+				const error = new Error(
+					`Missing OAuth tokens for: ${oauthResult.missingProviders.map((p) => p.name).join(", ")}`,
+				);
+				(error as any).missingProviders = oauthResult.missingProviders;
+				(error as any).isOAuthError = true;
+				throw error;
+			}
+		}
+
+		if (Object.keys(oauthResult.tokens).length > 0) {
+			oauthTokens = oauthResult.tokens;
+		}
+
 		channel.onmessage = (events: IIntercomEvent[]) => {
 			if (closed) {
 				console.warn("Channel closed, ignoring events");
@@ -470,18 +793,112 @@ export class BoardState implements IBoardState {
 			if (cb) cb(events);
 		};
 
-		const metadata: ILogMetadata | undefined = await invoke("execute_board", {
-			appId: appId,
-			boardId: boardId,
-			payload: payload,
-			events: channel,
-			streamState: streamState,
-			credentials,
+		const token = this.backend.auth?.user?.access_token;
+		console.log("Using token:", token);
+
+		console.dir({
+			id: this.backend.auth?.user?.id_token,
+			access: this.backend.auth?.user?.access_token,
 		});
 
-		closed = true;
+		let metadata: ILogMetadata | undefined;
+		try {
+			metadata = await invoke("execute_board", {
+				appId: appId,
+				boardId: boardId,
+				payload: payload,
+				events: channel,
+				streamState: streamState,
+				credentials,
+				token,
+				oauthTokens,
+			});
+
+			closed = true;
+			finishAllProgressToasts(true);
+		} catch (error) {
+			closed = true;
+			finishAllProgressToasts(false);
+			throw error;
+		}
 
 		return metadata;
+	}
+
+	async executeBoardRemote(
+		appId: string,
+		boardId: string,
+		payload: IRunPayload,
+		streamState?: boolean,
+		eventId?: (id: string) => void,
+		cb?: (event: IIntercomEvent[]) => void,
+	): Promise<ILogMetadata | undefined> {
+		if (!this.backend.profile || !this.backend.auth) {
+			throw new Error("Profile and auth required for remote execution");
+		}
+
+		let closed = false;
+		let foundRunId = false;
+
+		await streamFetcher<IIntercomEvent>(
+			this.backend.profile,
+			`apps/${appId}/board/${boardId}/invoke`,
+			{
+				method: "POST",
+				body: JSON.stringify({
+					node_id: payload.id,
+					payload: payload.payload,
+					token: this.backend.auth.user?.access_token,
+					stream_state: streamState ?? true,
+					runtime_variables: payload.runtime_variables,
+					profile_id: this.backend.profile?.id,
+				}),
+			},
+			this.backend.auth,
+			(event: IIntercomEvent) => {
+				if (closed) {
+					console.warn("Stream closed, ignoring event");
+					return;
+				}
+
+				// Handle run_initiated event to get run ID
+				if (!foundRunId && eventId && event.event_type === "run_initiated") {
+					const runId = event.payload?.run_id;
+					if (runId) {
+						eventId(runId);
+						foundRunId = true;
+					}
+				}
+
+				// Handle toast events globally
+				if (event.event_type === "toast") {
+					handleToastEvent(event);
+				}
+
+				// Handle progress events globally
+				if (event.event_type === "progress") {
+					handleProgressEvent(event);
+				}
+
+				// Check for terminal events and finish progress toasts
+				if (event.event_type === "completed") {
+					finishAllProgressToasts(true);
+				} else if (event.event_type === "error") {
+					finishAllProgressToasts(false);
+				}
+
+				// Forward event to callback as array (consistent with local execution)
+				if (cb) cb([event]);
+				else {
+					console.log("UNDELIVERED Received event:", event);
+				}
+			},
+		);
+
+		closed = true;
+		finishAllProgressToasts(true);
+		// Full metadata will be fetched separately by the caller
+		return undefined;
 	}
 
 	async listRuns(
@@ -495,18 +912,74 @@ export class BoardState implements IBoardState {
 		offset?: number,
 		limit?: number,
 	): Promise<ILogMetadata[]> {
-		const runs: ILogMetadata[] = await invoke("list_runs", {
-			appId: appId,
-			boardId: boardId,
-			nodeId: nodeId,
-			from: from,
-			to: to,
-			status: status,
-			limit: limit,
-			offset: offset,
-			lastMeta: lastMeta,
-		});
-		return runs;
+		let localRuns: ILogMetadata[] = [];
+		// Fetch local runs
+		try {
+			localRuns = await invoke("list_runs", {
+				appId: appId,
+				boardId: boardId,
+				nodeId: nodeId,
+				from: from,
+				to: to,
+				status: status,
+				limit: limit,
+				offset: offset,
+				lastMeta: lastMeta,
+			});
+		} catch (e) {}
+
+		// Mark local runs
+		for (const run of localRuns) {
+			run.is_remote = false;
+		}
+
+		// Try to fetch remote runs if online
+		let remoteRuns: ILogMetadata[] = [];
+		if (this.backend.profile && this.backend.auth) {
+			try {
+				const params = new URLSearchParams();
+				if (nodeId) params.set("node_id", nodeId);
+				if (from) params.set("from", from.toString());
+				if (to) params.set("to", to.toString());
+				if (status !== undefined) params.set("status", status.toString());
+				if (limit) params.set("limit", limit.toString());
+				if (offset) params.set("offset", offset.toString());
+
+				const queryString = params.toString();
+				const path = `apps/${appId}/board/${boardId}/runs${queryString ? `?${queryString}` : ""}`;
+
+				const response = await fetcher<ILogMetadata[]>(
+					this.backend.profile,
+					path,
+					{ method: "GET" },
+					this.backend.auth,
+				);
+
+				remoteRuns = response ?? [];
+
+				for (const run of remoteRuns) {
+					run.is_remote = true;
+				}
+			} catch (e) {
+				console.warn("Failed to fetch remote runs:", e);
+			}
+		}
+
+		// Merge and deduplicate by run_id, preferring local runs
+		const runMap = new Map<string, ILogMetadata>();
+		for (const run of remoteRuns) {
+			runMap.set(run.run_id, run);
+		}
+		for (const run of localRuns) {
+			runMap.set(run.run_id, run);
+		}
+
+		// Sort by start time descending (newest first)
+		const merged = Array.from(runMap.values()).sort(
+			(a, b) => b.start - a.start,
+		);
+
+		return merged;
 	}
 
 	async queryRun(
@@ -515,6 +988,30 @@ export class BoardState implements IBoardState {
 		offset?: number,
 		limit?: number,
 	): Promise<ILog[]> {
+		// Check if this is a remote run - fetch from API
+		if (logMeta.is_remote && this.backend.profile && this.backend.auth) {
+			try {
+				const params = new URLSearchParams();
+				params.set("run_id", logMeta.run_id);
+				if (query) params.set("query", query);
+				if (limit !== undefined) params.set("limit", limit.toString());
+				if (offset !== undefined) params.set("offset", offset.toString());
+
+				const path = `apps/${logMeta.app_id}/board/${logMeta.board_id}/logs?${params.toString()}`;
+				const logs = await fetcher<ILog[]>(
+					this.backend.profile,
+					path,
+					{ method: "GET" },
+					this.backend.auth,
+				);
+				return logs ?? [];
+			} catch (e) {
+				console.error("Failed to fetch remote logs:", e);
+				return [];
+			}
+		}
+
+		// Local run - use Tauri invoke
 		const runs: ILog[] = await invoke("query_run", {
 			logMeta: logMeta,
 			query: query,
@@ -602,6 +1099,7 @@ export class BoardState implements IBoardState {
 		description: string,
 		logLevel: ILogLevel,
 		stage: IExecutionStage,
+		executionMode?: IExecutionMode,
 		template?: IBoard,
 	) {
 		const isOffline = await this.backend.isOffline(appId);
@@ -614,6 +1112,7 @@ export class BoardState implements IBoardState {
 				description: description,
 				logLevel: logLevel,
 				stage: stage,
+				executionMode: executionMode,
 				template: template,
 			});
 			return;
@@ -639,6 +1138,7 @@ export class BoardState implements IBoardState {
 					description: description,
 					log_level: logLevel,
 					stage: stage,
+					execution_mode: executionMode,
 					template: template,
 				}),
 			},
@@ -744,5 +1244,182 @@ export class BoardState implements IBoardState {
 		}
 
 		return returnValue;
+	}
+
+	async getExecutionElements(
+		appId: string,
+		boardId: string,
+		pageId: string,
+		wildcard = false,
+	): Promise<Record<string, unknown>> {
+		// Try local execution first
+		const localElements = await invoke<Record<string, unknown>>(
+			"get_execution_elements",
+			{
+				boardId,
+				pageId,
+				wildcard,
+			},
+		);
+
+		// For offline apps or if we have local elements, return them
+		const isOffline = await this.backend.isOffline(appId);
+		if (isOffline || Object.keys(localElements).length > 0) {
+			return localElements;
+		}
+
+		// Try remote API if online and no local elements
+		if (this.backend.profile && this.backend.auth) {
+			try {
+				const params = new URLSearchParams();
+				params.set("page_id", pageId);
+				if (wildcard) params.set("wildcard", "true");
+
+				const response = await fetcher<{ elements: Record<string, unknown> }>(
+					this.backend.profile,
+					`apps/${appId}/board/${boardId}/elements?${params.toString()}`,
+					{ method: "GET" },
+					this.backend.auth,
+				);
+				return response.elements;
+			} catch (error) {
+				console.warn("Failed to fetch execution elements from API:", error);
+			}
+		}
+
+		return localElements;
+	}
+
+	async copilot_chat(
+		scope: CopilotScope,
+		board: IBoard | null,
+		selectedNodeIds: string[],
+		currentSurface: SurfaceComponent[] | null,
+		selectedComponentIds: string[],
+		userPrompt: string,
+		history: UnifiedChatMessage[],
+		onToken?: (token: string) => void,
+		modelId?: string,
+		token?: string,
+		runContext?: IRunContext,
+		actionContext?: UIActionContext,
+	): Promise<UnifiedCopilotResponse> {
+		console.log(
+			"[copilot_chat] Calling with scope:",
+			scope,
+			"runContext:",
+			runContext,
+		);
+
+		const channel = new Channel<string>();
+		if (onToken) {
+			channel.onmessage = onToken;
+		}
+
+		const actualToken = token ?? this.backend.auth?.user?.access_token;
+
+		return await invoke("copilot_chat", {
+			scope,
+			board,
+			selectedNodeIds,
+			currentSurface,
+			selectedComponentIds,
+			userPrompt,
+			history,
+			modelId,
+			channel,
+			token: actualToken,
+			runContext,
+			actionContext,
+		});
+	}
+
+	async prerunBoard(
+		appId: string,
+		boardId: string,
+		version?: [number, number, number],
+	): Promise<IPrerunBoardResponse> {
+		const isOffline = await this.backend.isOffline(appId);
+
+		// Helper to build prerun response from local board
+		const buildLocalPrerun = async (): Promise<IPrerunBoardResponse> => {
+			const board: IBoard = await invoke("get_board", {
+				appId,
+				boardId,
+				version,
+			});
+
+			const runtimeVariables = Object.values(board.variables)
+				.filter((v) => v.runtime_configured)
+				.map((v) => ({
+					id: v.id,
+					name: v.name,
+					description: v.description ?? undefined,
+					data_type: v.data_type,
+					value_type: v.value_type,
+					secret: v.secret,
+					schema: v.schema ?? undefined,
+				}));
+
+			const {
+				oauth_requirements,
+				requires_local_execution,
+				execution_mode,
+				can_execute_locally,
+			} = extractOAuthRequirementsFromBoard(board);
+
+			return {
+				runtime_variables: runtimeVariables,
+				oauth_requirements,
+				requires_local_execution,
+				execution_mode,
+				can_execute_locally,
+			};
+		};
+
+		// Offline apps: always use local board data
+		if (isOffline) {
+			return buildLocalPrerun();
+		}
+
+		// Online apps: fetch from API to get execution requirements
+		// The API tells us if we can execute locally (based on permissions)
+		if (this.backend.profile && this.backend.auth) {
+			let url = `apps/${appId}/board/${boardId}/prerun`;
+			if (version) {
+				url += `?version=${version.join("_")}`;
+			}
+
+			try {
+				const response = await fetcher<IPrerunBoardResponse>(
+					this.backend.profile,
+					url,
+					{ method: "GET" },
+					this.backend.auth,
+				);
+
+				if (response) {
+					// If we can execute locally and execution_mode is not Remote, use local board
+					// This ensures we get secrets from local board for local execution
+					if (
+						response.can_execute_locally &&
+						response.execution_mode !== IExecutionMode.Remote
+					) {
+						return buildLocalPrerun();
+					}
+
+					// Server execution: return API response (no secrets needed locally)
+					return response;
+				}
+			} catch (e) {
+				console.warn(
+					"[prerunBoard] API call failed, falling back to local:",
+					e,
+				);
+			}
+		}
+
+		// Fallback to local board
+		return buildLocalPrerun();
 	}
 }

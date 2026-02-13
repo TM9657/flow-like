@@ -8,6 +8,7 @@ use crate::{
         },
         node::Node,
         pin::Pin,
+        variable::Variable,
     },
     utils::hash::hash_string_non_cryptographic,
 };
@@ -55,6 +56,10 @@ impl BoardCleanupLogic for FixRefsCleanup {
     fn main_pin_iteration(&mut self, pin: &mut Pin, _pin_lookup: &PinLookup) {
         self.ensure_ref(&mut pin.description);
         self.ensure_ref_opt(&mut pin.schema);
+    }
+
+    fn main_variable_iteration(&mut self, variable: &mut Variable, _pin_lookup: &PinLookup) {
+        self.ensure_ref_opt(&mut variable.schema);
     }
 
     fn post_process(&mut self, board: &mut Board, _pin_lookup: &PinLookup) {

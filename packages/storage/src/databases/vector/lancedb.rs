@@ -1,4 +1,4 @@
-use arrow_array::RecordBatch;
+use arrow_array::{RecordBatch, RecordBatchIterator};
 use datafusion::prelude::*;
 use flow_like_types::Cacheable;
 use flow_like_types::async_trait;
@@ -13,6 +13,7 @@ use lancedb::table::AddColumnsResult;
 use lancedb::table::AlterColumnsResult;
 use lancedb::table::ColumnAlteration;
 use lancedb::table::NewColumnTransform;
+use lancedb::table::WriteOptions;
 use lancedb::{
     Connection, Table, connect,
     index::{
@@ -32,9 +33,9 @@ use super::VectorStore;
 
 #[derive(serde::Serialize)]
 pub struct IndexConfigDto {
-    name: String,
-    index_type: String, // render enum via Display
-    columns: Vec<String>,
+    pub name: String,
+    pub index_type: String, // render enum via Display
+    pub columns: Vec<String>,
 }
 
 impl From<IndexConfig> for IndexConfigDto {
@@ -52,6 +53,7 @@ pub struct LanceDBVectorStore {
     connection: Connection,
     table: Option<Table>,
     table_name: String,
+    write_options: Option<WriteOptions>,
 }
 
 impl Cacheable for LanceDBVectorStore {
@@ -64,6 +66,10 @@ impl Cacheable for LanceDBVectorStore {
     }
 }
 impl LanceDBVectorStore {
+    pub fn table_name(&self) -> &str {
+        &self.table_name
+    }
+
     pub async fn new(path: PathBuf, table_name: String) -> Result<Self> {
         let connection = connect(path.to_str().unwrap()).execute().await.ok();
         let connection: Connection = connection.ok_or(anyhow!("Error connecting to LanceDB"))?;
@@ -74,6 +80,7 @@ impl LanceDBVectorStore {
             connection,
             table,
             table_name,
+            write_options: None,
         })
     }
 
@@ -84,7 +91,12 @@ impl LanceDBVectorStore {
             connection,
             table,
             table_name,
+            write_options: None,
         }
+    }
+
+    pub fn set_write_options(&mut self, options: WriteOptions) {
+        self.write_options = Some(options);
     }
 
     pub async fn list_tables(&self) -> Result<Vec<String>> {
@@ -138,6 +150,68 @@ impl LanceDBVectorStore {
         Ok(indices.into_iter().map(IndexConfigDto::from).collect())
     }
 
+    pub async fn drop_index(&self, name: &str) -> Result<()> {
+        let table = self
+            .table
+            .clone()
+            .ok_or_else(|| anyhow!("Table not initialized"))?;
+        table.drop_index(name).await?;
+        Ok(())
+    }
+
+    pub async fn update(
+        &self,
+        filter: &str,
+        updates: std::collections::HashMap<String, Value>,
+    ) -> Result<()> {
+        let table = self
+            .table
+            .clone()
+            .ok_or_else(|| anyhow!("Table not initialized"))?;
+
+        let mut op = table.update();
+        op = op.only_if(filter);
+
+        for (column, value) in updates {
+            let value_str = match &value {
+                Value::String(s) => format!("'{}'", s.replace('\'', "''")),
+                Value::Number(n) => n.to_string(),
+                Value::Bool(b) => b.to_string(),
+                Value::Null => "NULL".to_string(),
+                _ => format!("'{}'", value.to_string().replace('\'', "''")),
+            };
+            op = op.column(&column, &value_str);
+        }
+
+        op.execute().await?;
+        Ok(())
+    }
+
+    pub async fn add_column(&self, name: &str, sql_expression: &str) -> Result<()> {
+        let table = self
+            .table
+            .clone()
+            .ok_or_else(|| anyhow!("Table not initialized"))?;
+
+        let transform = NewColumnTransform::SqlExpressions(vec![(
+            name.to_string(),
+            sql_expression.to_string(),
+        )]);
+        table.add_columns(transform, None).await?;
+        Ok(())
+    }
+
+    pub async fn make_column_nullable(&self, column: &str, nullable: bool) -> Result<()> {
+        let table = self
+            .table
+            .clone()
+            .ok_or_else(|| anyhow!("Table not initialized"))?;
+
+        let alteration = ColumnAlteration::new(column.to_string()).set_nullable(nullable);
+        table.alter_columns(&[alteration]).await?;
+        Ok(())
+    }
+
     pub async fn to_datafusion(&self) -> Result<lancedb::table::datafusion::BaseTableAdapter> {
         let table = self
             .table
@@ -168,6 +242,41 @@ impl LanceDBVectorStore {
         let results = ctx.sql(sql).await?;
 
         Ok(results)
+    }
+
+    pub async fn insert_record_batch(&mut self, batch: RecordBatch) -> Result<()> {
+        let schema = batch.schema();
+        let items = RecordBatchIterator::new(
+            vec![Ok::<RecordBatch, arrow_schema::ArrowError>(batch)].into_iter(),
+            schema,
+        );
+
+        if self.table.is_none() {
+            let mut builder = self.connection.create_table(&self.table_name, items);
+            if let Some(opts) = &self.write_options {
+                builder = builder.write_options(opts.clone());
+            }
+            match builder.execute().await {
+                Ok(table) => {
+                    self.table = Some(table);
+                    return Ok(());
+                }
+                Err(err) => {
+                    println!("Error creating table: {:?}", err);
+                    return Err(anyhow!("Error creating table"));
+                }
+            }
+        }
+
+        let table = self.table.clone().unwrap();
+        let mut add = table.add(items);
+        if let Some(opts) = &self.write_options {
+            add = add.write_options(opts.clone());
+        }
+        match add.execute().await {
+            Ok(_) => Ok(()),
+            Err(err) => Err(anyhow!(err.to_string())),
+        }
     }
 }
 
@@ -236,6 +345,7 @@ impl VectorStore for LanceDBVectorStore {
         text: &str,
         filter: Option<&str>,
         select: Option<Vec<String>>,
+        fields: Option<Vec<String>>,
         limit: usize,
         offset: usize,
     ) -> Result<Vec<Value>> {
@@ -244,9 +354,18 @@ impl VectorStore for LanceDBVectorStore {
             .clone()
             .ok_or_else(|| anyhow!("Table not initialized"))?;
 
+        let mut fts_query = FullTextSearchQuery::new(text.to_string());
+        if let Some(fields) = fields {
+            match fields.len() {
+                1 => fts_query = fts_query.with_column(fields[0].clone())?,
+                n if n > 1 => fts_query = fts_query.with_columns(&fields)?,
+                _ => {}
+            }
+        }
+
         let mut query = table
             .query()
-            .full_text_search(FullTextSearchQuery::new(text.to_string()))
+            .full_text_search(fts_query)
             .limit(limit)
             .offset(offset);
 
@@ -270,6 +389,7 @@ impl VectorStore for LanceDBVectorStore {
         text: &str,
         filter: Option<&str>,
         select: Option<Vec<String>>,
+        fields: Option<Vec<String>>,
         limit: usize,
         offset: usize,
         rerank: bool,
@@ -279,11 +399,20 @@ impl VectorStore for LanceDBVectorStore {
             .clone()
             .ok_or_else(|| anyhow!("Table not initialized"))?;
 
+        let mut fts_query = FullTextSearchQuery::new(text.to_string());
+        if let Some(ref fields) = fields {
+            match fields.len() {
+                1 => fts_query = fts_query.with_column(fields[0].clone())?,
+                n if n > 1 => fts_query = fts_query.with_columns(fields)?,
+                _ => {}
+            }
+        }
+
         let mut query = table
             .query()
             .nearest_to(vector)?
             .distance_type(lancedb::DistanceType::Cosine)
-            .full_text_search(FullTextSearchQuery::new(text.to_string()))
+            .full_text_search(fts_query)
             .fast_search()
             .limit(limit)
             .offset(offset);
@@ -342,12 +471,11 @@ impl VectorStore for LanceDBVectorStore {
         };
 
         if self.table.is_none() {
-            match self
-                .connection
-                .create_table(&self.table_name, items)
-                .execute()
-                .await
-            {
+            let mut builder = self.connection.create_table(&self.table_name, items);
+            if let Some(opts) = &self.write_options {
+                builder = builder.write_options(opts.clone());
+            }
+            match builder.execute().await {
                 Ok(table) => {
                     self.table = Some(table);
                     return Ok(());
@@ -379,12 +507,11 @@ impl VectorStore for LanceDBVectorStore {
         };
 
         if self.table.is_none() {
-            match self
-                .connection
-                .create_table(&self.table_name, items)
-                .execute()
-                .await
-            {
+            let mut builder = self.connection.create_table(&self.table_name, items);
+            if let Some(opts) = &self.write_options {
+                builder = builder.write_options(opts.clone());
+            }
+            match builder.execute().await {
                 Ok(table) => {
                     self.table = Some(table);
                     return Ok(());
@@ -397,7 +524,11 @@ impl VectorStore for LanceDBVectorStore {
         }
 
         let table = self.table.clone().unwrap();
-        match table.add(items).execute().await {
+        let mut add = table.add(items);
+        if let Some(opts) = &self.write_options {
+            add = add.write_options(opts.clone());
+        }
+        match add.execute().await {
             Ok(_) => return Ok(()),
             Err(err) => {
                 return Err(anyhow!(err.to_string()));
@@ -438,9 +569,7 @@ impl VectorStore for LanceDBVectorStore {
             .await?;
 
         table
-            .optimize(lancedb::table::OptimizeAction::Index(OptimizeOptions {
-                ..Default::default()
-            }))
+            .optimize(lancedb::table::OptimizeAction::Index(OptimizeOptions::new()))
             .await?;
 
         return Ok(());
@@ -628,12 +757,11 @@ mod tests {
         db.upsert(json_records, "id".to_string()).await?;
         db.index("name", Some("FULL TEXT")).await?;
 
-        let search_results: Vec<Value> = db.fts_search("Alice", None, None, 10, 0).await?;
+        let search_results: Vec<Value> = db.fts_search("Alice", None, None, None, 10, 0).await?;
 
         assert!(!search_results.is_empty());
 
         let first_item: TestStruct = from_value(search_results[0].clone())?;
-
         assert_eq!(first_item, records[0]);
 
         std::fs::remove_dir_all(&test_path).unwrap();
@@ -820,3 +948,22 @@ mod tests {
         Ok(())
     }
 }
+
+// impl VectorStoreIndex for LanceDBVectorStore {
+//     fn top_n<T: for<'a> serde::Deserialize<'a> + rig::wasm_compat::WasmCompatSend>(
+//             &self,
+//             req: rig::vector_store::VectorSearchRequest<Self::Filter>,
+//         ) -> impl std::future::Future<Output = std::result::Result<Vec<(f64, String, T)>, rig::vector_store::VectorStoreError>>
+//         + rig::wasm_compat::WasmCompatSend {
+//         todo!("Implement top_n_ids")
+//     }
+
+//     fn top_n_ids(
+//             &self,
+//             req: rig::vector_store::VectorSearchRequest<Self::Filter>,
+//         ) -> impl std::future::Future<Output = std::result::Result<Vec<(f64, String)>, rig::vector_store::VectorStoreError>> + rig::wasm_compat::WasmCompatSend {
+//         todo!("Implement top_n_ids")
+//     }
+
+//     type Filter;
+// }

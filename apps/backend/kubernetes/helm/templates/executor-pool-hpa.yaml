@@ -1,0 +1,29 @@
+{{- if and .Values.executorPool.enabled .Values.executorPool.autoscaling.enabled }}
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: {{ include "flow-like.fullname" . }}-executor-pool
+  labels:
+    {{- include "flow-like.executor.labels" . | nindent 4 }}
+    app.kubernetes.io/component: executor-pool
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: {{ include "flow-like.fullname" . }}-executor-pool
+  minReplicas: {{ .Values.executorPool.autoscaling.minReplicas }}
+  maxReplicas: {{ .Values.executorPool.autoscaling.maxReplicas }}
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: {{ .Values.executorPool.autoscaling.targetCPUUtilization }}
+    - type: Resource
+      resource:
+        name: memory
+        target:
+          type: Utilization
+          averageUtilization: {{ .Values.executorPool.autoscaling.targetMemoryUtilization }}
+{{- end }}

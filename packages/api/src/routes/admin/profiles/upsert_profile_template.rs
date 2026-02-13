@@ -51,17 +51,19 @@ pub async fn upsert_profile_template(
         updated_profile.apps = Set(apps.clone());
         updated_profile.thumbnail = Set(profile_data.thumbnail.clone());
         updated_profile.settings = Set(Some(settings.clone()));
+        updated_profile.secure = Set(profile_data.secure);
         updated_profile.updated_at = Set(chrono::Utc::now().naive_utc());
         let updated_profile = updated_profile.update(&state.db).await?;
         return Ok(Json(Profile::from(updated_profile)));
     }
 
-    let apps = apps.map(|apps| Value::Array(apps));
+    let apps = apps.map(Value::Array);
     let new_profile = template_profile::ActiveModel {
         id: Set(create_id()),
         name: Set(profile_data.name),
         description: Set(profile_data.description),
         icon: Set(profile_data.icon),
+        secure: Set(profile_data.secure),
         bit_ids: Set(Some(profile_data.bits)),
         hub: Set(profile_data.hub),
         hubs: Set(Some(profile_data.hubs)),

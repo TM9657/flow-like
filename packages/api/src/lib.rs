@@ -1,8 +1,13 @@
 use std::sync::Arc;
 
-use axum::{Json, Router, middleware::from_fn_with_state, routing::get};
+use axum::{
+    Json, Router,
+    middleware::from_fn_with_state,
+    routing::{get, post},
+};
 use error::InternalError;
-use flow_like::hub::Hub;
+use flow_like_types::Value;
+use middleware::error_reporting::error_reporting_middleware;
 use middleware::jwt::jwt_middleware;
 use state::{AppState, State};
 use tower::ServiceBuilder;
@@ -11,16 +16,31 @@ use tower_http::{
     cors::CorsLayer,
     decompression::RequestDecompressionLayer,
 };
+use tracing_subscriber::EnvFilter;
+use utoipa::OpenApi;
+use utoipa_swagger_ui::SwaggerUi;
 
 pub mod entity;
 mod middleware;
+pub mod openapi;
 mod routes;
 
+pub mod alerting;
 pub mod credentials;
 pub mod error;
+pub mod mail;
 pub mod permission;
 pub mod state;
+pub mod storage_config;
 pub mod user_management;
+
+pub mod backend_jwt;
+pub mod execution;
+
+pub use routes::registry::ServerRegistry;
+
+#[cfg(feature = "kubernetes")]
+pub mod kubernetes;
 
 pub use axum;
 pub mod auth {
@@ -29,6 +49,18 @@ pub mod auth {
 }
 
 pub use sea_orm;
+
+pub fn warn_env_filter() -> EnvFilter {
+    EnvFilter::try_from_default_env().unwrap_or_else(|_| {
+        EnvFilter::new("warn")
+            .add_directive("hyper=warn".parse().unwrap())
+            .add_directive("hyper_util=warn".parse().unwrap())
+            .add_directive("rustls=warn".parse().unwrap())
+            .add_directive("tokio=warn".parse().unwrap())
+            .add_directive("h2=warn".parse().unwrap())
+            .add_directive("tower=warn".parse().unwrap())
+    })
+}
 
 pub fn construct_router(state: Arc<State>) -> Router {
     let router = Router::new()
@@ -41,9 +73,24 @@ pub fn construct_router(state: Arc<State>) -> Router {
         .nest("/bit", routes::bit::routes())
         .nest("/store", routes::store::routes())
         .nest("/auth", routes::auth::routes())
+        .nest("/oauth", routes::oauth::routes())
+        .nest("/chat", routes::chat::routes())
+        .nest("/embeddings", routes::embeddings::routes())
+        .nest("/ai", routes::ai::routes())
         .nest("/admin", routes::admin::routes())
+        .nest("/tmp", routes::tmp::routes())
+        .nest("/solution", routes::solution::routes())
+        .nest("/execution", routes::execution::routes())
+        .nest("/usage", routes::usage::routes())
+        .nest("/registry", routes::registry::routes())
+        .nest("/sink", routes::sink::routes())
+        .route("/webhook/stripe", post(routes::webhook::stripe_webhook))
         .with_state(state.clone())
         .route("/version", get(|| async { "0.0.0" }))
+        .layer(from_fn_with_state(
+            state.clone(),
+            error_reporting_middleware,
+        ))
         .layer(from_fn_with_state(state.clone(), jwt_middleware))
         .layer(CorsLayer::permissive())
         .layer(
@@ -55,12 +102,31 @@ pub fn construct_router(state: Arc<State>) -> Router {
                 )),
         );
 
-    Router::new().nest("/api/v1", router)
+    Router::new()
+        .merge(
+            SwaggerUi::new("/swagger-ui").url("/api-doc/openapi.json", openapi::ApiDoc::openapi()),
+        )
+        .nest("/api/v1", router)
 }
 
 #[tracing::instrument(name = "GET /", skip(state))]
 async fn hub_info(
     axum::extract::State(state): axum::extract::State<AppState>,
-) -> Result<Json<Hub>, InternalError> {
-    Ok(Json(state.platform_config.clone()))
+) -> Result<Json<Value>, InternalError> {
+    // Serialize hub to JSON value so we can modify it
+    let mut hub_value: Value = serde_json::to_value(&state.platform_config)?;
+
+    // Strip sensitive OAuth fields (client_secret_env and client_secret)
+    if let Some(oauth_providers) = hub_value.get_mut("oauth_providers")
+        && let Some(providers_obj) = oauth_providers.as_object_mut()
+    {
+        for (_provider_id, provider_config) in providers_obj.iter_mut() {
+            if let Some(config_obj) = provider_config.as_object_mut() {
+                config_obj.remove("client_secret_env");
+                config_obj.remove("client_secret");
+            }
+        }
+    }
+
+    Ok(Json(hub_value))
 }

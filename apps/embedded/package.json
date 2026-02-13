@@ -10,17 +10,21 @@
 	},
 	"dependencies": {
 		"@tm9657/flow-like-ui": "workspace:*",
-		"@xyflow/react": "^12.8.2",
+		"@xyflow/react": "^12.10.0",
 		"comlink": "^4.4.2",
-		"next": "^15.4.1",
-		"react": "^19.0.0",
-		"react-dom": "^19.0.0"
+		"next": "^16.1.6",
+		"react": "19.2.1",
+		"react-dom": "19.2.1"
 	},
 	"devDependencies": {
 		"tailwindcss": "^3.4.17",
 		"typescript": "^5",
 		"@types/node": "^20",
-		"@types/react": "^19",
-		"@types/react-dom": "^19"
+		"@types/react": "19.2.6",
+		"@types/react-dom": "19.2.3"
+	},
+	"overrides": {
+		"@types/react": "19.2.6",
+		"@types/react-dom": "19.2.3"
 	}
 }

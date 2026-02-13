@@ -1,6 +1,5 @@
 use std::{
     io::Cursor,
-    sync::Arc,
     time::{Duration, SystemTime},
 };
 
@@ -10,16 +9,12 @@ use flow_like::{
     app::App,
     bit::Metadata,
     flow::{
-        board::{Board, ExecutionStage},
+        board::{Board, ExecutionMode, ExecutionStage},
         execution::LogLevel,
     },
-    flow_like_storage::{
-        Path,
-        object_store::{self, ObjectStore},
-    },
+    flow_like_storage::{Path, object_store::ObjectStore},
     profile::ProfileApp,
     state::FlowLikeState,
-    utils::compression::from_compressed,
 };
 use flow_like_types::anyhow;
 use flow_like_types::create_id;
@@ -28,7 +23,6 @@ use image::ImageReader;
 use serde::Deserialize;
 use serde_json::Value;
 use tauri::AppHandle;
-use tauri_plugin_dialog::DialogExt;
 pub mod sharing;
 pub mod tables;
 
@@ -39,8 +33,6 @@ async fn presign_meta(
 ) -> Result<(), TauriFunctionError> {
     let state = TauriFlowLikeState::construct(app_handle).await?;
     let store = state
-        .lock()
-        .await
         .config
         .read()
         .await
@@ -50,61 +42,6 @@ async fn presign_meta(
         .ok_or_else(|| TauriFunctionError::new("App storage store not found"))?;
     let prefix = Path::from("apps").child(app_id).child("media");
     metadata.presign(prefix, &store).await;
-    Ok(())
-}
-
-#[tauri::command(async)]
-pub async fn import_app(app_handle: AppHandle) -> Result<(), TauriFunctionError> {
-    let dir = app_handle
-        .dialog()
-        .file()
-        .set_title("Select App Directory")
-        .blocking_pick_folder()
-        .ok_or_else(|| TauriFunctionError::new("Failed to select app directory"))?;
-
-    let path = dir
-        .as_path()
-        .ok_or_else(|| TauriFunctionError::new("Invalid directory path"))?;
-
-    let store = object_store::local::LocalFileSystem::new_with_prefix(path)
-        .map_err(|e| anyhow!(format!("Failed to create local file system: {}", e)))?;
-    let store: Arc<dyn ObjectStore> = Arc::new(store);
-    let app: flow_like_types::proto::App =
-        from_compressed(store, Path::from("manifest.app")).await?;
-
-    let app_id = app.id.clone();
-
-    let mut profile = TauriSettingsState::current_profile(&app_handle).await?;
-
-    if profile.hub_profile.apps.is_none() {
-        profile.hub_profile.apps = Some(vec![]);
-    }
-
-    if profile
-        .hub_profile
-        .apps
-        .as_mut()
-        .unwrap()
-        .iter()
-        .any(|a| a.app_id == app_id)
-    {
-        return Err(TauriFunctionError::new("App already exists in profile"));
-    }
-
-    profile
-        .hub_profile
-        .apps
-        .as_mut()
-        .unwrap()
-        .push(ProfileApp::new(app_id.clone()));
-
-    let settings = TauriSettingsState::construct(&app_handle).await?;
-    let mut settings = settings.lock().await;
-    settings
-        .profiles
-        .insert(profile.hub_profile.id.clone(), profile.clone());
-    settings.serialize();
-
     Ok(())
 }
 
@@ -221,6 +158,7 @@ pub async fn upsert_board(
     description: String,
     log_level: Option<LogLevel>,
     stage: Option<ExecutionStage>,
+    execution_mode: Option<ExecutionMode>,
     board_data: Option<Board>,
     template: Option<Board>,
 ) -> Result<(), TauriFunctionError> {
@@ -240,6 +178,10 @@ pub async fn upsert_board(
 
             if let Some(stage) = stage {
                 board.stage = stage;
+            }
+
+            if let Some(execution_mode) = execution_mode {
+                board.execution_mode = execution_mode;
             }
 
             if let Some(data) = board_data {
@@ -278,6 +220,7 @@ pub async fn upsert_board(
         board.viewport = board_data.viewport;
         board.stage = board.stage.clone();
         board.log_level = board.log_level;
+        board.execution_mode = board.execution_mode.clone();
         board.created_at = board_data.created_at;
         board.updated_at = board_data.updated_at;
         board.save(None).await?;
@@ -297,6 +240,10 @@ pub async fn upsert_board(
 
     if let Some(stage) = stage {
         board.stage = stage;
+    }
+
+    if let Some(execution_mode) = execution_mode {
+        board.execution_mode = execution_mode;
     }
     board.save(None).await?;
 
@@ -377,8 +324,6 @@ pub async fn push_app_media(
 ) -> Result<String, TauriFunctionError> {
     let state = TauriFlowLikeState::construct(&app_handle).await?;
     let project_store = state
-        .lock()
-        .await
         .config
         .read()
         .await
@@ -444,8 +389,6 @@ pub async fn remove_app_media(
 ) -> Result<(), TauriFunctionError> {
     let state = TauriFlowLikeState::construct(&app_handle).await?;
     let project_store = state
-        .lock()
-        .await
         .config
         .read()
         .await
@@ -500,8 +443,6 @@ pub async fn transform_media(
     println!("Transforming media item: {}", media_item);
     let state = TauriFlowLikeState::construct(&app_handle).await?;
     let project_store = state
-        .lock()
-        .await
         .config
         .read()
         .await
@@ -591,7 +532,7 @@ pub async fn get_app_meta(
 pub async fn get_app_size(
     app_handle: AppHandle,
     app_id: String,
-) -> Result<usize, TauriFunctionError> {
+) -> Result<u64, TauriFunctionError> {
     let content_store = TauriFlowLikeState::get_project_storage_store(&app_handle).await?;
     let path = Path::from("apps").child(app_id);
 

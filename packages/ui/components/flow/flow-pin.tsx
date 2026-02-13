@@ -9,10 +9,74 @@ import type { ILayer } from "../../lib/schema/flow/board";
 import type { INode } from "../../lib/schema/flow/node";
 import { type IPin, IPinType, IValueType } from "../../lib/schema/flow/pin";
 import { useBackendStore } from "../../state/backend-state";
-import { DynamicImage } from "../ui/dynamic-image";
 import { useUndoRedo } from "./flow-history";
 import { PinEdit } from "./flow-pin/pin-edit";
 import { typeToColor } from "./utils";
+
+/** A Handle that shows a small inner dot while keeping a larger hitbox. */
+const SmallDotHandle = memo(function SmallDotHandle({
+	dotColor,
+	showBorderWhenTransparent = true,
+	dotSize = 5,
+	isExecution = false,
+	...props
+}: Omit<React.ComponentProps<typeof Handle>, "children"> & {
+	/** Visual color of the inner dot. Use transparent to hide fill. */
+	dotColor: string;
+	/** Draw a 1px border when dot is transparent (for Execution pins, etc.). */
+	showBorderWhenTransparent?: boolean;
+	/** Visual size of the inner dot (defaults to 5). */
+	dotSize?: number;
+	/** Is this an execution pin? */
+	isExecution?: boolean;
+} & { children?: React.ReactNode }) {
+	const { className, style, children } = props as any;
+
+	const size = dotSize;
+	const isTransparent = dotColor === "transparent";
+	const visualSize = 7; // Data pins size
+
+	return (
+		<Handle
+			{...props}
+			className={`relative ${className ?? ""}`}
+			style={{
+				width: 12,
+				height: 12,
+				background: "transparent",
+				border: "transparent",
+				padding: 0,
+				...(style ?? {}),
+			}}
+		>
+			{/* centered visual dot that doesn't catch the mouse */}
+			{!isExecution && (
+				<span
+					className="pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 rounded-full"
+					style={{
+						width: visualSize,
+						height: visualSize,
+						background: isTransparent
+							? "transparent"
+							: `
+								radial-gradient(
+									circle at 35% 35%,
+									color-mix(in oklch, ${dotColor} 100%, white 25%),
+									${dotColor} 70%
+								)
+							`,
+						border: `1px solid ${dotColor}`,
+						boxShadow: `
+							0 0 4px color-mix(in oklch, ${dotColor} 25%, transparent),
+							inset 0 0.5px 1px color-mix(in oklch, white 20%, transparent)
+						`,
+					}}
+				/>
+			)}
+			{children}
+		</Handle>
+	);
+});
 
 function FlowPinInnerComponent({
 	pin,
@@ -21,6 +85,7 @@ function FlowPinInnerComponent({
 	node,
 	skipOffset,
 	onPinRemove,
+	version,
 }: Readonly<{
 	pin: IPin;
 	boardId: string;
@@ -28,6 +93,7 @@ function FlowPinInnerComponent({
 	node: INode | ILayer;
 	skipOffset?: boolean;
 	onPinRemove?: (pin: IPin) => Promise<void>;
+	version?: [number, number, number];
 }>) {
 	const { pushCommand } = useUndoRedo(appId, boardId);
 	const invalidate = useInvalidateInvoke();
@@ -35,12 +101,12 @@ function FlowPinInnerComponent({
 
 	const [defaultValue, setDefaultValue] = useState(pin.default_value);
 
+	// compute vertical offsets + color; we no longer rely on Handle background
 	const handleStyle = useMemo(() => {
+		// keep your existing offsets/positions exactly as before
 		if (node?.name === "reroute") {
 			return {
-				// marginTop: "0.5rem",
-				// top: index * 15,
-				background: typeToColor(pin.data_type),
+				background: "transparent",
 			};
 		}
 
@@ -48,30 +114,32 @@ function FlowPinInnerComponent({
 			return {
 				marginTop: "1.75rem",
 				top: (pin.index - 1) * 15,
-				background:
-					pin.data_type === "Execution" || pin.value_type !== IValueType.Normal
-						? "transparent"
-						: typeToColor(pin.data_type),
-			};
+			} as React.CSSProperties;
 		}
 
 		return {
 			marginTop: "1.75rem",
 			top: (pin.index - 1) * 15,
-			background:
-				pin.data_type === "Execution" || pin.value_type !== IValueType.Normal
-					? "transparent"
-					: typeToColor(pin.data_type),
-		};
-	}, [pin.data_type, pin.value_type, pin.index, node?.name]);
+		} as React.CSSProperties;
+	}, [pin.index, node?.name, skipOffset]);
+
+	// visible dot color follows your previous logic
+	const dotColor = useMemo(
+		() =>
+			pin.data_type === "Execution" || pin.value_type !== IValueType.Normal
+				? "transparent"
+				: typeToColor(pin.data_type),
+		[pin.data_type, pin.value_type],
+	);
 
 	const iconStyle = useMemo(
 		() => ({
 			color: typeToColor(pin.data_type),
+			marginLeft: pin.pin_type === IPinType.Input ? "0.4rem" : "0.4rem",
 			backgroundColor:
 				"var(--xy-node-background-color, var(--xy-node-background-color-default))",
 		}),
-		[pin.data_type],
+		[pin.data_type, pin.pin_type],
 	);
 
 	const shouldRenderPinEdit = useMemo(
@@ -84,7 +152,9 @@ function FlowPinInnerComponent({
 
 	const pinEditContainerClassName = useMemo(
 		() =>
-			`flex flex-row items-center gap-1 max-w-1/2 ${pin.pin_type === "Input" ? "ml-2" : "translate-x-[calc(-100%-0.25rem)]"}`,
+			`flex flex-row items-center gap-1 max-w-[10rem] ${
+				pin.pin_type === "Input" ? "ml-2.5" : "translate-x-[calc(-100%+0.2rem)]"
+			}`,
 		[pin.pin_type],
 	);
 
@@ -94,44 +164,47 @@ function FlowPinInnerComponent({
 		invalidate(backend.boardState.getBoard, [appId, boardId]);
 	}, [appId, boardId, invalidate]);
 
-	const updateNode = useCallback(async () => {
-		if (node.nodes) return;
-		const currentNode = getNode(node.id);
-		if (!currentNode) return;
-		const translatedNode = currentNode?.data?.node as INode | undefined;
-		if (!translatedNode) {
-			toast.error("Node not found");
-			return;
-		}
-		if (defaultValue === undefined) return;
-		if (defaultValue === null) return;
-		if (defaultValue === pin.default_value) return;
-		const backend = useBackendStore.getState().backend;
-		if (!backend) return;
-		const command = updateNodeCommand({
-			node: {
-				...translatedNode,
-				hash: undefined,
-				coordinates: [currentNode.position.x, currentNode.position.y, 0],
-				pins: {
-					...translatedNode.pins,
-					[pin.id]: { ...pin, default_value: defaultValue },
+	const updateNode = useCallback(
+		async (value: any) => {
+			if (typeof version !== "undefined") {
+				return;
+			}
+
+			if (node.nodes) return;
+			const currentNode = getNode(node.id);
+			if (!currentNode) return;
+			const translatedNode = currentNode?.data?.node as INode | undefined;
+			if (!translatedNode) {
+				toast.error("Node not found");
+				return;
+			}
+			if (value === undefined) return;
+			if (value === null) return;
+			if (value === pin.default_value) return;
+			const backend = useBackendStore.getState().backend;
+			if (!backend) return;
+			const command = updateNodeCommand({
+				node: {
+					...translatedNode,
+					hash: undefined,
+					coordinates: [currentNode.position.x, currentNode.position.y, 0],
+					pins: {
+						...translatedNode.pins,
+						[pin.id]: { ...pin, default_value: value },
+					},
 				},
-			},
-		});
+			});
 
-		const result = await backend.boardState.executeCommand(
-			currentNode.data.appId as string,
-			boardId,
-			command,
-		);
-		await pushCommand(result, false);
-		await refetchBoard();
-	}, [pin.id, defaultValue, refetchBoard, boardId, pushCommand]);
-
-	useEffect(() => {
-		updateNode();
-	}, [defaultValue]);
+			const result = await backend.boardState.executeCommand(
+				currentNode.data.appId as string,
+				boardId,
+				command,
+			);
+			await pushCommand(result, false);
+			await refetchBoard();
+		},
+		[pin.id, refetchBoard, boardId, pushCommand, getNode, node, pin, version],
+	);
 
 	useEffect(() => {
 		setDefaultValue(pin.default_value);
@@ -145,49 +218,74 @@ function FlowPinInnerComponent({
 		[pin.pin_type],
 	);
 
-	// Memoize the pin icons rendering based on type
+	// Memoized pin icons
 	const pinIcons = useMemo(
 		() => (
 			<>
 				{pin.data_type === "Execution" && node?.name !== "reroute" && (
-					<DynamicImage
-						url="/flow/pin.svg"
-						className="w-2 h-2 absolute left-0 -translate-x-[15%] pointer-events-none bg-foreground"
+					<div
+						className="absolute left-1/2 top-1/2 pointer-events-none"
+						style={{
+							width: 8,
+							height: 8,
+							transform: "translate(-50%, -50%) rotate(45deg)",
+							background: `
+								linear-gradient(
+									135deg,
+									color-mix(in oklch, var(--foreground) 100%, white 15%),
+									var(--foreground) 70%
+								)
+							`,
+							border: "1.5px solid var(--foreground)",
+							borderRadius: "1.5px",
+							boxShadow: `
+								0 0 5px color-mix(in oklch, var(--foreground) 25%, transparent),
+								inset 0 0.5px 1px color-mix(in oklch, white 15%, transparent)
+							`,
+						}}
 					/>
 				)}
 				{pin.value_type === IValueType.Array && (
 					<GripIcon
 						strokeWidth={3}
-						className="w-2 h-2 absolute left-0 -translate-x-[30%] pointer-events-none bg-background"
+						className={`w-2 h-2 absolute left-0 -translate-x-[50%] pointer-events-none bg-background ${pin.pin_type === IPinType.Input ? "ml-0.5" : "ml-1"}`}
 						style={iconStyle}
 					/>
 				)}
 				{pin.value_type === IValueType.HashSet && (
 					<EllipsisVerticalIcon
 						strokeWidth={3}
-						className="w-2 h-2 absolute left-0 -translate-x-[30%] pointer-events-none bg-background"
+						className="w-2 h-2 absolute left-0 -translate-x-[50%] pointer-events-none bg-background"
 						style={iconStyle}
 					/>
 				)}
 				{pin.value_type === IValueType.HashMap && (
 					<ListIcon
 						strokeWidth={3}
-						className="w-2 h-2 absolute left-0 -translate-x-[30%] pointer-events-none"
+						className="w-2 h-2 absolute left-0 -translate-x-[50%] pointer-events-none"
 						style={iconStyle}
 					/>
 				)}
 			</>
 		),
-		[pin.data_type, pin.value_type, iconStyle, node?.name],
+		[pin.data_type, pin.value_type, iconStyle, node?.name, pin.pin_type],
+	);
+
+	const isExecution = useMemo(
+		() => pin.data_type === "Execution",
+		[pin.data_type],
 	);
 
 	return (
-		<MemoizedHandle
+		<SmallDotHandle
 			type={pinTypeProps.type as HandleType}
 			position={pinTypeProps.position}
 			id={pin.id}
 			style={handleStyle}
 			className="flex flex-row items-center gap-1 group"
+			dotColor={dotColor}
+			showBorderWhenTransparent
+			isExecution={isExecution}
 		>
 			{pinIcons}
 			{shouldRenderPinEdit && (
@@ -199,6 +297,9 @@ function FlowPinInnerComponent({
 						boardId={boardId}
 						defaultValue={defaultValue}
 						changeDefaultValue={setDefaultValue}
+						saveDefaultValue={async (value) => {
+							await updateNode(value);
+						}}
 					/>
 					{pin.dynamic && onPinRemove && (
 						<button
@@ -213,18 +314,20 @@ function FlowPinInnerComponent({
 			)}
 			{!shouldRenderPinEdit && onPinRemove && pin.dynamic && (
 				<button
-					className={`opacity-0 bg-background border p-0.5 rounded-full group-hover:opacity-100 hover:text-primary ${pin.pin_type === IPinType.Input ? "ml-2" : "mr-2 right-0 absolute"}`}
+					className={`opacity-0 bg-background border p-0.5 rounded-full group-hover:opacity-100 hover:text-primary ${
+						pin.pin_type === IPinType.Input
+							? "ml-2.5"
+							: "mr-2.5 right-0 absolute"
+					}`}
 					title="Delete Pin"
 					onClick={() => onPinRemove(pin)}
 				>
 					<Trash2 className="w-1.5 h-1.5" />
 				</button>
 			)}
-		</MemoizedHandle>
+		</SmallDotHandle>
 	);
 }
-
-const MemoizedHandle = memo(Handle);
 
 function pinPropsAreEqual(prevProps: any, nextProps: any) {
 	return (
@@ -239,6 +342,7 @@ function pinPropsAreEqual(prevProps: any, nextProps: any) {
 }
 
 export const FlowPinInner = memo(FlowPinInnerComponent, pinPropsAreEqual);
+
 function FlowPin({
 	pin,
 	boardId,
@@ -246,13 +350,15 @@ function FlowPin({
 	node,
 	onPinRemove,
 	skipOffset,
+	version,
 }: Readonly<{
 	pin: IPin;
 	boardId: string;
 	appId: string;
 	node: INode | ILayer;
 	skipOffset?: boolean;
-	onPinRemove: (pin: IPin) => Promise<void>;
+	onPinRemove?: (pin: IPin) => Promise<void>;
+	version?: [number, number, number];
 }>) {
 	if (pin.dynamic) {
 		return (
@@ -264,6 +370,7 @@ function FlowPin({
 				node={node}
 				skipOffset={skipOffset}
 				onPinRemove={onPinRemove}
+				version={version}
 			/>
 		);
 	}
@@ -276,6 +383,7 @@ function FlowPin({
 			boardId={boardId}
 			node={node}
 			skipOffset={skipOffset}
+			version={version}
 		/>
 	);
 }

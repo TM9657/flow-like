@@ -1,6 +1,10 @@
 use crate::{
-    ensure_permission, error::ApiError, middleware::jwt::AppUser,
-    permission::role_permission::RolePermissions, state::AppState,
+    ensure_permission,
+    error::ApiError,
+    middleware::jwt::AppUser,
+    permission::role_permission::RolePermissions,
+    routes::app::events::db::{filter_event_list_execution, is_user_facing_event},
+    state::AppState,
 };
 use axum::{
     Extension, Json,
@@ -8,26 +12,49 @@ use axum::{
 };
 use flow_like::flow::event::Event;
 
+use super::db::{filter_event_secrets, get_events_for_app};
+
 #[tracing::instrument(name = "GET /apps/{app_id}/events", skip(state, user))]
+#[utoipa::path(
+    get,
+    path = "/apps/{app_id}/events",
+    tag = "events",
+    description = "List events for an app.",
+    params(
+        ("app_id" = String, Path, description = "Application ID")
+    ),
+    responses(
+        (status = 200, description = "Event list", body = String, content_type = "application/json"),
+        (status = 401, description = "Unauthorized"),
+        (status = 403, description = "Forbidden")
+    ),
+    security(
+        ("bearer_auth" = []),
+        ("api_key" = []),
+        ("pat" = [])
+    )
+)]
 pub async fn get_events(
     State(state): State<AppState>,
     Extension(user): Extension<AppUser>,
     Path(app_id): Path<String>,
 ) -> Result<Json<Vec<Event>>, ApiError> {
-    let permission = ensure_permission!(user, &app_id, &state, RolePermissions::WriteEvents);
-    let sub = permission.sub()?;
+    let permission = ensure_permission!(user, &app_id, &state, RolePermissions::ListEvents);
 
-    let app = state.master_app(&sub, &app_id, &state).await?;
-    let events = &app.events;
-    let mut loaded_events = Vec::with_capacity(events.len());
+    // Use database lookup instead of bucket
+    let events = get_events_for_app(&state.db, &app_id).await?;
 
-    for event in events {
-        if let Ok(loaded_event) = Event::load(event, &app, None).await {
-            loaded_events.push(loaded_event);
-        } else {
-            tracing::warn!("Failed to load event: {} in app {}", event, app_id.clone());
-        }
+    // Filter out secret variable values from all events
+    let mut events: Vec<Event> = events.into_iter().map(filter_event_secrets).collect();
+
+    if !permission.has_permission(RolePermissions::ReadEvents) {
+        events = events
+            .into_iter()
+            .filter(|e| e.active)
+            .filter(|e| is_user_facing_event(e))
+            .map(filter_event_list_execution)
+            .collect();
     }
 
-    Ok(Json(loaded_events))
+    Ok(Json(events))
 }

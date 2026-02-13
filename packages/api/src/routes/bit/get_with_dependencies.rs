@@ -19,6 +19,18 @@ use std::{
 
 use super::get_bit::temporary_bit;
 
+#[utoipa::path(
+    get,
+    path = "/bit/{bit_id}/dependencies",
+    tag = "bit",
+    params(
+        ("bit_id" = String, Path, description = "Unique identifier of the bit")
+    ),
+    responses(
+        (status = 200, description = "Bit with all dependencies retrieved successfully", body = Vec<Bit>),
+        (status = 404, description = "Bit not found")
+    )
+)]
 #[tracing::instrument(name = "GET /bit/{bit_id}/dependencies", skip(state, user))]
 pub async fn get_with_dependencies(
     State(state): State<AppState>,
@@ -37,7 +49,7 @@ pub async fn get_with_dependencies(
     let bit_model = bit::Entity::find_by_id(&bit_id)
         .one(&state.db)
         .await?
-        .ok_or(ApiError::NotFound)?;
+        .ok_or(ApiError::NOT_FOUND)?;
 
     if bit_model.dependency_tree_hash == bit_model.hash {
         // If the dependency tree hash is the same as the bit hash, it means there are no dependencies.
@@ -80,23 +92,28 @@ pub async fn get_with_dependencies(
         return Ok(Json(bits));
     }
 
+    // Capture original dependency_tree_hash before conversion (it might be None in DB)
+    let original_dependency_tree_hash = bit_model.dependency_tree_hash.clone();
     let converted_bit: Bit = bit_model.into();
     let bits = fetch_dependencies(&converted_bit, &state).await?;
 
-    bit_tree_cache::Entity::insert(bit_tree_cache::ActiveModel {
-        dependency_tree_hash: Set(converted_bit.dependency_tree_hash.clone()),
-        created_at: Set(chrono::Utc::now().naive_utc()),
-        updated_at: Set(chrono::Utc::now().naive_utc()),
-    })
-    .on_conflict(
-        OnConflict::column(bit_tree_cache::Column::DependencyTreeHash)
-            .update_column(bit_tree_cache::Column::UpdatedAt)
-            .to_owned(),
-    )
-    .exec_with_returning(&state.db)
-    .await?;
+    // Only insert into cache if the bit has a real dependency_tree_hash in the database
+    if let Some(ref dep_hash) = original_dependency_tree_hash {
+        bit_tree_cache::Entity::insert(bit_tree_cache::ActiveModel {
+            dependency_tree_hash: Set(dep_hash.clone()),
+            created_at: Set(chrono::Utc::now().naive_utc()),
+            updated_at: Set(chrono::Utc::now().naive_utc()),
+        })
+        .on_conflict(
+            OnConflict::column(bit_tree_cache::Column::DependencyTreeHash)
+                .update_column(bit_tree_cache::Column::UpdatedAt)
+                .to_owned(),
+        )
+        .exec_with_returning(&state.db)
+        .await?;
 
-    insert_bit_cache(&state, &bits, &converted_bit.dependency_tree_hash).await?;
+        insert_bit_cache(&state, &bits, dep_hash).await?;
+    }
 
     state.set_cache(cache_key, &bits);
 
@@ -107,7 +124,7 @@ pub async fn get_with_dependencies(
 async fn fetch_dependencies(bit: &Bit, state: &AppState) -> flow_like_types::Result<Vec<Bit>> {
     let mut bits = vec![bit.clone()];
     let self_domain = state.platform_config.domain.clone();
-    let (http_client, _rcv) = HTTPClient::new();
+    let http_client = HTTPClient::new_without_refetch();
     let http_client = Arc::new(http_client);
     let mut hubs: HashMap<String, flow_like::hub::Hub> = HashMap::new();
 

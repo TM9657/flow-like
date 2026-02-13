@@ -19,6 +19,8 @@ flow-like-types.workspace = true
 flow-like-bits.workspace = true
 flow-like-model-provider.workspace = true
 flow-like-storage.workspace = true
+rig-core.workspace = true#
+rmcp.workspace = true
 rayon = "1.11.0"
 portpicker = "0.1.1"
 dirs-next.workspace = true
@@ -33,6 +35,7 @@ url = {version = "2.5.4", features = ["serde"]}
 json5 = "0.4.1"
 ahash.workspace = true
 schemars.workspace = true
+jsonschema.workspace = true
 chrono.workspace = true
 futures.workspace = true
 serde = { workspace = true, features = ["derive", "rc"] }
@@ -41,13 +44,20 @@ tracing.workspace = true
 highway = "1.3.0"
 canonical_json = "0.5.0"
 zip = {version = "4.3.0", default-features = false, features = ["deflate"] }
-flate2 = { version = "1.1.2", default-features = false, features = ["rust_backend"] }
+flate2.workspace = true
 chacha20poly1305 = {version="0.10.1", features=["stream", "std"]}
 argon2 = "0.5.3"
 zeroize = "1.8.1"
+thiserror.workspace = true
+serde_json.workspace = true
+async-trait.workspace = true
+percent-encoding.workspace = true
+utoipa = { version = "5", optional = true }
 
 [features]
 tauri = ["flow-like-storage/tauri"]
+local-ml = ["flow-like-model-provider/local-ml"]
+remote-ml = ["flow-like-model-provider/remote-ml"]
 schema-gen = []
 flow-runtime = []
 flow = ["flow-runtime"]
@@ -55,6 +65,7 @@ hub = []
 bit = ["hub"]
 model = ["bit"]
 app = ["bit", "model", "hub"]
+openapi = ["utoipa"]
 full = ["schema-gen", "flow-runtime", "flow", "hub", "bit", "model", "app"]
 default = ["schema-gen", "flow-runtime", "flow", "hub", "bit", "model", "app"]
 [profile.release]

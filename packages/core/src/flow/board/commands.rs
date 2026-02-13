@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use flow_like_types::{async_trait, sync::Mutex};
+use flow_like_types::async_trait;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
@@ -20,16 +20,16 @@ pub mod variables;
 macro_rules! impl_command_methods {
     ($($variant:ident),*) => {
         impl GenericCommand {
-            pub fn to_dyn(&self) -> Arc<Mutex<dyn Command>> {
+            pub fn to_dyn(&self) -> Arc<flow_like_types::sync::Mutex<dyn Command>> {
                 match self {
-                    $(GenericCommand::$variant(cmd) => Arc::new(Mutex::new(cmd.clone())),)*
+                    $(GenericCommand::$variant(cmd) => Arc::new(flow_like_types::sync::Mutex::new(cmd.clone())),)*
                 }
             }
 
             pub async fn execute(
                 &mut self,
                 board: &mut Board,
-                state: Arc<Mutex<FlowLikeState>>,
+                state: Arc<FlowLikeState>,
             ) -> flow_like_types::Result<()> {
                 match self {
                     $(GenericCommand::$variant(cmd) => cmd.execute(board, state).await,)*
@@ -39,7 +39,7 @@ macro_rules! impl_command_methods {
             pub async fn undo(
                 &mut self,
                 board: &mut Board,
-                state: Arc<Mutex<FlowLikeState>>,
+                state: Arc<FlowLikeState>,
             ) -> flow_like_types::Result<()> {
                 match self {
                     $(GenericCommand::$variant(cmd) => cmd.undo(board, state).await,)*
@@ -71,23 +71,20 @@ pub trait Command: Send + Sync {
     async fn execute(
         &mut self,
         board: &mut Board,
-        state: Arc<Mutex<FlowLikeState>>,
+        state: Arc<FlowLikeState>,
     ) -> flow_like_types::Result<()>;
     async fn undo(
         &mut self,
         board: &mut Board,
-        state: Arc<Mutex<FlowLikeState>>,
+        state: Arc<FlowLikeState>,
     ) -> flow_like_types::Result<()>;
 
     async fn node_to_logic(
         &self,
         node: &Node,
-        state: Arc<Mutex<FlowLikeState>>,
+        state: Arc<FlowLikeState>,
     ) -> flow_like_types::Result<Arc<dyn NodeLogic>> {
-        let node_registry = {
-            let state_guard = state.lock().await;
-            state_guard.node_registry().clone()
-        };
+        let node_registry = state.node_registry().clone();
 
         let registry_guard = node_registry.read().await;
 

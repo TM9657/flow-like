@@ -1,0 +1,292 @@
+---
+import {
+  LuBug,
+  LuSparkles,
+  LuPuzzle,
+  LuMessageCircleQuestion,
+  LuPlay,
+} from "react-icons/lu";
+import type { Lang, TranslationKey } from "../i18n";
+import { translations, defaultLang } from "../i18n";
+
+interface Props {
+  lang?: Lang;
+}
+
+const { lang = defaultLang } = Astro.props;
+const t = (key: TranslationKey): string => {
+  const langTranslations = translations[lang] as Record<string, string>;
+  const enTranslations = translations.en as Record<string, string>;
+  return langTranslations?.[key] ?? enTranslations[key] ?? key;
+};
+---
+
+<section
+  id="flowpilot"
+  class="relative w-full min-h-screen border-t border-b"
+>
+  <!-- Full-width video background - maximum visibility -->
+  <div class="absolute inset-0">
+    <video
+      id="flowpilot-video"
+      autoplay
+      loop
+      muted
+      playsinline
+      preload="auto"
+      class="absolute inset-0 w-full h-full object-cover object-right md:object-center"
+      poster="/images/flowpilot-poster.png"
+    >
+      <source src="/process-workflow.webm" type="video/webm" />
+    </video>
+
+    <!-- Gradients for readability -->
+    <div class="absolute inset-0 bg-linear-to-r from-background/95 via-background/40 to-transparent"></div>
+    <div class="absolute inset-0 bg-linear-to-b from-background via-transparent to-background"></div>
+  </div>
+
+  <!-- Animated glow orbs - enhanced -->
+  <div class="absolute inset-0 overflow-hidden pointer-events-none" aria-hidden="true">
+    <div class="glow-orb glow-orb-1"></div>
+    <div class="glow-orb glow-orb-2"></div>
+    <div class="glow-orb glow-orb-3"></div>
+    <!-- Flashy light particles -->
+    <div class="light-particle light-particle-1"></div>
+    <div class="light-particle light-particle-2"></div>
+    <div class="light-particle light-particle-3"></div>
+    <div class="light-particle light-particle-4"></div>
+    <div class="light-particle light-particle-5"></div>
+  </div>
+
+  <!-- Content -->
+  <div class="relative z-10 mx-auto max-w-7xl px-4 lg:px-8 min-h-screen flex items-center">
+    <div class="py-24 lg:py-0 max-w-xl">
+
+      <!-- Glowing badge with animation -->
+      <div class="inline-flex items-center gap-2.5 rounded-full border border-violet-400/50 bg-violet-500/20 backdrop-blur-2xl px-5 py-3 text-sm font-semibold text-violet-200 mb-10 shadow-[0_0_40px_-8px_rgba(139,92,246,0.5)] hover:shadow-[0_0_50px_-5px_rgba(139,92,246,0.6)] transition-shadow duration-500 group">
+        <div class="relative">
+          <LuSparkles className="w-4 h-4 group-hover:rotate-12 transition-transform" />
+          <div class="absolute inset-0 blur-sm bg-violet-400/50 rounded-full"></div>
+        </div>
+        <span>{t("flowpilot.tagline")}</span>
+      </div>
+
+      <!-- Title with text shadow for depth -->
+      <h2 class="text-5xl font-black sm:text-6xl lg:text-7xl leading-[1.05] tracking-tight drop-shadow-2xl">
+        <span class="bg-linear-to-r from-white to-white/90 bg-clip-text text-transparent">{t("flowpilot.headline.meet")}</span>
+        <br />
+        <span class="bg-linear-to-br from-violet-300 via-fuchsia-300 to-cyan-300 bg-clip-text text-transparent animate-gradient-x">{t("flowpilot.headline.name")}</span>
+      </h2>
+
+      <!-- Subtitle with better contrast -->
+      <p class="mt-8 text-lg lg:text-xl text-white/80 max-w-md leading-relaxed drop-shadow-lg">
+        {t("flowpilot.description")} <span class="text-violet-300 font-semibold">{t("flowpilot.description.highlight")}</span>.
+      </p>
+
+      <!-- Feature pills - glassy and interactive -->
+      <div class="mt-14 flex flex-wrap gap-3">
+        <div class="feature-pill group border-violet-400/40 hover:border-violet-300/60">
+          <div class="feature-icon from-violet-500 to-fuchsia-600">
+            <LuBug className="w-3.5 h-3.5 text-white" />
+          </div>
+          <span class="text-violet-100 group-hover:text-white">{t("flowpilot.feature.debug")}</span>
+        </div>
+
+        <div class="feature-pill group border-cyan-400/40 hover:border-cyan-300/60">
+          <div class="feature-icon from-cyan-500 to-blue-600">
+            <LuSparkles className="w-3.5 h-3.5 text-white" />
+          </div>
+          <span class="text-cyan-100 group-hover:text-white">{t("flowpilot.feature.build")}</span>
+        </div>
+
+        <div class="feature-pill group border-emerald-400/40 hover:border-emerald-300/60">
+          <div class="feature-icon from-emerald-500 to-teal-600">
+            <LuPuzzle className="w-3.5 h-3.5 text-white" />
+          </div>
+          <span class="text-emerald-100 group-hover:text-white">{t("flowpilot.feature.extend")}</span>
+        </div>
+
+        <div class="feature-pill group border-amber-400/40 hover:border-amber-300/60">
+          <div class="feature-icon from-amber-500 to-orange-600">
+            <LuMessageCircleQuestion className="w-3.5 h-3.5 text-white" />
+          </div>
+          <span class="text-amber-100 group-hover:text-white">{t("flowpilot.feature.ask")}</span>
+        </div>
+      </div>
+
+      <!-- Live indicator with play icon -->
+      <div class="mt-12 inline-flex items-center gap-4 rounded-2xl border border-white/10 bg-white/5 backdrop-blur-xl px-5 py-3">
+        <div class="relative">
+          <span class="absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75 animate-ping"></span>
+          <span class="relative flex h-3 w-3 rounded-full bg-green-500 shadow-[0_0_10px_2px_rgba(34,197,94,0.5)]"></span>
+        </div>
+        <p class="text-sm text-white/70 font-medium">
+          Watching: Screenshot → workflow transformation
+        </p>
+        <LuPlay className="w-4 h-4 text-white/50" />
+      </div>
+    </div>
+  </div>
+</section>
+
+<script>
+  // Ensure video plays - handle browser autoplay policies
+  const video = document.getElementById('flowpilot-video') as HTMLVideoElement;
+  if (video) {
+    // Try to play immediately
+    const playPromise = video.play();
+    if (playPromise !== undefined) {
+      playPromise.catch(() => {
+        // Autoplay was prevented, try again on first user interaction
+        const playOnInteraction = () => {
+          video.play();
+          document.removeEventListener('click', playOnInteraction);
+          document.removeEventListener('scroll', playOnInteraction);
+          document.removeEventListener('touchstart', playOnInteraction);
+        };
+        document.addEventListener('click', playOnInteraction, { once: true });
+        document.addEventListener('scroll', playOnInteraction, { once: true });
+        document.addEventListener('touchstart', playOnInteraction, { once: true });
+      });
+    }
+
+    // Also try when video becomes visible
+    const observer = new IntersectionObserver((entries) => {
+      entries.forEach(entry => {
+        if (entry.isIntersecting) {
+          video.play().catch(() => {});
+        }
+      });
+    }, { threshold: 0.1 });
+    observer.observe(video);
+  }
+</script>
+
+<style>
+  /* Feature pills */
+  .feature-pill {
+    display: flex;
+    align-items: center;
+    gap: 0.625rem;
+    border-radius: 9999px;
+    border-width: 1px;
+    background: rgba(255, 255, 255, 0.08);
+    backdrop-filter: blur(24px);
+    padding: 0.625rem 1rem;
+    transition: all 0.3s ease;
+    cursor: default;
+  }
+
+  .feature-pill:hover {
+    background: rgba(255, 255, 255, 0.15);
+    transform: translateY(-2px);
+    box-shadow: 0 10px 40px -10px rgba(0, 0, 0, 0.3);
+  }
+
+  .feature-icon {
+    width: 1.75rem;
+    height: 1.75rem;
+    border-radius: 9999px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: linear-gradient(to bottom right, var(--tw-gradient-from), var(--tw-gradient-to));
+    box-shadow: 0 4px 15px -3px rgba(0, 0, 0, 0.3);
+  }
+
+  .feature-pill span {
+    font-size: 0.875rem;
+    font-weight: 500;
+    transition: color 0.2s;
+  }
+
+  /* Glow orbs - enhanced */
+  .glow-orb {
+    position: absolute;
+    border-radius: 50%;
+    filter: blur(80px);
+    opacity: 0.5;
+    animation: float 8s ease-in-out infinite;
+  }
+
+  .glow-orb-1 {
+    width: 500px;
+    height: 500px;
+    background: radial-gradient(circle, rgba(139, 92, 246, 0.5) 0%, transparent 70%);
+    top: 15%;
+    left: 0%;
+    animation-delay: 0s;
+  }
+
+  .glow-orb-2 {
+    width: 400px;
+    height: 400px;
+    background: radial-gradient(circle, rgba(6, 182, 212, 0.4) 0%, transparent 70%);
+    bottom: 25%;
+    left: 10%;
+    animation-delay: 4s;
+  }
+
+  .glow-orb-3 {
+    width: 350px;
+    height: 350px;
+    background: radial-gradient(circle, rgba(236, 72, 153, 0.3) 0%, transparent 70%);
+    top: 40%;
+    left: -5%;
+    animation-delay: 2s;
+  }
+
+  /* Light particles */
+  .light-particle {
+    position: absolute;
+    width: 4px;
+    height: 4px;
+    border-radius: 50%;
+    background: white;
+    box-shadow: 0 0 10px 2px rgba(255, 255, 255, 0.8), 0 0 20px 4px rgba(139, 92, 246, 0.5);
+    opacity: 0;
+    animation: particle-float 6s ease-in-out infinite;
+  }
+
+  .light-particle-1 { top: 20%; left: 15%; animation-delay: 0s; }
+  .light-particle-2 { top: 35%; left: 8%; animation-delay: 1.2s; }
+  .light-particle-3 { top: 50%; left: 20%; animation-delay: 2.4s; }
+  .light-particle-4 { top: 65%; left: 5%; animation-delay: 3.6s; }
+  .light-particle-5 { top: 80%; left: 18%; animation-delay: 4.8s; }
+
+  @keyframes particle-float {
+    0%, 100% {
+      opacity: 0;
+      transform: translate(0, 0) scale(0.5);
+    }
+    20% {
+      opacity: 1;
+      transform: translate(10px, -20px) scale(1);
+    }
+    80% {
+      opacity: 0.8;
+      transform: translate(30px, -60px) scale(0.8);
+    }
+  }
+
+  @keyframes float {
+    0%, 100% { transform: translate(0, 0) scale(1); }
+    50% { transform: translate(30px, -30px) scale(1.1); }
+  }
+
+  /* Gradient text animation */
+  @keyframes gradient-x {
+    0%, 100% { background-position: 0% 50%; }
+    50% { background-position: 100% 50%; }
+  }
+
+  .animate-gradient-x {
+    background-size: 200% 200%;
+    animation: gradient-x 8s ease infinite;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .glow-orb, .animate-gradient-x, .light-particle { animation: none; }
+    .light-particle { opacity: 0; }
+  }
+</style>

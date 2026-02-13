@@ -1,6 +1,8 @@
+use crate::flow::execution::context::ExecutionContext;
 use crate::state::FlowLikeState;
 use crate::utils::compression::{compress_to_file_json, from_compressed_json};
 use crate::utils::download::download_bit;
+use flow_like_model_provider::history::History;
 use flow_like_model_provider::provider::{
     EmbeddingModelProvider, ImageEmbeddingModelProvider, ModelProvider,
 };
@@ -9,8 +11,9 @@ use flow_like_storage::files::store::FlowLikeStore;
 use flow_like_storage::files::store::local_store::LocalObjectStore;
 use flow_like_types::Value;
 use flow_like_types::intercom::InterComCallback;
-use flow_like_types::sync::Mutex;
 
+use rig::agent::AgentBuilder;
+use rig::client::completion::{CompletionClientDyn, CompletionModelHandle};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
@@ -22,6 +25,7 @@ const NAME_HINT_WEIGHT: f32 = 0.2; // weight of name similarity for best model p
 const NAME_HINT_SIMILARITY_THRESHOLD: f32 = 0.5; // minimum required similarity score to model name
 
 #[derive(Serialize, Deserialize, JsonSchema, Clone, Debug)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 pub struct Metadata {
     pub name: String,
     pub description: String,
@@ -37,8 +41,33 @@ pub struct Metadata {
     pub support_url: Option<String>,
     pub docs_url: Option<String>,
     pub organization_specific_values: Option<Vec<u8>>,
+    #[cfg_attr(feature = "openapi", schema(value_type = String))]
     pub created_at: SystemTime,
+    #[cfg_attr(feature = "openapi", schema(value_type = String))]
     pub updated_at: SystemTime,
+}
+
+impl Default for Metadata {
+    fn default() -> Self {
+        Self {
+            name: "Unknown".to_string(),
+            description: "No description".to_string(),
+            long_description: None,
+            release_notes: None,
+            tags: vec![],
+            use_case: None,
+            icon: None,
+            thumbnail: None,
+            preview_media: vec![],
+            age_rating: None,
+            website: None,
+            support_url: None,
+            docs_url: None,
+            organization_specific_values: None,
+            created_at: SystemTime::now(),
+            updated_at: SystemTime::now(),
+        }
+    }
 }
 
 impl Metadata {
@@ -96,7 +125,8 @@ impl Metadata {
     }
 }
 
-#[derive(Serialize, Deserialize, JsonSchema, Clone, Debug, PartialEq)]
+#[derive(Serialize, Deserialize, JsonSchema, Clone, Debug, PartialEq, Default)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 pub enum BitTypes {
     Llm,
     Vlm,
@@ -114,9 +144,11 @@ pub enum BitTypes {
     Projection,
     Project,
     Board,
+    #[default]
     Other,
     ObjectDetection,
 }
+
 #[derive(Serialize, Deserialize, JsonSchema, Clone, Debug, Default)]
 pub struct BitModelPreference {
     pub multimodal: Option<bool>,
@@ -189,7 +221,7 @@ impl BitModelPreference {
     }
 }
 
-#[derive(Serialize, Deserialize, JsonSchema, Clone, Debug)]
+#[derive(Serialize, Deserialize, JsonSchema, Clone, Debug, Default)]
 pub struct BitModelClassification {
     cost: f32,
     speed: f32,
@@ -303,7 +335,9 @@ impl BitModelClassification {
     }
 }
 
-#[derive(Serialize, Deserialize, JsonSchema, Clone, Debug)]
+#[derive(Serialize, Deserialize, JsonSchema, Clone, Debug, Default)]
+#[serde(default)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 pub struct Bit {
     pub id: String,
     #[serde(rename = "type")]
@@ -346,9 +380,9 @@ pub struct BitPack {
 
 async fn collect_dependencies(
     bit: &Bit,
-    state: Arc<Mutex<FlowLikeState>>,
+    state: Arc<FlowLikeState>,
 ) -> flow_like_types::Result<Vec<Bit>> {
-    let http_client = state.lock().await.http_client.clone();
+    let http_client = state.http_client.clone();
     let hub = crate::hub::Hub::new(&bit.hub, http_client.clone()).await?;
     let bit_id = bit.id.clone();
     let bits = hub.get_bit_dependencies(&bit_id).await?;
@@ -358,7 +392,7 @@ async fn collect_dependencies(
 impl BitPack {
     pub async fn get_installed(
         &self,
-        state: Arc<Mutex<FlowLikeState>>,
+        state: Arc<FlowLikeState>,
     ) -> flow_like_types::Result<Vec<Bit>> {
         let bits_store = FlowLikeState::bit_store(&state).await?.as_generic();
 
@@ -386,21 +420,28 @@ impl BitPack {
 
     pub async fn download(
         &self,
-        state: Arc<Mutex<FlowLikeState>>,
+        state: Arc<FlowLikeState>,
         callback: InterComCallback,
     ) -> flow_like_types::Result<Vec<Bit>> {
         let mut deduplicated_bits = vec![];
         let mut deduplication_helper = HashSet::new();
         self.bits.iter().for_each(|bit| {
-            if deduplication_helper.contains(&bit.hash)
-                || bit.download_link.is_none()
-                || bit.size.is_none()
-                || bit.file_name.is_none()
-            {
-                println!(
-                    "Skipping bit {}: already downloaded or missing required fields",
-                    bit.id
-                );
+            // If there is no download link we treat it as a virtual / proxied bit.
+            // These should count as a successful "download" operation from a UX perspective
+            // so we simply don't schedule a download but DO include it in the returned list.
+            if bit.download_link.is_none() {
+                println!("Skipping network download for bit {}: no download link (proxied or empty model)", bit.id);
+                // Do not attempt any download but keep it in the final success vector
+                return;
+            }
+
+            if deduplication_helper.contains(&bit.hash) {
+                println!("Skipping bit {}: duplicate hash already queued", bit.id);
+                return;
+            }
+
+            if bit.size.is_none() || bit.file_name.is_none() {
+                println!("Skipping bit {}: missing size or file_name", bit.id);
                 return;
             }
 
@@ -413,9 +454,19 @@ impl BitPack {
             deduplication_helper.insert(bit.hash.clone());
         });
 
+        // If there is nothing to actually download we still return success with the original bits
+        // so the frontend can proceed (useful for empty / proxied models)
         if deduplicated_bits.is_empty() {
-            println!("No bits to download");
-            return Ok(vec![]);
+            println!(
+                "No concrete bits to download; returning success (all bits were proxied or lacked downloadable artifacts)"
+            );
+            let filtered: Vec<Bit> = self
+                .bits
+                .iter()
+                .filter(|b| b.download_link.is_none() && b.size.unwrap_or(0) > 0)
+                .cloned()
+                .collect();
+            return Ok(filtered);
         }
 
         println!(
@@ -442,7 +493,15 @@ impl BitPack {
             }
         }
 
-        Ok(deduplicated_bits)
+        // Combine successfully queued bits (deduplicated_bits) with any virtual bits (those without download links)
+        let mut result = self
+            .bits
+            .iter()
+            .filter(|b| b.download_link.is_none() && b.size.unwrap_or(0) > 0)
+            .cloned()
+            .collect::<Vec<_>>();
+        result.extend(deduplicated_bits);
+        Ok(result)
     }
 
     pub fn size(&self) -> u64 {
@@ -460,10 +519,7 @@ impl BitPack {
         size
     }
 
-    pub async fn is_installed(
-        &self,
-        state: Arc<Mutex<FlowLikeState>>,
-    ) -> flow_like_types::Result<bool> {
+    pub async fn is_installed(&self, state: Arc<FlowLikeState>) -> flow_like_types::Result<bool> {
         let bits_store = FlowLikeState::bit_store(&state).await?.as_generic();
         let mut installed = true;
         for bit in self.bits.iter() {
@@ -592,12 +648,16 @@ impl Bit {
 
     pub async fn dependencies(
         &self,
-        state: Arc<Mutex<FlowLikeState>>,
+        state: Arc<FlowLikeState>,
     ) -> flow_like_types::Result<BitPack> {
         let bits_store = FlowLikeState::bit_store(&state).await?.as_generic();
 
-        let cache_dir =
-            Path::from("deps-cache").child(format!("bit-deps-{}.bin", self.dependency_tree_hash));
+        let cache_key = if self.dependency_tree_hash.is_empty() {
+            &self.id
+        } else {
+            &self.dependency_tree_hash
+        };
+        let cache_dir = Path::from("deps-cache").child(format!("bit-deps-{}.bin", cache_key));
 
         let metadata = bits_store.head(&cache_dir).await;
 
@@ -625,16 +685,13 @@ impl Bit {
         Ok(bit_pack)
     }
 
-    pub async fn pack(&self, state: Arc<Mutex<FlowLikeState>>) -> flow_like_types::Result<BitPack> {
+    pub async fn pack(&self, state: Arc<FlowLikeState>) -> flow_like_types::Result<BitPack> {
         let mut dependencies = self.dependencies(state).await?;
         dependencies.bits.push(self.clone());
         Ok(dependencies)
     }
 
-    pub async fn is_installed(
-        &self,
-        state: Arc<Mutex<FlowLikeState>>,
-    ) -> flow_like_types::Result<bool> {
+    pub async fn is_installed(&self, state: Arc<FlowLikeState>) -> flow_like_types::Result<bool> {
         let pack = self.pack(state.clone()).await?;
         pack.is_installed(state).await
     }
@@ -648,5 +705,115 @@ impl Bit {
         let bit_path = Path::from(self.hash.clone()).child(file_name);
         let path = file_system.path_to_filesystem(&bit_path).ok()?;
         Some(path)
+    }
+
+    pub async fn agent<'a>(
+        &self,
+        context: &mut ExecutionContext,
+        history: &Option<History>,
+    ) -> flow_like_types::Result<AgentBuilder<CompletionModelHandle<'a>>> {
+        let (model_name, additional_params, completion_client) =
+            self.completion_model(context, history).await?;
+        let mut agent_builder = completion_client.agent(&model_name);
+
+        if let Some(additional_params) = additional_params {
+            agent_builder = agent_builder.additional_params(additional_params);
+        }
+
+        Ok(agent_builder)
+    }
+
+    pub async fn completion_model<'a>(
+        &self,
+        context: &mut ExecutionContext,
+        history: &Option<History>,
+    ) -> flow_like_types::Result<(
+        String,
+        Option<flow_like_types::Value>,
+        Box<dyn CompletionClientDyn + Send + Sync + 'a>,
+    )> {
+        let (model_name, additional_params, completion_client) = {
+            let model_factory = context.app_state.model_factory.clone();
+            let model = model_factory
+                .lock()
+                .await
+                .build(self, context.app_state.clone(), context.token.clone())
+                .await?;
+            let additional_params = model.additional_params(history);
+            let default_model = model.default_model().await.unwrap_or_default();
+            let provider = model.provider().await?;
+            let completion = provider.into_client();
+            (default_model, additional_params, completion)
+        };
+
+        Ok((model_name, additional_params, completion_client))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::state::{FlowLikeConfig, FlowLikeState};
+    use flow_like_storage::files::store::FlowLikeStore;
+    use flow_like_storage::files::store::local_store::LocalObjectStore;
+    use flow_like_types::Value;
+    use flow_like_types::{sync::Mutex, tokio};
+
+    #[tokio::test]
+    async fn test_download_skips_and_succeeds_without_links() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let mut config: FlowLikeConfig = FlowLikeConfig::new();
+        let store = LocalObjectStore::new(temp_dir.path().to_path_buf()).unwrap();
+        config.stores.bits_store = Some(FlowLikeStore::Local(store.into()));
+        let http_client = crate::utils::http::HTTPClient::new_without_refetch();
+        let state = FlowLikeState::new(config, http_client);
+        let state = Arc::new(state);
+
+        let proxied_bit = Bit {
+            id: "proxied".into(),
+            bit_type: BitTypes::Other,
+            meta: Default::default(),
+            authors: vec![],
+            repository: None,
+            download_link: None,
+            file_name: None,
+            hash: "hash_proxied".into(),
+            size: Some(123),
+            hub: "hub".into(),
+            parameters: Value::Null,
+            version: None,
+            license: None,
+            dependencies: vec![],
+            dependency_tree_hash: "hash_proxied".into(),
+            created: chrono::Utc::now().to_rfc3339(),
+            updated: chrono::Utc::now().to_rfc3339(),
+        };
+
+        let zero_size_bit = Bit {
+            id: "zero".into(),
+            bit_type: BitTypes::Other,
+            meta: Default::default(),
+            authors: vec![],
+            repository: None,
+            download_link: Some("http://example.com/file.bin".into()),
+            file_name: Some("file.bin".into()),
+            hash: "hash_zero".into(),
+            size: Some(0),
+            hub: "hub".into(),
+            parameters: Value::Null,
+            version: None,
+            license: None,
+            dependencies: vec![],
+            dependency_tree_hash: "hash_zero".into(),
+            created: chrono::Utc::now().to_rfc3339(),
+            updated: chrono::Utc::now().to_rfc3339(),
+        };
+
+        let pack = BitPack {
+            bits: vec![proxied_bit.clone(), zero_size_bit.clone()],
+        };
+        let result = pack.download(state, None).await.unwrap();
+        assert!(result.iter().any(|b| b.id == proxied_bit.id));
+        assert!(!result.iter().any(|b| b.id == zero_size_bit.id));
     }
 }

@@ -1,0 +1,18 @@
+//! Document processing catalog for Flow-Like
+//!
+//! This crate contains document processing utilities:
+//! - Markitdown conversion
+//! - Keyword extraction (RAKE, YAKE, AI-based)
+
+use std::sync::Arc;
+
+pub use flow_like_catalog_core::{NodeConstructor, NodeLogic, inventory, register_node};
+
+#[path = "processing.rs"]
+pub mod processing;
+
+pub use processing::*;
+
+pub fn get_catalog() -> Vec<Arc<dyn NodeLogic>> {
+    flow_like_catalog_core::get_catalog()
+}

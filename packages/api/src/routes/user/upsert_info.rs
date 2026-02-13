@@ -1,15 +1,13 @@
 use std::time::Duration;
 
-use crate::{
-    entity::user, error::ApiError, middleware::jwt::AppUser, state::AppState,
-    user_management::UserManagement,
-};
+use crate::{entity::user, error::ApiError, middleware::jwt::AppUser, state::AppState};
 use axum::{Extension, Json, extract::State};
 use flow_like_types::create_id;
 use sea_orm::{ActiveModelTrait, ActiveValue::Set, EntityTrait};
 use serde::{Deserialize, Serialize};
+use utoipa::ToSchema;
 
-#[derive(Debug, Clone, Default, Deserialize, Serialize)]
+#[derive(Debug, Clone, Default, Deserialize, Serialize, ToSchema)]
 pub struct UpsertInfoBody {
     pub name: Option<String>,
     pub description: Option<String>,
@@ -18,11 +16,25 @@ pub struct UpsertInfoBody {
     pub tutorial_completed: Option<bool>,
 }
 
-#[derive(Debug, Clone, Default, Deserialize, Serialize)]
+#[derive(Debug, Clone, Default, Deserialize, Serialize, ToSchema)]
 pub struct UpsertInfoResponse {
     pub signed_url: Option<String>,
 }
 
+#[utoipa::path(
+    put,
+    path = "/user/info",
+    tag = "user",
+    request_body = UpsertInfoBody,
+    responses(
+        (status = 200, description = "User info updated successfully", body = UpsertInfoResponse),
+        (status = 401, description = "Unauthorized"),
+        (status = 404, description = "User not found")
+    ),
+    security(
+        ("bearer_auth" = [])
+    )
+)]
 #[tracing::instrument(name = "PUT /user/info", skip(state, user))]
 pub async fn upsert_info(
     State(state): State<AppState>,
@@ -30,19 +42,17 @@ pub async fn upsert_info(
     Json(payload): Json<UpsertInfoBody>,
 ) -> Result<Json<UpsertInfoResponse>, ApiError> {
     let sub = user.sub()?;
-    let username = user.username().clone();
-    let mut response = UpsertInfoResponse { signed_url: None };
-    let user_manager = UserManagement::new(&state).await;
 
-    let email = user_manager.get_attribute(&sub, &username, "email").await?;
-    let preferred_username = user_manager
-        .get_attribute(&sub, &username, "preferred_username")
-        .await?;
+    let mut response = UpsertInfoResponse { signed_url: None };
+    let info = user.user_info(&state).await?;
+
+    let email = info.email.clone();
+    let preferred_username = info.preferred_username.clone();
 
     let current_user = user::Entity::find_by_id(&sub)
         .one(&state.db)
         .await?
-        .ok_or(ApiError::NotFound)?;
+        .ok_or(ApiError::NOT_FOUND)?;
 
     let mut updated_user: user::ActiveModel = current_user.clone().into();
 

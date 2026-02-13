@@ -1,6 +1,11 @@
+#[cfg(not(any(all(target_os = "macos", target_arch = "aarch64"), target_os = "ios")))]
+#[global_allocator]
+static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
+
 use dotenv::dotenv;
 use flow_like_api::axum;
 use flow_like_api::construct_router;
+use flow_like_catalog::get_catalog;
 use flow_like_storage::object_store::aws::AmazonS3Builder;
 use flow_like_types::tokio;
 use socket2::{Domain, Socket, Type};
@@ -62,12 +67,13 @@ async fn main() {
     let cdn_bucket =
         flow_like_storage::files::store::FlowLikeStore::AWS(Arc::new(cdn_bucket.build().unwrap()));
 
-    let catalog = Arc::new(flow_like_catalog::get_catalog().await);
+    let catalog = Arc::new(get_catalog());
     let state = Arc::new(flow_like_api::state::State::new(catalog, Arc::new(cdn_bucket)).await);
 
     let app = construct_router(state);
 
-    let port = 3210;
+    let port = std::env::var("API_PORT").unwrap_or_else(|_| "8080".to_string());
+    let port: u16 = port.parse().expect("API_PORT must be a valid port number");
     let listener = match create_listener(format!("0.0.0.0:{}", port)) {
         Ok(listener) => listener,
         Err(err) => {

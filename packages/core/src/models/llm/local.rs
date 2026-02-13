@@ -1,24 +1,14 @@
 use crate::{
     bit::{Bit, BitTypes},
-    models::ModelMeta,
+    models::{ModelMeta, local_utils::ensure_local_weights},
     state::FlowLikeState,
 };
-use flow_like_model_provider::{
-    history::History,
-    llm::{LLMCallback, ModelLogic},
-    response::Response,
-    response_chunk::ResponseChunk,
-};
+use flow_like_model_provider::llm::{ModelLogic, llamacpp::LlamaCppModel};
 use flow_like_storage::files::store::FlowLikeStore;
 use flow_like_types::{
     Result, reqwest,
-    tokio::{self, sync::Mutex as TokioMutex, task::JoinHandle, time::sleep},
+    tokio::{self, task::JoinHandle, time::sleep},
 };
-use flow_like_types::{
-    async_trait,
-    reqwest_eventsource::{Event, RequestBuilderExt},
-};
-use futures::StreamExt;
 use portpicker::pick_unused_port;
 use std::{
     io::{BufRead, BufReader},
@@ -30,13 +20,11 @@ use std::{
 
 use super::ExecutionSettings;
 
-mod local_history;
-
 pub struct LocalModel {
     bit: Bit,
     handle: Arc<Mutex<Option<Child>>>,
     thread_handle: JoinHandle<()>,
-    client: reqwest::Client,
+    llm_model: Arc<LlamaCppModel>,
     pub port: u16,
 }
 
@@ -46,52 +34,14 @@ impl ModelMeta for LocalModel {
     }
 }
 
-#[async_trait]
+#[flow_like_types::async_trait]
 impl ModelLogic for LocalModel {
-    async fn invoke(&self, history: &History, callback: Option<LLMCallback>) -> Result<Response> {
-        let local_history = local_history::LocalModelHistory::from_history(history).await;
-        let stream = history.stream.unwrap_or(false);
+    async fn provider(&self) -> Result<flow_like_model_provider::llm::ModelConstructor> {
+        self.llm_model.provider().await
+    }
 
-        let request = self
-            .client
-            .post(format!(
-                "http://localhost:{}/v1/chat/completions",
-                self.port
-            ))
-            .json(&local_history);
-
-        if !stream {
-            let response = request.send().await?;
-            let response = response.json::<Response>().await?;
-            return Ok(response);
-        }
-        let mut stream = request.eventsource()?;
-
-        let mut output = Response::default();
-
-        while let Some(event) = stream.next().await {
-            if let Ok(Event::Message(event)) = event {
-                let data = &event.data;
-                if data == "[DONE]" {
-                    break;
-                }
-                let chunk: ResponseChunk = match flow_like_types::json::from_str(data) {
-                    Ok(chunk) => chunk,
-                    Err(e) => {
-                        eprintln!("Failed to parse chunk: {}", e);
-                        continue;
-                    }
-                };
-                output.push_chunk(chunk.clone());
-                if let Some(callback) = &callback {
-                    callback(chunk).await?;
-                }
-            }
-        }
-
-        stream.close();
-
-        Ok(output)
+    async fn default_model(&self) -> Option<String> {
+        self.llm_model.default_model().await
     }
 }
 
@@ -111,7 +61,7 @@ impl LocalModel {
 
     pub async fn new(
         bit: &Bit,
-        app_state: Arc<TokioMutex<FlowLikeState>>,
+        app_state: Arc<FlowLikeState>,
         execution_settings: &ExecutionSettings,
     ) -> flow_like_types::Result<LocalModel> {
         let bit_store = FlowLikeState::bit_store(&app_state).await?;
@@ -125,15 +75,13 @@ impl LocalModel {
             .to_path(&bit_store)
             .ok_or(flow_like_types::anyhow!("No model path"))?;
         let pack = bit.pack(app_state.clone()).await?;
-        pack.download(app_state, None).await?;
+        ensure_local_weights(&pack, &app_state, bit.id.as_str(), "local model").await?;
 
         let projection_bit = pack
             .bits
             .iter()
             .find(|b| b.bit_type == BitTypes::Projection);
         let projection_bit = projection_bit.cloned();
-        let mut current_dir = std::env::current_exe().unwrap();
-        current_dir.pop();
 
         let child_handle = Arc::new(Mutex::new(None));
         let child_handle_clone: Arc<Mutex<Option<Child>>> = Arc::clone(&child_handle);
@@ -166,6 +114,7 @@ impl LocalModel {
                 "--port",
                 &port,
                 "--no-webui",
+                "--jinja",
             ];
 
             let mut gpu_layer = 0;
@@ -237,11 +186,23 @@ impl LocalModel {
             }
         }
 
+        if !loaded {
+            return Err(flow_like_types::anyhow!(
+                "Failed to start local model server"
+            ));
+        }
+
+        let provider = bit
+            .try_to_provider()
+            .ok_or_else(|| flow_like_types::anyhow!("Failed to get provider from bit"))?;
+
+        let llm_model = LlamaCppModel::new(&provider, port).await?;
+
         Ok(LocalModel {
-            client: reqwest::Client::new(),
             bit: bit.clone(),
             handle: child_handle,
             thread_handle,
+            llm_model: Arc::new(llm_model),
             port,
         })
     }

@@ -1,4 +1,4 @@
-use flow_like_types::{async_trait, sync::Mutex};
+use flow_like_types::async_trait;
 use schemars::JsonSchema;
 use std::sync::Arc;
 
@@ -80,7 +80,7 @@ impl Command for MoveNodeCommand {
     async fn execute(
         &mut self,
         board: &mut Board,
-        _: Arc<Mutex<FlowLikeState>>,
+        _: Arc<FlowLikeState>,
     ) -> flow_like_types::Result<()> {
         if self.node_id.ends_with("-input") {
             let id = self.node_id.trim_end_matches("-input").to_string();
@@ -88,6 +88,7 @@ impl Command for MoveNodeCommand {
                 flow_like_types::anyhow!(format!("Layer with id {} not found", id))
             })?;
 
+            self.from_coordinates = layer.in_coordinates;
             layer.in_coordinates = Some(self.to_coordinates);
             return Ok(());
         }
@@ -98,6 +99,7 @@ impl Command for MoveNodeCommand {
                 flow_like_types::anyhow!(format!("Layer with id {} not found", id))
             })?;
 
+            self.from_coordinates = layer.out_coordinates;
             layer.out_coordinates = Some(self.to_coordinates);
             return Ok(());
         }
@@ -160,8 +162,24 @@ impl Command for MoveNodeCommand {
     async fn undo(
         &mut self,
         board: &mut Board,
-        _: Arc<Mutex<FlowLikeState>>,
+        _: Arc<FlowLikeState>,
     ) -> flow_like_types::Result<()> {
+        if self.node_id.ends_with("-input") {
+            let id = self.node_id.trim_end_matches("-input").to_string();
+            if let Some(layer) = board.layers.get_mut(&id) {
+                layer.in_coordinates = self.from_coordinates;
+            }
+            return Ok(());
+        }
+
+        if self.node_id.ends_with("-return") {
+            let id = self.node_id.trim_end_matches("-return").to_string();
+            if let Some(layer) = board.layers.get_mut(&id) {
+                layer.out_coordinates = self.from_coordinates;
+            }
+            return Ok(());
+        }
+
         if let Some(layer) = board.layers.get_mut(&self.node_id) {
             if let Some(from_coordinates) = self.from_coordinates {
                 layer.coordinates = from_coordinates;

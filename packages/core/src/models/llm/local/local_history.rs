@@ -92,6 +92,7 @@ async fn parse_messages(history: &History) -> Vec<HistoryMessage> {
             name: None,
             tool_call_id: None,
             tool_calls: None,
+            annotations: None,
         });
     }
     messages

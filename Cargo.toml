@@ -3,39 +3,79 @@ resolver = "2"
 members = [
     "apps/desktop/src-tauri",
     "apps/backend/local/api",
+    "apps/backend/local/runtime",
     "apps/schema-gen",
-    "apps/benchmark",
-    "apps/backend/aws/runtime",
-    "apps/backend/aws/runtime-async",
     "apps/backend/aws/api",
+    "apps/backend/aws/executor",
+    "apps/backend/aws/executor-async",
+    "apps/backend/aws/event-bridge",
     "apps/backend/aws/media-transformer",
     "apps/backend/aws/file-tracker",
+    "apps/backend/kubernetes/api",
+    "apps/backend/kubernetes/executor",
+    "apps/backend/kubernetes/sink-trigger",
+    "apps/backend/docker-compose/api",
+    "apps/backend/docker-compose/runtime",
+    "apps/backend/docker-compose/sink-services",
     "packages/core",
     "packages/model-provider",
     "packages/bits",
     "packages/types",
     "packages/catalog",
+    "packages/catalog/core",
+    "packages/catalog/std",
+    "packages/catalog/data",
+    "packages/catalog/web",
+    "packages/catalog/media",
+    "packages/catalog/ml",
+    "packages/catalog/onnx",
+    "packages/catalog/llm",
+    "packages/catalog/processing",
+    "packages/catalog/geo",
+    "packages/catalog-macros",
     "packages/storage",
     "packages/api",
+    "packages/sinks",
+    "packages/executor",
+    "packages/wasm",
     "apps/utils/board-decoder",
 ]
 
 [workspace.dependencies]
 flow-like = { path = "packages/core" }
 flow-like-types = { path = "packages/types" }
-flow-like-api = { path = "packages/api" }
+flow-like-api = { path = "packages/api", default-features = false }
 flow-like-model-provider = { path = "packages/model-provider" }
 flow-like-bits = { path = "packages/bits" }
 flow-like-catalog = { path = "packages/catalog" }
+flow-like-catalog-core = { path = "packages/catalog/core" }
+flow-like-catalog-std = { path = "packages/catalog/std" }
+flow-like-catalog-data = { path = "packages/catalog/data" }
+flow-like-catalog-web = { path = "packages/catalog/web" }
+flow-like-catalog-media = { path = "packages/catalog/media" }
+flow-like-catalog-ml = { path = "packages/catalog/ml" }
+flow-like-catalog-onnx = { path = "packages/catalog/onnx" }
+flow-like-catalog-llm = { path = "packages/catalog/llm" }
+flow-like-catalog-processing = { path = "packages/catalog/processing" }
+flow-like-catalog-geo = { path = "packages/catalog/geo" }
+flow-like-catalog-macros = { path = "packages/catalog-macros" }
 flow-like-storage = { path = "packages/storage" }
+flow-like-sinks = { path = "packages/sinks" }
+flow-like-executor = { path = "packages/executor" }
+flow-like-wasm = { path = "packages/wasm" }
 lambda_http = "0.15.1"
 futures = "0.3.31"
+bytes = "1.10.1"
 serde = { version = "1.0.219", features = ["derive", "rc"] }
 serde_json = "1.0.134"
-schemars = "0.8.22"
-chrono = "0.4.41"
+schemars = {version="1.1.0", features = ["preserve_order"]}
+chrono = {version="0.4.41", features = ["serde"]}
+chrono-tz = "0.10.4"
+icalendar = "0.17.4"
+uuid = { version = "1.19.0", features = ["v4", "serde"] }
+iana-time-zone = "0.1.64"
 axum = {version="0.8.4", features=["http2", "multipart"]}
-sea-orm = { version = "1.1.15", features = [ "sqlx-mysql", "sqlx-postgres", "sqlx-sqlite", "runtime-tokio-native-tls", "macros", "with-json", "seaography" ] }
+sea-orm = { version = "1.1.17", features = ["sqlx-postgres", "runtime-tokio-rustls", "macros", "with-json", "seaography" ] }
 tower = "0.5.2"
 tracing-subscriber = "0.3.19"
 dotenv = "0.15.0"
@@ -43,30 +83,67 @@ jsonwebtoken = "9.3.0"
 hyper = {version = "1.5.2", features = ["full", "client"]}
 hyper-util = {version = "0.1.10", features = ["full"]}
 tracing = "0.1.41"
-sentry-tracing = "0.42.0"
-sentry = "0.42.0"
+sentry-tracing = "0.45.0"
+sentry = { version = "0.45.0", default-features = false, features = ["backtrace", "contexts", "debug-images", "panic", "release-health", "reqwest", "rustls", "tokio"] }
 sentry-tower = { version = "0.38.1", features = ["axum", "axum-matched-path"] }
 tower-http = {version="0.6.6", features = ["full"]}
 async-stripe = {version="0.41.0", features = ["runtime-tokio-hyper"]}
 futures-util = "0.3.31"
-moka = { version = "0.12.10", features = ["sync"] }
+moka = { version = "0.12.11", features = ["sync"] }
 bitflags = "2.9.4"
 blake3 = "1.8.2"
 lambda_runtime = "0.14.2"
-aws-config = "1.8.3"
+aws-config = "1.8.8"
 aws-sdk-dynamodb = "1.80.0"
+aws-sdk-lambda = "1.88.0"
 aws-sdk-s3 = "1.93.0"
+aws-sdk-sesv2 = "1.85.0"
+aws-sdk-sqs = "1.63.0"
+aws-sdk-sts = "1.88.0"
+aws_lambda_events = "1.0.3"
 tokio = {version="1.47.1"}
 urlencoding = "2.1.3"
 image = "0.25.6"
 imageproc = "0.25.0"
-webp = "0.3.0"
-aws-sdk-sts = "1.80.0"
+webp = "0.3.1"
 ahash = "0.8.12"
 base64 = "0.22.1"
+metrics = "0.24"
+metrics-exporter-prometheus = "0.16"
+opentelemetry = "0.27"
+opentelemetry_sdk = { version = "0.27", features = ["rt-tokio"] }
+opentelemetry-otlp = { version = "0.27", features = ["tonic"] }
+tracing-opentelemetry = "0.28"
 ndarray = "0.16.1"
 dirs-next = "2.0.0"
-regex = "1.11.2"
+regex = "1.11.3"
+rig-core = {version="0.29.0", default-features = false, features = ["rmcp", "reqwest-rustls"]}
+copilot-sdk = { git = "https://github.com/copilot-community-sdk/copilot-sdk-rust.git" }
+async-trait = "0.1.89"
+jsonschema = "0.33.0"
+rmcp = {version="0.13.0", features = ["auth", "client", "client-side-sse","macros","transport-streamable-http-client-reqwest","transport-streamable-http-server"]}
+thiserror = "2.0.17"
+mimalloc = { version = "0.1.48", default-features = false }
+lettre = { version = "0.11.17", features = ["tokio1-rustls-tls"] }
+reqwest = { version = "0.12.15", default-features = false, features = ["json", "rustls-tls"] }
+markitdown = { git = "https://github.com/TM9657/markitdown-rs.git", rev = "a586b0d", default-features = false, features = ["rustls-tls"] }
+kube = { version = "0.98", features = ["runtime", "derive"] }
+k8s-openapi = { version = "0.24", features = ["v1_32"] }
+percent-encoding = "2.3.2"
+# Force flate2 to use pure Rust backend (no C zlib) for iOS compatibility
+flate2 = { version = "1.1", default-features = false, features = ["rust_backend"] }
 
+# Patch esaxx-rs to fix Windows CRT mismatch (upstream hardcodes static CRT /MT,
+# conflicting with ort_sys which uses dynamic CRT /MD → LNK2038)
+[patch.crates-io]
+esaxx-rs = { git = "https://github.com/thewh1teagle/esaxx-rs.git", branch = "feat/dynamic-msvc-link" }
+
+# Use line-tables-only debug info and strip debuginfo to keep .so under 4GB for Android APK ZIP32 limit
 [profile.dev]
-split-debuginfo = "unpacked"
+debug = 1
+strip = "debuginfo"
+incremental = true
+
+[profile.dev.package."*"]
+opt-level = 1
+

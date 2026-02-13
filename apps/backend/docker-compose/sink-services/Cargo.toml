@@ -1,0 +1,47 @@
+[package]
+name = "docker-compose-sink-services"
+version = "0.1.0"
+edition = "2021"
+description = "Flow-Like Docker Compose Sink Services (Cron, Discord, Telegram)"
+
+[dependencies]
+tokio = { version = "1", features = ["full", "signal"] }
+tokio-cron-scheduler = "0.13"
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+cron = "0.15"
+uuid = { version = "1", features = ["v4"] }
+chrono = { version = "0.4", features = ["serde"] }
+redis = { version = "0.27", features = ["tokio-comp", "connection-manager"] }
+async-trait = "0.1"
+# Discord bot
+serenity = { version = "0.12", default-features = false, features = [
+    "client",
+    "gateway",
+    "model",
+    "rustls_backend",
+], optional = true }
+# Telegram bot
+teloxide = { version = "0.13", default-features = false, features = [
+    "rustls",
+    "macros",
+    "ctrlc_handler",
+], optional = true }
+futures = "0.3"
+
+[features]
+default = []
+discord = ["serenity"]
+telegram = ["teloxide"]
+full = ["discord", "telegram"]
+
+[profile.release]
+opt-level = "z"
+lto = true
+codegen-units = 1
+panic = "abort"
+strip = true
+debug = false

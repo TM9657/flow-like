@@ -2,15 +2,19 @@ use flow_like::{
     flow_like_storage::object_store::ObjectStore, state::FlowLikeState, utils::http::HTTPClient,
 };
 use flow_like_types::sync::Mutex;
+use flow_like_wasm::client::RegistryClient;
 use std::sync::Arc;
 use tauri::{AppHandle, Manager};
 
-use crate::{profile::UserProfile, settings::Settings};
+#[cfg(desktop)]
+use crate::tray::TrayRuntimeState;
+use crate::{event_bus::EventBus, profile::UserProfile, settings::Settings};
 
-pub struct TauriFlowLikeState(pub Arc<Mutex<FlowLikeState>>);
+#[derive(Clone)]
+pub struct TauriFlowLikeState(pub Arc<FlowLikeState>);
 impl TauriFlowLikeState {
     #[inline]
-    pub async fn construct(app_handle: &AppHandle) -> anyhow::Result<Arc<Mutex<FlowLikeState>>> {
+    pub async fn construct(app_handle: &AppHandle) -> anyhow::Result<Arc<FlowLikeState>> {
         app_handle
             .try_state::<TauriFlowLikeState>()
             .map(|state| state.0.clone())
@@ -20,7 +24,7 @@ impl TauriFlowLikeState {
     #[inline]
     pub async fn http_client(app_handle: &AppHandle) -> anyhow::Result<Arc<HTTPClient>> {
         let flow_like_state = TauriFlowLikeState::construct(app_handle).await?;
-        let http_client = flow_like_state.lock().await.http_client.clone();
+        let http_client = flow_like_state.http_client.clone();
         Ok(http_client)
     }
 
@@ -30,8 +34,6 @@ impl TauriFlowLikeState {
     ) -> anyhow::Result<Arc<dyn ObjectStore>> {
         let flow_like_state = TauriFlowLikeState::construct(app_handle).await?;
         let project_store = flow_like_state
-            .lock()
-            .await
             .config
             .read()
             .await
@@ -49,8 +51,6 @@ impl TauriFlowLikeState {
     ) -> anyhow::Result<Arc<dyn ObjectStore>> {
         let flow_like_state = TauriFlowLikeState::construct(app_handle).await?;
         let project_store = flow_like_state
-            .lock()
-            .await
             .config
             .read()
             .await
@@ -81,3 +81,52 @@ impl TauriSettingsState {
         Ok(current_profile)
     }
 }
+
+pub struct TauriEventBusState(pub Arc<EventBus>);
+impl TauriEventBusState {
+    #[inline]
+    pub fn construct(app_handle: &AppHandle) -> anyhow::Result<Arc<EventBus>> {
+        app_handle
+            .try_state::<TauriEventBusState>()
+            .map(|state| state.0.clone())
+            .ok_or_else(|| anyhow::anyhow!("EventBus State not found"))
+    }
+}
+
+pub struct TauriEventSinkManagerState(pub Arc<Mutex<crate::event_sink::EventSinkManager>>);
+impl TauriEventSinkManagerState {
+    #[inline]
+    pub async fn construct(
+        app_handle: &AppHandle,
+    ) -> anyhow::Result<Arc<Mutex<crate::event_sink::EventSinkManager>>> {
+        app_handle
+            .try_state::<TauriEventSinkManagerState>()
+            .map(|state| state.0.clone())
+            .ok_or_else(|| anyhow::anyhow!("EventSinkManager State not found"))
+    }
+}
+
+pub struct TauriRegistryState(pub Arc<Mutex<Option<RegistryClient>>>);
+impl TauriRegistryState {
+    #[inline]
+    pub async fn construct(
+        app_handle: &AppHandle,
+    ) -> anyhow::Result<Arc<Mutex<Option<RegistryClient>>>> {
+        app_handle
+            .try_state::<TauriRegistryState>()
+            .map(|state| state.0.clone())
+            .ok_or_else(|| anyhow::anyhow!("Registry State not found"))
+    }
+
+    #[inline]
+    pub async fn get_client(app_handle: &AppHandle) -> anyhow::Result<RegistryClient> {
+        let state: Arc<Mutex<Option<RegistryClient>>> = Self::construct(app_handle).await?;
+        let guard = state.lock().await;
+        guard
+            .clone()
+            .ok_or_else(|| anyhow::anyhow!("Registry client not initialized"))
+    }
+}
+
+#[cfg(desktop)]
+pub struct TauriTrayState(pub Arc<Mutex<TrayRuntimeState>>);

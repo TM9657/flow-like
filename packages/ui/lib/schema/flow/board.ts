@@ -5,6 +5,7 @@ export interface IBoard {
 	id: string;
 	layers: { [key: string]: ILayer };
 	log_level: ILogLevel;
+	execution_mode: IExecutionMode;
 	name: string;
 	nodes: { [key: string]: INode };
 	refs: { [key: string]: string };
@@ -13,6 +14,7 @@ export interface IBoard {
 	variables: { [key: string]: IVariable };
 	version: number[];
 	viewport: number[];
+	page_ids: string[];
 	[property: string]: any;
 }
 
@@ -82,6 +84,8 @@ export interface INode {
 	pins: { [key: string]: IPin };
 	scores?: null | INodeScores;
 	start?: boolean | null;
+	/** Schema version for node migration. When catalog version > placed version, pins are synced. */
+	version?: number | null;
 	[property: string]: any;
 }
 
@@ -138,19 +142,24 @@ export enum IValueType {
 }
 
 /**
- * Represents quality metrics for a node, with scores ranging from 0 to 10. Higher scores
- * indicate worse performance in each category.
+ * Represents quality metrics for a node. Scores range from 0 to 10 (low - high).
+ * A higher score indicates a larger issue or resource impact in the category.
  *
- * # Score Categories * `privacy` - Measures data protection and confidentiality level *
- * `security` - Assesses resistance against potential attacks * `performance` - Evaluates
- * computational efficiency and speed * `governance` - Indicates compliance with policies
- * and regulations
+ * Score Categories:
+ * - `privacy` — Data protection and confidentiality (0 low - 10 high)
+ * - `security` — Resistance to attack and exposure
+ * - `performance` — Computational cost / latency (higher is worse)
+ * - `governance` — Compliance and auditability
+ * - `reliability` — Stability, error rates and recoverability
+ * - `cost` — Resource / financial impact of running this node
  */
 export interface INodeScores {
 	governance: number;
 	performance: number;
 	privacy: number;
 	security: number;
+	reliability: number;
+	cost: number;
 	[property: string]: any;
 }
 
@@ -170,6 +179,7 @@ export interface IVariable {
 	hash?: number | null;
 	id: string;
 	name: string;
+	schema?: null | string;
 	secret: boolean;
 	value_type: IValueType;
 	[property: string]: any;
@@ -189,4 +199,10 @@ export enum IExecutionStage {
 	PreProd = "PreProd",
 	Prod = "Prod",
 	QA = "QA",
+}
+
+export enum IExecutionMode {
+	Hybrid = "Hybrid",
+	Remote = "Remote",
+	Local = "Local",
 }

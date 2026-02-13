@@ -1,0 +1,28 @@
+[package]
+name = "local-runtime"
+version = "0.1.0"
+edition = "2021"
+description = "Flow-Like Local Development Execution Runtime"
+
+[dependencies]
+flow-like.workspace = true
+flow-like-api = { workspace = true, features = ["kubernetes", "redis", "azure"] }
+flow-like-catalog = { workspace = true, features = ["execute"] }
+flow-like-executor = { workspace = true, features = ["all-execute"] }
+flow-like-storage.workspace = true
+mimalloc.workspace = true
+axum.workspace = true
+serde = { workspace = true, features = ["derive", "rc"] }
+serde_json.workspace = true
+tracing.workspace = true
+tracing-subscriber = { workspace = true, features = ["env-filter"] }
+tokio = { version = "1", features = ["full"] }
+dotenv.workspace = true
+
+[profile.release]
+opt-level = "z"
+lto = true
+codegen-units = 1
+panic = "abort"
+strip = true
+debug = false

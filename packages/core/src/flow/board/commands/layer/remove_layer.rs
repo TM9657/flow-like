@@ -1,5 +1,5 @@
 use flow_like_types::async_trait;
-use flow_like_types::sync::Mutex;
+
 use schemars::JsonSchema;
 use std::collections::HashSet;
 use std::sync::Arc;
@@ -42,7 +42,7 @@ impl Command for RemoveLayerCommand {
     async fn execute(
         &mut self,
         board: &mut Board,
-        _state: Arc<Mutex<FlowLikeState>>,
+        _state: Arc<FlowLikeState>,
     ) -> flow_like_types::Result<()> {
         if !self.preserve_nodes {
             // 1) Collect & remove the target layer + all nested children
@@ -116,7 +116,7 @@ impl Command for RemoveLayerCommand {
     async fn undo(
         &mut self,
         board: &mut Board,
-        _: Arc<Mutex<FlowLikeState>>,
+        _: Arc<FlowLikeState>,
     ) -> flow_like_types::Result<()> {
         // 1) Restore fully-removed layers
         for layer in &self.layers {

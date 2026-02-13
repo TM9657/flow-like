@@ -9,14 +9,30 @@ use axum::{
     extract::{Path, State},
 };
 use flow_like::flow::board::commands::GenericCommand;
-use flow_like_types::sync::Mutex;
 use serde::Deserialize;
+use utoipa::ToSchema;
 
-#[derive(Clone, Deserialize)]
+#[derive(Clone, Deserialize, ToSchema)]
 pub struct ExecuteCommandsBody {
+    #[schema(value_type = Vec<Object>)]
     pub commands: Vec<GenericCommand>,
 }
 
+#[utoipa::path(
+    post,
+    path = "/apps/{app_id}/board/{board_id}",
+    tag = "boards",
+    params(
+        ("app_id" = String, Path, description = "Application ID"),
+        ("board_id" = String, Path, description = "Board ID")
+    ),
+    request_body = ExecuteCommandsBody,
+    responses(
+        (status = 200, description = "Commands executed, returns resulting commands", body = Vec<Object>),
+        (status = 401, description = "Unauthorized"),
+        (status = 403, description = "Forbidden")
+    )
+)]
 #[tracing::instrument(
     name = "POST /apps/{app_id}/board/{board_id}",
     skip(state, user, params)
@@ -48,7 +64,7 @@ pub async fn execute_commands(
                 .await?
                 .to_state(state)
                 .await?;
-            Arc::new(Mutex::new(flow_state))
+            Arc::new(flow_state)
         }
     };
 

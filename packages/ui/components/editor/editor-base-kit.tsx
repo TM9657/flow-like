@@ -7,6 +7,7 @@ import { BaseCodeBlockKit } from "./plugins/code-block-base-kit";
 import { BaseColumnKit } from "./plugins/column-base-kit";
 import { BaseCommentKit } from "./plugins/comment-base-kit";
 import { BaseDateKit } from "./plugins/date-base-kit";
+import { BaseFocusNodeKit } from "./plugins/focus-node-base-kit";
 import { BaseFontKit } from "./plugins/font-base-kit";
 import { BaseLineHeightKit } from "./plugins/line-height-base-kit";
 import { BaseLinkKit } from "./plugins/link-base-kit";
@@ -19,6 +20,7 @@ import { BaseSuggestionKit } from "./plugins/suggestion-base-kit";
 import { BaseTableKit } from "./plugins/table-base-kit";
 import { BaseTocKit } from "./plugins/toc-base-kit";
 import { BaseToggleKit } from "./plugins/toggle-base-kit";
+import { BaseUserMentionKit } from "./plugins/user-mention-base-kit";
 
 export const BaseEditorKit = [
 	...BaseBasicBlocksKit,
@@ -33,6 +35,8 @@ export const BaseEditorKit = [
 	...BaseDateKit,
 	...BaseLinkKit,
 	...BaseMentionKit,
+	...BaseFocusNodeKit,
+	...BaseUserMentionKit,
 	...BaseBasicMarksKit,
 	...BaseFontKit,
 	...BaseListKit,

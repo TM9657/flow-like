@@ -4,13 +4,16 @@ use flow_like_model_provider::{
     embedding::{EmbeddingModelLogic, openai::OpenAIEmbeddingModel},
     image_embedding::ImageEmbeddingModelLogic,
 };
-use flow_like_types::sync::Mutex;
 
 use crate::{bit::Bit, state::FlowLikeState};
 
+#[cfg(feature = "local-ml")]
 use super::{
     embedding::local::LocalEmbeddingModel, image_embedding::local::LocalImageEmbeddingModel,
 };
+
+#[cfg(feature = "remote-ml")]
+use flow_like_model_provider::embedding::proxy::ProxyEmbeddingModel;
 
 pub struct EmbeddingFactory {
     pub cached_text_models: HashMap<String, Arc<dyn EmbeddingModelLogic>>,
@@ -36,9 +39,9 @@ impl EmbeddingFactory {
     pub async fn build_text(
         &mut self,
         bit: &Bit,
-        app_state: Arc<Mutex<FlowLikeState>>,
+        app_state: Arc<FlowLikeState>,
     ) -> flow_like_types::Result<Arc<dyn EmbeddingModelLogic>> {
-        let provider_config = app_state.lock().await.model_provider_config.clone();
+        let provider_config = app_state.model_provider_config.clone();
 
         let provider = bit
             .try_to_embedding_provider()
@@ -49,17 +52,27 @@ impl EmbeddingFactory {
         let provider_name = provider.provider_name;
 
         if provider_name == "Local" {
-            if let Some(model) = self.cached_text_models.get(&bit.id) {
-                // update last used time
+            #[cfg(feature = "local-ml")]
+            {
+                if let Some(model) = self.cached_text_models.get(&bit.id) {
+                    // update last used time
+                    self.ttl_list.insert(bit.id.clone(), SystemTime::now());
+                    return Ok(model.clone());
+                }
+
+                let local_model = LocalEmbeddingModel::new(bit, app_state).await?;
                 self.ttl_list.insert(bit.id.clone(), SystemTime::now());
-                return Ok(model.clone());
+                self.cached_text_models
+                    .insert(bit.id.clone(), local_model.clone());
+                return Ok(local_model);
             }
 
-            let local_model = LocalEmbeddingModel::new(bit, app_state).await?;
-            self.ttl_list.insert(bit.id.clone(), SystemTime::now());
-            self.cached_text_models
-                .insert(bit.id.clone(), local_model.clone());
-            return Ok(local_model);
+            #[cfg(not(feature = "local-ml"))]
+            {
+                return Err(flow_like_types::anyhow!(
+                    "Local models are not supported. Please enable the 'local-ml' feature."
+                ));
+            }
         }
 
         if provider_name == "openai" || provider_name == "azure" {
@@ -74,7 +87,7 @@ impl EmbeddingFactory {
     pub async fn build_image(
         &mut self,
         bit: &Bit,
-        app_state: Arc<Mutex<FlowLikeState>>,
+        app_state: Arc<FlowLikeState>,
     ) -> flow_like_types::Result<Arc<dyn ImageEmbeddingModelLogic>> {
         let provider = bit.try_to_image_embedding();
         if provider.is_none() {
@@ -85,19 +98,64 @@ impl EmbeddingFactory {
         let provider = provider.provider.provider_name;
 
         if provider == "Local" {
-            if let Some(model) = self.cached_image_models.get(&bit.id) {
-                self.ttl_list.insert(bit.id.clone(), SystemTime::now());
-                return Ok(model.clone());
-            }
+            #[cfg(feature = "local-ml")]
+            {
+                if let Some(model) = self.cached_image_models.get(&bit.id) {
+                    self.ttl_list.insert(bit.id.clone(), SystemTime::now());
+                    return Ok(model.clone());
+                }
 
-            let local_model = LocalImageEmbeddingModel::new(bit, app_state, self).await?;
-            self.ttl_list.insert(bit.id.clone(), SystemTime::now());
-            self.cached_image_models
-                .insert(bit.id.clone(), local_model.clone());
-            return Ok(local_model);
+                let local_model = LocalImageEmbeddingModel::new(bit, app_state, self).await?;
+                self.ttl_list.insert(bit.id.clone(), SystemTime::now());
+                self.cached_image_models
+                    .insert(bit.id.clone(), local_model.clone());
+                return Ok(local_model);
+            }
+            #[cfg(not(feature = "local-ml"))]
+            {
+                return Err(flow_like_types::anyhow!(
+                    "Local models are not supported. Please enable the 'local-ml' feature."
+                ));
+            }
         }
 
         Err(flow_like_types::anyhow!("Model type not supported"))
+    }
+
+    /// Build a text embedding model that proxies through the API
+    /// Used in executors (AWS Lambda, Kubernetes) where secrets are not available
+    #[cfg(feature = "remote-ml")]
+    pub async fn build_text_proxy(
+        &mut self,
+        bit: &Bit,
+        access_token: String,
+    ) -> flow_like_types::Result<Arc<dyn EmbeddingModelLogic>> {
+        let embedding_provider = bit
+            .try_to_embedding()
+            .ok_or(flow_like_types::anyhow!("Model type not supported"))?;
+
+        // Check if the model supports remote execution
+        if !embedding_provider.supports_remote() {
+            return Err(flow_like_types::anyhow!(
+                "Model does not support remote execution"
+            ));
+        }
+
+        // Check cache first
+        let cache_key = format!("{}_proxy", bit.id);
+        if let Some(model) = self.cached_text_models.get(&cache_key) {
+            self.ttl_list.insert(cache_key.clone(), SystemTime::now());
+            return Ok(model.clone());
+        }
+
+        let proxy_model =
+            ProxyEmbeddingModel::new(embedding_provider, bit.id.clone(), access_token);
+        let model: Arc<dyn EmbeddingModelLogic> = Arc::new(proxy_model);
+
+        self.ttl_list.insert(cache_key.clone(), SystemTime::now());
+        self.cached_text_models.insert(cache_key, model.clone());
+
+        Ok(model)
     }
 
     pub fn gc(&mut self) {

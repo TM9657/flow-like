@@ -1,141 +1,558 @@
+mod deeplink;
+mod event_bus;
+mod event_sink;
 mod functions;
 mod profile;
 mod settings;
 mod state;
+#[cfg(desktop)]
+mod tray;
 pub mod utils;
+
+// Stub for tray_update_state on non-desktop platforms
+#[cfg(not(desktop))]
+#[tauri::command]
+async fn tray_update_state() -> Result<(), String> {
+    Ok(())
+}
+
 use flow_like::{
+    flow::node::NodeLogic,
     flow_like_storage::{
         Path,
         files::store::{FlowLikeStore, local_store::LocalObjectStore},
         lancedb,
     },
+    hub::Hub,
     state::{FlowLikeConfig, FlowLikeState},
     utils::http::HTTPClient,
 };
+use flow_like_catalog::{get_catalog, initialize as initialize_catalog};
 use flow_like_types::{sync::Mutex, tokio::time::interval};
-use serde_json::json;
 use settings::Settings;
 use state::TauriFlowLikeState;
-use tauri_plugin_updater::UpdaterExt;
 use std::{sync::Arc, time::Duration};
-use tauri::{window::{ProgressBarState, ProgressBarStatus}, AppHandle, Manager};
-use tauri_plugin_deep_link::{DeepLinkExt, OpenUrlEvent};
+use tauri::{AppHandle, Manager};
+use tauri_plugin_deep_link::DeepLinkExt;
+#[cfg(desktop)]
+use tauri_plugin_updater::UpdaterExt;
 
 #[cfg(not(debug_assertions))]
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
+use crate::{deeplink::handle_deep_link, event_bus::EventBus};
+
+#[cfg(target_os = "macos")]
+fn disable_app_nap() {
+    macos_app_nap::prevent();
+}
+
+#[cfg(not(target_os = "macos"))]
+fn disable_app_nap() {}
+
+/// Disable the WKWebView scroll view's automatic content inset adjustment.
+/// Without this, iOS adds a system-level content inset on top of our CSS
+/// `env(safe-area-inset-*)` padding, causing double safe-area offsets.
+///
+/// IMPORTANT: Must NEVER be called synchronously during `setup` — the
+/// WKWebView is not fully initialised at that point and `with_webview`
+/// will crash. Only call from the delayed retry loop (≥100 ms).
+#[cfg(target_os = "ios")]
+fn harden_ios_webview_scroll(window: &tauri::WebviewWindow) {
+    if let Err(err) = window.with_webview(|webview| {
+        unsafe {
+            use objc2::runtime::AnyObject;
+
+            let wk_webview: *mut AnyObject = webview.inner().cast();
+            if wk_webview.is_null() {
+                return;
+            }
+
+            let scroll_view: *mut AnyObject = objc2::msg_send![wk_webview, scrollView];
+            if scroll_view.is_null() {
+                return;
+            }
+
+            // Disable rubber-band overscroll and force no automatic inset adjustment.
+            let _: () = objc2::msg_send![scroll_view, setBounces: false];
+            let _: () = objc2::msg_send![scroll_view, setAlwaysBounceVertical: false];
+            let _: () = objc2::msg_send![scroll_view, setAlwaysBounceHorizontal: false];
+            // UIScrollViewContentInsetAdjustmentNever = 2
+            let _: () = objc2::msg_send![scroll_view, setContentInsetAdjustmentBehavior: 2isize];
+        }
+    }) {
+        tracing::warn!("Failed to apply iOS webview scroll hardening: {}", err);
+    }
+}
+
+/// JS snippet that probes CSS env(safe-area-inset-*) and applies the values
+/// as CSS custom properties. Also re-syncs `--fl-mobile-vvh` so the body
+/// height is correct after `harden_ios_webview_scroll` changes the scroll
+/// view's content inset adjustment (which affects `visualViewport.height`).
+#[cfg(target_os = "ios")]
+const IOS_SAFE_AREA_JS: &str = concat!(
+    "(function(){",
+    "var d=document.documentElement;",
+    "var p=document.createElement('div');",
+    "p.style.cssText='position:fixed;left:-9999px;top:0;width:1px;height:1px;",
+    "padding-top:env(safe-area-inset-top,0px);",
+    "padding-bottom:env(safe-area-inset-bottom,0px);",
+    "visibility:hidden;pointer-events:none';",
+    "(document.body||d).appendChild(p);",
+    "var cs=getComputedStyle(p);",
+    "var t=Math.round(parseFloat(cs.paddingTop)||0);",
+    "var b=Math.round(parseFloat(cs.paddingBottom)||0);",
+    "p.remove();",
+    "t=Math.max(t,window.__FL_NATIVE_SAFE_TOP||0);",
+    "b=Math.max(b,window.__FL_NATIVE_SAFE_BOTTOM||0);",
+    "if(t>0||b>0){",
+    "d.style.setProperty('--fl-native-safe-top',t+'px');",
+    "d.style.setProperty('--fl-native-safe-bottom',b+'px');",
+    "window.__FL_NATIVE_SAFE_TOP=t;",
+    "window.__FL_NATIVE_SAFE_BOTTOM=b;",
+    "}",
+    "var vvh=Math.round((window.visualViewport?window.visualViewport.height:0)||window.innerHeight);",
+    "if(vvh>0)d.style.setProperty('--fl-mobile-vvh',vvh+'px');",
+    "})();"
+);
+
+// --- iOS Release logging -----------------------------------------------------
+#[cfg(all(target_os = "ios", not(debug_assertions)))]
+mod ios_release_logging {
+    use tracing_subscriber::{
+        EnvFilter, filter::LevelFilter, layer::SubscriberExt, util::SubscriberInitExt,
+    };
+
+    pub fn init() {
+        use std::sync::OnceLock;
+        use tracing_subscriber::{EnvFilter, layer::SubscriberExt, util::SubscriberInitExt};
+        static INIT_GUARD: OnceLock<()> = OnceLock::new();
+
+        // If we've already run (or someone else set a global subscriber), bail quietly.
+        if INIT_GUARD.set(()).is_err() {
+            return;
+        }
+
+        // Prefer Apple unified logging so you can see everything in Console.app
+        let oslog = tracing_oslog::OsLogger::new("com.flow-like.app", "default");
+
+        // Keep third-party noise down; raise your own crate(s). Never panic on parse errors.
+        let builder = EnvFilter::builder().with_default_directive(LevelFilter::INFO.into());
+        let mut filter = builder.from_env_lossy();
+        for d in [
+            "tao=warn",
+            "wry=warn",
+            "tauri=info",
+            "flow_like=info",
+            "flow_like_types=info",
+        ] {
+            if let Ok(dir) = d.parse() {
+                filter = filter.add_directive(dir);
+            }
+        }
+
+        // Don't panic if a global subscriber is already installed.
+        let _ = tracing_subscriber::registry()
+            .with(filter)
+            .with(oslog)
+            .try_init(); // <- returns Err if someone else initialized first; we ignore it.
+    }
+}
+
+// On iOS Release, map println!/eprintln! to tracing so we never hit stdio.
+#[cfg(all(target_os = "ios", not(debug_assertions)))]
+macro_rules! println { ($($t:tt)*) => { tracing::info!($($t)*); } }
+#[cfg(all(target_os = "ios", not(debug_assertions)))]
+macro_rules! eprintln { ($($t:tt)*) => { tracing::error!($($t)*); } }
+// ---------------------------------------------------------------------------
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
+#[allow(clippy::too_many_lines, clippy::cognitive_complexity)]
 pub fn run() {
+    // Ensure panics are logged with backtraces in release too.
+    std::panic::set_hook(Box::new(|info| {
+        if let Some(location) = info.location() {
+            tracing::error!(
+                target: "panic",
+                message = %info,
+                file = location.file(),
+                line = location.line(),
+                "Application panic"
+            );
+        } else {
+            tracing::error!(target: "panic", message = %info, "Application panic (no location)");
+        }
+
+        {
+            let _ = sentry::capture_message(&format!("panic: {info}"), sentry::Level::Fatal);
+        }
+    }));
+    #[cfg(all(target_os = "ios", not(debug_assertions)))]
+    ios_release_logging::init();
+    disable_app_nap();
+
+    // On Android, HOME & CACHE_DIR are set by MainActivity.kt before the
+    // native runtime starts.  The block below acts as a safety net in case
+    // Kotlin's Os.setenv did not execute (e.g. running tests without the Activity).
+    #[cfg(target_os = "android")]
+    {
+        if let Some(home) = std::env::var_os("HOME") {
+            let home_path = std::path::PathBuf::from(&home);
+            println!("Android HOME: {:?}", home_path);
+
+            // Only set CACHE_DIR if Kotlin didn't already set it.
+            if std::env::var_os("CACHE_DIR").is_none() {
+                let cache_parent = home_path.join(".cache");
+                let _ = std::fs::create_dir_all(&cache_parent);
+                // SAFETY: called once at startup before any threads access CACHE_DIR.
+                unsafe {
+                    std::env::set_var("CACHE_DIR", cache_parent.to_string_lossy().as_ref());
+                }
+            }
+
+            // Ensure TMPDIR lives under filesDir so rename() across temp→data
+            // stays on the same filesystem / SELinux context (required by LanceDB).
+            if std::env::var_os("TMPDIR").is_none() {
+                let tmp_dir = home_path.join("tmp");
+                let _ = std::fs::create_dir_all(&tmp_dir);
+                // SAFETY: called once at startup before any threads access TMPDIR.
+                unsafe {
+                    std::env::set_var("TMPDIR", tmp_dir.to_string_lossy().as_ref());
+                }
+            }
+        } else {
+            eprintln!("Android: HOME is NOT set — storage paths will likely fail");
+        }
+
+        println!("Android CACHE_DIR: {:?}", std::env::var_os("CACHE_DIR"));
+        println!("Android TMPDIR: {:?}", std::env::var_os("TMPDIR"));
+        println!("Android LANCE_CACHE_DIR: {:?}", std::env::var_os("LANCE_CACHE_DIR"));
+        let root = settings::mobile_storage_root();
+        println!("Android mobile_storage_root: {:?}", root);
+        let _ = settings::ensure_app_dirs();
+    }
+
+    // Initialize catalog runtime (ONNX execution providers, etc.)
+    initialize_catalog();
+
     let mut settings_state = Settings::new();
     let project_dir = settings_state.project_dir.clone();
     let logs_dir = settings_state.logs_dir.clone();
     let temporary_dir = settings_state.temporary_dir.clone();
 
     let mut config: FlowLikeConfig = FlowLikeConfig::new();
-    config.register_bits_store(FlowLikeStore::Local(Arc::new(
-        LocalObjectStore::new(settings_state.bit_dir.clone()).unwrap(),
-    )));
 
-    config.register_user_store(FlowLikeStore::Local(Arc::new(
-        LocalObjectStore::new(settings_state.user_dir.clone()).unwrap(),
-    )));
+    // Helper to build a store with a safe fallback to in-memory on failure (prevents startup crashes on mobile)
+    let build_store = |path: std::path::PathBuf| -> FlowLikeStore {
+        println!("build_store: attempting path {:?}", path);
+        match LocalObjectStore::new(path.clone()) {
+            Ok(store) => {
+                println!("build_store: success for {:?}", path);
+                FlowLikeStore::Local(Arc::new(store))
+            }
+            Err(e) => {
+                eprintln!(
+                    "Failed to init LocalObjectStore at {:?}: {:?}. Attempting to create dir...",
+                    path, e
+                );
+                let _ = std::fs::create_dir_all(&path);
+                match LocalObjectStore::new(path.clone()) {
+                    Ok(store) => {
+                        println!("build_store: success on retry for {:?}", path);
+                        FlowLikeStore::Local(Arc::new(store))
+                    }
+                    Err(err) => {
+                        eprintln!(
+                            "Re-initialization failed for {:?}: {:?}. Falling back to in-memory store.",
+                            path, err
+                        );
+                        FlowLikeStore::Memory(Arc::new(
+                            flow_like::flow_like_storage::object_store::memory::InMemory::new(),
+                        ))
+                    }
+                }
+            }
+        }
+    };
 
-    config.register_app_storage_store(FlowLikeStore::Local(Arc::new(
-        LocalObjectStore::new(project_dir.clone()).unwrap(),
-    )));
+    config.register_bits_store(build_store(settings_state.bit_dir.clone()));
 
-    config.register_app_meta_store(FlowLikeStore::Local(Arc::new(
-        LocalObjectStore::new(project_dir.clone()).unwrap(),
-    )));
+    let user_dir = settings_state.user_dir.clone();
+    config.register_user_store(build_store(settings_state.user_dir.clone()));
 
-    config.register_log_store(FlowLikeStore::Local(Arc::new(
-        LocalObjectStore::new(logs_dir.clone()).unwrap(),
-    )));
+    config.register_app_storage_store(build_store(project_dir.clone()));
 
-    config.register_temporary_store(FlowLikeStore::Local(Arc::new(
-        LocalObjectStore::new(temporary_dir.clone()).unwrap(),
-    )));
+    config.register_app_meta_store(build_store(project_dir.clone()));
+
+    config.register_log_store(build_store(logs_dir.clone()));
+
+    config.register_temporary_store(build_store(temporary_dir.clone()));
 
     config.register_build_project_database(Arc::new(move |path: Path| {
         let directory = project_dir.join(path.to_string());
-        lancedb::connect(directory.to_str().unwrap())
+        let _ = std::fs::create_dir_all(&directory);
+        lancedb::connect(directory.to_string_lossy().as_ref())
+    }));
+
+    config.register_build_user_database(Arc::new(move |path: Path| {
+        let directory = user_dir.join(path.to_string());
+        let _ = std::fs::create_dir_all(&directory);
+        lancedb::connect(directory.to_string_lossy().as_ref())
     }));
 
     config.register_build_logs_database(Arc::new(move |path: Path| {
         let directory = logs_dir.join(path.to_string());
-        lancedb::connect(directory.to_str().unwrap())
+        let _ = std::fs::create_dir_all(&directory);
+        lancedb::connect(directory.to_string_lossy().as_ref())
     }));
+
+    // On Android, use a custom ObjectStore wrapper to avoid hard_link() which fails on Android SELinux
+    #[cfg(target_os = "android")]
+    config.register_lance_write_options(flow_like::flow_like_storage::android_store::android_write_options());
 
     settings_state.set_config(&config);
     let settings_state = Arc::new(Mutex::new(settings_state));
     let (http_client, refetch_rx) = HTTPClient::new();
     let state = FlowLikeState::new(config, http_client);
-    let state_ref = Arc::new(Mutex::new(state));
+    let state_ref = Arc::new(state);
 
     let initialized_state = state_ref.clone();
     tauri::async_runtime::spawn(async move {
+        #[cfg(any(target_os = "ios", target_os = "android"))]
+        flow_like_types::tokio::time::sleep(Duration::from_millis(800)).await;
+
         let weak_ref = Arc::downgrade(&initialized_state);
-        let catalog = flow_like_catalog::get_catalog().await;
-        let state = initialized_state.lock().await;
-        let registry_guard = state.node_registry.clone();
-        drop(state);
+        let catalog = get_catalog();
+        let registry_guard = initialized_state.node_registry.clone();
         let mut registry = registry_guard.write().await;
         registry.initialize(weak_ref);
-        registry.push_nodes(catalog).await.unwrap();
+        registry.push_nodes(catalog);
         println!("Catalog Initialized");
     });
 
     let sentry_endpoint = std::option_env!("PUBLIC_SENTRY_ENDPOINT");
-    let guard = sentry_endpoint.map(|endpoint| {
-        sentry::init((
-            endpoint,
-            sentry::ClientOptions {
-                release: sentry::release_name!(),
-                auto_session_tracking: true,
-                traces_sample_rate: 0.1,
-                ..Default::default()
-            },
-        ))
-    });
+    // Defer Sentry init on mobile to improve startup; init immediately elsewhere.
+    let mut _sentry_guard: Option<sentry::ClientInitGuard> = None;
+    #[cfg(not(any(target_os = "ios", target_os = "android")))]
+    {
+        _sentry_guard = sentry_endpoint.map(|endpoint| {
+            sentry::init((
+                endpoint,
+                sentry::ClientOptions {
+                    release: sentry::release_name!(),
+                    auto_session_tracking: true,
+                    traces_sample_rate: 0.1,
+                    ..Default::default()
+                },
+            ))
+        });
+    }
+    #[cfg(any(target_os = "ios", target_os = "android"))]
+    {
+        tauri::async_runtime::spawn(async move {
+            flow_like_types::tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+            if let Some(endpoint) = std::option_env!("PUBLIC_SENTRY_ENDPOINT") {
+                let _ = sentry::init((
+                    endpoint,
+                    sentry::ClientOptions {
+                        release: sentry::release_name!(),
+                        auto_session_tracking: true,
+                        traces_sample_rate: 0.1,
+                        ..Default::default()
+                    },
+                ));
+                tracing::info!("Sentry Tracing Layer Initialized (deferred)");
+            }
+        });
+    }
 
     #[cfg(not(debug_assertions))]
     {
-        match guard {
-            Some(_) => {
-                tracing_subscriber::registry()
-                    .with(tracing_subscriber::fmt::layer())
-                    .with(sentry_tracing::layer())
-                    .init();
+        #[cfg(all(target_os = "ios"))]
+        { /* iOS Release: oslog is already set up above; Sentry init is deferred. */ }
 
-                println!("Sentry Tracing Layer Initialized");
+        #[cfg(target_os = "android")]
+        {
+            // Android Release: Sentry is deferred; logcat captures stdout/stderr natively.
+            match _sentry_guard {
+                Some(_) => {
+                    tracing_subscriber::registry()
+                        .with(tracing_subscriber::fmt::layer())
+                        .with(sentry_tracing::layer())
+                        .init();
+                    tracing::info!("Sentry Tracing Layer Initialized");
+                }
+                None => {
+                    tracing_subscriber::registry()
+                        .with(tracing_subscriber::fmt::layer())
+                        .init();
+                    tracing::info!("Sentry Tracing Layer Not Initialized");
+                }
             }
-            None => {
-                tracing_subscriber::registry()
-                    .with(tracing_subscriber::fmt::layer())
-                    .init();
+        }
 
-                println!("Sentry Tracing Layer Not Initialized");
+        #[cfg(not(any(target_os = "ios", target_os = "android")))]
+        {
+            // Non-iOS Release (macOS/Windows/Linux): stdio fmt layer is OK
+            match _sentry_guard {
+                Some(_) => {
+                    tracing_subscriber::registry()
+                        .with(tracing_subscriber::fmt::layer())
+                        .with(sentry_tracing::layer())
+                        .init();
+                    tracing::info!("Sentry Tracing Layer Initialized");
+                }
+                None => {
+                    tracing_subscriber::registry()
+                        .with(tracing_subscriber::fmt::layer())
+                        .init();
+                    tracing::info!("Sentry Tracing Layer Not Initialized");
+                }
             }
-        };
+        }
     }
 
+    let settings_state_for_sink = settings_state.clone();
     let mut builder = tauri::Builder::default()
+        .manage(state::TauriSettingsState(settings_state.clone()))
+        .manage(state::TauriFlowLikeState(state_ref.clone()))
+        .manage(state::TauriRegistryState(Arc::new(Mutex::new(None))))
         .plugin(tauri_plugin_http::init())
+        .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_deep_link::init())
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_clipboard_manager::init())
         .plugin(tauri_plugin_dialog::init())
-        .setup(|app| {
-
+        .plugin(tauri_plugin_notification::init())
+        .setup(move |app| {
             #[cfg(desktop)]
-            if let Err(e) = app.handle().plugin(tauri_plugin_updater::Builder::new().build()) {
+            if let Err(e) = app
+                .handle()
+                .plugin(tauri_plugin_updater::Builder::new().build())
+            {
                 eprintln!("Failed to register updater plugin: {}", e);
             }
+
+            // Initialize EventBus and register as managed state
+            let (event_bus, mut event_receiver) = EventBus::new(app.app_handle().clone());
+            app.manage(state::TauriEventBusState(event_bus));
+
+            // Initialize Event Sink Manager synchronously to ensure it's ready before accepting commands
+            let settings_clone = settings_state_for_sink.clone();
+            let manager_init_handle = app.app_handle().clone();
+
+            // Block on initialization to ensure EventSinkManager is ready
+            tauri::async_runtime::spawn(async move {
+                let event_sink_db_path = settings_clone
+                    .lock()
+                    .await
+                    .project_dir
+                    .parent()
+                    .unwrap()
+                    .join("event_sinks.db")
+                    .to_string_lossy()
+                    .to_string();
+
+                match event_sink::EventSinkManager::new(&event_sink_db_path) {
+                    Ok(manager) => {
+                        tracing::info!("Event Sink Manager initialized successfully");
+                        manager_init_handle.manage(state::TauriEventSinkManagerState(Arc::new(
+                            Mutex::new(manager),
+                        )));
+
+                        // Load existing registrations from database
+                        if let Some(manager_state) =
+                            manager_init_handle.try_state::<state::TauriEventSinkManagerState>()
+                        {
+                            let manager = manager_state.0.lock().await;
+                            if let Err(e) = manager.init_from_storage(&manager_init_handle).await {
+                                tracing::error!(
+                                    "Failed to restore event sink registrations: {}",
+                                    e
+                                );
+                            } else {
+                                tracing::info!("Event sink registrations restored from database");
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        tracing::error!("Failed to initialize Event Sink Manager: {}", e);
+                    }
+                }
+            });
 
             let relay_handle = app.app_handle().clone();
             let gc_handle = relay_handle.clone();
             let refetch_handle = relay_handle.clone();
             let deep_link_handle = relay_handle.clone();
+            let event_bus_handle = relay_handle.clone();
+
+            #[cfg(target_os = "ios")]
+            {
+                let ios_handle = app.app_handle().clone();
+                tauri::async_runtime::spawn(async move {
+                    // Wait for the WKWebView to be fully initialised before
+                    // touching ObjC properties — calling too early crashes.
+                    for delay_ms in [100, 300, 700, 1500, 3000] {
+                        flow_like_types::tokio::time::sleep(Duration::from_millis(delay_ms)).await;
+                        if let Some(main) = ios_handle.get_webview_window("main") {
+                            harden_ios_webview_scroll(&main);
+                            let _ = main.eval(IOS_SAFE_AREA_JS);
+                        }
+                    }
+                });
+            }
+
+            // Android: retry safe-area CSS var application after page load.
+            // The Kotlin MainActivity exposes insets via a JavascriptInterface
+            // (FlowLikeInsets) that the page can read synchronously.  This retry
+            // also reads from that bridge so it works even if the globals set by
+            // evaluateJavascript were wiped during the about:blank → app page transition.
+            #[cfg(target_os = "android")]
+            {
+                let android_handle = app.app_handle().clone();
+                tauri::async_runtime::spawn(async move {
+                    for delay_ms in [50, 150, 300, 700, 1500, 3000] {
+                        flow_like_types::tokio::time::sleep(Duration::from_millis(delay_ms)).await;
+                        if let Some(main) = android_handle.get_webview_window("main") {
+                            let _ = main.eval(concat!(
+                                "(function(){",
+                                "var t=0,b=0;",
+                                "if(typeof FlowLikeInsets!=='undefined'){",
+                                "try{var dpr=window.devicePixelRatio||1;",
+                                "t=Math.ceil(FlowLikeInsets.getTopPx()/dpr);",
+                                "b=Math.ceil(FlowLikeInsets.getBottomPx()/dpr);",
+                                "}catch(e){}",
+                                "}",
+                                "t=Math.max(t,window.__FL_NATIVE_SAFE_TOP||0);",
+                                "b=Math.max(b,window.__FL_NATIVE_SAFE_BOTTOM||0);",
+                                "if(t>0||b>0){",
+                                "var d=document.documentElement;",
+                                "d.style.setProperty('--fl-native-safe-top',t+'px');",
+                                "d.style.setProperty('--fl-native-safe-bottom',b+'px');",
+                                "window.__FL_NATIVE_SAFE_TOP=t;",
+                                "window.__FL_NATIVE_SAFE_BOTTOM=b;",
+                                "}",
+                                "})();"
+                            ));
+                        }
+                    }
+                });
+            }
+
+            #[cfg(desktop)]
+            {
+                // Manage TauriTrayState for desktop platforms
+                app.manage(state::TauriTrayState(Arc::new(Mutex::new(
+                    tray::TrayRuntimeState::default(),
+                ))));
+
+                if let Err(err) = tray::init_tray(&relay_handle) {
+                    eprintln!("Failed to initialize tray: {}", err);
+                } else {
+                    tray::spawn_tray_refresh(relay_handle.clone());
+                }
+            }
 
             #[cfg(desktop)]
             {
@@ -152,24 +569,38 @@ pub fn run() {
                 }
             }
 
-            #[cfg(any(target_os = "linux", all(debug_assertions, windows)))]
+            #[cfg(any(target_os = "linux", windows))]
             {
                 use tauri_plugin_deep_link::DeepLinkExt;
                 app.deep_link().register_all()?;
             }
 
+            let start_urls = app.deep_link().get_current();
+            if let Ok(Some(urls)) = start_urls {
+                tracing::info!("deep link URLs for start: {:?}", urls);
+                handle_deep_link(&deep_link_handle, &urls);
+            }
+
             app.deep_link().on_open_url(move |event| {
                 let deep_link_handle = deep_link_handle.clone();
-                handle_deep_link(&deep_link_handle, event);
+                handle_deep_link(&deep_link_handle, &event.urls());
             });
 
             tauri::async_runtime::spawn(async move {
+                #[cfg(any(target_os = "ios", target_os = "android"))]
+                flow_like_types::tokio::time::sleep(Duration::from_millis(1200)).await;
+
                 let handle = gc_handle;
 
                 let model_factory = {
                     println!("Starting GC");
-                    let flow_like_state = TauriFlowLikeState::construct(&handle).await.unwrap();
-                    let flow_like_state = flow_like_state.lock().await;
+                    let flow_like_state = match TauriFlowLikeState::construct(&handle).await {
+                        Ok(s) => s,
+                        Err(e) => {
+                            eprintln!("GC init failed: {:?}", e);
+                            return;
+                        }
+                    };
 
                     flow_like_state.model_factory.clone()
                 };
@@ -190,13 +621,21 @@ pub fn run() {
             });
 
             tauri::async_runtime::spawn(async move {
+                #[cfg(any(target_os = "ios", target_os = "android"))]
+                flow_like_types::tokio::time::sleep(Duration::from_millis(1200)).await;
+
                 let mut receiver = refetch_rx;
                 let handle = refetch_handle;
 
                 let http_client = {
                     println!("Starting Refetch Handler");
-                    let flow_like_state = TauriFlowLikeState::construct(&handle).await.unwrap();
-                    let flow_like_state = flow_like_state.lock().await;
+                    let flow_like_state = match TauriFlowLikeState::construct(&handle).await {
+                        Ok(s) => s,
+                        Err(e) => {
+                            eprintln!("Refetch handler init failed: {:?}", e);
+                            return;
+                        }
+                    };
                     flow_like_state.http_client.clone()
                 };
 
@@ -232,47 +671,102 @@ pub fn run() {
                 }
             });
 
+            // EventBus event processing sink
+            tauri::async_runtime::spawn(async move {
+                #[cfg(any(target_os = "ios", target_os = "android"))]
+                flow_like_types::tokio::time::sleep(Duration::from_millis(1200)).await;
+
+                let handle = event_bus_handle;
+
+                println!("Starting EventBus Sink");
+
+                let (flow_like_state, hub_url, http_client) = {
+                    let flow_like_state = match state::TauriFlowLikeState::construct(&handle).await
+                    {
+                        Ok(s) => s,
+                        Err(e) => {
+                            eprintln!("EventBus sink init failed: {:?}", e);
+                            return;
+                        }
+                    };
+
+                    let settings = match state::TauriSettingsState::construct(&handle).await {
+                        Ok(s) => s,
+                        Err(e) => {
+                            eprintln!("EventBus sink settings init failed: {:?}", e);
+                            return;
+                        }
+                    };
+
+                    let hub_url = settings.lock().await.default_hub.clone();
+                    let http_client = flow_like_state.http_client.clone();
+
+                    (flow_like_state, hub_url, http_client)
+                };
+
+                let hub = match Hub::new(&hub_url, http_client).await {
+                    Ok(h) => h,
+                    Err(e) => {
+                        eprintln!("Failed to initialize Hub for EventBus: {:?}", e);
+                        return;
+                    }
+                };
+
+                println!("EventBus Sink Started");
+
+                while let Some(event) = event_receiver.recv().await {
+                    // Spawn each event execution as a separate task for parallel processing
+                    let handle_clone = handle.clone();
+                    let flow_like_state_clone = flow_like_state.clone();
+                    let hub_clone = hub.clone();
+
+                    tokio::spawn(async move {
+                        match event
+                            .execute(&handle_clone, flow_like_state_clone, &hub_clone)
+                            .await
+                        {
+                            Ok(meta) => _ = meta,
+                            Err(e) => {
+                                eprintln!("Error executing event: {:?}", e);
+                            }
+                        }
+                    });
+                }
+
+                println!("EventBus Sink stopped");
+            });
+
             Ok(())
         })
         .plugin(tauri_plugin_shell::init())
-        .manage(state::TauriSettingsState(settings_state))
-        .manage(state::TauriFlowLikeState(state_ref))
-        .on_page_load(|view, payload| {
-            let label = view.label().to_string();
-            let app_handle = view.app_handle().clone();
-
-            if label == "oidcFlow" {
-                crate::utils::emit_throttled(
-                    &app_handle,
-                    crate::utils::UiEmitTarget::All,
-                    "oidc/url",
-                    json!({ "url": payload.url() }),
-                    std::time::Duration::from_millis(200),
-                );
-            }
-
-            println!("{} loaded: {}", label, payload.url());
-        })
         .invoke_handler(tauri::generate_handler![
             update,
             functions::file::get_path_meta,
             functions::ai::invoke::stream_chat_completion,
             functions::ai::invoke::chat_completion,
-            functions::ai::invoke::predict,
             functions::ai::invoke::find_best_model,
             functions::system::get_system_info,
+            #[cfg(desktop)]
+            tray::tray_update_state,
+            #[cfg(not(desktop))]
+            tray_update_state,
             functions::download::init::init_downloads,
             functions::download::init::get_downloads,
             functions::settings::profiles::get_profiles,
+            functions::settings::profiles::get_profiles_raw,
             functions::settings::profiles::get_default_profiles,
             functions::settings::profiles::get_current_profile,
+            functions::settings::profiles::get_current_profile_id,
             functions::settings::profiles::set_current_profile,
             functions::settings::profiles::upsert_profile,
+            functions::settings::profiles::remap_profile_id,
             functions::settings::profiles::delete_profile,
             functions::settings::profiles::add_bit,
             functions::settings::profiles::remove_bit,
             functions::settings::profiles::get_bits_in_current_profile,
             functions::settings::profiles::change_profile_image,
+            functions::settings::profiles::read_profile_icon,
+            functions::settings::profiles::get_profile_icon_path,
             functions::settings::profiles::profile_update_app,
             functions::app::app_configured,
             functions::app::upsert_board,
@@ -289,7 +783,6 @@ pub fn run() {
             functions::app::get_apps,
             functions::app::get_app_size,
             functions::app::create_app,
-            functions::app::import_app,
             functions::app::update_app,
             functions::app::delete_app,
             functions::app::sharing::export_app_to_file,
@@ -303,6 +796,13 @@ pub fn run() {
             functions::app::tables::db_delete,
             functions::app::tables::db_indices,
             functions::app::tables::db_query,
+            functions::app::tables::db_optimize,
+            functions::app::tables::db_update,
+            functions::app::tables::db_drop_columns,
+            functions::app::tables::db_add_column,
+            functions::app::tables::db_alter_column,
+            functions::app::tables::db_drop_index,
+            functions::tmp::post_process_local_file,
             functions::bit::get_bit,
             functions::bit::is_bit_installed,
             functions::bit::get_bit_size,
@@ -327,6 +827,7 @@ pub fn run() {
             functions::flow::board::redo_board,
             functions::flow::board::execute_command,
             functions::flow::board::execute_commands,
+            functions::flow::board::get_execution_elements,
             functions::flow::board::save_board,
             functions::flow::run::execute_board,
             functions::flow::run::execute_event,
@@ -347,6 +848,58 @@ pub fn run() {
             functions::flow::template::delete_template,
             functions::flow::template::get_template_meta,
             functions::flow::template::push_template_meta,
+            functions::ai::copilot::copilot_chat,
+            functions::ai::copilot::copilot_sdk_start,
+            functions::ai::copilot::copilot_sdk_stop,
+            functions::ai::copilot::copilot_sdk_is_running,
+            functions::ai::copilot::copilot_sdk_list_models,
+            functions::ai::copilot::copilot_sdk_get_auth_status,
+            functions::ai::copilot::copilot_sdk_create_agent_session,
+            functions::a2ui::widget::get_widgets,
+            functions::a2ui::widget::get_widget,
+            functions::a2ui::widget::create_widget,
+            functions::a2ui::widget::update_widget,
+            functions::a2ui::widget::delete_widget,
+            functions::a2ui::widget::create_widget_version,
+            functions::a2ui::widget::get_widget_versions,
+            functions::a2ui::widget::get_open_widgets,
+            functions::a2ui::widget::close_widget,
+            functions::a2ui::widget::get_widget_meta,
+            functions::a2ui::widget::push_widget_meta,
+            functions::a2ui::page::get_pages,
+            functions::a2ui::page::get_page,
+            functions::a2ui::page::get_page_by_route,
+            functions::a2ui::page::create_page,
+            functions::a2ui::page::update_page,
+            functions::a2ui::page::delete_page,
+            functions::a2ui::page::get_open_pages,
+            functions::a2ui::page::close_page,
+            functions::a2ui::page::get_page_meta,
+            functions::a2ui::page::push_page_meta,
+            functions::a2ui::route::get_app_routes,
+            functions::a2ui::route::get_app_route_by_path,
+            functions::a2ui::route::get_default_app_route,
+            functions::a2ui::route::set_app_route,
+            functions::a2ui::route::set_app_routes,
+            functions::a2ui::route::delete_app_route_by_path,
+            functions::a2ui::route::delete_app_route_by_event,
+            functions::event_sink_commands::add_event_sink,
+            functions::event_sink_commands::remove_event_sink,
+            functions::event_sink_commands::get_event_sink,
+            functions::event_sink_commands::list_event_sinks,
+            functions::event_sink_commands::is_event_sink_active,
+            functions::registry::registry_search_packages,
+            functions::registry::registry_get_package,
+            functions::registry::registry_install_package,
+            functions::registry::registry_uninstall_package,
+            functions::registry::registry_get_installed_packages,
+            functions::registry::registry_is_package_installed,
+            functions::registry::registry_get_installed_version,
+            functions::registry::registry_update_package,
+            functions::registry::registry_check_for_updates,
+            functions::registry::registry_load_local,
+            functions::registry::registry_init,
+            functions::statistics::get_board_statistics,
         ]);
 
     #[cfg(desktop)]
@@ -369,39 +922,31 @@ pub fn run() {
 }
 
 fn handle_instance(app: &AppHandle, args: Vec<String>, _cwd: String) {
-    let _ = app
-        .get_webview_window("main")
-        .expect("no main window")
-        .set_focus();
+    #[cfg(desktop)]
+    {
+        let _ = app
+            .get_webview_window("main")
+            .expect("no main window")
+            .set_focus();
+    }
 
     println!(
         "a new app instance was opened with {args:?} and the deep link event was already triggered"
     );
 }
 
-fn handle_deep_link(app: &AppHandle, event: OpenUrlEvent) {
-    let _ = app
-        .get_webview_window("main")
-        .expect("no main window")
-        .set_focus();
-
-    println!("deep link URLs: {:?}", event.urls());
-}
-
+#[cfg(desktop)]
 #[tauri::command(async)]
 async fn update(app_handle: AppHandle) -> tauri_plugin_updater::Result<()> {
+    use tauri::window::{ProgressBarState, ProgressBarStatus};
     if let Some(update) = app_handle.updater()?.check().await? {
-        // get the window once
         if let Some(win) = app_handle.get_webview_window("main") {
-            // initial indeterminate
             let _ = win.set_progress_bar(ProgressBarState {
                 status: Some(ProgressBarStatus::Indeterminate),
                 progress: None,
             });
 
             let mut downloaded: u64 = 0;
-
-            // clone for each closure to avoid "moved value" error
             let progress_win = win.clone();
             let done_win = win.clone();
 
@@ -410,13 +955,13 @@ async fn update(app_handle: AppHandle) -> tauri_plugin_updater::Result<()> {
                     move |chunk_len, content_len| {
                         downloaded += chunk_len as u64;
 
-                        if let Some(total) = content_len.map(|v| v as u64) {
-                            let pct = ((downloaded as f64 / total as f64) * 100.0)
-                                .clamp(0.0, 100.0) as u64;
+                        if let Some(total) = content_len {
+                            let pct = ((downloaded as f64 / total as f64) * 100.0).clamp(0.0, 100.0)
+                                as u64;
 
                             let _ = progress_win.set_progress_bar(ProgressBarState {
                                 status: Some(ProgressBarStatus::Normal),
-                                progress: Some(pct), // 0..=100
+                                progress: Some(pct),
                             });
                         } else {
                             let _ = progress_win.set_progress_bar(ProgressBarState {
@@ -426,7 +971,6 @@ async fn update(app_handle: AppHandle) -> tauri_plugin_updater::Result<()> {
                         }
                     },
                     move || {
-                        // clear when finished
                         let _ = done_win.set_progress_bar(ProgressBarState {
                             status: Some(ProgressBarStatus::None),
                             progress: None,
@@ -439,5 +983,12 @@ async fn update(app_handle: AppHandle) -> tauri_plugin_updater::Result<()> {
         app_handle.restart();
     }
 
+    Ok(())
+}
+
+#[cfg(not(desktop))]
+#[tauri::command(async)]
+async fn update(_app_handle: AppHandle) -> Result<(), String> {
+    // No-op on non-desktop targets (e.g., iOS)
     Ok(())
 }

@@ -1,4 +1,4 @@
-use crate::{ai::onnx::detection::BoundingBox, image::NodeImage};
+use crate::image::{BoundingBox, NodeImage};
 
 use flow_like::{
     flow::{
@@ -11,6 +11,7 @@ use flow_like::{
 };
 use flow_like_types::{async_trait, json::json};
 
+#[crate::register_node]
 #[derive(Default)]
 pub struct CropImageNode {}
 
@@ -22,7 +23,7 @@ impl CropImageNode {
 
 #[async_trait]
 impl NodeLogic for CropImageNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new("crop_image", "Crop Image", "Crop Image", "Image/Transform");
         node.add_icon("/flow/icons/image.svg");
 

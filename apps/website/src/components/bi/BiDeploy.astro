@@ -1,0 +1,239 @@
+---
+interface Props {
+  t: (key: string) => string;
+}
+
+const { t } = Astro.props;
+
+const deployOptions = [
+  {
+    title: t("bi.deploy.onprem.title"),
+    desc: t("bi.deploy.onprem.desc"),
+    icon: "server",
+    color: "slate",
+  },
+  {
+    title: t("bi.deploy.cloud.title"),
+    desc: t("bi.deploy.cloud.desc"),
+    icon: "cloud",
+    color: "blue",
+  },
+  {
+    title: t("bi.deploy.mobile.title"),
+    desc: t("bi.deploy.mobile.desc"),
+    icon: "phone",
+    color: "violet",
+  },
+  {
+    title: t("bi.deploy.field.title"),
+    desc: t("bi.deploy.field.desc"),
+    icon: "wifi-off",
+    color: "emerald",
+  },
+  {
+    title: t("bi.deploy.hybrid.title"),
+    desc: t("bi.deploy.hybrid.desc"),
+    icon: "layers",
+    color: "amber",
+  },
+];
+---
+
+<section class="relative py-16 sm:py-24 lg:py-32 overflow-hidden">
+  <div class="absolute inset-0 bg-gradient-to-br from-primary/5 via-transparent to-violet-500/5 pointer-events-none" />
+
+  <div class="mx-auto max-w-7xl px-6 lg:px-8 relative">
+    <div class="grid lg:grid-cols-2 gap-8 lg:gap-16 items-center">
+      <!-- Left: Content -->
+      <div>
+        <p class="text-[11px] font-medium tracking-[0.3em] uppercase text-primary mb-4">
+          {t("bi.deploy.tagline")}
+        </p>
+        <h2 class="text-4xl sm:text-5xl font-bold tracking-tight mb-6">
+          {t("bi.deploy.headline")}
+        </h2>
+
+        <div class="space-y-3 mt-10">
+          {deployOptions.map((option) => (
+            <div class="group flex items-start gap-4 p-4 rounded-xl border border-transparent hover:border-border hover:bg-card/50 transition-all duration-300">
+              <div class={`
+                shrink-0 w-12 h-12 rounded-xl flex items-center justify-center transition-all duration-300 group-hover:scale-110
+                ${option.color === 'slate' ? 'bg-slate-500/10 text-slate-600' : ''}
+                ${option.color === 'blue' ? 'bg-blue-500/10 text-blue-600' : ''}
+                ${option.color === 'violet' ? 'bg-violet-500/10 text-violet-600' : ''}
+                ${option.color === 'emerald' ? 'bg-emerald-500/10 text-emerald-600' : ''}
+                ${option.color === 'amber' ? 'bg-amber-500/10 text-amber-600' : ''}
+              `}>
+                {option.icon === "server" && (
+                  <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M5 12h14M5 12a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v4a2 2 0 01-2 2M5 12a2 2 0 00-2 2v4a2 2 0 002 2h14a2 2 0 002-2v-4a2 2 0 00-2-2m-2-4h.01M17 16h.01" />
+                  </svg>
+                )}
+                {option.icon === "cloud" && (
+                  <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M3 15a4 4 0 004 4h9a5 5 0 10-.1-9.999 5.002 5.002 0 10-9.78 2.096A4.001 4.001 0 003 15z" />
+                  </svg>
+                )}
+                {option.icon === "phone" && (
+                  <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M12 18h.01M8 21h8a2 2 0 002-2V5a2 2 0 00-2-2H8a2 2 0 00-2 2v14a2 2 0 002 2z" />
+                  </svg>
+                )}
+                {option.icon === "wifi-off" && (
+                  <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M18.364 5.636a9 9 0 010 12.728m0 0l-2.829-2.829m2.829 2.829L21 21M15.536 8.464a5 5 0 010 7.072m0 0l-2.829-2.829m-4.243 2.829a4.978 4.978 0 01-1.414-2.83m-1.414 5.658a9 9 0 01-2.167-9.238m7.824 2.167a1 1 0 111.414 1.414m-1.414-1.414L3 3m8.293 8.293l1.414 1.414" />
+                  </svg>
+                )}
+                {option.icon === "layers" && (
+                  <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+                  </svg>
+                )}
+              </div>
+              <div>
+                <h3 class="font-semibold mb-1">{option.title}</h3>
+                <p class="text-sm text-muted-foreground">{option.desc}</p>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <!-- Right: Architecture Visual -->
+      <div class="relative">
+        <div class="absolute -inset-4 bg-gradient-to-r from-primary/10 via-violet-500/10 to-emerald-500/10 blur-3xl opacity-40 rounded-full" />
+
+        <div class="relative bg-card/80 backdrop-blur-xl rounded-3xl border border-border/50 p-8 shadow-2xl">
+          <!-- Architecture diagram -->
+          <div class="relative aspect-square max-w-[380px] mx-auto">
+            <!-- Central Flow-Like -->
+            <div class="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-20">
+              <div class="relative">
+                <div class="absolute -inset-6 rounded-full bg-primary/10 animate-pulse" style="animation-duration: 2s;" />
+                <div class="w-20 h-20 rounded-2xl bg-background border-2 border-primary shadow-xl flex items-center justify-center">
+                  <img src="/icon.webp" alt="Flow-Like" class="w-12 h-12" />
+                </div>
+              </div>
+            </div>
+
+            <!-- Deployment targets in orbit -->
+            <!-- On-Premise (top) -->
+            <div class="absolute top-4 left-1/2 -translate-x-1/2 z-10">
+              <div class="group relative">
+                <div class="w-14 h-14 rounded-xl bg-background border border-slate-500/30 flex items-center justify-center transition-all group-hover:scale-110 group-hover:bg-slate-500/10">
+                  <svg class="w-7 h-7 text-slate-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M5 12h14M5 12a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v4a2 2 0 01-2 2M5 12a2 2 0 00-2 2v4a2 2 0 002 2h14a2 2 0 002-2v-4a2 2 0 00-2-2" />
+                  </svg>
+                </div>
+                <span class="absolute -bottom-6 left-1/2 -translate-x-1/2 text-[10px] font-medium text-muted-foreground whitespace-nowrap">On-Prem</span>
+              </div>
+            </div>
+
+            <!-- Cloud (top-right) -->
+            <div class="absolute top-[20%] right-[10%] z-10">
+              <div class="group relative">
+                <div class="w-14 h-14 rounded-xl bg-background border border-blue-500/30 flex items-center justify-center transition-all group-hover:scale-110 group-hover:bg-blue-500/10">
+                  <svg class="w-7 h-7 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M3 15a4 4 0 004 4h9a5 5 0 10-.1-9.999 5.002 5.002 0 10-9.78 2.096A4.001 4.001 0 003 15z" />
+                  </svg>
+                </div>
+                <span class="absolute -bottom-6 left-1/2 -translate-x-1/2 text-[10px] font-medium text-muted-foreground whitespace-nowrap">Cloud</span>
+              </div>
+            </div>
+
+            <!-- Mobile (bottom-right) -->
+            <div class="absolute bottom-[20%] right-[10%] z-10">
+              <div class="group relative">
+                <div class="w-14 h-14 rounded-xl bg-background border border-violet-500/30 flex items-center justify-center transition-all group-hover:scale-110 group-hover:bg-violet-500/10">
+                  <svg class="w-7 h-7 text-violet-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M12 18h.01M8 21h8a2 2 0 002-2V5a2 2 0 00-2-2H8a2 2 0 00-2 2v14a2 2 0 002 2z" />
+                  </svg>
+                </div>
+                <span class="absolute -bottom-6 left-1/2 -translate-x-1/2 text-[10px] font-medium text-muted-foreground whitespace-nowrap">Mobile</span>
+              </div>
+            </div>
+
+            <!-- Field (bottom) -->
+            <div class="absolute bottom-4 left-1/2 -translate-x-1/2 z-10">
+              <div class="group relative">
+                <div class="w-14 h-14 rounded-xl bg-background border border-emerald-500/30 flex items-center justify-center transition-all group-hover:scale-110 group-hover:bg-emerald-500/10">
+                  <svg class="w-7 h-7 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+                  </svg>
+                </div>
+                <span class="absolute -bottom-6 left-1/2 -translate-x-1/2 text-[10px] font-medium text-muted-foreground whitespace-nowrap">Field</span>
+              </div>
+            </div>
+
+            <!-- Hybrid (bottom-left) -->
+            <div class="absolute bottom-[20%] left-[10%] z-10">
+              <div class="group relative">
+                <div class="w-14 h-14 rounded-xl bg-background border border-amber-500/30 flex items-center justify-center transition-all group-hover:scale-110 group-hover:bg-amber-500/10">
+                  <svg class="w-7 h-7 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M4 5a1 1 0 011-1h14a1 1 0 011 1v2a1 1 0 01-1 1H5a1 1 0 01-1-1V5zM4 13a1 1 0 011-1h6a1 1 0 011 1v6a1 1 0 01-1 1H5a1 1 0 01-1-1v-6zM16 13a1 1 0 011-1h2a1 1 0 011 1v6a1 1 0 01-1 1h-2a1 1 0 01-1-1v-6z" />
+                  </svg>
+                </div>
+                <span class="absolute -bottom-6 left-1/2 -translate-x-1/2 text-[10px] font-medium text-muted-foreground whitespace-nowrap">Hybrid</span>
+              </div>
+            </div>
+
+            <!-- Edge (top-left) -->
+            <div class="absolute top-[20%] left-[10%] z-10">
+              <div class="group relative">
+                <div class="w-14 h-14 rounded-xl bg-background border border-cyan-500/30 flex items-center justify-center transition-all group-hover:scale-110 group-hover:bg-cyan-500/10">
+                  <svg class="w-7 h-7 text-cyan-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2zM9 9h6v6H9V9z" />
+                  </svg>
+                </div>
+                <span class="absolute -bottom-6 left-1/2 -translate-x-1/2 text-[10px] font-medium text-muted-foreground whitespace-nowrap">Edge</span>
+              </div>
+            </div>
+
+            <!-- Connecting lines (z-0 to stay behind icons) -->
+            <svg class="absolute inset-0 w-full h-full z-0" viewBox="0 0 380 380">
+              <defs>
+                <linearGradient id="deployGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+                  <stop offset="0%" stop-color="hsl(var(--primary))" stop-opacity="0.25" />
+                  <stop offset="100%" stop-color="hsl(var(--primary))" stop-opacity="0.1" />
+                </linearGradient>
+                <linearGradient id="ringGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+                  <stop offset="0%" stop-color="hsl(var(--primary))" stop-opacity="0.15" />
+                  <stop offset="50%" stop-color="hsl(var(--muted-foreground))" stop-opacity="0.1" />
+                  <stop offset="100%" stop-color="hsl(var(--primary))" stop-opacity="0.15" />
+                </linearGradient>
+              </defs>
+
+              <!-- Outer ring connecting all nodes (hexagon path) -->
+              <!-- Points: On-Prem(190,50), Cloud(320,100), Mobile(320,280), Field(190,330), Hybrid(60,280), Edge(60,100) -->
+              <path
+                d="M 190 50 L 320 100 L 320 280 L 190 330 L 60 280 L 60 100 Z"
+                fill="none"
+                stroke="url(#ringGrad)"
+                stroke-width="1.5"
+                stroke-dasharray="8 4"
+                class="animate-pulse"
+                style="animation-duration: 3s;"
+              />
+
+              <!-- Subtle center connections (very light, no animation for cleaner look) -->
+              <line x1="190" y1="190" x2="190" y2="50" stroke="url(#deployGrad)" stroke-width="1" opacity="0.4" />
+              <line x1="190" y1="190" x2="320" y2="100" stroke="url(#deployGrad)" stroke-width="1" opacity="0.4" />
+              <line x1="190" y1="190" x2="320" y2="280" stroke="url(#deployGrad)" stroke-width="1" opacity="0.4" />
+              <line x1="190" y1="190" x2="190" y2="330" stroke="url(#deployGrad)" stroke-width="1" opacity="0.4" />
+              <line x1="190" y1="190" x2="60" y2="280" stroke="url(#deployGrad)" stroke-width="1" opacity="0.4" />
+              <line x1="190" y1="190" x2="60" y2="100" stroke="url(#deployGrad)" stroke-width="1" opacity="0.4" />
+            </svg>
+          </div>
+
+          <!-- Caption -->
+          <div class="text-center mt-8 pt-6 border-t border-border/50">
+            <p class="text-sm text-muted-foreground">
+              Same codebase. Any environment. <span class="text-primary font-medium">Zero vendor lock-in.</span>
+            </p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>

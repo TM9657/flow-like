@@ -8,5 +8,10 @@ export interface IHelperState {
 		recursive: boolean,
 	): Promise<string[] | string | undefined>;
 
-	fileToUrl(file: File): Promise<string>;
+	/**
+	 * Converts a file to a URL.
+	 * @param file The file to convert.
+	 * @param offline Whether to use offline storage (optional).
+	 */
+	fileToUrl(file: File, offline?: boolean): Promise<string>;
 }

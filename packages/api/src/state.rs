@@ -1,3 +1,4 @@
+#[cfg(feature = "aws")]
 use aws_config::SdkConfig;
 use axum::body::Body;
 use flow_like::app::App;
@@ -7,10 +8,8 @@ use flow_like::flow_like_model_provider::provider::{ModelProviderConfiguration, 
 use flow_like::flow_like_storage::Path;
 use flow_like::flow_like_storage::files::store::FlowLikeStore;
 use flow_like::hub::{Environment, Hub};
-use flow_like::state::{FlowLikeConfig, FlowLikeState, FlowNodeRegistryInner};
-use flow_like::utils::http::HTTPClient;
+use flow_like::state::{FlowLikeState, FlowNodeRegistryInner};
 use flow_like_types::bail;
-use flow_like_types::sync::Mutex;
 use flow_like_types::{Result, Value};
 use hyper_util::{
     client::legacy::{Client, connect::HttpConnector},
@@ -25,11 +24,27 @@ use std::{collections::HashMap, sync::Arc, time::Duration};
 
 use crate::credentials::{CredentialsAccess, RuntimeCredentials};
 use crate::entity::role;
+use crate::execution::{DispatchConfig, Dispatcher};
+use crate::mail::{DynMailClient, create_mail_client};
+use crate::routes::registry::ServerRegistry;
 
 pub type AppState = Arc<State>;
 
 const CONFIG: &str = include_str!("../../../flow-like.config.json");
 const JWKS: &str = include_str!(concat!(env!("OUT_DIR"), "/jwks.json"));
+
+/// Cached auth result for JWT/PAT/API key
+#[derive(Clone, Debug)]
+pub enum CachedAuth {
+    /// OpenID user with sub
+    OpenID { sub: String },
+    /// PAT user with sub
+    PAT { sub: String },
+    /// API key with key_id and app_id
+    ApiKey { key_id: String, app_id: String },
+    /// Invalid/expired token
+    Invalid,
+}
 
 pub struct State {
     pub platform_config: Hub,
@@ -37,16 +52,25 @@ pub struct State {
     pub jwks: JwkSet,
     pub client: Client<HttpConnector, Body>,
     pub stripe_client: Option<stripe::Client>,
+    pub mail_client: Option<DynMailClient>,
     #[cfg(feature = "aws")]
     pub aws_client: Arc<SdkConfig>,
     pub catalog: Arc<Vec<Arc<dyn NodeLogic>>>,
     pub registry: Arc<FlowNodeRegistryInner>,
     pub provider: Arc<ModelProviderConfiguration>,
+    pub dispatcher: Arc<Dispatcher>,
     pub permission_cache: moka::sync::Cache<String, Arc<role::Model>>,
     pub credentials_cache: moka::sync::Cache<String, Arc<RuntimeCredentials>>,
-    pub state_cache: moka::sync::Cache<String, Arc<Mutex<FlowLikeState>>>,
+    pub state_cache: moka::sync::Cache<String, Arc<FlowLikeState>>,
     pub cdn_bucket: Arc<FlowLikeStore>,
     pub response_cache: moka::sync::Cache<String, Value>,
+    /// Auth token cache: token_hash -> CachedAuth
+    /// Short TTL (240s) to balance security vs performance
+    pub auth_cache: moka::sync::Cache<String, CachedAuth>,
+    /// WASM package registry (optional)
+    pub wasm_registry: Option<Arc<ServerRegistry>>,
+    /// Sink scheduler for cron events (AWS EventBridge, K8s CronJobs, or in-memory)
+    pub sink_scheduler: Option<Arc<dyn flow_like_sinks::SchedulerBackend>>,
 }
 
 impl State {
@@ -96,11 +120,7 @@ impl State {
             })
         }
 
-        let config = FlowLikeConfig::new();
-        let (http_client, _) = HTTPClient::new();
-        let flow_like_state = FlowLikeState::new(config, http_client);
-
-        let registry = FlowNodeRegistryInner::prepare(&flow_like_state, &catalog).await;
+        let registry = FlowNodeRegistryInner::prepare(&catalog);
 
         let cache = moka::sync::Cache::builder()
             .max_capacity(32 * 1024 * 1024) // 32 MB
@@ -112,17 +132,105 @@ impl State {
             .time_to_live(Duration::from_secs(60)) // 30 minutes
             .build();
 
+        let mail_client = if let Some(mail_config) = &platform_config.mail {
+            match create_mail_client(mail_config).await {
+                Ok(client) => Some(client),
+                Err(e) => {
+                    tracing::warn!("Failed to initialize mail client: {}", e);
+                    None
+                }
+            }
+        } else {
+            None
+        };
+
+        // Initialize dispatcher once with env config (caches AWS/Redis clients)
+        let dispatch_config = DispatchConfig::from_env();
+        let dispatcher = Dispatcher::new(dispatch_config).await;
+
+        // Initialize WASM registry if enabled (uses PostgreSQL + CDN)
+        let wasm_registry = if platform_config.features.wasm_registry {
+            let cdn_base_url = platform_config.cdn.clone();
+            let registry = ServerRegistry::new(db.clone(), cdn_bucket.clone(), cdn_base_url);
+            Some(Arc::new(registry))
+        } else {
+            None
+        };
+
+        // Initialize sink scheduler based on environment
+        // Priority: AWS EventBridge > Kubernetes > None (sink-service polls /schedules)
+        let sink_scheduler: Option<Arc<dyn flow_like_sinks::SchedulerBackend>> = {
+            let scheduler_provider = std::env::var("SINK_SCHEDULER_PROVIDER")
+                .ok()
+                .map(|s| flow_like_sinks::scheduler::SchedulerProvider::from_str(&s));
+
+            match scheduler_provider {
+                Some(flow_like_sinks::scheduler::SchedulerProvider::Aws) => {
+                    #[cfg(feature = "aws")]
+                    {
+                        let scheduler =
+                            flow_like_sinks::scheduler::AwsEventBridgeScheduler::from_env().await;
+                        tracing::info!("Initialized AWS EventBridge sink scheduler");
+                        Some(Arc::new(scheduler) as Arc<dyn flow_like_sinks::SchedulerBackend>)
+                    }
+                    #[cfg(not(feature = "aws"))]
+                    {
+                        tracing::warn!("AWS scheduler requested but aws feature not enabled");
+                        None
+                    }
+                }
+                Some(flow_like_sinks::scheduler::SchedulerProvider::Kubernetes) => {
+                    #[cfg(feature = "kubernetes")]
+                    {
+                        match flow_like_sinks::scheduler::KubernetesScheduler::from_env().await {
+                            Ok(scheduler) => {
+                                tracing::info!("Initialized Kubernetes CronJob sink scheduler");
+                                Some(Arc::new(scheduler)
+                                    as Arc<dyn flow_like_sinks::SchedulerBackend>)
+                            }
+                            Err(e) => {
+                                tracing::warn!("Failed to initialize K8s scheduler: {}", e);
+                                None
+                            }
+                        }
+                    }
+                    #[cfg(not(feature = "kubernetes"))]
+                    {
+                        tracing::warn!(
+                            "Kubernetes scheduler requested but kubernetes feature not enabled"
+                        );
+                        None
+                    }
+                }
+                Some(flow_like_sinks::scheduler::SchedulerProvider::Memory) => {
+                    tracing::info!("Using in-memory sink scheduler");
+                    Some(
+                        Arc::new(flow_like_sinks::scheduler::InMemoryScheduler::new())
+                            as Arc<dyn flow_like_sinks::SchedulerBackend>,
+                    )
+                }
+                None => {
+                    tracing::debug!(
+                        "No sink scheduler configured (SINK_SCHEDULER_PROVIDER not set)"
+                    );
+                    None
+                }
+            }
+        };
+
         Self {
             platform_config,
             db,
             client,
             jwks,
             stripe_client,
+            mail_client,
             #[cfg(feature = "aws")]
             aws_client: Arc::new(aws_config::load_from_env().await),
             catalog,
             provider: Arc::new(provider),
             registry: Arc::new(registry),
+            dispatcher: Arc::new(dispatcher),
             permission_cache: moka::sync::Cache::builder()
                 .max_capacity(32 * 1024 * 1024)
                 .time_to_live(Duration::from_secs(120))
@@ -134,6 +242,14 @@ impl State {
             credentials_cache: cache,
             cdn_bucket,
             response_cache,
+            // Auth cache: max 10k entries, 60s TTL for security
+            // Entries are keyed by token hash to avoid storing raw tokens
+            auth_cache: moka::sync::Cache::builder()
+                .max_capacity(10_000)
+                .time_to_live(Duration::from_secs(240))
+                .build(),
+            wasm_registry,
+            sink_scheduler,
         }
     }
 
@@ -187,7 +303,7 @@ impl State {
         mode: CredentialsAccess,
     ) -> flow_like_types::Result<App> {
         let credentials = self.scoped_credentials(sub, app_id, mode).await?;
-        let app_state = Arc::new(Mutex::new(credentials.to_state(state.clone()).await?));
+        let app_state = Arc::new(credentials.to_state(state.clone()).await?);
 
         let app = App::load(app_id.to_string(), app_state.clone()).await?;
 
@@ -212,7 +328,7 @@ impl State {
         let app_state = match app_state {
             Some(state) => state,
             None => {
-                let state = Arc::new(Mutex::new(credentials.to_state(state.clone()).await?));
+                let state = Arc::new(credentials.to_state(state.clone()).await?);
                 self.state_cache.insert("master".to_string(), state.clone());
                 state
             }
@@ -239,7 +355,7 @@ impl State {
         mode: CredentialsAccess,
     ) -> flow_like_types::Result<Board> {
         let credentials = self.scoped_credentials(sub, app_id, mode).await?;
-        let app_state = Arc::new(Mutex::new(credentials.to_state(state.clone()).await?));
+        let app_state = Arc::new(credentials.to_state(state.clone()).await?);
         let storage_root = Path::from("apps").child(app_id.to_string());
         let board = Board::load(storage_root, board_id, app_state, version).await?;
         Ok(board)
@@ -266,7 +382,7 @@ impl State {
         let app_state = match app_state {
             Some(state) => state,
             None => {
-                let state = Arc::new(Mutex::new(credentials.to_state(state.clone()).await?));
+                let state = Arc::new(credentials.to_state(state.clone()).await?);
                 self.state_cache.insert("master".to_string(), state.clone());
                 state
             }
@@ -288,7 +404,7 @@ impl State {
         mode: CredentialsAccess,
     ) -> flow_like_types::Result<Board> {
         let credentials = self.scoped_credentials(sub, app_id, mode).await?;
-        let app_state = Arc::new(Mutex::new(credentials.to_state(state.clone()).await?));
+        let app_state = Arc::new(credentials.to_state(state.clone()).await?);
 
         let storage_root = Path::from("apps").child(app_id.to_string());
 

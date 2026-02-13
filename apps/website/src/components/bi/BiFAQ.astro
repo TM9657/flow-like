@@ -1,0 +1,44 @@
+---
+interface Props {
+  t: (key: string) => string;
+}
+
+const { t } = Astro.props;
+
+const faqs = [
+  { q: t("bi.faq.q1"), a: t("bi.faq.a1") },
+  { q: t("bi.faq.q2"), a: t("bi.faq.a2") },
+  { q: t("bi.faq.q3"), a: t("bi.faq.a3") },
+  { q: t("bi.faq.q4"), a: t("bi.faq.a4") },
+  { q: t("bi.faq.q5"), a: t("bi.faq.a5") },
+  { q: t("bi.faq.q6"), a: t("bi.faq.a6") },
+];
+---
+
+<section class="relative py-14 sm:py-20 lg:py-28 bg-muted/30">
+  <div class="absolute top-0 left-0 right-0 h-px bg-border" />
+
+  <div class="mx-auto max-w-4xl px-6 lg:px-8">
+    <div class="text-center mb-16">
+      <p class="text-[11px] font-medium tracking-[0.3em] uppercase text-muted-foreground mb-4">
+        {t("bi.faq.tagline")}
+      </p>
+    </div>
+
+    <div class="space-y-4">
+      {faqs.map((faq, i) => (
+        <details class="group p-6 rounded-2xl border border-border/50 bg-card/50 cursor-pointer">
+          <summary class="flex items-center justify-between font-medium list-none">
+            <span>{faq.q}</span>
+            <svg class="w-5 h-5 text-muted-foreground group-open:rotate-180 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M19 9l-7 7-7-7" />
+            </svg>
+          </summary>
+          <p class="mt-4 text-muted-foreground leading-relaxed">
+            {faq.a}
+          </p>
+        </details>
+      ))}
+    </div>
+  </div>
+</section>

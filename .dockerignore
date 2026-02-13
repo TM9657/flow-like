@@ -1,10 +1,44 @@
-node_modules
-target
-out
-packages/ui
-assets
-tools
-.github
+# Git
+.git/
+.gitignore
+
+# Build artifacts
+target/
+**/target/
+
+# Node.js
+node_modules/
+**/node_modules/
+
+# Next.js
+.next/
+**/.next/
+
+# Environment and secrets
 .env
-.vscode
-.idea
+.env.*
+**/.env
+**/.env.*
+**/values-secrets.yaml
+**/values-secret*.yaml
+
+# Large files and caches
+*.log
+tmp/
+apps/desktop/dist/
+apps/desktop/out/
+apps/desktop/.tauri/
+apps/web-app/dist/
+apps/website/dist/
+apps/docs/dist/
+apps/embedded/dist/
+thirdparty/
+tests/data/
+assets/
+
+# IDE and OS
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store

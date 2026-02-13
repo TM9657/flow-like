@@ -1,7 +1,11 @@
+#[global_allocator]
+static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
+
 use flow_like_api::construct_router;
+use flow_like_catalog::get_catalog;
 use flow_like_storage::object_store::aws::AmazonS3Builder;
 use flow_like_types::tokio;
-use lambda_http::{Error, run_with_streaming_response, tracing};
+use lambda_http::{Error, run_with_streaming_response};
 use std::sync::Arc;
 use tracing_subscriber::prelude::*;
 
@@ -9,8 +13,12 @@ use tracing_subscriber::prelude::*;
 async fn main() -> Result<(), Error> {
     let sentry_endpoint = std::env::var("SENTRY_ENDPOINT").unwrap_or_default();
 
+    let env_filter = flow_like_api::warn_env_filter();
+
     let _sentry_guard = if sentry_endpoint.is_empty() {
-        tracing::init_default_subscriber();
+        tracing_subscriber::registry()
+            .with(tracing_subscriber::fmt::layer().with_filter(env_filter))
+            .init();
         None
     } else {
         let guard = sentry::init((
@@ -22,7 +30,7 @@ async fn main() -> Result<(), Error> {
             },
         ));
         tracing_subscriber::registry()
-            .with(tracing_subscriber::fmt::layer())
+            .with(tracing_subscriber::fmt::layer().with_filter(env_filter))
             .with(sentry_tracing::layer())
             .init();
         Some(guard)
@@ -51,7 +59,7 @@ async fn main() -> Result<(), Error> {
     let cdn_bucket =
         flow_like_storage::files::store::FlowLikeStore::AWS(Arc::new(cdn_bucket.build().unwrap()));
 
-    let catalog = Arc::new(flow_like_catalog::get_catalog().await);
+    let catalog = Arc::new(get_catalog());
     let state = Arc::new(flow_like_api::state::State::new(catalog, Arc::new(cdn_bucket)).await);
     let app = construct_router(state);
 

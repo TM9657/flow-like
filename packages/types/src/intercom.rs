@@ -6,7 +6,7 @@ use std::{
     time::SystemTime,
 };
 
-use cuid2::create_id;
+use crate::create_id;
 use dashmap::DashMap;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize, de::DeserializeOwned};

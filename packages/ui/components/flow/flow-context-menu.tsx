@@ -1,5 +1,11 @@
-import { MessageCircleDashedIcon, PlayCircleIcon, ZapIcon } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { createId } from "@paralleldrive/cuid2";
+import {
+	MessageCircleDashedIcon,
+	PlayCircleIcon,
+	VariableIcon,
+	ZapIcon,
+} from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useMiniSearch } from "react-minisearch";
 import {
 	ContextMenu,
@@ -10,6 +16,7 @@ import {
 import { type IBoard, doPinsMatch } from "../../lib";
 import type { INode } from "../../lib/schema/flow/node";
 import type { IPin } from "../../lib/schema/flow/pin";
+import type { IVariable } from "../../lib/schema/flow/variable";
 import { convertJsonToUint8Array } from "../../lib/uint8";
 import {
 	Button,
@@ -35,6 +42,7 @@ export function FlowContextMenu({
 	onPlaceholder,
 	onNodePlace,
 	onCommentPlace,
+	onCreateVariable,
 	onClose,
 }: Readonly<{
 	nodes: INode[];
@@ -45,14 +53,68 @@ export function FlowContextMenu({
 	onPlaceholder: (name: string) => void;
 	onNodePlace: (node: INode) => void;
 	onCommentPlace: () => void;
+	onCreateVariable?: (variable: IVariable) => void;
 	onClose: () => void;
 }>) {
 	const inputRef = useRef<HTMLInputElement>(null);
 	const placeholderInputRef = useRef<HTMLInputElement>(null);
+	const menuBlockedRef = useRef(false);
 	const [filter, setFilter] = useState("");
 	const [contextSensitive, setContextSensitive] = useState(true);
 	const [isPlaceholderOpen, setIsPlaceholderOpen] = useState(false);
 	const [placeholderName, setPlaceholderName] = useState("Placeholder");
+
+	const resolveRefValue = useCallback(
+		(value: string | null | undefined) => {
+			if (!value) return null;
+			return refs?.[value] ?? value;
+		},
+		[refs],
+	);
+
+	const buildVariableNode = useCallback(
+		(nodeName: "variable_get" | "variable_set", variable: IVariable) => {
+			const baseNode = nodes.find((node) => node.name === nodeName);
+			if (!baseNode) return undefined;
+
+			const pins = Object.values(baseNode.pins).map((pin) => {
+				if (pin.name === "var_ref") {
+					return {
+						...pin,
+						default_value: convertJsonToUint8Array(variable.id),
+					};
+				}
+				if (pin.name === "value_in" || pin.name === "value_ref") {
+					return {
+						...pin,
+						data_type: variable.data_type,
+						value_type: variable.value_type,
+						schema: variable.schema ?? null,
+					};
+				}
+				return pin;
+			});
+			const newPins = Object.fromEntries(pins.map((pin) => [pin.id, pin]));
+
+			const friendlyName =
+				nodeName === "variable_get"
+					? `Get ${variable.name}`
+					: `Set ${variable.name}`;
+
+			return {
+				...baseNode,
+				friendly_name: friendlyName,
+				pin_in_names: Object.values(newPins)
+					.filter((pin) => pin.pin_type === "Input")
+					.map((pin) => pin.friendly_name),
+				pin_out_names: Object.values(newPins)
+					.filter((pin) => pin.pin_type === "Output")
+					.map((pin) => pin.friendly_name),
+				pins: newPins,
+			};
+		},
+		[nodes],
+	);
 
 	useEffect(() => {
 		if (isPlaceholderOpen) {
@@ -67,6 +129,13 @@ export function FlowContextMenu({
 		setIsPlaceholderOpen(false);
 		setPlaceholderName("Placeholder");
 	};
+
+	const handleNodePlace = useCallback(
+		async (node: INode) => {
+			await onNodePlace(node);
+		},
+		[onNodePlace],
+	);
 
 	const sortedNodes = useMemo(() => {
 		if (!nodes) return [];
@@ -127,15 +196,43 @@ export function FlowContextMenu({
 
 		if (board && variableGetNode && variableSetNode) {
 			Object.values(board.variables).forEach((variable) => {
-				const getPins = Object.values(variableGetNode?.pins ?? {}).map((pin) =>
-					pin.name === "var_ref"
-						? { ...pin, default_value: convertJsonToUint8Array(variable.id) }
-						: pin,
+				const getPins = Object.values(variableGetNode?.pins ?? {}).map(
+					(pin) => {
+						if (pin.name === "var_ref") {
+							return {
+								...pin,
+								default_value: convertJsonToUint8Array(variable.id),
+							};
+						}
+						if (pin.name === "value_ref") {
+							return {
+								...pin,
+								data_type: variable.data_type,
+								value_type: variable.value_type,
+								schema: variable.schema ?? null,
+							};
+						}
+						return pin;
+					},
 				);
-				const setPins = Object.values(variableSetNode?.pins ?? {}).map((pin) =>
-					pin.name === "var_ref"
-						? { ...pin, default_value: convertJsonToUint8Array(variable.id) }
-						: pin,
+				const setPins = Object.values(variableSetNode?.pins ?? {}).map(
+					(pin) => {
+						if (pin.name === "var_ref") {
+							return {
+								...pin,
+								default_value: convertJsonToUint8Array(variable.id),
+							};
+						}
+						if (pin.name === "value_in" || pin.name === "value_ref") {
+							return {
+								...pin,
+								data_type: variable.data_type,
+								value_type: variable.value_type,
+								schema: variable.schema ?? null,
+							};
+						}
+						return pin;
+					},
 				);
 				const newGetPins = Object.fromEntries(
 					getPins.map((pin) => [pin.id, pin]),
@@ -264,22 +361,42 @@ export function FlowContextMenu({
 			if (board && variableGetNode && variableSetNode) {
 				Object.values(board.variables).forEach((variable) => {
 					const getPins = Object.values(variableGetNode?.pins ?? {}).map(
-						(pin) =>
-							pin.name === "var_ref"
-								? {
-										...pin,
-										default_value: convertJsonToUint8Array(variable.id),
-									}
-								: pin,
+						(pin) => {
+							if (pin.name === "var_ref") {
+								return {
+									...pin,
+									default_value: convertJsonToUint8Array(variable.id),
+								};
+							}
+							if (pin.name === "value_ref") {
+								return {
+									...pin,
+									data_type: variable.data_type,
+									value_type: variable.value_type,
+									schema: variable.schema ?? null,
+								};
+							}
+							return pin;
+						},
 					);
 					const setPins = Object.values(variableSetNode?.pins ?? {}).map(
-						(pin) =>
-							pin.name === "var_ref"
-								? {
-										...pin,
-										default_value: convertJsonToUint8Array(variable.id),
-									}
-								: pin,
+						(pin) => {
+							if (pin.name === "var_ref") {
+								return {
+									...pin,
+									default_value: convertJsonToUint8Array(variable.id),
+								};
+							}
+							if (pin.name === "value_in" || pin.name === "value_ref") {
+								return {
+									...pin,
+									data_type: variable.data_type,
+									value_type: variable.value_type,
+									schema: variable.schema ?? null,
+								};
+							}
+							return pin;
+						},
 					);
 					const newGetPins = Object.fromEntries(
 						getPins.map((pin) => [pin.id, pin]),
@@ -324,14 +441,20 @@ export function FlowContextMenu({
 		<>
 			<ContextMenu
 				onOpenChange={(open) => {
-					if (!open && !isPlaceholderOpen) {
+					if (open) {
+						// Block clicks for 200ms after menu opens to prevent accidental triggers
+						menuBlockedRef.current = true;
+						setTimeout(() => {
+							menuBlockedRef.current = false;
+						}, 200);
+					} else if (!isPlaceholderOpen && menuBlockedRef.current === false) {
 						onClose();
 						setFilter("");
 					}
 				}}
 			>
 				<ContextMenuTrigger asChild>{children}</ContextMenuTrigger>
-				<ContextMenuContent className="w-80 max-h-[30rem] h-[30rem] overflow-y-hidden overflow-x-hidden flex flex-col">
+				<ContextMenuContent className="w-80 max-h-120 h-120 overflow-y-hidden overflow-x-hidden flex flex-col">
 					<div className="sticky">
 						<div className="flex flex-row w-full items-center justify-between bg-accent text-accent-foreground p-1 mb-1">
 							<small className="font-bold">Actions</small>
@@ -352,14 +475,24 @@ export function FlowContextMenu({
 						</div>
 						<ContextMenuItem
 							className="flex flex-row gap-1 items-center"
-							onClick={() => onCommentPlace()}
+							onSelect={(event) => {
+								if (menuBlockedRef.current) {
+									event.preventDefault();
+									return;
+								}
+								onCommentPlace();
+							}}
 						>
 							<MessageCircleDashedIcon className="w-4 h-4" />
 							Comment
 						</ContextMenuItem>
 						<ContextMenuItem
 							className="flex flex-row gap-1 items-center"
-							onClick={() => {
+							onSelect={(event) => {
+								if (menuBlockedRef.current) {
+									event.preventDefault();
+									return;
+								}
 								const node_ref = sortedNodes.find(
 									(node) => node.name === "events_simple",
 								);
@@ -371,11 +504,60 @@ export function FlowContextMenu({
 						</ContextMenuItem>
 						<ContextMenuItem
 							className="flex flex-row gap-1 items-center"
-							onClick={() => setIsPlaceholderOpen(true)}
+							onSelect={(event) => {
+								if (menuBlockedRef.current) {
+									event.preventDefault();
+									return;
+								}
+								setIsPlaceholderOpen(true);
+							}}
 						>
 							<ZapIcon className="w-4 h-4" />
 							Placeholder
 						</ContextMenuItem>
+						{/* TODO: create the get node if input, set node if output! */}
+						{droppedPin &&
+							onCreateVariable &&
+							droppedPin.data_type !== "Execution" && (
+								<ContextMenuItem
+									className="flex flex-row gap-1 items-center"
+									onSelect={(event) => {
+										if (menuBlockedRef.current) {
+											event.preventDefault();
+											return;
+										}
+										const resolvedSchema = resolveRefValue(droppedPin.schema);
+										const variable: IVariable = {
+											id: createId(),
+											name: droppedPin.friendly_name || droppedPin.name,
+											data_type: droppedPin.data_type,
+											value_type: droppedPin.value_type,
+											exposed: false,
+											secret: false,
+											editable: true,
+											schema: resolvedSchema ?? null,
+											default_value: droppedPin.default_value ?? null,
+										};
+										onCreateVariable(variable);
+
+										const variableNodeName =
+											droppedPin.pin_type === "Output"
+												? "variable_set"
+												: "variable_get";
+										const variableNode = buildVariableNode(
+											variableNodeName,
+											variable,
+										);
+										if (variableNode) {
+											onNodePlace(variableNode);
+										}
+										onClose();
+									}}
+								>
+									<VariableIcon className="w-4 h-4" />
+									Create Variable from Pin
+								</ContextMenuItem>
+							)}
 						<Separator className="my-1" />
 						<Input
 							ref={inputRef}
@@ -415,6 +597,25 @@ export function FlowContextMenu({
 														? sortedNodes
 														: (searchResults ?? [])
 													).filter((node) => {
+														// Check if the dropped pin is a function reference handle
+														const isRefInHandle =
+															droppedPin.id.startsWith("ref_in_");
+														const isRefOutHandle =
+															droppedPin.id.startsWith("ref_out_");
+
+														if (isRefInHandle) {
+															// For ref_in, only show nodes with can_reference_fns
+															return node.fn_refs?.can_reference_fns ?? false;
+														}
+
+														if (isRefOutHandle) {
+															// For ref_out, only show nodes with can_be_referenced_by_fns
+															return (
+																node.fn_refs?.can_be_referenced_by_fns ?? false
+															);
+														}
+
+														// Regular pin matching logic
 														const pins = Object.values(node.pins);
 														return pins.some((pin) => {
 															if (pin.pin_type === droppedPin.pin_type)
@@ -430,7 +631,8 @@ export function FlowContextMenu({
 												]
 									}
 									filter={filter}
-									onNodePlace={async (node) => onNodePlace(node)}
+									onNodePlace={handleNodePlace}
+									menuBlockedRef={menuBlockedRef}
 								/>
 							)}
 						</ScrollArea>

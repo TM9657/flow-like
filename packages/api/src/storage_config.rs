@@ -1,0 +1,343 @@
+//! Shared storage configuration for all backends (Lambda, Kubernetes, Docker Compose, etc.)
+//!
+//! This module provides a unified way to configure and create FlowLikeStore instances
+//! from environment variables across all deployment backends.
+
+use flow_like::flow_like_storage::files::store::FlowLikeStore;
+use flow_like_storage::object_store::{
+    aws::AmazonS3Builder,
+    azure::{AzureConfigKey, MicrosoftAzureBuilder},
+    gcp::GoogleCloudStorageBuilder,
+};
+use flow_like_types::Result;
+use serde::{Deserialize, Serialize};
+use std::{fmt::Display, sync::Arc};
+
+/// Storage provider type
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+pub enum StorageProvider {
+    Aws,
+    Azure,
+    Gcp,
+}
+
+impl Display for StorageProvider {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            StorageProvider::Aws => write!(f, "aws"),
+            StorageProvider::Azure => write!(f, "azure"),
+            StorageProvider::Gcp => write!(f, "gcp"),
+        }
+    }
+}
+
+impl std::str::FromStr for StorageProvider {
+    type Err = String;
+
+    fn from_str(s: &str) -> std::result::Result<Self, Self::Err> {
+        match s.to_lowercase().as_str() {
+            "aws" | "s3" => Ok(StorageProvider::Aws),
+            "azure" | "blob" => Ok(StorageProvider::Azure),
+            "gcp" | "gcs" | "google" => Ok(StorageProvider::Gcp),
+            _ => Err(format!("Unknown storage provider: {}", s)),
+        }
+    }
+}
+
+/// AWS S3 configuration
+///
+/// Authentication options:
+/// 1. Static credentials (AWS_ACCESS_KEY_ID + AWS_SECRET_ACCESS_KEY)
+/// 2. IAM instance role (on EC2/ECS/EKS - automatic via AWS SDK credential chain)
+/// 3. Web Identity / IRSA (on EKS - set AWS_WEB_IDENTITY_TOKEN_FILE + AWS_ROLE_ARN)
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct S3Config {
+    pub endpoint: Option<String>,
+    pub region: String,
+    pub access_key_id: Option<String>,
+    pub secret_access_key: Option<String>,
+    pub session_token: Option<String>,
+    pub use_path_style: bool,
+}
+
+impl S3Config {
+    pub fn from_env() -> Result<Self> {
+        Ok(S3Config {
+            endpoint: std::env::var("AWS_ENDPOINT").ok(),
+            region: std::env::var("AWS_REGION").unwrap_or_else(|_| "us-east-1".to_string()),
+            access_key_id: std::env::var("AWS_ACCESS_KEY_ID").ok(),
+            secret_access_key: std::env::var("AWS_SECRET_ACCESS_KEY").ok(),
+            session_token: std::env::var("AWS_SESSION_TOKEN").ok(),
+            use_path_style: std::env::var("AWS_USE_PATH_STYLE")
+                .map(|v| v == "true" || v == "1")
+                .unwrap_or(false),
+        })
+    }
+
+    pub fn build_store(&self, bucket: &str) -> Result<FlowLikeStore> {
+        use flow_like_storage::object_store::aws::AmazonS3ConfigKey;
+
+        let mut builder = AmazonS3Builder::new()
+            .with_region(&self.region)
+            .with_bucket_name(bucket);
+
+        if let Some(endpoint) = &self.endpoint {
+            builder = builder.with_endpoint(endpoint);
+        }
+
+        // Use static credentials if provided, otherwise rely on AWS credential chain
+        // (instance role, web identity, environment variables, etc.)
+        if let (Some(access_key), Some(secret_key)) = (&self.access_key_id, &self.secret_access_key)
+        {
+            builder = builder
+                .with_access_key_id(access_key)
+                .with_secret_access_key(secret_key);
+
+            // Add session token if present (for assumed role credentials)
+            if let Some(token) = &self.session_token {
+                builder = builder.with_token(token);
+            }
+        }
+
+        if self.use_path_style {
+            builder = builder.with_config(AmazonS3ConfigKey::VirtualHostedStyleRequest, "false");
+        }
+
+        let store = builder
+            .build()
+            .map_err(|e| flow_like_types::anyhow!("Failed to build S3 store: {}", e))?;
+        Ok(FlowLikeStore::AWS(Arc::new(store)))
+    }
+}
+
+/// Azure Blob Storage configuration
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct AzureConfig {
+    pub account: String,
+    pub access_key: String,
+}
+
+impl AzureConfig {
+    pub fn from_env() -> Result<Self> {
+        Ok(AzureConfig {
+            account: std::env::var("AZURE_STORAGE_ACCOUNT_NAME")
+                .map_err(|_| flow_like_types::anyhow!("AZURE_STORAGE_ACCOUNT_NAME not set"))?,
+            access_key: std::env::var("AZURE_STORAGE_ACCOUNT_KEY")
+                .map_err(|_| flow_like_types::anyhow!("AZURE_STORAGE_ACCOUNT_KEY not set"))?,
+        })
+    }
+
+    pub fn build_store(&self, container: &str) -> Result<FlowLikeStore> {
+        let store = MicrosoftAzureBuilder::new()
+            .with_account(&self.account)
+            .with_container_name(container)
+            .with_config(AzureConfigKey::AccessKey, &self.access_key)
+            .build()
+            .map_err(|e| flow_like_types::anyhow!("Failed to build Azure store: {}", e))?;
+        Ok(FlowLikeStore::Azure(Arc::new(store)))
+    }
+}
+
+/// GCP Cloud Storage configuration
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct GcpConfig {
+    pub project_id: String,
+    pub credentials_json: Option<String>,
+}
+
+impl GcpConfig {
+    pub fn from_env() -> Result<Self> {
+        Ok(GcpConfig {
+            project_id: std::env::var("GCP_PROJECT_ID")
+                .map_err(|_| flow_like_types::anyhow!("GCP_PROJECT_ID not set"))?,
+            credentials_json: std::env::var("GOOGLE_APPLICATION_CREDENTIALS_JSON").ok(),
+        })
+    }
+
+    pub fn build_store(&self, bucket: &str) -> Result<FlowLikeStore> {
+        let mut builder = GoogleCloudStorageBuilder::new().with_bucket_name(bucket);
+
+        if let Some(creds) = &self.credentials_json {
+            builder = builder.with_service_account_key(creds);
+        }
+
+        let store = builder
+            .build()
+            .map_err(|e| flow_like_types::anyhow!("Failed to build GCS store: {}", e))?;
+        Ok(FlowLikeStore::Google(Arc::new(store)))
+    }
+}
+
+/// Unified storage configuration
+#[derive(Clone, Debug)]
+pub enum StorageConfig {
+    Aws(S3Config),
+    Azure(AzureConfig),
+    Gcp(GcpConfig),
+}
+
+impl StorageConfig {
+    /// Load storage config from environment based on STORAGE_PROVIDER
+    pub fn from_env() -> Result<Self> {
+        let provider: StorageProvider = std::env::var("STORAGE_PROVIDER")
+            .map_err(|_| flow_like_types::anyhow!("STORAGE_PROVIDER not set"))?
+            .parse()
+            .map_err(|e| flow_like_types::anyhow!("{}", e))?;
+
+        Self::from_env_with_provider(provider)
+    }
+
+    /// Load storage config from environment with explicit provider
+    pub fn from_env_with_provider(provider: StorageProvider) -> Result<Self> {
+        match provider {
+            StorageProvider::Aws => Ok(StorageConfig::Aws(S3Config::from_env()?)),
+            StorageProvider::Azure => Ok(StorageConfig::Azure(AzureConfig::from_env()?)),
+            StorageProvider::Gcp => Ok(StorageConfig::Gcp(GcpConfig::from_env()?)),
+        }
+    }
+
+    /// Get the provider type
+    pub fn provider(&self) -> StorageProvider {
+        match self {
+            StorageConfig::Aws(_) => StorageProvider::Aws,
+            StorageConfig::Azure(_) => StorageProvider::Azure,
+            StorageConfig::Gcp(_) => StorageProvider::Gcp,
+        }
+    }
+
+    /// Build a FlowLikeStore for the given bucket/container name
+    pub fn build_store(&self, bucket: &str) -> Result<FlowLikeStore> {
+        match self {
+            StorageConfig::Aws(cfg) => cfg.build_store(bucket),
+            StorageConfig::Azure(cfg) => cfg.build_store(bucket),
+            StorageConfig::Gcp(cfg) => cfg.build_store(bucket),
+        }
+    }
+}
+
+/// Create a FlowLikeStore from the unified storage config
+/// This creates a single store - for multi-bucket setups, call build_store multiple times
+pub fn create_flow_store(config: &StorageConfig, bucket: &str) -> Result<FlowLikeStore> {
+    config.build_store(bucket)
+}
+
+/// Load bucket names from environment
+#[derive(Clone, Debug)]
+pub struct BucketConfig {
+    pub meta: String,
+    pub content: String,
+    pub logs: String,
+}
+
+impl BucketConfig {
+    /// Load bucket configuration from environment
+    /// Uses provider-specific env vars with fallback to generic ones
+    pub fn from_env(provider: &StorageProvider) -> Result<Self> {
+        let (meta, content, logs) = match provider {
+            StorageProvider::Aws => (
+                std::env::var("AWS_META_BUCKET")
+                    .or_else(|_| std::env::var("META_BUCKET"))
+                    .map_err(|_| {
+                        flow_like_types::anyhow!("META_BUCKET or AWS_META_BUCKET not set")
+                    })?,
+                std::env::var("AWS_CONTENT_BUCKET")
+                    .or_else(|_| std::env::var("CONTENT_BUCKET"))
+                    .map_err(|_| {
+                        flow_like_types::anyhow!("CONTENT_BUCKET or AWS_CONTENT_BUCKET not set")
+                    })?,
+                std::env::var("AWS_LOG_BUCKET")
+                    .or_else(|_| std::env::var("LOG_BUCKET"))
+                    .map_err(|_| {
+                        flow_like_types::anyhow!("LOG_BUCKET or AWS_LOG_BUCKET not set")
+                    })?,
+            ),
+            StorageProvider::Azure => (
+                std::env::var("AZURE_META_CONTAINER")
+                    .or_else(|_| std::env::var("META_BUCKET"))
+                    .map_err(|_| {
+                        flow_like_types::anyhow!("META_BUCKET or AZURE_META_CONTAINER not set")
+                    })?,
+                std::env::var("AZURE_CONTENT_CONTAINER")
+                    .or_else(|_| std::env::var("CONTENT_BUCKET"))
+                    .map_err(|_| {
+                        flow_like_types::anyhow!(
+                            "CONTENT_BUCKET or AZURE_CONTENT_CONTAINER not set"
+                        )
+                    })?,
+                std::env::var("AZURE_LOG_CONTAINER")
+                    .or_else(|_| std::env::var("LOG_BUCKET"))
+                    .map_err(|_| {
+                        flow_like_types::anyhow!("LOG_BUCKET or AZURE_LOG_CONTAINER not set")
+                    })?,
+            ),
+            StorageProvider::Gcp => (
+                std::env::var("GCP_META_BUCKET")
+                    .or_else(|_| std::env::var("META_BUCKET"))
+                    .map_err(|_| {
+                        flow_like_types::anyhow!("META_BUCKET or GCP_META_BUCKET not set")
+                    })?,
+                std::env::var("GCP_CONTENT_BUCKET")
+                    .or_else(|_| std::env::var("CONTENT_BUCKET"))
+                    .map_err(|_| {
+                        flow_like_types::anyhow!("CONTENT_BUCKET or GCP_CONTENT_BUCKET not set")
+                    })?,
+                std::env::var("GCP_LOG_BUCKET")
+                    .or_else(|_| std::env::var("LOG_BUCKET"))
+                    .map_err(|_| {
+                        flow_like_types::anyhow!("LOG_BUCKET or GCP_LOG_BUCKET not set")
+                    })?,
+            ),
+        };
+
+        Ok(BucketConfig {
+            meta,
+            content,
+            logs,
+        })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_storage_provider_parse() {
+        assert_eq!(
+            "aws".parse::<StorageProvider>().unwrap(),
+            StorageProvider::Aws
+        );
+        assert_eq!(
+            "s3".parse::<StorageProvider>().unwrap(),
+            StorageProvider::Aws
+        );
+        assert_eq!(
+            "azure".parse::<StorageProvider>().unwrap(),
+            StorageProvider::Azure
+        );
+        assert_eq!(
+            "blob".parse::<StorageProvider>().unwrap(),
+            StorageProvider::Azure
+        );
+        assert_eq!(
+            "gcp".parse::<StorageProvider>().unwrap(),
+            StorageProvider::Gcp
+        );
+        assert_eq!(
+            "gcs".parse::<StorageProvider>().unwrap(),
+            StorageProvider::Gcp
+        );
+        assert_eq!(
+            "google".parse::<StorageProvider>().unwrap(),
+            StorageProvider::Gcp
+        );
+    }
+
+    #[test]
+    fn test_storage_provider_display() {
+        assert_eq!(StorageProvider::Aws.to_string(), "aws");
+        assert_eq!(StorageProvider::Azure.to_string(), "azure");
+        assert_eq!(StorageProvider::Gcp.to_string(), "gcp");
+    }
+}

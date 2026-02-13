@@ -5,7 +5,7 @@ use flow_like_types::{
     sync::{DashMap, mpsc},
 };
 use serde::{Deserialize, Serialize};
-use std::{sync::Arc, time::Duration};
+use std::{sync::{Arc, OnceLock}, time::Duration};
 
 use super::cache::{cache_file_exists, read_cache_file, write_cache_file};
 
@@ -27,32 +27,91 @@ pub struct HTTPClient {
     #[serde(skip)]
     sender: Option<mpsc::Sender<Request>>,
 
+    /// Lazily initialized to avoid triggering iOS Network.framework
+    /// before the run loop is active (causes `nw_dictionary_copy null`).
     #[serde(skip)]
-    client: reqwest::Client,
+    client: OnceLock<reqwest::Client>,
 }
 
 impl HTTPClient {
+    async fn try_cached_value<T>(
+        &self,
+        request_hash: &str,
+        request: &Request,
+    ) -> flow_like_types::Result<Option<T>>
+    where
+        for<'de> T: Deserialize<'de> + Clone,
+    {
+        if let Ok(value) = self.handle_in_memory(request_hash, request).await {
+            return Ok(Some(value));
+        }
+
+        if let Ok(value) = self.handle_file_cache(request_hash, request).await {
+            return Ok(Some(value));
+        }
+
+        Ok(None)
+    }
+
+    async fn fetch_and_cache<T>(
+        &self,
+        request_hash: &str,
+        request: Request,
+    ) -> flow_like_types::Result<T>
+    where
+        for<'de> T: Deserialize<'de> + Clone + Serialize,
+    {
+        let response = self.client().execute(request).await?;
+        let status = response.status();
+
+        if !status.is_success() {
+            let body_text = response.text().await.unwrap_or_default();
+            return Err(flow_like_types::anyhow!(
+                "Request failed with status {}: {}",
+                status,
+                body_text
+            ));
+        }
+
+        let value = response.json::<Value>().await?;
+        let _ = self.put(request_hash, &value);
+        let value = flow_like_types::json::from_value::<T>(value.clone())?;
+        Ok(value)
+    }
+
     pub fn new() -> (HTTPClient, mpsc::Receiver<Request>) {
         let (tx, rx) = mpsc::channel(1000);
         (
             HTTPClient {
                 cache: Arc::new(DashMap::new()),
                 sender: Some(tx),
-                client: reqwest::Client::new(),
+                client: OnceLock::new(),
             },
             rx,
         )
+    }
+
+    pub fn new_without_refetch() -> HTTPClient {
+        HTTPClient {
+            cache: Arc::new(DashMap::new()),
+            sender: None,
+            client: OnceLock::new(),
+        }
     }
 
     /// Refetches the request
     /// This is used to update the cache in the background
     async fn refetch(&self, request: &Request) {
         if let Some(sender) = &self.sender {
-            let request = request.try_clone();
-            if let Some(request) = request
-                && let Err(e) = sender.send_timeout(request, Duration::from_secs(1)).await
-            {
-                eprintln!("Failed to send request: {}", e);
+            match request.try_clone() {
+                Some(cloned) => {
+                    if let Err(e) = sender.send_timeout(cloned, Duration::from_secs(30)).await {
+                        eprintln!("Failed to send request: {}", e);
+                    }
+                }
+                None => {
+                    eprintln!("Skipping refetch: request body is not clonable");
+                }
             }
         }
     }
@@ -110,13 +169,17 @@ impl HTTPClient {
         let mut headers_to_hash: Vec<_> = request
             .headers()
             .iter()
-            .map(|(key, value)| (key.as_str(), value))
-            .filter(|(key, _)| HEADERS_TO_CACHE.contains(&key.to_lowercase().as_str()))
+            .filter(|(key, _)| {
+                HEADERS_TO_CACHE
+                    .iter()
+                    .any(|cached| cached.eq_ignore_ascii_case(key.as_str()))
+            })
             .collect();
-        headers_to_hash.sort_by_key(|(key, _)| *key);
+        headers_to_hash.sort_by_key(|(key, _)| key.as_str());
 
         for (key, value) in headers_to_hash {
-            hasher.update(key.as_bytes());
+            let header_name = key.as_str();
+            hasher.update(header_name.as_bytes());
             hasher.update(value.as_bytes());
         }
 
@@ -133,7 +196,7 @@ impl HTTPClient {
     }
 
     pub fn client(&self) -> reqwest::Client {
-        self.client.clone()
+        self.client.get_or_init(reqwest::Client::new).clone()
     }
 
     pub async fn hashed_request<T>(&self, request: Request) -> flow_like_types::Result<T>
@@ -142,23 +205,12 @@ impl HTTPClient {
     {
         let request_hash = self.quick_hash(&request);
 
-        // checks the in memory cache
-        if let Ok(value) = self.handle_in_memory(&request_hash, &request).await {
-            return Ok(value);
-        }
-
-        // checks the file cache
-        if let Ok(value) = self.handle_file_cache(&request_hash, &request).await {
+        if let Some(value) = self.try_cached_value::<T>(&request_hash, &request).await? {
             return Ok(value);
         }
 
         // fetches from the network
-        let response = self.client.execute(request).await?;
-        println!("Response: {:?}", response);
-        let value = response.json::<Value>().await?;
-        let _ = self.put(&request_hash, &value);
-        let value = flow_like_types::json::from_value::<T>(value.clone())?;
-        Ok(value)
+        self.fetch_and_cache::<T>(&request_hash, request).await
     }
 
     pub fn put(&self, request_hash: &str, body: &Value) -> flow_like_types::Result<()> {

@@ -1,0 +1,94 @@
+---
+import { tCommon } from "../../i18n/locales/pages/common";
+
+interface Props {
+  lang: string;
+}
+
+const { lang } = Astro.props;
+const t = (key: string) => tCommon(lang, key);
+
+const faqKeys = [
+  { q: "pricing.faq.q1", a: "pricing.faq.a1" },
+  { q: "pricing.faq.q2", a: "pricing.faq.a2" },
+  { q: "pricing.faq.q3", a: "pricing.faq.a3" },
+  { q: "pricing.faq.q4", a: "pricing.faq.a4" },
+  { q: "pricing.faq.q5", a: "pricing.faq.a5" },
+  { q: "pricing.faq.q6", a: "pricing.faq.a6" },
+  { q: "pricing.faq.q7", a: "pricing.faq.a7" },
+  { q: "pricing.faq.q8", a: "pricing.faq.a8" },
+];
+---
+
+<section class="py-20 md:py-32 relative overflow-hidden">
+  <!-- Background -->
+  <div class="absolute inset-0 -z-10">
+    <div class="absolute inset-0 bg-gradient-to-b from-muted/30 via-muted/50 to-muted/30"></div>
+    <div class="absolute top-0 left-1/2 -translate-x-1/2 w-[800px] h-[400px] bg-primary/5 rounded-full blur-[150px]"></div>
+  </div>
+
+  <div class="max-w-4xl mx-auto px-4">
+    {/* Header */}
+    <div class="text-center mb-16">
+      <div class="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-card/50 backdrop-blur-sm border border-border/50 text-sm text-muted-foreground mb-6">
+        <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+        </svg>
+        FAQ
+      </div>
+      <h2 class="text-4xl md:text-5xl font-bold mb-4">
+        <span class="bg-clip-text text-transparent bg-gradient-to-r from-foreground to-foreground/70">
+          {t("pricing.faq.title")}
+        </span>
+      </h2>
+      <p class="text-lg text-muted-foreground max-w-xl mx-auto">{t("pricing.faq.subtitle")}</p>
+    </div>
+
+    {/* FAQ Grid - Two columns on desktop */}
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+      {faqKeys.map((faq, index) => (
+        <details
+          class="group rounded-2xl bg-card/50 backdrop-blur-sm border border-border/50 hover:border-primary/30 transition-all duration-300 overflow-hidden"
+        >
+          <summary class="flex items-center justify-between p-6 cursor-pointer list-none">
+            <span class="font-semibold pr-4 group-hover:text-primary transition-colors">{t(faq.q)}</span>
+            <div class="flex-shrink-0 w-8 h-8 rounded-full bg-muted/50 flex items-center justify-center group-hover:bg-primary/10 transition-colors">
+              <svg
+                class="w-4 h-4 text-muted-foreground group-hover:text-primary transition-all duration-300 group-open:rotate-180"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+              >
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+              </svg>
+            </div>
+          </summary>
+          <div class="px-6 pb-6 -mt-2">
+            <p class="text-muted-foreground leading-relaxed">{t(faq.a)}</p>
+          </div>
+        </details>
+      ))}
+    </div>
+
+    {/* Still have questions? */}
+    <div class="mt-12 text-center">
+      <div class="inline-flex flex-col sm:flex-row items-center gap-4 p-6 rounded-2xl bg-card/30 backdrop-blur-sm border border-border/50">
+        <div class="w-12 h-12 rounded-2xl bg-gradient-to-br from-primary/20 to-violet-500/20 flex items-center justify-center">
+          <svg class="w-6 h-6 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+          </svg>
+        </div>
+        <div class="text-center sm:text-left">
+          <p class="font-semibold">{t("pricing.faq.moreQuestions") || "Still have questions?"}</p>
+          <p class="text-sm text-muted-foreground">{t("pricing.faq.contactUs") || "We're here to help"}</p>
+        </div>
+        <a
+          href="mailto:hello@flow-like.com"
+          class="px-5 py-2.5 rounded-xl bg-primary text-primary-foreground font-medium hover:bg-primary/90 transition-colors"
+        >
+          {t("pricing.faq.contactButton") || "Contact us"}
+        </a>
+      </div>
+    </div>
+  </div>
+</section>

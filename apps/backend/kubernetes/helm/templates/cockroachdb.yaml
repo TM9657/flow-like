@@ -1,0 +1,211 @@
+{{- if eq (include "flow-like.databaseMode" .) "internal" }}
+{{- $fullname := include "flow-like.fullname" . -}}
+{{- $secretName := printf "%s-cockroachdb" $fullname -}}
+{{- $user := (default "flowlike" .Values.database.internal.auth.username) -}}
+{{- $dbName := (default "flowlike" .Values.database.internal.auth.database) -}}
+{{- $host := printf "%s-cockroachdb-public" $fullname -}}
+{{- /* In insecure mode, CockroachDB doesn't support passwords */}}
+{{- $urlInsecure := printf "postgresql://%s@%s:26257/%s?sslmode=disable" $user $host $dbName -}}
+
+apiVersion: v1
+kind: Secret
+metadata:
+  name: {{ $secretName }}
+  labels:
+    {{- include "flow-like.labels" . | nindent 4 }}
+    app.kubernetes.io/component: cockroachdb
+type: Opaque
+stringData:
+  username: {{ $user | quote }}
+  database: {{ $dbName | quote }}
+  DATABASE_URL: {{ $urlInsecure | quote }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $fullname }}-cockroachdb-public
+  labels:
+    {{- include "flow-like.labels" . | nindent 4 }}
+    app.kubernetes.io/component: cockroachdb
+spec:
+  type: ClusterIP
+  ports:
+    - name: sql
+      port: 26257
+      targetPort: 26257
+    - name: http
+      port: 8080
+      targetPort: 8080
+  selector:
+    app.kubernetes.io/name: {{ include "flow-like.name" . }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/component: cockroachdb
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $fullname }}-cockroachdb
+  labels:
+    {{- include "flow-like.labels" . | nindent 4 }}
+    app.kubernetes.io/component: cockroachdb
+spec:
+  type: ClusterIP
+  clusterIP: None
+  publishNotReadyAddresses: true
+  ports:
+    - name: sql
+      port: 26257
+      targetPort: 26257
+    - name: http
+      port: 8080
+      targetPort: 8080
+  selector:
+    app.kubernetes.io/name: {{ include "flow-like.name" . }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/component: cockroachdb
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ $fullname }}-cockroachdb
+  labels:
+    {{- include "flow-like.labels" . | nindent 4 }}
+    app.kubernetes.io/component: cockroachdb
+spec:
+  serviceName: {{ $fullname }}-cockroachdb
+  replicas: {{ .Values.database.internal.replicas | default 1 }}
+  podManagementPolicy: Parallel
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: {{ include "flow-like.name" . }}
+      app.kubernetes.io/instance: {{ .Release.Name }}
+      app.kubernetes.io/component: cockroachdb
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: {{ include "flow-like.name" . }}
+        app.kubernetes.io/instance: {{ .Release.Name }}
+        app.kubernetes.io/component: cockroachdb
+    spec:
+      serviceAccountName: {{ include "flow-like.serviceAccountName" . }}
+      {{- with .Values.global.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: cockroachdb
+          image: "{{ .Values.database.internal.image.repository }}:{{ .Values.database.internal.image.tag }}"
+          imagePullPolicy: {{ .Values.database.internal.image.pullPolicy | default "IfNotPresent" }}
+          ports:
+            - name: sql
+              containerPort: 26257
+            - name: http
+              containerPort: 8080
+          command:
+            - /cockroach/cockroach
+            - start-single-node
+            - --insecure
+            - --advertise-addr=$(POD_NAME).{{ $fullname }}-cockroachdb.{{ .Release.Namespace }}.svc.cluster.local
+            - --logtostderr=WARNING
+            - --cache={{ .Values.database.internal.cache | default "25%" }}
+            - --max-sql-memory={{ .Values.database.internal.maxSqlMemory | default "25%" }}
+          env:
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: COCKROACH_CHANNEL
+              value: kubernetes-helm
+          volumeMounts:
+            - name: datadir
+              mountPath: /cockroach/cockroach-data
+          readinessProbe:
+            httpGet:
+              path: /health?ready=1
+              port: http
+              scheme: HTTP
+            initialDelaySeconds: 10
+            periodSeconds: 5
+            failureThreshold: 2
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+              scheme: HTTP
+            initialDelaySeconds: 30
+            periodSeconds: 10
+          {{- with .Values.database.internal.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+      terminationGracePeriodSeconds: 60
+  volumeClaimTemplates:
+    - metadata:
+        name: datadir
+        labels:
+          {{- include "flow-like.labels" . | nindent 10 }}
+          app.kubernetes.io/component: cockroachdb
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        {{- if .Values.database.internal.persistence.storageClass }}
+        storageClassName: {{ .Values.database.internal.persistence.storageClass | quote }}
+        {{- end }}
+        resources:
+          requests:
+            storage: {{ .Values.database.internal.persistence.size | default "10Gi" }}
+---
+# Job to create user and database - runs after StatefulSet is created
+# This is NOT a Helm hook - it runs as a regular Job and handles its own waiting
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ $fullname }}-cockroachdb-init
+  labels:
+    {{- include "flow-like.labels" . | nindent 4 }}
+    app.kubernetes.io/component: cockroachdb-init
+spec:
+  backoffLimit: 10
+  ttlSecondsAfterFinished: 600
+  template:
+    metadata:
+      labels:
+        {{- include "flow-like.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: cockroachdb-init
+    spec:
+      restartPolicy: OnFailure
+      {{- with .Values.global.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: init
+          image: "{{ .Values.database.internal.image.repository }}:{{ .Values.database.internal.image.tag }}"
+          imagePullPolicy: {{ .Values.database.internal.image.pullPolicy | default "IfNotPresent" }}
+          command:
+            - /bin/sh
+            - -c
+            - |
+              set -e
+
+              echo "Waiting for CockroachDB to be ready..."
+              until /cockroach/cockroach sql \
+                --insecure \
+                --host={{ $fullname }}-cockroachdb-public \
+                -e "SELECT 1" 2>/dev/null; do
+                echo "CockroachDB not ready yet, waiting..."
+                sleep 3
+              done
+
+              echo "Creating user and database..."
+              /cockroach/cockroach sql \
+                --insecure \
+                --host={{ $fullname }}-cockroachdb-public \
+                -e "
+                  CREATE USER IF NOT EXISTS {{ $user }};
+                  CREATE DATABASE IF NOT EXISTS {{ $dbName }};
+                  GRANT ALL ON DATABASE {{ $dbName }} TO {{ $user }};
+                  ALTER USER {{ $user }} WITH CREATEDB;
+                "
+
+              echo "CockroachDB initialization complete!"
+{{- end }}

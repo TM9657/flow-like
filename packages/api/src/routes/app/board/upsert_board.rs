@@ -7,25 +7,46 @@ use axum::{
     extract::{Path, State},
 };
 use flow_like::flow::{
-    board::{Board, ExecutionStage},
+    board::{Board, ExecutionMode, ExecutionStage},
     execution::LogLevel,
 };
 use serde::{Deserialize, Serialize};
+use utoipa::ToSchema;
 
-#[derive(Clone, Deserialize)]
+#[derive(Clone, Deserialize, ToSchema)]
 pub struct UpsertBoard {
     pub name: Option<String>,
     pub description: Option<String>,
+    #[schema(value_type = Option<String>)]
     pub stage: Option<ExecutionStage>,
+    #[schema(value_type = Option<i32>)]
     pub log_level: Option<LogLevel>,
+    #[schema(value_type = Option<String>)]
+    pub execution_mode: Option<ExecutionMode>,
+    #[schema(value_type = Option<Object>)]
     pub template: Option<Board>,
 }
 
-#[derive(Deserialize, Serialize)]
+#[derive(Deserialize, Serialize, ToSchema)]
 pub struct UpsertBoardResponse {
     pub id: String,
 }
 
+#[utoipa::path(
+    put,
+    path = "/apps/{app_id}/board/{board_id}",
+    tag = "boards",
+    params(
+        ("app_id" = String, Path, description = "Application ID"),
+        ("board_id" = String, Path, description = "Board ID")
+    ),
+    request_body = UpsertBoard,
+    responses(
+        (status = 200, description = "Board created or updated", body = UpsertBoardResponse),
+        (status = 401, description = "Unauthorized"),
+        (status = 403, description = "Forbidden")
+    )
+)]
 #[tracing::instrument(
     name = "PUT /apps/{app_id}/board/{board_id}",
     skip(state, user, params)
@@ -52,6 +73,9 @@ pub async fn upsert_board(
     board.description = params.description.unwrap_or(board.description.clone());
     board.stage = params.stage.unwrap_or(board.stage.clone());
     board.log_level = params.log_level.unwrap_or(board.log_level);
+    board.execution_mode = params
+        .execution_mode
+        .unwrap_or(board.execution_mode.clone());
     board.save(None).await?;
 
     Ok(Json(UpsertBoardResponse {

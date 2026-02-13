@@ -3,6 +3,7 @@ import { createId } from "@paralleldrive/cuid2";
 import * as Sentry from "@sentry/nextjs";
 import { invoke } from "@tauri-apps/api/core";
 import { WebviewWindow } from "@tauri-apps/api/webviewWindow";
+import { openUrl } from "@tauri-apps/plugin-opener";
 import {
 	Avatar,
 	AvatarFallback,
@@ -27,10 +28,13 @@ import {
 	DropdownMenuSeparator,
 	DropdownMenuShortcut,
 	DropdownMenuTrigger,
+	FlowBackground,
 	GlobalPermission,
 	IBitTypes,
 	Input,
 	Label,
+	MobileHeader,
+	MobileHeaderProvider,
 	Sidebar,
 	SidebarContent,
 	SidebarFooter,
@@ -46,6 +50,7 @@ import {
 	SidebarMenuSubItem,
 	SidebarProvider,
 	SidebarRail,
+	SpotlightTrigger,
 	Textarea,
 	useBackend,
 	useInvalidateInvoke,
@@ -55,6 +60,7 @@ import {
 import type { ISettingsProfile } from "@tm9657/flow-like-ui/types";
 import {
 	BadgeCheck,
+	BarChart3,
 	BellIcon,
 	BookOpenIcon,
 	BugIcon,
@@ -64,6 +70,8 @@ import {
 	Edit3Icon,
 	ExternalLinkIcon,
 	HeartIcon,
+	KeyIcon,
+	KeyRoundIcon,
 	LayoutDashboardIcon,
 	LibraryIcon,
 	LogInIcon,
@@ -78,15 +86,17 @@ import {
 	Sun,
 	UsersRoundIcon,
 	WorkflowIcon,
+	ZapIcon,
 } from "lucide-react";
 import { useTheme } from "next-themes";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useAuth } from "react-oidc-context";
 import { toast } from "sonner";
 import { fetcher } from "../lib/api";
 import { CreateProfileDialog } from "./add-profile";
+import { Shortcuts } from "./shortcuts";
 import { useTauriInvoke } from "./useInvoke";
 
 const data = {
@@ -127,12 +137,25 @@ const data = {
 				// 	title: "Favorites",
 				// 	url: "/library/favorites",
 				// },
-				{
-					title: "Create App",
-					url: "/library/new",
-				},
 			],
 		},
+		// {
+		// 	title: "Developer",
+		// 	url: "/settings/registry",
+		// 	icon: Code2Icon,
+		// 	isActive: false,
+		// 	permission: false,
+		// 	items: [
+		// 		{
+		// 			title: "Installed",
+		// 			url: "/settings/registry/installed",
+		// 		},
+		// 		{
+		// 			title: "Explore",
+		// 			url: "/settings/registry/explore",
+		// 		},
+		// 	],
+		// },
 		// {
 		// 	title: "Documentation",
 		// 	url: "https://docs.flow-like.com/",
@@ -198,6 +221,32 @@ const data = {
 				},
 			],
 		},
+		{
+			title: "Solutions",
+			url: "/admin/solutions",
+			icon: Sparkles,
+			permission: true,
+			items: [
+				{
+					title: "Manage Requests",
+					url: "/admin/solutions",
+					permission: GlobalPermission.WriteSolutions,
+				},
+			],
+		},
+		{
+			title: "Sinks",
+			url: "/admin/sinks",
+			icon: KeyRoundIcon,
+			permission: true,
+			items: [
+				{
+					title: "Service Tokens",
+					url: "/admin/sinks",
+					permission: GlobalPermission.Admin,
+				},
+			],
+		},
 	],
 };
 
@@ -210,17 +259,116 @@ interface IUser {
 export function AppSidebar({
 	children,
 }: Readonly<{ children: React.ReactNode }>) {
-	const defaultOpen = localStorage.getItem("sidebar_state") === "true";
+	// Guard localStorage usage for SSR and provide a sensible default.
+	const defaultOpen =
+		typeof window !== "undefined"
+			? localStorage.getItem("sidebar_state") === "true"
+			: true;
 
 	return (
 		<SidebarProvider defaultOpen={defaultOpen}>
 			<InnerSidebar />
-			<main className="w-full h-full">
-				<SidebarInset className="bg-gradient-to-br from-background via-background to-muted/20">
-					{children}
-				</SidebarInset>
+			<IOSQuickMenuTrigger />
+			<main
+				className="w-full h-dvh flex flex-col overflow-hidden"
+				style={{
+					height: "var(--fl-mobile-vvh, 100dvh)",
+					paddingTop: "var(--fl-safe-top, env(safe-area-inset-top, 0px))",
+				}}
+			>
+				<MobileHeaderProvider>
+					<MobileHeader />
+					<SidebarInset
+						className="relative flex flex-col flex-1 min-h-0 h-full overflow-hidden"
+						style={{ paddingBottom: "var(--fl-safe-bottom, env(safe-area-inset-bottom, 0px))" }}
+					>
+						<FlowBackground
+							intensity="subtle"
+							interactive
+							className="flex flex-col flex-1 min-h-0"
+						>
+							{children}
+						</FlowBackground>
+					</SidebarInset>
+				</MobileHeaderProvider>
 			</main>
 		</SidebarProvider>
+	);
+}
+
+function IOSQuickMenuTrigger() {
+	const { isMobile, openMobile, toggleSidebar } = useSidebar();
+	const touchStartRef = useRef<{ x: number; y: number } | null>(null);
+
+	const isIosTauri = useMemo(() => {
+		if (typeof window === "undefined" || typeof navigator === "undefined") {
+			return false;
+		}
+
+		const isTauri =
+			"__TAURI__" in (window as any) ||
+			"__TAURI_IPC__" in (window as any) ||
+			"__TAURI_INTERNALS__" in (window as any);
+		const isIOS =
+			/iPad|iPhone|iPod/.test(navigator.userAgent) ||
+			(navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+
+		return isTauri && isIOS;
+	}, []);
+
+	useEffect(() => {
+		if (!isIosTauri || !isMobile) return;
+
+		const onTouchStart = (event: TouchEvent) => {
+			const t = event.changedTouches[0];
+			if (!t) return;
+			touchStartRef.current = { x: t.clientX, y: t.clientY };
+		};
+
+		const onTouchEnd = (event: TouchEvent) => {
+			if (openMobile) return;
+			const start = touchStartRef.current;
+			const t = event.changedTouches[0];
+			if (!start || !t) return;
+
+			const dx = t.clientX - start.x;
+			const dy = Math.abs(t.clientY - start.y);
+
+			// Left-edge swipe opens the menu if the header button is hard to tap.
+			if (start.x <= 24 && dx > 40 && dy < 30) {
+				toggleSidebar();
+			}
+		};
+
+		window.addEventListener("touchstart", onTouchStart, { passive: true });
+		window.addEventListener("touchend", onTouchEnd, { passive: true });
+
+		return () => {
+			window.removeEventListener("touchstart", onTouchStart);
+			window.removeEventListener("touchend", onTouchEnd);
+		};
+	}, [isIosTauri, isMobile, openMobile, toggleSidebar]);
+
+	if (!isIosTauri || !isMobile || openMobile) return null;
+
+	return (
+		<div
+			className="md:hidden fixed left-3 z-[70]"
+			style={{ top: "calc(var(--fl-safe-top, 0px) + 10px)" }}
+		>
+			<Button
+				size="icon"
+				variant="outline"
+				className="h-10 w-10 rounded-lg shadow-lg bg-card/95 backdrop-blur supports-backdrop-filter:bg-background/70"
+				onClick={toggleSidebar}
+				onTouchStart={(event) => {
+					event.stopPropagation();
+				}}
+				aria-label="Open menu"
+			>
+				<SidebarOpenIcon className="h-4 w-4" />
+			</Button>
+		</div>
 	);
 }
 
@@ -239,9 +387,11 @@ function InnerSidebar() {
 		<Sidebar collapsible="icon" side="left">
 			<SidebarHeader>
 				<Profiles />
+				<SpotlightTrigger />
 			</SidebarHeader>
 			<SidebarContent>
 				<NavMain items={data.navMain} />
+				<Shortcuts />
 				<Flows />
 			</SidebarContent>
 			<SidebarFooter>
@@ -389,7 +539,10 @@ function Profiles() {
 	const backend = useBackend();
 	const invalidate = useInvalidateInvoke();
 	const { isMobile } = useSidebar();
-	const profiles = useTauriInvoke<ISettingsProfile[]>("get_profiles", {});
+	const profiles = useTauriInvoke<Record<string, ISettingsProfile>>(
+		"get_profiles",
+		{},
+	);
 	const currentProfile = useInvoke(
 		backend.userState.getSettingsProfile,
 		backend.userState,
@@ -563,10 +716,17 @@ function NavMain({
 	}[];
 }>) {
 	const backend = useBackend();
+	const auth = useAuth();
 	const router = useRouter();
 	const pathname = usePathname();
 	const { open } = useSidebar();
-	const info = useInvoke(backend.userState.getInfo, backend.userState, []);
+	const info = useInvoke(
+		backend.userState.getInfo,
+		backend.userState,
+		[],
+		Boolean(auth?.isAuthenticated),
+		[auth?.user?.profile?.sub, auth?.isAuthenticated],
+	);
 
 	return (
 		<>
@@ -612,7 +772,7 @@ function NavMain({
 													if (e.button === 1) {
 														e.preventDefault();
 														try {
-															const _view = new WebviewWindow(
+															const webview = new WebviewWindow(
 																`sidebar-${createId()}`,
 																{
 																	url: item.url,
@@ -624,6 +784,13 @@ function NavMain({
 																	height: 800,
 																},
 															);
+															// Listen for webview creation errors
+															webview.once("tauri://error", (error) => {
+																console.error(
+																	"Failed to open new window:",
+																	error,
+																);
+															});
 														} catch (error) {
 															console.error(
 																"Failed to open new window:",
@@ -797,8 +964,16 @@ export function NavUser({
 		backend.userState.getProfile,
 		backend.userState,
 		[],
+		Boolean(auth?.isAuthenticated),
+		[auth?.user?.profile?.sub, auth?.isAuthenticated],
 	);
-	const info = useInvoke(backend.userState.getInfo, backend.userState, []);
+	const info = useInvoke(
+		backend.userState.getInfo,
+		backend.userState,
+		[],
+		Boolean(auth?.isAuthenticated),
+		[auth?.user?.profile?.sub, auth?.isAuthenticated],
+	);
 
 	const displayName: string = useMemo(() => {
 		if (!info.data) return "Offline";
@@ -814,8 +989,14 @@ export function NavUser({
 		backend.userState.getNotifications,
 		backend.userState,
 		[],
+		Boolean(auth?.isAuthenticated),
+		[auth?.user?.profile?.sub, auth?.isAuthenticated],
+		0, // staleTime: 0 to always refetch on mount
 	);
-	const notificationCount = notifications.data?.invites_count ?? 0;
+	// Show total unread count (includes invites + local workflow notifications)
+	const notificationCount =
+		(notifications.data?.unread_count ?? 0) +
+		(notifications.data?.invites_count ?? 0);
 
 	return (
 		<SidebarMenu>
@@ -836,7 +1017,7 @@ export function NavUser({
 								</AvatarFallback>
 							</Avatar>
 							{notificationCount > 0 && (
-								<div className="absolute -top-0 -left-0 bg-red-500 text-white text-xs rounded-full min-w-[16px] h-4 flex items-center justify-center px-1">
+								<div className="absolute -top-2 -right-2 bg-red-500 text-white text-xs rounded-full min-w-[16px] h-4 flex items-center justify-center px-1">
 									{notificationCount > 5 ? "5+" : notificationCount}
 								</div>
 							)}
@@ -870,13 +1051,20 @@ export function NavUser({
 						<DropdownMenuSeparator />
 						{auth?.isAuthenticated && (
 							<>
-								<DropdownMenuGroup>
-									<DropdownMenuItem className="gap-2">
-										<Sparkles className="size-4" />
-										Upgrade to Pro
-									</DropdownMenuItem>
-								</DropdownMenuGroup>
-								<DropdownMenuSeparator />
+								{(!info.data?.tier ||
+									info.data?.tier.toUpperCase() === "FREE") && (
+									<>
+										<DropdownMenuGroup>
+											<a href="/subscription">
+												<DropdownMenuItem className="gap-2">
+													<Sparkles className="size-4" />
+													Upgrade to Pro
+												</DropdownMenuItem>
+											</a>
+										</DropdownMenuGroup>
+										<DropdownMenuSeparator />
+									</>
+								)}
 								<DropdownMenuGroup>
 									<a href="/account">
 										<DropdownMenuItem className="gap-2">
@@ -895,14 +1083,7 @@ export function NavUser({
 													auth,
 												);
 
-												const _view = new WebviewWindow("billing", {
-													url: urlRequest.url,
-													title: "Billing",
-													focus: true,
-													resizable: true,
-													maximized: true,
-													contentProtected: true,
-												});
+												await openUrl(urlRequest.url);
 											}}
 										>
 											<CreditCard className="size-4" />
@@ -923,6 +1104,24 @@ export function NavUser({
 											Notifications
 										</DropdownMenuItem>
 									</a>
+									<a href="/account/pat">
+										<DropdownMenuItem className="gap-2 p-2">
+											<KeyIcon className="size-4" />
+											Token
+										</DropdownMenuItem>
+									</a>
+									<a href="/settings/sinks">
+										<DropdownMenuItem className="gap-2 p-2">
+											<ZapIcon className="size-4" />
+											Active Sinks
+										</DropdownMenuItem>
+									</a>
+									<a href="/settings/statistics">
+										<DropdownMenuItem className="gap-2 p-2">
+											<BarChart3 className="size-4" />
+											Board Statistics
+										</DropdownMenuItem>
+									</a>
 								</DropdownMenuGroup>
 								<DropdownMenuSeparator />
 								<DropdownMenuItem
@@ -940,7 +1139,13 @@ export function NavUser({
 							<DropdownMenuItem
 								className="gap-2"
 								onClick={async () => {
-									await auth?.signinRedirect();
+									try {
+										console.log("Signing in...");
+										await auth?.signinRedirect();
+										console.log("Sign-in initiated.");
+									} catch (error) {
+										console.error("Sign-in failed:", error);
+									}
 								}}
 							>
 								<LogInIcon className="size-4" />

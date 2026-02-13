@@ -203,14 +203,27 @@ async fn download_and_hash(
     tx: Option<mpsc::Sender<StreamMsg>>,
 ) -> flow_like_types::Result<()> {
     if bit.download_link.is_none() {
-        tracing::warn!("No download link provided for bit {}", bit.id);
+        tracing::info!(
+            "No download link provided for bit {}, using ID as hash",
+            bit.id
+        );
+        if bit.hash.as_ref().is_none_or(|h| h.is_empty()) {
+            bit.hash = Some(bit.id.clone());
+        }
+        if bit
+            .dependency_tree_hash
+            .as_ref()
+            .is_none_or(|h| h.is_empty())
+        {
+            bit.dependency_tree_hash = Some(bit.id.clone());
+        }
         return Ok(());
     }
 
     let store = state.cdn_bucket.clone();
 
-    let old_location =
-        flow_like_storage::object_store::path::Path::from("bits").child(bit.hash.clone());
+    let old_location = flow_like_storage::object_store::path::Path::from("bits")
+        .child(bit.hash.clone().unwrap_or(bit.id.clone()));
     let _delete = store.as_generic().delete(&old_location).await;
 
     let url = match bit.download_link {
@@ -427,9 +440,13 @@ async fn download_and_hash(
     }
 
     let file_hash = hasher.finalize().to_hex().to_string().to_lowercase();
-    bit.hash = file_hash.clone();
-    if bit.dependency_tree_hash.is_empty() {
-        bit.dependency_tree_hash = file_hash.clone();
+    bit.hash = Some(file_hash.clone());
+    if bit
+        .dependency_tree_hash
+        .as_ref()
+        .is_none_or(|h| h.is_empty())
+    {
+        bit.dependency_tree_hash = Some(file_hash.clone());
     }
 
     bit.size = Some(total_downloaded as i64);
@@ -468,20 +485,32 @@ async fn build_dependency_hash(
     let mut dependencies = match &bit.dependencies {
         Some(deps) => deps.clone(),
         None => {
-            tracing::warn!("No dependencies provided for bit {}", bit.id);
-            bit.dependency_tree_hash = bit.hash.clone();
+            tracing::info!("No dependencies provided for bit {}", bit.id);
+            if bit
+                .dependency_tree_hash
+                .as_ref()
+                .is_none_or(|h| h.is_empty())
+            {
+                bit.dependency_tree_hash = Some(bit.hash.clone().unwrap_or_else(|| bit.id.clone()));
+            }
             return Ok(());
         }
     };
 
     if dependencies.is_empty() {
-        bit.dependency_tree_hash = bit.hash.clone();
+        if bit
+            .dependency_tree_hash
+            .as_ref()
+            .is_none_or(|h| h.is_empty())
+        {
+            bit.dependency_tree_hash = Some(bit.hash.clone().unwrap_or_else(|| bit.id.clone()));
+        }
         return Ok(());
     }
 
     dependencies.sort();
     let mut hasher = blake3::Hasher::new();
-    let (http_client, _rcv) = HTTPClient::new();
+    let http_client = HTTPClient::new_without_refetch();
     let http_client = Arc::new(http_client);
 
     if let Some(tx) = &tx {
@@ -511,7 +540,10 @@ async fn build_dependency_hash(
                 .ok_or_else(|| {
                     flow_like_types::Error::msg(format!("Local bit not found: {}", id))
                 })?;
-            hasher.update(local_bit.dependency_tree_hash.as_bytes());
+            let dep_hash = local_bit
+                .dependency_tree_hash
+                .unwrap_or_else(|| local_bit.id.clone());
+            hasher.update(dep_hash.as_bytes());
         } else {
             let hub = flow_like::hub::Hub::new(hub, http_client.clone()).await?;
             let remote_bit = hub.get_bit(id).await.map_err(|e| {
@@ -536,11 +568,11 @@ async fn build_dependency_hash(
     }
 
     let dependency_hash = hasher.finalize().to_hex().to_string().to_lowercase();
-    bit.dependency_tree_hash = dependency_hash;
+    bit.dependency_tree_hash = Some(dependency_hash.clone());
     tracing::info!(
         "Built dependency hash for bit {}: {}",
         bit.id,
-        bit.dependency_tree_hash
+        dependency_hash
     );
 
     if let Some(tx) = &tx {

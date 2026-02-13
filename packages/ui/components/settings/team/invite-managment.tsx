@@ -4,6 +4,7 @@ import { useDebounce } from "@uidotdev/usehooks";
 import {
 	Clock,
 	Copy,
+	ExternalLink,
 	Link,
 	LinkIcon,
 	Mail,
@@ -438,10 +439,24 @@ export function InviteManagement({ appId }: Readonly<{ appId: string }>) {
 										</DropdownMenuTrigger>
 										<DropdownMenuContent align="end">
 											<DropdownMenuItem
-												onClick={() => copyInviteLink(link.token)}
+												onClick={() =>
+													copyInviteLink(
+														`https://${hub?.app ?? "app.flow-like.com"}/join?appId=${appId}&token=${link.token}`,
+													)
+												}
+											>
+												<ExternalLink className="w-4 h-4 mr-2" />
+												Copy Web Link
+											</DropdownMenuItem>
+											<DropdownMenuItem
+												onClick={() =>
+													copyInviteLink(
+														`flow-like://join?appId=${appId}&token=${link.token}`,
+													)
+												}
 											>
 												<Copy className="w-4 h-4 mr-2" />
-												Copy Link
+												Copy Desktop Link
 											</DropdownMenuItem>
 											<AlertDialog>
 												<AlertDialogTrigger asChild>

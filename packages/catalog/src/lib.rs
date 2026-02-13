@@ -1,40 +1,343 @@
-use std::sync::Arc;
+//! Flow-Like Catalog - Aggregate crate for all catalog modules
+//!
+//! This crate re-exports all catalog sub-crates for convenience.
+//! You can also depend on individual catalog crates directly.
+//!
+//! # Usage
+//!
+//! ```rust,ignore
+//! use flow_like_catalog::{CatalogBuilder, CatalogPackage, get_catalog};
+//!
+//! // Get the full catalog
+//! let catalog = get_catalog();
+//!
+//! // Or use the builder for customization
+//! let catalog = CatalogBuilder::new()
+//!     .exclude_packages(&[CatalogPackage::Onnx, CatalogPackage::Ml])
+//!     .with_custom_nodes(my_custom_nodes())  // Custom nodes override existing ones by name
+//!     .build();
+//!
+//! // Include only specific packages
+//! let catalog = CatalogBuilder::new()
+//!     .only_packages(&[CatalogPackage::Core, CatalogPackage::Std])
+//!     .build();
+//!
+//! // Include/exclude specific nodes by name
+//! let catalog = CatalogBuilder::new()
+//!     .only_nodes(&["control_branch", "bool_or"])  // Only include these nodes
+//!     .build();
+//!
+//! let catalog = CatalogBuilder::new()
+//!     .exclude_nodes(&["control_branch"])  // Exclude specific nodes
+//!     .build();
+//! ```
 
-use flow_like::flow::node::NodeLogic;
+use std::collections::{HashMap, HashSet};
+use std::sync::{Arc, LazyLock};
 
-pub mod ai;
-pub mod bit;
-pub mod control;
-pub mod data;
-pub mod events;
-pub mod http;
-pub mod image;
-pub mod logging;
-pub mod mail;
-pub mod math;
-pub mod structs;
-pub mod utils;
-pub mod variables;
-pub mod web;
+pub use flow_like_catalog_core::NodeLogic;
 
-pub async fn get_catalog() -> Vec<Arc<dyn NodeLogic>> {
-    let catalog: Vec<Arc<dyn NodeLogic>> = vec![
-        ai::register_functions().await,
-        control::register_functions().await,
-        logging::register_functions().await,
-        events::register_functions().await,
-        utils::register_functions().await,
-        structs::register_functions().await,
-        data::register_functions().await,
-        bit::register_functions().await,
-        image::register_functions().await,
-        variables::register_functions().await,
-        web::register_functions().await,
-        mail::register_functions().await,
-    ]
-    .into_iter()
-    .flatten()
-    .collect();
+// Re-export core types and utilities
+pub use flow_like_catalog_core::{
+    Attachment, BoundingBox, CachedDB, FlowPath, FlowPathRuntime, FlowPathStore, NodeDBConnection,
+    NodeImage, NodeImageWrapper, get_catalog as get_core_catalog, inventory, register_node,
+};
 
-    catalog
+// Re-export standard library
+pub use flow_like_catalog_std::{control, logging, math, structs, utils, variables};
+
+// Re-export data integrations
+pub use flow_like_catalog_data::{data, events};
+
+// Re-export web modules
+pub use flow_like_catalog_web::{http, mail, web};
+
+// Re-export media modules
+pub use flow_like_catalog_media::{bit, image};
+
+// Re-export ML module
+pub use flow_like_catalog_ml::ml;
+
+// Re-export ONNX module
+pub use flow_like_catalog_onnx::{onnx, teachable_machine};
+
+// Re-export LLM/GenAI modules
+pub use flow_like_catalog_llm::generative;
+
+// Re-export processing modules
+pub use flow_like_catalog_geo::geo;
+pub use flow_like_catalog_processing::processing;
+
+/// Available catalog packages that can be included/excluded
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum CatalogPackage {
+    Core,
+    Std,
+    Data,
+    Web,
+    Media,
+    Ml,
+    Onnx,
+    Llm,
+    Processing,
+    Geo,
+}
+
+impl CatalogPackage {
+    pub fn all() -> &'static [CatalogPackage] {
+        &[
+            CatalogPackage::Core,
+            CatalogPackage::Std,
+            CatalogPackage::Data,
+            CatalogPackage::Web,
+            CatalogPackage::Media,
+            CatalogPackage::Ml,
+            CatalogPackage::Onnx,
+            CatalogPackage::Llm,
+            CatalogPackage::Processing,
+            CatalogPackage::Geo,
+        ]
+    }
+
+    fn get_nodes(&self) -> Vec<Arc<dyn NodeLogic>> {
+        match self {
+            CatalogPackage::Core => flow_like_catalog_core::get_catalog(),
+            CatalogPackage::Std => flow_like_catalog_std::get_catalog(),
+            CatalogPackage::Data => flow_like_catalog_data::get_catalog(),
+            CatalogPackage::Web => flow_like_catalog_web::get_catalog(),
+            CatalogPackage::Media => flow_like_catalog_media::get_catalog(),
+            CatalogPackage::Ml => flow_like_catalog_ml::get_catalog(),
+            CatalogPackage::Onnx => flow_like_catalog_onnx::get_catalog(),
+            CatalogPackage::Llm => flow_like_catalog_llm::get_catalog(),
+            CatalogPackage::Processing => flow_like_catalog_processing::get_catalog(),
+            CatalogPackage::Geo => flow_like_catalog_geo::get_catalog(),
+        }
+    }
+}
+
+impl std::str::FromStr for CatalogPackage {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s.to_lowercase().as_str() {
+            "core" => Ok(CatalogPackage::Core),
+            "std" | "standard" => Ok(CatalogPackage::Std),
+            "data" => Ok(CatalogPackage::Data),
+            "web" => Ok(CatalogPackage::Web),
+            "media" => Ok(CatalogPackage::Media),
+            "ml" | "machine_learning" => Ok(CatalogPackage::Ml),
+            "onnx" => Ok(CatalogPackage::Onnx),
+            "llm" | "genai" | "generative" => Ok(CatalogPackage::Llm),
+            "processing" => Ok(CatalogPackage::Processing),
+            "geo" | "geolocation" => Ok(CatalogPackage::Geo),
+            _ => Err(format!("Unknown catalog package: {}", s)),
+        }
+    }
+}
+
+/// Builder for constructing a customized catalog
+#[derive(Default)]
+pub struct CatalogBuilder {
+    excluded_packages: HashSet<CatalogPackage>,
+    included_packages: Option<HashSet<CatalogPackage>>,
+    excluded_nodes: HashSet<String>,
+    included_nodes: Option<HashSet<String>>,
+    custom_nodes: Vec<Arc<dyn NodeLogic>>,
+    node_filter: Option<Box<dyn Fn(&dyn NodeLogic) -> bool + Send + Sync>>,
+}
+
+impl CatalogBuilder {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Include only specific packages (whitelist mode)
+    pub fn only_packages(mut self, packages: &[CatalogPackage]) -> Self {
+        self.included_packages = Some(packages.iter().copied().collect());
+        self
+    }
+
+    /// Include only specific packages by name (whitelist mode)
+    pub fn only_packages_by_name(mut self, names: &[&str]) -> Self {
+        let packages: HashSet<_> = names
+            .iter()
+            .filter_map(|n| n.parse::<CatalogPackage>().ok())
+            .collect();
+        self.included_packages = Some(packages);
+        self
+    }
+
+    /// Exclude specific packages
+    pub fn exclude_packages(mut self, packages: &[CatalogPackage]) -> Self {
+        self.excluded_packages.extend(packages.iter().copied());
+        self
+    }
+
+    /// Exclude packages by name
+    pub fn exclude_packages_by_name(mut self, names: &[&str]) -> Self {
+        for name in names {
+            if let Ok(pkg) = name.parse::<CatalogPackage>() {
+                self.excluded_packages.insert(pkg);
+            }
+        }
+        self
+    }
+
+    /// Include only specific nodes by name (whitelist mode)
+    pub fn only_nodes(mut self, names: &[&str]) -> Self {
+        self.included_nodes = Some(names.iter().map(|s| s.to_string()).collect());
+        self
+    }
+
+    /// Exclude specific nodes by name
+    pub fn exclude_nodes(mut self, names: &[&str]) -> Self {
+        self.excluded_nodes
+            .extend(names.iter().map(|s| s.to_string()));
+        self
+    }
+
+    /// Add custom nodes to the catalog.
+    /// Custom nodes will override any existing nodes with the same name.
+    pub fn with_custom_nodes(mut self, nodes: Vec<Arc<dyn NodeLogic>>) -> Self {
+        self.custom_nodes.extend(nodes);
+        self
+    }
+
+    /// Add a single custom node.
+    /// If a node with the same name already exists, it will be replaced.
+    pub fn with_node(mut self, node: Arc<dyn NodeLogic>) -> Self {
+        self.custom_nodes.push(node);
+        self
+    }
+
+    /// Set a custom filter function for nodes.
+    /// The filter receives a reference to the NodeLogic trait object.
+    pub fn with_filter<F>(mut self, filter: F) -> Self
+    where
+        F: Fn(&dyn NodeLogic) -> bool + Send + Sync + 'static,
+    {
+        self.node_filter = Some(Box::new(filter));
+        self
+    }
+
+    /// Build the catalog with all configurations applied.
+    /// Custom nodes override existing nodes with the same name.
+    pub fn build(self) -> Vec<Arc<dyn NodeLogic>> {
+        let mut node_map: HashMap<String, Arc<dyn NodeLogic>> = HashMap::new();
+
+        let packages_to_include: Vec<CatalogPackage> =
+            if let Some(ref included) = self.included_packages {
+                included.iter().copied().collect()
+            } else {
+                CatalogPackage::all()
+                    .iter()
+                    .filter(|p| !self.excluded_packages.contains(p))
+                    .copied()
+                    .collect()
+            };
+
+        for package in packages_to_include {
+            if self.excluded_packages.contains(&package) {
+                continue;
+            }
+            for node in package.get_nodes() {
+                let node_def = node.get_node();
+                let name = node_def.name.clone();
+                if self.excluded_nodes.contains(&name) {
+                    continue;
+                }
+                if let Some(ref included) = self.included_nodes
+                    && !included.contains(&name)
+                {
+                    continue;
+                }
+                node_map.insert(name, node);
+            }
+        }
+
+        // Custom nodes override existing ones
+        for node in self.custom_nodes {
+            let node_def = node.get_node();
+            node_map.insert(node_def.name.clone(), node);
+        }
+
+        let mut catalog: Vec<Arc<dyn NodeLogic>> = node_map.into_values().collect();
+
+        if let Some(ref filter) = self.node_filter {
+            catalog.retain(|node| filter(node.as_ref()));
+        }
+
+        catalog
+    }
+}
+
+/// Static cached catalog - initialized once on first access
+static CATALOG: LazyLock<Vec<Arc<dyn NodeLogic>>> = LazyLock::new(|| CatalogBuilder::new().build());
+
+/// Get the full catalog from all sub-crates (cached, initialized once)
+pub fn get_catalog() -> Vec<Arc<dyn NodeLogic>> {
+    CATALOG.clone()
+}
+
+/// Get catalog from specific packages only (not cached - use sparingly)
+pub fn get_catalog_from(packages: &[CatalogPackage]) -> Vec<Arc<dyn NodeLogic>> {
+    CatalogBuilder::new().only_packages(packages).build()
+}
+
+/// Get catalog excluding specific packages (not cached - use sparingly)
+pub fn get_catalog_without(packages: &[CatalogPackage]) -> Vec<Arc<dyn NodeLogic>> {
+    CatalogBuilder::new().exclude_packages(packages).build()
+}
+
+/// Initialize the catalog runtime systems.
+///
+/// This should be called once at application startup, before any flow execution.
+/// It initializes:
+/// - ONNX Runtime with the best available execution providers (GPU/NPU acceleration)
+///
+/// # Returns
+///
+/// Information about the initialized execution providers.
+///
+/// # Example
+///
+/// ```rust,ignore
+/// use flow_like_catalog::initialize;
+///
+/// fn main() {
+///     let info = initialize();
+///     println!("Active providers: {:?}", info.onnx_providers);
+///     println!("GPU acceleration: {}", info.onnx_accelerated);
+/// }
+/// ```
+#[cfg(feature = "execute")]
+pub fn initialize() -> InitInfo {
+    let onnx_info = flow_like_catalog_onnx::onnx::initialize_ort();
+    tracing::info!(
+        providers = ?onnx_info.active_providers,
+        accelerated = onnx_info.accelerated,
+        "ONNX Runtime initialized"
+    );
+    InitInfo {
+        onnx_providers: onnx_info.active_providers,
+        onnx_accelerated: onnx_info.accelerated,
+        onnx_warnings: onnx_info.warnings,
+    }
+}
+
+/// Information about initialized runtime systems
+#[cfg(feature = "execute")]
+#[derive(Debug, Clone, Default)]
+pub struct InitInfo {
+    /// Active ONNX execution providers
+    pub onnx_providers: Vec<String>,
+    /// Whether ONNX has GPU/NPU acceleration
+    pub onnx_accelerated: bool,
+    /// Any warnings during ONNX initialization
+    pub onnx_warnings: Vec<String>,
+}
+
+#[cfg(not(feature = "execute"))]
+pub fn initialize() -> () {
+    // No-op when execute feature is not enabled
 }

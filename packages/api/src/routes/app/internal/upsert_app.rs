@@ -16,7 +16,7 @@ use axum::{
     extract::{Path, Query, State},
 };
 use flow_like::{app::App, bit::Metadata};
-use flow_like_types::{anyhow, create_id, sync::Mutex};
+use flow_like_types::{anyhow, create_id};
 use sea_orm::{
     ActiveModelTrait,
     ActiveValue::{NotSet, Set},
@@ -24,14 +24,32 @@ use sea_orm::{
     QuerySelect, RelationTrait, TransactionTrait,
 };
 use serde::{Deserialize, Serialize};
+use utoipa::ToSchema;
 
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize, ToSchema)]
 pub struct AppUpsertBody {
+    #[schema(value_type = Option<Object>)]
     pub app: Option<App>,
+    #[schema(value_type = Option<Object>)]
     pub meta: Option<Metadata>,
     pub bits: Option<Vec<String>>,
 }
 
+#[utoipa::path(
+    put,
+    path = "/apps/{app_id}",
+    tag = "apps",
+    params(
+        ("app_id" = String, Path, description = "Application ID"),
+        ("language" = Option<String>, Query, description = "Language code (default: en)")
+    ),
+    request_body = AppUpsertBody,
+    responses(
+        (status = 200, description = "Application created or updated", body = Object),
+        (status = 401, description = "Unauthorized"),
+        (status = 403, description = "Forbidden")
+    )
+)]
 #[tracing::instrument(name = "PUT /apps/{app_id}", skip(state, user, app_body, query))]
 pub async fn upsert_app(
     State(state): State<AppState>,
@@ -60,7 +78,7 @@ pub async fn upsert_app(
                 sub.sub()?,
                 app_id
             );
-            return Err(ApiError::Forbidden);
+            return Err(ApiError::FORBIDDEN);
         }
 
         {
@@ -78,7 +96,6 @@ pub async fn upsert_app(
             bucket_app.secondary_category = app_updates.secondary_category.clone();
             bucket_app.price = app_updates.price;
             bucket_app.updated_at = SystemTime::now();
-            bucket_app.bits = app_updates.bits.clone();
             bucket_app.status = app_updates.status.clone();
             bucket_app.version = app_updates.version.clone();
             bucket_app.save().await?;
@@ -105,7 +122,7 @@ pub async fn upsert_app(
             sub,
             app_id
         );
-        return Err(ApiError::Forbidden);
+        return Err(ApiError::FORBIDDEN);
     }
 
     let Some(metadata) = app_body.meta else {
@@ -114,16 +131,14 @@ pub async fn upsert_app(
             sub,
             app_id
         );
-        return Err(ApiError::InternalError(
-            anyhow!("Meta is required for new apps").into(),
-        ));
+        return Err(ApiError::internal_error(anyhow!(
+            "Meta is required for new apps"
+        )));
     };
 
     if tier.max_non_visible_projects == 0 {
-        tracing::warn!(
-            "Configuration doesn't allow for the creation of non-visible projects",
-        );
-        return Err(ApiError::Forbidden);
+        tracing::warn!("Configuration doesn't allow for the creation of non-visible projects",);
+        return Err(ApiError::FORBIDDEN);
     }
 
     if tier.max_non_visible_projects > 0 {
@@ -148,7 +163,7 @@ pub async fn upsert_app(
                 tier.max_non_visible_projects,
                 count
             );
-            return Err(ApiError::Forbidden);
+            return Err(ApiError::FORBIDDEN);
         }
     }
 
@@ -161,7 +176,7 @@ pub async fn upsert_app(
                 crate::credentials::CredentialsAccess::EditApp,
             )
             .await?;
-        let flow_like_state = Arc::new(Mutex::new(credentials.to_state(state.clone()).await?));
+        let flow_like_state = Arc::new(credentials.to_state(state.clone()).await?);
         let new_app = App::new(
             Some(new_id.clone()),
             metadata.clone(),
@@ -183,6 +198,7 @@ pub async fn upsert_app(
                     created_at: Set(now),
                     updated_at: Set(now),
                     visibility: Set(Visibility::Private),
+                    bits: Set(Some(app_body.bits.unwrap_or_default())),
                     ..Default::default()
                 };
 
@@ -266,7 +282,11 @@ pub async fn upsert_app(
                 Ok(app)
             })
         })
-        .await?;
+        .await
+        .map_err(|e| match e {
+            sea_orm::TransactionError::Connection(db_err) => ApiError::from(db_err),
+            sea_orm::TransactionError::Transaction(db_err) => ApiError::from(db_err),
+        })?;
 
     Ok(Json(drive_app))
 }

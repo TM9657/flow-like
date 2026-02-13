@@ -22,15 +22,18 @@ import { PathbufVariable } from "./pathbuf-variable";
 import { StringArrayVariable } from "./string-array-variable";
 import { StringSetVariable } from "./string-set-variable";
 import { StringVariable } from "./string-variable";
+import { StructVariable } from "./struct-variable";
 
 export function VariablesMenuEdit({
 	disabled,
 	variable,
 	updateVariable,
+	refs,
 }: Readonly<{
 	disabled?: boolean;
 	variable: IVariable;
 	updateVariable: (variable: IVariable) => Promise<void>;
+	refs?: Record<string, string>;
 }>) {
 	const [intermediateValue, setIntermediateValue] = useState(variable);
 
@@ -269,6 +272,20 @@ export function VariablesMenuEdit({
 				disabled={disabled}
 				variable={intermediateValue}
 				onChange={setIntermediateValue}
+			/>
+		);
+	}
+
+	if (
+		variable.data_type === IVariableType.Struct &&
+		variable.value_type === IValueType.Normal
+	) {
+		return (
+			<StructVariable
+				disabled={disabled}
+				variable={intermediateValue}
+				onChange={setIntermediateValue}
+				refs={refs}
 			/>
 		);
 	}

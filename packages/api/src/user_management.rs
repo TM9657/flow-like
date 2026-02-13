@@ -6,6 +6,8 @@ pub mod cognito;
 pub enum UserManagement {
     #[cfg(feature = "cognito")]
     Cognito(cognito::CognitoUserManagement),
+    #[cfg(not(feature = "cognito"))]
+    None,
 }
 
 impl UserManagement {
@@ -18,9 +20,10 @@ impl UserManagement {
         );
 
         #[cfg(not(feature = "cognito"))]
-        flow_like_types::anyhow::bail!(
-            "No user management implementation available for this environment"
-        );
+        {
+            let _ = state;
+            UserManagement::None
+        }
     }
 
     pub async fn get_attribute(
@@ -33,6 +36,11 @@ impl UserManagement {
             #[cfg(feature = "cognito")]
             UserManagement::Cognito(cognito) => {
                 cognito.get_attribute(sub, username, attribute).await
+            }
+            #[cfg(not(feature = "cognito"))]
+            UserManagement::None => {
+                let _ = (sub, username, attribute);
+                Ok(None)
             }
         }
     }

@@ -1,0 +1,63 @@
+use std::any::Any;
+
+use super::{ModelConstructor, ModelLogic};
+use crate::provider::ModelProvider;
+use flow_like_types::{Cacheable, Result, async_trait};
+
+mod client;
+pub use client::{CompletionModel, LlamaCppClient};
+
+pub struct LlamaCppModel {
+    client: LlamaCppClient,
+    provider: ModelProvider,
+    default_model: Option<String>,
+    port: u16,
+}
+
+impl LlamaCppModel {
+    pub async fn new(provider: &ModelProvider, port: u16) -> flow_like_types::Result<Self> {
+        let model_id = provider.model_id.clone();
+        let base_url = format!("http://localhost:{}", port);
+
+        let client = LlamaCppClient::new(&base_url);
+
+        Ok(LlamaCppModel {
+            client,
+            provider: provider.clone(),
+            default_model: model_id,
+            port,
+        })
+    }
+
+    pub fn port(&self) -> u16 {
+        self.port
+    }
+
+    pub fn completion_model(&self, model: &str) -> CompletionModel {
+        self.client.completion_model(model)
+    }
+}
+
+impl Cacheable for LlamaCppModel {
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+
+    fn as_any_mut(&mut self) -> &mut dyn Any {
+        self
+    }
+}
+
+#[async_trait]
+impl ModelLogic for LlamaCppModel {
+    #[allow(deprecated)]
+    async fn provider(&self) -> Result<ModelConstructor> {
+        Ok(ModelConstructor {
+            inner: Box::new(self.client.clone()),
+        })
+    }
+
+    async fn default_model(&self) -> Option<String> {
+        self.default_model.clone()
+    }
+}

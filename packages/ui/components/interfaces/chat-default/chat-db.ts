@@ -15,6 +15,19 @@ export type IAttachment =
 			page?: number;
 	  };
 
+export type PlanStepStatus = "planned" | "progress" | "done" | "failed";
+
+export interface IPlanStep {
+	id: string;
+	title: string;
+	description?: string;
+	status: PlanStepStatus;
+	reasoning?: string;
+	timestamp?: number;
+	startTime?: number;
+	endTime?: number;
+}
+
 export interface IMessage {
 	id: string;
 	appId: string;
@@ -31,6 +44,8 @@ export interface IMessage {
 		canContact?: boolean;
 	};
 	timestamp: number;
+	plan_steps?: IPlanStep[];
+	current_step_id?: string;
 }
 
 export interface ISession {
@@ -64,7 +79,7 @@ const chatDb = new Dexie("Chat-History") as Dexie & {
 };
 
 // Schema declaration:
-chatDb.version(2).stores({
+chatDb.version(3).stores({
 	sessions: "id, appId, updatedAt, [updatedAt+appId]",
 	messages: "id, sessionId",
 	localStage: "sessionId, appId, eventId, [sessionId+eventId], timestamp",

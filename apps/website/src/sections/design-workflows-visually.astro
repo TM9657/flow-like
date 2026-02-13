@@ -1,16 +1,29 @@
 ---
 import { Image } from "astro:assets";
 import { LuLock, LuSearch, LuUnplug } from "react-icons/lu";
+import type { Lang, TranslationKey } from "../i18n";
+import { translations, defaultLang } from "../i18n";
 
 import designOverview from "../images/index/design-overview.png";
 import designValidation from "../images/index/design-validation.png";
+
+interface Props {
+  lang?: Lang;
+}
+
+const { lang = defaultLang } = Astro.props;
+const t = (key: TranslationKey): string => {
+  const langTranslations = translations[lang] as Record<string, string>;
+  const enTranslations = translations.en as Record<string, string>;
+  return langTranslations?.[key] ?? enTranslations[key] ?? key;
+};
 ---
 
 <section
   id="builder"
   data-c1="hsl(222 89% 60% / .10)"
   data-c2="hsl(268 84% 62% / .10)"
-  class="relative mx-auto max-w-7xl px-4 py-28 lg:px-8 mb-6"
+  class="relative mx-auto max-w-7xl px-4 py-28 lg:px-8 mb-6 overflow-hidden md:overflow-visible"
 >
   <!-- decorative bg -->
   <div aria-hidden="true" class="pointer-events-none absolute inset-0 -z-10">
@@ -26,6 +39,9 @@ import designValidation from "../images/index/design-validation.png";
       class="absolute inset-0 [mask-image:radial-gradient(70%_70%_at_50%_40%,black,transparent)] bg-[linear-gradient(to_right,theme(colors.muted.DEFAULT/.12)_1px,transparent_1px),linear-gradient(to_bottom,theme(colors.muted.DEFAULT/.12)_1px,transparent_1px)] bg-[size:36px_36px]"
     >
     </div>
+    <!-- Animated glow orbs -->
+    <div class="dwv-glow dwv-glow-1"></div>
+    <div class="dwv-glow dwv-glow-2"></div>
   </div>
 
   <div class="relative z-10 grid items-start gap-10 lg:gap-16 lg:grid-cols-12">
@@ -33,23 +49,23 @@ import designValidation from "../images/index/design-validation.png";
     <div class="space-y-8 w-full lg:col-span-5 lg:sticky lg:top-24 reveal">
       <div>
         <div
-          class="inline-flex items-center gap-2 rounded-full border border-secondary/20 bg-secondary/10 backdrop-blur-sm px-4 py-2 text-sm font-medium text-secondary mb-6"
+          class="inline-flex items-center gap-2.5 rounded-full border border-secondary/30 bg-secondary/10 backdrop-blur-xl px-5 py-2.5 text-sm font-semibold text-secondary mb-8 shadow-[0_0_30px_-8px_hsl(var(--secondary)/.4)] hover:shadow-[0_0_40px_-5px_hsl(var(--secondary)/.5)] transition-all duration-500 group"
         >
-          <div class="w-2 h-2 bg-secondary rounded-full animate-pulse"></div>
-          Visual builder
+          <div class="relative">
+            <span class="absolute inline-flex h-full w-full rounded-full bg-secondary opacity-60 animate-ping"></span>
+            <span class="relative flex h-2 w-2 rounded-full bg-secondary"></span>
+          </div>
+          <span>{t("design.tagline")}</span>
         </div>
 
         <h2
           class="text-4xl font-bold sm:text-5xl bg-gradient-to-r from-foreground to-secondary bg-clip-text text-transparent leading-tight"
         >
-          Design workflows <span class="text-secondary">visually</span>
+          {t("design.headline")} <span class="text-secondary">{t("design.headline.highlight")}</span>
         </h2>
 
         <p class="mt-6 text-lg text-muted-foreground">
-          Draw your flow and see your <b>data’s journey</b> as you build: what came
-          in, how it was filtered and transformed, and what went out. Inline feedback
-          keeps things usable, and snapshots let you reproduce issues and compare
-          runs—no guesswork.
+          {t("design.description")}
         </p>
       </div>
 
@@ -65,10 +81,9 @@ import designValidation from "../images/index/design-validation.png";
               <LuUnplug className="w-6 h-6 text-primary-foreground" />
             </div>
             <div>
-              <h3 class="font-semibold text-lg">Connections that fit</h3>
+              <h3 class="font-semibold text-lg">{t("design.feature1.title")}</h3>
               <p class="text-muted-foreground">
-                Pins know what they accept, so you wire correctly and refactors
-                don’t break flows.
+                {t("design.feature1.desc")}
               </p>
             </div>
           </div>
@@ -84,10 +99,9 @@ import designValidation from "../images/index/design-validation.png";
               <LuLock className="w-6 h-6 text-secondary-foreground" />
             </div>
             <div>
-              <h3 class="font-semibold text-lg">Instant feedback</h3>
+              <h3 class="font-semibold text-lg">{t("design.feature2.title")}</h3>
               <p class="text-muted-foreground">
-                Miswired edges surface immediately. Fix mistakes as you
-                go—before they ship.
+                {t("design.feature2.desc")}
               </p>
             </div>
           </div>
@@ -103,10 +117,9 @@ import designValidation from "../images/index/design-validation.png";
               <LuSearch className="w-6 h-6 text-tertiary-foreground" />
             </div>
             <div>
-              <h3 class="font-semibold text-lg">See every input & output</h3>
+              <h3 class="font-semibold text-lg">{t("design.feature3.title")}</h3>
               <p class="text-muted-foreground">
-                Inspect payloads and timings at each step. Trace changes and
-                explain results with confidence.
+                {t("design.feature3.desc")}
               </p>
             </div>
           </div>
@@ -312,6 +325,88 @@ import designValidation from "../images/index/design-validation.png";
       --c1: attr(data-c1);
       --c2: attr(data-c2);
     }
+
+    /* Background glows - BIGGER and more dramatic */
+    .dwv-glow {
+      position: absolute;
+      border-radius: 50%;
+      filter: blur(120px);
+      opacity: 0.35;
+      animation: dwv-float 12s ease-in-out infinite;
+    }
+
+    .dwv-glow-1 {
+      width: 600px;
+      height: 600px;
+      background: radial-gradient(circle, hsl(222 89% 60% / 0.5) 0%, transparent 60%);
+      top: 5%;
+      left: 0%;
+    }
+
+    .dwv-glow-2 {
+      width: 500px;
+      height: 500px;
+      background: radial-gradient(circle, hsl(268 84% 62% / 0.4) 0%, transparent 60%);
+      bottom: 15%;
+      right: 5%;
+      animation-delay: 6s;
+    }
+
+    @keyframes dwv-float {
+      0%, 100% { transform: translate(0, 0) scale(1); }
+      33% { transform: translate(30px, -25px) scale(1.1); }
+      66% { transform: translate(-20px, 15px) scale(0.92); }
+    }
+
+    /* Feature cards - more dramatic */
+    .dwv-card {
+      position: relative;
+      overflow: hidden;
+      border-radius: 1.5rem;
+      border: 1px solid color-mix(in oklch, var(--border) 60%, transparent);
+      background: linear-gradient(
+        135deg,
+        color-mix(in oklch, var(--card) 90%, transparent),
+        color-mix(in oklch, var(--card) 60%, transparent)
+      );
+      backdrop-filter: blur(24px);
+      padding: 1.75rem;
+      transition: all 0.4s cubic-bezier(0.2, 0.8, 0.2, 1);
+    }
+
+    .dwv-card:hover {
+      transform: translateY(-6px) scale(1.015);
+      border-color: color-mix(in oklch, var(--primary) 50%, transparent);
+      box-shadow:
+        0 25px 70px -20px rgba(0, 0, 0, 0.3),
+        0 0 50px -15px hsl(var(--primary) / 0.25);
+    }
+
+    /* Card hover glows - stronger */
+    .dwv-card-glow {
+      position: absolute;
+      inset: -2px;
+      border-radius: inherit;
+      opacity: 0;
+      transition: opacity 0.4s ease;
+    }
+
+    .dwv-card:hover .dwv-card-glow {
+      opacity: 1;
+    }
+
+    .dwv-card-glow-primary {
+      background: radial-gradient(circle at 10% 20%, hsl(var(--primary) / 0.2) 0%, transparent 55%);
+    }
+
+    .dwv-card-glow-secondary {
+      background: radial-gradient(circle at 10% 20%, hsl(var(--secondary) / 0.2) 0%, transparent 55%);
+    }
+
+    .dwv-card-glow-tertiary {
+      background: radial-gradient(circle at 10% 20%, hsl(var(--tertiary) / 0.2) 0%, transparent 55%);
+    }
+
     #builder [data-lightbox] {
       margin: 0;
     }
@@ -335,6 +430,11 @@ import designValidation from "../images/index/design-validation.png";
     #builder .reveal.in {
       opacity: 1;
       transform: none;
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      .dwv-glow { animation: none; }
+      .dwv-card { transition: none; }
     }
   </style>
 </section>

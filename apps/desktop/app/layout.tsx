@@ -1,5 +1,7 @@
 "use client";
 import {
+	ExecutionEngineProviderComponent,
+	ExecutionServiceProvider,
 	PersistQueryClientProvider,
 	QueryClient,
 	ReactFlowProvider,
@@ -8,6 +10,8 @@ import { ThemeProvider } from "@tm9657/flow-like-ui/components/theme-provider";
 import { Toaster } from "@tm9657/flow-like-ui/components/ui/sonner";
 import { TooltipProvider } from "@tm9657/flow-like-ui/components/ui/tooltip";
 import "@tm9657/flow-like-ui/global.css";
+import { NetworkStatusIndicator } from "@tm9657/flow-like-ui/components/ui/network-status-indicator";
+import { useNetworkStatus } from "@tm9657/flow-like-ui/hooks/use-network-status";
 import { createIDBPersister } from "@tm9657/flow-like-ui/lib/persister";
 import {
 	Architects_Daughter,
@@ -36,12 +40,22 @@ import {
 	Space_Grotesk,
 	Space_Mono,
 } from "next/font/google";
+import { useEffect } from "react";
 import { AppSidebar } from "../components/app-sidebar";
 import { DesktopAuthProvider } from "../components/auth-provider";
+import { DeeplinkNavigationHandler } from "../components/deeplink-navigation-handler";
+import DownloadNotificationProvider from "../components/download-notification-provider";
 import GlobalAnchorHandler from "../components/global-anchor-component";
+import { IOSWebviewHardening } from "../components/ios-webview-hardening";
+import NotificationProvider from "../components/notification-provider";
+import { OAuthCallbackHandler } from "../components/oauth-callback-handler";
+import { OAuthExecutionProvider } from "../components/oauth-execution-provider";
+import { RuntimeVariablesProviderComponent } from "../components/runtime-variables-provider";
+import { SpotlightWrapper } from "../components/spotlight-wrapper";
 import { TauriProvider } from "../components/tauri-provider";
 import { ThemeLoader } from "../components/theme-loader";
 import ToastProvider from "../components/toast-provider";
+import TrayProvider from "../components/tray-provider";
 import { UpdateProvider } from "../components/update-provider";
 import PostHogPageView from "./PostHogPageView";
 import { PHProvider } from "./provider";
@@ -50,7 +64,14 @@ const persister = createIDBPersister();
 const queryClient = new QueryClient({
 	defaultOptions: {
 		queries: {
-			networkMode: "offlineFirst",
+			networkMode: "always",
+			staleTime: 30 * 1000,
+			gcTime: 7 * 24 * 60 * 60 * 1000,
+			refetchOnWindowFocus: false,
+			refetchOnReconnect: false,
+			refetchOnMount: true,
+			retry: 1,
+			retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 30000), // Exponential backoff
 		},
 	},
 });
@@ -112,13 +133,30 @@ const architectsDaughter = Architects_Daughter({
 	preload: true,
 });
 
+function NetworkAwareProvider({ children }: { children: React.ReactNode }) {
+	const isOnline = useNetworkStatus();
+
+	useEffect(() => {
+		// When network comes back online, refetch all active queries
+		if (isOnline) {
+			console.log("Network reconnected - refetching stale queries");
+			queryClient.refetchQueries({
+				type: "active",
+				stale: true,
+			});
+		}
+	}, [isOnline]);
+
+	return <>{children}</>;
+}
+
 export default function RootLayout({
 	children,
 }: Readonly<{
 	children: React.ReactNode;
 }>) {
 	return (
-		<html lang="en" suppressHydrationWarning suppressContentEditableWarning>
+		<html lang="en" data-desktop-app="true" suppressHydrationWarning suppressContentEditableWarning>
 			{/* <ReactScan /> */}
 			<PHProvider>
 				<ReactFlowProvider>
@@ -128,29 +166,50 @@ export default function RootLayout({
 							persister,
 						}}
 					>
-						<body className={inter.className}>
-							<UpdateProvider />
-							<GlobalAnchorHandler />
-							<ThemeProvider
-								attribute="class"
-								defaultTheme="system"
-								enableSystem
-								storageKey="theme"
-								disableTransitionOnChange
-							>
-								<TooltipProvider>
-									<Toaster />
-									<ToastProvider />
-									<TauriProvider>
-										<DesktopAuthProvider>
-											<PostHogPageView />
-											<ThemeLoader />
-											<AppSidebar>{children}</AppSidebar>
-										</DesktopAuthProvider>
-									</TauriProvider>
-								</TooltipProvider>
-							</ThemeProvider>
-						</body>
+						<NetworkAwareProvider>
+							<body className={inter.className} data-desktop-app="true">
+								<IOSWebviewHardening />
+								<NetworkStatusIndicator />
+								<UpdateProvider />
+								<TrayProvider />
+								<GlobalAnchorHandler />
+								<ThemeProvider
+									attribute="class"
+									defaultTheme="system"
+									enableSystem
+									storageKey="theme"
+									disableTransitionOnChange
+								>
+									<TooltipProvider>
+										<Toaster />
+										<ToastProvider />
+										<TauriProvider>
+											<DownloadNotificationProvider />
+											<DeeplinkNavigationHandler>
+												<OAuthCallbackHandler>
+													<OAuthExecutionProvider>
+														<DesktopAuthProvider>
+															<NotificationProvider />
+															<RuntimeVariablesProviderComponent>
+																<ExecutionServiceProvider>
+																	<ExecutionEngineProviderComponent>
+																		<SpotlightWrapper>
+																			<PostHogPageView />
+																			<ThemeLoader />
+																			<AppSidebar>{children}</AppSidebar>
+																		</SpotlightWrapper>
+																	</ExecutionEngineProviderComponent>
+																</ExecutionServiceProvider>
+															</RuntimeVariablesProviderComponent>
+														</DesktopAuthProvider>
+													</OAuthExecutionProvider>
+												</OAuthCallbackHandler>
+											</DeeplinkNavigationHandler>
+										</TauriProvider>
+									</TooltipProvider>
+								</ThemeProvider>
+							</body>
+						</NetworkAwareProvider>
 					</PersistQueryClientProvider>
 				</ReactFlowProvider>
 			</PHProvider>

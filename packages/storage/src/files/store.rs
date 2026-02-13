@@ -9,7 +9,7 @@ use local_store::LocalObjectStore;
 use object_store::{ObjectMeta, ObjectStore, path::Path, signer::Signer};
 use serde::{Deserialize, Serialize};
 use std::{sync::Arc, time::Duration};
-use urlencoding::encode;
+use urlencoding::{decode, encode};
 mod helper;
 pub mod local_store;
 
@@ -17,7 +17,7 @@ pub mod local_store;
 pub struct StorageItem {
     pub location: String,
     pub last_modified: String,
-    pub size: usize,
+    pub size: u64,
     pub e_tag: Option<String>,
     pub version: Option<String>,
     pub is_dir: bool,
@@ -87,7 +87,11 @@ impl FlowLikeStore {
         let final_path = prefix
             .split('/')
             .filter(|s| !s.is_empty())
-            .fold(base_path, |acc, seg| acc.child(seg));
+            .fold(base_path, |acc, seg| {
+                // Decode URL-encoded segments (e.g., %CC%88 -> combining umlaut)
+                let decoded = decode(seg).unwrap_or(std::borrow::Cow::Borrowed(seg));
+                acc.child(decoded.as_ref())
+            });
 
         Ok(final_path)
     }
@@ -98,6 +102,7 @@ impl FlowLikeStore {
             "PUT" => reqwest::Method::PUT,
             "POST" => reqwest::Method::POST,
             "DELETE" => reqwest::Method::DELETE,
+            "HEAD" => reqwest::Method::HEAD,
             _ => bail!("Invalid HTTP Method"),
         };
 

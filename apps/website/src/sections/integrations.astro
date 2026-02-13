@@ -1,0 +1,355 @@
+---
+import {
+  LuPlug2,
+  LuArrowRight,
+  LuSparkles,
+  LuLayoutGrid,
+} from "react-icons/lu";
+import {
+  SiGoogle,
+  SiNotion,
+  SiGithub,
+  SiSlack,
+  SiDiscord,
+  SiAirtable,
+  SiDropbox,
+  SiJira,
+  SiLinear,
+  SiTrello,
+  SiOpenai,
+} from "react-icons/si";
+import type { Lang, TranslationKey } from "../i18n";
+import { translations, defaultLang } from "../i18n";
+
+interface Props {
+  lang?: Lang;
+}
+
+const { lang = defaultLang } = Astro.props;
+const t = (key: TranslationKey): string => {
+  const langTranslations = translations[lang] as Record<string, string>;
+  const enTranslations = translations.en as Record<string, string>;
+  return langTranslations?.[key] ?? enTranslations[key] ?? key;
+};
+---
+
+<section
+  id="integrations"
+  class="relative mx-auto max-w-7xl px-4 py-28 lg:px-8 overflow-visible"
+>
+  <!-- Background decorations -->
+  <div aria-hidden="true" class="pointer-events-none absolute inset-0 -z-10">
+    <div class="absolute inset-0 mask-[radial-gradient(70%_70%_at_50%_40%,black,transparent)]">
+      <div class="absolute inset-0 bg-[linear-gradient(to_right,var(--color-border)/.08_1px,transparent_1px),linear-gradient(to_bottom,var(--color-border)/.08_1px,transparent_1px)] bg-size-[40px_40px]"></div>
+    </div>
+    <!-- Animated glow orbs -->
+    <div class="int-glow int-glow-1"></div>
+    <div class="int-glow int-glow-2"></div>
+    <div class="int-glow int-glow-3"></div>
+  </div>
+
+  <div class="relative z-10 space-y-16">
+    <!-- Header -->
+    <div class="mx-auto max-w-3xl text-center space-y-6">
+      <!-- Badge -->
+      <div class="inline-flex items-center gap-2.5 rounded-full border border-cyan-400/30 bg-cyan-500/10 backdrop-blur-xl px-5 py-2.5 text-sm font-semibold text-cyan-400 shadow-[0_0_30px_-8px_rgba(6,182,212,0.4)] hover:shadow-[0_0_40px_-5px_rgba(6,182,212,0.5)] transition-all duration-500 group">
+        <div class="relative">
+          <span class="absolute left-0 inline-flex h-full w-full rounded-full bg-cyan-400 opacity-60 animate-ping"></span>
+          <span class="relative flex h-2 w-2 rounded-full bg-cyan-400"></span>
+        </div>
+        <span>{t("integrations.tagline")}</span>
+      </div>
+
+      <h2 class="text-4xl sm:text-5xl lg:text-6xl font-bold tracking-tight leading-tight">
+        {t("integrations.headline")}
+        <br class="hidden sm:block" />
+        <span class="bg-linear-to-r from-cyan-400 via-blue-500 to-violet-500 bg-clip-text text-transparent">{t("integrations.headline.highlight")}</span>
+      </h2>
+
+      <p class="text-muted-foreground text-lg sm:text-xl max-w-2xl mx-auto leading-relaxed">
+        {t("integrations.description")}
+      </p>
+    </div>
+
+    <!-- Integration grid -->
+    <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
+      <!-- Google -->
+      <div class="int-card group">
+        <div class="int-card-glow"></div>
+        <div class="relative z-10 flex flex-col items-center gap-4 py-2">
+          <div class="int-icon-wrapper bg-linear-to-br from-red-500/20 via-yellow-500/20 to-green-500/20 group-hover:from-red-500/30 group-hover:via-yellow-500/30 group-hover:to-green-500/30">
+            <SiGoogle className="w-8 h-8 text-foreground" />
+          </div>
+          <div class="text-center">
+            <h3 class="font-semibold text-foreground">Google</h3>
+            <p class="text-xs text-muted-foreground mt-1">Sheets, Drive, Gmail</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Microsoft -->
+      <div class="int-card group">
+        <div class="int-card-glow"></div>
+        <div class="relative z-10 flex flex-col items-center gap-4 py-2">
+          <div class="int-icon-wrapper bg-linear-to-br from-blue-600/20 to-blue-400/20 group-hover:from-blue-600/30 group-hover:to-blue-400/30">
+            <LuLayoutGrid className="w-8 h-8 text-foreground" />
+          </div>
+          <div class="text-center">
+            <h3 class="font-semibold text-foreground">Microsoft</h3>
+            <p class="text-xs text-muted-foreground mt-1">365, Teams, SharePoint</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Notion -->
+      <div class="int-card group">
+        <div class="int-card-glow"></div>
+        <div class="relative z-10 flex flex-col items-center gap-4 py-2">
+          <div class="int-icon-wrapper bg-linear-to-br from-gray-100/20 to-gray-400/20 group-hover:from-gray-100/30 group-hover:to-gray-400/30">
+            <SiNotion className="w-8 h-8 text-foreground" />
+          </div>
+          <div class="text-center">
+            <h3 class="font-semibold text-foreground">Notion</h3>
+            <p class="text-xs text-muted-foreground mt-1">Pages, Databases</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- GitHub -->
+      <div class="int-card group">
+        <div class="int-card-glow"></div>
+        <div class="relative z-10 flex flex-col items-center gap-4 py-2">
+          <div class="int-icon-wrapper bg-linear-to-br from-gray-600/20 to-gray-800/20 group-hover:from-gray-600/30 group-hover:to-gray-800/30">
+            <SiGithub className="w-8 h-8 text-foreground" />
+          </div>
+          <div class="text-center">
+            <h3 class="font-semibold text-foreground">GitHub</h3>
+            <p class="text-xs text-muted-foreground mt-1">Repos, Issues, Actions</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Slack -->
+      <div class="int-card group">
+        <div class="int-card-glow"></div>
+        <div class="relative z-10 flex flex-col items-center gap-4 py-2">
+          <div class="int-icon-wrapper bg-linear-to-br from-purple-500/20 via-green-500/20 to-yellow-500/20 group-hover:from-purple-500/30 group-hover:via-green-500/30 group-hover:to-yellow-500/30">
+            <SiSlack className="w-8 h-8 text-foreground" />
+          </div>
+          <div class="text-center">
+            <h3 class="font-semibold text-foreground">Slack</h3>
+            <p class="text-xs text-muted-foreground mt-1">Messages, Channels</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Discord -->
+      <div class="int-card group">
+        <div class="int-card-glow"></div>
+        <div class="relative z-10 flex flex-col items-center gap-4 py-2">
+          <div class="int-icon-wrapper bg-linear-to-br from-indigo-500/20 to-indigo-700/20 group-hover:from-indigo-500/30 group-hover:to-indigo-700/30">
+            <SiDiscord className="w-8 h-8 text-foreground" />
+          </div>
+          <div class="text-center">
+            <h3 class="font-semibold text-foreground">Discord</h3>
+            <p class="text-xs text-muted-foreground mt-1">Bots, Webhooks</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Airtable -->
+      <div class="int-card group">
+        <div class="int-card-glow"></div>
+        <div class="relative z-10 flex flex-col items-center gap-4 py-2">
+          <div class="int-icon-wrapper bg-linear-to-br from-teal-400/20 to-teal-600/20 group-hover:from-teal-400/30 group-hover:to-teal-600/30">
+            <SiAirtable className="w-8 h-8 text-foreground" />
+          </div>
+          <div class="text-center">
+            <h3 class="font-semibold text-foreground">Airtable</h3>
+            <p class="text-xs text-muted-foreground mt-1">Bases, Records</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- OpenAI -->
+      <div class="int-card group">
+        <div class="int-card-glow"></div>
+        <div class="relative z-10 flex flex-col items-center gap-4 py-2">
+          <div class="int-icon-wrapper bg-linear-to-br from-emerald-400/20 to-emerald-600/20 group-hover:from-emerald-400/30 group-hover:to-emerald-600/30">
+            <SiOpenai className="w-8 h-8 text-foreground" />
+          </div>
+          <div class="text-center">
+            <h3 class="font-semibold text-foreground">OpenAI</h3>
+            <p class="text-xs text-muted-foreground mt-1">GPT, Embeddings</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Jira -->
+      <div class="int-card group">
+        <div class="int-card-glow"></div>
+        <div class="relative z-10 flex flex-col items-center gap-4 py-2">
+          <div class="int-icon-wrapper bg-linear-to-br from-blue-500/20 to-blue-700/20 group-hover:from-blue-500/30 group-hover:to-blue-700/30">
+            <SiJira className="w-8 h-8 text-foreground" />
+          </div>
+          <div class="text-center">
+            <h3 class="font-semibold text-foreground">Jira</h3>
+            <p class="text-xs text-muted-foreground mt-1">Issues, Projects</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Linear -->
+      <div class="int-card group">
+        <div class="int-card-glow"></div>
+        <div class="relative z-10 flex flex-col items-center gap-4 py-2">
+          <div class="int-icon-wrapper bg-linear-to-br from-violet-500/20 to-violet-700/20 group-hover:from-violet-500/30 group-hover:to-violet-700/30">
+            <SiLinear className="w-8 h-8 text-foreground" />
+          </div>
+          <div class="text-center">
+            <h3 class="font-semibold text-foreground">Linear</h3>
+            <p class="text-xs text-muted-foreground mt-1">Issues, Cycles</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Trello -->
+      <div class="int-card group">
+        <div class="int-card-glow"></div>
+        <div class="relative z-10 flex flex-col items-center gap-4 py-2">
+          <div class="int-icon-wrapper bg-linear-to-br from-sky-400/20 to-sky-600/20 group-hover:from-sky-400/30 group-hover:to-sky-600/30">
+            <SiTrello className="w-8 h-8 text-foreground" />
+          </div>
+          <div class="text-center">
+            <h3 class="font-semibold text-foreground">Trello</h3>
+            <p class="text-xs text-muted-foreground mt-1">Boards, Cards</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- More coming soon -->
+      <div class="int-card group border-dashed">
+        <div class="relative z-10 flex flex-col items-center gap-4 py-2">
+          <div class="int-icon-wrapper bg-muted/30 group-hover:bg-muted/50">
+            <LuPlug2 className="w-8 h-8 text-muted-foreground" />
+          </div>
+          <div class="text-center">
+            <h3 class="font-semibold text-muted-foreground">+ More</h3>
+            <p class="text-xs text-muted-foreground mt-1">Coming soon</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Bottom CTA -->
+    <div class="flex flex-col sm:flex-row items-center justify-center gap-4 pt-8">
+      <a
+        href="https://docs.flow-like.com/integrations"
+        class="inline-flex items-center gap-2 rounded-xl border border-border/40 bg-card/40 backdrop-blur-sm px-6 py-3 text-sm font-medium text-foreground hover:bg-card/60 hover:border-border/60 transition-all duration-300 group"
+      >
+        <LuPlug2 className="w-4 h-4" />
+        <span>View all integrations</span>
+        <LuArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
+      </a>
+      <a
+        href="https://docs.flow-like.com/custom-nodes"
+        class="inline-flex items-center gap-2 rounded-xl border border-primary/30 bg-primary/10 backdrop-blur-sm px-6 py-3 text-sm font-medium text-primary hover:bg-primary/20 hover:border-primary/40 transition-all duration-300 group"
+      >
+        <LuSparkles className="w-4 h-4" />
+        <span>Build your own</span>
+        <LuArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
+      </a>
+    </div>
+  </div>
+</section>
+
+<style>
+  /* Background glows */
+  .int-glow {
+    position: absolute;
+    border-radius: 50%;
+    filter: blur(120px);
+    opacity: 0.2;
+    animation: int-float 15s ease-in-out infinite;
+  }
+
+  .int-glow-1 {
+    width: 500px;
+    height: 500px;
+    background: radial-gradient(circle, rgba(6, 182, 212, 0.4) 0%, transparent 70%);
+    top: 10%;
+    left: -10%;
+    animation-delay: 0s;
+  }
+
+  .int-glow-2 {
+    width: 400px;
+    height: 400px;
+    background: radial-gradient(circle, rgba(139, 92, 246, 0.4) 0%, transparent 70%);
+    bottom: 20%;
+    right: -5%;
+    animation-delay: 5s;
+  }
+
+  .int-glow-3 {
+    width: 350px;
+    height: 350px;
+    background: radial-gradient(circle, rgba(59, 130, 246, 0.3) 0%, transparent 70%);
+    top: 50%;
+    left: 30%;
+    animation-delay: 10s;
+  }
+
+  @keyframes int-float {
+    0%, 100% { transform: translate(0, 0) scale(1); }
+    33% { transform: translate(20px, -20px) scale(1.05); }
+    66% { transform: translate(-10px, 10px) scale(0.95); }
+  }
+
+  /* Integration cards */
+  .int-card {
+    position: relative;
+    border-radius: 1rem;
+    border: 1px solid hsl(var(--border) / 0.3);
+    background: hsl(var(--card) / 0.3);
+    backdrop-filter: blur(12px);
+    padding: 1.5rem;
+    transition: all 0.3s ease;
+    overflow: hidden;
+  }
+
+  .int-card:hover {
+    border-color: hsl(var(--border) / 0.5);
+    background: hsl(var(--card) / 0.5);
+    transform: translateY(-4px);
+    box-shadow: 0 20px 40px -15px rgba(0, 0, 0, 0.3);
+  }
+
+  .int-card-glow {
+    position: absolute;
+    inset: 0;
+    background: radial-gradient(circle at 50% 50%, hsl(var(--primary) / 0.08), transparent 70%);
+    opacity: 0;
+    transition: opacity 0.3s ease;
+    border-radius: 1rem;
+  }
+
+  .int-card:hover .int-card-glow {
+    opacity: 1;
+  }
+
+  .int-icon-wrapper {
+    width: 4rem;
+    height: 4rem;
+    border-radius: 1rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.3s ease;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .int-glow { animation: none; }
+    .int-card:hover { transform: none; }
+  }
+</style>

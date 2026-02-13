@@ -1,6 +1,8 @@
 ---
 import "@tm9657/flow-like-ui/global.css";
-import { BlogHeader } from "../components/blog-header";
+import "../styles/website-base.css";
+import { Header } from "../components/header";
+import LanguageDetect from "../components/language-detect.astro";
 
 import AmbientGlow from "../components/ambient-glow.astro";
 import SoftSeam from "../components/soft-seam.astro";
@@ -17,22 +19,33 @@ import ProcessCombination from "../sections/process-combination.astro";
 import Storage from "../sections/storage.astro";
 import ProblemSolution from "../sections/problem-solution.astro";
 import Reading from "../sections/reading.astro";
+import FlowPilot from "../sections/flowpilot.astro";
+import Integrations from "../sections/integrations.astro";
+import UseCases from "../sections/use-cases.astro";
+import CtaAutomate from "../sections/cta-automate.astro";
+import TwentyFourHourBanner from "../sections/24-hour-solution-banner.astro";
+import EnterpriseStack from "../sections/enterprise-stack.astro";
+import EnterpriseServices from "../sections/enterprise-services.astro";
+import TargetAudience from "../sections/target-audience.astro";
+import Newsletter from "../sections/newsletter.astro";
+import BiPreview from "../sections/bi-preview.astro";
 import { BlogFooter } from "../components/blog-footer";
+import { translations } from "../i18n";
 
 // --- SEO constants ---
 const site = "https://flow-like.com";
-const title = "Flow-Like — Typed Workflows that Scale (Fast, Robust, Local-First)";
+const title = "Flow-Like | Open Source Workflow Engine - Local-First, Rust-Powered, Type-Safe";
 const description =
-  "Typed, scalable workflows with Rust performance. Build reliable systems that run locally, on edge, or in any cloud — with governance built-in and effortless integration. Skip the Prototype!";
+  "Open source workflow engine for local-first and self-hosted automation. Build type-safe, auditable flows in Rust and deploy on-prem or air-gapped.";
 const keywords = [
-  "workflow automation","visual programming","typed workflows","Rust",
-  "local-first","ETL","data pipelines","RAG","orchestration","DevOps"
+  "open source workflow engine","self-hosted workflow automation","local-first automation platform","air-gapped workflow engine",
+  "type-safe workflow automation","workflow engine with data lineage","rust workflow engine","on-premise workflow engine"
 ].join(", ");
 const appName = "Flow-Like";
 const orgName = "TM9657 GmbH";
 const canonicalUrl = site;
 const ogImage = `${site}/og.png`;
-const ogImageAlt = "Flow-Like — Typed Workflows that Scale";
+const ogImageAlt = "Flow-Like Open Source Workflow Engine";
 const twitterCard = "summary_large_image";
 
 const github = "https://github.com/TM9657/flow-like";
@@ -88,10 +101,29 @@ const ldWebPage = {
   },
   inLanguage: "en"
 };
+
+const enTranslations = translations.en as Record<string, string>;
+const faqItems = [1, 2, 3, 4, 5, 6].map((idx) => ({
+  question: enTranslations[`faq.q${idx}`],
+  answer: enTranslations[`faq.a${idx}`]
+}));
+
+const ldFaqPage = {
+  "@context": "https://schema.org",
+  "@type": "FAQPage",
+  mainEntity: faqItems.map((item) => ({
+    "@type": "Question",
+    name: item.question,
+    acceptedAnswer: {
+      "@type": "Answer",
+      text: item.answer
+    }
+  }))
+};
 ---
 
 <!doctype html>
-<html lang="en" class="scroll-smooth max-w-full overflow-x-hidden" style="overflow-x: hidden;">
+<html lang="en" class="scroll-smooth">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -111,6 +143,18 @@ const ldWebPage = {
 
     <!-- Canonical & alternates -->
     <link rel="canonical" href={canonicalUrl} />
+    <link rel="alternate" hreflang="en" href={site} />
+    <link rel="alternate" hreflang="de" href={`${site}/de`} />
+    <link rel="alternate" hreflang="es" href={`${site}/es`} />
+    <link rel="alternate" hreflang="fr" href={`${site}/fr`} />
+    <link rel="alternate" hreflang="zh" href={`${site}/zh`} />
+    <link rel="alternate" hreflang="ja" href={`${site}/ja`} />
+    <link rel="alternate" hreflang="ko" href={`${site}/ko`} />
+    <link rel="alternate" hreflang="pt" href={`${site}/pt`} />
+    <link rel="alternate" hreflang="it" href={`${site}/it`} />
+    <link rel="alternate" hreflang="nl" href={`${site}/nl`} />
+    <link rel="alternate" hreflang="sv" href={`${site}/sv`} />
+    <link rel="alternate" hreflang="x-default" href={site} />
     <link rel="alternate" type="application/rss+xml" title="Flow-Like Blog" href="/rss.xml" />
 
     <!-- Favicons / PWA -->
@@ -149,10 +193,14 @@ const ldWebPage = {
     <link rel="preconnect" href="https://github.com" crossorigin />
 
     <!-- Structured Data (inline, non-blocking) -->
-    <script type="application/ld+json">{JSON.stringify(ldOrganization)}</script>
-    <script type="application/ld+json">{JSON.stringify(ldSoftware)}</script>
-    <script type="application/ld+json">{JSON.stringify(ldWebSite)}</script>
-    <script type="application/ld+json">{JSON.stringify(ldWebPage)}</script>
+    <script type="application/ld+json" is:inline set:html={JSON.stringify(ldOrganization)} />
+    <script type="application/ld+json" is:inline set:html={JSON.stringify(ldSoftware)} />
+    <script type="application/ld+json" is:inline set:html={JSON.stringify(ldWebSite)} />
+    <script type="application/ld+json" is:inline set:html={JSON.stringify(ldWebPage)} />
+    <script type="application/ld+json" is:inline set:html={JSON.stringify(ldFaqPage)} />
+
+    <!-- Language detection - runs before page renders -->
+    <LanguageDetect />
 
     <!-- Performance helpers -->
     <style is:global>
@@ -165,75 +213,84 @@ const ldWebPage = {
         background-attachment: scroll !important;
       }
       @media (hover: none) and (pointer: coarse) {
-        /* Never let a viewport overlay catch touches unless explicitly allowed */
-        [data-overlay], [data-visual], .overlay, .backdrop,
-        [class*="fixed"], [class~="fixed"] {
+        [data-overlay], [data-visual], .overlay, .backdrop {
           pointer-events: none;
           touch-action: pan-y;
         }
-
-        /* Disable scroll snapping & smooth scroll on phones */
         * { scroll-snap-type: none !important; }
         html { scroll-behavior: auto !important; }
-
-        /* Don’t allow sections to create nested scrollers or crop content */
-        html, body, main, section, [role="region"] {
-          overflow: visible !important;
-        }
-
-        /* Sticky/fixed inside sections can break the scroll chain after style changes */
-        .sticky, [style*="position: sticky"] { position: static !important; }
       }
 
-      html, body { min-height: 100%; }
-      html, body {
-        overflow-y: auto;
-        -webkit-overflow-scrolling: touch;
-        touch-action: pan-y;
-      }
-      :root, body, #content {
-        overscroll-behavior: auto;
-      }
     </style>
   </head>
 
   <body
-    class="bg-background text-foreground antialiased selection:bg-primary/30 selection:text-primary-foreground overflow-x-hidden max-w-full
+    class="bg-background text-foreground antialiased selection:bg-primary/30 selection:text-primary-foreground
             bg-[radial-gradient(var(--muted)_1px,transparent_1px)] [background-size:16px_16px]"
   >
-    <main id="content" class="w-full">
+    <main id="content" class="w-full max-w-[100vw] overflow-x-clip">
       <AmbientGlow />
-      <BlogHeader client:idle/>
-      <Hero />
+      <Header client:load/>
+      <Hero client:load/>
+
+      <!-- Enterprise Stack - what you get -->
+      <EnterpriseStack />
+
+      <!-- BI Preview -->
+      <BiPreview />
+
+      <!-- CTA -->
+      <CtaAutomate />
+
+      <!-- Problem/Solution - the hidden risk & flow-like difference -->
+      <ProblemSolution />
+
+      <!-- Use Cases -->
+      <UseCases />
+
+      <!-- Visual builder showcase -->
       <DesignWorkflowsVisually />
+
+      <!-- Target Audience -->
+      <TargetAudience />
+
+      <!-- Enterprise Services -->
+      <EnterpriseServices />
+
+      <!-- 24 Hour Solution Banner -->
+      <TwentyFourHourBanner />
+
+      <!-- Core features: Portability -->
+      <Portability />
+
+      <SoftSeam />
+      <Performance />
+
+      <!-- FlowPilot - prominent AI feature -->
+      <FlowPilot />
+
+      <Extensibility />
+
+      <!-- Zero to Prod -->
       <ZeroToProd />
 
-      <SoftSeam  />
-      <ProblemSolution  />
+      <!-- Dark section: Integrations -->
+      <Integrations />
 
-      <SoftSeam  />
-      <Portability  />
+      <SoftSeam />
+      <Theming />
 
-      <SoftSeam  />
-      <Performance  />
+      <SoftSeam />
+      <ProcessCombination />
 
-      <SoftSeam  />
-      <Extensibility  />
+      <SoftSeam />
+      <Storage />
 
-      <SoftSeam  />
-      <Theming  />
+      <Reading />
 
-      <SoftSeam  />
-      <ProcessCombination  />
+      <Newsletter />
 
-      <SoftSeam  />
-      <Storage  />
-
-      <SoftSeam  />
-      <Reading  />
-
-      <SoftSeam  />
-      <FAQ  />
+      <FAQ />
     </main>
 
     <BlogFooter  />

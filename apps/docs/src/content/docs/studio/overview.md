@@ -14,7 +14,8 @@ Important components of the Studio environment are:
 - [**Layers**](/studio/layers/) that allow you to collapse and define higher-order *nodes*,
 - [**Variables**](/studio/variables/) available at the *Board* level to store and access information at runtime,
 - [**Run History**](/studio/logging/) to inspect previous flow executions,
-- [**Logs**](/studio/logging/) stored for every *run* for inspection and tracing.
+- [**Logs**](/studio/logging/) stored for every *run* for inspection and tracing,
+- [**FlowPilot**](/studio/flowpilot/) AI assistant for building flows with natural language.
 
 A *Flow* represents a *process* and consists of one or more *Nodes*. Nodes are linked through *Edges* (or *Wires*) for *Execution* and *Data*.
 

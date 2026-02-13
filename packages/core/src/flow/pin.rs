@@ -172,6 +172,14 @@ impl Pin {
         if let Some(options) = &self.options {
             options.hash(hasher);
         }
+
+        for connected in &self.connected_to {
+            hasher.append(connected.as_bytes());
+        }
+
+        if let Some(default_value) = &self.default_value {
+            hasher.append(default_value);
+        }
     }
 }
 

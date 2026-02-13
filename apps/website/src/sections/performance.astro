@@ -1,6 +1,19 @@
 ---
 import { Image } from "astro:assets";
 import tracing from "../images/index/tracing.png";
+import type { Lang, TranslationKey } from "../i18n";
+import { translations, defaultLang } from "../i18n";
+
+interface Props {
+  lang?: Lang;
+}
+
+const { lang = defaultLang } = Astro.props;
+const t = (key: TranslationKey): string => {
+  const langTranslations = translations[lang] as Record<string, string>;
+  const enTranslations = translations.en as Record<string, string>;
+  return langTranslations?.[key] ?? enTranslations[key] ?? key;
+};
 ---
 
 <section
@@ -23,6 +36,9 @@ import tracing from "../images/index/tracing.png";
       class="absolute inset-0 [mask-image:radial-gradient(60%_60%_at_50%_40%,black,transparent)] bg-[linear-gradient(to_right,theme(colors.muted.DEFAULT/.12)_1px,transparent_1px),linear-gradient(to_bottom,theme(colors.muted.DEFAULT/.12)_1px,transparent_1px)] bg-[size:36px_36px]"
     >
     </div>
+    <!-- Animated glow orbs -->
+    <div class="perf-glow perf-glow-1"></div>
+    <div class="perf-glow perf-glow-2"></div>
   </div>
 
   <!-- big visual with overlayed copy -->
@@ -57,10 +73,13 @@ import tracing from "../images/index/tracing.png";
         >
           <!-- badge -->
           <div
-            class="inline-flex items-center gap-2 rounded-full border border-orange-500/20 bg-orange-500/10 backdrop-blur-sm px-4 py-2 text-sm font-medium text-orange-600 dark:text-orange-400 mb-4"
+            class="inline-flex items-center gap-2.5 rounded-full border border-orange-500/30 bg-orange-500/10 backdrop-blur-xl px-5 py-2.5 text-sm font-semibold text-orange-600 dark:text-orange-400 mb-6 shadow-[0_0_30px_-8px_rgba(249,115,22,0.4)] hover:shadow-[0_0_40px_-5px_rgba(249,115,22,0.5)] transition-all duration-500 group"
           >
-            <div class="w-2 h-2 bg-orange-500 rounded-full animate-pulse"></div>
-            Speed & Insight
+            <div class="relative">
+              <span class="absolute inline-flex h-full w-full rounded-full bg-orange-500 opacity-60 animate-ping"></span>
+              <span class="relative flex h-2 w-2 rounded-full bg-orange-500"></span>
+            </div>
+            <span>Speed & Insight</span>
           </div>
 
           <!-- card -->
@@ -70,40 +89,55 @@ import tracing from "../images/index/tracing.png";
             <h2
               class="text-4xl font-bold sm:text-5xl bg-gradient-to-r from-foreground via-orange-500 to-red-500 bg-clip-text text-transparent leading-tight"
             >
-              One of the fastest runtimes — with a clear paper trail
+              {t("perf.headline")}
             </h2>
 
             <p class="mt-4 sm:mt-5 text-base sm:text-lg text-muted-foreground">
-              Flow-Like runs your flows at top speed and makes every run
-              explainable. See what went in, what changed, and what came out —
-              with timestamps and spans you can drill into when you need the
-              details.
+              {t("perf.description")}
             </p>
+
+            <!-- Benchmark stats -->
+            <div class="mt-5 grid grid-cols-2 sm:grid-cols-4 gap-3">
+              <div class="rounded-xl border border-orange-500/20 bg-orange-500/5 p-3 text-center">
+                <div class="text-2xl sm:text-3xl font-bold text-orange-500">~0.6ms</div>
+                <div class="text-xs text-muted-foreground mt-1">{t("perf.metric.workflow")}</div>
+              </div>
+              <div class="rounded-xl border border-green-500/20 bg-green-500/5 p-3 text-center">
+                <div class="text-2xl sm:text-3xl font-bold text-green-500">244K</div>
+                <div class="text-xs text-muted-foreground mt-1">{t("perf.metric.executions")}</div>
+              </div>
+              <div class="rounded-xl border border-blue-500/20 bg-blue-500/5 p-3 text-center">
+                <div class="text-2xl sm:text-3xl font-bold text-blue-500">1109×</div>
+                <div class="text-xs text-muted-foreground mt-1">{t("perf.comparison")}</div>
+              </div>
+              <div class="rounded-xl border border-purple-500/20 bg-purple-500/5 p-3 text-center">
+                <div class="text-2xl sm:text-3xl font-bold text-purple-500">100%</div>
+                <div class="text-xs text-muted-foreground mt-1">{t("perf.metric.traceable")}</div>
+              </div>
+            </div>
 
             <!-- succinct value tags -->
             <div class="mt-5 flex flex-wrap gap-2">
               <span
                 class="rounded-full border border-orange-500/20 bg-orange-500/10 px-3 py-1 text-xs font-medium"
               >
-                ⚡ High-performance engine
+                {t("perf.tag.rust")}
               </span>
               <span
                 class="rounded-full border border-green-500/20 bg-green-500/10 px-3 py-1 text-xs font-medium"
               >
-                🔎 Traceable by design
+                {t("perf.tag.traceable")}
               </span>
               <span
                 class="rounded-full border border-blue-500/20 bg-blue-500/10 px-3 py-1 text-xs font-medium"
               >
-                📜 In-depth logs & timings
+                {t("perf.tag.logs")}
               </span>
             </div>
 
-            <!-- quiet proof (optional) -->
+            <!-- proof link -->
             <div class="mt-4 text-xs sm:text-sm text-muted-foreground">
-              Built on a Rust runtime for predictable performance. Benchmarks <span
-                class="opacity-80">(coming soon)</span
-              >.
+              {t("perf.benchmark_note")} <a href="https://docs.flow-like.com/reference/benchmarks/" class="text-orange-500 hover:underline">{t("perf.benchmark_link")}</a>
             </div>
           </div>
         </div>
@@ -193,6 +227,38 @@ import tracing from "../images/index/tracing.png";
       --c2: attr(data-c2);
     }
 
+    /* Background glows - BIGGER and more dramatic */
+    .perf-glow {
+      position: absolute;
+      border-radius: 50%;
+      filter: blur(120px);
+      opacity: 0.45;
+      animation: perf-float 12s ease-in-out infinite;
+    }
+
+    .perf-glow-1 {
+      width: 600px;
+      height: 600px;
+      background: radial-gradient(circle, hsl(24 96% 60% / 0.5) 0%, transparent 60%);
+      top: 0%;
+      left: 10%;
+    }
+
+    .perf-glow-2 {
+      width: 550px;
+      height: 550px;
+      background: radial-gradient(circle, hsl(280 85% 65% / 0.4) 0%, transparent 60%);
+      bottom: 10%;
+      right: 5%;
+      animation-delay: 6s;
+    }
+
+    @keyframes perf-float {
+      0%, 100% { transform: translate(0, 0) scale(1); }
+      33% { transform: translate(35px, -25px) scale(1.12); }
+      66% { transform: translate(-20px, 18px) scale(0.9); }
+    }
+
     /* ensure dialog has no UA margin and is centered when opened (fallback for browsers/Tailwind variants) */
     #performance [data-zoom-dialog] {
       margin: 0;
@@ -219,6 +285,10 @@ import tracing from "../images/index/tracing.png";
     #performance .reveal.in {
       opacity: 1;
       transform: none;
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      .perf-glow { animation: none; }
     }
   </style>
 </section>

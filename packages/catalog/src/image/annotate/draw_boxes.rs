@@ -1,4 +1,4 @@
-use crate::{ai::onnx::detection::BoundingBox, image::NodeImage};
+use crate::image::{BoundingBox, NodeImage};
 
 use flow_like::{
     flow::{
@@ -81,6 +81,7 @@ pub fn draw_bboxes(
     Ok(img)
 }
 
+#[crate::register_node]
 #[derive(Default)]
 pub struct DrawBoxesNode {}
 
@@ -92,7 +93,7 @@ impl DrawBoxesNode {
 
 #[async_trait]
 impl NodeLogic for DrawBoxesNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "draw_boxes",
             "Draw Boxes",

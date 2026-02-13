@@ -11,6 +11,7 @@ export interface IApp {
 	frontend?: null | IFrontendConfiguration;
 	id: string;
 	interactions_count: number;
+	page_ids: string[];
 	price?: number | null;
 	primary_category?: IAppCategory | null;
 	rating_count: number;
@@ -22,6 +23,7 @@ export interface IApp {
 	updated_at: ISystemTime;
 	version?: null | string;
 	visibility: IAppVisibility;
+	widget_ids: string[];
 	[property: string]: any;
 }
 

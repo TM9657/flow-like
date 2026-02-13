@@ -8,6 +8,28 @@ use axum::{
 };
 use flow_like_storage::databases::vector::{VectorStore, lancedb::LanceDBVectorStore};
 
+#[utoipa::path(
+    get,
+    path = "/apps/{app_id}/db/{table}",
+    tag = "database",
+    description = "List rows from a table with pagination.",
+    params(
+        ("app_id" = String, Path, description = "Application ID"),
+        ("table" = String, Path, description = "Table name"),
+        ("limit" = Option<u64>, Query, description = "Max results (default 25, max 250)"),
+        ("offset" = Option<u64>, Query, description = "Result offset")
+    ),
+    responses(
+        (status = 200, description = "List table items", body = String, content_type = "application/json"),
+        (status = 401, description = "Unauthorized"),
+        (status = 403, description = "Forbidden")
+    ),
+    security(
+        ("bearer_auth" = []),
+        ("api_key" = []),
+        ("pat" = [])
+    )
+)]
 #[tracing::instrument(name = "GET /apps/{app_id}/db/{table}", skip(state, user))]
 pub async fn list_items(
     State(state): State<AppState>,

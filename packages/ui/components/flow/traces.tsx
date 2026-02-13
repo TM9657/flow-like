@@ -24,13 +24,7 @@ import "react-virtualized/styles.css";
 import { QuestionMarkCircledIcon } from "@radix-ui/react-icons";
 import { VariableSizeList as List, type VariableSizeList } from "react-window";
 import { toast } from "sonner";
-import {
-	type IBoard,
-	type ILog,
-	type INode,
-	useBackend,
-	useInfiniteInvoke,
-} from "../..";
+import { type IBoard, type ILog, useBackend, useInfiniteInvoke } from "../..";
 import { parseTimespan } from "../../lib/date";
 import { logLevelToNumber } from "../../lib/log-level";
 import { ILogLevel, type ILogMessage } from "../../lib/schema/flow/run";
@@ -76,7 +70,7 @@ export function Traces({
 			backend.boardState.queryRun,
 			backend.boardState,
 			[currentMetadata!, query],
-			1000,
+			100,
 			typeof currentMetadata !== "undefined",
 		);
 
@@ -176,9 +170,11 @@ export function Traces({
 			}
 
 			const log = messages[index];
+			if (!log) return null;
+
 			return (
 				<LogMessage
-					key={index}
+					key={`${log.operation_id ?? index}-${log.start?.nanos_since_epoch ?? 0}-${index}`}
 					log={log}
 					index={index}
 					style={style}
@@ -188,7 +184,14 @@ export function Traces({
 				/>
 			);
 		},
-		[messages, hasNextPage, isFetchingNextPage, fetchNextPage],
+		[
+			messages,
+			hasNextPage,
+			isFetchingNextPage,
+			fetchNextPage,
+			board,
+			onFocusNode,
+		],
 	);
 
 	useEffect(() => {
@@ -201,15 +204,11 @@ export function Traces({
 	}
 
 	return (
-		<div
-			className={
-				"transition-all top-0 bottom-0 right-0 h-[calc(100%)] z-10 bg-background border rounded-lg flex flex-col p-2 w-full"
-			}
-		>
-			<div className="flex flex-row items-stretch overflow-hidden grow h-full">
-				<div className="ml-2 flex flex-col w-full gap-1 overflow-x-hidden max-h-full grow h-full">
-					<div className="w-full flex flex-row items-center justify-between my-1">
-						<div className="flex flex-row items-center gap-1">
+		<div className="h-full w-full">
+			<div className="transition-all h-full z-10 bg-background border rounded-lg flex flex-col w-full overflow-hidden">
+				<div className="flex flex-col h-full p-2">
+					<div className="w-full flex flex-row items-center justify-between my-1 px-2 flex-wrap gap-2">
+						<div className="flex flex-row items-center gap-1 flex-wrap">
 							<LogFilterBadge
 								level={ILogLevel.Debug}
 								label="Debug"
@@ -242,15 +241,16 @@ export function Traces({
 							/>
 						</div>
 
-						<div className="flex flex-row items-stretch">
+						<div className="flex flex-row items-center gap-2">
 							<Input
 								value={search}
 								onChange={(e) => setSearch(e.target.value)}
 								placeholder="Search..."
+								className="w-32 md:w-48"
 							/>
 						</div>
 					</div>
-					<div className="flex flex-col w-full gap-1 overflow-x-auto max-h-full grow h-full">
+					<div className="flex flex-col w-full gap-1 overflow-x-auto flex-1 min-h-0 px-2">
 						{(messages?.length ?? 0) === 0 && (
 							<EmptyState
 								className="h-full w-full max-w-full"
@@ -285,6 +285,50 @@ export function Traces({
 	);
 }
 
+/**
+ * Attempts to format a message with pretty-printed JSON.
+ * If the entire message is valid JSON, returns the parsed JSON and formatted string.
+ * Otherwise returns the original message.
+ */
+function formatLogMessage(message: string): {
+	isJson: boolean;
+	content: string;
+} {
+	const trimmed = message.trim();
+
+	// Check if the entire message is JSON (starts with { or [)
+	if (
+		(trimmed.startsWith("{") && trimmed.endsWith("}")) ||
+		(trimmed.startsWith("[") && trimmed.endsWith("]"))
+	) {
+		try {
+			const parsed = JSON.parse(trimmed);
+			const pretty = JSON.stringify(parsed, null, 2);
+			return { isJson: true, content: pretty };
+		} catch {
+			// Not valid JSON, return as-is
+		}
+	}
+
+	return { isJson: false, content: message };
+}
+
+/**
+ * Lightweight log message renderer - avoids heavy TextEditor for simple messages
+ */
+const LogMessageContent = memo(function LogMessageContent({
+	message,
+}: Readonly<{ message: { isJson: boolean; content: string } }>) {
+	if (message.isJson) {
+		return (
+			<pre className="text-xs font-mono whitespace-pre-wrap break-all bg-muted/30 p-2 rounded max-h-48 overflow-y-auto w-full">
+				<code className="break-all">{message.content}</code>
+			</pre>
+		);
+	}
+	return <span className="text-sm break-all">{message.content}</span>;
+});
+
 const LogMessage = memo(function LogMessage({
 	log,
 	style,
@@ -300,21 +344,29 @@ const LogMessage = memo(function LogMessage({
 	onSetHeight: (index: number, height: number) => void;
 	onSelectNode: (nodeId: string) => void;
 }>) {
-	const [node, setNode] = useState<INode | undefined>();
 	const rowRef = useRef<HTMLDivElement>(null);
 
-	useEffect(() => {
-		if (log.node_id) {
-			const node = board.current?.nodes[log.node_id];
-			setNode(node);
+	// Use useMemo instead of useState + useEffect to avoid re-renders
+	const node = useMemo(() => {
+		if (log?.node_id && board.current) {
+			return board.current.nodes[log.node_id];
 		}
-	}, [log.node_id, board]);
+		return undefined;
+	}, [log?.node_id, board.current?.nodes]);
+
+	// Format the message - memoized to avoid re-computing on every render
+	const formattedMessage = useMemo(
+		() => formatLogMessage(log?.message ?? ""),
+		[log?.message],
+	);
 
 	useEffect(() => {
 		if (rowRef.current) {
 			onSetHeight(index, rowRef.current.clientHeight);
 		}
-	}, [rowRef]);
+	}, [rowRef, index, onSetHeight, log?.message]);
+
+	const logLevel = log?.log_level ?? ILogLevel.Debug;
 
 	return (
 		<button
@@ -324,17 +376,19 @@ const LogMessage = memo(function LogMessage({
 		>
 			<div
 				ref={rowRef}
-				className={`flex flex-col items-center border rounded-md ${logLevelToColor(log.log_level)}`}
+				className={`flex flex-col items-center border rounded-md ${logLevelToColor(logLevel)}`}
 			>
 				<div className="flex p-1 px-2  flex-row items-center gap-2 w-full">
-					<LogIndicator logLevel={log.log_level} />
-					<p className="text-start text-wrap break-all">{log.message}</p>
+					<LogIndicator logLevel={logLevel} />
+					<div className="text-start text-wrap break-all flex-1 min-w-0">
+						<LogMessageContent message={formattedMessage} />
+					</div>
 				</div>
 				<div className="flex flex-row items-center gap-1 w-full px-2 py-1 border-t justify-between">
-					{log.start.nanos_since_epoch !== log.end.nanos_since_epoch ? (
+					{log.start?.nanos_since_epoch !== log.end?.nanos_since_epoch ? (
 						<div className="flex flex-row items-center">
 							<small className="text-xs">
-								{parseTimespan(log.start, log.end)}
+								{log.start && log.end ? parseTimespan(log.start, log.end) : "—"}
 							</small>
 							{log?.stats?.token_out && (
 								<small className="text-xs">
@@ -356,7 +410,7 @@ const LogMessage = memo(function LogMessage({
 								<span className={`flex flex-row items-center gap-2`}>
 									<DynamicImage
 										url={node.icon ?? ""}
-										className={`w-4 h-4 size-4 ${logLevelToColor(log.log_level, true)}`}
+										className={`w-4 h-4 size-4 ${logLevelToColor(logLevel, true)}`}
 									/>
 									{node.friendly_name || node.name}
 								</span>
@@ -372,13 +426,13 @@ const LogMessage = memo(function LogMessage({
 							size={"icon"}
 							className="p-1! h-6 w-6"
 							onClick={() => {
-								navigator.clipboard.writeText(log.message);
+								navigator.clipboard.writeText(log?.message ?? "");
 								toast.success("Log message copied to clipboard");
 							}}
 						>
 							<CopyIcon className="w-4 h-4" />
 						</Button>
-						{log.node_id && (
+						{log?.node_id && (
 							<Button
 								variant={"outline"}
 								size={"icon"}
@@ -396,22 +450,22 @@ const LogMessage = memo(function LogMessage({
 });
 
 function logLevelToColor(logLevel: ILogLevel, icon = false) {
-	switch (logLevel) {
-		case ILogLevel.Debug:
-			return !icon
-				? "bg-muted/20 text-muted-foreground"
-				: "bg-muted-foreground";
-		case ILogLevel.Info:
-			return !icon ? "bg-background/20" : "bg-foreground";
-		case ILogLevel.Warn:
-			return !icon ? "bg-yellow-400/20" : "bg-yellow-400";
-		case ILogLevel.Error:
-			return icon ? "bg-rose-400/20" : "bg-rose-400";
-		case ILogLevel.Fatal:
-			return !icon ? "bg-pink-400/30" : "bg-pink-400";
-	}
+	const colors: Record<ILogLevel, { base: string; icon: string }> = {
+		[ILogLevel.Debug]: {
+			base: "bg-muted/20 text-muted-foreground",
+			icon: "bg-muted-foreground",
+		},
+		[ILogLevel.Info]: { base: "bg-background/20", icon: "bg-foreground" },
+		[ILogLevel.Warn]: { base: "bg-yellow-400/20", icon: "bg-yellow-400" },
+		[ILogLevel.Error]: { base: "bg-rose-400", icon: "bg-rose-400/20" },
+		[ILogLevel.Fatal]: { base: "bg-pink-400/30", icon: "bg-pink-400" },
+	};
 
-	return icon ? "bg-foreground" : "bg-background";
+	const entry = colors[logLevel];
+	if (!entry) {
+		return icon ? "bg-foreground" : "bg-background";
+	}
+	return icon ? entry.icon : entry.base;
 }
 
 function LogIndicator({ logLevel }: Readonly<{ logLevel: ILogLevel }>) {

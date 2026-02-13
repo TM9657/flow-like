@@ -9,6 +9,12 @@ import type { IAppSearchSort } from "../../lib/schema/app/app-search-query";
 
 export type IMediaItem = "icon" | "thumbnail" | "preview";
 
+export interface IPurchaseResponse {
+	checkoutUrl: string | null;
+	alreadyMember: boolean;
+	appId: string;
+}
+
 export interface IAppState {
 	createApp(
 		metadata: IMetadata,
@@ -44,4 +50,6 @@ export interface IAppState {
 		language?: string,
 	): Promise<void>;
 	changeAppVisibility(appId: string, visibility: IAppVisibility): Promise<void>;
+	requestJoinApp(appId: string, comment?: string): Promise<void>;
+	purchaseApp(appId: string): Promise<IPurchaseResponse>;
 }

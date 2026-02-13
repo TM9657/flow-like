@@ -43,7 +43,10 @@ pub struct FlowLikeStores {
 #[derive(Clone, Default)]
 pub struct FlowLikeCallbacks {
     pub build_project_database: Option<Arc<dyn (Fn(Path) -> ConnectBuilder) + Send + Sync>>,
+    pub build_user_database: Option<Arc<dyn (Fn(Path) -> ConnectBuilder) + Send + Sync>>,
     pub build_logs_database: Option<Arc<dyn (Fn(Path) -> ConnectBuilder) + Send + Sync>>,
+    /// Optional write options for LanceDB (used on Android to avoid hard_link issues)
+    pub lance_write_options: Option<flow_like_storage::lancedb::table::WriteOptions>,
 }
 
 #[derive(Clone, Default)]
@@ -105,11 +108,25 @@ impl FlowLikeConfig {
         self.callbacks.build_project_database = Some(callback);
     }
 
+    pub fn register_build_user_database(
+        &mut self,
+        callback: Arc<dyn (Fn(Path) -> ConnectBuilder) + Send + Sync>,
+    ) {
+        self.callbacks.build_user_database = Some(callback);
+    }
+
     pub fn register_build_logs_database(
         &mut self,
         callback: Arc<dyn (Fn(Path) -> ConnectBuilder) + Send + Sync>,
     ) {
         self.callbacks.build_logs_database = Some(callback);
+    }
+
+    pub fn register_lance_write_options(
+        &mut self,
+        options: flow_like_storage::lancedb::table::WriteOptions,
+    ) {
+        self.callbacks.lance_write_options = Some(options);
     }
 }
 
@@ -134,13 +151,13 @@ impl FlowNodeRegistryInner {
         self.registry.values().map(|node| node.0.clone()).collect()
     }
 
-    pub async fn prepare(state: &FlowLikeState, nodes: &Arc<Vec<Arc<dyn NodeLogic>>>) -> Self {
+    pub fn prepare(nodes: &Arc<Vec<Arc<dyn NodeLogic>>>) -> Self {
         let mut registry = FlowNodeRegistryInner {
             registry: HashMap::with_capacity(nodes.len()),
         };
 
         for logic in nodes.iter() {
-            let node = logic.get_node(state).await;
+            let node = logic.get_node();
             registry.insert(node, logic.clone());
         }
 
@@ -169,7 +186,7 @@ impl FlowNodeRegistryInner {
 #[cfg(feature = "flow-runtime")]
 pub struct FlowNodeRegistry {
     pub node_registry: Arc<FlowNodeRegistryInner>,
-    pub parent: Option<Weak<Mutex<FlowLikeState>>>,
+    pub parent: Option<Weak<FlowLikeState>>,
 }
 
 #[cfg(feature = "flow-runtime")]
@@ -187,7 +204,7 @@ impl FlowNodeRegistry {
         }
     }
 
-    pub fn initialize(&mut self, parent: Weak<Mutex<FlowLikeState>>) {
+    pub fn initialize(&mut self, parent: Weak<FlowLikeState>) {
         self.parent = Some(parent);
     }
 
@@ -196,43 +213,25 @@ impl FlowNodeRegistry {
         Ok(nodes)
     }
 
-    pub async fn push_node(&mut self, logic: Arc<dyn NodeLogic>) -> flow_like_types::Result<()> {
-        let state = self
-            .parent
-            .as_ref()
-            .and_then(|weak| weak.upgrade())
-            .ok_or(flow_like_types::anyhow!("Parent not found"))?;
-        let guard = state.lock().await;
+    pub fn push_node(&mut self, logic: Arc<dyn NodeLogic>) {
         let mut registry = FlowNodeRegistryInner {
             registry: self.node_registry.registry.clone(),
         };
-        let node = logic.get_node(&guard).await;
+        let node = logic.get_node();
         registry.insert(node, logic);
         self.node_registry = Arc::new(registry);
-        Ok(())
     }
 
-    pub async fn push_nodes(
-        &mut self,
-        nodes: Vec<Arc<dyn NodeLogic>>,
-    ) -> flow_like_types::Result<()> {
-        let state = self
-            .parent
-            .as_ref()
-            .and_then(|weak| weak.upgrade())
-            .ok_or(flow_like_types::anyhow!("Parent not found"))?;
-        let guard = state.lock().await;
-
+    pub fn push_nodes(&mut self, nodes: Vec<Arc<dyn NodeLogic>>) {
         let mut registry = FlowNodeRegistryInner {
             registry: self.node_registry.registry.clone(),
         };
 
         for logic in nodes {
-            let node = logic.get_node(&guard).await;
+            let node = logic.get_node();
             registry.insert(node, logic);
         }
         self.node_registry = Arc::new(registry);
-        Ok(())
     }
 
     pub fn get_node(&self, node_id: &str) -> flow_like_types::Result<Node> {
@@ -246,6 +245,8 @@ impl FlowNodeRegistry {
     }
 }
 
+use std::sync::atomic::AtomicU64;
+
 #[derive(Clone)]
 pub struct RunData {
     pub start_time: Instant,
@@ -253,6 +254,11 @@ pub struct RunData {
     pub node_id: Arc<str>,
     pub event_id: Option<Arc<str>>,
     pub cancellation_token: CancellationToken,
+    pub board_name: Option<Arc<str>>,
+    pub event_name: Option<Arc<str>>,
+    pub event_type: Option<Arc<str>>,
+    /// Timestamp (ms since epoch) of the last node update event
+    last_node_update_ms: Arc<AtomicU64>,
 }
 
 impl RunData {
@@ -268,6 +274,32 @@ impl RunData {
             node_id: Arc::from(node_id),
             event_id: event_id.map(|s| Arc::from(s.as_str())),
             cancellation_token,
+            board_name: None,
+            event_name: None,
+            event_type: None,
+            last_node_update_ms: Arc::new(AtomicU64::new(0)),
+        }
+    }
+
+    pub fn with_metadata(
+        board_id: &str,
+        node_id: &str,
+        event_id: Option<String>,
+        cancellation_token: CancellationToken,
+        board_name: Option<String>,
+        event_name: Option<String>,
+        event_type: Option<String>,
+    ) -> Self {
+        RunData {
+            start_time: Instant::now(),
+            board_id: Arc::from(board_id),
+            node_id: Arc::from(node_id),
+            event_id: event_id.map(|s| Arc::from(s.as_str())),
+            cancellation_token,
+            board_name: board_name.map(|s| Arc::from(s.as_str())),
+            event_name: event_name.map(|s| Arc::from(s.as_str())),
+            event_type: event_type.map(|s| Arc::from(s.as_str())),
+            last_node_update_ms: Arc::new(AtomicU64::new(0)),
         }
     }
 
@@ -283,6 +315,22 @@ impl RunData {
         self.start_time.elapsed()
     }
 
+    /// Update the last node update timestamp to now
+    pub fn touch_last_node_update(&self) {
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_millis() as u64)
+            .unwrap_or(0);
+        self.last_node_update_ms
+            .store(now, std::sync::atomic::Ordering::Relaxed);
+    }
+
+    /// Get the last node update timestamp in milliseconds since epoch
+    pub fn get_last_node_update_ms(&self) -> u64 {
+        self.last_node_update_ms
+            .load(std::sync::atomic::Ordering::Relaxed)
+    }
+
     pub fn from_event(event: &Event, cancellation_token: CancellationToken) -> Self {
         RunData {
             start_time: Instant::now(),
@@ -290,6 +338,10 @@ impl RunData {
             node_id: Arc::from(event.node_id.as_str()),
             event_id: Some(Arc::from(event.id.as_str())),
             cancellation_token,
+            board_name: None,
+            event_name: Some(Arc::from(event.name.as_str())),
+            event_type: Some(Arc::from(event.event_type.as_str())),
+            last_node_update_ms: Arc::new(AtomicU64::new(0)),
         }
     }
 }
@@ -317,6 +369,12 @@ pub struct FlowLikeState {
     pub board_registry: Arc<DashMap<String, Arc<Mutex<Board>>>>, // TODO: should board be wrapped in RWLock or Mutex?
     #[cfg(feature = "flow-runtime")]
     pub board_run_registry: Arc<DashMap<String, Arc<RunData>>>,
+
+    // A2UI registries for open widgets/pages
+    #[cfg(feature = "flow-runtime")]
+    pub widget_registry: Arc<DashMap<String, crate::a2ui::widget::Widget>>,
+    #[cfg(feature = "flow-runtime")]
+    pub page_registry: Arc<DashMap<String, crate::a2ui::widget::Page>>,
 }
 
 impl FlowLikeState {
@@ -342,6 +400,42 @@ impl FlowLikeState {
             board_registry: Arc::new(DashMap::new()),
             #[cfg(feature = "flow-runtime")]
             board_run_registry: Arc::new(DashMap::new()),
+
+            #[cfg(feature = "flow-runtime")]
+            widget_registry: Arc::new(DashMap::new()),
+            #[cfg(feature = "flow-runtime")]
+            page_registry: Arc::new(DashMap::new()),
+        }
+    }
+
+    #[cfg(feature = "model")]
+    pub fn new_with_model_config(
+        config: FlowLikeConfig,
+        client: HTTPClient,
+        model_provider_config: ModelProviderConfiguration,
+    ) -> Self {
+        FlowLikeState {
+            config: Arc::new(RwLock::new(config)),
+            http_client: Arc::new(client),
+
+            #[cfg(feature = "bit")]
+            download_manager: Arc::new(Mutex::new(DownloadManager::new())),
+
+            model_provider_config: Arc::new(model_provider_config),
+            model_factory: Arc::new(Mutex::new(ModelFactory::new())),
+            embedding_factory: Arc::new(Mutex::new(EmbeddingFactory::new())),
+
+            #[cfg(feature = "flow-runtime")]
+            node_registry: Arc::new(RwLock::new(FlowNodeRegistry::new())),
+            #[cfg(feature = "flow-runtime")]
+            board_registry: Arc::new(DashMap::new()),
+            #[cfg(feature = "flow-runtime")]
+            board_run_registry: Arc::new(DashMap::new()),
+
+            #[cfg(feature = "flow-runtime")]
+            widget_registry: Arc::new(DashMap::new()),
+            #[cfg(feature = "flow-runtime")]
+            page_registry: Arc::new(DashMap::new()),
         }
     }
 
@@ -545,17 +639,15 @@ impl FlowLikeState {
     }
 
     #[inline]
-    pub async fn stores(state: &Arc<Mutex<FlowLikeState>>) -> FlowLikeStores {
-        state.lock().await.config.read().await.stores.clone()
+    pub async fn stores(state: &Arc<FlowLikeState>) -> FlowLikeStores {
+        state.config.read().await.stores.clone()
     }
 
     #[inline]
     pub async fn project_storage_store(
-        state: &Arc<Mutex<FlowLikeState>>,
+        state: &Arc<FlowLikeState>,
     ) -> flow_like_types::Result<FlowLikeStore> {
         state
-            .lock()
-            .await
             .config
             .read()
             .await
@@ -567,11 +659,9 @@ impl FlowLikeState {
 
     #[inline]
     pub async fn project_meta_store(
-        state: &Arc<Mutex<FlowLikeState>>,
+        state: &Arc<FlowLikeState>,
     ) -> flow_like_types::Result<FlowLikeStore> {
         state
-            .lock()
-            .await
             .config
             .read()
             .await
@@ -582,12 +672,8 @@ impl FlowLikeState {
     }
 
     #[inline]
-    pub async fn bit_store(
-        state: &Arc<Mutex<FlowLikeState>>,
-    ) -> flow_like_types::Result<FlowLikeStore> {
+    pub async fn bit_store(state: &Arc<FlowLikeState>) -> flow_like_types::Result<FlowLikeStore> {
         state
-            .lock()
-            .await
             .config
             .read()
             .await
@@ -598,12 +684,8 @@ impl FlowLikeState {
     }
 
     #[inline]
-    pub async fn user_store(
-        state: &Arc<Mutex<FlowLikeState>>,
-    ) -> flow_like_types::Result<FlowLikeStore> {
+    pub async fn user_store(state: &Arc<FlowLikeState>) -> flow_like_types::Result<FlowLikeStore> {
         state
-            .lock()
-            .await
             .config
             .read()
             .await
@@ -643,6 +725,154 @@ impl Default for ToastEvent {
         ToastEvent {
             message: "".to_string(),
             level: ToastLevel::Info,
+        }
+    }
+}
+
+/// Event sent via InterCom to show progress to the user
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct ProgressEvent {
+    /// Unique identifier to update/dismiss this progress toast
+    pub id: String,
+    /// The message shown to the user
+    pub message: String,
+    /// Progress value between 0 and 100 (None to dismiss)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub progress: Option<u8>,
+    /// Whether this is the final update (dismisses or completes the progress)
+    #[serde(default)]
+    pub done: bool,
+    /// Whether the operation succeeded (only relevant when done=true)
+    #[serde(default)]
+    pub success: bool,
+}
+
+impl ProgressEvent {
+    pub fn new(id: &str, message: &str, progress: Option<u8>) -> Self {
+        ProgressEvent {
+            id: id.to_string(),
+            message: message.to_string(),
+            progress,
+            done: false,
+            success: false,
+        }
+    }
+
+    pub fn done(id: &str, message: &str, success: bool) -> Self {
+        ProgressEvent {
+            id: id.to_string(),
+            message: message.to_string(),
+            progress: if success { Some(100) } else { None },
+            done: true,
+            success,
+        }
+    }
+}
+
+/// Event sent via InterCom to notify the user
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct NotificationEvent {
+    pub title: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub icon: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub link: Option<String>,
+    pub show_desktop: bool,
+
+    /// Event ID that triggered this workflow execution.
+    /// If present, UIs can persist the notification via the backend API.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub event_id: Option<String>,
+
+    /// Target user sub (for project-user notifications)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub target_user_sub: Option<String>,
+
+    /// Optional tracking info
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub source_run_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub source_node_id: Option<String>,
+}
+
+impl NotificationEvent {
+    pub fn new(title: &str) -> Self {
+        NotificationEvent {
+            title: title.to_string(),
+            description: None,
+            icon: None,
+            link: None,
+            show_desktop: true,
+            event_id: None,
+            target_user_sub: None,
+            source_run_id: None,
+            source_node_id: None,
+        }
+    }
+
+    pub fn with_description(mut self, description: &str) -> Self {
+        self.description = Some(description.to_string());
+        self
+    }
+
+    pub fn with_icon(mut self, icon: &str) -> Self {
+        self.icon = Some(icon.to_string());
+        self
+    }
+
+    pub fn with_link(mut self, link: &str) -> Self {
+        self.link = Some(link.to_string());
+        self
+    }
+
+    pub fn with_event_id(mut self, event_id: &str) -> Self {
+        if !event_id.trim().is_empty() {
+            self.event_id = Some(event_id.to_string());
+        }
+        self
+    }
+
+    pub fn with_target_user_sub(mut self, target_user_sub: &str) -> Self {
+        if !target_user_sub.trim().is_empty() {
+            self.target_user_sub = Some(target_user_sub.to_string());
+        }
+        self
+    }
+
+    pub fn with_source_run_id(mut self, run_id: &str) -> Self {
+        if !run_id.trim().is_empty() {
+            self.source_run_id = Some(run_id.to_string());
+        }
+        self
+    }
+
+    pub fn with_source_node_id(mut self, node_id: &str) -> Self {
+        if !node_id.trim().is_empty() {
+            self.source_node_id = Some(node_id.to_string());
+        }
+        self
+    }
+
+    pub fn with_desktop(mut self, show_desktop: bool) -> Self {
+        self.show_desktop = show_desktop;
+        self
+    }
+}
+
+impl Default for NotificationEvent {
+    fn default() -> Self {
+        NotificationEvent {
+            title: String::new(),
+            description: None,
+            icon: None,
+            link: None,
+            show_desktop: true,
+            event_id: None,
+            target_user_sub: None,
+            source_run_id: None,
+            source_node_id: None,
         }
     }
 }

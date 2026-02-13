@@ -1,0 +1,47 @@
+---
+import "@tm9657/flow-like-ui/global.css";
+import LegalLayout from "../../../layouts/Legal-Layout.astro";
+import { SbomTable } from "../../../components/thirdparty/sbom-table";
+
+import cargoLicenses from "../../../../../../thirdparty/cargo-licenses.json";
+import npmLicenses from "../../../../../../thirdparty/npm-licenses.json";
+
+const title = "서드파티 라이선스";
+const description = "소프트웨어 자재 명세서 (SBOM) - Flow-Like에서 사용되는 오픈소스 라이브러리의 전체 목록";
+---
+
+<LegalLayout title={title} description={description} lastUpdated="2026년 2월 4일">
+	<p class="text-lg mb-8">
+		Flow-Like는 많은 훌륭한 오픈소스 프로젝트를 기반으로 구축되었습니다.
+		이러한 라이브러리의 개발자와 관리자분들께 감사드립니다.
+		이 페이지는 소프트웨어 자재 명세서 (SBOM)로서 의존성에 대한 투명성을 제공합니다.
+	</p>
+
+	<div class="mb-8 p-4 rounded-lg bg-muted/30 border border-border/50">
+		<h3 class="font-semibold mb-2">이 SBOM에 대하여</h3>
+		<p class="text-sm text-muted-foreground">
+			이 목록은 프로젝트 의존성에서 자동으로 생성됩니다.
+			Cargo 워크스페이스의 모든 Rust 크레이트와 웹 애플리케이션의 npm 패키지가 포함되어 있습니다.
+		</p>
+		<div class="flex flex-wrap gap-2 mt-3">
+			<a
+				href="https://github.com/TM9657/flow-like/blob/dev/thirdparty/cargo-licenses.json"
+				target="_blank"
+				rel="noreferrer"
+				class="text-sm px-3 py-1 rounded-full bg-primary/10 text-primary hover:bg-primary/20 transition-colors"
+			>
+				Rust 의존성 (JSON)
+			</a>
+			<a
+				href="https://github.com/TM9657/flow-like/blob/dev/thirdparty/npm-licenses.json"
+				target="_blank"
+				rel="noreferrer"
+				class="text-sm px-3 py-1 rounded-full bg-primary/10 text-primary hover:bg-primary/20 transition-colors"
+			>
+				NPM 의존성 (JSON)
+			</a>
+		</div>
+	</div>
+
+	<SbomTable client:load cargoLicenses={cargoLicenses} npmLicenses={npmLicenses} />
+</LegalLayout>

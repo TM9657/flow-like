@@ -1,0 +1,523 @@
+---
+title: "Expose Your Flow-Like HTTP Events to the Internet with ngrok and Cloudflare Tunnel"
+description: "Learn how to securely expose Flow-Like's local HTTP event endpoints to the internet using free tunneling solutions like Cloudflare Tunnel and ngrok."
+date: 2025-10-30
+tags: ["tutorial", "http-events", "webhooks", "ngrok", "cloudflare", "automation"]
+cover: "/images/expose-http-new.jpg"
+draft: false
+---
+
+# Expose Your Flow-Like HTTP Events to the Internet
+
+Flow-Like's HTTP event system lets you trigger automation flows via local API endpoints on `http://localhost:9657`. While perfect for local development and testing, you'll often need to expose these endpoints to the internet—for receiving webhooks from external services, triggering flows remotely, or integrating with cloud platforms.
+
+This guide walks you through two powerful (and free!) tunneling solutions: **Cloudflare Tunnel** and **ngrok**. Both create secure HTTPS endpoints that forward traffic to your local Flow-Like instance, no firewall configuration required.
+
+## Understanding Flow-Like's HTTP Event System
+
+Before we dive into tunneling, let's understand what we're exposing. Flow-Like runs a local HTTP server on port `9657` that listens for incoming requests to trigger events.
+
+### How HTTP Events Work
+
+When you create an HTTP event in Flow-Like, you configure:
+
+- **Path**: The endpoint route (e.g., `/webhook`, `/api/trigger`)
+- **Method**: HTTP verb (GET, POST, PUT, PATCH, DELETE, etc.)
+- **Authentication**: Optional Bearer token for secure access
+- **App ID**: Your Flow-Like application identifier
+
+The resulting endpoint looks like:
+```
+http://localhost:9657/{app-id}{path}
+```
+
+For example, with app ID `my-app` and path `/webhook`:
+```
+http://localhost:9657/my-app/webhook
+```
+
+### Why You Need Tunneling
+
+Your local endpoint at `localhost:9657` is only accessible from your machine. To receive webhooks from services like:
+
+- GitHub (push notifications, issue events)
+- Stripe (payment confirmations)
+- Discord (bot commands)
+- Slack (slash commands, events)
+- Any external API or service
+
+...you need a publicly accessible HTTPS URL that forwards to your local instance.
+
+## Option 1: Cloudflare Tunnel (Recommended)
+
+Cloudflare Tunnel (formerly Argo Tunnel) is our recommended solution for several compelling reasons:
+
+### Why Cloudflare Tunnel?
+
+- ✅ **100% Free** - No credit card required, no paid plans needed
+- ✅ **No firewall changes** - Uses outbound connections only
+- ✅ **Automatic HTTPS** - TLS certificates managed for you
+- ✅ **Fast & reliable** - Powered by Cloudflare's global network
+- ✅ **No account required for Quick Tunnels** - Start tunneling in seconds
+
+### Step 1: Install cloudflared
+
+The Cloudflare Tunnel client (`cloudflared`) is available for all major platforms.
+
+#### macOS
+```bash
+brew install cloudflare/cloudflare/cloudflared
+```
+
+#### Windows
+```bash
+winget install --id Cloudflare.cloudflared
+```
+
+#### Linux (Debian/Ubuntu)
+```bash
+curl -L --output cloudflared.deb https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64.deb
+sudo dpkg -i cloudflared.deb
+```
+
+For other platforms or installation methods, see [Cloudflare's official download page](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/downloads/).
+
+### Step 2: Start a Quick Tunnel
+
+Quick Tunnels are the fastest way to get started—no account or configuration needed:
+
+```bash
+cloudflared tunnel --url http://localhost:9657
+```
+
+Within seconds, you'll see output like:
+
+```
+2025-10-29T10:15:30Z INF |  Your quick Tunnel has been created! Visit it at:
+2025-10-29T10:15:30Z INF |  https://random-subdomain.trycloudflare.com
+```
+
+### Step 3: Configure Your Webhook
+
+Copy the generated URL and append your Flow-Like endpoint path. For example, if your endpoint is:
+
+```
+http://localhost:9657/my-app/webhook
+```
+
+Your public URL becomes:
+
+```
+https://random-subdomain.trycloudflare.com/my-app/webhook
+```
+
+Use this URL when configuring webhooks in external services like GitHub, Stripe, or Discord.
+
+### Testing Your Tunnel
+
+Test your public endpoint with curl:
+
+```bash
+# Public endpoint (replace with your tunnel URL)
+curl -X POST https://random-subdomain.trycloudflare.com/my-app/webhook \
+  -H "Content-Type: application/json" \
+  -d '{"test": "data"}'
+```
+
+If you configured authentication in Flow-Like, include the Bearer token:
+
+```bash
+curl -X POST https://random-subdomain.trycloudflare.com/my-app/webhook \
+  -H "Authorization: Bearer your-token-here" \
+  -H "Content-Type: application/json" \
+  -d '{"test": "data"}'
+```
+
+### Pro Tips for Cloudflare Tunnel
+
+**Quick Tunnel Limitations:**
+- URL changes every time you restart the tunnel
+- Random subdomain assignment
+- Great for testing and temporary use
+
+**For Permanent URLs:**
+
+If you need a stable, persistent URL, create a **named tunnel** (still free, but requires a Cloudflare account):
+
+```bash
+# Login to Cloudflare
+cloudflared tunnel login
+
+# Create a named tunnel
+cloudflared tunnel create flow-like-tunnel
+
+# Create a config file
+cloudflared tunnel route dns flow-like-tunnel flow-like.yourdomain.com
+
+# Run the tunnel
+cloudflared tunnel run flow-like-tunnel
+```
+
+Named tunnels give you:
+- Custom subdomains on your own domain
+- Persistent URLs that survive restarts
+- Better logging and monitoring
+- Traffic policies and access controls
+
+See [Cloudflare's named tunnel guide](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/get-started/create-remote-tunnel/) for full setup instructions.
+
+### Running Cloudflare Tunnel in the Background
+
+For production use, run cloudflared as a system service:
+
+#### macOS/Linux (systemd)
+```bash
+sudo cloudflared service install
+sudo systemctl start cloudflared
+```
+
+#### Windows
+```bash
+cloudflared service install
+net start cloudflared
+```
+
+## Option 2: ngrok
+
+ngrok is another popular tunneling solution with a generous free tier and excellent developer experience.
+
+### Why ngrok?
+
+- ✅ **Developer-friendly** - Beautiful web interface for inspecting traffic
+- ✅ **Request replay** - Replay past requests for debugging
+- ✅ **Multiple protocols** - HTTP, HTTPS, TCP, TLS
+- ✅ **Custom domains** - Available on paid plans
+
+⚠️ **Free tier limitations:**
+- Requires account signup
+- URL changes on every restart (unless you upgrade)
+- Rate limits on requests
+
+### Step 1: Install ngrok
+
+#### macOS
+```bash
+brew install ngrok
+```
+
+#### Windows
+```bash
+choco install ngrok
+```
+
+#### Linux (Debian/Ubuntu)
+```bash
+curl -s https://ngrok-agent.s3.amazonaws.com/ngrok.asc | sudo tee /etc/apt/trusted.gpg.d/ngrok.asc >/dev/null
+echo "deb https://ngrok-agent.s3.amazonaws.com buster main" | sudo tee /etc/apt/sources.list.d/ngrok.list
+sudo apt update && sudo apt install ngrok
+```
+
+### Step 2: Sign Up and Authenticate
+
+1. Create a free account at [ngrok.com](https://ngrok.com)
+2. Get your auth token from the [ngrok dashboard](https://dashboard.ngrok.com/get-started/your-authtoken)
+3. Configure ngrok with your token:
+
+```bash
+ngrok config add-authtoken YOUR_TOKEN_HERE
+```
+
+### Step 3: Start the Tunnel
+
+Forward port 9657 to the internet:
+
+```bash
+ngrok http 9657
+```
+
+You'll see a dashboard with your public URL:
+
+```
+ngrok                                                     (Ctrl+C to quit)
+
+Session Status                online
+Account                       your-email@example.com
+Version                       3.x.x
+Region                        United States (us)
+Latency                       12ms
+Web Interface                 http://127.0.0.1:4040
+Forwarding                    https://abc-123-def.ngrok-free.app -> http://localhost:9657
+
+Connections                   ttl     opn     rt1     rt5     p50     p90
+                              0       0       0.00    0.00    0.00    0.00
+```
+
+### Step 4: Use Your ngrok URL
+
+Copy the `Forwarding` URL and append your Flow-Like path:
+
+```
+https://abc-123-def.ngrok-free.app/my-app/webhook
+```
+
+### ngrok's Web Interface
+
+One of ngrok's killer features is its web interface at `http://127.0.0.1:4040`. This gives you:
+
+- **Live request inspection** - See every request in real-time
+- **Request/response details** - Headers, body, timing
+- **Replay functionality** - Resend previous requests
+- **Traffic statistics** - Bandwidth, connection counts
+
+This is invaluable for debugging webhook integrations!
+
+### ngrok Configuration File
+
+For persistent configuration, create an `ngrok.yml`:
+
+```yaml
+version: "2"
+authtoken: YOUR_TOKEN_HERE
+tunnels:
+  flow-like:
+    proto: http
+    addr: 9657
+    inspect: true
+```
+
+Then start with:
+
+```bash
+ngrok start flow-like
+```
+
+## Security Best Practices
+
+Both tunneling solutions expose your local server to the internet. Follow these security practices:
+
+### 1. Use Authentication
+
+Always enable authentication for HTTP events in Flow-Like:
+
+```typescript
+// In your Flow-Like HTTP event configuration
+{
+  "path": "/webhook",
+  "method": "POST",
+  "public_endpoint": false,  // Require authentication
+  "auth_token": "your-secure-token-here"
+}
+```
+
+Generate strong tokens using Flow-Like's built-in generator or:
+
+```bash
+# Generate a secure random token
+openssl rand -base64 32
+```
+
+### 2. Validate Request Origins
+
+In your Flow-Like flows, validate that requests come from expected sources:
+
+```typescript
+// Check webhook signatures (example for GitHub)
+const signature = headers['x-hub-signature-256'];
+const payload = JSON.stringify(body);
+const expectedSignature = crypto
+  .createHmac('sha256', webhookSecret)
+  .update(payload)
+  .digest('hex');
+
+if (signature !== `sha256=${expectedSignature}`) {
+  throw new Error('Invalid signature');
+}
+```
+
+### 3. Use HTTPS Only
+
+Both Cloudflare Tunnel and ngrok provide HTTPS by default. Never use unencrypted HTTP for public endpoints.
+
+### 4. Monitor Traffic
+
+- Use ngrok's web interface to monitor requests
+- Check Flow-Like's event logs regularly
+- Set up alerts for unusual activity
+
+### 5. Limit Endpoint Lifetime
+
+For temporary testing:
+- Use Quick Tunnels (Cloudflare) or free ngrok tunnels that expire
+- Don't publish tunnel URLs in public repositories
+- Rotate authentication tokens regularly
+
+## Real-World Use Cases
+
+### GitHub Webhooks
+
+Trigger Flow-Like automation on GitHub events:
+
+```bash
+# Start tunnel
+cloudflared tunnel --url http://localhost:9657
+
+# Configure GitHub webhook
+# URL: https://your-tunnel.trycloudflare.com/my-app/github
+# Events: Push, Pull Request, Issues
+```
+
+Your Flow-Like flow receives:
+```json
+{
+  "action": "opened",
+  "pull_request": { /* ... */ },
+  "repository": { /* ... */ }
+}
+```
+
+### Stripe Payment Processing
+
+Receive payment confirmations:
+
+```bash
+# Tunnel with ngrok for request inspection
+ngrok http 9657
+
+# Configure Stripe webhook
+# URL: https://abc-123.ngrok-free.app/my-app/stripe
+# Events: payment_intent.succeeded, customer.created
+```
+
+### Discord Bot Commands
+
+Create a Discord bot that triggers Flow-Like workflows:
+
+```bash
+cloudflared tunnel --url http://localhost:9657
+
+# Discord Interactions Endpoint:
+# https://tunnel-url.trycloudflare.com/my-app/discord
+```
+
+### IoT Device Reporting
+
+Remote devices can POST status updates:
+
+```bash
+# Named tunnel for stability
+cloudflared tunnel --url http://localhost:9657
+
+# Device sends to:
+# https://devices.yourdomain.com/my-app/device-status
+```
+
+## Troubleshooting
+
+### Tunnel Connection Issues
+
+**Problem**: Tunnel won't start or keeps disconnecting
+
+**Solutions**:
+- Check your firewall allows outbound connections
+- Verify your internet connection is stable
+- Try a different tunnel region (ngrok: `ngrok http 9657 --region eu`)
+- Update to latest version of cloudflared/ngrok
+
+### 404 Not Found
+
+**Problem**: Tunnel works, but requests return 404
+
+**Solutions**:
+- Verify Flow-Like is running on port 9657
+- Check the path matches your HTTP event configuration
+- Ensure app ID is correct in the URL
+- Test the local endpoint first: `curl http://localhost:9657/app-id/path`
+
+### Authentication Failures
+
+**Problem**: Requests fail with 401 Unauthorized
+
+**Solutions**:
+- Verify Bearer token matches Flow-Like configuration
+- Check header format: `Authorization: Bearer your-token`
+- Ensure `public_endpoint` is set to `false` in config
+- Token may contain special characters—use quotes in curl
+
+### Performance Issues
+
+**Problem**: Slow response times through tunnel
+
+**Solutions**:
+- Check ngrok/cloudflared logs for errors
+- Test local endpoint latency first
+- Consider geographic region of tunnel server
+- For ngrok, try different regions
+- Cloudflare Tunnel uses nearest datacenter automatically
+
+## Comparing the Two Solutions
+
+| Feature              | Cloudflare Tunnel                  | ngrok                 |
+|-----------------------|------------------------------------|-----------------------|
+| **Free Tier**         | Unlimited                         | Limited requests      |
+| **Account Required**  | No (Quick Tunnel)                  | Yes                   |
+| **Persistent URLs**   | Named tunnels only                 | Paid plans            |
+| **Web Interface**     | Dashboard (named tunnels)          | Local (port 4040)     |
+| **Request Inspection**| Via logs                           | Built-in GUI          |
+| **Custom Domains**    | Free (your domain)                 | Paid plans            |
+| **Best For**          | Production, permanent setups       | Development, debugging |
+
+### Our Recommendation
+
+- **Development & Testing**: Use **ngrok** for its excellent request inspection and replay features
+- **Production & Permanent**: Use **Cloudflare Tunnel** with named tunnels for reliability and zero cost
+- **Quick Demos**: Cloudflare Quick Tunnels for instant, no-signup access
+
+## Advanced: Running Multiple Tunnels
+
+### Cloudflare: Multiple Services
+
+```bash
+# Tunnel multiple local services
+cloudflared tunnel --url http://localhost:9657 &
+cloudflared tunnel --url http://localhost:3000 &
+```
+
+### ngrok: Multiple Tunnels
+
+```yaml
+# ngrok.yml
+tunnels:
+  flow-like:
+    proto: http
+    addr: 9657
+  web-app:
+    proto: http
+    addr: 3000
+```
+
+Start both:
+```bash
+ngrok start --all
+```
+
+## Next Steps
+
+Now that your HTTP events are exposed to the internet, explore:
+
+1. **Create Webhook Integrations**: Connect GitHub, Stripe, Slack, Discord
+2. **Build API Flows**: Accept data from mobile apps or external services
+3. **Remote Automation**: Trigger flows from anywhere in the world
+4. **Event Chaining**: Use HTTP events as triggers for complex workflows
+
+Check out our [HTTP Event Documentation](/docs/events/http) for more configuration options and the [Event System Guide](/docs/events) for advanced patterns.
+
+## Conclusion
+
+Exposing Flow-Like's local HTTP events to the internet is straightforward with modern tunneling solutions. Both Cloudflare Tunnel and ngrok offer powerful, free options with their own strengths:
+
+- **Cloudflare Tunnel** excels at permanent, production-ready deployments
+- **ngrok** shines for development with unmatched debugging tools
+
+Choose the one that fits your workflow, follow security best practices, and unlock the full potential of Flow-Like's event-driven automation system. Whether you're receiving webhooks, building public APIs, or integrating with cloud services, these tools make it seamless to bridge local and global automation.
+
+Happy automating! 🚀

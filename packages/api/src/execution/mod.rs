@@ -1,0 +1,31 @@
+//! Execution module for runtime authentication and job management.
+//!
+//! This module provides JWT-based authentication for execution environments
+//! (Kubernetes, Docker Compose, Lambda, etc.) to securely communicate with the API.
+
+mod dispatch;
+mod jwt;
+pub mod payload_storage;
+pub mod queue;
+mod sse_proxy;
+pub mod state;
+
+pub use crate::backend_jwt::TokenType;
+pub use dispatch::{
+    ByteStream, DispatchConfig, DispatchError, DispatchRequest, DispatchResponse, Dispatcher,
+    ExecutionBackend, StreamChunk, fetch_profile_for_dispatch,
+};
+pub use jwt::{
+    ExecutionClaims, ExecutionJwk, ExecutionJwks, ExecutionJwtError, ExecutionJwtParams,
+    get_jwks as get_execution_jwks, is_configured as is_jwt_configured, sign as sign_execution_jwt,
+    verify as verify_execution_jwt, verify_user as verify_user_jwt,
+};
+#[cfg(feature = "redis")]
+pub use queue::QueueWorker;
+pub use queue::{OAuthTokenInput, QueueConfig, QueueError, QueuedJob};
+pub use sse_proxy::proxy_sse_response;
+pub use state::{
+    CreateEventInput, CreateRunInput, EventQuery, ExecutionEventRecord, ExecutionRunRecord,
+    ExecutionStateStore, RunMode, RunStatus, StateBackend, StateStoreConfig, StateStoreError,
+    UpdateRunInput, create_state_store,
+};

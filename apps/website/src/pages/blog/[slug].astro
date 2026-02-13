@@ -1,8 +1,9 @@
 ---
 import { getCollection } from "astro:content";
 import "@tm9657/flow-like-ui/global.css";
-import "../../styles/Blog.css";
+import "../../styles/blog.css";
 import BlogLayout from "../../layouts/Blog-Layout.astro";
+import BlogNewsletter from "../../components/blog-newsletter.astro";
 import { LuCopy, LuShare } from "react-icons/lu";
 
 export async function getStaticPaths() {
@@ -18,200 +19,143 @@ export async function getStaticPaths() {
 const { entry } = Astro.props;
 const { Content, headings } = await entry.render();
 const { title, description, date, tags = [], cover } = entry.data;
+const postCover = cover;
 
 const site = Astro.site ?? import.meta.env.SITE;
 const canonical = site ? new URL(Astro.url.pathname, site).toString() : "";
 ---
 
 <BlogLayout data={entry.data} content={Content}>
-  <a
-    href="/blog/"
-    class="inline-flex items-center rounded-md px-2 py-1 text-sm hover:text-primary transition mb-2"
-  >
-    ← Back to blog
-  </a>
+  <div class="mx-auto w-full max-w-6xl px-4 sm:px-6 lg:px-8 pb-12 sm:pb-14 lg:pb-16">
+    <a
+      href="/blog/"
+      class="mb-8 inline-flex items-center gap-2 rounded-full border border-border/60 bg-background/80 px-3.5 py-1.5 text-sm text-muted-foreground transition hover:border-border hover:text-foreground"
+    >
+      <span aria-hidden="true">←</span>
+      Back to blog
+    </a>
 
-  <div class="relative">
-    {
-      cover && (
-        <header id="cover-header" class="relative mb-8 md:mb-10">
-          <div
-            id="right-pin"
-            class="size-4 bg-primary absolute top-30 -right-1.5 z-10 rounded-full"
+    <header class="mb-10 overflow-hidden rounded-2xl border border-border/50 bg-card/50 backdrop-blur-sm">
+      {postCover && (
+        <div class="relative overflow-hidden border-b border-border/40">
+          <img
+            src={postCover}
+            alt=""
+            class="h-56 w-full object-cover sm:h-64 md:h-72 lg:h-80"
+            loading="eager"
           />
-          <div
-            id="left-pin"
-            class="size-4 bg-pink-400 absolute top-50 -left-1.5 z-10 rounded-full"
-          />
-          <div
-            id="right-pin-top"
-            class="size-4 bg-foreground absolute top-10 -right-1.5 z-10 rounded-full"
-          />
-          <div
-            id="left-pin-top"
-            class="size-4 bg-foreground absolute top-20 -left-1.5 z-10 rounded-full"
-          />
+          <div class="absolute inset-0 bg-gradient-to-t from-black/25 via-transparent to-transparent" />
+        </div>
+      )}
 
-          <svg
-            id="pin-connections"
-            class="pointer-events-none absolute inset-0"
-            style="overflow: visible;"
-            viewBox="0 0 100 100"
-            preserveAspectRatio="none"
-            aria-hidden="true"
-          >
-            <path id="right-conn" class="pin-conn text-primary" fill="none" />
-            <path id="left-conn" class="pin-conn text-pink-400" fill="none" />
-            <path
-              id="right-conn-top"
-              class="pin-conn-solid text-foreground"
-              fill="none"
-            />
-            <path
-              id="left-conn-top"
-              class="pin-conn-solid text-foreground"
-              fill="none"
-            />
-          </svg>
+      <div class="p-6 sm:p-8 lg:p-10">
+        <h1 class="m-0 text-3xl font-bold tracking-tight leading-[1.08] sm:text-4xl lg:text-5xl">
+          {title}
+        </h1>
 
-          <div class="relative h-[36vh] min-h-[240px] max-h-[420px] overflow-hidden rounded-xl border">
-            <img
-              src={cover}
-              alt=""
-              class="absolute inset-0 h-full w-full object-cover"
-              loading="eager"
-            />
-            <div class="absolute inset-0 bg-gradient-to-t from-black/80 via-black/40 to-black/10" />
-            <div class="absolute z-10 flex h-full items-end">
-              <div class="w-full p-5 sm:p-7 md:p-8">
-                <h1 class="text-white drop-shadow-md text-xl sm:text-3xl md:text-4xl font-bold leading-tight pt-0! line-clamp-2 sm:line-clamp-2 md:line-clamp-4">
-                  {title}
-                </h1>
-                <p class="mt-2 text-white/90 max-w-3xl drop-shadow">
-                  {description}
-                </p>
-                <div class="mt-3 flex flex-wrap items-center gap-3 text-white/80 text-sm">
-                  <time datetime={new Date(date).toISOString()}>
-                    {new Date(date).toDateString()}
-                  </time>
-                  <span aria-hidden="true">•</span>
-                  <span id="reading-time">— min read</span>
-                </div>
-                <div class="flex flex-wrap gap-2 mt-3 h-0 md:h-fit opacity-0 md:opacity-100">
-                  {tags.map((t: string) => (
-                    <a
-                      href={`/tags/${encodeURIComponent(t)}/`}
-                      class="rounded-full border border-white/30 bg-black/30 px-2 py-0.5 text-xs text-white/90 backdrop-blur-[2px] hover:border-white/50 hover:bg-black/40 transition"
-                    >
-                      #{t}
-                    </a>
-                  ))}
-                </div>
-              </div>
-            </div>
-          </div>
-        </header>
-      )
-    }
+        {description && (
+          <p class="mt-4 max-w-4xl text-base leading-relaxed text-muted-foreground sm:text-lg">
+            {description}
+          </p>
+        )}
 
-    {
-      !cover && (
-        <header class="mb-8 md:mb-10">
-          <h1 class="text-3xl md:text-4xl font-bold">{title}</h1>
-          <p class="mt-2 text-muted-foreground">{description}</p>
-          <div class="mt-3 flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
-            <time datetime={new Date(date).toISOString()}>
-              {new Date(date).toDateString()}
-            </time>
-            <span aria-hidden="true">•</span>
-            <span id="reading-time">— min read</span>
-            {tags.length > 0 && (
-              <>
-                <span aria-hidden="true">•</span>
-                <div class="flex flex-wrap gap-2">
-                  {tags.map((t: string) => (
-                    <a
-                      href={`/tags/${encodeURIComponent(t)}/`}
-                      class="rounded-full border px-2 py-0.5 text-xs hover:-translate-y-0.5 transition"
-                    >
-                      #{t}
-                    </a>
-                  ))}
-                </div>
-              </>
-            )}
-          </div>
-        </header>
-      )
-    }
+        <div class="mt-5 flex flex-wrap items-center gap-x-3 gap-y-2 text-sm text-muted-foreground">
+          <time datetime={new Date(date).toISOString()} class="whitespace-nowrap">
+            {new Date(date).toLocaleDateString("en-US", {
+              year: "numeric",
+              month: "short",
+              day: "numeric",
+            })}
+          </time>
+          <span aria-hidden="true" class="text-zinc-300 dark:text-zinc-700">·</span>
+          <span id="reading-time" class="whitespace-nowrap">— min read</span>
+        </div>
 
-    <div class="mx-auto border rounded-xl max-w-7xl p-2 md:p-4 sm:p-6 bg-background">
-      <div class="grid gap-8 lg:grid-cols-[260px_minmax(0,1fr)]">
-        <aside class="hidden lg:block">
-          {
-            headings?.length > 0 && (
-              <nav class="sticky top-24 h-max rounded-lg border bg-card/60 backdrop-blur p-2 md:p-4 text-sm">
-                <p class="mb-2 font-medium text-muted-foreground">
-                  On this page
-                </p>
-                <ul class="space-y-1">
-                  {headings
-                    .filter((h) => h.depth <= 3 && h.slug)
-                    .map((h) => (
-                      <li class={`pl-${(h.depth - 2) * 3} toc-item`}>
-                        <a
-                          href={`#${h.slug}`}
-                          data-slug={h.slug}
-                          class="toc-link block rounded px-2 py-1 text-muted-foreground hover:text-foreground"
-                        >
-                          {h.text}
-                        </a>
-                      </li>
-                    ))}
-                </ul>
-              </nav>
-            )
-          }
-        </aside>
-
-        <article
-          id="post-content"
-          class="prose prose-zinc dark:prose-invert max-w-none px-2! md:px-4"
-        >
-          <Content />
-          <hr class="my-10" />
-          <div class="flex flex-wrap gap-2 justify-between items-center">
-            <div class="flex flex-wrap gap-2">
-              {
-                tags.map((t: string) => (
-                  <a
-                    href={`/tags/${encodeURIComponent(t)}/`}
-                    class="rounded-full border px-2 py-0.5 text-xs hover:-translate-y-0.5 transition"
-                  >
-                    #{t}
-                  </a>
-                ))
-              }
-            </div>
-            <div class="flex items-center gap-2">
-              <button
-                data-copy-link
-                class="rounded-md border px-2.5 py-1.5 text-xs hover:bg-accent transition. flex flex-row items-center gap-2"
+        {tags.length > 0 && (
+          <div class="mt-4 flex flex-wrap gap-2">
+            {tags.map((t: string) => (
+              <a
+                href={`/tags/${encodeURIComponent(t)}/`}
+                class="inline-flex items-center rounded-full border border-border/60 bg-background/60 px-3 py-1 text-xs font-medium text-muted-foreground transition hover:border-border hover:text-foreground"
               >
-                <LuCopy />
-                Copy link
-              </button>
-              <button
-                data-web-share
-                class="rounded-md border px-2.5 py-1.5 text-xs hover:bg-accent transition. flex flex-row items-center gap-2"
-              >
-                <LuShare />
-                Share
-              </button>
-            </div>
+                #{t}
+              </a>
+            ))}
           </div>
-        </article>
+        )}
       </div>
+    </header>
+
+    <div class="mb-10 border-t border-border/50" />
+
+    <div class="grid gap-10 lg:grid-cols-[minmax(0,1fr)_260px] xl:gap-12 xl:grid-cols-[minmax(0,1fr)_280px]">
+      <article
+        id="post-content"
+        class="post-prose prose prose-zinc dark:prose-invert max-w-none prose-headings:scroll-mt-20 first-h1-hidden"
+      >
+        <Content />
+
+        <BlogNewsletter />
+
+        <hr class="my-8" />
+        <div class="not-prose flex flex-wrap items-center justify-between gap-3 text-sm">
+          <div class="flex flex-wrap gap-2.5">
+            {
+              tags.map((t: string) => (
+                <a
+                  href={`/tags/${encodeURIComponent(t)}/`}
+                  class="text-muted-foreground transition hover:text-foreground"
+                >
+                  #{t}
+                </a>
+              ))
+            }
+          </div>
+          <div class="flex items-center gap-2">
+            <button
+              data-copy-link
+              class="flex flex-row items-center gap-2 rounded-md border px-2.5 py-1.5 text-xs transition hover:bg-accent"
+            >
+              <LuCopy />
+              Copy link
+            </button>
+            <button
+              data-web-share
+              class="flex flex-row items-center gap-2 rounded-md border px-2.5 py-1.5 text-xs transition hover:bg-accent"
+            >
+              <LuShare />
+              Share
+            </button>
+          </div>
+        </div>
+      </article>
+
+      <aside class="hidden lg:block">
+        {
+          headings?.length > 0 && (
+            <nav class="sticky top-24 rounded-xl border border-border/50 bg-card/40 p-4 text-sm backdrop-blur-sm">
+              <p class="mb-3 text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                On this page
+              </p>
+              <ul class="space-y-1.5">
+                {headings
+                  .filter((h) => h.depth <= 3 && h.slug)
+                  .map((h) => (
+                    <li class="toc-item" style={`padding-left: ${(h.depth - 1) * 10}px`}>
+                      <a
+                        href={`#${h.slug}`}
+                        data-slug={h.slug}
+                        class="toc-link block rounded-md px-2 py-1 text-[13px] text-muted-foreground transition hover:bg-muted/60 hover:text-foreground"
+                      >
+                        {h.text}
+                      </a>
+                    </li>
+                  ))}
+              </ul>
+            </nav>
+          )
+        }
+      </aside>
     </div>
   </div>
 
@@ -419,6 +363,10 @@ const canonical = site ? new URL(Astro.url.pathname, site).toString() : "";
   </script>
 
   <style>
+    .post-prose {
+      padding-inline: 0;
+    }
+
     .toc-link.font-medium {
       color: var(--foreground);
     }

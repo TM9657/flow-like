@@ -1,0 +1,132 @@
+---
+title: API Service
+description: Architecture of the Kubernetes API service.
+sidebar:
+  order: 60
+---
+
+import { LinkCard } from '@astrojs/starlight/components';
+
+<LinkCard
+  title="API Reference"
+  description="Complete list of all API endpoints"
+  href="/self-hosting/kubernetes/api-reference/"
+/>
+
+## Overview
+
+The API service is the main entry point for Flow-Like on Kubernetes. It handles:
+
+- **User requests** — Authentication, apps, workflows
+- **Job management** — Submit and track workflow executions
+- **Health checks** — Kubernetes probes for reliability
+
+## Architecture
+
+```
+┌─────────────────────────────────────────────────────────┐
+│                    API Service                          │
+│                   (Port 8080)                           │
+├─────────────────────────────────────────────────────────┤
+│                                                         │
+│  /health/*     → Kubernetes probes (live, ready, etc.)  │
+│  /jobs/*       → Job submission and management          │
+│  /api/v1/*     → Flow-Like API (auth, apps, etc.)       │
+│                                                         │
+└─────────────────────────────────────────────────────────┘
+         │                    │
+         ▼                    ▼
+   ┌──────────┐        ┌─────────────┐
+   │  Redis   │        │ CockroachDB │
+   │  (Queue) │        │  (Database) │
+   └──────────┘        └─────────────┘
+```
+
+## Source Code
+
+| Component | Location |
+|-----------|----------|
+| Main entrypoint | `apps/backend/kubernetes/api/src/main.rs` |
+| Configuration | `apps/backend/kubernetes/api/src/config.rs` |
+| Health endpoints | `apps/backend/kubernetes/api/src/health.rs` |
+| Job management | `apps/backend/kubernetes/api/src/jobs/` |
+| Storage setup | `apps/backend/kubernetes/api/src/storage.rs` |
+
+## Storage Providers
+
+The API supports multiple storage backends:
+
+| Provider | Configuration Key |
+|----------|-------------------|
+| AWS S3 | `aws` |
+| Azure Blob | `azure` |
+| Google Cloud Storage | `gcp` |
+| Cloudflare R2 | `r2` |
+| S3-compatible (MinIO, etc.) | `s3` |
+
+See [Storage Configuration](/self-hosting/kubernetes/storage/) for details.
+
+## Required Configuration
+
+At minimum, the API needs:
+
+| Variable | Purpose |
+|----------|---------|
+| `DATABASE_URL` | CockroachDB/PostgreSQL connection |
+| `REDIS_URL` | Job queue and caching |
+| `STORAGE_PROVIDER` | Which storage backend to use |
+| Storage credentials | Depends on provider |
+
+See [Configuration](/self-hosting/kubernetes/configuration/) for the full list.
+
+## Port Configuration
+
+The API **always listens on port 8080** inside the container. This is:
+- Set in the Helm chart (`values.yaml`)
+- Used by the Kubernetes Service definition
+- Exposed via port-forward, Ingress, or LoadBalancer
+
+To access it locally:
+
+```bash
+# Forward local 8083 → service 8080
+kubectl port-forward svc/flow-like-api 8083:8080 -n flow-like
+
+# Test it
+curl http://localhost:8083/api/v1/health
+```
+
+## Scaling
+
+The API is stateless and can be horizontally scaled. Default configuration:
+
+- **Minimum replicas:** 3
+- **Maximum replicas:** 10
+- **Scale trigger:** 70% CPU utilization
+
+```bash
+# Manual scaling
+kubectl scale deployment/flow-like-api --replicas=5 -n flow-like
+
+# Check autoscaler
+kubectl get hpa -n flow-like
+```
+
+## Logs
+
+```bash
+# View logs
+kubectl logs deployment/flow-like-api -n flow-like
+
+# Follow in real-time
+kubectl logs deployment/flow-like-api -n flow-like -f
+
+# Last 100 lines
+kubectl logs deployment/flow-like-api -n flow-like --tail=100
+```
+
+## Related
+
+- [API Reference](/self-hosting/kubernetes/api-reference/) — All endpoints
+- [kubectl Basics](/self-hosting/kubernetes/kubectl-basics/) — Essential commands
+- [Executor](/self-hosting/kubernetes/executor/) — How jobs run

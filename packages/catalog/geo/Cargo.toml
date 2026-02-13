@@ -1,0 +1,32 @@
+[package]
+name = "flow-like-catalog-geo"
+version = "0.1.0"
+edition = "2024"
+
+[features]
+default = []
+local-ml = ["flow-like-catalog-core/local-ml"]
+execute = [
+    "flow-like-catalog-core/execute",
+    "dep:h3o",
+]
+
+[dependencies]
+flow-like-catalog-core.workspace = true
+flow-like.workspace = true
+flow-like-types.workspace = true
+flow-like-storage.workspace = true
+flow-like-catalog-macros.workspace = true
+inventory = "0.3"
+ahash.workspace = true
+tracing.workspace = true
+schemars.workspace = true
+futures.workspace = true
+serde = { workspace = true, features = ["derive", "rc"] }
+tokio = { workspace = true, features = ["rt-multi-thread", "macros"] }
+uuid.workspace = true
+async-trait.workspace = true
+urlencoding.workspace = true
+
+# H3 geospatial indexing - only included when execute feature is enabled
+h3o = { git = "https://github.com/TM9657/h3o", rev = "95255f0", features = ["geo"], optional = true }

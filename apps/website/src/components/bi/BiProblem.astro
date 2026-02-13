@@ -1,0 +1,71 @@
+---
+interface Props {
+  t: (key: string) => string;
+}
+
+const { t } = Astro.props;
+
+const problems = [
+  { icon: "scatter", title: t("bi.problem.item1.title"), desc: t("bi.problem.item1.description"), color: "rose" },
+  { icon: "clock", title: t("bi.problem.item2.title"), desc: t("bi.problem.item2.description"), color: "amber" },
+  { icon: "users", title: t("bi.problem.item3.title"), desc: t("bi.problem.item3.description"), color: "violet" },
+  { icon: "lock", title: t("bi.problem.item4.title"), desc: t("bi.problem.item4.description"), color: "slate" },
+];
+---
+
+<section class="relative py-16 sm:py-24 lg:py-32 bg-gradient-to-b from-background via-destructive/5 to-background">
+  <div class="absolute top-0 left-0 right-0 h-px bg-border" />
+
+  <div class="mx-auto max-w-7xl px-6 lg:px-8">
+    <div class="text-center mb-16">
+      <p class="text-[11px] font-medium tracking-[0.3em] uppercase text-destructive mb-4">
+        {t("bi.problem.tagline")}
+      </p>
+      <h2 class="text-4xl sm:text-5xl font-bold tracking-tight mb-6">
+        {t("bi.problem.headline")}
+      </h2>
+      <p class="text-xl text-muted-foreground max-w-xl mx-auto">
+        {t("bi.problem.description")}
+      </p>
+    </div>
+
+    <div class="grid sm:grid-cols-2 lg:grid-cols-4 gap-6">
+      {problems.map((problem, i) => (
+        <div class="group relative">
+          <!-- Card -->
+          <div class="relative p-6 rounded-2xl border border-destructive/20 bg-card/50 hover:border-destructive/40 hover:bg-destructive/5 transition-all duration-300 h-full">
+            <!-- Problem number -->
+            <span class="absolute -top-3 -left-3 w-8 h-8 rounded-full bg-destructive border border-destructive/30 text-background text-sm font-bold flex items-center justify-center">
+              {i + 1}
+            </span>
+
+            <div class="w-14 h-14 rounded-xl bg-destructive/10 text-destructive flex items-center justify-center mb-5 group-hover:bg-destructive/20 transition-colors">
+              {problem.icon === "scatter" && (
+                <svg class="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M4 5a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1H5a1 1 0 01-1-1V5zM14 5a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1h-4a1 1 0 01-1-1V5zM4 15a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1H5a1 1 0 01-1-1v-4zM14 15a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1h-4a1 1 0 01-1-1v-4z" />
+                </svg>
+              )}
+              {problem.icon === "clock" && (
+                <svg class="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+              )}
+              {problem.icon === "users" && (
+                <svg class="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
+                </svg>
+              )}
+              {problem.icon === "lock" && (
+                <svg class="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                </svg>
+              )}
+            </div>
+            <h3 class="text-lg font-semibold mb-2 text-destructive/90">{problem.title}</h3>
+            <p class="text-sm text-muted-foreground leading-relaxed">{problem.desc}</p>
+          </div>
+        </div>
+      ))}
+    </div>
+  </div>
+</section>

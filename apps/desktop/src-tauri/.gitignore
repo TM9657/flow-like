@@ -2,7 +2,6 @@
 # will have compiled files and executables
 /target/
 
-docling_cache
 lib
 bin
 tmp

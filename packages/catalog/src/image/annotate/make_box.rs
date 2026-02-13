@@ -1,4 +1,4 @@
-use crate::ai::onnx::detection::BoundingBox;
+use crate::image::BoundingBox;
 
 use flow_like::{
     flow::{
@@ -14,6 +14,7 @@ use flow_like_types::{anyhow, async_trait, json::json};
 
 use std::sync::Arc;
 
+#[crate::register_node]
 #[derive(Default)]
 pub struct MakeBoxNode {}
 
@@ -25,7 +26,7 @@ impl MakeBoxNode {
 
 #[async_trait]
 impl NodeLogic for MakeBoxNode {
-    async fn get_node(&self, _app_state: &FlowLikeState) -> Node {
+    fn get_node(&self) -> Node {
         let mut node = Node::new(
             "make_boxe",
             "Make Box",

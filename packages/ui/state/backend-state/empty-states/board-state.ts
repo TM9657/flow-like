@@ -2,6 +2,7 @@ import type {
 	IBoard,
 	IBoardState,
 	IConnectionMode,
+	IExecutionMode,
 	IExecutionStage,
 	IGenericCommand,
 	IIntercomEvent,
@@ -9,9 +10,18 @@ import type {
 	ILogLevel,
 	ILogMetadata,
 	INode,
+	IRunContext,
 	IRunPayload,
 	IVersionType,
 } from "../../../";
+import type { IJwks, IRealtimeAccess } from "../../../";
+import type { SurfaceComponent } from "../../../components/a2ui/types";
+import type {
+	CopilotScope,
+	UIActionContext,
+	UnifiedChatMessage,
+	UnifiedCopilotResponse,
+} from "../../../lib/schema/copilot";
 
 export class EmptyBoardState implements IBoardState {
 	getBoards(appId: string): Promise<IBoard[]> {
@@ -25,6 +35,12 @@ export class EmptyBoardState implements IBoardState {
 		boardId: string,
 		version?: [number, number, number],
 	): Promise<IBoard> {
+		throw new Error("Method not implemented.");
+	}
+	getRealtimeAccess(appId: string, boardId: string): Promise<IRealtimeAccess> {
+		throw new Error("Method not implemented.");
+	}
+	getRealtimeJwks(appId: string, boardId: string): Promise<IJwks> {
 		throw new Error("Method not implemented.");
 	}
 	createBoardVersion(
@@ -56,6 +72,7 @@ export class EmptyBoardState implements IBoardState {
 		streamState?: boolean,
 		eventId?: (id: string) => void,
 		cb?: (event: IIntercomEvent[]) => void,
+		skipConsentCheck?: boolean,
 	): Promise<ILogMetadata | undefined> {
 		throw new Error("Method not implemented.");
 	}
@@ -101,6 +118,7 @@ export class EmptyBoardState implements IBoardState {
 		description: string,
 		logLevel: ILogLevel,
 		stage: IExecutionStage,
+		executionMode?: IExecutionMode,
 		template?: IBoard,
 	): Promise<void> {
 		throw new Error("Method not implemented.");
@@ -120,6 +138,32 @@ export class EmptyBoardState implements IBoardState {
 		boardId: string,
 		commands: IGenericCommand[],
 	): Promise<IGenericCommand[]> {
+		throw new Error("Method not implemented.");
+	}
+
+	getExecutionElements(
+		appId: string,
+		boardId: string,
+		pageId: string,
+		wildcard?: boolean,
+	): Promise<Record<string, unknown>> {
+		throw new Error("Method not implemented.");
+	}
+
+	copilot_chat(
+		scope: CopilotScope,
+		board: IBoard | null,
+		selectedNodeIds: string[],
+		currentSurface: SurfaceComponent[] | null,
+		selectedComponentIds: string[],
+		userPrompt: string,
+		history: UnifiedChatMessage[],
+		onToken?: (token: string) => void,
+		modelId?: string,
+		token?: string,
+		runContext?: IRunContext,
+		actionContext?: UIActionContext,
+	): Promise<UnifiedCopilotResponse> {
 		throw new Error("Method not implemented.");
 	}
 }

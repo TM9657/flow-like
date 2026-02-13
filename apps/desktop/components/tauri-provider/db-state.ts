@@ -1,5 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import type {
+	IAddColumnPayload,
 	IDatabaseState,
 	IIndexConfig,
 	IIndexType,
@@ -185,6 +186,28 @@ export class DatabaseState implements IDatabaseState {
 		return await invoke("db_indices", { appId, tableName });
 	}
 
+	async dropIndex(
+		appId: string,
+		tableName: string,
+		indexName: string,
+	): Promise<void> {
+		const isOffline = await this.backend.isOffline(appId);
+
+		if (!isOffline) {
+			await fetcher(
+				this.backend.profile!,
+				`apps/${appId}/db/${parseTableName(tableName)}/indices/${encodeURIComponent(indexName)}`,
+				{
+					method: "DELETE",
+				},
+				this.backend.auth,
+			);
+			return;
+		}
+
+		await invoke("db_drop_index", { appId, tableName, indexName });
+	}
+
 	async listTables(appId: string): Promise<string[]> {
 		const isOffline = await this.backend.isOffline(appId);
 
@@ -202,10 +225,7 @@ export class DatabaseState implements IDatabaseState {
 		return await invoke("db_table_names", { appId });
 	}
 
-	async countItems(
-		appId: string,
-		tableName: string,
-	): Promise<number> {
+	async countItems(appId: string, tableName: string): Promise<number> {
 		const isOffline = await this.backend.isOffline(appId);
 
 		if (!isOffline) {
@@ -220,5 +240,126 @@ export class DatabaseState implements IDatabaseState {
 		}
 
 		return await invoke("db_count", { appId, tableName });
+	}
+
+	async optimize(
+		appId: string,
+		tableName: string,
+		keepVersions?: boolean,
+	): Promise<void> {
+		const isOffline = await this.backend.isOffline(appId);
+
+		if (!isOffline) {
+			return await fetcher(
+				this.backend.profile!,
+				`apps/${appId}/db/${parseTableName(tableName)}/optimize`,
+				{
+					method: "POST",
+					body: JSON.stringify({ keepVersions: keepVersions ?? false }),
+				},
+				this.backend.auth,
+			);
+		}
+
+		return await invoke("db_optimize", {
+			appId,
+			tableName,
+			keepVersions: keepVersions ?? false,
+		});
+	}
+
+	async updateItem(
+		appId: string,
+		tableName: string,
+		filter: string,
+		updates: Record<string, any>,
+	): Promise<void> {
+		const isOffline = await this.backend.isOffline(appId);
+
+		if (!isOffline) {
+			return await fetcher(
+				this.backend.profile!,
+				`apps/${appId}/db/${parseTableName(tableName)}/update`,
+				{
+					method: "POST",
+					body: JSON.stringify({ filter, updates }),
+				},
+				this.backend.auth,
+			);
+		}
+
+		return await invoke("db_update", { appId, tableName, filter, updates });
+	}
+
+	async dropColumns(
+		appId: string,
+		tableName: string,
+		columns: string[],
+	): Promise<void> {
+		const isOffline = await this.backend.isOffline(appId);
+
+		if (!isOffline) {
+			return await fetcher(
+				this.backend.profile!,
+				`apps/${appId}/db/${parseTableName(tableName)}/columns`,
+				{
+					method: "DELETE",
+					body: JSON.stringify({ columns }),
+				},
+				this.backend.auth,
+			);
+		}
+
+		return await invoke("db_drop_columns", { appId, tableName, columns });
+	}
+
+	async addColumn(
+		appId: string,
+		tableName: string,
+		column: IAddColumnPayload,
+	): Promise<void> {
+		const isOffline = await this.backend.isOffline(appId);
+
+		if (!isOffline) {
+			return await fetcher(
+				this.backend.profile!,
+				`apps/${appId}/db/${parseTableName(tableName)}/columns`,
+				{
+					method: "POST",
+					body: JSON.stringify(column),
+				},
+				this.backend.auth,
+			);
+		}
+
+		return await invoke("db_add_column", { appId, tableName, column });
+	}
+
+	async alterColumn(
+		appId: string,
+		tableName: string,
+		column: string,
+		nullable: boolean,
+	): Promise<void> {
+		const isOffline = await this.backend.isOffline(appId);
+
+		if (!isOffline) {
+			return await fetcher(
+				this.backend.profile!,
+				`apps/${appId}/db/${parseTableName(tableName)}/columns/alter`,
+				{
+					method: "POST",
+					body: JSON.stringify({ column, nullable }),
+				},
+				this.backend.auth,
+			);
+		}
+
+		return await invoke("db_alter_column", {
+			appId,
+			tableName,
+			column,
+			nullable,
+		});
 	}
 }

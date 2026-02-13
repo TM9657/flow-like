@@ -3,6 +3,7 @@ import type {
 	IEventState,
 	IIntercomEvent,
 	ILogMetadata,
+	IOAuthToken,
 	IRunPayload,
 	IVersionType,
 } from "@tm9657/flow-like-ui";
@@ -15,7 +16,7 @@ export class EmptyEventState implements IEventState {
 	): Promise<IEvent> {
 		throw new Error("Method not implemented.");
 	}
-	getEvents(appId: string): Promise<IEvent[]> {
+	getEvents(appId: string, _force?: boolean): Promise<IEvent[]> {
 		throw new Error("Method not implemented.");
 	}
 	getEventVersions(
@@ -28,6 +29,8 @@ export class EmptyEventState implements IEventState {
 		appId: string,
 		event: IEvent,
 		versionType?: IVersionType,
+		personalAccessToken?: string,
+		oauthTokens?: Record<string, IOAuthToken>,
 	): Promise<IEvent> {
 		throw new Error("Method not implemented.");
 	}
@@ -62,10 +65,16 @@ export class EmptyEventState implements IEventState {
 		streamState?: boolean,
 		onEventId?: (id: string) => void,
 		cb?: (event: IIntercomEvent[]) => void,
+		skipConsentCheck?: boolean,
 	): Promise<ILogMetadata | undefined> {
 		throw new Error("Method not implemented.");
 	}
 	cancelExecution(runId: string): Promise<void> {
 		throw new Error("Method not implemented.");
+	}
+
+	isEventSinkActive(eventId: string): Promise<boolean> {
+		// Empty state always returns false - no sinks active in non-Tauri environments
+		return Promise.resolve(false);
 	}
 }

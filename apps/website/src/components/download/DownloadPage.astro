@@ -1,0 +1,365 @@
+---
+import "@tm9657/flow-like-ui/global.css";
+import "../../styles/blog.css";
+import BlogLayout from "../../layouts/Blog-Layout.astro";
+import AmbientGlow from "../ambient-glow.astro";
+import Hero from "./Hero.astro";
+import Config from "./Config.astro";
+import Assets from "./Assets.astro";
+import { tDownload } from "../../i18n/locales/pages/download";
+import { buildAlternateLinks } from "../../lib/seo";
+
+interface Props {
+  lang: string;
+}
+
+const { lang } = Astro.props;
+const t = (key: string) => tDownload(lang, key);
+
+export const prerender = true;
+
+const title = t("download.meta.title");
+const description = t("download.meta.description");
+const site = Astro.site ?? import.meta.env.SITE ?? "https://flow-like.com";
+const siteUrl = typeof site === "string" ? site : site.toString();
+const canonical = new URL(Astro.url.pathname, siteUrl).toString();
+const alternateLinks = buildAlternateLinks(siteUrl, Astro.url.pathname);
+
+const ownerRepo = "TM9657/flow-like";
+const listUrl = `https://api.github.com/repos/${ownerRepo}/releases`;
+
+// --- server-side fetch that also works when only prereleases exist -----------
+let release: any = null;
+try {
+  const headers: Record<string, string> = {
+    Accept: "application/vnd.github+json",
+    "User-Agent": "flow-like.com",
+  };
+  const token =
+    (import.meta as any).env?.GITHUB_TOKEN ||
+    (import.meta as any).env?.PUBLIC_GITHUB_TOKEN;
+  if (token) headers.Authorization = `Bearer ${token}`;
+
+  const res = await fetch(`${listUrl}?per_page=5`, { headers });
+  if (res.ok) {
+    const releases = await res.json();
+    const nonDraft = releases.filter((r: any) => !r.draft);
+    release = nonDraft.find((r: any) => !r.prerelease) || nonDraft[0] || null;
+  }
+} catch {
+  /* client will refetch if needed */
+}
+
+const version = release ? (release.tag_name ?? release.name) : null;
+
+// simple "content" so BlogLayout renders
+const Content = (() => null) as any;
+const data = {
+  title,
+  description,
+  canonical,
+  lang,
+  alternateLinks,
+  date: new Date().toISOString(),
+  tags: ["download"],
+  cover: null,
+};
+
+// Translations for client-side script
+const i18n = {
+  detected: t("download.assets.detected"),
+  none: t("download.assets.none"),
+  download: t("download.assets.download"),
+};
+---
+
+<BlogLayout data={data} content={Content}>
+  <AmbientGlow />
+
+  <div class="fixed inset-0 -z-50 bg-white/80 backdrop-blur-[100px]"></div>
+
+  <section id="download" class="relative mx-auto max-w-7xl px-4 lg:px-8 py-16 md:py-24 font-sans text-zinc-900">
+
+    <Hero t={t} description={description} version={version} ownerRepo={ownerRepo} />
+
+    <!-- Configuration & List -->
+    <div id="all-downloads" class="grid lg:grid-cols-12 gap-8 border-t border-zinc-200 pt-16">
+      <Config t={t} />
+      <Assets t={t} ownerRepo={ownerRepo} />
+    </div>
+  </section>
+
+  <script
+    type="module"
+    define:vars={{ preloaded: release, listUrl, ownerRepo, canonical, title, description, i18n }}
+  >
+    const $ = (s, r = document) => r.querySelector(s);
+
+    const state = {
+      release: preloaded || null,
+      assets: [],
+      checksumAsset: null,
+      recommended: null,
+      detected: { os: "linux", arch: "x64" },
+      selection: { os: "auto", arch: "auto", pkg: "auto" },
+    };
+
+    const detectOS = () => {
+      const ua = navigator.userAgent || "";
+      const plat = (navigator.platform || "").toLowerCase();
+      if (/windows/i.test(ua)) return "windows";
+      if (/mac|darwin/i.test(ua) || plat.includes("mac")) return "macos";
+      return "linux";
+    };
+    const detectArch = async () => {
+      const nav = navigator;
+      try {
+        if ("userAgentData" in nav && nav.userAgentData.getHighEntropyValues) {
+          const { architecture } = await nav.userAgentData.getHighEntropyValues(
+            ["architecture"],
+          );
+          if (/arm|aarch64/i.test(architecture)) return "arm64";
+          if (/x64|amd64|x86_64/i.test(architecture)) return "x64";
+        }
+      } catch {}
+      const ua = (navigator.userAgent || "").toLowerCase();
+      if (/arm64|aarch64|apple\ssilicon|silicon/.test(ua)) return "arm64";
+      if (/mac/i.test(ua) && navigator.maxTouchPoints > 0) return "arm64";
+      return "x64";
+    };
+
+    const fetchLatestReleaseAllowingPrerelease = async () => {
+      if (state.release) return state.release;
+      try {
+        const res = await fetch(`${listUrl}?per_page=5`, {
+          headers: { Accept: "application/vnd.github+json" },
+        });
+        if (!res.ok) return null;
+        const releases = await res.json();
+        const nonDraft = releases.filter((r) => !r.draft);
+        state.release =
+          nonDraft.find((r) => !r.prerelease) || nonDraft[0] || null;
+      } catch {}
+      return state.release;
+    };
+
+    const toMB = (bytes) => (bytes / 1048576).toFixed(1);
+    const niceDate = (d) =>
+      new Date(d ?? Date.now()).toLocaleString(undefined, {
+        year: "numeric",
+        month: "short",
+        day: "2-digit",
+      });
+
+    const nameOS = (n) => {
+      const s = n.toLowerCase();
+      if (/\.(dmg|pkg)$/i.test(n) || s.includes("mac") || s.includes("darwin"))
+        return "macos";
+      if (/\.(msi|exe)$/i.test(n) || s.includes("win")) return "windows";
+      if (/\.(appimage|deb|rpm|tar\.gz)$/i.test(n) || s.includes("linux"))
+        return "linux";
+      return "other";
+    };
+    const nameArch = (n) => {
+      const s = n.toLowerCase();
+      if (/(arm64|aarch64|apple|silicon)/.test(s)) return "arm64";
+      if (/(x64|x86_64|amd64)/.test(s)) return "x64";
+      return "any";
+    };
+    const namePkg = (n) => {
+      const s = n.toLowerCase();
+      if (s.endsWith(".dmg")) return "dmg";
+      if (s.endsWith(".msi")) return "msi";
+      if (s.endsWith(".exe")) return "exe";
+      if (s.endsWith(".appimage")) return "appimage";
+      if (s.endsWith(".deb")) return "deb";
+      if (s.endsWith(".rpm")) return "rpm";
+      if (s.endsWith(".tar.gz")) return "tar.gz";
+      if (s.endsWith(".zip")) return "zip";
+      return "file";
+    };
+
+    const buildIndex = () => {
+      const raw = state.release?.assets || [];
+      state.assets = raw
+        .filter((a) => !/\.json$/i.test(a.name) && !/\.sig$/i.test(a.name))
+        .map((a) => ({
+          name: a.name,
+          url: a.browser_download_url,
+          size: a.size,
+          os: nameOS(a.name),
+          arch: nameArch(a.name),
+          pkg: namePkg(a.name),
+          uploadedAt: a.updated_at || a.created_at || state.release?.published_at,
+        }));
+      state.checksumAsset =
+        state.assets.find((a) => /checksums?(\.txt)?$/i.test(a.name)) || null;
+    };
+
+    const pkgPriorityByOS = {
+      macos: ["dmg", "zip"],
+      windows: ["msi", "exe", "zip"],
+      linux: ["appimage", "deb", "rpm", "tar.gz", "zip"],
+      other: ["zip"],
+    };
+
+    const pickAsset = (os, arch, pkgPref = "auto") => {
+      const candidates = state.assets.filter(
+        (a) => a.os === os || (os === "linux" && a.os === "other"),
+      );
+      const archFirst = candidates.filter(
+        (a) => a.arch === arch || a.arch === "any",
+      );
+      const order =
+        pkgPref !== "auto" ? [pkgPref] : pkgPriorityByOS[os] || ["zip"];
+      for (const kind of order) {
+        const m = archFirst.find((a) => a.pkg === kind);
+        if (m) return m;
+      }
+      return archFirst[0] || candidates[0] || state.assets[0] || null;
+    };
+
+    const renderPrimary = (asset) => {
+      const btn = $("#download-primary");
+      if (!btn) return;
+      if (asset) {
+        btn.href = asset.url;
+        btn.target = "_blank";
+        btn.rel = "noopener noreferrer";
+        btn.setAttribute("download", "");
+        btn.querySelector("span").textContent = `${i18n.download} ${asset.name}`;
+      } else {
+        btn.href = `https://github.com/${ownerRepo}/releases`;
+        btn.target = "_blank";
+        btn.rel = "noopener noreferrer";
+        btn.removeAttribute("download");
+        btn.querySelector("span").textContent = "Open Releases";
+      }
+    };
+
+    const renderDetected = () => {
+      const el = $("#detected-os");
+      if(el) {
+          const os = state.selection.os === "auto" ? state.detected.os : state.selection.os;
+          const arch = state.selection.arch === "auto" ? state.detected.arch : state.selection.arch;
+          el.textContent = `${i18n.detected} ${os} / ${arch}`;
+      }
+    };
+
+    const iconForPkg = (pkg) => {
+      switch (pkg) {
+        case "dmg": return "MAC";
+        case "msi":
+        case "exe": return "WIN";
+        case "appimage":
+        case "deb":
+        case "rpm":
+        case "tar.gz": return "LIN";
+        case "zip":
+        default: return "ZIP";
+      }
+    };
+
+    const renderAssetsList = () => {
+      const wrap = $("#asset-list");
+      if (!wrap) return;
+
+      if (!state.assets.length) {
+        wrap.innerHTML =
+          `<div class="text-sm text-zinc-500 font-mono">${i18n.none}</div>`;
+        return;
+      }
+
+      const groups = ["macos", "windows", "linux", "other"];
+      let html = '';
+      for (const g of groups) {
+        const list = state.assets.filter((a) => a.os === g);
+        if (!list.length) continue;
+
+        html += `
+          <div class="mb-8">
+            <div class="flex items-center gap-3 mb-4">
+                <div class="w-2 h-2 bg-zinc-900 rounded-full"></div>
+                <span class="text-sm font-bold uppercase tracking-widest text-zinc-900">${g}</span>
+                <div class="h-px bg-zinc-200 flex-1"></div>
+            </div>
+            <div class="grid gap-3">
+              ${list.map(a => `
+                <div class="group relative flex items-center justify-between p-4 bg-white border border-zinc-200 hover:border-zinc-900 transition-all duration-300 hover:shadow-lg hover:shadow-zinc-200/50 rounded-sm">
+                    <div class="flex items-center gap-4 overflow-hidden">
+                        <div class="shrink-0 w-12 h-12 bg-zinc-50 border border-zinc-100 flex items-center justify-center text-[10px] font-mono font-bold text-zinc-400 group-hover:text-zinc-900 group-hover:bg-white transition-colors">
+                            ${iconForPkg(a.pkg)}
+                        </div>
+                        <div class="min-w-0">
+                            <div class="font-mono text-sm text-zinc-800 truncate font-medium group-hover:text-zinc-900">${a.name}</div>
+                            <div class="flex items-center gap-2 text-[10px] text-zinc-400 uppercase tracking-wide mt-1">
+                                <span class="bg-zinc-100 px-1.5 py-0.5 rounded-sm">${toMB(a.size)} MB</span>
+                                <span>${a.arch}</span>
+                                <span>·</span>
+                                <span>${niceDate(a.uploadedAt)}</span>
+                            </div>
+                        </div>
+                    </div>
+                    <a href="${a.url}" class="shrink-0 ml-4 px-4 py-2 bg-zinc-50 hover:bg-zinc-900 hover:text-white text-xs font-bold uppercase tracking-wide transition-all border border-zinc-200 hover:border-zinc-900 rounded-sm">
+                        ${i18n.download}
+                    </a>
+                </div>
+              `).join('')}
+            </div>
+          </div>
+        `;
+      }
+      wrap.innerHTML = html;
+
+      // checksums
+      const checks = state.checksumAsset;
+      const cwrap = $("#checksum-wrap");
+      if (checks && cwrap) {
+        $("#checksum-link").href = checks.url;
+        cwrap.classList.remove("hidden");
+        cwrap.classList.add("flex");
+      }
+    };
+
+    const updateRecommendation = () => {
+      const osSel = document.querySelector("#os-select").value;
+      const archSel = document.querySelector("#arch-select").value;
+      const pkgSel = document.querySelector("#pkg-select").value;
+
+      state.selection = { os: osSel, arch: archSel, pkg: pkgSel };
+
+      const os = osSel === "auto" ? state.detected.os : osSel;
+      const arch = archSel === "auto" ? state.detected.arch : archSel;
+
+      const rec = pickAsset(os, arch, pkgSel);
+      state.recommended = rec;
+      renderDetected();
+      renderPrimary(rec);
+    };
+
+    (async () => {
+      state.detected.os = detectOS();
+      state.detected.arch = await detectArch().catch(() => "x64");
+      renderDetected();
+
+      await fetchLatestReleaseAllowingPrerelease();
+      if (state.release) {
+        const tagEl = $("#release-tag");
+        if (tagEl) {
+             tagEl.textContent = state.release.tag_name ?? state.release.name ?? "—";
+        }
+      }
+
+      if (state.release) {
+        buildIndex();
+      }
+
+      renderAssetsList();
+      updateRecommendation();
+
+      document.querySelector("#os-select")?.addEventListener("change", updateRecommendation);
+      document.querySelector("#arch-select")?.addEventListener("change", updateRecommendation);
+      document.querySelector("#pkg-select")?.addEventListener("change", updateRecommendation);
+    })();
+  </script>
+</BlogLayout>

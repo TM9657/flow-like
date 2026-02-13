@@ -1,0 +1,85 @@
+---
+import { LuCode, LuShieldCheck, LuSettings, LuLandmark } from "react-icons/lu";
+import type { Lang, TranslationKey } from "../i18n";
+import { translations, defaultLang } from "../i18n";
+
+interface Props {
+  lang?: Lang;
+}
+
+const { lang = defaultLang } = Astro.props;
+const t = (key: TranslationKey): string => {
+  const langTranslations = translations[lang] as Record<string, string>;
+  const enTranslations = translations.en as Record<string, string>;
+  return langTranslations?.[key] ?? enTranslations[key] ?? key;
+};
+
+const personas = [
+  {
+    icon: LuCode,
+    role: t("audience.cto.title"),
+    description: t("audience.cto.description"),
+    color: "text-primary",
+    bgColor: "bg-primary/10",
+  },
+  {
+    icon: LuShieldCheck,
+    role: t("audience.ciso.title"),
+    description: t("audience.ciso.description"),
+    color: "text-emerald-500",
+    bgColor: "bg-emerald-500/10",
+  },
+  {
+    icon: LuSettings,
+    role: t("audience.ops.title"),
+    description: t("audience.ops.description"),
+    color: "text-amber-500",
+    bgColor: "bg-amber-500/10",
+  },
+  {
+    icon: LuLandmark,
+    role: t("audience.gov.title"),
+    description: t("audience.gov.description"),
+    color: "text-blue-500",
+    bgColor: "bg-blue-500/10",
+    highlight: true,
+  },
+];
+---
+
+<section class="relative py-20">
+  <div class="mx-auto max-w-6xl px-6 lg:px-8">
+    <!-- Header -->
+    <div class="text-center mb-14">
+      <p class="text-[11px] font-medium tracking-[0.3em] uppercase text-muted-foreground mb-4">
+        {t("audience.tagline")}
+      </p>
+      <h2 class="text-3xl sm:text-4xl font-semibold tracking-tight text-foreground leading-[1.15]">
+        {t("audience.headline")}
+      </h2>
+    </div>
+
+    <!-- Persona Cards -->
+    <div class="grid md:grid-cols-2 lg:grid-cols-4 gap-6">
+      {personas.map((persona) => (
+        <div class={`relative text-center p-8 rounded-2xl border ${persona.highlight ? 'border-primary/30 bg-primary/5' : 'border-border/50 bg-card/30'} backdrop-blur-sm hover:border-border transition-colors`}>
+          <div class={`w-14 h-14 rounded-2xl ${persona.bgColor} flex items-center justify-center mx-auto mb-5`}>
+            <persona.icon className={`w-7 h-7 ${persona.color}`} />
+          </div>
+          <h3 class="text-lg font-semibold text-foreground mb-2">{persona.role}</h3>
+          <p class="text-sm text-muted-foreground">{persona.description}</p>
+        </div>
+      ))}
+    </div>
+
+    <!-- Simple Rule -->
+    <div class="mt-16 text-center">
+      <div class="inline-flex flex-col items-center gap-4 px-8 py-6 rounded-2xl border border-border/50 bg-card/30 max-w-2xl">
+        <span class="text-xl">📌</span>
+        <p class="text-base font-medium text-foreground">
+          {t("audience.closing")}
+        </p>
+      </div>
+    </div>
+  </div>
+</section>

@@ -8,13 +8,14 @@ import type { IAttachment } from "./chat-db";
 export async function fileToAttachment(
 	files: File[],
 	backend: IBackendState,
+	offline: boolean,
 ): Promise<IAttachment[]> {
 	if (!files || files.length === 0) return [];
 
 	const attachments: IAttachment[] = [];
 
 	for (const file of files) {
-		const url = await backend.helperState.fileToUrl(file);
+		const url = await backend.helperState.fileToUrl(file, offline);
 		attachments.push({
 			name: file.name,
 			type: file.type,
@@ -137,7 +138,7 @@ export function FilePreview({
 						</div>
 					)}
 					<div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/70 to-transparent text-white text-xs p-1 truncate">
-						{file.name}
+						{decodeURIComponent(file.name)}
 					</div>
 				</div>
 			);

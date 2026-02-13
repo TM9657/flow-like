@@ -2,10 +2,12 @@
 
 import { DndProvider } from "react-dnd";
 import { HTML5Backend } from "react-dnd-html5-backend";
+import { TouchBackend } from "react-dnd-touch-backend";
 
 import { DndPlugin } from "@platejs/dnd";
 import { PlaceholderPlugin } from "@platejs/media/react";
 
+import { isTauri } from "../../../lib/platform";
 import { BlockDraggable } from "../ui/block-draggable";
 
 export const DndKit = [
@@ -20,9 +22,24 @@ export const DndKit = [
 		},
 		render: {
 			aboveNodes: BlockDraggable,
-			aboveSlate: ({ children }) => (
-				<DndProvider backend={HTML5Backend}>{children}</DndProvider>
-			),
+			aboveSlate: (props) => {
+				const backend = isTauri() ? TouchBackend : HTML5Backend;
+				const options = isTauri()
+					? {
+							enableMouseEvents: true,
+							delayTouchStart: 0,
+							delayMouseStart: 0,
+							ignoreContextMenu: true,
+							touchSlop: 5,
+						}
+					: undefined;
+				return (
+					// react-dnd types allow options; cast if needed to satisfy TS in this environment
+					<DndProvider backend={backend as any} options={options as any}>
+						{props.children}
+					</DndProvider>
+				);
+			},
 		},
 	}),
 ];

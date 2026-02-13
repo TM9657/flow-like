@@ -1,4 +1,4 @@
-use flow_like_types::{async_trait, sync::Mutex};
+use flow_like_types::async_trait;
 use schemars::JsonSchema;
 use std::sync::Arc;
 
@@ -30,7 +30,7 @@ impl Command for UpsertCommentCommand {
     async fn execute(
         &mut self,
         board: &mut Board,
-        _: Arc<Mutex<FlowLikeState>>,
+        _: Arc<FlowLikeState>,
     ) -> flow_like_types::Result<()> {
         self.comment.layer = self.current_layer.clone();
         self.comment.hash();
@@ -47,7 +47,7 @@ impl Command for UpsertCommentCommand {
     async fn undo(
         &mut self,
         board: &mut Board,
-        _: Arc<Mutex<FlowLikeState>>,
+        _: Arc<FlowLikeState>,
     ) -> flow_like_types::Result<()> {
         board.comments.remove(&self.comment.id);
         if let Some(old_comment) = self.old_comment.take() {

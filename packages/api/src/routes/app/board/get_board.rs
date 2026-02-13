@@ -10,6 +10,21 @@ use axum::{
 use flow_like::flow::board::Board;
 use flow_like_types::anyhow;
 
+#[utoipa::path(
+    get,
+    path = "/apps/{app_id}/board/{board_id}",
+    tag = "boards",
+    params(
+        ("app_id" = String, Path, description = "Application ID"),
+        ("board_id" = String, Path, description = "Board ID"),
+        ("version" = Option<String>, Query, description = "Version in MAJOR_MINOR_PATCH format (e.g., 1_0_3)")
+    ),
+    responses(
+        (status = 200, description = "Board details", body = Object),
+        (status = 401, description = "Unauthorized"),
+        (status = 404, description = "Board not found")
+    )
+)]
 #[tracing::instrument(name = "GET /apps/{app_id}/board/{board_id}", skip(state, user))]
 pub async fn get_board(
     State(state): State<AppState>,
@@ -28,9 +43,9 @@ pub async fn get_board(
         match parts.as_slice() {
             [maj, min, pat] => Some((*maj, *min, *pat)),
             _ => {
-                return Err(ApiError::InternalError(
-                    anyhow!("version must be in MAJOR_MINOR_PATCH format").into(),
-                ));
+                return Err(ApiError::internal_error(anyhow!(
+                    "version must be in MAJOR_MINOR_PATCH format"
+                )));
             }
         }
     } else {

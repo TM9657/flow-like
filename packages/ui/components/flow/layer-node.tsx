@@ -4,13 +4,8 @@ import { type Node, type NodeProps, useReactFlow } from "@xyflow/react";
 import {
 	BanIcon,
 	CircleXIcon,
-	FoldHorizontalIcon,
-	MessageSquareIcon,
 	ScrollTextIcon,
-	SlidersHorizontalIcon,
 	SquareCheckIcon,
-	SquarePenIcon,
-	Trash2Icon,
 	TriangleAlertIcon,
 	ZapIcon,
 } from "lucide-react";
@@ -25,22 +20,16 @@ import {
 } from "react";
 import PuffLoader from "react-spinners/PuffLoader";
 import { toast } from "sonner";
-import {
-	ContextMenu,
-	ContextMenuContent,
-	ContextMenuItem,
-	ContextMenuLabel,
-	ContextMenuSeparator,
-	ContextMenuTrigger,
-} from "../../components/ui/context-menu";
 import type { IBoard, INode } from "../../lib";
 import { logLevelFromNumber } from "../../lib/log-level";
 import { type ILayer, ILogLevel, IPinType } from "../../lib/schema/flow/board";
 import { useLogAggregation } from "../../state/log-aggregation-state";
 import { useRunExecutionStore } from "../../state/run-execution-state";
+import { AutoResizeText } from "./auto-resize-text";
 import { CommentDialog } from "./comment-dialog";
 import { FlowPin } from "./flow-pin";
 import { LayerEditMenu } from "./layer-editing-menu";
+import { LayerNodeToolbar } from "./layer-node/layer-node-toolbar";
 import { NameDialog } from "./name-dialog";
 
 export type LayerNode = Node<
@@ -54,6 +43,7 @@ export type LayerNode = Node<
 		pushLayer(layer: ILayer): Promise<void>;
 		onLayerUpdate(layer: ILayer): Promise<void>;
 		onLayerRemove(layer: ILayer, preserve_nodes: boolean): Promise<void>;
+		onExplain?: (nodeIds: string[]) => void;
 	},
 	"layerNode"
 >;
@@ -64,6 +54,7 @@ export function LayerNode(props: NodeProps<LayerNode>) {
 	const [comment, setComment] = useState<string | undefined>();
 	const [name, setName] = useState<string | undefined>();
 	const [editing, setEditing] = useState(false);
+	const [isHovered, setIsHovered] = useState(false);
 	const { resolvedTheme } = useTheme();
 
 	const { currentMetadata } = useLogAggregation();
@@ -201,6 +192,15 @@ export function LayerNode(props: NodeProps<LayerNode>) {
 		setName(undefined);
 	}, [props.id, name]);
 
+	const handleExplain = useCallback(() => {
+		const selectedNodes = getNodes().filter((node) => node.selected);
+		const nodeIds =
+			selectedNodes.length > 0
+				? selectedNodes.map((node) => node.id)
+				: [props.id];
+		props.data.onExplain?.(nodeIds);
+	}, [getNodes, props.id, props.data.onExplain]);
+
 	return (
 		<>
 			{typeof comment === "string" && (
@@ -227,20 +227,33 @@ export function LayerNode(props: NodeProps<LayerNode>) {
 					onUpsert={(name) => setName(name)}
 				/>
 			)}
-			<ContextMenu>
-				<ContextMenuTrigger>
-					<div
-						ref={divRef}
-						key={`${props.data.hash}__node`}
-						className={`p-1 flex flex-col justify-center items-center react-flow__node-default selectable focus:ring-2 relative bg-card! border-border! rounded-md! group ${executionState === "done" ? "opacity-60" : "opacity-100"} ${props.selected && "border-primary! border-2"}`}
-					>
-						{props.data.layer.comment && props.data.layer.comment !== "" && (
-							<div className="absolute top-0 translate-y-[calc(-100%-0.5rem)] left-3 right-3 mb-2 text-center bg-foreground/70 text-background p-1 rounded-md">
-								<small className="font-normal text-extra-small leading-extra-small">
-									{props.data.layer.comment}
-								</small>
-								<div
-									className="
+			<div
+				className="relative"
+				onMouseEnter={() => setIsHovered(true)}
+				onMouseLeave={() => setIsHovered(false)}
+			>
+				{(props.selected || isHovered) && (
+					<LayerNodeToolbar
+						onRename={() => setName(props.data.layer.name ?? "")}
+						onComment={() => setComment(props.data.layer.comment ?? "")}
+						onEdit={() => setEditing(true)}
+						onExtend={() => props.data.onLayerRemove(props.data.layer, true)}
+						onDelete={() => props.data.onLayerRemove(props.data.layer, false)}
+						onExplain={handleExplain}
+					/>
+				)}
+				<div
+					ref={divRef}
+					key={`${props.data.hash}__node`}
+					className={`p-1 flex flex-col justify-center items-center react-flow__node-default selectable focus:ring-2 relative bg-card! border-border! rounded-md! group ${executionState === "done" ? "opacity-60" : "opacity-100"} ${props.selected && "border-primary! border-2"}`}
+				>
+					{props.data.layer.comment && props.data.layer.comment !== "" && (
+						<div className="absolute top-0 translate-y-[calc(-100%-0.5rem)] left-3 right-3 mb-2 text-center bg-foreground/70 text-background p-1 rounded-md">
+							<small className="font-normal text-extra-small leading-extra-small">
+								{props.data.layer.comment}
+							</small>
+							<div
+								className="
                                             absolute
                                             -bottom-1
                                             left-1/2
@@ -250,133 +263,81 @@ export function LayerNode(props: NodeProps<LayerNode>) {
                                             border-r-4 border-r-transparent
                                             border-t-4 border-t-foreground/70
                                         "
-								/>
-							</div>
-						)}
-						{severity !== ILogLevel.Debug && (
-							<div className="absolute top-0 z-10 translate-y-[calc(-50%)] translate-x-[calc(50%)] right-0 text-center bg-background rounded-full">
-								{severity === ILogLevel.Fatal && (
-									<BanIcon className="w-3 h-3 text-red-800" />
-								)}
-								{severity === ILogLevel.Error && (
-									<CircleXIcon className="w-3 h-3 text-red-500" />
-								)}
-								{severity === ILogLevel.Warn && (
-									<TriangleAlertIcon className="w-3 h-3 text-yellow-500" />
-								)}
-							</div>
-						)}
-						<div className="header absolute top-0 left-0 right-0 h-4 gap-1 flex flex-row items-center border-b bg-accent text-accent-foreground p-1 justify-between rounded-t-md">
-							<div className="flex flex-row items-center gap-1">
-								<ZapIcon className="w-2 h-2" />
-								<small className="font-medium leading-none">
-									{props.data.layer.name}
-								</small>
-							</div>
-							<div className="flex flex-row items-center gap-1">
-								{executed && (
-									<ScrollTextIcon
-										// onClick={() => props.data.openTrace(props.data.traces)}
-										className="w-2 h-2 cursor-pointer hover:text-primary"
-									/>
-								)}
-								{useMemo(() => {
-									if (debouncedExecutionState !== "running") return null;
-									return (
-										<PuffLoader
-											color={resolvedTheme === "dark" ? "white" : "black"}
-											size={10}
-											speedMultiplier={1}
-										/>
-									);
-								}, [debouncedExecutionState, resolvedTheme])}
-
-								{useMemo(() => {
-									return debouncedExecutionState === "done" ? (
-										<SquareCheckIcon className="w-2 h-2 text-primary" />
-									) : null;
-								}, [debouncedExecutionState])}
-							</div>
+							/>
 						</div>
-						{Object.values(props.data.layer.pins)
-							.filter((pin) => pin.pin_type === IPinType.Input)
-							.toSorted((a, b) => a.index - b.index)
-							.map((pin) => (
-								<FlowPin
-									appId={props.data.appId}
-									node={props.data.pinLookup[pin.id] ?? props.data.layer}
-									boardId={props.data.boardId}
-									pin={pin}
-									key={pin.id}
-									skipOffset={true}
-									onPinRemove={async () => {}}
-								/>
-							))}
-						{Object.values(props.data.layer.pins)
-							.filter((pin) => pin.pin_type === IPinType.Output)
-							.toSorted((a, b) => a.index - b.index)
-							.map((pin) => (
-								<FlowPin
-									appId={props.data.appId}
-									node={props.data.pinLookup[pin.id] ?? props.data.layer}
-									boardId={props.data.boardId}
-									pin={pin}
-									key={pin.id}
-									skipOffset={true}
-									onPinRemove={async () => {}}
-								/>
-							))}
+					)}
+					{severity !== ILogLevel.Debug && (
+						<div className="absolute top-0 z-10 translate-y-[calc(-50%)] translate-x-[calc(50%)] right-0 text-center bg-background rounded-full">
+							{severity === ILogLevel.Fatal && (
+								<BanIcon className="w-3 h-3 text-red-800" />
+							)}
+							{severity === ILogLevel.Error && (
+								<CircleXIcon className="w-3 h-3 text-red-500" />
+							)}
+							{severity === ILogLevel.Warn && (
+								<TriangleAlertIcon className="w-3 h-3 text-yellow-500" />
+							)}
+						</div>
+					)}
+					<div className="header absolute top-0 left-0 right-0 h-4 gap-1 flex flex-row items-center border-b bg-accent text-accent-foreground p-1 justify-between rounded-t-md">
+						<div className="flex flex-row items-center gap-1 min-w-0">
+							<ZapIcon className="w-2 h-2 shrink-0" />
+							<small className="font-medium leading-none truncate">
+								<AutoResizeText text={props.data.layer.name} maxChars={30} />
+							</small>
+						</div>
+						<div className="flex flex-row items-center gap-1 shrink-0">
+							{executed && (
+								<ScrollTextIcon className="w-2 h-2 cursor-pointer hover:text-primary" />
+							)}
+							{useMemo(() => {
+								if (debouncedExecutionState !== "running") return null;
+								return (
+									<PuffLoader
+										color={resolvedTheme === "dark" ? "white" : "black"}
+										size={10}
+										speedMultiplier={1}
+									/>
+								);
+							}, [debouncedExecutionState, resolvedTheme])}
+
+							{useMemo(() => {
+								return debouncedExecutionState === "done" ? (
+									<SquareCheckIcon className="w-2 h-2 text-primary" />
+								) : null;
+							}, [debouncedExecutionState])}
+						</div>
 					</div>
-				</ContextMenuTrigger>
-				<ContextMenuContent className="max-w-20">
-					<ContextMenuLabel>Layer Actions</ContextMenuLabel>
-					<ContextMenuItem
-						className="flex flex-row items-center gap-2"
-						onClick={() => {
-							setName(props.data.layer.name ?? "");
-						}}
-					>
-						<SquarePenIcon className="w-4 h-4" />
-						Rename
-					</ContextMenuItem>
-					<ContextMenuItem
-						className="flex flex-row items-center gap-2"
-						onClick={() => {
-							setComment(props.data.layer.comment ?? "");
-						}}
-					>
-						<MessageSquareIcon className="w-4 h-4" />
-						Comment
-					</ContextMenuItem>
-					<ContextMenuItem
-						className="flex flex-row items-center gap-2"
-						onClick={() => setEditing(true)}
-					>
-						<SlidersHorizontalIcon className="w-4 h-4" />
-						Edit
-					</ContextMenuItem>
-					<ContextMenuSeparator />
-					<ContextMenuItem
-						className="flex flex-row items-center gap-2"
-						onClick={async () => {
-							await props.data.onLayerRemove(props.data.layer, true);
-						}}
-					>
-						<FoldHorizontalIcon className="w-4 h-4" />
-						Extend
-					</ContextMenuItem>
-					<ContextMenuSeparator />
-					<ContextMenuItem
-						className="flex flex-row items-center gap-2"
-						onClick={async () => {
-							await props.data.onLayerRemove(props.data.layer, false);
-						}}
-					>
-						<Trash2Icon className="w-4 h-4" />
-						Delete
-					</ContextMenuItem>
-				</ContextMenuContent>
-			</ContextMenu>
+					{Object.values(props.data.layer.pins)
+						.filter((pin) => pin.pin_type === IPinType.Input)
+						.toSorted((a, b) => a.index - b.index)
+						.map((pin) => (
+							<FlowPin
+								appId={props.data.appId}
+								node={props.data.pinLookup[pin.id] ?? props.data.layer}
+								boardId={props.data.boardId}
+								pin={pin}
+								key={pin.id}
+								skipOffset={true}
+								onPinRemove={async () => {}}
+							/>
+						))}
+					{Object.values(props.data.layer.pins)
+						.filter((pin) => pin.pin_type === IPinType.Output)
+						.toSorted((a, b) => a.index - b.index)
+						.map((pin) => (
+							<FlowPin
+								appId={props.data.appId}
+								node={props.data.pinLookup[pin.id] ?? props.data.layer}
+								boardId={props.data.boardId}
+								pin={pin}
+								key={pin.id}
+								skipOffset={true}
+								onPinRemove={async () => {}}
+							/>
+						))}
+				</div>
+			</div>
 
 			<LayerEditMenu
 				open={editing}

@@ -34,7 +34,7 @@ export function FnVariable({
 	]);
 
 	return (
-		<div className="flex flex-row items-center justify-start">
+		<div className="flex flex-row items-center justify-start max-w-full ml-1 overflow-hidden">
 			<Select
 				defaultValue={parseUint8ArrayToJson(value)}
 				value={parseUint8ArrayToJson(value)}
@@ -46,16 +46,16 @@ export function FnVariable({
 				<SelectTrigger
 					noChevron
 					size="sm"
-					className="!w-fit !max-w-fit p-0 border-0 text-xs !bg-card text-nowrap text-start max-h-fit h-4 gap-0.5 flex-row items-center"
+					className="w-fit! max-w-full! p-0 border-0 text-xs bg-card! text-start max-h-fit h-4 gap-0.5 flex-row items-center overflow-hidden"
 				>
-					<small className="text-nowrap text-start text-[10px] !m-0 w-fit">
+					<small className="text-start text-[10px] m-0! truncate">
 						{!board.data && "Loading..."}
 						{board.data &&
 							(board?.data?.nodes?.[parseUint8ArrayToJson(value)]
 								?.friendly_name ??
 								"No Function Selected")}
 					</small>
-					<ChevronDown className="size-2 min-w-2 min-h-2 text-card-foreground" />
+					<ChevronDown className="size-2 min-w-2 min-h-2 text-card-foreground shrink-0" />
 				</SelectTrigger>
 				<SelectContent>
 					<SelectGroup>

@@ -6,6 +6,7 @@ import {
 	Background,
 	BackgroundVariant,
 	type Connection,
+	ControlButton,
 	Controls,
 	type Edge,
 	type FinalConnectionState,
@@ -15,11 +16,14 @@ import {
 	type Node,
 	type OnEdgesChange,
 	type OnNodesChange,
+	type OnSelectionChangeFunc,
 	ReactFlow,
 	type ReactFlowInstance,
 	addEdge,
 	applyEdgeChanges,
 	applyNodeChanges,
+	getNodesBounds,
+	getViewportForBounds,
 	reconnectEdge,
 	useEdgesState,
 	useKeyPress,
@@ -27,28 +31,59 @@ import {
 	useReactFlow,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
+import { useMediaQuery } from "@uidotdev/usehooks";
 import {
 	ArrowBigLeftDashIcon,
+	CheckIcon,
+	FileTextIcon,
 	HistoryIcon,
+	LayoutTemplateIcon,
 	NotebookPenIcon,
 	PlayCircleIcon,
-	Redo2Icon,
 	ScrollIcon,
+	SearchIcon,
+	ShareIcon,
+	SparklesIcon,
 	SquareChevronUpIcon,
-	Undo2Icon,
 	VariableIcon,
+	WifiIcon,
+	WifiOffIcon,
 	XIcon,
 } from "lucide-react";
 import { useTheme } from "next-themes";
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+	type ReactElement,
+	useCallback,
+	useEffect,
+	useMemo,
+	useRef,
+	useState,
+} from "react";
 import type { ImperativePanelHandle } from "react-resizable-panels";
-import { useLogAggregation, viewportDb, viewportKey } from "../..";
+import {
+	Button,
+	Sheet,
+	SheetContent,
+	SheetHeader,
+	SheetTitle,
+	useHub,
+	useLogAggregation,
+	useMobileHeader,
+} from "../..";
+import { BoardActivityIndicator } from "../../components/flow/board-activity-indicator";
 import { CommentNode } from "../../components/flow/comment-node";
 import { FlowContextMenu } from "../../components/flow/flow-context-menu";
 import { FlowDock } from "../../components/flow/flow-dock";
 import { FlowNode } from "../../components/flow/flow-node";
+import {
+	FlowNodeInfoOverlay,
+	type FlowNodeInfoOverlayHandle,
+} from "../../components/flow/flow-node/flow-node-info-overlay";
+import { FlowPages } from "../../components/flow/flow-pages";
+import { MediaNode } from "../../components/flow/media-node";
 import { Traces } from "../../components/flow/traces";
+import { UploadPlaceholderNode } from "../../components/flow/upload-placeholder-node";
 import {
 	Variable,
 	VariablesMenu,
@@ -58,75 +93,97 @@ import {
 	ResizablePanel,
 	ResizablePanelGroup,
 } from "../../components/ui/resizable";
+import { useCommandExecution } from "../../hooks/use-command-execution";
+import { useCopilotCommands } from "../../hooks/use-copilot-commands";
+import { useFlowPanels } from "../../hooks/use-flow-panels";
 import { useInvoke } from "../../hooks/use-invoke";
+import { useKeyboardShortcuts } from "../../hooks/use-keyboard-shortcuts";
+import { useLayerNavigation } from "../../hooks/use-layer-navigation";
+import { useMediaUpload } from "../../hooks/use-media-upload";
+import { usePeerUserInfo } from "../../hooks/use-peer-users";
+import { useRealtimeCollaboration } from "../../hooks/use-realtime-collaboration";
+import { useViewportManager } from "../../hooks/use-viewport-manager";
 import {
 	type IGenericCommand,
 	type ILogMetadata,
 	IPinType,
 	IValueType,
-	addNodeCommand,
 	connectPinsCommand,
 	disconnectPinsCommand,
 	moveNodeCommand,
-	removeCommentCommand,
-	removeLayerCommand,
-	removeNodeCommand,
+	updateNodeCommand,
 	upsertCommentCommand,
-	upsertLayerCommand,
+	upsertVariableCommand,
 } from "../../lib";
+import {
+	handleConnection,
+	handleEdgesChange,
+	handleNodesChange,
+	handlePlaceNode,
+	handlePlacePlaceholder,
+} from "../../lib/flow-board-helpers";
 import {
 	handleCopy,
 	handlePaste,
+	hexToRgba,
 	isValidConnection,
 	parseBoard,
 } from "../../lib/flow-board-utils";
 import { toastError, toastSuccess } from "../../lib/messages";
+import { getRuntimeConfiguredVariables } from "../../lib/runtime-vars-utils";
+import { IAppVisibility } from "../../lib/schema/app/app";
 import {
 	type IBoard,
 	type IComment,
 	ICommentType,
 	type IVariable,
 } from "../../lib/schema/flow/board";
-import { ILayerType } from "../../lib/schema/flow/board/commands/upsert-layer";
 import { type INode, IVariableType } from "../../lib/schema/flow/node";
 import type { IPin } from "../../lib/schema/flow/pin";
 import type { ILayer } from "../../lib/schema/flow/run";
 import { convertJsonToUint8Array } from "../../lib/uint8";
-import { useBackend, useBackendStore } from "../../state/backend-state";
+import { useBackend } from "../../state/backend-state";
 import { useFlowBoardParentState } from "../../state/flow-board-parent-state";
 import { useRunExecutionStore } from "../../state/run-execution-state";
+import {
+	type RuntimeVariableValue,
+	useRuntimeVariables,
+} from "../../state/runtime-variables-context";
 import { BoardMeta } from "./board-meta";
+import { FlowCopilot, type Suggestion } from "./flow-copilot";
+import { FlowCursors } from "./flow-cursors";
+import { FlowDataEdge } from "./flow-data-edge";
+import { FlowExecutionEdge } from "./flow-execution-edge";
 import { useUndoRedo } from "./flow-history";
+import { FlowLayerIndicators } from "./flow-layer-indicators";
 import { PinEditModal } from "./flow-pin/edit-modal";
 import { FlowRuns } from "./flow-runs";
+import { FlowSearch } from "./flow-search";
+import { FlowTemplateSelector } from "./flow-template-selector";
+import { FlowVeilEdge } from "./flow-veil-edge";
 import { LayerInnerNode } from "./layer-inner-node";
 import { LayerNode } from "./layer-node";
-
-function hexToRgba(hex: string, alpha = 0.3): string {
-	let c = hex.replace("#", "");
-	if (c.length === 3) c = c[0] + c[0] + c[1] + c[1] + c[2] + c[2];
-	const num = Number.parseInt(c, 16);
-	const r = (num >> 16) & 255;
-	const g = (num >> 8) & 255;
-	const b = num & 255;
-	return `rgba(${r}, ${g}, ${b}, ${alpha})`;
-}
+import { RuntimeVariablesPrompt } from "./runtime-variables-prompt";
 
 export function FlowBoard({
 	appId,
 	boardId,
 	nodeId,
 	initialVersion,
+	sub,
 }: Readonly<{
 	appId: string;
 	boardId: string;
 	nodeId?: string;
 	initialVersion?: [number, number, number];
+	/** The authenticated user's sub (subject) from the auth token - used for realtime collaboration */
+	sub?: string;
 }>) {
 	const { pushCommand, pushCommands, redo, undo } = useUndoRedo(appId, boardId);
 	const router = useRouter();
 	const backend = useBackend();
 	const selected = useRef(new Set<string>());
+	const hub = useHub();
 	const edgeReconnectSuccessful = useRef(true);
 	const { isOver, setNodeRef, active } = useDroppable({ id: "flow" });
 	const parentRegister = useFlowBoardParentState();
@@ -141,6 +198,7 @@ export function FlowBoard({
 	const logPanelRef = useRef<ImperativePanelHandle>(null);
 	const varPanelRef = useRef<ImperativePanelHandle>(null);
 	const runsPanelRef = useRef<ImperativePanelHandle>(null);
+	const nodeInfoOverlayRef = useRef<FlowNodeInfoOverlayHandle>(null);
 
 	const shiftPressed = useKeyPress("Shift");
 
@@ -163,14 +221,16 @@ export function FlowBoard({
 		backend.userState,
 		[],
 	);
+	const app = useInvoke(backend.appState.getApp, backend.appState, [appId]);
 	const { addRun, removeRun, pushUpdate } = useRunExecutionStore();
-	const { screenToFlowPosition, getViewport, setViewport, fitView } =
+	const { screenToFlowPosition, getViewport, setViewport, fitView, getNodes } =
 		useReactFlow();
 
 	const [nodes, setNodes] = useNodesState<any>([]);
 	const [edges, setEdges] = useEdgesState<any>([]);
 	const [droppedPin, setDroppedPin] = useState<IPin | undefined>(undefined);
 	const [clickPosition, setClickPosition] = useState({ x: 0, y: 0 });
+	const deletingNodesRef = useRef<Set<string>>(new Set());
 	const [mousePosition, setMousePosition] = useState({ x: 0, y: 0 });
 	const [pinCache, setPinCache] = useState<
 		Map<string, [IPin, INode | ILayer, boolean]>
@@ -178,10 +238,137 @@ export function FlowBoard({
 	const [editBoard, setEditBoard] = useState(false);
 	const [currentLayer, setCurrentLayer] = useState<string | undefined>();
 	const [layerPath, setLayerPath] = useState<string | undefined>();
+	const [templateSelectorOpen, setTemplateSelectorOpen] = useState(false);
+	const [runtimeVarsPromptOpen, setRuntimeVarsPromptOpen] = useState(false);
+	const [pendingExecution, setPendingExecution] = useState<{
+		node: INode;
+		payload?: object;
+		isRemote: boolean;
+	} | null>(null);
+	const [existingRuntimeVars, setExistingRuntimeVars] = useState<
+		Map<string, RuntimeVariableValue>
+	>(new Map());
+	const runtimeVarsContext = useRuntimeVariables();
 	const colorMode = useMemo(
 		() => (resolvedTheme === "dark" ? "dark" : "light"),
 		[resolvedTheme],
 	);
+
+	const { update: updateHeader } = useMobileHeader();
+
+	useEffect(() => {
+		const left: ReactElement[] = [];
+		const right: ReactElement[] = [];
+
+		if (
+			typeof parentRegister.boardParents[boardId] === "string" &&
+			!currentLayer
+		) {
+			left.push(
+				<Button
+					variant={"default"}
+					size={"icon"}
+					onClick={async () => {
+						const urlWithQuery = parentRegister.boardParents[boardId];
+						router.push(urlWithQuery);
+					}}
+				>
+					<ArrowBigLeftDashIcon />
+				</Button>,
+			);
+		}
+
+		right.push(
+			...[
+				<Button
+					variant={"outline"}
+					size={"icon"}
+					onClick={async () => {
+						toggleVars();
+					}}
+				>
+					<VariableIcon />
+				</Button>,
+				<Button
+					variant={"outline"}
+					size={"icon"}
+					onClick={() => {
+						setTemplateSelectorOpen(true);
+					}}
+				>
+					<LayoutTemplateIcon />
+				</Button>,
+				<Button
+					variant={"outline"}
+					size={"icon"}
+					onClick={async () => {
+						setEditBoard(true);
+					}}
+				>
+					<NotebookPenIcon />
+				</Button>,
+				<Button
+					variant={"outline"}
+					size={"icon"}
+					onClick={async () => {
+						toggleRunHistory();
+					}}
+				>
+					<HistoryIcon />
+				</Button>,
+			],
+		);
+
+		// Always expose Logs button; it opens the logs sheet (shows empty state when no run is selected)
+		right.push(
+			<Button
+				variant={"outline"}
+				size={"icon"}
+				aria-label="Open logs"
+				onClick={async () => {
+					toggleLogs();
+				}}
+			>
+				<ScrollIcon />
+			</Button>,
+		);
+
+		// FlowPilot button with fancy styling
+		right.push(
+			<Button
+				variant={"outline"}
+				size={"icon"}
+				aria-label="Open FlowPilot"
+				onClick={() => setCopilotOpen(true)}
+				className="relative group border-primary/30 hover:border-primary/60 hover:bg-primary/5"
+			>
+				<div className="absolute inset-0 rounded-md bg-linear-to-br from-primary/20 via-violet-500/10 to-pink-500/10 opacity-0 group-hover:opacity-100 transition-opacity" />
+				<SparklesIcon className="w-4 h-4 text-primary relative z-10" />
+				{currentMetadata && (
+					<span className="absolute -top-1 -right-1 w-2 h-2 bg-amber-500 rounded-full" />
+				)}
+			</Button>,
+		);
+
+		if (currentLayer) {
+			left.push(
+				<Button
+					variant={"default"}
+					size={"icon"}
+					onClick={async () => {
+						popLayer();
+					}}
+				>
+					<SquareChevronUpIcon />
+				</Button>,
+			);
+		}
+
+		updateHeader({
+			left,
+			right,
+		});
+	}, [currentMetadata, currentLayer, parentRegister.boardParents, boardId]);
 
 	const pinToNode = useCallback(
 		(pinId: string) => {
@@ -191,239 +378,295 @@ export function FlowBoard({
 		[nodes, pinCache],
 	);
 
-	const saveViewport = useCallback(async () => {
-		try {
-			const vp = getViewport();
-			await viewportDb.viewports.put({
-				id: viewportKey(appId, boardId, layerPath),
-				appId,
-				boardId,
-				layerPath: layerPath ?? "root",
-				x: vp.x,
-				y: vp.y,
-				zoom: vp.zoom,
-				updatedAt: Date.now(),
-			});
-		} catch {
-			// no-op
-		}
-	}, [appId, boardId, layerPath, getViewport]);
+	const { saveViewport } = useViewportManager({
+		appId,
+		boardId,
+		layerPath,
+		nodesLength: nodes.length,
+	});
 
-	useEffect(() => {
-		let active = true;
+	const { focusNode, pushLayer, popLayer } = useLayerNavigation({
+		board,
+		layerPath,
+		setCurrentLayer,
+		setLayerPath,
+		saveViewport,
+		fitView,
+	});
 
-		const restore = async () => {
-			const rec = await viewportDb.viewports.get(
-				viewportKey(appId, boardId, layerPath),
-			);
-			if (!active) return;
+	const {
+		executeCommand,
+		executeCommands,
+		awarenessRef: commandAwarenessRef,
+	} = useCommandExecution({
+		appId,
+		boardId,
+		board,
+		version,
+		pushCommand,
+		pushCommands,
+	});
 
-			if (rec) {
-				setViewport({ x: rec.x, y: rec.y, zoom: rec.zoom });
-			} else {
-				// Fit screen when no stored viewport is found
-				fitView({ duration: 300 });
-			}
-		};
+	// Realtime collaboration
+	const { awareness, connectionStatus, peerStates, reconnect } =
+		useRealtimeCollaboration({
+			appId,
+			boardId,
+			board,
+			version,
+			backend,
+			sub,
+			hub,
+			mousePosition,
+			layerPath,
+			screenToFlowPosition,
+			commandAwarenessRef,
+			setNodes,
+		});
 
-		// Wait until nodes are there so fitting has effect
-		// Using nodes.length is enough to re-run after initial load
-		restore();
-
-		return () => {
-			active = false;
-		};
-	}, [appId, boardId, layerPath, setViewport, fitView, nodes.length]);
-
-	const focusNode = useCallback(
-		(nodeId: string) => {
-			const node = board.data?.nodes[nodeId];
-			if (!node) {
-				console.error("Node not found:", nodeId);
-				return;
-			}
-
-			const layers = board.data?.layers ?? {};
-			const layerTree: string[] = [];
-			let parentLayer = node.layer;
-			let iteration = 0;
-
-			while (parentLayer && iteration < 40) {
-				iteration++;
-				const layer = layers[parentLayer];
-				if (!layer) break;
-				layerTree.push(layer.id);
-				parentLayer = layer.parent_id;
-			}
-
-			if (layerTree.length > 0) {
-				setCurrentLayer(layerTree[layerTree.length - 1]);
-				setLayerPath(layerTree.slice().reverse().join("/"));
-			} else {
-				setCurrentLayer(undefined);
-				setLayerPath(undefined);
-			}
-
-			// Defer until layer switch renders nodes
-			requestAnimationFrame(() => {
-				requestAnimationFrame(() => {
-					fitView({
-						nodes: [{ id: node.id }],
-						padding: 3,
-						duration: 500,
-					});
-				});
-			});
-		},
-		[board.data?.nodes, board.data?.layers, fitView],
+	// Cache peer user info to avoid repeated API calls
+	const peerSubs = useMemo(
+		() => peerStates.map((p) => p.sub).filter((s): s is string => !!s),
+		[peerStates],
+	);
+	const peerUsers = usePeerUserInfo(
+		peerSubs,
+		backend.userState.lookupUser.bind(backend.userState),
 	);
 
-	const executeCommand = useCallback(
-		async (command: IGenericCommand, append = false): Promise<any> => {
-			const backend = useBackendStore.getState().backend;
-			if (!backend) return;
-			if (typeof version !== "undefined") {
-				toastError("Cannot change old version", <XIcon />);
-				return;
-			}
-			const result = await backend.boardState.executeCommand(
-				appId,
-				boardId,
-				command,
-			);
-			await pushCommand(result, append);
-			await board.refetch();
-			return result;
-		},
-		[board.refetch, appId, boardId, pushCommand, version],
-	);
-
-	const executeCommands = useCallback(
-		async (commands: IGenericCommand[]) => {
-			const backend = useBackendStore.getState().backend;
-			if (!backend) return;
-			if (typeof version !== "undefined") {
-				toastError("Cannot change old version", <XIcon />);
-				return;
-			}
-			if (commands.length === 0) return;
-			const result = await backend.boardState.executeCommands(
-				appId,
-				boardId,
-				commands,
-			);
-			await pushCommands(result);
-			await board.refetch();
-			return result;
-		},
-		[board.refetch, appId, boardId, pushCommands, version],
-	);
+	// Media upload for images/videos on the board
+	const { handleMediaPaste } = useMediaUpload({
+		appId,
+		boardId,
+		backend,
+		executeCommand,
+		currentLayer,
+		setNodes,
+	});
 
 	useEffect(() => {
 		if (!logPanelRef.current) return;
-
+		// Avoid auto-expanding logs on mobile to prevent layout jump
+		const isMobile =
+			typeof window !== "undefined" &&
+			window.matchMedia("(max-width: 767px)").matches;
+		if (isMobile) return;
 		logPanelRef.current.expand();
 		const size = logPanelRef.current.getSize();
-
 		if (size < 10) logPanelRef.current.resize(45);
 	}, [logPanelRef.current]);
 
 	const initializeFlow = useCallback(
-		async (instance: ReactFlowInstance) => {
+		async (_instance: ReactFlowInstance) => {
 			if (initialized) return;
 			if (!nodeId || nodeId === "") return;
 
-			instance.fitView({
-				nodes: [
-					{
-						id: nodeId ?? "",
-					},
-				],
-				duration: 500,
-			});
+			focusNode(nodeId);
 			setInitialized(true);
 		},
-		[nodeId, initialized],
+		[nodeId, initialized, focusNode],
 	);
 
-	function toggleVars() {
-		if (!varPanelRef.current) return;
-		const isCollapsed = varPanelRef.current.isCollapsed();
-		isCollapsed ? varPanelRef.current.expand() : varPanelRef.current.collapse();
+	// Check if board is empty (no nodes) for showing template selector
+	const isBoardEmpty = useMemo(() => {
+		if (!board.data) return false;
+		const nodeCount = Object.keys(board.data.nodes).length;
+		const commentCount = Object.keys(board.data.comments).length;
+		const layerCount = Object.keys(board.data.layers).length;
+		return nodeCount === 0 && commentCount === 0 && layerCount === 0;
+	}, [board.data]);
 
-		if (!isCollapsed) {
-			return;
-		}
+	// Handler for applying a template to the board
+	const handleApplyTemplate = useCallback(
+		async (templateAppId: string, templateId: string) => {
+			if (typeof version !== "undefined") {
+				toastError("Cannot modify old version", <XIcon />);
+				return;
+			}
 
-		const size = varPanelRef.current.getSize();
-		if (size < 10) varPanelRef.current.resize(20);
-	}
+			try {
+				const templateBoard = await backend.templateState.getTemplate(
+					templateAppId,
+					templateId,
+				);
 
-	function toggleRunHistory() {
-		if (!runsPanelRef.current) return;
-		const isCollapsed = runsPanelRef.current.isCollapsed();
-		isCollapsed
-			? runsPanelRef.current.expand()
-			: runsPanelRef.current.collapse();
+				if (!templateBoard) {
+					toastError("Template not found", <XIcon />);
+					return;
+				}
 
-		if (!isCollapsed) {
-			return;
-		}
+				// Convert template nodes to the format expected by copyPasteCommand
+				const templateNodes = Object.values(templateBoard.nodes);
+				const templateComments = Object.values(templateBoard.comments);
+				const templateLayers = Object.values(templateBoard.layers);
+				const templateVariables = Object.values(templateBoard.variables);
 
-		const size = runsPanelRef.current.getSize();
-		if (size < 10) runsPanelRef.current.resize(30);
-	}
+				if (
+					templateNodes.length === 0 &&
+					templateComments.length === 0 &&
+					templateLayers.length === 0
+				) {
+					toastError("Template is empty", <XIcon />);
+					return;
+				}
 
-	function toggleLogs() {
-		if (!logPanelRef.current) return;
-		const isCollapsed = logPanelRef.current.isCollapsed();
-		isCollapsed ? logPanelRef.current.expand() : logPanelRef.current.collapse();
+				// Create a copy-paste command to insert template contents
+				const command = {
+					command_type: "CopyPaste" as const,
+					original_nodes: templateNodes,
+					original_comments: templateComments,
+					original_layers: templateLayers,
+					original_variables: templateVariables,
+					new_nodes: [],
+					new_comments: [],
+					new_layers: [],
+					current_layer: currentLayer,
+					offset: [100, 100, 0],
+					old_mouse: undefined,
+				};
 
-		if (!isCollapsed) {
-			return;
-		}
-
-		const size = logPanelRef.current.getSize();
-		if (size < 10) logPanelRef.current.resize(20);
-	}
-
-	const pushLayer = useCallback(
-		(pushedLayer: ILayer) => {
-			void saveViewport();
-
-			setCurrentLayer(pushedLayer.id);
-			setLayerPath((old) => {
-				if (old) return `${old}/${pushedLayer.id}`;
-				return pushedLayer.id;
-			});
+				await executeCommand(command as any);
+				setTemplateSelectorOpen(false);
+			} catch (error) {
+				console.error("Failed to apply template:", error);
+				toastError("Failed to apply template", <XIcon />);
+			}
 		},
-		[saveViewport],
+		[backend.templateState, executeCommand, currentLayer, version],
 	);
 
-	const popLayer = useCallback(() => {
-		if (!layerPath) return;
+	const [varsOpen, setVarsOpen] = useState(false);
+	const [runsOpen, setRunsOpen] = useState(false);
+	const [logsOpen, setLogsOpen] = useState(false);
+	const [pagesOpen, setPagesOpen] = useState(false);
+	const [searchOpen, setSearchOpen] = useState(false);
+	const [searchMode, setSearchMode] = useState<"dialog" | "sidebar">("dialog");
+	const [copilotOpen, setCopilotOpen] = useState(false);
+	const [copilotInitialPrompt, setCopilotInitialPrompt] = useState<
+		string | undefined
+	>();
+	const isMobile = useMediaQuery("(max-width: 767px)");
 
-		// Save current layer viewport before switching
-		void saveViewport();
+	const { toggleVars, toggleRunHistory, toggleLogs } = useFlowPanels({
+		varPanelRef,
+		runsPanelRef,
+		logPanelRef,
+		setVarsOpen,
+		setRunsOpen,
+		setLogsOpen,
+	});
 
-		const segments = layerPath.split("/");
-		if (segments.length === 1) {
-			setLayerPath(undefined);
-			setCurrentLayer(undefined);
-			return;
+	const togglePages = useCallback(() => {
+		if (isMobile) {
+			setPagesOpen((v) => !v);
+		} else {
+			// For desktop, we use the runs panel area to show pages
+			// Toggle the runs panel if needed, or just open the sheet
+			setPagesOpen((v) => !v);
 		}
-		const newPath = segments.slice(0, -1).join("/");
-		setLayerPath(newPath);
-		const segment = newPath.split("/").pop();
-		setCurrentLayer(segment);
-	}, [layerPath, saveViewport]);
+	}, [isMobile]);
+
+	// Clear selections when version changes
+	useEffect(() => {
+		selected.current.clear();
+		setNodes((nds) =>
+			nds.map((node) => ({
+				...node,
+				selected: false,
+			})),
+		);
+		setEdges((eds) =>
+			eds.map((edge) => ({
+				...edge,
+				selected: false,
+			})),
+		);
+	}, [version, setNodes, setEdges]);
 
 	const onMoveEnd = useCallback(() => {
 		void saveViewport();
 	}, [saveViewport]);
 
-	const executeBoard = useCallback(
-		async (node: INode, payload?: object) => {
+	// Get runtime-configured variables from the board
+	const runtimeConfiguredVars = useMemo(() => {
+		if (!board.data) return [];
+		return getRuntimeConfiguredVariables(board.data);
+	}, [board.data]);
+
+	// Check if runtime variables need configuration before execution
+	// Returns { intercepted: false, runtimeVariables: map } if all configured
+	// Returns { intercepted: true } if prompting user for values
+	const checkRuntimeVarsAndExecute = useCallback(
+		async (
+			node: INode,
+			payload?: object,
+			isRemote?: boolean,
+		): Promise<{
+			intercepted: boolean;
+			runtimeVariables?: Record<string, IVariable>;
+		}> => {
+			// If no runtime-configured variables or no context, proceed directly
+			if (runtimeConfiguredVars.length === 0 || !runtimeVarsContext) {
+				return { intercepted: false }; // No interception needed
+			}
+
+			// Check if all runtime variables are configured
+			const hasAll = await runtimeVarsContext.hasAllValues(
+				appId,
+				runtimeConfiguredVars.map((v) => v.id),
+			);
+
+			if (hasAll) {
+				// All configured - build the runtime variables map
+				const storedValues = await runtimeVarsContext.getValues(appId);
+				const runtimeVariables: Record<string, IVariable> = {};
+
+				for (const variable of runtimeConfiguredVars) {
+					// For remote execution, skip secrets
+					if (isRemote && variable.secret) continue;
+
+					const storedValue = storedValues.get(variable.id);
+					if (storedValue?.value !== undefined) {
+						runtimeVariables[variable.id] = {
+							...variable,
+							default_value: storedValue.value,
+						};
+					}
+				}
+
+				return {
+					intercepted: false,
+					runtimeVariables:
+						Object.keys(runtimeVariables).length > 0
+							? runtimeVariables
+							: undefined,
+				};
+			}
+
+			// Need to prompt for configuration
+			const existingValues = await runtimeVarsContext.getValues(appId);
+			setExistingRuntimeVars(existingValues);
+			setPendingExecution({ node, payload, isRemote: isRemote ?? false });
+			setRuntimeVarsPromptOpen(true);
+			return { intercepted: true }; // Intercepted
+		},
+		[appId, runtimeConfiguredVars, runtimeVarsContext],
+	);
+
+	// Cancel runtime vars prompt
+	const handleRuntimeVarsCancel = useCallback(() => {
+		setRuntimeVarsPromptOpen(false);
+		setPendingExecution(null);
+	}, []);
+
+	// Internal execution function (called after runtime vars check)
+	const executeBoardInternal = useCallback(
+		async (
+			node: INode,
+			payload?: object,
+			skipConsentCheck?: boolean,
+			runtimeVariables?: Record<string, IVariable>,
+		) => {
 			let added = false;
 			let runId = "";
 			let meta: ILogMetadata | undefined = undefined;
@@ -434,6 +677,7 @@ export function FlowBoard({
 					{
 						id: node.id,
 						payload: payload,
+						runtime_variables: runtimeVariables,
 					},
 					true,
 					async (id: string) => {
@@ -450,19 +694,41 @@ export function FlowBoard({
 						if (runUpdates.length === 0) return;
 						const firstItem = runUpdates[0];
 						if (!added) {
-							runId = firstItem.run_id;
-							addRun(firstItem.run_id, boardId, [node.id]);
+							runId = firstItem.runId;
+							addRun(firstItem.runId, boardId, [node.id]);
 							added = true;
 						}
 
-						pushUpdate(firstItem.run_id, runUpdates);
+						pushUpdate(firstItem.runId, runUpdates);
 					},
+					skipConsentCheck,
 				);
 			} catch (error) {
 				console.warn("Failed to execute board", error);
+
+				// Check if this is an OAuth error with missing providers
+				const oauthError = error as Error & {
+					isOAuthError?: boolean;
+					missingProviders?: unknown[];
+				};
+				if (oauthError.isOAuthError && oauthError.missingProviders) {
+					// Emit custom event for OAuth handling
+					window.dispatchEvent(
+						new CustomEvent("flow:oauth-required", {
+							detail: {
+								missingProviders: oauthError.missingProviders,
+								appId,
+								boardId,
+								nodeId: node.id,
+								payload,
+							},
+						}),
+					);
+					return;
+				}
 			}
 			removeRun(runId);
-			if (!meta) {
+			if (!meta && !runId) {
 				toastError(
 					"Failed to execute board",
 					<PlayCircleIcon className="w-4 h-4" />,
@@ -470,7 +736,13 @@ export function FlowBoard({
 				return;
 			}
 			await refetchLogs(backend);
-			if (meta) setCurrentMetadata(meta);
+			// Find the full metadata from currentLogs by run_id
+			// The meta from runBoard may be incomplete for remote executions
+			const targetRunId = meta?.run_id || runId;
+			const fullMeta = useLogAggregation
+				.getState()
+				.currentLogs.find((log) => log.run_id === targetRunId);
+			if (fullMeta) setCurrentMetadata(fullMeta);
 		},
 		[
 			appId,
@@ -484,6 +756,227 @@ export function FlowBoard({
 		],
 	);
 
+	const executeBoardRemoteInternal = useCallback(
+		async (
+			node: INode,
+			payload?: object,
+			runtimeVariables?: Record<string, IVariable>,
+		) => {
+			if (!backend.boardState.executeBoardRemote) {
+				toastError(
+					"Remote execution not available",
+					<PlayCircleIcon className="w-4 h-4" />,
+				);
+				return;
+			}
+
+			let added = false;
+			let runId = "";
+			let meta: ILogMetadata | undefined = undefined;
+			try {
+				meta = await backend.boardState.executeBoardRemote(
+					appId,
+					boardId,
+					{
+						id: node.id,
+						payload: payload,
+						runtime_variables: runtimeVariables,
+					},
+					true,
+					async (id: string) => {
+						if (added) return;
+						console.log("Remote run started", id);
+						runId = id;
+						added = true;
+						addRun(id, boardId, [node.id]);
+					},
+					(update) => {
+						console.dir(update);
+						const runUpdates = update
+							.filter((item) => item.event_type.startsWith("run:"))
+							.map((item) => item.payload);
+						if (runUpdates.length === 0) return;
+						const firstItem = runUpdates[0];
+						if (!added) {
+							runId = firstItem.runId;
+							addRun(firstItem.runId, boardId, [node.id]);
+							added = true;
+						}
+
+						pushUpdate(firstItem.runId, runUpdates);
+					},
+				);
+			} catch (error) {
+				console.warn("Failed to execute board remotely", error);
+			}
+			removeRun(runId);
+			if (!meta && !runId) {
+				toastError(
+					"Failed to execute board on server",
+					<PlayCircleIcon className="w-4 h-4" />,
+				);
+				return;
+			}
+			await refetchLogs(backend);
+			// Find the full metadata from currentLogs by run_id
+			// The meta from remote execution is incomplete (only has run_id, status, duration_ms)
+			const targetRunId = meta?.run_id || runId;
+			const fullMeta = useLogAggregation
+				.getState()
+				.currentLogs.find((log) => log.run_id === targetRunId);
+			if (fullMeta) setCurrentMetadata(fullMeta);
+		},
+		[
+			appId,
+			boardId,
+			backend,
+			refetchLogs,
+			pushUpdate,
+			addRun,
+			removeRun,
+			setCurrentMetadata,
+		],
+	);
+
+	// Handle saving runtime variables and continuing execution
+	const handleRuntimeVarsSave = useCallback(
+		async (values: RuntimeVariableValue[]) => {
+			if (!runtimeVarsContext || !pendingExecution || !board.data) return;
+
+			// Save the values
+			await runtimeVarsContext.saveValues(
+				appId,
+				boardId,
+				values.map((v) => {
+					const variable = runtimeConfiguredVars.find(
+						(rv) => rv.id === v.variableId,
+					);
+					return {
+						variableId: v.variableId,
+						variableName: variable?.name ?? "",
+						value: v.value,
+						isSecret: variable?.secret ?? false,
+					};
+				}),
+			);
+
+			// Build runtime variables map from the saved values
+			const runtimeVariables: Record<string, IVariable> = {};
+			for (const v of values) {
+				const variable = runtimeConfiguredVars.find(
+					(rv) => rv.id === v.variableId,
+				);
+				if (variable) {
+					// For remote execution, skip secrets
+					if (pendingExecution.isRemote && variable.secret) continue;
+
+					runtimeVariables[variable.id] = {
+						...variable,
+						default_value: v.value,
+					};
+				}
+			}
+
+			// Close prompt and proceed with execution
+			setRuntimeVarsPromptOpen(false);
+			const { node, payload, isRemote } = pendingExecution;
+			setPendingExecution(null);
+
+			const varsMap =
+				Object.keys(runtimeVariables).length > 0 ? runtimeVariables : undefined;
+			if (isRemote) {
+				await executeBoardRemoteInternal(node, payload, varsMap);
+			} else {
+				await executeBoardInternal(node, payload, true, varsMap);
+			}
+		},
+		[
+			appId,
+			boardId,
+			runtimeVarsContext,
+			pendingExecution,
+			runtimeConfiguredVars,
+			board.data,
+			executeBoardInternal,
+			executeBoardRemoteInternal,
+		],
+	);
+
+	// Public execution function - checks runtime vars first
+	const executeBoard = useCallback(
+		async (node: INode, payload?: object, skipConsentCheck?: boolean) => {
+			const result = await checkRuntimeVarsAndExecute(node, payload, false);
+			if (!result.intercepted) {
+				await executeBoardInternal(
+					node,
+					payload,
+					skipConsentCheck,
+					result.runtimeVariables,
+				);
+			}
+		},
+		[checkRuntimeVarsAndExecute, executeBoardInternal],
+	);
+
+	// Public remote execution function - checks runtime vars first
+	const executeBoardRemote = useCallback(
+		async (node: INode, payload?: object) => {
+			const result = await checkRuntimeVarsAndExecute(node, payload, true);
+			if (!result.intercepted) {
+				await executeBoardRemoteInternal(
+					node,
+					payload,
+					result.runtimeVariables,
+				);
+			}
+		},
+		[checkRuntimeVarsAndExecute, executeBoardRemoteInternal],
+	);
+
+	// Listen for OAuth retry events to re-execute after authorization
+	useEffect(() => {
+		const handleOAuthRetry = (event: Event) => {
+			const retryEvent = event as CustomEvent<{
+				appId: string;
+				boardId: string;
+				nodeId: string;
+				payload?: object;
+				skipConsentCheck?: boolean;
+			}>;
+
+			const {
+				appId: eventAppId,
+				boardId: eventBoardId,
+				nodeId,
+				payload,
+				skipConsentCheck,
+			} = retryEvent.detail;
+
+			// Only handle if this is for our board
+			if (eventAppId !== appId || eventBoardId !== boardId) return;
+
+			console.log(
+				"[FlowBoard] OAuth retry event received, re-executing node:",
+				nodeId,
+				"skipConsentCheck:",
+				skipConsentCheck,
+			);
+
+			// Find the node and re-execute
+			const node = nodes.find((n) => n.id === nodeId);
+			if (node?.data?.node) {
+				executeBoard(node.data.node as INode, payload, skipConsentCheck);
+			} else {
+				console.warn("[FlowBoard] Node not found for OAuth retry:", nodeId);
+			}
+		};
+
+		window.addEventListener("flow:oauth-retry", handleOAuthRetry);
+		return () => {
+			window.removeEventListener("flow:oauth-retry", handleOAuthRetry);
+		};
+	}, [appId, boardId, nodes, executeBoard]);
+
 	const handlePasteCB = useCallback(
 		async (event: ClipboardEvent) => {
 			if (typeof version !== "undefined") {
@@ -494,6 +987,15 @@ export function FlowBoard({
 				x: mousePosition.x,
 				y: mousePosition.y,
 			});
+
+			// Try to handle media paste first (images/videos)
+			const wasMediaPaste = await handleMediaPaste(
+				event,
+				currentCursorPosition,
+			);
+			if (wasMediaPaste) return;
+
+			// Fall back to regular paste handling
 			await handlePaste(
 				event,
 				currentCursorPosition,
@@ -502,7 +1004,14 @@ export function FlowBoard({
 				currentLayer,
 			);
 		},
-		[boardId, mousePosition, executeCommand, currentLayer, version],
+		[
+			boardId,
+			mousePosition,
+			executeCommand,
+			currentLayer,
+			version,
+			handleMediaPaste,
+		],
 	);
 
 	const handleCopyCB = useCallback(
@@ -517,6 +1026,35 @@ export function FlowBoard({
 		[nodes, mousePosition, board.data, currentLayer],
 	);
 
+	const openNodeInfo = useCallback((node: INode) => {
+		nodeInfoOverlayRef.current?.openNodeInfo(node);
+	}, []);
+
+	const handleExplainNodes = useCallback(
+		(nodeIds: string[]) => {
+			// Select the nodes for context
+			const nodeIdSet = new Set(nodeIds);
+			setNodes((nds) =>
+				nds.map((node) => ({
+					...node,
+					selected: nodeIdSet.has(node.id),
+				})),
+			);
+			selected.current = nodeIdSet;
+
+			// Build the explain prompt
+			const nodeCount = nodeIds.length;
+			const prompt =
+				nodeCount === 1
+					? "Explain what this node does and how it works in the context of this flow."
+					: `Explain what these ${nodeCount} selected nodes do and how they work together in this flow.`;
+
+			setCopilotInitialPrompt(prompt);
+			setCopilotOpen(true);
+		},
+		[setNodes],
+	);
+
 	const placeNodeShortcut = useCallback(
 		async (node: INode) => {
 			await placeNode(node, {
@@ -527,409 +1065,80 @@ export function FlowBoard({
 		[mousePosition],
 	);
 
-	const shortcutHandler = useCallback(
-		async (event: KeyboardEvent) => {
-			const target = event.target as HTMLElement;
-			if (
-				target.tagName === "INPUT" ||
-				target.tagName === "TEXTAREA" ||
-				target.isContentEditable
-			) {
-				return;
-			}
-			// Undo
-			if (
-				(event.metaKey || event.ctrlKey) &&
-				event.key === "z" &&
-				!event.shiftKey
-			) {
-				event.preventDefault();
-				event.stopPropagation();
-				if (typeof version !== "undefined") {
-					toastError("Cannot change old version", <XIcon />);
-					return;
-				}
-				const stack = await undo();
-				if (stack) await backend.boardState.undoBoard(appId, boardId, stack);
-				toastSuccess("Undo", <Undo2Icon className="w-4 h-4" />);
-				await board.refetch();
-				return;
-			}
-
-			// Redo
-			if ((event.metaKey || event.ctrlKey) && event.key === "y") {
-				event.preventDefault();
-				event.stopPropagation();
-				if (typeof version !== "undefined") {
-					toastError("Cannot change old version", <XIcon />);
-					return;
-				}
-				const stack = await redo();
-				if (stack) await backend.boardState.redoBoard(appId, boardId, stack);
-				toastSuccess("Redo", <Redo2Icon className="w-4 h-4" />);
-				await board.refetch();
-			}
-
-			// Place Branch
-			if (
-				(event.metaKey || event.ctrlKey) &&
-				event.key === "b" &&
-				!event.shiftKey
-			) {
-				event.preventDefault();
-				event.stopPropagation();
-				if (typeof version !== "undefined") {
-					toastError("Cannot change old version", <XIcon />);
-					return;
-				}
-				const node = catalog.data?.find(
-					(node) => node.name === "control_branch",
-				);
-				if (!node) return;
-				await placeNodeShortcut(node);
-				await board.refetch();
-				return;
-			}
-
-			// Place For Each
-			if (
-				(event.metaKey || event.ctrlKey) &&
-				event.key === "f" &&
-				!event.shiftKey
-			) {
-				event.preventDefault();
-				event.stopPropagation();
-				if (typeof version !== "undefined") {
-					toastError("Cannot change old version", <XIcon />);
-					return;
-				}
-				const node = catalog.data?.find(
-					(node) => node.name === "control_for_each",
-				);
-				if (!node) return;
-				await placeNodeShortcut(node);
-				await board.refetch();
-				return;
-			}
-
-			if (
-				(event.metaKey || event.ctrlKey) &&
-				event.key === "p" &&
-				!event.shiftKey
-			) {
-				event.preventDefault();
-				event.stopPropagation();
-				if (typeof version !== "undefined") {
-					toastError("Cannot change old version", <XIcon />);
-					return;
-				}
-				const node = catalog.data?.find((node) => node.name === "log_info");
-				if (!node) return;
-				await placeNodeShortcut(node);
-				await board.refetch();
-				return;
-			}
-
-			if (
-				(event.metaKey || event.ctrlKey) &&
-				event.key === "s" &&
-				!event.shiftKey
-			) {
-				event.preventDefault();
-				event.stopPropagation();
-				if (typeof version !== "undefined") {
-					toastError("Cannot change old version", <XIcon />);
-					return;
-				}
-				const node = catalog.data?.find((node) => node.name === "reroute");
-				if (!node) return;
-				await placeNodeShortcut(node);
-				await board.refetch();
-			}
-		},
-		[boardId, board, backend, version],
-	);
-
 	const placeNode = useCallback(
 		async (node: INode, position?: { x: number; y: number }) => {
-			const refs = board.data?.refs ?? {};
 			const location = screenToFlowPosition({
 				x: position?.x ?? clickPosition.x,
 				y: position?.y ?? clickPosition.y,
 			});
 
-			const result = addNodeCommand({
-				node: { ...node, coordinates: [location.x, location.y, 0] },
-				current_layer: currentLayer,
+			await handlePlaceNode({
+				node,
+				position: location,
+				droppedPin,
+				currentLayer,
+				refs: board.data?.refs ?? {},
+				boardNodes: board.data?.nodes ?? {},
+				pinCache,
+				executeCommand,
 			});
-
-			await executeCommand(result.command);
-			const new_node = result.node;
-
-			if (droppedPin) {
-				const pinType = droppedPin.pin_type === "Input" ? "Output" : "Input";
-				const pinValueType = droppedPin.value_type;
-				const pinDataType = droppedPin.data_type;
-				const schema = refs?.[droppedPin.schema ?? ""] ?? droppedPin.schema;
-				const options = droppedPin.options;
-
-				const pin = Object.values(new_node.pins).find((pin) => {
-					if (typeof schema === "string" || typeof pin.schema === "string") {
-						const pinSchema = refs?.[pin.schema ?? ""] ?? pin.schema;
-						if (
-							(pin.options?.enforce_schema || options?.enforce_schema) &&
-							schema !== pinSchema &&
-							pin.data_type !== IVariableType.Generic &&
-							droppedPin.data_type !== IVariableType.Generic
-						)
-							return false;
-					}
-					if (pin.pin_type !== pinType) return false;
-					if (pin.value_type !== pinValueType) {
-						if (
-							pinDataType !== IVariableType.Generic &&
-							pin.data_type !== IVariableType.Generic
-						)
-							return false;
-						if (
-							(options?.enforce_generic_value_type ?? false) ||
-							(pin.options?.enforce_generic_value_type ?? false)
-						)
-							return false;
-					}
-					if (
-						pin.data_type === IVariableType.Generic &&
-						pinDataType !== IVariableType.Execution
-					)
-						return true;
-					if (
-						pinDataType === IVariableType.Generic &&
-						pin.data_type !== IVariableType.Execution
-					)
-						return true;
-					return pin.data_type === pinDataType;
-				});
-				const [sourcePin, sourceNode] = pinCache.get(droppedPin.id) || [];
-				if (!sourcePin || !sourceNode) return;
-				if (!pin) return;
-
-				const command = connectPinsCommand({
-					from_node:
-						droppedPin.pin_type === "Output" ? sourceNode.id : new_node.id,
-					from_pin: droppedPin.pin_type === "Output" ? sourcePin.id : pin?.id,
-					to_node:
-						droppedPin.pin_type === "Input" ? sourceNode.id : new_node.id,
-					to_pin: droppedPin.pin_type === "Input" ? sourcePin.id : pin?.id,
-				});
-
-				await executeCommand(command);
-			}
 		},
 		[
 			clickPosition,
-			boardId,
 			droppedPin,
 			board.data?.refs,
+			board.data?.nodes,
 			currentLayer,
 			screenToFlowPosition,
+			pinCache,
+			executeCommand,
 		],
 	);
 
 	const placePlaceholder = useCallback(
 		async (name: string, position?: { x: number; y: number }) => {
 			const delayNode = catalog.data?.find((node) => node.name === "delay");
-
-			const refs = board.data?.refs ?? {};
 			const location = screenToFlowPosition({
 				x: position?.x ?? clickPosition.x,
 				y: position?.y ?? clickPosition.y,
 			});
 
-			const layerId = createId();
-
-			const execInPin: IPin = {
-				id: createId(),
-				name: "exec_in",
-				friendly_name: "Exec In",
-				connected_to: [],
-				depends_on: [],
-				description: "",
-				index: 1,
-				pin_type: IPinType.Input,
-				value_type: IValueType.Normal,
-				data_type: IVariableType.Execution,
-				default_value: null,
-			};
-
-			const execOutPin: IPin = {
-				...execInPin,
-				id: createId(),
-				pin_type: IPinType.Output,
-				name: "exec_out",
-				friendly_name: "Exec Out",
-				index: 1,
-			};
-
-			let dataPin: IPin | undefined;
-			let connectToPinId: string | undefined;
-
-			if (droppedPin) {
-				const oppositeType =
-					droppedPin.pin_type === "Input" ? IPinType.Output : IPinType.Input;
-
-				if (droppedPin.data_type === IVariableType.Execution) {
-					connectToPinId =
-						oppositeType === IPinType.Input ? execInPin.id : execOutPin.id;
-				} else {
-					const resolvedSchema =
-						typeof droppedPin.schema === "string"
-							? (refs?.[droppedPin.schema] ?? droppedPin.schema)
-							: droppedPin.schema;
-
-					dataPin = {
-						id: createId(),
-						name: oppositeType === IPinType.Input ? "in" : "out",
-						friendly_name: oppositeType === IPinType.Input ? "In" : "Out",
-						connected_to: [],
-						depends_on: [],
-						description: "",
-						index: 2,
-						pin_type: oppositeType,
-						value_type: droppedPin.value_type,
-						data_type: droppedPin.data_type,
-						default_value: null,
-						...(resolvedSchema ? { schema: resolvedSchema } : {}),
-						...(droppedPin.options ? { options: droppedPin.options } : {}),
-					};
-
-					connectToPinId = dataPin.id;
-				}
-			}
-
-			const pins: Record<string, IPin> = {
-				[execInPin.id]: execInPin,
-				[execOutPin.id]: execOutPin,
-				...(dataPin ? { [dataPin.id]: dataPin } : {}),
-			};
-
-			const newLayerCommand = upsertLayerCommand({
-				current_layer: currentLayer,
-				layer: {
-					comments: {},
-					coordinates: [location.x, location.y, 0],
-					id: layerId,
-					name,
-					nodes: {},
-					pins,
-					type: ILayerType.Collapsed,
-					variables: {},
-					parent_id: currentLayer,
-				},
-				node_ids: [],
+			await handlePlacePlaceholder({
+				name,
+				position: location,
+				droppedPin,
+				currentLayer,
+				refs: board.data?.refs ?? {},
+				pinCache,
+				delayNode,
+				executeCommand,
+				executeCommands,
 			});
-
-			const newLayerResult = await executeCommand(newLayerCommand, false);
-			const newLayer: ILayer = newLayerResult.layer;
-
-			if (delayNode) {
-				const placeDelayCommand = addNodeCommand({
-					node: delayNode,
-					current_layer: newLayer.id,
-				});
-
-				const placedNode = await executeCommand(placeDelayCommand.command);
-				const newNode: INode = placedNode.node;
-				const newNodeInPin = Object.values(newNode.pins).find(
-					(pin) =>
-						pin.pin_type === IPinType.Input &&
-						pin.data_type === IVariableType.Execution,
-				);
-				const newNodeOutPin = Object.values(newNode.pins).find(
-					(pin) =>
-						pin.pin_type === IPinType.Output &&
-						pin.data_type === IVariableType.Execution,
-				);
-
-				const connectOutput = connectPinsCommand({
-					from_node: newNode.id,
-					from_pin: newNodeOutPin!.id,
-					to_node: newLayer.id,
-					to_pin: execOutPin.id,
-				});
-
-				const connectInput = connectPinsCommand({
-					to_node: newNode.id,
-					to_pin: newNodeInPin!.id,
-					from_node: newLayer.id,
-					from_pin: execInPin.id,
-				});
-
-				await executeCommands([connectOutput, connectInput]);
-			}
-
-			if (!droppedPin) {
-				return;
-			}
-			const pinType = droppedPin.pin_type === "Input" ? "Output" : "Input";
-			const pinValueType = droppedPin.value_type;
-			const pinDataType = droppedPin.data_type;
-			const options = droppedPin.options;
-
-			const pin = Object.values(newLayer.pins).find((pin) => {
-				if (pin.pin_type !== pinType) false;
-				if (pin.value_type !== pinValueType) {
-					if (
-						pinDataType !== IVariableType.Generic &&
-						pin.data_type !== IVariableType.Generic
-					)
-						return false;
-					if (
-						(options?.enforce_generic_value_type ?? false) ||
-						(pin.options?.enforce_generic_value_type ?? false)
-					)
-						return false;
-				}
-				if (
-					pin.data_type === IVariableType.Generic &&
-					pinDataType !== IVariableType.Execution
-				)
-					return true;
-				if (
-					pinDataType === IVariableType.Generic &&
-					pin.data_type !== IVariableType.Execution
-				)
-					return true;
-				return pin.data_type === pinDataType;
-			});
-			const [sourcePin, sourceNode] = pinCache.get(droppedPin.id) || [];
-			if (!sourcePin || !sourceNode) {
-				return;
-			}
-			if (!pin) {
-				return;
-			}
-
-			const command = connectPinsCommand({
-				from_node:
-					droppedPin.pin_type === "Output" ? sourceNode.id : newLayer.id,
-				from_pin: droppedPin.pin_type === "Output" ? sourcePin.id : pin?.id,
-				to_node: droppedPin.pin_type === "Input" ? sourceNode.id : newLayer.id,
-				to_pin: droppedPin.pin_type === "Input" ? sourcePin.id : pin?.id,
-			});
-
-			await executeCommand(command);
 		},
 		[
 			clickPosition,
-			boardId,
 			droppedPin,
 			board.data?.refs,
 			executeCommand,
+			executeCommands,
 			pinCache,
 			currentLayer,
 			screenToFlowPosition,
+			catalog.data,
 		],
 	);
+
+	useKeyboardShortcuts({
+		board,
+		catalog,
+		version,
+		appId,
+		boardId,
+		mousePosition,
+		placeNode,
+		undo,
+		redo,
+	});
 
 	const handleDrop = useCallback(
 		async (event: any) => {
@@ -967,12 +1176,39 @@ export function FlowBoard({
 		};
 	}, [nodes]);
 
+	// Keyboard shortcut: Cmd/Ctrl+Shift+P to toggle pages panel
 	useEffect(() => {
-		document.addEventListener("keydown", shortcutHandler);
-		return () => {
-			document.removeEventListener("keydown", shortcutHandler);
+		const handleKeyDown = (e: KeyboardEvent) => {
+			if (
+				(e.metaKey || e.ctrlKey) &&
+				e.shiftKey &&
+				e.key.toLowerCase() === "p"
+			) {
+				e.preventDefault();
+				setPagesOpen((v) => !v);
+			}
 		};
-	}, [shortcutHandler]);
+		document.addEventListener("keydown", handleKeyDown);
+		return () => document.removeEventListener("keydown", handleKeyDown);
+	}, []);
+
+	// Keyboard shortcut: Cmd/Ctrl+F to open search dialog, Cmd/Ctrl+Shift+F for sidebar
+	useEffect(() => {
+		const handleKeyDown = (e: KeyboardEvent) => {
+			if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "f") {
+				e.preventDefault();
+				if (e.shiftKey) {
+					setSearchMode("sidebar");
+					setSearchOpen((prev) => !prev);
+				} else {
+					setSearchMode("dialog");
+					setSearchOpen(true);
+				}
+			}
+		};
+		document.addEventListener("keydown", handleKeyDown);
+		return () => document.removeEventListener("keydown", handleKeyDown);
+	}, []);
 
 	useEffect(() => {
 		document.addEventListener("flow-drop", handleDrop);
@@ -996,6 +1232,10 @@ export function FlowBoard({
 	useEffect(() => {
 		if (!board.data) return;
 		boardRef.current = board.data;
+
+		// Determine if app is offline (Offline visibility)
+		const isOffline = app.data?.visibility === IAppVisibility.Offline;
+
 		const parsed = parseBoard(
 			board.data,
 			appId,
@@ -1009,17 +1249,38 @@ export function FlowBoard({
 			edges,
 			currentLayer,
 			boardRef,
+			version,
+			openNodeInfo,
+			handleExplainNodes,
+			backend.boardState.executeBoardRemote
+				? {
+						isOffline,
+						onRemoteExecute: executeBoardRemote,
+					}
+				: undefined,
 		);
 
 		setNodes(parsed.nodes);
 		setEdges(parsed.edges);
 		setPinCache(new Map(parsed.cache));
-	}, [board.data, currentLayer, currentProfile.data]);
+	}, [
+		board.data,
+		currentLayer,
+		currentProfile.data,
+		version,
+		openNodeInfo,
+		handleExplainNodes,
+		app.data,
+		executeBoardRemote,
+		backend.boardState.executeBoardRemote,
+	]);
 
 	const nodeTypes = useMemo(
 		() => ({
 			flowNode: FlowNode,
 			commentNode: CommentNode,
+			mediaNode: MediaNode,
+			uploadPlaceholderNode: UploadPlaceholderNode,
 			layerNode: LayerNode,
 			layerInnerNode: LayerInnerNode,
 			node: FlowNode,
@@ -1027,27 +1288,54 @@ export function FlowBoard({
 		[],
 	);
 
+	const edgeTypes = useMemo(
+		() => ({
+			veil: FlowVeilEdge,
+			execution: FlowExecutionEdge,
+			data: FlowDataEdge,
+		}),
+		[],
+	);
+
 	const onConnect = useCallback(
 		(params: any) =>
-			setEdges((eds) => {
-				const [sourcePin, sourceNode] = pinCache.get(params.sourceHandle) || [];
-				const [targetPin, targetNode] = pinCache.get(params.targetHandle) || [];
+			setEdges((eds) =>
+				handleConnection({
+					params,
+					version,
+					boardNodes: board.data?.nodes ?? {},
+					pinCache,
+					executeCommand,
+					addEdge: (p: any, e: any[]) => addEdge(p, e),
+					currentEdges: eds,
+				}),
+			),
+		[setEdges, pinCache, version, executeCommand, board.data?.nodes],
+	);
 
-				if (!sourcePin || !targetPin) return eds;
-				if (!sourceNode || !targetNode) return eds;
+	const onSelectionChange = useCallback<OnSelectionChangeFunc<Node, Edge>>(
+		({ nodes: selectedNodes }) => {
+			if (!awareness) return;
+			const nodeIds = selectedNodes
+				.filter((selectedNode) => selectedNode.type === "node")
+				.map((selectedNode) => selectedNode.id);
+			awareness.setLocalStateField("selection", { nodes: nodeIds });
+		},
+		[awareness],
+	);
 
-				const command = connectPinsCommand({
-					from_node: sourceNode.id,
-					from_pin: sourcePin.id,
-					to_node: targetNode.id,
-					to_pin: targetPin.id,
-				});
-
-				executeCommand(command);
-
-				return addEdge(params, eds);
-			}),
-		[setEdges, pinCache, boardId],
+	const selectNodes = useCallback(
+		(nodeIds: string[]) => {
+			const nodeIdSet = new Set(nodeIds);
+			setNodes((nds) =>
+				nds.map((node) => ({
+					...node,
+					selected: nodeIdSet.has(node.id),
+				})),
+			);
+			selected.current = nodeIdSet;
+		},
+		[setNodes],
 	);
 
 	const onConnectEnd = useCallback(
@@ -1064,8 +1352,34 @@ export function FlowBoard({
 
 				const handle = connectionState.fromHandle;
 				if (handle?.id) {
-					const [pin, _node] = pinCache.get(handle.id) || [];
-					setDroppedPin(pin);
+					// Check if this is a function reference handle
+					if (
+						handle.id.startsWith("ref_in_") ||
+						handle.id.startsWith("ref_out_")
+					) {
+						// Create a synthetic pin object for ref handles
+						const syntheticPin: IPin = {
+							id: handle.id,
+							name: handle.id.startsWith("ref_in_") ? "ref_in" : "ref_out",
+							friendly_name: handle.id.startsWith("ref_in_")
+								? "Function Reference In"
+								: "Function Reference Out",
+							pin_type: handle.id.startsWith("ref_in_")
+								? IPinType.Input
+								: IPinType.Output,
+							data_type: IVariableType.Generic,
+							value_type: IValueType.Normal,
+							depends_on: [],
+							connected_to: [],
+							index: 0,
+							description: "",
+							schema: "",
+						};
+						setDroppedPin(syntheticPin);
+					} else {
+						const [pin, _node] = pinCache.get(handle.id) || [];
+						setDroppedPin(pin);
+					}
 				}
 
 				const contextMenuEvent = new MouseEvent("contextmenu", {
@@ -1084,119 +1398,37 @@ export function FlowBoard({
 
 	const onNodesChangeIntercept: OnNodesChange = useCallback(
 		(changes: any[]) =>
-			setNodes((nds) => {
-				if (!changes) return applyNodeChanges(changes, nds);
-
-				const selectChanges = changes.filter(
-					(change: any) => change.type === "select",
-				);
-				for (const change of selectChanges) {
-					const selectedId = change.id;
-
-					if (change.selected) selected.current.add(selectedId);
-					if (!change.selected) selected.current.delete(selectedId);
-				}
-
-				const removeChanges = changes.filter(
-					(change: any) => change.type === "remove",
-				);
-				executeCommands(
-					removeChanges
-						.map((change) => {
-							const foundNode = Object.values(board.data?.nodes || {}).find(
-								(node) => node.id === change.id,
-							);
-							if (foundNode) {
-								return removeNodeCommand({
-									node: foundNode,
-									connected_nodes: [],
-								});
-							}
-							const foundComment = Object.values(
-								board.data?.comments || {},
-							).find((comment) => comment.id === change.id);
-							if (foundComment) {
-								return removeCommentCommand({
-									comment: foundComment,
-								});
-							}
-
-							const foundLayer = Object.values(board.data?.layers || {}).find(
-								(layer) => layer.id === change.id,
-							);
-
-							if (foundLayer) {
-								return removeLayerCommand({
-									child_layers: [],
-									layer: foundLayer,
-									layer_nodes: [],
-									layers: [],
-									nodes: [],
-									preserve_nodes: false,
-								});
-							}
-
-							return undefined;
-						})
-						.filter((command) => command !== undefined) as any[],
-				);
-
-				return applyNodeChanges(changes, nds);
-			}),
-		[setNodes, board.data, boardId, executeCommands],
+			setNodes((nds) =>
+				handleNodesChange({
+					changes,
+					currentNodes: nds,
+					selected,
+					version,
+					boardData: board.data,
+					deletingNodesRef,
+					executeCommands,
+					applyNodeChanges,
+				}),
+			),
+		[setNodes, board.data, executeCommands, version],
 	);
 
 	const onEdgesChange: OnEdgesChange = useCallback(
 		(changes: any[]) =>
-			setEdges((eds) => {
-				if (!changes || changes.length === 0)
-					return applyEdgeChanges(changes, eds);
-
-				const selectChanges = changes.filter(
-					(change: any) => change.type === "select",
-				);
-				for (const change of selectChanges) {
-					const selectedId = change.id;
-					const selectedEdge: any = eds.find((edge) => edge.id === selectedId);
-
-					if (change.selected) selected.current.add(selectedId);
-					if (!change.selected) selected.current.delete(selectedId);
-
-					if (selectedEdge.data_type !== "Execution")
-						eds = eds.map((edge) =>
-							edge.id === selectedId
-								? { ...edge, animated: !change.selected }
-								: edge,
-						);
-				}
-
-				const removeChanges = changes.filter(
-					(change: any) => change.type === "remove",
-				);
-				executeCommands(
-					removeChanges
-						.map((change: any) => {
-							const selectedId = change.id;
-							const [fromPinId, toPinId] = selectedId.split("-");
-							const [fromPin, fromNode] = pinCache.get(fromPinId) || [];
-							const [toPin, toNode] = pinCache.get(toPinId) || [];
-
-							if (!fromPin || !toPin) return undefined;
-							if (!fromNode || !toNode) return undefined;
-
-							return disconnectPinsCommand({
-								from_node: fromNode.id,
-								from_pin: fromPin.id,
-								to_node: toNode.id,
-								to_pin: toPin.id,
-							});
-						})
-						.filter((command: any) => command !== undefined) as any[],
-				);
-
-				return applyEdgeChanges(changes, eds);
-			}),
-		[setEdges, board.data, boardId, pinCache],
+			setEdges((eds) =>
+				handleEdgesChange({
+					changes,
+					currentEdges: eds,
+					selected,
+					version,
+					boardData: board.data,
+					pinCache,
+					deletingNodesRef,
+					executeCommands,
+					applyEdgeChanges,
+				}),
+			),
+		[setEdges, board.data, pinCache, executeCommands, version],
 	);
 
 	const onReconnectStart = useCallback(() => {
@@ -1205,51 +1437,263 @@ export function FlowBoard({
 
 	const onReconnect = useCallback(
 		async (oldEdge: any, newConnection: Connection) => {
-			// Check if the edge is actually being moved
-			const new_id = `${newConnection.sourceHandle}-${newConnection.targetHandle}`;
-			if (oldEdge.id === new_id) return;
-
-			const oldEdgeToNode = pinToNode(oldEdge.targetHandle);
-			const oldEdgeFromNode = pinToNode(oldEdge.sourceHandle);
-
-			if (!oldEdgeToNode || !oldEdgeFromNode) return;
-
-			const commands = [];
-
-			const disconnectCommand = disconnectPinsCommand({
-				from_node: oldEdgeFromNode.id,
-				from_pin: oldEdge.sourceHandle,
-				to_node: oldEdgeToNode.id,
-				to_pin: oldEdge.targetHandle,
-			});
-
-			commands.push(disconnectCommand);
-
-			if (newConnection.targetHandle && newConnection.sourceHandle) {
-				const newConnectionSourceNode = pinToNode(newConnection.sourceHandle);
-				const newConnectionTargetNode = pinToNode(newConnection.targetHandle);
-
-				if (newConnectionSourceNode && newConnectionTargetNode)
-					commands.push(
-						connectPinsCommand({
-							from_node: newConnectionSourceNode.id,
-							from_pin: newConnection.sourceHandle,
-							to_node: newConnectionTargetNode.id,
-							to_pin: newConnection.targetHandle,
-						}),
-					);
+			// Don't execute commands when viewing an old version
+			if (typeof version !== "undefined") {
+				return;
 			}
 
-			await executeCommands(commands);
+			// Check if the edge is actually being moved
+			const new_id = `${newConnection.sourceHandle}-${newConnection.targetHandle}`;
+			if (oldEdge.id === new_id) {
+				return;
+			}
+
+			// Check if this is a veil edge (fn_ref) FIRST - handle it differently
+			const isOldRefConnection =
+				(oldEdge.sourceHandle?.startsWith("ref_out_") &&
+					oldEdge.targetHandle?.startsWith("ref_in_")) ||
+				(oldEdge.sourceHandle?.startsWith("ref_in_") &&
+					oldEdge.targetHandle?.startsWith("ref_out_"));
+			const isNewRefConnection =
+				(newConnection.sourceHandle?.startsWith("ref_out_") &&
+					newConnection.targetHandle?.startsWith("ref_in_")) ||
+				(newConnection.sourceHandle?.startsWith("ref_in_") &&
+					newConnection.targetHandle?.startsWith("ref_out_"));
+
+			if (isOldRefConnection && isNewRefConnection) {
+				const oldSource = oldEdge.sourceHandle;
+				const oldTarget = oldEdge.targetHandle;
+				const newSource = newConnection.sourceHandle;
+				const newTarget = newConnection.targetHandle;
+
+				// Determine which end was reconnected
+				const sourceChanged = oldSource !== newSource;
+				const targetChanged = oldTarget !== newTarget;
+
+				const commands: IGenericCommand[] = [];
+
+				if (sourceChanged) {
+					// Source (ref_out) was reconnected - update both old and new source nodes
+					const oldRefOutNodeId = oldSource?.replace("ref_out_", "") || "";
+					const newRefOutNodeId = newSource?.replace("ref_out_", "") || "";
+					const refInNodeId = oldTarget?.replace("ref_in_", "") || "";
+
+					const oldRefOutNode = board.data?.nodes[oldRefOutNodeId];
+					const newRefOutNode = board.data?.nodes[newRefOutNodeId];
+
+					// Remove ref from old source node
+					if (oldRefOutNode && refInNodeId) {
+						const currentRefs = oldRefOutNode.fn_refs?.fn_refs ?? [];
+						const updatedRefs = currentRefs.filter(
+							(ref: string) => ref !== refInNodeId,
+						);
+
+						const updatedOldNode = {
+							...oldRefOutNode,
+							fn_refs: {
+								...oldRefOutNode.fn_refs,
+								fn_refs: updatedRefs,
+								can_reference_fns:
+									oldRefOutNode.fn_refs?.can_reference_fns ?? false,
+								can_be_referenced_by_fns:
+									oldRefOutNode.fn_refs?.can_be_referenced_by_fns ?? false,
+							},
+						};
+
+						commands.push(updateNodeCommand({ node: updatedOldNode }));
+					}
+
+					// Add ref to new source node
+					if (newRefOutNode && refInNodeId) {
+						const currentRefs = newRefOutNode.fn_refs?.fn_refs ?? [];
+						const updatedRefs = [...currentRefs];
+
+						if (!updatedRefs.includes(refInNodeId)) {
+							updatedRefs.push(refInNodeId);
+						}
+
+						const updatedNewNode = {
+							...newRefOutNode,
+							fn_refs: {
+								...newRefOutNode.fn_refs,
+								fn_refs: updatedRefs,
+								can_reference_fns:
+									newRefOutNode.fn_refs?.can_reference_fns ?? false,
+								can_be_referenced_by_fns:
+									newRefOutNode.fn_refs?.can_be_referenced_by_fns ?? false,
+							},
+						};
+
+						commands.push(updateNodeCommand({ node: updatedNewNode }));
+					}
+				} else if (targetChanged) {
+					// Target (ref_in) was reconnected - update the source node's refs
+					const refOutNodeId = oldSource?.replace("ref_out_", "") || "";
+					const oldRefInNodeId = oldTarget?.replace("ref_in_", "") || "";
+					const newRefInNodeId = newTarget?.replace("ref_in_", "") || "";
+
+					const refOutNode = board.data?.nodes[refOutNodeId];
+
+					if (refOutNode && newRefInNodeId && oldRefInNodeId) {
+						const currentRefs = refOutNode.fn_refs?.fn_refs ?? [];
+
+						// Remove old ref, add new ref
+						const updatedRefs = currentRefs.filter(
+							(ref: string) => ref !== oldRefInNodeId,
+						);
+
+						if (!updatedRefs.includes(newRefInNodeId)) {
+							updatedRefs.push(newRefInNodeId);
+						}
+
+						const updatedNode = {
+							...refOutNode,
+							fn_refs: {
+								...refOutNode.fn_refs,
+								fn_refs: updatedRefs,
+								can_reference_fns:
+									refOutNode.fn_refs?.can_reference_fns ?? false,
+								can_be_referenced_by_fns:
+									refOutNode.fn_refs?.can_be_referenced_by_fns ?? false,
+							},
+						};
+
+						commands.push(updateNodeCommand({ node: updatedNode }));
+					}
+				}
+
+				if (commands.length > 0) {
+					await executeCommands(commands);
+				}
+			} else {
+				// Regular pin connection reconnection - need to look up nodes
+				const oldEdgeToNode = pinToNode(oldEdge.targetHandle);
+				const oldEdgeFromNode = pinToNode(oldEdge.sourceHandle);
+
+				if (!oldEdgeToNode || !oldEdgeFromNode) {
+					return;
+				}
+
+				const commands = [];
+
+				const disconnectCommand = disconnectPinsCommand({
+					from_node: oldEdgeFromNode.id,
+					from_pin: oldEdge.sourceHandle,
+					to_node: oldEdgeToNode.id,
+					to_pin: oldEdge.targetHandle,
+				});
+
+				commands.push(disconnectCommand);
+
+				if (newConnection.targetHandle && newConnection.sourceHandle) {
+					const newConnectionSourceNode = pinToNode(newConnection.sourceHandle);
+					const newConnectionTargetNode = pinToNode(newConnection.targetHandle);
+
+					if (newConnectionSourceNode && newConnectionTargetNode)
+						commands.push(
+							connectPinsCommand({
+								from_node: newConnectionSourceNode.id,
+								from_pin: newConnection.sourceHandle,
+								to_node: newConnectionTargetNode.id,
+								to_pin: newConnection.targetHandle,
+							}),
+						);
+				}
+
+				await executeCommands(commands);
+			}
 
 			edgeReconnectSuccessful.current = true;
 			setEdges((els) => reconnectEdge(oldEdge, newConnection, els));
 		},
-		[setEdges, pinToNode, executeCommands],
+		[
+			setEdges,
+			pinToNode,
+			executeCommands,
+			executeCommand,
+			board.data?.nodes,
+			version,
+		],
 	);
+
+	const onScreenshot = useCallback(async () => {
+		const viewportEl = document.querySelector(
+			".react-flow__viewport",
+		) as HTMLElement | null;
+		if (!viewportEl) return;
+
+		const nodes = getNodes();
+		if (nodes.length === 0) {
+			toastError("No nodes to capture", <XIcon />);
+			return;
+		}
+
+		const nodesBounds = getNodesBounds(nodes);
+		const padding = 50;
+		const imageWidth = Math.min(4096, nodesBounds.width + padding * 2);
+		const imageHeight = Math.min(4096, nodesBounds.height + padding * 2);
+
+		const viewport = getViewportForBounds(
+			nodesBounds,
+			imageWidth,
+			imageHeight,
+			0.5,
+			2,
+			padding,
+		);
+
+		const { toPng } = await import("html-to-image");
+
+		try {
+			const dataUrl = await toPng(viewportEl, {
+				backgroundColor: "transparent",
+				width: imageWidth,
+				height: imageHeight,
+				style: {
+					width: `${imageWidth}px`,
+					height: `${imageHeight}px`,
+					transform: `translate(${viewport.x}px, ${viewport.y}px) scale(${viewport.zoom})`,
+				},
+				// Skip images that fail to load (cross-origin issues)
+				filter: (node) => {
+					// Skip video elements as they can't be captured
+					if (node instanceof HTMLVideoElement) return false;
+					return true;
+				},
+				// Handle image fetch errors gracefully
+				skipFonts: true,
+				imagePlaceholder:
+					"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==",
+			});
+
+			const response = await fetch(dataUrl);
+			const blob = await response.blob();
+
+			try {
+				await navigator.clipboard.write([
+					new ClipboardItem({ "image/png": blob }),
+				]);
+				toastSuccess("Screenshot copied to clipboard", <CheckIcon />);
+			} catch {
+				const link = document.createElement("a");
+				link.download = "flow-screenshot.png";
+				link.href = dataUrl;
+				link.click();
+				toastSuccess("Screenshot downloaded", <CheckIcon />);
+			}
+		} catch (error) {
+			console.error("Screenshot failed:", error);
+			toastError("Failed to capture screenshot", <XIcon />);
+		}
+	}, [getNodes]);
 
 	const onReconnectEnd = useCallback(
 		async (event: any, edge: any) => {
+			// Don't execute commands when viewing an old version
+			if (typeof version !== "undefined") {
+				return;
+			}
+
 			if (!edgeReconnectSuccessful.current) {
 				const { source, target, sourceHandle, targetHandle } = edge;
 				const from_node = pinToNode(sourceHandle);
@@ -1267,7 +1711,7 @@ export function FlowBoard({
 
 			edgeReconnectSuccessful.current = true;
 		},
-		[setEdges, pinToNode],
+		[setEdges, pinToNode, version, executeCommand],
 	);
 
 	const onContextMenuCB = useCallback((event: any) => {
@@ -1276,6 +1720,10 @@ export function FlowBoard({
 
 	const onNodeDragStop = useCallback(
 		async (event: any, node: any, nodes: any) => {
+			// Don't execute commands when viewing an old version
+			if (typeof version !== "undefined") {
+				return;
+			}
 			const commands: IGenericCommand[] = [];
 			for await (const node of nodes) {
 				const command = moveNodeCommand({
@@ -1288,7 +1736,7 @@ export function FlowBoard({
 			}
 			await executeCommands(commands);
 		},
-		[boardId, executeCommands, currentLayer],
+		[boardId, executeCommands, currentLayer, version],
 	);
 
 	const isValidConnectionCB = useCallback(
@@ -1315,6 +1763,11 @@ export function FlowBoard({
 	);
 
 	const onCommentPlace = useCallback(async () => {
+		// Don't execute commands when viewing an old version
+		if (typeof version !== "undefined") {
+			return;
+		}
+
 		const location = screenToFlowPosition({
 			x: clickPosition.x,
 			y: clickPosition.y,
@@ -1337,7 +1790,7 @@ export function FlowBoard({
 		});
 
 		await executeCommand(command);
-	}, [currentLayer, clickPosition, executeCommand]);
+	}, [currentLayer, clickPosition, executeCommand, version]);
 
 	const onNodeDrag = useCallback(
 		(event: any, node: Node, nodes: Node[]) => {
@@ -1388,8 +1841,112 @@ export function FlowBoard({
 		[shiftPressed],
 	);
 
+	const onAcceptSuggestion = useCallback(
+		async (suggestion: any) => {
+			const node = catalog.data?.find((n) => n.name === suggestion.node_type);
+			if (node) {
+				await placeNode(node);
+			} else {
+				toastError(`Node type ${suggestion.node_type} not found`, <XIcon />);
+			}
+		},
+		[catalog.data, placeNode],
+	);
+
+	const [ghostNodes, setGhostNodes] = useState<
+		{
+			id: string;
+			node_type: string;
+			position: { x: number; y: number };
+			reason: string;
+		}[]
+	>([]);
+
+	const handleGhostNodesChange = useCallback((suggestions: Suggestion[]) => {
+		setGhostNodes(
+			suggestions.map((s, i) => ({
+				id: `ghost-${i}`,
+				node_type: s.node_type,
+				position: s.position || { x: 0, y: 0 },
+				reason: s.reason,
+			})),
+		);
+	}, []);
+
+	// Use the copilot commands hook for executing AI-generated commands
+	const { handleExecuteCommands } = useCopilotCommands({
+		board,
+		catalog,
+		executeCommand,
+		currentLayer,
+	});
+
 	return (
-		<div className="min-h-dvh h-dvh max-h-dvh w-full flex-1 grow flex-col">
+		<div className="w-full flex flex-1 grow flex-col min-h-0 relative overflow-hidden">
+			{/* Desktop FlowPilot floating panel */}
+			{copilotOpen && (
+				<div className="hidden md:block fixed inset-0 z-100 pointer-events-none">
+					<div className="absolute top-4 right-4 w-[420px] h-[calc(100%-2rem)] max-h-[700px] pointer-events-auto">
+						<FlowCopilot
+							board={board.data}
+							selectedNodeIds={Array.from(selected.current)}
+							onAcceptSuggestion={onAcceptSuggestion}
+							onFocusNode={focusNode}
+							onSelectNodes={selectNodes}
+							onGhostNodesChange={handleGhostNodesChange}
+							onExecuteCommands={handleExecuteCommands}
+							runContext={currentMetadata}
+							onClearRunContext={() => setCurrentMetadata(undefined)}
+							onClose={() => {
+								setCopilotOpen(false);
+								setCopilotInitialPrompt(undefined);
+							}}
+							mode="panel"
+							initialPrompt={copilotInitialPrompt}
+						/>
+					</div>
+				</div>
+			)}
+			{/* Top-right toolbar - Figma style with connection status */}
+			<div className="fixed right-3 top-16 z-50 flex items-center gap-2 sm:right-4 sm:top-16 md:right-6 md:top-6">
+				{/* Connection status indicator */}
+				{awareness && connectionStatus === "connected" && (
+					<div className="flex items-center gap-2 rounded-xl border border-[color-mix(in_oklch,var(--primary)_35%,transparent)] bg-[color-mix(in_oklch,var(--background)_92%,transparent)] px-3 py-1.5 backdrop-blur-sm shadow-sm">
+						<WifiIcon className="h-3.5 w-3.5 text-primary animate-pulse" />
+						<span className="text-xs font-medium text-primary">Live</span>
+					</div>
+				)}
+				{awareness && connectionStatus === "reconnecting" && (
+					<div className="flex items-center gap-2 rounded-xl border border-[color-mix(in_oklch,var(--yellow-500)_35%,transparent)] bg-[color-mix(in_oklch,var(--background)_92%,transparent)] px-3 py-1.5 backdrop-blur-sm shadow-sm">
+						<WifiIcon className="h-3.5 w-3.5 text-yellow-500 animate-pulse" />
+						<span className="text-xs font-medium text-yellow-500">
+							Reconnecting...
+						</span>
+					</div>
+				)}
+				{awareness && connectionStatus === "disconnected" && (
+					<button
+						type="button"
+						onClick={() => reconnect()}
+						className="flex items-center gap-2 rounded-xl border border-[color-mix(in_oklch,var(--destructive)_35%,transparent)] bg-[color-mix(in_oklch,var(--background)_92%,transparent)] px-3 py-1.5 backdrop-blur-sm shadow-sm hover:bg-[color-mix(in_oklch,var(--background)_85%,transparent)] transition-colors cursor-pointer"
+					>
+						<WifiOffIcon className="h-3.5 w-3.5 text-destructive" />
+						<span className="text-xs font-medium text-destructive">
+							Disconnected - Click to reconnect
+						</span>
+					</button>
+				)}
+				{!awareness && (
+					<div className="flex items-center gap-2 rounded-xl border border-[color-mix(in_oklch,var(--muted-foreground)_35%,transparent)] bg-[color-mix(in_oklch,var(--background)_92%,transparent)] px-3 py-1.5 backdrop-blur-sm shadow-sm">
+						<WifiOffIcon className="h-3.5 w-3.5 text-muted-foreground" />
+						<span className="text-xs font-medium text-muted-foreground">
+							Offline
+						</span>
+					</div>
+				)}
+				{/* Board activity indicator */}
+				<BoardActivityIndicator boardId={boardId} />
+			</div>
 			<div className="flex items-center justify-center absolute translate-x-[-50%] mt-5 left-[50dvw] z-40">
 				{board.data && editBoard && (
 					<BoardMeta
@@ -1399,9 +1956,17 @@ export function FlowBoard({
 						closeMeta={() => setEditBoard(false)}
 						version={version}
 						selectVersion={(version) => setVersion(version)}
+						onPageClick={(pageId) => {
+							setEditBoard(false);
+							router.push(
+								`/page-builder?id=${pageId}&app=${appId}&board=${boardId}`,
+							);
+						}}
+						isOffline={app.data?.visibility === IAppVisibility.Offline}
 					/>
 				)}
 				<FlowDock
+					mobileClassName="hidden"
 					items={[
 						...(typeof parentRegister.boardParents[boardId] === "string" &&
 						!currentLayer
@@ -1424,10 +1989,36 @@ export function FlowBoard({
 							},
 						},
 						{
+							icon: <LayoutTemplateIcon />,
+							title: "Templates",
+							onClick: async () => {
+								setTemplateSelectorOpen(true);
+							},
+						},
+						{
 							icon: <NotebookPenIcon />,
 							title: "Manage Board",
 							onClick: async () => {
 								setEditBoard(true);
+							},
+						},
+						{
+							icon: <FileTextIcon />,
+							title: "Pages",
+							onClick: async () => {
+								togglePages();
+							},
+						},
+						{
+							icon: <SearchIcon />,
+							title: "Search (⌘F / ⌘⇧F sidebar)",
+							onClick: async () => {
+								setSearchMode("dialog");
+								setSearchOpen(true);
+							},
+							onContextMenu: async () => {
+								setSearchMode("sidebar");
+								setSearchOpen((prev) => !prev);
 							},
 						},
 						{
@@ -1462,15 +2053,36 @@ export function FlowBoard({
 									},
 								]
 							: []),
+						{
+							icon: <SparklesIcon className="text-white" />,
+							title: "FlowPilot",
+							separator: "left",
+							special: true,
+							onClick: () => setCopilotOpen(true),
+						},
 					]}
 				/>
 			</div>
+
+			{/* Template Selector Overlay - FigJam style centered overlay */}
+			{(templateSelectorOpen || (isBoardEmpty && !currentLayer)) && (
+				<FlowTemplateSelector
+					onSelectTemplate={handleApplyTemplate}
+					onDismiss={() => setTemplateSelectorOpen(false)}
+				/>
+			)}
+
 			<ResizablePanelGroup
 				direction="horizontal"
-				className="flex grow min-h-dvh h-dvh"
+				className="flex grow flex-1 min-h-0 h-full overscroll-none"
+				style={{
+					touchAction: "none",
+					overflow: "hidden",
+				}}
 			>
+				{/* Desktop/Tablet side panels */}
 				<ResizablePanel
-					className="z-50 bg-background"
+					className="z-50 bg-background hidden md:block"
 					autoSave="flow-variables"
 					defaultSize={0}
 					collapsible={true}
@@ -1502,10 +2114,72 @@ export function FlowBoard({
 								onNodePlace={async (node) => {
 									await placeNode(node);
 								}}
+								onCreateVariable={async (variable) => {
+									const command = upsertVariableCommand({ variable });
+									await executeCommand(command, false);
+									setDroppedPin(undefined);
+								}}
 							>
 								<div
-									className={`w-full h-full relative ${isOver && "border-green-400 border-2 z-10"}`}
+									className={`w-full h-full relative select-none touch-none ${isOver && "border-green-400 border-2 z-10"}`}
 									ref={setNodeRef}
+									style={{
+										WebkitUserSelect: "none",
+										WebkitTouchCallout: "none",
+										touchAction: "none",
+									}}
+									onTouchStart={(e) => {
+										const t = e.touches[0];
+										if (!t) return;
+										const target = e.currentTarget;
+										const startX = t.clientX;
+										const startY = t.clientY;
+										let moved = false;
+										const onMove = (me: TouchEvent) => {
+											const tt = me.touches[0];
+											if (!tt) return;
+											if (
+												Math.hypot(tt.clientX - startX, tt.clientY - startY) >
+												10
+											)
+												moved = true;
+										};
+										const timer = setTimeout(() => {
+											if (moved) return;
+											// Synthesize a contextmenu-like event for long-press
+											const evt = new MouseEvent("contextmenu", {
+												clientX: startX,
+												clientY: startY,
+												bubbles: true,
+												cancelable: true,
+											});
+											target.dispatchEvent(evt);
+										}, 450);
+										const onEnd = () => {
+											clearTimeout(timer);
+											document.removeEventListener("touchmove", onMove, {
+												capture: true,
+											} as any);
+											document.removeEventListener("touchend", onEnd, {
+												capture: true,
+											} as any);
+											document.removeEventListener("touchcancel", onEnd, {
+												capture: true,
+											} as any);
+										};
+										document.addEventListener("touchmove", onMove, {
+											passive: true,
+											capture: true,
+										} as any);
+										document.addEventListener("touchend", onEnd, {
+											passive: true,
+											capture: true,
+										} as any);
+										document.addEventListener("touchcancel", onEnd, {
+											passive: true,
+											capture: true,
+										} as any);
+									}}
 								>
 									{currentLayer && (
 										<h2 className="absolute bottom-0 left-0 z-10 ml-16 mb-10 text-muted pointer-events-none select-none">
@@ -1528,6 +2202,7 @@ export function FlowBoard({
 										nodes={nodes}
 										nodeTypes={nodeTypes}
 										edges={edges}
+										edgeTypes={edgeTypes}
 										maxZoom={3}
 										minZoom={0.1}
 										onNodeDoubleClick={onNodeDoubleClick}
@@ -1537,6 +2212,7 @@ export function FlowBoard({
 										onNodeDrag={onNodeDrag}
 										isValidConnection={isValidConnectionCB}
 										onConnect={onConnect}
+										onSelectionChange={onSelectionChange}
 										onReconnect={onReconnect}
 										onReconnectStart={onReconnectStart}
 										onMoveEnd={onMoveEnd}
@@ -1548,7 +2224,11 @@ export function FlowBoard({
 										fitView
 										proOptions={{ hideAttribution: true }}
 									>
-										<Controls />
+										<Controls>
+											<ControlButton onClick={onScreenshot}>
+												<ShareIcon className="size-4" />
+											</ControlButton>
+										</Controls>
 										<MiniMap
 											pannable
 											zoomable
@@ -1605,6 +2285,21 @@ export function FlowBoard({
 											size={1}
 										/>
 									</ReactFlow>
+									{peerStates.length > 0 && (
+										<FlowCursors
+											peers={peerStates}
+											currentLayerPath={layerPath ?? "root"}
+											peerUsers={peerUsers}
+										/>
+									)}
+									{peerStates.length > 0 && (
+										<FlowLayerIndicators
+											peers={peerStates}
+											currentLayerPath={layerPath ?? "root"}
+											nodes={nodes}
+											peerUsers={peerUsers}
+										/>
+									)}
 									<DragOverlay
 										dropAnimation={{
 											duration: 500,
@@ -1625,7 +2320,7 @@ export function FlowBoard({
 						</ResizablePanel>
 						<ResizableHandle withHandle />
 						<ResizablePanel
-							className="z-50"
+							className="z-50 hidden md:block"
 							hidden={!currentMetadata}
 							ref={logPanelRef}
 							defaultSize={0}
@@ -1638,9 +2333,7 @@ export function FlowBoard({
 									appId={appId}
 									boardId={boardId}
 									board={boardRef}
-									onFocusNode={(nodeId: string) => {
-										focusNode(nodeId);
-									}}
+									onFocusNode={focusNode}
 								/>
 							)}
 						</ResizablePanel>
@@ -1648,7 +2341,7 @@ export function FlowBoard({
 				</ResizablePanel>
 				<ResizableHandle withHandle />
 				<ResizablePanel
-					className="z-50"
+					className="z-50 hidden md:block"
 					autoSave="flow-runs"
 					defaultSize={0}
 					collapsible={true}
@@ -1663,11 +2356,166 @@ export function FlowBoard({
 							boardId={boardId}
 							version={board.data.version as [number, number, number]}
 							onVersionChange={setVersion}
+							onFocusNode={focusNode}
 						/>
 					)}
 				</ResizablePanel>
+				{searchMode === "sidebar" && searchOpen && (
+					<>
+						<ResizableHandle withHandle />
+						<ResizablePanel
+							className="z-50 hidden md:block min-w-[280px] max-w-[400px]"
+							defaultSize={20}
+							minSize={15}
+							maxSize={30}
+						>
+							<FlowSearch
+								board={board.data}
+								open={searchOpen}
+								onOpenChange={setSearchOpen}
+								onNavigate={focusNode}
+								mode="sidebar"
+							/>
+						</ResizablePanel>
+					</>
+				)}
+				{/* Mobile sheets */}
+				<Sheet open={varsOpen} onOpenChange={setVarsOpen}>
+					<SheetContent side="bottom" className="h-[60dvh] w-full">
+						<SheetHeader>
+							<SheetTitle>Variables</SheetTitle>
+						</SheetHeader>
+						{board.data && (
+							<div className="h-[calc(60dvh-3.5rem)] overflow-y-auto overscroll-contain">
+								<VariablesMenu
+									board={board.data}
+									executeCommand={executeCommand}
+								/>
+							</div>
+						)}
+					</SheetContent>
+				</Sheet>
+				<Sheet open={runsOpen} onOpenChange={setRunsOpen}>
+					<SheetContent side="bottom" className="h-[80dvh] w-full">
+						<SheetHeader>
+							<SheetTitle>Runs</SheetTitle>
+						</SheetHeader>
+						{board.data && (
+							<div className="h-[calc(80dvh-3.5rem)] overflow-y-auto overscroll-contain">
+								<FlowRuns
+									executeBoard={executeBoard}
+									nodes={board.data.nodes}
+									appId={appId}
+									boardId={boardId}
+									version={board.data.version as [number, number, number]}
+									onVersionChange={setVersion}
+									onFocusNode={focusNode}
+								/>
+							</div>
+						)}
+					</SheetContent>
+				</Sheet>
+				<Sheet open={logsOpen} onOpenChange={setLogsOpen}>
+					<SheetContent side="bottom" className="h-[80dvh] w-full">
+						<SheetHeader>
+							<SheetTitle>Logs</SheetTitle>
+						</SheetHeader>
+						{board.data && currentMetadata && (
+							<div className="h-[calc(80dvh-3.5rem)] w-full">
+								<Traces
+									appId={appId}
+									boardId={boardId}
+									board={boardRef}
+									onFocusNode={focusNode}
+								/>
+							</div>
+						)}
+						{(!currentMetadata || !board.data) && (
+							<div className="h-[calc(80dvh-3.5rem)] w-full flex items-center justify-center text-sm text-muted-foreground p-6">
+								No run selected yet. Start a run to view logs here.
+							</div>
+						)}
+					</SheetContent>
+				</Sheet>
+				{/* Pages Sheet */}
+				<Sheet open={pagesOpen} onOpenChange={setPagesOpen}>
+					<SheetContent side="right" className="w-[400px] sm:w-[540px] p-0">
+						<FlowPages
+							appId={appId}
+							boardId={boardId}
+							onOpenPage={(pageId, bId) => {
+								setPagesOpen(false);
+								router.push(
+									`/page-builder?id=${pageId}&app=${appId}&board=${bId}`,
+								);
+							}}
+						/>
+					</SheetContent>
+				</Sheet>
+				{/* Mobile FlowPilot Sheet */}
+				<Sheet
+					open={copilotOpen && isMobile}
+					onOpenChange={(open) => {
+						setCopilotOpen(open);
+						if (!open) setCopilotInitialPrompt(undefined);
+					}}
+				>
+					<SheetContent side="bottom" className="h-[85dvh] w-full p-0">
+						<div className="h-full w-full">
+							<FlowCopilot
+								board={board.data}
+								selectedNodeIds={Array.from(selected.current)}
+								onAcceptSuggestion={onAcceptSuggestion}
+								onFocusNode={focusNode}
+								onSelectNodes={selectNodes}
+								onGhostNodesChange={handleGhostNodesChange}
+								onExecuteCommands={handleExecuteCommands}
+								runContext={currentMetadata}
+								onClearRunContext={() => setCurrentMetadata(undefined)}
+								onClose={() => {
+									setCopilotOpen(false);
+									setCopilotInitialPrompt(undefined);
+								}}
+								mode="panel"
+								initialPrompt={copilotInitialPrompt}
+							/>
+						</div>
+					</SheetContent>
+				</Sheet>
 			</ResizablePanelGroup>
-			<PinEditModal appId={appId} boardId={boardId} />
+			<PinEditModal appId={appId} boardId={boardId} version={version} />
+			<FlowNodeInfoOverlay
+				key={boardId}
+				ref={nodeInfoOverlayRef}
+				refs={board.data?.refs}
+				boardRef={boardRef}
+				onFocusNode={focusNode}
+			/>
+			{searchMode === "dialog" && (
+				<FlowSearch
+					board={board.data}
+					open={searchOpen}
+					onOpenChange={setSearchOpen}
+					onNavigate={focusNode}
+					mode="dialog"
+					onSwitchToSidebar={() => {
+						setSearchOpen(false);
+						setSearchMode("sidebar");
+						// Use setTimeout to ensure state updates properly
+						setTimeout(() => setSearchOpen(true), 0);
+					}}
+				/>
+			)}
+
+			{/* Runtime Variables Prompt */}
+			<RuntimeVariablesPrompt
+				open={runtimeVarsPromptOpen}
+				onOpenChange={setRuntimeVarsPromptOpen}
+				variables={runtimeConfiguredVars}
+				existingValues={existingRuntimeVars}
+				onSave={handleRuntimeVarsSave}
+				onCancel={handleRuntimeVarsCancel}
+			/>
 		</div>
 	);
 }

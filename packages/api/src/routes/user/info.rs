@@ -1,12 +1,13 @@
 use std::collections::HashMap;
 
 use crate::{
-    entity::user, error::ApiError, middleware::jwt::AppUser, routes::user::sign_avatar,
+    entity::user, error::ApiError, middleware::jwt::AppUser,
+    routes::profile::create_default::create_default_profile, routes::user::sign_avatar,
     state::AppState, user_management::UserManagement,
 };
 use axum::{Extension, Json, extract::State};
-use flow_like_types::anyhow;
-use sea_orm::{ActiveModelTrait, EntityTrait, sqlx::types::chrono};
+use flow_like_types::{anyhow, create_id};
+use sea_orm::{ActiveModelTrait, EntityTrait};
 
 /// Sometimes when the user still has an old jwt, the user info is not updated correctly.
 /// In these cases, we want to update the value correctly.
@@ -34,15 +35,28 @@ async fn should_update(
     should_update
 }
 
+#[utoipa::path(
+    get,
+    path = "/user/info",
+    tag = "user",
+    responses(
+        (status = 200, description = "Returns the current user's information"),
+        (status = 401, description = "Unauthorized")
+    ),
+    security(
+        ("bearer_auth" = [])
+    )
+)]
 #[tracing::instrument(name = "GET /user/info", skip(state, user))]
 pub async fn user_info(
     State(state): State<AppState>,
     Extension(user): Extension<AppUser>,
 ) -> Result<Json<user::Model>, ApiError> {
     let sub = user.sub()?;
-    let email = user.email().clone();
-    let username = user.username().clone();
-    let preferred_username = user.preferred_username().clone();
+    let user_info = user.user_info(&state).await?;
+    let email = user_info.email.clone();
+    let username = user_info.username.clone();
+    let preferred_username = user_info.preferred_username.clone();
     let user_info = user::Entity::find_by_id(&sub).one(&state.db).await?;
     if let Some(mut user_info) = user_info {
         let mut updated_user: Option<user::ActiveModel> = None;
@@ -61,6 +75,14 @@ pub async fn user_info(
             let mut tmp_updated_user: user::ActiveModel =
                 updated_user.unwrap_or(user_info.clone().into());
             tmp_updated_user.username = sea_orm::ActiveValue::Set(Some(username.clone()));
+            updated_user = Some(tmp_updated_user);
+        }
+
+        if user_info.tracking_id.is_none() {
+            let tracking_id = create_id();
+            let mut tmp_updated_user: user::ActiveModel =
+                updated_user.unwrap_or(user_info.clone().into());
+            tmp_updated_user.tracking_id = sea_orm::ActiveValue::Set(Some(tracking_id));
             updated_user = Some(tmp_updated_user);
         }
 
@@ -118,6 +140,7 @@ pub async fn user_info(
 
     let user = user::ActiveModel {
         id: sea_orm::ActiveValue::Set(sub.clone()),
+        tracking_id: sea_orm::ActiveValue::Set(Some(create_id())),
         email: sea_orm::ActiveValue::Set(email),
         stripe_id: sea_orm::ActiveValue::Set(stripe_customer),
         username: sea_orm::ActiveValue::Set(username),
@@ -130,6 +153,16 @@ pub async fn user_info(
     let new_user = user::Entity::insert(user)
         .exec_with_returning(&state.db)
         .await?;
+
+    // Create default profile for new user
+    if let Err(e) = create_default_profile(&state, &sub).await {
+        tracing::warn!(
+            "Failed to create default profile for new user {}: {}",
+            sub,
+            e
+        );
+        // Don't fail user creation if profile creation fails
+    }
 
     Ok(Json(new_user))
 }

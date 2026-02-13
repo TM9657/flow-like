@@ -9,12 +9,20 @@ import {
 	useImperativeHandle,
 	useRef,
 	useState,
+	useTransition,
 } from "react";
 import PuffLoader from "react-spinners/PuffLoader";
 import type { IEventPayloadChat } from "../../../lib";
 import type { IMessage } from "./chat-db";
 import { ChatBox, type ChatBoxRef, type ISendMessageFunction } from "./chatbox";
 import { MessageComponent } from "./message";
+
+function getMessageTextContent(message: IMessage): string {
+	const content = message.inner.content;
+	if (typeof content === "string") return content;
+	const textContent = content.find((c) => c.type === "text");
+	return textContent?.text ?? "";
+}
 
 export interface IChatProps {
 	messages: IMessage[];
@@ -52,10 +60,39 @@ const ChatInner = forwardRef<IChatRef, IChatProps>(
 		const chatBox = useRef<ChatBoxRef>(null);
 		const isScrollingProgrammatically = useRef(false);
 		const [defaultActiveTools, setDefaultActiveTools] = useState<string[]>();
+		const [isSending, setIsSending] = useState(false);
+		const isSendingRef = useRef(false);
+		const [sendingContent, setSendingContent] = useState("");
+		const [, startMessagesTransition] = useTransition();
+
+		useEffect(() => {
+			isSendingRef.current = isSending;
+		}, [isSending]);
+
+		// Reset state when switching sessions (avoids expensive key-based remount)
+		useEffect(() => {
+			setCurrentMessage(null);
+			setLocalMessages([]);
+			setShouldAutoScroll(true);
+			setHasInitiallyScrolled(false);
+			setIsSending(false);
+			setSendingContent("");
+		}, [sessionId]);
 
 		// Sync external messages with local state
 		useEffect(() => {
-			setLocalMessages(messages);
+			startMessagesTransition(() => {
+				setLocalMessages(messages);
+			});
+
+			// Clear optimistic sending state when the user message appears in DB
+			if (isSendingRef.current) {
+				const lastMessage = messages[messages.length - 1];
+				if (lastMessage?.inner.role === "user") {
+					setIsSending(false);
+					setSendingContent("");
+				}
+			}
 
 			const lastUserMessage = messages
 				.slice()
@@ -90,7 +127,10 @@ const ChatInner = forwardRef<IChatRef, IChatProps>(
 			if (!messagesEndRef.current) return;
 			if (!shouldAutoScroll) return;
 			isScrollingProgrammatically.current = true;
-			messagesEndRef.current.scrollIntoView({ behavior: "instant" });
+			messagesEndRef.current.scrollIntoView({
+				behavior: "instant",
+				block: "end",
+			});
 			// Reset the flag after scroll animation completes
 			setTimeout(() => {
 				isScrollingProgrammatically.current = false;
@@ -106,17 +146,13 @@ const ChatInner = forwardRef<IChatRef, IChatProps>(
 		}, []);
 
 		const handleScroll = useCallback(() => {
-			// Don't update auto-scroll state if we're programmatically scrolling
 			const atBottom = isAtBottom();
 			if (isScrollingProgrammatically.current) {
-				console.log("Ignoring scroll - programmatic");
 				if (!atBottom) {
 					setShouldAutoScroll(false);
 				}
 				return;
 			}
-
-			console.log("Scroll event detected, at bottom:", atBottom);
 
 			setShouldAutoScroll(atBottom);
 		}, [isAtBottom]);
@@ -143,7 +179,20 @@ const ChatInner = forwardRef<IChatRef, IChatProps>(
 				audioFile?: File,
 			) => {
 				setShouldAutoScroll(true);
-				await onSendMessage(content, filesAttached, activeTools, audioFile);
+				setIsSending(true);
+				setSendingContent(content);
+
+				// Scroll immediately to show the optimistic message
+				setTimeout(() => {
+					scrollToBottom();
+				}, 50);
+
+				try {
+					await onSendMessage(content, filesAttached, activeTools, audioFile);
+				} finally {
+					setIsSending(false);
+					setSendingContent("");
+				}
 				// Scroll after a brief delay to ensure the message is rendered
 				setTimeout(() => {
 					scrollToBottom();
@@ -151,6 +200,52 @@ const ChatInner = forwardRef<IChatRef, IChatProps>(
 			},
 			[onSendMessage, scrollToBottom],
 		);
+
+		// iOS keyboard/open focus handling to reduce layout jump and zoom
+		useEffect(() => {
+			const onFocusIn = (e: FocusEvent) => {
+				const target = e.target as HTMLElement | null;
+				if (!target) return;
+				// Ensure the input stays visible when keyboard opens
+				if (target.tagName === "TEXTAREA" || target.tagName === "INPUT") {
+					setTimeout(() => {
+						try {
+							messagesEndRef.current?.scrollIntoView({
+								block: "end",
+								behavior: "smooth",
+							});
+						} catch {}
+					}, 100);
+				}
+			};
+			document.addEventListener("focusin", onFocusIn);
+			return () => document.removeEventListener("focusin", onFocusIn);
+		}, []);
+
+		// Dismiss keyboard when tapping outside inputs on iOS
+		useEffect(() => {
+			const onTouchStart = (e: TouchEvent) => {
+				const active = document.activeElement as HTMLElement | null;
+				if (!active) return;
+				const tag = active.tagName;
+				if (tag === "INPUT" || tag === "TEXTAREA") {
+					const target = e.target as Node | null;
+					if (target && active && !active.contains(target)) {
+						setTimeout(() => {
+							try {
+								active.blur();
+							} catch {}
+						}, 50);
+					}
+				}
+			};
+			document.addEventListener("touchstart", onTouchStart, {
+				passive: true,
+				capture: true,
+			} as AddEventListenerOptions);
+			return () =>
+				document.removeEventListener("touchstart", onTouchStart, true as any);
+		}, []);
 
 		// Expose methods via ref
 		useImperativeHandle(
@@ -180,40 +275,71 @@ const ChatInner = forwardRef<IChatRef, IChatProps>(
 		);
 
 		return (
-			<main className="flex flex-col h-full w-full items-center flex-grow bg-background max-h-full overflow-hidden ">
-				<div className="h-full flex-grow flex flex-col bg-background max-h-full w-full overflow-auto">
+			<main
+				className="flex flex-col h-full w-full items-center flex-grow bg-background max-h-full overflow-hidden"
+				style={{
+					WebkitOverflowScrolling: "touch",
+					touchAction: "manipulation",
+				}}
+			>
+				<div className="h-full flex-grow flex flex-col bg-background max-h-full w-full overflow-hidden">
 					{/* Messages Container */}
 					<div
 						ref={scrollContainerRef}
 						onScroll={handleScroll}
-						className="flex-1 overflow-y-auto p-4 space-y-8  flex flex-col items-center flex-grow max-h-full overflow-hidden"
+						className="flex-1 overflow-y-auto overscroll-contain p-4 pb-2 space-y-8 flex flex-col items-center flex-grow max-h-full"
+						style={{ WebkitOverflowScrolling: "touch" }}
 					>
 						{localMessages.map((message) => (
-							<div className="w-full max-w-screen-lg px-4" key={message.id}>
+							<div className="w-full max-w-screen-lg px-1 sm:px-4" key={message.id}>
 								<MessageComponent
 									message={message}
 									onMessageUpdate={onMessageUpdate}
 								/>
 							</div>
 						))}
-						{currentMessage && (
-							<div
-								className="w-full max-w-screen-lg px-4 relative"
-								key={currentMessage.id}
-							>
-								<PuffLoader
-									color={resolvedTheme === "dark" ? "white" : "black"}
-									className="mt-2 absolute left-0 top-0 translate-y-[2.5rem] translate-x-[-100%]"
-									size={30}
-								/>
-								<MessageComponent loading message={currentMessage} />
-							</div>
-						)}
+						{isSending &&
+							!localMessages.some(
+								(m) =>
+									m.inner.role === "user" &&
+									getMessageTextContent(m) === sendingContent,
+							) && (
+								<div className="w-full max-w-screen-lg px-4 flex flex-col items-end space-y-1 animate-in fade-in slide-in-from-bottom-2 duration-200">
+									<div className="bg-muted dark:bg-muted/30 text-foreground px-4 py-2 rounded-xl rounded-tr-sm max-w-3xl shadow-sm">
+										<p className="whitespace-pre-wrap text-sm">
+											{sendingContent}
+										</p>
+									</div>
+									<div className="flex items-center gap-2 pr-1">
+										<PuffLoader
+											size={16}
+											color={resolvedTheme === "dark" ? "white" : "black"}
+										/>
+										<span className="text-xs text-muted-foreground">
+											Processing...
+										</span>
+									</div>
+								</div>
+							)}
+						{currentMessage &&
+							!localMessages.some((m) => m.id === currentMessage.id) && (
+								<div
+									className="w-full max-w-screen-lg px-4 relative"
+									key={currentMessage.id}
+								>
+									<PuffLoader
+										color={resolvedTheme === "dark" ? "white" : "black"}
+										className="mt-2 absolute left-0 top-0 translate-y-[2.5rem] translate-x-[-100%]"
+										size={30}
+									/>
+									<MessageComponent loading message={currentMessage} />
+								</div>
+							)}
 						<div ref={messagesEndRef} />
 					</div>
 
 					{/* ChatBox */}
-					<div className="bg-transparent pb-4 max-w-screen-lg w-full mx-auto">
+					<div className="bg-transparent px-2 pb-2 max-w-screen-lg w-full mx-auto">
 						{defaultActiveTools && (
 							<ChatBox
 								ref={chatBox}

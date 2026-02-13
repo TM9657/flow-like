@@ -3,7 +3,7 @@ use flow_like_storage::files::store::FlowLikeStore;
 use flow_like_storage::{Path, blake3};
 use flow_like_types::intercom::{InterComCallback, InterComEvent};
 use flow_like_types::reqwest::Client;
-use flow_like_types::sync::{Mutex, mpsc};
+use flow_like_types::sync::mpsc;
 use flow_like_types::tokio::fs::{self as async_fs, OpenOptions};
 use flow_like_types::tokio::io::{AsyncReadExt, AsyncWriteExt, BufWriter};
 use flow_like_types::tokio::spawn;
@@ -34,7 +34,7 @@ fn global_download_semaphore() -> &'static Semaphore {
             .ok()
             .and_then(|v| v.parse::<usize>().ok())
             .filter(|&n| n > 0)
-            .unwrap_or(5);
+            .unwrap_or(10);
         Semaphore::new(max)
     })
 }
@@ -42,7 +42,7 @@ fn global_download_semaphore() -> &'static Semaphore {
 // Download job queue and dispatcher.
 struct DownloadJob {
     bit: crate::bit::Bit,
-    app_state: Arc<Mutex<FlowLikeState>>,
+    app_state: Arc<FlowLikeState>,
     retries: usize,
     callback: InterComCallback,
     respond_to: oneshot::Sender<flow_like_types::Result<Path>>,
@@ -84,6 +84,13 @@ fn global_download_queue() -> &'static mpsc::Sender<DownloadJob> {
 
 async fn get_remote_size(client: &Client, url: &str) -> flow_like_types::Result<u64> {
     let res = client.head(url).send().await?;
+    if res.status().is_server_error() {
+        bail!(
+            "Server responded with {} to HEAD request for {}",
+            res.status(),
+            url
+        );
+    }
     let total_size = res
         .headers()
         .get("content-length")
@@ -136,7 +143,7 @@ async fn feed_hasher_with_existing(
         total += n as u64;
 
         // yield occasionally to keep the runtime responsive (Windows)
-        if total % (8 * 1024 * 1024) == 0 {
+        if total.is_multiple_of(8 * 1024 * 1024) {
             yield_now().await;
         }
     }
@@ -144,14 +151,14 @@ async fn feed_hasher_with_existing(
     Ok(total)
 }
 
-async fn remove_download(bit: &crate::bit::Bit, app_state: &Arc<Mutex<FlowLikeState>>) {
-    let manager = app_state.lock().await.download_manager();
+async fn remove_download(bit: &crate::bit::Bit, app_state: &Arc<FlowLikeState>) {
+    let manager = app_state.download_manager();
     manager.lock().await.remove_download(bit);
 }
 
 pub async fn download_bit(
     bit: &crate::bit::Bit,
-    app_state: Arc<Mutex<FlowLikeState>>,
+    app_state: Arc<FlowLikeState>,
     retries: usize,
     callback: &InterComCallback,
 ) -> flow_like_types::Result<Path> {
@@ -174,7 +181,7 @@ pub async fn download_bit(
 
 async fn process_download_bit(
     bit: &crate::bit::Bit,
-    app_state: Arc<Mutex<FlowLikeState>>,
+    app_state: Arc<FlowLikeState>,
     retries: usize,
     callback: &InterComCallback,
 ) -> flow_like_types::Result<Path> {
@@ -189,6 +196,12 @@ async fn process_download_bit(
     let store_path =
         Path::from(bit.hash.clone()).child(bit.file_name.clone().ok_or(anyhow!("No file name"))?);
     let path_name = file_store.path_to_filesystem(&store_path)?;
+    let temp_extension = path_name
+        .extension()
+        .map(|ext| format!("{}.download", ext.to_string_lossy()))
+        .unwrap_or_else(|| "download".to_string());
+    let temp_path = path_name.with_extension(temp_extension);
+    let had_existing_file = async_fs::try_exists(&path_name).await.unwrap_or(false);
     let url = bit
         .download_link
         .clone()
@@ -196,7 +209,7 @@ async fn process_download_bit(
 
     // Another download of that type already exists
     let exists = {
-        let manager = app_state.lock().await.download_manager();
+        let manager = app_state.download_manager();
         let manager = manager.lock().await;
         manager.download_exists(bit)
     };
@@ -206,7 +219,7 @@ async fn process_download_bit(
     }
 
     let client = {
-        let manager = app_state.lock().await.download_manager();
+        let manager = app_state.download_manager();
         let mut manager = manager.lock().await;
         manager.add_download(bit)
     };
@@ -217,55 +230,88 @@ async fn process_download_bit(
     }
 
     let client = client.ok_or(anyhow!("No client for download"))?;
-    let mut resume = false;
     let remote_size = get_remote_size(&client, &url).await;
 
     if remote_size.is_err() {
-        if async_fs::try_exists(&path_name).await.unwrap_or(false) {
-            let _rem = remove_download(bit, &app_state).await;
+        let err = remote_size.unwrap_err();
+        println!(
+            "Error getting remote size for {}: {}. Falling back to cached files if available.",
+            &url, err
+        );
+        let _rem = remove_download(bit, &app_state).await;
+        let _ = async_fs::remove_file(&temp_path).await;
+
+        if had_existing_file {
             let local_len = async_fs::metadata(&path_name)
                 .await
                 .ok()
                 .map(|m| m.len())
                 .unwrap_or(0);
             let _ = publish_progress(bit, callback, local_len, &store_path).await;
-            return Ok(store_path);
+        } else {
+            println!(
+                "No cached file found for {}. Continuing without fresh download; downstream operations may fail if weights are required.",
+                bit.id
+            );
         }
 
-        bail!(
-            "Error getting remote size for {}: {}",
-            &url,
-            remote_size.unwrap_err()
-        );
+        return Ok(store_path);
     }
 
     let remote_size = remote_size?;
 
-    let mut local_size = 0;
-    if async_fs::try_exists(&path_name).await.unwrap_or(false) {
-        local_size = async_fs::metadata(&path_name)
+    if had_existing_file {
+        let existing_size = async_fs::metadata(&path_name)
             .await
             .ok()
             .map(|m| m.len())
             .unwrap_or(0);
-        if local_size == remote_size {
+        if existing_size == remote_size {
             let _rem = remove_download(bit, &app_state).await;
             let _ = publish_progress(bit, callback, remote_size, &store_path).await;
             return Ok(store_path);
         }
+    }
 
-        if local_size < remote_size {
+    let mut resume = false;
+    let mut downloaded: u64 = 0;
+    let mut hasher = blake3::Hasher::new();
+
+    if async_fs::try_exists(&temp_path).await.unwrap_or(false) {
+        let partial_size = async_fs::metadata(&temp_path)
+            .await
+            .ok()
+            .map(|m| m.len())
+            .unwrap_or(0);
+
+        if partial_size == remote_size {
+            let mut resume_hasher = blake3::Hasher::new();
+            feed_hasher_with_existing(&temp_path, &mut resume_hasher).await?;
+            let partial_hash = resume_hasher.finalize().to_hex().to_string().to_lowercase();
+            if partial_hash == bit.hash.to_lowercase() {
+                if async_fs::try_exists(&path_name).await.unwrap_or(false) {
+                    let _ = async_fs::remove_file(&path_name).await;
+                }
+                async_fs::rename(&temp_path, &path_name).await?;
+                let _rem = remove_download(bit, &app_state).await;
+                let _ = publish_progress(bit, callback, remote_size, &store_path).await;
+                return Ok(store_path);
+            }
+        }
+
+        if partial_size > 0 {
             resume = true;
-            println!("Resuming download: {} to {}", &url, path_name.display());
-        }
-
-        if local_size > remote_size {
+            downloaded = partial_size;
+            feed_hasher_with_existing(&temp_path, &mut hasher).await?;
             println!(
-                "Local file is bigger than remote file, deleting: {}",
-                path_name.display()
+                "Resuming download: {} to {} ({} bytes already present)",
+                &url,
+                temp_path.display(),
+                partial_size
             );
-            let _ = async_fs::remove_file(&path_name).await;
         }
+    } else {
+        let _ = async_fs::remove_file(&temp_path).await;
     }
 
     println!("Downloading: {} to {}", &url, store_path);
@@ -274,11 +320,30 @@ async fn process_download_bit(
     let mut headers = reqwest::header::HeaderMap::new();
 
     if resume {
-        headers.insert("Range", format!("bytes={}-", local_size).parse()?);
+        headers.insert("Range", format!("bytes={}-", downloaded).parse()?);
     }
 
     let res = match client.get(&url).headers(headers).send().await {
-        Ok(res) => res,
+        Ok(res) => {
+            if res.status().is_server_error() {
+                let _ = remove_download(bit, &app_state).await;
+                if had_existing_file {
+                    let _ = async_fs::remove_file(&temp_path).await;
+                    println!(
+                        "Server error {} when downloading {}; using cached file instead",
+                        res.status(),
+                        url
+                    );
+                    return Ok(store_path);
+                }
+                bail!(
+                    "Server responded with {} when downloading {}",
+                    res.status(),
+                    url
+                );
+            }
+            res
+        }
         Err(e) => {
             let _rem = remove_download(bit, &app_state).await;
             bail!("Error downloading file {}", e);
@@ -294,7 +359,7 @@ async fn process_download_bit(
         .append(resume)
         .truncate(!resume)
         .create(true)
-        .open(&path_name)
+        .open(&temp_path)
         .await
     {
         Ok(file) => file,
@@ -306,14 +371,6 @@ async fn process_download_bit(
     };
 
     let mut file = BufWriter::with_capacity(1 << 20, file);
-
-    let mut downloaded: u64 = 0;
-    let mut hasher = blake3::Hasher::new();
-
-    if resume {
-        feed_hasher_with_existing(&path_name, &mut hasher).await?;
-        downloaded = local_size;
-    }
 
     let mut stream = res.bytes_stream();
     let mut in_buffer = 0;
@@ -368,14 +425,27 @@ async fn process_download_bit(
             "Error downloading file, hash does not match, deleting __ {} != {}",
             file_hash, bit.hash
         );
-        let _ = async_fs::remove_file(&path_name).await;
+        let _ = async_fs::remove_file(&temp_path).await;
         if retries > 0 {
             println!("Retrying download: {}", bit.hash);
             let result = Box::pin(process_download_bit(bit, app_state, retries - 1, callback));
             return result.await;
         }
+        if had_existing_file {
+            println!(
+                "Falling back to previously cached file for {} despite download hash mismatch",
+                bit.id
+            );
+            return Ok(store_path);
+        }
         bail!("Error downloading file, hash does not match");
     }
+
+    if async_fs::try_exists(&path_name).await.unwrap_or(false) {
+        let _ = async_fs::remove_file(&path_name).await;
+    }
+
+    async_fs::rename(&temp_path, &path_name).await?;
 
     Ok(store_path)
 }

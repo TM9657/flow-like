@@ -10,6 +10,19 @@ import {
     LuLink,
     LuShieldCheck,
 } from "react-icons/lu";
+import type { Lang, TranslationKey } from "../i18n";
+import { translations, defaultLang } from "../i18n";
+
+interface Props {
+  lang?: Lang;
+}
+
+const { lang = defaultLang } = Astro.props;
+const t = (key: TranslationKey): string => {
+  const langTranslations = translations[lang] as Record<string, string>;
+  const enTranslations = translations.en as Record<string, string>;
+  return langTranslations?.[key] ?? enTranslations[key] ?? key;
+};
 ---
 
 <section
@@ -24,26 +37,38 @@ import {
             class="absolute inset-0 bg-[linear-gradient(to_right,theme(colors.muted.DEFAULT/.12)_1px,transparent_1px),linear-gradient(to_bottom,theme(colors.muted.DEFAULT/.12)_1px,transparent_1px)] bg-[size:36px_36px]"
         >
         </div>
+        <!-- Enhanced glow orbs - BIGGER -->
+        <div
+            class="glow-orb absolute -top-48 -left-48 h-[30rem] w-[30rem]"
+            style="background: radial-gradient(60% 60% at 50% 50%, hsl(200 90% 60% / 0.55) 0%, transparent 70%);"
+        ></div>
+        <div
+            class="glow-orb absolute -bottom-48 -right-48 h-[30rem] w-[30rem]"
+            style="background: radial-gradient(60% 60% at 50% 50%, hsl(150 80% 60% / 0.55) 0%, transparent 70%); animation-delay: -4s;"
+        ></div>
+        <div
+            class="glow-orb absolute top-1/3 right-1/4 h-[24rem] w-[24rem]"
+            style="background: radial-gradient(60% 60% at 50% 50%, hsl(263 83% 66% / 0.4) 0%, transparent 70%); animation-delay: -2s;"
+        ></div>
     </div>
 
     <div class="relative z-10">
         <div class="mx-auto max-w-4xl text-center">
             <div
-                class="inline-flex items-center gap-2 rounded-full border border-sky-500/20 bg-sky-500/10 backdrop-blur-sm px-4 py-2 text-sm font-medium text-sky-700 dark:text-sky-300 mb-6"
+                class="inline-flex items-center gap-2 rounded-full border border-sky-500/30 bg-sky-500/10 backdrop-blur-2xl px-4 py-2 text-sm font-medium text-sky-700 dark:text-sky-300 mb-6 shadow-[0_0_40px_-8px_rgba(56,189,248,0.4)]"
             >
-                Storage & Search — Built-in
+                <span class="w-2 h-2 bg-sky-500 rounded-full animate-pulse shadow-[0_0_12px_rgba(56,189,248,0.8)]"></span>
+                {t("storage.tagline")}
             </div>
 
             <h2
-                class="text-4xl font-bold sm:text-5xl lg:text-6xl bg-gradient-to-r from-foreground via-sky-500 to-violet-500 bg-clip-text text-transparent"
+                class="text-4xl font-bold sm:text-5xl lg:text-6xl bg-gradient-to-r from-foreground via-sky-500 to-violet-500 bg-clip-text text-transparent drop-shadow-sm"
             >
-                Files, tables, and search — right on the canvas
+                {t("storage.headline")}
             </h2>
 
-            <p class="mt-6 text-lg text-muted-foreground max-w-3xl mx-auto">
-                Save files, keep records, and find things fast — all inside your
-                flow. No extra services to wire up. Plug a node in, and your
-                data is ready to use.
+            <p class="mt-6 text-lg text-muted-foreground max-w-3xl mx-auto leading-relaxed">
+                {t("storage.description")}
             </p>
         </div>
 
@@ -674,16 +699,33 @@ import {
 </script>
 
 <style>
+    /* Glow orb animation */
+    @keyframes glow-float {
+        0%, 100% { transform: translate(0, 0) scale(1); }
+        33% { transform: translate(30px, -20px) scale(1.1); }
+        66% { transform: translate(-20px, 15px) scale(0.9); }
+    }
+
+    #storage .glow-orb {
+        position: absolute;
+        border-radius: 50%;
+        filter: blur(100px);
+        opacity: 0.55;
+        animation: glow-float 10s ease-in-out infinite;
+        pointer-events: none;
+    }
+
     /* layout + panes */
     .stage {
         --stage-h: min(56vh, 520px);
         background: radial-gradient(
                 120% 120% at 15% 5%,
-                rgba(255, 255, 255, 0.06),
+                rgba(255, 255, 255, 0.08),
                 transparent 55%
             ),
-            linear-gradient(to bottom, rgba(0, 0, 0, 0.08), transparent 40%),
-            color-mix(in oklch, var(--card) 34%, transparent);
+            linear-gradient(to bottom, rgba(0, 0, 0, 0.1), transparent 40%),
+            color-mix(in oklch, var(--card) 40%, transparent);
+        box-shadow: 0 30px 80px -20px rgba(0, 0, 0, 0.25);
     }
     .stage > .grid {
         align-items: center;

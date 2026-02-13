@@ -5,13 +5,13 @@ edition = "2024"
 
 [dependencies]
 anyhow = "1.0.97"
-async-trait = "0.1.88"
+async-stream = "0.3.6"
+async-trait.workspace = true
 bytes = "1.10.1"
-cuid2 = {version="0.1.4", default-features = false}
 prost = "0.14.1"
 prost-types = "0.14.1"
 rand = "0.9.0"
-reqwest = { version = "0.12.15", features = ["stream", "json", "gzip", "brotli", "socks", "http2", "default-tls", "rustls-tls"] }
+reqwest = { version = "0.12.15", default-features = false, features = ["stream", "json", "gzip", "brotli", "socks", "http2", "rustls-tls"] }
 schemars.workspace = true
 serde = { workspace = true, features = ["derive", "rc"] }
 serde_json.workspace = true
@@ -28,6 +28,7 @@ minijinja = "2.9.0"
 rxing = { version = "0.7.1", features = ["serde", "image"] }
 ab_glyph = "0.2.29"
 tokio-util = "0.7.15"
+cuid2 = { git = "https://github.com/TM9657/cuid-rust.git", package = "cuid2" }
 jsonschema = "0.33.0"
 regex.workspace = true
 
