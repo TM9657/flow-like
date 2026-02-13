@@ -47,6 +47,7 @@ export const enCommon = {
 	"footer.eula": "EULA",
 	"footer.privacy": "Privacy Policy",
 	"footer.legal": "Legal Notice",
+	"footer.dataDeletion": "Data Deletion",
 
 	// BI Preview Section
 	"bi.preview.badge": "Business Intelligence",

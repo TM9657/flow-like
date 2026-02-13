@@ -16,6 +16,8 @@ const t = (key: TranslationKey): string => {
 
 const github = "https://github.com/TM9657/flow-like";
 const enterpriseContact = "mailto:enterprise@flow-like.com?subject=Automation%20Risk%20Review";
+const webAppUrl = "https://app.flow-like.com";
+const studioName = "Flow-Like Studio";
 ---
 
 <section class="relative py-8 md:py-12 lg:py-16 mt-8 max-w-screen overflow-hidden">
@@ -95,14 +97,27 @@ const enterpriseContact = "mailto:enterprise@flow-like.com?subject=Automation%20
 
                     <div class="flex flex-wrap items-center gap-3 mb-8">
                         <a
-                            href={enterpriseContact}
-                            class="inline-flex items-center justify-center rounded-full bg-foreground text-background px-6 py-3 text-sm font-medium hover:bg-foreground/90 transition-all hover:scale-[1.02] active:scale-[0.98]"
-                            >{t("hero.cta.risk_review")}</a
+                            href="/download"
+                            class="group inline-flex items-center justify-center gap-2 rounded-full bg-foreground text-background px-6 py-3 text-sm font-semibold hover:bg-foreground/90 transition-all hover:scale-[1.02] active:scale-[0.98] shadow-lg shadow-black/20"
+                            >
+                            <span>{t("hero.cta.download")} {studioName}</span>
+                            <span
+                                aria-hidden="true"
+                                class="transition-transform group-hover:translate-x-0.5"
+                                >→</span
+                            ></a
                         >
                         <a
-                            href="/download"
+                            href={webAppUrl}
+                            target="_blank"
+                            rel="noreferrer"
                             class="inline-flex items-center justify-center rounded-full border border-border/80 bg-background/50 px-6 py-3 text-sm font-medium text-foreground hover:bg-muted/50 hover:border-border transition-colors"
-                            >{t("hero.cta.download")}</a
+                            >Open Web App</a
+                        >
+                        <a
+                            href={enterpriseContact}
+                            class="inline-flex items-center gap-1 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
+                            >{t("hero.cta.risk_review")} <span aria-hidden="true">→</span></a
                         >
                         <a
                             href={github}
@@ -110,6 +125,9 @@ const enterpriseContact = "mailto:enterprise@flow-like.com?subject=Automation%20
                             >Star on GitHub <span class="group-hover:translate-x-0.5 transition-transform">→</span></a
                         >
                     </div>
+                    <p class="text-xs text-muted-foreground/80 mb-5">
+                        {t("hero.enterprise_note")} · {studioName}
+                    </p>
 
                     <div class="flex flex-wrap items-center gap-2">
                         <span class="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-full border border-border/40 text-muted-foreground bg-muted/10">

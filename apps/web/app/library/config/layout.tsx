@@ -312,14 +312,34 @@ export default function Id({
 		return set;
 	}, []);
 
-	useEffect(() => {
-		const hasRoutes = !!routes.data?.length;
-		const hasUsableEvent = !!events.data?.find((e) =>
-			usableEvents.has(e.event_type),
+	const useAppHref = useMemo(() => {
+		if (!id) return null;
+
+		const activeEvents = (events.data ?? []).filter((event) => event.active);
+		const activeEventsById = new Map(
+			activeEvents.map((event) => [event.id, event] as const),
 		);
-		const useHref = hasRoutes
-			? `/use?id=${id}`
-			: `/use?id=${id}&eventId=${events.data?.find((e) => usableEvents.has(e.event_type))?.id}`;
+
+		const hasUsableRoute = (routes.data ?? []).some((route) => {
+			const routeEvent = activeEventsById.get(route.eventId);
+			if (!routeEvent) return false;
+			return !!routeEvent.default_page_id || usableEvents.has(routeEvent.event_type);
+		});
+
+		if (hasUsableRoute) {
+			return `/use?id=${id}`;
+		}
+
+		const fallbackEvent = activeEvents.find((event) =>
+			usableEvents.has(event.event_type),
+		);
+		if (!fallbackEvent) return null;
+
+		return `/use?id=${id}&eventId=${fallbackEvent.id}`;
+	}, [id, events.data, routes.data, usableEvents]);
+
+	useEffect(() => {
+		const canUseApp = !!useAppHref;
 
 		update({
 			title:
@@ -340,9 +360,9 @@ export default function Id({
 				>
 					<MenuIcon className="w-4 h-4" />
 				</Button>,
-				...(hasRoutes || hasUsableEvent
+				...(canUseApp
 					? [
-							<Link key={"use-app"} href={useHref} className="md:hidden">
+							<Link key={"use-app"} href={useAppHref} className="md:hidden">
 								<Button variant="default" size="sm" aria-label="Use App">
 									<SparklesIcon className="w-4 h-4" />
 									Use App
@@ -353,12 +373,9 @@ export default function Id({
 			],
 		});
 	}, [
-		events.data,
-		routes.data,
-		id,
 		metadata.data?.name,
 		metadata.isFetching,
-		usableEvents,
+		useAppHref,
 	]);
 
 	const strength = useMemo(() => {
@@ -435,17 +452,9 @@ export default function Id({
 								</BreadcrumbList>
 							</Breadcrumb>
 							<div className="flex items-center gap-2">
-								{(routes.data?.length ||
-									events.data?.find((e) => usableEvents.has(e.event_type))) && (
+								{useAppHref && (
 									<div className="hidden md:block">
-										<Link
-											href={
-												routes.data?.length
-													? `/use?id=${id}`
-													: `/use?id=${id}&eventId=${events.data?.find((e) => usableEvents.has(e.event_type))?.id}`
-											}
-											className="w-full"
-										>
+										<Link href={useAppHref} className="w-full">
 											<Button
 												size="sm"
 												className="flex items-center gap-2 w-full rounded-full px-4"
@@ -458,16 +467,8 @@ export default function Id({
 								)}
 
 								{/* Mobile "Use App" quick action */}
-								{(routes.data?.length ||
-									events.data?.find((e) => usableEvents.has(e.event_type))) && (
-									<Link
-										href={
-											routes.data?.length
-												? `/use?id=${id}`
-												: `/use?id=${id}&eventId=${events.data?.find((e) => usableEvents.has(e.event_type))?.id}`
-										}
-										className="md:hidden"
-									>
+								{useAppHref && (
+									<Link href={useAppHref} className="md:hidden">
 										<Button variant="default" size="sm" aria-label="Use App">
 											<SparklesIcon className="w-4 h-4" />
 											Use App

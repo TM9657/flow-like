@@ -16,6 +16,7 @@ import BiCTA from "./BiCTA.astro";
 import BiFAQ from "./BiFAQ.astro";
 
 import { tBi } from "../../i18n/locales/pages/bi";
+import { buildAlternateLinks, getOgLocale } from "../../lib/seo";
 
 interface Props {
   lang: string;
@@ -25,7 +26,10 @@ const { lang } = Astro.props;
 const t = (key: string) => tBi(lang, key);
 
 const site = Astro.site ?? import.meta.env.SITE ?? "https://flow-like.com";
-const canonical = new URL(Astro.url.pathname, site).toString();
+const siteUrl = typeof site === "string" ? site : site.toString();
+const canonical = new URL(Astro.url.pathname, siteUrl).toString();
+const alternateLinks = buildAlternateLinks(siteUrl, Astro.url.pathname);
+const ogLocale = getOgLocale(lang);
 
 const title = t("bi.meta.title");
 const desc = t("bi.meta.description");
@@ -48,6 +52,9 @@ const cover = "/og.png";
     <meta name="keywords" content={keywords} />
     <meta name="robots" content="index, follow" />
     <link rel="canonical" href={canonical} />
+    {alternateLinks.map((alt) => (
+      <link rel="alternate" hreflang={alt.hreflang} href={alt.href} />
+    ))}
     <meta name="theme-color" content="#ffffff" />
     <link rel="sitemap" href="/sitemap-index.xml" />
 
@@ -57,6 +64,7 @@ const cover = "/og.png";
     <meta property="og:title" content={ogTitle} />
     <meta property="og:description" content={ogDesc} />
     <meta property="og:image" content={cover} />
+    <meta property="og:locale" content={ogLocale} />
 
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:title" content={ogTitle} />

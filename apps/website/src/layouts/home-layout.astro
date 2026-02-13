@@ -183,10 +183,10 @@ const alternateLinks = Object.keys(languages).map(l => ({
     <link rel="preconnect" href="https://github.com" crossorigin />
 
     <!-- Structured Data (inline, non-blocking) -->
-    <script type="application/ld+json">{JSON.stringify(ldOrganization)}</script>
-    <script type="application/ld+json">{JSON.stringify(ldSoftware)}</script>
-    <script type="application/ld+json">{JSON.stringify(ldWebSite)}</script>
-    <script type="application/ld+json">{JSON.stringify(ldWebPage)}</script>
+    <script type="application/ld+json" is:inline set:html={JSON.stringify(ldOrganization)} />
+    <script type="application/ld+json" is:inline set:html={JSON.stringify(ldSoftware)} />
+    <script type="application/ld+json" is:inline set:html={JSON.stringify(ldWebSite)} />
+    <script type="application/ld+json" is:inline set:html={JSON.stringify(ldWebPage)} />
 
     <!-- Performance helpers -->
     <style is:global>

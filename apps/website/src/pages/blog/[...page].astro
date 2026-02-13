@@ -2,7 +2,7 @@
 import { getCollection } from 'astro:content';
 import PostCard from '../../components/post-card.astro';
 import "@tm9657/flow-like-ui/global.css";
-import "../../styles/Blog.css";
+import "../../styles/blog.css";
 import BlogLayout from '../../layouts/Blog-Layout.astro';
 import type { GetStaticPaths } from 'astro';
 
@@ -18,37 +18,35 @@ const first = page.data[0];
 const rest = page.data.slice(1);
 ---
 <BlogLayout data={{ title: "Blog", description: "Latest news, releases, and tutorials from the Flow-Like team.", slug: "blog" }}>
-  <div class="mx-auto max-w-6xl px-4 sm:px-6 lg:px-8 flex grow flex-col items-stretch gap-12 py-8 sm:py-12">
-    <!-- Page header -->
-    <header class="text-center max-w-2xl mx-auto">
-      <p class="text-[11px] font-medium tracking-[0.3em] uppercase text-primary mb-3">Flow-Like Blog</p>
-      <h1 class="text-3xl sm:text-4xl lg:text-5xl font-bold tracking-tight mb-4">
+  <div class="mx-auto w-full max-w-6xl px-4 sm:px-6 lg:px-8 pb-12 sm:pb-14 lg:pb-16">
+    <header class="mb-10 rounded-2xl border border-border/50 bg-card/50 p-7 text-center backdrop-blur-sm sm:mb-12 sm:p-9 lg:p-11">
+      <p class="mb-3 text-[11px] font-medium tracking-[0.3em] uppercase text-primary">Flow-Like Blog</p>
+      <h1 class="text-4xl font-bold tracking-tight sm:text-5xl lg:text-6xl">
         Latest Updates
       </h1>
-      <p class="text-lg text-muted-foreground">
+      <p class="mx-auto mt-4 max-w-3xl text-base leading-relaxed text-muted-foreground sm:text-lg">
         Releases, deep-dives, comparisons, and tutorials.
       </p>
     </header>
 
-    <!-- Featured post -->
-    {first && <PostCard entry={first} variant="lead" />}
+    <div class="space-y-8 sm:space-y-9 lg:space-y-10">
+      {first && <PostCard entry={first} variant="lead" />}
 
-    <!-- Post grid -->
-    {rest.length > 0 && (
-      <section class="grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
-        {rest.map(p => <PostCard entry={p} variant="compact" />)}
-      </section>
-    )}
+      {rest.length > 0 && (
+        <section class="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+          {rest.map(p => <PostCard entry={p} variant="compact" />)}
+        </section>
+      )}
+    </div>
 
-    <!-- Pagination -->
     {page.lastPage > 1 && (
-      <nav class="flex items-center justify-center gap-2 pt-4" aria-label="Blog pagination">
+      <nav class="flex items-center justify-center gap-2 pt-10 sm:pt-12" aria-label="Blog pagination">
         {page.url.prev && (
           <a
             href={page.url.prev}
-            class="inline-flex items-center gap-1.5 px-4 py-2 rounded-full border border-border/50 text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-muted/50 hover:border-border transition-all"
+            class="inline-flex items-center gap-1.5 rounded-full border border-border/50 px-4 py-2 text-sm font-medium text-muted-foreground transition-all hover:border-border hover:bg-muted/50 hover:text-foreground"
           >
-            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
             </svg>
             Prev
@@ -56,14 +54,14 @@ const rest = page.data.slice(1);
         )}
 
         <div class="flex items-center gap-1">
-          {Array.from({length: page.lastPage}, (_, i) => i + 1).map(i => (
+          {Array.from({ length: page.lastPage }, (_, i) => i + 1).map(i => (
             <a
               href={i === 1 ? '/blog' : `/blog/${i}`}
               aria-current={i === page.currentPage ? 'page' : undefined}
-              class={`w-9 h-9 rounded-full flex items-center justify-center text-sm font-medium transition-all ${
+              class={`flex h-9 w-9 items-center justify-center rounded-full text-sm font-medium transition-all ${
                 i === page.currentPage
                   ? 'bg-primary text-primary-foreground shadow-sm'
-                  : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
+                  : 'text-muted-foreground hover:bg-muted/50 hover:text-foreground'
               }`}
             >
               {i}
@@ -74,10 +72,10 @@ const rest = page.data.slice(1);
         {page.url.next && (
           <a
             href={page.url.next}
-            class="inline-flex items-center gap-1.5 px-4 py-2 rounded-full border border-border/50 text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-muted/50 hover:border-border transition-all"
+            class="inline-flex items-center gap-1.5 rounded-full border border-border/50 px-4 py-2 text-sm font-medium text-muted-foreground transition-all hover:border-border hover:bg-muted/50 hover:text-foreground"
           >
             Next
-            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
             </svg>
           </a>

@@ -45,6 +45,7 @@ export const itCommon = {
 	"footer.eula": "EULA",
 	"footer.privacy": "Informativa sulla privacy",
 	"footer.legal": "Note legali",
+	"footer.dataDeletion": "Cancellazione dei dati",
 
 	// BI Preview Section
 	"bi.preview.badge": "Business Intelligence",

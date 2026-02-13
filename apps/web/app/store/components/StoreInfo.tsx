@@ -88,6 +88,7 @@ export function DetailsCard({
 	price,
 	visibility,
 	priceLabel,
+	canUseApp,
 	onUse,
 	onSettings,
 	onJoinOrRequest,
@@ -100,6 +101,7 @@ export function DetailsCard({
 	price: number;
 	visibility: IAppVisibility;
 	priceLabel: string;
+	canUseApp: boolean;
 	onUse: () => void;
 	onSettings: () => void;
 	onJoinOrRequest: () => Promise<void> | void;
@@ -139,42 +141,41 @@ export function DetailsCard({
 						>
 							<SettingsIcon className="h-4 w-4 mr-2" /> Settings
 						</Button>
-						<Button onClick={onUse} className="flex-grow">
-							{" "}
-							<Play className="h-4 w-4 mr-2" /> Use App
-						</Button>
+						{canUseApp && (
+							<Button onClick={onUse} className="flex-grow">
+								<Play className="h-4 w-4 mr-2" /> Use App
+							</Button>
+						)}
 					</div>
 				) : (
 					<div className="flex flex-1 items-center gap-3">
 						{price > 0 ? (
-							<>
-								<Button
-									onClick={onJoinOrRequest}
-									className="flex-1 md:flex-none md:min-w-[200px]"
-								>
-									<KeyRound className="h-4 w-4 mr-2" /> Request access
-								</Button>
-								<Button
-									variant="secondary"
-									onClick={onBuy}
-									disabled={isPurchasing}
-									className="flex-1 md:flex-none md:min-w-[160px]"
-								>
-									{isPurchasing ? (
-										<>Processing...</>
-									) : (
-										<>
-											<ShoppingCart className="h-4 w-4 mr-2" /> Buy {priceLabel}
-										</>
-									)}
-								</Button>
-							</>
+							<Button
+								onClick={onBuy}
+								disabled={isPurchasing}
+								className="flex-1 md:flex-none md:min-w-[200px] w-full"
+							>
+								{isPurchasing ? (
+									<>Processing...</>
+								) : (
+									<>
+										<ShoppingCart className="h-4 w-4 mr-2" /> Buy {priceLabel}
+									</>
+								)}
+							</Button>
 						) : visibility === IAppVisibility.Public ? (
 							<Button
 								onClick={onJoinOrRequest}
 								className="flex-1 md:flex-none md:min-w-[200px] w-full"
 							>
-								<Users className="h-4 w-4 mr-2" /> Join for free
+								<Download className="h-4 w-4 mr-2" /> Get
+							</Button>
+						) : visibility === IAppVisibility.PublicRequestAccess ? (
+							<Button
+								onClick={onJoinOrRequest}
+								className="flex-1 md:flex-none md:min-w-[200px] w-full"
+							>
+								<KeyRound className="h-4 w-4 mr-2" /> Request join
 							</Button>
 						) : (
 							<Button

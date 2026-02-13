@@ -45,6 +45,7 @@ export const koCommon = {
 	"footer.eula": "EULA",
 	"footer.privacy": "개인정보 처리방침",
 	"footer.legal": "법적 고지",
+	"footer.dataDeletion": "데이터 삭제",
 
 	// BI Preview Section
 	"bi.preview.badge": "비즈니스 인텔리전스",

@@ -203,22 +203,27 @@ async fn execute_internal(
         println!("Error flushing buffered sender: {}", err);
     }
 
-    if let Some(meta) = &meta {
-        let db = {
-            let guard = flow_like_state.config.read().await;
 
-            guard.callbacks.build_logs_database.clone()
+    if let Some(meta) = &meta {
+        let (db_fn, write_options) = {
+            let guard = flow_like_state.config.read().await;
+            (
+                guard.callbacks.build_logs_database.clone(),
+                guard.callbacks.lance_write_options.clone(),
+            )
         };
-        let db_fn = db
+        let db_fn = db_fn
             .as_ref()
             .ok_or_else(|| flow_like_types::anyhow!("No log database configured"))?;
         let base_path = Path::from("runs").child(app_id).child(board_id);
         let db = db_fn(base_path.clone()).execute().await.map_err(|e| {
             flow_like_types::anyhow!("Failed to open database: {}, {:?}", base_path, e)
         })?;
-        meta.flush(db)
+        meta.flush(db, write_options.as_ref())
             .await
-            .map_err(|e| flow_like_types::anyhow!("Failed to flush run: {}, {:?}", base_path, e))?;
+            .map_err(|e| {
+                flow_like_types::anyhow!("Failed to flush run: {}, {:?}", base_path, e)
+            })?;
     }
 
     let _res = flow_like_state.remove_and_cancel_run(&run_id);

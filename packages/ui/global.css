@@ -64,6 +64,8 @@
 	--shadow-2xl: 0 1px 3px 0px hsl(0 0% 0% / 0.25);
 	--tracking-normal: 0em;
 	--spacing: 0.25rem;
+	--fl-safe-top: max(env(safe-area-inset-top, 0px), var(--fl-native-safe-top, 0px));
+	--fl-safe-bottom: max(env(safe-area-inset-bottom, 0px), var(--fl-native-safe-bottom, 0px));
 
 	--pin-string: oklch(71.8% 0.202 349.761);
 	--pin-integer: oklch(78.9% 0.154 211.53);
@@ -509,9 +511,42 @@
 		width: 100%;
 	}
 	body:where([data-desktop-app]) {
-		overflow: hidden;
-		position: fixed;
-		inset: 0;
+		overflow: hidden !important;
+		position: fixed !important;
+		inset: 0 !important;
+	}
+
+	/* Desktop app hardening: safe area support & scroll containment. */
+	html:where([data-desktop-app]) {
+		height: var(--fl-mobile-vvh, 100dvh) !important;
+		--fl-safe-top: max(
+			env(safe-area-inset-top, 0px),
+			var(--fl-native-safe-top, 0px)
+		);
+		--fl-safe-bottom: max(
+			env(safe-area-inset-bottom, 0px),
+			var(--fl-native-safe-bottom, 0px)
+		);
+	}
+
+	body:where([data-desktop-app]) {
+		height: var(--fl-mobile-vvh, 100dvh) !important;
+		width: 100dvw !important;
+	}
+
+	/* Prevent sidebar-wrapper min-h-svh from causing body overflow */
+	body:where([data-desktop-app]) [data-slot="sidebar-wrapper"] {
+		min-height: 0 !important;
+		height: 100% !important;
+		max-height: 100% !important;
+	}
+
+	body:where([data-desktop-app]) [data-slot="scroll-area-viewport"],
+	body:where([data-desktop-app]) .overflow-auto,
+	body:where([data-desktop-app]) .overflow-y-auto,
+	body:where([data-desktop-app]) .overflow-x-auto {
+		overscroll-behavior: contain;
+		-webkit-overflow-scrolling: touch;
 	}
 
 	@supports (font: -apple-system-body) and (-webkit-appearance: none) {

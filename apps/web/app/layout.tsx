@@ -9,17 +9,22 @@ const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://app.flow-like.com";
 
 export const metadata: Metadata = {
 	title: {
-		default: "App | Flow-Like",
-		template: "%s | Flow-Like",
+		default: "Flow-Like Web App | Local-First Workflow Automation",
+		template: "%s | Flow-Like Web App",
 	},
-	description: "Enterprise-grade workflow automation built for scale.",
+	description:
+		"Build and run type-safe, local-first workflow automation in the browser. Self-hosted, auditable, and Rust-powered.",
 	keywords: [
-		"workflow automation",
-		"enterprise automation",
-		"orchestration",
+		"workflow automation web app",
+		"self-hosted workflow automation",
+		"local-first workflow engine",
+		"type-safe workflows",
+		"rust workflow automation",
 		"flow-like",
-		"AI automation",
 	],
+	alternates: {
+		canonical: "/",
+	},
 	authors: [{ name: "TM9657 GmbH" }],
 	creator: "TM9657 GmbH",
 	metadataBase: new URL(siteUrl),
@@ -28,14 +33,15 @@ export const metadata: Metadata = {
 		locale: "en_US",
 		url: siteUrl,
 		siteName: "Flow-Like",
-		title: "Flow-Like",
-		description: "Enterprise-grade workflow automation built for scale.",
+		title: "Flow-Like Web App | Local-First Workflow Automation",
+		description:
+			"Build and run type-safe, local-first workflow automation in the browser. Self-hosted, auditable, and Rust-powered.",
 		images: [
 			{
 				url: "/og.png",
 				width: 1600,
 				height: 900,
-				alt: "Flow-Like",
+				alt: "Flow-Like web app",
 			},
 		],
 	},
@@ -43,8 +49,9 @@ export const metadata: Metadata = {
 		card: "summary_large_image",
 		site: "@greatco_de",
 		creator: "@greatco_de",
-		title: "Flow-Like | Enterprise Automation",
-		description: "Enterprise-grade workflow automation built for scale.",
+		title: "Flow-Like Web App | Local-First Workflow Automation",
+		description:
+			"Build and run type-safe, local-first workflow automation in the browser. Self-hosted, auditable, and Rust-powered.",
 		images: ["/og.png"],
 	},
 	icons: {
@@ -59,6 +66,13 @@ export const metadata: Metadata = {
 	robots: {
 		index: true,
 		follow: true,
+		googleBot: {
+			index: true,
+			follow: true,
+			"max-image-preview": "large",
+			"max-snippet": -1,
+			"max-video-preview": -1,
+		},
 	},
 };
 

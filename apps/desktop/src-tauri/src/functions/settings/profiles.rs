@@ -35,6 +35,32 @@ fn presign_icon(icon: &str) -> Result<String, TauriFunctionError> {
     Ok(url.to_string())
 }
 
+fn decode_asset_proxy_path(path: &str) -> Option<String> {
+    let url = Url::parse(path).ok()?;
+    let host = url.host_str()?;
+    let is_asset_proxy = (url.scheme() == "asset" && host == "localhost")
+        || ((url.scheme() == "http" || url.scheme() == "https") && host == "asset.localhost");
+    if !is_asset_proxy {
+        return None;
+    }
+
+    let encoded_path = url.path().trim_start_matches('/');
+    if encoded_path.is_empty() {
+        return None;
+    }
+
+    let decoded_path = urlencoding::decode(encoded_path).ok()?.into_owned();
+    if decoded_path.is_empty() {
+        return None;
+    }
+
+    Some(decoded_path)
+}
+
+fn now_iso() -> String {
+    chrono::Utc::now().to_rfc3339()
+}
+
 #[instrument(skip_all)]
 #[tauri::command(async)]
 pub async fn get_profiles(
@@ -324,6 +350,9 @@ pub async fn add_bit(
         .get_mut(&profile.hub_profile.id)
         .ok_or(anyhow::anyhow!("Profile not found"))?;
     profile.hub_profile.add_bit(&bit).await;
+    let now = now_iso();
+    profile.hub_profile.updated = now.clone();
+    profile.updated = now;
     settings.serialize();
     Ok(())
 }
@@ -342,6 +371,9 @@ pub async fn remove_bit(
         .get_mut(&profile.hub_profile.id)
         .ok_or(anyhow::anyhow!("Profile not found"))?;
     profile.hub_profile.remove_bit(&bit);
+    let now = now_iso();
+    profile.hub_profile.updated = now.clone();
+    profile.updated = now;
     settings.serialize();
     Ok(())
 }
@@ -391,6 +423,9 @@ pub async fn change_profile_image(
 
     println!("Setting icon to {}", icon);
     profile.hub_profile.icon = Some(icon);
+    let now = now_iso();
+    profile.hub_profile.updated = now.clone();
+    profile.updated = now;
     settings.serialize();
 
     if let Some(icon) = icon_to_delete {
@@ -441,6 +476,10 @@ pub async fn profile_update_app(
             }
         }
     }
+
+    let now = now_iso();
+    profile.hub_profile.updated = now.clone();
+    profile.updated = now;
     settings.serialize();
     Ok(())
 }
@@ -452,7 +491,9 @@ pub async fn read_profile_icon(icon_path: String) -> Result<Vec<u8>, TauriFuncti
     let decoded_path = urlencoding::decode(&icon_path)
         .map_err(|e| TauriFunctionError::new(&format!("Failed to decode path: {}", e)))?;
 
-    let path = PathBuf::from(decoded_path.as_ref());
+    let resolved_path =
+        decode_asset_proxy_path(decoded_path.as_ref()).unwrap_or_else(|| decoded_path.into_owned());
+    let path = PathBuf::from(resolved_path);
 
     if !path.exists() {
         return Err(TauriFunctionError::new(&format!(
@@ -494,13 +535,17 @@ pub async fn get_profile_icon_path(
     };
 
     match path {
-        Some(p)
-            if !p.starts_with("http://")
-                && !p.starts_with("https://")
-                && !p.starts_with("asset://") =>
-        {
+        Some(p) => {
+            if let Some(decoded_path) = decode_asset_proxy_path(&p) {
+                return Ok(Some(decoded_path));
+            }
+
+            if p.starts_with("http://") || p.starts_with("https://") {
+                return Ok(None);
+            }
+
             Ok(Some(p))
         }
-        _ => Ok(None),
+        None => Ok(None),
     }
 }

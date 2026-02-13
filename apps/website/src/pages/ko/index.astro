@@ -148,10 +148,10 @@ const alternateLinks = [
     <meta name="twitter:description" content={description} />
     <meta name="twitter:image" content={ogImage} />
 
-    <script type="application/ld+json">{JSON.stringify(ldOrganization)}</script>
-    <script type="application/ld+json">{JSON.stringify(ldSoftware)}</script>
-    <script type="application/ld+json">{JSON.stringify(ldWebSite)}</script>
-    <script type="application/ld+json">{JSON.stringify(ldWebPage)}</script>
+    <script type="application/ld+json" is:inline set:html={JSON.stringify(ldOrganization)} />
+    <script type="application/ld+json" is:inline set:html={JSON.stringify(ldSoftware)} />
+    <script type="application/ld+json" is:inline set:html={JSON.stringify(ldWebSite)} />
+    <script type="application/ld+json" is:inline set:html={JSON.stringify(ldWebPage)} />
 
     <style is:global>
       body {

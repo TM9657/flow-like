@@ -8,8 +8,6 @@ use flow_like::flow::{
     variable::VariableType,
 };
 use flow_like_types::{async_trait, json::json};
-#[cfg(feature = "execute")]
-use umya_spreadsheet::{self};
 
 /// Write a single cell inside an Excel workbook (XLSX).
 /// Works with virtual/object-store files via `FlowPath` (no local filesystem I/O).
@@ -76,6 +74,8 @@ impl NodeLogic for WriteCellNode {
 
     #[cfg(feature = "execute")]
     async fn run(&self, ctx: &mut ExecutionContext) -> flow_like_types::Result<()> {
+        use super::{CachedExcelWorkbook, flush_workbook, get_or_open_workbook};
+
         ctx.deactivate_exec_pin("exec_out").await?;
 
         let file: FlowPath = ctx.evaluate_pin("file").await?;
@@ -84,42 +84,28 @@ impl NodeLogic for WriteCellNode {
         let col_str: String = ctx.evaluate_pin("col").await?;
         let value: String = ctx.evaluate_pin("value").await?;
 
-        let file_content: Vec<u8> = file.get(ctx, false).await?;
-        let file_content_reader = std::io::Cursor::new(&file_content);
-        let mut book = match umya_spreadsheet::reader::xlsx::read_reader(file_content_reader, true)
-        {
-            Ok(b) => b,
-            Err(e) => return Err(flow_like_types::anyhow!("Failed to read workbook: {}", e)),
-        };
-
-        let _ = if book.get_sheet_by_name(&sheet).is_some() {
-        } else {
-            book.new_sheet(&sheet)
-                .map_err(|e| flow_like_types::anyhow!("Failed to create sheet: {}", e))?;
-        };
-        let ws = book.get_sheet_by_name_mut(&sheet).ok_or_else(|| {
-            flow_like_types::anyhow!("Failed to access or create sheet: {}", sheet)
-        })?;
-
-        // Parse row & column (both 1-based)
         let row = parse_row_1_based(&row_str)?;
         let col = parse_col_1_based(&col_str)?;
 
-        // Set cell value
+        let cached = get_or_open_workbook(ctx, &file, false).await?;
+        let wb = cached
+            .as_any()
+            .downcast_ref::<CachedExcelWorkbook>()
+            .ok_or_else(|| flow_like_types::anyhow!("Cache type mismatch"))?;
+
         {
-            let cell = ws.get_cell_mut((col, row));
-            cell.set_value(value.clone());
+            let mut book = wb.umya_book_mut()?;
+            if book.get_sheet_by_name(&sheet).is_none() {
+                book.new_sheet(&sheet)
+                    .map_err(|e| flow_like_types::anyhow!("Failed to create sheet: {}", e))?;
+            }
+            let ws = book.get_sheet_by_name_mut(&sheet).ok_or_else(|| {
+                flow_like_types::anyhow!("Failed to access or create sheet: {}", sheet)
+            })?;
+            ws.get_cell_mut((col, row)).set_value(value);
         }
 
-        let mut out: Vec<u8> = Vec::new();
-        if let Err(e) = umya_spreadsheet::writer::xlsx::write_writer(&book, &mut out) {
-            return Err(flow_like_types::anyhow!(
-                "Failed to serialize workbook: {}",
-                e
-            ));
-        }
-
-        file.put(ctx, out, false).await?;
+        flush_workbook(wb, &file, ctx).await?;
 
         ctx.set_pin_value("file_out", json!(file)).await?;
         ctx.activate_exec_pin("exec_out").await?;

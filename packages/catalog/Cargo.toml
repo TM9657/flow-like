@@ -20,6 +20,9 @@ remote-ml = [
     "flow-like-catalog-core/remote-ml",
     "flow-like-catalog-llm/remote-ml",
 ]
+tauri = [
+    "flow-like-catalog-llm/tauri",
+]
 mimalloc = ["dep:mimalloc"]
 
 
@@ -59,6 +62,7 @@ all-databases-with-odbc = ["all-databases", "odbc"]
 federation = ["flow-like-catalog-data/federation"]
 postgres-federation = ["flow-like-catalog-data/postgres-federation"]
 mysql-federation = ["flow-like-catalog-data/mysql-federation"]
+# Explicit rustls variants (transparent — postgres/mysql already use rustls under the hood)
 sqlite-federation = ["flow-like-catalog-data/sqlite-federation"]
 duckdb-federation = ["flow-like-catalog-data/duckdb-federation"]
 clickhouse-federation = ["flow-like-catalog-data/clickhouse-federation"]

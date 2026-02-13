@@ -10,18 +10,24 @@ import PricingStudio from "./PricingStudio.astro";
 import PricingTiers from "./PricingTiers.astro";
 import PricingFAQ from "./PricingFAQ.astro";
 import PricingCTA from "./PricingCTA.astro";
+import { tCommon } from "../../i18n/locales/pages/common";
+import { buildAlternateLinks, getOgLocale } from "../../lib/seo";
 
 interface Props {
   lang: string;
 }
 
 const { lang } = Astro.props;
+const t = (key: string) => tCommon(lang, key);
 
 const site = Astro.site ?? import.meta.env.SITE ?? "https://flow-like.com";
-const canonical = new URL(Astro.url.pathname, site).toString();
+const siteUrl = typeof site === "string" ? site : site.toString();
+const canonical = new URL(Astro.url.pathname, siteUrl).toString();
+const alternateLinks = buildAlternateLinks(siteUrl, Astro.url.pathname);
+const ogLocale = getOgLocale(lang);
 
-const title = "Pricing - Flow Like";
-const desc = "Simple, transparent pricing. Start free, scale as you grow. No hidden fees, no per-seat licensing.";
+const title = `Flow-Like Pricing | ${t("pricing.badge")}`;
+const desc = t("pricing.description");
 const cover = "/og.png";
 ---
 
@@ -37,6 +43,9 @@ const cover = "/og.png";
     <meta name="description" content={desc} />
     <meta name="robots" content="index, follow" />
     <link rel="canonical" href={canonical} />
+    {alternateLinks.map((alt) => (
+      <link rel="alternate" hreflang={alt.hreflang} href={alt.href} />
+    ))}
     <meta name="theme-color" content="#ffffff" />
     <link rel="sitemap" href="/sitemap-index.xml" />
 
@@ -46,6 +55,7 @@ const cover = "/og.png";
     <meta property="og:title" content={title} />
     <meta property="og:description" content={desc} />
     <meta property="og:image" content={cover} />
+    <meta property="og:locale" content={ogLocale} />
 
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:title" content={title} />

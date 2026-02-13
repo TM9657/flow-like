@@ -27,10 +27,12 @@ import { Avatar, AvatarFallback, AvatarImage } from "./avatar";
 import { Badge } from "./badge";
 import { Button } from "./button";
 import {
+	isEmbeddingBit,
 	ModalityIcons,
 	ModelTypeIcon,
 	formatContextLength,
 	getCapabilityIcon,
+	supportsRemoteEmbeddingExecution,
 } from "./model-card";
 import { Progress } from "./progress";
 import {
@@ -237,6 +239,8 @@ export function ModelDetailSheet({
 	const contextLength = (params as ILlmParameters)?.context_length;
 	const embeddingParams = params as IEmbeddingModelParameters;
 	const isHosted = bitSize.data === 0 || isVirtualBit;
+	const canRunRemotely = supportsRemoteEmbeddingExecution(bit);
+	const isEmbeddingModel = isEmbeddingBit(bit);
 
 	return (
 		<Sheet open={open} onOpenChange={onOpenChange}>
@@ -304,6 +308,16 @@ export function ModelDetailSheet({
 						{contextLength && (
 							<Badge variant="outline">
 								{formatContextLength(contextLength)}
+							</Badge>
+						)}
+						{canRunRemotely && (
+							<Badge className="bg-cyan-500/10 text-cyan-700 border-cyan-500/30">
+								Remote
+							</Badge>
+						)}
+						{isEmbeddingModel && !canRunRemotely && (
+							<Badge className="bg-zinc-500/10 text-zinc-600 border-zinc-500/30">
+								Local only
 							</Badge>
 						)}
 						{tierInfo.isRestricted && tierInfo.requiredTier && (

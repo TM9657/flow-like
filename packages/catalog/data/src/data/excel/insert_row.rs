@@ -145,13 +145,11 @@ impl NodeLogic for InsertRowNode {
 
     #[cfg(feature = "execute")]
     async fn run(&self, context: &mut ExecutionContext) -> flow_like_types::Result<()> {
-        use std::io::Cursor;
+        use super::{CachedExcelWorkbook, flush_workbook, get_or_open_workbook};
 
-        // Only one outgoing exec pin; deactivate so the graph won't continue on failure.
         context.deactivate_exec_pin("exec_out").await?;
 
-        // Inputs
-        let file: FlowPath = context.evaluate_pin("file").await?; // throws on failure
+        let file: FlowPath = context.evaluate_pin("file").await?;
         let sheet_name: String = context.evaluate_pin("sheet_name").await?;
         let row_index_in: i64 = context.evaluate_pin("row").await.unwrap_or(1);
         let position: String = context.evaluate_pin("position").await?;
@@ -168,43 +166,38 @@ impl NodeLogic for InsertRowNode {
             num_rows = 1;
         }
 
-        let base_index: u32 = row_index_in as u32; // safe after check
+        let base_index: u32 = row_index_in as u32;
         let insert_index: u32 = match position.as_str() {
             "after" => base_index + 1,
             _ => base_index,
         };
         let num_rows_u32: u32 = num_rows as u32;
 
-        // Load workbook
-        let bytes = file.get(context, false).await?; // throws on failure
-        let mut book = umya_spreadsheet::reader::xlsx::read_reader(Cursor::new(bytes), true)
-            .map_err(|e| anyhow!("Failed to read workbook: {}", e))?;
+        let cached = get_or_open_workbook(context, &file, false).await?;
+        let wb = cached
+            .as_any()
+            .downcast_ref::<CachedExcelWorkbook>()
+            .ok_or_else(|| anyhow!("Cache type mismatch"))?;
 
-        // Ensure sheet exists
-        if book.get_sheet_by_name(&sheet_name).is_none() {
-            return Err(anyhow!("Sheet '{}' not found", sheet_name));
-        }
+        {
+            let mut book = wb.umya_book_mut()?;
 
-        // Insert rows
-        if adjust_refs {
-            // Spreadsheet-level insert adjusts references across workbook
-            book.insert_new_row(&sheet_name, &insert_index, &num_rows_u32);
-        } else {
-            // Worksheet-only adjustment
-            if let Some(ws) = book.get_sheet_by_name_mut(&sheet_name) {
-                ws.insert_new_row(&insert_index, &num_rows_u32);
+            if book.get_sheet_by_name(&sheet_name).is_none() {
+                return Err(anyhow!("Sheet '{}' not found", sheet_name));
+            }
+
+            if adjust_refs {
+                book.insert_new_row(&sheet_name, &insert_index, &num_rows_u32);
             } else {
-                return Err(anyhow!("Sheet '{}' not found (mut)", sheet_name));
+                let ws = book
+                    .get_sheet_by_name_mut(&sheet_name)
+                    .ok_or_else(|| anyhow!("Sheet '{}' not found (mut)", sheet_name))?;
+                ws.insert_new_row(&insert_index, &num_rows_u32);
             }
         }
 
-        // Persist
-        let mut out = Cursor::new(Vec::<u8>::new());
-        umya_spreadsheet::writer::xlsx::write_writer(&book, &mut out)
-            .map_err(|e| anyhow!("Failed to write workbook: {}", e))?;
-        file.put(context, out.into_inner(), false).await?; // throws on failure
+        flush_workbook(wb, &file, context).await?;
 
-        // Outputs
         context.set_pin_value("inserted", json!(true)).await?;
         context
             .set_pin_value("final_row_index", json!(insert_index as i64))

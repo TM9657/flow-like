@@ -98,7 +98,7 @@ impl NodeLogic for NewWorksheetNode {
 
     #[cfg(feature = "execute")]
     async fn run(&self, context: &mut ExecutionContext) -> flow_like_types::Result<()> {
-        use std::io::Cursor;
+        use super::{CachedExcelWorkbook, flush_workbook, get_or_open_workbook};
 
         context.deactivate_exec_pin("exec_out").await?;
 
@@ -111,45 +111,54 @@ impl NodeLogic for NewWorksheetNode {
             bail!("Invalid sheet name (empty after sanitization)");
         }
 
-        let bytes = file.get(context, false).await?;
+        let cached = get_or_open_workbook(context, &file, false).await?;
+        let wb = cached
+            .as_any()
+            .downcast_ref::<CachedExcelWorkbook>()
+            .ok_or_else(|| flow_like_types::anyhow!("Cache type mismatch"))?;
 
-        let mut workbook = umya_spreadsheet::reader::xlsx::read_reader(Cursor::new(bytes), true)?;
+        let (target_name, created) = {
+            let mut book = wb.umya_book_mut()?;
 
-        let mut target_name = sheet_name.clone();
-        let exists = workbook.get_sheet_by_name(&target_name).is_some();
+            let mut target_name = sheet_name.clone();
+            let exists = book.get_sheet_by_name(&target_name).is_some();
+            let mut created = false;
 
-        let mut created = false;
-        if exists {
-            match if_exists.as_str() {
-                "skip" => {
-                    context.log_message(
-                        &format!("Sheet '{}' exists. Skipping creation.", target_name),
-                        LogLevel::Info,
-                    );
+            if exists {
+                match if_exists.as_str() {
+                    "skip" => {
+                        context.log_message(
+                            &format!("Sheet '{}' exists. Skipping creation.", target_name),
+                            LogLevel::Info,
+                        );
+                    }
+                    "rename" => {
+                        target_name = next_unique_sheet_name(&book, &target_name);
+                        book.new_sheet(&target_name).map_err(|e| {
+                            flow_like_types::anyhow!(
+                                "Failed to create sheet '{}': {}",
+                                target_name,
+                                e
+                            )
+                        })?;
+                        created = true;
+                    }
+                    _ => {
+                        bail!("Sheet '{}' already exists", target_name);
+                    }
                 }
-                "rename" => {
-                    target_name = next_unique_sheet_name(&workbook, &target_name);
-                    workbook.new_sheet(&target_name).map_err(|e| {
-                        flow_like_types::anyhow!("Failed to create sheet '{}': {}", target_name, e)
-                    })?;
-                    created = true;
-                }
-                _ => {
-                    bail!("Sheet '{}' already exists", target_name);
-                }
+            } else {
+                book.new_sheet(&target_name).map_err(|e| {
+                    flow_like_types::anyhow!("Failed to create sheet '{}': {}", target_name, e)
+                })?;
+                created = true;
             }
-        } else {
-            workbook.new_sheet(&target_name).map_err(|e| {
-                flow_like_types::anyhow!("Failed to create sheet '{}': {}", target_name, e)
-            })?;
-            created = true;
-        }
+
+            (target_name, created)
+        };
 
         if created {
-            let mut out = Cursor::new(Vec::<u8>::new());
-            umya_spreadsheet::writer::xlsx::write_writer(&workbook, &mut out)?;
-            let out_bytes = out.into_inner();
-            file.put(context, out_bytes, false).await?;
+            flush_workbook(wb, &file, context).await?;
         }
 
         context.set_pin_value("created", json!(created)).await?;

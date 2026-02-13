@@ -45,6 +45,7 @@ export const svCommon = {
 	"footer.eula": "EULA",
 	"footer.privacy": "Integritetspolicy",
 	"footer.legal": "Juridiskt meddelande",
+	"footer.dataDeletion": "Radering av data",
 
 	// BI Preview Section
 	"bi.preview.badge": "Business Intelligence",

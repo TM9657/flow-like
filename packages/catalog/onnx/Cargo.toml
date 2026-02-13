@@ -48,7 +48,7 @@ tokenizers = { version = "0.22.2", optional = true }
 
 [dev-dependencies]
 serde_json = "1.0"
-reqwest = { version = "0.12", features = ["blocking"] }
+reqwest = { version = "0.12", default-features = false, features = ["blocking", "rustls-tls"] }
 image = "0.25"
 
 [[test]]

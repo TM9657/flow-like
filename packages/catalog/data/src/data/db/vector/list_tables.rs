@@ -102,7 +102,17 @@ impl NodeLogic for ListTablesNode {
         };
 
         let db = db.execute().await?;
-        let intermediate = LanceDBVectorStore::from_connection(db, "".to_string()).await;
+        let mut intermediate = LanceDBVectorStore::from_connection(db, "".to_string()).await;
+        if let Some(opts) = &context
+            .app_state
+            .config
+            .read()
+            .await
+            .callbacks
+            .lance_write_options
+        {
+            intermediate.set_write_options(opts.clone());
+        }
         let tables = intermediate.list_tables().await?;
 
         context.set_pin_value("tables", json!(tables)).await?;
