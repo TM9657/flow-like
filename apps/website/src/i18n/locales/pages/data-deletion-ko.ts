@@ -53,8 +53,7 @@ export const koDataDeletion = {
 	"dataDeletion.withAccount.notStored": "저장하지 않는 정보",
 	"dataDeletion.withAccount.notStored1":
 		"개인 데이터를 제3자에게 판매하지 않습니다",
-	"dataDeletion.withAccount.notStored2":
-		"결제 정보를 직접 저장하지 않습니다",
+	"dataDeletion.withAccount.notStored2": "결제 정보를 직접 저장하지 않습니다",
 	"dataDeletion.withAccount.notStored3":
 		"당사 서비스 외부의 브라우징 활동을 추적하지 않습니다",
 
@@ -93,8 +92,7 @@ export const koDataDeletion = {
 	"dataDeletion.rights.rectificationDesc":
 		"부정확한 개인 데이터의 정정을 요청할 수 있습니다",
 	"dataDeletion.rights.erasure": "삭제권",
-	"dataDeletion.rights.erasureDesc":
-		"개인 데이터의 삭제를 요청할 수 있습니다",
+	"dataDeletion.rights.erasureDesc": "개인 데이터의 삭제를 요청할 수 있습니다",
 	"dataDeletion.rights.portability": "이동권",
 	"dataDeletion.rights.portabilityDesc":
 		"데이터를 이식 가능한 형식으로 요청할 수 있습니다",

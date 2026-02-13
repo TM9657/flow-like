@@ -37,7 +37,10 @@ function localeAgnosticPath(pathname: string): string {
 	return normalized;
 }
 
-export function buildAlternateLinks(site: string, pathname: string): HreflangLink[] {
+export function buildAlternateLinks(
+	site: string,
+	pathname: string,
+): HreflangLink[] {
 	const siteBase = site.endsWith("/") ? site.slice(0, -1) : site;
 	const path = localeAgnosticPath(pathname);
 	const toHref = (locale: string): string =>

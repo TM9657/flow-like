@@ -2,7 +2,11 @@
 import { listen } from "@tauri-apps/api/event";
 import { getCurrent } from "@tauri-apps/plugin-deep-link";
 import { openUrl } from "@tauri-apps/plugin-opener";
-import { useBackend, useInvalidateInvoke, useInvoke } from "@tm9657/flow-like-ui";
+import {
+	useBackend,
+	useInvalidateInvoke,
+	useInvoke,
+} from "@tm9657/flow-like-ui";
 import type { IProfile } from "@tm9657/flow-like-ui";
 import { Amplify } from "aws-amplify";
 import {
@@ -351,7 +355,9 @@ function AuthInner({ children }: Readonly<{ children: React.ReactNode }>) {
 			try {
 				const user = await userManager.getUser();
 				if (user && !user.expired) {
-					console.log("[AuthInner] fl-auth-changed: reloading user into context");
+					console.log(
+						"[AuthInner] fl-auth-changed: reloading user into context",
+					);
 					const events = authEventsRef.current;
 					if (events) {
 						await events.load(user);

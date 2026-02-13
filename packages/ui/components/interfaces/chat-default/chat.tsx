@@ -291,7 +291,10 @@ const ChatInner = forwardRef<IChatRef, IChatProps>(
 						style={{ WebkitOverflowScrolling: "touch" }}
 					>
 						{localMessages.map((message) => (
-							<div className="w-full max-w-screen-lg px-1 sm:px-4" key={message.id}>
+							<div
+								className="w-full max-w-screen-lg px-1 sm:px-4"
+								key={message.id}
+							>
 								<MessageComponent
 									message={message}
 									onMessageUpdate={onMessageUpdate}

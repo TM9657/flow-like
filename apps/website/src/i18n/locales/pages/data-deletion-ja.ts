@@ -93,8 +93,7 @@ export const jaDataDeletion = {
 	"dataDeletion.rights.rectificationDesc":
 		"不正確な個人データの訂正を請求できます",
 	"dataDeletion.rights.erasure": "削除権",
-	"dataDeletion.rights.erasureDesc":
-		"個人データの削除を請求できます",
+	"dataDeletion.rights.erasureDesc": "個人データの削除を請求できます",
 	"dataDeletion.rights.portability": "データポータビリティ権",
 	"dataDeletion.rights.portabilityDesc":
 		"データをポータブルな形式で請求できます",

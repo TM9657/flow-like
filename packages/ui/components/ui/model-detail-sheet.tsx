@@ -27,11 +27,11 @@ import { Avatar, AvatarFallback, AvatarImage } from "./avatar";
 import { Badge } from "./badge";
 import { Button } from "./button";
 import {
-	isEmbeddingBit,
 	ModalityIcons,
 	ModelTypeIcon,
 	formatContextLength,
 	getCapabilityIcon,
+	isEmbeddingBit,
 	supportsRemoteEmbeddingExecution,
 } from "./model-card";
 import { Progress } from "./progress";

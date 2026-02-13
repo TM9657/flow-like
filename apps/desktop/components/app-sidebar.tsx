@@ -280,7 +280,10 @@ export function AppSidebar({
 					<MobileHeader />
 					<SidebarInset
 						className="relative flex flex-col flex-1 min-h-0 h-full overflow-hidden"
-						style={{ paddingBottom: "var(--fl-safe-bottom, env(safe-area-inset-bottom, 0px))" }}
+						style={{
+							paddingBottom:
+								"var(--fl-safe-bottom, env(safe-area-inset-bottom, 0px))",
+						}}
 					>
 						<FlowBackground
 							intensity="subtle"

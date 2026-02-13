@@ -67,8 +67,7 @@ export const ptDataDeletion = {
 	"dataDeletion.withAccount.step1Detail":
 		"a partir do endereço de e-mail associado à sua conta",
 	"dataDeletion.withAccount.step2": "Utilize o assunto:",
-	"dataDeletion.withAccount.step2Subject":
-		"Pedido de eliminação de dados",
+	"dataDeletion.withAccount.step2Subject": "Pedido de eliminação de dados",
 	"dataDeletion.withAccount.step3":
 		"Confirme no corpo do e-mail que pretende a remoção de todos os seus dados pessoais",
 	"dataDeletion.withAccount.processingTime":
