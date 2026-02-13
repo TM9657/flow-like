@@ -127,18 +127,14 @@ impl EmbeddingModelLogic for LocalEmbeddingModel {
             .map(|text| format!("{}{}", params.prefix.query, text))
             .collect::<Vec<String>>();
 
-        let embeddings = match self
-            .embedding_model
-            .lock()
-            .await
-            .embed(prefixed_array.to_vec(), None)
-        {
-            Ok(embeddings) => embeddings,
-            Err(e) => {
-                println!("Error embedding text: {}", e);
-                return Err(anyhow!("Error embedding text"));
-            }
-        };
+        let model = self.embedding_model.clone();
+        let embeddings = flow_like_types::tokio::task::spawn_blocking(move || {
+            model.blocking_lock().embed(prefixed_array, None)
+        })
+        .await
+        .map_err(|e| anyhow!("Blocking task failed: {}", e))?
+        .map_err(|e| anyhow!("Error embedding text: {}", e))?;
+
         Ok(embeddings)
     }
 
@@ -155,18 +151,15 @@ impl EmbeddingModelLogic for LocalEmbeddingModel {
             .iter()
             .map(|text| format!("{}{}", params.prefix.paragraph, text))
             .collect::<Vec<String>>();
-        let embeddings = match self
-            .embedding_model
-            .lock()
-            .await
-            .embed(prefixed_array, None)
-        {
-            Ok(embeddings) => embeddings,
-            Err(e) => {
-                println!("Error embedding text: {}", e);
-                return Err(anyhow!("Error embedding text"));
-            }
-        };
+
+        let model = self.embedding_model.clone();
+        let embeddings = flow_like_types::tokio::task::spawn_blocking(move || {
+            model.blocking_lock().embed(prefixed_array, None)
+        })
+        .await
+        .map_err(|e| anyhow!("Blocking task failed: {}", e))?
+        .map_err(|e| anyhow!("Error embedding text: {}", e))?;
+
         Ok(embeddings)
     }
 

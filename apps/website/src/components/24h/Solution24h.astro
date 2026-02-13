@@ -16,6 +16,7 @@ import FAQ from "./FAQ.astro";
 import Contact from "./Contact.astro";
 
 import { t24h } from "../../i18n/locales/pages/24h";
+import { buildAlternateLinks, getOgLocale } from "../../lib/seo";
 
 interface Props {
   lang: string;
@@ -25,7 +26,10 @@ const { lang } = Astro.props;
 const t = (key: string) => t24h(lang, key);
 
 const site = Astro.site ?? import.meta.env.SITE ?? "https://flow-like.com";
-const canonical = new URL(Astro.url.pathname, site).toString();
+const siteUrl = typeof site === "string" ? site : site.toString();
+const canonical = new URL(Astro.url.pathname, siteUrl).toString();
+const alternateLinks = buildAlternateLinks(siteUrl, Astro.url.pathname);
+const ogLocale = getOgLocale(lang);
 
 const title = t("24h.meta.title");
 const desc = t("24h.meta.description");
@@ -44,6 +48,9 @@ const cover = "/og.png";
     <meta name="description" content={desc} />
     <meta name="robots" content="index, follow" />
     <link rel="canonical" href={canonical} />
+    {alternateLinks.map((alt) => (
+      <link rel="alternate" hreflang={alt.hreflang} href={alt.href} />
+    ))}
     <meta name="theme-color" content="#ffffff" />
     <link rel="sitemap" href="/sitemap-index.xml" />
 
@@ -53,6 +60,7 @@ const cover = "/og.png";
     <meta property="og:title" content={title} />
     <meta property="og:description" content={desc} />
     <meta property="og:image" content={cover} />
+    <meta property="og:locale" content={ogLocale} />
 
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:title" content={title} />

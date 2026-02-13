@@ -72,7 +72,7 @@ export function StoreHero({
 				<div className="absolute inset-0 md:inset-auto md:relative rounded-md bg-background/60 md:bg-background/25 supports-[backdrop-filter]:bg-background/40 md:supports-[backdrop-filter]:bg-background/20 backdrop-blur-md md:backdrop-blur-sm shadow-sm transition-colors sheen" />
 
 				<div className="relative grid grid-cols-1 md:grid-cols-[auto,1fr] items-start md:items-center gap-3 sm:gap-4 md:gap-5 lg:gap-6">
-					<Avatar className="h-16 w-16 md:h-20 md:w-20 lg:h-24 lg:w-24 shadow-lg ring-1 ring-background/40">
+					<Avatar className="h-16 w-16 md:h-20 md:w-20 lg:h-24 lg:w-24 shadow-lg">
 						<AvatarImage src={iconUrl} alt={appName} />
 						<AvatarFallback className="font-bold">
 							{appName.slice(0, 2).toUpperCase()}
@@ -118,8 +118,8 @@ export function StoreHero({
 							<ShareButton
 								appId={appId}
 								appName={appName}
-								variant="outline"
-								className="ml-auto"
+								variant="default"
+								className="ml-auto shadow-md"
 							/>
 						</div>
 					</div>

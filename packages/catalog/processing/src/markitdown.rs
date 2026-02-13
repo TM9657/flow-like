@@ -61,6 +61,47 @@ pub fn pages_to_markdown(pages: &[DocumentPage]) -> String {
 }
 
 #[cfg(feature = "execute")]
+/// Safely calls markitdown convert_bytes, catching any panics from the underlying crate.
+async fn safe_convert_bytes(
+    _md: &MarkItDown,
+    bytes: Bytes,
+    options: Option<ConversionOptions>,
+) -> flow_like_types::Result<Document> {
+    use flow_like_types::tokio;
+
+    let handle = tokio::task::spawn(async move {
+        let md = MarkItDown::new();
+        md.convert_bytes(bytes, options).await
+    });
+
+    match handle.await {
+        Ok(Ok(doc)) => Ok(doc),
+        Ok(Err(e)) => Err(flow_like_types::anyhow!(
+            "Document conversion failed: {}",
+            e
+        )),
+        Err(e) if e.is_panic() => {
+            let panic_msg = if let Ok(reason) = e.try_into_panic() {
+                if let Some(s) = reason.downcast_ref::<String>() {
+                    s.clone()
+                } else if let Some(s) = reason.downcast_ref::<&str>() {
+                    s.to_string()
+                } else {
+                    "Unknown panic".to_string()
+                }
+            } else {
+                "Unknown panic".to_string()
+            };
+            Err(flow_like_types::anyhow!(
+                "Document conversion panicked: {}",
+                panic_msg
+            ))
+        }
+        Err(e) => Err(flow_like_types::anyhow!("Document conversion task failed: {}", e)),
+    }
+}
+
+#[cfg(feature = "execute")]
 /// Converts a markitdown Document to DocumentPages, caching images
 async fn document_to_pages(
     document: &Document,
@@ -204,14 +245,8 @@ impl NodeLogic for ExtractDocumentNode {
             .with_image_context_path(file.path)
             .with_images(extract_images);
 
-        // Run the heavy document conversion in a cancellable task
-        let result = context
-            .run_cancellable(async move {
-                let md = MarkItDown::new();
-                md.convert_bytes(bytes, Some(options)).await
-            })
-            .await?
-            .map_err(|e| flow_like_types::anyhow!("Failed to extract document: {}", e))?;
+        let md = MarkItDown::new();
+        let result = safe_convert_bytes(&md, bytes, Some(options)).await?;
 
         let pages = document_to_pages(&result, context).await?;
 
@@ -400,10 +435,7 @@ impl NodeLogic for ExtractDocumentAiNode {
             .with_llm(llm_client);
         options.url = Some(file_path_clone);
 
-        let result = md
-            .convert_bytes(bytes, Some(options))
-            .await
-            .map_err(|e| flow_like_types::anyhow!("Failed to extract document with AI: {}", e))?;
+        let result = safe_convert_bytes(&md, bytes, Some(options)).await?;
 
         let pages = document_to_pages(&result, context).await?;
 
@@ -525,16 +557,14 @@ impl NodeLogic for ExtractDocumentsNode {
                 .with_image_context_path(file.path)
                 .with_images(extract_images);
 
-            let result = md
-                .convert_bytes(bytes, Some(options))
-                .await
-                .map_err(|e| flow_like_types::anyhow!("Failed to extract document: {}", e))?;
+            let result = safe_convert_bytes(&md, bytes, Some(options)).await?;
 
             let pages = document_to_pages(&result, context).await?;
             all_results.push(pages);
         }
 
-        context.set_pin_value("results", json!(all_results)).await?;
+        let flat_results: Vec<DocumentPage> = all_results.into_iter().flatten().collect();
+        context.set_pin_value("results", json!(flat_results)).await?;
         context.activate_exec_pin("exec_out").await?;
 
         Ok(())
@@ -721,15 +751,14 @@ impl NodeLogic for ExtractDocumentsAiNode {
                 .with_image_context_path(file.path.clone())
                 .with_llm(llm_client.clone());
 
-            let result = md.convert_bytes(bytes, Some(options)).await.map_err(|e| {
-                flow_like_types::anyhow!("Failed to extract document with AI: {}", e)
-            })?;
+            let result = safe_convert_bytes(&md, bytes, Some(options)).await?;
 
             let pages = document_to_pages(&result, context).await?;
             all_results.push(pages);
         }
 
-        context.set_pin_value("results", json!(all_results)).await?;
+        let flat_results: Vec<DocumentPage> = all_results.into_iter().flatten().collect();
+        context.set_pin_value("results", json!(flat_results)).await?;
         context.activate_exec_pin("exec_out").await?;
 
         Ok(())

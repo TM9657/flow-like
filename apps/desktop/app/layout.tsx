@@ -46,6 +46,7 @@ import { DesktopAuthProvider } from "../components/auth-provider";
 import { DeeplinkNavigationHandler } from "../components/deeplink-navigation-handler";
 import DownloadNotificationProvider from "../components/download-notification-provider";
 import GlobalAnchorHandler from "../components/global-anchor-component";
+import { IOSWebviewHardening } from "../components/ios-webview-hardening";
 import NotificationProvider from "../components/notification-provider";
 import { OAuthCallbackHandler } from "../components/oauth-callback-handler";
 import { OAuthExecutionProvider } from "../components/oauth-execution-provider";
@@ -155,7 +156,7 @@ export default function RootLayout({
 	children: React.ReactNode;
 }>) {
 	return (
-		<html lang="en" suppressHydrationWarning suppressContentEditableWarning>
+		<html lang="en" data-desktop-app="true" suppressHydrationWarning suppressContentEditableWarning>
 			{/* <ReactScan /> */}
 			<PHProvider>
 				<ReactFlowProvider>
@@ -166,7 +167,8 @@ export default function RootLayout({
 						}}
 					>
 						<NetworkAwareProvider>
-							<body className={inter.className}>
+							<body className={inter.className} data-desktop-app="true">
+								<IOSWebviewHardening />
 								<NetworkStatusIndicator />
 								<UpdateProvider />
 								<TrayProvider />

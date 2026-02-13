@@ -302,17 +302,20 @@ async fn execute_inner(
 
             // Flush logs to database if we have metadata
             if let Some(meta) = &log_meta {
-                let db = {
+                let (db_fn, write_options) = {
                     let guard = state.config.read().await;
-                    guard.callbacks.build_logs_database.clone()
+                    (
+                        guard.callbacks.build_logs_database.clone(),
+                        guard.callbacks.lance_write_options.clone(),
+                    )
                 };
-                if let Some(db_fn) = db.as_ref() {
+                if let Some(db_fn) = db_fn.as_ref() {
                     let base_path = Path::from("runs")
                         .child(request.app_id.as_str())
                         .child(request.board_id.as_str());
                     match db_fn(base_path.clone()).execute().await {
                         Ok(db) => {
-                            if let Err(e) = meta.flush(db).await {
+                            if let Err(e) = meta.flush(db, write_options.as_ref()).await {
                                 tracing::error!(error = %e, "Failed to flush run logs");
                             } else {
                                 tracing::info!("Successfully flushed run logs to {}", base_path);

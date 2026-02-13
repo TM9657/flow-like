@@ -66,6 +66,9 @@ export function Footer() {
 			>
 				<small>{t("footer.legal")}</small>
 			</a>
+			<a href="/data-deletion">
+				<small>{t("footer.dataDeletion")}</small>
+			</a>
 		</footer>
 	);
 }

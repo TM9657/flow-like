@@ -18,7 +18,7 @@ import type { IOAuthCheckResult } from "@tm9657/flow-like-ui/state/backend-state
 import type { IPrerunEventResponse } from "@tm9657/flow-like-ui/state/backend-state/types";
 import { toast } from "sonner";
 import { oauthConsentStore, oauthTokenStore } from "../oauth-db";
-import { oauthService } from "../oauth-service";
+import { getOAuthApiBaseUrl, getOAuthService } from "../oauth-service";
 import {
 	type WebBackendRef,
 	apiDelete,
@@ -164,6 +164,9 @@ export class WebEventState implements IEventState {
 			);
 
 			const hub = await getHubConfig(this.backend.profile);
+			const oauthService = getOAuthService(
+				getOAuthApiBaseUrl(this.backend.profile?.hub),
+			);
 			const oauthResult = await checkOAuthTokens(board, oauthTokenStore, hub, {
 				refreshToken: oauthService.refreshToken.bind(oauthService),
 			});
@@ -271,6 +274,9 @@ export class WebEventState implements IEventState {
 
 		// Check OAuth tokens
 		const hub = await getHubConfig(this.backend.profile);
+		const oauthService = getOAuthService(
+			getOAuthApiBaseUrl(this.backend.profile?.hub),
+		);
 		const oauthResult = await checkOAuthTokens(board, oauthTokenStore, hub, {
 			refreshToken: oauthService.refreshToken.bind(oauthService),
 		});

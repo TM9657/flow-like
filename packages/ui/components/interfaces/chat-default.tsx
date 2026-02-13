@@ -6,6 +6,7 @@ import {
 	ChevronDownIcon,
 	HistoryIcon,
 	HomeIcon,
+	Loader2Icon,
 	SquarePenIcon,
 } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
@@ -458,13 +459,22 @@ export const ChatInterfaceMemoized = memo(function ChatInterface({
 		};
 	}, [sessionIdParameter, executionEngine]);
 
-	const messages = useLiveQuery(async () => {
+	const messagesQuery = useLiveQuery(async () => {
 		const rawMessages = await chatDb.messages
 			.where("sessionId")
 			.equals(sessionIdParameter)
 			.sortBy("timestamp");
 		return deduplicateConsecutiveMessages(rawMessages);
 	}, [sessionIdParameter]);
+
+	const messagesLoaded = messagesQuery !== undefined;
+	const messages = messagesQuery ?? [];
+	const hasMessages = messages.length > 0;
+
+	const messagesRef = useRef<IMessage[]>(messages);
+	useEffect(() => {
+		messagesRef.current = messages;
+	}, [messages]);
 
 	const localState = useLiveQuery(
 		() =>
@@ -662,7 +672,6 @@ export const ChatInterfaceMemoized = memo(function ChatInterface({
 	const sidebarContent = useMemo(
 		() => (
 			<ChatHistory
-				key={sessionIdParameter}
 				appId={appId}
 				sessionId={sessionIdParameter}
 				onSessionChange={handleSessionChange}
@@ -681,7 +690,7 @@ export const ChatInterfaceMemoized = memo(function ChatInterface({
 	useEffect(() => {
 		if (!sessionIdParameter) return;
 		// Wait for messages to be loaded from IndexedDB
-		if (messages === undefined) return;
+		if (!messagesLoaded) return;
 
 		const streamId = sessionIdParameter;
 
@@ -756,7 +765,7 @@ export const ChatInterfaceMemoized = memo(function ChatInterface({
 
 		// For active streams, wait for Chat component to be mounted (messages.length > 0)
 		// before subscribing, since we need chatRef to push updates
-		if (messages.length === 0) return;
+		if (!hasMessages) return;
 
 		// Mark this subscriber as active before subscribing
 		reconnectSubscribed.current.add(subscriberId);
@@ -823,7 +832,8 @@ export const ChatInterfaceMemoized = memo(function ChatInterface({
 		event.name,
 		executionEngine,
 		handleNavigationEvents,
-		messages,
+		messagesLoaded,
+		hasMessages,
 	]);
 
 	// Internal function to execute the chat (called after OAuth is confirmed)
@@ -903,7 +913,7 @@ export const ChatInterfaceMemoized = memo(function ChatInterface({
 			await updateSession(sessionIdParameter, appId, content);
 			await chatDb.messages.add(userMessage);
 
-			const lastMessages = messages?.slice(-history_elements) ?? [];
+			const lastMessages = messagesRef.current?.slice(-history_elements) ?? [];
 
 			const payload = createPayload(
 				userMessage,
@@ -937,6 +947,10 @@ export const ChatInterfaceMemoized = memo(function ChatInterface({
 			const streamId = sessionIdParameter;
 			const subscriberId = `chat-${responseMessage.id}`;
 			activeSubscriptions.current.push(subscriberId);
+
+			// Clear stale completion tracking so this stream's completion is processed
+			processedCompletedStreams.current.delete(streamId);
+			reconnectSubscribed.current.delete(`chat-reconnect-${sessionIdParameter}`);
 
 			// Create incremental save function for robust message persistence
 			// This saves the message every N events to prevent data loss
@@ -1037,7 +1051,6 @@ export const ChatInterfaceMemoized = memo(function ChatInterface({
 			sessionIdParameter,
 			appId,
 			event,
-			messages,
 			localState,
 			globalState,
 			handleNavigationEvents,
@@ -1116,7 +1129,7 @@ export const ChatInterfaceMemoized = memo(function ChatInterface({
 
 			// Show loading state if sending from welcome screen
 			const hasFiles = (filesAttached && filesAttached.length > 0) || audioFile;
-			if (hasFiles && (!messages || messages.length === 0)) {
+			if (hasFiles && (!messagesRef.current || messagesRef.current.length === 0)) {
 				setIsSendingFromWelcome(true);
 			}
 
@@ -1137,7 +1150,7 @@ export const ChatInterfaceMemoized = memo(function ChatInterface({
 				setIsSendingFromWelcome(false);
 			}
 		},
-		[sessionIdParameter, messages, executeChatMessage],
+		[sessionIdParameter, executeChatMessage],
 	);
 
 	const onMessageUpdate = useCallback(
@@ -1150,17 +1163,18 @@ export const ChatInterfaceMemoized = memo(function ChatInterface({
 	);
 
 	const showWelcome = useMemo(
-		() => !messages || messages?.length === 0,
-		[messages],
+		() => messagesLoaded && messages.length === 0,
+		[messagesLoaded, messages],
 	);
-
-	if (!messages) {
-		return null;
-	}
 
 	return (
 		<>
-			{showWelcome ? (
+			{!messagesLoaded ? (
+				<div className="flex flex-col items-center justify-center h-full gap-3">
+					<Loader2Icon className="w-6 h-6 animate-spin text-muted-foreground" />
+					<p className="text-sm text-muted-foreground">Loading conversation...</p>
+				</div>
+			) : showWelcome ? (
 				<ChatWelcome
 					onSendMessage={handleSendMessage}
 					event={event}
@@ -1169,7 +1183,6 @@ export const ChatInterfaceMemoized = memo(function ChatInterface({
 				/>
 			) : (
 				<Chat
-					key={sessionIdParameter}
 					ref={chatRef}
 					sessionId={sessionIdParameter}
 					messages={messages}

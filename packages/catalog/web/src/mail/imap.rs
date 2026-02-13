@@ -73,7 +73,7 @@ impl ImapConnection {
 }
 
 #[cfg(feature = "execute")]
-pub type ImapSession = Arc<Mutex<async_imap::Session<async_native_tls::TlsStream<TcpStream>>>>;
+pub type ImapSession = Arc<Mutex<async_imap::Session<tokio_rustls::client::TlsStream<TcpStream>>>>;
 
 #[cfg(feature = "execute")]
 #[derive(Clone)]
@@ -131,10 +131,66 @@ impl ImapConnectNode {
 }
 
 #[cfg(feature = "execute")]
-fn tls() -> async_native_tls::TlsConnector {
-    async_native_tls::TlsConnector::new()
-        .danger_accept_invalid_hostnames(true)
-        .danger_accept_invalid_certs(true)
+fn rustls_connector(accept_invalid: bool) -> tokio_rustls::TlsConnector {
+    use rustls_pki_types::ServerName;
+    use std::sync::Arc as StdArc;
+
+    let config = if accept_invalid {
+        tokio_rustls::rustls::ClientConfig::builder()
+            .dangerous()
+            .with_custom_certificate_verifier(StdArc::new(NoVerifier))
+            .with_no_client_auth()
+    } else {
+        let root_store = tokio_rustls::rustls::RootCertStore::from_iter(
+            webpki_roots::TLS_SERVER_ROOTS.iter().cloned(),
+        );
+        tokio_rustls::rustls::ClientConfig::builder()
+            .with_root_certificates(root_store)
+            .with_no_client_auth()
+    };
+    tokio_rustls::TlsConnector::from(StdArc::new(config))
+}
+
+#[cfg(feature = "execute")]
+#[derive(Debug)]
+pub(crate) struct NoVerifier;
+
+#[cfg(feature = "execute")]
+impl tokio_rustls::rustls::client::danger::ServerCertVerifier for NoVerifier {
+    fn verify_server_cert(
+        &self,
+        _end_entity: &rustls_pki_types::CertificateDer<'_>,
+        _intermediates: &[rustls_pki_types::CertificateDer<'_>],
+        _server_name: &rustls_pki_types::ServerName<'_>,
+        _ocsp_response: &[u8],
+        _now: rustls_pki_types::UnixTime,
+    ) -> Result<tokio_rustls::rustls::client::danger::ServerCertVerified, tokio_rustls::rustls::Error> {
+        Ok(tokio_rustls::rustls::client::danger::ServerCertVerified::assertion())
+    }
+
+    fn verify_tls12_signature(
+        &self,
+        _message: &[u8],
+        _cert: &rustls_pki_types::CertificateDer<'_>,
+        _dss: &tokio_rustls::rustls::DigitallySignedStruct,
+    ) -> Result<tokio_rustls::rustls::client::danger::HandshakeSignatureValid, tokio_rustls::rustls::Error> {
+        Ok(tokio_rustls::rustls::client::danger::HandshakeSignatureValid::assertion())
+    }
+
+    fn verify_tls13_signature(
+        &self,
+        _message: &[u8],
+        _cert: &rustls_pki_types::CertificateDer<'_>,
+        _dss: &tokio_rustls::rustls::DigitallySignedStruct,
+    ) -> Result<tokio_rustls::rustls::client::danger::HandshakeSignatureValid, tokio_rustls::rustls::Error> {
+        Ok(tokio_rustls::rustls::client::danger::HandshakeSignatureValid::assertion())
+    }
+
+    fn supported_verify_schemes(&self) -> Vec<tokio_rustls::rustls::SignatureScheme> {
+        tokio_rustls::rustls::crypto::ring::default_provider()
+            .signature_verification_algorithms
+            .supported_schemes()
+    }
 }
 
 #[async_trait]
@@ -233,18 +289,20 @@ impl NodeLogic for ImapConnectNode {
             "Tls" => {
                 // Implicit SSL/TLS from the start
                 let tcp: TcpStream = TcpStream::connect(imap_addr).await?;
-                let tls = async_native_tls::TlsConnector::new();
-                let stream = tls.connect(&host, tcp).await?;
+                let connector = rustls_connector(false);
+                let server_name = rustls_pki_types::ServerName::try_from(host.clone())?;
+                let stream = connector.connect(server_name, tcp).await?;
                 async_imap::Client::new(stream)
             }
             "StartTls" => {
                 // Plain TCP first, then upgrade via STARTTLS
                 let tcp = TcpStream::connect(imap_addr).await?;
                 let mut client = async_imap::Client::new(tcp);
-                let tls = tls();
+                let connector = rustls_connector(true);
                 client.run_command_and_check_ok("STARTTLS", None).await?;
                 let stream = client.into_inner();
-                let tls_stream = tls.connect(&host, stream).await?;
+                let server_name = rustls_pki_types::ServerName::try_from(host.clone())?;
+                let tls_stream = connector.connect(server_name, stream).await?;
                 async_imap::Client::new(tls_stream)
             }
             "Plain" => {

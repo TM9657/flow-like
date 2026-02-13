@@ -1,4 +1,5 @@
 import { ChevronDown } from "lucide-react";
+import { useCallback, useState } from "react";
 import { type IBackendState, useBackend, useInvoke } from "../../../..";
 import {
 	Select,
@@ -24,19 +25,32 @@ export function BitVariable({
 	setValue: (value: any) => void;
 }>) {
 	const backend = useBackend();
+	const [open, setOpen] = useState(false);
+
 	const profileBits = useInvoke(
 		backend.bitState.getProfileBits,
 		backend.bitState,
 		[],
-		true,
+		open,
+	);
+
+	const parsedValue = parseUint8ArrayToJson(value);
+
+	const handleOpenChange = useCallback(
+		(isOpen: boolean) => {
+			setOpen(isOpen);
+			if (isOpen) profileBits.refetch();
+		},
+		[profileBits],
 	);
 
 	return (
 		<div className="flex flex-row items-center justify-start max-w-full ml-1 overflow-hidden">
 			<Select
-				defaultValue={parseUint8ArrayToJson(value)}
-				value={parseUint8ArrayToJson(value)}
-				onValueChange={(value) => setValue(convertJsonToUint8Array(value))}
+				open={open}
+				onOpenChange={handleOpenChange}
+				value={parsedValue}
+				onValueChange={(v) => setValue(convertJsonToUint8Array(v))}
 			>
 				<SelectTrigger
 					noChevron
@@ -44,7 +58,7 @@ export function BitVariable({
 					className="w-fit! max-w-full! p-0 border-0 text-xs bg-card! text-start max-h-fit h-4 gap-0.5 flex-row items-center overflow-hidden"
 				>
 					<small className="text-start text-[10px] m-0! truncate">
-						<BitRender backend={backend} bitId={parseUint8ArrayToJson(value)} />
+						<BitRender backend={backend} bitId={parsedValue} />
 					</small>
 					<ChevronDown className="size-2 min-w-2 min-h-2 text-card-foreground mt-0.5 shrink-0" />
 				</SelectTrigger>
@@ -55,7 +69,7 @@ export function BitVariable({
 							const bitId = `${bit.hub}:${bit.id}`;
 							return (
 								<SelectItem key={bitId} value={bitId}>
-									<BitRender backend={backend} bitId={bitId} />
+									{bit.meta?.en?.name ?? bit.id}
 								</SelectItem>
 							);
 						})}
@@ -70,8 +84,6 @@ function BitRender({
 	backend,
 	bitId,
 }: Readonly<{ backend: IBackendState; bitId?: string }>) {
-	// Parse the bitId format "hub:id" into separate components
-	// Hub can contain colons (e.g., "https://hub.flow-like.com"), so split from the last colon
 	const lastColonIndex = bitId?.lastIndexOf(":");
 	const hub =
 		lastColonIndex !== undefined && lastColonIndex > 0

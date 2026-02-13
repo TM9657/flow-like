@@ -29,6 +29,8 @@ const languages = {
 	nl: "Nederlands",
 	sv: "Svenska",
 } as const;
+const webAppUrl = "https://app.flow-like.com";
+const studioName = "Flow-Like Studio";
 
 const langFlags: Record<string, string> = {
 	en: "🇺🇸",
@@ -428,12 +430,22 @@ function MobileMenu({
 
 				<div className="sticky bottom-0 p-4 border-t border-border/30 bg-background/95 backdrop-blur-lg">
 					<a
+						href={webAppUrl}
+						target="_blank"
+						rel="noreferrer"
+						onClick={onClose}
+						className="w-full mb-2 group flex items-center justify-center gap-2 py-2.5 px-4 rounded-lg border border-border/70 bg-background text-foreground font-medium hover:bg-muted/40 transition-colors duration-300"
+					>
+						<LuExternalLink className="w-4 h-4" />
+						Open Web App
+					</a>
+					<a
 						href="/download"
 						onClick={onClose}
 						className="w-full group flex items-center justify-center gap-2 py-2.5 px-4 rounded-lg bg-primary text-primary-foreground font-medium hover:bg-primary/90 transition-colors duration-300"
 					>
 						<LuDownload className="w-4 h-4" />
-						{t("header.download")}
+						{t("header.download")} Studio
 						<LuArrowRight className="w-4 h-4 ml-auto transition-transform duration-300 group-hover:translate-x-1" />
 					</a>
 				</div>
@@ -598,11 +610,22 @@ export function Header() {
 						</div>
 
 						<a
+							href={webAppUrl}
+							target="_blank"
+							rel="noreferrer"
+							className="ml-2 flex items-center gap-2 py-1.5 px-3 rounded-lg border border-border/70 bg-background text-foreground text-sm font-medium hover:bg-muted/50 transition-colors duration-300"
+						>
+							<LuExternalLink className="w-4 h-4" />
+							Open Web App
+						</a>
+
+						<a
 							href="/download"
-							className="ml-2 flex items-center gap-2 py-1.5 px-3 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors duration-300"
+							className="flex items-center gap-2 py-1.5 px-3 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors duration-300"
+							title={studioName}
 						>
 							<LuDownload className="w-4 h-4" />
-							{t("header.download")}
+							{t("header.download")} Studio
 						</a>
 					</div>
 

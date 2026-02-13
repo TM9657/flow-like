@@ -3,8 +3,8 @@ use futures::stream::BoxStream;
 use object_store::local::LocalFileSystem;
 use object_store::path::Path;
 use object_store::{
-    GetOptions, GetResult, ListResult, MultipartUpload, ObjectMeta, ObjectStore, PutMultipartOpts,
-    PutOptions, PutPayload, PutResult, Result,
+    GetOptions, GetResult, ListResult, MultipartUpload, ObjectMeta, ObjectStore, PutMode,
+    PutMultipartOptions, PutOptions, PutPayload, PutResult, Result,
 };
 use std::fs;
 use std::ops::Range;
@@ -13,6 +13,8 @@ use std::path::PathBuf;
 #[derive(Debug)]
 pub struct LocalObjectStore {
     store: LocalFileSystem,
+    /// When true, use Android-safe implementations that avoid hard_link()
+    android_safe: bool,
 }
 
 impl std::fmt::Display for LocalObjectStore {
@@ -30,7 +32,22 @@ impl LocalObjectStore {
         }
 
         let store = LocalFileSystem::new_with_prefix(prefix)?.with_automatic_cleanup(true);
-        Ok(Self { store })
+        Ok(Self {
+            store,
+            android_safe: cfg!(target_os = "android"),
+        })
+    }
+
+    /// Create a new LocalObjectStore with explicit Android-safe mode setting
+    pub fn new_with_android_safe(prefix: PathBuf, android_safe: bool) -> Result<Self> {
+        if !prefix.exists() {
+            fs::create_dir_all(&prefix)
+                .map(|_| ())
+                .map_err(|_| object_store::Error::NotImplemented)?;
+        }
+
+        let store = LocalFileSystem::new_with_prefix(prefix)?.with_automatic_cleanup(true);
+        Ok(Self { store, android_safe })
     }
 
     pub fn path_to_filesystem(&self, location: &Path) -> Result<PathBuf> {
@@ -67,6 +84,34 @@ impl ObjectStore for LocalObjectStore {
                 .map(|_| ())
                 .map_err(|_| object_store::Error::NotImplemented)?;
         }
+
+        // On Android, PutMode::Create uses hard_link() which fails due to SELinux.
+        // Use existence check + overwrite instead.
+        if self.android_safe && matches!(opts.mode, PutMode::Create) {
+            match self.store.head(location).await {
+                Ok(_) => {
+                    return Err(object_store::Error::AlreadyExists {
+                        path: location.to_string(),
+                        source: "File already exists (Android-safe check)".into(),
+                    });
+                }
+                Err(object_store::Error::NotFound { .. }) => {
+                    return self
+                        .store
+                        .put_opts(
+                            location,
+                            payload,
+                            PutOptions {
+                                mode: PutMode::Overwrite,
+                                ..opts
+                            },
+                        )
+                        .await;
+                }
+                Err(e) => return Err(e),
+            }
+        }
+
         self.store.put_opts(location, payload, opts).await
     }
 
@@ -85,7 +130,7 @@ impl ObjectStore for LocalObjectStore {
     async fn put_multipart_opts(
         &self,
         location: &Path,
-        opts: PutMultipartOpts,
+        opts: PutMultipartOptions,
     ) -> Result<Box<dyn MultipartUpload>> {
         let path = self.store.path_to_filesystem(location)?;
         if let Some(parent) = path.parent()
@@ -166,10 +211,42 @@ impl ObjectStore for LocalObjectStore {
     }
 
     async fn copy_if_not_exists(&self, from: &Path, to: &Path) -> Result<()> {
+        // On Android, copy_if_not_exists uses hard_link() which fails due to SELinux.
+        // Use existence check + copy instead.
+        if self.android_safe {
+            match self.store.head(to).await {
+                Ok(_) => {
+                    return Err(object_store::Error::AlreadyExists {
+                        path: to.to_string(),
+                        source: "File already exists (Android-safe check)".into(),
+                    });
+                }
+                Err(object_store::Error::NotFound { .. }) => {
+                    return self.store.copy(from, to).await;
+                }
+                Err(e) => return Err(e),
+            }
+        }
         self.store.copy_if_not_exists(from, to).await
     }
 
     async fn rename_if_not_exists(&self, from: &Path, to: &Path) -> Result<()> {
+        // On Android, rename_if_not_exists uses hard_link() which fails due to SELinux.
+        // Use existence check + rename instead.
+        if self.android_safe {
+            match self.store.head(to).await {
+                Ok(_) => {
+                    return Err(object_store::Error::AlreadyExists {
+                        path: to.to_string(),
+                        source: "File already exists (Android-safe check)".into(),
+                    });
+                }
+                Err(object_store::Error::NotFound { .. }) => {
+                    return self.store.rename(from, to).await;
+                }
+                Err(e) => return Err(e),
+            }
+        }
         self.store.rename_if_not_exists(from, to).await
     }
 }

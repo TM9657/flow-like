@@ -12,7 +12,7 @@ export default defineConfig({
 	site: "https://flow-like.com",
 	i18n: {
 		defaultLocale: "en",
-		locales: ["en", "de", "es", "fr"],
+		locales: ["en", "de", "es", "fr", "zh", "ja", "ko", "pt", "it", "nl", "sv"],
 		routing: {
 			prefixDefaultLocale: false,
 		},
@@ -32,7 +32,6 @@ export default defineConfig({
 			remarkRehype: { footnoteLabel: "Footnotes" },
 			gfm: true,
 		}),
-		sitemap(),
 		(await import("@playform/compress")).default(),
 		compressor(),
 	],

@@ -9,13 +9,13 @@ export async function GET(context) {
 	).sort((a, b) => b.data.date - a.data.date);
 
 	return rss({
-		title: "Your Blog",
-		description: "Newest posts",
+		title: "Flow-Like Blog",
+		description: "Latest releases, tutorials, and technical deep dives from Flow-Like.",
 		site: context.site, // set "site" in astro.config for absolute URLs
 		items: posts.map((p) => ({
 			title: p.data.title,
 			description: p.data.description,
-			link: "/" + p.slug.split("-").slice(3).join("-") + "/",
+			link: "/blog/" + p.slug.split("-").slice(3).join("-") + "/",
 			pubDate: p.data.date,
 		})),
 	});

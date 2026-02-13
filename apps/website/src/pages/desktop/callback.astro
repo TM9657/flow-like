@@ -11,6 +11,10 @@ import Layout from "../../layouts/Layout.astro";
     <script>
         (function () {
             try {
+                var isIOS =
+                    /iPad|iPhone|iPod/.test(navigator.userAgent) ||
+                    (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+
                 var search = new URLSearchParams(window.location.search);
                 var hash = window.location.hash ? window.location.hash.substring(1) : "";
                 if (hash) {
@@ -18,10 +22,36 @@ import Layout from "../../layouts/Layout.astro";
                     hashParams.forEach(function (v, k) { search.set(k, v); });
                 }
                 var qs = search.toString();
-                var deeplink = "flow-like://auth" + (qs ? "?" + qs : "");
+
+                var universalLink = "https://app.flow-like.com/callback" + (qs ? "?" + qs : "");
+                var legacyDeepLink = "flow-like://auth" + (qs ? "?" + qs : "");
+                var primaryTarget = isIOS ? universalLink : legacyDeepLink;
+                var fallbackTarget = isIOS ? legacyDeepLink : null;
+
                 var link = document.getElementById("deeplink");
-                if (link) link.setAttribute("href", deeplink);
-                window.location.replace(deeplink);
+                if (link) link.setAttribute("href", primaryTarget);
+
+                var leftPage = false;
+                var markLeftPage = function () { leftPage = true; };
+                window.addEventListener("pagehide", markLeftPage, { once: true });
+                document.addEventListener("visibilitychange", function () {
+                    if (document.visibilityState === "hidden") {
+                        leftPage = true;
+                    }
+                });
+
+                window.location.replace(primaryTarget);
+
+                // iOS native path first; keep legacy scheme fallback for older app versions.
+                if (fallbackTarget) {
+                    window.setTimeout(function () {
+                        var fallback = fallbackTarget;
+                        if (!fallback) return;
+                        if (leftPage || document.visibilityState === "hidden") return;
+                        if (link) link.setAttribute("href", fallback);
+                        window.location.replace(fallback);
+                    }, 1200);
+                }
             } catch (_) { /* noop */ }
         })();
     </script>

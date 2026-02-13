@@ -43,7 +43,16 @@ async fn db_connection(
     };
 
     let db = db.execute().await?;
-    let db = LanceDBVectorStore::from_connection(db, table_name).await;
+    let mut db = LanceDBVectorStore::from_connection(db, table_name).await;
+    if let Some(opts) = &flow_like_state
+        .config
+        .read()
+        .await
+        .callbacks
+        .lance_write_options
+    {
+        db.set_write_options(opts.clone());
+    }
     Ok(db)
 }
 

@@ -3,15 +3,59 @@ use crate::data::{
     path::FlowPath,
 };
 #[cfg(feature = "execute")]
-use calamine::{Data, DataType, Reader, open_workbook_auto_from_rs};
+use calamine::{Data, DataType};
 use flow_like::flow::{
     execution::context::ExecutionContext,
     node::{Node, NodeLogic},
     variable::VariableType,
 };
 use flow_like_types::{async_trait, json::json};
+
 #[cfg(feature = "execute")]
-use std::io::Cursor;
+fn calamine_data_to_string(cell: &Data) -> String {
+    match cell {
+        Data::Empty => String::new(),
+        Data::String(s) => s.clone(),
+        Data::Bool(b) => b.to_string(),
+        Data::Int(i) => i.to_string(),
+        Data::Float(f) => f.to_string(),
+        Data::DateTime(_) => cell
+            .as_datetime()
+            .map(|dt| dt.format("%Y-%m-%dT%H:%M:%S").to_string())
+            .or_else(|| cell.as_date().map(|d| d.format("%Y-%m-%d").to_string()))
+            .unwrap_or_else(|| cell.as_f64().map(|f| f.to_string()).unwrap_or_default()),
+        Data::DateTimeIso(s) => s.clone(),
+        Data::DurationIso(s) => s.clone(),
+        Data::Error(e) => format!("{:?}", e),
+    }
+}
+
+/// Read a cell value + optional hyperlink from an already-parsed workbook.
+#[cfg(feature = "execute")]
+fn read_cell_from_book(
+    book: &umya_spreadsheet::Spreadsheet,
+    sheet: &str,
+    col: u32,
+    row: u32,
+) -> (String, bool) {
+    let Some(ws) = book.get_sheet_by_name(sheet) else {
+        return (String::new(), false);
+    };
+    let Some(cell) = ws.get_cell((col, row)) else {
+        return (String::new(), false);
+    };
+    let value = cell.get_formatted_value();
+    let found = !value.is_empty();
+    let url = cell
+        .get_hyperlink()
+        .map(|h| h.get_url().to_owned())
+        .unwrap_or_default();
+    if !url.is_empty() && found {
+        (format!("[{}]({})", value, url), found)
+    } else {
+        (value, found)
+    }
+}
 
 /// Read a single cell from an Excel workbook (XLSX) located in object storage via `FlowPath`.
 /// - Does **not** touch the local filesystem; reads from bytes and returns the raw string value.
@@ -80,6 +124,8 @@ impl NodeLogic for ReadCellNode {
 
     #[cfg(feature = "execute")]
     async fn run(&self, ctx: &mut ExecutionContext) -> flow_like_types::Result<()> {
+        use super::{CachedExcelWorkbook, get_or_open_workbook};
+
         ctx.deactivate_exec_pin("exec_out").await?;
 
         let file: FlowPath = ctx.evaluate_pin("file").await?;
@@ -87,41 +133,38 @@ impl NodeLogic for ReadCellNode {
         let row_str: String = ctx.evaluate_pin("row").await?;
         let col_str: String = ctx.evaluate_pin("col").await?;
 
-        let mut out_value = String::new();
-        let mut found = false;
+        let r1 = parse_row_1_based(&row_str)?;
+        let c1 = parse_col_1_based(&col_str)?;
 
-        let bytes = file.get(ctx, false).await?;
+        let cached = get_or_open_workbook(ctx, &file, false).await?;
+        let wb = cached
+            .as_any()
+            .downcast_ref::<CachedExcelWorkbook>()
+            .ok_or_else(|| flow_like_types::anyhow!("Cache type mismatch"))?;
 
-        if !bytes.is_empty() {
-            let mut wb = open_workbook_auto_from_rs(Cursor::new(bytes))
-                .map_err(|e| flow_like_types::anyhow!("Calamine open failed: {}", e))?;
-
-            if let Ok(range) = wb.worksheet_range(&sheet) {
-                let r0 = (parse_row_1_based(&row_str)? - 1) as u32;
-                let c0 = (parse_col_1_based(&col_str)? - 1) as u32;
-
-                if let Some(cell) = range.get_value((r0, c0)) {
-                    found = !matches!(cell, Data::Empty);
-                    out_value = cell.as_string().unwrap_or_default();
-                } else {
-                    ctx.log_message(
-                        &format!("Cell not found at row {} col {}", row_str, col_str),
-                        flow_like::flow::execution::LogLevel::Warn,
-                    );
-                }
-            } else {
-                return Err(flow_like_types::anyhow!("Sheet '{}' not found", sheet));
+        let (value, found) = match wb {
+            CachedExcelWorkbook::Umya { book } => {
+                let book = book
+                    .read()
+                    .map_err(|e| flow_like_types::anyhow!("Lock poisoned: {}", e))?;
+                read_cell_from_book(&book, &sheet, c1, r1)
             }
-        } else {
-            return Err(flow_like_types::anyhow!(
-                "Excel file is empty or could not be read"
-            ));
-        }
+            CachedExcelWorkbook::Calamine { sheets } => match sheets.get(&sheet) {
+                Some(range) => {
+                    let r0 = (r1 - 1) as u32;
+                    let c0 = (c1 - 1) as u32;
+                    match range.get_value((r0, c0)) {
+                        Some(cell) => (calamine_data_to_string(cell), !matches!(cell, Data::Empty)),
+                        None => (String::new(), false),
+                    }
+                }
+                None => (String::new(), false),
+            },
+        };
 
         ctx.set_pin_value("file_out", json!(file)).await?;
-        ctx.set_pin_value("value", json!(out_value)).await?;
+        ctx.set_pin_value("value", json!(value)).await?;
         ctx.set_pin_value("found", json!(found)).await?;
-
         ctx.activate_exec_pin("exec_out").await?;
         Ok(())
     }

@@ -45,6 +45,8 @@ pub struct FlowLikeCallbacks {
     pub build_project_database: Option<Arc<dyn (Fn(Path) -> ConnectBuilder) + Send + Sync>>,
     pub build_user_database: Option<Arc<dyn (Fn(Path) -> ConnectBuilder) + Send + Sync>>,
     pub build_logs_database: Option<Arc<dyn (Fn(Path) -> ConnectBuilder) + Send + Sync>>,
+    /// Optional write options for LanceDB (used on Android to avoid hard_link issues)
+    pub lance_write_options: Option<flow_like_storage::lancedb::table::WriteOptions>,
 }
 
 #[derive(Clone, Default)]
@@ -118,6 +120,13 @@ impl FlowLikeConfig {
         callback: Arc<dyn (Fn(Path) -> ConnectBuilder) + Send + Sync>,
     ) {
         self.callbacks.build_logs_database = Some(callback);
+    }
+
+    pub fn register_lance_write_options(
+        &mut self,
+        options: flow_like_storage::lancedb::table::WriteOptions,
+    ) {
+        self.callbacks.lance_write_options = Some(options);
     }
 }
 

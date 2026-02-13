@@ -30,21 +30,22 @@ import TargetAudience from "../sections/target-audience.astro";
 import Newsletter from "../sections/newsletter.astro";
 import BiPreview from "../sections/bi-preview.astro";
 import { BlogFooter } from "../components/blog-footer";
+import { translations } from "../i18n";
 
 // --- SEO constants ---
 const site = "https://flow-like.com";
-const title = "Flow-Like — Enterprise Automation You Can Trust (Auditable, On-Prem, Secure)";
+const title = "Flow-Like | Open Source Workflow Engine - Local-First, Rust-Powered, Type-Safe";
 const description =
-  "Mission-critical automation you can audit, control and run on-prem. No black boxes. No silent failures. No data leaks. Built for teams that cannot afford uncertainty.";
+  "Open source workflow engine for local-first and self-hosted automation. Build type-safe, auditable flows in Rust and deploy on-prem or air-gapped.";
 const keywords = [
-  "enterprise automation","workflow automation","on-premise automation","auditable workflows",
-  "visual programming","typed workflows","Rust","compliance","governance","secure automation"
+  "open source workflow engine","self-hosted workflow automation","local-first automation platform","air-gapped workflow engine",
+  "type-safe workflow automation","workflow engine with data lineage","rust workflow engine","on-premise workflow engine"
 ].join(", ");
 const appName = "Flow-Like";
 const orgName = "TM9657 GmbH";
 const canonicalUrl = site;
 const ogImage = `${site}/og.png`;
-const ogImageAlt = "Flow-Like — Enterprise Automation You Can Trust";
+const ogImageAlt = "Flow-Like Open Source Workflow Engine";
 const twitterCard = "summary_large_image";
 
 const github = "https://github.com/TM9657/flow-like";
@@ -99,6 +100,25 @@ const ldWebPage = {
     name: appName
   },
   inLanguage: "en"
+};
+
+const enTranslations = translations.en as Record<string, string>;
+const faqItems = [1, 2, 3, 4, 5, 6].map((idx) => ({
+  question: enTranslations[`faq.q${idx}`],
+  answer: enTranslations[`faq.a${idx}`]
+}));
+
+const ldFaqPage = {
+  "@context": "https://schema.org",
+  "@type": "FAQPage",
+  mainEntity: faqItems.map((item) => ({
+    "@type": "Question",
+    name: item.question,
+    acceptedAnswer: {
+      "@type": "Answer",
+      text: item.answer
+    }
+  }))
 };
 ---
 
@@ -173,10 +193,11 @@ const ldWebPage = {
     <link rel="preconnect" href="https://github.com" crossorigin />
 
     <!-- Structured Data (inline, non-blocking) -->
-    <script type="application/ld+json">{JSON.stringify(ldOrganization)}</script>
-    <script type="application/ld+json">{JSON.stringify(ldSoftware)}</script>
-    <script type="application/ld+json">{JSON.stringify(ldWebSite)}</script>
-    <script type="application/ld+json">{JSON.stringify(ldWebPage)}</script>
+    <script type="application/ld+json" is:inline set:html={JSON.stringify(ldOrganization)} />
+    <script type="application/ld+json" is:inline set:html={JSON.stringify(ldSoftware)} />
+    <script type="application/ld+json" is:inline set:html={JSON.stringify(ldWebSite)} />
+    <script type="application/ld+json" is:inline set:html={JSON.stringify(ldWebPage)} />
+    <script type="application/ld+json" is:inline set:html={JSON.stringify(ldFaqPage)} />
 
     <!-- Language detection - runs before page renders -->
     <LanguageDetect />

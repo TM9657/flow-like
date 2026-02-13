@@ -91,7 +91,7 @@ import {
 import { useTheme } from "next-themes";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useAuth } from "react-oidc-context";
 import { toast } from "sonner";
 import { fetcher } from "../lib/api";
@@ -268,10 +268,20 @@ export function AppSidebar({
 	return (
 		<SidebarProvider defaultOpen={defaultOpen}>
 			<InnerSidebar />
-			<main className="w-full h-dvh flex flex-col overflow-hidden">
+			<IOSQuickMenuTrigger />
+			<main
+				className="w-full h-dvh flex flex-col overflow-hidden"
+				style={{
+					height: "var(--fl-mobile-vvh, 100dvh)",
+					paddingTop: "var(--fl-safe-top, env(safe-area-inset-top, 0px))",
+				}}
+			>
 				<MobileHeaderProvider>
 					<MobileHeader />
-					<SidebarInset className="relative flex flex-col flex-1 min-h-0 h-full overflow-hidden">
+					<SidebarInset
+						className="relative flex flex-col flex-1 min-h-0 h-full overflow-hidden"
+						style={{ paddingBottom: "var(--fl-safe-bottom, env(safe-area-inset-bottom, 0px))" }}
+					>
 						<FlowBackground
 							intensity="subtle"
 							interactive
@@ -283,6 +293,82 @@ export function AppSidebar({
 				</MobileHeaderProvider>
 			</main>
 		</SidebarProvider>
+	);
+}
+
+function IOSQuickMenuTrigger() {
+	const { isMobile, openMobile, toggleSidebar } = useSidebar();
+	const touchStartRef = useRef<{ x: number; y: number } | null>(null);
+
+	const isIosTauri = useMemo(() => {
+		if (typeof window === "undefined" || typeof navigator === "undefined") {
+			return false;
+		}
+
+		const isTauri =
+			"__TAURI__" in (window as any) ||
+			"__TAURI_IPC__" in (window as any) ||
+			"__TAURI_INTERNALS__" in (window as any);
+		const isIOS =
+			/iPad|iPhone|iPod/.test(navigator.userAgent) ||
+			(navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+
+		return isTauri && isIOS;
+	}, []);
+
+	useEffect(() => {
+		if (!isIosTauri || !isMobile) return;
+
+		const onTouchStart = (event: TouchEvent) => {
+			const t = event.changedTouches[0];
+			if (!t) return;
+			touchStartRef.current = { x: t.clientX, y: t.clientY };
+		};
+
+		const onTouchEnd = (event: TouchEvent) => {
+			if (openMobile) return;
+			const start = touchStartRef.current;
+			const t = event.changedTouches[0];
+			if (!start || !t) return;
+
+			const dx = t.clientX - start.x;
+			const dy = Math.abs(t.clientY - start.y);
+
+			// Left-edge swipe opens the menu if the header button is hard to tap.
+			if (start.x <= 24 && dx > 40 && dy < 30) {
+				toggleSidebar();
+			}
+		};
+
+		window.addEventListener("touchstart", onTouchStart, { passive: true });
+		window.addEventListener("touchend", onTouchEnd, { passive: true });
+
+		return () => {
+			window.removeEventListener("touchstart", onTouchStart);
+			window.removeEventListener("touchend", onTouchEnd);
+		};
+	}, [isIosTauri, isMobile, openMobile, toggleSidebar]);
+
+	if (!isIosTauri || !isMobile || openMobile) return null;
+
+	return (
+		<div
+			className="md:hidden fixed left-3 z-[70]"
+			style={{ top: "calc(var(--fl-safe-top, 0px) + 10px)" }}
+		>
+			<Button
+				size="icon"
+				variant="outline"
+				className="h-10 w-10 rounded-lg shadow-lg bg-card/95 backdrop-blur supports-backdrop-filter:bg-background/70"
+				onClick={toggleSidebar}
+				onTouchStart={(event) => {
+					event.stopPropagation();
+				}}
+				aria-label="Open menu"
+			>
+				<SidebarOpenIcon className="h-4 w-4" />
+			</Button>
+		</div>
 	);
 }
 

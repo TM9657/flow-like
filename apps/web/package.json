@@ -50,7 +50,7 @@
 		"@udecode/cn": "^49.0.15",
 		"@uidotdev/usehooks": "^2.4.1",
 		"@vitejs/plugin-react": "^4.3.4",
-		"@xyflow/react": "^12.8.2",
+		"@xyflow/react": "^12.10.0",
 		"add": "^2.0.6",
 		"aws-amplify": "^6.14.4",
 		"babel-plugin-react-compiler": "^19.1.0-rc.2",

@@ -45,6 +45,7 @@ export const esCommon = {
 	"footer.eula": "CLUF",
 	"footer.privacy": "Política de privacidad",
 	"footer.legal": "Aviso legal",
+	"footer.dataDeletion": "Eliminación de datos",
 
 	// BI Preview Section
 	"bi.preview.badge": "Business Intelligence",

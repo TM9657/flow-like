@@ -129,7 +129,16 @@ export default function SettingsProfilesPage() {
 	const updateProfile = useCallback(
 		(updates: Partial<ISettingsProfile>) => {
 			if (!localProfile) return;
-			const newProfile = { ...localProfile, ...updates };
+			const now = new Date().toISOString();
+			const hubProfile = updates.hub_profile
+				? { ...localProfile.hub_profile, ...updates.hub_profile, updated: now }
+				: { ...localProfile.hub_profile, updated: now };
+			const newProfile = {
+				...localProfile,
+				...updates,
+				hub_profile: hubProfile,
+				updated: now,
+			};
 			setLocalProfile(newProfile);
 			setHasChanges(true);
 		},

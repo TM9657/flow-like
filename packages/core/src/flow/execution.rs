@@ -230,54 +230,78 @@ impl LogMeta {
         types.join(", ")
     }
 
-    pub async fn flush(&self, db: Connection) -> flow_like_types::Result<()> {
+    pub async fn flush(
+        &self,
+        db: Connection,
+        write_options: Option<&flow_like_storage::lancedb::table::WriteOptions>,
+    ) -> flow_like_types::Result<()> {
         let arrow_batch = self.into_arrow()?;
         let schema = arrow_batch.schema();
 
-        let table = db.open_table("runs").execute().await;
-
-        if let Err(_err) = table {
-            let table = db
-                .create_empty_table("runs", schema.clone())
-                .execute()
-                .await?;
-            let iter = RecordBatchIterator::new(vec![arrow_batch].into_iter().map(Ok), schema);
-            table.add(iter).execute().await?;
-            table
-                .create_index(
-                    &["event_id"],
-                    flow_like_storage::lancedb::index::Index::Bitmap(BitmapIndexBuilder {}),
-                )
-                .execute()
-                .await?;
-            table
-                .create_index(
-                    &["node_id"],
-                    flow_like_storage::lancedb::index::Index::Bitmap(BitmapIndexBuilder {}),
-                )
-                .execute()
-                .await?;
-            table
-                .create_index(
-                    &["log_level"],
-                    flow_like_storage::lancedb::index::Index::Bitmap(BitmapIndexBuilder {}),
-                )
-                .execute()
-                .await?;
-            table
-                .create_index(
-                    &["start"],
-                    flow_like_storage::lancedb::index::Index::BTree(
-                        flow_like_storage::lancedb::index::scalar::BTreeIndexBuilder {},
-                    ),
-                )
-                .execute()
-                .await?;
-            return Ok(());
+        // Try to open and add to existing table first
+        if let Ok(table) = db.open_table("runs").execute().await {
+            let iter = RecordBatchIterator::new(
+                vec![arrow_batch.clone()].into_iter().map(Ok),
+                schema.clone(),
+            );
+            let mut add = table.add(iter);
+            if let Some(opts) = write_options {
+                add = add.write_options(opts.clone());
+            }
+            match add.execute().await {
+                Ok(_) => {
+                    return Ok(());
+                }
+                Err(e) => {
+                    // Table is corrupted (e.g. from failed hard_link on Android), drop and recreate
+                    let _ = db.drop_table("runs", &[]).await;
+                }
+            }
         }
-        let table = table?;
-        let iter = RecordBatchIterator::new(vec![arrow_batch].into_iter().map(Ok), schema);
-        table.add(iter).execute().await?;
+
+        // Create table with data (either didn't exist or was dropped due to corruption)
+        let iter = RecordBatchIterator::new(
+            vec![arrow_batch].into_iter().map(Ok),
+            schema.clone(),
+        );
+        let mut builder = db.create_table("runs", Box::new(iter));
+        if let Some(opts) = write_options {
+            builder = builder.write_options(opts.clone());
+        }
+        let table = builder.execute().await?;
+
+        // Create indexes
+        let _ = table
+            .create_index(
+                &["event_id"],
+                flow_like_storage::lancedb::index::Index::Bitmap(BitmapIndexBuilder {}),
+            )
+            .execute()
+            .await;
+        let _ = table
+            .create_index(
+                &["node_id"],
+                flow_like_storage::lancedb::index::Index::Bitmap(BitmapIndexBuilder {}),
+            )
+            .execute()
+            .await;
+        let _ = table
+            .create_index(
+                &["log_level"],
+                flow_like_storage::lancedb::index::Index::Bitmap(BitmapIndexBuilder {}),
+            )
+            .execute()
+            .await;
+        let _ = table
+            .create_index(
+                &["start"],
+                flow_like_storage::lancedb::index::Index::BTree(
+                    flow_like_storage::lancedb::index::scalar::BTreeIndexBuilder {},
+                ),
+            )
+            .execute()
+            .await;
+
         Ok(())
     }
 }
@@ -307,6 +331,7 @@ pub struct Run {
     pub log_db: Option<
         Arc<dyn Fn(Path) -> flow_like_storage::lancedb::connection::ConnectBuilder + Send + Sync>,
     >,
+    pub lance_write_options: Option<flow_like_storage::lancedb::table::WriteOptions>,
 }
 
 impl Run {
@@ -411,6 +436,7 @@ impl Run {
             schema,
             log_initialized: self.log_initialized,
             meta,
+            write_options: self.lance_write_options.clone(),
         }))
     }
 
@@ -437,6 +463,7 @@ pub(crate) struct PreparedFlush {
     schema: SchemaRef,
     log_initialized: bool,
     meta: Option<LogMeta>,
+    write_options: Option<flow_like_storage::lancedb::table::WriteOptions>,
 }
 
 pub(crate) struct FlushResult {
@@ -445,24 +472,71 @@ pub(crate) struct FlushResult {
 }
 
 impl PreparedFlush {
+    const MAX_RETRIES: u32 = 3;
+    const INITIAL_BACKOFF_MS: u64 = 100;
+
     pub async fn write(self) -> flow_like_types::Result<FlushResult> {
+        let mut last_err = None;
+
+        for attempt in 0..Self::MAX_RETRIES {
+            if attempt > 0 {
+                let backoff = Self::INITIAL_BACKOFF_MS * (1 << (attempt - 1));
+                flow_like_types::tokio::time::sleep(Duration::from_millis(backoff)).await;
+            }
+
+            match self.try_write().await {
+                Ok(result) => return Ok(result),
+                Err(err) => {
+                    eprintln!(
+                        "[Warn] log flush attempt {}/{} failed: {:?}",
+                        attempt + 1,
+                        Self::MAX_RETRIES,
+                        err
+                    );
+                    last_err = Some(err);
+                }
+            }
+        }
+
+        Err(last_err.unwrap())
+    }
+
+    async fn try_write(&self) -> flow_like_types::Result<FlushResult> {
         let db = (self.db_fn)(self.base_path.clone()).execute().await?;
 
-        let table = if self.log_initialized {
-            db.open_table(&self.run_id).execute().await?
-        } else {
-            db.create_empty_table(&self.run_id, self.schema.clone())
-                .execute()
-                .await?
-        };
+        // On Android, datasets can get into inconsistent states due to SELinux blocking hard_link().
+        // Try to open existing table, or create new one with data directly.
+        let iter = RecordBatchIterator::new(
+            vec![self.arrow_batch.clone()].into_iter().map(Ok),
+            self.schema.clone(),
+        );
 
-        let iter =
-            RecordBatchIterator::new(vec![self.arrow_batch].into_iter().map(Ok), self.schema);
-        table.add(iter).execute().await?;
+        match db.open_table(&self.run_id).execute().await {
+            Ok(table) => {
+                let mut add = table.add(iter);
+                if let Some(opts) = &self.write_options {
+                    add = add.write_options(opts.clone());
+                }
+                add.execute().await?;
+            }
+            Err(open_err) => {
+                // Try to drop any corrupted/partial table first
+                if let Err(e) = db.drop_table(&self.run_id, &[]).await {
+                    eprintln!("[DBG-v3] drop_table failed (expected if not exists): {:?}", e);
+                }
+
+                // Create the table WITH data in one step (avoids create_empty + add issue)
+                let mut builder = db.create_table(&self.run_id, Box::new(iter));
+                if let Some(opts) = &self.write_options {
+                    builder = builder.write_options(opts.clone());
+                }
+                builder.execute().await?;
+            }
+        };
 
         Ok(FlushResult {
             created_table: !self.log_initialized,
-            meta: self.meta,
+            meta: self.meta.clone(),
         })
     }
 }
@@ -629,16 +703,17 @@ impl InternalRun {
         let before = Instant::now();
         let run_id = run_id.unwrap_or_else(create_id);
 
-        let (log_store, db) = {
+        let (log_store, db, lance_write_options) = {
             let guard = handler.config.read().await;
             let log_store = guard.stores.log_store.clone();
             let db = guard.callbacks.build_logs_database.clone();
+            let write_opts = guard.callbacks.lance_write_options.clone();
             tracing::debug!(
                 has_log_store = log_store.is_some(),
                 has_log_db = db.is_some(),
                 "InternalRun: Reading log configuration from state"
             );
-            (log_store, db)
+            (log_store, db, write_opts)
         };
 
         // derive sub from token (JWT) or default to "local"
@@ -672,6 +747,7 @@ impl InternalRun {
             visited_nodes: AHashMap::with_capacity(board.nodes.len()),
             log_store,
             log_db: db,
+            lance_write_options,
         };
 
         let run = Arc::new(Mutex::new(run));

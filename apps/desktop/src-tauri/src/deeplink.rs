@@ -39,34 +39,84 @@ pub fn handle_deep_link(app_handle: &AppHandle, urls: &Vec<Url>) {
             }
         }
 
-        // Fallback: custom scheme deep links (e.g., flow-like://auth?...)
-        let url_str = url.as_str();
-        let command = url_str.trim_start_matches("flow-like://");
+        if is_app_universal_link(url) {
+            if handle_universal_link(app_handle, url) {
+                continue;
+            }
+        }
 
-        let mut parts = command.splitn(2, '/');
-        // we also need to split off any potential query parameters
-        let command = parts.next().unwrap_or("");
-        let mut parts = command.splitn(2, '?');
+        if url.scheme() == "flow-like" {
+            let command = url.host_str().unwrap_or_default();
 
-        match parts.next() {
-            Some("auth") => {
-                handle_auth(app_handle, url_str);
+            match command {
+                "auth" => {
+                    handle_auth(app_handle, url.as_str());
+                }
+                "thirdparty" => {
+                    handle_thirdparty_callback(app_handle, url);
+                }
+                "trigger" => {
+                    handle_trigger(app_handle, url);
+                }
+                "store" => {
+                    handle_store(app_handle, url);
+                }
+                "join" => {
+                    handle_join(app_handle, url);
+                }
+                _ => {
+                    println!("Unknown deep link command: {}", command);
+                }
             }
-            Some("thirdparty") => {
-                handle_thirdparty_callback(app_handle, url);
-            }
-            Some("trigger") => {
-                handle_trigger(app_handle, url);
-            }
-            Some("store") => {
-                handle_store(app_handle, url);
-            }
-            Some("join") => {
-                handle_join(app_handle, url);
-            }
-            _ => {
-                println!("Unknown deep link command: {}", command);
-            }
+            continue;
+        }
+
+        println!("Unknown deep link URL: {}", url);
+    }
+}
+
+fn is_app_universal_link(url: &Url) -> bool {
+    if !(url.scheme() == "https" || url.scheme() == "http") {
+        return false;
+    }
+
+    matches!(
+        url.host_str(),
+        Some("app.flow-like.com") | Some("localhost") | Some("127.0.0.1")
+    )
+}
+
+fn handle_universal_link(app_handle: &AppHandle, url: &Url) -> bool {
+    let path = url.path().trim_matches('/');
+
+    match path {
+        "callback" | "desktop/callback" => {
+            handle_auth(app_handle, url.as_str());
+            true
+        }
+        "thirdparty/callback" => {
+            handle_thirdparty_callback(app_handle, url);
+            true
+        }
+        _ if path.starts_with("trigger/") => {
+            handle_trigger(app_handle, url);
+            true
+        }
+        "store" => {
+            handle_store(app_handle, url);
+            true
+        }
+        _ if path.starts_with("store/") => {
+            handle_store(app_handle, url);
+            true
+        }
+        "join" => {
+            handle_join(app_handle, url);
+            true
+        }
+        _ => {
+            println!("Unknown universal link path: {}", path);
+            false
         }
     }
 }
@@ -83,12 +133,14 @@ fn handle_auth(app_handle: &AppHandle, url: &str) {
 }
 
 fn handle_thirdparty_callback(app_handle: &AppHandle, url: &Url) {
-    // Parse URL: flow-like://thirdparty/callback?code=...&state=...
+    // Parse URL:
+    // - flow-like://thirdparty/callback?code=...&state=...
+    // - https://app.flow-like.com/thirdparty/callback?code=...&state=...
     // Supports both OAuth (code flow) and OIDC (implicit flow with id_token)
-    let path = url.path();
+    let path = url.path().trim_matches('/');
 
     // Check if this is the callback path
-    if path.trim_start_matches('/') != "callback" {
+    if path != "callback" && path != "thirdparty/callback" {
         println!("Unknown thirdparty path: {}", path);
         return;
     }
@@ -150,11 +202,14 @@ fn handle_thirdparty_callback(app_handle: &AppHandle, url: &Url) {
 }
 
 fn handle_trigger(app_handle: &AppHandle, url: &Url) {
-    // Parse URL: flow-like://trigger/{app_id}/{...route}?param1=value1&param2=value2
-    let path = url.path();
+    // Parse URL:
+    // - flow-like://trigger/{app_id}/{...route}?param1=value1&param2=value2
+    // - https://app.flow-like.com/trigger/{app_id}/{...route}?param1=value1&param2=value2
+    let raw_path = url.path().trim_matches('/');
+    let path = raw_path.strip_prefix("trigger/").unwrap_or(raw_path);
 
     // Remove leading slash and split into parts
-    let path_parts: Vec<&str> = path.trim_start_matches('/').split('/').collect();
+    let path_parts: Vec<&str> = path.split('/').collect();
 
     if path_parts.len() < 2 {
         println!("Invalid trigger URL: expected at least app_id and route");
@@ -206,11 +261,23 @@ fn handle_trigger(app_handle: &AppHandle, url: &Url) {
 }
 
 fn handle_store(app_handle: &AppHandle, url: &Url) {
-    // Parse URL: flow-like://store?id={app_id}
-    let app_id = url
+    // Parse URL:
+    // - flow-like://store?id={app_id}
+    // - https://app.flow-like.com/store?id={app_id}
+    // - https://app.flow-like.com/store/{app_id}
+    let mut app_id = url
         .query_pairs()
         .find(|(k, _)| k == "id")
         .map(|(_, v)| v.to_string());
+
+    if app_id.is_none() {
+        let path = url.path().trim_matches('/');
+        if let Some(rest) = path.strip_prefix("store/") {
+            if !rest.is_empty() {
+                app_id = Some(rest.to_string());
+            }
+        }
+    }
 
     println!("Store deep link: app_id={:?}", app_id);
 
@@ -224,7 +291,9 @@ fn handle_store(app_handle: &AppHandle, url: &Url) {
 }
 
 fn handle_join(app_handle: &AppHandle, url: &Url) {
-    // Parse URL: flow-like://join?appId={app_id}&token={token}
+    // Parse URL:
+    // - flow-like://join?appId={app_id}&token={token}
+    // - https://app.flow-like.com/join?appId={app_id}&token={token}
     let params: std::collections::HashMap<_, _> = url.query_pairs().collect();
     let app_id = params.get("appId").map(|v| v.to_string());
     let token = params.get("token").map(|v| v.to_string());

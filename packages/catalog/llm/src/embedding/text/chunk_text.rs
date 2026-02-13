@@ -5,7 +5,7 @@ use flow_like::flow::{
     pin::{PinOptions, ValueType},
     variable::VariableType,
 };
-use flow_like_types::{anyhow, async_trait, bail, json::json};
+use flow_like_types::{anyhow, async_trait, bail, json::json, tokio};
 
 #[crate::register_node]
 #[derive(Default)]
@@ -139,11 +139,15 @@ impl NodeLogic for ChunkText {
                 return Err(anyhow!("No model found"));
             };
 
-        let chunks = if markdown {
-            md_splitter.chunks(&text)
-        } else {
-            text_splitter.chunks(&text)
-        }?;
+        let chunks = tokio::task::spawn_blocking(move || {
+            if markdown {
+                md_splitter.chunks(&text)
+            } else {
+                text_splitter.chunks(&text)
+            }
+        })
+        .await
+        .map_err(|e| anyhow!("Blocking task failed: {}", e))??;
 
         context.set_pin_value("chunks", json!(chunks)).await?;
         context.activate_exec_pin("exec_out").await?;

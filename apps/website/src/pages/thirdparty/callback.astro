@@ -25,11 +25,19 @@ import Layout from "../../layouts/Layout.astro";
          */
         type OAuthPlatform = "desktop" | "web-dev" | "web-prod";
 
-        const PLATFORM_URLS: Record<OAuthPlatform, string> = {
-            "desktop": "flow-like://thirdparty/callback",
+        const WEB_PLATFORM_URLS: Record<Exclude<OAuthPlatform, "desktop">, string> = {
             "web-dev": "http://localhost:3001/thirdparty/callback",
             "web-prod": "https://app.flow-like.com/thirdparty/callback",
         };
+        const DESKTOP_UNIVERSAL_LINK = "https://app.flow-like.com/thirdparty/callback";
+        const DESKTOP_LEGACY_DEEPLINK = "flow-like://thirdparty/callback";
+
+        function isIOSDevice(): boolean {
+            return (
+                /iPad|iPhone|iPod/.test(navigator.userAgent) ||
+                (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1)
+            );
+        }
 
         /**
          * Decodes platform info from the OAuth state parameter.
@@ -85,20 +93,49 @@ import Layout from "../../layouts/Layout.astro";
                 var decoded = decodeStateWithPlatform(state);
 
                 var qs = search.toString();
-                // Get the hardcoded URL for this platform
-                var targetUrl = PLATFORM_URLS[decoded.platform] + (qs ? "?" + qs : "");
+                var isIOS = isIOSDevice();
+
+                var primaryTarget: string;
+                var fallbackTarget: string | null = null;
+
+                if (decoded.platform === "desktop") {
+                    primaryTarget = (isIOS ? DESKTOP_UNIVERSAL_LINK : DESKTOP_LEGACY_DEEPLINK) + (qs ? "?" + qs : "");
+                    fallbackTarget = isIOS ? DESKTOP_LEGACY_DEEPLINK + (qs ? "?" + qs : "") : null;
+                } else {
+                    primaryTarget = WEB_PLATFORM_URLS[decoded.platform] + (qs ? "?" + qs : "");
+                }
 
                 // Set the manual link
                 var link = document.getElementById("deeplink");
                 if (link) {
-                    link.setAttribute("href", targetUrl);
+                    link.setAttribute("href", primaryTarget);
                     if (decoded.platform !== "desktop") {
                         link.textContent = "click here to continue";
                     }
                 }
 
+                var leftPage = false;
+                var markLeftPage = function () { leftPage = true; };
+                window.addEventListener("pagehide", markLeftPage, { once: true });
+                document.addEventListener("visibilitychange", function () {
+                    if (document.visibilityState === "hidden") {
+                        leftPage = true;
+                    }
+                });
+
                 // Redirect to the appropriate destination
-                window.location.replace(targetUrl);
+                window.location.replace(primaryTarget);
+
+                // iOS native path first; keep legacy scheme fallback for older app versions.
+                if (fallbackTarget) {
+                    window.setTimeout(function () {
+                        var fallback = fallbackTarget;
+                        if (!fallback) return;
+                        if (leftPage || document.visibilityState === "hidden") return;
+                        if (link) link.setAttribute("href", fallback);
+                        window.location.replace(fallback);
+                    }, 1200);
+                }
             } catch (e) {
                 var errorEl = document.getElementById("error");
                 if (errorEl) {

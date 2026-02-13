@@ -124,7 +124,7 @@ impl NodeLogic for CopyWorksheetNode {
 
     #[cfg(feature = "execute")]
     async fn run(&self, context: &mut ExecutionContext) -> flow_like_types::Result<()> {
-        use std::io::Cursor;
+        use super::{CachedExcelWorkbook, flush_workbook, get_or_open_workbook};
 
         context.deactivate_exec_pin("exec_out").await?;
 
@@ -136,56 +136,61 @@ impl NodeLogic for CopyWorksheetNode {
             .await
             .unwrap_or_else(|_| "error".to_string());
 
-        let bytes = file.get(context, false).await?;
-        let mut book = umya_spreadsheet::reader::xlsx::read_reader(Cursor::new(bytes), true)
-            .map_err(|e| anyhow!("Failed to read workbook: {}", e))?;
+        let cached = get_or_open_workbook(context, &file, false).await?;
+        let wb = cached
+            .as_any()
+            .downcast_ref::<CachedExcelWorkbook>()
+            .ok_or_else(|| anyhow!("Cache type mismatch"))?;
 
-        let (source_idx, source_name) = resolve_sheet_identifier(&book, &source_sheet_in)?;
+        let (source_name, final_name, copied) = {
+            let mut book = wb.umya_book_mut()?;
 
-        let base_name = if new_name_in.trim().is_empty() {
-            format!("{} (copy)", &source_name)
-        } else {
-            new_name_in.trim().to_string()
-        };
-        let mut final_name = sanitize_sheet_name(&base_name);
-        if final_name.is_empty() {
-            return Err(anyhow!(
-                "Destination sheet name resolves to empty after sanitization"
-            ));
-        }
+            let (source_idx, source_name) = resolve_sheet_identifier(&book, &source_sheet_in)?;
 
-        let exists = book.get_sheet_by_name(&final_name).is_some();
-        let mut copied = false;
-        if exists {
-            match if_exists.as_str() {
-                "skip" => {
-                    context.log_message(
-                        &format!("Sheet '{}' exists. Skipping copy.", final_name),
-                        LogLevel::Info,
-                    );
-                }
-                "rename" => {
-                    final_name = next_unique_sheet_name(&book, &final_name);
-                    copy_append(&mut book, source_idx, &final_name)?;
-                    copied = true;
-                }
-                _ => {
-                    return Err(anyhow!(
-                        "Destination sheet '{}' already exists (if_exists=error)",
-                        final_name
-                    ));
-                }
+            let base_name = if new_name_in.trim().is_empty() {
+                format!("{} (copy)", &source_name)
+            } else {
+                new_name_in.trim().to_string()
+            };
+            let mut final_name = sanitize_sheet_name(&base_name);
+            if final_name.is_empty() {
+                return Err(anyhow!(
+                    "Destination sheet name resolves to empty after sanitization"
+                ));
             }
-        } else {
-            copy_append(&mut book, source_idx, &final_name)?;
-            copied = true;
-        }
+
+            let exists = book.get_sheet_by_name(&final_name).is_some();
+            let mut copied = false;
+            if exists {
+                match if_exists.as_str() {
+                    "skip" => {
+                        context.log_message(
+                            &format!("Sheet '{}' exists. Skipping copy.", final_name),
+                            LogLevel::Info,
+                        );
+                    }
+                    "rename" => {
+                        final_name = next_unique_sheet_name(&book, &final_name);
+                        copy_append(&mut book, source_idx, &final_name)?;
+                        copied = true;
+                    }
+                    _ => {
+                        return Err(anyhow!(
+                            "Destination sheet '{}' already exists (if_exists=error)",
+                            final_name
+                        ));
+                    }
+                }
+            } else {
+                copy_append(&mut book, source_idx, &final_name)?;
+                copied = true;
+            }
+
+            (source_name, final_name, copied)
+        };
 
         if copied {
-            let mut out = Cursor::new(Vec::<u8>::new());
-            umya_spreadsheet::writer::xlsx::write_writer(&book, &mut out)
-                .map_err(|e| anyhow!("Failed to write workbook: {}", e))?;
-            file.put(context, out.into_inner(), false).await?;
+            flush_workbook(wb, &file, context).await?;
         }
 
         context.set_pin_value("copied", json!(copied)).await?;

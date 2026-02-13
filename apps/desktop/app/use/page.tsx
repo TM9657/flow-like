@@ -239,18 +239,21 @@ export default function UsePage() {
 		if (routeMapping) return;
 		if (routeLoading) return;
 		if ((routes.data?.length ?? 0) > 0) return;
+		const queriesPending = routes.isFetching || events.isFetching;
 
-		if (sortedEvents.length === 0 && events.data) {
+		if (sortedEvents.length === 0) {
+			if (!events.data || queriesPending) return;
 			router.replace(`/store?id=${appId}`);
 			return;
 		}
 
-		if (sortedEvents.length === 0) return;
-
 		let rerouteEvent = sortedEvents.find((e) => usableEvents.has(e.event_type));
 
-		if (!rerouteEvent && usableEvents.size > 0 && events.data) {
-			router.replace(`/store?id=${appId}`);
+		if (!rerouteEvent) {
+			if (queriesPending) return;
+			if (events.data) {
+				router.replace(`/store?id=${appId}`);
+			}
 			return;
 		}
 
@@ -283,9 +286,11 @@ export default function UsePage() {
 		switchEvent,
 		usableEvents,
 		events.data,
+		events.isFetching,
 		routeMapping,
 		routeLoading,
 		routes.data,
+		routes.isFetching,
 		router,
 	]);
 

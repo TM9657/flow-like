@@ -5,10 +5,6 @@ use flow_like::flow::{
     variable::VariableType,
 };
 use flow_like_types::{async_trait, json::json};
-#[cfg(feature = "execute")]
-use std::io::Cursor;
-#[cfg(feature = "execute")]
-use umya_spreadsheet::{self};
 
 /// Remove one or more columns from an XLSX worksheet (object-store aware).
 /// - Works entirely in-memory using `FlowPath` bytes (no local filesystem I/O).
@@ -71,6 +67,8 @@ impl NodeLogic for RemoveColumnNode {
 
     #[cfg(feature = "execute")]
     async fn run(&self, ctx: &mut ExecutionContext) -> flow_like_types::Result<()> {
+        use super::{CachedExcelWorkbook, flush_workbook, get_or_open_workbook};
+
         ctx.deactivate_exec_pin("exec_out").await?;
 
         let file: FlowPath = ctx.evaluate_pin("file").await?;
@@ -86,46 +84,25 @@ impl NodeLogic for RemoveColumnNode {
             return Err(flow_like_types::anyhow!("'count' must be >= 1"));
         }
 
-        let mut book = match file.get(ctx, false).await {
-            Ok(bytes) if !bytes.is_empty() => {
-                match umya_spreadsheet::reader::xlsx::read_reader(Cursor::new(bytes), true) {
-                    Ok(b) => b,
-                    Err(e) => {
-                        return Err(flow_like_types::anyhow!(
-                            "Failed to read workbook bytes: {}",
-                            e
-                        ));
-                    }
-                }
+        let cached = get_or_open_workbook(ctx, &file, true).await?;
+        let wb = cached
+            .as_any()
+            .downcast_ref::<CachedExcelWorkbook>()
+            .ok_or_else(|| flow_like_types::anyhow!("Cache type mismatch"))?;
+
+        {
+            let mut book = wb.umya_book_mut()?;
+            if book.get_sheet_by_name(&sheet).is_none() {
+                let _ = book.new_sheet(&sheet);
             }
-            _ => umya_spreadsheet::new_file(),
-        };
-
-        if book.get_sheet_by_name(&sheet).is_none() {
-            let _ = book.new_sheet(&sheet);
-        }
-        let ws = book.get_sheet_by_name_mut(&sheet).ok_or_else(|| {
-            flow_like_types::anyhow!("Failed to access or create sheet: {}", sheet)
-        })?;
-
-        let col_letters = normalize_col_letters(&col_in)?;
-
-        ws.remove_column(&col_letters, &count);
-
-        let mut out: Vec<u8> = Vec::new();
-        if let Err(e) = umya_spreadsheet::writer::xlsx::write_writer(&book, &mut out) {
-            return Err(flow_like_types::anyhow!(
-                "Failed to serialize workbook: {}",
-                e
-            ));
+            let ws = book.get_sheet_by_name_mut(&sheet).ok_or_else(|| {
+                flow_like_types::anyhow!("Failed to access or create sheet: {}", sheet)
+            })?;
+            let col_letters = normalize_col_letters(&col_in)?;
+            ws.remove_column(&col_letters, &count);
         }
 
-        if let Err(e) = file.put(ctx, out, false).await {
-            return Err(flow_like_types::anyhow!(
-                "Failed to store updated workbook: {}",
-                e
-            ));
-        }
+        flush_workbook(wb, &file, ctx).await?;
 
         ctx.set_pin_value("file_out", json!(file)).await?;
         ctx.set_pin_value("ok", json!(true)).await?;

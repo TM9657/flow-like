@@ -8,6 +8,7 @@ import {
 	CornerRightUpIcon,
 	EllipsisVerticalIcon,
 	HardDriveIcon,
+	Loader2Icon,
 	LogsIcon,
 	RefreshCcwIcon,
 	ScrollIcon,
@@ -70,6 +71,7 @@ const FlowRunsComponent = ({
 		currentLogs,
 		setFilter,
 		refetchLogs,
+		isLoading,
 	} = useLogAggregation();
 	const [localFilter, setLocalFilter] = useState<ILogAggregationFilter>({
 		appId,
@@ -213,7 +215,13 @@ const FlowRunsComponent = ({
 					</SelectContent>
 				</Select>
 			</div>
-			{(!currentLogs || currentLogs.length === 0) && (
+			{isLoading && (
+				<div className="flex flex-col items-center justify-center gap-2 py-8 h-full">
+					<Loader2Icon className="w-6 h-6 animate-spin text-muted-foreground" />
+					<p className="text-sm text-muted-foreground">Loading runs...</p>
+				</div>
+			)}
+			{!isLoading && (!currentLogs || currentLogs.length === 0) && (
 				<EmptyState
 					className="mt-2 h-full"
 					icons={[LogsIcon, ScrollIcon, CheckCircle2Icon]}

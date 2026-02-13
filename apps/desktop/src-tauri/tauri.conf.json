@@ -1,6 +1,6 @@
 {
 	"productName": "Flow Like",
-	"version": "0.0.8",
+	"version": "0.0.9",
 	"identifier": "com.flow-like.app",
 	"build": {
 		"beforeDevCommand": "bun run dev",
@@ -105,6 +105,18 @@
 	"plugins": {
 		"deep-link": {
 			"mobile": [
+				{
+					"scheme": ["https"],
+					"host": "app.flow-like.com",
+					"pathPrefix": [
+						"/callback",
+						"/thirdparty/callback",
+						"/trigger",
+						"/store",
+						"/join"
+					],
+					"appLink": true
+				},
 				{
 					"scheme": ["flow-like"],
 					"appLink": false

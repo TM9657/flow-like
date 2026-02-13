@@ -45,6 +45,7 @@ export const ptCommon = {
 	"footer.eula": "EULA",
 	"footer.privacy": "Política de Privacidade",
 	"footer.legal": "Aviso Legal",
+	"footer.dataDeletion": "Exclusão de dados",
 
 	// BI Preview Section
 	"bi.preview.badge": "Business Intelligence",
