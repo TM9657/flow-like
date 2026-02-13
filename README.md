@@ -3,15 +3,12 @@
     <img src="apps/desktop/public/app-logo.webp" alt="Flow-Like Logo" width="80" />
   </a>
 </p>
-
 <h1 align="center">Flow-Like</h1>
-
 <p align="center">
   <strong>If you can't see it, you can't trust it.</strong><br/>
   A Rust-powered workflow engine that runs on your device — laptop, server, or phone.<br/>
   Fully typed. Fully traceable. Fully yours.
 </p>
-
 <p align="center">
   <a href="https://app.codacy.com/gh/TM9657/flow-like/dashboard?utm_source=gh&utm_medium=referral"><img src="https://app.codacy.com/project/badge/Grade/244d2db2a84f4e79b64d984639a2b18f" alt="Codacy Badge" /></a>
   <a href="https://discord.com/invite/mdBA9kMjFJ"><img src="https://img.shields.io/discord/673169081704120334" alt="Discord" /></a>
@@ -20,7 +17,6 @@
   <a href="https://docs.flow-like.com"><img src="https://img.shields.io/badge/docs-docs.flow--like.com-0a7cff?logo=readthedocs&logoColor=white" alt="Docs" /></a>
   <a href="https://flow-like.com/download"><img src="https://img.shields.io/badge/download-Desktop%20App-28a745?logo=tauri&logoColor=white" alt="Download" /></a>
 </p>
-
 <p align="center">
   <a href="https://github.com/TM9657/flow-like/stargazers"><strong>⭐ Star on GitHub</strong></a> ·
   <a href="https://docs.flow-like.com"><strong>📖 Docs</strong></a> ·
@@ -89,6 +85,7 @@ Flow-Like workflows are **fully typed** — they track *what data flows where* a
 | Data lineage / audit trail | ✅ Complete | ❌ Limited | ❌ None | ⚠️ Via logging |
 | Performance | ✅ ~244K/sec (Rust) | ⚠️ ~200/sec (Node) | ⚠️ Cloud-limited | ⚠️ Go-based |
 | Visual builder | ✅ Full IDE | ✅ Good | ✅ Simple | ❌ Code only |
+| UI builder | ✅ Built-in | ❌ None | ❌ None | ❌ None |
 | LLM orchestration | ✅ Built-in + guardrails | ⚠️ Via nodes | ⚠️ Via integrations | ❌ Manual |
 | White-label / embed | ✅ Full customization | ❌ Branded | ❌ Branded | ❌ No UI |
 | Business process views | ✅ Process / Data / Execution | ❌ Single view | ❌ Single view | ❌ Code only |
@@ -98,10 +95,10 @@ Flow-Like workflows are **fully typed** — they track *what data flows where* a
 
 ## Quick Start
 
-| 💻 Desktop App | ☁️ Web App | ⚙️ From Source |
-|:---:|:---:|:---:|
-| **[Download Now](https://flow-like.com/download)** | **[Try Online](https://app.flow-like.com)** | **[Build Yourself](#build-from-source)** |
-| macOS · Windows · Linux | Coming soon | Latest features |
+| 💻 Desktop App | ☁️ Web App | 📱 Mobile App | ⚙️ From Source |
+|:---:|:---:|:---:|:---:|
+| **[Download Now](https://flow-like.com/download)** | **[Try Online](https://app.flow-like.com)** | **[Coming Soon](https://flow-like.com)** | **[Build Yourself](#build-from-source)** |
+| macOS · Windows · Linux | Available now | iOS · Android | Latest features |
 
 ---
 
@@ -115,7 +112,7 @@ A no-code IDE for building workflows. Smart wiring with type-aware pins, inline 
   <img src="assets/recording.gif" alt="Visual Studio" width="100%" />
 </p>
 
-### 🧩 100+ Built-in Nodes
+### 🧩 900+ Built-in Nodes
 
 APIs & webhooks, databases, file processing (Excel, CSV, PDF), AI models & computer vision, messaging (Slack, Discord, email), IoT, logic & control flow, security & auth — and growing.
 
@@ -225,7 +222,6 @@ We welcome contributions of all kinds — new nodes, bug fixes, docs, themes, an
 
 <details>
 <summary><strong>📸 Screenshots & Gallery</strong></summary>
-
 <br/>
 
 **Team & Access Management**
@@ -250,38 +246,30 @@ We welcome contributions of all kinds — new nodes, bug fixes, docs, themes, an
 
 <details>
 <summary><strong>❓ FAQ</strong></summary>
-
 <br/>
 
 **Is Flow-Like free to use?**
-
 Most likely, yes. Flow-Like uses the Business Source License (BSL), which is free if your organization has fewer than 2,000 employees and less than $300M in annual recurring revenue. This covers startups, SMBs, and most enterprises. [Read the full license](./LICENSE).
 
 **Can I run it completely offline?**
-
 Yes, 100%. Flow-Like works fully offline on your local machine — ideal for air-gapped networks and secure environments. Switch to online mode anytime to collaborate.
 
 **Can I embed it in my product?**
-
 Yes. Flow-Like is white-label ready — embed the visual editor, customize the theme to your brand, integrate SSO, or run just the engine headlessly.
 
 **What languages can I use?**
-
 The visual builder is no-code. For custom nodes, you write Rust. SDKs and REST APIs are available for programmatic control.
 
 **Is it production-ready?**
-
 Flow-Like is actively developed and used in production. We recommend thorough testing for mission-critical workflows. See the [releases page](https://github.com/TM9657/flow-like/releases) for version stability.
 
 **How do I get support?**
-
 [Discord](https://discord.com/invite/mdBA9kMjFJ) for quick help, [Docs](https://docs.flow-like.com) for guides, or [GitHub Issues](https://github.com/TM9657/flow-like/issues) for bugs and features.
 
 </details>
 
 <details>
 <summary><strong>🏗️ Built With</strong></summary>
-
 <br/>
 
 Flow-Like stands on the shoulders of incredible open-source projects:
