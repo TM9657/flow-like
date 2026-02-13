@@ -10,7 +10,8 @@ export async function GET(context) {
 
 	return rss({
 		title: "Flow-Like Blog",
-		description: "Latest releases, tutorials, and technical deep dives from Flow-Like.",
+		description:
+			"Latest releases, tutorials, and technical deep dives from Flow-Like.",
 		site: context.site, // set "site" in astro.config for absolute URLs
 		items: posts.map((p) => ({
 			title: p.data.title,

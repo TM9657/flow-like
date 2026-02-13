@@ -1,5 +1,6 @@
 "use client";
 
+import { useTheme } from "next-themes";
 import { useCallback, useEffect, useMemo, useRef } from "react";
 import type { ChartInput } from "./chart-data-parser";
 import { toPlotlyData } from "./chart-data-parser";
@@ -23,13 +24,104 @@ interface PlotlyChartPreviewProps {
 function PlotlyChartPreview({ input, height = 350 }: PlotlyChartPreviewProps) {
 	const containerRef = useRef<HTMLDivElement>(null);
 	const plotlyRef = useRef<PlotlyModule | null>(null);
+	const { resolvedTheme } = useTheme();
+	const isDark = resolvedTheme === "dark";
 
 	const { data, layout, config } = useMemo(() => {
 		const result = toPlotlyData(input);
-		// Ensure height is set
-		result.layout.height = input.config.height || height;
+		const baseLayout = result.layout as Record<string, unknown>;
+		const currentFont = (baseLayout.font as Record<string, unknown>) || {};
+		const currentTitle = (baseLayout.title as Record<string, unknown>) || {};
+		const currentTitleFont =
+			(currentTitle.font as Record<string, unknown>) || {};
+		const currentLegend = (baseLayout.legend as Record<string, unknown>) || {};
+		const currentLegendFont =
+			(currentLegend.font as Record<string, unknown>) || {};
+		const currentXAxis = (baseLayout.xaxis as Record<string, unknown>) || {};
+		const currentXAxisTitle =
+			(currentXAxis.title as Record<string, unknown>) || {};
+		const currentXAxisTitleFont =
+			(currentXAxisTitle.font as Record<string, unknown>) || {};
+		const currentYAxis = (baseLayout.yaxis as Record<string, unknown>) || {};
+		const currentYAxisTitle =
+			(currentYAxis.title as Record<string, unknown>) || {};
+		const currentYAxisTitleFont =
+			(currentYAxisTitle.font as Record<string, unknown>) || {};
+
+		const legacyFontColor =
+			typeof currentFont.color === "string" && currentFont.color === "#888";
+
+		const themedFontColor = isDark ? "#f3f4f6" : "#111827";
+		const themedMutedColor = isDark ? "#9ca3af" : "#6b7280";
+		const themedBorderColor = isDark ? "#374151" : "#d1d5db";
+
+		result.layout = {
+			...baseLayout,
+			height: input.config.height || height,
+			paper_bgcolor: baseLayout.paper_bgcolor ?? "transparent",
+			plot_bgcolor: baseLayout.plot_bgcolor ?? "transparent",
+			font: {
+				...currentFont,
+				color: legacyFontColor
+					? themedFontColor
+					: (currentFont.color ?? themedFontColor),
+			},
+			title: {
+				...currentTitle,
+				font: {
+					...currentTitleFont,
+					color: currentTitleFont.color ?? themedFontColor,
+				},
+			},
+			legend: {
+				...currentLegend,
+				font: {
+					...currentLegendFont,
+					color: currentLegendFont.color ?? themedMutedColor,
+				},
+			},
+			xaxis: {
+				...currentXAxis,
+				linecolor: currentXAxis.linecolor ?? themedBorderColor,
+				gridcolor: currentXAxis.gridcolor ?? themedBorderColor,
+				zerolinecolor: currentXAxis.zerolinecolor ?? themedBorderColor,
+				tickfont: {
+					...((currentXAxis.tickfont as Record<string, unknown>) || {}),
+					color:
+						((currentXAxis.tickfont as Record<string, unknown>) || {}).color ??
+						themedMutedColor,
+				},
+				title: {
+					...currentXAxisTitle,
+					font: {
+						...currentXAxisTitleFont,
+						color: currentXAxisTitleFont.color ?? themedMutedColor,
+					},
+				},
+			},
+			yaxis: {
+				...currentYAxis,
+				linecolor: currentYAxis.linecolor ?? themedBorderColor,
+				gridcolor: currentYAxis.gridcolor ?? themedBorderColor,
+				zerolinecolor: currentYAxis.zerolinecolor ?? themedBorderColor,
+				tickfont: {
+					...((currentYAxis.tickfont as Record<string, unknown>) || {}),
+					color:
+						((currentYAxis.tickfont as Record<string, unknown>) || {}).color ??
+						themedMutedColor,
+				},
+				title: {
+					...currentYAxisTitle,
+					font: {
+						...currentYAxisTitleFont,
+						color: currentYAxisTitleFont.color ?? themedMutedColor,
+					},
+				},
+			},
+		};
+
 		return result;
-	}, [input, height]);
+	}, [input, height, resolvedTheme, isDark]);
 
 	const handleResize = useCallback(() => {
 		if (!containerRef.current || !plotlyRef.current) return;

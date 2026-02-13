@@ -61,15 +61,13 @@ export const frDataDeletion = {
 		"Nous ne suivons pas votre activité de navigation en dehors de nos services",
 
 	// Étapes de suppression
-	"dataDeletion.withAccount.howToDelete":
-		"Comment demander la suppression",
+	"dataDeletion.withAccount.howToDelete": "Comment demander la suppression",
 	"dataDeletion.withAccount.step1": "Envoyez un e-mail à",
 	"dataDeletion.withAccount.step1Email": "privacy@flow-like.com",
 	"dataDeletion.withAccount.step1Detail":
 		"depuis l'adresse e-mail associée à votre compte",
 	"dataDeletion.withAccount.step2": "Utilisez l'objet :",
-	"dataDeletion.withAccount.step2Subject":
-		"Demande de suppression des données",
+	"dataDeletion.withAccount.step2Subject": "Demande de suppression des données",
 	"dataDeletion.withAccount.step3":
 		"Confirmez dans le corps de l'e-mail que vous souhaitez la suppression de toutes vos données personnelles",
 	"dataDeletion.withAccount.processingTime":

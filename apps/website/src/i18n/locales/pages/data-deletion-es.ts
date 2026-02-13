@@ -66,8 +66,7 @@ export const esDataDeletion = {
 	"dataDeletion.withAccount.step1Detail":
 		"desde la dirección de correo asociada a tu cuenta",
 	"dataDeletion.withAccount.step2": "Usa el asunto:",
-	"dataDeletion.withAccount.step2Subject":
-		"Solicitud de eliminación de datos",
+	"dataDeletion.withAccount.step2Subject": "Solicitud de eliminación de datos",
 	"dataDeletion.withAccount.step3":
 		"Confirma en el cuerpo del correo que deseas que se eliminen todos tus datos personales",
 	"dataDeletion.withAccount.processingTime":

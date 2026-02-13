@@ -156,7 +156,12 @@ export default function RootLayout({
 	children: React.ReactNode;
 }>) {
 	return (
-		<html lang="en" data-desktop-app="true" suppressHydrationWarning suppressContentEditableWarning>
+		<html
+			lang="en"
+			data-desktop-app="true"
+			suppressHydrationWarning
+			suppressContentEditableWarning
+		>
 			{/* <ReactScan /> */}
 			<PHProvider>
 				<ReactFlowProvider>

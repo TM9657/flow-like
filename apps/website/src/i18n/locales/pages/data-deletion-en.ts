@@ -93,8 +93,7 @@ export const enDataDeletion = {
 	"dataDeletion.rights.rectificationDesc":
 		"Request correction of inaccurate personal data",
 	"dataDeletion.rights.erasure": "Erasure",
-	"dataDeletion.rights.erasureDesc":
-		"Request deletion of your personal data",
+	"dataDeletion.rights.erasureDesc": "Request deletion of your personal data",
 	"dataDeletion.rights.portability": "Portability",
 	"dataDeletion.rights.portabilityDesc":
 		"Request your data in a portable format",

@@ -873,14 +873,10 @@ export function createOAuthService(config: OAuthServiceConfig) {
 							Accept: "application/json",
 						},
 					)
-				: await runtime.httpPost(
-						provider.device_auth_url,
-						params.toString(),
-						{
-							"Content-Type": "application/x-www-form-urlencoded",
-							Accept: "application/json",
-						},
-					);
+				: await runtime.httpPost(provider.device_auth_url, params.toString(), {
+						"Content-Type": "application/x-www-form-urlencoded",
+						Accept: "application/json",
+					});
 
 			if (!response.ok) {
 				const errorText = await response.text();
@@ -919,14 +915,10 @@ export function createOAuthService(config: OAuthServiceConfig) {
 							Accept: "application/json",
 						},
 					)
-				: await runtime.httpPost(
-						provider.token_url,
-						params.toString(),
-						{
-							"Content-Type": "application/x-www-form-urlencoded",
-							Accept: "application/json",
-						},
-					);
+				: await runtime.httpPost(provider.token_url, params.toString(), {
+						"Content-Type": "application/x-www-form-urlencoded",
+						Accept: "application/json",
+					});
 
 			const data = (await response.json()) as {
 				access_token?: string;
