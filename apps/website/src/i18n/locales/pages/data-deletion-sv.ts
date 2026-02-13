@@ -32,8 +32,7 @@ export const svDataDeletion = {
 
 	// Väg 2: Med konto
 	"dataDeletion.withAccount.title": "Med konto",
-	"dataDeletion.withAccount.subtitle":
-		"Använda Flow-Likes molnfunktioner",
+	"dataDeletion.withAccount.subtitle": "Använda Flow-Likes molnfunktioner",
 	"dataDeletion.withAccount.badge": "Raderingsbegäran krävs",
 	"dataDeletion.withAccount.description":
 		"Om du har skapat ett konto eller använder molntjänster lagrar vi viss data som kan raderas på begäran.",
@@ -78,8 +77,7 @@ export const svDataDeletion = {
 		"Ditt konto och alla tillhörande uppgifter tas bort permanent",
 	"dataDeletion.withAccount.after2":
 		"Molnsynkroniserade arbetsflöden och inställningar raderas",
-	"dataDeletion.withAccount.after3":
-		"Lokal data på dina enheter påverkas inte",
+	"dataDeletion.withAccount.after3": "Lokal data på dina enheter påverkas inte",
 	"dataDeletion.withAccount.after4":
 		"Åtgärden är oåterkallelig — data kan inte återställas",
 
@@ -94,8 +92,7 @@ export const svDataDeletion = {
 	"dataDeletion.rights.rectificationDesc":
 		"Begära rättelse av felaktiga personuppgifter",
 	"dataDeletion.rights.erasure": "Radering",
-	"dataDeletion.rights.erasureDesc":
-		"Begära radering av dina personuppgifter",
+	"dataDeletion.rights.erasureDesc": "Begära radering av dina personuppgifter",
 	"dataDeletion.rights.portability": "Dataportabilitet",
 	"dataDeletion.rights.portabilityDesc":
 		"Begära dina uppgifter i ett portabelt format",

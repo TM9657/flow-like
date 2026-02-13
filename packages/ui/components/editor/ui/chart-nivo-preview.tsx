@@ -1,5 +1,6 @@
 "use client";
 
+import { useTheme } from "next-themes";
 import {
 	type ComponentType,
 	useEffect,
@@ -122,29 +123,6 @@ const CHART_PACKAGES: Record<string, ChartInfo> = {
 	},
 };
 
-const DEFAULT_THEME = {
-	background: "transparent",
-	text: { fill: "#888" },
-	fontSize: 11,
-	axis: {
-		domain: { line: { stroke: "#444" } },
-		ticks: { line: { stroke: "#444" }, text: { fill: "#888" } },
-		legend: { text: { fill: "#888" } },
-	},
-	grid: { line: { stroke: "#333" } },
-	legends: { text: { fill: "#888" } },
-	labels: { text: { fill: "#fff" } },
-	tooltip: {
-		container: {
-			background: "#1a1a1a",
-			color: "#fff",
-			fontSize: 12,
-			borderRadius: 4,
-			boxShadow: "0 2px 8px rgba(0,0,0,0.3)",
-		},
-	},
-};
-
 const DEFAULT_MARGIN = { top: 30, right: 30, bottom: 50, left: 60 };
 
 interface NivoChartPreviewProps {
@@ -157,8 +135,38 @@ function NivoChartPreview({ input, height = 350 }: NivoChartPreviewProps) {
 	const [chartModule, setChartModule] = useState<ChartModule | null>(null);
 	const [loading, setLoading] = useState(true);
 	const [error, setError] = useState<string | null>(null);
+	const { resolvedTheme } = useTheme();
 
 	const { data, chartType, props } = useMemo(() => toNivoData(input), [input]);
+	const isDark = resolvedTheme === "dark";
+	const defaultTheme = useMemo(
+		() => ({
+			background: "transparent",
+			text: { fill: isDark ? "#9ca3af" : "#6b7280" },
+			fontSize: 11,
+			axis: {
+				domain: { line: { stroke: isDark ? "#374151" : "#d1d5db" } },
+				ticks: {
+					line: { stroke: isDark ? "#374151" : "#d1d5db" },
+					text: { fill: isDark ? "#9ca3af" : "#6b7280" },
+				},
+				legend: { text: { fill: isDark ? "#9ca3af" : "#6b7280" } },
+			},
+			grid: { line: { stroke: isDark ? "#374151" : "#e5e7eb" } },
+			legends: { text: { fill: isDark ? "#9ca3af" : "#6b7280" } },
+			labels: { text: { fill: isDark ? "#f3f4f6" : "#111827" } },
+			tooltip: {
+				container: {
+					background: isDark ? "#111827" : "#ffffff",
+					color: isDark ? "#f9fafb" : "#111827",
+					fontSize: 12,
+					borderRadius: 4,
+					boxShadow: "0 2px 8px rgba(0,0,0,0.2)",
+				},
+			},
+		}),
+		[isDark],
+	);
 
 	// Load the chart component dynamically
 	useEffect(() => {
@@ -187,9 +195,11 @@ function NivoChartPreview({ input, height = 350 }: NivoChartPreviewProps) {
 
 	// Build props based on chart type
 	const chartProps = useMemo(() => {
+		const chartTheme =
+			(props.theme as Record<string, unknown> | undefined) ?? undefined;
 		const baseProps: Record<string, unknown> = {
 			data,
-			theme: DEFAULT_THEME,
+			theme: chartTheme ?? defaultTheme,
 			margin: DEFAULT_MARGIN,
 			animate: input.config.animate !== false,
 			...props,
@@ -202,6 +212,10 @@ function NivoChartPreview({ input, height = 350 }: NivoChartPreviewProps) {
 					...baseProps,
 					padding: 0.3,
 					enableLabel: true,
+					labelTextColor: {
+						from: "color",
+						modifiers: [[isDark ? "brighter" : "darker", isDark ? 1.8 : 1.2]],
+					},
 					labelSkipWidth: 12,
 					labelSkipHeight: 12,
 					enableGridY: true,
@@ -270,7 +284,7 @@ function NivoChartPreview({ input, height = 350 }: NivoChartPreviewProps) {
 			default:
 				return baseProps;
 		}
-	}, [data, chartType, props, input.config.animate]);
+	}, [data, chartType, props, input.config.animate, defaultTheme, isDark]);
 
 	if (loading) {
 		return (

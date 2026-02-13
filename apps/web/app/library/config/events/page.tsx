@@ -25,9 +25,12 @@ export default function Page() {
 		return getOAuthService(getOAuthApiBaseUrl(profile.data?.hub));
 	}, [profile.data?.hub]);
 
-	const handleStartOAuth = useCallback(async (provider: IOAuthProvider) => {
-		await oauthService.startAuthorization(provider);
-	}, [oauthService]);
+	const handleStartOAuth = useCallback(
+		async (provider: IOAuthProvider) => {
+			await oauthService.startAuthorization(provider);
+		},
+		[oauthService],
+	);
 
 	const handleRefreshToken = useCallback(
 		async (provider: IOAuthProvider, token: IStoredOAuthToken) => {

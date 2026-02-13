@@ -488,13 +488,10 @@ export function ProfileSyncer({
 			apiBase: string,
 			iconExt?: string,
 			thumbnailExt?: string,
-		): Promise<
-			| {
-					icon_upload_url?: string | null;
-					thumbnail_upload_url?: string | null;
-			  }
-			| null
-		> => {
+		): Promise<{
+			icon_upload_url?: string | null;
+			thumbnail_upload_url?: string | null;
+		} | null> => {
 			if (!iconExt && !thumbnailExt) {
 				return null;
 			}
@@ -555,9 +552,7 @@ export function ProfileSyncer({
 					process.env.NEXT_PUBLIC_API_URL ?? hubUrl ?? "api.flow-like.com";
 				const protocol = profile.data?.secure === false ? "http" : "https";
 				const apiBase = (
-					baseUrl.startsWith("http")
-						? baseUrl
-						: `${protocol}://${baseUrl}`
+					baseUrl.startsWith("http") ? baseUrl : `${protocol}://${baseUrl}`
 				).replace(/\/+$/, "");
 				console.log(
 					"[ProfileSync] API base:",
