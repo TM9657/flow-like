@@ -161,6 +161,7 @@ export default function RootLayout({
 			data-desktop-app="true"
 			suppressHydrationWarning
 			suppressContentEditableWarning
+			className="min-h-screen"
 		>
 			{/* <ReactScan /> */}
 			<PHProvider>

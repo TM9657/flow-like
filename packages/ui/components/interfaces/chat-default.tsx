@@ -553,7 +553,7 @@ export const ChatInterfaceMemoized = memo(function ChatInterface({
 						console.log("Open chat history");
 					}}
 				>
-					<div className="flex items-center gap-2 text-sm font-medium">
+					<div className="flex items-center gap-2 text-sm font-medium" style={{paddingTop: "var(--fl-safe-top, env(safe-area-inset-top, 0px))"}}>
 						<HistoryIcon className="w-3 h-3" />
 						Chat History
 					</div>
