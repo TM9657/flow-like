@@ -499,7 +499,7 @@
 	}
 
 	html {
-		@apply scroll-smooth;
+		@apply scroll-smooth bg-background;
 	}
 
 	body {
@@ -520,11 +520,13 @@
 		overflow: hidden !important;
 		position: fixed !important;
 		inset: 0 !important;
+		margin: 0 !important;
+		width: 100% !important;
+		height: 100% !important;
 	}
 
 	/* Desktop app hardening: safe area support & scroll containment. */
 	html:where([data-desktop-app]) {
-		height: var(--fl-mobile-vvh, 100dvh) !important;
 		--fl-safe-top: max(
 			env(safe-area-inset-top, 0px),
 			var(--fl-native-safe-top, 0px)
@@ -535,15 +537,21 @@
 		);
 	}
 
-	body:where([data-desktop-app]) {
-		height: var(--fl-mobile-vvh, 100dvh) !important;
-		width: 100dvw !important;
-	}
+	/* position:fixed + inset:0 already sizes body to the viewport.
+	   Do NOT add an explicit height – it would override inset:0 and
+	   cause the body to extend past the screen on iOS. */
 
 	/* Prevent sidebar-wrapper min-h-svh from causing body overflow */
 	body:where([data-desktop-app]) [data-slot="sidebar-wrapper"] {
 		min-height: 0 !important;
-		height: 100% !important;
+		height: 100dvh !important;
+		max-height: 100dvh !important;
+		overflow: hidden !important;
+	}
+
+	/* Ensure the main content area fills sidebar-wrapper without overflow */
+	body:where([data-desktop-app]) [data-slot="sidebar-inset"] {
+		min-height: 0 !important;
 		max-height: 100% !important;
 	}
 
