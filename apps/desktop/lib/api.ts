@@ -330,6 +330,7 @@ export async function fetcher<T>(
 	}
 
 	const url = constructUrl(profile, path);
+	console.log("[API DEBUG] Fetching URL:", url);
 	try {
 		const response = await tauriFetch(url, {
 			...options,
@@ -342,7 +343,10 @@ export async function fetcher<T>(
 			priority: "high",
 		});
 
+		console.log("[API DEBUG] Response received:", response);
+
 		if (!response.ok) {
+			console.warn(`Error fetching ${path}:`, response);
 			if (response.status === 401 && auth) {
 				auth?.startSilentRenew();
 			}

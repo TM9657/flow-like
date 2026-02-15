@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 use std::{collections::HashMap, path::PathBuf, sync::Arc, time::SystemTime};
 use tauri::AppHandle;
 
-// iOS-only centralized, sandbox-safe roots.
+// Mobile-only centralized, sandbox-safe roots (iOS + Android).
 #[cfg(target_os = "ios")]
 fn app_data_root() -> PathBuf {
     if let Some(dir) = dirs_next::data_dir() {
@@ -12,7 +12,20 @@ fn app_data_root() -> PathBuf {
     } else if let Some(dir) = dirs_next::cache_dir() {
         dir.join("flow-like")
     } else {
-        // Relative fallback inside sandboxed working directory
+        PathBuf::from("flow-like")
+    }
+}
+
+// On Android, Tauri sets HOME to the app's writable `filesDir`.
+// dirs_next derives XDG paths like $HOME/.local/share which are non-standard on Android
+// and may fail to create. Use HOME directly as the sandbox root.
+#[cfg(target_os = "android")]
+fn app_data_root() -> PathBuf {
+    if let Some(home) = std::env::var_os("HOME") {
+        PathBuf::from(home).join("flow-like")
+    } else if let Some(dir) = dirs_next::data_dir() {
+        dir.join("flow-like")
+    } else {
         PathBuf::from("flow-like")
     }
 }
@@ -24,25 +37,33 @@ fn app_cache_root() -> PathBuf {
     } else if let Some(dir) = dirs_next::data_dir() {
         dir.join("flow-like").join("cache")
     } else {
-        // Relative fallback inside sandboxed working directory
         PathBuf::from("flow-like").join("cache")
     }
 }
 
-// Single source of truth for iOS storage root. We pick cache root based on runtime observations
-// (cache survived updates more reliably in your environment). All app data is placed under this.
-#[cfg(target_os = "ios")]
-fn ios_storage_root() -> PathBuf {
+#[cfg(target_os = "android")]
+fn app_cache_root() -> PathBuf {
+    if let Some(home) = std::env::var_os("HOME") {
+        PathBuf::from(home).join(".cache").join("flow-like")
+    } else if let Some(dir) = dirs_next::cache_dir() {
+        dir.join("flow-like")
+    } else {
+        PathBuf::from("flow-like").join("cache")
+    }
+}
+
+// Single source of truth for mobile storage root. All app data is placed under this.
+#[cfg(any(target_os = "ios", target_os = "android"))]
+pub(crate) fn mobile_storage_root() -> PathBuf {
     app_data_root()
 }
 
-#[cfg(target_os = "ios")]
+#[cfg(any(target_os = "ios", target_os = "android"))]
 fn default_logs_dir() -> PathBuf {
-    // Keep logs under the chosen iOS storage root (cache)
-    ios_storage_root().join("logs")
+    mobile_storage_root().join("logs")
 }
 
-#[cfg(not(target_os = "ios"))]
+#[cfg(not(any(target_os = "ios", target_os = "android")))]
 fn default_logs_dir() -> PathBuf {
     dirs_next::data_dir()
         .unwrap_or_default()
@@ -50,13 +71,12 @@ fn default_logs_dir() -> PathBuf {
         .join("logs")
 }
 
-#[cfg(target_os = "ios")]
+#[cfg(any(target_os = "ios", target_os = "android"))]
 fn default_temporary_dir() -> PathBuf {
-    // Keep tmp under the chosen iOS storage root (cache)
-    ios_storage_root().join("tmp")
+    mobile_storage_root().join("tmp")
 }
 
-#[cfg(not(target_os = "ios"))]
+#[cfg(not(any(target_os = "ios", target_os = "android")))]
 fn default_temporary_dir() -> PathBuf {
     dirs_next::data_dir()
         .unwrap_or_default()
@@ -71,9 +91,9 @@ fn ensure_dir(p: &PathBuf) -> std::io::Result<()> {
     Ok(())
 }
 
-#[cfg(target_os = "ios")]
+#[cfg(any(target_os = "ios", target_os = "android"))]
 pub fn ensure_app_dirs() -> std::io::Result<()> {
-    let root = ios_storage_root();
+    let root = mobile_storage_root();
     let bit_dir = root.join("bits");
     let project_dir = root.join("projects");
     let cache_dir = root.clone();
@@ -86,7 +106,7 @@ pub fn ensure_app_dirs() -> std::io::Result<()> {
     Ok(())
 }
 
-#[cfg(not(target_os = "ios"))]
+#[cfg(not(any(target_os = "ios", target_os = "android")))]
 pub fn ensure_app_dirs() -> std::io::Result<()> {
     let bit_dir = dirs_next::data_dir()
         .ok_or_else(|| std::io::Error::other("data_dir() is None"))?
@@ -178,25 +198,27 @@ impl Settings {
 
         ensure_app_dirs().ok();
 
-        let bit_dir = dirs_next::data_dir()
+        let mut bit_dir = dirs_next::data_dir()
             .unwrap_or_default()
             .join("flow-like")
             .join("bits");
-        let project_dir = dirs_next::data_dir()
+        let mut project_dir = dirs_next::data_dir()
             .unwrap_or_default()
             .join("flow-like")
             .join("projects");
-        let user_dir = dirs_next::cache_dir().unwrap_or_default().join("flow-like");
+        let mut user_dir = dirs_next::cache_dir().unwrap_or_default().join("flow-like");
 
-        if cfg!(target_os = "ios") {
-            #[cfg(target_os = "ios")]
+        if cfg!(any(target_os = "ios", target_os = "android")) {
+            #[cfg(any(target_os = "ios", target_os = "android"))]
             {
-                let root = ios_storage_root();
+                let root = mobile_storage_root();
                 bit_dir = root.join("bits");
                 project_dir = root.join("projects");
                 user_dir = root.clone();
             }
         }
+
+        println!("Settings::new() bit_dir={:?} project_dir={:?} user_dir={:?}", bit_dir, project_dir, user_dir);
 
         Self {
             loaded: false,
@@ -274,16 +296,15 @@ impl Drop for Settings {
 
 impl Settings {
     fn normalize_platform_paths(&mut self) {
-        #[cfg(target_os = "ios")]
+        #[cfg(any(target_os = "ios", target_os = "android"))]
         {
-            let root = ios_storage_root();
-            // Compute desired paths under the unified iOS storage root (cache-based).
+            let root = mobile_storage_root();
             let new_bit = root.join("bits");
             let new_project = root.join("projects");
             let new_user = root.clone();
             let new_logs = default_logs_dir();
             let new_tmp = default_temporary_dir();
-            // Always rebase to the current container's data root on iOS.
+            // Always rebase to the current container's data root on mobile.
             self.bit_dir = new_bit;
             self.project_dir = new_project;
             self.user_dir = new_user;
@@ -293,13 +314,13 @@ impl Settings {
     }
 }
 
-// Compute the path to persist global settings. On iOS, prefer data_dir for durability.
+// Compute the path to persist global settings. On mobile, prefer data_dir for durability.
 fn settings_store_path() -> std::path::PathBuf {
-    #[cfg(target_os = "ios")]
+    #[cfg(any(target_os = "ios", target_os = "android"))]
     {
-        return ios_storage_root().join("global-settings.json");
+        return mobile_storage_root().join("global-settings.json");
     }
-    #[cfg(not(target_os = "ios"))]
+    #[cfg(not(any(target_os = "ios", target_os = "android")))]
     {
         get_cache_dir().join("global-settings.json")
     }

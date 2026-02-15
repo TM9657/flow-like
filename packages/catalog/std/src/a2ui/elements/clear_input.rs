@@ -27,7 +27,7 @@ impl NodeLogic for ClearInput {
             "a2ui_clear_input",
             "Clear Input",
             "Clears the value of an input element",
-            "A2UI/Elements/Input",
+            "UI/Elements/Input",
         );
         node.add_icon("/flow/icons/a2ui.svg");
 

@@ -9,13 +9,29 @@ use axum::{
 use flow_like::a2ui::widget::Page;
 use flow_like_types::anyhow;
 use serde::Deserialize;
+use utoipa::{IntoParams, ToSchema};
 
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Debug, IntoParams, ToSchema)]
 pub struct VersionQuery {
     /// expected format: "MAJOR_MINOR_PATCH", e.g. "1_0_3"
     pub version: Option<String>,
 }
 
+#[utoipa::path(
+    get,
+    path = "/apps/{app_id}/pages/{page_id}",
+    tag = "pages",
+    params(
+        ("app_id" = String, Path, description = "Application ID"),
+        ("page_id" = String, Path, description = "Page ID"),
+        VersionQuery
+    ),
+    responses(
+        (status = 200, description = "Page details", body = Object),
+        (status = 401, description = "Unauthorized"),
+        (status = 404, description = "Page not found")
+    )
+)]
 #[tracing::instrument(name = "GET /apps/{app_id}/pages/{page_id}", skip(state, user))]
 pub async fn get_page(
     State(state): State<AppState>,

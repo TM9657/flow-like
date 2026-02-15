@@ -26,7 +26,7 @@ impl NodeLogic for SetIcon {
             "a2ui_set_icon",
             "Set Icon",
             "Sets the icon name of an icon element",
-            "A2UI/Elements/Display",
+            "UI/Elements/Display",
         );
         node.add_icon("/flow/icons/a2ui.svg");
 

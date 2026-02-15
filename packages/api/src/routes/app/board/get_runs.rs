@@ -6,13 +6,14 @@ use flow_like::flow::execution::LogMeta;
 use flow_like_types::anyhow;
 use sea_orm::{ColumnTrait, EntityTrait, QueryFilter, QueryOrder, QuerySelect};
 use serde::Deserialize;
+use utoipa::{IntoParams, ToSchema};
 
 use crate::{
     ensure_permission, entity::execution_run, error::ApiError, middleware::jwt::AppUser,
     permission::role_permission::RolePermissions, state::AppState,
 };
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, IntoParams, ToSchema)]
 pub struct ListRunsQuery {
     pub node_id: Option<String>,
     pub from: Option<u64>,
@@ -22,6 +23,20 @@ pub struct ListRunsQuery {
     pub offset: Option<u64>,
 }
 
+#[utoipa::path(
+    get,
+    path = "/apps/{app_id}/board/{board_id}/runs",
+    tag = "execution",
+    params(
+        ("app_id" = String, Path, description = "Application ID"),
+        ("board_id" = String, Path, description = "Board ID"),
+        ListRunsQuery
+    ),
+    responses(
+        (status = 200, description = "List of execution runs", body = Vec<Object>),
+        (status = 401, description = "Unauthorized")
+    )
+)]
 #[tracing::instrument(name = "GET /apps/{app_id}/board/{board_id}/runs", skip(state, user))]
 pub async fn get_runs(
     State(state): State<AppState>,

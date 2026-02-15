@@ -7,14 +7,28 @@ use crate::state::AppState;
 use axum::extract::{Path, State};
 use axum::{Extension, Json};
 use serde::Deserialize;
+use utoipa::ToSchema;
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, ToSchema)]
 pub struct UpdateRequest {
     pub status: Option<String>,
     pub verified: Option<bool>,
 }
 
-/// PATCH /admin/packages/{package_id}
+#[utoipa::path(
+    patch,
+    path = "/admin/packages/{package_id}",
+    tag = "admin",
+    params(
+        ("package_id" = String, Path, description = "Package ID to update")
+    ),
+    request_body = UpdateRequest,
+    responses(
+        (status = 200, description = "Package updated successfully"),
+        (status = 401, description = "Unauthorized"),
+        (status = 403, description = "Forbidden")
+    )
+)]
 pub async fn update_package(
     State(state): State<AppState>,
     Extension(user): Extension<AppUser>,

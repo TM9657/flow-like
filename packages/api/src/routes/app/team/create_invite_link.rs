@@ -9,13 +9,34 @@ use axum::{
 use flow_like_types::create_id;
 use sea_orm::ActiveModelTrait;
 use serde::{Deserialize, Serialize};
+use utoipa::ToSchema;
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct CreateInviteLinkPayload {
     pub name: Option<String>,
     pub max_uses: Option<i64>,
 }
 
+#[utoipa::path(
+    put,
+    path = "/apps/{app_id}/team/link",
+    tag = "team",
+    description = "Create an invite link for the app.",
+    params(
+        ("app_id" = String, Path, description = "Application ID")
+    ),
+    request_body = CreateInviteLinkPayload,
+    responses(
+        (status = 200, description = "Invite link created", body = ()),
+        (status = 401, description = "Unauthorized"),
+        (status = 403, description = "Forbidden")
+    ),
+    security(
+        ("bearer_auth" = []),
+        ("api_key" = []),
+        ("pat" = [])
+    )
+)]
 #[tracing::instrument(name = "PUT /apps/{app_id}/team/link", skip(state, user))]
 pub async fn create_invite_link(
     State(state): State<AppState>,

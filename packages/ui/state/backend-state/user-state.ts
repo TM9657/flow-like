@@ -124,7 +124,9 @@ export interface IUserState {
 	deleteNotification(notificationId: string): Promise<void>;
 	markAllNotificationsRead(): Promise<number>;
 	getProfile(): Promise<IProfile>;
+	getProfiles(): Promise<IProfile[]>;
 	getSettingsProfile(): Promise<ISettingsProfile>;
+	getAllSettingsProfiles(): Promise<ISettingsProfile[]>;
 	updateUser(data: IUserUpdate, avatar?: File): Promise<void>;
 	updateProfileApp(
 		profile: ISettingsProfile,

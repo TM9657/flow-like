@@ -78,6 +78,7 @@ pub enum A2UIComponentType {
     InventoryGrid(InventoryGridProps),
     HealthBar(HealthBarProps),
     MiniMap(MiniMapProps),
+    GeoMap(GeoMapProps),
 
     // Embeds & Charts
     Iframe(IframeProps),
@@ -985,6 +986,37 @@ pub struct MiniMapProps {
     pub player_y: Option<BoundValue>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub player_rotation: Option<BoundValue>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct GeoMapProps {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub viewport: Option<BoundValue>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub markers: Option<BoundValue>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub routes: Option<BoundValue>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub show_controls: Option<BoundValue>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub show_zoom: Option<BoundValue>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub show_compass: Option<BoundValue>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub show_locate: Option<BoundValue>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub show_fullscreen: Option<BoundValue>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub interactive: Option<BoundValue>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub control_position: Option<BoundValue>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub cluster_markers: Option<BoundValue>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub cluster_radius: Option<BoundValue>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub cluster_max_zoom: Option<BoundValue>,
 }
 
 // =============================================================================

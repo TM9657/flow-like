@@ -342,7 +342,11 @@ export function TemplatePreview({
 		<div className="flex h-full bg-background">
 			{!isEditing && (
 				<div className="w-2/5 border-r bg-muted/20">
-					<FlowPreview nodes={Object.values(template.data?.nodes)} />
+					<FlowPreview
+						nodes={Object.values(template.data?.nodes)}
+						comments={template.data?.comments}
+						layers={template.data?.layers}
+					/>
 				</div>
 			)}
 

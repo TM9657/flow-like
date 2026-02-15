@@ -7,6 +7,19 @@ use axum::{
     extract::{Path, State},
 };
 
+#[utoipa::path(
+    get,
+    path = "/apps/{app_id}/board/{board_id}/version",
+    tag = "boards",
+    params(
+        ("app_id" = String, Path, description = "Application ID"),
+        ("board_id" = String, Path, description = "Board ID")
+    ),
+    responses(
+        (status = 200, description = "List of board versions as (major, minor, patch) tuples", body = Vec<(u32, u32, u32)>),
+        (status = 401, description = "Unauthorized")
+    )
+)]
 #[tracing::instrument(
     name = "GET /apps/{app_id}/board/{board_id}/version",
     skip(state, user)

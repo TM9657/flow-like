@@ -16,6 +16,7 @@ interface Props {
 }
 
 const { t, description, version, ownerRepo } = Astro.props;
+const studioName = "Flow-Like Studio";
 ---
 
 <div class="grid lg:grid-cols-2 gap-12 lg:gap-20 items-center mb-24">
@@ -39,17 +40,17 @@ const { t, description, version, ownerRepo } = Astro.props;
     </p>
 
     <div class="flex flex-wrap gap-4">
-       <a
+      <a
         id="download-primary"
         href={`https://github.com/${ownerRepo}/releases`}
         target="_blank"
         rel="noopener noreferrer"
-        class="group relative inline-flex items-center justify-center gap-3 bg-zinc-900 text-white px-8 py-4 text-sm font-bold uppercase tracking-wide overflow-hidden transition-all hover:scale-[1.02]"
+        class="group relative inline-flex items-center justify-center gap-3 bg-zinc-900 text-white px-8 py-4 text-sm font-bold uppercase tracking-wide overflow-hidden transition-all hover:scale-[1.02] shadow-lg shadow-zinc-900/30"
       >
         <div class="absolute inset-0 bg-gradient-to-r from-zinc-800 to-zinc-900 transition-transform group-hover:scale-105"></div>
         <div class="relative flex items-center gap-3">
             <LuDownload className="text-lg" />
-            <span>{t("download.hero.cta.download")}</span>
+            <span>{t("download.hero.cta.download")} {studioName}</span>
         </div>
       </a>
 

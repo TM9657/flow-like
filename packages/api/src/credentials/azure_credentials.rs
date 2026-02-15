@@ -19,8 +19,10 @@ use std::sync::Arc;
 pub struct AzureRuntimeCredentials {
     /// SAS token for meta container
     pub meta_sas_token: Option<String>,
-    /// SAS token for content container
+    /// SAS token for content container (app-level: apps/{app_id})
     pub content_sas_token: Option<String>,
+    /// SAS token for user-scoped content (users/{sub}/apps/{app_id})
+    pub user_content_sas_token: Option<String>,
     /// SAS token for logs container
     pub logs_sas_token: Option<String>,
     pub meta_container: String,
@@ -29,6 +31,10 @@ pub struct AzureRuntimeCredentials {
     pub account_name: String,
     pub account_key: Option<String>,
     pub expiration: Option<chrono::DateTime<chrono::Utc>>,
+    /// App-level content path prefix (e.g., "apps/{app_id}")
+    pub content_path_prefix: Option<String>,
+    /// User-level content path prefix (e.g., "users/{sub}/apps/{app_id}")
+    pub user_content_path_prefix: Option<String>,
 }
 
 #[cfg(feature = "azure")]
@@ -42,6 +48,7 @@ impl AzureRuntimeCredentials {
         AzureRuntimeCredentials {
             meta_sas_token: None,
             content_sas_token: None,
+            user_content_sas_token: None,
             logs_sas_token: None,
             meta_container: meta_container.to_string(),
             content_container: content_container.to_string(),
@@ -49,6 +56,8 @@ impl AzureRuntimeCredentials {
             account_name: account_name.to_string(),
             account_key: None,
             expiration: None,
+            content_path_prefix: None,
+            user_content_path_prefix: None,
         }
     }
 
@@ -62,6 +71,7 @@ impl AzureRuntimeCredentials {
         AzureRuntimeCredentials {
             meta_sas_token: None,
             content_sas_token: None,
+            user_content_sas_token: None,
             logs_sas_token: None,
             meta_container: std::env::var("AZURE_META_CONTAINER").unwrap_or_default(),
             content_container: std::env::var("AZURE_CONTENT_CONTAINER").unwrap_or_default(),
@@ -69,6 +79,8 @@ impl AzureRuntimeCredentials {
             account_name: std::env::var("AZURE_STORAGE_ACCOUNT_NAME").unwrap_or_default(),
             account_key: std::env::var("AZURE_STORAGE_ACCOUNT_KEY").ok(),
             expiration: None,
+            content_path_prefix: None,
+            user_content_path_prefix: None,
         }
     }
 
@@ -76,6 +88,7 @@ impl AzureRuntimeCredentials {
         AzureRuntimeCredentials {
             meta_sas_token: None,
             content_sas_token: None,
+            user_content_sas_token: None,
             logs_sas_token: None,
             meta_container: self.meta_container.clone(),
             content_container: self.content_container.clone(),
@@ -83,6 +96,8 @@ impl AzureRuntimeCredentials {
             account_name: self.account_name.clone(),
             account_key: std::env::var("AZURE_STORAGE_ACCOUNT_KEY").ok(),
             expiration: None,
+            content_path_prefix: None,
+            user_content_path_prefix: None,
         }
     }
 
@@ -115,7 +130,14 @@ impl AzureRuntimeCredentials {
         let start = chrono::Utc::now().format("%Y-%m-%dT%H:%M:%SZ").to_string();
 
         // Determine which containers and paths need SAS tokens based on access mode
-        let (meta_sas, content_sas, logs_sas) = match mode {
+        let (
+            meta_sas,
+            content_sas,
+            user_content_sas,
+            logs_sas,
+            content_path_prefix,
+            user_content_path_prefix,
+        ) = match mode {
             CredentialsAccess::EditApp => {
                 // EditApp: need write access to meta container for app manifests
                 // Also need content access for app data (stored at apps/{app_id})
@@ -137,7 +159,14 @@ impl AzureRuntimeCredentials {
                     &expiry_str,
                     &account_key,
                 )?;
-                (Some(meta_sas), Some(content_sas), None)
+                (
+                    Some(meta_sas),
+                    Some(content_sas),
+                    None,
+                    None,
+                    Some(format!("apps/{}", app_id)),
+                    None,
+                )
             }
             CredentialsAccess::ReadApp => {
                 // ReadApp: need read access to meta container
@@ -160,11 +189,27 @@ impl AzureRuntimeCredentials {
                     &expiry_str,
                     &account_key,
                 )?;
-                (Some(meta_sas), Some(content_sas), None)
+                (
+                    Some(meta_sas),
+                    Some(content_sas),
+                    None,
+                    None,
+                    Some(format!("apps/{}", app_id)),
+                    None,
+                )
             }
             CredentialsAccess::InvokeNone => {
-                // InvokeNone: write access to user content, write to logs
-                let content_sas = generate_directory_sas(
+                // InvokeNone: write access to BOTH app content AND user content, write to logs
+                let app_content_sas = generate_directory_sas(
+                    &self.account_name,
+                    &self.content_container,
+                    &format!("apps/{}", app_id),
+                    "rwdl",
+                    &start,
+                    &expiry_str,
+                    &account_key,
+                )?;
+                let user_content_sas = generate_directory_sas(
                     &self.account_name,
                     &self.content_container,
                     &format!("users/{}/apps/{}", sub, app_id),
@@ -182,10 +227,17 @@ impl AzureRuntimeCredentials {
                     &expiry_str,
                     &account_key,
                 )?;
-                (None, Some(content_sas), Some(logs_sas))
+                (
+                    None,
+                    Some(app_content_sas),
+                    Some(user_content_sas),
+                    Some(logs_sas),
+                    Some(format!("apps/{}", app_id)),
+                    Some(format!("users/{}/apps/{}", sub, app_id)),
+                )
             }
             CredentialsAccess::InvokeRead => {
-                // InvokeRead: read app from meta, read user content, read logs
+                // InvokeRead: read app from meta, read BOTH app content AND user content, read logs
                 let meta_sas = generate_directory_sas(
                     &self.account_name,
                     &self.meta_container,
@@ -195,7 +247,16 @@ impl AzureRuntimeCredentials {
                     &expiry_str,
                     &account_key,
                 )?;
-                let content_sas = generate_directory_sas(
+                let app_content_sas = generate_directory_sas(
+                    &self.account_name,
+                    &self.content_container,
+                    &format!("apps/{}", app_id),
+                    "rl",
+                    &start,
+                    &expiry_str,
+                    &account_key,
+                )?;
+                let user_content_sas = generate_directory_sas(
                     &self.account_name,
                     &self.content_container,
                     &format!("users/{}/apps/{}", sub, app_id),
@@ -213,10 +274,17 @@ impl AzureRuntimeCredentials {
                     &expiry_str,
                     &account_key,
                 )?;
-                (Some(meta_sas), Some(content_sas), Some(logs_sas))
+                (
+                    Some(meta_sas),
+                    Some(app_content_sas),
+                    Some(user_content_sas),
+                    Some(logs_sas),
+                    Some(format!("apps/{}", app_id)),
+                    Some(format!("users/{}/apps/{}", sub, app_id)),
+                )
             }
             CredentialsAccess::InvokeWrite => {
-                // InvokeWrite: read app from meta, write user content, write logs
+                // InvokeWrite: read app from meta, write BOTH app content AND user content, write logs
                 let meta_sas = generate_directory_sas(
                     &self.account_name,
                     &self.meta_container,
@@ -226,7 +294,16 @@ impl AzureRuntimeCredentials {
                     &expiry_str,
                     &account_key,
                 )?;
-                let content_sas = generate_directory_sas(
+                let app_content_sas = generate_directory_sas(
+                    &self.account_name,
+                    &self.content_container,
+                    &format!("apps/{}", app_id),
+                    "rwdl",
+                    &start,
+                    &expiry_str,
+                    &account_key,
+                )?;
+                let user_content_sas = generate_directory_sas(
                     &self.account_name,
                     &self.content_container,
                     &format!("users/{}/apps/{}", sub, app_id),
@@ -244,7 +321,14 @@ impl AzureRuntimeCredentials {
                     &expiry_str,
                     &account_key,
                 )?;
-                (Some(meta_sas), Some(content_sas), Some(logs_sas))
+                (
+                    Some(meta_sas),
+                    Some(app_content_sas),
+                    Some(user_content_sas),
+                    Some(logs_sas),
+                    Some(format!("apps/{}", app_id)),
+                    Some(format!("users/{}/apps/{}", sub, app_id)),
+                )
             }
             CredentialsAccess::ReadLogs => {
                 // ReadLogs: read access to logs container only
@@ -257,13 +341,14 @@ impl AzureRuntimeCredentials {
                     &expiry_str,
                     &account_key,
                 )?;
-                (None, None, Some(logs_sas))
+                (None, None, None, Some(logs_sas), None, None)
             }
         };
 
         Ok(Self {
             meta_sas_token: meta_sas,
             content_sas_token: content_sas,
+            user_content_sas_token: user_content_sas,
             logs_sas_token: logs_sas,
             meta_container: self.meta_container.clone(),
             content_container: self.content_container.clone(),
@@ -271,6 +356,8 @@ impl AzureRuntimeCredentials {
             account_name: self.account_name.clone(),
             account_key: None,
             expiration: Some(expiry),
+            content_path_prefix,
+            user_content_path_prefix,
         })
     }
 
@@ -310,43 +397,63 @@ impl AzureRuntimeCredentials {
 
         // Determine the directory path based on access mode
         // EditApp/ReadApp: apps/{app_id}
-        // InvokeRead/InvokeWrite/InvokeNone: users/{sub}/apps/{app_id}
+        // InvokeRead/InvokeWrite/InvokeNone: both app and user paths
         // ReadLogs: logs/{app_id}
-        let directory = match mode {
+        let (app_directory, user_directory) = match mode {
             CredentialsAccess::EditApp | CredentialsAccess::ReadApp => {
-                format!("apps/{}", app_id)
+                (Some(format!("apps/{}", app_id)), None)
             }
             CredentialsAccess::InvokeRead
             | CredentialsAccess::InvokeWrite
-            | CredentialsAccess::InvokeNone => {
-                format!("users/{}/apps/{}", sub, app_id)
-            }
-            CredentialsAccess::ReadLogs => {
-                format!("logs/{}", app_id)
-            }
+            | CredentialsAccess::InvokeNone => (
+                Some(format!("apps/{}", app_id)),
+                Some(format!("users/{}/apps/{}", sub, app_id)),
+            ),
+            CredentialsAccess::ReadLogs => (None, None),
         };
 
         // Use Directory SAS for path-level security (requires HNS/ADLS Gen2)
-        let sas_token = generate_directory_sas(
-            &self.account_name,
-            &self.content_container,
-            &directory,
-            permissions,
-            &start,
-            &expiry_str,
-            &account_key,
-        )?;
+        let app_sas_token = if let Some(ref dir) = app_directory {
+            Some(generate_directory_sas(
+                &self.account_name,
+                &self.content_container,
+                dir,
+                permissions,
+                &start,
+                &expiry_str,
+                &account_key,
+            )?)
+        } else {
+            None
+        };
+
+        let user_sas_token = if let Some(ref dir) = user_directory {
+            Some(generate_directory_sas(
+                &self.account_name,
+                &self.content_container,
+                dir,
+                permissions,
+                &start,
+                &expiry_str,
+                &account_key,
+            )?)
+        } else {
+            None
+        };
 
         Ok(Self {
-            meta_sas_token: Some(sas_token.clone()),
-            content_sas_token: Some(sas_token.clone()),
-            logs_sas_token: Some(sas_token),
+            meta_sas_token: app_sas_token.clone(),
+            content_sas_token: app_sas_token,
+            user_content_sas_token: user_sas_token,
+            logs_sas_token: None,
             meta_container: self.meta_container.clone(),
             content_container: self.content_container.clone(),
             logs_container: self.logs_container.clone(),
             account_name: self.account_name.clone(),
             account_key: None,
             expiration: Some(expiry),
+            content_path_prefix: app_directory,
+            user_content_path_prefix: user_directory,
         })
     }
 }
@@ -549,6 +656,7 @@ impl RuntimeCredentialsTrait for AzureRuntimeCredentials {
         SharedCredentials::Azure(AzureSharedCredentials {
             meta_sas_token: self.meta_sas_token.clone(),
             content_sas_token: self.content_sas_token.clone(),
+            user_content_sas_token: self.user_content_sas_token.clone(),
             logs_sas_token: self.logs_sas_token.clone(),
             meta_container: self.meta_container.clone(),
             content_container: self.content_container.clone(),
@@ -556,11 +664,17 @@ impl RuntimeCredentialsTrait for AzureRuntimeCredentials {
             account_name: self.account_name.clone(),
             account_key: self.account_key.clone(),
             expiration: self.expiration,
+            content_path_prefix: self.content_path_prefix.clone(),
+            user_content_path_prefix: self.user_content_path_prefix.clone(),
         })
     }
 
     async fn to_db(&self, app_id: &str) -> Result<ConnectBuilder> {
         self.into_shared_credentials().to_db(app_id).await
+    }
+
+    async fn to_db_scoped(&self, app_id: &str) -> Result<ConnectBuilder> {
+        self.into_shared_credentials().to_db_scoped(app_id).await
     }
 
     #[tracing::instrument(
@@ -569,15 +683,15 @@ impl RuntimeCredentialsTrait for AzureRuntimeCredentials {
         level = "debug"
     )]
     async fn to_state(&self, state: AppState) -> Result<FlowLikeState> {
-        let (meta_store, content_store, (http_client, _refetch_rx)) = {
+        let (meta_store, content_store) = {
             use flow_like_types::tokio;
 
             tokio::join!(
                 async { self.into_shared_credentials().to_store(true).await },
                 async { self.into_shared_credentials().to_store(false).await },
-                async { HTTPClient::new() }
             )
         };
+        let http_client = HTTPClient::new_without_refetch();
 
         let meta_store = meta_store?;
         let content_store = content_store?;
@@ -912,6 +1026,9 @@ mod integration_tests {
             account_name: "teststorage".to_string(),
             account_key: None,
             expiration: None,
+            content_path_prefix: None,
+            user_content_path_prefix: None,
+            user_content_sas_token: None,
         };
 
         let json = to_string(&creds).expect("Failed to serialize");

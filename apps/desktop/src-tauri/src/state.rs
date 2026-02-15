@@ -6,9 +6,9 @@ use flow_like_wasm::client::RegistryClient;
 use std::sync::Arc;
 use tauri::{AppHandle, Manager};
 
-use crate::{
-    event_bus::EventBus, profile::UserProfile, settings::Settings, tray::TrayRuntimeState,
-};
+#[cfg(desktop)]
+use crate::tray::TrayRuntimeState;
+use crate::{event_bus::EventBus, profile::UserProfile, settings::Settings};
 
 pub use crate::functions::recording::state::TauriRecordingState;
 
@@ -130,4 +130,5 @@ impl TauriRegistryState {
     }
 }
 
+#[cfg(desktop)]
 pub struct TauriTrayState(pub Arc<Mutex<TrayRuntimeState>>);

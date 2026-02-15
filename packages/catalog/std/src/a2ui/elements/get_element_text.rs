@@ -28,7 +28,7 @@ impl NodeLogic for GetElementText {
             "a2ui_get_element_text",
             "Get Element Text",
             "Gets the text content of an element",
-            "A2UI/Elements",
+            "UI/Elements",
         );
         node.add_icon("/flow/icons/a2ui.svg");
 

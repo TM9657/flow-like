@@ -1,11 +1,13 @@
 "use client";
 import { type Node, useStore } from "@xyflow/react";
 import { memo, useMemo } from "react";
+import { type PeerUserInfo, colorFromSub } from "../../hooks/use-peer-users";
 import { Avatar, AvatarFallback, AvatarImage } from "../ui/avatar";
 
 interface PeerPresence {
 	clientId: number;
-	user: { id?: string; name: string; color: string; avatar?: string };
+	/** The sub (subject) from the auth token */
+	sub?: string;
 	layerPath: string;
 }
 
@@ -14,10 +16,10 @@ interface LayerIndicator {
 	screenX: number;
 	screenY: number;
 	peers: Array<{
-		name: string;
+		sub?: string;
 		color: string;
-		avatar?: string;
-		userId?: string;
+		name: string;
+		avatarUrl?: string;
 	}>;
 }
 
@@ -25,10 +27,13 @@ export const FlowLayerIndicators = memo(function FlowLayerIndicators({
 	peers,
 	currentLayerPath,
 	nodes,
+	peerUsers,
 }: {
 	peers: PeerPresence[];
 	currentLayerPath: string;
 	nodes: Node[];
+	/** Map of sub -> user info for displaying names */
+	peerUsers: Map<string, PeerUserInfo>;
 }) {
 	const transform = useStore((state) => state.transform);
 	const [tx, ty, zoom] = transform;
@@ -98,17 +103,20 @@ export const FlowLayerIndicators = memo(function FlowLayerIndicators({
 				nodeId: node.id,
 				screenX: nodeScreenX,
 				screenY: nodeScreenY,
-				peers: matchingPeers.map((p) => ({
-					name: p.user.name,
-					color: p.user.color,
-					avatar: p.user.avatar,
-					userId: p.user.id,
-				})),
+				peers: matchingPeers.map((p) => {
+					const userInfo = p.sub ? peerUsers.get(p.sub) : undefined;
+					return {
+						sub: p.sub,
+						color: userInfo?.color ?? colorFromSub(p.sub),
+						name: userInfo?.truncatedName ?? "User",
+						avatarUrl: userInfo?.avatarUrl,
+					};
+				}),
 			});
 		}
 
 		return result;
-	}, [peers, currentLayerPath, nodes, tx, ty, zoom]);
+	}, [peers, currentLayerPath, nodes, tx, ty, zoom, peerUsers]);
 
 	return (
 		<div className="pointer-events-none absolute inset-0 z-30">
@@ -123,16 +131,17 @@ export const FlowLayerIndicators = memo(function FlowLayerIndicators({
 					<div className="flex items-center -space-x-2">
 						{indicator.peers.slice(0, 3).map((peer, idx) => (
 							<Avatar
-								key={`${peer.userId}-${idx}`}
+								key={`${peer.sub ?? "unknown"}-${idx}`}
 								className="h-6 w-6 border-2 shadow-lg"
 								style={{ borderColor: peer.color }}
+								title={peer.name}
 							>
-								<AvatarImage src={peer.avatar} alt={peer.name} />
+								{peer.avatarUrl && <AvatarImage src={peer.avatarUrl} />}
 								<AvatarFallback
 									className="text-[10px] font-semibold"
 									style={{ backgroundColor: peer.color, color: "white" }}
 								>
-									{peer.name.slice(0, 2).toUpperCase()}
+									{peer.name.charAt(0).toUpperCase()}
 								</AvatarFallback>
 							</Avatar>
 						))}

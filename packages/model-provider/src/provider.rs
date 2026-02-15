@@ -16,6 +16,31 @@ pub struct ModelProvider {
     pub params: Option<HashMap<String, Value>>,
 }
 
+/// Remote embedding provider implementation
+#[derive(Serialize, Deserialize, JsonSchema, Clone, Debug, PartialEq, Default)]
+pub enum RemoteEmbeddingProvider {
+    /// Huggingface Inference Endpoints
+    #[default]
+    HuggingfaceEndpoint,
+    /// Cloudflare Workers AI
+    CloudflareWorkersAI,
+}
+
+/// Configuration for remote execution via API proxy
+#[derive(Serialize, Deserialize, JsonSchema, Clone, Debug, PartialEq, Default)]
+pub struct RemoteExecutionConfig {
+    /// Upstream endpoint URL (e.g., HF inference endpoint URL)
+    /// Can contain placeholders like {ACCOUNT_ID} for Cloudflare
+    #[serde(default)]
+    pub endpoint: Option<String>,
+    /// Name of secret in API's environment (never exposed to executors)
+    #[serde(default)]
+    pub secret_name: Option<String>,
+    /// Which remote provider implementation to use
+    #[serde(default)]
+    pub implementation: Option<RemoteEmbeddingProvider>,
+}
+
 #[derive(Serialize, Deserialize, JsonSchema, Clone, Debug, PartialEq)]
 pub struct EmbeddingModelProvider {
     pub languages: Vec<String>,
@@ -24,6 +49,18 @@ pub struct EmbeddingModelProvider {
     pub prefix: Prefix,
     pub pooling: Pooling,
     pub provider: ModelProvider,
+    /// Remote execution configuration (for API proxy mode)
+    #[serde(default)]
+    pub remote: Option<RemoteExecutionConfig>,
+}
+
+impl EmbeddingModelProvider {
+    /// Check if this provider supports remote execution via API proxy
+    pub fn supports_remote(&self) -> bool {
+        self.remote
+            .as_ref()
+            .is_some_and(|r| r.endpoint.is_some() && r.implementation.is_some())
+    }
 }
 
 #[derive(Serialize, Deserialize, JsonSchema, Clone, Debug)]
@@ -32,6 +69,18 @@ pub struct ImageEmbeddingModelProvider {
     pub vector_length: u32,
     pub pooling: Pooling,
     pub provider: ModelProvider,
+    /// Remote execution configuration (for API proxy mode)
+    #[serde(default)]
+    pub remote: Option<RemoteExecutionConfig>,
+}
+
+impl ImageEmbeddingModelProvider {
+    /// Check if this provider supports remote execution via API proxy
+    pub fn supports_remote(&self) -> bool {
+        self.remote
+            .as_ref()
+            .is_some_and(|r| r.endpoint.is_some() && r.implementation.is_some())
+    }
 }
 
 #[derive(Serialize, Deserialize, JsonSchema, Clone, Debug, PartialEq)]

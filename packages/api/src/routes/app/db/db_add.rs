@@ -13,6 +13,27 @@ pub struct AddToDBPayload {
     pub items: Vec<flow_like_types::Value>,
 }
 
+#[utoipa::path(
+    put,
+    path = "/apps/{app_id}/db/{table}",
+    tag = "database",
+    description = "Insert rows into a table.",
+    params(
+        ("app_id" = String, Path, description = "Application ID"),
+        ("table" = String, Path, description = "Table name")
+    ),
+    request_body = String,
+    responses(
+        (status = 200, description = "Items inserted", body = ()),
+        (status = 401, description = "Unauthorized"),
+        (status = 403, description = "Forbidden")
+    ),
+    security(
+        ("bearer_auth" = []),
+        ("api_key" = []),
+        ("pat" = [])
+    )
+)]
 #[tracing::instrument(name = "PUT /apps/{app_id}/db/{table}", skip(state, user))]
 pub async fn add_to_table(
     State(state): State<AppState>,

@@ -136,7 +136,11 @@ impl NodeLogic for CreateLocalDatabaseNode {
             let app_id = context_cache.app_id.clone();
 
             let db = if let Some(credentials) = &context.credentials {
-                credentials.to_db(&app_id).await?
+                if user_scoped {
+                    credentials.to_db_scoped(&app_id).await?
+                } else {
+                    credentials.to_db(&app_id).await?
+                }
             } else if user_scoped {
                 let user_dir = context_cache.get_user_dir(false)?;
                 let user_dir = user_dir.child("db");
@@ -168,7 +172,17 @@ impl NodeLogic for CreateLocalDatabaseNode {
             };
 
             let db = db.execute().await?;
-            let intermediate = LanceDBVectorStore::from_connection(db, table).await;
+            let mut intermediate = LanceDBVectorStore::from_connection(db, table).await;
+            if let Some(opts) = &context
+                .app_state
+                .config
+                .read()
+                .await
+                .callbacks
+                .lance_write_options
+            {
+                intermediate.set_write_options(opts.clone());
+            }
             let intermediate = CachedDB {
                 db: Arc::new(RwLock::new(intermediate)),
             };

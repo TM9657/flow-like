@@ -6,15 +6,18 @@ pub mod app;
 pub mod auth;
 pub mod bit;
 pub mod chat;
+pub mod embeddings;
 pub mod execution;
 pub mod health;
 pub mod info;
 pub mod oauth;
 pub mod profile;
 pub mod registry;
+pub mod sink;
 pub mod solution;
 pub mod store;
 pub mod tmp;
+pub mod usage;
 pub mod user;
 pub mod webhook;
 

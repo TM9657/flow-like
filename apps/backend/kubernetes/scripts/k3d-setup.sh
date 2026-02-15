@@ -279,15 +279,23 @@ build_and_push_images() {
         -t "${registry}/flow-like/migration:${tag}" \
         "$REPO_ROOT"
 
+    log_info "Building Web image..."
+    docker build \
+        -f "$ROOT_DIR/web/Dockerfile" \
+        -t "${registry}/flow-like/web:${tag}" \
+        "$REPO_ROOT"
+
     log_info "Pushing images to local registry..."
     docker push "${registry}/flow-like/api:${tag}"
     docker push "${registry}/flow-like/executor:${tag}"
     docker push "${registry}/flow-like/migration:${tag}"
+    docker push "${registry}/flow-like/web:${tag}"
 
     log_info "Images built and pushed ✓"
     echo "  - ${registry}/flow-like/api:${tag}"
     echo "  - ${registry}/flow-like/executor:${tag}"
     echo "  - ${registry}/flow-like/migration:${tag}"
+    echo "  - ${registry}/flow-like/web:${tag}"
 }
 
 # Install Helm chart
@@ -326,6 +334,27 @@ api:
     limits:
       memory: "512Mi"
       cpu: "500m"
+  autoscaling:
+    enabled: false
+
+web:
+  enabled: true
+  replicaCount: 1
+  image:
+    repository: flow-like/web
+    tag: dev
+    pullPolicy: Always
+  service:
+    type: NodePort
+    port: 3001
+    nodePort: 30001
+  resources:
+    requests:
+      memory: "32Mi"
+      cpu: "10m"
+    limits:
+      memory: "64Mi"
+      cpu: "100m"
   autoscaling:
     enabled: false
 

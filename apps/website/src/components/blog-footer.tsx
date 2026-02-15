@@ -182,6 +182,9 @@ export function BlogFooter() {
 						<FooterLink href="/thirdparty">
 							{t("footer.link.thirdParty")}
 						</FooterLink>
+						<FooterLink href="/data-deletion">
+							{t("footer.dataDeletion")}
+						</FooterLink>
 					</FooterSection>
 				</div>
 

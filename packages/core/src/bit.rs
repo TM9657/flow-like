@@ -25,6 +25,7 @@ const NAME_HINT_WEIGHT: f32 = 0.2; // weight of name similarity for best model p
 const NAME_HINT_SIMILARITY_THRESHOLD: f32 = 0.5; // minimum required similarity score to model name
 
 #[derive(Serialize, Deserialize, JsonSchema, Clone, Debug)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 pub struct Metadata {
     pub name: String,
     pub description: String,
@@ -40,7 +41,9 @@ pub struct Metadata {
     pub support_url: Option<String>,
     pub docs_url: Option<String>,
     pub organization_specific_values: Option<Vec<u8>>,
+    #[cfg_attr(feature = "openapi", schema(value_type = String))]
     pub created_at: SystemTime,
+    #[cfg_attr(feature = "openapi", schema(value_type = String))]
     pub updated_at: SystemTime,
 }
 
@@ -123,6 +126,7 @@ impl Metadata {
 }
 
 #[derive(Serialize, Deserialize, JsonSchema, Clone, Debug, PartialEq, Default)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 pub enum BitTypes {
     Llm,
     Vlm,
@@ -332,6 +336,8 @@ impl BitModelClassification {
 }
 
 #[derive(Serialize, Deserialize, JsonSchema, Clone, Debug, Default)]
+#[serde(default)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 pub struct Bit {
     pub id: String,
     #[serde(rename = "type")]
@@ -759,7 +765,7 @@ mod tests {
         let mut config: FlowLikeConfig = FlowLikeConfig::new();
         let store = LocalObjectStore::new(temp_dir.path().to_path_buf()).unwrap();
         config.stores.bits_store = Some(FlowLikeStore::Local(store.into()));
-        let (http_client, _rx) = crate::utils::http::HTTPClient::new();
+        let http_client = crate::utils::http::HTTPClient::new_without_refetch();
         let state = FlowLikeState::new(config, http_client);
         let state = Arc::new(state);
 

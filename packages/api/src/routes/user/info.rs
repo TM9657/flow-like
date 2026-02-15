@@ -1,7 +1,8 @@
 use std::collections::HashMap;
 
 use crate::{
-    entity::user, error::ApiError, middleware::jwt::AppUser, routes::user::sign_avatar,
+    entity::user, error::ApiError, middleware::jwt::AppUser,
+    routes::profile::create_default::create_default_profile, routes::user::sign_avatar,
     state::AppState, user_management::UserManagement,
 };
 use axum::{Extension, Json, extract::State};
@@ -34,6 +35,18 @@ async fn should_update(
     should_update
 }
 
+#[utoipa::path(
+    get,
+    path = "/user/info",
+    tag = "user",
+    responses(
+        (status = 200, description = "Returns the current user's information"),
+        (status = 401, description = "Unauthorized")
+    ),
+    security(
+        ("bearer_auth" = [])
+    )
+)]
 #[tracing::instrument(name = "GET /user/info", skip(state, user))]
 pub async fn user_info(
     State(state): State<AppState>,
@@ -140,6 +153,16 @@ pub async fn user_info(
     let new_user = user::Entity::insert(user)
         .exec_with_returning(&state.db)
         .await?;
+
+    // Create default profile for new user
+    if let Err(e) = create_default_profile(&state, &sub).await {
+        tracing::warn!(
+            "Failed to create default profile for new user {}: {}",
+            sub,
+            e
+        );
+        // Don't fail user creation if profile creation fails
+    }
 
     Ok(Json(new_user))
 }

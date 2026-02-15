@@ -26,7 +26,7 @@ impl NodeLogic for PushChild {
             "a2ui_push_child",
             "Push Child",
             "Appends a child element to a container",
-            "A2UI/Elements/Containers",
+            "UI/Elements/Containers",
         );
         node.add_icon("/flow/icons/a2ui.svg");
 

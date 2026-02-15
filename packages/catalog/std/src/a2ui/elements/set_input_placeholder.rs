@@ -29,7 +29,7 @@ impl NodeLogic for SetInputPlaceholder {
             "a2ui_set_input_placeholder",
             "Set Input Placeholder",
             "Sets the placeholder text of an input element",
-            "A2UI/Elements/Input",
+            "UI/Elements/Input",
         );
         node.add_icon("/flow/icons/a2ui.svg");
 

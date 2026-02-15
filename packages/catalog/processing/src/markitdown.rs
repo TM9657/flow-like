@@ -16,7 +16,10 @@ use flow_like_types::Bytes;
 use flow_like_types::image::ImageReader;
 use flow_like_types::{async_trait, json::json};
 #[cfg(feature = "execute")]
-use markitdown::{ConversionOptions, Document, ExtractedImage, MarkItDown, create_llm_client};
+use markitdown::{
+    ConversionOptions, Document, ExtractedImage, LlmConfig, MarkItDown,
+    create_llm_client_with_config,
+};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 #[cfg(feature = "execute")]
@@ -55,6 +58,47 @@ pub fn pages_to_markdown(pages: &[DocumentPage]) -> String {
     }
 
     md
+}
+
+#[cfg(feature = "execute")]
+/// Safely calls markitdown convert_bytes, catching any panics from the underlying crate.
+async fn safe_convert_bytes(
+    _md: &MarkItDown,
+    bytes: Bytes,
+    options: Option<ConversionOptions>,
+) -> flow_like_types::Result<Document> {
+    use flow_like_types::tokio;
+
+    let handle = tokio::task::spawn(async move {
+        let md = MarkItDown::new();
+        md.convert_bytes(bytes, options).await
+    });
+
+    match handle.await {
+        Ok(Ok(doc)) => Ok(doc),
+        Ok(Err(e)) => Err(flow_like_types::anyhow!(
+            "Document conversion failed: {}",
+            e
+        )),
+        Err(e) if e.is_panic() => {
+            let panic_msg = if let Ok(reason) = e.try_into_panic() {
+                if let Some(s) = reason.downcast_ref::<String>() {
+                    s.clone()
+                } else if let Some(s) = reason.downcast_ref::<&str>() {
+                    s.to_string()
+                } else {
+                    "Unknown panic".to_string()
+                }
+            } else {
+                "Unknown panic".to_string()
+            };
+            Err(flow_like_types::anyhow!(
+                "Document conversion panicked: {}",
+                panic_msg
+            ))
+        }
+        Err(e) => Err(flow_like_types::anyhow!("Document conversion task failed: {}", e)),
+    }
 }
 
 #[cfg(feature = "execute")]
@@ -201,14 +245,8 @@ impl NodeLogic for ExtractDocumentNode {
             .with_image_context_path(file.path)
             .with_images(extract_images);
 
-        // Run the heavy document conversion in a cancellable task
-        let result = context
-            .run_cancellable(async move {
-                let md = MarkItDown::new();
-                md.convert_bytes(bytes, Some(options)).await
-            })
-            .await?
-            .map_err(|e| flow_like_types::anyhow!("Failed to extract document: {}", e))?;
+        let md = MarkItDown::new();
+        let result = safe_convert_bytes(&md, bytes, Some(options)).await?;
 
         let pages = document_to_pages(&result, context).await?;
 
@@ -291,6 +329,38 @@ impl NodeLogic for ExtractDocumentAiNode {
         )
         .set_default_value(Some(json!(true)));
 
+        node.add_input_pin(
+            "images_per_message",
+            "Images Per Message",
+            "Number of images to batch per LLM request (higher = faster but may hit token limits).",
+            VariableType::Integer,
+        )
+        .set_default_value(Some(json!(1)));
+
+        node.add_input_pin(
+            "pages_per_batch",
+            "Pages Per Batch",
+            "Number of PDF pages to process in parallel (higher = faster but uses more memory).",
+            VariableType::Integer,
+        )
+        .set_default_value(Some(json!(4)));
+
+        node.add_input_pin(
+            "temperature",
+            "Temperature",
+            "LLM temperature (0.0 = deterministic, 1.0 = creative). Lower is better for extraction.",
+            VariableType::Float,
+        )
+        .set_default_value(Some(json!(0.1)));
+
+        node.add_input_pin(
+            "max_tokens",
+            "Max Tokens",
+            "Maximum output tokens per LLM call. Leave at 0 for model default. Set lower for unreliable models.",
+            VariableType::Integer,
+        )
+        .set_default_value(Some(json!(0)));
+
         node.add_output_pin(
             "exec_out",
             "Output",
@@ -320,6 +390,10 @@ impl NodeLogic for ExtractDocumentAiNode {
         let file: FlowPath = context.evaluate_pin("file").await?;
         let model_bit = context.evaluate_pin::<Bit>("model").await?;
         let extract_images: bool = context.evaluate_pin("extract_images").await?;
+        let images_per_message: i64 = context.evaluate_pin("images_per_message").await?;
+        let pages_per_batch: i64 = context.evaluate_pin("pages_per_batch").await?;
+        let temperature: f64 = context.evaluate_pin("temperature").await?;
+        let max_tokens: i64 = context.evaluate_pin("max_tokens").await?;
 
         let file_path = Path::from(file.path.clone());
         let extension = file_path
@@ -327,22 +401,30 @@ impl NodeLogic for ExtractDocumentAiNode {
             .map(|e| format!(".{}", e))
             .unwrap_or_default();
 
-        let _file_start = std::time::Instant::now();
         let file_buffer = file.get(context, false).await?;
         let bytes = Bytes::from(file_buffer);
 
         let model_factory = context.app_state.model_factory.clone();
-        let _model_start = std::time::Instant::now();
         let model = model_factory
             .lock()
             .await
             .build(&model_bit, context.app_state.clone(), context.token.clone())
             .await?;
 
-        let _llm_start = std::time::Instant::now();
         #[allow(deprecated)]
         let completion_handle = model.completion_model_handle(None).await?;
-        let llm_client = create_llm_client(completion_handle);
+
+        let llm_config = LlmConfig::default()
+            .with_images_per_message(images_per_message.max(1) as usize)
+            .with_pages_per_batch(pages_per_batch.max(1) as usize)
+            .with_temperature(temperature)
+            .with_max_tokens(if max_tokens > 0 {
+                Some(max_tokens as u64)
+            } else {
+                None
+            });
+
+        let llm_client = create_llm_client_with_config(completion_handle, llm_config);
 
         let md = MarkItDown::new();
         let file_path_clone = file.path.clone();
@@ -353,13 +435,8 @@ impl NodeLogic for ExtractDocumentAiNode {
             .with_llm(llm_client);
         options.url = Some(file_path_clone);
 
-        let _convert_start = std::time::Instant::now();
-        let result = md
-            .convert_bytes(bytes, Some(options))
-            .await
-            .map_err(|e| flow_like_types::anyhow!("Failed to extract document with AI: {}", e))?;
+        let result = safe_convert_bytes(&md, bytes, Some(options)).await?;
 
-        let _pages_start = std::time::Instant::now();
         let pages = document_to_pages(&result, context).await?;
 
         context.set_pin_value("pages", json!(pages)).await?;
@@ -480,16 +557,14 @@ impl NodeLogic for ExtractDocumentsNode {
                 .with_image_context_path(file.path)
                 .with_images(extract_images);
 
-            let result = md
-                .convert_bytes(bytes, Some(options))
-                .await
-                .map_err(|e| flow_like_types::anyhow!("Failed to extract document: {}", e))?;
+            let result = safe_convert_bytes(&md, bytes, Some(options)).await?;
 
             let pages = document_to_pages(&result, context).await?;
             all_results.push(pages);
         }
 
-        context.set_pin_value("results", json!(all_results)).await?;
+        let flat_results: Vec<DocumentPage> = all_results.into_iter().flatten().collect();
+        context.set_pin_value("results", json!(flat_results)).await?;
         context.activate_exec_pin("exec_out").await?;
 
         Ok(())
@@ -569,6 +644,38 @@ impl NodeLogic for ExtractDocumentsAiNode {
         )
         .set_default_value(Some(json!(true)));
 
+        node.add_input_pin(
+            "images_per_message",
+            "Images Per Message",
+            "Number of images to batch per LLM request (higher = faster but may hit token limits).",
+            VariableType::Integer,
+        )
+        .set_default_value(Some(json!(2)));
+
+        node.add_input_pin(
+            "pages_per_batch",
+            "Pages Per Batch",
+            "Number of PDF pages to process in parallel (higher = faster but uses more memory).",
+            VariableType::Integer,
+        )
+        .set_default_value(Some(json!(2)));
+
+        node.add_input_pin(
+            "temperature",
+            "Temperature",
+            "LLM temperature (0.0 = deterministic, 1.0 = creative). Lower is better for extraction.",
+            VariableType::Float,
+        )
+        .set_default_value(Some(json!(0.1)));
+
+        node.add_input_pin(
+            "max_tokens",
+            "Max Tokens",
+            "Maximum output tokens per LLM call. Leave at 0 for model default. Set lower for unreliable models.",
+            VariableType::Integer,
+        )
+        .set_default_value(Some(json!(4096)));
+
         node.add_output_pin(
             "exec_out",
             "Output",
@@ -598,6 +705,10 @@ impl NodeLogic for ExtractDocumentsAiNode {
         let files: Vec<FlowPath> = context.evaluate_pin("files").await?;
         let model_bit = context.evaluate_pin::<Bit>("model").await?;
         let extract_images: bool = context.evaluate_pin("extract_images").await?;
+        let images_per_message: i64 = context.evaluate_pin("images_per_message").await?;
+        let pages_per_batch: i64 = context.evaluate_pin("pages_per_batch").await?;
+        let temperature: f64 = context.evaluate_pin("temperature").await?;
+        let max_tokens: i64 = context.evaluate_pin("max_tokens").await?;
 
         let model_factory = context.app_state.model_factory.clone();
         let model = model_factory
@@ -608,7 +719,18 @@ impl NodeLogic for ExtractDocumentsAiNode {
 
         #[allow(deprecated)]
         let completion_handle = model.completion_model_handle(None).await?;
-        let llm_client = create_llm_client(completion_handle);
+
+        let llm_config = LlmConfig::default()
+            .with_images_per_message(images_per_message.max(1) as usize)
+            .with_pages_per_batch(pages_per_batch.max(1) as usize)
+            .with_temperature(temperature)
+            .with_max_tokens(if max_tokens > 0 {
+                Some(max_tokens as u64)
+            } else {
+                None
+            });
+
+        let llm_client = create_llm_client_with_config(completion_handle, llm_config);
 
         let md = MarkItDown::new();
         let mut all_results: Vec<Vec<DocumentPage>> = Vec::with_capacity(files.len());
@@ -629,15 +751,14 @@ impl NodeLogic for ExtractDocumentsAiNode {
                 .with_image_context_path(file.path.clone())
                 .with_llm(llm_client.clone());
 
-            let result = md.convert_bytes(bytes, Some(options)).await.map_err(|e| {
-                flow_like_types::anyhow!("Failed to extract document with AI: {}", e)
-            })?;
+            let result = safe_convert_bytes(&md, bytes, Some(options)).await?;
 
             let pages = document_to_pages(&result, context).await?;
             all_results.push(pages);
         }
 
-        context.set_pin_value("results", json!(all_results)).await?;
+        let flat_results: Vec<DocumentPage> = all_results.into_iter().flatten().collect();
+        context.set_pin_value("results", json!(flat_results)).await?;
         context.activate_exec_pin("exec_out").await?;
 
         Ok(())

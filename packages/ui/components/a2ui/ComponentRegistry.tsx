@@ -26,6 +26,7 @@ import {
 	A2UIBoundingBoxOverlay,
 	A2UIDivider,
 	A2UIFilePreview,
+	A2UIGeoMap,
 	A2UIIcon,
 	A2UIIframe,
 	A2UIImage,
@@ -135,6 +136,7 @@ const registry: Record<string, ComponentRenderer> = {
 	filePreview: A2UIFilePreview as ComponentRenderer,
 	nivoChart: A2UINivoChart as ComponentRenderer,
 	boundingBoxOverlay: A2UIBoundingBoxOverlay as ComponentRenderer,
+	geoMap: A2UIGeoMap as ComponentRenderer,
 
 	// Interactive
 	button: A2UIButton as ComponentRenderer,

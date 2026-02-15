@@ -12,6 +12,27 @@ use axum::{
 };
 use sea_orm::{ActiveModelTrait, ActiveValue::Set, ColumnTrait, EntityTrait, QueryFilter};
 
+#[utoipa::path(
+    put,
+    path = "/apps/{app_id}/roles/{role_id}/default",
+    tag = "roles",
+    description = "Set the default role for new members.",
+    params(
+        ("app_id" = String, Path, description = "Application ID"),
+        ("role_id" = String, Path, description = "Role ID")
+    ),
+    responses(
+        (status = 200, description = "Default role updated", body = ()),
+        (status = 401, description = "Unauthorized"),
+        (status = 403, description = "Forbidden"),
+        (status = 404, description = "Not found")
+    ),
+    security(
+        ("bearer_auth" = []),
+        ("api_key" = []),
+        ("pat" = [])
+    )
+)]
 #[tracing::instrument(
     name = "PUT /apps/{app_id}/roles/{role_id}/default",
     skip(state, user, role_id)

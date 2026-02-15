@@ -33,7 +33,13 @@ export class EmptyUserState implements IUserState {
 	getProfile(): Promise<IProfile> {
 		throw new Error("Method not implemented.");
 	}
+	getProfiles(): Promise<IProfile[]> {
+		throw new Error("Method not implemented.");
+	}
 	getSettingsProfile(): Promise<ISettingsProfile> {
+		throw new Error("Method not implemented.");
+	}
+	getAllSettingsProfiles(): Promise<ISettingsProfile[]> {
 		throw new Error("Method not implemented.");
 	}
 	updateUser(data: IUserUpdate, avatar?: File): Promise<void> {

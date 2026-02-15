@@ -95,19 +95,41 @@ import {
 	ToolbarMenuGroup,
 } from "./toolbar";
 
+function extractNodeContent(node: any): string {
+	// Handle text nodes
+	if (node.text !== undefined) {
+		return node.text;
+	}
+
+	// Handle image nodes - convert to markdown syntax
+	if (node.type === "img" && node.url) {
+		const alt = node.caption?.[0]?.text || node.alt || "";
+		return `![${alt}](${node.url})`;
+	}
+
+	// Handle link nodes - convert to markdown syntax
+	if (node.type === "a" && node.url) {
+		const linkText = node.children
+			?.map((c: any) => extractNodeContent(c))
+			.join("");
+		return `[${linkText}](${node.url})`;
+	}
+
+	// Recursively process children
+	if (node.children) {
+		return node.children.map((c: any) => extractNodeContent(c)).join("");
+	}
+
+	return "";
+}
+
 function extractTableData(element: TTableElement): string[][] {
 	const rows: string[][] = [];
 	for (const row of element.children as TTableRowElement[]) {
 		const cells: string[] = [];
 		for (const cell of row.children as TTableCellElement[]) {
 			const text = cell.children
-				?.map((child: any) => {
-					if (child.text) return child.text;
-					if (child.children) {
-						return child.children.map((c: any) => c.text || "").join("");
-					}
-					return "";
-				})
+				?.map((child: any) => extractNodeContent(child))
 				.join("");
 			cells.push(text || "");
 		}

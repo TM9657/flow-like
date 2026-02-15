@@ -455,7 +455,7 @@ impl Response {
                     existing_choice.finish_reason = finish_reason;
                 }
 
-                return;
+                continue; // Continue to next choice, don't return
             }
 
             // Create a new choice if it doesn't exist

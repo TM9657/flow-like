@@ -30,6 +30,7 @@ export default function FlowEditPage() {
 			appId={appId}
 			nodeId={nodeId}
 			version={version}
+			sub={auth.user?.profile?.sub}
 			extraDockItems={[
 				{
 					icon: <Video className={showRecording ? "text-red-500" : ""} />,

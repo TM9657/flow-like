@@ -1,16 +1,17 @@
 export const en = {
 	// Meta
-	"meta.title": "Flow-Like — Enterprise Automation You Can Trust",
+	"meta.title":
+		"Flow-Like | Open Source Workflow Engine - Local-First, Rust-Powered, Type-Safe",
 	"meta.description":
-		"Mission-critical automation you can audit, control, and run on-prem. No black boxes. No silent failures. No data leaks.",
+		"Open source workflow engine for local-first and self-hosted automation. Build type-safe, auditable flows in Rust and deploy on-prem or air-gapped.",
 
 	// Hero
 	"hero.tagline": "Control is not optional",
-	"hero.headline": "If you can't see it, you can't trust it.",
+	"hero.headline": "Open source workflow engine you can trust.",
 	"hero.subheadline":
 		"AI accelerates decisions. Automation amplifies their impact. But accountability, risk, and direction still belong to you.",
 	"hero.description":
-		"Flow-Like gives you an automation runtime you can audit, replay, and govern — whether it's LLM pipelines, internal tools, or critical business processes. No black boxes. No silent failures. No data leaks.",
+		"Flow-Like gives you a local-first workflow engine you can audit, replay, and govern - whether it's LLM pipelines, internal tools, or critical business processes. No black boxes. No silent failures. No data leaks.",
 	"hero.cta.risk_review": "Schedule Risk Review",
 	"hero.cta.download": "Download",
 	"hero.enterprise_note": "No credit card. Runs on your hardware.",

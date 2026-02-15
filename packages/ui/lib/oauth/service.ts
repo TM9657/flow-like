@@ -12,6 +12,45 @@ function generateRandomString(length: number): string {
 	return Array.from(array, (b) => b.toString(16).padStart(2, "0")).join("");
 }
 
+/**
+ * Platform targets for OAuth callback routing.
+ * These map to hardcoded URLs on the callback handler for security.
+ */
+export type OAuthPlatform = "desktop" | "web-dev" | "web-prod";
+
+/**
+ * Encodes platform info into the OAuth state parameter.
+ * Format: platform_randomState
+ * Uses predefined platform flags that map to hardcoded URLs on the callback handler.
+ */
+function encodeStateWithPlatform(
+	randomState: string,
+	platform: OAuthPlatform,
+): string {
+	return `${platform}_${randomState}`;
+}
+
+/**
+ * Decodes platform info from the OAuth state parameter.
+ * Returns the platform flag and random state.
+ */
+export function decodeStateWithPlatform(state: string): {
+	platform: OAuthPlatform;
+	randomState: string;
+} {
+	const platforms: OAuthPlatform[] = ["desktop", "web-dev", "web-prod"];
+	for (const platform of platforms) {
+		if (state.startsWith(`${platform}_`)) {
+			return {
+				platform,
+				randomState: state.substring(platform.length + 1),
+			};
+		}
+	}
+	// Legacy state without platform prefix - assume desktop
+	return { platform: "desktop", randomState: state };
+}
+
 function generateCodeVerifier(): string {
 	return generateRandomString(64);
 }
@@ -32,19 +71,49 @@ export interface OAuthServiceConfig {
 	redirectUri?: string;
 	/**
 	 * Function to get the API base URL for the OAuth proxy.
-	 * Required for providers with requires_secret_proxy=true.
+	 * Required for providers with requires_secret_proxy=true and for all web platform proxy flows.
 	 * Should return the base URL like "https://api.example.com"
 	 */
 	getApiBaseUrl?: () => Promise<string | null>;
+	/**
+	 * Platform identifier for OAuth callback routing.
+	 * This value is encoded into OAuth state and interpreted by the website callback
+	 * page to perform the second-hop redirect after provider callback is received.
+	 * - "desktop": Website callback forwards to the native app deep link route
+	 * - "web-dev": Website callback forwards to localhost web callback
+	 * - "web-prod": Website callback forwards to production web callback
+	 */
+	platform?: OAuthPlatform;
 }
 
 export function createOAuthService(config: OAuthServiceConfig) {
-	const {
-		runtime,
-		tokenStore,
-		redirectUri = "https://flow-like.com/thirdparty/callback",
-		getApiBaseUrl,
-	} = config;
+	const { runtime, tokenStore, getApiBaseUrl, platform = "desktop" } = config;
+	// Always use website callback as OAuth redirect URI.
+	// The website callback script decides the final destination based on state.
+	const redirectUri =
+		config.redirectUri ?? "https://flow-like.com/thirdparty/callback";
+	const isWebPlatform = platform === "web-dev" || platform === "web-prod";
+
+	function shouldProxyProviderRequests(provider: IOAuthProvider): boolean {
+		return isWebPlatform || provider.requires_secret_proxy;
+	}
+
+	async function resolveApiBaseUrl(
+		provider: IOAuthProvider,
+		overrideApiBaseUrl?: string,
+	): Promise<string> {
+		const rawApiBaseUrl =
+			overrideApiBaseUrl ?? (getApiBaseUrl ? await getApiBaseUrl() : null);
+		if (!rawApiBaseUrl) {
+			throw new Error(
+				`Provider ${provider.id} requires OAuth proxying but no API base URL is available`,
+			);
+		}
+
+		return rawApiBaseUrl.endsWith("/")
+			? rawApiBaseUrl.slice(0, -1)
+			: rawApiBaseUrl;
+	}
 
 	return {
 		async startAuthorization(
@@ -65,7 +134,9 @@ export function createOAuthService(config: OAuthServiceConfig) {
 
 			await tokenStore.cleanupPendingAuth();
 
-			const state = generateRandomString(32);
+			const randomState = generateRandomString(32);
+			// Encode platform info into state for callback routing
+			const state = encodeStateWithPlatform(randomState, platform);
 			const codeVerifier = generateCodeVerifier();
 			const codeChallenge = await generateCodeChallenge(codeVerifier);
 
@@ -209,8 +280,9 @@ export function createOAuthService(config: OAuthServiceConfig) {
 			if (provider.userinfo_url && tokenResponse.access_token) {
 				try {
 					userInfo = await this.fetchUserInfo(
-						provider.userinfo_url,
+						provider,
 						tokenResponse.access_token,
+						pendingAuth.apiBaseUrl,
 					);
 				} catch (e) {
 					console.warn("Failed to fetch user info:", e);
@@ -239,6 +311,7 @@ export function createOAuthService(config: OAuthServiceConfig) {
 				providerId: string;
 				scopes: string[];
 				state: string;
+				apiBaseUrl?: string;
 			},
 			provider: IOAuthProvider,
 			tokenData: {
@@ -255,8 +328,9 @@ export function createOAuthService(config: OAuthServiceConfig) {
 			if (provider.userinfo_url && tokenData.access_token) {
 				try {
 					userInfo = await this.fetchUserInfo(
-						provider.userinfo_url,
+						provider,
 						tokenData.access_token,
+						pendingAuth.apiBaseUrl,
 					);
 				} catch (e) {
 					console.warn("Failed to fetch user info:", e);
@@ -312,16 +386,12 @@ export function createOAuthService(config: OAuthServiceConfig) {
 				hasClientSecret: !!provider.client_secret,
 			});
 
-			// If provider requires secret proxy, route through the API server
-			if (provider.requires_secret_proxy) {
-				// Use override URL from pending auth, or fall back to config
-				const apiBaseUrl =
-					overrideApiBaseUrl ?? (getApiBaseUrl ? await getApiBaseUrl() : null);
-				if (!apiBaseUrl) {
-					throw new Error(
-						`Provider ${provider.id} requires secret proxy but no API base URL is available`,
-					);
-				}
+			// Web clients and providers with secrets must proxy token exchange through the API.
+			if (shouldProxyProviderRequests(provider)) {
+				const apiBaseUrl = await resolveApiBaseUrl(
+					provider,
+					overrideApiBaseUrl,
+				);
 
 				const proxyUrl = `${apiBaseUrl}/api/v1/oauth/token/${provider.id}`;
 				const proxyBody = JSON.stringify({
@@ -330,7 +400,7 @@ export function createOAuthService(config: OAuthServiceConfig) {
 					code_verifier: provider.pkce_required ? codeVerifier : undefined,
 				});
 
-				console.log("[OAuth] Using secret proxy for token exchange:", proxyUrl);
+				console.log("[OAuth] Using API proxy for token exchange:", proxyUrl);
 
 				const response = await runtime.httpPost(proxyUrl, proxyBody, {
 					"Content-Type": "application/json",
@@ -508,27 +578,16 @@ export function createOAuthService(config: OAuthServiceConfig) {
 				throw new Error("No refresh token available");
 			}
 
-			// If provider requires secret proxy, route through the API server
-			if (provider.requires_secret_proxy) {
-				if (!getApiBaseUrl) {
-					throw new Error(
-						`Provider ${provider.id} requires secret proxy but getApiBaseUrl is not configured`,
-					);
-				}
-
-				const apiBaseUrl = await getApiBaseUrl();
-				if (!apiBaseUrl) {
-					throw new Error(
-						`Provider ${provider.id} requires secret proxy but no API base URL is available`,
-					);
-				}
+			// Web clients and providers with secrets must proxy refresh requests through the API.
+			if (shouldProxyProviderRequests(provider)) {
+				const apiBaseUrl = await resolveApiBaseUrl(provider);
 
 				const proxyUrl = `${apiBaseUrl}/api/v1/oauth/refresh/${provider.id}`;
 				const proxyBody = JSON.stringify({
 					refresh_token: token.refresh_token,
 				});
 
-				console.log("[OAuth] Using secret proxy for token refresh:", proxyUrl);
+				console.log("[OAuth] Using API proxy for token refresh:", proxyUrl);
 
 				const response = await runtime.httpPost(proxyUrl, proxyBody, {
 					"Content-Type": "application/json",
@@ -623,12 +682,26 @@ export function createOAuthService(config: OAuthServiceConfig) {
 		},
 
 		async fetchUserInfo(
-			userinfoUrl: string,
+			provider: IOAuthProvider,
 			accessToken: string,
+			overrideApiBaseUrl?: string,
 		): Promise<IStoredOAuthToken["userInfo"]> {
-			const response = await runtime.httpGet(userinfoUrl, {
-				Authorization: `Bearer ${accessToken}`,
-			});
+			if (!provider.userinfo_url) {
+				throw new Error(`Provider ${provider.id} does not expose userinfo_url`);
+			}
+
+			const response = shouldProxyProviderRequests(provider)
+				? await runtime.httpPost(
+						`${await resolveApiBaseUrl(provider, overrideApiBaseUrl)}/api/v1/oauth/userinfo/${provider.id}`,
+						JSON.stringify({ access_token: accessToken }),
+						{
+							"Content-Type": "application/json",
+							Accept: "application/json",
+						},
+					)
+				: await runtime.httpGet(provider.userinfo_url, {
+						Authorization: `Bearer ${accessToken}`,
+					});
 
 			if (!response.ok) {
 				throw new Error(`Failed to fetch user info: ${response.status}`);
@@ -658,14 +731,26 @@ export function createOAuthService(config: OAuthServiceConfig) {
 			}
 
 			try {
-				const params = new URLSearchParams({
-					token: token.access_token,
-					client_id: provider.client_id,
-				});
+				if (shouldProxyProviderRequests(provider)) {
+					const proxyUrl = `${await resolveApiBaseUrl(provider)}/api/v1/oauth/revoke/${provider.id}`;
+					await runtime.httpPost(
+						proxyUrl,
+						JSON.stringify({ token: token.access_token }),
+						{
+							"Content-Type": "application/json",
+							Accept: "application/json",
+						},
+					);
+				} else {
+					const params = new URLSearchParams({
+						token: token.access_token,
+						client_id: provider.client_id,
+					});
 
-				await runtime.httpPost(provider.revoke_url, params.toString(), {
-					"Content-Type": "application/x-www-form-urlencoded",
-				});
+					await runtime.httpPost(provider.revoke_url, params.toString(), {
+						"Content-Type": "application/x-www-form-urlencoded",
+					});
+				}
 			} catch (e) {
 				console.warn("Token revocation failed:", e);
 			}
@@ -779,14 +864,19 @@ export function createOAuthService(config: OAuthServiceConfig) {
 				scope: scopes.join(" "),
 			});
 
-			const response = await runtime.httpPost(
-				provider.device_auth_url,
-				params.toString(),
-				{
-					"Content-Type": "application/x-www-form-urlencoded",
-					Accept: "application/json",
-				},
-			);
+			const response = shouldProxyProviderRequests(provider)
+				? await runtime.httpPost(
+						`${await resolveApiBaseUrl(provider)}/api/v1/oauth/device/start/${provider.id}`,
+						JSON.stringify({ scope: scopes.join(" ") }),
+						{
+							"Content-Type": "application/json",
+							Accept: "application/json",
+						},
+					)
+				: await runtime.httpPost(provider.device_auth_url, params.toString(), {
+						"Content-Type": "application/x-www-form-urlencoded",
+						Accept: "application/json",
+					});
 
 			if (!response.ok) {
 				const errorText = await response.text();
@@ -814,14 +904,21 @@ export function createOAuthService(config: OAuthServiceConfig) {
 				grant_type: "urn:ietf:params:oauth:grant-type:device_code",
 			});
 
-			const response = await runtime.httpPost(
-				provider.token_url,
-				params.toString(),
-				{
-					"Content-Type": "application/x-www-form-urlencoded",
-					Accept: "application/json",
-				},
-			);
+			const response = shouldProxyProviderRequests(provider)
+				? await runtime.httpPost(
+						`${await resolveApiBaseUrl(provider)}/api/v1/oauth/device/poll/${provider.id}`,
+						JSON.stringify({
+							device_code: deviceCode,
+						}),
+						{
+							"Content-Type": "application/json",
+							Accept: "application/json",
+						},
+					)
+				: await runtime.httpPost(provider.token_url, params.toString(), {
+						"Content-Type": "application/x-www-form-urlencoded",
+						Accept: "application/json",
+					});
 
 			const data = (await response.json()) as {
 				access_token?: string;
@@ -855,10 +952,7 @@ export function createOAuthService(config: OAuthServiceConfig) {
 			let userInfo: IStoredOAuthToken["userInfo"];
 			if (provider.userinfo_url && data.access_token) {
 				try {
-					userInfo = await this.fetchUserInfo(
-						provider.userinfo_url,
-						data.access_token,
-					);
+					userInfo = await this.fetchUserInfo(provider, data.access_token);
 				} catch (e) {
 					console.warn("Failed to fetch user info:", e);
 				}

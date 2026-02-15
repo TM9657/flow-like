@@ -8,12 +8,34 @@ use axum::{
 };
 use flow_like_types::anyhow;
 use futures_util::{StreamExt, TryStreamExt};
+use utoipa::ToSchema;
 
-#[derive(Debug, Clone, serde::Deserialize)]
+#[derive(Debug, Clone, serde::Deserialize, ToSchema)]
 pub struct DeleteFilesPayload {
     pub prefixes: Vec<String>,
 }
 
+#[utoipa::path(
+    delete,
+    path = "/apps/{app_id}/data",
+    tag = "data",
+    description = "Delete files by prefix.",
+    params(
+        ("app_id" = String, Path, description = "Application ID")
+    ),
+    request_body = DeleteFilesPayload,
+    responses(
+        (status = 200, description = "Files deleted", body = ()),
+        (status = 400, description = "Bad request"),
+        (status = 401, description = "Unauthorized"),
+        (status = 403, description = "Forbidden")
+    ),
+    security(
+        ("bearer_auth" = []),
+        ("api_key" = []),
+        ("pat" = [])
+    )
+)]
 #[tracing::instrument(name = "DELETE /apps/{app_id}/data", skip(state, user))]
 pub async fn delete_files(
     State(state): State<AppState>,

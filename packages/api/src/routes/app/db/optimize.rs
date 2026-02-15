@@ -7,13 +7,35 @@ use axum::{
     extract::{Path, State},
 };
 use flow_like_storage::databases::vector::{VectorStore, lancedb::LanceDBVectorStore};
+use utoipa::ToSchema;
 
-#[derive(Debug, Clone, serde::Deserialize)]
+#[derive(Debug, Clone, serde::Deserialize, ToSchema)]
 pub struct OptimizePayload {
     #[serde(default)]
     pub keep_versions: bool,
 }
 
+#[utoipa::path(
+    post,
+    path = "/apps/{app_id}/db/{table}/optimize",
+    tag = "database",
+    description = "Optimize table storage and indices.",
+    params(
+        ("app_id" = String, Path, description = "Application ID"),
+        ("table" = String, Path, description = "Table name")
+    ),
+    request_body = OptimizePayload,
+    responses(
+        (status = 200, description = "Table optimized", body = ()),
+        (status = 401, description = "Unauthorized"),
+        (status = 403, description = "Forbidden")
+    ),
+    security(
+        ("bearer_auth" = []),
+        ("api_key" = []),
+        ("pat" = [])
+    )
+)]
 #[tracing::instrument(name = "POST /apps/{app_id}/db/{table}/optimize", skip(state, user))]
 pub async fn optimize_table(
     State(state): State<AppState>,

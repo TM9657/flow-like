@@ -29,7 +29,7 @@ impl NodeLogic for SetNivoData {
             "a2ui_set_nivo_data",
             "Set Nivo Chart Data",
             "Sets the data for a Nivo chart element",
-            "A2UI/Elements/Charts",
+            "UI/Elements/Charts",
         );
         node.add_icon("/flow/icons/a2ui.svg");
 

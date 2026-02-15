@@ -45,6 +45,8 @@ pub struct FlowLikeCallbacks {
     pub build_project_database: Option<Arc<dyn (Fn(Path) -> ConnectBuilder) + Send + Sync>>,
     pub build_user_database: Option<Arc<dyn (Fn(Path) -> ConnectBuilder) + Send + Sync>>,
     pub build_logs_database: Option<Arc<dyn (Fn(Path) -> ConnectBuilder) + Send + Sync>>,
+    /// Optional write options for LanceDB (used on Android to avoid hard_link issues)
+    pub lance_write_options: Option<flow_like_storage::lancedb::table::WriteOptions>,
 }
 
 #[derive(Clone, Default)]
@@ -118,6 +120,13 @@ impl FlowLikeConfig {
         callback: Arc<dyn (Fn(Path) -> ConnectBuilder) + Send + Sync>,
     ) {
         self.callbacks.build_logs_database = Some(callback);
+    }
+
+    pub fn register_lance_write_options(
+        &mut self,
+        options: flow_like_storage::lancedb::table::WriteOptions,
+    ) {
+        self.callbacks.lance_write_options = Some(options);
     }
 }
 
@@ -716,6 +725,46 @@ impl Default for ToastEvent {
         ToastEvent {
             message: "".to_string(),
             level: ToastLevel::Info,
+        }
+    }
+}
+
+/// Event sent via InterCom to show progress to the user
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct ProgressEvent {
+    /// Unique identifier to update/dismiss this progress toast
+    pub id: String,
+    /// The message shown to the user
+    pub message: String,
+    /// Progress value between 0 and 100 (None to dismiss)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub progress: Option<u8>,
+    /// Whether this is the final update (dismisses or completes the progress)
+    #[serde(default)]
+    pub done: bool,
+    /// Whether the operation succeeded (only relevant when done=true)
+    #[serde(default)]
+    pub success: bool,
+}
+
+impl ProgressEvent {
+    pub fn new(id: &str, message: &str, progress: Option<u8>) -> Self {
+        ProgressEvent {
+            id: id.to_string(),
+            message: message.to_string(),
+            progress,
+            done: false,
+            success: false,
+        }
+    }
+
+    pub fn done(id: &str, message: &str, success: bool) -> Self {
+        ProgressEvent {
+            id: id.to_string(),
+            message: message.to_string(),
+            progress: if success { Some(100) } else { None },
+            done: true,
+            success,
         }
     }
 }

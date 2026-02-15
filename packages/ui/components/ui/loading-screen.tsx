@@ -1,23 +1,6 @@
 "use client";
 
-import {
-	Brain,
-	Code,
-	Coffee,
-	Cpu,
-	Globe,
-	Heart,
-	Hexagon,
-	Lightbulb,
-	Loader2,
-	Rocket,
-	Shield,
-	Sparkles,
-	Star,
-	Wand2,
-	Zap,
-} from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { cn } from "../../lib";
 
 interface LoadingScreenProps {
@@ -26,429 +9,254 @@ interface LoadingScreenProps {
 	className?: string;
 }
 
-const loadingMessages = [
-	"Preparing something amazing...",
-	"Initializing awesome...",
-	"Crafting the perfect experience...",
-	"Assembling digital magic...",
-	"Loading brilliance...",
-	"Weaving code into reality...",
-	"Summoning the flow state...",
-	"Materializing innovation...",
-	"Brewing digital excellence...",
-	"Orchestrating perfection...",
-];
-
-const floatingIcons = [
-	{ Icon: Zap, delay: 0, color: "text-yellow-400", size: "w-6 h-6" },
-	{ Icon: Sparkles, delay: 0.5, color: "text-purple-400", size: "w-5 h-5" },
-	{ Icon: Code, delay: 1, color: "text-blue-400", size: "w-7 h-7" },
-	{ Icon: Rocket, delay: 1.5, color: "text-red-400", size: "w-6 h-6" },
-	{ Icon: Brain, delay: 2, color: "text-green-400", size: "w-5 h-5" },
-	{ Icon: Lightbulb, delay: 2.5, color: "text-orange-400", size: "w-6 h-6" },
-	{ Icon: Star, delay: 3, color: "text-pink-400", size: "w-5 h-5" },
-	{ Icon: Heart, delay: 3.5, color: "text-rose-400", size: "w-6 h-6" },
-];
-
-const backgroundIcons = [
-	{ Icon: Hexagon, color: "text-muted-foreground/20", size: "w-12 h-12" },
-	{ Icon: Coffee, color: "text-muted-foreground/15", size: "w-8 h-8" },
-	{ Icon: Cpu, color: "text-muted-foreground/20", size: "w-10 h-10" },
-	{ Icon: Globe, color: "text-muted-foreground/15", size: "w-14 h-14" },
-	{ Icon: Shield, color: "text-muted-foreground/20", size: "w-9 h-9" },
-	{ Icon: Wand2, color: "text-muted-foreground/15", size: "w-11 h-11" },
-];
-
-// Seeded random number generator for deterministic values
-function seededRandom(seed: number) {
-	const x = Math.sin(seed) * 10000;
-	return x - Math.floor(x);
+interface Tip {
+	emoji: string;
+	text: string;
 }
 
-export function LoadingScreen({
-	message = loadingMessages[0],
-	progress = 0,
-	className,
-}: Readonly<LoadingScreenProps>) {
-	const [currentMessage, setCurrentMessage] = useState(message);
-	const [dots, setDots] = useState("");
-	const [isMounted, setIsMounted] = useState(false);
-	const [backgroundElements, setBackgroundElements] = useState<
-		Array<{
-			id: number;
-			x: number;
-			y: number;
-			icon: (typeof backgroundIcons)[0];
-			animationDelay: number;
-			animationDuration: number;
-		}>
-	>([]);
+const TIPS: Tip[] = [
+	{ emoji: "⌨️", text: "Press Ctrl+K to open the command palette from anywhere." },
+	{ emoji: "🔗", text: "Connect nodes by dragging from one pin to another." },
+	{ emoji: "📦", text: "Browse community packages in the Registry to extend your workflows." },
+	{ emoji: "💾", text: "Your flows auto-save — no need to hit save manually." },
+	{ emoji: "🔍", text: "Use the search bar in the node catalog to find nodes quickly." },
+	{ emoji: "🎯", text: "Double-click the canvas to create a new node at that position." },
+	{ emoji: "📋", text: "Select multiple nodes with Shift+Click to move them together." },
+	{ emoji: "🧪", text: "Test individual nodes by right-clicking and selecting 'Run'." },
+	{ emoji: "🌙", text: "Toggle dark mode in Settings → Appearance." },
+	{ emoji: "🔄", text: "Undo with Ctrl+Z — works for node connections too." },
+	{ emoji: "📊", text: "Use the Data Viewer node to inspect values mid-flow." },
+	{ emoji: "⚡", text: "Pin frequently used nodes to the toolbar for faster access." },
+];
 
-	// Generate deterministic particle positions using seeded random
-	const particles = Array.from({ length: 30 }, (_, i) => ({
-		id: i,
-		x: seededRandom(i * 7 + 1) * 100,
-		y: seededRandom(i * 13 + 2) * 100,
-		delay: seededRandom(i * 17 + 3) * 8,
-		duration: 3 + seededRandom(i * 23 + 4) * 2,
-	}));
+const HINTS: Tip[] = [
+	{ emoji: "🖥️", text: "Try Flow Like Studio — the desktop app for offline editing and local execution." },
+	{ emoji: "🤖", text: "FlowPilot can generate entire workflows from a text description." },
+	{ emoji: "🧩", text: "Build custom nodes with WASM — use any language that compiles to WebAssembly." },
+	{ emoji: "☁️", text: "Deploy flows to the cloud with one click from the Studio." },
+	{ emoji: "📱", text: "Flow Like Studio syncs your projects across all your devices." },
+	{ emoji: "🔐", text: "Studio supports local-only mode — your data never leaves your machine." },
+];
 
-	useEffect(() => {
-		setIsMounted(true);
+function pickRandom<T>(arr: readonly T[], exclude?: number): number {
+	let idx: number;
+	do {
+		idx = Math.floor(Math.random() * arr.length);
+	} while (idx === exclude && arr.length > 1);
+	return idx;
+}
 
-		// Generate random background elements (client-side only)
-		const elements = Array.from({ length: 5 }, (_, i) => ({
-			id: i,
-			x: seededRandom(i * 31 + 5) * 100,
-			y: seededRandom(i * 37 + 6) * 100,
-			icon: backgroundIcons[
-				Math.floor(seededRandom(i * 41 + 7) * backgroundIcons.length)
-			],
-			animationDelay: seededRandom(i * 43 + 8) * 5,
-			animationDuration: 8 + seededRandom(i * 47 + 9) * 4,
-		}));
-		setBackgroundElements(elements);
+function FlowLogo() {
+	return (
+		<div className="relative flex items-center justify-center h-20 w-20">
+			{/* outer breathing ring */}
+			<div className="absolute inset-0 rounded-full border border-primary/12 ls-breathe" />
 
-		const messageInterval = setInterval(() => {
-			setCurrentMessage(
-				loadingMessages[Math.floor(Math.random() * loadingMessages.length)],
-			);
-		}, 3000);
+			{/* orbital dot */}
+			<div className="absolute inset-0 ls-orbit">
+				<div className="absolute top-0 left-1/2 -translate-x-1/2 -translate-y-1/2 h-1.5 w-1.5 rounded-full bg-primary/60" />
+			</div>
 
-		const dotsInterval = setInterval(() => {
-			setDots((prev) => (prev.length >= 3 ? "" : prev + "."));
-		}, 500);
+			{/* glass container */}
+			<div className="relative h-12 w-12 rounded-xl bg-muted/40 border border-border/60 backdrop-blur-sm flex items-center justify-center shadow-sm">
+				<svg
+					className="h-6 w-6 text-primary"
+					viewBox="0 0 24 24"
+					fill="none"
+				>
+					<path
+						d="M5 8h3a4 4 0 0 1 4 4v0a4 4 0 0 0 4 4h3"
+						stroke="currentColor"
+						strokeWidth="1.5"
+						strokeLinecap="round"
+						className="ls-draw"
+					/>
+					<path
+						d="M5 16h3a4 4 0 0 0 4-4v0a4 4 0 0 1 4-4h3"
+						stroke="currentColor"
+						strokeWidth="1.5"
+						strokeLinecap="round"
+						className="ls-draw ls-draw--reverse"
+					/>
+					<circle cx="5" cy="8" r="1.5" fill="currentColor" opacity="0.5" />
+					<circle cx="5" cy="16" r="1.5" fill="currentColor" opacity="0.5" />
+					<circle cx="12" cy="12" r="2" fill="currentColor" className="ls-center-dot" />
+					<circle cx="19" cy="8" r="1.5" fill="currentColor" opacity="0.5" />
+					<circle cx="19" cy="16" r="1.5" fill="currentColor" opacity="0.5" />
+				</svg>
+			</div>
+		</div>
+	);
+}
 
-		return () => {
-			clearInterval(messageInterval);
-			clearInterval(dotsInterval);
-		};
-	}, []);
+function isHint(tip: Tip): boolean {
+	return HINTS.some((h) => h.text === tip.text);
+}
+
+function TipCard({ tip, transitioning }: { tip: Tip; transitioning: boolean }) {
+	const hint = isHint(tip);
 
 	return (
 		<div
 			className={cn(
-				"fixed inset-0 bg-background flex items-center justify-center overflow-hidden",
+				"relative max-w-90 w-full rounded-xl border px-5 py-4 transition-all duration-500",
+				hint
+					? "border-primary/20 bg-primary/3"
+					: "border-border/40 bg-muted/20",
+				transitioning
+					? "opacity-0 translate-y-3 scale-[0.98]"
+					: "opacity-100 translate-y-0 scale-100",
+			)}
+		>
+			{/* label */}
+			<span
+				className={cn(
+					"text-[10px] font-medium uppercase tracking-wider mb-2 block",
+					hint ? "text-primary/60" : "text-muted-foreground/40",
+				)}
+			>
+				{hint ? "Did you know?" : "Tip"}
+			</span>
+
+			{/* body */}
+			<div className="flex items-start gap-3">
+				<span className="text-lg leading-none shrink-0" aria-hidden>
+					{tip.emoji}
+				</span>
+				<p className="text-[13px] text-foreground/70 leading-relaxed">{tip.text}</p>
+			</div>
+		</div>
+	);
+}
+
+export function LoadingScreen({
+	message,
+	progress = 0,
+	className,
+}: Readonly<LoadingScreenProps>) {
+	const clamped = Math.min(Math.max(progress, 0), 100);
+
+	const allCards = useMemo(() => [...TIPS, ...HINTS], []);
+	const [cardIndex, setCardIndex] = useState(() => pickRandom(allCards));
+	const [transitioning, setTransitioning] = useState(false);
+
+	useEffect(() => {
+		const id = setInterval(() => {
+			setTransitioning(true);
+			setTimeout(() => {
+				setCardIndex((prev) => pickRandom(allCards, prev));
+				setTransitioning(false);
+			}, 500);
+		}, 5500);
+		return () => clearInterval(id);
+	}, [allCards]);
+
+	const currentCard = allCards[cardIndex];
+
+	return (
+		<div
+			className={cn(
+				"fixed inset-0 z-50 bg-background flex flex-col items-center justify-center overflow-hidden",
 				className,
 			)}
 		>
-			{/* Dynamic background gradient */}
-			<div className="absolute inset-0 bg-linear-to-br from-background via-muted/30 to-background animate-gradient-shift" />
-
-			{/* Animated mesh overlay */}
-			<div className="absolute inset-0 opacity-40">
-				<div className="absolute inset-0 bg-[radial-gradient(circle_at_25%_25%,var(--muted)_1px,transparent_1px)] bg-size-[50px_50px] animate-mesh-drift" />
-				<div className="absolute inset-0 bg-[radial-gradient(circle_at_75%_75%,var(--border)_1px,transparent_1px)] bg-size-[80px_80px] animate-mesh-drift-reverse" />
+			{/* soft radial glow */}
+			<div className="pointer-events-none absolute inset-0">
+				<div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 h-[60vh] w-[60vh] rounded-full bg-primary/3 blur-[160px]" />
 			</div>
 
-			{/* Floating grid overlay */}
-			<div className="absolute inset-0 bg-[linear-gradient(to_right,var(--border)_1px,transparent_1px),linear-gradient(to_bottom,var(--border)_1px,transparent_1px)] bg-size-[120px_120px] opacity-20 animate-grid-float" />
+			{/* content */}
+			<div className="relative flex flex-col items-center gap-10 ls-enter">
+				{/* flow logo */}
+				<FlowLogo />
 
-			{/* Large background geometric shapes */}
-			<div className="absolute inset-0 overflow-hidden">
-				<div className="absolute -top-40 -left-40 w-80 h-80 border border-muted-foreground/10 rounded-full animate-float-massive" />
-				<div className="absolute -bottom-32 -right-32 w-64 h-64 border border-muted-foreground/10 rotate-45 animate-float-massive-reverse" />
-				<div className="absolute top-1/4 -left-20 w-40 h-40 border border-muted-foreground/10 rounded-full animate-pulse-gentle" />
-			</div>
-
-			{/* Background icon constellation */}
-			{isMounted &&
-				backgroundElements.map((element) => (
-					<div
-						key={element.id}
-						className="absolute animate-float-background"
-						style={{
-							left: `${element.x}%`,
-							top: `${element.y}%`,
-							animationDelay: `${element.animationDelay}s`,
-							animationDuration: `${element.animationDuration}s`,
-						}}
-					>
-						<element.icon.Icon
-							className={cn(
-								element.icon.size,
-								element.icon.color,
-								"animate-spin-very-slow",
-							)}
-						/>
-					</div>
-				))}
-
-			{/* Floating colorful icons */}
-			{floatingIcons.map(({ Icon, delay, color, size }, i) => (
-				<div
-					key={`floating-icon-${delay}-${color}-${size}`}
-					className="absolute animate-float-orbital opacity-70 hover:opacity-100 transition-opacity duration-300"
-					style={{
-						left: `${15 + i * 10}%`,
-						top: `${25 + Math.sin(i * 1.2) * 30}%`,
-						animationDelay: `${delay}s`,
-						animationDuration: "10s",
-					}}
-				>
-					<div className="relative">
-						{/* Glow effect */}
-						<div className={cn("absolute inset-0 blur-md opacity-60", color)}>
-							<Icon className={size} />
-						</div>
-						<Icon className={cn(size, color, "relative z-10 drop-shadow-lg")} />
-					</div>
-				</div>
-			))}
-
-			{/* Particle trail effect */}
-			<div className="absolute inset-0">
-				{particles.map((particle) => (
-					<div
-						key={particle.id}
-						className="absolute w-1 h-1 bg-muted-foreground/30 rounded-full animate-particle-trail"
-						style={{
-							left: `${particle.x}%`,
-							top: `${particle.y}%`,
-							animationDelay: `${particle.delay}s`,
-							animationDuration: `${particle.duration}s`,
-						}}
-					/>
-				))}
-			</div>
-
-			{/* Main loading content */}
-			<div className="relative z-10 text-center space-y-2 px-8 max-w-lg">
-				{/* Elegant central loader */}
-				<div className="relative flex flex-col items-center justify-center">
-					<div className="relative">
-						{/* Subtle outer ring */}
-						<div className="absolute inset-0 rounded-full border border-border/50 w-32 h-32 left-1/2 top-1/2 -ml-16 -mt-16 animate-spin-elegant" />
-
-						{/* Inner container */}
-						<div className="relative bg-card/95 backdrop-blur-xs rounded-full p-8 border border-border shadow-lg w-24 h-24">
-							<Loader2 className="w-8 h-8 animate-spin text-foreground mx-auto" />
-						</div>
-
-						{/* Minimal orbiting dots */}
-						<div className="absolute inset-0 animate-spin-slow">
-							{Array.from({ length: 6 }).map((_, i) => (
-								<div
-									key={i}
-									className="absolute w-1.5 h-1.5 bg-muted-foreground rounded-full"
-									style={{
-										top: "50%",
-										left: "50%",
-										transform: `rotate(${i * 60}deg) translateX(40px) translateY(-50%)`,
-									}}
-								/>
-							))}
-						</div>
-					</div>
-				</div>
-
-				{/* Elegant loading message */}
-				<div className="space-y-4 pt-6">
-					<h2 className="text-xl font-semibold text-foreground">
-						{currentMessage}
-						{dots}
-					</h2>
-
-					{/* Clean progress bar */}
-					{progress > 0 && (
-						<div className="w-80 mx-auto space-y-2">
-							<div className="relative w-full bg-muted rounded-full h-1.5 overflow-hidden">
-								<div
-									className="h-full bg-foreground rounded-full transition-all duration-700 ease-out"
-									style={{ width: `${Math.min(progress, 100)}%` }}
-								/>
-							</div>
-							<p className="text-xs text-muted-foreground">
-								{Math.round(progress)}% complete
-							</p>
-						</div>
+				{/* status text */}
+				<div className="text-center space-y-1.5">
+					{message ? (
+						<p className="text-sm text-foreground/70">{message}</p>
+					) : (
+						<p className="text-sm text-muted-foreground/60">Loading your workspace</p>
+					)}
+					{clamped > 0 && (
+						<p className="text-xs tabular-nums text-muted-foreground/40">
+							{Math.round(clamped)}%
+						</p>
 					)}
 				</div>
 
-				{/* Simple subtitle */}
-				<p className="text-muted-foreground">
-					Please wait while we prepare everything
-				</p>
-
-				{/* Minimal loading indicators */}
-				<div className="flex justify-center space-x-1 pt-4">
-					{Array.from({ length: 3 }).map((_, i) => (
+				{/* progress bar */}
+				{clamped > 0 && (
+					<div className="w-48 h-px bg-border/40 rounded-full overflow-hidden">
 						<div
-							key={i}
-							className="w-1.5 h-1.5 bg-muted-foreground rounded-full animate-bounce-jump"
-							style={{ animationDelay: `${i * 0.15}s` }}
+							className="h-full bg-primary/50 transition-[width] duration-700 ease-out"
+							style={{ width: `${clamped}%` }}
 						/>
-					))}
-				</div>
+					</div>
+				)}
+
+				{/* tip / hint card */}
+				<TipCard tip={currentCard} transitioning={transitioning} />
 			</div>
 
-			<style jsx>{`
-                @keyframes bounce-jump {
-                    0%, 20%, 50%, 80%, 100% {
-                        transform: translateY(0);
-                        opacity: 0.6;
-                    }
-                    40% {
-                        transform: translateY(-12px);
-                        opacity: 1;
-                    }
-                    60% {
-                        transform: translateY(-6px);
-                        opacity: 0.8;
-                    }
-                }
+			{/* minimal footer label */}
+			<div className="absolute bottom-5 flex flex-col items-center gap-1 ls-enter" style={{ animationDelay: "0.3s" }}>
+				<span className="text-[10px] tracking-widest uppercase text-muted-foreground/30">
+					Flow Like
+				</span>
+			</div>
 
-                @keyframes float-orbital {
-                    0%, 100% { transform: translateY(0px) translateX(0px) rotate(0deg); }
-                    25% { transform: translateY(-20px) translateX(15px) rotate(90deg); }
-                    50% { transform: translateY(-40px) translateX(0px) rotate(180deg); }
-                    75% { transform: translateY(-20px) translateX(-15px) rotate(270deg); }
-                }
+			<style>{`
+				.ls-enter {
+					animation: ls-enter 0.8s ease-out both;
+				}
+				@keyframes ls-enter {
+					from { opacity: 0; transform: translateY(10px); }
+					to   { opacity: 1; transform: translateY(0); }
+				}
 
-                @keyframes float-background {
-                    0%, 100% { transform: translateY(0px) scale(1); opacity: 0.3; }
-                    50% { transform: translateY(-30px) scale(1.1); opacity: 0.5; }
-                }
+				/* breathing outer ring */
+				.ls-breathe {
+					animation: ls-breathe 4s ease-in-out infinite;
+				}
+				@keyframes ls-breathe {
+					0%, 100% { transform: scale(1); opacity: 0.35; }
+					50%      { transform: scale(1.12); opacity: 0.12; }
+				}
 
-                @keyframes float-massive {
-                    0%, 100% { transform: translateY(0px) translateX(0px) rotate(0deg); }
-                    50% { transform: translateY(-60px) translateX(30px) rotate(180deg); }
-                }
+				/* orbiting dot */
+				.ls-orbit {
+					animation: ls-orbit 6s linear infinite;
+				}
+				@keyframes ls-orbit {
+					from { transform: rotate(0deg); }
+					to   { transform: rotate(360deg); }
+				}
 
-                @keyframes float-massive-reverse {
-                    0%, 100% { transform: translateY(0px) translateX(0px) rotate(0deg); }
-                    50% { transform: translateY(60px) translateX(-30px) rotate(-180deg); }
-                }
+				/* svg path draw */
+				.ls-draw {
+					stroke-dasharray: 48;
+					stroke-dashoffset: 48;
+					animation: ls-draw 2.8s ease-in-out infinite;
+				}
+				.ls-draw--reverse {
+					animation-direction: reverse;
+				}
+				@keyframes ls-draw {
+					0%   { stroke-dashoffset: 48; }
+					50%  { stroke-dashoffset: 0; }
+					100% { stroke-dashoffset: -48; }
+				}
 
-                @keyframes particle-trail {
-                    0% { transform: translateY(0px) scale(1); opacity: 0; }
-                    50% { transform: translateY(-100px) scale(1.5); opacity: 1; }
-                    100% { transform: translateY(-200px) scale(0.5); opacity: 0; }
-                }
-
-                @keyframes gradient-shift {
-                    0%, 100% { background-position: 0% 50%; }
-                    50% { background-position: 100% 50%; }
-                }
-
-                @keyframes mesh-drift {
-                    0%, 100% { transform: translate(0, 0); }
-                    50% { transform: translate(25px, -25px); }
-                }
-
-                @keyframes mesh-drift-reverse {
-                    0%, 100% { transform: translate(0, 0); }
-                    50% { transform: translate(-20px, 20px); }
-                }
-
-                @keyframes grid-float {
-                    0%, 100% { transform: translate(0, 0); }
-                    50% { transform: translate(15px, -15px); }
-                }
-
-                @keyframes spin-elegant {
-                    from { transform: rotate(0deg); }
-                    to { transform: rotate(360deg); }
-                }
-
-                @keyframes spin-slow {
-                    from { transform: rotate(0deg); }
-                    to { transform: rotate(360deg); }
-                }
-
-                @keyframes spin-reverse {
-                    from { transform: rotate(360deg); }
-                    to { transform: rotate(0deg); }
-                }
-
-                @keyframes spin-very-slow {
-                    from { transform: rotate(0deg); }
-                    to { transform: rotate(360deg); }
-                }
-
-                @keyframes pulse-gentle {
-                    0%, 100% { opacity: 0.3; transform: scale(1); }
-                    50% { opacity: 0.6; transform: scale(1.05); }
-                }
-
-                @keyframes pulse-wave {
-                    0%, 20%, 100% { opacity: 0.3; transform: scale(1); }
-                    50% { opacity: 1; transform: scale(1.2); }
-                }
-
-                @keyframes shimmer {
-                    0% { transform: translateX(-100%); }
-                    100% { transform: translateX(100%); }
-                }
-
-                .animate-bounce-jump {
-                    animation: bounce-jump 1.2s ease-in-out infinite;
-                }
-
-                .animate-float-orbital {
-                    animation: float-orbital 8s ease-in-out infinite;
-                }
-
-                .animate-float-background {
-                    animation: float-background 6s ease-in-out infinite;
-                }
-
-                .animate-float-massive {
-                    animation: float-massive 12s ease-in-out infinite;
-                }
-
-                .animate-float-massive-reverse {
-                    animation: float-massive-reverse 15s ease-in-out infinite;
-                }
-
-                .animate-particle-trail {
-                    animation: particle-trail 4s ease-out infinite;
-                }
-
-                .animate-gradient-shift {
-                    animation: gradient-shift 8s ease infinite;
-                }
-
-                .animate-mesh-drift {
-                    animation: mesh-drift 10s ease-in-out infinite;
-                }
-
-                .animate-mesh-drift-reverse {
-                    animation: mesh-drift-reverse 12s ease-in-out infinite;
-                }
-
-                .animate-grid-float {
-                    animation: grid-float 8s ease-in-out infinite;
-                }
-
-                .animate-spin-elegant {
-                    animation: spin-elegant 15s linear infinite;
-                }
-
-                .animate-spin-slow {
-                    animation: spin-slow 10s linear infinite;
-                }
-
-                .animate-spin-reverse {
-                    animation: spin-reverse 8s linear infinite;
-                }
-
-                .animate-spin-very-slow {
-                    animation: spin-very-slow 20s linear infinite;
-                }
-
-                .animate-pulse-gentle {
-                    animation: pulse-gentle 4s ease-in-out infinite;
-                }
-
-                .animate-pulse-wave {
-                    animation: pulse-wave 1.8s ease-in-out infinite;
-                }
-
-                .animate-shimmer {
-                    animation: shimmer 2s ease-in-out infinite;
-                }
-            `}</style>
+				/* center dot pulse */
+				.ls-center-dot {
+					transform-origin: center;
+					animation: ls-center 2.8s ease-in-out infinite;
+				}
+				@keyframes ls-center {
+					0%, 100% { transform: scale(1); opacity: 0.6; }
+					50%      { transform: scale(1.3); opacity: 1; }
+				}
+			`}</style>
 		</div>
 	);
 }

@@ -12,10 +12,14 @@ execute = [
     "dep:htmd",
     "dep:scraper",
     "dep:async-imap",
-    "dep:async-native-tls",
+    "dep:tokio-rustls",
+    "dep:rustls-pki-types",
+    "dep:webpki-roots",
     "dep:async-smtp",
     "dep:mail-parser",
     "dep:icalendar",
+    "dep:serenity",
+    "dep:teloxide",
 ]
 
 [dependencies]
@@ -44,7 +48,13 @@ urlencoding.workspace = true
 htmd = { version = "0.3.0", optional = true }
 scraper = { version = "0.23.1", optional = true }
 async-imap = { version = "0.11.1", default-features = false, features = ["runtime-tokio", "tokio"], optional = true }
-async-native-tls = { version = "0.5", default-features = false, features = ["runtime-tokio"], optional = true }
+tokio-rustls = { version = "0.26", default-features = false, features = ["ring"], optional = true }
+rustls-pki-types = { version = "1", optional = true }
+webpki-roots = { version = "0.26", optional = true }
 async-smtp = { version = "0.10.2", default-features = false, features = ["runtime-tokio", "tokio"], optional = true }
 mail-parser = { version = "0.11.0", optional = true }
 icalendar = { workspace = true, optional = true }
+
+# Discord/Telegram bot integrations - only included when execute feature is enabled
+serenity = { version = "0.12.4", default-features = false, features = ["client", "gateway", "model", "rustls_backend", "cache"], optional = true }
+teloxide = { version = "0.17", default-features = false, features = ["macros", "rustls", "ctrlc_handler"], optional = true }

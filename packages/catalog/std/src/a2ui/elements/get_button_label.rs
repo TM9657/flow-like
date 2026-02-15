@@ -29,7 +29,7 @@ impl NodeLogic for GetButtonLabel {
             "a2ui_get_button_label",
             "Get Button Label",
             "Gets the label text of a button element",
-            "A2UI/Elements/Button",
+            "UI/Elements/Button",
         );
         node.add_icon("/flow/icons/a2ui.svg");
 

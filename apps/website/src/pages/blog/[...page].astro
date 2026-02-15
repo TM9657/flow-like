@@ -2,7 +2,7 @@
 import { getCollection } from 'astro:content';
 import PostCard from '../../components/post-card.astro';
 import "@tm9657/flow-like-ui/global.css";
-import "../../styles/Blog.css";
+import "../../styles/blog.css";
 import BlogLayout from '../../layouts/Blog-Layout.astro';
 import type { GetStaticPaths } from 'astro';
 
@@ -17,46 +17,70 @@ const { page } = Astro.props;
 const first = page.data[0];
 const rest = page.data.slice(1);
 ---
-<BlogLayout data={{ title: "Blog", description: "Latest blog posts", slug: "blog" }}>
-  <main class="mx-auto max-w-4xl p-2 flex grow flex-col items-start justify-start gap-8">
-    <h1 class="sr-only">Blog</h1>
+<BlogLayout data={{ title: "Blog", description: "Latest news, releases, and tutorials from the Flow-Like team.", slug: "blog" }}>
+  <div class="mx-auto w-full max-w-6xl px-4 sm:px-6 lg:px-8 pb-12 sm:pb-14 lg:pb-16">
+    <header class="mb-10 rounded-2xl border border-border/50 bg-card/50 p-7 text-center backdrop-blur-sm sm:mb-12 sm:p-9 lg:p-11">
+      <p class="mb-3 text-[11px] font-medium tracking-[0.3em] uppercase text-primary">Flow-Like Blog</p>
+      <h1 class="text-4xl font-bold tracking-tight sm:text-5xl lg:text-6xl">
+        Latest Updates
+      </h1>
+      <p class="mx-auto mt-4 max-w-3xl text-base leading-relaxed text-muted-foreground sm:text-lg">
+        Releases, deep-dives, comparisons, and tutorials.
+      </p>
+    </header>
 
-    {first && <PostCard entry={first} variant="lead" />}
+    <div class="space-y-8 sm:space-y-9 lg:space-y-10">
+      {first && <PostCard entry={first} variant="lead" />}
 
-    <section class="mt-6 flex flex-col gap-8">
-      {rest.map(p => <PostCard entry={p} variant="compact" />)}
-    </section>
+      {rest.length > 0 && (
+        <section class="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+          {rest.map(p => <PostCard entry={p} variant="compact" />)}
+        </section>
+      )}
+    </div>
 
     {page.lastPage > 1 && (
-      <nav class="mt-10 flex gap-2 items-center" aria-label="Blog pagination">
+      <nav class="flex items-center justify-center gap-2 pt-10 sm:pt-12" aria-label="Blog pagination">
         {page.url.prev && (
           <a
             href={page.url.prev}
-            class="px-3 py-1 rounded border border-zinc-300 dark:border-zinc-700 hover:bg-zinc-100 dark:hover:bg-zinc-800"
+            class="inline-flex items-center gap-1.5 rounded-full border border-border/50 px-4 py-2 text-sm font-medium text-muted-foreground transition-all hover:border-border hover:bg-muted/50 hover:text-foreground"
           >
-            Previous
+            <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
+            </svg>
+            Prev
           </a>
         )}
 
-        {Array.from({length: page.lastPage}, (_, i) => i + 1).map(i => (
-          <a
-            href={i === 1 ? '/blog' : `/blog/${i}`}
-            aria-current={i === page.currentPage ? 'page' : undefined}
-            class={`px-3 py-1 rounded border border-zinc-300 dark:border-zinc-700 hover:bg-zinc-100 dark:hover:bg-zinc-800 ${i === page.currentPage ? 'bg-zinc-200 dark:bg-zinc-700 font-medium' : ''}`}
-          >
-            {i}
-          </a>
-        ))}
+        <div class="flex items-center gap-1">
+          {Array.from({ length: page.lastPage }, (_, i) => i + 1).map(i => (
+            <a
+              href={i === 1 ? '/blog' : `/blog/${i}`}
+              aria-current={i === page.currentPage ? 'page' : undefined}
+              class={`flex h-9 w-9 items-center justify-center rounded-full text-sm font-medium transition-all ${
+                i === page.currentPage
+                  ? 'bg-primary text-primary-foreground shadow-sm'
+                  : 'text-muted-foreground hover:bg-muted/50 hover:text-foreground'
+              }`}
+            >
+              {i}
+            </a>
+          ))}
+        </div>
 
         {page.url.next && (
           <a
             href={page.url.next}
-            class="px-3 py-1 rounded border border-zinc-300 dark:border-zinc-700 hover:bg-zinc-100 dark:hover:bg-zinc-800"
+            class="inline-flex items-center gap-1.5 rounded-full border border-border/50 px-4 py-2 text-sm font-medium text-muted-foreground transition-all hover:border-border hover:bg-muted/50 hover:text-foreground"
           >
             Next
+            <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
+            </svg>
           </a>
         )}
       </nav>
     )}
-  </main>
+  </div>
 </BlogLayout>

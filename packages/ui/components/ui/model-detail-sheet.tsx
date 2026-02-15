@@ -31,6 +31,8 @@ import {
 	ModelTypeIcon,
 	formatContextLength,
 	getCapabilityIcon,
+	isEmbeddingBit,
+	supportsRemoteEmbeddingExecution,
 } from "./model-card";
 import { Progress } from "./progress";
 import {
@@ -47,12 +49,14 @@ export interface ModelDetailSheetProps {
 	bit: IBit | null;
 	open: boolean;
 	onOpenChange: (open: boolean) => void;
+	webMode?: boolean;
 }
 
 export function ModelDetailSheet({
 	bit,
 	open,
 	onOpenChange,
+	webMode = false,
 }: Readonly<ModelDetailSheetProps>) {
 	const backend = useBackend();
 	const { hub } = useHub();
@@ -235,6 +239,8 @@ export function ModelDetailSheet({
 	const contextLength = (params as ILlmParameters)?.context_length;
 	const embeddingParams = params as IEmbeddingModelParameters;
 	const isHosted = bitSize.data === 0 || isVirtualBit;
+	const canRunRemotely = supportsRemoteEmbeddingExecution(bit);
+	const isEmbeddingModel = isEmbeddingBit(bit);
 
 	return (
 		<Sheet open={open} onOpenChange={onOpenChange}>
@@ -304,6 +310,16 @@ export function ModelDetailSheet({
 								{formatContextLength(contextLength)}
 							</Badge>
 						)}
+						{canRunRemotely && (
+							<Badge className="bg-cyan-500/10 text-cyan-700 border-cyan-500/30">
+								Remote
+							</Badge>
+						)}
+						{isEmbeddingModel && !canRunRemotely && (
+							<Badge className="bg-zinc-500/10 text-zinc-600 border-zinc-500/30">
+								Local only
+							</Badge>
+						)}
 						{tierInfo.isRestricted && tierInfo.requiredTier && (
 							<Badge className="bg-amber-500/10 text-amber-600 border-amber-500/30">
 								{tierInfo.requiredTier} Required
@@ -357,24 +373,26 @@ export function ModelDetailSheet({
 
 					{/* Actions */}
 					<div className="flex flex-col gap-2 pt-2">
-						<Button
-							onClick={handleDownload}
-							variant={isInstalled.data ? "destructive" : "default"}
-							className="w-full"
-							disabled={progress !== undefined}
-						>
-							{isInstalled.data ? (
-								<>
-									<TrashIcon className="h-4 w-4 mr-2" />
-									Remove Download
-								</>
-							) : (
-								<>
-									<DownloadCloudIcon className="h-4 w-4 mr-2" />
-									Download ({humanFileSize(bitSize.data ?? 0)})
-								</>
-							)}
-						</Button>
+						{!webMode && !isHosted && (
+							<Button
+								onClick={handleDownload}
+								variant={isInstalled.data ? "destructive" : "default"}
+								className="w-full"
+								disabled={progress !== undefined}
+							>
+								{isInstalled.data ? (
+									<>
+										<TrashIcon className="h-4 w-4 mr-2" />
+										Remove Download
+									</>
+								) : (
+									<>
+										<DownloadCloudIcon className="h-4 w-4 mr-2" />
+										Download ({humanFileSize(bitSize.data ?? 0)})
+									</>
+								)}
+							</Button>
+						)}
 						<Button
 							onClick={handleToggleProfile}
 							variant="outline"

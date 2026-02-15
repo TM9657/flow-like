@@ -15,12 +15,15 @@ export interface IOAuthCheckResult {
 }
 
 export interface IEventState {
+	/** Whether events always execute remotely (server-side). When true, secrets are handled server-side and don't need to be prompted or sent from the client. */
+	readonly alwaysRemote?: boolean;
+
 	getEvent(
 		appId: string,
 		eventId: string,
 		version?: [number, number, number],
 	): Promise<IEvent>;
-	getEvents(appId: string): Promise<IEvent[]>;
+	getEvents(appId: string, force?: boolean): Promise<IEvent[]>;
 	getEventVersions(
 		appId: string,
 		eventId: string,
@@ -60,6 +63,16 @@ export interface IEventState {
 		onEventId?: (id: string) => void,
 		cb?: (event: IIntercomEvent[]) => void,
 		skipConsentCheck?: boolean,
+	): Promise<ILogMetadata | undefined>;
+
+	/** Execute an event remotely via the server-side SSE invoke endpoint */
+	executeEventRemote?(
+		appId: string,
+		eventId: string,
+		payload: IRunPayload,
+		streamState?: boolean,
+		onEventId?: (id: string) => void,
+		cb?: (event: IIntercomEvent[]) => void,
 	): Promise<ILogMetadata | undefined>;
 
 	cancelExecution(runId: string): Promise<void>;

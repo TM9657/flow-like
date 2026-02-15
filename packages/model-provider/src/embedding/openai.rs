@@ -188,6 +188,7 @@ mod tests {
             languages: vec!["en".to_string()],
             pooling: Pooling::None,
             vector_length: 3048,
+            remote: None,
         };
         let api_key = std::env::var("OPENAI_API_EMBEDDING_KEY").unwrap();
         let config = ModelProviderConfiguration {
@@ -243,6 +244,7 @@ mod tests {
             languages: vec!["en".to_string()],
             pooling: Pooling::None,
             vector_length: 3048,
+            remote: None,
         };
         let api_key = std::env::var("OPENAI_API_EMBEDDING_KEY").unwrap();
         let config = ModelProviderConfiguration {
@@ -293,6 +295,7 @@ mod tests {
             languages: vec!["en".to_string()],
             pooling: Pooling::None,
             vector_length: 3048,
+            remote: None,
         };
 
         let model = OpenAIEmbeddingModel::new(&provider, &config).await.unwrap();

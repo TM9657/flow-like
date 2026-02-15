@@ -13,6 +13,7 @@ pub mod provider;
 pub mod pull_requests;
 pub mod releases;
 pub mod search_code;
+pub mod search_issues;
 pub mod search_repos;
 pub mod workflows;
 

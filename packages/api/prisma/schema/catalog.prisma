@@ -1,10 +1,10 @@
 model Node {
   id String @id
 
-  name String
+  name        String
   description String?
-  category String
-  icon String?
+  category    String
+  icon        String?
 
   bitId String @unique
 

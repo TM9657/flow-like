@@ -13,6 +13,27 @@ use axum::{
 use sea_orm::{ActiveModelTrait, ColumnTrait, EntityTrait, QueryFilter, TransactionTrait};
 
 /// Users are allowed to remove other users if they are admin. If the remove themselfes they are allowed to do so regardless of their role
+#[utoipa::path(
+    delete,
+    path = "/apps/{app_id}/team/{sub}",
+    tag = "team",
+    description = "Remove a user from the app team.",
+    params(
+        ("app_id" = String, Path, description = "Application ID"),
+        ("sub" = String, Path, description = "User subject")
+    ),
+    responses(
+        (status = 200, description = "User removed", body = ()),
+        (status = 401, description = "Unauthorized"),
+        (status = 403, description = "Forbidden"),
+        (status = 404, description = "Not found")
+    ),
+    security(
+        ("bearer_auth" = []),
+        ("api_key" = []),
+        ("pat" = [])
+    )
+)]
 #[tracing::instrument(name = "DELETE /apps/{app_id}/team/{sub}", skip(state, user))]
 pub async fn remove_user(
     State(state): State<AppState>,

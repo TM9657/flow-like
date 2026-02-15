@@ -106,8 +106,11 @@ impl BoardCleanupLogic for BridgeLayersCleanup {
             if self.layer_pin_ids.contains(connected_to) {
                 return;
             }
-            let connected_layer = self.pin_layer.get(connected_to).cloned().flatten();
-            if connected_layer != Some(layer_id.clone()) {
+            // Skip orphaned pins (deleted nodes) - they won't be in pin_layer
+            let Some(connected_layer) = self.pin_layer.get(connected_to) else {
+                return;
+            };
+            if *connected_layer != Some(layer_id.clone()) {
                 let key = (layer_id.clone(), pin.id.clone());
                 let plan = self.bridge_plans.entry(key).or_default();
                 plan.outside_connected_to.insert(connected_to.clone());
@@ -122,8 +125,11 @@ impl BoardCleanupLogic for BridgeLayersCleanup {
             if self.layer_pin_ids.contains(depends_on) {
                 return;
             }
-            let depends_on_layer = self.pin_layer.get(depends_on).cloned().flatten();
-            if depends_on_layer != Some(layer_id.clone()) {
+            // Skip orphaned pins (deleted nodes) - they won't be in pin_layer
+            let Some(depends_on_layer) = self.pin_layer.get(depends_on) else {
+                return;
+            };
+            if *depends_on_layer != Some(layer_id.clone()) {
                 let key = (layer_id.clone(), pin.id.clone());
                 let plan = self.bridge_plans.entry(key).or_default();
                 plan.outside_depends_on.insert(depends_on.clone());

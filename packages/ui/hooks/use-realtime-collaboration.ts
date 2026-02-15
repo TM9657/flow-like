@@ -9,7 +9,8 @@ import type { IBoard } from "../lib/schema/flow/board";
 interface PeerPresence {
 	clientId: number;
 	cursor?: { x: number; y: number };
-	user: { id?: string; name: string; color: string; avatar?: string };
+	/** The sub (subject) from the auth token - use this to resolve user info via API */
+	sub?: string;
 	layerPath: string;
 	selection: { nodes: string[] };
 }
@@ -20,7 +21,8 @@ interface UseRealtimeCollaborationProps {
 	board: UseQueryResult<IBoard>;
 	version: [number, number, number] | undefined;
 	backend: any;
-	currentProfile: any;
+	/** The authenticated user's sub (subject) from the auth token */
+	sub?: string;
 	hub: any;
 	mousePosition: { x: number; y: number };
 	layerPath: string | undefined;
@@ -35,7 +37,7 @@ export function useRealtimeCollaboration({
 	board,
 	version,
 	backend,
-	currentProfile,
+	sub,
 	hub,
 	mousePosition,
 	layerPath,
@@ -65,8 +67,18 @@ export function useRealtimeCollaboration({
 		[JSON.stringify(hub.hub?.signaling)],
 	);
 
-	// Setup realtime session
+	// Track whether the session has been initialized for this board
+	const sessionInitializedRef = useRef<string | null>(null);
+
+	// Setup realtime session - only run when board identity changes, not profile updates
 	useEffect(() => {
+		const sessionKey = `${appId}:${boardId}`;
+
+		// Skip if already initialized for this board and session exists
+		if (sessionInitializedRef.current === sessionKey && sessionRef.current) {
+			return;
+		}
+
 		let disposed = false;
 		const setup = async () => {
 			try {
@@ -75,25 +87,19 @@ export function useRealtimeCollaboration({
 				if (!hasBoardData || typeof version !== "undefined") return;
 				if (offline) return;
 
-				const room = `${appId}:${boardId}`;
+				const room = sessionKey;
 				const [access, jwks] = await Promise.all([
 					backend.boardState.getRealtimeAccess(appId, boardId),
 					backend.boardState
 						.getRealtimeJwks(appId, boardId)
 						.catch(() => undefined as any),
 				]);
-				const name =
-					currentProfile.data?.name ||
-					currentProfile.data?.settings?.display_name ||
-					"Anonymous";
-				const userId = currentProfile.data?.id;
 
 				const session = await createRealtimeSession({
 					room,
 					access,
 					jwks,
-					name,
-					userId,
+					sub,
 					signalingServers,
 					onStatusChange: (status) => {
 						setConnectionStatus((prev) => {
@@ -116,6 +122,7 @@ export function useRealtimeCollaboration({
 				};
 				awarenessRef.current = session.awareness;
 				commandAwarenessRef.current = session.awareness;
+				sessionInitializedRef.current = sessionKey;
 				setAwareness(session.awareness);
 				setConnectionStatus("connected");
 			} catch (e) {
@@ -127,6 +134,7 @@ export function useRealtimeCollaboration({
 
 		return () => {
 			disposed = true;
+			sessionInitializedRef.current = null;
 			try {
 				sessionRef.current?.dispose();
 			} catch {}
@@ -136,17 +144,9 @@ export function useRealtimeCollaboration({
 			setAwareness(undefined);
 			setConnectionStatus("disconnected");
 		};
-	}, [
-		backend,
-		appId,
-		boardId,
-		hasBoardData,
-		version,
-		currentProfile.data?.id,
-		currentProfile.data?.name,
-		signalingServers,
-		commandAwarenessRef,
-	]);
+		// Only depend on board identity and essential data, not profile updates
+		// Profile updates are handled by a separate effect that updates awareness
+	}, [backend, appId, boardId, hasBoardData, version, signalingServers]);
 
 	// Update peer states
 	useEffect(() => {
@@ -164,17 +164,11 @@ export function useRealtimeCollaboration({
 				const isSelf = clientId === awareness.clientID;
 				const isInvalid = invalidPeers?.has(clientId) ?? false;
 				if (isSelf || isInvalid) return;
-				const user = state?.user ?? {};
 				const cursor = state?.cursor;
 				next.push({
 					clientId,
 					cursor: cursor ? { x: cursor.x, y: cursor.y } : undefined,
-					user: {
-						id: user?.id,
-						name: user?.name ?? "User",
-						color: user?.color ?? "#22c55e",
-						avatar: user?.avatar,
-					},
+					sub: state?.sub,
 					layerPath: state?.layerPath ?? "root",
 					selection: {
 						nodes: normalizeSelectionNodes(state?.selection?.nodes),
@@ -249,25 +243,6 @@ export function useRealtimeCollaboration({
 		awareness.setLocalStateField("selection", { nodes: [] });
 	}, [awareness]);
 
-	// Update user info
-	useEffect(() => {
-		if (!awareness) return;
-		const profileName =
-			currentProfile.data?.name ?? currentProfile.data?.settings?.display_name;
-		if (!profileName && !currentProfile.data?.id) return;
-		const localUser = awareness.getLocalState()?.user ?? {};
-		awareness.setLocalStateField("user", {
-			...localUser,
-			name: profileName ?? localUser.name ?? "Anonymous",
-			id: currentProfile.data?.id ?? localUser.id,
-		});
-	}, [
-		awareness,
-		currentProfile.data?.id,
-		currentProfile.data?.name,
-		currentProfile.data?.settings?.display_name,
-	]);
-
 	// Update remote selections on nodes
 	useEffect(() => {
 		const map = new Map<string, RemoteSelectionParticipant[]>();
@@ -277,9 +252,7 @@ export function useRealtimeCollaboration({
 				if (!nodeId) continue;
 				const participant: RemoteSelectionParticipant = {
 					clientId: peer.clientId,
-					userId: peer.user.id,
-					name: peer.user.name,
-					color: peer.user.color,
+					sub: peer.sub,
 				};
 				const existing = map.get(nodeId) ?? [];
 				map.set(nodeId, [...existing, participant]);
@@ -293,7 +266,7 @@ export function useRealtimeCollaboration({
 					.slice()
 					.sort((a, b) =>
 						a.clientId === b.clientId
-							? a.name.localeCompare(b.name)
+							? (a.sub ?? "").localeCompare(b.sub ?? "")
 							: a.clientId - b.clientId,
 					),
 			);
@@ -313,13 +286,7 @@ export function useRealtimeCollaboration({
 				for (let i = 0; i < participants.length; i++) {
 					const p = participants[i];
 					const prevP = prev[i];
-					if (
-						!prevP ||
-						p.clientId !== prevP.clientId ||
-						p.userId !== prevP.userId ||
-						p.name !== prevP.name ||
-						p.color !== prevP.color
-					) {
+					if (!prevP || p.clientId !== prevP.clientId || p.sub !== prevP.sub) {
 						hasChanges = true;
 						break;
 					}

@@ -28,6 +28,7 @@ import {
 	DropdownMenuSeparator,
 	DropdownMenuShortcut,
 	DropdownMenuTrigger,
+	FlowBackground,
 	GlobalPermission,
 	IBitTypes,
 	Input,
@@ -59,17 +60,18 @@ import {
 import type { ISettingsProfile } from "@tm9657/flow-like-ui/types";
 import {
 	BadgeCheck,
+	BarChart3,
 	BellIcon,
 	BookOpenIcon,
 	BugIcon,
 	ChevronRight,
 	ChevronsUpDown,
-	Code2Icon,
 	CreditCard,
 	Edit3Icon,
 	ExternalLinkIcon,
 	HeartIcon,
 	KeyIcon,
+	KeyRoundIcon,
 	LayoutDashboardIcon,
 	LibraryIcon,
 	LogInIcon,
@@ -89,7 +91,7 @@ import {
 import { useTheme } from "next-themes";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useAuth } from "react-oidc-context";
 import { toast } from "sonner";
 import { fetcher } from "../lib/api";
@@ -137,23 +139,23 @@ const data = {
 				// },
 			],
 		},
-		{
-			title: "Developer",
-			url: "/settings/registry",
-			icon: Code2Icon,
-			isActive: false,
-			permission: false,
-			items: [
-				{
-					title: "Installed",
-					url: "/settings/registry/installed",
-				},
-				{
-					title: "Explore",
-					url: "/settings/registry/explore",
-				},
-			],
-		},
+		// {
+		// 	title: "Developer",
+		// 	url: "/settings/registry",
+		// 	icon: Code2Icon,
+		// 	isActive: false,
+		// 	permission: false,
+		// 	items: [
+		// 		{
+		// 			title: "Installed",
+		// 			url: "/settings/registry/installed",
+		// 		},
+		// 		{
+		// 			title: "Explore",
+		// 			url: "/settings/registry/explore",
+		// 		},
+		// 	],
+		// },
 		// {
 		// 	title: "Documentation",
 		// 	url: "https://docs.flow-like.com/",
@@ -232,6 +234,19 @@ const data = {
 				},
 			],
 		},
+		{
+			title: "Sinks",
+			url: "/admin/sinks",
+			icon: KeyRoundIcon,
+			permission: true,
+			items: [
+				{
+					title: "Service Tokens",
+					url: "/admin/sinks",
+					permission: GlobalPermission.Admin,
+				},
+			],
+		},
 	],
 };
 
@@ -253,15 +268,104 @@ export function AppSidebar({
 	return (
 		<SidebarProvider defaultOpen={defaultOpen}>
 			<InnerSidebar />
-			<main className="w-full h-dvh flex flex-col overflow-hidden">
+			<main
+				className="w-full h-dvh flex flex-col overflow-hidden"
+				style={{
+					paddingTop: "var(--fl-safe-top, env(safe-area-inset-top, 0px))",
+				}}
+			>
 				<MobileHeaderProvider>
 					<MobileHeader />
-					<SidebarInset className="bg-gradient-to-br from-background via-background to-muted/20 flex flex-col flex-1 min-h-0 h-full overflow-hidden">
-						{children}
+					<SidebarInset
+						className="relative flex flex-col flex-1 min-h-0 h-full overflow-hidden"
+					>
+						<FlowBackground
+							intensity="subtle"
+							interactive
+							className="flex flex-col flex-1 min-h-0 h-full"
+						>
+							{children}
+						</FlowBackground>
 					</SidebarInset>
 				</MobileHeaderProvider>
 			</main>
 		</SidebarProvider>
+	);
+}
+
+function IOSQuickMenuTrigger() {
+	const { isMobile, openMobile, toggleSidebar } = useSidebar();
+	const touchStartRef = useRef<{ x: number; y: number } | null>(null);
+
+	const isIosTauri = useMemo(() => {
+		if (typeof window === "undefined" || typeof navigator === "undefined") {
+			return false;
+		}
+
+		const isTauri =
+			"__TAURI__" in (window as any) ||
+			"__TAURI_IPC__" in (window as any) ||
+			"__TAURI_INTERNALS__" in (window as any);
+		const isIOS =
+			/iPad|iPhone|iPod/.test(navigator.userAgent) ||
+			(navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+
+		return isTauri && isIOS;
+	}, []);
+
+	useEffect(() => {
+		if (!isIosTauri || !isMobile) return;
+
+		const onTouchStart = (event: TouchEvent) => {
+			const t = event.changedTouches[0];
+			if (!t) return;
+			touchStartRef.current = { x: t.clientX, y: t.clientY };
+		};
+
+		const onTouchEnd = (event: TouchEvent) => {
+			if (openMobile) return;
+			const start = touchStartRef.current;
+			const t = event.changedTouches[0];
+			if (!start || !t) return;
+
+			const dx = t.clientX - start.x;
+			const dy = Math.abs(t.clientY - start.y);
+
+			// Left-edge swipe opens the menu if the header button is hard to tap.
+			if (start.x <= 24 && dx > 40 && dy < 30) {
+				toggleSidebar();
+			}
+		};
+
+		window.addEventListener("touchstart", onTouchStart, { passive: true });
+		window.addEventListener("touchend", onTouchEnd, { passive: true });
+
+		return () => {
+			window.removeEventListener("touchstart", onTouchStart);
+			window.removeEventListener("touchend", onTouchEnd);
+		};
+	}, [isIosTauri, isMobile, openMobile, toggleSidebar]);
+
+	if (!isIosTauri || !isMobile || openMobile) return null;
+
+	return (
+		<div
+			className="md:hidden fixed left-3 z-[70]"
+			style={{ top: "calc(var(--fl-safe-top, 0px) + 10px)" }}
+		>
+			<Button
+				size="icon"
+				variant="outline"
+				className="h-10 w-10 rounded-lg shadow-lg bg-card/95 backdrop-blur supports-backdrop-filter:bg-background/70"
+				onClick={toggleSidebar}
+				onTouchStart={(event) => {
+					event.stopPropagation();
+				}}
+				aria-label="Open menu"
+			>
+				<SidebarOpenIcon className="h-4 w-4" />
+			</Button>
+		</div>
 	);
 }
 
@@ -432,7 +536,10 @@ function Profiles() {
 	const backend = useBackend();
 	const invalidate = useInvalidateInvoke();
 	const { isMobile } = useSidebar();
-	const profiles = useTauriInvoke<ISettingsProfile[]>("get_profiles", {});
+	const profiles = useTauriInvoke<Record<string, ISettingsProfile>>(
+		"get_profiles",
+		{},
+	);
 	const currentProfile = useInvoke(
 		backend.userState.getSettingsProfile,
 		backend.userState,
@@ -606,10 +713,17 @@ function NavMain({
 	}[];
 }>) {
 	const backend = useBackend();
+	const auth = useAuth();
 	const router = useRouter();
 	const pathname = usePathname();
 	const { open } = useSidebar();
-	const info = useInvoke(backend.userState.getInfo, backend.userState, []);
+	const info = useInvoke(
+		backend.userState.getInfo,
+		backend.userState,
+		[],
+		Boolean(auth?.isAuthenticated),
+		[auth?.user?.profile?.sub, auth?.isAuthenticated],
+	);
 
 	return (
 		<>
@@ -655,7 +769,7 @@ function NavMain({
 													if (e.button === 1) {
 														e.preventDefault();
 														try {
-															const _view = new WebviewWindow(
+															const webview = new WebviewWindow(
 																`sidebar-${createId()}`,
 																{
 																	url: item.url,
@@ -667,6 +781,13 @@ function NavMain({
 																	height: 800,
 																},
 															);
+															// Listen for webview creation errors
+															webview.once("tauri://error", (error) => {
+																console.error(
+																	"Failed to open new window:",
+																	error,
+																);
+															});
 														} catch (error) {
 															console.error(
 																"Failed to open new window:",
@@ -840,8 +961,16 @@ export function NavUser({
 		backend.userState.getProfile,
 		backend.userState,
 		[],
+		Boolean(auth?.isAuthenticated),
+		[auth?.user?.profile?.sub, auth?.isAuthenticated],
 	);
-	const info = useInvoke(backend.userState.getInfo, backend.userState, []);
+	const info = useInvoke(
+		backend.userState.getInfo,
+		backend.userState,
+		[],
+		Boolean(auth?.isAuthenticated),
+		[auth?.user?.profile?.sub, auth?.isAuthenticated],
+	);
 
 	const displayName: string = useMemo(() => {
 		if (!info.data) return "Offline";
@@ -857,8 +986,8 @@ export function NavUser({
 		backend.userState.getNotifications,
 		backend.userState,
 		[],
-		true,
-		[],
+		Boolean(auth?.isAuthenticated),
+		[auth?.user?.profile?.sub, auth?.isAuthenticated],
 		0, // staleTime: 0 to always refetch on mount
 	);
 	// Show total unread count (includes invites + local workflow notifications)
@@ -984,6 +1113,12 @@ export function NavUser({
 											Active Sinks
 										</DropdownMenuItem>
 									</a>
+									<a href="/settings/statistics">
+										<DropdownMenuItem className="gap-2 p-2">
+											<BarChart3 className="size-4" />
+											Board Statistics
+										</DropdownMenuItem>
+									</a>
 								</DropdownMenuGroup>
 								<DropdownMenuSeparator />
 								<DropdownMenuItem
@@ -1001,7 +1136,13 @@ export function NavUser({
 							<DropdownMenuItem
 								className="gap-2"
 								onClick={async () => {
-									await auth?.signinRedirect();
+									try {
+										console.log("Signing in...");
+										await auth?.signinRedirect();
+										console.log("Sign-in initiated.");
+									} catch (error) {
+										console.error("Sign-in failed:", error);
+									}
 								}}
 							>
 								<LogInIcon className="size-4" />

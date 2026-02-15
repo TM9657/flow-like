@@ -6,6 +6,8 @@ edition = "2024"
 [features]
 default = []
 local-ml = ["flow-like-catalog-core/local-ml"]
+remote-ml = ["flow-like-catalog-core/remote-ml"]
+tauri = ["flow-like-catalog-core/tauri"]
 # Execution feature - enables heavy dependencies for node execution
 execute = [
     "flow-like-catalog-core/execute",
@@ -13,6 +15,7 @@ execute = [
     "dep:rig-core",
     "dep:rmcp",
     "dep:jsonschema",
+    "dep:copilot-sdk",
 ]
 
 [dependencies]
@@ -35,4 +38,5 @@ async-trait.workspace = true
 rig-core = { workspace = true, optional = true }
 rmcp = { workspace = true, optional = true }
 jsonschema = { workspace = true, optional = true }
+copilot-sdk = { workspace = true, optional = true }
 regex.workspace = true

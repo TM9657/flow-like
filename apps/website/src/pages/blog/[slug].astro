@@ -1,7 +1,7 @@
 ---
 import { getCollection } from "astro:content";
 import "@tm9657/flow-like-ui/global.css";
-import "../../styles/Blog.css";
+import "../../styles/blog.css";
 import BlogLayout from "../../layouts/Blog-Layout.astro";
 import BlogNewsletter from "../../components/blog-newsletter.astro";
 import { LuCopy, LuShare } from "react-icons/lu";
@@ -19,142 +19,144 @@ export async function getStaticPaths() {
 const { entry } = Astro.props;
 const { Content, headings } = await entry.render();
 const { title, description, date, tags = [], cover } = entry.data;
+const postCover = cover;
 
 const site = Astro.site ?? import.meta.env.SITE;
 const canonical = site ? new URL(Astro.url.pathname, site).toString() : "";
 ---
 
 <BlogLayout data={entry.data} content={Content}>
-  <a
-    href="/blog/"
-    class="inline-flex items-center text-sm text-muted-foreground hover:text-foreground transition mb-6"
-  >
-    ← Back to blog
-  </a>
+  <div class="mx-auto w-full max-w-6xl px-4 sm:px-6 lg:px-8 pb-12 sm:pb-14 lg:pb-16">
+    <a
+      href="/blog/"
+      class="mb-8 inline-flex items-center gap-2 rounded-full border border-border/60 bg-background/80 px-3.5 py-1.5 text-sm text-muted-foreground transition hover:border-border hover:text-foreground"
+    >
+      <span aria-hidden="true">←</span>
+      Back to blog
+    </a>
 
-  <!-- Header with optional cover -->
-  <header class="mb-8">
-    <div class="flex flex-col md:flex-row gap-5 items-center">
-      {cover && (
-        <div class="shrink-0 overflow-hidden rounded-lg border border-zinc-200 dark:border-zinc-800 w-32 md:w-36">
+    <header class="mb-10 overflow-hidden rounded-2xl border border-border/50 bg-card/50 backdrop-blur-sm">
+      {postCover && (
+        <div class="relative overflow-hidden border-b border-border/40">
           <img
-            src={cover}
+            src={postCover}
             alt=""
-            class="w-full aspect-square object-cover"
+            class="h-56 w-full object-cover sm:h-64 md:h-72 lg:h-80"
             loading="eager"
           />
+          <div class="absolute inset-0 bg-gradient-to-t from-black/25 via-transparent to-transparent" />
         </div>
       )}
-      <div class="flex-1 min-w-0">
-        <h1 class="text-xl md:text-2xl font-semibold tracking-tight leading-snug mt-0! pt-0!">
+
+      <div class="p-6 sm:p-8 lg:p-10">
+        <h1 class="m-0 text-3xl font-bold tracking-tight leading-[1.08] sm:text-4xl lg:text-5xl">
           {title}
         </h1>
-        <p class="mt-1.5 text-muted-foreground text-sm line-clamp-2">
-          {description}
-        </p>
-        <div class="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
-          <time datetime={new Date(date).toISOString()}>
+
+        {description && (
+          <p class="mt-4 max-w-4xl text-base leading-relaxed text-muted-foreground sm:text-lg">
+            {description}
+          </p>
+        )}
+
+        <div class="mt-5 flex flex-wrap items-center gap-x-3 gap-y-2 text-sm text-muted-foreground">
+          <time datetime={new Date(date).toISOString()} class="whitespace-nowrap">
             {new Date(date).toLocaleDateString("en-US", {
               year: "numeric",
               month: "short",
               day: "numeric",
             })}
           </time>
-          <span class="text-zinc-300 dark:text-zinc-700">·</span>
-          <span id="reading-time">— min read</span>
-          {tags.length > 0 && (
-            <>
-              <span class="text-zinc-300 dark:text-zinc-700">·</span>
-              <div class="flex flex-wrap gap-1.5">
-                {tags.map((t: string) => (
-                  <a
-                    href={`/tags/${encodeURIComponent(t)}/`}
-                    class="text-muted-foreground hover:text-foreground transition"
-                  >
-                    #{t}
-                  </a>
-                ))}
-              </div>
-            </>
-          )}
+          <span aria-hidden="true" class="text-zinc-300 dark:text-zinc-700">·</span>
+          <span id="reading-time" class="whitespace-nowrap">— min read</span>
         </div>
-      </div>
-    </div>
-  </header>
 
-  <hr class="mb-8 border-zinc-200 dark:border-zinc-800" />
-
-  <!-- Content grid -->
-  <div class="grid gap-8 lg:grid-cols-[1fr_220px]">
-    <article
-      id="post-content"
-      class="prose prose-zinc dark:prose-invert max-w-none prose-headings:scroll-mt-20 first-h1-hidden"
-    >
-      <Content />
-
-      <!-- Newsletter CTA -->
-      <BlogNewsletter />
-
-      <hr class="my-8" />
-      <div class="flex flex-wrap gap-2 justify-between items-center not-prose text-sm">
-        <div class="flex flex-wrap gap-2">
-          {
-            tags.map((t: string) => (
+        {tags.length > 0 && (
+          <div class="mt-4 flex flex-wrap gap-2">
+            {tags.map((t: string) => (
               <a
                 href={`/tags/${encodeURIComponent(t)}/`}
-                class="text-muted-foreground hover:text-foreground transition"
+                class="inline-flex items-center rounded-full border border-border/60 bg-background/60 px-3 py-1 text-xs font-medium text-muted-foreground transition hover:border-border hover:text-foreground"
               >
                 #{t}
               </a>
-            ))
-          }
-        </div>
-        <div class="flex items-center gap-2">
-          <button
-            data-copy-link
-            class="rounded-md border px-2.5 py-1.5 text-xs hover:bg-accent transition flex flex-row items-center gap-2"
-          >
-            <LuCopy />
-            Copy link
-          </button>
-          <button
-            data-web-share
-            class="rounded-md border px-2.5 py-1.5 text-xs hover:bg-accent transition flex flex-row items-center gap-2"
-          >
-            <LuShare />
-            Share
-          </button>
-        </div>
+            ))}
+          </div>
+        )}
       </div>
-    </article>
+    </header>
 
-    <!-- TOC sidebar -->
-    <aside class="hidden lg:block">
-      {
-        headings?.length > 0 && (
-          <nav class="sticky top-24 text-sm">
-            <p class="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-3">
-              On this page
-            </p>
-            <ul class="space-y-1.5">
-              {headings
-                .filter((h) => h.depth <= 3 && h.slug)
-                .map((h) => (
-                  <li class="toc-item" style={`padding-left: ${(h.depth - 1) * 12}px`}>
-                    <a
-                      href={`#${h.slug}`}
-                      data-slug={h.slug}
-                      class="toc-link block py-1 text-muted-foreground hover:text-foreground transition text-[13px]"
-                    >
-                      {h.text}
-                    </a>
-                  </li>
-                ))}
-            </ul>
-          </nav>
-        )
-      }
-    </aside>
+    <div class="mb-10 border-t border-border/50" />
+
+    <div class="grid gap-10 lg:grid-cols-[minmax(0,1fr)_260px] xl:gap-12 xl:grid-cols-[minmax(0,1fr)_280px]">
+      <article
+        id="post-content"
+        class="post-prose prose prose-zinc dark:prose-invert max-w-none prose-headings:scroll-mt-20 first-h1-hidden"
+      >
+        <Content />
+
+        <BlogNewsletter />
+
+        <hr class="my-8" />
+        <div class="not-prose flex flex-wrap items-center justify-between gap-3 text-sm">
+          <div class="flex flex-wrap gap-2.5">
+            {
+              tags.map((t: string) => (
+                <a
+                  href={`/tags/${encodeURIComponent(t)}/`}
+                  class="text-muted-foreground transition hover:text-foreground"
+                >
+                  #{t}
+                </a>
+              ))
+            }
+          </div>
+          <div class="flex items-center gap-2">
+            <button
+              data-copy-link
+              class="flex flex-row items-center gap-2 rounded-md border px-2.5 py-1.5 text-xs transition hover:bg-accent"
+            >
+              <LuCopy />
+              Copy link
+            </button>
+            <button
+              data-web-share
+              class="flex flex-row items-center gap-2 rounded-md border px-2.5 py-1.5 text-xs transition hover:bg-accent"
+            >
+              <LuShare />
+              Share
+            </button>
+          </div>
+        </div>
+      </article>
+
+      <aside class="hidden lg:block">
+        {
+          headings?.length > 0 && (
+            <nav class="sticky top-24 rounded-xl border border-border/50 bg-card/40 p-4 text-sm backdrop-blur-sm">
+              <p class="mb-3 text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                On this page
+              </p>
+              <ul class="space-y-1.5">
+                {headings
+                  .filter((h) => h.depth <= 3 && h.slug)
+                  .map((h) => (
+                    <li class="toc-item" style={`padding-left: ${(h.depth - 1) * 10}px`}>
+                      <a
+                        href={`#${h.slug}`}
+                        data-slug={h.slug}
+                        class="toc-link block rounded-md px-2 py-1 text-[13px] text-muted-foreground transition hover:bg-muted/60 hover:text-foreground"
+                      >
+                        {h.text}
+                      </a>
+                    </li>
+                  ))}
+              </ul>
+            </nav>
+          )
+        }
+      </aside>
+    </div>
   </div>
 
   <div class="fixed inset-x-0 top-0 z-40 h-1">
@@ -361,6 +363,10 @@ const canonical = site ? new URL(Astro.url.pathname, site).toString() : "";
   </script>
 
   <style>
+    .post-prose {
+      padding-inline: 0;
+    }
+
     .toc-link.font-medium {
       color: var(--foreground);
     }

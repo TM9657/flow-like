@@ -33,9 +33,15 @@ spec:
             pathType: {{ .pathType }}
             backend:
               service:
+                {{- if eq .service "web" }}
+                name: {{ include "flow-like.fullname" $ }}-web
+                port:
+                  number: {{ $.Values.web.service.port }}
+                {{- else }}
                 name: {{ include "flow-like.fullname" $ }}-api
                 port:
                   number: {{ $.Values.api.service.port }}
+                {{- end }}
           {{- end }}
     {{- end }}
 {{- end }}

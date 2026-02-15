@@ -26,7 +26,7 @@ impl NodeLogic for SetChartLayout {
             "a2ui_set_chart_layout",
             "Set Chart Layout",
             "Sets the layout configuration for a Plotly chart",
-            "A2UI/Elements/Charts",
+            "UI/Elements/Charts",
         );
         node.add_icon("/flow/icons/a2ui.svg");
 

@@ -250,6 +250,23 @@ function useManagedSurface(initialSurface: Surface | null, appId?: string) {
 						};
 						break;
 					}
+					case "setGeoMapViewport": {
+						const viewport = updateValue.viewport as
+							| { literalJson?: string }
+							| undefined;
+						const componentData = component.component as unknown as Record<
+							string,
+							unknown
+						>;
+						updatedComponent = {
+							...component,
+							component: {
+								...componentData,
+								viewport,
+							} as unknown as SurfaceComponent["component"],
+						};
+						break;
+					}
 					case "setChartData": {
 						const data = updateValue.data;
 						const componentData = component.component as unknown as Record<
@@ -974,7 +991,7 @@ function PageInterfaceInner({
 	const customCss = page?.canvasSettings?.customCss;
 
 	return (
-		<div className="h-full w-full overflow-hidden bg-background">
+		<div className="h-full w-full overflow-auto bg-background">
 			{customCss && (
 				<style
 					{...createSanitizedStyleProps(
@@ -984,14 +1001,14 @@ function PageInterfaceInner({
 			)}
 			<div
 				data-page-id={pageContainerId}
-				className="h-full flex flex-col"
+				className="min-h-full flex flex-col"
 				style={canvasStyle}
 			>
 				<DataProvider initialData={[]}>
 					<A2UIRenderer
 						surface={surface}
 						widgetRefs={page?.widgetRefs}
-						className="h-full w-full flex-1 overflow-hidden"
+						className="w-full flex-1"
 						appId={appId}
 						boardId={routeEvent?.board_id}
 						onA2UIMessage={handleA2UIMessage}

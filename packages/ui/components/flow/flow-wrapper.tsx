@@ -13,6 +13,7 @@ export function FlowWrapper({
 	version,
 	extraDockItems,
 	renderOverlay,
+	sub,
 }: Readonly<{
 	boardId: string;
 	appId: string;
@@ -27,6 +28,8 @@ export function FlowWrapper({
 		special?: boolean;
 	}>;
 	renderOverlay?: () => ReactNode;
+	/** The authenticated user's sub (subject) from the auth token - used for realtime collaboration */
+	sub?: string;
 }>) {
 	const mouseSensor = useSensor(MouseSensor, {
 		activationConstraint: {
@@ -96,6 +99,7 @@ export function FlowWrapper({
 				initialVersion={version}
 				extraDockItems={extraDockItems}
 				renderOverlay={renderOverlay}
+				sub={sub}
 			/>
 			<Dialog
 				open={detail !== undefined}

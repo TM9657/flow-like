@@ -4,7 +4,7 @@
 	"version": "0.0.1",
 	"scripts": {
 		"dev": "astro dev",
-		"build": "astro build",
+		"build": "NODE_OPTIONS=--max-old-space-size=8192 astro build",
 		"deploy": "bun run build && bunx wrangler pages deploy dist",
 		"deploy:force": "bun run build && bunx wrangler pages deploy dist --branch main",
 		"preview": "astro preview",

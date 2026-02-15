@@ -5,45 +5,16 @@ use flow_like::flow::{
     variable::VariableType,
 };
 use flow_like_types::{async_trait, json::json};
-use schemars::JsonSchema;
-use serde::{Deserialize, Serialize};
+#[cfg(feature = "execute")]
+use serde::Deserialize;
 
-use crate::geo::GeoCoordinate;
+use crate::geo::{
+    GeoCoordinate,
+    routing::osrm::{RouteGeometry, RouteResult},
+};
 
-#[derive(Serialize, Deserialize, Clone, Debug, JsonSchema, Default)]
-pub enum RouteProfile {
-    #[default]
-    Car,
-    Bike,
-    Foot,
-}
-
-#[derive(Serialize, Deserialize, Clone, Debug, JsonSchema, Default)]
-pub struct RouteStep {
-    pub instruction: String,
-    pub distance: f64,
-    pub duration: f64,
-    pub name: String,
-    pub maneuver_type: String,
-    pub coordinate: GeoCoordinate,
-}
-
-#[derive(Serialize, Deserialize, Clone, Debug, JsonSchema, Default)]
-pub struct RouteLeg {
-    pub distance: f64,
-    pub duration: f64,
-    pub summary: String,
-    pub steps: Vec<RouteStep>,
-}
-
-#[derive(Serialize, Deserialize, Clone, Debug, JsonSchema, Default)]
-pub struct RouteResult {
-    pub distance: f64,
-    pub duration: f64,
-    pub geometry: Vec<GeoCoordinate>,
-    pub legs: Vec<RouteLeg>,
-    pub weight_name: String,
-}
+#[cfg(feature = "execute")]
+use crate::geo::routing::osrm::{OsrmRoute, build_coordinate_string, map_osrm_routes};
 
 #[crate::register_node]
 #[derive(Default)]
@@ -103,10 +74,18 @@ impl NodeLogic for PlanRouteNode {
             "profile",
             "Profile",
             "Transportation mode: Car, Bike, or Foot",
-            VariableType::Struct,
+            VariableType::String,
         )
-        .set_schema::<RouteProfile>()
-        .set_default_value(Some(json!(RouteProfile::Car)));
+        .set_default_value(Some(json!("Car")))
+        .set_options(
+            PinOptions::new()
+                .set_valid_values(vec![
+                    "Car".to_string(),
+                    "Bike".to_string(),
+                    "Foot".to_string(),
+                ])
+                .build(),
+        );
 
         node.add_input_pin(
             "alternatives",
@@ -164,7 +143,7 @@ impl NodeLogic for PlanRouteNode {
             "Route geometry as array of coordinates",
             VariableType::Struct,
         )
-        .set_schema::<GeoCoordinate>();
+        .set_schema::<RouteGeometry>();
 
         node.set_scores(
             NodeScores::new()
@@ -189,21 +168,20 @@ impl NodeLogic for PlanRouteNode {
         let start: GeoCoordinate = context.evaluate_pin("start").await?;
         let end: GeoCoordinate = context.evaluate_pin("end").await?;
         let waypoints: Vec<GeoCoordinate> = context.evaluate_pin("waypoints").await?;
-        let profile: RouteProfile = context.evaluate_pin("profile").await?;
+        let profile: String = context.evaluate_pin("profile").await?;
         let alternatives: bool = context.evaluate_pin("alternatives").await?;
 
-        let profile_str = match profile {
-            RouteProfile::Car => "driving",
-            RouteProfile::Bike => "cycling",
-            RouteProfile::Foot => "foot",
+        let profile_str = match profile.as_str() {
+            "Car" | "car" => "driving",
+            "Bike" | "bike" => "cycling",
+            "Foot" | "foot" => "foot",
+            _ => return Err(flow_like_types::anyhow!("Unsupported profile: {}", profile)),
         };
 
-        let mut coordinates = vec![format!("{},{}", start.longitude, start.latitude)];
-        for wp in &waypoints {
-            coordinates.push(format!("{},{}", wp.longitude, wp.latitude));
-        }
-        coordinates.push(format!("{},{}", end.longitude, end.latitude));
-        let coords_str = coordinates.join(";");
+        let mut coordinates = vec![start];
+        coordinates.extend(waypoints);
+        coordinates.push(end);
+        let coords_str = build_coordinate_string(&coordinates);
 
         let client = reqwest::Client::builder()
             .user_agent("FlowLike/1.0")
@@ -232,65 +210,7 @@ impl NodeLogic for PlanRouteNode {
             ));
         }
 
-        let routes: Vec<RouteResult> = body
-            .routes
-            .unwrap_or_default()
-            .into_iter()
-            .map(|r| {
-                let geometry = r
-                    .geometry
-                    .coordinates
-                    .iter()
-                    .map(|c| GeoCoordinate::new(c[1], c[0]))
-                    .collect();
-
-                let legs = r
-                    .legs
-                    .into_iter()
-                    .map(|leg| {
-                        let steps = leg
-                            .steps
-                            .into_iter()
-                            .map(|step| RouteStep {
-                                instruction: step
-                                    .maneuver
-                                    .as_ref()
-                                    .map(|m| m.modifier.clone().unwrap_or_else(|| m.r#type.clone()))
-                                    .unwrap_or_default(),
-                                distance: step.distance,
-                                duration: step.duration,
-                                name: step.name,
-                                maneuver_type: step
-                                    .maneuver
-                                    .as_ref()
-                                    .map(|m| m.r#type.clone())
-                                    .unwrap_or_default(),
-                                coordinate: step
-                                    .maneuver
-                                    .as_ref()
-                                    .map(|m| GeoCoordinate::new(m.location[1], m.location[0]))
-                                    .unwrap_or_default(),
-                            })
-                            .collect();
-
-                        RouteLeg {
-                            distance: leg.distance,
-                            duration: leg.duration,
-                            summary: leg.summary,
-                            steps,
-                        }
-                    })
-                    .collect();
-
-                RouteResult {
-                    distance: r.distance,
-                    duration: r.duration,
-                    geometry,
-                    legs,
-                    weight_name: r.weight_name,
-                }
-            })
-            .collect();
+        let routes = map_osrm_routes(body.routes.unwrap_or_default());
 
         let primary_route = routes.first().cloned().unwrap_or_default();
         let alt_routes: Vec<RouteResult> = routes.into_iter().skip(1).collect();
@@ -323,47 +243,10 @@ impl NodeLogic for PlanRouteNode {
     }
 }
 
+#[cfg(feature = "execute")]
 #[derive(Deserialize)]
 struct OsrmResponse {
     code: String,
     message: Option<String>,
     routes: Option<Vec<OsrmRoute>>,
-}
-
-#[derive(Deserialize)]
-struct OsrmRoute {
-    distance: f64,
-    duration: f64,
-    geometry: OsrmGeometry,
-    legs: Vec<OsrmLeg>,
-    weight_name: String,
-}
-
-#[derive(Deserialize)]
-struct OsrmGeometry {
-    coordinates: Vec<Vec<f64>>,
-}
-
-#[derive(Deserialize)]
-struct OsrmLeg {
-    distance: f64,
-    duration: f64,
-    summary: String,
-    steps: Vec<OsrmStep>,
-}
-
-#[derive(Deserialize)]
-struct OsrmStep {
-    distance: f64,
-    duration: f64,
-    name: String,
-    maneuver: Option<OsrmManeuver>,
-}
-
-#[derive(Deserialize)]
-struct OsrmManeuver {
-    #[serde(rename = "type")]
-    r#type: String,
-    modifier: Option<String>,
-    location: Vec<f64>,
 }

@@ -1,0 +1,50 @@
+---
+import { tCommon } from "../../i18n/locales/pages/common";
+
+interface Props {
+  lang: string;
+}
+
+const { lang } = Astro.props;
+const t = (key: string) => tCommon(lang, key);
+---
+
+<section class="py-16 md:py-24">
+  <div class="max-w-4xl mx-auto px-4">
+    <div class="rounded-2xl bg-card border border-border p-8 md:p-12 text-center">
+      <h2 class="text-2xl md:text-3xl font-bold mb-4">
+        {t("pricing.ctaSection.title")}
+      </h2>
+
+      <p class="text-muted-foreground mb-8 max-w-xl mx-auto">
+        {t("pricing.ctaSection.description")}
+      </p>
+
+      <div class="flex flex-col sm:flex-row items-center justify-center gap-4 mb-6">
+        <a
+          href="mailto:hello@flow-like.com?subject=24-Hour%20Solution%20Request"
+          class="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-primary text-primary-foreground font-semibold hover:bg-primary/90 transition-colors"
+        >
+          <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
+          </svg>
+          {t("pricing.ctaSection.24h")}
+        </a>
+
+        <a
+          href="mailto:enterprise@flow-like.com?subject=Enterprise%20Inquiry"
+          class="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-muted hover:bg-muted/80 font-semibold transition-colors"
+        >
+          <svg class="w-4 h-4 text-muted-foreground" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+          </svg>
+          {t("pricing.ctaSection.enterprise")}
+        </a>
+      </div>
+
+      <p class="text-sm text-muted-foreground">
+        {t("pricing.ctaSection.startingAt")}
+      </p>
+    </div>
+  </div>
+</section>

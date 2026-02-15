@@ -29,7 +29,7 @@ impl ToProto<flow_like_types::proto::App> for App {
             updated_at: Some(Timestamp::from(self.updated_at)),
             widget_ids: self.widget_ids.clone(),
             page_ids: self.page_ids.clone(),
-            route_mappings: self.route_mappings.clone(),
+            route_mappings: std::collections::HashMap::new(),
         }
     }
 }
@@ -67,7 +67,6 @@ impl FromProto<flow_like_types::proto::App> for App {
                 .unwrap_or(SystemTime::UNIX_EPOCH),
             widget_ids: proto.widget_ids,
             page_ids: proto.page_ids,
-            route_mappings: proto.route_mappings,
             app_state: None,
             frontend: None,
         }

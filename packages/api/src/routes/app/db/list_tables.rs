@@ -7,6 +7,25 @@ use axum::{
     extract::{Path, State},
 };
 
+#[utoipa::path(
+    get,
+    path = "/apps/{app_id}/db",
+    tag = "database",
+    description = "List available tables in the app database.",
+    params(
+        ("app_id" = String, Path, description = "Application ID")
+    ),
+    responses(
+        (status = 200, description = "List tables", body = Vec<String>),
+        (status = 401, description = "Unauthorized"),
+        (status = 403, description = "Forbidden")
+    ),
+    security(
+        ("bearer_auth" = []),
+        ("api_key" = []),
+        ("pat" = [])
+    )
+)]
 #[tracing::instrument(name = "GET /apps/{app_id}/db", skip(state, user))]
 pub async fn list_tables(
     State(state): State<AppState>,

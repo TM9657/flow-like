@@ -4,20 +4,35 @@ use crate::{error::ApiError, middleware::jwt::AppUser, state::AppState};
 use axum::{Extension, Json, extract::State};
 use flow_like_types::anyhow;
 use serde::{Deserialize, Serialize};
+use utoipa::ToSchema;
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, ToSchema)]
 pub struct SubscribeRequest {
     pub tier: String,
     pub success_url: String,
     pub cancel_url: String,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, ToSchema)]
 pub struct SubscribeResponse {
     pub checkout_url: String,
     pub session_id: String,
 }
 
+#[utoipa::path(
+    post,
+    path = "/user/subscribe",
+    tag = "user",
+    request_body = SubscribeRequest,
+    responses(
+        (status = 200, description = "Stripe checkout session created", body = SubscribeResponse),
+        (status = 401, description = "Unauthorized"),
+        (status = 400, description = "Invalid tier or premium not enabled")
+    ),
+    security(
+        ("bearer_auth" = [])
+    )
+)]
 #[tracing::instrument(name = "POST /user/subscribe", skip(state, user))]
 pub async fn create_subscription_checkout(
     State(state): State<AppState>,

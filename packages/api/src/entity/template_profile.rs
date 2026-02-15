@@ -16,7 +16,7 @@ pub struct Model {
     pub icon: Option<String>,
     #[sea_orm(column_type = "Text", nullable)]
     pub description: Option<String>,
-    pub secure: Option<bool>,
+    pub secure: bool,
     pub interests: Option<Vec<String>>,
     pub tags: Option<Vec<String>>,
     #[sea_orm(column_type = "JsonBinary", nullable)]

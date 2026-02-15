@@ -29,7 +29,7 @@ impl NodeLogic for QueryChildren {
             "a2ui_query_children",
             "Query Children",
             "Gets all child elements of a container",
-            "A2UI/Elements/Query",
+            "UI/Elements/Query",
         );
         node.add_icon("/flow/icons/a2ui.svg");
 

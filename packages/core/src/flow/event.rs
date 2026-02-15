@@ -72,6 +72,14 @@ pub struct Event {
     /// Input pins copied from the node (populated at upsert time)
     #[serde(default)]
     pub inputs: Vec<EventInput>,
+
+    /// URL route path that maps to this event (e.g., "/", "/dashboard")
+    #[serde(default)]
+    pub route: Option<String>,
+
+    /// Whether this is the default event/route for the app (shown at "/")
+    #[serde(default)]
+    pub is_default: bool,
 }
 
 #[derive(Serialize, Deserialize, JsonSchema, Clone, Debug)]

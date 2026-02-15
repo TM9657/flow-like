@@ -28,6 +28,8 @@ pub struct AwsRuntimeCredentials {
     pub logs_bucket: String,
     pub region: String,
     pub expiration: Option<chrono::DateTime<chrono::Utc>>,
+    pub content_path_prefix: Option<String>,
+    pub user_content_path_prefix: Option<String>,
 }
 
 #[cfg(feature = "aws")]
@@ -37,11 +39,17 @@ impl From<aws_sdk_sts::types::Credentials> for AwsRuntimeCredentials {
             access_key_id: Some(credentials.access_key_id),
             secret_access_key: Some(credentials.secret_access_key),
             session_token: Some(credentials.session_token),
-            meta_bucket: std::env::var("META_BUCKET_NAME").unwrap_or_default(),
-            content_bucket: std::env::var("CONTENT_BUCKET_NAME").unwrap_or_default(),
+            meta_bucket: std::env::var("META_BUCKET")
+                .or_else(|_| std::env::var("META_BUCKET_NAME"))
+                .unwrap_or_default(),
+            content_bucket: std::env::var("CONTENT_BUCKET")
+                .or_else(|_| std::env::var("CONTENT_BUCKET_NAME"))
+                .unwrap_or_default(),
             logs_bucket: std::env::var("LOG_BUCKET").unwrap_or_default(),
             region: std::env::var("AWS_REGION").unwrap_or_else(|_| "us-east-1".to_string()),
             expiration: None,
+            content_path_prefix: None,
+            user_content_path_prefix: None,
         }
     }
 }
@@ -58,6 +66,8 @@ impl AwsRuntimeCredentials {
             logs_bucket: logs_bucket.to_string(),
             region: region.to_string(),
             expiration: None,
+            content_path_prefix: None,
+            user_content_path_prefix: None,
         }
     }
 
@@ -72,11 +82,17 @@ impl AwsRuntimeCredentials {
             access_key_id: std::env::var("AWS_ACCESS_KEY_ID").ok(),
             secret_access_key: std::env::var("AWS_SECRET_ACCESS_KEY").ok(),
             session_token: std::env::var("AWS_SESSION_TOKEN").ok(),
-            meta_bucket: std::env::var("META_BUCKET_NAME").unwrap_or_default(),
-            content_bucket: std::env::var("CONTENT_BUCKET_NAME").unwrap_or_default(),
+            meta_bucket: std::env::var("META_BUCKET")
+                .or_else(|_| std::env::var("META_BUCKET_NAME"))
+                .unwrap_or_default(),
+            content_bucket: std::env::var("CONTENT_BUCKET")
+                .or_else(|_| std::env::var("CONTENT_BUCKET_NAME"))
+                .unwrap_or_default(),
             logs_bucket,
             region: std::env::var("AWS_REGION").unwrap_or_else(|_| "us-east-1".to_string()),
             expiration: None,
+            content_path_prefix: None,
+            user_content_path_prefix: None,
         }
     }
 
@@ -90,6 +106,8 @@ impl AwsRuntimeCredentials {
             logs_bucket: self.logs_bucket.clone(),
             region: self.region.clone(),
             expiration: None,
+            content_path_prefix: None,
+            user_content_path_prefix: None,
         }
     }
 
@@ -117,7 +135,7 @@ impl AwsRuntimeCredentials {
 
         let apps_prefix = format!("apps/{}", app_id);
         let user_prefix = format!("users/{}/apps/{}", sub, app_id);
-        let log_prefix = format!("logs/runs/{}", app_id);
+        let runs_prefix = format!("runs/{}", app_id);
         let temporary_user_prefix = format!("tmp/user/{}/apps/{}", sub, app_id);
         let temporary_global_prefix = format!("tmp/global/apps/{}", app_id);
 
@@ -128,14 +146,14 @@ impl AwsRuntimeCredentials {
                 self,
                 &apps_prefix,
                 &user_prefix,
-                &log_prefix,
+                &runs_prefix,
                 &temporary_user_prefix,
             ),
             CredentialsAccess::InvokeRead => invoke_read_policy(
                 self,
                 &apps_prefix,
                 &user_prefix,
-                &log_prefix,
+                &runs_prefix,
                 &temporary_user_prefix,
                 &temporary_global_prefix,
             ),
@@ -143,11 +161,11 @@ impl AwsRuntimeCredentials {
                 self,
                 &apps_prefix,
                 &user_prefix,
-                &log_prefix,
+                &runs_prefix,
                 &temporary_user_prefix,
                 &temporary_global_prefix,
             ),
-            CredentialsAccess::ReadLogs => read_logs_policy(self, &log_prefix),
+            CredentialsAccess::ReadLogs => read_logs_policy(self, &runs_prefix),
         };
 
         let policy = to_string(&policy)
@@ -179,6 +197,8 @@ impl AwsRuntimeCredentials {
             logs_bucket: self.logs_bucket.clone(),
             region: self.region.clone(),
             expiration: Some(chrono_expiration),
+            content_path_prefix: Some(apps_prefix),
+            user_content_path_prefix: Some(user_prefix),
         })
     }
 }
@@ -239,11 +259,17 @@ impl RuntimeCredentialsTrait for AwsRuntimeCredentials {
             logs_config,
             region: self.region.clone(),
             expiration: self.expiration,
+            content_path_prefix: self.content_path_prefix.clone(),
+            user_content_path_prefix: self.user_content_path_prefix.clone(),
         })
     }
 
     async fn to_db(&self, app_id: &str) -> Result<ConnectBuilder> {
         self.into_shared_credentials().to_db(app_id).await
+    }
+
+    async fn to_db_scoped(&self, app_id: &str) -> Result<ConnectBuilder> {
+        self.into_shared_credentials().to_db_scoped(app_id).await
     }
 
     #[tracing::instrument(
@@ -252,15 +278,15 @@ impl RuntimeCredentialsTrait for AwsRuntimeCredentials {
         level = "debug"
     )]
     async fn to_state(&self, state: AppState) -> Result<FlowLikeState> {
-        let (meta_store, content_store, (http_client, _refetch_rx)) = {
+        let (meta_store, content_store) = {
             use flow_like_types::tokio;
 
             tokio::join!(
                 async { self.into_shared_credentials().to_store(true).await },
                 async { self.into_shared_credentials().to_store(false).await },
-                async { HTTPClient::new() }
             )
         };
+        let http_client = HTTPClient::new_without_refetch();
 
         let meta_store = meta_store?;
         let content_store = content_store?;
@@ -326,7 +352,7 @@ fn invoke_read_write_policy(
     credentials: &AwsRuntimeCredentials,
     apps_prefix: &str,
     user_prefix: &str,
-    log_prefix: &str,
+    runs_prefix: &str,
     temporary_user_prefix: &str,
     temporary_global_prefix: &str,
 ) -> flow_like_types::Value {
@@ -347,7 +373,7 @@ fn invoke_read_write_policy(
                     "s3:prefix": [
                         format!("{}/*", apps_prefix),
                         format!("{}/*", user_prefix),
-                        format!("{}/*", log_prefix),
+                        format!("{}/*", runs_prefix),
                         format!("{}/*", temporary_user_prefix),
                         format!("{}/*", temporary_global_prefix)
                     ]
@@ -364,6 +390,7 @@ fn invoke_read_write_policy(
             "Resource": [
                 format!("arn:aws:s3:::{}/{}/*", credentials.content_bucket, apps_prefix),
                 format!("arn:aws:s3:::{}/{}/*", credentials.content_bucket, user_prefix),
+                format!("arn:aws:s3:::{}/{}/*", credentials.content_bucket, runs_prefix),
                 format!("arn:aws:s3:::{}/{}/*", credentials.content_bucket, temporary_user_prefix),
                 format!("arn:aws:s3:::{}/{}/*", credentials.content_bucket, temporary_global_prefix),
             ],
@@ -375,16 +402,6 @@ fn invoke_read_write_policy(
             ],
             "Resource": [
                 format!("arn:aws:s3express:::{}/{}/*", credentials.meta_bucket, apps_prefix),
-            ],
-          },
-          {
-            "Effect": "Allow",
-            "Action": [
-                "s3:GetObject",
-                "s3:PutObject",
-            ],
-            "Resource": [
-                format!("arn:aws:s3:::{}/{}/*", credentials.content_bucket, log_prefix),
             ],
           },
           {
@@ -406,7 +423,7 @@ fn invoke_read_policy(
     credentials: &AwsRuntimeCredentials,
     apps_prefix: &str,
     user_prefix: &str,
-    log_prefix: &str,
+    runs_prefix: &str,
     temporary_user_prefix: &str,
     temporary_global_prefix: &str,
 ) -> flow_like_types::Value {
@@ -427,7 +444,7 @@ fn invoke_read_policy(
                     "s3:prefix": [
                         format!("{}/*", apps_prefix),
                         format!("{}/*", user_prefix),
-                        format!("{}/*", log_prefix),
+                        format!("{}/*", runs_prefix),
                         format!("{}/*", temporary_user_prefix),
                         format!("{}/*", temporary_global_prefix)
                     ]
@@ -441,6 +458,7 @@ fn invoke_read_policy(
             ],
             "Resource": [
                 format!("arn:aws:s3:::{}/{}/*", credentials.content_bucket, apps_prefix),
+                format!("arn:aws:s3:::{}/{}/*", credentials.content_bucket, runs_prefix),
                 format!("arn:aws:s3:::{}/{}/*", credentials.content_bucket, temporary_global_prefix),
                 format!("arn:aws:s3express:::{}/{}/*", credentials.meta_bucket, apps_prefix),
             ],
@@ -455,16 +473,6 @@ fn invoke_read_policy(
             "Resource": [
                 format!("arn:aws:s3:::{}/{}/*", credentials.content_bucket, user_prefix),
                 format!("arn:aws:s3:::{}/{}/*", credentials.content_bucket, temporary_user_prefix),
-            ],
-          },
-          {
-            "Effect": "Allow",
-            "Action": [
-                "s3:GetObject",
-                "s3:PutObject",
-            ],
-            "Resource": [
-                format!("arn:aws:s3:::{}/{}/*", credentials.content_bucket, log_prefix),
             ],
           },
           {
@@ -486,7 +494,7 @@ fn invoke_none_policy(
     credentials: &AwsRuntimeCredentials,
     apps_prefix: &str,
     user_prefix: &str,
-    log_prefix: &str,
+    runs_prefix: &str,
     temporary_user_prefix: &str,
 ) -> flow_like_types::Value {
     let policy = json!({
@@ -537,7 +545,7 @@ fn invoke_none_policy(
                 "s3:PutObject",
             ],
             "Resource": [
-                format!("arn:aws:s3:::{}/{}/*", credentials.content_bucket, log_prefix),
+                format!("arn:aws:s3:::{}/{}/*", credentials.content_bucket, runs_prefix),
             ],
           },
           {
@@ -657,7 +665,7 @@ fn read_app_policy(
 
 fn read_logs_policy(
     credentials: &AwsRuntimeCredentials,
-    log_prefix: &str,
+    runs_prefix: &str,
 ) -> flow_like_types::Value {
     let policy = json!({
         "Version": "2012-10-17",
@@ -673,7 +681,7 @@ fn read_logs_policy(
             "Condition": {
                 "StringLike": {
                     "s3:prefix": [
-                        format!("{}/*", log_prefix),
+                        format!("{}/*", runs_prefix),
                     ]
                 }
             }
@@ -684,7 +692,7 @@ fn read_logs_policy(
                 "s3:GetObject",
             ],
             "Resource": [
-                format!("arn:aws:s3:::{}/{}/*", credentials.content_bucket, log_prefix),
+                format!("arn:aws:s3:::{}/{}/*", credentials.content_bucket, runs_prefix),
             ],
           }
         ],
@@ -720,11 +728,11 @@ mod tests {
         );
         assert!(
             !creds.meta_bucket.is_empty(),
-            "META_BUCKET_NAME must be set"
+            "META_BUCKET or META_BUCKET_NAME must be set"
         );
         assert!(
             !creds.content_bucket.is_empty(),
-            "CONTENT_BUCKET_NAME must be set"
+            "CONTENT_BUCKET or CONTENT_BUCKET_NAME must be set"
         );
     }
 
@@ -796,6 +804,8 @@ mod tests {
             logs_bucket: "logs".to_string(),
             region: "us-east-1".to_string(),
             expiration: None,
+            content_path_prefix: None,
+            user_content_path_prefix: None,
         };
 
         let json = to_string(&creds).expect("Failed to serialize");

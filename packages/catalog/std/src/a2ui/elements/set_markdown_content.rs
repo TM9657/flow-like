@@ -26,7 +26,7 @@ impl NodeLogic for SetMarkdownContent {
             "a2ui_set_markdown_content",
             "Set Markdown Content",
             "Sets the markdown content of a markdown element",
-            "A2UI/Elements/Display",
+            "UI/Elements/Display",
         );
         node.add_icon("/flow/icons/a2ui.svg");
 

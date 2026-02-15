@@ -1,0 +1,83 @@
+{{/*
+Sink Trigger Image Build Documentation
+
+The sink-trigger container is an ultra-lean binary (~500KB) designed to be run
+by Kubernetes CronJobs to trigger sink events via the central API.
+
+## Building the Image
+
+From the repository root:
+
+    docker build -f apps/backend/kubernetes/sink-trigger/Dockerfile \
+        -t your-registry/sink-trigger:latest .
+
+## Pushing to Registry
+
+    docker push your-registry/sink-trigger:latest
+
+## Usage in CronJob
+
+Create a CronJob that uses this image with the following environment variables:
+  - EVENT_ID: The sink event ID to trigger (required)
+  - SINK_TYPE: Type of sink, defaults to "cron" (optional)
+  - API_BASE_URL: Base URL of the API service (required)
+  - SINK_TRIGGER_JWT: JWT token for authentication (required)
+
+Example CronJob spec:
+
+    apiVersion: batch/v1
+    kind: CronJob
+    metadata:
+      name: sink-trigger-example
+    spec:
+      schedule: "0 * * * *"
+      jobTemplate:
+        spec:
+          template:
+            spec:
+              containers:
+              - name: sink-trigger
+                image: your-registry/sink-trigger:latest
+                env:
+                - name: EVENT_ID
+                  value: "your-event-id"
+                - name: SINK_TYPE
+                  value: "cron"
+                - name: API_BASE_URL
+                  valueFrom:
+                    configMapKeyRef:
+                      name: api-config
+                      key: base-url
+                - name: SINK_TRIGGER_JWT
+                  valueFrom:
+                    secretKeyRef:
+                      name: sink-secrets
+                      key: trigger-jwt
+              restartPolicy: OnFailure
+*/}}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "flow-like.fullname" . }}-sink-trigger-docs
+  labels:
+    {{- include "flow-like.labels" . | nindent 4 }}
+data:
+  README.md: |
+    # Sink Trigger Container
+
+    Ultra-lean container for triggering sink events from Kubernetes CronJobs.
+
+    ## Environment Variables
+
+    | Variable | Required | Default | Description |
+    |----------|----------|---------|-------------|
+    | EVENT_ID | Yes | - | The sink event ID to trigger |
+    | SINK_TYPE | No | cron | Type of sink event |
+    | API_BASE_URL | Yes | - | Base URL of the API (e.g., http://api-service:8080) |
+    | SINK_TRIGGER_JWT | Yes | - | JWT token for sink trigger authentication |
+
+    ## Exit Codes
+
+    - 0: Success
+    - 1: Failure (missing env vars, API error, network error)

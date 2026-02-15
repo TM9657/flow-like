@@ -1,6 +1,6 @@
 use axum::{
     Router,
-    routing::{get, post, put},
+    routing::{delete, get, post, put},
 };
 use bit::{delete_bit, push_meta, upsert_bit};
 
@@ -9,6 +9,7 @@ use crate::state::AppState;
 pub mod bit;
 pub mod packages;
 pub mod profiles;
+pub mod sinks;
 pub mod solutions;
 
 pub fn routes() -> Router<AppState> {
@@ -50,4 +51,10 @@ pub fn routes() -> Router<AppState> {
             "/packages/{package_id}/review",
             post(packages::review_package::review_package),
         )
+        // Sink token management routes
+        .route(
+            "/sinks",
+            get(sinks::list_tokens::list_tokens).post(sinks::register_sink::register_sink),
+        )
+        .route("/sinks/{jti}", delete(sinks::revoke_sink::revoke_sink))
 }

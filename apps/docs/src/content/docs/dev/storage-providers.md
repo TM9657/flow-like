@@ -162,7 +162,7 @@ az storage container create --name content-container --account-name mystorageacc
 The API generates Directory SAS tokens scoped to specific paths:
 - `apps/{app_id}/*` for app data
 - `users/{user_id}/apps/{app_id}/*` for user data
-- `logs/runs/{app_id}/*` for logs
+- `runs/{app_id}/*` for logs
 
 SAS tokens include:
 - Time-limited validity (1 hour default)
@@ -331,7 +331,7 @@ The API derives scoped credentials with path-based restrictions:
 | `InvokeNone` | `users/{sub}/apps/{app_id}/*`, `tmp/user/{sub}/apps/{app_id}/*` | Read, Write |
 | `InvokeRead` | All app + user paths | Read only |
 | `InvokeWrite` | All app + user paths | Read, Write |
-| `ReadLogs` | `logs/runs/{app_id}/*` | Read only |
+| `ReadLogs` | `runs/{app_id}/*` | Read only |
 
 ### Security Model
 

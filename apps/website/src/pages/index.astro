@@ -1,6 +1,7 @@
 ---
 import "@tm9657/flow-like-ui/global.css";
-import { BlogHeader } from "../components/blog-header";
+import "../styles/website-base.css";
+import { Header } from "../components/header";
 import LanguageDetect from "../components/language-detect.astro";
 
 import AmbientGlow from "../components/ambient-glow.astro";
@@ -29,21 +30,22 @@ import TargetAudience from "../sections/target-audience.astro";
 import Newsletter from "../sections/newsletter.astro";
 import BiPreview from "../sections/bi-preview.astro";
 import { BlogFooter } from "../components/blog-footer";
+import { translations } from "../i18n";
 
 // --- SEO constants ---
 const site = "https://flow-like.com";
-const title = "Flow-Like — Enterprise Automation You Can Trust (Auditable, On-Prem, Secure)";
+const title = "Flow-Like | Open Source Workflow Engine - Local-First, Rust-Powered, Type-Safe";
 const description =
-  "Mission-critical automation you can audit, control and run on-prem. No black boxes. No silent failures. No data leaks. Built for teams that cannot afford uncertainty.";
+  "Open source workflow engine for local-first and self-hosted automation. Build type-safe, auditable flows in Rust and deploy on-prem or air-gapped.";
 const keywords = [
-  "enterprise automation","workflow automation","on-premise automation","auditable workflows",
-  "visual programming","typed workflows","Rust","compliance","governance","secure automation"
+  "open source workflow engine","self-hosted workflow automation","local-first automation platform","air-gapped workflow engine",
+  "type-safe workflow automation","workflow engine with data lineage","rust workflow engine","on-premise workflow engine"
 ].join(", ");
 const appName = "Flow-Like";
 const orgName = "TM9657 GmbH";
 const canonicalUrl = site;
 const ogImage = `${site}/og.png`;
-const ogImageAlt = "Flow-Like — Enterprise Automation You Can Trust";
+const ogImageAlt = "Flow-Like Open Source Workflow Engine";
 const twitterCard = "summary_large_image";
 
 const github = "https://github.com/TM9657/flow-like";
@@ -99,10 +101,29 @@ const ldWebPage = {
   },
   inLanguage: "en"
 };
+
+const enTranslations = translations.en as Record<string, string>;
+const faqItems = [1, 2, 3, 4, 5, 6].map((idx) => ({
+  question: enTranslations[`faq.q${idx}`],
+  answer: enTranslations[`faq.a${idx}`]
+}));
+
+const ldFaqPage = {
+  "@context": "https://schema.org",
+  "@type": "FAQPage",
+  mainEntity: faqItems.map((item) => ({
+    "@type": "Question",
+    name: item.question,
+    acceptedAnswer: {
+      "@type": "Answer",
+      text: item.answer
+    }
+  }))
+};
 ---
 
 <!doctype html>
-<html lang="en" class="scroll-smooth max-w-full overflow-x-hidden" style="overflow-x: hidden;">
+<html lang="en" class="scroll-smooth">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -172,10 +193,11 @@ const ldWebPage = {
     <link rel="preconnect" href="https://github.com" crossorigin />
 
     <!-- Structured Data (inline, non-blocking) -->
-    <script type="application/ld+json">{JSON.stringify(ldOrganization)}</script>
-    <script type="application/ld+json">{JSON.stringify(ldSoftware)}</script>
-    <script type="application/ld+json">{JSON.stringify(ldWebSite)}</script>
-    <script type="application/ld+json">{JSON.stringify(ldWebPage)}</script>
+    <script type="application/ld+json" is:inline set:html={JSON.stringify(ldOrganization)} />
+    <script type="application/ld+json" is:inline set:html={JSON.stringify(ldSoftware)} />
+    <script type="application/ld+json" is:inline set:html={JSON.stringify(ldWebSite)} />
+    <script type="application/ld+json" is:inline set:html={JSON.stringify(ldWebPage)} />
+    <script type="application/ld+json" is:inline set:html={JSON.stringify(ldFaqPage)} />
 
     <!-- Language detection - runs before page renders -->
     <LanguageDetect />
@@ -190,69 +212,25 @@ const ldWebPage = {
         background-size: 16px 16px !important;
         background-attachment: scroll !important;
       }
-      html, body { overflow-x: clip; }
       @media (hover: none) and (pointer: coarse) {
-        /* Keep decorative overlays passive on touch without disabling legit fixed UI */
         [data-overlay], [data-visual], .overlay, .backdrop {
           pointer-events: none;
           touch-action: pan-y;
         }
-
-        /* Disable scroll snapping & smooth scroll on phones */
         * { scroll-snap-type: none !important; }
         html { scroll-behavior: auto !important; }
-
-        /* Don’t allow sections to create nested scrollers or crop content */
-        html, body, main, section, [role="region"] {
-          overflow: visible !important;
-        }
-
-        /* Sticky/fixed inside sections can break the scroll chain after style changes */
-        .sticky, [style*="position: sticky"] { position: static !important; }
       }
 
-      html, body { min-height: 100%; }
-      html, body {
-        overflow-y: auto;
-        overflow-x: hidden !important;
-        max-width: 100vw;
-        -webkit-overflow-scrolling: touch;
-        touch-action: pan-y;
-      }
-      :root, body, #content {
-        overscroll-behavior: auto;
-      }
     </style>
   </head>
 
   <body
-    class="bg-background text-foreground antialiased selection:bg-primary/30 selection:text-primary-foreground overflow-x-hidden max-w-full
+    class="bg-background text-foreground antialiased selection:bg-primary/30 selection:text-primary-foreground
             bg-[radial-gradient(var(--muted)_1px,transparent_1px)] [background-size:16px_16px]"
   >
-    <script is:inline>
-      // DEV: horizontal overflow detector (remove in production if undesired)
-      (function(){
-        try {
-          const vw = () => document.documentElement.clientWidth;
-          const offenders = [];
-          document.querySelectorAll('*').forEach(function(el){
-            var sw = el.scrollWidth;
-            if (sw > vw() + 1) {
-              var styles = getComputedStyle(el);
-              if (styles.overflowX === 'hidden' || styles.position === 'fixed') return;
-              offenders.push({el: el, sw: sw, cls: el.className});
-            }
-          });
-          if (offenders.length) {
-            window.__overflowOffenders = offenders;
-            console.warn('[Overflow detector] Elements exceeding viewport width:', offenders.slice(0,5));
-          }
-        } catch(e) {}
-      })();
-    </script>
-    <main id="content" class="w-full">
+    <main id="content" class="w-full max-w-[100vw] overflow-x-clip">
       <AmbientGlow />
-      <BlogHeader client:load/>
+      <Header client:load/>
       <Hero client:load/>
 
       <!-- Enterprise Stack - what you get -->

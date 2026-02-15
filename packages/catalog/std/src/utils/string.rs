@@ -1,6 +1,7 @@
 pub mod contains;
 pub mod ends_with;
 pub mod equal;
+pub mod escape;
 pub mod format;
 pub mod join;
 pub mod length;
@@ -12,5 +13,6 @@ pub mod template;
 pub mod to_lowercase;
 pub mod to_uppercase;
 pub mod trim;
+pub mod unescape;
 pub mod unequal;
 pub mod utf_8_lossy;

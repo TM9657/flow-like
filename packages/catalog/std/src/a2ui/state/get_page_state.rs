@@ -28,7 +28,7 @@ impl NodeLogic for GetPageState {
             "a2ui_get_page_state",
             "Get Page State",
             "Gets a value from page-local state by key",
-            "A2UI/State",
+            "UI/State",
         );
         node.add_icon("/flow/icons/a2ui.svg");
 

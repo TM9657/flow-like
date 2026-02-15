@@ -20,15 +20,6 @@ const roomRegistry = new Map<
 	{ doc: Y.Doc; provider: any; refCount: number }
 >();
 
-function pickColor(seed?: string): string {
-	// Stable HSL color from seed, fallback random
-	let s = 0;
-	const str = seed ?? Math.random().toString(36);
-	for (let i = 0; i < str.length; i++) s = (s * 31 + str.charCodeAt(i)) >>> 0;
-	const hue = s % 360;
-	return `hsl(${hue} 80% 50%)`;
-}
-
 async function verifyPeerJwt(token: string, jwks: IJwks): Promise<boolean> {
 	try {
 		// Resolve key by kid if present, else try first EC key
@@ -64,14 +55,14 @@ export async function createRealtimeSession(args: {
 	room: string;
 	access: IRealtimeAccess;
 	jwks?: IJwks;
-	name?: string;
-	userId?: string;
+	/** The authenticated user's sub (subject) from the auth token */
+	sub?: string;
 	signalingServers?: string[];
 	onStatusChange?: (
 		status: "connected" | "disconnected" | "reconnecting",
 	) => void;
 }): Promise<RealtimeSession> {
-	const { room, access, jwks, name, userId, onStatusChange } = args;
+	const { room, access, jwks, sub, onStatusChange } = args;
 
 	// Check if a session already exists for this room
 	const existing = roomRegistry.get(room);
@@ -80,13 +71,8 @@ export async function createRealtimeSession(args: {
 		existing.refCount++;
 
 		const awareness = existing.provider.awareness;
-		const color = pickColor(userId);
-		awareness.setLocalStateField("user", {
-			name: name ?? "Anonymous",
-			color,
-			token: access.jwt,
-			id: userId,
-		});
+		awareness.setLocalStateField("sub", sub);
+		awareness.setLocalStateField("token", access.jwt);
 		awareness.setLocalStateField("selection", { nodes: [] });
 
 		const dispose = () => {
@@ -114,12 +100,8 @@ export async function createRealtimeSession(args: {
 			console.log(`[WebRTC] Reconnect called for existing session: ${room}`);
 			if (onStatusChange) onStatusChange("reconnecting");
 			// Provider should auto-reconnect, just reset awareness state
-			awareness.setLocalStateField("user", {
-				name: name ?? "Anonymous",
-				color: pickColor(userId),
-				token: access.jwt,
-				id: userId,
-			});
+			awareness.setLocalStateField("sub", sub);
+			awareness.setLocalStateField("token", access.jwt);
 			if (onStatusChange) onStatusChange("connected");
 		};
 
@@ -151,13 +133,8 @@ export async function createRealtimeSession(args: {
 	});
 
 	const awareness = provider.awareness;
-	const color = pickColor(userId);
-	awareness.setLocalStateField("user", {
-		name: name ?? "Anonymous",
-		color,
-		token: access.jwt,
-		id: userId,
-	});
+	awareness.setLocalStateField("sub", sub);
+	awareness.setLocalStateField("token", access.jwt);
 	awareness.setLocalStateField("selection", { nodes: [] });
 
 	// Optional: validate peers' JWTs when their state arrives; mark invalid
@@ -171,7 +148,7 @@ export async function createRealtimeSession(args: {
 				const toCheck = [...added, ...updated];
 				for (const clientId of toCheck) {
 					const state = states.get(clientId);
-					const token = state?.user?.token as string | undefined;
+					const token = state?.token as string | undefined;
 					if (!token) continue;
 					const ok = await verifyPeerJwt(token, jwks);
 					if (!ok) invalidPeers.add(clientId);
@@ -221,12 +198,8 @@ export async function createRealtimeSession(args: {
 
 		try {
 			// Reinitialize awareness state
-			awareness.setLocalStateField("user", {
-				name: name ?? "Anonymous",
-				color: pickColor(userId),
-				token: access.jwt,
-				id: userId,
-			});
+			awareness.setLocalStateField("sub", sub);
+			awareness.setLocalStateField("token", access.jwt);
 			awareness.setLocalStateField("selection", { nodes: [] });
 			awareness.setLocalStateField("cursor", undefined);
 

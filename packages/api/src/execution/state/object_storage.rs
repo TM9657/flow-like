@@ -41,7 +41,8 @@ impl ObjectStorageStateStore {
     pub async fn from_env() -> Result<Self, StateStoreError> {
         use aws_sdk_s3::config::Builder as S3ConfigBuilder;
 
-        let bucket = std::env::var("META_BUCKET_NAME")
+        let bucket = std::env::var("META_BUCKET")
+            .or_else(|_| std::env::var("META_BUCKET_NAME"))
             .or_else(|_| std::env::var("S3_STATE_BUCKET"))
             .map_err(|_| {
                 StateStoreError::Configuration(

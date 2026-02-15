@@ -15,6 +15,27 @@ pub struct UpdatePayload {
     pub updates: HashMap<String, flow_like_types::Value>,
 }
 
+#[utoipa::path(
+    put,
+    path = "/apps/{app_id}/db/{table}/update",
+    tag = "database",
+    description = "Update rows matching a filter.",
+    params(
+        ("app_id" = String, Path, description = "Application ID"),
+        ("table" = String, Path, description = "Table name")
+    ),
+    request_body = String,
+    responses(
+        (status = 200, description = "Items updated", body = ()),
+        (status = 401, description = "Unauthorized"),
+        (status = 403, description = "Forbidden")
+    ),
+    security(
+        ("bearer_auth" = []),
+        ("api_key" = []),
+        ("pat" = [])
+    )
+)]
 #[tracing::instrument(name = "PUT /apps/{app_id}/db/{table}/update", skip(state, user))]
 pub async fn update_table(
     State(state): State<AppState>,

@@ -16,6 +16,13 @@ local-ml = [
     "flow-like-catalog-llm/local-ml",
     "flow-like-catalog-processing/local-ml",
 ]
+remote-ml = [
+    "flow-like-catalog-core/remote-ml",
+    "flow-like-catalog-llm/remote-ml",
+]
+tauri = [
+    "flow-like-catalog-llm/tauri",
+]
 mimalloc = ["dep:mimalloc"]
 
 
@@ -56,6 +63,7 @@ all-databases-with-odbc = ["all-databases", "odbc"]
 federation = ["flow-like-catalog-data/federation"]
 postgres-federation = ["flow-like-catalog-data/postgres-federation"]
 mysql-federation = ["flow-like-catalog-data/mysql-federation"]
+# Explicit rustls variants (transparent — postgres/mysql already use rustls under the hood)
 sqlite-federation = ["flow-like-catalog-data/sqlite-federation"]
 duckdb-federation = ["flow-like-catalog-data/duckdb-federation"]
 clickhouse-federation = ["flow-like-catalog-data/clickhouse-federation"]
@@ -85,6 +93,7 @@ flow-like-catalog-processing.workspace = true
 flow-like-catalog-geo.workspace = true
 flow-like-catalog-automation.workspace = true
 mimalloc = { workspace = true, optional = true }
+tracing.workspace = true
 
 [dev-dependencies]
 criterion = { version = "0.7", features = ["html_reports", "async_tokio"] }

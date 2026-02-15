@@ -10,6 +10,20 @@ use flow_like_types::anyhow;
 use futures_util::{StreamExt, TryStreamExt};
 use sea_orm::{ModelTrait, TransactionTrait};
 
+#[utoipa::path(
+    delete,
+    path = "/apps/{app_id}",
+    tag = "apps",
+    params(
+        ("app_id" = String, Path, description = "Application ID")
+    ),
+    responses(
+        (status = 200, description = "Application deleted"),
+        (status = 401, description = "Unauthorized"),
+        (status = 403, description = "Forbidden"),
+        (status = 404, description = "Application not found")
+    )
+)]
 #[tracing::instrument(name = "DELETE /apps/{app_id}", skip(state, user))]
 pub async fn delete_app(
     State(state): State<AppState>,

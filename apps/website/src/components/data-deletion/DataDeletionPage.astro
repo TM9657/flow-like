@@ -1,0 +1,307 @@
+---
+import "@tm9657/flow-like-ui/global.css";
+import "../../styles/website-base.css";
+import { BlogFooter } from "../blog-footer";
+import { Header } from "../header";
+import PostHog from "../posthog.astro";
+import { tDataDeletion } from "../../i18n/locales/pages/data-deletion";
+import { buildAlternateLinks } from "../../lib/seo";
+
+interface Props {
+	lang: string;
+}
+
+const { lang } = Astro.props;
+const t = (key: string) => tDataDeletion(lang, key);
+
+export const prerender = true;
+
+const title = t("dataDeletion.title");
+const description = t("dataDeletion.description");
+const lastUpdated = t("dataDeletion.lastUpdated");
+
+const site = Astro.site ?? import.meta.env.SITE ?? "https://flow-like.com";
+const siteUrl = typeof site === "string" ? site : site.toString();
+const canonical = new URL(Astro.url.pathname, siteUrl).toString();
+const alternateLinks = buildAlternateLinks(siteUrl, Astro.url.pathname);
+
+const langAttr = lang === "zh" ? "zh-Hans" : lang;
+---
+
+<!doctype html>
+<html lang={langAttr} class="scroll-smooth">
+	<head>
+		<meta charset="UTF-8" />
+		<meta name="viewport" content="width=device-width" />
+		<link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+		<meta name="generator" content={Astro.generator} />
+
+		<title>{title} | Flow-Like</title>
+		<meta name="description" content={description} />
+		<meta name="robots" content="index, follow" />
+		<link rel="canonical" href={canonical} />
+		<link rel="sitemap" href="/sitemap-index.xml" />
+
+		{alternateLinks.map(({ lang: l, href }) => (
+			<link rel="alternate" hreflang={l} href={href} />
+		))}
+
+		<meta property="og:type" content="website" />
+		<meta property="og:site_name" content="Flow-Like" />
+		<meta property="og:url" content={canonical} />
+		<meta property="og:title" content={`${title} | Flow-Like`} />
+		<meta property="og:description" content={description} />
+
+		<meta name="twitter:card" content="summary" />
+		<meta name="twitter:site" content="@greatco_de" />
+		<meta name="twitter:title" content={`${title} | Flow-Like`} />
+		<meta name="twitter:description" content={description} />
+
+		<PostHog />
+	</head>
+	<body class="min-h-screen bg-background text-foreground overflow-y-auto overflow-x-hidden pt-16">
+		<Header client:load />
+
+		<main class="relative">
+			<!-- Hero -->
+			<div class="border-b border-border/40 bg-gradient-to-b from-background to-muted/20">
+				<div class="max-w-4xl mx-auto px-6 py-16 md:py-24">
+					<h1 class="text-4xl md:text-5xl font-bold tracking-tight mb-4">{title}</h1>
+					<p class="text-muted-foreground text-sm">
+						Last updated: <time>{lastUpdated}</time>
+					</p>
+				</div>
+			</div>
+
+			<!-- Intro -->
+			<div class="max-w-4xl mx-auto px-6 pt-12 md:pt-16">
+				<p class="text-muted-foreground leading-relaxed text-base leading-7 mb-8">
+					{t("dataDeletion.intro")}
+				</p>
+			</div>
+
+			<!-- Path Chooser -->
+			<div class="max-w-4xl mx-auto px-6 pb-4">
+				<h2 class="text-2xl font-semibold text-foreground mb-2">{t("dataDeletion.choosePath")}</h2>
+				<p class="text-muted-foreground text-base leading-7 mb-8">{t("dataDeletion.choosePathDesc")}</p>
+			</div>
+
+			<!-- Two Paths -->
+			<div class="max-w-5xl mx-auto px-6 pb-12 md:pb-16">
+				<div class="grid md:grid-cols-2 gap-6 md:gap-8">
+
+					<!-- Path 1: Without Account -->
+					<div class="relative rounded-xl border border-border/50 bg-gradient-to-b from-emerald-500/5 to-transparent overflow-hidden">
+						<div class="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-emerald-500 to-emerald-400"></div>
+						<div class="p-6 md:p-8">
+							<div class="flex items-center gap-3 mb-4">
+								<div class="flex items-center justify-center w-10 h-10 rounded-full bg-emerald-500/10 text-emerald-500">
+									<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+										<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/>
+										<circle cx="9" cy="7" r="4"/>
+										<line x1="17" y1="11" x2="23" y2="11"/>
+									</svg>
+								</div>
+								<div>
+									<h3 class="text-lg font-semibold text-foreground">{t("dataDeletion.withoutAccount.title")}</h3>
+									<p class="text-sm text-muted-foreground">{t("dataDeletion.withoutAccount.subtitle")}</p>
+								</div>
+							</div>
+
+							<span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium bg-emerald-500/10 text-emerald-500 mb-5">
+								<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+									<polyline points="20 6 9 17 4 12"/>
+								</svg>
+								{t("dataDeletion.withoutAccount.badge")}
+							</span>
+
+							<p class="text-muted-foreground text-sm leading-6 mb-5">{t("dataDeletion.withoutAccount.description")}</p>
+
+							<ul class="space-y-3 mb-6">
+								{[
+									t("dataDeletion.withoutAccount.point1"),
+									t("dataDeletion.withoutAccount.point2"),
+									t("dataDeletion.withoutAccount.point3"),
+									t("dataDeletion.withoutAccount.point4"),
+								].map((point) => (
+									<li class="flex items-start gap-2.5 text-sm text-muted-foreground leading-6">
+										<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-emerald-500 mt-0.5 shrink-0">
+											<polyline points="20 6 9 17 4 12"/>
+										</svg>
+										<span>{point}</span>
+									</li>
+								))}
+							</ul>
+
+							<div class="rounded-lg border border-border/40 bg-muted/20 p-4">
+								<h4 class="text-sm font-medium text-foreground mb-1">{t("dataDeletion.withoutAccount.localData")}</h4>
+								<p class="text-xs text-muted-foreground leading-5">{t("dataDeletion.withoutAccount.localDataDesc")}</p>
+							</div>
+						</div>
+					</div>
+
+					<!-- Path 2: With Account -->
+					<div class="relative rounded-xl border border-border/50 bg-gradient-to-b from-blue-500/5 to-transparent overflow-hidden">
+						<div class="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-blue-500 to-blue-400"></div>
+						<div class="p-6 md:p-8">
+							<div class="flex items-center gap-3 mb-4">
+								<div class="flex items-center justify-center w-10 h-10 rounded-full bg-blue-500/10 text-blue-500">
+									<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+										<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/>
+										<circle cx="9" cy="7" r="4"/>
+										<path d="M20 8v6"/>
+										<path d="M23 11h-6"/>
+									</svg>
+								</div>
+								<div>
+									<h3 class="text-lg font-semibold text-foreground">{t("dataDeletion.withAccount.title")}</h3>
+									<p class="text-sm text-muted-foreground">{t("dataDeletion.withAccount.subtitle")}</p>
+								</div>
+							</div>
+
+							<span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium bg-blue-500/10 text-blue-500 mb-5">
+								<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+									<circle cx="12" cy="12" r="10"/>
+									<line x1="12" y1="8" x2="12" y2="12"/>
+									<line x1="12" y1="16" x2="12.01" y2="16"/>
+								</svg>
+								{t("dataDeletion.withAccount.badge")}
+							</span>
+
+							<p class="text-muted-foreground text-sm leading-6 mb-5">{t("dataDeletion.withAccount.description")}</p>
+
+							<!-- What we store -->
+							<h4 class="text-sm font-semibold text-foreground mb-3">{t("dataDeletion.withAccount.storedData")}</h4>
+							<div class="space-y-2 mb-5">
+								{[
+									{ title: t("dataDeletion.withAccount.accountInfo"), desc: t("dataDeletion.withAccount.accountInfoDesc") },
+									{ title: t("dataDeletion.withAccount.usageData"), desc: t("dataDeletion.withAccount.usageDataDesc") },
+									{ title: t("dataDeletion.withAccount.cloudData"), desc: t("dataDeletion.withAccount.cloudDataDesc") },
+								].map((item) => (
+									<div class="flex items-start gap-2.5 text-sm text-muted-foreground leading-6">
+										<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-blue-500 mt-0.5 shrink-0">
+											<path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/>
+										</svg>
+										<span><strong class="text-foreground font-medium">{item.title}</strong> — {item.desc}</span>
+									</div>
+								))}
+							</div>
+
+							<!-- How to delete -->
+							<h4 class="text-sm font-semibold text-foreground mb-3">{t("dataDeletion.withAccount.howToDelete")}</h4>
+							<ol class="space-y-2 mb-4 list-none">
+								<li class="flex items-start gap-2.5 text-sm text-muted-foreground leading-6">
+									<span class="flex items-center justify-center w-5 h-5 rounded-full bg-blue-500/10 text-blue-500 text-xs font-semibold mt-0.5 shrink-0">1</span>
+									<span>{t("dataDeletion.withAccount.step1")} <a href="mailto:privacy@flow-like.com" class="text-primary hover:underline">{t("dataDeletion.withAccount.step1Email")}</a> {t("dataDeletion.withAccount.step1Detail")}</span>
+								</li>
+								<li class="flex items-start gap-2.5 text-sm text-muted-foreground leading-6">
+									<span class="flex items-center justify-center w-5 h-5 rounded-full bg-blue-500/10 text-blue-500 text-xs font-semibold mt-0.5 shrink-0">2</span>
+									<span>{t("dataDeletion.withAccount.step2")} <strong class="text-foreground font-medium">"{t("dataDeletion.withAccount.step2Subject")}"</strong></span>
+								</li>
+								<li class="flex items-start gap-2.5 text-sm text-muted-foreground leading-6">
+									<span class="flex items-center justify-center w-5 h-5 rounded-full bg-blue-500/10 text-blue-500 text-xs font-semibold mt-0.5 shrink-0">3</span>
+									<span>{t("dataDeletion.withAccount.step3")}</span>
+								</li>
+							</ol>
+							<p class="text-xs text-muted-foreground leading-5 bg-muted/20 border border-border/40 rounded-lg p-3">{t("dataDeletion.withAccount.processingTime")}</p>
+						</div>
+					</div>
+				</div>
+			</div>
+
+			<!-- After Deletion & What We Don't Store -->
+			<div class="max-w-4xl mx-auto px-6 pb-12 md:pb-16">
+				<div class="grid md:grid-cols-2 gap-6 md:gap-8">
+					<!-- After Deletion -->
+					<div class="rounded-lg border border-border/40 bg-muted/10 p-6">
+						<h3 class="text-lg font-semibold text-foreground mb-4">{t("dataDeletion.withAccount.afterDeletion")}</h3>
+						<ul class="space-y-3">
+							{[
+								t("dataDeletion.withAccount.after1"),
+								t("dataDeletion.withAccount.after2"),
+								t("dataDeletion.withAccount.after3"),
+								t("dataDeletion.withAccount.after4"),
+							].map((item) => (
+								<li class="flex items-start gap-2.5 text-sm text-muted-foreground leading-6">
+									<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-amber-500 mt-0.5 shrink-0">
+										<path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+										<line x1="12" y1="9" x2="12" y2="13"/>
+										<line x1="12" y1="17" x2="12.01" y2="17"/>
+									</svg>
+									<span>{item}</span>
+								</li>
+							))}
+						</ul>
+					</div>
+
+					<!-- What we don't store -->
+					<div class="rounded-lg border border-border/40 bg-muted/10 p-6">
+						<h3 class="text-lg font-semibold text-foreground mb-4">{t("dataDeletion.withAccount.notStored")}</h3>
+						<ul class="space-y-3">
+							{[
+								t("dataDeletion.withAccount.notStored1"),
+								t("dataDeletion.withAccount.notStored2"),
+								t("dataDeletion.withAccount.notStored3"),
+							].map((item) => (
+								<li class="flex items-start gap-2.5 text-sm text-muted-foreground leading-6">
+									<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-emerald-500 mt-0.5 shrink-0">
+										<path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+									</svg>
+									<span>{item}</span>
+								</li>
+							))}
+						</ul>
+					</div>
+				</div>
+			</div>
+
+			<!-- Rights Section -->
+			<div class="max-w-4xl mx-auto px-6 pb-12 md:pb-16">
+				<div class="border-t border-border/40 pt-12">
+					<h2 class="text-2xl font-semibold text-foreground mb-2">{t("dataDeletion.rights.title")}</h2>
+					<p class="text-muted-foreground text-base leading-7 mb-6">{t("dataDeletion.rights.description")}</p>
+
+					<div class="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
+						{[
+							{ title: t("dataDeletion.rights.access"), desc: t("dataDeletion.rights.accessDesc") },
+							{ title: t("dataDeletion.rights.rectification"), desc: t("dataDeletion.rights.rectificationDesc") },
+							{ title: t("dataDeletion.rights.erasure"), desc: t("dataDeletion.rights.erasureDesc") },
+							{ title: t("dataDeletion.rights.portability"), desc: t("dataDeletion.rights.portabilityDesc") },
+							{ title: t("dataDeletion.rights.objection"), desc: t("dataDeletion.rights.objectionDesc") },
+						].map((right) => (
+							<div class="rounded-lg border border-border/30 bg-muted/20 p-4">
+								<strong class="block mb-1 text-foreground text-sm">{right.title}</strong>
+								<p class="text-xs text-muted-foreground leading-5 mb-0">{right.desc}</p>
+							</div>
+						))}
+					</div>
+
+					<p class="text-sm text-muted-foreground mt-6">
+						{t("dataDeletion.contact.privacyLink")} <a href={lang === "en" ? "/privacy-policy" : `/${lang}/privacy-policy`} class="text-primary hover:underline">{t("dataDeletion.contact.privacyPolicy")}</a>.
+					</p>
+				</div>
+			</div>
+
+			<!-- Contact -->
+			<div class="max-w-4xl mx-auto px-6 pb-16 md:pb-24">
+				<div class="border-t border-border/40 pt-12">
+					<h2 class="text-2xl font-semibold text-foreground mb-2">{t("dataDeletion.contact.title")}</h2>
+					<p class="text-muted-foreground text-base leading-7 mb-6">{t("dataDeletion.contact.description")}</p>
+
+					<div class="rounded-lg border border-border/40 bg-muted/10 p-6 inline-flex flex-col gap-3">
+						<div class="flex items-center gap-3 text-sm">
+							<strong class="text-foreground font-medium">{t("dataDeletion.contact.email")}:</strong>
+							<a href="mailto:privacy@flow-like.com" class="text-primary hover:underline">privacy@flow-like.com</a>
+						</div>
+						<div class="flex items-start gap-3 text-sm">
+							<strong class="text-foreground font-medium shrink-0">{t("dataDeletion.contact.company")}:</strong>
+							<span class="text-muted-foreground">{t("dataDeletion.contact.companyName")}</span>
+						</div>
+					</div>
+				</div>
+			</div>
+		</main>
+
+		<BlogFooter />
+	</body>
+</html>

@@ -23,7 +23,7 @@ impl NodeLogic for PushChildAtIndex {
             "a2ui_push_child_at_index",
             "Insert Child At Index",
             "Inserts a child element at a specific index in a container",
-            "A2UI/Elements/Containers",
+            "UI/Elements/Containers",
         );
         node.add_icon("/flow/icons/a2ui.svg");
 

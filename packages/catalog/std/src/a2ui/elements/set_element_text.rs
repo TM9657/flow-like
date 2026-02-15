@@ -28,7 +28,7 @@ impl NodeLogic for SetElementText {
             "a2ui_set_element_text",
             "Set Element Text",
             "Sets the text content of an element",
-            "A2UI/Elements",
+            "UI/Elements",
         );
         node.add_icon("/flow/icons/a2ui.svg");
 

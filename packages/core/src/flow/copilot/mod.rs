@@ -570,14 +570,32 @@ impl Copilot {
                 };
                 current_history.push(assistant_msg);
 
-                // Add tool results to history
-                for (tool_id, _tool_name, tool_output) in &tool_results {
+                // Add all tool results to history as a single User message
+                // This is required for Gemini API which expects tool results to immediately follow
+                // the assistant's tool call message in a single message
+                if !tool_results.is_empty() {
+                    let tool_result_contents: Vec<UserContent> = tool_results
+                        .iter()
+                        .map(|(tool_id, _tool_name, tool_output)| {
+                            UserContent::ToolResult(RigToolResult {
+                                id: tool_id.clone(),
+                                call_id: None,
+                                content: OneOrMany::one(ToolResultContent::text(
+                                    tool_output.clone(),
+                                )),
+                            })
+                        })
+                        .collect();
+
+                    let combined_tool_results = if tool_result_contents.len() == 1 {
+                        OneOrMany::one(tool_result_contents.into_iter().next().unwrap())
+                    } else {
+                        OneOrMany::many(tool_result_contents)
+                            .expect("tool_result_contents should have at least 2 elements")
+                    };
+
                     let tool_result_msg = rig::message::Message::User {
-                        content: OneOrMany::one(UserContent::ToolResult(RigToolResult {
-                            id: tool_id.clone(),
-                            call_id: None,
-                            content: OneOrMany::one(ToolResultContent::text(tool_output.clone())),
-                        })),
+                        content: combined_tool_results,
                     };
                     current_history.push(tool_result_msg);
                 }

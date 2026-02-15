@@ -29,7 +29,7 @@ impl NodeLogic for SetButtonLabel {
             "a2ui_set_button_label",
             "Set Button Label",
             "Sets the label text of a button element",
-            "A2UI/Elements/Button",
+            "UI/Elements/Button",
         );
         node.add_icon("/flow/icons/a2ui.svg");
 

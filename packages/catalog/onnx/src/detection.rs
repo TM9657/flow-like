@@ -346,7 +346,7 @@ impl NodeLogic for ObjectDetectionNode {
         let mut node = Node::new(
             "object_detection",
             "Object Detection",
-            "Object Detection in Images with ONNX-Models",
+            "Object Detection in Images with ONNX-Models. Download models from: TinyYOLOv2 (https://github.com/onnx/models/tree/main/validated/vision/object_detection_segmentation/tiny-yolov2), YOLO (https://github.com/onnx/models/tree/main/validated/vision/object_detection_segmentation), SSD-MobileNet (https://github.com/onnx/models/tree/main/validated/vision/object_detection_segmentation/ssd-mobilenetv1)",
             "AI/ML/ONNX",
         );
 

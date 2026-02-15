@@ -9,13 +9,14 @@ use flow_like_storage::lancedb::query::{ExecutableQuery, QueryBase};
 use flow_like_types::anyhow;
 use futures::TryStreamExt;
 use serde::Deserialize;
+use utoipa::{IntoParams, ToSchema};
 
 use crate::{
     credentials::CredentialsAccess, ensure_permission, error::ApiError, middleware::jwt::AppUser,
     permission::role_permission::RolePermissions, state::AppState,
 };
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, IntoParams, ToSchema)]
 pub struct QueryLogsRequest {
     pub run_id: String,
     #[serde(default)]
@@ -26,6 +27,21 @@ pub struct QueryLogsRequest {
     pub offset: Option<usize>,
 }
 
+#[utoipa::path(
+    get,
+    path = "/apps/{app_id}/board/{board_id}/logs",
+    tag = "execution",
+    params(
+        ("app_id" = String, Path, description = "Application ID"),
+        ("board_id" = String, Path, description = "Board ID"),
+        QueryLogsRequest
+    ),
+    responses(
+        (status = 200, description = "Log messages for the run", body = Vec<Object>),
+        (status = 401, description = "Unauthorized"),
+        (status = 500, description = "Failed to query logs")
+    )
+)]
 #[tracing::instrument(name = "GET /apps/{app_id}/board/{board_id}/logs", skip(state, user))]
 pub async fn query_logs(
     State(state): State<AppState>,

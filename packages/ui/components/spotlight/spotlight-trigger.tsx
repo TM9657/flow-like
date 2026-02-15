@@ -1,6 +1,6 @@
 "use client";
 
-import { CommandIcon, Search, Sparkles } from "lucide-react";
+import { CommandIcon, Search, Sparkles, SparklesIcon } from "lucide-react";
 import { cn } from "../../lib/utils";
 import { useSpotlightStore } from "../../state/spotlight-state";
 import { Button } from "../ui/button";
@@ -86,8 +86,8 @@ export function SpotlightTrigger({
 						className,
 					)}
 				>
-					<div className="flex items-center justify-center h-4 w-4 rounded-sm bg-linear-to-br from-primary/20 to-primary/10 group-hover:from-primary/30 group-hover:to-primary/20 transition-colors">
-						<Sparkles className="h-5 w-5 text-primary-foreground" />
+					<div className="flex items-center justify-center h-4 w-4 rounded-sm bg-linear-to-br">
+						<SparklesIcon className="h-5 w-5 text-primary-foreground" />
 					</div>
 					{sidebarOpen && (
 						<>

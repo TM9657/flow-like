@@ -99,13 +99,16 @@ impl Tool for CatalogTool {
     async fn definition(&self, _prompt: String) -> ToolDefinition {
         ToolDefinition {
             name: "catalog_search".to_string(),
-            description: "Search for nodes in the catalog by functionality or name".to_string(),
+            description: r#"Search the node catalog by functionality or name. Returns matching nodes with their node_type (needed for AddNode).
+
+WHEN TO USE: Before adding any node - to get the exact node_type
+EXAMPLE QUERIES: "http request", "parse json", "loop array", "condition if""#.to_string(),
             parameters: json!({
                 "type": "object",
                 "properties": {
                     "query": {
                         "type": "string",
-                        "description": "Search query"
+                        "description": "Natural language search. Examples: 'http request', 'json parse', 'loop array'"
                     }
                 },
                 "required": ["query"]
@@ -139,18 +142,20 @@ impl Tool for SearchByPinTool {
     async fn definition(&self, _prompt: String) -> ToolDefinition {
         ToolDefinition {
             name: "search_by_pin".to_string(),
-            description: "Search for nodes that have a specific input or output pin type"
-                .to_string(),
+            description: r#"Find nodes compatible with a specific pin type. Use this to find nodes that can connect to an existing node's pin.
+
+WHEN TO USE: Finding what can connect to/from a specific pin type
+EXAMPLES: search_by_pin("String", true) finds nodes with String input pins"#.to_string(),
             parameters: json!({
                 "type": "object",
                 "properties": {
                     "pin_type": {
                         "type": "string",
-                        "description": "The type of pin to search for (e.g., 'String', 'Number')"
+                        "description": "Data type: String, Integer, Float, Boolean, Struct, Generic, Execution"
                     },
                     "is_input": {
                         "type": "boolean",
-                        "description": "True to search input pins, false for output pins"
+                        "description": "true = find nodes with this INPUT pin type, false = find nodes with this OUTPUT pin type"
                     }
                 },
                 "required": ["pin_type", "is_input"]
@@ -187,13 +192,16 @@ impl Tool for FilterCategoryTool {
     async fn definition(&self, _prompt: String) -> ToolDefinition {
         ToolDefinition {
             name: "filter_category".to_string(),
-            description: "Filter nodes by category prefix".to_string(),
+            description: r#"Browse nodes by category. Categories are hierarchical (e.g., "flow/control", "data/transform").
+
+WHEN TO USE: Exploring what nodes exist in a domain
+COMMON CATEGORIES: flow, data, http, math, logic, string, array"#.to_string(),
             parameters: json!({
                 "type": "object",
                 "properties": {
                     "category_prefix": {
                         "type": "string",
-                        "description": "The category prefix to filter by (e.g., 'math', 'logic')"
+                        "description": "Category prefix like 'flow', 'data', 'http', 'math'. Use '/' for subcategories: 'flow/control'"
                     }
                 },
                 "required": ["category_prefix"]
@@ -231,13 +239,16 @@ impl Tool for SearchTemplatesTool {
     async fn definition(&self, _prompt: String) -> ToolDefinition {
         ToolDefinition {
             name: "search_templates".to_string(),
-            description: "Search for workflow templates that can serve as examples or starting points. Templates show real implementations of common patterns.".to_string(),
+            description: r#"Search for workflow templates - reusable patterns that can be instantiated. Templates contain pre-built node configurations.
+
+WHEN TO USE: User asks for a "template", "example", or common workflow pattern
+RETURNS: Template info with node_types used (helpful for understanding structure)"#.to_string(),
             parameters: json!({
                 "type": "object",
                 "properties": {
                     "query": {
                         "type": "string",
-                        "description": "Search query (matches name, description, tags, or node types)"
+                        "description": "Search by name, description, tags, or node types used in the template"
                     }
                 },
                 "required": ["query"]
@@ -302,13 +313,20 @@ impl Tool for GetNodeDetailsTool {
     async fn definition(&self, _prompt: String) -> ToolDefinition {
         ToolDefinition {
             name: "get_node_details".to_string(),
-            description: "Get complete, unfiltered details about a specific node including all pin information, connections, default values, and metadata. Use this when you need more information than what's shown in the abbreviated context.".to_string(),
+            description: r#"Get full details about a node: all pins, connections, current values. Use when context summary is insufficient.
+
+WHEN TO USE:
+- Need exact pin names for ConnectPins/UpdateNodePin
+- See what values are configured
+- Understand node's connections
+
+RETURNS: Full pin list with names, types, current values, and all connections"#.to_string(),
             parameters: json!({
                 "type": "object",
                 "properties": {
                     "node_id": {
                         "type": "string",
-                        "description": "The ID of the node to get full details for"
+                        "description": "The node ID from context (e.g., 'abc123')"
                     }
                 },
                 "required": ["node_id"]
@@ -405,28 +423,45 @@ impl Tool for EmitCommandsTool {
     async fn definition(&self, _prompt: String) -> ToolDefinition {
         ToolDefinition {
             name: "emit_commands".to_string(),
-            description: "Emit a list of commands to modify the graph. Each command MUST include a 'summary' field with a brief human-readable description. Commands are executed by the frontend to maintain undo/redo history.".to_string(),
+            description: r#"Execute graph modifications. Commands are batched and applied atomically with undo support.
+
+WORKFLOW:
+1. Use catalog_search to get exact node_type
+2. Use get_node_details for pin names
+3. Emit commands with ref_ids to chain operations
+
+COMMAND TYPES:
+- AddNode: Add a node (requires node_type from catalog)
+- AddPlaceholder: Add a placeholder with custom pins
+- ConnectPins: Connect two pins (use pin NAME, not ID)
+- UpdateNodePin: Set a pin's value
+- RemoveNode: Delete a node
+- CreateVariable/UpdateVariable/DeleteVariable
+- CreateComment/UpdateComment/DeleteComment
+- CreateLayer/AddNodesToLayer/RemoveNodesFromLayer
+
+REF_IDS: Use '$0', '$1', etc. to reference nodes in same batch"#.to_string(),
             parameters: json!({
                 "type": "object",
                 "properties": {
                     "commands": {
                         "type": "array",
-                        "description": "List of commands to execute. Each command MUST have a 'summary' field.",
+                        "description": "Commands to execute. Use ref_id ('$0', '$1') for cross-referencing new nodes.",
                         "items": {
                             "type": "object",
                             "oneOf": [
                                 {
                                     "properties": {
                                         "command_type": { "const": "AddNode" },
-                                        "node_type": { "type": "string", "description": "The node type from the catalog" },
-                                        "ref_id": { "type": "string", "description": "Reference ID for this node (e.g., '$0', '$1') to use in subsequent commands" },
+                                        "node_type": { "type": "string", "description": "EXACT node_type from catalog_search (e.g., 'flow_like_catalog_nodes::example::Example')" },
+                                        "ref_id": { "type": "string", "description": "Reference ID like '$0', '$1' to use in ConnectPins/UpdateNodePin" },
                                         "position": {
                                             "type": "object",
                                             "properties": { "x": { "type": "number" }, "y": { "type": "number" } }
                                         },
-                                        "friendly_name": { "type": "string", "description": "Optional friendly name" },
-                                        "target_layer": { "type": "string", "description": "Layer ID to place the node in. Use layer ID from context. Omit for root/current layer." },
-                                        "summary": { "type": "string", "description": "Human-readable summary, e.g. 'Add a String Concat node'" }
+                                        "friendly_name": { "type": "string", "description": "Optional display name" },
+                                        "target_layer": { "type": "string", "description": "Layer ID for placement. Omit for root layer." },
+                                        "summary": { "type": "string", "description": "Brief description, e.g. 'Add HTTP GET node'" }
                                     },
                                     "required": ["command_type", "node_type", "ref_id", "summary"]
                                 },
@@ -677,8 +712,9 @@ impl Tool for EmitCommandsTool {
                     color,
                     ..
                 } => {
-                    let preview = if content.len() > 30 {
-                        format!("{}...", &content[..30])
+                    let preview = if content.chars().count() > 30 {
+                        let truncated: String = content.chars().take(30).collect();
+                        format!("{}...", truncated)
                     } else {
                         content.clone()
                     };
@@ -731,17 +767,26 @@ impl Tool for QueryLogsTool {
     async fn definition(&self, _prompt: String) -> ToolDefinition {
         ToolDefinition {
             name: "query_logs".to_string(),
-            description: "Query execution logs from a flow run. Use this to find errors, warnings, or trace execution flow. Log levels: 0=Debug, 1=Info, 2=Warn, 3=Error, 4=Fatal. Returns log messages with their node_id so you can use focus_node to highlight problematic nodes.".to_string(),
+            description: r#"Query execution logs from a flow run. Useful for debugging errors and tracing execution.
+
+LOG LEVELS: Debug(0), Info(1), Warn(2), Error(3), Fatal(4)
+
+FILTER EXAMPLES:
+- 'log_level >= 3' → Errors and fatal only
+- 'node_id = "abc123"' → Logs from specific node
+- 'message LIKE "%timeout%"' → Search in messages
+
+RETURNS: Logs with level, message, node_id (use node_id with get_node_details)"#.to_string(),
             parameters: json!({
                 "type": "object",
                 "properties": {
                     "filter": {
                         "type": "string",
-                        "description": "Optional SQL-like filter query. Examples: 'log_level >= 3' (errors and above), 'node_id = \"abc123\"', 'message LIKE \"%error%\"'"
+                        "description": "SQL-like filter: 'log_level >= 3', 'node_id = \"id\"', 'message LIKE \"%error%\"'"
                     },
                     "limit": {
                         "type": "integer",
-                        "description": "Maximum number of logs to return (default: 50, max: 100)"
+                        "description": "Max logs to return (default: 50, max: 100)"
                     }
                 },
                 "required": []

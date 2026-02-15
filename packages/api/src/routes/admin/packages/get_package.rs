@@ -8,14 +8,28 @@ use crate::state::AppState;
 use axum::extract::{Path, State};
 use axum::{Extension, Json};
 use serde::Serialize;
+use utoipa::ToSchema;
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, ToSchema)]
 pub struct PackageDetailResponse {
     pub package: PackageDetails,
     pub reviews: Vec<PackageReview>,
 }
 
-/// GET /admin/packages/{package_id}
+#[utoipa::path(
+    get,
+    path = "/admin/packages/{package_id}",
+    tag = "admin",
+    params(
+        ("package_id" = String, Path, description = "Package ID")
+    ),
+    responses(
+        (status = 200, description = "Package details", body = PackageDetailResponse),
+        (status = 401, description = "Unauthorized"),
+        (status = 403, description = "Forbidden"),
+        (status = 404, description = "Package not found")
+    )
+)]
 pub async fn get_package(
     State(state): State<AppState>,
     Extension(user): Extension<AppUser>,

@@ -22,7 +22,7 @@ impl NodeLogic for UpsertElement {
             "a2ui_upsert_element",
             "Upsert Element",
             "Updates or inserts an element value in the frontend",
-            "A2UI/Data",
+            "UI/Data",
         );
         node.add_icon("/flow/icons/a2ui.svg");
 

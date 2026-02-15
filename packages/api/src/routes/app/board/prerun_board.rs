@@ -15,16 +15,17 @@ use axum::{
 use flow_like::flow::board::ExecutionMode;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use utoipa::{IntoParams, ToSchema};
 
 /// Query parameters for pre-run analysis
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, IntoParams, ToSchema)]
 pub struct PrerunBoardQuery {
     /// Board version as tuple (major, minor, patch) - defaults to latest
     pub version: Option<String>,
 }
 
 /// A runtime-configured variable that needs a value before execution
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, ToSchema)]
 pub struct RuntimeVariable {
     pub id: String,
     pub name: String,
@@ -36,14 +37,14 @@ pub struct RuntimeVariable {
 }
 
 /// OAuth provider requirement
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, ToSchema)]
 pub struct OAuthRequirement {
     pub provider_id: String,
     pub scopes: Vec<String>,
 }
 
 /// Response from pre-run analysis
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, ToSchema)]
 pub struct PrerunBoardResponse {
     /// Variables that are marked as runtime_configured (need user-provided values)
     pub runtime_variables: Vec<RuntimeVariable>,
@@ -52,6 +53,7 @@ pub struct PrerunBoardResponse {
     /// Whether the board can only run locally (has offline-only nodes)
     pub requires_local_execution: bool,
     /// Board's execution mode setting (Hybrid, Remote, Local)
+    #[schema(value_type = String)]
     pub execution_mode: ExecutionMode,
     /// Whether the user can execute locally (has ReadBoards permission)
     /// If false, execution must happen on server
@@ -73,6 +75,21 @@ fn parse_version(version_str: &str) -> Option<(u32, u32, u32)> {
 /// Analyze a board to determine what's needed before execution.
 ///
 /// Returns runtime-configured variables and OAuth requirements.
+#[utoipa::path(
+    get,
+    path = "/apps/{app_id}/board/{board_id}/prerun",
+    tag = "execution",
+    params(
+        ("app_id" = String, Path, description = "Application ID"),
+        ("board_id" = String, Path, description = "Board ID"),
+        PrerunBoardQuery
+    ),
+    responses(
+        (status = 200, description = "Pre-run analysis results", body = PrerunBoardResponse),
+        (status = 401, description = "Unauthorized"),
+        (status = 404, description = "Board not found")
+    )
+)]
 #[tracing::instrument(name = "GET /apps/{app_id}/board/{board_id}/prerun", skip(state, user))]
 pub async fn prerun_board(
     State(state): State<AppState>,
@@ -127,13 +144,17 @@ pub async fn prerun_board(
             }
         }
 
-        // Collect required scopes
+        // Collect required scopes - only for providers already registered via oauth_providers
+        // required_oauth_scopes is informational - it documents what scopes a node needs
+        // IF OAuth is used, but shouldn't trigger OAuth by itself
         if let Some(required_scopes) = &node.required_oauth_scopes {
             for (provider_id, scopes) in required_scopes {
-                let entry = oauth_scopes.entry(provider_id.clone()).or_default();
-                for scope in scopes {
-                    if !entry.contains(scope) {
-                        entry.push(scope.clone());
+                // Only add scopes if this provider was already registered by an OAuth provider node
+                if let Some(entry) = oauth_scopes.get_mut(provider_id) {
+                    for scope in scopes {
+                        if !entry.contains(scope) {
+                            entry.push(scope.clone());
+                        }
                     }
                 }
             }

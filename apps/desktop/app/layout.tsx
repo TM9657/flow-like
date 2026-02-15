@@ -43,7 +43,10 @@ import {
 import { useEffect } from "react";
 import { AppSidebar } from "../components/app-sidebar";
 import { DesktopAuthProvider } from "../components/auth-provider";
+import { DeeplinkNavigationHandler } from "../components/deeplink-navigation-handler";
+import DownloadNotificationProvider from "../components/download-notification-provider";
 import GlobalAnchorHandler from "../components/global-anchor-component";
+import { IOSWebviewHardening } from "../components/ios-webview-hardening";
 import NotificationProvider from "../components/notification-provider";
 import { OAuthCallbackHandler } from "../components/oauth-callback-handler";
 import { OAuthExecutionProvider } from "../components/oauth-execution-provider";
@@ -153,7 +156,13 @@ export default function RootLayout({
 	children: React.ReactNode;
 }>) {
 	return (
-		<html lang="en" suppressHydrationWarning suppressContentEditableWarning>
+		<html
+			lang="en"
+			data-desktop-app="true"
+			suppressHydrationWarning
+			suppressContentEditableWarning
+			className="min-h-screen"
+		>
 			{/* <ReactScan /> */}
 			<PHProvider>
 				<ReactFlowProvider>
@@ -164,7 +173,8 @@ export default function RootLayout({
 						}}
 					>
 						<NetworkAwareProvider>
-							<body className={inter.className}>
+							<body className={inter.className} data-desktop-app="true">
+								<IOSWebviewHardening />
 								<NetworkStatusIndicator />
 								<UpdateProvider />
 								<TrayProvider />
@@ -180,24 +190,27 @@ export default function RootLayout({
 										<Toaster />
 										<ToastProvider />
 										<TauriProvider>
-											<OAuthCallbackHandler>
-												<OAuthExecutionProvider>
-													<DesktopAuthProvider>
-														<NotificationProvider />
-														<RuntimeVariablesProviderComponent>
-															<ExecutionServiceProvider>
-																<ExecutionEngineProviderComponent>
-																	<SpotlightWrapper>
-																		<PostHogPageView />
-																		<ThemeLoader />
-																		<AppSidebar>{children}</AppSidebar>
-																	</SpotlightWrapper>
-																</ExecutionEngineProviderComponent>
-															</ExecutionServiceProvider>
-														</RuntimeVariablesProviderComponent>
-													</DesktopAuthProvider>
-												</OAuthExecutionProvider>
-											</OAuthCallbackHandler>
+											<DownloadNotificationProvider />
+											<DeeplinkNavigationHandler>
+												<OAuthCallbackHandler>
+													<OAuthExecutionProvider>
+														<DesktopAuthProvider>
+															<NotificationProvider />
+															<RuntimeVariablesProviderComponent>
+																<ExecutionServiceProvider>
+																	<ExecutionEngineProviderComponent>
+																		<SpotlightWrapper>
+																			<PostHogPageView />
+																			<ThemeLoader />
+																			<AppSidebar>{children}</AppSidebar>
+																		</SpotlightWrapper>
+																	</ExecutionEngineProviderComponent>
+																</ExecutionServiceProvider>
+															</RuntimeVariablesProviderComponent>
+														</DesktopAuthProvider>
+													</OAuthExecutionProvider>
+												</OAuthCallbackHandler>
+											</DeeplinkNavigationHandler>
 										</TauriProvider>
 									</TooltipProvider>
 								</ThemeProvider>

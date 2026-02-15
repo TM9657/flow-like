@@ -92,6 +92,12 @@ pub struct QueuedJob {
     /// Runtime-configured variables to override board variables
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub runtime_variables: Option<HashMap<String, flow_like::flow::variable::Variable>>,
+    /// User execution context (role, permissions, attributes)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub user_context: Option<flow_like::flow::execution::UserExecutionContext>,
+    /// User profile data for execution context (bits, settings, etc.)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub profile: Option<serde_json::Value>,
 }
 
 /// Queue worker errors

@@ -48,6 +48,8 @@ pub struct Model {
     pub total_size: i64,
     #[sea_orm(column_name = "totalLLMPrice")]
     pub total_llm_price: i64,
+    #[sea_orm(column_name = "totalEmbeddingPrice")]
+    pub total_embedding_price: i64,
     #[sea_orm(column_name = "llmPriceTrackingMonth", column_type = "Text", nullable)]
     pub llm_price_tracking_month: Option<String>,
     #[sea_orm(column_name = "createdAt")]
@@ -58,8 +60,14 @@ pub struct Model {
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
 pub enum Relation {
+    #[sea_orm(has_many = "super::app_purchase::Entity")]
+    AppPurchase,
     #[sea_orm(has_many = "super::comment::Entity")]
     Comment,
+    #[sea_orm(has_many = "super::embedding_usage_tracking::Entity")]
+    EmbeddingUsageTracking,
+    #[sea_orm(has_many = "super::execution_run::Entity")]
+    ExecutionRun,
     #[sea_orm(has_many = "super::execution_usage_tracking::Entity")]
     ExecutionUsageTracking,
     #[sea_orm(has_many = "super::feedback::Entity")]
@@ -72,6 +80,8 @@ pub enum Relation {
     LlmUsageTracking,
     #[sea_orm(has_many = "super::membership::Entity")]
     Membership,
+    #[sea_orm(has_many = "super::notification::Entity")]
+    Notification,
     #[sea_orm(has_many = "super::pat::Entity")]
     Pat,
     #[sea_orm(has_many = "super::profile::Entity")]
@@ -88,9 +98,27 @@ pub enum Relation {
     WasmPackageReview,
 }
 
+impl Related<super::app_purchase::Entity> for Entity {
+    fn to() -> RelationDef {
+        Relation::AppPurchase.def()
+    }
+}
+
 impl Related<super::comment::Entity> for Entity {
     fn to() -> RelationDef {
         Relation::Comment.def()
+    }
+}
+
+impl Related<super::embedding_usage_tracking::Entity> for Entity {
+    fn to() -> RelationDef {
+        Relation::EmbeddingUsageTracking.def()
+    }
+}
+
+impl Related<super::execution_run::Entity> for Entity {
+    fn to() -> RelationDef {
+        Relation::ExecutionRun.def()
     }
 }
 
@@ -127,6 +155,12 @@ impl Related<super::llm_usage_tracking::Entity> for Entity {
 impl Related<super::membership::Entity> for Entity {
     fn to() -> RelationDef {
         Relation::Membership.def()
+    }
+}
+
+impl Related<super::notification::Entity> for Entity {
+    fn to() -> RelationDef {
+        Relation::Notification.def()
     }
 }
 

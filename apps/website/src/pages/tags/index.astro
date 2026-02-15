@@ -1,6 +1,6 @@
 ---
 import "@tm9657/flow-like-ui/global.css";
-import "../../styles/Blog.css";
+import "../../styles/blog.css";
 import BlogLayout from '../../layouts/Blog-Layout.astro';
 import { getCollection } from 'astro:content';
 const posts = await getCollection('blog', ({ data }) => import.meta.env.PROD ? !data.draft : true);
@@ -10,12 +10,29 @@ const tags = [...tagCounts.entries()].sort(([a],[b]) => a.localeCompare(b));
 ---
 
 <BlogLayout data={{ title: "Tags", description: "Explore blog posts by tags", slug: "tags" }}>
-  <main class="mx-auto max-w-3xl p-6">
-    <h1>Tags</h1>
-    <ul>
-      {tags.map(([t,count]) =>
-      <li><a href={`/tags/${encodeURIComponent(t)}/`}>#{t}</a> ({count})</li>
-    )}
-  </ul>
-</main>
+  <div class="mx-auto w-full max-w-6xl px-4 sm:px-6 lg:px-8 pb-12 sm:pb-14 lg:pb-16">
+    <header class="mb-10 rounded-2xl border border-border/50 bg-card/50 p-7 text-center backdrop-blur-sm sm:mb-12 sm:p-9 lg:p-11">
+      <p class="mb-3 text-[11px] font-medium tracking-[0.3em] uppercase text-primary">Flow-Like Blog</p>
+      <h1 class="text-4xl font-bold tracking-tight sm:text-5xl">Browse By Tag</h1>
+      <p class="mx-auto mt-4 max-w-3xl text-base leading-relaxed text-muted-foreground sm:text-lg">
+        Explore all posts grouped by topic.
+      </p>
+    </header>
+
+    <ul class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+      {tags.map(([t, count]) => (
+        <li>
+          <a
+            href={`/tags/${encodeURIComponent(t)}/`}
+            class="group flex items-center justify-between rounded-xl border border-border/50 bg-card/40 px-4 py-3 transition-all hover:border-border hover:bg-card/60"
+          >
+            <span class="font-medium text-foreground">#{t}</span>
+            <span class="rounded-full border border-border/60 bg-background/70 px-2 py-0.5 text-xs text-muted-foreground transition group-hover:text-foreground">
+              {count}
+            </span>
+          </a>
+        </li>
+      ))}
+    </ul>
+  </div>
 </BlogLayout>

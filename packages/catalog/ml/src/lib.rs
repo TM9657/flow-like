@@ -10,6 +10,9 @@ pub use flow_like_catalog_core::{NodeConstructor, NodeLogic, inventory, register
 #[path = "ml.rs"]
 pub mod ml;
 
+#[cfg(test)]
+mod tests;
+
 pub use ml::*;
 
 pub fn get_catalog() -> Vec<Arc<dyn NodeLogic>> {

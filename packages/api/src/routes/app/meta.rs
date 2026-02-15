@@ -4,6 +4,7 @@ use axum::{
 };
 use sea_orm::{ColumnTrait, EntityTrait, QueryFilter};
 use serde::Deserialize;
+use utoipa::ToSchema;
 
 use crate::{
     auth::AppUser, ensure_in_project, ensure_permission, entity::meta, error::ApiError,
@@ -24,21 +25,21 @@ pub fn routes() -> Router<AppState> {
         .route("/media/{media_id}", delete(remove_media::remove_media))
 }
 
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Debug, ToSchema)]
 pub struct MetaQuery {
     pub language: Option<String>,
     pub template_id: Option<String>,
     pub course_id: Option<String>,
 }
 
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Debug, ToSchema)]
 #[serde(rename_all = "lowercase")]
 pub enum MediaItem {
     Icon,
     Thumbnail,
     Preview,
 }
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Debug, ToSchema)]
 pub struct MediaQuery {
     pub language: Option<String>,
     pub template_id: Option<String>,

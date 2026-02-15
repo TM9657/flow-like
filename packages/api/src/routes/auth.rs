@@ -22,8 +22,18 @@ pub fn routes() -> Router<AppState> {
         .route("/openid", get(openid_config))
 }
 
+#[utoipa::path(
+    get,
+    path = "/auth/openid",
+    tag = "auth",
+    responses(
+        (status = 200, description = "OpenID Connect configuration")
+    )
+)]
 #[tracing::instrument(name = "GET /auth/openid", skip(state))]
-async fn openid_config(State(state): State<AppState>) -> Result<Json<OpenIdConfig>, InternalError> {
+pub async fn openid_config(
+    State(state): State<AppState>,
+) -> Result<Json<OpenIdConfig>, InternalError> {
     let config = state
         .platform_config
         .authentication
@@ -37,8 +47,16 @@ async fn openid_config(State(state): State<AppState>) -> Result<Json<OpenIdConfi
     Ok(Json(config))
 }
 
+#[utoipa::path(
+    get,
+    path = "/auth/discovery",
+    tag = "auth",
+    responses(
+        (status = 307, description = "Redirect to OpenID discovery endpoint")
+    )
+)]
 #[tracing::instrument(name = "GET /auth/discovery", skip(state))]
-async fn discovery(State(state): State<AppState>) -> Redirect {
+pub async fn discovery(State(state): State<AppState>) -> Redirect {
     Redirect::temporary(
         &state
             .platform_config
@@ -55,8 +73,16 @@ async fn discovery(State(state): State<AppState>) -> Redirect {
     )
 }
 
+#[utoipa::path(
+    get,
+    path = "/auth/jwks",
+    tag = "auth",
+    responses(
+        (status = 307, description = "Redirect to JWKS endpoint")
+    )
+)]
 #[tracing::instrument(name = "GET /auth/jwks", skip(state))]
-async fn jwks(State(state): State<AppState>) -> Redirect {
+pub async fn jwks(State(state): State<AppState>) -> Redirect {
     Redirect::temporary(
         &state
             .platform_config

@@ -9,7 +9,7 @@ import { useBackend } from "../../../state/backend-state";
 import { PackageDetailView } from "../../store/package-detail-view";
 
 // biome-ignore lint/suspicious/noExplicitAny: Required for generic fetcher signature compatibility
-type GenericFetcher = <T>(
+export type GenericFetcher = <T>(
 	profile: IProfile,
 	path: string,
 	options?: RequestInit,

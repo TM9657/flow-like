@@ -1,4 +1,4 @@
-use std::{collections::HashMap, time::SystemTime};
+use std::time::SystemTime;
 
 use crate::{entity::app, state::AppState};
 use axum::{
@@ -8,6 +8,7 @@ use axum::{
 
 pub mod internal;
 
+pub mod api;
 pub mod board;
 pub mod data;
 pub mod db;
@@ -17,7 +18,7 @@ pub mod meta;
 pub mod notifications;
 pub mod page;
 pub mod roles;
-pub mod route;
+pub mod sales;
 pub mod team;
 pub mod template;
 pub mod widget;
@@ -44,15 +45,16 @@ pub fn routes() -> Router<AppState> {
         .nest("/{app_id}/templates", template::routes())
         .nest("/{app_id}/widgets", widget::routes())
         .nest("/{app_id}/pages", page::routes())
-        .nest("/{app_id}/routes", route::routes())
         .nest("/{app_id}/board", board::routes())
         .nest("/{app_id}/meta", meta::routes())
         .nest("/{app_id}/roles", roles::routes())
         .nest("/{app_id}/team", team::routes())
+        .nest("/{app_id}/sales", sales::routes())
         .nest("/{app_id}/events", events::routes())
         .nest("/{app_id}/data", data::routes())
         .nest("/{app_id}/invoke", invoke::routes())
         .nest("/{app_id}/db", db::routes())
+        .nest("/{app_id}/api", api::routes())
 }
 
 #[macro_export]
@@ -296,7 +298,6 @@ impl From<app::Model> for flow_like::app::App {
             app_state: None,
             widget_ids: vec![],
             page_ids: vec![],
-            route_mappings: HashMap::new(),
         }
     }
 }

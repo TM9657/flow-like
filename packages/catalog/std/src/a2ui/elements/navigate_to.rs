@@ -24,7 +24,7 @@ impl NodeLogic for NavigateTo {
             "a2ui_navigate_to",
             "Navigate To",
             "Navigates to a page route",
-            "A2UI/Navigation",
+            "UI/Navigation",
         );
         node.add_icon("/flow/icons/a2ui.svg");
 

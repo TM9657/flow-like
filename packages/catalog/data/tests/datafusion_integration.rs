@@ -2734,9 +2734,9 @@ mod scoped_credentials_tests {
             }
         };
 
-        // Scoped user should be able to write to logs/runs/test-app-123/
+        // Scoped user should be able to write to runs/test-app-123/
         let log_path =
-            ObjectStorePath::from(format!("logs/runs/test-app-123/run_{}.log", Uuid::new_v4()));
+            ObjectStorePath::from(format!("runs/test-app-123/run_{}.log", Uuid::new_v4()));
         let log_content = b"[INFO] Test log entry from scoped credential test";
 
         let put_result = s3

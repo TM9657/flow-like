@@ -24,7 +24,7 @@ impl NodeLogic for GetChildAtIndex {
             "a2ui_get_child_at_index",
             "Get Child At Index",
             "Gets a child element at a specific index from a container",
-            "A2UI/Elements/Containers",
+            "UI/Elements/Containers",
         );
         node.add_icon("/flow/icons/a2ui.svg");
 

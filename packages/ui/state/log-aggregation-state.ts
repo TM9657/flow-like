@@ -18,6 +18,7 @@ interface ILogAggregationState {
 	currentLogs: ILogMetadata[];
 	filter?: ILogAggregationFilter;
 	currentMetadata?: ILogMetadata;
+	isLoading: boolean;
 	refetchLogs: (backend: IBackendState) => Promise<void>;
 	setFilter(
 		backend: IBackendState,
@@ -30,6 +31,7 @@ export const useLogAggregation = create<ILogAggregationState>((set, get) => ({
 	currentLogs: [],
 	filter: undefined,
 	currentMetadata: undefined,
+	isLoading: false,
 	setFilter: async (backend: IBackendState, filter: ILogAggregationFilter) => {
 		const currentFilter = get().filter;
 		const boardChanged =
@@ -38,24 +40,31 @@ export const useLogAggregation = create<ILogAggregationState>((set, get) => ({
 
 		// Clear currentMetadata when board changes to avoid showing stale logs
 		if (boardChanged) {
-			set({ filter, currentMetadata: undefined });
+			set({ filter, currentMetadata: undefined, isLoading: true });
 		} else {
-			set({ filter });
+			set({ filter, isLoading: true });
 		}
 
-		const runs = await backend.boardState.listRuns(
-			filter.appId,
-			filter.boardId,
-			filter.nodeId,
-			filter.from,
-			filter.to,
-			filter.status,
-			filter.lastMeta,
-			filter.offset,
-			filter.limit,
-		);
+		try {
+			const runs = await backend.boardState.listRuns(
+				filter.appId,
+				filter.boardId,
+				filter.nodeId,
+				filter.from,
+				filter.to,
+				filter.status,
+				filter.lastMeta,
+				filter.offset,
+				filter.limit,
+			);
 
-		set({ currentLogs: runs.toSorted((a, b) => b.start - a.start) });
+			set({
+				currentLogs: runs.toSorted((a, b) => b.start - a.start),
+				isLoading: false,
+			});
+		} catch {
+			set({ isLoading: false });
+		}
 	},
 	setCurrentMetadata: (meta?: ILogMetadata) => {
 		set({ currentMetadata: meta });
@@ -67,18 +76,27 @@ export const useLogAggregation = create<ILogAggregationState>((set, get) => ({
 			return;
 		}
 
-		const runs = await backend.boardState.listRuns(
-			filter.appId,
-			filter.boardId,
-			filter.nodeId,
-			filter.from,
-			filter.to,
-			filter.status,
-			filter.lastMeta,
-			filter.offset,
-			filter.limit,
-		);
+		set({ isLoading: true });
 
-		set({ currentLogs: runs.toSorted((a, b) => b.start - a.start) });
+		try {
+			const runs = await backend.boardState.listRuns(
+				filter.appId,
+				filter.boardId,
+				filter.nodeId,
+				filter.from,
+				filter.to,
+				filter.status,
+				filter.lastMeta,
+				filter.offset,
+				filter.limit,
+			);
+
+			set({
+				currentLogs: runs.toSorted((a, b) => b.start - a.start),
+				isLoading: false,
+			});
+		} catch {
+			set({ isLoading: false });
+		}
 	},
 }));

@@ -51,6 +51,7 @@ bitflags = "2"
 chrono = { version = "0.4", features = ["serde"] }
 toml = "0.8"
 base64 = "0.22"
+utoipa = { version = "5", optional = true }
 
 [dev-dependencies]
 tokio = { version = "1", features = ["full", "test-util"] }
@@ -61,3 +62,5 @@ wat = "1"
 default = []
 # Enable full WASI preview support
 wasi = []
+# Enable OpenAPI schema generation
+openapi = ["utoipa"]

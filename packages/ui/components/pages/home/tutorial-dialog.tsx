@@ -689,7 +689,7 @@ export function TutorialDialog() {
 								? "p-4 sm:p-8 bg-background/15 backdrop-blur-xl border-t border-border/30"
 								: "p-4 sm:p-8 bg-card border-t border-border/30"
 						}
-						style={{ paddingBottom: "max(env(safe-area-inset-bottom), 0px)" }}
+						style={{ paddingBottom: "max(var(--fl-safe-bottom), 0px)" }}
 					>
 						{/* Dots are enough; progress bar removed per feedback */}
 

@@ -129,7 +129,7 @@ impl NodeLogic for RegisterDeltaTableNode {
             let url = Url::parse(&url_str)?;
 
             let mut builder =
-                DeltaTableBuilder::from_uri(url.clone())?.with_storage_backend(object_store, url);
+                DeltaTableBuilder::from_url(url.clone())?.with_storage_backend(object_store, url);
 
             if version >= 0 {
                 builder = builder.with_version(version);
@@ -295,13 +295,13 @@ impl NodeLogic for DeltaTimeTravelNode {
             let url = Url::parse(&url_str)?;
 
             let builder = match travel_mode.to_lowercase().as_str() {
-                "version" => DeltaTableBuilder::from_uri(url.clone())?
+                "version" => DeltaTableBuilder::from_url(url.clone())?
                     .with_storage_backend(object_store, url)
                     .with_version(version),
                 "timestamp" => {
                     let dt = chrono::DateTime::parse_from_rfc3339(&timestamp)
                         .map_err(|e| flow_like_types::anyhow!("Invalid timestamp format: {}", e))?;
-                    DeltaTableBuilder::from_uri(url.clone())?
+                    DeltaTableBuilder::from_url(url.clone())?
                         .with_storage_backend(object_store, url)
                         .with_timestamp(dt.to_utc())
                 }
@@ -448,7 +448,7 @@ impl NodeLogic for DeltaTableInfoNode {
             let url_str = build_store_url(&path.store_ref, &path.path);
             let url = Url::parse(&url_str)?;
 
-            let delta_table = DeltaTableBuilder::from_uri(url.clone())?
+            let delta_table = DeltaTableBuilder::from_url(url.clone())?
                 .with_storage_backend(object_store, url)
                 .load()
                 .await
@@ -943,14 +943,14 @@ impl NodeLogic for WriteDeltaTableNode {
                 _ => return Err(flow_like_types::anyhow!("Invalid write mode: {}", mode)),
             };
 
-            let ops = match DeltaTableBuilder::from_uri(url.clone())?
+            let ops = match DeltaTableBuilder::from_url(url.clone())?
                 .with_storage_backend(object_store.clone(), url.clone())
                 .load()
                 .await
             {
                 Ok(table) => DeltaOps::from(table),
                 Err(_) => {
-                    let table = DeltaTableBuilder::from_uri(url.clone())?
+                    let table = DeltaTableBuilder::from_url(url.clone())?
                         .with_storage_backend(object_store.clone(), url)
                         .build()
                         .map_err(|e| {

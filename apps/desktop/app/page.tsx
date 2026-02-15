@@ -7,7 +7,7 @@ import {
 } from "@tm9657/flow-like-ui";
 import type { ISettingsProfile } from "@tm9657/flow-like-ui/types";
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useTauriInvoke } from "../components/useInvoke";
 
 export default function Home() {
@@ -19,25 +19,31 @@ export default function Home() {
 		{},
 	);
 
-	useEffect(() => {
+	const checkProfiles = useCallback(async () => {
 		if (profiles.isLoading) return;
 
-		// Handle successful data load
 		if (profiles.data) {
 			const profileCount = Object.keys(profiles.data).length;
 
-			if (profileCount === 0) {
-				router.push("/onboarding");
-			} else {
+			if (profileCount > 0) {
 				setIsCheckingProfiles(false);
+				return;
 			}
+
+			// Cache may be stale after login sync — refetch before redirecting.
+			const { data: fresh } = await profiles.refetch();
+			if (fresh && Object.keys(fresh).length > 0) {
+				setIsCheckingProfiles(false);
+				return;
+			}
+
+			router.replace("/onboarding");
 			return;
 		}
 
-		// Only redirect on actual errors, not on undefined/null data during loading
 		if (profiles.isError) {
 			console.error("Failed to load profiles:", profiles.error);
-			router.push("/onboarding");
+			router.replace("/onboarding");
 		}
 	}, [
 		profiles.data,
@@ -46,6 +52,10 @@ export default function Home() {
 		profiles.error,
 		router,
 	]);
+
+	useEffect(() => {
+		checkProfiles();
+	}, [checkProfiles]);
 
 	if (profiles.isLoading || isCheckingProfiles) {
 		return (

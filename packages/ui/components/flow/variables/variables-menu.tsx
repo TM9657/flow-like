@@ -127,8 +127,8 @@ export function VariablesMenu({
 	}, [upsertVariable]);
 
 	return (
-		<div className="flex flex-col gap-2 p-4">
-			<div className="flex flex-row items-center gap-4 mb-2">
+		<div className="flex flex-col h-full overflow-hidden">
+			<div className="flex flex-row items-center gap-4 p-4 pb-2 shrink-0">
 				<h2>Variables</h2>
 				<Button
 					className="gap-2"
@@ -145,18 +145,20 @@ export function VariablesMenu({
 				onCreateVariable={upsertVariable}
 			/>
 
-			<CategoryTree
-				root={tree}
-				refs={board.refs}
-				onVariableChange={(variable) => {
-					if (!variable.editable) return;
-					upsertVariable(variable);
-				}}
-				onVariableDeleted={(variable) => {
-					if (!variable.editable) return;
-					removeVariable(variable);
-				}}
-			/>
+			<div className="flex-1 overflow-y-auto overscroll-contain px-4 pb-4">
+				<CategoryTree
+					root={tree}
+					refs={board.refs}
+					onVariableChange={(variable) => {
+						if (!variable.editable) return;
+						upsertVariable(variable);
+					}}
+					onVariableDeleted={(variable) => {
+						if (!variable.editable) return;
+						removeVariable(variable);
+					}}
+				/>
+			</div>
 		</div>
 	);
 }

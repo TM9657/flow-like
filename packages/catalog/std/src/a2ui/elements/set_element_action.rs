@@ -24,7 +24,7 @@ impl NodeLogic for SetElementAction {
             "a2ui_set_element_action",
             "Set Element Action",
             "Dynamically sets the action of an interactive element (button, link, etc.)",
-            "A2UI/Elements",
+            "UI/Elements",
         );
         node.add_icon("/flow/icons/a2ui.svg");
 

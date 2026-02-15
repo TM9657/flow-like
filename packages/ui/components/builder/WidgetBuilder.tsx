@@ -272,6 +272,7 @@ function WidgetBuilderContent({
 		getComponent,
 		widgetRefs,
 		actionContext,
+		setCanvasSettings,
 	} = useBuilder();
 	const { activeId } = useBuilderDnd();
 	const isDragging = activeId !== null;
@@ -303,77 +304,93 @@ function WidgetBuilderContent({
 		[setPendingComponents],
 	);
 
-	const handleApplyComponents = useCallback(() => {
-		if (pendingComponents.length === 0) return;
+	const handleApplyComponents = useCallback(
+		(
+			_components?: SurfaceComponent[],
+			canvasSettings?: {
+				backgroundColor?: string;
+				padding?: string;
+				customCss?: string;
+			},
+		) => {
+			if (pendingComponents.length === 0) return;
 
-		// Get root component BEFORE adding new components (to avoid stale closure)
-		const rootComponent = getComponent(ROOT_ID);
-
-		// Collect all child IDs referenced within the new components
-		const referencedChildIds = new Set<string>();
-		for (const comp of pendingComponents) {
-			const childrenData = (
-				comp.component as unknown as Record<string, unknown>
-			)?.children as Children | undefined;
-			if (childrenData && "explicitList" in childrenData) {
-				for (const childId of childrenData.explicitList) {
-					referencedChildIds.add(childId);
-				}
+			// Apply canvas settings if provided
+			if (canvasSettings) {
+				setCanvasSettings(canvasSettings);
 			}
-		}
 
-		// Find top-level components (new components not referenced as children of other new components)
-		const topLevelIds: string[] = [];
-		for (const comp of pendingComponents) {
-			if (!referencedChildIds.has(comp.id) && comp.id !== ROOT_ID) {
-				topLevelIds.push(comp.id);
-			}
-		}
+			// Get root component BEFORE adding new components (to avoid stale closure)
+			const rootComponent = getComponent(ROOT_ID);
 
-		// Add all components to the map
-		for (const comp of pendingComponents) {
-			const existing = getComponent(comp.id);
-			if (existing) {
-				updateComponent(comp.id, comp);
-			} else {
-				addComponent(comp);
-			}
-		}
-
-		// Add top-level components to the root's children list
-		if (topLevelIds.length > 0 && rootComponent) {
-			const rootChildrenData = (
-				rootComponent.component as unknown as Record<string, unknown>
-			)?.children as Children | undefined;
-			const existingChildren =
-				rootChildrenData && "explicitList" in rootChildrenData
-					? [...rootChildrenData.explicitList]
-					: [];
-
-			// Only add IDs that aren't already in the root's children
-			const newChildren = [...existingChildren];
-			for (const id of topLevelIds) {
-				if (!newChildren.includes(id)) {
-					newChildren.push(id);
+			// Collect all child IDs referenced within the new components
+			const referencedChildIds = new Set<string>();
+			for (const comp of pendingComponents) {
+				const childrenData = (
+					comp.component as unknown as Record<string, unknown>
+				)?.children as Children | undefined;
+				if (childrenData && "explicitList" in childrenData) {
+					for (const childId of childrenData.explicitList) {
+						referencedChildIds.add(childId);
+					}
 				}
 			}
 
-			updateComponent(ROOT_ID, {
-				component: {
-					...rootComponent.component,
-					children: { explicitList: newChildren },
-				} as A2UIComponent,
-			});
-		}
+			// Find top-level components (new components not referenced as children of other new components)
+			const topLevelIds: string[] = [];
+			for (const comp of pendingComponents) {
+				if (!referencedChildIds.has(comp.id) && comp.id !== ROOT_ID) {
+					topLevelIds.push(comp.id);
+				}
+			}
 
-		setPendingComponents([]);
-	}, [
-		pendingComponents,
-		getComponent,
-		updateComponent,
-		addComponent,
-		setPendingComponents,
-	]);
+			// Add all components to the map
+			for (const comp of pendingComponents) {
+				const existing = getComponent(comp.id);
+				if (existing) {
+					updateComponent(comp.id, comp);
+				} else {
+					addComponent(comp);
+				}
+			}
+
+			// Add top-level components to the root's children list
+			if (topLevelIds.length > 0 && rootComponent) {
+				const rootChildrenData = (
+					rootComponent.component as unknown as Record<string, unknown>
+				)?.children as Children | undefined;
+				const existingChildren =
+					rootChildrenData && "explicitList" in rootChildrenData
+						? [...rootChildrenData.explicitList]
+						: [];
+
+				// Only add IDs that aren't already in the root's children
+				const newChildren = [...existingChildren];
+				for (const id of topLevelIds) {
+					if (!newChildren.includes(id)) {
+						newChildren.push(id);
+					}
+				}
+
+				updateComponent(ROOT_ID, {
+					component: {
+						...rootComponent.component,
+						children: { explicitList: newChildren },
+					} as A2UIComponent,
+				});
+			}
+
+			setPendingComponents([]);
+		},
+		[
+			pendingComponents,
+			getComponent,
+			updateComponent,
+			addComponent,
+			setPendingComponents,
+			setCanvasSettings,
+		],
+	);
 
 	const handleDismissComponents = useCallback(() => {
 		setPendingComponents([]);
@@ -1216,6 +1233,23 @@ function BuilderPreview({ surfaceId }: BuilderPreviewProps) {
 								...componentData,
 								typewriter: enabled,
 								...(speed !== undefined && { typewriterSpeed: speed }),
+							} as unknown as SurfaceComponent["component"],
+						};
+						break;
+					}
+					case "setGeoMapViewport": {
+						const viewport = updateValue.viewport as
+							| { literalJson?: string }
+							| undefined;
+						const componentData = component.component as unknown as Record<
+							string,
+							unknown
+						>;
+						updatedComponent = {
+							...component,
+							component: {
+								...componentData,
+								viewport,
 							} as unknown as SurfaceComponent["component"],
 						};
 						break;

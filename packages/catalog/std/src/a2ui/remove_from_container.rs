@@ -26,7 +26,7 @@ impl NodeLogic for RemoveFromContainer {
             "a2ui_remove_from_container",
             "Remove From Container",
             "Removes an element from a container's children list",
-            "A2UI/Container",
+            "UI/Container",
         );
         node.add_icon("/flow/icons/a2ui.svg");
 

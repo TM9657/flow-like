@@ -217,6 +217,10 @@ pub fn set_component_schema_by_type(pin: &mut Pin, component_type: &str) -> bool
             pin.set_schema::<MiniMapProps>();
             true
         }
+        "geomap" => {
+            pin.set_schema::<GeoMapProps>();
+            true
+        }
 
         // Embeds
         "iframe" => {
@@ -298,6 +302,7 @@ pub fn valid_component_types() -> &'static [&'static str] {
         "inventoryGrid",
         "healthBar",
         "miniMap",
+        "geoMap",
         // Embeds
         "iframe",
         "plotlyChart",

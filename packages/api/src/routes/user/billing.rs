@@ -4,13 +4,27 @@ use crate::{error::ApiError, middleware::jwt::AppUser, state::AppState};
 use axum::{Extension, Json, extract::State};
 use flow_like_types::anyhow;
 use serde::{Deserialize, Serialize};
+use utoipa::ToSchema;
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Deserialize, Serialize, ToSchema)]
 pub struct BillingSession {
     pub session_id: String,
     pub url: String,
 }
 
+#[utoipa::path(
+    get,
+    path = "/user/billing",
+    tag = "user",
+    responses(
+        (status = 200, description = "Stripe billing portal session", body = BillingSession),
+        (status = 401, description = "Unauthorized"),
+        (status = 400, description = "Premium not enabled or user has no Stripe ID")
+    ),
+    security(
+        ("bearer_auth" = [])
+    )
+)]
 #[tracing::instrument(name = "GET /user/billing", skip(state, user))]
 pub async fn get_billing_session(
     State(state): State<AppState>,

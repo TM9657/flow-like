@@ -7,6 +7,21 @@ use axum::{
     extract::{Path, State},
 };
 
+#[utoipa::path(
+    delete,
+    path = "/apps/{app_id}/board/{board_id}",
+    tag = "boards",
+    params(
+        ("app_id" = String, Path, description = "Application ID"),
+        ("board_id" = String, Path, description = "Board ID")
+    ),
+    responses(
+        (status = 200, description = "Board deleted"),
+        (status = 401, description = "Unauthorized"),
+        (status = 403, description = "Forbidden"),
+        (status = 404, description = "Board not found")
+    )
+)]
 #[tracing::instrument(name = "DELETE /apps/{app_id}/board/{board_id}", skip(state, user))]
 pub async fn delete_board(
     State(state): State<AppState>,

@@ -96,6 +96,7 @@ impl ToProto<flow_like_types::proto::Node> for Node {
                 })
                 .unwrap_or_default(),
             only_offline: self.only_offline,
+            version: self.version,
         }
     }
 }
@@ -150,6 +151,7 @@ impl FromProto<flow_like_types::proto::Node> for Node {
                 )
             },
             only_offline: proto.only_offline,
+            version: proto.version,
         }
     }
 }

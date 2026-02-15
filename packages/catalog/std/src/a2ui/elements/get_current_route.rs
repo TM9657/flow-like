@@ -23,7 +23,7 @@ impl NodeLogic for GetCurrentRoute {
             "a2ui_get_current_route",
             "Get Current Route",
             "Gets the current page route from the execution context",
-            "A2UI/Navigation",
+            "UI/Navigation",
         );
         node.add_icon("/flow/icons/a2ui.svg");
 

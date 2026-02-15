@@ -8,12 +8,21 @@ use std::{
 const CACHE_KEY: &str = "flow-like";
 
 pub fn get_cache_dir() -> PathBuf {
+    if let Ok(dir) = std::env::var("CACHE_DIR") {
+        return PathBuf::from(dir).join(CACHE_KEY);
+    }
+
+    if std::env::var("AWS_LAMBDA_FUNCTION_NAME").is_ok() {
+        return PathBuf::from("/tmp").join(CACHE_KEY);
+    }
+
     if let Some(cache_dir) = dirs_next::cache_dir() {
         cache_dir.join(CACHE_KEY)
     } else if let Some(data_dir) = dirs_next::data_dir() {
         data_dir.join(CACHE_KEY)
+    } else if let Some(home) = std::env::var_os("HOME") {
+        PathBuf::from(home).join(".cache").join(CACHE_KEY)
     } else {
-        // Relative fallback inside the current working directory
         PathBuf::from(CACHE_KEY)
     }
 }

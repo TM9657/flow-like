@@ -1,5 +1,9 @@
 use flow_like::flow::{
-    execution::{LogLevel, context::ExecutionContext, internal_node::InternalNode},
+    execution::{
+        LogLevel,
+        context::ExecutionContext,
+        internal_node::InternalNode,
+    },
     node::{Node, NodeLogic},
     variable::VariableType,
 };
@@ -82,6 +86,14 @@ impl NodeLogic for WhileLoopNode {
         let flow = exec_item.get_connected_nodes();
 
         for i in 0..max_iter {
+            if !InternalNode::trigger_missing_dependencies(context, &mut None, false).await {
+                context.log_message(
+                    "Failed to re-trigger condition dependencies",
+                    LogLevel::Error,
+                );
+                break;
+            }
+
             let condition = context
                 .evaluate_pin_ref::<bool>(condition_pin.clone())
                 .await?;

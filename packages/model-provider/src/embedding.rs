@@ -1,3 +1,4 @@
+use crate::tokenizer::TokenizerSizer;
 use flow_like_types::Cacheable;
 use flow_like_types::Result;
 use flow_like_types::async_trait;
@@ -8,12 +9,15 @@ use tiktoken_rs::CoreBPE;
 
 pub mod openai;
 
+#[cfg(feature = "remote-ml")]
+pub mod proxy;
+
 #[derive(Clone)]
 pub enum GeneralTextSplitter {
     MarkdownCharacter(Arc<MarkdownSplitter<Characters>>),
     TextCharacters(Arc<TextSplitter<Characters>>),
-    MarkdownTokenizer(Arc<MarkdownSplitter<tokenizers::Tokenizer>>),
-    TextTokenizer(Arc<TextSplitter<tokenizers::Tokenizer>>),
+    MarkdownTokenizer(Arc<MarkdownSplitter<TokenizerSizer>>),
+    TextTokenizer(Arc<TextSplitter<TokenizerSizer>>),
     MarkdownTiktoken(Arc<MarkdownSplitter<Arc<CoreBPE>>>),
     TextTiktoken(Arc<TextSplitter<Arc<CoreBPE>>>),
 }

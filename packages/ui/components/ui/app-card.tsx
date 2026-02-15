@@ -1,5 +1,6 @@
 import { HeartFilledIcon } from "@radix-ui/react-icons";
 import { motion } from "framer-motion";
+import { cn } from "../../lib/utils";
 import {
 	Check,
 	CircleUserIcon,
@@ -11,6 +12,7 @@ import {
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { hashToGradient, useThemeInfo } from "../../hooks/use-theme-gradient";
 import { type IApp, IAppVisibility } from "../../lib/schema/app/app";
 import type { IMetadata } from "../../lib/schema/bit/bit";
 import { Avatar, AvatarFallback, AvatarImage } from "./avatar";
@@ -200,6 +202,7 @@ function SmallAppCard({
 	>
 >) {
 	const formatPrice = (price: number) => `€${(price / 100).toFixed(2)}`;
+	const { primaryHue, isDark } = useThemeInfo();
 
 	const itemVariants = {
 		hidden: { opacity: 0, y: 20 },
@@ -217,7 +220,7 @@ function SmallAppCard({
 			<button
 				type="button"
 				onClick={onClick}
-				className={`group cursor-pointer relative flex items-center gap-3 p-3 transition-all duration-200 rounded-xl border border-border/50 bg-card  w-full overflow-hidden ${className}`}
+				className={cn("group cursor-pointer relative flex items-center gap-3 p-3 transition-all duration-300 rounded-xl border border-border/40 bg-card/80 backdrop-blur-sm hover:border-primary/20 hover:bg-card/95 hover:shadow-md w-full overflow-hidden", className)}
 			>
 				{typeof multiSelected !== "undefined" && onClick && (
 					<div className="relative shrink-0 z-10">
@@ -238,6 +241,15 @@ function SmallAppCard({
 						decoding="async"
 						fetchPriority="low"
 					/>
+					{!metadata?.thumbnail && (() => {
+						const g = hashToGradient(app.id, primaryHue, isDark);
+						return (
+							<div
+								className="absolute inset-0"
+								style={{ background: `linear-gradient(${g.angle}deg, ${g.from}, ${g.to})`, opacity: g.opacity }}
+							/>
+						);
+					})()}
 					<div className="absolute inset-0 bg-gradient-to-r from-transparent to-card" />
 				</div>
 
@@ -336,6 +348,7 @@ function ExtendedAppCard({
 	const appName = metadata?.name ?? app.id;
 	const appIcon = metadata?.icon ?? "/app-logo.webp";
 	const hasRating = app.rating_count > 0;
+	const { primaryHue, isDark } = useThemeInfo();
 	const showSettingsButton =
 		onSettingsClick &&
 		(app.visibility === IAppVisibility.Offline ||
@@ -358,7 +371,7 @@ function ExtendedAppCard({
 			<button
 				type="button"
 				onClick={onClick}
-				className={`group cursor-pointer relative flex flex-col transition-all duration-300 rounded-xl border border-border/40 bg-card shadow-sm hover:bg-card/95 w-72 h-[375px] overflow-hidden ${className}`}
+				className={cn("group cursor-pointer relative flex flex-col transition-all duration-300 rounded-xl border border-border/40 bg-card/80 backdrop-blur-sm shadow-sm hover:shadow-lg hover:border-primary/20 hover:bg-card/95 w-72 h-[375px] overflow-hidden", className)}
 			>
 				{typeof multiSelected !== "undefined" && onClick && (
 					<div className="relative shrink-0 z-10">
@@ -383,6 +396,15 @@ function ExtendedAppCard({
 						}}
 						transition={{ type: "spring", stiffness: 300 }}
 					/>
+					{!metadata?.thumbnail && (() => {
+						const g = hashToGradient(app.id, primaryHue, isDark);
+						return (
+							<div
+								className="absolute inset-0"
+								style={{ background: `linear-gradient(${g.angle}deg, ${g.from}, ${g.to})`, opacity: g.opacity }}
+							/>
+						);
+					})()}
 					<div className="absolute inset-0 bg-gradient-to-t from-black/60 via-black/20 to-transparent" />
 
 					<div className="absolute top-3 right-3 z-10 flex items-center gap-2">

@@ -29,7 +29,7 @@ impl NodeLogic for SetElementDisabled {
             "a2ui_set_element_disabled",
             "Set Element Disabled",
             "Enables or disables an element",
-            "A2UI/Elements",
+            "UI/Elements",
         );
         node.add_icon("/flow/icons/a2ui.svg");
 

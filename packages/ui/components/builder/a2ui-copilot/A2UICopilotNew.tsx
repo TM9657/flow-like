@@ -7,7 +7,14 @@ export interface A2UICopilotProps {
 	currentComponents: SurfaceComponent[];
 	selectedComponentIds: string[];
 	onComponentsGenerated?: (components: SurfaceComponent[]) => void;
-	onApplyComponents?: (components: SurfaceComponent[]) => void;
+	onApplyComponents?: (
+		components: SurfaceComponent[],
+		canvasSettings?: {
+			backgroundColor?: string;
+			padding?: string;
+			customCss?: string;
+		},
+	) => void;
 	className?: string;
 	onClose?: () => void;
 	/** Custom function to capture a screenshot for context */

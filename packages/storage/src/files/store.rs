@@ -9,7 +9,7 @@ use local_store::LocalObjectStore;
 use object_store::{ObjectMeta, ObjectStore, path::Path, signer::Signer};
 use serde::{Deserialize, Serialize};
 use std::{sync::Arc, time::Duration};
-use urlencoding::encode;
+use urlencoding::{decode, encode};
 mod helper;
 pub mod local_store;
 
@@ -87,7 +87,11 @@ impl FlowLikeStore {
         let final_path = prefix
             .split('/')
             .filter(|s| !s.is_empty())
-            .fold(base_path, |acc, seg| acc.child(seg));
+            .fold(base_path, |acc, seg| {
+                // Decode URL-encoded segments (e.g., %CC%88 -> combining umlaut)
+                let decoded = decode(seg).unwrap_or(std::borrow::Cow::Borrowed(seg));
+                acc.child(decoded.as_ref())
+            });
 
         Ok(final_path)
     }

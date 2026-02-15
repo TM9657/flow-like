@@ -12,7 +12,7 @@ export default function OnboardingLayout({
 				// Start content at the top on small screens to avoid cut-off; center on md+
 				"flex flex-col items-center justify-start md:justify-center",
 				"p-4",
-				"pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)]",
+				"pt-[var(--fl-safe-top)] pb-[var(--fl-safe-bottom)]",
 			].join(" ")}
 		>
 			<BackgroundFX />

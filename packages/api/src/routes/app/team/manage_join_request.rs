@@ -16,6 +16,27 @@ use sea_orm::{
     TransactionTrait,
 };
 
+#[utoipa::path(
+    post,
+    path = "/apps/{app_id}/team/queue/{request_id}",
+    tag = "team",
+    description = "Accept a join request.",
+    params(
+        ("app_id" = String, Path, description = "Application ID"),
+        ("request_id" = String, Path, description = "Join request ID")
+    ),
+    responses(
+        (status = 200, description = "Join request accepted", body = ()),
+        (status = 401, description = "Unauthorized"),
+        (status = 403, description = "Forbidden"),
+        (status = 404, description = "Not found")
+    ),
+    security(
+        ("bearer_auth" = []),
+        ("api_key" = []),
+        ("pat" = [])
+    )
+)]
 #[tracing::instrument(
     name = "POST /apps/{app_id}/team/queue/{request_id}",
     skip(state, user)
@@ -120,6 +141,27 @@ pub async fn accept_join_request(
 #[tracing::instrument(
     name = "DELETE /apps/{app_id}/team/queue/{request_id}",
     skip(state, user)
+)]
+#[utoipa::path(
+    delete,
+    path = "/apps/{app_id}/team/queue/{request_id}",
+    tag = "team",
+    description = "Reject a join request.",
+    params(
+        ("app_id" = String, Path, description = "Application ID"),
+        ("request_id" = String, Path, description = "Join request ID")
+    ),
+    responses(
+        (status = 200, description = "Join request rejected", body = ()),
+        (status = 401, description = "Unauthorized"),
+        (status = 403, description = "Forbidden"),
+        (status = 404, description = "Not found")
+    ),
+    security(
+        ("bearer_auth" = []),
+        ("api_key" = []),
+        ("pat" = [])
+    )
 )]
 pub async fn reject_join_request(
     State(state): State<AppState>,

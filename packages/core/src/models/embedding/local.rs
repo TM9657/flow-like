@@ -127,18 +127,14 @@ impl EmbeddingModelLogic for LocalEmbeddingModel {
             .map(|text| format!("{}{}", params.prefix.query, text))
             .collect::<Vec<String>>();
 
-        let embeddings = match self
-            .embedding_model
-            .lock()
-            .await
-            .embed(prefixed_array.to_vec(), None)
-        {
-            Ok(embeddings) => embeddings,
-            Err(e) => {
-                println!("Error embedding text: {}", e);
-                return Err(anyhow!("Error embedding text"));
-            }
-        };
+        let model = self.embedding_model.clone();
+        let embeddings = flow_like_types::tokio::task::spawn_blocking(move || {
+            model.blocking_lock().embed(prefixed_array, None)
+        })
+        .await
+        .map_err(|e| anyhow!("Blocking task failed: {}", e))?
+        .map_err(|e| anyhow!("Error embedding text: {}", e))?;
+
         Ok(embeddings)
     }
 
@@ -155,18 +151,15 @@ impl EmbeddingModelLogic for LocalEmbeddingModel {
             .iter()
             .map(|text| format!("{}{}", params.prefix.paragraph, text))
             .collect::<Vec<String>>();
-        let embeddings = match self
-            .embedding_model
-            .lock()
-            .await
-            .embed(prefixed_array, None)
-        {
-            Ok(embeddings) => embeddings,
-            Err(e) => {
-                println!("Error embedding text: {}", e);
-                return Err(anyhow!("Error embedding text"));
-            }
-        };
+
+        let model = self.embedding_model.clone();
+        let embeddings = flow_like_types::tokio::task::spawn_blocking(move || {
+            model.blocking_lock().embed(prefixed_array, None)
+        })
+        .await
+        .map_err(|e| anyhow!("Blocking task failed: {}", e))?
+        .map_err(|e| anyhow!("Error embedding text: {}", e))?;
+
         Ok(embeddings)
     }
 
@@ -241,7 +234,7 @@ mod tests {
         let store = Arc::new(store);
         config.register_app_storage_store(FlowLikeStore::Local(store.clone()));
         config.register_bits_store(FlowLikeStore::Local(store));
-        let (http_client, _refetch_rx) = HTTPClient::new();
+        let http_client = HTTPClient::new_without_refetch();
         let flow_like_state = crate::state::FlowLikeState::new(config, http_client);
         Arc::new(flow_like_state)
     }

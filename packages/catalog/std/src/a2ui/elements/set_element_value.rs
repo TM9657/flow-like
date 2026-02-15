@@ -27,7 +27,7 @@ impl NodeLogic for SetElementValue {
             "a2ui_set_element_value",
             "Set Element Value",
             "Sets the value of an input element",
-            "A2UI/Elements",
+            "UI/Elements",
         );
         node.add_icon("/flow/icons/a2ui.svg");
 

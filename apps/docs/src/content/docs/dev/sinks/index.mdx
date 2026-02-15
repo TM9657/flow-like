@@ -1,0 +1,126 @@
+---
+title: Event Sinks
+description: Understanding event sinks and trigger mechanisms in Flow-Like
+sidebar:
+  order: 1
+---
+
+Event sinks are the entry points that trigger flow executions. They define how external events (HTTP requests, scheduled tasks, bot messages) invoke your workflows.
+
+## Overview
+
+Flow-Like supports multiple sink types, each with different characteristics:
+
+| Sink Type | Trigger Mechanism | Local Support | Remote Support |
+|-----------|-------------------|---------------|----------------|
+| HTTP | REST API calls | ✅ Polling | ✅ Webhook |
+| Telegram | Bot messages | ✅ Long Polling | ✅ Webhook |
+| Discord | Bot interactions | ✅ Gateway | ✅ Interactions Webhook |
+| Cron | Scheduled time | ✅ Local scheduler | ✅ Server scheduler |
+| Webhook | Generic webhooks | ❌ | ✅ Webhook |
+
+## Local vs Remote Execution
+
+Flow-Like can run workflows in two modes:
+
+### Local Mode (Desktop App)
+
+When running the desktop application:
+- **HTTP**: The app exposes a local server (default port 9657) that accepts requests
+- **Telegram**: Uses long polling to fetch messages from Telegram's API
+- **Discord**: Connects via Discord Gateway (WebSocket) to receive events
+- **Cron**: Uses local system scheduler to trigger at specified times
+
+**Advantages:**
+- No server infrastructure needed
+- Direct access to local resources (files, applications)
+- Lower latency for local operations
+- Privacy - data stays on your machine
+
+**Limitations:**
+- Computer must be running
+- Not accessible from the internet (without tunneling)
+- Limited scalability
+
+### Remote Mode (Server/Cloud)
+
+When deployed to a backend server:
+- **HTTP**: Server exposes public endpoints that accept webhooks
+- **Telegram**: Telegram sends webhooks directly to your server
+- **Discord**: Discord sends interaction webhooks to your server
+- **Cron**: Server-side scheduler triggers executions
+
+**Advantages:**
+- Always available (24/7)
+- Publicly accessible
+- Scalable infrastructure
+- Handles high volume
+
+**Limitations:**
+- Requires server infrastructure
+- Additional hosting costs
+- Network latency for operations
+
+## Hub Configuration
+
+The hub's `supported_sinks` configuration determines which sinks are available:
+
+```json
+{
+  "supported_sinks": {
+    "http": true,
+    "telegram": true,
+    "discord": true,
+    "cron": true,
+    "webhook": true
+  }
+}
+```
+
+When a sink type is disabled in the hub configuration, the corresponding event types will only be available for local execution.
+
+## Sink Architecture
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                      External Trigger                            │
+│  (HTTP Request / Telegram Message / Discord Interaction / Cron)  │
+└────────────────────────────────┬────────────────────────────────┘
+                                 │
+                    ┌────────────▼────────────┐
+                    │      Sink Endpoint       │
+                    │  /sink/trigger/{type}/   │
+                    └────────────┬────────────┘
+                                 │
+                    ┌────────────▼────────────┐
+                    │    Authentication &      │
+                    │      Verification        │
+                    │  (Tokens, Signatures)    │
+                    └────────────┬────────────┘
+                                 │
+                    ┌────────────▼────────────┐
+                    │    Event Lookup &        │
+                    │    Sink Resolution       │
+                    └────────────┬────────────┘
+                                 │
+                    ┌────────────▼────────────┐
+                    │      Dispatcher          │
+                    │  (async/streaming)       │
+                    └────────────┬────────────┘
+                                 │
+                    ┌────────────▼────────────┐
+                    │    Flow Execution        │
+                    └─────────────────────────┘
+```
+
+## Security
+
+Each sink type has its own security mechanisms:
+
+- **HTTP**: Optional Bearer token authentication
+- **Telegram**: Secret token header verification + IP allowlist
+- **Discord**: Ed25519 signature verification
+- **Cron**: Internal scheduling (no external access)
+- **Webhook**: Configurable authentication
+
+See the individual sink documentation for detailed security configuration.

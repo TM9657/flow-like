@@ -3,6 +3,7 @@
 //! Provides robust SSE parsing using `eventsource-stream` to properly handle
 //! SSE protocol edge cases like multi-line data, reconnection, and buffering.
 
+use crate::entity::sea_orm_active_enums::RunStatus;
 use crate::entity::{execution_run, prelude::*};
 use axum::response::sse::{Event, KeepAlive, Sse};
 use eventsource_stream::Eventsource;
@@ -64,10 +65,10 @@ fn create_sse_stream(
                                         .unwrap_or("Completed");
 
                                     let run_status = match status {
-                                        "Failed" => execution_run::RunStatus::Failed,
-                                        "Cancelled" => execution_run::RunStatus::Cancelled,
-                                        "Timeout" => execution_run::RunStatus::Timeout,
-                                        _ => execution_run::RunStatus::Completed,
+                                        "Failed" => RunStatus::Failed,
+                                        "Cancelled" => RunStatus::Cancelled,
+                                        "Timeout" => RunStatus::Timeout,
+                                        _ => RunStatus::Completed,
                                     };
 
                                     let db = db.clone();
@@ -105,7 +106,7 @@ fn create_sse_stream(
 async fn update_run_on_completion(
     db: &DatabaseConnection,
     run_id: &str,
-    status: execution_run::RunStatus,
+    status: RunStatus,
     log_level: i32,
 ) -> Result<(), sea_orm::DbErr> {
     if let Some(existing) = ExecutionRun::find_by_id(run_id).one(db).await? {

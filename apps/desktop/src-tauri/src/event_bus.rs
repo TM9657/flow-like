@@ -64,6 +64,7 @@ impl EventBusEvent {
             id: loaded_event.node_id.clone(),
             payload: self.payload.to_owned(),
             runtime_variables: None, // Event bus triggers don't have runtime vars context
+            filter_secrets: Some(false), // Desktop execution is trusted
         };
 
         let board_version = loaded_event.board_version;
@@ -193,19 +194,21 @@ impl EventBusEvent {
         }
 
         if let Some(meta) = &meta {
-            let db = {
+            let (db_fn, write_options) = {
                 let guard = flow_like_state.config.read().await;
-
-                guard.callbacks.build_logs_database.clone()
+                (
+                    guard.callbacks.build_logs_database.clone(),
+                    guard.callbacks.lance_write_options.clone(),
+                )
             };
-            let db_fn = db
+            let db_fn = db_fn
                 .as_ref()
                 .ok_or_else(|| flow_like_types::anyhow!("No log database configured"))?;
             let base_path = Path::from("runs").child(app_id).child(board_id);
             let db = db_fn(base_path.clone()).execute().await.map_err(|e| {
                 flow_like_types::anyhow!("Failed to open database: {}, {:?}", base_path, e)
             })?;
-            meta.flush(db).await.map_err(|e| {
+            meta.flush(db, write_options.as_ref()).await.map_err(|e| {
                 flow_like_types::anyhow!("Failed to flush run: {}, {:?}", base_path, e)
             })?;
         }
@@ -263,6 +266,8 @@ fn event_bus_dir() -> PathBuf {
         dir.join("flow-like").join("event-bus")
     } else if let Some(dir) = dirs_next::cache_dir() {
         dir.join("flow-like").join("event-bus")
+    } else if let Some(home) = std::env::var_os("HOME") {
+        PathBuf::from(home).join("flow-like").join("event-bus")
     } else {
         PathBuf::from("flow-like").join("event-bus")
     }

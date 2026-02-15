@@ -5,8 +5,16 @@ mod functions;
 mod profile;
 mod settings;
 mod state;
+#[cfg(desktop)]
 mod tray;
 pub mod utils;
+
+// Stub for tray_update_state on non-desktop platforms
+#[cfg(not(desktop))]
+#[tauri::command]
+async fn tray_update_state() -> Result<(), String> {
+    Ok(())
+}
 
 use flow_like::{
     flow::node::NodeLogic,
@@ -19,7 +27,7 @@ use flow_like::{
     state::{FlowLikeConfig, FlowLikeState},
     utils::http::HTTPClient,
 };
-use flow_like_catalog::get_catalog;
+use flow_like_catalog::{get_catalog, initialize as initialize_catalog};
 use flow_like_types::{sync::Mutex, tokio::time::interval};
 use settings::Settings;
 use state::TauriFlowLikeState;
@@ -41,6 +49,72 @@ fn disable_app_nap() {
 
 #[cfg(not(target_os = "macos"))]
 fn disable_app_nap() {}
+
+/// Disable the WKWebView scroll view's automatic content inset adjustment.
+/// Without this, iOS adds a system-level content inset on top of our CSS
+/// `env(safe-area-inset-*)` padding, causing double safe-area offsets.
+///
+/// IMPORTANT: Must NEVER be called synchronously during `setup` — the
+/// WKWebView is not fully initialised at that point and `with_webview`
+/// will crash. Only call from the delayed retry loop (≥100 ms).
+#[cfg(target_os = "ios")]
+fn harden_ios_webview_scroll(window: &tauri::WebviewWindow) {
+    if let Err(err) = window.with_webview(|webview| {
+        unsafe {
+            use objc2::runtime::AnyObject;
+
+            let wk_webview: *mut AnyObject = webview.inner().cast();
+            if wk_webview.is_null() {
+                return;
+            }
+
+            let scroll_view: *mut AnyObject = objc2::msg_send![wk_webview, scrollView];
+            if scroll_view.is_null() {
+                return;
+            }
+
+            // Disable rubber-band overscroll and force no automatic inset adjustment.
+            let _: () = objc2::msg_send![scroll_view, setBounces: false];
+            let _: () = objc2::msg_send![scroll_view, setAlwaysBounceVertical: false];
+            let _: () = objc2::msg_send![scroll_view, setAlwaysBounceHorizontal: false];
+            // UIScrollViewContentInsetAdjustmentNever = 2
+            let _: () = objc2::msg_send![scroll_view, setContentInsetAdjustmentBehavior: 2isize];
+        }
+    }) {
+        tracing::warn!("Failed to apply iOS webview scroll hardening: {}", err);
+    }
+}
+
+/// JS snippet that probes CSS env(safe-area-inset-*) and applies the values
+/// as CSS custom properties. Also re-syncs `--fl-mobile-vvh` so the body
+/// height is correct after `harden_ios_webview_scroll` changes the scroll
+/// view's content inset adjustment (which affects `visualViewport.height`).
+#[cfg(target_os = "ios")]
+const IOS_SAFE_AREA_JS: &str = concat!(
+    "(function(){",
+    "var d=document.documentElement;",
+    "var p=document.createElement('div');",
+    "p.style.cssText='position:fixed;left:-9999px;top:0;width:1px;height:1px;",
+    "padding-top:env(safe-area-inset-top,0px);",
+    "padding-bottom:env(safe-area-inset-bottom,0px);",
+    "visibility:hidden;pointer-events:none';",
+    "(document.body||d).appendChild(p);",
+    "var cs=getComputedStyle(p);",
+    "var t=Math.round(parseFloat(cs.paddingTop)||0);",
+    "var b=Math.round(parseFloat(cs.paddingBottom)||0);",
+    "p.remove();",
+    "t=Math.max(t,window.__FL_NATIVE_SAFE_TOP||0);",
+    "b=Math.max(b,window.__FL_NATIVE_SAFE_BOTTOM||0);",
+    "if(t>0||b>0){",
+    "d.style.setProperty('--fl-native-safe-top',t+'px');",
+    "d.style.setProperty('--fl-native-safe-bottom',b+'px');",
+    "window.__FL_NATIVE_SAFE_TOP=t;",
+    "window.__FL_NATIVE_SAFE_BOTTOM=b;",
+    "}",
+    "var vvh=Math.round((window.visualViewport?window.visualViewport.height:0)||window.innerHeight);",
+    "if(vvh>0)d.style.setProperty('--fl-mobile-vvh',vvh+'px');",
+    "})();"
+);
 
 // --- iOS Release logging -----------------------------------------------------
 #[cfg(all(target_os = "ios", not(debug_assertions)))]
@@ -117,6 +191,50 @@ pub fn run() {
     ios_release_logging::init();
     disable_app_nap();
 
+    // On Android, HOME & CACHE_DIR are set by MainActivity.kt before the
+    // native runtime starts.  The block below acts as a safety net in case
+    // Kotlin's Os.setenv did not execute (e.g. running tests without the Activity).
+    #[cfg(target_os = "android")]
+    {
+        if let Some(home) = std::env::var_os("HOME") {
+            let home_path = std::path::PathBuf::from(&home);
+            println!("Android HOME: {:?}", home_path);
+
+            // Only set CACHE_DIR if Kotlin didn't already set it.
+            if std::env::var_os("CACHE_DIR").is_none() {
+                let cache_parent = home_path.join(".cache");
+                let _ = std::fs::create_dir_all(&cache_parent);
+                // SAFETY: called once at startup before any threads access CACHE_DIR.
+                unsafe {
+                    std::env::set_var("CACHE_DIR", cache_parent.to_string_lossy().as_ref());
+                }
+            }
+
+            // Ensure TMPDIR lives under filesDir so rename() across temp→data
+            // stays on the same filesystem / SELinux context (required by LanceDB).
+            if std::env::var_os("TMPDIR").is_none() {
+                let tmp_dir = home_path.join("tmp");
+                let _ = std::fs::create_dir_all(&tmp_dir);
+                // SAFETY: called once at startup before any threads access TMPDIR.
+                unsafe {
+                    std::env::set_var("TMPDIR", tmp_dir.to_string_lossy().as_ref());
+                }
+            }
+        } else {
+            eprintln!("Android: HOME is NOT set — storage paths will likely fail");
+        }
+
+        println!("Android CACHE_DIR: {:?}", std::env::var_os("CACHE_DIR"));
+        println!("Android TMPDIR: {:?}", std::env::var_os("TMPDIR"));
+        println!("Android LANCE_CACHE_DIR: {:?}", std::env::var_os("LANCE_CACHE_DIR"));
+        let root = settings::mobile_storage_root();
+        println!("Android mobile_storage_root: {:?}", root);
+        let _ = settings::ensure_app_dirs();
+    }
+
+    // Initialize catalog runtime (ONNX execution providers, etc.)
+    initialize_catalog();
+
     let mut settings_state = Settings::new();
     let project_dir = settings_state.project_dir.clone();
     let logs_dir = settings_state.logs_dir.clone();
@@ -124,10 +242,14 @@ pub fn run() {
 
     let mut config: FlowLikeConfig = FlowLikeConfig::new();
 
-    // Helper to build a store with a safe fallback to in-memory on failure (prevents startup crashes on iOS)
+    // Helper to build a store with a safe fallback to in-memory on failure (prevents startup crashes on mobile)
     let build_store = |path: std::path::PathBuf| -> FlowLikeStore {
+        println!("build_store: attempting path {:?}", path);
         match LocalObjectStore::new(path.clone()) {
-            Ok(store) => FlowLikeStore::Local(Arc::new(store)),
+            Ok(store) => {
+                println!("build_store: success for {:?}", path);
+                FlowLikeStore::Local(Arc::new(store))
+            }
             Err(e) => {
                 eprintln!(
                     "Failed to init LocalObjectStore at {:?}: {:?}. Attempting to create dir...",
@@ -135,7 +257,10 @@ pub fn run() {
                 );
                 let _ = std::fs::create_dir_all(&path);
                 match LocalObjectStore::new(path.clone()) {
-                    Ok(store) => FlowLikeStore::Local(Arc::new(store)),
+                    Ok(store) => {
+                        println!("build_store: success on retry for {:?}", path);
+                        FlowLikeStore::Local(Arc::new(store))
+                    }
                     Err(err) => {
                         eprintln!(
                             "Re-initialization failed for {:?}: {:?}. Falling back to in-memory store.",
@@ -181,6 +306,10 @@ pub fn run() {
         lancedb::connect(directory.to_string_lossy().as_ref())
     }));
 
+    // On Android, use a custom ObjectStore wrapper to avoid hard_link() which fails on Android SELinux
+    #[cfg(target_os = "android")]
+    config.register_lance_write_options(flow_like::flow_like_storage::android_store::android_write_options());
+
     settings_state.set_config(&config);
     let settings_state = Arc::new(Mutex::new(settings_state));
     let (http_client, refetch_rx) = HTTPClient::new();
@@ -189,7 +318,7 @@ pub fn run() {
 
     let initialized_state = state_ref.clone();
     tauri::async_runtime::spawn(async move {
-        #[cfg(target_os = "ios")]
+        #[cfg(any(target_os = "ios", target_os = "android"))]
         flow_like_types::tokio::time::sleep(Duration::from_millis(800)).await;
 
         let weak_ref = Arc::downgrade(&initialized_state);
@@ -202,9 +331,9 @@ pub fn run() {
     });
 
     let sentry_endpoint = std::option_env!("PUBLIC_SENTRY_ENDPOINT");
-    // Defer Sentry init on iOS to improve startup; init immediately elsewhere.
+    // Defer Sentry init on mobile to improve startup; init immediately elsewhere.
     let mut _sentry_guard: Option<sentry::ClientInitGuard> = None;
-    #[cfg(not(target_os = "ios"))]
+    #[cfg(not(any(target_os = "ios", target_os = "android")))]
     {
         _sentry_guard = sentry_endpoint.map(|endpoint| {
             sentry::init((
@@ -218,7 +347,7 @@ pub fn run() {
             ))
         });
     }
-    #[cfg(all(target_os = "ios"))]
+    #[cfg(any(target_os = "ios", target_os = "android"))]
     {
         tauri::async_runtime::spawn(async move {
             flow_like_types::tokio::time::sleep(std::time::Duration::from_secs(2)).await;
@@ -242,7 +371,27 @@ pub fn run() {
         #[cfg(all(target_os = "ios"))]
         { /* iOS Release: oslog is already set up above; Sentry init is deferred. */ }
 
-        #[cfg(not(target_os = "ios"))]
+        #[cfg(target_os = "android")]
+        {
+            // Android Release: Sentry is deferred; logcat captures stdout/stderr natively.
+            match _sentry_guard {
+                Some(_) => {
+                    tracing_subscriber::registry()
+                        .with(tracing_subscriber::fmt::layer())
+                        .with(sentry_tracing::layer())
+                        .init();
+                    tracing::info!("Sentry Tracing Layer Initialized");
+                }
+                None => {
+                    tracing_subscriber::registry()
+                        .with(tracing_subscriber::fmt::layer())
+                        .init();
+                    tracing::info!("Sentry Tracing Layer Not Initialized");
+                }
+            }
+        }
+
+        #[cfg(not(any(target_os = "ios", target_os = "android")))]
         {
             // Non-iOS Release (macOS/Windows/Linux): stdio fmt layer is OK
             match _sentry_guard {
@@ -278,6 +427,7 @@ pub fn run() {
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_clipboard_manager::init())
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_notification::init())
         .setup(move |app| {
             #[cfg(desktop)]
             if let Err(e) = app
@@ -341,8 +491,66 @@ pub fn run() {
             let deep_link_handle = relay_handle.clone();
             let event_bus_handle = relay_handle.clone();
 
+            #[cfg(target_os = "ios")]
+            {
+                let ios_handle = app.app_handle().clone();
+                tauri::async_runtime::spawn(async move {
+                    // Wait for the WKWebView to be fully initialised before
+                    // touching ObjC properties — calling too early crashes.
+                    for delay_ms in [100, 300, 700, 1500, 3000] {
+                        flow_like_types::tokio::time::sleep(Duration::from_millis(delay_ms)).await;
+                        if let Some(main) = ios_handle.get_webview_window("main") {
+                            harden_ios_webview_scroll(&main);
+                            let _ = main.eval(IOS_SAFE_AREA_JS);
+                        }
+                    }
+                });
+            }
+
+            // Android: retry safe-area CSS var application after page load.
+            // The Kotlin MainActivity exposes insets via a JavascriptInterface
+            // (FlowLikeInsets) that the page can read synchronously.  This retry
+            // also reads from that bridge so it works even if the globals set by
+            // evaluateJavascript were wiped during the about:blank → app page transition.
+            #[cfg(target_os = "android")]
+            {
+                let android_handle = app.app_handle().clone();
+                tauri::async_runtime::spawn(async move {
+                    for delay_ms in [50, 150, 300, 700, 1500, 3000] {
+                        flow_like_types::tokio::time::sleep(Duration::from_millis(delay_ms)).await;
+                        if let Some(main) = android_handle.get_webview_window("main") {
+                            let _ = main.eval(concat!(
+                                "(function(){",
+                                "var t=0,b=0;",
+                                "if(typeof FlowLikeInsets!=='undefined'){",
+                                "try{var dpr=window.devicePixelRatio||1;",
+                                "t=Math.ceil(FlowLikeInsets.getTopPx()/dpr);",
+                                "b=Math.ceil(FlowLikeInsets.getBottomPx()/dpr);",
+                                "}catch(e){}",
+                                "}",
+                                "t=Math.max(t,window.__FL_NATIVE_SAFE_TOP||0);",
+                                "b=Math.max(b,window.__FL_NATIVE_SAFE_BOTTOM||0);",
+                                "if(t>0||b>0){",
+                                "var d=document.documentElement;",
+                                "d.style.setProperty('--fl-native-safe-top',t+'px');",
+                                "d.style.setProperty('--fl-native-safe-bottom',b+'px');",
+                                "window.__FL_NATIVE_SAFE_TOP=t;",
+                                "window.__FL_NATIVE_SAFE_BOTTOM=b;",
+                                "}",
+                                "})();"
+                            ));
+                        }
+                    }
+                });
+            }
+
             #[cfg(desktop)]
             {
+                // Manage TauriTrayState for desktop platforms
+                app.manage(state::TauriTrayState(Arc::new(Mutex::new(
+                    tray::TrayRuntimeState::default(),
+                ))));
+
                 if let Err(err) = tray::init_tray(&relay_handle) {
                     eprintln!("Failed to initialize tray: {}", err);
                 } else {
@@ -365,7 +573,7 @@ pub fn run() {
                 }
             }
 
-            #[cfg(any(target_os = "linux", all(debug_assertions, windows)))]
+            #[cfg(any(target_os = "linux", windows))]
             {
                 use tauri_plugin_deep_link::DeepLinkExt;
                 app.deep_link().register_all()?;
@@ -383,7 +591,7 @@ pub fn run() {
             });
 
             tauri::async_runtime::spawn(async move {
-                #[cfg(target_os = "ios")]
+                #[cfg(any(target_os = "ios", target_os = "android"))]
                 flow_like_types::tokio::time::sleep(Duration::from_millis(1200)).await;
 
                 let handle = gc_handle;
@@ -417,7 +625,7 @@ pub fn run() {
             });
 
             tauri::async_runtime::spawn(async move {
-                #[cfg(target_os = "ios")]
+                #[cfg(any(target_os = "ios", target_os = "android"))]
                 flow_like_types::tokio::time::sleep(Duration::from_millis(1200)).await;
 
                 let mut receiver = refetch_rx;
@@ -469,7 +677,7 @@ pub fn run() {
 
             // EventBus event processing sink
             tauri::async_runtime::spawn(async move {
-                #[cfg(target_os = "ios")]
+                #[cfg(any(target_os = "ios", target_os = "android"))]
                 flow_like_types::tokio::time::sleep(Duration::from_millis(1200)).await;
 
                 let handle = event_bus_handle;
@@ -511,12 +719,22 @@ pub fn run() {
                 println!("EventBus Sink Started");
 
                 while let Some(event) = event_receiver.recv().await {
-                    match event.execute(&handle, flow_like_state.clone(), &hub).await {
-                        Ok(meta) => _ = meta,
-                        Err(e) => {
-                            eprintln!("Error executing event: {:?}", e);
+                    // Spawn each event execution as a separate task for parallel processing
+                    let handle_clone = handle.clone();
+                    let flow_like_state_clone = flow_like_state.clone();
+                    let hub_clone = hub.clone();
+
+                    tokio::spawn(async move {
+                        match event
+                            .execute(&handle_clone, flow_like_state_clone, &hub_clone)
+                            .await
+                        {
+                            Ok(meta) => _ = meta,
+                            Err(e) => {
+                                eprintln!("Error executing event: {:?}", e);
+                            }
                         }
-                    }
+                    });
                 }
 
                 println!("EventBus Sink stopped");
@@ -532,19 +750,27 @@ pub fn run() {
             functions::ai::invoke::chat_completion,
             functions::ai::invoke::find_best_model,
             functions::system::get_system_info,
+            #[cfg(desktop)]
             tray::tray_update_state,
+            #[cfg(not(desktop))]
+            tray_update_state,
             functions::download::init::init_downloads,
             functions::download::init::get_downloads,
             functions::settings::profiles::get_profiles,
+            functions::settings::profiles::get_profiles_raw,
             functions::settings::profiles::get_default_profiles,
             functions::settings::profiles::get_current_profile,
+            functions::settings::profiles::get_current_profile_id,
             functions::settings::profiles::set_current_profile,
             functions::settings::profiles::upsert_profile,
+            functions::settings::profiles::remap_profile_id,
             functions::settings::profiles::delete_profile,
             functions::settings::profiles::add_bit,
             functions::settings::profiles::remove_bit,
             functions::settings::profiles::get_bits_in_current_profile,
             functions::settings::profiles::change_profile_image,
+            functions::settings::profiles::read_profile_icon,
+            functions::settings::profiles::get_profile_icon_path,
             functions::settings::profiles::profile_update_app,
             functions::app::app_configured,
             functions::app::upsert_board,
@@ -627,6 +853,12 @@ pub fn run() {
             functions::flow::template::get_template_meta,
             functions::flow::template::push_template_meta,
             functions::ai::copilot::copilot_chat,
+            functions::ai::copilot::copilot_sdk_start,
+            functions::ai::copilot::copilot_sdk_stop,
+            functions::ai::copilot::copilot_sdk_is_running,
+            functions::ai::copilot::copilot_sdk_list_models,
+            functions::ai::copilot::copilot_sdk_get_auth_status,
+            functions::ai::copilot::copilot_sdk_create_agent_session,
             functions::a2ui::widget::get_widgets,
             functions::a2ui::widget::get_widget,
             functions::a2ui::widget::create_widget,
@@ -680,6 +912,7 @@ pub fn run() {
             functions::recording::get_recording_status,
             functions::recording::get_recorded_actions,
             functions::recording::insert_recording_to_board,
+            functions::statistics::get_board_statistics,
         ]);
 
     #[cfg(desktop)]

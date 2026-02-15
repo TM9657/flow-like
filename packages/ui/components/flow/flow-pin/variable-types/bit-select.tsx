@@ -1,4 +1,5 @@
 import { ChevronDown } from "lucide-react";
+import { useCallback, useState } from "react";
 import { type IBackendState, useBackend, useInvoke } from "../../../..";
 import {
 	Select,
@@ -17,28 +18,39 @@ import {
 export function BitVariable({
 	pin,
 	value,
-	appId,
 	setValue,
 }: Readonly<{
 	pin: IPin;
 	value: number[] | undefined | null;
-	appId: string;
 	setValue: (value: any) => void;
 }>) {
 	const backend = useBackend();
-	const app = useInvoke(
-		backend.appState.getApp,
-		backend.appState,
-		[appId],
-		!!appId,
+	const [open, setOpen] = useState(false);
+
+	const profileBits = useInvoke(
+		backend.bitState.getProfileBits,
+		backend.bitState,
+		[],
+		open,
+	);
+
+	const parsedValue = parseUint8ArrayToJson(value);
+
+	const handleOpenChange = useCallback(
+		(isOpen: boolean) => {
+			setOpen(isOpen);
+			if (isOpen) profileBits.refetch();
+		},
+		[profileBits],
 	);
 
 	return (
 		<div className="flex flex-row items-center justify-start max-w-full ml-1 overflow-hidden">
 			<Select
-				defaultValue={parseUint8ArrayToJson(value)}
-				value={parseUint8ArrayToJson(value)}
-				onValueChange={(value) => setValue(convertJsonToUint8Array(value))}
+				open={open}
+				onOpenChange={handleOpenChange}
+				value={parsedValue}
+				onValueChange={(v) => setValue(convertJsonToUint8Array(v))}
 			>
 				<SelectTrigger
 					noChevron
@@ -46,17 +58,18 @@ export function BitVariable({
 					className="w-fit! max-w-full! p-0 border-0 text-xs bg-card! text-start max-h-fit h-4 gap-0.5 flex-row items-center overflow-hidden"
 				>
 					<small className="text-start text-[10px] m-0! truncate">
-						<BitRender backend={backend} bitId={parseUint8ArrayToJson(value)} />
+						<BitRender backend={backend} bitId={parsedValue} />
 					</small>
 					<ChevronDown className="size-2 min-w-2 min-h-2 text-card-foreground mt-0.5 shrink-0" />
 				</SelectTrigger>
 				<SelectContent>
 					<SelectGroup>
 						<SelectLabel>{pin.friendly_name}</SelectLabel>
-						{app?.data?.bits?.map((option) => {
+						{profileBits?.data?.map((bit) => {
+							const bitId = `${bit.hub}:${bit.id}`;
 							return (
-								<SelectItem key={option} value={option}>
-									<BitRender backend={backend} bitId={option} />
+								<SelectItem key={bitId} value={bitId}>
+									{bit.meta?.en?.name ?? bit.id}
 								</SelectItem>
 							);
 						})}
@@ -71,11 +84,21 @@ function BitRender({
 	backend,
 	bitId,
 }: Readonly<{ backend: IBackendState; bitId?: string }>) {
+	const lastColonIndex = bitId?.lastIndexOf(":");
+	const hub =
+		lastColonIndex !== undefined && lastColonIndex > 0
+			? bitId?.substring(0, lastColonIndex)
+			: undefined;
+	const id =
+		lastColonIndex !== undefined && lastColonIndex > 0
+			? bitId?.substring(lastColonIndex + 1)
+			: bitId;
+
 	const bit = useInvoke(
 		backend.bitState.getBit,
 		backend.bitState,
-		[bitId!],
-		!!bitId,
+		[id!, hub],
+		!!id,
 	);
 
 	if (!bitId) return <span className="truncate m-0">Select a bit</span>;

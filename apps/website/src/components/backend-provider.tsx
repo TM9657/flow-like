@@ -1,5 +1,7 @@
 import {
 	EmptyAIState,
+	EmptyApiKeyState,
+	EmptyApiState,
 	EmptyAppState,
 	EmptyBitState,
 	EmptyBoardState,
@@ -7,11 +9,15 @@ import {
 	EmptyEventState,
 	EmptyHelperState,
 	EmptyRoleState,
+	EmptyRouteState,
 	EmptyStorageState,
 	EmptyTeamState,
 	EmptyTemplateState,
 	EmptyUserState,
 	type IAIState,
+	type IApiKeyState,
+	type IApiState,
+	type IAppRouteState,
 	type IAppState,
 	type IBackendState,
 	type IBitState,
@@ -20,11 +26,14 @@ import {
 	type IDatabaseState,
 	type IEventState,
 	type IHelperState,
+	type IPageState,
+	type IRegistryState,
 	type IRoleState,
 	type IStorageState,
 	type ITeamState,
 	type ITemplateState,
 	type IUserState,
+	type IWidgetState,
 	LoadingScreen,
 	ThemeProvider,
 	useBackendStore,
@@ -32,8 +41,22 @@ import {
 import { Suspense, lazy, useEffect, useState } from "react";
 
 const BoardWrapper = lazy(() => import("./board-wrapper"));
+
+function unavailableState<T>(name: string): T {
+	return new Proxy(
+		{},
+		{
+			get: () => {
+				throw new Error(`${name} is not available in EmptyBackendProvider`);
+			},
+		},
+	) as T;
+}
+
 export class EmptyBackend implements IBackendState {
 	aiState: IAIState = new EmptyAIState();
+	apiState: IApiState = new EmptyApiState();
+	apiKeyState: IApiKeyState = new EmptyApiKeyState();
 	appState: IAppState = new EmptyAppState();
 	bitState: IBitState = new EmptyBitState();
 	boardState: IBoardState = new EmptyBoardState();
@@ -45,6 +68,11 @@ export class EmptyBackend implements IBackendState {
 	templateState: ITemplateState = new EmptyTemplateState();
 	userState: IUserState = new EmptyUserState();
 	dbState: IDatabaseState = new EmptyDatabaseState();
+	widgetState: IWidgetState = unavailableState<IWidgetState>("WidgetState");
+	pageState: IPageState = unavailableState<IPageState>("PageState");
+	routeState: IAppRouteState = new EmptyRouteState();
+	registryState: IRegistryState =
+		unavailableState<IRegistryState>("RegistryState");
 
 	capabilities(): ICapabilities {
 		return {
@@ -67,17 +95,39 @@ export function EmptyBackendProvider({ data }: Readonly<{ data: string }>) {
 	const { setBackend } = useBackendStore();
 
 	useEffect(() => {
+		let cancelled = false;
+
 		(async () => {
-			const response = await fetch(data);
-			const json = await response.json();
-			const { nodes, edges } = json;
-			setNodes(nodes);
-			setEdges(edges);
-			const backend = new EmptyBackend();
-			setBackend(backend);
-			setLoaded(true);
+			try {
+				const response = await fetch(data);
+				if (!response.ok) {
+					throw new Error(`Failed to load board data: ${response.status}`);
+				}
+				const json = await response.json();
+				const nextNodes = Array.isArray(json?.nodes) ? json.nodes : [];
+				const nextEdges = Array.isArray(json?.edges) ? json.edges : [];
+
+				if (cancelled) return;
+
+				setNodes(nextNodes);
+				setEdges(nextEdges);
+				setBackend(new EmptyBackend());
+				setLoaded(true);
+			} catch (error) {
+				console.error("Failed to initialize EmptyBackendProvider", error);
+				if (cancelled) return;
+
+				setNodes([]);
+				setEdges([]);
+				setBackend(new EmptyBackend());
+				setLoaded(true);
+			}
 		})();
-	}, []);
+
+		return () => {
+			cancelled = true;
+		};
+	}, [data, setBackend]);
 
 	if (!loaded) {
 		return (
@@ -87,7 +137,7 @@ export function EmptyBackendProvider({ data }: Readonly<{ data: string }>) {
 				enableSystem
 				disableTransitionOnChange
 			>
-				<LoadingScreen className="absolute top-0 left-0 right-0 bottom-0" />;
+				<LoadingScreen className="absolute top-0 left-0 right-0 bottom-0" />
 			</ThemeProvider>
 		);
 	}

@@ -1,11 +1,12 @@
 "use client";
 
-import { Clock, UserPlus, Users } from "lucide-react";
+import { Clock, Key, UserPlus, Users } from "lucide-react";
 import { useSearchParams } from "next/navigation";
 import { useState } from "react";
 import { Badge, Tabs, TabsContent, TabsList, TabsTrigger } from "../../../";
 import { InviteManagement } from "./invite-managment";
 import { TeamJoinManagement } from "./join-management";
+import { TechnicalUserManagement } from "./technical-user-management";
 import { UserManagement } from "./user-managements";
 
 interface JoinRequest {
@@ -45,7 +46,7 @@ export function TeamManagementPage() {
 				defaultValue="members"
 				className="space-y-6 flex flex-col flex-1 min-h-0"
 			>
-				<TabsList className="grid w-full grid-cols-3 shrink-0">
+				<TabsList className="grid w-full grid-cols-4 shrink-0">
 					<TabsTrigger value="members" className="flex items-center gap-2">
 						<Users className="w-4 h-4" />
 						Team Members
@@ -53,6 +54,10 @@ export function TeamManagementPage() {
 					<TabsTrigger value="invite" className="flex items-center gap-2">
 						<UserPlus className="w-4 h-4" />
 						Invite & Access
+					</TabsTrigger>
+					<TabsTrigger value="api-keys" className="flex items-center gap-2">
+						<Key className="w-4 h-4" />
+						API Keys
 					</TabsTrigger>
 					{showRequestQueue && (
 						<TabsTrigger value="requests" className="flex items-center gap-2">
@@ -76,6 +81,15 @@ export function TeamManagementPage() {
 					<TabsContent value="invite" className="flex-1 min-h-0">
 						<div className="h-full overflow-y-auto">
 							<InviteManagement appId={appId} />
+						</div>
+					</TabsContent>
+				)}
+
+				{/* API Keys Tab */}
+				{appId && (
+					<TabsContent value="api-keys" className="flex-1 min-h-0">
+						<div className="h-full overflow-y-auto">
+							<TechnicalUserManagement appId={appId} />
 						</div>
 					</TabsContent>
 				)}

@@ -7,6 +7,20 @@ use axum::{
 };
 use flow_like::app::App;
 use sea_orm::EntityTrait;
+
+#[utoipa::path(
+    get,
+    path = "/apps/{app_id}",
+    tag = "apps",
+    params(
+        ("app_id" = String, Path, description = "Application ID")
+    ),
+    responses(
+        (status = 200, description = "Application details", body = Object),
+        (status = 401, description = "Unauthorized"),
+        (status = 404, description = "Application not found")
+    )
+)]
 #[tracing::instrument(name = "GET /apps/{app_id}", skip(state, user))]
 pub async fn get_app(
     State(state): State<AppState>,

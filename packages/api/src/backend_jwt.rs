@@ -40,7 +40,7 @@ const ISSUER: &str = "flow-like";
 // ============================================================================
 
 /// Token type - determines what the token can be used for
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, utoipa::ToSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum TokenType {
     /// Token for executors to call back to API (progress, events)
@@ -226,7 +226,7 @@ pub fn verify_any<T: for<'de> Deserialize<'de>>(token: &str) -> Result<T, Backen
 // ============================================================================
 
 /// JWK representation for JWKS endpoint
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, utoipa::ToSchema)]
 pub struct Jwk {
     pub kty: String,
     pub crv: String,
@@ -239,7 +239,7 @@ pub struct Jwk {
 }
 
 /// JWKS (JSON Web Key Set) for public key distribution
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, utoipa::ToSchema)]
 pub struct Jwks {
     pub keys: Vec<Jwk>,
 }

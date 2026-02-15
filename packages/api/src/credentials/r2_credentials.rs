@@ -48,11 +48,15 @@ pub struct R2RuntimeCredentials {
     pub endpoint: String,
     pub account_id: String,
     pub expiration: Option<chrono::DateTime<chrono::Utc>>,
+    pub content_path_prefix: Option<String>,
+    pub user_content_path_prefix: Option<String>,
 }
 
 impl R2RuntimeCredentials {
     pub fn from_env() -> Self {
-        let logs_bucket = std::env::var("LOG_BUCKET").unwrap_or_default();
+        let logs_bucket = std::env::var("LOG_BUCKET")
+            .or_else(|_| std::env::var("LOGS_BUCKET"))
+            .unwrap_or_default();
         if logs_bucket.is_empty() {
             tracing::warn!(
                 "LOG_BUCKET environment variable is not set - logs will not be persisted"
@@ -66,14 +70,20 @@ impl R2RuntimeCredentials {
                 .or_else(|_| std::env::var("AWS_SECRET_ACCESS_KEY"))
                 .ok(),
             session_token: None,
-            meta_bucket: std::env::var("META_BUCKET_NAME").unwrap_or_default(),
-            content_bucket: std::env::var("CONTENT_BUCKET_NAME").unwrap_or_default(),
+            meta_bucket: std::env::var("META_BUCKET")
+                .or_else(|_| std::env::var("META_BUCKET_NAME"))
+                .unwrap_or_default(),
+            content_bucket: std::env::var("CONTENT_BUCKET")
+                .or_else(|_| std::env::var("CONTENT_BUCKET_NAME"))
+                .unwrap_or_default(),
             logs_bucket,
             endpoint: std::env::var("R2_ENDPOINT")
                 .or_else(|_| std::env::var("AWS_ENDPOINT"))
                 .unwrap_or_default(),
             account_id: std::env::var("R2_ACCOUNT_ID").unwrap_or_default(),
             expiration: None,
+            content_path_prefix: None,
+            user_content_path_prefix: None,
         }
     }
 
@@ -92,6 +102,8 @@ impl R2RuntimeCredentials {
             endpoint: self.endpoint.clone(),
             account_id: self.account_id.clone(),
             expiration: None,
+            content_path_prefix: None,
+            user_content_path_prefix: None,
         }
     }
 
@@ -123,7 +135,7 @@ impl R2RuntimeCredentials {
         // Build prefix list based on access mode
         let apps_prefix = format!("apps/{}/", app_id);
         let user_prefix = format!("users/{}/apps/{}/", sub, app_id);
-        let log_prefix = format!("logs/runs/{}/", app_id);
+        let log_prefix = format!("runs/{}/", app_id);
         let temporary_user_prefix = format!("tmp/user/{}/apps/{}/", sub, app_id);
         let temporary_global_prefix = format!("tmp/global/apps/{}/", app_id);
 
@@ -187,6 +199,8 @@ impl R2RuntimeCredentials {
             endpoint: self.endpoint.clone(),
             account_id: self.account_id.clone(),
             expiration: Some(chrono_expiration),
+            content_path_prefix: Some(format!("apps/{}", app_id)),
+            user_content_path_prefix: Some(format!("users/{}/apps/{}", sub, app_id)),
         })
     }
 
@@ -264,11 +278,17 @@ impl RuntimeCredentialsTrait for R2RuntimeCredentials {
             logs_config: r2_config,
             region: "auto".to_string(), // R2 uses "auto" region
             expiration: self.expiration,
+            content_path_prefix: self.content_path_prefix.clone(),
+            user_content_path_prefix: self.user_content_path_prefix.clone(),
         })
     }
 
     async fn to_db(&self, app_id: &str) -> Result<ConnectBuilder> {
         self.into_shared_credentials().to_db(app_id).await
+    }
+
+    async fn to_db_scoped(&self, app_id: &str) -> Result<ConnectBuilder> {
+        self.into_shared_credentials().to_db_scoped(app_id).await
     }
 
     #[tracing::instrument(
@@ -277,15 +297,15 @@ impl RuntimeCredentialsTrait for R2RuntimeCredentials {
         level = "debug"
     )]
     async fn to_state(&self, state: AppState) -> Result<FlowLikeState> {
-        let (meta_store, content_store, (http_client, _refetch_rx)) = {
+        let (meta_store, content_store) = {
             use flow_like_types::tokio;
 
             tokio::join!(
                 async { self.into_shared_credentials().to_store(true).await },
                 async { self.into_shared_credentials().to_store(false).await },
-                async { HTTPClient::new() }
             )
         };
+        let http_client = HTTPClient::new_without_refetch();
 
         let meta_store = meta_store?;
         let content_store = content_store?;

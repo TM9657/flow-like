@@ -2,23 +2,31 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-  <key>NSCameraUsageDescription</key>
-  <string>Request camera access for WebRTC</string>
-  <key>NSMicrophoneUsageDescription</key>
-  <string>Request microphone access for WebRTC</string>
-  <key>CFBundleIconFile</key>
+	<key>NSCameraUsageDescription</key>
+	<string>Request camera access for WebRTC</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Request microphone access for WebRTC</string>
+	<key>CFBundleIconFile</key>
 	<string>icon</string>
 	<key>CFBundleIconName</key>
 	<string>icon</string>
-
-  <key>NSAppleEventsUsageDescription</key>
-  <string>Flow Like automates and integrates with other apps you choose (e.g., Finder) to manage files.</string>
-
-  <!-- RPA/Automation permissions - requested lazily when workflow requires them -->
-  <key>NSAccessibilityUsageDescription</key>
-  <string>Flow Like needs Accessibility access to automate mouse clicks, keyboard input, and read UI elements in your workflows.</string>
-
-  <key>NSScreenCaptureUsageDescription</key>
-  <string>Flow Like needs Screen Recording access to capture screenshots for visual element matching in your automation workflows.</string>
+	<key>NSAppleEventsUsageDescription</key>
+	<string>Flow Like automates and integrates with other apps you choose (e.g., Finder) to manage files.</string>
+	<!-- RPA/Automation permissions - requested lazily when workflow requires them -->
+	<key>NSAccessibilityUsageDescription</key>
+	<string>Flow Like needs Accessibility access to automate mouse clicks, keyboard input, and read UI elements in your workflows.</string>
+	<key>NSScreenCaptureUsageDescription</key>
+	<string>Flow Like needs Screen Recording access to capture screenshots for visual element matching in your automation workflows.</string>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLName</key>
+			<string>flow-like</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>flow-like</string>
+			</array>
+		</dict>
+	</array>
 </dict>
 </plist>

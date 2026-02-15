@@ -1,7 +1,8 @@
 ---
 import "@tm9657/flow-like-ui/global.css";
+import "../../styles/website-base.css";
 import PostHog from "../posthog.astro";
-import { BlogHeader } from "../blog-header";
+import { Header } from "../header";
 import { BlogFooter } from "../blog-footer";
 
 import Hero from "./Hero.astro";
@@ -15,6 +16,7 @@ import FAQ from "./FAQ.astro";
 import Contact from "./Contact.astro";
 
 import { t24h } from "../../i18n/locales/pages/24h";
+import { buildAlternateLinks, getOgLocale } from "../../lib/seo";
 
 interface Props {
   lang: string;
@@ -24,7 +26,10 @@ const { lang } = Astro.props;
 const t = (key: string) => t24h(lang, key);
 
 const site = Astro.site ?? import.meta.env.SITE ?? "https://flow-like.com";
-const canonical = new URL(Astro.url.pathname, site).toString();
+const siteUrl = typeof site === "string" ? site : site.toString();
+const canonical = new URL(Astro.url.pathname, siteUrl).toString();
+const alternateLinks = buildAlternateLinks(siteUrl, Astro.url.pathname);
+const ogLocale = getOgLocale(lang);
 
 const title = t("24h.meta.title");
 const desc = t("24h.meta.description");
@@ -32,7 +37,7 @@ const cover = "/og.png";
 ---
 
 <!doctype html>
-<html lang={lang} class="scroll-smooth" style="overflow-x: hidden;">
+<html lang={lang} class="scroll-smooth">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -43,6 +48,9 @@ const cover = "/og.png";
     <meta name="description" content={desc} />
     <meta name="robots" content="index, follow" />
     <link rel="canonical" href={canonical} />
+    {alternateLinks.map((alt) => (
+      <link rel="alternate" hreflang={alt.hreflang} href={alt.href} />
+    ))}
     <meta name="theme-color" content="#ffffff" />
     <link rel="sitemap" href="/sitemap-index.xml" />
 
@@ -52,6 +60,7 @@ const cover = "/og.png";
     <meta property="og:title" content={title} />
     <meta property="og:description" content={desc} />
     <meta property="og:image" content={cover} />
+    <meta property="og:locale" content={ogLocale} />
 
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:title" content={title} />
@@ -60,29 +69,10 @@ const cover = "/og.png";
 
     <PostHog />
 
-    <style is:global>
-      @media (max-width: 768px) {
-        * { scroll-snap-type: none !important; }
-        html { scroll-behavior: auto !important; }
-        html, body, main, section, [role="region"] { overflow: visible !important; }
-        .sticky, [style*="position: sticky"] { position: static !important; }
-      }
 
-      html, body { min-height: 100%; }
-      html, body {
-        overflow-y: auto;
-        overflow-x: hidden !important;
-        max-width: 100vw;
-        -webkit-overflow-scrolling: touch;
-        touch-action: pan-y;
-      }
-      :root, body, #content { overscroll-behavior: auto; }
-    </style>
   </head>
-  <body class="bg-background text-foreground antialiased overflow-x-hidden max-w-full"
-        style="overflow-y: auto !important;"
-  >
-    <BlogHeader client:load />
+  <body class="bg-background text-foreground antialiased overflow-x-hidden max-w-full">
+    <Header client:load />
 
     <main class="pt-16">
       <Hero t={t}>

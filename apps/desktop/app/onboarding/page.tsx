@@ -1,4 +1,6 @@
 "use client";
+import { invoke } from "@tauri-apps/api/core";
+import { fetch as tauriFetch } from "@tauri-apps/plugin-http";
 import type { IHub, UseQueryResult } from "@tm9657/flow-like-ui";
 import { Bit, Button, useBackend } from "@tm9657/flow-like-ui";
 import {
@@ -17,10 +19,19 @@ import type { IBit } from "@tm9657/flow-like-ui/lib/schema/bit/bit";
 import { IBitTypes } from "@tm9657/flow-like-ui/lib/schema/bit/bit";
 import { humanFileSize } from "@tm9657/flow-like-ui/lib/utils";
 import type { ISettingsProfile } from "@tm9657/flow-like-ui/types";
-import { ArrowBigRight, CloudDownload, LogIn } from "lucide-react";
+import { ArrowBigRight, CloudDownload, Loader2, LogIn } from "lucide-react";
+import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useAuth } from "react-oidc-context";
-import { useTauriInvoke } from "../../components/useInvoke";
+import {
+	useInvalidateTauriInvoke,
+	useTauriInvoke,
+} from "../../components/useInvoke";
+import {
+	type OnlineProfile,
+	getDefaultApiBase,
+	toLocalProfile,
+} from "../../lib/profile-sync";
 
 type ProfileEntry = {
 	profile: ISettingsProfile;
@@ -54,14 +65,21 @@ const requiresHostedSignIn = (bit: IBit): boolean => {
 	return !LOCAL_PROVIDERS.has(providerName);
 };
 
+// Module-level flag — survives component remounts within the same SPA session,
+// unlike useRef which resets every time the route re-mounts the component.
+let hasInitiatedProfilePull = false;
+
 export default function Onboarding() {
 	const backend = useBackend();
 	const auth = useAuth();
+	const router = useRouter();
+	const invalidate = useInvalidateTauriInvoke();
 	const canHostModels = backend.capabilities().canHostLlamaCPP;
 	const isAuthenticated = Boolean(auth?.isAuthenticated);
 	const [profiles, setProfiles] = useState<[ISettingsProfile, IBit[]][]>([]);
 	const [route, setRoute] = useState("");
 	const [totalSize, setTotalSize] = useState(0);
+	const [isPullingProfiles, setIsPullingProfiles] = useState(false);
 	const defaultProfiles: UseQueryResult<[[ISettingsProfile, IBit[]][], IHub]> =
 		useTauriInvoke("get_default_profiles", {});
 	const [activeProfiles, setActiveProfiles] = useState<string[]>([]);
@@ -121,8 +139,77 @@ export default function Onboarding() {
 
 	const handleSignIn = useCallback(async () => {
 		if (!auth?.signinRedirect) return;
-		await auth.signinRedirect();
+		try {
+			await auth.signinRedirect();
+		} catch (error) {
+			console.error("signinRedirect failed:", error);
+		}
 	}, [auth]);
+
+	useEffect(() => {
+		const accessToken = auth?.user?.access_token;
+		if (!isAuthenticated || !accessToken) return;
+		if (hasInitiatedProfilePull) return;
+		hasInitiatedProfilePull = true;
+
+		let cancelled = false;
+		const pullServerProfiles = async () => {
+			setIsPullingProfiles(true);
+			try {
+				const apiBase = getDefaultApiBase();
+				const url = `${apiBase}/api/v1/profile`;
+				const response = await tauriFetch(url, {
+					method: "GET",
+					headers: {
+						"Content-Type": "application/json",
+						Authorization: `Bearer ${accessToken}`,
+					},
+				});
+
+				if (!response.ok || cancelled) {
+					if (!response.ok) hasInitiatedProfilePull = false;
+					if (!cancelled) setIsPullingProfiles(false);
+					return;
+				}
+
+				const serverProfiles = (await response.json()) as OnlineProfile[];
+				if (cancelled) return;
+
+				if (serverProfiles.length > 0) {
+					let firstProfileId: string | null = null;
+					for (const op of serverProfiles) {
+						try {
+							const localProfile = toLocalProfile(op);
+							await invoke("upsert_profile", {
+								profile: localProfile,
+							});
+							firstProfileId ??= op.id;
+						} catch (error) {
+							console.error("Failed to create profile:", op.id, error);
+						}
+					}
+
+					if (firstProfileId && !cancelled) {
+						await invoke("set_current_profile", {
+							profileId: firstProfileId,
+						});
+						await invalidate("get_profiles");
+						router.replace("/");
+						return;
+					}
+				}
+			} catch (error) {
+				hasInitiatedProfilePull = false;
+				console.warn("Failed to pull server profiles:", error);
+			}
+			if (!cancelled) setIsPullingProfiles(false);
+		};
+
+		pullServerProfiles();
+		return () => {
+			cancelled = true;
+		};
+	}, [isAuthenticated, auth?.user?.access_token, router]);
 
 	const handleToggleProfile = useCallback((profileId: string) => {
 		setActiveProfiles((previous) =>
@@ -192,25 +279,34 @@ export default function Onboarding() {
 	return (
 		<div className="flex flex-col items-center justify-start w-full min-h-0 px-3 py-4 sm:px-6 sm:py-6 pb-12 sm:pb-16 z-10 gap-8">
 			<OnboardingIntro />
-			<ProfilesSection
-				showLocalModelAlert={showLocalModelAlert}
-				filteredOutCount={filteredOutCount}
-				hasSignInProfiles={hasSignInProfiles}
-				isAuthenticated={isAuthenticated}
-				noProfilesAvailable={noProfilesAvailable}
-				availableProfiles={availableProfiles}
-				activeProfiles={activeProfiles}
-				onToggleProfile={handleToggleProfile}
-			/>
-			<DownloadPanel
-				totalSize={totalSize}
-				selectedRequiresSignIn={selectedRequiresSignIn}
-				hasSignInProfiles={hasSignInProfiles}
-				canTriggerSignIn={canTriggerSignIn}
-				isAuthenticated={isAuthenticated}
-				onSignIn={handleSignIn}
-				downloadHref={downloadHref}
-			/>
+			{isPullingProfiles ? (
+				<RestoreProfilesLoading />
+			) : (
+				<>
+					{!isAuthenticated && (
+						<ExistingAccountBanner onSignIn={handleSignIn} />
+					)}
+					<ProfilesSection
+						showLocalModelAlert={showLocalModelAlert}
+						filteredOutCount={filteredOutCount}
+						hasSignInProfiles={hasSignInProfiles}
+						isAuthenticated={isAuthenticated}
+						noProfilesAvailable={noProfilesAvailable}
+						availableProfiles={availableProfiles}
+						activeProfiles={activeProfiles}
+						onToggleProfile={handleToggleProfile}
+					/>
+					<DownloadPanel
+						totalSize={totalSize}
+						selectedRequiresSignIn={selectedRequiresSignIn}
+						hasSignInProfiles={hasSignInProfiles}
+						canTriggerSignIn={canTriggerSignIn}
+						isAuthenticated={isAuthenticated}
+						onSignIn={handleSignIn}
+						downloadHref={downloadHref}
+					/>
+				</>
+			)}
 			<br />
 		</div>
 	);
@@ -232,6 +328,50 @@ function OnboardingIntro() {
 				Choose one or more profiles that match your interests. You can always
 				add, change or remove profiles later.
 			</p>
+		</div>
+	);
+}
+
+function ExistingAccountBanner({
+	onSignIn,
+}: Readonly<{ onSignIn: () => void }>) {
+	const handleClick = () => {
+		console.log("[Onboarding] ExistingAccountBanner Sign in clicked");
+		onSignIn();
+	};
+	return (
+		<div className="w-full max-w-6xl">
+			<div className="flex flex-col items-center gap-4 rounded-xl border bg-card/80 backdrop-blur-sm px-6 py-6 shadow-sm">
+				<div className="text-center space-y-2">
+					<h3 className="text-lg font-semibold">Already have an account?</h3>
+					<p className="text-sm text-muted-foreground">
+						Sign in to restore your profiles and settings from another device.
+					</p>
+				</div>
+				<Button variant="outline" className="gap-2" onClick={handleClick}>
+					<LogIn className="h-4 w-4" />
+					Sign in
+				</Button>
+			</div>
+			<div className="relative mt-8">
+				<div className="absolute inset-0 flex items-center">
+					<div className="w-full border-t border-border/60" />
+				</div>
+				<div className="relative flex justify-center text-xs uppercase">
+					<span className="bg-background px-2 text-muted-foreground">
+						Or choose a starter profile
+					</span>
+				</div>
+			</div>
+		</div>
+	);
+}
+
+function RestoreProfilesLoading() {
+	return (
+		<div className="w-full max-w-6xl flex flex-col items-center gap-4 py-12">
+			<Loader2 className="h-8 w-8 animate-spin text-primary" />
+			<p className="text-sm text-muted-foreground">Restoring your profiles…</p>
 		</div>
 	);
 }

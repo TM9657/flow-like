@@ -94,10 +94,38 @@ export function FlowTemplateSelector({
 		return result;
 	}, [appsWithTemplates]);
 
-	const quickTemplates = useMemo(
-		() => allTemplates.slice(0, 5),
-		[allTemplates],
-	);
+	// Show diverse templates - prioritize one from each app, then fill remaining slots
+	const quickTemplates = useMemo(() => {
+		const result: TemplateInfo[] = [];
+		const seenApps = new Set<string>();
+
+		// First pass: one template per app
+		for (const item of appsWithTemplates) {
+			if (result.length >= 5) break;
+			if (item.templates.length > 0 && !seenApps.has(item.app.id)) {
+				result.push(item.templates[0]);
+				seenApps.add(item.app.id);
+			}
+		}
+
+		// Second pass: fill remaining slots with more templates
+		if (result.length < 5) {
+			for (const template of allTemplates) {
+				if (result.length >= 5) break;
+				if (
+					!result.some(
+						(t) =>
+							t.appId === template.appId &&
+							t.templateId === template.templateId,
+					)
+				) {
+					result.push(template);
+				}
+			}
+		}
+
+		return result;
+	}, [appsWithTemplates, allTemplates]);
 
 	const getAppMetaForTemplate = useCallback(
 		(template: TemplateInfo) => {
@@ -280,6 +308,9 @@ export function FlowTemplateSelector({
 											key={`${template.appId}-${template.templateId}`}
 											template={template}
 											appIcon={appMeta?.icon}
+											appName={
+												appsWithTemplates.length > 1 ? appMeta?.name : undefined
+											}
 											onClick={() => openPreview(template)}
 										/>
 									);
@@ -319,9 +350,9 @@ export function FlowTemplateSelector({
 				>
 					<div className="flex flex-col md:flex-row h-full">
 						{/* Sidebar - horizontal scroll on mobile, sidebar on desktop */}
-						<div className="w-full md:w-56 border-b md:border-b-0 md:border-r border-border/50 flex flex-col bg-muted/20 shrink-0">
+						<div className="w-full max-h-[40vh] md:max-h-none md:w-56 border-b md:border-b-0 md:border-r border-border/50 flex flex-col bg-muted/20 shrink-0">
 							{/* Header */}
-							<div className="p-3 md:p-4 md:border-b border-border/50">
+							<div className="p-3 md:p-4 md:border-b border-border/50 shrink-0">
 								<h2 className="text-base md:text-lg font-semibold mb-2 md:mb-3">
 									Templates
 								</h2>
@@ -337,7 +368,7 @@ export function FlowTemplateSelector({
 							</div>
 
 							{/* Categories - horizontal scroll on mobile, vertical list on desktop */}
-							<div className="md:flex-1 overflow-x-auto md:overflow-x-visible md:overflow-y-auto">
+							<div className="flex-1 overflow-x-auto overflow-y-auto md:overflow-x-visible">
 								<div className="flex md:flex-col gap-1 p-2 md:space-y-1 min-w-max md:min-w-0">
 									<button
 										type="button"
@@ -444,6 +475,9 @@ export function FlowTemplateSelector({
 													template={template}
 													appIcon={appMeta?.icon}
 													appThumbnail={appMeta?.thumbnail}
+													appName={
+														!selectedCategory ? appMeta?.name : undefined
+													}
 													isSelected={isSelected}
 													onClick={() => setBrowserPreview(template)}
 												/>
@@ -462,6 +496,9 @@ export function FlowTemplateSelector({
 													key={`${template.appId}-${template.templateId}`}
 													template={template}
 													appIcon={appMeta?.icon}
+													appName={
+														!selectedCategory ? appMeta?.name : undefined
+													}
 													isSelected={isSelected}
 													onClick={() => setBrowserPreview(template)}
 												/>
@@ -565,7 +602,11 @@ function InlineTemplatePreview({
 						<Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
 					</div>
 				) : templateBoard.data ? (
-					<FlowPreview nodes={Object.values(templateBoard.data.nodes)} />
+					<FlowPreview
+						nodes={Object.values(templateBoard.data.nodes)}
+						comments={templateBoard.data.comments}
+						layers={templateBoard.data.layers}
+					/>
 				) : (
 					<div className="w-full h-full flex items-center justify-center">
 						<p className="text-xs text-muted-foreground">
@@ -655,10 +696,12 @@ function InlineTemplatePreview({
 function QuickTemplateItem({
 	template,
 	appIcon,
+	appName,
 	onClick,
 }: {
 	template: TemplateInfo;
 	appIcon?: string | null;
+	appName?: string;
 	onClick: () => void;
 }) {
 	return (
@@ -679,9 +722,16 @@ function QuickTemplateItem({
 				</div>
 			)}
 			<div className="flex-1 min-w-0">
-				<p className="text-sm font-medium text-foreground truncate group-hover:text-primary transition-colors">
-					{template.metadata?.name || template.templateId}
-				</p>
+				<div className="flex items-center gap-1.5">
+					<p className="text-sm font-medium text-foreground truncate group-hover:text-primary transition-colors">
+						{template.metadata?.name || template.templateId}
+					</p>
+					{appName && (
+						<span className="text-[10px] text-muted-foreground/70 shrink-0">
+							• {appName}
+						</span>
+					)}
+				</div>
 				{template.metadata?.description && (
 					<p className="text-xs text-muted-foreground truncate">
 						{template.metadata.description}
@@ -742,7 +792,11 @@ function BrowserPreviewPane({
 						<Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
 					</div>
 				) : templateBoard.data ? (
-					<FlowPreview nodes={Object.values(templateBoard.data.nodes)} />
+					<FlowPreview
+						nodes={Object.values(templateBoard.data.nodes)}
+						comments={templateBoard.data.comments}
+						layers={templateBoard.data.layers}
+					/>
 				) : (
 					<div className="w-full h-full flex items-center justify-center">
 						<p className="text-xs text-muted-foreground">
@@ -840,12 +894,14 @@ function BrowserTemplateCard({
 	template,
 	appIcon,
 	appThumbnail,
+	appName,
 	isSelected,
 	onClick,
 }: {
 	template: TemplateInfo;
 	appIcon?: string | null;
 	appThumbnail?: string | null;
+	appName?: string;
 	isSelected?: boolean;
 	onClick: () => void;
 }) {
@@ -883,6 +939,17 @@ function BrowserTemplateCard({
 					</div>
 				)}
 				<div className="absolute inset-0 bg-gradient-to-t from-black/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
+				{/* App name badge */}
+				{appName && (
+					<div className="absolute top-2 left-2">
+						<Badge
+							variant="secondary"
+							className="text-[10px] bg-background/90 backdrop-blur-sm"
+						>
+							{appName}
+						</Badge>
+					</div>
+				)}
 			</div>
 
 			{/* Info */}
@@ -916,11 +983,13 @@ function BrowserTemplateCard({
 function BrowserTemplateRow({
 	template,
 	appIcon,
+	appName,
 	isSelected,
 	onClick,
 }: {
 	template: TemplateInfo;
 	appIcon?: string | null;
+	appName?: string;
 	isSelected?: boolean;
 	onClick: () => void;
 }) {
@@ -946,9 +1015,19 @@ function BrowserTemplateRow({
 				</div>
 			)}
 			<div className="flex-1 min-w-0">
-				<p className="font-medium text-sm text-foreground truncate group-hover:text-primary transition-colors">
-					{template.metadata?.name || template.templateId}
-				</p>
+				<div className="flex items-center gap-2">
+					<p className="font-medium text-sm text-foreground truncate group-hover:text-primary transition-colors">
+						{template.metadata?.name || template.templateId}
+					</p>
+					{appName && (
+						<Badge
+							variant="outline"
+							className="text-[10px] px-1.5 py-0 shrink-0"
+						>
+							{appName}
+						</Badge>
+					)}
+				</div>
 				{template.metadata?.description && (
 					<p className="text-xs text-muted-foreground truncate mt-0.5">
 						{template.metadata.description}

@@ -1,6 +1,7 @@
 import type React from "react";
 import type { IBoard } from "../../lib";
 import type { A2UIPlanStep } from "../../lib/schema/a2ui/copilot";
+import type { CanvasSettings } from "../../lib/schema/copilot";
 import type {
 	BoardCommand,
 	PlanStep,
@@ -15,6 +16,48 @@ import type { SurfaceComponent } from "../a2ui/types";
  * - "both": Can operate on both (future capability)
  */
 export type AgentMode = "board" | "ui" | "both";
+
+/**
+ * AI Provider type for FlowPilot
+ * - "bits": Use configured model bits from user profile
+ * - "copilot": Use GitHub Copilot SDK directly
+ */
+export type AIProvider = "bits" | "copilot";
+
+/**
+ * Copilot model information from the SDK
+ */
+export interface CopilotModel {
+	/** Model ID */
+	id: string;
+	/** Model display name */
+	name: string;
+}
+
+/**
+ * Copilot authentication status
+ */
+export interface CopilotAuthStatus {
+	/** Whether the user is authenticated with GitHub Copilot */
+	authenticated: boolean;
+	/** GitHub username if authenticated */
+	login?: string;
+}
+
+/**
+ * Copilot connection configuration
+ */
+export interface CopilotConnectionConfig {
+	/** Use stdio connection (local mode) or TCP/remote */
+	useStdio: boolean;
+	/** Server URL for remote/web mode */
+	serverUrl?: string;
+}
+
+/**
+ * Specialized agent type for Copilot
+ */
+export type CopilotAgentType = "general" | "frontend" | "backend";
 
 /**
  * Loading phases that represent the AI's current activity
@@ -122,6 +165,20 @@ export interface FlowPilotProps {
 	/** Callback when close button is clicked */
 	onClose?: () => void;
 
+	// === Provider Props ===
+
+	/** Force a specific AI provider (if not set, shows provider selector) */
+	forceProvider?: AIProvider;
+
+	/** Default provider to use (defaults to "bits" for backward compatibility) */
+	defaultProvider?: AIProvider;
+
+	/** Copilot server URL for web mode (required if using copilot provider in web) */
+	copilotServerUrl?: string;
+
+	/** Callback when copilot server URL is needed (shows dialog in web mode) */
+	onRequestCopilotServerUrl?: () => Promise<string | undefined>;
+
 	// === Board Mode Props ===
 
 	/** The board to operate on (required for board mode) */
@@ -165,7 +222,10 @@ export interface FlowPilotProps {
 	onComponentsGenerated?: (components: SurfaceComponent[]) => void;
 
 	/** Callback when components should be applied (UI mode) */
-	onApplyComponents?: (components: SurfaceComponent[]) => void;
+	onApplyComponents?: (
+		components: SurfaceComponent[],
+		canvasSettings?: CanvasSettings,
+	) => void;
 
 	// === Screenshot Props ===
 
@@ -189,6 +249,8 @@ export interface FlowPilotState {
 	attachedImages: AttachedImage[];
 	userScrolledUp: boolean;
 	selectedModelId: string;
+	/** Current AI provider */
+	provider: AIProvider;
 
 	// Board-specific state
 	pendingCommands: BoardCommand[];

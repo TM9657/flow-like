@@ -115,7 +115,7 @@ pub async fn execute(
     // Load model provider configuration from environment
     let model_provider_config = model_provider_config_from_env();
 
-    let (http_client, _) = HTTPClient::new();
+    let http_client = HTTPClient::new_without_refetch();
     let state =
         FlowLikeState::new_with_model_config(flow_config, http_client, model_provider_config);
 
@@ -176,6 +176,7 @@ pub async fn execute(
         id: request.node_id.clone(),
         payload: request.payload.clone(),
         runtime_variables: request.runtime_variables.clone(),
+        filter_secrets: Some(true),
     };
 
     // Create BufferedInterComHandler - this is REQUIRED for meaningful execution output
@@ -236,6 +237,11 @@ pub async fn execute(
     .await
     .map_err(|e| ExecutorError::RunInit(e.to_string()))?;
 
+    // Set user context if provided
+    if let Some(user_context) = request.user_context.clone() {
+        run.set_user_context(user_context);
+    }
+
     // Execute with timeout
     let execution_result = tokio::time::timeout(config.execution_timeout(), async {
         run.execute(state.clone()).await
@@ -257,22 +263,25 @@ pub async fn execute(
                 "Execution completed, checking for log metadata"
             );
             if let Some(meta) = log_meta {
-                let db = {
+                let (db_fn, write_options) = {
                     let guard = state.config.read().await;
-                    guard.callbacks.build_logs_database.clone()
+                    (
+                        guard.callbacks.build_logs_database.clone(),
+                        guard.callbacks.lance_write_options.clone(),
+                    )
                 };
                 tracing::debug!(
-                    has_db_builder = db.is_some(),
+                    has_db_builder = db_fn.is_some(),
                     "Retrieved log database builder from state"
                 );
-                if let Some(db_fn) = db.as_ref() {
+                if let Some(db_fn) = db_fn.as_ref() {
                     let base_path = Path::from("runs")
                         .child(request.app_id.as_str())
                         .child(request.board_id.as_str());
                     tracing::info!(path = %base_path, "Opening log database to flush run metadata");
                     match db_fn(base_path.clone()).execute().await {
                         Ok(db) => {
-                            if let Err(e) = meta.flush(db).await {
+                            if let Err(e) = meta.flush(db, write_options.as_ref()).await {
                                 tracing::error!(error = %e, "Failed to flush run logs");
                             } else {
                                 tracing::info!("Successfully flushed run logs to {}", base_path);

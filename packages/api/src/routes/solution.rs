@@ -18,6 +18,7 @@ use mime::Mime;
 use sea_orm::{ActiveModelTrait, ActiveValue::Set};
 use serde::{Deserialize, Serialize};
 use std::time::Duration;
+use utoipa::ToSchema;
 
 const UPLOAD_TTL_SECS: u64 = 60 * 60; // 1 hour
 const DOWNLOAD_TTL_SECS: u64 = 60 * 60 * 24 * 7; // 7 days
@@ -27,73 +28,83 @@ const DEPOSIT_AMOUNT_CENTS: i64 = 50000; // €500 deposit for priority queue
 const STANDARD_TOTAL_CENTS: i64 = 240000; // €2,400 total
 const APPSTORE_TOTAL_CENTS: i64 = 199900; // €1,999 total
 
-#[derive(Clone, Deserialize, Serialize, Debug)]
+#[derive(Clone, Deserialize, Serialize, Debug, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct SolutionUploadResponse {
-    key: String,
-    content_type: String,
-    upload_url: String,
-    upload_expires_at: String,
-    download_url: String,
-    download_expires_at: String,
-    size_limit_bytes: Option<u64>,
+    pub key: String,
+    pub content_type: String,
+    pub upload_url: String,
+    pub upload_expires_at: String,
+    pub download_url: String,
+    pub download_expires_at: String,
+    pub size_limit_bytes: Option<u64>,
 }
 
-#[derive(Clone, Deserialize, Serialize, Debug)]
+#[derive(Clone, Deserialize, Serialize, Debug, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct SolutionSubmission {
-    name: String,
-    email: String,
-    company: String,
-    application_type: String,
-    data_security: String,
-    description: String,
-    example_input: String,
-    expected_output: String,
-    files: Vec<UploadedFile>,
-    user_count: String,
-    user_type: String,
-    technical_level: String,
-    timeline: Option<String>,
-    additional_notes: Option<String>,
-    pricing_tier: String,
-    pay_deposit: bool,
+    pub name: String,
+    pub email: String,
+    pub company: String,
+    pub application_type: String,
+    pub data_security: String,
+    pub description: String,
+    pub example_input: String,
+    pub expected_output: String,
+    pub files: Vec<UploadedFile>,
+    pub user_count: String,
+    pub user_type: String,
+    pub technical_level: String,
+    pub timeline: Option<String>,
+    pub additional_notes: Option<String>,
+    pub pricing_tier: String,
+    pub pay_deposit: bool,
 }
 
-#[derive(Clone, Deserialize, Serialize, Debug)]
+#[derive(Clone, Deserialize, Serialize, Debug, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct UploadedFile {
-    name: String,
-    key: String,
-    download_url: String,
-    size: u64,
+    pub name: String,
+    pub key: String,
+    pub download_url: String,
+    pub size: u64,
 }
 
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Debug, ToSchema, utoipa::IntoParams)]
 pub struct UploadParams {
-    extension: Option<String>,
-    content_type: Option<String>,
+    pub extension: Option<String>,
+    pub content_type: Option<String>,
 }
 
-#[derive(Clone, Serialize, Debug)]
+#[derive(Clone, Serialize, Debug, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct SubmissionResponse {
-    success: bool,
-    id: String,
-    tracking_token: String,
-    message: String,
-    checkout_url: Option<String>,
+    pub success: bool,
+    pub id: String,
+    pub tracking_token: String,
+    pub message: String,
+    pub checkout_url: Option<String>,
 }
 
 pub fn routes() -> Router<AppState> {
     Router::new()
-        .route("/upload", get(presign_solution_upload))
+        .route("/upload", get(get_upload_url))
         .route("/", post(submit_solution))
-        .route("/track/{token}", get(get_solution_status))
+        .route("/track/{token}", get(track_solution))
 }
 
+#[utoipa::path(
+    get,
+    path = "/solution/upload",
+    tag = "solution",
+    params(UploadParams),
+    responses(
+        (status = 200, description = "Presigned upload URL generated successfully", body = SolutionUploadResponse),
+        (status = 500, description = "Internal server error")
+    )
+)]
 #[tracing::instrument(name = "GET /solution/upload", skip(state))]
-async fn presign_solution_upload(
+pub async fn get_upload_url(
     State(state): State<AppState>,
     Query(params): Query<UploadParams>,
 ) -> Result<Json<SolutionUploadResponse>, ApiError> {
@@ -139,8 +150,19 @@ async fn presign_solution_upload(
     Ok(Json(response))
 }
 
+#[utoipa::path(
+    post,
+    path = "/solution",
+    tag = "solution",
+    request_body = SolutionSubmission,
+    responses(
+        (status = 200, description = "Solution submitted successfully", body = SubmissionResponse),
+        (status = 400, description = "Invalid submission data"),
+        (status = 500, description = "Internal server error")
+    )
+)]
 #[tracing::instrument(name = "POST /solution", skip(state, submission))]
-async fn submit_solution(
+pub async fn submit_solution(
     State(state): State<AppState>,
     Json(submission): Json<SolutionSubmission>,
 ) -> Result<Json<SubmissionResponse>, ApiError> {
@@ -430,7 +452,7 @@ fn sanitize_ext(input: Option<&str>) -> Option<String> {
     Some(std::mem::take(&mut s))
 }
 
-#[derive(Clone, Serialize, Debug)]
+#[derive(Clone, Serialize, Debug, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct PublicSolutionStatus {
     pub id: String,
@@ -450,7 +472,7 @@ pub struct PublicSolutionStatus {
     pub logs: Vec<PublicSolutionLog>,
 }
 
-#[derive(Clone, Serialize, Debug)]
+#[derive(Clone, Serialize, Debug, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct PublicSolutionLog {
     pub action: String,
@@ -489,8 +511,21 @@ fn get_status_description(status: &str) -> String {
     }
 }
 
+#[utoipa::path(
+    get,
+    path = "/solution/track/{token}",
+    tag = "solution",
+    params(
+        ("token" = String, Path, description = "Tracking token for the solution request")
+    ),
+    responses(
+        (status = 200, description = "Solution status retrieved successfully", body = PublicSolutionStatus),
+        (status = 404, description = "Solution not found"),
+        (status = 500, description = "Internal server error")
+    )
+)]
 #[tracing::instrument(name = "GET /solution/track/{token}", skip(state))]
-async fn get_solution_status(
+pub async fn track_solution(
     State(state): State<AppState>,
     axum::extract::Path(token): axum::extract::Path<String>,
 ) -> Result<Json<PublicSolutionStatus>, ApiError> {

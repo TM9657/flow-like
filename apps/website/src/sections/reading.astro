@@ -75,7 +75,7 @@ const dateFor = (p: any) =>
           <div class="relative aspect-video mb-4 overflow-hidden rounded-lg bg-zinc-900">
             <img
               src={thumbFor(post)}
-              alt=""
+              alt={`Article thumbnail for ${post.data.title}`}
               class="absolute inset-0 w-full h-full object-cover opacity-80 group-hover:opacity-100 group-hover:scale-[1.02] transition-all duration-300"
               loading="lazy"
             />

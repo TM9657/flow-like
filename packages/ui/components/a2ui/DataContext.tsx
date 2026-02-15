@@ -180,10 +180,36 @@ export function DataProvider({
 	return <DataContext.Provider value={value}>{children}</DataContext.Provider>;
 }
 
+const defaultContextValue: DataContextValue = {
+	data: {},
+	get: () => undefined,
+	set: () => {},
+	setByPath: () => {},
+	resolve: (boundValue, defaultValue) => {
+		if (boundValue === null || boundValue === undefined)
+			return defaultValue ?? boundValue;
+		if (typeof boundValue !== "object") return boundValue;
+		if ("literalString" in boundValue) return boundValue.literalString;
+		if ("literalNumber" in boundValue) return boundValue.literalNumber;
+		if ("literalBool" in boundValue) return boundValue.literalBool;
+		if ("literalJson" in boundValue) {
+			try {
+				return JSON.parse(boundValue.literalJson as string);
+			} catch {
+				return defaultValue;
+			}
+		}
+		return defaultValue;
+	},
+	update: () => {},
+	reset: () => {},
+};
+
 export function useData(): DataContextValue {
 	const context = useContext(DataContext);
 	if (!context) {
-		throw new Error("useData must be used within a DataProvider");
+		console.warn("useData called outside DataProvider, using default context");
+		return defaultContextValue;
 	}
 	return context;
 }

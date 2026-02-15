@@ -76,7 +76,7 @@ impl SmtpConnection {
 }
 
 #[cfg(feature = "execute")]
-pub type SmtpTransportTls = SmtpTransport<BufStream<async_native_tls::TlsStream<TcpStream>>>;
+pub type SmtpTransportTls = SmtpTransport<BufStream<tokio_rustls::client::TlsStream<TcpStream>>>;
 #[cfg(feature = "execute")]
 pub type SmtpSession = Arc<Mutex<SmtpTransportTls>>;
 
@@ -107,10 +107,24 @@ impl SmtpConnectNode {
 }
 
 #[cfg(feature = "execute")]
-fn tls() -> async_native_tls::TlsConnector {
-    async_native_tls::TlsConnector::new()
-        .danger_accept_invalid_hostnames(true)
-        .danger_accept_invalid_certs(true)
+fn rustls_connector(accept_invalid: bool) -> tokio_rustls::TlsConnector {
+    use rustls_pki_types::ServerName;
+    use std::sync::Arc as StdArc;
+
+    let config = if accept_invalid {
+        tokio_rustls::rustls::ClientConfig::builder()
+            .dangerous()
+            .with_custom_certificate_verifier(StdArc::new(super::imap::NoVerifier))
+            .with_no_client_auth()
+    } else {
+        let root_store = tokio_rustls::rustls::RootCertStore::from_iter(
+            webpki_roots::TLS_SERVER_ROOTS.iter().cloned(),
+        );
+        tokio_rustls::rustls::ClientConfig::builder()
+            .with_root_certificates(root_store)
+            .with_no_client_auth()
+    };
+    tokio_rustls::TlsConnector::from(StdArc::new(config))
 }
 
 #[async_trait]
@@ -215,7 +229,9 @@ impl NodeLogic for SmtpConnectNode {
         let session: SmtpSession = match encryption.as_str() {
             "Tls" => {
                 let tcp = TcpStream::connect(addr).await?;
-                let tls_stream = tls().connect(&host, tcp).await?;
+                let connector = rustls_connector(false);
+                let server_name = rustls_pki_types::ServerName::try_from(host.clone())?;
+                let tls_stream = connector.connect(server_name, tcp).await?;
                 let stream = BufStream::new(tls_stream);
 
                 let client = SmtpClient::new(); // expects greeting over TLS
@@ -246,7 +262,9 @@ impl NodeLogic for SmtpConnectNode {
                     .map_err(|e| anyhow!("SMTP STARTTLS failed: {}", e))?;
 
                 let tcp_stream = inner_plain.into_inner();
-                let tls_stream = tls().connect(&host, tcp_stream).await?;
+                let connector = rustls_connector(true);
+                let server_name = rustls_pki_types::ServerName::try_from(host.clone())?;
+                let tls_stream = connector.connect(server_name, tcp_stream).await?;
                 let stream_tls = BufStream::new(tls_stream);
 
                 let client_tls = SmtpClient::new().without_greeting();

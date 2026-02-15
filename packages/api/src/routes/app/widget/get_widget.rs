@@ -9,13 +9,36 @@ use axum::{
 use flow_like::a2ui::widget::Widget;
 use flow_like_types::anyhow;
 use serde::Deserialize;
+use utoipa::ToSchema;
 
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Debug, ToSchema)]
 pub struct VersionQuery {
     /// expected format: "MAJOR_MINOR_PATCH", e.g. "1_0_3"
     pub version: Option<String>,
 }
 
+#[utoipa::path(
+    get,
+    path = "/apps/{app_id}/widgets/{widget_id}",
+    tag = "widgets",
+    description = "Get a widget by ID and optional version.",
+    params(
+        ("app_id" = String, Path, description = "Application ID"),
+        ("widget_id" = String, Path, description = "Widget ID"),
+        ("version" = Option<String>, Query, description = "Version in MAJOR_MINOR_PATCH format")
+    ),
+    responses(
+        (status = 200, description = "Widget payload", body = String, content_type = "application/json"),
+        (status = 400, description = "Bad request"),
+        (status = 401, description = "Unauthorized"),
+        (status = 403, description = "Forbidden")
+    ),
+    security(
+        ("bearer_auth" = []),
+        ("api_key" = []),
+        ("pat" = [])
+    )
+)]
 #[tracing::instrument(name = "GET /apps/{app_id}/widgets/{widget_id}", skip(state, user))]
 pub async fn get_widget(
     State(state): State<AppState>,

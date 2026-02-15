@@ -26,7 +26,7 @@ impl NodeLogic for SetBadgeContent {
             "a2ui_set_badge_content",
             "Set Badge Content",
             "Sets the content/text of a badge element",
-            "A2UI/Elements/Display",
+            "UI/Elements/Display",
         );
         node.add_icon("/flow/icons/a2ui.svg");
 

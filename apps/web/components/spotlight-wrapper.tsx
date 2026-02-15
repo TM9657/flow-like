@@ -1,0 +1,450 @@
+"use client";
+
+import {
+	type ProjectQuickLink,
+	type SpotlightItem,
+	SpotlightProvider,
+	nowSystemTime,
+	useBackend,
+	useInvalidateInvoke,
+	useInvoke,
+	useSpotlightStore,
+} from "@tm9657/flow-like-ui";
+import { useLiveQuery } from "dexie-react-hooks";
+import {
+	Bookmark,
+	BookmarkMinus,
+	BookmarkPlus,
+	ExternalLink,
+} from "lucide-react";
+import { useTheme } from "next-themes";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { useCallback, useMemo } from "react";
+import { useAuth } from "react-oidc-context";
+import { toast } from "sonner";
+import { type IShortcut, appsDB } from "../lib/apps-db";
+
+interface SpotlightWrapperProps {
+	children: React.ReactNode;
+}
+
+export function SpotlightWrapper({ children }: SpotlightWrapperProps) {
+	const router = useRouter();
+	const pathname = usePathname();
+	const searchParams = useSearchParams();
+	const { setTheme } = useTheme();
+	const auth = useAuth();
+	const backend = useBackend();
+	const invalidate = useInvalidateInvoke();
+
+	const currentProfile = useInvoke(
+		backend.userState.getSettingsProfile,
+		backend.userState,
+		[],
+	);
+
+	const appMetadata = useInvoke(backend.appState.getApps, backend.appState, []);
+
+	const openBoards = useInvoke(
+		backend.boardState.getOpenBoards,
+		backend.boardState,
+		[],
+	);
+
+	const shortcuts = useLiveQuery(async () => {
+		if (!currentProfile.data?.hub_profile.id) return [];
+		return await appsDB.shortcuts
+			.where("profileId")
+			.equals(currentProfile.data.hub_profile.id)
+			.sortBy("order");
+	}, [currentProfile.data?.hub_profile.id]);
+
+	const isCurrentPageShortcut = useMemo(() => {
+		if (!shortcuts) return false;
+		const fullPath = searchParams.toString()
+			? `${pathname}?${searchParams.toString()}`
+			: pathname;
+		return shortcuts.some((s) => s.path === fullPath || s.path === pathname);
+	}, [shortcuts, pathname, searchParams]);
+
+	const projects = useMemo<ProjectQuickLink[]>(() => {
+		if (!appMetadata.data || !currentProfile.data) return [];
+
+		const profileAppIds = new Set(
+			(currentProfile.data.hub_profile.apps ?? []).map((a) => a.app_id),
+		);
+
+		return appMetadata.data
+			.filter(([app]) => profileAppIds.has(app.id))
+			.map(([app, meta]) => ({
+				id: app.id,
+				name: meta?.name || "Unnamed Project",
+				icon: meta?.icon || meta?.preview_media?.[0]?.toString(),
+				links: {
+					flows: `/library/config/flows?id=${app.id}`,
+					storage: `/library/config/storage?id=${app.id}`,
+					events: `/library/config/events?id=${app.id}`,
+					explore: `/library/config/explore?id=${app.id}`,
+					settings: `/library/config?id=${app.id}`,
+				},
+			}));
+	}, [appMetadata.data, currentProfile.data]);
+
+	const openBoardItems = useMemo<SpotlightItem[]>(() => {
+		if (!openBoards.data) return [];
+
+		return openBoards.data.map(([appId, boardId, boardName]) => ({
+			id: `open-board-${boardId}`,
+			type: "dynamic" as const,
+			label: boardName,
+			description: "Open flow board",
+			group: "open-flows",
+			keywords: ["flow", "board", boardName.toLowerCase()],
+			priority: 180,
+			action: () => router.push(`/flow?id=${boardId}&app=${appId}`),
+		}));
+	}, [openBoards.data, router]);
+
+	const handleNavigate = useCallback(
+		(path: string) => {
+			router.push(path);
+		},
+		[router],
+	);
+
+	const handleCreateProject = useCallback(() => {
+		useSpotlightStore.getState().open();
+		useSpotlightStore.getState().setMode("quick-create");
+	}, []);
+
+	const handleToggleTheme = useCallback(
+		(theme: "light" | "dark" | "system") => {
+			setTheme(theme);
+			toast.success(`Theme set to ${theme}`);
+		},
+		[setTheme],
+	);
+
+	const handleOpenDocs = useCallback(() => {
+		window.open("https://docs.flow-like.com", "_blank");
+	}, []);
+
+	const handleFlowPilotMessage = useCallback(
+		async (message: string): Promise<string> => {
+			const responses: Record<string, string> = {
+				"how do i create a flow?":
+					"To create a flow, go to Library > New Project, give it a name, and choose Online mode. You'll be taken directly to the flow editor where you can start adding nodes!",
+				"what are nodes?":
+					"Nodes are the building blocks of your workflows. Each node performs a specific action - like fetching data, processing text, or calling AI models. Connect them together to create powerful automations!",
+				"help with storage":
+					"Storage in Flow-Like lets you persist data between flow runs. You can store files, JSON data, and more. Access it from your project's Storage tab.",
+			};
+
+			const lowerMessage = message.toLowerCase();
+			for (const [key, response] of Object.entries(responses)) {
+				if (lowerMessage.includes(key.split(" ").slice(0, 3).join(" "))) {
+					return response;
+				}
+			}
+
+			return `Thanks for your question about "${message}"! Flow-Like is a visual workflow automation tool. You can:\n\n• Create flows with drag-and-drop nodes\n• Connect to AI models for intelligent automation\n• Store and process data\n• Deploy online\n\nFor detailed docs, visit docs.flow-like.com`;
+		},
+		[],
+	);
+
+	const handleAddShortcut = useCallback(async () => {
+		if (!currentProfile.data?.hub_profile.id) {
+			toast.error("No profile selected");
+			return;
+		}
+
+		const existingShortcuts = await appsDB.shortcuts
+			.where("profileId")
+			.equals(currentProfile.data.hub_profile.id)
+			.toArray();
+
+		const pageTitle =
+			document.title.replace(" | Flow-Like", "").trim() || "Current Page";
+
+		const appId = searchParams.get("app") || searchParams.get("id");
+
+		let icon: string | undefined;
+		if (appId && appMetadata.data) {
+			const appData = appMetadata.data.find(([app]) => app.id === appId);
+			icon = appData?.[1]?.icon || appData?.[1]?.preview_media?.[0]?.toString();
+		}
+
+		const fullPath = searchParams.toString()
+			? `${pathname}?${searchParams.toString()}`
+			: pathname;
+
+		const newShortcut: IShortcut = {
+			id: crypto.randomUUID(),
+			profileId: currentProfile.data.hub_profile.id,
+			label: pageTitle,
+			path: fullPath,
+			appId: appId || undefined,
+			icon,
+			order: existingShortcuts.length,
+			createdAt: new Date().toISOString(),
+		};
+
+		await appsDB.shortcuts.add(newShortcut);
+		toast.success("Page added to shortcuts");
+	}, [
+		currentProfile.data?.hub_profile.id,
+		pathname,
+		searchParams,
+		appMetadata.data,
+	]);
+
+	const handleRemoveShortcut = useCallback(async () => {
+		if (!shortcuts) return;
+
+		const shortcut = shortcuts.find((s) => s.path === pathname);
+		if (shortcut) {
+			await appsDB.shortcuts.delete(shortcut.id);
+			toast.success("Page removed from shortcuts");
+		}
+	}, [shortcuts, pathname]);
+
+	const additionalItems = useMemo<SpotlightItem[]>(() => {
+		const items: SpotlightItem[] = [...openBoardItems];
+
+		if (isCurrentPageShortcut) {
+			items.push({
+				id: "action-remove-shortcut",
+				type: "action",
+				label: "Remove from Shortcuts",
+				description: "Remove this page from your quick access shortcuts",
+				icon: BookmarkMinus,
+				group: "shortcuts",
+				keywords: ["shortcut", "remove", "bookmark", "unpin"],
+				priority: 250,
+				action: handleRemoveShortcut,
+			});
+		} else {
+			items.push({
+				id: "action-add-shortcut",
+				type: "action",
+				label: "Add to Shortcuts",
+				description: "Add this page to your quick access shortcuts",
+				icon: BookmarkPlus,
+				group: "shortcuts",
+				keywords: ["shortcut", "add", "bookmark", "pin", "save"],
+				priority: 250,
+				action: handleAddShortcut,
+			});
+		}
+
+		if (shortcuts && shortcuts.length > 0) {
+			for (const shortcut of shortcuts.slice(0, 5)) {
+				let iconUrl = shortcut.icon;
+				if (!iconUrl && shortcut.appId && appMetadata.data) {
+					const appData = appMetadata.data.find(
+						([app]) => app.id === shortcut.appId,
+					);
+					iconUrl =
+						appData?.[1]?.icon || appData?.[1]?.preview_media?.[0]?.toString();
+				}
+
+				items.push({
+					id: `shortcut-${shortcut.id}`,
+					type: "shortcut" as const,
+					label: shortcut.label,
+					description: shortcut.path,
+					icon: Bookmark,
+					iconUrl,
+					group: "shortcuts",
+					keywords: ["shortcut", "bookmark", shortcut.label.toLowerCase()],
+					priority: 200,
+					action: () => router.push(shortcut.path),
+				});
+			}
+		}
+
+		if (auth.isAuthenticated) {
+			items.push({
+				id: "action-logout",
+				type: "action",
+				label: "Sign Out",
+				description: "Sign out of your account",
+				group: "account",
+				keywords: ["logout", "sign out", "account", "exit"],
+				priority: 30,
+				action: () => auth.signoutRedirect(),
+			});
+
+			items.push({
+				id: "nav-account",
+				type: "navigation",
+				label: "Account Settings",
+				description: "Manage your account settings",
+				group: "navigation",
+				keywords: ["account", "profile", "user", "settings"],
+				priority: 70,
+				action: () => router.push("/account"),
+			});
+
+			items.push({
+				id: "nav-notifications",
+				type: "navigation",
+				label: "Notifications",
+				description: "View your notifications",
+				group: "navigation",
+				keywords: ["notifications", "alerts", "messages", "invites"],
+				priority: 65,
+				action: () => router.push("/notifications"),
+			});
+		} else {
+			items.push({
+				id: "action-login",
+				type: "action",
+				label: "Sign In",
+				description: "Sign in to your account",
+				group: "account",
+				keywords: ["login", "sign in", "account", "authenticate"],
+				priority: 40,
+				action: () => auth.signinRedirect(),
+			});
+		}
+
+		items.push({
+			id: "nav-profile-settings",
+			type: "navigation",
+			label: "Profile Settings",
+			description: "Edit your profile configuration",
+			group: "navigation",
+			keywords: ["profile", "settings", "configuration", "preferences"],
+			priority: 60,
+			action: () => router.push("/settings/profiles"),
+		});
+
+		// FlowPilot Documentation items
+		items.push({
+			id: "flowpilot-docs",
+			type: "action" as const,
+			label: "FlowPilot Documentation",
+			description: "Learn how to use FlowPilot AI assistant",
+			icon: ExternalLink,
+			group: "flowpilot",
+			keywords: [
+				"flowpilot",
+				"ai",
+				"assistant",
+				"help",
+				"docs",
+				"documentation",
+				"copilot",
+			],
+			priority: 140,
+			action: () => {
+				window.open("https://docs.flow-like.com/guides/flowpilot", "_blank");
+			},
+		});
+
+		items.push({
+			id: "docs-quick-start",
+			type: "action" as const,
+			label: "Quick Start Guide",
+			description: "Get started with Flow-Like",
+			icon: ExternalLink,
+			group: "flowpilot",
+			keywords: ["docs", "quick start", "guide", "tutorial", "begin"],
+			priority: 130,
+			action: () => {
+				window.open("https://docs.flow-like.com/start/quickstart", "_blank");
+			},
+		});
+
+		items.push({
+			id: "docs-concepts",
+			type: "action" as const,
+			label: "Core Concepts",
+			description: "Learn about flows, nodes, and more",
+			icon: ExternalLink,
+			group: "flowpilot",
+			keywords: ["docs", "concepts", "flows", "nodes", "learn"],
+			priority: 125,
+			action: () => {
+				window.open("https://docs.flow-like.com/concepts", "_blank");
+			},
+		});
+
+		return items;
+	}, [
+		openBoardItems,
+		auth,
+		router,
+		isCurrentPageShortcut,
+		handleAddShortcut,
+		handleRemoveShortcut,
+		shortcuts,
+		appMetadata.data,
+	]);
+
+	const handleQuickCreateProject = useCallback(
+		async (
+			name: string,
+			isOffline: boolean,
+		): Promise<{ appId: string; boardId: string } | null> => {
+			try {
+				const meta = {
+					name,
+					description: `Quick-created project: ${name}`,
+					tags: [],
+					use_case: "",
+					created_at: nowSystemTime(),
+					updated_at: nowSystemTime(),
+					preview_media: [],
+				};
+
+				// Web apps are always online
+				const app = await backend.appState.createApp(meta, [], true, undefined);
+
+				if (currentProfile.data) {
+					await backend.userState.updateProfileApp(
+						currentProfile.data,
+						{
+							app_id: app.id,
+							favorite: false,
+							pinned: false,
+						},
+						"Upsert",
+					);
+				}
+
+				const boards = await backend.boardState.getBoards(app.id);
+				const boardId = boards?.[0]?.id || "";
+
+				toast.success(`Project "${name}" created! 🎉`);
+
+				if (boardId) {
+					router.push(`/flow?id=${boardId}&app=${app.id}`);
+				}
+
+				return { appId: app.id, boardId };
+			} catch (error) {
+				console.error("Failed to create project:", error);
+				toast.error("Failed to create project");
+				return null;
+			}
+		},
+		[backend, currentProfile.data, router],
+	);
+
+	return (
+		<SpotlightProvider
+			navigate={handleNavigate}
+			projects={projects}
+			onCreateProject={handleCreateProject}
+			onToggleTheme={handleToggleTheme}
+			onOpenDocs={handleOpenDocs}
+			additionalStaticItems={additionalItems}
+			onFlowPilotMessage={handleFlowPilotMessage}
+			onQuickCreateProject={handleQuickCreateProject}
+		>
+			{children}
+		</SpotlightProvider>
+	);
+}

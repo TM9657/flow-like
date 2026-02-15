@@ -229,6 +229,8 @@ export function ModelCard({
 	const params = bit.parameters as ILlmParameters | IEmbeddingModelParameters;
 	const contextLength = (params as ILlmParameters)?.context_length;
 	const isHosted = bitSize.data === 0 || isVirtualBit;
+	const canRunRemotely = supportsRemoteEmbeddingExecution(bit);
+	const isEmbeddingModel = isEmbeddingBit(bit);
 
 	if (variant === "list") {
 		return (
@@ -236,6 +238,8 @@ export function ModelCard({
 				bit={bit}
 				modality={modality}
 				contextLength={contextLength}
+				canRunRemotely={canRunRemotely}
+				isEmbeddingModel={isEmbeddingModel}
 				isInstalled={!!isInstalled.data}
 				isInProfile={isInProfile}
 				isHosted={isHosted}
@@ -258,6 +262,8 @@ export function ModelCard({
 			bit={bit}
 			modality={modality}
 			contextLength={contextLength}
+			canRunRemotely={canRunRemotely}
+			isEmbeddingModel={isEmbeddingModel}
 			isInstalled={!!isInstalled.data}
 			isInProfile={isInProfile}
 			isHosted={isHosted}
@@ -279,6 +285,8 @@ interface ModelCardVariantProps {
 	bit: IBit;
 	modality: string;
 	contextLength?: number;
+	canRunRemotely: boolean;
+	isEmbeddingModel: boolean;
 	isInstalled: boolean;
 	isInProfile: boolean;
 	isHosted: boolean;
@@ -298,6 +306,8 @@ function ModelCardGridVariant({
 	bit,
 	modality,
 	contextLength,
+	canRunRemotely,
+	isEmbeddingModel,
 	isInstalled,
 	isInProfile,
 	isHosted,
@@ -385,6 +395,22 @@ function ModelCardGridVariant({
 						{formatContextLength(contextLength)}
 					</Badge>
 				)}
+				{canRunRemotely && (
+					<Badge
+						variant="outline"
+						className="text-[10px] px-1.5 py-0 h-5 bg-cyan-500/10 text-cyan-700 border-cyan-500/30"
+					>
+						Remote
+					</Badge>
+				)}
+				{isEmbeddingModel && !canRunRemotely && (
+					<Badge
+						variant="outline"
+						className="text-[10px] px-1.5 py-0 h-5 bg-zinc-500/10 text-zinc-600 border-zinc-500/30"
+					>
+						Local only
+					</Badge>
+				)}
 				{isRestricted && requiredTier && (
 					<Badge
 						variant="outline"
@@ -402,6 +428,8 @@ function ModelCardListVariant({
 	bit,
 	modality,
 	contextLength,
+	canRunRemotely,
+	isEmbeddingModel,
 	isInstalled,
 	isInProfile,
 	isHosted,
@@ -473,6 +501,22 @@ function ModelCardListVariant({
 				{contextLength && (
 					<Badge variant="outline" className="text-[10px] px-1.5 py-0 h-5">
 						{formatContextLength(contextLength)}
+					</Badge>
+				)}
+				{canRunRemotely && (
+					<Badge
+						variant="outline"
+						className="text-[10px] px-1.5 py-0 h-5 bg-cyan-500/10 text-cyan-700 border-cyan-500/30"
+					>
+						Remote
+					</Badge>
+				)}
+				{isEmbeddingModel && !canRunRemotely && (
+					<Badge
+						variant="outline"
+						className="text-[10px] px-1.5 py-0 h-5 bg-zinc-500/10 text-zinc-600 border-zinc-500/30"
+					>
+						Local only
 					</Badge>
 				)}
 				{isRestricted && requiredTier && (
@@ -702,6 +746,44 @@ export function getModelModality(bit: IBit): string {
 		default:
 			return "Unknown";
 	}
+}
+
+interface IRemoteExecutionConfig {
+	endpoint?: string | null;
+	implementation?: string | null;
+}
+
+interface IEmbeddingProviderParamsWithRemote {
+	remote?: IRemoteExecutionConfig;
+}
+
+type IEmbeddingModelParametersWithRemote =
+	Partial<IEmbeddingModelParameters> & {
+		remote?: IRemoteExecutionConfig;
+		provider?:
+			| (Partial<IEmbeddingModelParameters["provider"]> & {
+					params?: IEmbeddingProviderParamsWithRemote;
+			  })
+			| undefined;
+	};
+
+export function isEmbeddingBit(bit: IBit): boolean {
+	return (
+		bit.type === IBitTypes.Embedding || bit.type === IBitTypes.ImageEmbedding
+	);
+}
+
+export function supportsRemoteEmbeddingExecution(bit: IBit): boolean {
+	if (!isEmbeddingBit(bit)) return false;
+	const params = bit.parameters as
+		| IEmbeddingModelParametersWithRemote
+		| undefined;
+	const remote = params?.remote ?? params?.provider?.params?.remote;
+	if (remote?.endpoint && remote?.implementation) return true;
+
+	if (params?.provider?.provider_name?.toLowerCase() === "premium") return true;
+
+	return false;
 }
 
 export function formatContextLength(length: number): string {

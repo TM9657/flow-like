@@ -25,8 +25,10 @@ interface ElementSelectProps {
 
 interface ElementOption {
 	id: string;
+	rawId: string;
 	type: string;
 	label: string;
+	pageName?: string;
 	pagePath?: string;
 }
 
@@ -43,6 +45,7 @@ function flattenElements(components: SurfaceComponent[]): ElementOption[] {
 				id: component.id,
 				type,
 				label: component.id,
+				rawId: component.id,
 			});
 		}
 	}
@@ -64,35 +67,71 @@ export function ElementSelect({
 		async function loadElements() {
 			setLoading(true);
 			try {
-				const routes = await backend.routeState.getRoutes(appId);
-				const events = await backend.eventState.getEvents(appId);
+				const [routes, events, pages] = await Promise.all([
+					backend.routeState.getRoutes(appId),
+					backend.eventState.getEvents(appId),
+					backend.pageState.getPages(appId),
+				]);
 				const eventsMap = new Map(events.map((e) => [e.id, e]));
+				const pagesById = new Map(pages.map((page) => [page.pageId, page]));
 				const allElements: ElementOption[] = [];
 				const seenIds = new Set<string>();
 
-				for (const route of routes) {
-					const event = eventsMap.get(route.eventId);
-					if (event?.default_page_id) {
-						try {
-							const page = await backend.pageState.getPage(
-								appId,
-								event.default_page_id,
-							);
-							if (page?.components) {
-								const pageElements = flattenElements(page.components);
-								for (const el of pageElements) {
-									// Only add unique component IDs
-									if (!seenIds.has(el.id)) {
-										seenIds.add(el.id);
-										el.pagePath = route.path;
-										allElements.push(el);
-									}
+				const addPageElements = async (
+					pageId: string,
+					pageName?: string,
+					pagePath?: string,
+					boardId?: string,
+				) => {
+					try {
+						const page = await backend.pageState.getPage(
+							appId,
+							pageId,
+							boardId,
+						);
+						if (page?.components) {
+							const pageElements = flattenElements(page.components);
+							for (const el of pageElements) {
+								const optionId = `${pageId}/${el.id}`;
+								if (!seenIds.has(optionId)) {
+									seenIds.add(optionId);
+									allElements.push({
+										...el,
+										id: optionId,
+										rawId: el.id,
+										label: pageName ? `${pageName} / ${el.label}` : el.label,
+										pageName,
+										pagePath,
+									});
 								}
 							}
-						} catch {
-							// Skip pages that fail to load
 						}
+					} catch {
+						// Skip pages that fail to load
 					}
+				};
+
+				for (const route of routes) {
+					const event = eventsMap.get(route.eventId);
+					const pageId = event?.default_page_id;
+					if (pageId) {
+						const pageInfo = pagesById.get(pageId);
+						await addPageElements(
+							pageId,
+							pageInfo?.name,
+							route.path,
+							pageInfo?.boardId,
+						);
+					}
+				}
+
+				for (const pageInfo of pages) {
+					await addPageElements(
+						pageInfo.pageId,
+						pageInfo.name,
+						undefined,
+						pageInfo.boardId,
+					);
 				}
 
 				setElements(allElements);
@@ -107,7 +146,9 @@ export function ElementSelect({
 	}, [backend, appId]);
 
 	const currentValue = parseUint8ArrayToJson(value);
-	const selectedElement = elements.find((el) => el.id === currentValue);
+	const selectedElement = elements.find(
+		(el) => el.id === currentValue || el.rawId === currentValue,
+	);
 
 	return (
 		<div className="flex flex-row items-center justify-start w-fit max-w-full ml-1 overflow-hidden">

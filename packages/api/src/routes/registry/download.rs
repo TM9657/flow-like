@@ -9,6 +9,17 @@ use flow_like_wasm::registry::{DownloadRequest, DownloadResponse};
 /// POST /registry/download
 /// Get download URL for a package WASM binary
 /// Returns a CDN URL or signed URL for direct download
+#[utoipa::path(
+    post,
+    path = "/registry/download",
+    tag = "registry",
+    request_body = DownloadRequest,
+    responses(
+        (status = 200, description = "Download URL and package info", body = DownloadResponse),
+        (status = 404, description = "Package not found"),
+        (status = 503, description = "WASM registry not configured")
+    )
+)]
 pub async fn download(
     State(state): State<AppState>,
     Json(request): Json<DownloadRequest>,

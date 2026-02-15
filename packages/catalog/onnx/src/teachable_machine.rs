@@ -4,11 +4,8 @@ use flow_like::flow::{
     pin::{PinOptions, ValueType},
     variable::VariableType,
 };
-use flow_like_catalog_core::{FlowPath, NodeImage};
-use flow_like_types::{
-    JsonSchema, Result, async_trait,
-    json::{Deserialize, Serialize, json},
-};
+use flow_like_catalog_core::{ClassPrediction, FlowPath, NodeImage};
+use flow_like_types::{Result, async_trait, json::json};
 #[cfg(feature = "execute")]
 use flow_like_types::{
     image::{RgbImage, imageops, imageops::FilterType},
@@ -18,13 +15,6 @@ use flow_like_types::{
 use std::io::Cursor;
 #[cfg(feature = "execute")]
 use tract_tflite::prelude::*;
-
-#[derive(Default, Serialize, Deserialize, JsonSchema, Clone, Debug)]
-pub struct ClassPrediction {
-    pub class_idx: u32,
-    pub score: f32,
-    pub label: Option<String>,
-}
 
 #[crate::register_node]
 #[derive(Default)]
@@ -364,7 +354,7 @@ impl NodeLogic for PredictionScoreNode {
             "score",
             "Score",
             "Selected prediction score",
-            VariableType::Integer,
+            VariableType::Float,
         );
 
         node

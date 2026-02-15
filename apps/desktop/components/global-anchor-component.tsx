@@ -95,12 +95,17 @@ const GlobalAnchorHandler = () => {
 
 			const windowLabel = `window-${createId()}`;
 			try {
-				const _view = new WebviewWindow(windowLabel, {
+				const webview = new WebviewWindow(windowLabel, {
 					url,
 					title: title ?? "Flow-Like",
 					focus: true,
 					resizable: true,
 					maximized: true,
+				});
+
+				// Listen for webview creation errors
+				webview.once("tauri://error", (e) => {
+					console.error("Failed to create new window:", e);
 				});
 			} catch (error) {
 				console.error("Failed to create new window:", error);

@@ -46,6 +46,9 @@ pub mod internal_node;
 pub mod internal_pin;
 pub mod log;
 pub mod trace;
+pub mod user_context;
+
+pub use user_context::{RoleContext, UserExecutionContext};
 
 const USE_DEPENDENCY_GRAPH: bool = false;
 const RUN_LOCK_TIMEOUT: Duration = Duration::from_secs(3);
@@ -227,54 +230,78 @@ impl LogMeta {
         types.join(", ")
     }
 
-    pub async fn flush(&self, db: Connection) -> flow_like_types::Result<()> {
+    pub async fn flush(
+        &self,
+        db: Connection,
+        write_options: Option<&flow_like_storage::lancedb::table::WriteOptions>,
+    ) -> flow_like_types::Result<()> {
         let arrow_batch = self.into_arrow()?;
         let schema = arrow_batch.schema();
 
-        let table = db.open_table("runs").execute().await;
-
-        if let Err(_err) = table {
-            let table = db
-                .create_empty_table("runs", schema.clone())
-                .execute()
-                .await?;
-            let iter = RecordBatchIterator::new(vec![arrow_batch].into_iter().map(Ok), schema);
-            table.add(iter).execute().await?;
-            table
-                .create_index(
-                    &["event_id"],
-                    flow_like_storage::lancedb::index::Index::Bitmap(BitmapIndexBuilder {}),
-                )
-                .execute()
-                .await?;
-            table
-                .create_index(
-                    &["node_id"],
-                    flow_like_storage::lancedb::index::Index::Bitmap(BitmapIndexBuilder {}),
-                )
-                .execute()
-                .await?;
-            table
-                .create_index(
-                    &["log_level"],
-                    flow_like_storage::lancedb::index::Index::Bitmap(BitmapIndexBuilder {}),
-                )
-                .execute()
-                .await?;
-            table
-                .create_index(
-                    &["start"],
-                    flow_like_storage::lancedb::index::Index::BTree(
-                        flow_like_storage::lancedb::index::scalar::BTreeIndexBuilder {},
-                    ),
-                )
-                .execute()
-                .await?;
-            return Ok(());
+        // Try to open and add to existing table first
+        if let Ok(table) = db.open_table("runs").execute().await {
+            let iter = RecordBatchIterator::new(
+                vec![arrow_batch.clone()].into_iter().map(Ok),
+                schema.clone(),
+            );
+            let mut add = table.add(iter);
+            if let Some(opts) = write_options {
+                add = add.write_options(opts.clone());
+            }
+            match add.execute().await {
+                Ok(_) => {
+                    return Ok(());
+                }
+                Err(e) => {
+                    // Table is corrupted (e.g. from failed hard_link on Android), drop and recreate
+                    let _ = db.drop_table("runs", &[]).await;
+                }
+            }
         }
-        let table = table?;
-        let iter = RecordBatchIterator::new(vec![arrow_batch].into_iter().map(Ok), schema);
-        table.add(iter).execute().await?;
+
+        // Create table with data (either didn't exist or was dropped due to corruption)
+        let iter = RecordBatchIterator::new(
+            vec![arrow_batch].into_iter().map(Ok),
+            schema.clone(),
+        );
+        let mut builder = db.create_table("runs", Box::new(iter));
+        if let Some(opts) = write_options {
+            builder = builder.write_options(opts.clone());
+        }
+        let table = builder.execute().await?;
+
+        // Create indexes
+        let _ = table
+            .create_index(
+                &["event_id"],
+                flow_like_storage::lancedb::index::Index::Bitmap(BitmapIndexBuilder {}),
+            )
+            .execute()
+            .await;
+        let _ = table
+            .create_index(
+                &["node_id"],
+                flow_like_storage::lancedb::index::Index::Bitmap(BitmapIndexBuilder {}),
+            )
+            .execute()
+            .await;
+        let _ = table
+            .create_index(
+                &["log_level"],
+                flow_like_storage::lancedb::index::Index::Bitmap(BitmapIndexBuilder {}),
+            )
+            .execute()
+            .await;
+        let _ = table
+            .create_index(
+                &["start"],
+                flow_like_storage::lancedb::index::Index::BTree(
+                    flow_like_storage::lancedb::index::scalar::BTreeIndexBuilder {},
+                ),
+            )
+            .execute()
+            .await;
+
         Ok(())
     }
 }
@@ -304,6 +331,7 @@ pub struct Run {
     pub log_db: Option<
         Arc<dyn Fn(Path) -> flow_like_storage::lancedb::connection::ConnectBuilder + Send + Sync>,
     >,
+    pub lance_write_options: Option<flow_like_storage::lancedb::table::WriteOptions>,
 }
 
 impl Run {
@@ -408,6 +436,7 @@ impl Run {
             schema,
             log_initialized: self.log_initialized,
             meta,
+            write_options: self.lance_write_options.clone(),
         }))
     }
 
@@ -434,6 +463,7 @@ pub(crate) struct PreparedFlush {
     schema: SchemaRef,
     log_initialized: bool,
     meta: Option<LogMeta>,
+    write_options: Option<flow_like_storage::lancedb::table::WriteOptions>,
 }
 
 pub(crate) struct FlushResult {
@@ -442,24 +472,71 @@ pub(crate) struct FlushResult {
 }
 
 impl PreparedFlush {
+    const MAX_RETRIES: u32 = 3;
+    const INITIAL_BACKOFF_MS: u64 = 100;
+
     pub async fn write(self) -> flow_like_types::Result<FlushResult> {
+        let mut last_err = None;
+
+        for attempt in 0..Self::MAX_RETRIES {
+            if attempt > 0 {
+                let backoff = Self::INITIAL_BACKOFF_MS * (1 << (attempt - 1));
+                flow_like_types::tokio::time::sleep(Duration::from_millis(backoff)).await;
+            }
+
+            match self.try_write().await {
+                Ok(result) => return Ok(result),
+                Err(err) => {
+                    eprintln!(
+                        "[Warn] log flush attempt {}/{} failed: {:?}",
+                        attempt + 1,
+                        Self::MAX_RETRIES,
+                        err
+                    );
+                    last_err = Some(err);
+                }
+            }
+        }
+
+        Err(last_err.unwrap())
+    }
+
+    async fn try_write(&self) -> flow_like_types::Result<FlushResult> {
         let db = (self.db_fn)(self.base_path.clone()).execute().await?;
 
-        let table = if self.log_initialized {
-            db.open_table(&self.run_id).execute().await?
-        } else {
-            db.create_empty_table(&self.run_id, self.schema.clone())
-                .execute()
-                .await?
-        };
+        // On Android, datasets can get into inconsistent states due to SELinux blocking hard_link().
+        // Try to open existing table, or create new one with data directly.
+        let iter = RecordBatchIterator::new(
+            vec![self.arrow_batch.clone()].into_iter().map(Ok),
+            self.schema.clone(),
+        );
 
-        let iter =
-            RecordBatchIterator::new(vec![self.arrow_batch].into_iter().map(Ok), self.schema);
-        table.add(iter).execute().await?;
+        match db.open_table(&self.run_id).execute().await {
+            Ok(table) => {
+                let mut add = table.add(iter);
+                if let Some(opts) = &self.write_options {
+                    add = add.write_options(opts.clone());
+                }
+                add.execute().await?;
+            }
+            Err(open_err) => {
+                // Try to drop any corrupted/partial table first
+                if let Err(e) = db.drop_table(&self.run_id, &[]).await {
+                    eprintln!("[DBG-v3] drop_table failed (expected if not exists): {:?}", e);
+                }
+
+                // Create the table WITH data in one step (avoids create_empty + add issue)
+                let mut builder = db.create_table(&self.run_id, Box::new(iter));
+                if let Some(opts) = &self.write_options {
+                    builder = builder.write_options(opts.clone());
+                }
+                builder.execute().await?;
+            }
+        };
 
         Ok(FlushResult {
             created_table: !self.log_initialized,
-            meta: self.meta,
+            meta: self.meta.clone(),
         })
     }
 }
@@ -546,6 +623,8 @@ pub struct InternalRun {
     pub credentials: Option<Arc<SharedCredentials>>,
     pub token: Option<String>,
     pub oauth_tokens: Arc<AHashMap<String, OAuthToken>>,
+    /// User context for this execution
+    pub user_context: Option<UserExecutionContext>,
 
     stack: Arc<RunStack>,
     concurrency_limit: u64,
@@ -566,6 +645,11 @@ pub struct RunPayload {
     /// These override board variable defaults when present.
     #[serde(default)]
     pub runtime_variables: Option<std::collections::HashMap<String, Variable>>,
+    /// When true (default), secret variables from runtime_variables are ignored
+    /// unless they are also marked as runtime_configured.
+    /// Set to false only for trusted local (desktop) execution.
+    #[serde(default)]
+    pub filter_secrets: Option<bool>,
 }
 
 impl InternalRun {
@@ -619,16 +703,17 @@ impl InternalRun {
         let before = Instant::now();
         let run_id = run_id.unwrap_or_else(create_id);
 
-        let (log_store, db) = {
+        let (log_store, db, lance_write_options) = {
             let guard = handler.config.read().await;
             let log_store = guard.stores.log_store.clone();
             let db = guard.callbacks.build_logs_database.clone();
+            let write_opts = guard.callbacks.lance_write_options.clone();
             tracing::debug!(
                 has_log_store = log_store.is_some(),
                 has_log_db = db.is_some(),
                 "InternalRun: Reading log configuration from state"
             );
-            (log_store, db)
+            (log_store, db, write_opts)
         };
 
         // derive sub from token (JWT) or default to "local"
@@ -662,6 +747,7 @@ impl InternalRun {
             visited_nodes: AHashMap::with_capacity(board.nodes.len()),
             log_store,
             log_db: db,
+            lance_write_options,
         };
 
         let run = Arc::new(Mutex::new(run));
@@ -675,12 +761,17 @@ impl InternalRun {
 
         // Extract runtime_variables from payload
         let runtime_variables = payload.runtime_variables.clone().unwrap_or_default();
+        let filter_secrets = payload.filter_secrets.unwrap_or(true);
 
         let variables = Arc::new(Mutex::new({
             let mut map = AHashMap::with_capacity(board.variables.len());
             for (variable_id, board_variable) in &board.variables {
-                // Priority: runtime_configured vars > event vars (for exposed) > board vars
-                let variable = if board_variable.runtime_configured {
+                // Priority: runtime_configured/secret vars > event vars (for exposed) > board vars
+                // When filter_secrets is true, only runtime_configured vars may be overridden;
+                // secrets from untrusted callers are ignored to prevent injection.
+                let allow_runtime_override =
+                    board_variable.runtime_configured || (board_variable.secret && !filter_secrets);
+                let variable = if allow_runtime_override {
                     runtime_variables.get(variable_id).unwrap_or(board_variable)
                 } else if board_variable.exposed {
                     event_variables.get(variable_id).unwrap_or(board_variable)
@@ -864,6 +955,7 @@ impl InternalRun {
             log_level: board.log_level,
             profile: Arc::new(profile.clone()),
             completion_callbacks: Arc::new(RwLock::new(vec![])),
+            user_context: None,
             // Cached immutable fields from Run
             meta: RunMeta {
                 run_id: run_id.clone(),
@@ -876,6 +968,21 @@ impl InternalRun {
             },
             board: board.clone(),
         })
+    }
+
+    /// Set the user execution context for this run
+    pub fn set_user_context(&mut self, user_context: UserExecutionContext) {
+        self.user_context = Some(user_context);
+    }
+
+    /// Set the user execution context for offline/local execution
+    pub fn set_offline_user_context(&mut self) {
+        self.user_context = Some(UserExecutionContext::offline());
+    }
+
+    /// Get the user execution context if available
+    pub fn user_context(&self) -> Option<&UserExecutionContext> {
+        self.user_context.as_ref()
     }
 
     // Reuse the same run, but reset the states
@@ -928,6 +1035,7 @@ impl InternalRun {
         let concurrency_limit = self.concurrency_limit;
         let callback = self.callback.clone();
         let meta = self.meta.clone();
+        let user_context = self.user_context.clone();
 
         let new_stack = futures::stream::iter(stack.stack.clone())
             .map(|target| {
@@ -945,6 +1053,7 @@ impl InternalRun {
                 let token = self.token.clone();
                 let nodes = self.nodes.clone();
                 let oauth_tokens = self.oauth_tokens.clone();
+                let user_context = user_context.clone();
 
                 async move {
                     step_core(
@@ -965,6 +1074,7 @@ impl InternalRun {
                         credentials,
                         token,
                         oauth_tokens,
+                        user_context,
                     )
                     .await
                 }
@@ -1016,6 +1126,7 @@ impl InternalRun {
             self.credentials.clone(),
             self.token.clone(),
             self.oauth_tokens.clone(),
+            self.user_context.clone(),
         )
         .await;
 
@@ -1385,6 +1496,7 @@ async fn step_core(
     credentials: Option<Arc<SharedCredentials>>,
     token: Option<String>,
     oauth_tokens: Arc<AHashMap<String, OAuthToken>>,
+    user_context: Option<UserExecutionContext>,
 ) -> flow_like_types::Result<Vec<ExecutionTarget>> {
     // Check Node State and Validate Execution Count (to stop infinite loops)
     {
@@ -1414,6 +1526,7 @@ async fn step_core(
         oauth_tokens,
     )
     .await;
+    context.user_context = user_context;
     context.started_by = if target.through_pins.is_empty() {
         None
     } else {

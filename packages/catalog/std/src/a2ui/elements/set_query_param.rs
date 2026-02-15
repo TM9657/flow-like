@@ -26,7 +26,7 @@ impl NodeLogic for SetQueryParam {
             "a2ui_set_query_param",
             "Set Query Param",
             "Sets or updates a query parameter in the URL",
-            "A2UI/Navigation",
+            "UI/Navigation",
         );
         node.add_icon("/flow/icons/a2ui.svg");
 

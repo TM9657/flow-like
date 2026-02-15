@@ -7,7 +7,19 @@ use crate::state::AppState;
 use axum::extract::{Path, State};
 use axum::{Extension, Json};
 
-/// DELETE /admin/packages/{package_id}
+#[utoipa::path(
+    delete,
+    path = "/admin/packages/{package_id}",
+    tag = "admin",
+    params(
+        ("package_id" = String, Path, description = "Package ID to delete")
+    ),
+    responses(
+        (status = 200, description = "Package deleted successfully"),
+        (status = 401, description = "Unauthorized"),
+        (status = 403, description = "Forbidden")
+    )
+)]
 pub async fn delete_package(
     State(state): State<AppState>,
     Extension(user): Extension<AppUser>,

@@ -98,6 +98,11 @@ pub struct Hub {
     #[serde(default)]
     pub oauth_providers: OAuthProviderConfigs,
 
+    /// Supported server-side event sinks (e.g., discord, telegram, cron, http)
+    /// If None, defaults to basic sinks like http, webhook, cron
+    #[serde(default)]
+    pub supported_sinks: Option<SupportedSinks>,
+
     #[serde(skip)]
     recursion_guard: Option<Arc<Mutex<RecursionGuard>>>,
 
@@ -229,6 +234,124 @@ pub struct OAuthProviderConfig {
 
 pub type OAuthProviderConfigs = HashMap<String, OAuthProviderConfig>;
 
+/// Configuration for supported server-side event sinks.
+/// When a hub is deployed, only sinks listed here will be available for server-side execution.
+/// The desktop app always has access to all sinks.
+#[derive(Debug, Serialize, Deserialize, JsonSchema, Clone, Default)]
+pub struct SupportedSinks {
+    /// HTTP/REST API endpoint sink
+    #[serde(default)]
+    pub http: bool,
+    /// Incoming webhook from external service
+    #[serde(default)]
+    pub webhook: bool,
+    /// Cron scheduled trigger
+    #[serde(default)]
+    pub cron: bool,
+    /// MQTT message broker
+    #[serde(default)]
+    pub mqtt: bool,
+    /// GitHub repository webhook
+    #[serde(default)]
+    pub github: bool,
+    /// RSS feed polling
+    #[serde(default)]
+    pub rss: bool,
+    /// Discord bot integration
+    #[serde(default)]
+    pub discord: bool,
+    /// Slack bot integration
+    #[serde(default)]
+    pub slack: bool,
+    /// Telegram bot integration
+    #[serde(default)]
+    pub telegram: bool,
+    /// Email/IMAP polling
+    #[serde(default)]
+    pub email: bool,
+}
+
+impl SupportedSinks {
+    /// Returns a list of enabled sink types as strings
+    pub fn enabled_sinks(&self) -> Vec<&'static str> {
+        let mut sinks = Vec::new();
+        if self.http {
+            sinks.push("http");
+        }
+        if self.webhook {
+            sinks.push("webhook");
+        }
+        if self.cron {
+            sinks.push("cron");
+        }
+        if self.mqtt {
+            sinks.push("mqtt");
+        }
+        if self.github {
+            sinks.push("github");
+        }
+        if self.rss {
+            sinks.push("rss");
+        }
+        if self.discord {
+            sinks.push("discord");
+        }
+        if self.slack {
+            sinks.push("slack");
+        }
+        if self.telegram {
+            sinks.push("telegram");
+        }
+        if self.email {
+            sinks.push("email");
+        }
+        sinks
+    }
+
+    /// Returns true if the given sink type is supported
+    pub fn is_supported(&self, sink_type: &str) -> bool {
+        match sink_type.to_lowercase().as_str() {
+            "http" | "api" => self.http,
+            "webhook" => self.webhook,
+            "cron" => self.cron,
+            "mqtt" => self.mqtt,
+            "github" => self.github,
+            "rss" => self.rss,
+            "discord" => self.discord,
+            "slack" => self.slack,
+            "telegram" => self.telegram,
+            "email" => self.email,
+            _ => false,
+        }
+    }
+
+    /// Default configuration for basic server setups (http, webhook, cron)
+    pub fn basic() -> Self {
+        Self {
+            http: true,
+            webhook: true,
+            cron: true,
+            ..Default::default()
+        }
+    }
+
+    /// Configuration with all sinks enabled
+    pub fn all() -> Self {
+        Self {
+            http: true,
+            webhook: true,
+            cron: true,
+            mqtt: true,
+            github: true,
+            rss: true,
+            discord: true,
+            slack: true,
+            telegram: true,
+            email: true,
+        }
+    }
+}
+
 #[derive(Debug, Serialize, Deserialize, JsonSchema, Clone)]
 pub struct Features {
     pub model_hosting: bool,
@@ -250,6 +373,7 @@ pub struct Contact {
 }
 
 #[derive(Debug, Serialize, Deserialize, JsonSchema, Clone)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 pub struct BitSearchQuery {
     pub search: Option<String>,
     pub limit: Option<u64>,

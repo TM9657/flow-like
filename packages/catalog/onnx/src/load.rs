@@ -1,6 +1,8 @@
 /// # ONNX Model Loader Nodes
 use crate::onnx::NodeOnnxSession;
 #[cfg(feature = "execute")]
+use crate::onnx::execution_providers::{get_ep_info, is_initialized};
+#[cfg(feature = "execute")]
 use crate::onnx::{Provider, SessionWithMeta, classification, detection};
 use flow_like::flow::{
     execution::context::ExecutionContext,
@@ -11,9 +13,7 @@ use flow_like::flow::{
 use flow_like_catalog_core::FlowPath;
 #[cfg(feature = "execute")]
 use flow_like_model_provider::ml::ort::session::Session;
-#[cfg(feature = "execute")]
-use flow_like_types::{Error, json::json};
-use flow_like_types::{Result, anyhow, async_trait};
+use flow_like_types::{Result, anyhow, async_trait, json::json};
 
 // ## Loader Utilities
 // Identifying ONNX-I/Os
@@ -32,46 +32,39 @@ static TIMM_OUTPUTS: [&str; 1] = ["output0"];
 
 #[cfg(feature = "execute")]
 /// Factory Function Matching ONNX Assets to a Provider-Frameworks
-pub fn determine_provider(session: &Session) -> Result<Provider, Error> {
+pub fn determine_provider(session: &Session) -> Result<Provider> {
     let input_names: Vec<&str> = session.inputs.iter().map(|i| i.name.as_str()).collect();
     let output_names: Vec<&str> = session.outputs.iter().map(|o| o.name.as_str()).collect();
     if input_names == DFINE_INPUTS && output_names == DFINE_OUTPUTS {
         let (input_width, input_height) = determine_input_shape(session, "images")?;
-        println!(
-            "Model is DfineLike with input shape ({},{})",
-            input_width, input_height
-        );
         Ok(Provider::DfineLike(detection::DfineLike {
             input_width,
             input_height,
         }))
     } else if input_names == YOLO_INPUTS && output_names == YOLO_OUTPUTS {
         let (input_width, input_height) = determine_input_shape(session, "images")?;
-        println!(
-            "Model is YoloLike with input shape ({},{})",
-            input_width, input_height
-        );
         Ok(Provider::YoloLike(detection::YoloLike {
             input_width,
             input_height,
         }))
     } else if input_names == TIMM_INPUTS && output_names == TIMM_OUTPUTS {
         let (input_width, input_height) = determine_input_shape(session, "input0")?;
-        println!(
-            "Model is TimmLike with input shape ({},{})",
-            input_width, input_height
-        );
         Ok(Provider::TimmLike(classification::TimmLike {
             input_width,
             input_height,
         }))
     } else {
-        Err(anyhow!("Failed to determine provider!"))
+        tracing::info!(
+            "Model does not match known patterns, using Generic provider. Inputs: {:?}, Outputs: {:?}",
+            input_names,
+            output_names
+        );
+        Ok(Provider::Generic)
     }
 }
 
 #[cfg(feature = "execute")]
-pub fn determine_input_shape(session: &Session, input_name: &str) -> Result<(u32, u32), Error> {
+pub fn determine_input_shape(session: &Session, input_name: &str) -> Result<(u32, u32)> {
     for input in &session.inputs {
         if input.name == input_name
             && let Some(dims) = input.input_type.tensor_shape()
@@ -135,6 +128,20 @@ impl NodeLogic for LoadOnnxNode {
             .set_schema::<NodeOnnxSession>()
             .set_options(PinOptions::new().set_enforce_schema(true).build());
 
+        node.add_output_pin(
+            "accelerated",
+            "Accelerated",
+            "Whether GPU/NPU acceleration is active",
+            VariableType::Boolean,
+        );
+
+        node.add_output_pin(
+            "active_provider",
+            "Active Provider",
+            "The execution provider(s) that are actually in use",
+            VariableType::String,
+        );
+
         node
     }
 
@@ -148,17 +155,39 @@ impl NodeLogic for LoadOnnxNode {
             let path: FlowPath = context.evaluate_pin("path").await?;
             let bytes = path.get(context, false).await?;
 
-            // init ONNX session
+            // Get global EP info (ORT should be initialized at app startup)
+            let ep_info = get_ep_info().unwrap_or_default();
+            if !is_initialized() {
+                tracing::warn!(
+                    "ORT not initialized - call initialize_ort() at app startup for GPU acceleration"
+                );
+            }
+
+            // Build session - it will use the globally configured EPs
             let session = Session::builder()?.commit_from_memory(&bytes)?;
 
             // wrap ONNX session with provider metadata
             // we try to determine the here to fail fast in case of incompatible ONNX assets
             let provider = determine_provider(&session)?;
-            let session_with_meta = SessionWithMeta { session, provider };
+            let session_with_meta = SessionWithMeta {
+                session,
+                provider,
+                ep_active: ep_info.active_providers.clone(),
+                accelerated: ep_info.accelerated,
+            };
             let node_session = NodeOnnxSession::new(context, session_with_meta).await;
 
             // set outputs
             context.set_pin_value("model", json!(node_session)).await?;
+            context
+                .set_pin_value("accelerated", json!(ep_info.accelerated))
+                .await?;
+            context
+                .set_pin_value(
+                    "active_provider",
+                    json!(ep_info.active_providers.join(", ")),
+                )
+                .await?;
             context.activate_exec_pin("exec_out").await?;
             Ok(())
         }

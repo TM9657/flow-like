@@ -111,13 +111,13 @@ impl ImageEmbeddingModelLogic for LocalImageEmbeddingModel {
     }
 
     async fn image_embed(&self, images: Vec<DynamicImage>) -> Result<Vec<Vec<f32>>> {
-        let embeddings = match self.image_embedding_model.lock().await.embed_images(images) {
-            Ok(embeddings) => embeddings,
-            Err(e) => {
-                println!("Error embedding image: {}", e);
-                return Err(flow_like_types::anyhow!("Error embedding image"));
-            }
-        };
+        let model = self.image_embedding_model.clone();
+        let embeddings = flow_like_types::tokio::task::spawn_blocking(move || {
+            model.blocking_lock().embed_images(images)
+        })
+        .await
+        .map_err(|e| flow_like_types::anyhow!("Blocking task failed: {}", e))?
+        .map_err(|e| flow_like_types::anyhow!("Error embedding image: {}", e))?;
 
         Ok(embeddings)
     }
