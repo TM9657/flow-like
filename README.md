@@ -204,6 +204,17 @@ Embed the visual editor in your application, or run the engine headlessly behind
 - **Usage Metering** — Per-tenant quotas, event tracking, audit trails
 - **SDKs & APIs** — Control workflows programmatically
 
+### 🔌 SDKs
+
+Integrate Flow-Like into your applications with official SDKs:
+
+| Language | Package | Install |
+|----------|---------|---------|
+| **Node.js / TypeScript** | [`@flow-like/sdk`](https://www.npmjs.com/package/@flow-like/sdk) | `npm install @flow-like/sdk` |
+| **Python** | [`flow-like`](https://pypi.org/project/flow-like/) | `uv add flow-like` |
+
+Both SDKs support workflows, file management, LanceDB, chat completions, embeddings, and optional [LangChain](https://www.langchain.com/) integration. **[→ SDK Docs](https://docs.flow-like.com/dev/sdks/overview)**
+
 Perfect for SaaS platforms, internal tools, client portals, and embedded automation.
 
 ---

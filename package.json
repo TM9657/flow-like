@@ -41,6 +41,8 @@
 		"deploy:web:force": "bun run --cwd ./apps/web deploy:force",
 		"deploy:docs": "bun run --cwd ./apps/docs deploy",
 		"deploy:docs:force": "bun run --cwd ./apps/docs deploy:force",
+		"publish:nodejs": "bun publish --cwd ./libs/nodejs --access public",
+		"publish:python": "cd libs/python && uv build && uv publish",
 		"postinstall": "cargo install cargo-license cargo-watch systemfd --locked",
 		"version": "npm version patch -m \"Increment version to %s\"",
 		"bloat": "cargo bloat --release -n 10",
