@@ -82,6 +82,19 @@ cocoa = "0.26"
 macos-app-nap = "0.0.1"
 core-graphics = "0.25"
 
+[target."cfg(windows)".dependencies]
+windows = { version = "0.58", features = [
+    "Win32_UI_Accessibility",
+    "Win32_Foundation",
+    "Win32_System_Com",
+    "Win32_System_Ole",
+    "Win32_System_Variant",
+] }
+
+[target."cfg(target_os = \"linux\")".dependencies]
+atspi = "0.25"
+zbus = { version = "5", default-features = false, features = ["tokio"] }
+
 [profile.release]
 panic = "abort"
 codegen-units = 1

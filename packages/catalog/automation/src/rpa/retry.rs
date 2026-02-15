@@ -22,7 +22,7 @@ impl NodeLogic for RetryLoopNode {
         let mut node = Node::new(
             "rpa_retry_loop",
             "Retry Loop",
-            "Retries an action multiple times with configurable backoff",
+            "Retries an action multiple times with configurable backoff. WARNING: This node activates exec_attempt in a loop but the current executor does not re-enter downstream nodes -- the retry semantics require executor-level loop support to work correctly.",
             "Automation/RPA",
         );
         node.add_icon("/flow/icons/rpa.svg");

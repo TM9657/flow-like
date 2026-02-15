@@ -116,8 +116,8 @@ impl NodeLogic for WaitForTemplateNode {
 
         let autogui = session.get_autogui(context).await?;
         let start = Instant::now();
-        let timeout = Duration::from_millis(timeout_ms as u64);
-        let poll_interval = Duration::from_millis(poll_interval_ms as u64);
+        let timeout = Duration::from_millis(timeout_ms.max(0) as u64);
+        let poll_interval = Duration::from_millis(poll_interval_ms.max(0) as u64);
 
         loop {
             {
@@ -274,7 +274,7 @@ impl NodeLogic for WaitForColorNode {
         use xcap::Monitor;
 
         let start = Instant::now();
-        let timeout = Duration::from_millis(timeout_ms as u64);
+        let timeout = Duration::from_millis(timeout_ms.max(0) as u64);
 
         loop {
             {
@@ -374,8 +374,10 @@ impl NodeLogic for DelayNode {
 
         let duration_ms: i64 = context.evaluate_pin("duration_ms").await?;
 
-        flow_like_types::tokio::time::sleep(std::time::Duration::from_millis(duration_ms as u64))
-            .await;
+        flow_like_types::tokio::time::sleep(std::time::Duration::from_millis(
+            duration_ms.max(0) as u64,
+        ))
+        .await;
 
         context.activate_exec_pin("exec_out").await?;
 

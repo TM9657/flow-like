@@ -21,7 +21,10 @@ import {
 	ChevronDown,
 	ChevronUp,
 	Circle,
+	Clipboard,
+	ClipboardPaste,
 	Download,
+	Fingerprint,
 	Image,
 	Info,
 	Keyboard,
@@ -56,6 +59,8 @@ type ActionType =
 	| { Scroll: { direction: string; amount: number } }
 	| { KeyType: { text: string } }
 	| { KeyPress: { key: string; modifiers: string[] } }
+	| { Copy: { content: string | null } }
+	| { Paste: { content: string | null } }
 	| { AppLaunch: { app_name: string; app_path: string } }
 	| { WindowFocus: { window_title: string; process: string } };
 
@@ -82,6 +87,7 @@ interface RecordingSettings {
 	use_pattern_matching: boolean;
 	template_confidence: number;
 	bot_detection_evasion: boolean;
+	use_fingerprints: boolean;
 }
 
 type RecordingStatus = "Idle" | "Recording" | "Paused" | "Processing";
@@ -128,6 +134,7 @@ export function RecordingDock({
 		use_pattern_matching: false,
 		template_confidence: 0.8,
 		bot_detection_evasion: false,
+		use_fingerprints: true,
 	});
 	const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -280,8 +287,14 @@ export function RecordingDock({
 			await invoke("insert_recording_to_board", {
 				boardId,
 				actions,
-				position: [100.0, 100.0],
+				position: [
+					window.innerWidth / 2 - 200,
+					window.innerHeight / 2 - 100,
+				],
 				version: version ?? null,
+				usePatternMatching: settings.use_pattern_matching || null,
+				templateConfidence: settings.template_confidence || null,
+				useFingerprints: settings.use_fingerprints || null,
 			});
 			// Trigger board refresh to show the new nodes
 			window.dispatchEvent(new CustomEvent("flow:refetch-board"));
@@ -310,6 +323,8 @@ export function RecordingDock({
 		if ("Scroll" in type) return <Scroll className="h-3 w-3" />;
 		if ("KeyType" in type || "KeyPress" in type)
 			return <Keyboard className="h-3 w-3" />;
+		if ("Copy" in type) return <Clipboard className="h-3 w-3" />;
+		if ("Paste" in type) return <ClipboardPaste className="h-3 w-3" />;
 		return <Circle className="h-3 w-3" />;
 	};
 
@@ -318,12 +333,14 @@ export function RecordingDock({
 		if ("Click" in type) return `Click (${type.Click.button})`;
 		if ("DoubleClick" in type) return "Double Click";
 		if ("Drag" in type) return "Drag";
-		if ("Scroll" in type) return `Scroll ${type.Scroll.direction}`;
+		if ("Scroll" in type) return `Scroll ${type.Scroll.direction} (${type.Scroll.amount})`;
 		if ("KeyType" in type) {
 			const text = type.KeyType.text;
 			return text.length > 15 ? `"${text.slice(0, 15)}..."` : `"${text}"`;
 		}
 		if ("KeyPress" in type) return type.KeyPress.key;
+		if ("Copy" in type) return "Copy";
+		if ("Paste" in type) return "Paste";
 		if ("AppLaunch" in type) return type.AppLaunch.app_name;
 		if ("WindowFocus" in type)
 			return type.WindowFocus.window_title?.slice(0, 15) || "Window";
@@ -668,6 +685,27 @@ export function RecordingDock({
 										/>
 									</div>
 								)}
+								<div className="flex items-center justify-between">
+									<div className="flex items-center gap-2">
+										<Fingerprint className="h-4 w-4 text-muted-foreground" />
+										<Label
+											htmlFor="use_fingerprints"
+											className="text-sm cursor-pointer"
+										>
+											Element Fingerprinting
+										</Label>
+									</div>
+									<Switch
+										id="use_fingerprints"
+										checked={settings.use_fingerprints}
+										onCheckedChange={(checked) =>
+											setSettings((s) => ({
+												...s,
+												use_fingerprints: checked,
+											}))
+										}
+									/>
+								</div>
 							</div>
 						</motion.div>
 					)}

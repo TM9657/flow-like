@@ -470,7 +470,7 @@ impl NodeLogic for BrowserWaitForDownloadNode {
         let dir_path = PathBuf::from(runtime.path.to_string());
 
         let start = Instant::now();
-        let timeout = Duration::from_millis(timeout_ms as u64);
+        let timeout = Duration::from_millis(timeout_ms.max(0) as u64);
 
         let initial_files: std::collections::HashSet<_> = if dir_path.exists() {
             std::fs::read_dir(&dir_path)

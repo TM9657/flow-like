@@ -79,7 +79,7 @@ impl NodeLogic for ComputerWaitNode {
         let session: AutomationSession = context.evaluate_pin("session").await?;
         let ms: i64 = context.evaluate_pin("ms").await?;
 
-        tokio::time::sleep(Duration::from_millis(ms as u64)).await;
+        tokio::time::sleep(Duration::from_millis(ms.max(0) as u64)).await;
 
         context.set_pin_value("session_out", json!(session)).await?;
         context.activate_exec_pin("exec_out").await?;

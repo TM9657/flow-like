@@ -135,6 +135,8 @@ pub async fn start_recording(
         tracing::debug!("[Recording] EventCapture stored in state");
     }
 
+    crate::tray::set_recording_tray_icon(&handler).await;
+
     Ok(session_id)
 }
 
@@ -174,7 +176,7 @@ pub async fn resume_recording(handler: AppHandle) -> Result<(), TauriFunctionErr
 
 #[tauri::command(async)]
 pub async fn stop_recording(handler: AppHandle) -> Result<Vec<RecordedAction>, TauriFunctionError> {
-    println!("[Recording] ========== STOP RECORDING CALLED ==========");
+    tracing::debug!(" ========== STOP RECORDING CALLED ==========");
     tracing::info!("[Recording] stop_recording called");
 
     let recording_state = RecordingState::construct(&handler).await?;
@@ -184,47 +186,67 @@ pub async fn stop_recording(handler: AppHandle) -> Result<Vec<RecordedAction>, T
         let capture_guard = recording_state.capture.read().await;
         if let Some(capture) = capture_guard.as_ref() {
             capture.set_active(false);
-            println!("[Recording] EventCapture deactivated");
+            tracing::debug!(" EventCapture deactivated");
             tracing::debug!("[Recording] EventCapture deactivated");
         } else {
-            println!("[Recording] WARNING: No EventCapture found when stopping!");
+            tracing::warn!(" No EventCapture found when stopping!");
             tracing::warn!("[Recording] No EventCapture found when stopping!");
         }
     }
 
-    println!("[Recording] Waiting 500ms for events to be processed...");
-    // Wait for pending events to be processed
-    flow_like_types::tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+    // Wait for pending events to drain by polling action count stability
+    {
+        let mut last_count = 0usize;
+        let mut stable_ticks = 0u32;
+        for _ in 0..20 {
+            flow_like_types::tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+            let state = recording_state.inner.read().await;
+            let current = state
+                .session
+                .as_ref()
+                .map(|s| s.actions.len())
+                .unwrap_or(0);
+            if current == last_count {
+                stable_ticks += 1;
+                if stable_ticks >= 3 {
+                    break;
+                }
+            } else {
+                stable_ticks = 0;
+            }
+            last_count = current;
+        }
+    }
 
     // Get current state info before stopping
     {
         let state = recording_state.inner.read().await;
-        println!("[Recording] Current status: {:?}", state.status);
+        tracing::debug!(" Current status: {:?}", state.status);
         if let Some(session) = &state.session {
-            println!("[Recording] Session has {} actions", session.actions.len());
-            println!("[Recording] Target board ID: {:?}", session.target_board_id);
+            tracing::debug!(" Session has {} actions", session.actions.len());
+            tracing::debug!(" Target board ID: {:?}", session.target_board_id);
         } else {
-            println!("[Recording] WARNING: No active session!");
+            tracing::warn!(" No active session!");
         }
     }
 
     // Get the recorded actions
-    println!("[Recording] Calling state.stop() to collect actions...");
+    tracing::debug!(" Calling state.stop() to collect actions...");
     let actions = {
         let mut state = recording_state.inner.write().await;
         let result = state.stop().await?;
-        println!("[Recording] state.stop() returned {} actions", result.len());
+        tracing::debug!(" state.stop() returned {} actions", result.len());
         result
     };
 
-    println!("[Recording] Final action count: {}", actions.len());
+    tracing::debug!(" Final action count: {}", actions.len());
     for (i, action) in actions.iter().enumerate() {
         let coords = action
             .coordinates
             .map(|(x, y)| format!("({}, {})", x, y))
             .unwrap_or_else(|| "N/A".to_string());
-        println!(
-            "[Recording]   Action {}: {:?} at {}",
+        tracing::debug!(
+            "  Action {}: {:?} at {}",
             i, action.action_type, coords
         );
     }
@@ -234,12 +256,14 @@ pub async fn stop_recording(handler: AppHandle) -> Result<Vec<RecordedAction>, T
     );
 
     // Now drop the capture (closes the channel and stops the processor)
-    println!("[Recording] Dropping EventCapture...");
+    tracing::debug!(" Dropping EventCapture...");
     {
         let mut capture_guard = recording_state.capture.write().await;
         *capture_guard = None;
     }
-    println!("[Recording] ========== STOP RECORDING COMPLETE ==========");
+    tracing::debug!(" ========== STOP RECORDING COMPLETE ==========");
+
+    crate::tray::restore_tray_icon(&handler).await;
 
     Ok(actions)
 }
@@ -276,6 +300,7 @@ pub async fn insert_recording_to_board(
     app_id: Option<String>,
     use_pattern_matching: Option<bool>,
     template_confidence: Option<f64>,
+    use_fingerprints: Option<bool>,
 ) -> Result<Vec<flow_like::flow::board::commands::GenericCommand>, TauriFunctionError> {
     tracing::info!(
         "insert_recording_to_board called with {} actions",
@@ -291,7 +316,8 @@ pub async fn insert_recording_to_board(
         template_confidence: template_confidence.unwrap_or(0.8),
         app_id,
         board_id: Some(board_id.clone()),
-        bot_detection_evasion: false, // Default to false when manually inserting
+        bot_detection_evasion: false,
+        use_fingerprints: use_fingerprints.unwrap_or(true),
     };
 
     let commands = generator::generate_add_node_commands(

@@ -511,7 +511,7 @@ impl NodeLogic for LaunchAppNode {
                 context.set_pin_value("pid", json!(pid)).await?;
 
                 if wait_ms > 0 {
-                    sleep(Duration::from_millis(wait_ms as u64)).await;
+                    sleep(Duration::from_millis(wait_ms.max(0) as u64)).await;
                 }
 
                 context.activate_exec_pin("exec_out").await?;

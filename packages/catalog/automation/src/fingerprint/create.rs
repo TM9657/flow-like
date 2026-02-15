@@ -44,7 +44,8 @@ impl NodeLogic for CreateFingerprintNode {
             "Selector set for element location",
             VariableType::Struct,
         )
-        .set_schema::<SelectorSet>();
+        .set_schema::<SelectorSet>()
+        .set_default_value(Some(json!(SelectorSet::default())));
 
         node.add_input_pin(
             "role",

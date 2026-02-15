@@ -228,7 +228,7 @@ impl NodeLogic for ComputerNaturalMouseMoveNode {
 
     #[cfg(feature = "execute")]
     async fn run(&self, context: &mut ExecutionContext) -> flow_like_types::Result<()> {
-        use enigo::{Coordinate, Mouse};
+        use enigo::Mouse;
 
         context.deactivate_exec_pin("exec_out").await?;
 
@@ -239,114 +239,16 @@ impl NodeLogic for ComputerNaturalMouseMoveNode {
         let curve_intensity: f64 = context.evaluate_pin("curve_intensity").await.unwrap_or(0.3);
         let overshoot: bool = context.evaluate_pin("overshoot").await.unwrap_or(false);
 
-        // All synchronous work in a block that doesn't span await points
-        {
-            use rand::Rng;
-            let mut rng = rand::rng();
+        let mut enigo = session.create_enigo()?;
+        let start = enigo.location().unwrap_or((0, 0));
+        let end = (target_x as i32, target_y as i32);
+        let dur = duration_ms.max(0) as u64;
 
-            // Get current mouse position
-            let (start_x, start_y) = {
-                let enigo = session.create_enigo()?;
-                enigo.location().unwrap_or((0, 0))
-            };
-
-            let start = (start_x as f64, start_y as f64);
-            let end = (target_x as f64, target_y as f64);
-
-            // Calculate distance for step count
-            let dx = end.0 - start.0;
-            let dy = end.1 - start.1;
-            let distance = (dx * dx + dy * dy).sqrt();
-
-            // More steps for longer distances, minimum 10 steps
-            let steps = ((distance / 10.0) as i32).max(10).min(100);
-            let step_delay_ms = (duration_ms as f64 / steps as f64) as u64;
-
-            // Generate random control points for bezier curve
-            let curve_offset = distance * curve_intensity;
-            let perpendicular = if dx.abs() > 0.001 {
-                (-dy / dx, 1.0)
-            } else {
-                (1.0, 0.0)
-            };
-            let perp_len =
-                (perpendicular.0 * perpendicular.0 + perpendicular.1 * perpendicular.1).sqrt();
-            let perp_norm = (perpendicular.0 / perp_len, perpendicular.1 / perp_len);
-
-            // Randomize control point offsets
-            let offset1 = rng.random_range(-curve_offset..curve_offset);
-            let offset2 = rng.random_range(-curve_offset..curve_offset);
-
-            let ctrl1 = (
-                start.0 + dx * 0.3 + perp_norm.0 * offset1,
-                start.1 + dy * 0.3 + perp_norm.1 * offset1,
-            );
-            let ctrl2 = (
-                start.0 + dx * 0.7 + perp_norm.0 * offset2,
-                start.1 + dy * 0.7 + perp_norm.1 * offset2,
-            );
-
-            // If overshoot enabled, extend the target slightly
-            let overshoot_amount = if overshoot && distance > 50.0 {
-                let overshoot_dist = rng.random_range(5.0..15.0);
-                let angle = dy.atan2(dx);
-                (overshoot_dist * angle.cos(), overshoot_dist * angle.sin())
-            } else {
-                (0.0, 0.0)
-            };
-
-            let overshoot_end = (end.0 + overshoot_amount.0, end.1 + overshoot_amount.1);
-
-            // Move along the bezier curve with easing
-            let mut enigo = session.create_enigo()?;
-
-            for i in 1..=steps {
-                let t = ease_in_out_quad(i as f64 / steps as f64);
-                let (x, y) = bezier_point(start, ctrl1, ctrl2, overshoot_end, t);
-
-                // Add tiny random jitter for more natural movement
-                let jitter_x = rng.random_range(-1.0..1.0);
-                let jitter_y = rng.random_range(-1.0..1.0);
-
-                enigo
-                    .move_mouse(
-                        (x + jitter_x) as i32,
-                        (y + jitter_y) as i32,
-                        Coordinate::Abs,
-                    )
-                    .map_err(|e| flow_like_types::anyhow!("Failed to move mouse: {}", e))?;
-
-                // Variable delay for more natural timing
-                let delay_variance = rng.random_range(0.8..1.2);
-                std::thread::sleep(std::time::Duration::from_millis(
-                    (step_delay_ms as f64 * delay_variance) as u64,
-                ));
-            }
-
-            // If we overshot, correct to the actual target
-            if overshoot && (overshoot_amount.0.abs() > 0.1 || overshoot_amount.1.abs() > 0.1) {
-                std::thread::sleep(std::time::Duration::from_millis(rng.random_range(30..80)));
-
-                // Small correction movement
-                let correction_steps = 5;
-                for i in 1..=correction_steps {
-                    let t = i as f64 / correction_steps as f64;
-                    let x = overshoot_end.0 + (end.0 - overshoot_end.0) * t;
-                    let y = overshoot_end.1 + (end.1 - overshoot_end.1) * t;
-
-                    enigo
-                        .move_mouse(x as i32, y as i32, Coordinate::Abs)
-                        .map_err(|e| flow_like_types::anyhow!("Failed to move mouse: {}", e))?;
-
-                    std::thread::sleep(std::time::Duration::from_millis(rng.random_range(10..20)));
-                }
-            }
-
-            // Ensure we end exactly at target
-            enigo
-                .move_mouse(target_x as i32, target_y as i32, Coordinate::Abs)
-                .map_err(|e| flow_like_types::anyhow!("Failed to move mouse: {}", e))?;
-        }
+        flow_like_types::tokio::task::spawn_blocking(move || {
+            perform_natural_move(&mut enigo, start, end, dur, curve_intensity, overshoot)
+        })
+        .await
+        .map_err(|e| flow_like_types::anyhow!("Natural mouse move task failed: {}", e))??;
 
         context.set_pin_value("session_out", json!(session)).await?;
         context.activate_exec_pin("exec_out").await?;
@@ -368,6 +270,7 @@ fn perform_natural_move(
     start: (i32, i32),
     end: (i32, i32),
     duration_ms: u64,
+    curve_intensity: f64,
     overshoot: bool,
 ) -> flow_like_types::Result<()> {
     use enigo::{Coordinate, Mouse};
@@ -394,7 +297,6 @@ fn perform_natural_move(
     let step_delay_ms = (duration_ms as f64 / steps as f64) as u64;
 
     // Generate random control points for bezier curve
-    let curve_intensity = 0.3;
     let curve_offset = distance * curve_intensity;
     let perpendicular = if dx.abs() > 0.001 {
         (-dy / dx, 1.0)
@@ -591,6 +493,14 @@ impl NodeLogic for ComputerMouseClickNode {
         )
         .set_default_value(Some(json!(200)));
 
+        node.add_input_pin(
+            "fingerprint",
+            "Fingerprint",
+            "Optional element fingerprint for pre-click validation",
+            VariableType::Struct,
+        )
+        .set_schema::<crate::types::fingerprints::ElementFingerprint>();
+
         node.add_output_pin("exec_out", "▶", "Continue", VariableType::Execution);
 
         node.add_output_pin(
@@ -612,8 +522,8 @@ impl NodeLogic for ComputerMouseClickNode {
         context.deactivate_exec_pin("exec_out").await?;
 
         let session: AutomationSession = context.evaluate_pin("session").await?;
-        let mut x: i64 = context.evaluate_pin("x").await?;
-        let mut y: i64 = context.evaluate_pin("y").await?;
+        let x: i64 = context.evaluate_pin("x").await?;
+        let y: i64 = context.evaluate_pin("y").await?;
         let button_str: String = context.evaluate_pin("button").await?;
         let use_template_matching: bool = context
             .evaluate_pin("use_template_matching")
@@ -630,33 +540,68 @@ impl NodeLogic for ComputerMouseClickNode {
             .await
             .unwrap_or(200);
 
-        if use_template_matching && !screenshot_ref.is_empty() {
-            // Resolve the screenshot path relative to storage directory
+        // Auto-enable template matching when screenshot_ref is provided
+        let should_use_template = use_template_matching || !screenshot_ref.is_empty();
+
+        tracing::debug!(
+            "Click node: use_template_matching={}, screenshot_ref='{}', should_use_template={}, coords=({}, {})",
+            use_template_matching, screenshot_ref, should_use_template, x, y
+        );
+
+        let mut template_moved = false;
+
+        if should_use_template && !screenshot_ref.is_empty() {
             if let Some(ref context_cache) = context.execution_cache {
-                let storage_path = context_cache.get_storage(false)?;
-                let full_path = storage_path.child(screenshot_ref.clone());
+                let upload_path = context_cache.get_upload_dir()?;
+                let full_path = upload_path.child(screenshot_ref.clone());
                 let path_str = full_path.to_string();
+
+                tracing::debug!("Loading template from: {}", path_str);
 
                 let autogui = session.get_autogui(context).await?;
                 let mut gui = autogui.lock().await;
 
+                // Load template image to get dimensions for debugging
+                if let Ok(img) = image::open(&path_str) {
+                    tracing::debug!(
+                        "Template image dimensions: {}x{}",
+                        img.width(), img.height()
+                    );
+                }
+
                 if let Err(e) =
                     gui.prepare_template_from_file(&path_str, None, MatchMode::Segmented)
                 {
-                    println!(
-                        "[MouseClick] Template preparation failed: {}, falling back to coordinates",
-                        e
+                    tracing::warn!(
+                        "Template preparation failed: {}, falling back to coordinates ({}, {})",
+                        e, x, y
                     );
-                } else if let Ok(Some(matches)) = gui.find_image_on_screen(confidence as f32)
-                    && !matches.is_empty()
-                {
-                    let (mx, my, conf) = matches[0];
-                    println!(
-                        "[MouseClick] Template matched at ({}, {}) with confidence {}",
-                        mx, my, conf
-                    );
-                    x = mx as i64;
-                    y = my as i64;
+                } else {
+                    tracing::debug!("Template prepared successfully, searching on screen with confidence >= {}", confidence);
+                    // Use find_image_on_screen_and_move_mouse to handle centering
+                    // and macOS Retina scaling correctly
+                    match gui.find_image_on_screen_and_move_mouse(confidence as f32, 0.0) {
+                        Ok(Some(matches)) if !matches.is_empty() => {
+                            let (mx, my, conf) = matches[0];
+                            tracing::debug!(
+                                "Template matched at ({}, {}) with confidence {:.3}, cursor moved to center",
+                                mx, my, conf
+                            );
+                            template_moved = true;
+                        }
+                        Ok(_) => {
+                            tracing::warn!(
+                                "Template not found on screen (confidence >= {}), falling back to coordinates ({}, {})",
+                                confidence, x, y
+                            );
+                        }
+                        Err(e) => {
+                            tracing::warn!(
+                                "Template matching error: {}, falling back to coordinates ({}, {})",
+                                e, x, y
+                            );
+                        }
+                    }
                 }
             }
         }
@@ -670,22 +615,25 @@ impl NodeLogic for ComputerMouseClickNode {
         {
             let mut enigo = session.create_enigo()?;
 
-            if natural_move {
-                use rand::Rng;
-                // Get current position for natural movement
-                let start = enigo.location().unwrap_or((0, 0));
-                let overshoot = rand::rng().random_bool(0.3); // 30% chance of overshoot
-                perform_natural_move(
-                    &mut enigo,
-                    start,
-                    (x as i32, y as i32),
-                    move_duration_ms as u64,
-                    overshoot,
-                )?;
-            } else {
-                enigo
-                    .move_mouse(x as i32, y as i32, Coordinate::Abs)
-                    .map_err(|e| flow_like_types::anyhow!("Failed to move mouse: {}", e))?;
+            if !template_moved {
+                tracing::debug!("No template match, using fallback coordinates ({}, {}), natural_move={}", x, y, natural_move);
+                if natural_move {
+                    use rand::Rng;
+                    let start = enigo.location().unwrap_or((0, 0));
+                    let overshoot = rand::rng().random_bool(0.3);
+                    perform_natural_move(
+                        &mut enigo,
+                        start,
+                        (x as i32, y as i32),
+                        move_duration_ms as u64,
+                        0.3,
+                        overshoot,
+                    )?;
+                } else {
+                    enigo
+                        .move_mouse(x as i32, y as i32, Coordinate::Abs)
+                        .map_err(|e| flow_like_types::anyhow!("Failed to move mouse: {}", e))?;
+                }
             }
 
             std::thread::sleep(std::time::Duration::from_millis(session.click_delay_ms));
@@ -759,6 +707,30 @@ impl NodeLogic for ComputerMouseDoubleClickNode {
             .set_default_value(Some(json!(0)));
 
         node.add_input_pin(
+            "use_template_matching",
+            "Use Template Matching",
+            "If enabled, use template matching to find the click target from a recorded screenshot",
+            VariableType::Boolean,
+        )
+        .set_default_value(Some(json!(false)));
+
+        node.add_input_pin(
+            "screenshot_ref",
+            "Screenshot Ref",
+            "Reference to recorded screenshot artifact for template matching",
+            VariableType::String,
+        )
+        .set_default_value(Some(json!("")));
+
+        node.add_input_pin(
+            "confidence",
+            "Confidence",
+            "Minimum confidence threshold for template matching (0.0-1.0)",
+            VariableType::Float,
+        )
+        .set_default_value(Some(json!(0.8)));
+
+        node.add_input_pin(
             "natural_move",
             "Natural Movement",
             "Use curved, human-like mouse movement to avoid bot detection",
@@ -773,6 +745,14 @@ impl NodeLogic for ComputerMouseDoubleClickNode {
             VariableType::Integer,
         )
         .set_default_value(Some(json!(200)));
+
+        node.add_input_pin(
+            "fingerprint",
+            "Fingerprint",
+            "Optional element fingerprint for pre-click validation",
+            VariableType::Struct,
+        )
+        .set_schema::<crate::types::fingerprints::ElementFingerprint>();
 
         node.add_output_pin("exec_out", "▶", "Continue", VariableType::Execution);
 
@@ -790,36 +770,104 @@ impl NodeLogic for ComputerMouseDoubleClickNode {
     #[cfg(feature = "execute")]
     async fn run(&self, context: &mut ExecutionContext) -> flow_like_types::Result<()> {
         use enigo::{Button, Coordinate, Mouse};
+        use rustautogui::MatchMode;
 
         context.deactivate_exec_pin("exec_out").await?;
 
         let session: AutomationSession = context.evaluate_pin("session").await?;
         let x: i64 = context.evaluate_pin("x").await?;
         let y: i64 = context.evaluate_pin("y").await?;
+        let use_template_matching: bool = context
+            .evaluate_pin("use_template_matching")
+            .await
+            .unwrap_or(false);
+        let screenshot_ref: String = context
+            .evaluate_pin("screenshot_ref")
+            .await
+            .unwrap_or_default();
+        let confidence: f64 = context.evaluate_pin("confidence").await.unwrap_or(0.8);
         let natural_move: bool = context.evaluate_pin("natural_move").await.unwrap_or(false);
         let move_duration_ms: i64 = context
             .evaluate_pin("move_duration_ms")
             .await
             .unwrap_or(200);
 
+        // Auto-enable template matching when screenshot_ref is provided
+        let should_use_template = use_template_matching || !screenshot_ref.is_empty();
+
+        tracing::debug!(
+            "DoubleClick node: use_template_matching={}, screenshot_ref='{}', should_use_template={}, coords=({}, {})",
+            use_template_matching, screenshot_ref, should_use_template, x, y
+        );
+
+        let mut template_moved = false;
+
+        if should_use_template && !screenshot_ref.is_empty() {
+            if let Some(ref context_cache) = context.execution_cache {
+                let upload_path = context_cache.get_upload_dir()?;
+                let full_path = upload_path.child(screenshot_ref.clone());
+                let path_str = full_path.to_string();
+
+                tracing::debug!("Loading template from: {}", path_str);
+
+                let autogui = session.get_autogui(context).await?;
+                let mut gui = autogui.lock().await;
+
+                if let Err(e) =
+                    gui.prepare_template_from_file(&path_str, None, MatchMode::Segmented)
+                {
+                    tracing::warn!(
+                        "Template preparation failed: {}, falling back to coordinates ({}, {})",
+                        e, x, y
+                    );
+                } else {
+                    match gui.find_image_on_screen_and_move_mouse(confidence as f32, 0.0) {
+                        Ok(Some(matches)) if !matches.is_empty() => {
+                            let (mx, my, conf) = matches[0];
+                            tracing::debug!(
+                                "Template matched at ({}, {}) with confidence {:.3}, cursor moved to center",
+                                mx, my, conf
+                            );
+                            template_moved = true;
+                        }
+                        Ok(_) => {
+                            tracing::warn!(
+                                "Template not found on screen (confidence >= {}), falling back to coordinates ({}, {})",
+                                confidence, x, y
+                            );
+                        }
+                        Err(e) => {
+                            tracing::warn!(
+                                "Template matching error: {}, falling back to coordinates ({}, {})",
+                                e, x, y
+                            );
+                        }
+                    }
+                }
+            }
+        }
+
         {
             let mut enigo = session.create_enigo()?;
 
-            if natural_move {
-                use rand::Rng;
-                let start = enigo.location().unwrap_or((0, 0));
-                let overshoot = rand::rng().random_bool(0.3);
-                perform_natural_move(
-                    &mut enigo,
-                    start,
-                    (x as i32, y as i32),
-                    move_duration_ms as u64,
-                    overshoot,
-                )?;
-            } else {
-                enigo
-                    .move_mouse(x as i32, y as i32, Coordinate::Abs)
-                    .map_err(|e| flow_like_types::anyhow!("Failed to move mouse: {}", e))?;
+            if !template_moved {
+                if natural_move {
+                    use rand::Rng;
+                    let start = enigo.location().unwrap_or((0, 0));
+                    let overshoot = rand::rng().random_bool(0.3);
+                    perform_natural_move(
+                        &mut enigo,
+                        start,
+                        (x as i32, y as i32),
+                        move_duration_ms as u64,
+                        0.3,
+                        overshoot,
+                    )?;
+                } else {
+                    enigo
+                        .move_mouse(x as i32, y as i32, Coordinate::Abs)
+                        .map_err(|e| flow_like_types::anyhow!("Failed to move mouse: {}", e))?;
+                }
             }
 
             std::thread::sleep(std::time::Duration::from_millis(session.click_delay_ms));
@@ -829,12 +877,10 @@ impl NodeLogic for ComputerMouseDoubleClickNode {
                 .map_err(|e| flow_like_types::anyhow!("Failed to click mouse: {}", e))?;
         }
 
-        // Small delay between clicks (50-100ms is typical for double-click)
         flow_like_types::tokio::time::sleep(std::time::Duration::from_millis(80)).await;
 
         {
             let mut enigo = session.create_enigo()?;
-            // Second click - no need to move again, cursor is already there
             enigo
                 .button(Button::Left, enigo::Direction::Click)
                 .map_err(|e| flow_like_types::anyhow!("Failed to double-click mouse: {}", e))?;

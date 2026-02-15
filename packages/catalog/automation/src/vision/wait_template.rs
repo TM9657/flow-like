@@ -124,8 +124,8 @@ impl NodeLogic for WaitTemplateNode {
 
         let autogui = session.get_autogui(context).await?;
         let start = Instant::now();
-        let timeout = Duration::from_millis(timeout_ms as u64);
-        let poll_interval = Duration::from_millis(poll_interval_ms as u64);
+        let timeout = Duration::from_millis(timeout_ms.max(0) as u64);
+        let poll_interval = Duration::from_millis(poll_interval_ms.max(0) as u64);
 
         loop {
             {
@@ -279,7 +279,7 @@ impl NodeLogic for WaitTemplateDisappearNode {
 
         let autogui = session.get_autogui(context).await?;
         let start = Instant::now();
-        let timeout = Duration::from_millis(timeout_ms as u64);
+        let timeout = Duration::from_millis(timeout_ms.max(0) as u64);
 
         loop {
             {

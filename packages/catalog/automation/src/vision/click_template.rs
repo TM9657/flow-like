@@ -173,8 +173,18 @@ impl NodeLogic for ClickTemplateNode {
         let mut temp_file = std::fs::File::create(&temp_path)
             .map_err(|e| flow_like_types::anyhow!("Failed to create temp file: {}", e))?;
         temp_file.write_all(&template_bytes).map_err(|e| {
+            let _ = std::fs::remove_file(&temp_path);
             flow_like_types::anyhow!("Failed to write template to temp file: {}", e)
         })?;
+
+        // Guard ensures temp file is cleaned up even on early returns
+        struct TempFileGuard(std::path::PathBuf);
+        impl Drop for TempFileGuard {
+            fn drop(&mut self) {
+                let _ = std::fs::remove_file(&self.0);
+            }
+        }
+        let _guard = TempFileGuard(temp_path.clone());
 
         let autogui = session.get_autogui(context).await?;
         let mut gui = autogui.lock().await;
@@ -186,9 +196,6 @@ impl NodeLogic for ClickTemplateNode {
         let result = gui
             .find_image_on_screen(confidence as f32)
             .map_err(|e| flow_like_types::anyhow!("Failed to search screen: {}", e))?;
-
-        // Clean up temp file
-        let _ = std::fs::remove_file(&temp_path);
 
         let perform_click =
             |gui: &mut rustautogui::RustAutoGui, x: u32, y: u32| -> flow_like_types::Result<()> {

@@ -98,7 +98,7 @@ impl NodeLogic for BrowserWaitForNode {
 
         let driver = session.get_browser_driver_and_switch(context).await?;
 
-        let result = tokio::time::timeout(Duration::from_millis(timeout_ms as u64), async {
+        let result = tokio::time::timeout(Duration::from_millis(timeout_ms.max(0) as u64), async {
             loop {
                 if let Ok(_elem) = driver.find(By::Css(&selector)).await {
                     return true;
@@ -198,7 +198,7 @@ impl NodeLogic for BrowserWaitForDelayNode {
         let session: AutomationSession = context.evaluate_pin("session").await?;
         let delay_ms: i64 = context.evaluate_pin("delay_ms").await?;
 
-        tokio::time::sleep(Duration::from_millis(delay_ms as u64)).await;
+        tokio::time::sleep(Duration::from_millis(delay_ms.max(0) as u64)).await;
 
         context.set_pin_value("session_out", json!(session)).await?;
         context.activate_exec_pin("exec_out").await?;

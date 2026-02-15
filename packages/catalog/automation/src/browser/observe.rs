@@ -622,8 +622,8 @@ impl NodeLogic for BrowserWaitForNetworkIdleNode {
         let driver = session.get_browser_driver_and_switch(context).await?;
 
         let start = Instant::now();
-        let timeout = Duration::from_millis(timeout_ms as u64);
-        let idle_duration = Duration::from_millis(idle_time_ms as u64);
+        let timeout = Duration::from_millis(timeout_ms.max(0) as u64);
+        let idle_duration = Duration::from_millis(idle_time_ms.max(0) as u64);
         let mut last_request_count = 0i64;
         let mut idle_start: Option<Instant> = None;
 

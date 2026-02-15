@@ -9,7 +9,26 @@ use flow_like_types::rand::Rng;
 
 use crate::functions::TauriFunctionError;
 
-use super::state::{ActionType, KeyModifier, MouseButton, RecordedAction, ScrollDirection};
+use super::state::{ActionType, KeyModifier, MouseButton, RecordedAction, RecordedFingerprint, ScrollDirection};
+
+fn advance_layout(
+    x: &mut f32,
+    y: &mut f32,
+    nodes_in_row: &mut usize,
+    direction: &mut f32,
+    spacing: f32,
+    row_spacing: f32,
+    max_per_row: usize,
+) {
+    *nodes_in_row += 1;
+    if *nodes_in_row >= max_per_row {
+        *y += row_spacing;
+        *direction *= -1.0;
+        *nodes_in_row = 0;
+    } else {
+        *x += spacing * *direction;
+    }
+}
 
 /// Options for workflow generation from recorded actions
 #[derive(Clone, Debug)]
@@ -24,6 +43,8 @@ pub struct GeneratorOptions {
     pub board_id: Option<String>,
     /// Use natural curved mouse movements to avoid bot detection
     pub bot_detection_evasion: bool,
+    /// When true, embed fingerprint data into click nodes for pre-action validation
+    pub use_fingerprints: bool,
 }
 
 impl Default for GeneratorOptions {
@@ -34,6 +55,7 @@ impl Default for GeneratorOptions {
             app_id: None,
             board_id: None,
             bot_detection_evasion: false,
+            use_fingerprints: true,
         }
     }
 }
@@ -48,8 +70,12 @@ pub async fn generate_add_node_commands(
     let registry = state.node_registry.read().await;
     let mut commands = Vec::new();
     let mut x_offset = start_position.0 as f32;
-    let y_offset = start_position.1 as f32;
+    let mut y_offset = start_position.1 as f32;
     let node_spacing = 300.0_f32;
+    let row_spacing = 400.0_f32;
+    let max_nodes_per_row: usize = 8;
+    let mut nodes_in_row: usize = 0;
+    let mut direction: f32 = 1.0; // 1.0 = right, -1.0 = left
 
     let mut prev_exec_pin: Option<(String, String)> = None;
     let mut session_node_id: Option<String> = None;
@@ -73,7 +99,7 @@ pub async fn generate_add_node_commands(
     commands.push(GenericCommand::AddNode(add_event_cmd));
     prev_exec_pin = event_exec_out.map(|pin| (event_node_id.clone(), pin));
 
-    x_offset += node_spacing;
+    advance_layout(&mut x_offset, &mut y_offset, &mut nodes_in_row, &mut direction, node_spacing, row_spacing, max_nodes_per_row);
 
     // Use the unified automation session that supports browser, desktop, and RPA
     let mut session = registry.get_node("automation_start_session").map_err(|e| {
@@ -125,7 +151,7 @@ pub async fn generate_add_node_commands(
     session_out_pin_id = actual_session_handle_out.clone();
     prev_exec_pin = actual_session_exec_out.map(|pin| (actual_session_id.clone(), pin));
 
-    x_offset += node_spacing;
+    advance_layout(&mut x_offset, &mut y_offset, &mut nodes_in_row, &mut direction, node_spacing, row_spacing, max_nodes_per_row);
 
     // Minimum delay threshold to insert a delay node (milliseconds)
     const MIN_DELAY_THRESHOLD_MS: i64 = 500;
@@ -151,7 +177,7 @@ pub async fn generate_add_node_commands(
 
         // Insert delay node if there was a significant pause
         if delay_ms > MIN_DELAY_THRESHOLD_MS {
-            println!("[Generator] Adding delay node: {}ms", delay_ms);
+            tracing::debug!(" Adding delay node: {}ms", delay_ms);
 
             if let Ok(mut delay_node) = registry.get_node("delay") {
                 delay_node.coordinates = Some((x_offset, y_offset, 0.0));
@@ -203,7 +229,7 @@ pub async fn generate_add_node_commands(
                     prev_exec_pin = Some((delay_node_id, delay_out));
                 }
 
-                x_offset += node_spacing;
+                advance_layout(&mut x_offset, &mut y_offset, &mut nodes_in_row, &mut direction, node_spacing, row_spacing, max_nodes_per_row);
             }
         }
         // If last action was Enter and this is a click, insert a minimum delay for page navigation
@@ -213,8 +239,8 @@ pub async fn generate_add_node_commands(
                 ActionType::Click { .. } | ActionType::DoubleClick { .. }
             )
         {
-            println!(
-                "[Generator] Adding delay after Enter before click: {}ms",
+            tracing::debug!(
+                "Adding delay after Enter before click: {}ms",
                 MIN_DELAY_AFTER_ENTER_MS
             );
 
@@ -265,16 +291,45 @@ pub async fn generate_add_node_commands(
                     prev_exec_pin = Some((delay_node_id, delay_out));
                 }
 
-                x_offset += node_spacing;
+                advance_layout(&mut x_offset, &mut y_offset, &mut nodes_in_row, &mut direction, node_spacing, row_spacing, max_nodes_per_row);
             }
         }
 
-        println!("[Generator] Processing action: {:?}", action.action_type);
+        tracing::debug!(" Processing action: {:?}", action.action_type);
 
         // Track helper nodes needed for pattern matching (path_from_storage_dir, child)
         let mut helper_commands: Vec<GenericCommand> = Vec::new();
         let mut template_path_node_id: Option<String> = None;
         let mut template_path_out_pin_id: Option<String> = None;
+        // Track fingerprint node for connecting to click nodes
+        let mut fingerprint_node_id: Option<String> = None;
+        let mut fingerprint_out_pin_id: Option<String> = None;
+        let mut fingerprint_exec_in_pin_id: Option<String> = None;
+        let mut fingerprint_exec_out_pin_id: Option<String> = None;
+
+        // Generate fingerprint_create node before clicks if fingerprint data is available
+        let is_click = matches!(
+            &action.action_type,
+            ActionType::Click { .. } | ActionType::DoubleClick { .. }
+        );
+        if opts.use_fingerprints && is_click {
+            if let Some(fp) = &action.fingerprint {
+                if let Some(fp_cmds) = generate_fingerprint_node(
+                    fp,
+                    &registry,
+                    x_offset,
+                    y_offset - 180.0,
+                ) {
+                    fingerprint_node_id = Some(fp_cmds.node_id.clone());
+                    fingerprint_out_pin_id = Some(fp_cmds.fingerprint_out_pin_id.clone());
+                    fingerprint_exec_in_pin_id = fp_cmds.exec_in_pin_id;
+                    fingerprint_exec_out_pin_id = fp_cmds.exec_out_pin_id;
+                    for cmd in fp_cmds.commands {
+                        helper_commands.push(cmd);
+                    }
+                }
+            }
+        }
 
         let (node_name, extra_pins, _uses_rpa_session) = match &action.action_type {
             ActionType::Click {
@@ -292,18 +347,19 @@ pub async fn generate_add_node_commands(
                 if opts.use_pattern_matching && action.screenshot_ref.is_some() {
                     let screenshot_id = action.screenshot_ref.as_ref().unwrap();
 
-                    // Path is relative to storage_dir (from_storage_dir returns board_dir/storage)
-                    // The full path on disk is: apps/{app_id}/boards/{board_id}/storage/recordings/screenshots/{id}.png
-                    // But from storage_dir, we only need: recordings/screenshots/{id}.png
-                    let screenshot_path = format!("recordings/screenshots/{}.png", screenshot_id);
+                    // Path is relative to upload_dir (from_upload_dir returns board_dir/upload)
+                    let screenshot_path = match &opts.board_id {
+                        Some(bid) => format!("rpa/{}/screenshots/{}.png", bid, screenshot_id),
+                        None => format!("rpa/screenshots/{}.png", screenshot_id),
+                    };
 
-                    // Create path_from_storage_dir node (pure data node, no execution pins)
-                    if let Ok(mut storage_dir_node) = registry.get_node("path_from_storage_dir") {
-                        storage_dir_node.coordinates = Some((x_offset, y_offset - 150.0, 0.0));
-                        let storage_dir_cmd = AddNodeCommand::new(storage_dir_node);
-                        let storage_dir_id = storage_dir_cmd.node.id.clone();
+                    // Create path_from_upload_dir node (pure data node, no execution pins)
+                    if let Ok(mut upload_dir_node) = registry.get_node("path_from_upload_dir") {
+                        upload_dir_node.coordinates = Some((x_offset, y_offset - 150.0, 0.0));
+                        let upload_dir_cmd = AddNodeCommand::new(upload_dir_node);
+                        let upload_dir_id = upload_dir_cmd.node.id.clone();
 
-                        let storage_path_out = storage_dir_cmd
+                        let upload_path_out = upload_dir_cmd
                             .node
                             .pins
                             .iter()
@@ -313,11 +369,11 @@ pub async fn generate_add_node_commands(
                             })
                             .map(|(id, _)| id.clone());
 
-                        helper_commands.push(GenericCommand::AddNode(storage_dir_cmd));
+                        helper_commands.push(GenericCommand::AddNode(upload_dir_cmd));
 
                         // Create child node to append the screenshot path
-                        if let (Ok(mut child_node), Some(storage_out)) =
-                            (registry.get_node("child"), storage_path_out)
+                        if let (Ok(mut child_node), Some(upload_out)) =
+                            (registry.get_node("child"), upload_path_out)
                         {
                             child_node.coordinates =
                                 Some((x_offset + 180.0, y_offset - 150.0, 0.0));
@@ -357,13 +413,13 @@ pub async fn generate_add_node_commands(
 
                             helper_commands.push(GenericCommand::AddNode(child_cmd));
 
-                            // Connect storage_dir output to child input
+                            // Connect upload_dir output to child input
                             if let Some(child_in) = child_path_in {
                                 helper_commands.push(GenericCommand::ConnectPin(
                                     ConnectPinsCommand::new(
-                                        storage_dir_id,
+                                        upload_dir_id,
                                         child_node_id.clone(),
-                                        storage_out,
+                                        upload_out,
                                         child_in,
                                     ),
                                 ));
@@ -395,8 +451,10 @@ pub async fn generate_add_node_commands(
                     ];
 
                     if let Some(ref screenshot_id) = action.screenshot_ref {
-                        let screenshot_path =
-                            format!("recordings/screenshots/{}.png", screenshot_id);
+                        let screenshot_path = match &opts.board_id {
+                            Some(bid) => format!("rpa/{}/screenshots/{}.png", bid, screenshot_id),
+                            None => format!("rpa/screenshots/{}.png", screenshot_id),
+                        };
                         pins.push(("screenshot_ref", json!(screenshot_path)));
                     }
 
@@ -414,7 +472,14 @@ pub async fn generate_add_node_commands(
                 let (x, y) = action.coordinates.unwrap_or((0, 0));
                 let mut pins = vec![("x", json!(x)), ("y", json!(y))];
 
-                // Add natural movement for bot detection evasion
+                if let Some(ref screenshot_id) = action.screenshot_ref {
+                    let screenshot_path = match &opts.board_id {
+                        Some(bid) => format!("rpa/{}/screenshots/{}.png", bid, screenshot_id),
+                        None => format!("rpa/screenshots/{}.png", screenshot_id),
+                    };
+                    pins.push(("screenshot_ref", json!(screenshot_path)));
+                }
+
                 if opts.bot_detection_evasion {
                     let mut rng = flow_like_types::rand::rng();
                     pins.push(("natural_move", json!(true)));
@@ -510,7 +575,7 @@ pub async fn generate_add_node_commands(
             }
         };
 
-        println!("[Generator] Mapped to node: {}", node_name);
+        tracing::debug!(" Mapped to node: {}", node_name);
         let mut node = match registry.get_node(node_name) {
             Ok(n) => n,
             Err(_) => {
@@ -519,6 +584,27 @@ pub async fn generate_add_node_commands(
             }
         };
         node.coordinates = Some((x_offset, y_offset, 0.0));
+
+        // Annotate click nodes with fingerprint context for debugging
+        if is_click {
+            if let Some(fp) = &action.fingerprint {
+                let parts: Vec<String> = [
+                    fp.role.as_ref().map(|r| format!("Role: {}", r)),
+                    fp.name.as_ref().map(|n| format!("Name: {}", n)),
+                    fp.text.as_ref().map(|t| format!("Text: {}", t)),
+                ]
+                .into_iter()
+                .flatten()
+                .collect();
+                if !parts.is_empty() {
+                    node.description = format!(
+                        "{} | Target: [{}]",
+                        node.description,
+                        parts.join(", ")
+                    );
+                }
+            }
+        }
 
         for (pin_name, value) in &extra_pins {
             if let Some((_, pin)) = node.pins.iter_mut().find(|(_, p)| p.name == *pin_name)
@@ -595,6 +681,13 @@ pub async fn generate_add_node_commands(
             .find(|(_, p)| p.name == "text" && p.pin_type == flow_like::flow::pin::PinType::Input)
             .map(|(id, _)| id.clone());
 
+        let fingerprint_in_pin = add_cmd
+            .node
+            .pins
+            .iter()
+            .find(|(_, p)| p.name == "fingerprint" && p.pin_type == flow_like::flow::pin::PinType::Input)
+            .map(|(id, _)| id.clone());
+
         // Add helper nodes first (path_from_storage_dir, child) for pattern matching
         for cmd in helper_commands {
             commands.push(cmd);
@@ -617,7 +710,39 @@ pub async fn generate_add_node_commands(
             )));
         }
 
-        if let (Some((prev_node, prev_pin)), Some(curr_pin)) = (&prev_exec_pin, &exec_in_pin) {
+        // Wire fingerprint node into execution chain: prev → fingerprint → action node
+        if let (Some(fp_id), Some(fp_exec_in), Some(fp_exec_out)) =
+            (&fingerprint_node_id, &fingerprint_exec_in_pin_id, &fingerprint_exec_out_pin_id)
+        {
+            // Connect prev_exec → fingerprint.exec_in
+            if let Some((prev_node, prev_pin)) = &prev_exec_pin {
+                commands.push(GenericCommand::ConnectPin(ConnectPinsCommand::new(
+                    prev_node.clone(),
+                    fp_id.clone(),
+                    prev_pin.clone(),
+                    fp_exec_in.clone(),
+                )));
+            }
+            // Connect fingerprint.exec_out → action_node.exec_in
+            if let Some(curr_pin) = &exec_in_pin {
+                commands.push(GenericCommand::ConnectPin(ConnectPinsCommand::new(
+                    fp_id.clone(),
+                    new_node_id.clone(),
+                    fp_exec_out.clone(),
+                    curr_pin.clone(),
+                )));
+            }
+            // Connect fingerprint.fingerprint_out → action_node.fingerprint_in
+            if let (Some(fp_out), Some(fp_in)) = (&fingerprint_out_pin_id, &fingerprint_in_pin) {
+                commands.push(GenericCommand::ConnectPin(ConnectPinsCommand::new(
+                    fp_id.clone(),
+                    new_node_id.clone(),
+                    fp_out.clone(),
+                    fp_in.clone(),
+                )));
+            }
+        } else if let (Some((prev_node, prev_pin)), Some(curr_pin)) = (&prev_exec_pin, &exec_in_pin) {
+            // No fingerprint node — connect directly as before
             commands.push(GenericCommand::ConnectPin(ConnectPinsCommand::new(
                 prev_node.clone(),
                 new_node_id.clone(),
@@ -674,7 +799,7 @@ pub async fn generate_add_node_commands(
             ActionType::KeyPress { key, .. } if key == "Enter" || key == "Return"
         );
 
-        x_offset += node_spacing;
+        advance_layout(&mut x_offset, &mut y_offset, &mut nodes_in_row, &mut direction, node_spacing, row_spacing, max_nodes_per_row);
     }
 
     Ok(commands)
@@ -758,4 +883,111 @@ pub fn action_to_description(action: &RecordedAction) -> String {
             format!("Paste {}", preview)
         }
     }
+}
+
+struct FingerprintNodeResult {
+    node_id: String,
+    fingerprint_out_pin_id: String,
+    exec_in_pin_id: Option<String>,
+    exec_out_pin_id: Option<String>,
+    commands: Vec<GenericCommand>,
+}
+
+fn generate_fingerprint_node(
+    fp: &RecordedFingerprint,
+    registry: &flow_like::state::FlowNodeRegistry,
+    x: f32,
+    y: f32,
+) -> Option<FingerprintNodeResult> {
+    let mut node = registry.get_node("fingerprint_create").ok()?;
+    node.coordinates = Some((x, y, 0.0));
+
+    // Set the fingerprint ID
+    if let Some((_, pin)) = node.pins.iter_mut().find(|(_, p)| p.name == "id")
+        && let Ok(bytes) = to_vec(&json!(fp.id))
+    {
+        pin.default_value = Some(bytes);
+    }
+
+    // Set role, name, text
+    if let Some(role) = &fp.role {
+        if let Some((_, pin)) = node.pins.iter_mut().find(|(_, p)| p.name == "role")
+            && let Ok(bytes) = to_vec(&json!(role))
+        {
+            pin.default_value = Some(bytes);
+        }
+    }
+    if let Some(name) = &fp.name {
+        if let Some((_, pin)) = node.pins.iter_mut().find(|(_, p)| p.name == "name")
+            && let Ok(bytes) = to_vec(&json!(name))
+        {
+            pin.default_value = Some(bytes);
+        }
+    }
+    if let Some(text) = &fp.text {
+        if let Some((_, pin)) = node.pins.iter_mut().find(|(_, p)| p.name == "text")
+            && let Ok(bytes) = to_vec(&json!(text))
+        {
+            pin.default_value = Some(bytes);
+        }
+    }
+
+    // Build selectors from available fingerprint data
+    let mut selectors_json = json!({"selectors": [], "fallback_order": []});
+    {
+        let mut selectors = Vec::new();
+        let mut order = Vec::new();
+        if let Some(role) = &fp.role {
+            order.push(selectors.len());
+            selectors.push(json!({"kind": "Role", "value": role, "confidence": 0.8, "scope": null}));
+        }
+        if let Some(name) = &fp.name {
+            order.push(selectors.len());
+            selectors.push(json!({"kind": "AriaLabel", "value": name, "confidence": 0.9, "scope": null}));
+        }
+        if let Some(text) = &fp.text {
+            order.push(selectors.len());
+            selectors.push(json!({"kind": "Text", "value": text, "confidence": 0.7, "scope": null}));
+        }
+        if !selectors.is_empty() {
+            selectors_json = json!({"selectors": selectors, "fallback_order": order});
+        }
+    }
+    if let Some((_, pin)) = node.pins.iter_mut().find(|(_, p)| p.name == "selectors")
+        && let Ok(bytes) = to_vec(&selectors_json)
+    {
+        pin.default_value = Some(bytes);
+    }
+
+    let add_cmd = AddNodeCommand::new(node);
+    let node_id = add_cmd.node.id.clone();
+
+    let fingerprint_out = add_cmd
+        .node
+        .pins
+        .iter()
+        .find(|(_, p)| p.name == "fingerprint" && p.pin_type == flow_like::flow::pin::PinType::Output)
+        .map(|(id, _)| id.clone())?;
+
+    let exec_in = add_cmd
+        .node
+        .pins
+        .iter()
+        .find(|(_, p)| p.name == "exec_in" && p.pin_type == flow_like::flow::pin::PinType::Input)
+        .map(|(id, _)| id.clone());
+
+    let exec_out = add_cmd
+        .node
+        .pins
+        .iter()
+        .find(|(_, p)| p.name == "exec_out" && p.pin_type == flow_like::flow::pin::PinType::Output)
+        .map(|(id, _)| id.clone());
+
+    Some(FingerprintNodeResult {
+        node_id,
+        fingerprint_out_pin_id: fingerprint_out,
+        exec_in_pin_id: exec_in,
+        exec_out_pin_id: exec_out,
+        commands: vec![GenericCommand::AddNode(add_cmd)],
+    })
 }

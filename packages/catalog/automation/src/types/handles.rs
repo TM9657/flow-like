@@ -194,13 +194,19 @@ impl AutomationSession {
 
         {
             let mut cache = ctx.cache.write().await;
-            if let Some(wrapper) = cache.get_mut(&self.session_ref)
-                && let Some(wrapper) = Arc::get_mut(wrapper)
-                && let Some(auto_wrapper) = wrapper
-                    .as_any_mut()
-                    .downcast_mut::<AutomationSessionWrapper>()
-            {
-                auto_wrapper.browser_driver = Some(driver_arc);
+            if let Some(wrapper) = cache.get_mut(&self.session_ref) {
+                if let Some(wrapper) = Arc::get_mut(wrapper) {
+                    if let Some(auto_wrapper) = wrapper
+                        .as_any_mut()
+                        .downcast_mut::<AutomationSessionWrapper>()
+                    {
+                        auto_wrapper.browser_driver = Some(driver_arc);
+                    }
+                } else {
+                    return Err(flow_like_types::anyhow!(
+                        "Cannot attach browser: session wrapper has multiple references"
+                    ));
+                }
             }
         }
 
@@ -250,13 +256,19 @@ impl AutomationSession {
 
         {
             let mut cache = ctx.cache.write().await;
-            if let Some(wrapper) = cache.get_mut(&self.session_ref)
-                && let Some(wrapper) = Arc::get_mut(wrapper)
-                && let Some(auto_wrapper) = wrapper
-                    .as_any_mut()
-                    .downcast_mut::<AutomationSessionWrapper>()
-            {
-                auto_wrapper.current_window_handle = Some(window_handle);
+            if let Some(wrapper) = cache.get_mut(&self.session_ref) {
+                if let Some(wrapper) = Arc::get_mut(wrapper) {
+                    if let Some(auto_wrapper) = wrapper
+                        .as_any_mut()
+                        .downcast_mut::<AutomationSessionWrapper>()
+                    {
+                        auto_wrapper.current_window_handle = Some(window_handle);
+                    }
+                } else {
+                    return Err(flow_like_types::anyhow!(
+                        "Cannot set current page: session wrapper has multiple references"
+                    ));
+                }
             }
         }
 

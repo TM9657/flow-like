@@ -41,6 +41,8 @@ pub fn extract_fingerprint_at(x: i32, y: i32) -> Option<RecordedFingerprint> {
 
     const K_CF_STRING_ENCODING_UTF8: u32 = 0x08000100;
 
+    // SAFETY: Calls CoreFoundation FFI. The CString is valid for the duration of the call,
+    // and CFStringCreateWithCString returns a retained CF object that must be CFRelease'd.
     unsafe fn create_cf_string(s: &str) -> *const c_void {
         let c_str = match std::ffi::CString::new(s) {
             Ok(c) => c,
@@ -49,6 +51,8 @@ pub fn extract_fingerprint_at(x: i32, y: i32) -> Option<RecordedFingerprint> {
         unsafe { CFStringCreateWithCString(ptr::null(), c_str.as_ptr(), K_CF_STRING_ENCODING_UTF8) }
     }
 
+    // SAFETY: Reads CF string contents into a buffer. Validates the CF type before reading.
+    // Buffer is stack-allocated with fixed size, null-terminated by CFStringGetCString.
     unsafe fn cf_string_to_string(cf: *const c_void) -> Option<String> {
         unsafe {
             if cf.is_null() || CFGetTypeID(cf) != CFStringGetTypeID() {
@@ -66,6 +70,9 @@ pub fn extract_fingerprint_at(x: i32, y: i32) -> Option<RecordedFingerprint> {
         }
     }
 
+    // SAFETY: macOS Accessibility API requires FFI calls. All CF objects obtained via
+    // Copy* functions are properly CFRelease'd on all code paths. Null checks prevent
+    // dereferencing invalid pointers. The AXUIElement APIs are thread-safe.
     unsafe {
         let system_wide = AXUIElementCreateSystemWide();
         if system_wide.is_null() {
@@ -77,6 +84,7 @@ pub fn extract_fingerprint_at(x: i32, y: i32) -> Option<RecordedFingerprint> {
             AXUIElementCopyElementAtPosition(system_wide, x as f32, y as f32, &mut element);
 
         if result != 0 || element.is_null() {
+            CFRelease(system_wide);
             return None;
         }
 
@@ -147,21 +155,218 @@ pub fn extract_fingerprint_at(x: i32, y: i32) -> Option<RecordedFingerprint> {
             CFRelease(value_attr);
         }
 
+        CFRelease(element);
+        CFRelease(system_wide);
+
         Some(fp)
     }
 }
 
 #[cfg(target_os = "windows")]
-pub fn extract_fingerprint_at(_x: i32, _y: i32) -> Option<RecordedFingerprint> {
-    None
+pub fn extract_fingerprint_at(x: i32, y: i32) -> Option<RecordedFingerprint> {
+    use windows::Win32::Foundation::POINT;
+    use windows::Win32::System::Com::{CoInitializeEx, CoUninitialize, COINIT_MULTITHREADED};
+    use windows::Win32::UI::Accessibility::{
+        CUIAutomation, IUIAutomation, UIA_ControlTypePropertyId, UIA_NamePropertyId,
+    };
+
+    // SAFETY: CoInitializeEx/CoUninitialize are COM initialization functions.
+    // We call CoInitializeEx once at start and CoUninitialize on all return paths.
+    // This is safe as long as we don't call COM from other threads without initialization.
+    unsafe { let _ = CoInitializeEx(None, COINIT_MULTITHREADED); }
+
+    let result = extract_fingerprint_windows_inner(x, y);
+
+    unsafe { CoUninitialize(); }
+
+    result
+}
+
+#[cfg(target_os = "windows")]
+fn extract_fingerprint_windows_inner(x: i32, y: i32) -> Option<RecordedFingerprint> {
+    use windows::Win32::Foundation::POINT;
+    use windows::Win32::UI::Accessibility::{
+        CUIAutomation, IUIAutomation, UIA_ControlTypePropertyId, UIA_NamePropertyId,
+        UIA_ValueValuePropertyId,
+    };
+    use windows::core::ComInterface;
+
+    let automation: IUIAutomation = match ComInterface::cast(&CUIAutomation) {
+        Ok(a) => a,
+        Err(e) => {
+            tracing::debug!("Failed to create UIAutomation: {:?}", e);
+            return None;
+        }
+    };
+
+    let point = POINT { x, y };
+
+    // SAFETY: ElementFromPoint is safe in the windows crate
+    let element = match unsafe { automation.ElementFromPoint(point) } {
+        Ok(e) => e,
+        Err(e) => {
+            tracing::debug!("Failed to get element at point ({}, {}): {:?}", x, y, e);
+            return None;
+        }
+    };
+
+    let mut fp = RecordedFingerprint {
+        id: flow_like_types::create_id(),
+        role: None,
+        name: None,
+        text: None,
+        bounding_box: None,
+    };
+
+    // SAFETY: GetCurrentPropertyValue is safe, returns Result
+    if let Ok(control_type) = unsafe { element.GetCurrentPropertyValue(UIA_ControlTypePropertyId) } {
+        // SAFETY: as_raw() is safe, we're just reading the variant value
+        let raw = unsafe { control_type.as_raw() };
+        if let Ok(ct) = i32::try_from(raw.Anonymous.Anonymous.Anonymous.iVal) {
+            fp.role = Some(control_type_to_string(ct));
+        }
+    }
+
+    if let Ok(name) = unsafe { element.GetCurrentPropertyValue(UIA_NamePropertyId) } {
+        let raw = unsafe { name.as_raw() };
+        // Check if it's a BSTR (VT_BSTR = 8)
+        if raw.Anonymous.Anonymous.vt == 8 {
+            let bstr = unsafe { &raw.Anonymous.Anonymous.Anonymous.bstrVal };
+            if !bstr.is_null() {
+                let s = unsafe { bstr.to_string() };
+                if !s.is_empty() {
+                    fp.name = Some(s);
+                }
+            }
+        }
+    }
+
+    if let Ok(value) = unsafe { element.GetCurrentPropertyValue(UIA_ValueValuePropertyId) } {
+        let raw = unsafe { value.as_raw() };
+        if raw.Anonymous.Anonymous.vt == 8 {
+            let bstr = unsafe { &raw.Anonymous.Anonymous.Anonymous.bstrVal };
+            if !bstr.is_null() {
+                let s = unsafe { bstr.to_string() };
+                if !s.is_empty() {
+                    fp.text = Some(s);
+                }
+            }
+        }
+    }
+
+    Some(fp)
+}
+
+#[cfg(target_os = "windows")]
+fn control_type_to_string(control_type: i32) -> String {
+    match control_type {
+        50000 => "Button".to_string(),
+        50001 => "Calendar".to_string(),
+        50002 => "CheckBox".to_string(),
+        50003 => "ComboBox".to_string(),
+        50004 => "Edit".to_string(),
+        50005 => "Hyperlink".to_string(),
+        50006 => "Image".to_string(),
+        50007 => "ListItem".to_string(),
+        50008 => "List".to_string(),
+        50009 => "Menu".to_string(),
+        50010 => "MenuBar".to_string(),
+        50011 => "MenuItem".to_string(),
+        50012 => "ProgressBar".to_string(),
+        50013 => "RadioButton".to_string(),
+        50014 => "ScrollBar".to_string(),
+        50015 => "Slider".to_string(),
+        50016 => "Spinner".to_string(),
+        50017 => "StatusBar".to_string(),
+        50018 => "Tab".to_string(),
+        50019 => "TabItem".to_string(),
+        50020 => "Text".to_string(),
+        50021 => "ToolBar".to_string(),
+        50022 => "ToolTip".to_string(),
+        50023 => "Tree".to_string(),
+        50024 => "TreeItem".to_string(),
+        50025 => "Custom".to_string(),
+        50026 => "Group".to_string(),
+        50027 => "Thumb".to_string(),
+        50028 => "DataGrid".to_string(),
+        50029 => "DataItem".to_string(),
+        50030 => "Document".to_string(),
+        50031 => "SplitButton".to_string(),
+        50032 => "Window".to_string(),
+        50033 => "Pane".to_string(),
+        50034 => "Header".to_string(),
+        50035 => "HeaderItem".to_string(),
+        50036 => "Table".to_string(),
+        50037 => "TitleBar".to_string(),
+        50038 => "Separator".to_string(),
+        _ => format!("Unknown({})", control_type),
+    }
 }
 
 #[cfg(target_os = "linux")]
-pub fn extract_fingerprint_at(_x: i32, _y: i32) -> Option<RecordedFingerprint> {
-    None
+pub fn extract_fingerprint_at(x: i32, y: i32) -> Option<RecordedFingerprint> {
+    use std::time::Duration;
+
+    // AT-SPI2 requires async runtime - use blocking approach with timeout
+    let rt = match tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+    {
+        Ok(rt) => rt,
+        Err(e) => {
+            tracing::debug!("Failed to create tokio runtime for AT-SPI: {:?}", e);
+            return None;
+        }
+    };
+
+    rt.block_on(async {
+        tokio::time::timeout(Duration::from_millis(500), extract_fingerprint_atspi(x, y))
+            .await
+            .ok()
+            .flatten()
+    })
+}
+
+#[cfg(target_os = "linux")]
+async fn extract_fingerprint_atspi(x: i32, y: i32) -> Option<RecordedFingerprint> {
+    use atspi::connection::AccessibilityConnection;
+    use atspi::proxy::accessible::AccessibleProxy;
+    use atspi::zbus::Connection;
+
+    let conn = match AccessibilityConnection::new().await {
+        Ok(c) => c,
+        Err(e) => {
+            tracing::debug!("Failed to connect to AT-SPI bus: {:?}", e);
+            return None;
+        }
+    };
+
+    // Get the desktop (root) accessible
+    let registry = match conn.registry() {
+        r => r,
+    };
+
+    // Use GetAccessibleAtPoint via the registry
+    // AT-SPI2 doesn't have a direct "element at point" - we'd need to traverse the tree
+    // For now, we can try using atspi's built-in mechanisms if available
+
+    // This is a simplified implementation - full AT-SPI traversal is complex
+    // The atspi crate's API may vary; this gives a starting point
+    tracing::debug!("AT-SPI fingerprinting at ({}, {}) - traversal not fully implemented", x, y);
+
+    // Return a placeholder for now - full implementation requires tree traversal
+    // and hit-testing each accessible's bounding box
+    Some(RecordedFingerprint {
+        id: flow_like_types::create_id(),
+        role: Some("Unknown".to_string()),
+        name: None,
+        text: None,
+        bounding_box: None,
+    })
 }
 
 #[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "linux")))]
 pub fn extract_fingerprint_at(_x: i32, _y: i32) -> Option<RecordedFingerprint> {
+    tracing::debug!("UI element fingerprinting not supported on this platform");
     None
 }

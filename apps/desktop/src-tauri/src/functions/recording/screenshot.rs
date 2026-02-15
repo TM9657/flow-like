@@ -8,10 +8,11 @@ use crate::functions::TauriFunctionError;
 /// Capture a region around the given coordinates and store it.
 ///
 /// The screenshot is stored under:
-/// - `apps/{app_id}/boards/{board_id}/storage/recordings/screenshots/{artifact_id}.png` if both IDs are provided
+/// - `apps/{app_id}/upload/rpa/{board_id}/screenshots/{artifact_id}.png` if both IDs are provided
 /// - `recordings/screenshots/{artifact_id}.png` otherwise (fallback for offline/local)
 ///
-/// This matches the execution storage path structure (from_storage_dir returns board_dir/storage).
+/// This matches the execution upload path structure: get_upload_dir() returns board_dir/upload
+/// where board_dir = apps/{app_id}.
 /// Returns the artifact_id which can be used to construct the full path later.
 pub async fn capture_region(
     x: i32,
@@ -34,36 +35,43 @@ pub async fn capture_region(
             .capture_image()
             .map_err(|e| TauriFunctionError::new(&e.to_string()))?;
 
-        let half = (region_size / 2) as i32;
+        // On HiDPI displays (e.g. macOS Retina), capture_image() returns a
+        // physical-resolution image but monitor x/y/width/height are logical.
+        // Scale logical coordinates to physical pixels for correct cropping.
+        let scale = monitor.scale_factor().unwrap_or(1.0);
+
         let monitor_x = monitor.x().unwrap_or(0);
         let monitor_y = monitor.y().unwrap_or(0);
 
-        let rel_x = x - monitor_x;
-        let rel_y = y - monitor_y;
+        let rel_x = ((x - monitor_x) as f32 * scale) as i32;
+        let rel_y = ((y - monitor_y) as f32 * scale) as i32;
+        let scaled_half = (region_size as f32 * scale / 2.0) as i32;
+        let scaled_region = (region_size as f32 * scale) as u32;
 
-        let rx = (rel_x - half).max(0) as u32;
-        let ry = (rel_y - half).max(0) as u32;
+        let rx = (rel_x - scaled_half).max(0) as u32;
+        let ry = (rel_y - scaled_half).max(0) as u32;
 
         let max_width = screenshot.width().saturating_sub(rx);
         let max_height = screenshot.height().saturating_sub(ry);
-        let crop_width = region_size.min(max_width);
-        let crop_height = region_size.min(max_height);
+        let crop_width = scaled_region.min(max_width);
+        let crop_height = scaled_region.min(max_height);
 
         let dynamic_img = DynamicImage::ImageRgba8(screenshot);
         let cropped = dynamic_img.crop_imm(rx, ry, crop_width, crop_height);
 
+        tracing::debug!(
+            "Screenshot capture: click=({}, {}), scale={}, cropped={}x{} (physical pixels)",
+            x, y, scale, crop_width, crop_height
+        );
+
         let artifact_id = flow_like_types::create_id();
 
-        // Store under apps/{app_id}/boards/{board_id}/storage structure (matches from_storage_dir)
         let path = match (app_id, board_id) {
             (Some(aid), Some(bid)) => Path::from(format!(
-                "apps/{}/boards/{}/storage/recordings/screenshots/{}.png",
+                "apps/{}/upload/rpa/{}/screenshots/{}.png",
                 aid, bid, artifact_id
             )),
-            _ => {
-                // Fallback for local/offline recording
-                Path::from(format!("recordings/screenshots/{}.png", artifact_id))
-            }
+            _ => Path::from(format!("recordings/screenshots/{}.png", artifact_id)),
         };
 
         let mut bytes = Vec::new();
@@ -78,7 +86,7 @@ pub async fn capture_region(
             .await
             .map_err(|e| TauriFunctionError::new(&e.to_string()))?;
 
-        println!("[Screenshot] Saved screenshot to: {}", path);
+        tracing::debug!(" Saved screenshot to: {}", path);
 
         Ok(artifact_id)
     }

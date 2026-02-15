@@ -22,7 +22,7 @@ impl NodeLogic for TryCatchNode {
         let mut node = Node::new(
             "rpa_try_catch",
             "Try Catch",
-            "Catches errors from automation actions",
+            "Catches errors from automation actions. WARNING: This node reads error_occurred as a plain boolean input -- it does not actually intercept panics or Result::Err from downstream nodes. True try/catch semantics require executor-level support.",
             "Automation/RPA",
         );
         node.add_icon("/flow/icons/rpa.svg");

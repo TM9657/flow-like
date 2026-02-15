@@ -354,8 +354,8 @@ impl RecordingStateInner {
         }
 
         let text = std::mem::take(&mut self.keystroke_buffer);
-        println!(
-            "[RecordingState] Flushing keystroke buffer: '{}' ({} chars)",
+        tracing::debug!(
+            "Flushing keystroke buffer: '{}' ({} chars)",
             text,
             text.len()
         );

@@ -63,32 +63,56 @@ pub struct EventCapture {
     active: Arc<std::sync::atomic::AtomicBool>,
 }
 
+/// Shared sender for the singleton rdev listener thread.
+/// The rdev thread is spawned once and reused across recording sessions,
+/// because `rdev::listen()` blocks forever and cannot be cancelled.
+static RDEV_SENDER: std::sync::OnceLock<
+    std::sync::Mutex<Option<mpsc::Sender<CapturedEvent>>>,
+> = std::sync::OnceLock::new();
+
 impl EventCapture {
     pub fn new(
         state: Arc<RwLock<RecordingStateInner>>,
         app_handle: tauri::AppHandle,
         store: Option<Arc<FlowLikeStore>>,
     ) -> Self {
-        println!("[EventCapture] Creating new EventCapture instance");
+        tracing::debug!("Creating new EventCapture instance");
 
-        // Large buffer to prevent event loss during heavy activity
         let (tx, rx) = mpsc::channel::<CapturedEvent>(10000);
         let active = Arc::new(std::sync::atomic::AtomicBool::new(false));
         let active_clone = active.clone();
 
-        let event_tx = tx.clone();
-        println!("[EventCapture] Spawning event loop thread...");
-        std::thread::spawn(move || {
-            println!("[EventCapture] Event loop thread started");
-            Self::start_event_loop(event_tx, active_clone);
-            println!("[EventCapture] Event loop thread exited!");
+        // Install/replace the sender in the singleton rdev thread.
+        // The first call spawns the thread; subsequent calls just swap the sender.
+        let sender_slot = RDEV_SENDER.get_or_init(|| {
+            let slot = std::sync::Mutex::new(Some(tx.clone()));
+            let slot_ref = &RDEV_SENDER;
+
+            tracing::debug!("Spawning singleton rdev listener thread");
+            std::thread::spawn(move || {
+                // Wait until the slot is initialized by OnceLock
+                loop {
+                    if let Some(s) = slot_ref.get() {
+                        Self::start_event_loop_shared(s, active_clone);
+                        break;
+                    }
+                    std::thread::sleep(std::time::Duration::from_millis(1));
+                }
+                tracing::warn!("rdev listener thread exited unexpectedly");
+            });
+
+            slot
         });
+
+        // Replace the sender for subsequent sessions
+        if let Ok(mut guard) = sender_slot.lock() {
+            *guard = Some(tx.clone());
+        }
 
         let state_for_processor = state;
         let active_for_processor = active.clone();
-        println!("[EventCapture] Spawning event processor task...");
-        let processor_handle = flow_like_types::tokio::spawn(async move {
-            println!("[EventCapture] >>>>>> Event processor task ASYNC BLOCK STARTED <<<<<<");
+        tracing::debug!("Spawning event processor task...");
+        flow_like_types::tokio::spawn(async move {
             Self::process_events(
                 rx,
                 state_for_processor,
@@ -97,18 +121,13 @@ impl EventCapture {
                 store,
             )
             .await;
-            println!("[EventCapture] >>>>>> Event processor task ASYNC BLOCK EXITED <<<<<<");
         });
-        println!(
-            "[EventCapture] Processor task spawned with handle: {:?}",
-            processor_handle
-        );
 
         Self { _tx: tx, active }
     }
 
     pub fn set_active(&self, active: bool) {
-        println!("[EventCapture] set_active({})", active);
+        tracing::debug!("set_active({})", active);
         self.active
             .store(active, std::sync::atomic::Ordering::SeqCst);
     }
@@ -312,20 +331,19 @@ impl EventCapture {
     }
 
     #[cfg(any(target_os = "macos", target_os = "windows", target_os = "linux"))]
-    fn start_event_loop(
-        tx: mpsc::Sender<CapturedEvent>,
-        active: Arc<std::sync::atomic::AtomicBool>,
+    fn start_event_loop_shared(
+        _sender_slot: &std::sync::Mutex<Option<mpsc::Sender<CapturedEvent>>>,
+        _active: Arc<std::sync::atomic::AtomicBool>,
     ) {
         use rdev::{Event, EventType, Key, listen};
         use std::sync::atomic::{AtomicI32, Ordering};
 
-        println!("[EventCapture] start_event_loop: initializing rdev listener");
+        tracing::debug!("start_event_loop: initializing rdev listener");
 
-        // CRITICAL: Tell rdev we're not on the main thread to avoid TSM API crashes
         #[cfg(target_os = "macos")]
         {
             rdev::set_is_main_thread(false);
-            println!("[EventCapture] Set is_main_thread=false for macOS thread safety");
+            tracing::debug!("Set is_main_thread=false for macOS thread safety");
         }
 
         let mouse_x = Arc::new(AtomicI32::new(0));
@@ -343,16 +361,8 @@ impl EventCapture {
 
         let callback = move |event: Event| {
             let count = event_count_clone.fetch_add(1, Ordering::Relaxed);
-            if count % 100 == 0 {
-                println!(
-                    "[EventCapture] Received {} raw events, active={}",
-                    count,
-                    active.load(std::sync::atomic::Ordering::SeqCst)
-                );
-            }
-
-            if !active.load(std::sync::atomic::Ordering::SeqCst) {
-                return;
+            if count % 1000 == 0 {
+                tracing::trace!("rdev: processed {} raw events", count);
             }
 
             let captured = match event.event_type {
@@ -371,11 +381,26 @@ impl EventCapture {
 
                     let x = mouse_x.load(Ordering::Relaxed);
                     let y = mouse_y.load(Ordering::Relaxed);
+
+                    let mut mods = Vec::new();
+                    if shift_clone.load(Ordering::SeqCst) {
+                        mods.push(KeyModifier::Shift);
+                    }
+                    if ctrl_clone.load(Ordering::SeqCst) {
+                        mods.push(KeyModifier::Control);
+                    }
+                    if alt_clone.load(Ordering::SeqCst) {
+                        mods.push(KeyModifier::Alt);
+                    }
+                    if meta_clone.load(Ordering::SeqCst) {
+                        mods.push(KeyModifier::Meta);
+                    }
+
                     Some(CapturedEvent::MouseDown {
                         x,
                         y,
                         button: mouse_button,
-                        modifiers: vec![],
+                        modifiers: mods,
                     })
                 }
                 EventType::ButtonRelease(button) => {
@@ -578,26 +603,29 @@ impl EventCapture {
             };
 
             if let Some(captured) = captured {
-                println!("[EventCapture] Sending captured event: {:?}", captured);
-                if let Err(e) = tx.blocking_send(captured) {
-                    println!("[EventCapture] Failed to send event: {:?}", e);
+                if let Some(slot) = RDEV_SENDER.get() {
+                    if let Ok(guard) = slot.lock() {
+                        if let Some(tx) = guard.as_ref() {
+                            let _ = tx.blocking_send(captured);
+                        }
+                    }
                 }
             }
         };
 
-        println!("[EventCapture] Starting rdev::listen...");
+        tracing::debug!("Starting rdev::listen...");
         if let Err(error) = listen(callback) {
-            println!("[EventCapture] rdev::listen returned error: {:?}", error);
+            tracing::warn!("rdev::listen returned error: {:?}", error);
         }
-        println!("[EventCapture] rdev::listen exited");
+        tracing::warn!("rdev::listen exited unexpectedly");
     }
 
     #[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "linux")))]
-    fn start_event_loop(
-        _tx: mpsc::Sender<CapturedEvent>,
+    fn start_event_loop_shared(
+        _sender_slot: &std::sync::Mutex<Option<mpsc::Sender<CapturedEvent>>>,
         _active: Arc<std::sync::atomic::AtomicBool>,
     ) {
-        println!("[EventCapture] Event capture not available on this platform");
+        tracing::debug!("Event capture not available on this platform");
     }
 
     /// Get the currently focused window using xcap
@@ -638,8 +666,8 @@ impl EventCapture {
         .ok()
         .flatten();
 
-        println!(
-            "[EventCapture] get_mouse_location() (CGEvent) returned: {:?}",
+        tracing::debug!(
+" get_mouse_location() (CGEvent) returned: {:?}",
             result
         );
         result
@@ -659,7 +687,7 @@ impl EventCapture {
         .ok()
         .flatten();
 
-        println!("[EventCapture] get_mouse_location() returned: {:?}", result);
+        tracing::debug!(" get_mouse_location() returned: {:?}", result);
         result
     }
 
@@ -676,7 +704,7 @@ impl EventCapture {
         .ok()
         .flatten();
 
-        println!("[EventCapture] get_mouse_location() returned: {:?}", result);
+        tracing::debug!(" get_mouse_location() returned: {:?}", result);
         result
     }
 
@@ -706,7 +734,7 @@ impl EventCapture {
         app_handle: tauri::AppHandle,
         store: Option<Arc<FlowLikeStore>>,
     ) {
-        let mut last_mouse_down: Option<(i32, i32, MouseButton, std::time::Instant)> = None;
+        let mut last_mouse_down: Option<(i32, i32, MouseButton, Vec<KeyModifier>, std::time::Instant)> = None;
         let mut drag_start: Option<(i32, i32)> = None;
         let mut last_focused_window: Option<FocusedWindow> = None;
 
@@ -718,23 +746,23 @@ impl EventCapture {
         let mut pending_copy_key: Option<String> = None;
         const DOUBLE_CLICK_DISTANCE: i32 = 10; // Pixels
 
-        println!(
-            "[EventCapture] process_events: store available: {}",
+        tracing::debug!(
+" process_events: store available: {}",
             store.is_some()
         );
-        println!("[EventCapture] process_events: waiting for events...");
+        tracing::debug!(" process_events: waiting for events...");
 
         // Check session info
         {
             let state_guard = state.read().await;
             if let Some(session) = &state_guard.session {
-                println!("[EventCapture] Session ID: {}", session.id);
-                println!(
-                    "[EventCapture] Target board ID: {:?}",
+                tracing::debug!(" Session ID: {}", session.id);
+                tracing::debug!(
+" Target board ID: {:?}",
                     session.target_board_id
                 );
             } else {
-                println!("[EventCapture] WARNING: No session in state!");
+                tracing::warn!(" No session in state!");
             }
         }
 
@@ -744,7 +772,7 @@ impl EventCapture {
         // Reduce dedup interval - only skip very rapid duplicate non-click events
         let min_event_interval = std::time::Duration::from_millis(5);
 
-        println!("[EventCapture] About to enter event loop...");
+        tracing::debug!(" About to enter event loop...");
         while let Some(event) = rx.recv().await {
             processed_count += 1;
 
@@ -763,15 +791,15 @@ impl EventCapture {
             last_event_time = now;
 
             if processed_count % 10 == 1 {
-                println!(
-                    "[EventCapture] Received event #{}: {:?}",
+                tracing::debug!(
+" Received event #{}: {:?}",
                     processed_count, event
                 );
             }
 
             if !active.load(std::sync::atomic::Ordering::SeqCst) {
-                println!(
-                    "[EventCapture] Skipping event #{} - not active",
+                tracing::debug!(
+" Skipping event #{} - not active",
                     processed_count
                 );
                 continue;
@@ -780,8 +808,8 @@ impl EventCapture {
             {
                 let state_guard = state.read().await;
                 if state_guard.status != RecordingStatus::Recording {
-                    println!(
-                        "[EventCapture] Skipping event #{} - status is {:?}",
+                    tracing::debug!(
+" Skipping event #{} - status is {:?}",
                         processed_count, state_guard.status
                     );
                     continue;
@@ -804,8 +832,8 @@ impl EventCapture {
                 if focus_changed
                     && (!current_window.title.is_empty() || !current_window.process.is_empty())
                 {
-                    println!(
-                        "[EventCapture] Window focus changed to: {} ({})",
+                    tracing::debug!(
+" Window focus changed to: {} ({})",
                         current_window.title, current_window.process
                     );
 
@@ -837,15 +865,15 @@ impl EventCapture {
             }
 
             match &event {
-                CapturedEvent::MouseDown { x, y, button, .. } => {
-                    last_mouse_down = Some((*x, *y, button.clone(), std::time::Instant::now()));
+                CapturedEvent::MouseDown { x, y, button, modifiers } => {
+                    last_mouse_down = Some((*x, *y, button.clone(), modifiers.clone(), std::time::Instant::now()));
                     drag_start = Some((*x, *y));
                 }
                 CapturedEvent::MouseUp { x, y, button } => {
                     // Get fresh coordinates from enigo for accuracy (aligns with screenshot capture)
                     let (fresh_x, fresh_y) = Self::get_mouse_location().unwrap_or((*x, *y));
-                    println!(
-                        "[EventCapture] MouseUp: rdev coords=({}, {}), fresh coords=({}, {})",
+                    tracing::debug!(
+" MouseUp: rdev coords=({}, {}), fresh coords=({}, {})",
                         x, y, fresh_x, fresh_y
                     );
                     let (x, y) = (fresh_x, fresh_y);
@@ -877,8 +905,8 @@ impl EventCapture {
                         let mut state_guard = state.write().await;
                         state_guard.add_action(action.clone());
                         action_count += 1;
-                        println!(
-                            "[EventCapture] Drag action #{} added from ({}, {}) to ({}, {})",
+                        tracing::debug!(
+" Drag action #{} added from ({}, {}) to ({}, {})",
                             action_count, start_x, start_y, x, y
                         );
                         let _ = app_handle.emit("recording:action", &action);
@@ -973,11 +1001,15 @@ impl EventCapture {
                             // Clear to prevent triple-click
                             last_completed_click = None;
                         } else {
+                            let click_modifiers = last_mouse_down
+                                .as_ref()
+                                .map(|(_, _, _, mods, _)| mods.clone())
+                                .unwrap_or_default();
                             let mut action = RecordedAction::new(
                                 flow_like_types::create_id(),
                                 ActionType::Click {
                                     button: button.clone(),
-                                    modifiers: vec![],
+                                    modifiers: click_modifiers,
                                 },
                             )
                             .with_coordinates(x, y);
@@ -1014,6 +1046,10 @@ impl EventCapture {
                     let mut state_guard = state.write().await;
                     state_guard.flush_keystroke_buffer();
 
+                    // Determine scroll direction and amount.
+                    // rdev convention: positive dy = scroll down, negative dy = scroll up
+                    // (matches macOS "natural" scrolling inverted at driver level).
+                    // Positive dx = scroll right, negative dx = scroll left.
                     let (direction, amount) = if dy.abs() >= dx.abs() && *dy != 0 {
                         if *dy > 0 {
                             (ScrollDirection::Down, *dy)
@@ -1040,8 +1076,8 @@ impl EventCapture {
                     let _ = app_handle.emit("recording:action", &action);
                 }
                 CapturedEvent::KeyDown { key, modifiers } => {
-                    println!(
-                        "[EventCapture] KeyDown: key='{}', modifiers={:?}",
+                    tracing::debug!(
+" KeyDown: key='{}', modifiers={:?}",
                         key, modifiers
                     );
 
@@ -1097,14 +1133,14 @@ impl EventCapture {
                     let is_copy = has_cmd_or_ctrl && key.to_lowercase() == "c";
                     let is_paste = has_cmd_or_ctrl && key.to_lowercase() == "v";
 
-                    println!(
-                        "[EventCapture] KeyDown analysis: has_cmd_or_ctrl={}, is_copy={}, is_paste={}",
+                    tracing::debug!(
+" KeyDown analysis: has_cmd_or_ctrl={}, is_copy={}, is_paste={}",
                         has_cmd_or_ctrl, is_copy, is_paste
                     );
 
                     // For Copy, defer clipboard reading until KeyUp (system processes copy after KeyDown)
                     if is_copy {
-                        println!("[EventCapture] Setting pending_copy_key to '{}'", key);
+                        tracing::debug!(" Setting pending_copy_key to '{}'", key);
                         pending_copy_key = Some(key.clone());
                         continue;
                     }
@@ -1121,8 +1157,8 @@ impl EventCapture {
                         let action = if is_paste {
                             // For paste, clipboard already has content - read immediately
                             let clipboard_content = Self::get_clipboard_text();
-                            println!(
-                                "[EventCapture] Paste detected, clipboard: {:?}",
+                            tracing::debug!(
+" Paste detected, clipboard: {:?}",
                                 clipboard_content.as_ref().map(|s| if s.len() > 50 {
                                     format!("{}...", &s[..50])
                                 } else {
@@ -1151,34 +1187,41 @@ impl EventCapture {
 
                         state_guard.add_action(action.clone());
                         action_count += 1;
-                        println!(
-                            "[EventCapture] KeyPress action #{} added: {:?}",
+                        tracing::debug!(
+" KeyPress action #{} added: {:?}",
                             action_count, action.action_type
                         );
                         let _ = app_handle.emit("recording:action", &action);
                     }
                 }
                 CapturedEvent::KeyUp { key } => {
-                    println!(
-                        "[EventCapture] KeyUp: key='{}', pending_copy_key={:?}",
+                    tracing::debug!(
+" KeyUp: key='{}', pending_copy_key={:?}",
                         key, pending_copy_key
                     );
 
                     // Handle deferred Copy detection - clipboard is now populated
                     let pending_matches = pending_copy_key.as_ref().map(|k| k.to_lowercase())
                         == Some(key.to_lowercase());
-                    println!("[EventCapture] KeyUp: pending_matches={}", pending_matches);
+                    tracing::debug!(" KeyUp: pending_matches={}", pending_matches);
 
                     if pending_matches {
                         pending_copy_key = None;
 
-                        // Small delay to ensure clipboard is fully populated
-                        flow_like_types::tokio::time::sleep(std::time::Duration::from_millis(50))
+                        // Retry clipboard read with increasing delay to handle OS clipboard latency
+                        let mut clipboard_content = None;
+                        for delay in [50, 100, 200] {
+                            flow_like_types::tokio::time::sleep(
+                                std::time::Duration::from_millis(delay),
+                            )
                             .await;
-
-                        let clipboard_content = Self::get_clipboard_text();
-                        println!(
-                            "[EventCapture] Copy detected (on KeyUp), clipboard: {:?}",
+                            clipboard_content = Self::get_clipboard_text();
+                            if clipboard_content.is_some() {
+                                break;
+                            }
+                        }
+                        tracing::debug!(
+" Copy detected (on KeyUp), clipboard: {:?}",
                             clipboard_content.as_ref().map(|s| if s.len() > 50 {
                                 format!("{}...", &s[..50])
                             } else {
@@ -1198,7 +1241,7 @@ impl EventCapture {
 
                         state_guard.add_action(action.clone());
                         action_count += 1;
-                        println!("[EventCapture] Copy action #{} added", action_count);
+                        tracing::debug!(" Copy action #{} added", action_count);
                         let _ = app_handle.emit("recording:action", &action);
                     }
                 }
@@ -1210,8 +1253,8 @@ impl EventCapture {
                     state_guard.buffer_keystroke(*ch);
                     // Log every 10th character for debugging without spam
                     if state_guard.keystroke_buffer_len() % 10 == 1 {
-                        println!(
-                            "[EventCapture] Buffered char '{}', buffer len: {}",
+                        tracing::debug!(
+" Buffered char '{}', buffer len: {}",
                             ch,
                             state_guard.keystroke_buffer_len()
                         );
@@ -1229,14 +1272,14 @@ impl EventCapture {
                 }
             }
         }
-        println!("[EventCapture] ========== PROCESSOR LOOP EXITED ==========");
-        println!("[EventCapture] Total events processed: {}", processed_count);
-        println!("[EventCapture] Total actions created: {}", action_count);
+        tracing::debug!(" ========== PROCESSOR LOOP EXITED ==========");
+        tracing::debug!(" Total events processed: {}", processed_count);
+        tracing::debug!(" Total actions created: {}", action_count);
 
         let state_guard = state.read().await;
         if let Some(session) = &state_guard.session {
-            println!(
-                "[EventCapture] Session has {} actions at processor exit",
+            tracing::debug!(
+" Session has {} actions at processor exit",
                 session.actions.len()
             );
         }
