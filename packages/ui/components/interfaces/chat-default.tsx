@@ -719,20 +719,27 @@ export const ChatInterfaceMemoized = memo(function ChatInterface({
 			return;
 		}
 
-		const responseMessage: IMessage = {
-			id: createId(),
-			sessionId: sessionIdParameter,
-			appId,
-			files: [],
-			inner: {
-				role: IRole.Assistant,
-				content: "",
-			},
-			explicit_name: event.name,
-			timestamp: Date.now(),
-			tools: [],
-			actions: [],
-		};
+		// Reuse the last assistant message from Dexie if it exists (e.g. from incremental save)
+		// to avoid creating a duplicate when reconnecting to an active stream
+		const currentMessages = messagesRef.current;
+		const lastMsg = currentMessages[currentMessages.length - 1];
+		const responseMessage: IMessage =
+			lastMsg?.inner.role === IRole.Assistant
+				? { ...lastMsg }
+				: {
+						id: createId(),
+						sessionId: sessionIdParameter,
+						appId,
+						files: [],
+						inner: {
+							role: IRole.Assistant,
+							content: "",
+						},
+						explicit_name: event.name,
+						timestamp: Date.now(),
+						tools: [],
+						actions: [],
+					};
 
 		let intermediateResponse = Response.default();
 		const attachments: Map<string, IAttachment> = new Map();
