@@ -402,6 +402,15 @@ posthog.init('phc_hxGZEJaPqyCNzqqfrYyuUDCUSpcc7RSbwh07t4xtfrE', { api_host:'http
 							],
 						},
 						{
+							label: "Client SDKs",
+							collapsed: false,
+							items: [
+								{ label: "Overview", slug: "dev/sdks/overview" },
+								{ label: "Node.js / TypeScript", slug: "dev/sdks/nodejs" },
+								{ label: "Python", slug: "dev/sdks/python" },
+							],
+						},
+						{
 							label: "A2UI Development",
 							collapsed: true,
 							autogenerate: { directory: "dev/a2ui" },
