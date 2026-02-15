@@ -20,13 +20,12 @@ function normalizeApiBaseUrl(apiBaseUrl?: string | null): string | undefined {
 		return undefined;
 	}
 
-	const normalized = trimmed.startsWith("http://") || trimmed.startsWith("https://")
-		? trimmed
-		: `https://${trimmed}`;
+	const normalized =
+		trimmed.startsWith("http://") || trimmed.startsWith("https://")
+			? trimmed
+			: `https://${trimmed}`;
 
-	return normalized.endsWith("/")
-		? normalized.slice(0, -1)
-		: normalized;
+	return normalized.endsWith("/") ? normalized.slice(0, -1) : normalized;
 }
 
 export function getDefaultOAuthApiBaseUrl(): string {

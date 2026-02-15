@@ -95,8 +95,12 @@ function nativeInsets(): { top: number; bottom: number } {
 		FlowLikeInsets?: { getTopPx(): number; getBottomPx(): number };
 	};
 
-	let top = typeof w.__FL_NATIVE_SAFE_TOP === "number" ? w.__FL_NATIVE_SAFE_TOP : 0;
-	let bottom = typeof w.__FL_NATIVE_SAFE_BOTTOM === "number" ? w.__FL_NATIVE_SAFE_BOTTOM : 0;
+	let top =
+		typeof w.__FL_NATIVE_SAFE_TOP === "number" ? w.__FL_NATIVE_SAFE_TOP : 0;
+	let bottom =
+		typeof w.__FL_NATIVE_SAFE_BOTTOM === "number"
+			? w.__FL_NATIVE_SAFE_BOTTOM
+			: 0;
 
 	if (w.FlowLikeInsets) {
 		try {
@@ -105,7 +109,9 @@ function nativeInsets(): { top: number; bottom: number } {
 			const bridgeBottom = Math.ceil(w.FlowLikeInsets.getBottomPx() / dpr);
 			top = Math.max(top, bridgeTop);
 			bottom = Math.max(bottom, bridgeBottom);
-		} catch { /* bridge not ready yet */ }
+		} catch {
+			/* bridge not ready yet */
+		}
 	}
 
 	return { top, bottom };
@@ -116,7 +122,11 @@ function applySafeAreaInsets() {
 	const native = nativeInsets();
 
 	const top = clamp(Math.max(env.top, native.top), 0, MAX_SAFE_TOP_PX);
-	const bottom = clamp(Math.max(env.bottom, native.bottom), 0, MAX_SAFE_BOTTOM_PX);
+	const bottom = clamp(
+		Math.max(env.bottom, native.bottom),
+		0,
+		MAX_SAFE_BOTTOM_PX,
+	);
 
 	if (top > appliedSafeTop || (appliedSafeTop === 0 && top > 0)) {
 		appliedSafeTop = top;
@@ -190,11 +200,11 @@ export function IOSWebviewHardening() {
 			});
 		};
 
-		history.pushState = function (...args: Parameters<typeof origPushState>) {
+		history.pushState = (...args: Parameters<typeof origPushState>) => {
 			origPushState(...args);
 			onNavigation();
 		};
-		history.replaceState = function (...args: Parameters<typeof origReplaceState>) {
+		history.replaceState = (...args: Parameters<typeof origReplaceState>) => {
 			origReplaceState(...args);
 			onNavigation();
 		};
@@ -209,14 +219,8 @@ export function IOSWebviewHardening() {
 			history.pushState = origPushState;
 			history.replaceState = origReplaceState;
 			window.removeEventListener("popstate", onNavigation);
-			window.visualViewport?.removeEventListener(
-				"resize",
-				syncViewportHeight,
-			);
-			window.visualViewport?.removeEventListener(
-				"scroll",
-				syncViewportHeight,
-			);
+			window.visualViewport?.removeEventListener("resize", syncViewportHeight);
+			window.visualViewport?.removeEventListener("scroll", syncViewportHeight);
 			window.removeEventListener("orientationchange", handleOrientation);
 			window.removeEventListener("resize", syncViewportHeight);
 		};

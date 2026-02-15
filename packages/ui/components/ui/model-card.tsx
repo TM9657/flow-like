@@ -757,22 +757,27 @@ interface IEmbeddingProviderParamsWithRemote {
 	remote?: IRemoteExecutionConfig;
 }
 
-type IEmbeddingModelParametersWithRemote = Partial<IEmbeddingModelParameters> & {
-	remote?: IRemoteExecutionConfig;
-	provider?:
-		| (Partial<IEmbeddingModelParameters["provider"]> & {
-				params?: IEmbeddingProviderParamsWithRemote;
-		  })
-		| undefined;
-};
+type IEmbeddingModelParametersWithRemote =
+	Partial<IEmbeddingModelParameters> & {
+		remote?: IRemoteExecutionConfig;
+		provider?:
+			| (Partial<IEmbeddingModelParameters["provider"]> & {
+					params?: IEmbeddingProviderParamsWithRemote;
+			  })
+			| undefined;
+	};
 
 export function isEmbeddingBit(bit: IBit): boolean {
-	return bit.type === IBitTypes.Embedding || bit.type === IBitTypes.ImageEmbedding;
+	return (
+		bit.type === IBitTypes.Embedding || bit.type === IBitTypes.ImageEmbedding
+	);
 }
 
 export function supportsRemoteEmbeddingExecution(bit: IBit): boolean {
 	if (!isEmbeddingBit(bit)) return false;
-	const params = bit.parameters as IEmbeddingModelParametersWithRemote | undefined;
+	const params = bit.parameters as
+		| IEmbeddingModelParametersWithRemote
+		| undefined;
 	const remote = params?.remote ?? params?.provider?.params?.remote;
 	if (remote?.endpoint && remote?.implementation) return true;
 

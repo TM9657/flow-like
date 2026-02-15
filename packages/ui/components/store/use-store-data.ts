@@ -1,21 +1,33 @@
 "use client";
 
-import { openUrl as open } from "@tauri-apps/plugin-opener";
-import {
-	type IApp,
-	IAppVisibility,
-	type IMetadata,
-	useBackend,
-	useInvoke,
-} from "@tm9657/flow-like-ui";
+import type { IApp } from "../../lib/schema/app/app";
+import { IAppVisibility } from "../../lib/schema/app/app";
+import type { IMetadata } from "../../lib/schema/bit/bit-pack";
+import type { IEventMapping } from "../interfaces/interfaces";
+import { useBackend } from "../../state/backend-state";
+import { useInvoke } from "../../hooks/use-invoke";
 import type { AppRouterInstance } from "next/dist/shared/lib/app-router-context.shared-runtime";
 import { useCallback, useMemo, useState } from "react";
 import { toast } from "sonner";
-import { EVENT_CONFIG } from "../../../lib/event-config";
+
+async function openCheckoutUrl(url: string) {
+	if (
+		typeof window !== "undefined" &&
+		"__TAURI__" in window
+	) {
+		const { openUrl } = await import("@tauri-apps/plugin-opener");
+		await openUrl(url);
+		toast.info("Opening checkout in your browser...");
+	} else {
+		window.open(url, "_blank");
+		toast.info("Opening checkout in a new tab...");
+	}
+}
 
 export function useStoreData(
 	id: string | undefined,
 	router: AppRouterInstance,
+	eventConfig: IEventMapping,
 ) {
 	const backend = useBackend();
 	const [isPurchasing, setIsPurchasing] = useState(false);
@@ -50,14 +62,14 @@ export function useStoreData(
 	);
 	const usableEvents = useMemo(() => {
 		const set = new Set<string>();
-		Object.values(EVENT_CONFIG).forEach((config) => {
+		Object.values(eventConfig).forEach((config) => {
 			const usable = Object.keys(config.useInterfaces);
 			for (const eventType of usable) {
 				if (config.eventTypes.includes(eventType)) set.add(eventType);
 			}
 		});
 		return set;
-	}, []);
+	}, [eventConfig]);
 	const useAppHref = useMemo(() => {
 		if (!id || !isMember) return null;
 
@@ -69,7 +81,9 @@ export function useStoreData(
 		const hasUsableRoute = (routes.data ?? []).some((route) => {
 			const routeEvent = activeEventsById.get(route.eventId);
 			if (!routeEvent) return false;
-			return !!routeEvent.default_page_id || usableEvents.has(routeEvent.event_type);
+			return (
+				!!routeEvent.default_page_id || usableEvents.has(routeEvent.event_type)
+			);
 		});
 		if (hasUsableRoute) {
 			return `/use?id=${id}`;
@@ -114,9 +128,7 @@ export function useStoreData(
 			}
 
 			if (result.checkoutUrl) {
-				// Open checkout in system browser (desktop)
-				await open(result.checkoutUrl);
-				toast.info("Opening checkout in your browser...");
+				await openCheckoutUrl(result.checkoutUrl);
 			} else {
 				toast.error("Unable to start purchase. Please try again.");
 			}
@@ -168,6 +180,7 @@ export function useStoreData(
 		}
 	}, [app.data, id, backend.appState, apps, router, onBuy]);
 
+	const hasThumbnail = !!meta.data?.thumbnail;
 	const coverUrl = meta.data?.thumbnail || "/placeholder-thumbnail.webp";
 	const iconUrl = meta.data?.icon || "/app-logo.webp";
 	const appName = meta.data?.name || app.data?.id || "App";
@@ -179,6 +192,7 @@ export function useStoreData(
 		meta,
 		isMember,
 		isPurchasing,
+		hasThumbnail,
 		coverUrl,
 		iconUrl,
 		appName,

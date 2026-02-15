@@ -553,7 +553,7 @@ export const ChatInterfaceMemoized = memo(function ChatInterface({
 						console.log("Open chat history");
 					}}
 				>
-					<div className="flex items-center gap-2 text-sm font-medium">
+					<div className="flex items-center gap-2 text-sm font-medium" style={{paddingTop: "var(--fl-safe-top, env(safe-area-inset-top, 0px))"}}>
 						<HistoryIcon className="w-3 h-3" />
 						Chat History
 					</div>
@@ -950,7 +950,9 @@ export const ChatInterfaceMemoized = memo(function ChatInterface({
 
 			// Clear stale completion tracking so this stream's completion is processed
 			processedCompletedStreams.current.delete(streamId);
-			reconnectSubscribed.current.delete(`chat-reconnect-${sessionIdParameter}`);
+			reconnectSubscribed.current.delete(
+				`chat-reconnect-${sessionIdParameter}`,
+			);
 
 			// Create incremental save function for robust message persistence
 			// This saves the message every N events to prevent data loss
@@ -1129,7 +1131,10 @@ export const ChatInterfaceMemoized = memo(function ChatInterface({
 
 			// Show loading state if sending from welcome screen
 			const hasFiles = (filesAttached && filesAttached.length > 0) || audioFile;
-			if (hasFiles && (!messagesRef.current || messagesRef.current.length === 0)) {
+			if (
+				hasFiles &&
+				(!messagesRef.current || messagesRef.current.length === 0)
+			) {
 				setIsSendingFromWelcome(true);
 			}
 
@@ -1172,7 +1177,9 @@ export const ChatInterfaceMemoized = memo(function ChatInterface({
 			{!messagesLoaded ? (
 				<div className="flex flex-col items-center justify-center h-full gap-3">
 					<Loader2Icon className="w-6 h-6 animate-spin text-muted-foreground" />
-					<p className="text-sm text-muted-foreground">Loading conversation...</p>
+					<p className="text-sm text-muted-foreground">
+						Loading conversation...
+					</p>
 				</div>
 			) : showWelcome ? (
 				<ChatWelcome

@@ -374,7 +374,9 @@ export default function Id({
 		const hasUsableRoute = (routes.data ?? []).some((route) => {
 			const routeEvent = activeEventsById.get(route.eventId);
 			if (!routeEvent) return false;
-			return !!routeEvent.default_page_id || usableEvents.has(routeEvent.event_type);
+			return (
+				!!routeEvent.default_page_id || usableEvents.has(routeEvent.event_type)
+			);
 		});
 
 		if (hasUsableRoute) {
@@ -423,11 +425,7 @@ export default function Id({
 					: []),
 			],
 		});
-	}, [
-		metadata.data?.name,
-		metadata.isFetching,
-		useAppHref,
-	]);
+	}, [metadata.data?.name, metadata.isFetching, useAppHref]);
 
 	const strength = useMemo(() => {
 		if (!encrypt) return 0;

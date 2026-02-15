@@ -52,6 +52,9 @@
 		"license": "cd src-tauri && cargo license -j > ./assets/licenses.json && cd .. && bunx license-report --output=json > src-tauri/assets/licenses-node.json && bun run ./tools/license-bundle.ts"
 	},
 	"workspaces": ["packages/*", "apps/*"],
+	"overrides": {
+		"@sentry/nextjs": "^10.38.0"
+	},
 	"devDependencies": {
 		"@biomejs/biome": "1.9.4",
 		"dotenv-cli": "^8.0.0",

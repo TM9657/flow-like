@@ -58,7 +58,10 @@ export const useLogAggregation = create<ILogAggregationState>((set, get) => ({
 				filter.limit,
 			);
 
-			set({ currentLogs: runs.toSorted((a, b) => b.start - a.start), isLoading: false });
+			set({
+				currentLogs: runs.toSorted((a, b) => b.start - a.start),
+				isLoading: false,
+			});
 		} catch {
 			set({ isLoading: false });
 		}
@@ -88,7 +91,10 @@ export const useLogAggregation = create<ILogAggregationState>((set, get) => ({
 				filter.limit,
 			);
 
-			set({ currentLogs: runs.toSorted((a, b) => b.start - a.start), isLoading: false });
+			set({
+				currentLogs: runs.toSorted((a, b) => b.start - a.start),
+				isLoading: false,
+			});
 		} catch {
 			set({ isLoading: false });
 		}

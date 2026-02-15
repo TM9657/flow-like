@@ -33,8 +33,8 @@ tauri = { version = "2.9.5", features = [
 ] }
 window-vibrancy = "0.6.0"
 anyhow = "1.0.95"
-sentry = { version = "0.42.0", default-features = false, features = ["anyhow", "backtrace", "contexts", "debug-images", "panic", "release-health", "reqwest", "rustls", "tokio"] }
-sentry-tracing = "0.42.0"
+sentry.workspace = true
+sentry-tracing.workspace = true
 tracing-subscriber = { version = "0.3.19", features = ["env-filter", "json"] }
 tracing = { version = "0.1.41", features = ["async-await", "attributes"] }
 dirs-next.workspace = true

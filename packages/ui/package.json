@@ -97,7 +97,7 @@
 		"@radix-ui/react-tooltip": "^1.2.7",
 		"@react-three/drei": "^10.7.7",
 		"@react-three/fiber": "^9.5.0",
-		"@sentry/nextjs": "^9.39.0",
+		"@sentry/nextjs": "^10.38.0",
 		"@shikijs/colorized-brackets": "^1.26.1",
 		"@shikijs/rehype": "^1.26.1",
 		"@shikijs/transformers": "^1.26.1",

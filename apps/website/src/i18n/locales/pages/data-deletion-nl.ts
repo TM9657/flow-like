@@ -32,8 +32,7 @@ export const nlDataDeletion = {
 
 	// Pad 2: Met account
 	"dataDeletion.withAccount.title": "Met account",
-	"dataDeletion.withAccount.subtitle":
-		"Flow-Like-cloudfuncties gebruiken",
+	"dataDeletion.withAccount.subtitle": "Flow-Like-cloudfuncties gebruiken",
 	"dataDeletion.withAccount.badge": "Verwijderingsverzoek vereist",
 	"dataDeletion.withAccount.description":
 		"Als u een account hebt aangemaakt of cloudservices gebruikt, slaan we bepaalde gegevens op die op verzoek verwijderd kunnen worden.",
@@ -60,15 +59,13 @@ export const nlDataDeletion = {
 		"We volgen uw surfgedrag buiten onze diensten niet",
 
 	// Verwijderingsstappen
-	"dataDeletion.withAccount.howToDelete":
-		"Hoe u verwijdering kunt aanvragen",
+	"dataDeletion.withAccount.howToDelete": "Hoe u verwijdering kunt aanvragen",
 	"dataDeletion.withAccount.step1": "Stuur een e-mail naar",
 	"dataDeletion.withAccount.step1Email": "privacy@flow-like.com",
 	"dataDeletion.withAccount.step1Detail":
 		"vanaf het e-mailadres dat aan uw account is gekoppeld",
 	"dataDeletion.withAccount.step2": "Gebruik als onderwerp:",
-	"dataDeletion.withAccount.step2Subject":
-		"Verzoek tot gegevensverwijdering",
+	"dataDeletion.withAccount.step2Subject": "Verzoek tot gegevensverwijdering",
 	"dataDeletion.withAccount.step3":
 		"Bevestig in de e-mail dat u wilt dat al uw persoonlijke gegevens worden verwijderd",
 	"dataDeletion.withAccount.processingTime":
