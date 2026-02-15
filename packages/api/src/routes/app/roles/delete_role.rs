@@ -85,5 +85,9 @@ pub async fn delete_role(
 
     txn.commit().await?;
 
+    if let Err(e) = state.invalidate_role_permissions(&role_id, &app_id).await {
+        tracing::warn!(error = %e, "Failed to invalidate permission cache after role deletion");
+    }
+
     Ok(Json(()))
 }
