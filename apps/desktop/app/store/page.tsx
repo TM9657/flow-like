@@ -1,15 +1,18 @@
 "use client";
 
-import { TextEditor } from "@tm9657/flow-like-ui";
+import {
+	AboutSection,
+	HeroSkeleton,
+	StoreEmptyState,
+	StoreHero,
+	StoreRecommendations,
+	TextEditor,
+	useStoreData,
+} from "@tm9657/flow-like-ui";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect } from "react";
 import { toast } from "sonner";
-import { AboutSection } from "./components/AboutSection";
-import { StoreHero } from "./components/StoreHero";
-import { DetailsCard } from "./components/StoreInfo";
-import { StoreRecommendations } from "./components/StoreRecommendations";
-import { EmptyState, HeroSkeleton } from "./components/StoreSkeletons";
-import { useStoreData } from "./components/useStoreData";
+import { EVENT_CONFIG } from "../../lib/event-config";
 
 export default function Page() {
 	const searchParams = useSearchParams();
@@ -22,6 +25,7 @@ export default function Page() {
 		meta,
 		isMember,
 		isPurchasing,
+		hasThumbnail,
 		coverUrl,
 		iconUrl,
 		appName,
@@ -31,9 +35,8 @@ export default function Page() {
 		onSettings,
 		onBuy,
 		onJoinOrRequest,
-	} = useStoreData(id, router);
+	} = useStoreData(id, router, EVENT_CONFIG);
 
-	// Handle purchase result from Stripe redirect
 	useEffect(() => {
 		if (!purchaseStatus) return;
 
@@ -41,13 +44,11 @@ export default function Page() {
 			toast.success("Purchase successful! You now have access to this app.", {
 				duration: 5000,
 			});
-			// Refresh apps list to reflect new membership
 			apps.refetch?.();
 		} else if (purchaseStatus === "canceled") {
 			toast.info("Purchase was canceled. You can try again anytime.");
 		}
 
-		// Clean up URL by removing the purchase param
 		const url = new URL(window.location.href);
 		url.searchParams.delete("purchase");
 		router.replace(url.pathname + url.search, { scroll: false });
@@ -55,8 +56,8 @@ export default function Page() {
 
 	if (!id) {
 		return (
-			<div className="container mx-auto px-4 py-10">
-				<EmptyState
+			<div className="flex-1 flex items-center justify-center p-6">
+				<StoreEmptyState
 					title="No app selected"
 					description="Choose an app from the store to view its details."
 				/>
@@ -66,58 +67,47 @@ export default function Page() {
 
 	if (!app.data || !meta.data) {
 		return (
-			<div className="container mx-auto px-4 py-10 space-y-6">
+			<main className="flex-col flex grow max-h-full overflow-auto min-h-0 w-full">
 				<HeroSkeleton />
-				<div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-					<div className="lg:col-span-2 rounded-xl border bg-card p-6" />
-					<div className="rounded-xl border bg-card p-6" />
+				<div className="max-w-5xl mx-auto px-6 md:px-10 pt-8 space-y-4 w-full">
+					<div className="h-4 w-3/4 rounded-full bg-muted/20" />
+					<div className="h-4 w-1/2 rounded-full bg-muted/20" />
 				</div>
-			</div>
+			</main>
 		);
 	}
 
 	return (
-		<main className="flex-col flex flex-grow max-h-full p-6 overflow-auto md:overflow-auto min-h-0  w-full">
-			<div className="mx-auto w-full max-w-7xl flex-col flex space-y-8">
-				<StoreHero
-					appId={id}
-					coverUrl={coverUrl}
-					iconUrl={iconUrl}
-					appName={appName}
-					priceLabel={priceLabel}
-					category={app.data.primary_category ?? "Other"}
-					ageRating={`${meta.data.age_rating ?? 0}+`}
-					isMember={isMember}
-					ratingCount={app.data.rating_count}
-					avgRating={app.data.avg_rating ?? 0}
-					visibility={app.data.visibility}
-					authors={app.data.authors}
-				/>
+		<main className="flex-col flex grow max-h-full overflow-auto min-h-0 w-full">
+			<StoreHero
+				appId={id}
+				hasThumbnail={hasThumbnail}
+				coverUrl={coverUrl}
+				iconUrl={iconUrl}
+				appName={appName}
+				priceLabel={priceLabel}
+				category={app.data.primary_category ?? "Other"}
+				isMember={isMember}
+				ratingCount={app.data.rating_count}
+				avgRating={app.data.avg_rating ?? 0}
+				visibility={app.data.visibility}
+				authors={app.data.authors}
+				canUseApp={canUseApp}
+				price={app.data.price ?? 0}
+				isPurchasing={isPurchasing}
+				onUse={onUse}
+				onSettings={onSettings}
+				onBuy={onBuy}
+				onJoinOrRequest={onJoinOrRequest}
+			/>
 
-				<div className="grid grid-cols-1 lg:grid-cols-3 gap-6 flex-1 min-h-fit">
-					<AboutSection app={app.data} meta={meta.data} />
-					<DetailsCard
-						app={app.data}
-						meta={meta.data}
-						isMember={isMember}
-						price={app.data.price ?? 0}
-						visibility={app.data.visibility}
-						priceLabel={priceLabel}
-						canUseApp={canUseApp}
-						onUse={onUse}
-						onSettings={onSettings}
-						onJoinOrRequest={onJoinOrRequest}
-						onBuy={onBuy}
-						isPurchasing={isPurchasing}
-					/>
-				</div>
+			<div className="max-w-5xl mx-auto w-full px-6 md:px-10 pt-8 pb-12 space-y-10">
+				<AboutSection app={app.data} meta={meta.data} />
 
 				{meta.data.long_description && (
-					<div className="leading-relaxed mx-2">
+					<div className="leading-relaxed">
 						<TextEditor
-							initialContent={
-								meta.data.long_description ?? "No description available."
-							}
+							initialContent={meta.data.long_description}
 							isMarkdown
 						/>
 					</div>

@@ -24,6 +24,25 @@ export class PageState implements IPageState {
 		);
 	}
 
+	private async fetchRemotePage(
+		appId: string,
+		pageId: string,
+	): Promise<IPage | null> {
+		const isOffline = await this.backend.isOffline(appId);
+		if (isOffline || !this.backend.profile || !this.backend.auth) return null;
+
+		try {
+			return await fetcher<IPage>(
+				this.backend.profile,
+				`apps/${appId}/pages/${pageId}`,
+				{ method: "GET" },
+				this.backend.auth,
+			);
+		} catch {
+			return null;
+		}
+	}
+
 	async getPages(appId: string, boardId?: string): Promise<PageListItem[]> {
 		return invoke<PageListItem[]>("get_pages", {
 			appId,
@@ -36,7 +55,27 @@ export class PageState implements IPageState {
 		pageId: string,
 		boardId?: string,
 	): Promise<IPage> {
-		return invoke<IPage>("get_page", { appId, pageId, boardId });
+		const localPage = await invoke<IPage>("get_page", {
+			appId,
+			pageId,
+			boardId,
+		});
+
+		const syncTask = (async () => {
+			const remotePage = await this.fetchRemotePage(appId, pageId);
+			if (!remotePage) return;
+
+			const remoteUpdated = new Date(remotePage.updatedAt ?? 0).getTime();
+			const localUpdated = new Date(localPage.updatedAt ?? 0).getTime();
+
+			if (remoteUpdated > localUpdated) {
+				const merged = { ...remotePage, boardId: remotePage.boardId || localPage.boardId };
+				await invoke("update_page", { appId, page: merged });
+			}
+		})();
+		this.backend.backgroundTaskHandler(syncTask);
+
+		return localPage;
 	}
 
 	async createPage(

@@ -20,6 +20,7 @@ export interface ShareButtonProps {
 	webBaseUrl?: string;
 	className?: string;
 	variant?: "default" | "outline" | "ghost" | "icon";
+	size?: "default" | "sm" | "lg" | "icon";
 	inviteToken?: string;
 }
 
@@ -53,6 +54,7 @@ export function ShareButton({
 	webBaseUrl = "https://app.flow-like.com",
 	className,
 	variant = "outline",
+	size,
 	inviteToken,
 }: ShareButtonProps) {
 	const [copied, setCopied] = useState<string | null>(null);
@@ -119,7 +121,7 @@ export function ShareButton({
 	return (
 		<DropdownMenu>
 			<DropdownMenuTrigger asChild>
-				<Button variant={variant} className={cn("gap-2", className)}>
+				<Button variant={variant} size={size} className={cn("gap-2", className)}>
 					<Share2 className="h-4 w-4" />
 					Share
 				</Button>
