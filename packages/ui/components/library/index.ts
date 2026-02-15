@@ -5,7 +5,6 @@ export {
 	JoinInlineExpanded,
 	LibrarySkeleton,
 	PinnedHero,
-	SearchResults,
 	Section,
 	SortableFavoriteCard,
 } from "./library-sub-components";
