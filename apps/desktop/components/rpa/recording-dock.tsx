@@ -42,6 +42,9 @@ import {
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
+const MAX_LABEL_LENGTH = 15;
+const MAX_VISIBLE_ACTIONS = 8;
+
 interface RecordedAction {
 	id: string;
 	timestamp: string;
@@ -336,14 +339,14 @@ export function RecordingDock({
 		if ("Scroll" in type) return `Scroll ${type.Scroll.direction} (${type.Scroll.amount})`;
 		if ("KeyType" in type) {
 			const text = type.KeyType.text;
-			return text.length > 15 ? `"${text.slice(0, 15)}..."` : `"${text}"`;
+			return text.length > MAX_LABEL_LENGTH ? `"${text.slice(0, MAX_LABEL_LENGTH)}..."` : `"${text}"`;
 		}
 		if ("KeyPress" in type) return type.KeyPress.key;
 		if ("Copy" in type) return "Copy";
 		if ("Paste" in type) return "Paste";
 		if ("AppLaunch" in type) return type.AppLaunch.app_name;
 		if ("WindowFocus" in type)
-			return type.WindowFocus.window_title?.slice(0, 15) || "Window";
+			return type.WindowFocus.window_title?.slice(0, MAX_LABEL_LENGTH) || "Window";
 		return "Action";
 	};
 
@@ -762,7 +765,7 @@ export function RecordingDock({
 								>
 									<ScrollArea className="max-h-36 overflow-y-auto">
 										<div className="px-4 pb-3 space-y-1.5">
-											{actions.slice(-8).map((action, index) => (
+											{actions.slice(-MAX_VISIBLE_ACTIONS).map((action, index) => (
 												<div
 													key={action.id}
 													className="flex items-center gap-2 rounded-lg bg-muted/40 px-3 py-2 text-xs"

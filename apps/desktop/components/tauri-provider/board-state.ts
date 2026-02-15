@@ -700,6 +700,12 @@ export class BoardState implements IBoardState {
 			} catch (e) {
 				if ((e as any).isRpaPermissionError) throw e;
 				console.warn("Failed to check RPA permissions:", e);
+				const error = new Error(
+					"Failed to verify RPA permissions. This workflow cannot run without a successful permission check.",
+				);
+				(error as any).isRpaPermissionError = true;
+				(error as any).cause = e;
+				throw error;
 			}
 		}
 

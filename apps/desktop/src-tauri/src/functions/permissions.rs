@@ -42,6 +42,7 @@ mod macos {
             key_callbacks: *const c_void,
             value_callbacks: *const c_void,
         ) -> *const c_void;
+        fn CFRelease(cf: *const c_void);
         static kCFBooleanTrue: *const c_void;
         static kCFTypeDictionaryKeyCallBacks: c_void;
         static kCFTypeDictionaryValueCallBacks: c_void;
@@ -82,7 +83,14 @@ mod macos {
                 &kCFTypeDictionaryValueCallBacks as *const _ as *const c_void,
             );
 
-            AXIsProcessTrustedWithOptions(options)
+            let trusted = AXIsProcessTrustedWithOptions(options);
+
+            if !options.is_null() {
+                CFRelease(options);
+            }
+            CFRelease(key);
+
+            trusted
         }
     }
 
@@ -153,7 +161,12 @@ pub async fn request_rpa_permission(
     }
     #[cfg(not(target_os = "macos"))]
     {
-        let _ = permission_type;
-        Ok(true)
+        match permission_type.as_str() {
+            "accessibility" | "screen_recording" => Ok(true),
+            _ => Err(TauriFunctionError::new(&format!(
+                "Unknown permission type: {}",
+                permission_type
+            ))),
+        }
     }
 }

@@ -172,13 +172,14 @@ impl NodeLogic for ComputerScreenshotNode {
                     .capture_image()
                     .map_err(|e| flow_like_types::anyhow!("Failed to capture screen: {}", e))?;
 
-                let cropped = image::imageops::crop_imm(
-                    &full_image,
-                    region_x as u32,
-                    region_y as u32,
-                    region_width as u32,
-                    region_height as u32,
-                );
+                let img_w = full_image.width();
+                let img_h = full_image.height();
+                let x = (region_x.max(0) as u32).min(img_w.saturating_sub(1));
+                let y = (region_y.max(0) as u32).min(img_h.saturating_sub(1));
+                let w = (region_width.max(1) as u32).min(img_w.saturating_sub(x));
+                let h = (region_height.max(1) as u32).min(img_h.saturating_sub(y));
+
+                let cropped = image::imageops::crop_imm(&full_image, x, y, w, h);
                 cropped.to_image()
             }
             _ => {
