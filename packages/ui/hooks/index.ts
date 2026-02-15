@@ -1,5 +1,6 @@
 export * from "./use-invoke";
 export * from "./use-hub";
+export * from "./use-mobile";
 export * from "./use-network-status";
 export * from "./use-oauth-execution";
 export * from "./use-spotlight";
@@ -8,3 +9,4 @@ export * from "./use-widget-resolver";
 export * from "./use-copilot-sdk";
 export * from "./use-media-upload";
 export * from "./use-peer-users";
+export * from "./use-theme-gradient";

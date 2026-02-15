@@ -1,5 +1,5 @@
 "use client";
-import { IAppVisibility } from "@tm9657/flow-like-ui";
+import { IAppVisibility } from "../../lib/schema/app/app";
 import { Globe, KeyRound, Lock, Shield } from "lucide-react";
 
 export function visibilityLabel(v: IAppVisibility) {
