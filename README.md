@@ -36,13 +36,15 @@ Flow-Like is a **visual workflow automation platform** that runs entirely on you
 
 ## Why Flow-Like?
 
-### Your workflows run on *your* device. Nowhere else.
+### You decide where your workflows run. Not us.
 
-Most workflow tools run in someone else's cloud. Your data leaves your machine, passes through third-party servers, and you hope for the best. If you're offline, you're stuck.
+Most workflow tools force you into their cloud. Your data leaves your machine, passes through third-party servers, and you're locked into their infrastructure. Offline? Stuck. Want to self-host? Pay enterprise prices.
 
-Flow-Like runs **entirely on your hardware** — your laptop, your server, your phone. Your data never leaves your device unless you want it to. No cloud dependency, no vendor holding your workflows hostage, no "please upgrade to enterprise for self-hosting."
+Flow-Like runs **wherever you choose** — your laptop, your phone, your private server, or cloud infrastructure you control. Your data stays where you put it. No forced cloud dependency, no vendor lock-in, no "upgrade to enterprise for basic autonomy."
 
-This isn't just a privacy feature. It means you can automate in air-gapped environments, on factory floors, in hospital networks, on mobile devices in the field, or simply on your couch without Wi-Fi. **Write once, run anywhere you have a device.**
+**Local-first by default. Cloud-ready when you need it.**
+
+Automate on your couch without Wi-Fi. Deploy to your own AWS/GCP/Azure. Run in air-gapped factory networks. Process sensitive data in hospital environments. Your workflows, your infrastructure, your rules.
 
 ### A Rust engine fast enough to run on a phone
 

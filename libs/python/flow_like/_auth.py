@@ -1,3 +1,5 @@
+"""Authentication and base-URL resolution helpers for the Flow Like SDK."""
+
 from __future__ import annotations
 
 import os
@@ -12,6 +14,12 @@ def resolve_auth(
     pat: str | None = None,
     api_key: str | None = None,
 ) -> dict[str, str]:
+    """Build an auth header dict from a PAT or API key.
+
+    Raises:
+        ConfigurationError: If both or neither credential is provided.
+        AuthenticationError: If the credential has an invalid prefix.
+    """
     pat = pat or os.environ.get("FLOW_LIKE_PAT")
     api_key = api_key or os.environ.get("FLOW_LIKE_API_KEY")
 
@@ -35,6 +43,7 @@ def resolve_auth(
 
 
 def resolve_base_url(base_url: str | None = None) -> str:
+    """Return a normalised base URL, falling back to the environment variable."""
     url = base_url or os.environ.get("FLOW_LIKE_BASE_URL")
     if not url:
         raise ConfigurationError(
@@ -45,6 +54,7 @@ def resolve_base_url(base_url: str | None = None) -> str:
 
 
 def detect_and_resolve(token: str | None = None, **kwargs: str | None) -> dict[str, str]:
+    """Auto-detect token type and return the appropriate auth header."""
     if token is None:
         return resolve_auth(**kwargs)
     if token.startswith(PAT_PREFIX):

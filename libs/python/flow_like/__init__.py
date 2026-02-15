@@ -17,6 +17,7 @@ from ._types import (
     AzureSharedCredentials,
     Board,
     BucketConfig,
+    ChatChoice,
     ChatCompletionResult,
     ChatMessage,
     CountResult,
@@ -35,6 +36,7 @@ from ._types import (
     SSEEvent,
     TableSchema,
     UpsertBoardResponse,
+    UsageInfo,
 )
 
 __version__ = "0.1.0"
@@ -54,6 +56,7 @@ __all__ = [
     "AzureSharedCredentials",
     "Board",
     "BucketConfig",
+    "ChatChoice",
     "ChatCompletionResult",
     "ChatMessage",
     "CountResult",
@@ -72,4 +75,5 @@ __all__ = [
     "SSEEvent",
     "TableSchema",
     "UpsertBoardResponse",
+    "UsageInfo",
 ]

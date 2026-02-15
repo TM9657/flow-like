@@ -1,3 +1,5 @@
+"""Mixin for bit search and model discovery endpoints."""
+
 from __future__ import annotations
 
 from typing import Any
@@ -7,6 +9,7 @@ from ._types import ModelInfo
 
 
 def _extract_model_info(bit: dict[str, Any], lang: str = "en") -> ModelInfo:
+    """Build a ModelInfo from a raw bit dict."""
     meta = bit.get("meta", {})
     localized = meta.get(lang) or next(iter(meta.values()), {})
     params = bit.get("parameters", {}) or {}
@@ -26,6 +29,7 @@ def _extract_model_info(bit: dict[str, Any], lang: str = "en") -> ModelInfo:
 
 
 def _has_remote_provider(bit: dict[str, Any]) -> bool:
+    """Return True if the bit is backed by a remote/hosted provider."""
     params = bit.get("parameters", {}) or {}
 
     # LLM/VLM pattern: provider_name starts with "hosted"
@@ -44,6 +48,8 @@ def _has_remote_provider(bit: dict[str, Any]) -> bool:
 
 
 class BitsMixin(HTTPClient):
+    """HTTP methods for searching bits and listing available models."""
+
     def search_bits(
         self,
         search: str | None = None,
@@ -51,6 +57,17 @@ class BitsMixin(HTTPClient):
         limit: int = 50,
         offset: int = 0,
     ) -> list[dict[str, Any]]:
+        """Search the bit catalog.
+
+        Args:
+            search: Free-text query string.
+            bit_types: Filter by bit type names (e.g. ``["Llm"]``).
+            limit: Maximum results to return.
+            offset: Pagination offset.
+
+        Returns:
+            Raw bit dicts from the API.
+        """
         body: dict[str, Any] = {"limit": limit, "offset": offset}
         if search is not None:
             body["search"] = search
@@ -66,6 +83,7 @@ class BitsMixin(HTTPClient):
         limit: int = 50,
         offset: int = 0,
     ) -> list[dict[str, Any]]:
+        """Async version of search_bits."""
         body: dict[str, Any] = {"limit": limit, "offset": offset}
         if search is not None:
             body["search"] = search
@@ -75,14 +93,32 @@ class BitsMixin(HTTPClient):
         return resp.json()
 
     def get_bit(self, bit_id: str) -> dict[str, Any]:
+        """Fetch a single bit by ID.
+
+        Args:
+            bit_id: Unique bit identifier.
+
+        Returns:
+            Raw bit dict.
+        """
         resp = self._request("GET", f"/bit/{bit_id}")
         return resp.json()
 
     async def aget_bit(self, bit_id: str) -> dict[str, Any]:
+        """Async version of get_bit."""
         resp = await self._arequest("GET", f"/bit/{bit_id}")
         return resp.json()
 
     def list_llms(self, search: str | None = None, limit: int = 50) -> list[ModelInfo]:
+        """List available remote LLM/VLM models.
+
+        Args:
+            search: Optional text filter.
+            limit: Maximum results.
+
+        Returns:
+            List of ModelInfo for hosted LLM/VLM bits.
+        """
         bits = self.search_bits(search=search, bit_types=["Llm", "Vlm"], limit=limit)
         return [
             _extract_model_info(b)
@@ -91,6 +127,7 @@ class BitsMixin(HTTPClient):
         ]
 
     async def alist_llms(self, search: str | None = None, limit: int = 50) -> list[ModelInfo]:
+        """Async version of list_llms."""
         bits = await self.asearch_bits(search=search, bit_types=["Llm", "Vlm"], limit=limit)
         return [
             _extract_model_info(b)
@@ -101,6 +138,15 @@ class BitsMixin(HTTPClient):
     def list_embedding_models(
         self, search: str | None = None, limit: int = 50
     ) -> list[ModelInfo]:
+        """List available remote embedding models.
+
+        Args:
+            search: Optional text filter.
+            limit: Maximum results.
+
+        Returns:
+            List of ModelInfo for hosted embedding bits.
+        """
         bits = self.search_bits(search=search, bit_types=["Embedding"], limit=limit)
         return [
             _extract_model_info(b)
@@ -111,6 +157,7 @@ class BitsMixin(HTTPClient):
     async def alist_embedding_models(
         self, search: str | None = None, limit: int = 50
     ) -> list[ModelInfo]:
+        """Async version of list_embedding_models."""
         bits = await self.asearch_bits(search=search, bit_types=["Embedding"], limit=limit)
         return [
             _extract_model_info(b)

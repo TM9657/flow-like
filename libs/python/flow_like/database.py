@@ -1,3 +1,5 @@
+"""Database operations mixin for the Flow-Like Python SDK."""
+
 from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
@@ -16,6 +18,7 @@ from ._types import (
 
 
 def _parse_presign_response(data: dict[str, Any]) -> PresignDbAccessResponse:
+    """Convert a raw JSON dict into a ``PresignDbAccessResponse``."""
     return PresignDbAccessResponse(
         shared_credentials=data.get("shared_credentials", {}),
         db_path=data.get("db_path", ""),
@@ -27,6 +30,7 @@ def _parse_presign_response(data: dict[str, Any]) -> PresignDbAccessResponse:
 
 
 def _resolve_connection_info(resp: PresignDbAccessResponse) -> LanceConnectionInfo:
+    """Derive a ``LanceConnectionInfo`` from a presigned response."""
     creds = resp.shared_credentials
 
     if "Aws" in creds:
@@ -70,12 +74,24 @@ def _resolve_connection_info(resp: PresignDbAccessResponse) -> LanceConnectionIn
 
 
 class DatabaseMixin(HTTPClient):
+    """Mixin providing database access and LanceDB integration."""
+
     def get_db_credentials(
         self,
         app_id: str,
         table_name: str = "_default",
         access_mode: str = "read",
     ) -> LanceConnectionInfo:
+        """Obtain cloud-storage credentials for a LanceDB database.
+
+        Args:
+            app_id: Application identifier that owns the database.
+            table_name: Logical table name to access.
+            access_mode: ``"read"`` or ``"write"``.
+
+        Returns:
+            A ``LanceConnectionInfo`` with the URI and storage options.
+        """
         resp = self._request(
             "POST",
             f"/apps/{app_id}/db/presign",
@@ -89,6 +105,7 @@ class DatabaseMixin(HTTPClient):
         table_name: str = "_default",
         access_mode: str = "read",
     ) -> LanceConnectionInfo:
+        """Async version of ``get_db_credentials``."""
         resp = await self._arequest(
             "POST",
             f"/apps/{app_id}/db/presign",
@@ -102,6 +119,16 @@ class DatabaseMixin(HTTPClient):
         table_name: str = "_default",
         access_mode: str = "read",
     ) -> PresignDbAccessResponse:
+        """Obtain raw presigned database access credentials.
+
+        Args:
+            app_id: Application identifier that owns the database.
+            table_name: Logical table name to access.
+            access_mode: ``"read"`` or ``"write"``.
+
+        Returns:
+            A ``PresignDbAccessResponse`` with raw credential data.
+        """
         resp = self._request(
             "POST",
             f"/apps/{app_id}/db/presign",
@@ -115,6 +142,7 @@ class DatabaseMixin(HTTPClient):
         table_name: str = "_default",
         access_mode: str = "read",
     ) -> PresignDbAccessResponse:
+        """Async version of ``get_db_credentials_raw``."""
         resp = await self._arequest(
             "POST",
             f"/apps/{app_id}/db/presign",
@@ -125,6 +153,18 @@ class DatabaseMixin(HTTPClient):
     def create_lance_connection(
         self, app_id: str, access_mode: str = "read"
     ) -> LanceDBConnection:
+        """Create a LanceDB connection for an application database.
+
+        Args:
+            app_id: Application identifier that owns the database.
+            access_mode: ``"read"`` or ``"write"``.
+
+        Returns:
+            A ``LanceDBConnection`` ready for queries.
+
+        Raises:
+            ImportError: If the ``lancedb`` package is not installed.
+        """
         try:
             import lancedb
         except ImportError as e:
@@ -139,6 +179,7 @@ class DatabaseMixin(HTTPClient):
     async def acreate_lance_connection(
         self, app_id: str, access_mode: str = "read"
     ) -> LanceDBConnection:
+        """Async version of ``create_lance_connection``."""
         try:
             import lancedb
         except ImportError as e:
@@ -151,16 +192,34 @@ class DatabaseMixin(HTTPClient):
         return lancedb.connect(info.uri, storage_options=info.storage_options)
 
     def list_tables(self, app_id: str) -> list[str]:
+        """List all table names in an application database.
+
+        Args:
+            app_id: Application identifier that owns the database.
+
+        Returns:
+            A list of table name strings.
+        """
         resp = self._request("GET", f"/apps/{app_id}/db/tables")
         data = resp.json()
         return data if isinstance(data, list) else data.get("tables", [])
 
     async def alist_tables(self, app_id: str) -> list[str]:
+        """Async version of ``list_tables``."""
         resp = await self._arequest("GET", f"/apps/{app_id}/db/tables")
         data = resp.json()
         return data if isinstance(data, list) else data.get("tables", [])
 
     def get_table_schema(self, app_id: str, table: str) -> TableSchema:
+        """Retrieve the schema of a database table.
+
+        Args:
+            app_id: Application identifier that owns the database.
+            table: Name of the table.
+
+        Returns:
+            A ``TableSchema`` describing the table columns.
+        """
         resp = self._request("GET", f"/apps/{app_id}/db/{table}/schema")
         data: dict[str, Any] = resp.json()
         return TableSchema(
@@ -170,6 +229,7 @@ class DatabaseMixin(HTTPClient):
         )
 
     async def aget_table_schema(self, app_id: str, table: str) -> TableSchema:
+        """Async version of ``get_table_schema``."""
         resp = await self._arequest("GET", f"/apps/{app_id}/db/{table}/schema")
         data: dict[str, Any] = resp.json()
         return TableSchema(
@@ -179,6 +239,16 @@ class DatabaseMixin(HTTPClient):
         )
 
     def query_table(self, app_id: str, table: str, query: dict[str, Any]) -> QueryResult:
+        """Execute a query against a database table.
+
+        Args:
+            app_id: Application identifier that owns the database.
+            table: Name of the table to query.
+            query: Query parameters as a JSON-serializable dict.
+
+        Returns:
+            A ``QueryResult`` containing the matched rows.
+        """
         resp = self._request("POST", f"/apps/{app_id}/db/{table}/query", json=query)
         data: Any = resp.json()
         if isinstance(data, list):
@@ -187,6 +257,7 @@ class DatabaseMixin(HTTPClient):
         return QueryResult(rows=rows, raw=data if isinstance(data, dict) else {"value": data})
 
     async def aquery_table(self, app_id: str, table: str, query: dict[str, Any]) -> QueryResult:
+        """Async version of ``query_table``."""
         resp = await self._arequest("POST", f"/apps/{app_id}/db/{table}/query", json=query)
         data: Any = resp.json()
         if isinstance(data, list):
@@ -195,27 +266,56 @@ class DatabaseMixin(HTTPClient):
         return QueryResult(rows=rows, raw=data if isinstance(data, dict) else {"value": data})
 
     def add_to_table(self, app_id: str, table: str, data: list[dict[str, Any]]) -> dict[str, Any]:
+        """Insert rows into a database table.
+
+        Args:
+            app_id: Application identifier that owns the database.
+            table: Name of the target table.
+            data: List of row dicts to insert.
+
+        Returns:
+            A dict with the API response (e.g. inserted count).
+        """
         resp = self._request("POST", f"/apps/{app_id}/db/{table}/add", json=data)
         return resp.json()
 
     async def aadd_to_table(
         self, app_id: str, table: str, data: list[dict[str, Any]]
     ) -> dict[str, Any]:
+        """Async version of ``add_to_table``."""
         resp = await self._arequest("POST", f"/apps/{app_id}/db/{table}/add", json=data)
         return resp.json()
 
     def delete_from_table(self, app_id: str, table: str, filter: dict[str, Any]) -> None:
+        """Delete rows from a database table matching a filter.
+
+        Args:
+            app_id: Application identifier that owns the database.
+            table: Name of the target table.
+            filter: Filter criteria identifying rows to delete.
+        """
         self._request("DELETE", f"/apps/{app_id}/db/{table}/delete", json=filter)
 
     async def adelete_from_table(self, app_id: str, table: str, filter: dict[str, Any]) -> None:
+        """Async version of ``delete_from_table``."""
         await self._arequest("DELETE", f"/apps/{app_id}/db/{table}/delete", json=filter)
 
     def count_items(self, app_id: str, table: str) -> CountResult:
+        """Count the number of rows in a database table.
+
+        Args:
+            app_id: Application identifier that owns the database.
+            table: Name of the table.
+
+        Returns:
+            A ``CountResult`` with the row count.
+        """
         resp = self._request("GET", f"/apps/{app_id}/db/{table}/count")
         data = resp.json()
         return CountResult(count=data.get("count", 0), raw=data)
 
     async def acount_items(self, app_id: str, table: str) -> CountResult:
+        """Async version of ``count_items``."""
         resp = await self._arequest("GET", f"/apps/{app_id}/db/{table}/count")
         data = resp.json()
         return CountResult(count=data.get("count", 0), raw=data)
