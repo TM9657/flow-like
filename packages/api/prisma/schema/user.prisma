@@ -48,6 +48,7 @@ model User {
   authoredWasmPackages        WasmPackageAuthor[]
   wasmPackageReviews          WasmPackageReview[]
   purchases                   AppPurchase[]
+  interactions                Interaction[]
 
   status UserStatus @default(ACTIVE)
   tier   UserTier   @default(FREE)

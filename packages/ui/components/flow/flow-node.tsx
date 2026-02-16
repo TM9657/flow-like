@@ -443,7 +443,7 @@ const FlowNodeInner = memo(
 			parsePins(Object.values(props.data.node?.pins || []));
 			// Update React Flow internals when pins change (handles may have changed)
 			updateNodeInternals(props.id);
-		}, [props.data.node.pins, props.id]);
+		}, [props.data.node.pins, props.id, props.data.node.hash]);
 
 		function isPinAction(pin: IPin | IPinAction): pin is IPinAction {
 			return typeof (pin as IPinAction).onAction === "function";

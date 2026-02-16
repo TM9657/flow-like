@@ -900,6 +900,7 @@ pub fn run() {
             functions::registry::registry_load_local,
             functions::registry::registry_init,
             functions::statistics::get_board_statistics,
+            functions::interaction::respond_to_interaction,
         ]);
 
     #[cfg(desktop)]

@@ -274,7 +274,7 @@ async fn execute_inner(
         request.stream_state,
         callback,
         Some(request.credentials.clone()),
-        request.token.clone(),
+        Some(request.executor_jwt.clone()),
         oauth_tokens,
         Some(run_id.to_string()),
     )

@@ -7,15 +7,26 @@ import {
 	useCallback,
 	useEffect,
 	useImperativeHandle,
+	useMemo,
 	useRef,
 	useState,
 	useTransition,
 } from "react";
 import PuffLoader from "react-spinners/PuffLoader";
 import type { IEventPayloadChat } from "../../../lib";
+import type { IInteractionRequest } from "../../../lib/schema/interaction";
 import type { IMessage } from "./chat-db";
 import { ChatBox, type ChatBoxRef, type ISendMessageFunction } from "./chatbox";
+import { Interaction } from "./interaction";
 import { MessageComponent } from "./message";
+
+type ChatItem =
+	| { type: "message"; data: IMessage; timestamp: number }
+	| { type: "interaction"; data: IInteractionRequest; timestamp: number };
+
+function getInteractionCreatedAt(interaction: IInteractionRequest): number {
+	return (interaction.expires_at - interaction.ttl_seconds) * 1000;
+}
 
 function getMessageTextContent(message: IMessage): string {
 	const content = message.inner.content;
@@ -33,6 +44,8 @@ export interface IChatProps {
 	) => void | Promise<void>;
 	config?: Partial<IEventPayloadChat>;
 	sessionId?: string;
+	activeInteractions?: IInteractionRequest[];
+	onRespondToInteraction?: (interactionId: string, value: any) => void;
 }
 
 export interface IChatRef {
@@ -47,7 +60,7 @@ export interface IChatRef {
 
 const ChatInner = forwardRef<IChatRef, IChatProps>(
 	(
-		{ messages, onSendMessage, onMessageUpdate, config = {}, sessionId },
+		{ messages, onSendMessage, onMessageUpdate, config = {}, sessionId, activeInteractions, onRespondToInteraction },
 		ref,
 	) => {
 		const { resolvedTheme } = useTheme();
@@ -64,6 +77,27 @@ const ChatInner = forwardRef<IChatRef, IChatProps>(
 		const isSendingRef = useRef(false);
 		const [sendingContent, setSendingContent] = useState("");
 		const [, startMessagesTransition] = useTransition();
+
+		const chatItems = useMemo<ChatItem[]>(() => {
+			const items: ChatItem[] = [];
+
+			for (const msg of localMessages) {
+				items.push({ type: "message", data: msg, timestamp: msg.timestamp });
+			}
+
+			if (activeInteractions) {
+				for (const interaction of activeInteractions) {
+					items.push({
+						type: "interaction",
+						data: interaction,
+						timestamp: getInteractionCreatedAt(interaction),
+					});
+				}
+			}
+
+			items.sort((a, b) => a.timestamp - b.timestamp);
+			return items;
+		}, [localMessages, activeInteractions]);
 
 		useEffect(() => {
 			isSendingRef.current = isSending;
@@ -290,17 +324,29 @@ const ChatInner = forwardRef<IChatRef, IChatProps>(
 						className="flex-1 overflow-y-auto overscroll-contain p-4 pb-2 space-y-8 flex flex-col items-center flex-grow max-h-full"
 						style={{ WebkitOverflowScrolling: "touch" }}
 					>
-						{localMessages.map((message) => (
-							<div
-								className="w-full max-w-screen-lg px-1 sm:px-4"
-								key={message.id}
-							>
-								<MessageComponent
-									message={message}
-									onMessageUpdate={onMessageUpdate}
-								/>
-							</div>
-						))}
+						{chatItems.map((item) =>
+							item.type === "message" ? (
+								<div
+									className="w-full max-w-screen-lg px-1 sm:px-4"
+									key={`msg-${item.data.id}`}
+								>
+									<MessageComponent
+										message={item.data}
+										onMessageUpdate={onMessageUpdate}
+									/>
+								</div>
+							) : (
+								<div
+									className="w-full max-w-screen-lg px-4 flex flex-col items-start"
+									key={`int-${item.data.id}`}
+								>
+									<Interaction
+										interaction={item.data}
+										onRespond={onRespondToInteraction ?? (() => {})}
+									/>
+								</div>
+							)
+						)}
 						{isSending &&
 							!localMessages.some(
 								(m) =>
@@ -338,7 +384,7 @@ const ChatInner = forwardRef<IChatRef, IChatProps>(
 									<MessageComponent loading message={currentMessage} />
 								</div>
 							)}
-						<div ref={messagesEndRef} />
+					<div ref={messagesEndRef} />
 					</div>
 
 					{/* ChatBox */}

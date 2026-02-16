@@ -168,8 +168,6 @@ async fn enforce_embedding_tier(
         .get("tier")
         .and_then(|v| v.as_str())
         .unwrap_or("FREE");
-
-    // Check embedding tiers (reuse llm_tiers for now, can be separated later)
     if !user_tier.llm_tiers.iter().any(|t| t == tier) {
         tracing::warn!(
             "User tier {:?} does not allow access to embedding tier {}",

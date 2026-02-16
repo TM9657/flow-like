@@ -482,7 +482,7 @@ pub async fn invoke_llm(
     Extension(user): Extension<AppUser>,
     Json(payload): Json<serde_json::Value>,
 ) -> Result<AxumResponse, ApiError> {
-    user.sub()?;
+    user.executor_scoped_sub()?;
     let model_field = payload
         .get("model")
         .and_then(|v| v.as_str())

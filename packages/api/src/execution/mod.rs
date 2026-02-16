@@ -4,6 +4,7 @@
 //! (Kubernetes, Docker Compose, Lambda, etc.) to securely communicate with the API.
 
 mod dispatch;
+mod interaction_jwt;
 mod jwt;
 pub mod payload_storage;
 pub mod queue;
@@ -23,6 +24,11 @@ pub use jwt::{
 #[cfg(feature = "redis")]
 pub use queue::QueueWorker;
 pub use queue::{OAuthTokenInput, QueueConfig, QueueError, QueuedJob};
+pub use interaction_jwt::{
+    InteractionClaims, InteractionJwtError, InteractionJwtParams,
+    sign_responder as sign_interaction_responder_jwt,
+    verify_responder as verify_interaction_responder_jwt,
+};
 pub use sse_proxy::proxy_sse_response;
 pub use state::{
     CreateEventInput, CreateRunInput, EventQuery, ExecutionEventRecord, ExecutionRunRecord,

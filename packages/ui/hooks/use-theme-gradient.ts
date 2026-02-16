@@ -41,9 +41,9 @@ function readTheme(): ThemeSnapshot {
 	}
 
 	if (hue === FALLBACK_HUE) {
-		for (const sheet of document.styleSheets) {
+		for (const sheet of Array.from(document.styleSheets)) {
 			try {
-				for (const rule of sheet.cssRules) {
+				for (const rule of Array.from(sheet.cssRules)) {
 					const text = rule.cssText;
 					if (!text.includes("--primary")) continue;
 					const isRootRule = text.startsWith(":root");

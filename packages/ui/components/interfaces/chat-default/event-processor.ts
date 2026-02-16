@@ -1,5 +1,6 @@
 import { createId } from "@paralleldrive/cuid2";
 import { IRole, Response } from "../../../lib";
+import type { IInteractionRequest } from "../../../lib/schema/interaction";
 import type { IAttachment, IMessage, IPlanStep } from "./chat-db";
 
 export interface ProcessChatEventsResult {
@@ -10,6 +11,7 @@ export interface ProcessChatEventsResult {
 	tmpGlobalState: any;
 	done: boolean;
 	shouldUpdate: boolean;
+	interactions?: IInteractionRequest[];
 }
 
 interface BackendReasoning {
@@ -84,6 +86,7 @@ export function processChatEvents(
 		done,
 	} = initialState;
 	let shouldUpdate = false;
+	const interactions: IInteractionRequest[] = [];
 	const { appId, eventId, sessionId } = initialState;
 
 	const addAttachments = (newAttachments: IAttachment[]) => {
@@ -233,6 +236,11 @@ export function processChatEvents(
 			}
 		}
 
+		if (ev.event_type === "interaction_request") {
+			interactions.push(ev.payload as IInteractionRequest);
+			shouldUpdate = true;
+		}
+
 		if (ev.event_type === "chat_global_session") {
 			if (tmpGlobalState) {
 				tmpGlobalState = {
@@ -258,5 +266,6 @@ export function processChatEvents(
 		tmpGlobalState,
 		done,
 		shouldUpdate,
+		interactions: interactions.length > 0 ? interactions : undefined,
 	};
 }
