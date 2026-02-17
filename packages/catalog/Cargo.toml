@@ -38,7 +38,8 @@ execute = [
     "flow-like-catalog-onnx/execute",
     "flow-like-catalog-llm/execute",
     "flow-like-catalog-processing/execute",
-    "flow-like-catalog-geo/execute"
+    "flow-like-catalog-geo/execute",
+    "flow-like-catalog-automation/execute"
 ]
 
 # Data lake formats
@@ -90,6 +91,7 @@ flow-like-catalog-onnx.workspace = true
 flow-like-catalog-llm.workspace = true
 flow-like-catalog-processing.workspace = true
 flow-like-catalog-geo.workspace = true
+flow-like-catalog-automation.workspace = true
 mimalloc = { workspace = true, optional = true }
 tracing.workspace = true
 

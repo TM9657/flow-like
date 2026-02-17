@@ -68,6 +68,11 @@ pub use flow_like_catalog_llm::generative;
 pub use flow_like_catalog_geo::geo;
 pub use flow_like_catalog_processing::processing;
 
+// Re-export automation modules
+pub use flow_like_catalog_automation::{
+    browser, computer, fingerprint, llm as automation_llm, rpa, selector, vision,
+};
+
 /// Available catalog packages that can be included/excluded
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum CatalogPackage {
@@ -81,6 +86,7 @@ pub enum CatalogPackage {
     Llm,
     Processing,
     Geo,
+    Automation,
 }
 
 impl CatalogPackage {
@@ -96,6 +102,7 @@ impl CatalogPackage {
             CatalogPackage::Llm,
             CatalogPackage::Processing,
             CatalogPackage::Geo,
+            CatalogPackage::Automation,
         ]
     }
 
@@ -111,6 +118,7 @@ impl CatalogPackage {
             CatalogPackage::Llm => flow_like_catalog_llm::get_catalog(),
             CatalogPackage::Processing => flow_like_catalog_processing::get_catalog(),
             CatalogPackage::Geo => flow_like_catalog_geo::get_catalog(),
+            CatalogPackage::Automation => flow_like_catalog_automation::get_catalog(),
         }
     }
 }
@@ -130,6 +138,7 @@ impl std::str::FromStr for CatalogPackage {
             "llm" | "genai" | "generative" => Ok(CatalogPackage::Llm),
             "processing" => Ok(CatalogPackage::Processing),
             "geo" | "geolocation" => Ok(CatalogPackage::Geo),
+            "automation" | "rpa" | "browser" | "computer" => Ok(CatalogPackage::Automation),
             _ => Err(format!("Unknown catalog package: {}", s)),
         }
     }

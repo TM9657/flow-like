@@ -8,6 +8,8 @@ pub mod download;
 pub mod event_sink_commands;
 pub mod file;
 pub mod flow;
+pub mod permissions;
+pub mod recording;
 pub mod registry;
 pub mod settings;
 pub mod statistics;
