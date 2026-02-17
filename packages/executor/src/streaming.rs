@@ -89,7 +89,13 @@ pub async fn execute_streaming(
     let _ = tx.send(run_initiated_event(&claims.run_id));
 
     // Spawn execution task
-    tokio::spawn(run_execution(request, config, claims.run_id, tx));
+    tokio::spawn(run_execution(
+        request,
+        config,
+        claims.run_id,
+        claims.callback_url,
+        tx,
+    ));
 
     Ok(ExecutionStream { rx })
 }
@@ -98,11 +104,12 @@ async fn run_execution(
     request: ExecutionRequest,
     config: ExecutorConfig,
     run_id: String,
+    callback_url: String,
     tx: mpsc::UnboundedSender<StreamEvent>,
 ) {
     let start = Instant::now();
 
-    let result = execute_inner(&request, &config, &run_id, &tx).await;
+    let result = execute_inner(&request, &config, &run_id, &callback_url, &tx).await;
 
     let duration_ms = start.elapsed().as_millis() as u64;
 
@@ -120,6 +127,7 @@ async fn execute_inner(
     request: &ExecutionRequest,
     config: &ExecutorConfig,
     run_id: &str,
+    callback_url: &str,
     tx: &mpsc::UnboundedSender<StreamEvent>,
 ) -> Result<
     (
@@ -219,11 +227,14 @@ async fn execute_inner(
         .unwrap_or_default();
 
     // Use profile from request if provided, otherwise use default (empty profile)
-    let profile: Profile = request
+    let mut profile: Profile = request
         .profile
         .as_ref()
         .and_then(|p| serde_json::from_value(p.clone()).ok())
         .unwrap_or_default();
+
+    // Always use the API's callback URL as hub for remote interactions
+    profile.hub = callback_url.to_string();
 
     let run_payload = RunPayload {
         id: request.node_id.clone(),

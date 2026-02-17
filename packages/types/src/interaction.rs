@@ -256,11 +256,11 @@ pub struct RemoteInteractionParams<'a> {
 /// Create an interaction remotely and wait for the response.
 /// This version allows streaming the interaction request with responder_jwt before waiting.
 ///
-/// Returns a tuple of (responder_jwt, callback to wait for response).
+/// Returns the interaction result or an error with details about what failed.
 pub async fn create_remote_interaction_stream<F>(
     params: RemoteInteractionParams<'_>,
     on_created: F,
-) -> Option<RemoteInteractionResult>
+) -> crate::Result<RemoteInteractionResult>
 where
     F: FnOnce(InteractionRequest) -> std::pin::Pin<Box<dyn std::future::Future<Output = ()> + Send>>,
 {
@@ -279,7 +279,9 @@ where
             "ttl_seconds": params.ttl_seconds
         }));
 
-    let mut es = EventSource::new(request).ok()?;
+    let mut es = EventSource::new(request).map_err(|e| {
+        crate::anyhow!("Failed to create SSE connection to {}: {}", url, e)
+    })?;
 
     let mut responder_jwt = String::new();
     let mut on_created = Some(on_created);
@@ -309,13 +311,13 @@ where
                     if let Ok(payload) =
                         serde_json::from_str::<SseRespondedPayload>(&message.data)
                     {
-                        return Some(RemoteInteractionResult {
+                        return Ok(RemoteInteractionResult {
                             responded: true,
                             value: payload.value,
                             responder_jwt,
                         });
                     }
-                    return Some(RemoteInteractionResult {
+                    return Ok(RemoteInteractionResult {
                         responded: true,
                         value: Value::Null,
                         responder_jwt,
@@ -323,7 +325,7 @@ where
                 }
                 "expired" => {
                     es.close();
-                    return Some(RemoteInteractionResult {
+                    return Ok(RemoteInteractionResult {
                         responded: false,
                         value: Value::Null,
                         responder_jwt,
@@ -331,18 +333,14 @@ where
                 }
                 _ => {}
             },
-            Err(_) => {
+            Err(e) => {
                 es.close();
-                return Some(RemoteInteractionResult {
-                    responded: false,
-                    value: Value::Null,
-                    responder_jwt,
-                });
+                return Err(crate::anyhow!("SSE stream error: {}", e));
             }
         }
     }
 
-    Some(RemoteInteractionResult {
+    Ok(RemoteInteractionResult {
         responded: false,
         value: Value::Null,
         responder_jwt,

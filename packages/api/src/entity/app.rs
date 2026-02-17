@@ -76,6 +76,8 @@ pub enum Relation {
     ExecutionUsageTracking,
     #[sea_orm(has_many = "super::feedback::Entity")]
     Feedback,
+    #[sea_orm(has_many = "super::interaction::Entity")]
+    Interaction,
     #[sea_orm(has_many = "super::invitation::Entity")]
     Invitation,
     #[sea_orm(has_many = "super::invite_link::Entity")]
@@ -116,8 +118,6 @@ pub enum Relation {
     Template,
     #[sea_orm(has_many = "super::widget::Entity")]
     Widget,
-    #[sea_orm(has_many = "super::interaction::Entity")]
-    Interaction,
 }
 
 impl Related<super::app_discount::Entity> for Entity {
@@ -192,6 +192,12 @@ impl Related<super::feedback::Entity> for Entity {
     }
 }
 
+impl Related<super::interaction::Entity> for Entity {
+    fn to() -> RelationDef {
+        Relation::Interaction.def()
+    }
+}
+
 impl Related<super::invitation::Entity> for Entity {
     fn to() -> RelationDef {
         Relation::Invitation.def()
@@ -261,12 +267,6 @@ impl Related<super::template::Entity> for Entity {
 impl Related<super::widget::Entity> for Entity {
     fn to() -> RelationDef {
         Relation::Widget.def()
-    }
-}
-
-impl Related<super::interaction::Entity> for Entity {
-    fn to() -> RelationDef {
-        Relation::Interaction.def()
     }
 }
 

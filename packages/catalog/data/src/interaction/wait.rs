@@ -110,17 +110,12 @@ pub async fn wait_for_interaction_response(
             }
         })
     })
-    .await;
+    .await?;
 
-    match result {
-        Some(r) => Ok(InteractionWaitResult {
-            responded: r.responded,
-            value: r.value,
-        }),
-        None => Err(flow_like_types::anyhow!(
-            "Failed to create remote interaction"
-        )),
-    }
+    Ok(InteractionWaitResult {
+        responded: result.responded,
+        value: result.value,
+    })
 }
 
 /// Fallback when neither local nor remote feature is enabled.

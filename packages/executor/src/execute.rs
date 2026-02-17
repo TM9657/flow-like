@@ -171,7 +171,15 @@ pub async fn execute(
         .unwrap_or_default();
 
     // Create run payload with the node_id to execute
-    let profile = Profile::default();
+    let mut profile: Profile = request
+        .profile
+        .as_ref()
+        .and_then(|p| serde_json::from_value(p.clone()).ok())
+        .unwrap_or_default();
+
+    // Always use the API's callback URL as hub for remote interactions
+    profile.hub = claims.callback_url.clone();
+
     let run_payload = RunPayload {
         id: request.node_id.clone(),
         payload: request.payload.clone(),

@@ -72,6 +72,8 @@ pub enum Relation {
     ExecutionUsageTracking,
     #[sea_orm(has_many = "super::feedback::Entity")]
     Feedback,
+    #[sea_orm(has_many = "super::interaction::Entity")]
+    Interaction,
     #[sea_orm(has_many = "super::invitation::Entity")]
     Invitation,
     #[sea_orm(has_many = "super::join_queue::Entity")]
@@ -96,8 +98,6 @@ pub enum Relation {
     WasmPackageAuthor,
     #[sea_orm(has_many = "super::wasm_package_review::Entity")]
     WasmPackageReview,
-    #[sea_orm(has_many = "super::interaction::Entity")]
-    Interaction,
 }
 
 impl Related<super::app_purchase::Entity> for Entity {
@@ -133,6 +133,12 @@ impl Related<super::execution_usage_tracking::Entity> for Entity {
 impl Related<super::feedback::Entity> for Entity {
     fn to() -> RelationDef {
         Relation::Feedback.def()
+    }
+}
+
+impl Related<super::interaction::Entity> for Entity {
+    fn to() -> RelationDef {
+        Relation::Interaction.def()
     }
 }
 
@@ -205,12 +211,6 @@ impl Related<super::wasm_package_author::Entity> for Entity {
 impl Related<super::wasm_package_review::Entity> for Entity {
     fn to() -> RelationDef {
         Relation::WasmPackageReview.def()
-    }
-}
-
-impl Related<super::interaction::Entity> for Entity {
-    fn to() -> RelationDef {
-        Relation::Interaction.def()
     }
 }
 
