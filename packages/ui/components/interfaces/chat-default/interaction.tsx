@@ -11,7 +11,7 @@ import { RadioGroup, RadioGroupItem } from "../../ui/radio-group";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../../ui/select";
 import { Switch } from "../../ui/switch";
 import { Textarea } from "../../ui/textarea";
-import { AlertCircle, CheckCircle2, Clock, Plus, Trash2, XCircle } from "lucide-react";
+import { AlertCircle, CheckCircle2, ChevronDown, ChevronRight, ChevronUp, Clock, Plus, Trash2, XCircle } from "lucide-react";
 import type {
     IInteractionRequest,
     IInteractionType,
@@ -1004,10 +1004,128 @@ function InteractionBody({
     }
 }
 
-export function Interaction({ interaction, onRespond, disabled }: InteractionProps) {
+function getCompactResponseSummary(interaction: IInteractionRequest): string {
+    const { interaction_type, response_value } = interaction;
+    if (!response_value) return "Responded";
+
+    switch (interaction_type.type) {
+        case "single_choice": {
+            const option = interaction_type.options.find((o) => o.id === response_value.selected_id);
+            const label = option?.label ?? response_value.selected_id;
+            return response_value.freeform_value ? `${label}: ${response_value.freeform_value}` : label;
+        }
+        case "multiple_choice": {
+            const ids: string[] = response_value.selected_ids ?? [];
+            return ids
+                .map((id) => interaction_type.options.find((o) => o.id === id)?.label ?? id)
+                .join(", ") || "None selected";
+        }
+        case "form": {
+            const fields = interaction_type.fields ?? [];
+            const entries = Object.entries(response_value).filter(([, v]) => v !== undefined && v !== "");
+            if (entries.length === 0) return "Responded";
+            return entries
+                .map(([fieldId, value]) => {
+                    const field = fields.find((f) => f.id === fieldId);
+                    const label = field?.label ?? fieldId;
+                    const display = typeof value === "boolean" ? (value ? "Yes" : "No") : String(value);
+                    return `${label}: ${display}`;
+                })
+                .join(", ");
+        }
+        default:
+            return "Responded";
+    }
+}
+
+function CompactInteraction({
+    interaction,
+    onExpand,
+}: {
+    interaction: IInteractionRequest;
+    onExpand: () => void;
+}) {
+    const statusIcon =
+        interaction.status === "responded" ? (
+            <CheckCircle2 className="h-3 w-3 shrink-0 text-emerald-500" />
+        ) : interaction.status === "expired" ? (
+            <XCircle className="h-3 w-3 shrink-0 text-red-500/70" />
+        ) : (
+            <AlertCircle className="h-3 w-3 shrink-0 text-muted-foreground" />
+        );
+
+    const summary = interaction.status === "responded" ? getCompactResponseSummary(interaction) : interaction.status === "expired" ? "Expired" : "Cancelled";
+
+    return (
+        <button
+            type="button"
+            onClick={onExpand}
+            className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors group min-w-0"
+        >
+            {statusIcon}
+            <span className="font-medium text-foreground/80 truncate">{interaction.name}</span>
+            <span className="truncate">{summary}</span>
+            <ChevronRight className="h-3 w-3 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity" />
+        </button>
+    );
+}
+
+export function InteractionGroup({
+    interactions,
+    onRespond,
+}: {
+    interactions: IInteractionRequest[];
+    onRespond: (interactionId: string, value: any) => void;
+}) {
+    const [expandedId, setExpandedId] = useState<string | null>(null);
+
+    if (interactions.length === 0) return null;
+
+    const expanded = interactions.find((i) => i.id === expandedId);
+
+    if (expanded) {
+        return (
+            <div className="w-full max-w-lg space-y-2">
+                <Interaction
+                    interaction={expanded}
+                    onRespond={onRespond}
+                    onCollapse={() => setExpandedId(null)}
+                    forceExpanded
+                />
+                {interactions.length > 1 && (
+                    <div className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-md bg-muted/30 px-3 py-1.5">
+                        {interactions
+                            .filter((i) => i.id !== expandedId)
+                            .map((i) => (
+                                <CompactInteraction key={i.id} interaction={i} onExpand={() => setExpandedId(i.id)} />
+                            ))}
+                    </div>
+                )}
+            </div>
+        );
+    }
+
+    return (
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-md bg-muted/30 px-3 py-1.5 max-w-lg w-full">
+            {interactions.map((i) => (
+                <CompactInteraction key={i.id} interaction={i} onExpand={() => setExpandedId(i.id)} />
+            ))}
+        </div>
+    );
+}
+
+export function Interaction({
+    interaction,
+    onRespond,
+    disabled,
+    onCollapse,
+    forceExpanded,
+}: InteractionProps & { onCollapse?: () => void; forceExpanded?: boolean }) {
     const remaining = useCountdown(interaction.expires_at);
     const isPending = interaction.status === "pending" && remaining > 0;
     const isDisabled = disabled || !isPending;
+    const isSettled = !isPending && interaction.status !== "pending";
+    const [expanded, setExpanded] = useState(false);
 
     const handleSubmit = useCallback(
         (value: any) => {
@@ -1016,6 +1134,15 @@ export function Interaction({ interaction, onRespond, disabled }: InteractionPro
         },
         [interaction.id, isDisabled, onRespond],
     );
+
+    // Standalone condensed view (not in a group)
+    if (isSettled && !expanded && !forceExpanded) {
+        return (
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-md bg-muted/30 px-3 py-1.5 max-w-lg w-full">
+                <CompactInteraction interaction={interaction} onExpand={() => setExpanded(true)} />
+            </div>
+        );
+    }
 
     return (
         <Card className={cn(
@@ -1038,6 +1165,18 @@ export function Interaction({ interaction, onRespond, disabled }: InteractionPro
                             </span>
                         )}
                         <StatusBadge status={remaining <= 0 && interaction.status === "pending" ? "expired" : interaction.status} />
+                        {isSettled && (
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    if (onCollapse) onCollapse();
+                                    else setExpanded(false);
+                                }}
+                                className="text-muted-foreground hover:text-foreground transition-colors"
+                            >
+                                <ChevronUp className="h-4 w-4" />
+                            </button>
+                        )}
                     </div>
                 </div>
                 {interaction.description && (

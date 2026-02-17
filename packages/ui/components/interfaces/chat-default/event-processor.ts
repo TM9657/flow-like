@@ -237,7 +237,9 @@ export function processChatEvents(
 		}
 
 		if (ev.event_type === "interaction_request") {
-			interactions.push(ev.payload as IInteractionRequest);
+			const interaction = ev.payload as IInteractionRequest;
+			console.debug("[Chat] Received interaction_request:", interaction.id, interaction.interaction_type?.type, "status:", interaction.status, "expires_at:", interaction.expires_at, "has_jwt:", !!interaction.responder_jwt);
+			interactions.push(interaction);
 			shouldUpdate = true;
 		}
 

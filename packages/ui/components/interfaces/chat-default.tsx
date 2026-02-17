@@ -364,6 +364,10 @@ export const ChatInterfaceMemoized = memo(function ChatInterface({
 	const [isSendingFromWelcome, setIsSendingFromWelcome] = useState(false);
 	const lastNavigateToRef = useRef<string | null>(null);
 	const [activeInteractions, setActiveInteractions] = useState<IInteractionRequest[]>([]);
+	const activeInteractionsRef = useRef<IInteractionRequest[]>(activeInteractions);
+	useEffect(() => {
+		activeInteractionsRef.current = activeInteractions;
+	}, [activeInteractions]);
 
 	const addInteractions = useCallback((interactions: IInteractionRequest[]) => {
 		setActiveInteractions((prev) => {
@@ -375,8 +379,11 @@ export const ChatInterfaceMemoized = memo(function ChatInterface({
 
 	const handleRespondToInteraction = useCallback(
 		async (interactionId: string, value: any) => {
-			const interaction = activeInteractions.find((i) => i.id === interactionId);
-			if (!interaction) return;
+			const interaction = activeInteractionsRef.current.find((i) => i.id === interactionId);
+			if (!interaction) {
+				console.warn("[Chat] Interaction not found for response:", interactionId);
+				return;
+			}
 
 			try {
 				if (interaction.responder_jwt) {
@@ -385,14 +392,11 @@ export const ChatInterfaceMemoized = memo(function ChatInterface({
 					if (typeof process !== "undefined" && process.env?.NEXT_PUBLIC_API_URL) {
 						baseUrl = process.env.NEXT_PUBLIC_API_URL;
 					}
+					if (!baseUrl.startsWith("http://") && !baseUrl.startsWith("https://")) {
+						baseUrl = profile?.secure === false ? `http://${baseUrl}` : `https://${baseUrl}`;
+					}
 					if (!baseUrl.endsWith("/")) baseUrl += "/";
-					const protocol =
-						baseUrl.startsWith("http://") || baseUrl.startsWith("https://")
-							? ""
-							: profile?.secure === false
-								? "http://"
-								: "https://";
-					const url = `${protocol}${baseUrl}api/v1/interaction/${interactionId}/respond`;
+					const url = `${baseUrl}api/v1/interaction/${interactionId}/respond`;
 
 					const res = await fetch(url, {
 						method: "POST",
@@ -424,7 +428,7 @@ export const ChatInterfaceMemoized = memo(function ChatInterface({
 				toast.error("Failed to submit response. Please try again.");
 			}
 		},
-		[activeInteractions, backend.profile],
+		[backend.profile],
 	);
 
 	const buildUseNavigationUrl = useCallback(

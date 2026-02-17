@@ -17,12 +17,13 @@ import type { IEventPayloadChat } from "../../../lib";
 import type { IInteractionRequest } from "../../../lib/schema/interaction";
 import type { IMessage } from "./chat-db";
 import { ChatBox, type ChatBoxRef, type ISendMessageFunction } from "./chatbox";
-import { Interaction } from "./interaction";
+import { Interaction, InteractionGroup } from "./interaction";
 import { MessageComponent } from "./message";
 
 type ChatItem =
 	| { type: "message"; data: IMessage; timestamp: number }
-	| { type: "interaction"; data: IInteractionRequest; timestamp: number };
+	| { type: "interaction"; data: IInteractionRequest; timestamp: number }
+	| { type: "interaction-group"; data: IInteractionRequest[]; timestamp: number };
 
 function getInteractionCreatedAt(interaction: IInteractionRequest): number {
 	return (interaction.expires_at - interaction.ttl_seconds) * 1000;
@@ -78,26 +79,41 @@ const ChatInner = forwardRef<IChatRef, IChatProps>(
 		const [sendingContent, setSendingContent] = useState("");
 		const [, startMessagesTransition] = useTransition();
 
-		const chatItems = useMemo<ChatItem[]>(() => {
+		const chatItems = useMemo(() => {
+			return localMessages
+				.map((msg) => ({ type: "message" as const, data: msg, timestamp: msg.timestamp }))
+				.sort((a, b) => a.timestamp - b.timestamp);
+		}, [localMessages]);
+
+		// Interactions are rendered separately after currentMessage to avoid ordering issues
+		const interactionItems = useMemo<ChatItem[]>(() => {
+			if (!activeInteractions || activeInteractions.length === 0) return [];
+
 			const items: ChatItem[] = [];
+			let settledGroup: IInteractionRequest[] = [];
 
-			for (const msg of localMessages) {
-				items.push({ type: "message", data: msg, timestamp: msg.timestamp });
-			}
+			const flushGroup = () => {
+				if (settledGroup.length > 0) {
+					items.push({ type: "interaction-group", data: settledGroup, timestamp: 0 });
+					settledGroup = [];
+				}
+			};
 
-			if (activeInteractions) {
-				for (const interaction of activeInteractions) {
-					items.push({
-						type: "interaction",
-						data: interaction,
-						timestamp: getInteractionCreatedAt(interaction),
-					});
+			for (const interaction of activeInteractions) {
+				const remaining = Math.max(0, Math.floor((interaction.expires_at * 1000 - Date.now()) / 1000));
+				const isPending = interaction.status === "pending" && remaining > 0;
+
+				if (!isPending) {
+					settledGroup.push(interaction);
+				} else {
+					flushGroup();
+					items.push({ type: "interaction", data: interaction, timestamp: 0 });
 				}
 			}
+			flushGroup();
 
-			items.sort((a, b) => a.timestamp - b.timestamp);
 			return items;
-		}, [localMessages, activeInteractions]);
+		}, [activeInteractions]);
 
 		useEffect(() => {
 			isSendingRef.current = isSending;
@@ -324,29 +340,17 @@ const ChatInner = forwardRef<IChatRef, IChatProps>(
 						className="flex-1 overflow-y-auto overscroll-contain p-4 pb-2 space-y-8 flex flex-col items-center flex-grow max-h-full"
 						style={{ WebkitOverflowScrolling: "touch" }}
 					>
-						{chatItems.map((item) =>
-							item.type === "message" ? (
-								<div
-									className="w-full max-w-screen-lg px-1 sm:px-4"
-									key={`msg-${item.data.id}`}
-								>
-									<MessageComponent
-										message={item.data}
-										onMessageUpdate={onMessageUpdate}
-									/>
-								</div>
-							) : (
-								<div
-									className="w-full max-w-screen-lg px-4 flex flex-col items-start"
-									key={`int-${item.data.id}`}
-								>
-									<Interaction
-										interaction={item.data}
-										onRespond={onRespondToInteraction ?? (() => {})}
-									/>
-								</div>
-							)
-						)}
+						{chatItems.map((item) => (
+							<div
+								className="w-full max-w-screen-lg px-1 sm:px-4"
+								key={`msg-${item.data.id}`}
+							>
+								<MessageComponent
+									message={item.data as IMessage}
+									onMessageUpdate={onMessageUpdate}
+								/>
+							</div>
+						))}
 						{isSending &&
 							!localMessages.some(
 								(m) =>
@@ -384,6 +388,29 @@ const ChatInner = forwardRef<IChatRef, IChatProps>(
 									<MessageComponent loading message={currentMessage} />
 								</div>
 							)}
+						{interactionItems.map((item) =>
+							item.type === "interaction-group" ? (
+								<div
+									className="w-full max-w-screen-lg px-4 flex flex-col items-start"
+									key={`grp-${(item.data as IInteractionRequest[]).map((i) => i.id).join("-")}`}
+								>
+									<InteractionGroup
+										interactions={item.data as IInteractionRequest[]}
+										onRespond={onRespondToInteraction ?? (() => {})}
+									/>
+								</div>
+							) : (
+								<div
+									className="w-full max-w-screen-lg px-4 flex flex-col items-start"
+									key={`int-${(item.data as IInteractionRequest).id}`}
+								>
+									<Interaction
+										interaction={item.data as IInteractionRequest}
+										onRespond={onRespondToInteraction ?? (() => {})}
+									/>
+								</div>
+							)
+						)}
 					<div ref={messagesEndRef} />
 					</div>
 

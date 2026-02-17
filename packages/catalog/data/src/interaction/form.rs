@@ -715,9 +715,9 @@ impl NodeLogic for FormInteraction {
     fn get_node(&self) -> Node {
         let mut node = Node::new(
             "interaction_form",
-            "Form",
+            "Chat Form",
             "Builds a JSON Schema form from a referenced callback function's pins and executes it with typed submitted values.",
-            "Interaction",
+            "Events/Chat/Interaction",
         );
         node.add_icon("/flow/icons/interaction.svg");
         node.set_can_reference_fns(true);

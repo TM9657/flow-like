@@ -31,7 +31,7 @@ impl NodeLogic for SingleChoiceInteraction {
             "interaction_single_choice",
             "Single Choice",
             "Request the user to pick one option. Pauses execution until a response or timeout.",
-            "Interaction",
+            "Events/Chat/Interaction",
         );
         node.add_icon("/flow/icons/interaction.svg");
 
