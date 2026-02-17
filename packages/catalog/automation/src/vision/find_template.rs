@@ -5,6 +5,7 @@ use flow_like::flow::{
     node::{Node, NodeLogic},
     variable::VariableType,
 };
+use flow_like_catalog_core::FlowPath;
 use flow_like_types::{async_trait, json::json};
 
 #[crate::register_node]
@@ -51,12 +52,12 @@ impl NodeLogic for FindTemplateNode {
         .set_schema::<AutomationSession>();
 
         node.add_input_pin(
-            "template_path",
-            "Template Path",
-            "Path to the template image file",
-            VariableType::String,
+            "template",
+            "Template",
+            "Template image file",
+            VariableType::Struct,
         )
-        .set_default_value(Some(json!("")));
+        .set_schema::<FlowPath>();
 
         node.add_input_pin(
             "confidence",
@@ -114,36 +115,25 @@ impl NodeLogic for FindTemplateNode {
 
     #[cfg(feature = "execute")]
     async fn run(&self, context: &mut ExecutionContext) -> flow_like_types::Result<()> {
-        use rustautogui::MatchMode;
-
         context.deactivate_exec_pin("exec_out").await?;
 
-        let session: AutomationSession = context.evaluate_pin("session").await?;
-        let template_path: String = context.evaluate_pin("template_path").await?;
+        let _session: AutomationSession = context.evaluate_pin("session").await?;
+        let template: FlowPath = context.evaluate_pin("template").await?;
         let confidence: f64 = context.evaluate_pin("confidence").await?;
-        let match_mode_str: String = context.evaluate_pin("match_mode").await?;
+        let _match_mode_str: String = context.evaluate_pin("match_mode").await?;
 
-        let autogui = session.get_autogui(context).await?;
-        let mut gui = autogui.lock().await;
+        let template_bytes = template.get(context, false).await?;
 
-        let match_mode = match match_mode_str.as_str() {
-            "FFT" => MatchMode::FFT,
-            _ => MatchMode::Segmented,
-        };
+        // Use xcap screen capture + direct NCC (bypasses rustautogui's broken macOS capture)
+        let (matches, _gray_template, _gray_screen) =
+            crate::types::screen_match::find_template_on_screen(&template_bytes, confidence as f32)
+                .ok_or_else(|| flow_like_types::anyhow!("Failed to capture screen or decode template"))?;
 
-        gui.prepare_template_from_file(&template_path, None, match_mode)
-            .map_err(|e| flow_like_types::anyhow!("Failed to prepare template: {}", e))?;
-
-        let result = gui
-            .find_image_on_screen(confidence as f32)
-            .map_err(|e| flow_like_types::anyhow!("Failed to search screen: {}", e))?;
-
-        let (found, x, y) = match result {
-            Some(matches) if !matches.is_empty() => {
-                let (mx, my, _conf) = matches[0];
-                (true, mx, my)
-            }
-            _ => (false, 0, 0),
+        let (found, x, y) = if let Some(&(px, py, _conf)) = matches.first() {
+            let (lx, ly) = crate::types::screen_match::physical_to_logical(px, py);
+            (true, lx as u32, ly as u32)
+        } else {
+            (false, 0u32, 0u32)
         };
 
         let match_result = TemplateMatchResult {
@@ -151,7 +141,7 @@ impl NodeLogic for FindTemplateNode {
             x: x as i32,
             y: y as i32,
             confidence: if found { confidence } else { 0.0 },
-            template_path: template_path.clone(),
+            template_path: template.path.clone(),
         };
 
         context.set_pin_value("found", json!(found)).await?;
@@ -215,12 +205,12 @@ impl NodeLogic for FindAllTemplatesNode {
         .set_schema::<AutomationSession>();
 
         node.add_input_pin(
-            "template_path",
-            "Template Path",
-            "Path to the template image file",
-            VariableType::String,
+            "template",
+            "Template",
+            "Template image file",
+            VariableType::Struct,
         )
-        .set_default_value(Some(json!("")));
+        .set_schema::<FlowPath>();
 
         node.add_input_pin(
             "confidence",
@@ -259,35 +249,32 @@ impl NodeLogic for FindAllTemplatesNode {
 
     #[cfg(feature = "execute")]
     async fn run(&self, context: &mut ExecutionContext) -> flow_like_types::Result<()> {
-        use rustautogui::MatchMode;
-
         context.deactivate_exec_pin("exec_out").await?;
 
-        let session: AutomationSession = context.evaluate_pin("session").await?;
-        let template_path: String = context.evaluate_pin("template_path").await?;
+        let _session: AutomationSession = context.evaluate_pin("session").await?;
+        let template: FlowPath = context.evaluate_pin("template").await?;
         let confidence: f64 = context.evaluate_pin("confidence").await?;
         let max_results: i64 = context.evaluate_pin("max_results").await?;
 
-        let autogui = session.get_autogui(context).await?;
-        let mut gui = autogui.lock().await;
+        let template_bytes = template.get(context, false).await?;
 
-        gui.prepare_template_from_file(&template_path, None, MatchMode::Segmented)
-            .map_err(|e| flow_like_types::anyhow!("Failed to prepare template: {}", e))?;
+        // Use xcap screen capture + direct NCC (bypasses rustautogui's broken macOS capture)
+        let (matches, _gray_template, _gray_screen) =
+            crate::types::screen_match::find_template_on_screen(&template_bytes, confidence as f32)
+                .ok_or_else(|| flow_like_types::anyhow!("Failed to capture screen or decode template"))?;
 
-        let positions = gui
-            .find_image_on_screen(confidence as f32)
-            .map_err(|e| flow_like_types::anyhow!("Failed to search screen: {}", e))?;
-
-        let results: Vec<TemplateMatchResult> = positions
-            .unwrap_or_default()
+        let results: Vec<TemplateMatchResult> = matches
             .into_iter()
             .take(max_results as usize)
-            .map(|(x, y, conf)| TemplateMatchResult {
-                found: true,
-                x: x as i32,
-                y: y as i32,
-                confidence: conf as f64,
-                template_path: template_path.clone(),
+            .map(|(px, py, conf)| {
+                let (lx, ly) = crate::types::screen_match::physical_to_logical(px, py);
+                TemplateMatchResult {
+                    found: true,
+                    x: lx,
+                    y: ly,
+                    confidence: conf as f64,
+                    template_path: template.path.clone(),
+                }
             })
             .collect();
 

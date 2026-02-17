@@ -155,6 +155,85 @@ pub fn extract_fingerprint_at(x: i32, y: i32) -> Option<RecordedFingerprint> {
             CFRelease(value_attr);
         }
 
+        // Extract bounding box from AXPosition + AXSize
+        // Both return AXValue objects wrapping CGPoint / CGSize.
+        // We use AXValueGetValue to unpack them.
+        #[link(name = "ApplicationServices", kind = "framework")]
+        unsafe extern "C" {
+            fn AXValueGetValue(
+                value: *const c_void,
+                value_type: i32,
+                value_ptr: *mut c_void,
+            ) -> bool;
+        }
+
+        // AXValueType: kAXValueCGPointType = 1, kAXValueCGSizeType = 2
+        let mut got_pos = false;
+        let mut got_size = false;
+        let mut pos_x: f64 = 0.0;
+        let mut pos_y: f64 = 0.0;
+        let mut size_w: f64 = 0.0;
+        let mut size_h: f64 = 0.0;
+
+        let pos_attr = create_cf_string("AXPosition");
+        if !pos_attr.is_null() {
+            let mut pos_value: *const c_void = ptr::null();
+            if AXUIElementCopyAttributeValue(element, pos_attr, &mut pos_value) == 0
+                && !pos_value.is_null()
+            {
+                #[repr(C)]
+                struct CGPoint {
+                    x: f64,
+                    y: f64,
+                }
+                let mut point = CGPoint { x: 0.0, y: 0.0 };
+                if AXValueGetValue(
+                    pos_value,
+                    1, // kAXValueCGPointType
+                    &mut point as *mut CGPoint as *mut c_void,
+                ) {
+                    pos_x = point.x;
+                    pos_y = point.y;
+                    got_pos = true;
+                }
+                CFRelease(pos_value);
+            }
+            CFRelease(pos_attr);
+        }
+
+        let size_attr = create_cf_string("AXSize");
+        if !size_attr.is_null() {
+            let mut size_value: *const c_void = ptr::null();
+            if AXUIElementCopyAttributeValue(element, size_attr, &mut size_value) == 0
+                && !size_value.is_null()
+            {
+                #[repr(C)]
+                struct CGSize {
+                    width: f64,
+                    height: f64,
+                }
+                let mut size = CGSize {
+                    width: 0.0,
+                    height: 0.0,
+                };
+                if AXValueGetValue(
+                    size_value,
+                    2, // kAXValueCGSizeType
+                    &mut size as *mut CGSize as *mut c_void,
+                ) {
+                    size_w = size.width;
+                    size_h = size.height;
+                    got_size = true;
+                }
+                CFRelease(size_value);
+            }
+            CFRelease(size_attr);
+        }
+
+        if got_pos && got_size && (size_w > 0.0 || size_h > 0.0) {
+            fp.bounding_box = Some((pos_x, pos_y, pos_x + size_w, pos_y + size_h));
+        }
+
         CFRelease(element);
         CFRelease(system_wide);
 
@@ -251,6 +330,17 @@ fn extract_fingerprint_windows_inner(x: i32, y: i32) -> Option<RecordedFingerpri
                     fp.text = Some(s);
                 }
             }
+        }
+    }
+
+    // Extract bounding rectangle via IUIAutomationElement::CurrentBoundingRectangle
+    if let Ok(rect) = unsafe { element.CurrentBoundingRectangle() } {
+        let x1 = rect.left as f64;
+        let y1 = rect.top as f64;
+        let x2 = rect.right as f64;
+        let y2 = rect.bottom as f64;
+        if x2 > x1 || y2 > y1 {
+            fp.bounding_box = Some((x1, y1, x2, y2));
         }
     }
 

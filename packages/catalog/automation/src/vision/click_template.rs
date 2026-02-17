@@ -148,8 +148,7 @@ impl NodeLogic for ClickTemplateNode {
 
     #[cfg(feature = "execute")]
     async fn run(&self, context: &mut ExecutionContext) -> flow_like_types::Result<()> {
-        use rustautogui::{MatchMode, MouseClick};
-        use std::io::Write;
+        use rustautogui::MouseClick;
 
         context.deactivate_exec_pin("exec_out").await?;
         context.deactivate_exec_pin("exec_not_found").await?;
@@ -167,35 +166,13 @@ impl NodeLogic for ClickTemplateNode {
         // Download template image using FlowPath's caching mechanism
         let template_bytes = template.get(context, false).await?;
 
-        // Write to a temporary file for rustautogui
-        let temp_dir = std::env::temp_dir();
-        let temp_path = temp_dir.join(format!("template_{}.png", flow_like_types::create_id()));
-        let mut temp_file = std::fs::File::create(&temp_path)
-            .map_err(|e| flow_like_types::anyhow!("Failed to create temp file: {}", e))?;
-        temp_file.write_all(&template_bytes).map_err(|e| {
-            let _ = std::fs::remove_file(&temp_path);
-            flow_like_types::anyhow!("Failed to write template to temp file: {}", e)
-        })?;
-
-        // Guard ensures temp file is cleaned up even on early returns
-        struct TempFileGuard(std::path::PathBuf);
-        impl Drop for TempFileGuard {
-            fn drop(&mut self) {
-                let _ = std::fs::remove_file(&self.0);
-            }
-        }
-        let _guard = TempFileGuard(temp_path.clone());
+        // Use xcap screen capture + direct NCC (bypasses rustautogui's broken macOS capture)
+        let (matches, _gray_template, _gray_screen) =
+            crate::types::screen_match::find_template_on_screen(&template_bytes, confidence as f32)
+                .ok_or_else(|| flow_like_types::anyhow!("Failed to capture screen or decode template"))?;
 
         let autogui = session.get_autogui(context).await?;
         let mut gui = autogui.lock().await;
-
-        let template_path_str = temp_path.to_string_lossy().to_string();
-        gui.prepare_template_from_file(&template_path_str, None, MatchMode::Segmented)
-            .map_err(|e| flow_like_types::anyhow!("Failed to prepare template: {}", e))?;
-
-        let result = gui
-            .find_image_on_screen(confidence as f32)
-            .map_err(|e| flow_like_types::anyhow!("Failed to search screen: {}", e))?;
 
         let perform_click =
             |gui: &mut rustautogui::RustAutoGui, x: u32, y: u32| -> flow_like_types::Result<()> {
@@ -211,11 +188,11 @@ impl NodeLogic for ClickTemplateNode {
                 Ok(())
             };
 
-        if let Some(matches) = result
-            && let Some((x, y, _conf)) = matches.first()
-        {
-            let click_x = (*x as i64 + offset_x) as u32;
-            let click_y = (*y as i64 + offset_y) as u32;
+        if let Some((phys_x, phys_y, _conf)) = matches.first() {
+            // Convert physical (Retina) coordinates to logical mouse coordinates
+            let (lx, ly) = crate::types::screen_match::physical_to_logical(*phys_x, *phys_y);
+            let click_x = (lx as i64 + offset_x) as u32;
+            let click_y = (ly as i64 + offset_y) as u32;
 
             perform_click(&mut gui, click_x, click_y)?;
 

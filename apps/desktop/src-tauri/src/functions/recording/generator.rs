@@ -11,6 +11,18 @@ use crate::functions::TauriFunctionError;
 
 use super::state::{ActionType, KeyModifier, MouseButton, RecordedAction, RecordedFingerprint, ScrollDirection};
 
+const BROWSER_PROCESSES: &[&str] = &[
+    "safari", "google chrome", "chrome", "chromium", "firefox",
+    "microsoft edge", "msedge", "arc", "brave browser", "brave",
+    "opera", "vivaldi", "orion", "zen", "floorp", "waterfox",
+    "iexplore", "edge",
+];
+
+fn is_browser_process(process_name: &str) -> bool {
+    let lower = process_name.to_lowercase();
+    BROWSER_PROCESSES.iter().any(|b| lower.contains(b))
+}
+
 fn advance_layout(
     x: &mut f32,
     y: &mut f32,
@@ -165,6 +177,9 @@ pub async fn generate_add_node_commands(
     // Track if last action was an Enter key press (for adding delay before clicks)
     let mut last_was_enter = false;
 
+    // Track the current process name to detect browser context
+    let mut current_process: Option<String> = None;
+
     for action in actions {
         // Calculate delay from previous action
         let delay_ms = if let Some(prev_ts) = last_timestamp {
@@ -297,6 +312,18 @@ pub async fn generate_add_node_commands(
 
         tracing::debug!(" Processing action: {:?}", action.action_type);
 
+        // Update current_process from action metadata if available
+        if let Some(ref proc) = action.metadata.process_name {
+            if !proc.is_empty() {
+                current_process = Some(proc.clone());
+            }
+        }
+
+        let in_browser = current_process
+            .as_deref()
+            .map(is_browser_process)
+            .unwrap_or(false);
+
         // Track helper nodes needed for pattern matching (path_from_storage_dir, child)
         let mut helper_commands: Vec<GenericCommand> = Vec::new();
         let mut template_path_node_id: Option<String> = None;
@@ -306,6 +333,87 @@ pub async fn generate_add_node_commands(
         let mut fingerprint_out_pin_id: Option<String> = None;
         let mut fingerprint_exec_in_pin_id: Option<String> = None;
         let mut fingerprint_exec_out_pin_id: Option<String> = None;
+
+        // Create upload_dir → child FlowPath chain whenever a screenshot is available
+        if let Some(ref screenshot_id) = action.screenshot_ref {
+            let screenshot_path = match &opts.board_id {
+                Some(bid) => format!("rpa/{}/screenshots/{}.png", bid, screenshot_id),
+                None => format!("rpa/screenshots/{}.png", screenshot_id),
+            };
+
+            if let Ok(mut upload_dir_node) = registry.get_node("path_from_upload_dir") {
+                upload_dir_node.coordinates = Some((x_offset - 400.0, y_offset + 200.0, 0.0));
+                let upload_dir_cmd = AddNodeCommand::new(upload_dir_node);
+                let upload_dir_id = upload_dir_cmd.node.id.clone();
+
+                let upload_path_out = upload_dir_cmd
+                    .node
+                    .pins
+                    .iter()
+                    .find(|(_, p)| {
+                        p.name == "path"
+                            && p.pin_type == flow_like::flow::pin::PinType::Output
+                    })
+                    .map(|(id, _)| id.clone());
+
+                helper_commands.push(GenericCommand::AddNode(upload_dir_cmd));
+
+                if let (Ok(mut child_node), Some(upload_out)) =
+                    (registry.get_node("child"), upload_path_out)
+                {
+                    child_node.coordinates =
+                        Some((x_offset - 200.0, y_offset + 200.0, 0.0));
+
+                    if let Some((_, pin)) = child_node
+                        .pins
+                        .iter_mut()
+                        .find(|(_, p)| p.name == "child_name")
+                        && let Ok(bytes) = to_vec(&json!(screenshot_path))
+                    {
+                        pin.default_value = Some(bytes);
+                    }
+
+                    let child_cmd = AddNodeCommand::new(child_node);
+                    let child_node_id = child_cmd.node.id.clone();
+
+                    let child_path_in = child_cmd
+                        .node
+                        .pins
+                        .iter()
+                        .find(|(_, p)| {
+                            p.name == "parent_path"
+                                && p.pin_type == flow_like::flow::pin::PinType::Input
+                        })
+                        .map(|(id, _)| id.clone());
+
+                    let child_path_out = child_cmd
+                        .node
+                        .pins
+                        .iter()
+                        .find(|(_, p)| {
+                            p.name == "path"
+                                && p.pin_type == flow_like::flow::pin::PinType::Output
+                        })
+                        .map(|(id, _)| id.clone());
+
+                    helper_commands.push(GenericCommand::AddNode(child_cmd));
+
+                    if let Some(child_in) = child_path_in {
+                        helper_commands.push(GenericCommand::ConnectPin(
+                            ConnectPinsCommand::new(
+                                upload_dir_id,
+                                child_node_id.clone(),
+                                upload_out,
+                                child_in,
+                            ),
+                        ));
+                    }
+
+                    template_path_node_id = Some(child_node_id);
+                    template_path_out_pin_id = child_path_out;
+                }
+            }
+        }
 
         // Generate fingerprint_create node before clicks if fingerprint data is available
         let is_click = matches!(
@@ -343,94 +451,8 @@ pub async fn generate_add_node_commands(
                     MouseButton::Middle => "Middle",
                 };
 
-                // Use pattern matching if enabled and a screenshot is available
+                // Use vision_click_template if pattern matching mode enabled and screenshot available
                 if opts.use_pattern_matching && action.screenshot_ref.is_some() {
-                    let screenshot_id = action.screenshot_ref.as_ref().unwrap();
-
-                    // Path is relative to upload_dir (from_upload_dir returns board_dir/upload)
-                    let screenshot_path = match &opts.board_id {
-                        Some(bid) => format!("rpa/{}/screenshots/{}.png", bid, screenshot_id),
-                        None => format!("rpa/screenshots/{}.png", screenshot_id),
-                    };
-
-                    // Create path_from_upload_dir node (pure data node, no execution pins)
-                    if let Ok(mut upload_dir_node) = registry.get_node("path_from_upload_dir") {
-                        upload_dir_node.coordinates = Some((x_offset, y_offset - 150.0, 0.0));
-                        let upload_dir_cmd = AddNodeCommand::new(upload_dir_node);
-                        let upload_dir_id = upload_dir_cmd.node.id.clone();
-
-                        let upload_path_out = upload_dir_cmd
-                            .node
-                            .pins
-                            .iter()
-                            .find(|(_, p)| {
-                                p.name == "path"
-                                    && p.pin_type == flow_like::flow::pin::PinType::Output
-                            })
-                            .map(|(id, _)| id.clone());
-
-                        helper_commands.push(GenericCommand::AddNode(upload_dir_cmd));
-
-                        // Create child node to append the screenshot path
-                        if let (Ok(mut child_node), Some(upload_out)) =
-                            (registry.get_node("child"), upload_path_out)
-                        {
-                            child_node.coordinates =
-                                Some((x_offset + 180.0, y_offset - 150.0, 0.0));
-
-                            // Set the child_name (screenshot relative path)
-                            if let Some((_, pin)) = child_node
-                                .pins
-                                .iter_mut()
-                                .find(|(_, p)| p.name == "child_name")
-                                && let Ok(bytes) = to_vec(&json!(screenshot_path))
-                            {
-                                pin.default_value = Some(bytes);
-                            }
-
-                            let child_cmd = AddNodeCommand::new(child_node);
-                            let child_node_id = child_cmd.node.id.clone();
-
-                            let child_path_in = child_cmd
-                                .node
-                                .pins
-                                .iter()
-                                .find(|(_, p)| {
-                                    p.name == "parent_path"
-                                        && p.pin_type == flow_like::flow::pin::PinType::Input
-                                })
-                                .map(|(id, _)| id.clone());
-
-                            let child_path_out = child_cmd
-                                .node
-                                .pins
-                                .iter()
-                                .find(|(_, p)| {
-                                    p.name == "path"
-                                        && p.pin_type == flow_like::flow::pin::PinType::Output
-                                })
-                                .map(|(id, _)| id.clone());
-
-                            helper_commands.push(GenericCommand::AddNode(child_cmd));
-
-                            // Connect upload_dir output to child input
-                            if let Some(child_in) = child_path_in {
-                                helper_commands.push(GenericCommand::ConnectPin(
-                                    ConnectPinsCommand::new(
-                                        upload_dir_id,
-                                        child_node_id.clone(),
-                                        upload_out,
-                                        child_in,
-                                    ),
-                                ));
-                            }
-
-                            // Store child node output for connecting to vision_click_template
-                            template_path_node_id = Some(child_node_id);
-                            template_path_out_pin_id = child_path_out;
-                        }
-                    }
-
                     (
                         "vision_click_template",
                         vec![
@@ -442,27 +464,28 @@ pub async fn generate_add_node_commands(
                         false,
                     )
                 } else {
-                    // Even without full pattern matching mode, pass the screenshot ref
-                    // so users can enable template matching later if needed
                     let mut pins = vec![
                         ("x", json!(x)),
                         ("y", json!(y)),
                         ("button", json!(button_str)),
                     ];
 
-                    if let Some(ref screenshot_id) = action.screenshot_ref {
-                        let screenshot_path = match &opts.board_id {
-                            Some(bid) => format!("rpa/{}/screenshots/{}.png", bid, screenshot_id),
-                            None => format!("rpa/screenshots/{}.png", screenshot_id),
-                        };
-                        pins.push(("screenshot_ref", json!(screenshot_path)));
-                    }
-
                     // Add natural movement for bot detection evasion
                     if opts.bot_detection_evasion {
                         let mut rng = flow_like_types::rand::rng();
                         pins.push(("natural_move", json!(true)));
                         pins.push(("move_duration_ms", json!(rng.random_range(150..350))));
+                    }
+
+                    // Enable template matching when screenshot is available
+                    // (template FlowPath is wired automatically via template_path_node_id)
+                    if action.screenshot_ref.is_some() {
+                        pins.push(("use_template_matching", json!(true)));
+                    }
+
+                    // In browser context: disable fingerprint (template preferred)
+                    if in_browser && action.screenshot_ref.is_some() {
+                        pins.push(("use_fingerprint", json!(false)));
                     }
 
                     ("computer_mouse_click", pins, false)
@@ -472,18 +495,18 @@ pub async fn generate_add_node_commands(
                 let (x, y) = action.coordinates.unwrap_or((0, 0));
                 let mut pins = vec![("x", json!(x)), ("y", json!(y))];
 
-                if let Some(ref screenshot_id) = action.screenshot_ref {
-                    let screenshot_path = match &opts.board_id {
-                        Some(bid) => format!("rpa/{}/screenshots/{}.png", bid, screenshot_id),
-                        None => format!("rpa/screenshots/{}.png", screenshot_id),
-                    };
-                    pins.push(("screenshot_ref", json!(screenshot_path)));
-                }
-
                 if opts.bot_detection_evasion {
                     let mut rng = flow_like_types::rand::rng();
                     pins.push(("natural_move", json!(true)));
                     pins.push(("move_duration_ms", json!(rng.random_range(150..350))));
+                }
+
+                if action.screenshot_ref.is_some() {
+                    pins.push(("use_template_matching", json!(true)));
+                }
+
+                if in_browser && action.screenshot_ref.is_some() {
+                    pins.push(("use_fingerprint", json!(false)));
                 }
 
                 ("computer_mouse_double_click", pins, false)
@@ -504,9 +527,10 @@ pub async fn generate_add_node_commands(
                     continue;
                 }
 
-                // Convert pixel delta to scroll lines (rdev gives pixels, enigo expects lines)
-                // Typical scroll line = ~40 pixels, but cap at reasonable values
-                let lines = ((*amount as f32) / 40.0).round().max(1.0).min(20.0) as i32;
+                // rdev on macOS reports line-level deltas (typically 1-5 per event).
+                // After consolidation the accumulated amount is already in scroll-line units.
+                // Pass through directly — enigo.scroll(1) sends one line tick.
+                let lines = (*amount).max(1).min(100) as i32;
                 let (dx, dy) = match direction {
                     ScrollDirection::Down => (0, -lines),
                     ScrollDirection::Up => (0, lines),
@@ -550,13 +574,17 @@ pub async fn generate_add_node_commands(
             ActionType::WindowFocus {
                 window_title: _,
                 process,
-            } => (
-                "computer_focus_window",
-                // Use process name (app name) for more reliable matching
-                // Window titles change with tab/page, but app names stay stable
-                vec![("window_title", json!(process))],
-                false,
-            ),
+            } => {
+                // Track current process for browser detection
+                current_process = Some(process.clone());
+                (
+                    "computer_focus_window",
+                    // Use process name (app name) for more reliable matching
+                    // Window titles change with tab/page, but app names stay stable
+                    vec![("window_title", json!(process))],
+                    false,
+                )
+            }
             ActionType::Copy {
                 clipboard_content: _,
             } => {
@@ -927,6 +955,24 @@ fn generate_fingerprint_node(
     if let Some(text) = &fp.text {
         if let Some((_, pin)) = node.pins.iter_mut().find(|(_, p)| p.name == "text")
             && let Ok(bytes) = to_vec(&json!(text))
+        {
+            pin.default_value = Some(bytes);
+        }
+    }
+
+    // Set bounding box if available
+    if let Some((x1, y1, x2, y2)) = &fp.bounding_box {
+        let bbox_json = json!({
+            "x1": *x1 as f32,
+            "y1": *y1 as f32,
+            "x2": *x2 as f32,
+            "y2": *y2 as f32,
+            "score": 1.0,
+            "class_idx": -1,
+            "class_name": null
+        });
+        if let Some((_, pin)) = node.pins.iter_mut().find(|(_, p)| p.name == "bounding_box")
+            && let Ok(bytes) = to_vec(&bbox_json)
         {
             pin.default_value = Some(bytes);
         }

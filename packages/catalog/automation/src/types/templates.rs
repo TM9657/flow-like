@@ -165,3 +165,36 @@ pub struct TemplateMatchResult {
     pub confidence: f64,
     pub template_path: String,
 }
+
+/// Convert RGBA/RGB template bytes to a grayscale PNG using the NTSC luminance
+/// Converts a template image to grayscale matching `rustautogui`'s screen
+/// capture formula.
+///
+/// **Bug workaround:** On macOS and Linux, `rustautogui` reorders raw BGRA
+/// pixels to RGBA in `capture_screen` but then reads them with BGRA indices
+/// in `convert_bitmap_to_grayscale` — effectively computing
+/// `B*30 + G*59 + R*11` instead of the intended NTSC `R*30 + G*59 + B*11`.
+/// Windows has no reorder step, so the standard NTSC formula is correct there.
+///
+/// We must match the *actual* screen-capture formula per platform so that
+/// NCC correlation scores remain high for coloured content.
+#[cfg(feature = "execute")]
+pub fn to_ntsc_grayscale(template_bytes: &[u8]) -> Option<image::GrayImage> {
+    use image::GenericImageView;
+
+    let img = image::load_from_memory(template_bytes).ok()?;
+    let (w, h) = img.dimensions();
+
+    Some(image::ImageBuffer::from_fn(w, h, |x, y| {
+        let px = img.get_pixel(x, y);
+        // On Windows rustautogui reads raw BGRA with chunk[2]=R, chunk[0]=B
+        // which is correct.  On macOS/Linux it first reorders to RGBA but
+        // still reads chunk[2] as "R" (actually B) and chunk[0] as "B"
+        // (actually R), swapping the weights.
+        #[cfg(target_os = "windows")]
+        let v = (px[0] as u32 * 30 + px[1] as u32 * 59 + px[2] as u32 * 11) / 100;
+        #[cfg(not(target_os = "windows"))]
+        let v = (px[2] as u32 * 30 + px[1] as u32 * 59 + px[0] as u32 * 11) / 100;
+        image::Luma([v as u8])
+    }))
+}

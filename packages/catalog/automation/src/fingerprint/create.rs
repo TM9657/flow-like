@@ -5,6 +5,7 @@ use flow_like::flow::{
     node::{Node, NodeLogic},
     variable::VariableType,
 };
+use flow_like_catalog_core::BoundingBox;
 use flow_like_types::{async_trait, json::json};
 
 #[crate::register_node]
@@ -66,6 +67,15 @@ impl NodeLogic for CreateFingerprintNode {
         node.add_input_pin("text", "Text", "Visible text content", VariableType::String)
             .set_default_value(Some(json!("")));
 
+        node.add_input_pin(
+            "bounding_box",
+            "BBox",
+            "Bounding box of the element (x1, y1, x2, y2)",
+            VariableType::Struct,
+        )
+        .set_schema::<BoundingBox>()
+        .set_default_value(Some(json!(BoundingBox::default())));
+
         node.add_output_pin("exec_out", "▶", "Continue", VariableType::Execution);
 
         node.add_output_pin(
@@ -94,6 +104,11 @@ impl NodeLogic for CreateFingerprintNode {
             id
         };
 
+        let bbox: BoundingBox = context
+            .evaluate_pin("bounding_box")
+            .await
+            .unwrap_or_default();
+
         let mut fingerprint = ElementFingerprint::new(fingerprint_id).with_selectors(selectors);
 
         if !role.is_empty() {
@@ -104,6 +119,10 @@ impl NodeLogic for CreateFingerprintNode {
         }
         if !text.is_empty() {
             fingerprint = fingerprint.with_text(text);
+        }
+
+        if bbox.area() > 0.0 {
+            fingerprint = fingerprint.with_bounding_box(bbox);
         }
 
         context

@@ -135,6 +135,8 @@ percent-encoding = "2.3.2"
 # Force flate2 to use pure Rust backend (no C zlib) for iOS compatibility
 flate2 = { version = "1.1", default-features = false, features = ["rust_backend"] }
 
+rdev = { git = "https://github.com/TM9657/rdev", branch = "macos-thread-safety" }
+
 # Patch esaxx-rs to fix Windows CRT mismatch (upstream hardcodes static CRT /MT,
 # conflicting with ort_sys which uses dynamic CRT /MD → LNK2038)
 [patch.crates-io]

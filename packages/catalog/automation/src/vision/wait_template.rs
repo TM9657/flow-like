@@ -5,6 +5,7 @@ use flow_like::flow::{
     node::{Node, NodeLogic},
     variable::VariableType,
 };
+use flow_like_catalog_core::FlowPath;
 use flow_like_types::{async_trait, json::json};
 
 #[crate::register_node]
@@ -51,12 +52,12 @@ impl NodeLogic for WaitTemplateNode {
         .set_schema::<AutomationSession>();
 
         node.add_input_pin(
-            "template_path",
-            "Template Path",
-            "Path to the template image file",
-            VariableType::String,
+            "template",
+            "Template",
+            "Template image file",
+            VariableType::Struct,
         )
-        .set_default_value(Some(json!("")));
+        .set_schema::<FlowPath>();
 
         node.add_input_pin(
             "confidence",
@@ -110,39 +111,41 @@ impl NodeLogic for WaitTemplateNode {
 
     #[cfg(feature = "execute")]
     async fn run(&self, context: &mut ExecutionContext) -> flow_like_types::Result<()> {
-        use rustautogui::MatchMode;
         use std::time::{Duration, Instant};
 
         context.deactivate_exec_pin("exec_out").await?;
         context.deactivate_exec_pin("exec_timeout").await?;
 
-        let session: AutomationSession = context.evaluate_pin("session").await?;
-        let template_path: String = context.evaluate_pin("template_path").await?;
+        let _session: AutomationSession = context.evaluate_pin("session").await?;
+        let template: FlowPath = context.evaluate_pin("template").await?;
         let confidence: f64 = context.evaluate_pin("confidence").await?;
         let timeout_ms: i64 = context.evaluate_pin("timeout_ms").await?;
         let poll_interval_ms: i64 = context.evaluate_pin("poll_interval_ms").await?;
 
-        let autogui = session.get_autogui(context).await?;
+        let template_bytes = template.get(context, false).await?;
+        let gray_template = crate::types::screen_match::to_grayscale(&template_bytes)
+            .ok_or_else(|| flow_like_types::anyhow!("Failed to decode template image"))?;
+
         let start = Instant::now();
         let timeout = Duration::from_millis(timeout_ms.max(0) as u64);
         let poll_interval = Duration::from_millis(poll_interval_ms.max(0) as u64);
 
         loop {
-            {
-                let mut gui = autogui.lock().await;
-
-                gui.prepare_template_from_file(&template_path, None, MatchMode::Segmented)
-                    .map_err(|e| flow_like_types::anyhow!("Failed to prepare template: {}", e))?;
-
-                if let Ok(Some(matches)) = gui.find_image_on_screen(confidence as f32)
-                    && let Some((x, y, _conf)) = matches.first()
-                {
+            // Capture fresh screen each iteration and match
+            if let Some(gray_screen) = crate::types::screen_match::capture_screen_grayscale() {
+                let matches = crate::types::screen_match::find_template_in_image(
+                    &gray_screen,
+                    &gray_template,
+                    confidence as f32,
+                );
+                if let Some(&(px, py, _conf)) = matches.first() {
+                    let (lx, ly) = crate::types::screen_match::physical_to_logical(px, py);
                     let result = TemplateMatchResult {
                         found: true,
-                        x: *x as i32,
-                        y: *y as i32,
+                        x: lx,
+                        y: ly,
                         confidence,
-                        template_path: template_path.clone(),
+                        template_path: template.path.clone(),
                     };
 
                     context.set_pin_value("found", json!(true)).await?;
@@ -158,7 +161,7 @@ impl NodeLogic for WaitTemplateNode {
                     x: 0,
                     y: 0,
                     confidence: 0.0,
-                    template_path: template_path.clone(),
+                    template_path: template.path.clone(),
                 };
 
                 context.set_pin_value("found", json!(false)).await?;
@@ -223,12 +226,12 @@ impl NodeLogic for WaitTemplateDisappearNode {
         .set_schema::<AutomationSession>();
 
         node.add_input_pin(
-            "template_path",
-            "Template Path",
-            "Path to the template image file",
-            VariableType::String,
+            "template",
+            "Template",
+            "Template image file",
+            VariableType::Struct,
         )
-        .set_default_value(Some(json!("")));
+        .set_schema::<FlowPath>();
 
         node.add_input_pin(
             "confidence",
@@ -266,40 +269,39 @@ impl NodeLogic for WaitTemplateDisappearNode {
 
     #[cfg(feature = "execute")]
     async fn run(&self, context: &mut ExecutionContext) -> flow_like_types::Result<()> {
-        use rustautogui::MatchMode;
         use std::time::{Duration, Instant};
 
         context.deactivate_exec_pin("exec_out").await?;
         context.deactivate_exec_pin("exec_timeout").await?;
 
-        let session: AutomationSession = context.evaluate_pin("session").await?;
-        let template_path: String = context.evaluate_pin("template_path").await?;
+        let _session: AutomationSession = context.evaluate_pin("session").await?;
+        let template: FlowPath = context.evaluate_pin("template").await?;
         let confidence: f64 = context.evaluate_pin("confidence").await?;
         let timeout_ms: i64 = context.evaluate_pin("timeout_ms").await?;
 
-        let autogui = session.get_autogui(context).await?;
+        let template_bytes = template.get(context, false).await?;
+        let gray_template = crate::types::screen_match::to_grayscale(&template_bytes)
+            .ok_or_else(|| flow_like_types::anyhow!("Failed to decode template image"))?;
+
         let start = Instant::now();
         let timeout = Duration::from_millis(timeout_ms.max(0) as u64);
 
         loop {
-            {
-                let mut gui = autogui.lock().await;
+            let is_visible = crate::types::screen_match::capture_screen_grayscale()
+                .map(|gray_screen| {
+                    let matches = crate::types::screen_match::find_template_in_image(
+                        &gray_screen,
+                        &gray_template,
+                        confidence as f32,
+                    );
+                    !matches.is_empty()
+                })
+                .unwrap_or(false);
 
-                gui.prepare_template_from_file(&template_path, None, MatchMode::Segmented)
-                    .map_err(|e| flow_like_types::anyhow!("Failed to prepare template: {}", e))?;
-
-                let is_visible = gui
-                    .find_image_on_screen(confidence as f32)
-                    .ok()
-                    .flatten()
-                    .map(|v| !v.is_empty())
-                    .unwrap_or(false);
-
-                if !is_visible {
-                    context.set_pin_value("disappeared", json!(true)).await?;
-                    context.activate_exec_pin("exec_out").await?;
-                    return Ok(());
-                }
+            if !is_visible {
+                context.set_pin_value("disappeared", json!(true)).await?;
+                context.activate_exec_pin("exec_out").await?;
+                return Ok(());
             }
 
             if start.elapsed() >= timeout {

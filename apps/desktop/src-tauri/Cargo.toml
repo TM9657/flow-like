@@ -79,7 +79,7 @@ chrono-tz.workspace = true
 mimalloc.workspace = true
 sysinfo = "0.37.2"
 
-rdev = { version = "0.5" }
+rdev.workspace = true
 enigo = "0.6.1"
 
 copilot-sdk.workspace = true

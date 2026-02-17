@@ -4,6 +4,7 @@ use flow_like::flow::{
     node::{Node, NodeLogic},
     variable::VariableType,
 };
+use flow_like_catalog_core::FlowPath;
 use flow_like_types::{async_trait, json::json, rand};
 
 #[crate::register_node]
@@ -263,6 +264,204 @@ impl NodeLogic for ComputerNaturalMouseMoveNode {
         ))
     }
 }
+/// Which strategy resolved the click target
+#[cfg(feature = "execute")]
+#[derive(Debug)]
+enum ResolvedVia {
+    Template,
+    Fingerprint,
+    FallbackCoordinates,
+}
+
+/// Outcome of the click-target resolution hierarchy:
+/// template → fingerprint bounding-box → recorded (x, y).
+#[cfg(feature = "execute")]
+struct ResolvedTarget {
+    x: i32,
+    y: i32,
+    via: ResolvedVia,
+}
+
+/// Result of a template matching attempt with full diagnostic info.
+#[cfg(feature = "execute")]
+use crate::types::screen_match::TemplateMatchResult;
+
+/// Try template matching, returning detailed results for diagnostics.
+///
+/// Captures the screen via `xcap` (bypassing rustautogui's broken macOS
+/// screen capture) and runs NCC directly via rustautogui's `dev` API.
+#[cfg(feature = "execute")]
+fn try_template_match(
+    template_bytes: &[u8],
+    min_confidence: f32,
+) -> Option<TemplateMatchResult> {
+    crate::types::screen_match::try_template_match(template_bytes, min_confidence)
+}
+
+/// Resolve the click target using the hierarchy:
+/// 1. Template matching (if `use_template_matching` is true and template provided)
+/// 2. Fingerprint bounding-box center (if fingerprint provided)
+/// 3. Recorded (x, y) coordinates (always available)
+///
+/// Emits log messages for every step so the user can diagnose failures.
+#[cfg(feature = "execute")]
+async fn resolve_click_target(
+    context: &mut ExecutionContext,
+    _session: &AutomationSession,
+    x: i64,
+    y: i64,
+    use_template: bool,
+    template_bytes: Option<Vec<u8>>,
+    confidence: f64,
+    use_fingerprint: bool,
+    fingerprint: Option<&crate::types::fingerprints::ElementFingerprint>,
+) -> flow_like_types::Result<ResolvedTarget> {
+    // ── 1. Template matching ──────────────────────────────────────────
+    if use_template {
+        if let Some(bytes) = &template_bytes {
+            context.log_message(
+                &format!("Template loaded: {} bytes, confidence threshold: {}", bytes.len(), confidence),
+                flow_like::flow::execution::LogLevel::Debug,
+            );
+
+            match try_template_match(bytes, confidence as f32) {
+                Some(result) => {
+                    context.log_message(
+                        &format!(
+                            "Template {}x{}, screen {}x{} (physical), best match: {:?}",
+                            result.template_dims.0, result.template_dims.1,
+                            result.screen_dims.0, result.screen_dims.1,
+                            result.best_match.map(|(mx, my, c)| format!("({},{}) conf={:.4}", mx, my, c))
+                                .unwrap_or_else(|| "NONE (zero correlation)".to_string()),
+                        ),
+                        flow_like::flow::execution::LogLevel::Debug,
+                    );
+
+                    if let Some((mx, my, conf)) = result.best_match {
+                        if conf >= confidence as f32 {
+                            // Convert physical (Retina) coordinates to logical mouse coordinates
+                            let (lx, ly) = crate::types::screen_match::physical_to_logical(mx, my);
+                            let dist = (((lx as f64 - x as f64).powi(2)
+                                + (ly as f64 - y as f64).powi(2))
+                            .sqrt()) as i64;
+                            if dist > 500 {
+                                context.log_message(
+                                    &format!(
+                                        "Template found at ({}, {}) is {}px from recorded ({}, {}) – large drift",
+                                        lx, ly, dist, x, y
+                                    ),
+                                    flow_like::flow::execution::LogLevel::Warn,
+                                );
+                            }
+                            context.log_message(
+                                &format!(
+                                    "Template matched at ({}, {}) [logical] confidence {:.4}",
+                                    lx, ly, conf
+                                ),
+                                flow_like::flow::execution::LogLevel::Debug,
+                            );
+                            return Ok(ResolvedTarget {
+                                x: lx,
+                                y: ly,
+                                via: ResolvedVia::Template,
+                            });
+                        }
+                        context.log_message(
+                            &format!(
+                                "Template best match at ({},{}) conf={:.4} < threshold {} — not accepted. Debug images saved.",
+                                mx, my, conf, confidence
+                            ),
+                            flow_like::flow::execution::LogLevel::Warn,
+                        );
+                    } else {
+                        context.log_message(
+                            &format!(
+                                "Template not found on screen (zero correlation). Template {}x{}, screen {}x{}. Debug images saved.",
+                                result.template_dims.0, result.template_dims.1,
+                                result.screen_dims.0, result.screen_dims.1,
+                            ),
+                            flow_like::flow::execution::LogLevel::Warn,
+                        );
+                    }
+                }
+                None => {
+                    context.log_message(
+                        "Template grayscale conversion failed — could not decode template image",
+                        flow_like::flow::execution::LogLevel::Warn,
+                    );
+                }
+            }
+        } else {
+            context.log_message(
+                "Template matching enabled but no template image provided (FlowPath evaluation failed or empty)",
+                flow_like::flow::execution::LogLevel::Warn,
+            );
+        }
+    }
+
+    // ── 2. Fingerprint bounding box ───────────────────────────────────
+    if use_fingerprint {
+        if let Some(fp) = fingerprint {
+            context.log_message(
+                &format!(
+                    "Fingerprint present: role={:?}, name={:?}, text={:?}, bbox={:?}",
+                    fp.role, fp.name, fp.text, fp.bounding_box
+                ),
+                flow_like::flow::execution::LogLevel::Debug,
+            );
+
+            if let Some(ref bbox) = fp.bounding_box {
+                let cx = ((bbox.x1 + bbox.x2) / 2.0) as i32;
+                let cy = ((bbox.y1 + bbox.y2) / 2.0) as i32;
+                let dist = (((cx as f64 - x as f64).powi(2)
+                    + (cy as f64 - y as f64).powi(2))
+                .sqrt()) as i64;
+                if dist > 500 {
+                    context.log_message(
+                        &format!(
+                            "Fingerprint bbox center ({}, {}) is {}px from recorded ({}, {}) – large drift",
+                            cx, cy, dist, x, y
+                        ),
+                        flow_like::flow::execution::LogLevel::Warn,
+                    );
+                }
+                context.log_message(
+                    &format!(
+                        "Using fingerprint bounding-box center ({}, {})",
+                        cx, cy
+                    ),
+                    flow_like::flow::execution::LogLevel::Debug,
+                );
+                return Ok(ResolvedTarget {
+                    x: cx,
+                    y: cy,
+                    via: ResolvedVia::Fingerprint,
+                });
+            }
+            context.log_message(
+                "Fingerprint has no bounding box, cannot use for positioning",
+                flow_like::flow::execution::LogLevel::Warn,
+            );
+        }
+    } else if fingerprint.is_some() {
+        context.log_message(
+            "Fingerprint available but use_fingerprint is disabled, skipping",
+            flow_like::flow::execution::LogLevel::Debug,
+        );
+    }
+
+    // ── 3. Fallback: recorded coordinates ─────────────────────────────
+    context.log_message(
+        &format!("Using recorded coordinates ({}, {})", x, y),
+        flow_like::flow::execution::LogLevel::Debug,
+    );
+    Ok(ResolvedTarget {
+        x: x as i32,
+        y: y as i32,
+        via: ResolvedVia::FallbackCoordinates,
+    })
+}
+
 /// Performs natural mouse movement using Bezier curves
 #[cfg(feature = "execute")]
 fn perform_natural_move(
@@ -462,12 +661,12 @@ impl NodeLogic for ComputerMouseClickNode {
         .set_default_value(Some(json!(false)));
 
         node.add_input_pin(
-            "screenshot_ref",
-            "Screenshot Ref",
-            "Reference to recorded screenshot artifact for template matching",
-            VariableType::String,
+            "template",
+            "Template",
+            "Template image for template matching",
+            VariableType::Struct,
         )
-        .set_default_value(Some(json!("")));
+        .set_schema::<FlowPath>();
 
         node.add_input_pin(
             "confidence",
@@ -494,6 +693,14 @@ impl NodeLogic for ComputerMouseClickNode {
         .set_default_value(Some(json!(200)));
 
         node.add_input_pin(
+            "use_fingerprint",
+            "Use Fingerprint",
+            "If enabled, use fingerprint bounding box as fallback before raw coordinates",
+            VariableType::Boolean,
+        )
+        .set_default_value(Some(json!(true)));
+
+        node.add_input_pin(
             "fingerprint",
             "Fingerprint",
             "Optional element fingerprint for pre-click validation",
@@ -517,7 +724,6 @@ impl NodeLogic for ComputerMouseClickNode {
     #[cfg(feature = "execute")]
     async fn run(&self, context: &mut ExecutionContext) -> flow_like_types::Result<()> {
         use enigo::{Button, Coordinate, Mouse};
-        use rustautogui::MatchMode;
 
         context.deactivate_exec_pin("exec_out").await?;
 
@@ -525,86 +731,49 @@ impl NodeLogic for ComputerMouseClickNode {
         let x: i64 = context.evaluate_pin("x").await?;
         let y: i64 = context.evaluate_pin("y").await?;
         let button_str: String = context.evaluate_pin("button").await?;
-        let use_template_matching: bool = context
+        let use_template: bool = context
             .evaluate_pin("use_template_matching")
             .await
             .unwrap_or(false);
-        let screenshot_ref: String = context
-            .evaluate_pin("screenshot_ref")
-            .await
-            .unwrap_or_default();
+        let template_bytes: Option<Vec<u8>> = if use_template {
+            if let Ok(tmpl) = context.evaluate_pin::<FlowPath>("template").await {
+                tmpl.get(context, false).await.ok()
+            } else {
+                None
+            }
+        } else {
+            None
+        };
         let confidence: f64 = context.evaluate_pin("confidence").await.unwrap_or(0.8);
         let natural_move: bool = context.evaluate_pin("natural_move").await.unwrap_or(false);
         let move_duration_ms: i64 = context
             .evaluate_pin("move_duration_ms")
             .await
             .unwrap_or(200);
+        let use_fingerprint: bool = context
+            .evaluate_pin("use_fingerprint")
+            .await
+            .unwrap_or(true);
+        let fingerprint: Option<crate::types::fingerprints::ElementFingerprint> =
+            context.evaluate_pin("fingerprint").await.ok();
 
-        // Auto-enable template matching when screenshot_ref is provided
-        let should_use_template = use_template_matching || !screenshot_ref.is_empty();
+        let target = resolve_click_target(
+            context,
+            &session,
+            x,
+            y,
+            use_template,
+            template_bytes,
+            confidence,
+            use_fingerprint,
+            fingerprint.as_ref(),
+        )
+        .await?;
 
-        tracing::debug!(
-            "Click node: use_template_matching={}, screenshot_ref='{}', should_use_template={}, coords=({}, {})",
-            use_template_matching, screenshot_ref, should_use_template, x, y
+        context.log_message(
+            &format!("Click target resolved to ({}, {}) via {:?}", target.x, target.y, target.via),
+            flow_like::flow::execution::LogLevel::Debug,
         );
-
-        let mut template_moved = false;
-
-        if should_use_template && !screenshot_ref.is_empty() {
-            if let Some(ref context_cache) = context.execution_cache {
-                let upload_path = context_cache.get_upload_dir()?;
-                let full_path = upload_path.child(screenshot_ref.clone());
-                let path_str = full_path.to_string();
-
-                tracing::debug!("Loading template from: {}", path_str);
-
-                let autogui = session.get_autogui(context).await?;
-                let mut gui = autogui.lock().await;
-
-                // Load template image to get dimensions for debugging
-                if let Ok(img) = image::open(&path_str) {
-                    tracing::debug!(
-                        "Template image dimensions: {}x{}",
-                        img.width(), img.height()
-                    );
-                }
-
-                if let Err(e) =
-                    gui.prepare_template_from_file(&path_str, None, MatchMode::Segmented)
-                {
-                    tracing::warn!(
-                        "Template preparation failed: {}, falling back to coordinates ({}, {})",
-                        e, x, y
-                    );
-                } else {
-                    tracing::debug!("Template prepared successfully, searching on screen with confidence >= {}", confidence);
-                    // Use find_image_on_screen_and_move_mouse to handle centering
-                    // and macOS Retina scaling correctly
-                    match gui.find_image_on_screen_and_move_mouse(confidence as f32, 0.0) {
-                        Ok(Some(matches)) if !matches.is_empty() => {
-                            let (mx, my, conf) = matches[0];
-                            tracing::debug!(
-                                "Template matched at ({}, {}) with confidence {:.3}, cursor moved to center",
-                                mx, my, conf
-                            );
-                            template_moved = true;
-                        }
-                        Ok(_) => {
-                            tracing::warn!(
-                                "Template not found on screen (confidence >= {}), falling back to coordinates ({}, {})",
-                                confidence, x, y
-                            );
-                        }
-                        Err(e) => {
-                            tracing::warn!(
-                                "Template matching error: {}, falling back to coordinates ({}, {})",
-                                e, x, y
-                            );
-                        }
-                    }
-                }
-            }
-        }
 
         let button = match button_str.as_str() {
             "right" => Button::Right,
@@ -615,25 +784,22 @@ impl NodeLogic for ComputerMouseClickNode {
         {
             let mut enigo = session.create_enigo()?;
 
-            if !template_moved {
-                tracing::debug!("No template match, using fallback coordinates ({}, {}), natural_move={}", x, y, natural_move);
-                if natural_move {
-                    use rand::Rng;
-                    let start = enigo.location().unwrap_or((0, 0));
-                    let overshoot = rand::rng().random_bool(0.3);
-                    perform_natural_move(
-                        &mut enigo,
-                        start,
-                        (x as i32, y as i32),
-                        move_duration_ms as u64,
-                        0.3,
-                        overshoot,
-                    )?;
-                } else {
-                    enigo
-                        .move_mouse(x as i32, y as i32, Coordinate::Abs)
-                        .map_err(|e| flow_like_types::anyhow!("Failed to move mouse: {}", e))?;
-                }
+            if natural_move {
+                use rand::Rng;
+                let start = enigo.location().unwrap_or((0, 0));
+                let overshoot = rand::rng().random_bool(0.3);
+                perform_natural_move(
+                    &mut enigo,
+                    start,
+                    (target.x, target.y),
+                    move_duration_ms as u64,
+                    0.3,
+                    overshoot,
+                )?;
+            } else {
+                enigo
+                    .move_mouse(target.x, target.y, Coordinate::Abs)
+                    .map_err(|e| flow_like_types::anyhow!("Failed to move mouse: {}", e))?;
             }
 
             std::thread::sleep(std::time::Duration::from_millis(session.click_delay_ms));
@@ -715,12 +881,12 @@ impl NodeLogic for ComputerMouseDoubleClickNode {
         .set_default_value(Some(json!(false)));
 
         node.add_input_pin(
-            "screenshot_ref",
-            "Screenshot Ref",
-            "Reference to recorded screenshot artifact for template matching",
-            VariableType::String,
+            "template",
+            "Template",
+            "Template image for template matching",
+            VariableType::Struct,
         )
-        .set_default_value(Some(json!("")));
+        .set_schema::<FlowPath>();
 
         node.add_input_pin(
             "confidence",
@@ -747,6 +913,14 @@ impl NodeLogic for ComputerMouseDoubleClickNode {
         .set_default_value(Some(json!(200)));
 
         node.add_input_pin(
+            "use_fingerprint",
+            "Use Fingerprint",
+            "If enabled, use fingerprint bounding box as fallback before raw coordinates",
+            VariableType::Boolean,
+        )
+        .set_default_value(Some(json!(true)));
+
+        node.add_input_pin(
             "fingerprint",
             "Fingerprint",
             "Optional element fingerprint for pre-click validation",
@@ -770,104 +944,75 @@ impl NodeLogic for ComputerMouseDoubleClickNode {
     #[cfg(feature = "execute")]
     async fn run(&self, context: &mut ExecutionContext) -> flow_like_types::Result<()> {
         use enigo::{Button, Coordinate, Mouse};
-        use rustautogui::MatchMode;
 
         context.deactivate_exec_pin("exec_out").await?;
 
         let session: AutomationSession = context.evaluate_pin("session").await?;
         let x: i64 = context.evaluate_pin("x").await?;
         let y: i64 = context.evaluate_pin("y").await?;
-        let use_template_matching: bool = context
+        let use_template: bool = context
             .evaluate_pin("use_template_matching")
             .await
             .unwrap_or(false);
-        let screenshot_ref: String = context
-            .evaluate_pin("screenshot_ref")
-            .await
-            .unwrap_or_default();
+        let template_bytes: Option<Vec<u8>> = if use_template {
+            if let Ok(tmpl) = context.evaluate_pin::<FlowPath>("template").await {
+                tmpl.get(context, false).await.ok()
+            } else {
+                None
+            }
+        } else {
+            None
+        };
         let confidence: f64 = context.evaluate_pin("confidence").await.unwrap_or(0.8);
         let natural_move: bool = context.evaluate_pin("natural_move").await.unwrap_or(false);
         let move_duration_ms: i64 = context
             .evaluate_pin("move_duration_ms")
             .await
             .unwrap_or(200);
+        let use_fingerprint: bool = context
+            .evaluate_pin("use_fingerprint")
+            .await
+            .unwrap_or(true);
+        let fingerprint: Option<crate::types::fingerprints::ElementFingerprint> =
+            context.evaluate_pin("fingerprint").await.ok();
 
-        // Auto-enable template matching when screenshot_ref is provided
-        let should_use_template = use_template_matching || !screenshot_ref.is_empty();
+        let target = resolve_click_target(
+            context,
+            &session,
+            x,
+            y,
+            use_template,
+            template_bytes,
+            confidence,
+            use_fingerprint,
+            fingerprint.as_ref(),
+        )
+        .await?;
 
-        tracing::debug!(
-            "DoubleClick node: use_template_matching={}, screenshot_ref='{}', should_use_template={}, coords=({}, {})",
-            use_template_matching, screenshot_ref, should_use_template, x, y
+        context.log_message(
+            &format!("DoubleClick target resolved to ({}, {}) via {:?}", target.x, target.y, target.via),
+            flow_like::flow::execution::LogLevel::Debug,
         );
-
-        let mut template_moved = false;
-
-        if should_use_template && !screenshot_ref.is_empty() {
-            if let Some(ref context_cache) = context.execution_cache {
-                let upload_path = context_cache.get_upload_dir()?;
-                let full_path = upload_path.child(screenshot_ref.clone());
-                let path_str = full_path.to_string();
-
-                tracing::debug!("Loading template from: {}", path_str);
-
-                let autogui = session.get_autogui(context).await?;
-                let mut gui = autogui.lock().await;
-
-                if let Err(e) =
-                    gui.prepare_template_from_file(&path_str, None, MatchMode::Segmented)
-                {
-                    tracing::warn!(
-                        "Template preparation failed: {}, falling back to coordinates ({}, {})",
-                        e, x, y
-                    );
-                } else {
-                    match gui.find_image_on_screen_and_move_mouse(confidence as f32, 0.0) {
-                        Ok(Some(matches)) if !matches.is_empty() => {
-                            let (mx, my, conf) = matches[0];
-                            tracing::debug!(
-                                "Template matched at ({}, {}) with confidence {:.3}, cursor moved to center",
-                                mx, my, conf
-                            );
-                            template_moved = true;
-                        }
-                        Ok(_) => {
-                            tracing::warn!(
-                                "Template not found on screen (confidence >= {}), falling back to coordinates ({}, {})",
-                                confidence, x, y
-                            );
-                        }
-                        Err(e) => {
-                            tracing::warn!(
-                                "Template matching error: {}, falling back to coordinates ({}, {})",
-                                e, x, y
-                            );
-                        }
-                    }
-                }
-            }
-        }
 
         {
             let mut enigo = session.create_enigo()?;
 
-            if !template_moved {
-                if natural_move {
-                    use rand::Rng;
-                    let start = enigo.location().unwrap_or((0, 0));
-                    let overshoot = rand::rng().random_bool(0.3);
-                    perform_natural_move(
-                        &mut enigo,
-                        start,
-                        (x as i32, y as i32),
-                        move_duration_ms as u64,
-                        0.3,
-                        overshoot,
-                    )?;
-                } else {
-                    enigo
-                        .move_mouse(x as i32, y as i32, Coordinate::Abs)
-                        .map_err(|e| flow_like_types::anyhow!("Failed to move mouse: {}", e))?;
-                }
+            if natural_move {
+                use rand::Rng;
+                let start = enigo.location().unwrap_or((0, 0));
+                let overshoot = rand::rng().random_bool(0.3);
+                perform_natural_move(
+                    &mut enigo,
+                    start,
+                    (target.x, target.y),
+                    move_duration_ms as u64,
+                    0.3,
+                    overshoot,
+                )?;
+            } else {
+                enigo
+                    .move_mouse(target.x, target.y, Coordinate::Abs)
+                    .map_err(|e| flow_like_types::anyhow!("Failed to move mouse: {}", e))?;
             }
 
             std::thread::sleep(std::time::Duration::from_millis(session.click_delay_ms));
@@ -1121,19 +1266,35 @@ impl NodeLogic for ComputerScrollNode {
         let dx: i64 = context.evaluate_pin("dx").await?;
         let dy: i64 = context.evaluate_pin("dy").await?;
 
-        {
-            let mut enigo = session.create_enigo()?;
-            if dy != 0 {
+        // Send individual scroll ticks with small delays to ensure
+        // browsers and other apps process each event correctly.
+        // A single large scroll event is often ignored or misinterpreted.
+        let tick_delay = std::time::Duration::from_millis(15);
+        let session_clone = session.clone();
+
+        flow_like_types::tokio::task::spawn_blocking(move || -> flow_like_types::Result<()> {
+            let mut enigo = session_clone.create_enigo()?;
+            let dy_dir: i32 = if dy > 0 { 1 } else { -1 };
+            let dx_dir: i32 = if dx > 0 { 1 } else { -1 };
+
+            for _ in 0..dy.unsigned_abs() {
                 enigo
-                    .scroll(dy as i32, Axis::Vertical)
+                    .scroll(dy_dir, Axis::Vertical)
                     .map_err(|e| flow_like_types::anyhow!("Failed to scroll vertically: {}", e))?;
+                std::thread::sleep(tick_delay);
             }
-            if dx != 0 {
-                enigo.scroll(dx as i32, Axis::Horizontal).map_err(|e| {
-                    flow_like_types::anyhow!("Failed to scroll horizontally: {}", e)
-                })?;
+            for _ in 0..dx.unsigned_abs() {
+                enigo
+                    .scroll(dx_dir, Axis::Horizontal)
+                    .map_err(|e| {
+                        flow_like_types::anyhow!("Failed to scroll horizontally: {}", e)
+                    })?;
+                std::thread::sleep(tick_delay);
             }
-        }
+            Ok(())
+        })
+        .await
+        .map_err(|e| flow_like_types::anyhow!("Scroll task failed: {}", e))??;
 
         context.set_pin_value("session_out", json!(session)).await?;
         context.activate_exec_pin("exec_out").await?;

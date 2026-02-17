@@ -8,8 +8,8 @@ use tauri::Emitter;
 use super::fingerprint::extract_fingerprint_at;
 use super::screenshot::capture_region;
 use super::state::{
-    ActionType, KeyModifier, MouseButton, RecordedAction, RecordingStateInner, RecordingStatus,
-    ScrollDirection,
+    ActionMetadata, ActionType, KeyModifier, MouseButton, RecordedAction, RecordingStateInner,
+    RecordingStatus, ScrollDirection,
 };
 
 /// Track the currently focused window
@@ -251,39 +251,44 @@ impl EventCapture {
         }
     }
 
+    /// Fallback character mapping using physical key positions (US QWERTY).
+    /// Only used when the OS-provided `event.name` is unavailable.
+    /// Note: on non-US layouts some keys (e.g. Y/Z on QWERTZ) may be swapped;
+    /// shift+symbol mappings are intentionally omitted because they are
+    /// layout-dependent.
     #[cfg(any(target_os = "macos", target_os = "windows", target_os = "linux"))]
-    fn key_to_char(key: &rdev::Key) -> Option<char> {
+    fn key_to_char_fallback(key: &rdev::Key, is_shift_held: bool) -> Option<char> {
         use rdev::Key;
         match key {
-            // Letters (lowercase by default, shift handling done elsewhere)
-            Key::KeyA => Some('a'),
-            Key::KeyB => Some('b'),
-            Key::KeyC => Some('c'),
-            Key::KeyD => Some('d'),
-            Key::KeyE => Some('e'),
-            Key::KeyF => Some('f'),
-            Key::KeyG => Some('g'),
-            Key::KeyH => Some('h'),
-            Key::KeyI => Some('i'),
-            Key::KeyJ => Some('j'),
-            Key::KeyK => Some('k'),
-            Key::KeyL => Some('l'),
-            Key::KeyM => Some('m'),
-            Key::KeyN => Some('n'),
-            Key::KeyO => Some('o'),
-            Key::KeyP => Some('p'),
-            Key::KeyQ => Some('q'),
-            Key::KeyR => Some('r'),
-            Key::KeyS => Some('s'),
-            Key::KeyT => Some('t'),
-            Key::KeyU => Some('u'),
-            Key::KeyV => Some('v'),
-            Key::KeyW => Some('w'),
-            Key::KeyX => Some('x'),
-            Key::KeyY => Some('y'),
-            Key::KeyZ => Some('z'),
+            // Letters — shift only toggles case (universal across layouts)
+            Key::KeyA => Some(if is_shift_held { 'A' } else { 'a' }),
+            Key::KeyB => Some(if is_shift_held { 'B' } else { 'b' }),
+            Key::KeyC => Some(if is_shift_held { 'C' } else { 'c' }),
+            Key::KeyD => Some(if is_shift_held { 'D' } else { 'd' }),
+            Key::KeyE => Some(if is_shift_held { 'E' } else { 'e' }),
+            Key::KeyF => Some(if is_shift_held { 'F' } else { 'f' }),
+            Key::KeyG => Some(if is_shift_held { 'G' } else { 'g' }),
+            Key::KeyH => Some(if is_shift_held { 'H' } else { 'h' }),
+            Key::KeyI => Some(if is_shift_held { 'I' } else { 'i' }),
+            Key::KeyJ => Some(if is_shift_held { 'J' } else { 'j' }),
+            Key::KeyK => Some(if is_shift_held { 'K' } else { 'k' }),
+            Key::KeyL => Some(if is_shift_held { 'L' } else { 'l' }),
+            Key::KeyM => Some(if is_shift_held { 'M' } else { 'm' }),
+            Key::KeyN => Some(if is_shift_held { 'N' } else { 'n' }),
+            Key::KeyO => Some(if is_shift_held { 'O' } else { 'o' }),
+            Key::KeyP => Some(if is_shift_held { 'P' } else { 'p' }),
+            Key::KeyQ => Some(if is_shift_held { 'Q' } else { 'q' }),
+            Key::KeyR => Some(if is_shift_held { 'R' } else { 'r' }),
+            Key::KeyS => Some(if is_shift_held { 'S' } else { 's' }),
+            Key::KeyT => Some(if is_shift_held { 'T' } else { 't' }),
+            Key::KeyU => Some(if is_shift_held { 'U' } else { 'u' }),
+            Key::KeyV => Some(if is_shift_held { 'V' } else { 'v' }),
+            Key::KeyW => Some(if is_shift_held { 'W' } else { 'w' }),
+            Key::KeyX => Some(if is_shift_held { 'X' } else { 'x' }),
+            Key::KeyY => Some(if is_shift_held { 'Y' } else { 'y' }),
+            Key::KeyZ => Some(if is_shift_held { 'Z' } else { 'z' }),
 
-            // Numbers
+            // Number row — no shift-symbol mapping (layout-dependent)
             Key::Num0 => Some('0'),
             Key::Num1 => Some('1'),
             Key::Num2 => Some('2'),
@@ -295,7 +300,6 @@ impl EventCapture {
             Key::Num8 => Some('8'),
             Key::Num9 => Some('9'),
 
-            // Punctuation and symbols
             Key::Space => Some(' '),
             Key::Comma => Some(','),
             Key::Dot => Some('.'),
@@ -309,7 +313,7 @@ impl EventCapture {
             Key::Minus => Some('-'),
             Key::Equal => Some('='),
 
-            // Keypad numbers
+            // Keypad keys are layout-independent
             Key::Kp0 => Some('0'),
             Key::Kp1 => Some('1'),
             Key::Kp2 => Some('2'),
@@ -325,7 +329,6 @@ impl EventCapture {
             Key::KpMultiply => Some('*'),
             Key::KpDivide => Some('/'),
 
-            // Non-character keys return None
             _ => None,
         }
     }
@@ -523,53 +526,29 @@ impl EventCapture {
                             modifiers,
                         })
                     } else {
-                        // Try to get character for text input
-                        let maybe_char = {
-                            // First try event.name (set by OS text input system)
-                            let from_name = event.name.as_ref().and_then(|name| {
-                                if name.len() == 1 {
-                                    name.chars().next().filter(|ch| !ch.is_control())
-                                } else {
-                                    None
+                        // Try to get character for text input.
+                        // event.name from rdev uses UCKeyTranslate dispatched to
+                        // the main thread; it respects the active keyboard layout.
+                        let maybe_char = event
+                            .name
+                            .as_ref()
+                            .and_then(|name| {
+                                let mut chars = name.chars();
+                                let first = chars.next();
+                                let second = chars.next();
+                                match (first, second) {
+                                    (Some(ch), None) if !ch.is_control() => Some(ch),
+                                    _ => None,
                                 }
-                            });
-
-                            // If no character from event.name, use manual key mapping
-                            from_name.or_else(|| {
-                                Self::key_to_char(&key).map(|ch| {
-                                    if is_shift_held && ch.is_ascii_lowercase() {
-                                        ch.to_ascii_uppercase()
-                                    } else if is_shift_held {
-                                        match ch {
-                                            '1' => '!',
-                                            '2' => '@',
-                                            '3' => '#',
-                                            '4' => '$',
-                                            '5' => '%',
-                                            '6' => '^',
-                                            '7' => '&',
-                                            '8' => '*',
-                                            '9' => '(',
-                                            '0' => ')',
-                                            '-' => '_',
-                                            '=' => '+',
-                                            '[' => '{',
-                                            ']' => '}',
-                                            '\\' => '|',
-                                            ';' => ':',
-                                            '\'' => '"',
-                                            ',' => '<',
-                                            '.' => '>',
-                                            '/' => '?',
-                                            '`' => '~',
-                                            _ => ch,
-                                        }
-                                    } else {
-                                        ch
-                                    }
-                                })
                             })
-                        };
+                            .or_else(|| {
+                                tracing::debug!(
+                                    "event.name was {:?} for key {:?}, using fallback",
+                                    event.name,
+                                    key
+                                );
+                                Self::key_to_char_fallback(&key, is_shift_held)
+                            });
 
                         if let Some(ch) = maybe_char {
                             // Send ONLY Character event for text input (no KeyDown)
@@ -965,6 +944,17 @@ impl EventCapture {
                         // Extract UI element fingerprint at click location
                         let fingerprint = extract_fingerprint_at(x, y);
 
+                        // Build metadata from current focused window
+                        let click_metadata = if let Some(ref fw) = last_focused_window {
+                            ActionMetadata {
+                                window_title: Some(fw.title.clone()),
+                                process_name: Some(fw.process.clone()),
+                                monitor_index: None,
+                            }
+                        } else {
+                            ActionMetadata::default()
+                        };
+
                         if is_double_click {
                             // Remove the previous single click and replace with double-click
                             {
@@ -983,7 +973,8 @@ impl EventCapture {
                                     button: button.clone(),
                                 },
                             )
-                            .with_coordinates(x, y);
+                            .with_coordinates(x, y)
+                            .with_metadata(click_metadata.clone());
 
                             if let Some(ref screenshot_id) = screenshot_ref {
                                 action = action.with_screenshot_ref(screenshot_id);
@@ -1012,7 +1003,8 @@ impl EventCapture {
                                     modifiers: click_modifiers,
                                 },
                             )
-                            .with_coordinates(x, y);
+                            .with_coordinates(x, y)
+                            .with_metadata(click_metadata);
 
                             if let Some(ref screenshot_id) = screenshot_ref {
                                 action = action.with_screenshot_ref(screenshot_id);
