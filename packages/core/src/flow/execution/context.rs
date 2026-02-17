@@ -253,6 +253,10 @@ impl ExecutionContext {
         &self.run_id
     }
 
+    pub fn callback(&self) -> &InterComCallback {
+        &self.callback
+    }
+
     pub async fn event_id(&self) -> Option<String> {
         let run = self.run.upgrade()?;
         let run = run.lock().await;

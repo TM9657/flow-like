@@ -23,7 +23,7 @@ plist = "1.8.0"
 
 [dependencies]
 flow-like = { workspace = true, features = ["tauri", "local-ml"] }
-flow-like-catalog = { workspace = true, features = ["all-execute", "tauri", "local-ml"] }
+flow-like-catalog = { workspace = true, features = ["all-execute", "tauri", "local-ml", "local"] }
 flow-like-types.workspace = true
 flow-like-wasm.workspace = true
 
@@ -37,7 +37,7 @@ window-vibrancy = "0.6.0"
 anyhow = "1.0.95"
 sentry.workspace = true
 sentry-tracing.workspace = true
-tracing-subscriber = { version = "0.3.19", features = ["env-filter", "json"] }
+tracing-subscriber = { workspace = true, features = ["env-filter", "json"] }
 tracing = { version = "0.1.41", features = ["async-await", "attributes"] }
 
 dirs-next.workspace = true

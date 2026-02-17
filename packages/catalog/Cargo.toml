@@ -5,6 +5,13 @@ edition = "2024"
 
 [features]
 default = []
+
+# Execution environment - determines how interactions are handled
+# local: Desktop app with polling-based interactions
+# remote: Server execution with SSE-based interactions via API
+local = ["flow-like-catalog-data/local"]
+remote = ["flow-like-catalog-data/remote"]
+
 local-ml = [
     "flow-like-catalog-core/local-ml",
     "flow-like-catalog-std/local-ml",

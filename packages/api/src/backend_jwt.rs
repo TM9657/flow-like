@@ -4,6 +4,7 @@
 //! - **Executor tokens**: For execution environments to call back to the API
 //! - **User tokens**: For users to poll execution status
 //! - **Realtime tokens**: For y-webrtc collaboration
+//! - **InteractionResponder tokens**: For users to respond to interactions
 //!
 //! IMPORTANT: The keypair must be injected at deploy time via environment variables
 //! to support horizontal scaling. All API instances must use the same keypair.
@@ -49,6 +50,8 @@ pub enum TokenType {
     User,
     /// Token for realtime collaboration (y-webrtc)
     Realtime,
+    /// Token for users to respond to interactions
+    InteractionResponder,
 }
 
 impl TokenType {
@@ -58,15 +61,17 @@ impl TokenType {
             TokenType::Executor => "flow-like-executor",
             TokenType::User => "flow-like-user",
             TokenType::Realtime => "y-webrtc",
+            TokenType::InteractionResponder => "flow-like-interaction-responder",
         }
     }
 
     /// Get the default TTL in seconds for this token type
     pub fn default_ttl_seconds(&self) -> i64 {
         match self {
-            TokenType::Executor => 24 * 60 * 60, // 24 hours
-            TokenType::User => 60 * 60,          // 1 hour
-            TokenType::Realtime => 3 * 60 * 60,  // 3 hours
+            TokenType::Executor => 24 * 60 * 60,       // 24 hours
+            TokenType::User => 60 * 60,                // 1 hour
+            TokenType::Realtime => 3 * 60 * 60,        // 3 hours
+            TokenType::InteractionResponder => 5 * 60, // 5 minutes
         }
     }
 }

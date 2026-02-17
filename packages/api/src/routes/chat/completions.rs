@@ -482,7 +482,7 @@ pub async fn invoke_llm(
     Extension(user): Extension<AppUser>,
     Json(payload): Json<serde_json::Value>,
 ) -> Result<AxumResponse, ApiError> {
-    user.sub()?;
+    user.executor_scoped_sub()?;
     let model_field = payload
         .get("model")
         .and_then(|v| v.as_str())
@@ -528,7 +528,7 @@ pub async fn invoke_llm(
         request_builder = request_builder.header("X-User-Id", tracking_id);
     }
 
-    let user_sub = user.sub()?;
+    let user_sub = user.executor_scoped_sub()?;
     if stream {
         handle_streaming(request_builder, state, user_sub, upstream_model_id).await
     } else {

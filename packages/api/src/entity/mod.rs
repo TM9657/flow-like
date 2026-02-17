@@ -21,6 +21,7 @@ pub mod execution_event;
 pub mod execution_run;
 pub mod execution_usage_tracking;
 pub mod feedback;
+pub mod interaction;
 pub mod invitation;
 pub mod invite_link;
 pub mod join_queue;

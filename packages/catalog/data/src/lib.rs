@@ -15,6 +15,7 @@ pub use flow_like_catalog_core::{NodeConstructor, NodeLogic, inventory, register
 
 pub mod data;
 pub mod events;
+pub mod interaction;
 
 pub use data::*;
 
