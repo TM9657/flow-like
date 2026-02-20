@@ -502,6 +502,7 @@
         "date-fns": "^4.1.0",
         "dexie": "^4.0.11",
         "dexie-react-hooks": "^1.1.7",
+        "dompurify": "^3.3.1",
         "dropdown-menu": "^0.1.1",
         "embla-carousel-react": "^8.5.2",
         "eventsource-client": "^1.1.4",
@@ -577,6 +578,7 @@
         "@tailwindcss/postcss": "^4.1.11",
         "@types/adm-zip": "^0.5.7",
         "@types/bun": "latest",
+        "@types/dompurify": "^3.0.5",
         "@types/express": "^5.0.0",
         "@types/lodash-es": "^4.17.12",
         "@types/node": "^22.10.5",
@@ -2046,6 +2048,8 @@
     "@types/debug": ["@types/debug@4.1.12", "", { "dependencies": { "@types/ms": "*" } }, "sha512-vIChWdVG3LG1SMxEvI/AK+FWJthlrqlTu7fbrlywTkkaONwk/UAGaULXRlf8vkzFBLVm0zkMdCquhL5aOjhXPQ=="],
 
     "@types/deep-eql": ["@types/deep-eql@4.0.2", "", {}, "sha512-c9h9dVVMigMPc4bwTvC5dxqtqJZwQPePsWjPlpSOnojbor6pGqdk541lfA7AqFQr5pB1BRdq0juY9db81BwyFw=="],
+
+    "@types/dompurify": ["@types/dompurify@3.2.0", "", { "dependencies": { "dompurify": "*" } }, "sha512-Fgg31wv9QbLDA0SpTOXO3MaxySc4DKGLi8sna4/Utjo4r3ZRPdCt4UQee8BWr+Q5z21yifghREPJGYaEOEIACg=="],
 
     "@types/draco3d": ["@types/draco3d@1.4.10", "", {}, "sha512-AX22jp8Y7wwaBgAixaSvkoG4M/+PlAcm3Qs4OW8yT9DM4xUpWKeFhLueTAyZF39pviAdcDdeJoACapiAceqNcw=="],
 

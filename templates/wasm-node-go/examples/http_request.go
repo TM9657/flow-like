@@ -9,7 +9,7 @@ package main
 import (
 	"encoding/json"
 
-	sdk "github.com/example/flow-like-wasm-sdk-go"
+	sdk "github.com/TM9657/flow-like/libs/wasm-sdk/wasm-sdk-go"
 )
 
 // buildHTTPGetDefinition creates the node definition with the "http" permission.
