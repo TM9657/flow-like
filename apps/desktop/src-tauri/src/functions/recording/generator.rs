@@ -9,13 +9,29 @@ use flow_like_types::rand::Rng;
 
 use crate::functions::TauriFunctionError;
 
-use super::state::{ActionType, KeyModifier, MouseButton, RecordedAction, RecordedFingerprint, ScrollDirection};
+use super::state::{
+    ActionType, KeyModifier, MouseButton, RecordedAction, RecordedFingerprint, ScrollDirection,
+};
 
 const BROWSER_PROCESSES: &[&str] = &[
-    "safari", "google chrome", "chrome", "chromium", "firefox",
-    "microsoft edge", "msedge", "arc", "brave browser", "brave",
-    "opera", "vivaldi", "orion", "zen", "floorp", "waterfox",
-    "iexplore", "edge",
+    "safari",
+    "google chrome",
+    "chrome",
+    "chromium",
+    "firefox",
+    "microsoft edge",
+    "msedge",
+    "arc",
+    "brave browser",
+    "brave",
+    "opera",
+    "vivaldi",
+    "orion",
+    "zen",
+    "floorp",
+    "waterfox",
+    "iexplore",
+    "edge",
 ];
 
 fn is_browser_process(process_name: &str) -> bool {
@@ -111,7 +127,15 @@ pub async fn generate_add_node_commands(
     commands.push(GenericCommand::AddNode(add_event_cmd));
     prev_exec_pin = event_exec_out.map(|pin| (event_node_id.clone(), pin));
 
-    advance_layout(&mut x_offset, &mut y_offset, &mut nodes_in_row, &mut direction, node_spacing, row_spacing, max_nodes_per_row);
+    advance_layout(
+        &mut x_offset,
+        &mut y_offset,
+        &mut nodes_in_row,
+        &mut direction,
+        node_spacing,
+        row_spacing,
+        max_nodes_per_row,
+    );
 
     // Use the unified automation session that supports browser, desktop, and RPA
     let mut session = registry.get_node("automation_start_session").map_err(|e| {
@@ -163,7 +187,15 @@ pub async fn generate_add_node_commands(
     session_out_pin_id = actual_session_handle_out.clone();
     prev_exec_pin = actual_session_exec_out.map(|pin| (actual_session_id.clone(), pin));
 
-    advance_layout(&mut x_offset, &mut y_offset, &mut nodes_in_row, &mut direction, node_spacing, row_spacing, max_nodes_per_row);
+    advance_layout(
+        &mut x_offset,
+        &mut y_offset,
+        &mut nodes_in_row,
+        &mut direction,
+        node_spacing,
+        row_spacing,
+        max_nodes_per_row,
+    );
 
     // Minimum delay threshold to insert a delay node (milliseconds)
     const MIN_DELAY_THRESHOLD_MS: i64 = 500;
@@ -244,7 +276,15 @@ pub async fn generate_add_node_commands(
                     prev_exec_pin = Some((delay_node_id, delay_out));
                 }
 
-                advance_layout(&mut x_offset, &mut y_offset, &mut nodes_in_row, &mut direction, node_spacing, row_spacing, max_nodes_per_row);
+                advance_layout(
+                    &mut x_offset,
+                    &mut y_offset,
+                    &mut nodes_in_row,
+                    &mut direction,
+                    node_spacing,
+                    row_spacing,
+                    max_nodes_per_row,
+                );
             }
         }
         // If last action was Enter and this is a click, insert a minimum delay for page navigation
@@ -306,17 +346,25 @@ pub async fn generate_add_node_commands(
                     prev_exec_pin = Some((delay_node_id, delay_out));
                 }
 
-                advance_layout(&mut x_offset, &mut y_offset, &mut nodes_in_row, &mut direction, node_spacing, row_spacing, max_nodes_per_row);
+                advance_layout(
+                    &mut x_offset,
+                    &mut y_offset,
+                    &mut nodes_in_row,
+                    &mut direction,
+                    node_spacing,
+                    row_spacing,
+                    max_nodes_per_row,
+                );
             }
         }
 
         tracing::debug!(" Processing action: {:?}", action.action_type);
 
         // Update current_process from action metadata if available
-        if let Some(ref proc) = action.metadata.process_name {
-            if !proc.is_empty() {
-                current_process = Some(proc.clone());
-            }
+        if let Some(ref proc) = action.metadata.process_name
+            && !proc.is_empty()
+        {
+            current_process = Some(proc.clone());
         }
 
         let in_browser = current_process
@@ -351,8 +399,7 @@ pub async fn generate_add_node_commands(
                     .pins
                     .iter()
                     .find(|(_, p)| {
-                        p.name == "path"
-                            && p.pin_type == flow_like::flow::pin::PinType::Output
+                        p.name == "path" && p.pin_type == flow_like::flow::pin::PinType::Output
                     })
                     .map(|(id, _)| id.clone());
 
@@ -361,8 +408,7 @@ pub async fn generate_add_node_commands(
                 if let (Ok(mut child_node), Some(upload_out)) =
                     (registry.get_node("child"), upload_path_out)
                 {
-                    child_node.coordinates =
-                        Some((x_offset - 200.0, y_offset + 200.0, 0.0));
+                    child_node.coordinates = Some((x_offset - 200.0, y_offset + 200.0, 0.0));
 
                     if let Some((_, pin)) = child_node
                         .pins
@@ -391,22 +437,19 @@ pub async fn generate_add_node_commands(
                         .pins
                         .iter()
                         .find(|(_, p)| {
-                            p.name == "path"
-                                && p.pin_type == flow_like::flow::pin::PinType::Output
+                            p.name == "path" && p.pin_type == flow_like::flow::pin::PinType::Output
                         })
                         .map(|(id, _)| id.clone());
 
                     helper_commands.push(GenericCommand::AddNode(child_cmd));
 
                     if let Some(child_in) = child_path_in {
-                        helper_commands.push(GenericCommand::ConnectPin(
-                            ConnectPinsCommand::new(
-                                upload_dir_id,
-                                child_node_id.clone(),
-                                upload_out,
-                                child_in,
-                            ),
-                        ));
+                        helper_commands.push(GenericCommand::ConnectPin(ConnectPinsCommand::new(
+                            upload_dir_id,
+                            child_node_id.clone(),
+                            upload_out,
+                            child_in,
+                        )));
                     }
 
                     template_path_node_id = Some(child_node_id);
@@ -420,22 +463,18 @@ pub async fn generate_add_node_commands(
             &action.action_type,
             ActionType::Click { .. } | ActionType::DoubleClick { .. }
         );
-        if opts.use_fingerprints && is_click {
-            if let Some(fp) = &action.fingerprint {
-                if let Some(fp_cmds) = generate_fingerprint_node(
-                    fp,
-                    &registry,
-                    x_offset,
-                    y_offset - 180.0,
-                ) {
-                    fingerprint_node_id = Some(fp_cmds.node_id.clone());
-                    fingerprint_out_pin_id = Some(fp_cmds.fingerprint_out_pin_id.clone());
-                    fingerprint_exec_in_pin_id = fp_cmds.exec_in_pin_id;
-                    fingerprint_exec_out_pin_id = fp_cmds.exec_out_pin_id;
-                    for cmd in fp_cmds.commands {
-                        helper_commands.push(cmd);
-                    }
-                }
+        if opts.use_fingerprints
+            && is_click
+            && let Some(fp) = &action.fingerprint
+            && let Some(fp_cmds) =
+                generate_fingerprint_node(fp, &registry, x_offset, y_offset - 180.0)
+        {
+            fingerprint_node_id = Some(fp_cmds.node_id.clone());
+            fingerprint_out_pin_id = Some(fp_cmds.fingerprint_out_pin_id.clone());
+            fingerprint_exec_in_pin_id = fp_cmds.exec_in_pin_id;
+            fingerprint_exec_out_pin_id = fp_cmds.exec_out_pin_id;
+            for cmd in fp_cmds.commands {
+                helper_commands.push(cmd);
             }
         }
 
@@ -530,7 +569,7 @@ pub async fn generate_add_node_commands(
                 // rdev on macOS reports line-level deltas (typically 1-5 per event).
                 // After consolidation the accumulated amount is already in scroll-line units.
                 // Pass through directly — enigo.scroll(1) sends one line tick.
-                let lines = (*amount).max(1).min(100) as i32;
+                let lines = (*amount).max(1).min(100);
                 let (dx, dy) = match direction {
                     ScrollDirection::Down => (0, -lines),
                     ScrollDirection::Up => (0, lines),
@@ -614,23 +653,17 @@ pub async fn generate_add_node_commands(
         node.coordinates = Some((x_offset, y_offset, 0.0));
 
         // Annotate click nodes with fingerprint context for debugging
-        if is_click {
-            if let Some(fp) = &action.fingerprint {
-                let parts: Vec<String> = [
-                    fp.role.as_ref().map(|r| format!("Role: {}", r)),
-                    fp.name.as_ref().map(|n| format!("Name: {}", n)),
-                    fp.text.as_ref().map(|t| format!("Text: {}", t)),
-                ]
-                .into_iter()
-                .flatten()
-                .collect();
-                if !parts.is_empty() {
-                    node.description = format!(
-                        "{} | Target: [{}]",
-                        node.description,
-                        parts.join(", ")
-                    );
-                }
+        if is_click && let Some(fp) = &action.fingerprint {
+            let parts: Vec<String> = [
+                fp.role.as_ref().map(|r| format!("Role: {}", r)),
+                fp.name.as_ref().map(|n| format!("Name: {}", n)),
+                fp.text.as_ref().map(|t| format!("Text: {}", t)),
+            ]
+            .into_iter()
+            .flatten()
+            .collect();
+            if !parts.is_empty() {
+                node.description = format!("{} | Target: [{}]", node.description, parts.join(", "));
             }
         }
 
@@ -713,7 +746,9 @@ pub async fn generate_add_node_commands(
             .node
             .pins
             .iter()
-            .find(|(_, p)| p.name == "fingerprint" && p.pin_type == flow_like::flow::pin::PinType::Input)
+            .find(|(_, p)| {
+                p.name == "fingerprint" && p.pin_type == flow_like::flow::pin::PinType::Input
+            })
             .map(|(id, _)| id.clone());
 
         // Add helper nodes first (path_from_storage_dir, child) for pattern matching
@@ -739,9 +774,11 @@ pub async fn generate_add_node_commands(
         }
 
         // Wire fingerprint node into execution chain: prev → fingerprint → action node
-        if let (Some(fp_id), Some(fp_exec_in), Some(fp_exec_out)) =
-            (&fingerprint_node_id, &fingerprint_exec_in_pin_id, &fingerprint_exec_out_pin_id)
-        {
+        if let (Some(fp_id), Some(fp_exec_in), Some(fp_exec_out)) = (
+            &fingerprint_node_id,
+            &fingerprint_exec_in_pin_id,
+            &fingerprint_exec_out_pin_id,
+        ) {
             // Connect prev_exec → fingerprint.exec_in
             if let Some((prev_node, prev_pin)) = &prev_exec_pin {
                 commands.push(GenericCommand::ConnectPin(ConnectPinsCommand::new(
@@ -769,7 +806,8 @@ pub async fn generate_add_node_commands(
                     fp_in.clone(),
                 )));
             }
-        } else if let (Some((prev_node, prev_pin)), Some(curr_pin)) = (&prev_exec_pin, &exec_in_pin) {
+        } else if let (Some((prev_node, prev_pin)), Some(curr_pin)) = (&prev_exec_pin, &exec_in_pin)
+        {
             // No fingerprint node — connect directly as before
             commands.push(GenericCommand::ConnectPin(ConnectPinsCommand::new(
                 prev_node.clone(),
@@ -827,7 +865,15 @@ pub async fn generate_add_node_commands(
             ActionType::KeyPress { key, .. } if key == "Enter" || key == "Return"
         );
 
-        advance_layout(&mut x_offset, &mut y_offset, &mut nodes_in_row, &mut direction, node_spacing, row_spacing, max_nodes_per_row);
+        advance_layout(
+            &mut x_offset,
+            &mut y_offset,
+            &mut nodes_in_row,
+            &mut direction,
+            node_spacing,
+            row_spacing,
+            max_nodes_per_row,
+        );
     }
 
     Ok(commands)
@@ -938,26 +984,23 @@ fn generate_fingerprint_node(
     }
 
     // Set role, name, text
-    if let Some(role) = &fp.role {
-        if let Some((_, pin)) = node.pins.iter_mut().find(|(_, p)| p.name == "role")
-            && let Ok(bytes) = to_vec(&json!(role))
-        {
-            pin.default_value = Some(bytes);
-        }
+    if let Some(role) = &fp.role
+        && let Some((_, pin)) = node.pins.iter_mut().find(|(_, p)| p.name == "role")
+        && let Ok(bytes) = to_vec(&json!(role))
+    {
+        pin.default_value = Some(bytes);
     }
-    if let Some(name) = &fp.name {
-        if let Some((_, pin)) = node.pins.iter_mut().find(|(_, p)| p.name == "name")
-            && let Ok(bytes) = to_vec(&json!(name))
-        {
-            pin.default_value = Some(bytes);
-        }
+    if let Some(name) = &fp.name
+        && let Some((_, pin)) = node.pins.iter_mut().find(|(_, p)| p.name == "name")
+        && let Ok(bytes) = to_vec(&json!(name))
+    {
+        pin.default_value = Some(bytes);
     }
-    if let Some(text) = &fp.text {
-        if let Some((_, pin)) = node.pins.iter_mut().find(|(_, p)| p.name == "text")
-            && let Ok(bytes) = to_vec(&json!(text))
-        {
-            pin.default_value = Some(bytes);
-        }
+    if let Some(text) = &fp.text
+        && let Some((_, pin)) = node.pins.iter_mut().find(|(_, p)| p.name == "text")
+        && let Ok(bytes) = to_vec(&json!(text))
+    {
+        pin.default_value = Some(bytes);
     }
 
     // Set bounding box if available
@@ -985,15 +1028,19 @@ fn generate_fingerprint_node(
         let mut order = Vec::new();
         if let Some(role) = &fp.role {
             order.push(selectors.len());
-            selectors.push(json!({"kind": "Role", "value": role, "confidence": 0.8, "scope": null}));
+            selectors
+                .push(json!({"kind": "Role", "value": role, "confidence": 0.8, "scope": null}));
         }
         if let Some(name) = &fp.name {
             order.push(selectors.len());
-            selectors.push(json!({"kind": "AriaLabel", "value": name, "confidence": 0.9, "scope": null}));
+            selectors.push(
+                json!({"kind": "AriaLabel", "value": name, "confidence": 0.9, "scope": null}),
+            );
         }
         if let Some(text) = &fp.text {
             order.push(selectors.len());
-            selectors.push(json!({"kind": "Text", "value": text, "confidence": 0.7, "scope": null}));
+            selectors
+                .push(json!({"kind": "Text", "value": text, "confidence": 0.7, "scope": null}));
         }
         if !selectors.is_empty() {
             selectors_json = json!({"selectors": selectors, "fallback_order": order});
@@ -1012,7 +1059,9 @@ fn generate_fingerprint_node(
         .node
         .pins
         .iter()
-        .find(|(_, p)| p.name == "fingerprint" && p.pin_type == flow_like::flow::pin::PinType::Output)
+        .find(|(_, p)| {
+            p.name == "fingerprint" && p.pin_type == flow_like::flow::pin::PinType::Output
+        })
         .map(|(id, _)| id.clone())?;
 
     let exec_in = add_cmd

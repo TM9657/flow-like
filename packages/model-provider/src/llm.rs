@@ -214,7 +214,10 @@ impl DynamicCompletionModel {
         }
     }
 
-    pub fn from_arc(client: Arc<dyn CompletionClientDyn + Send + Sync>, model_name: String) -> Self {
+    pub fn from_arc(
+        client: Arc<dyn CompletionClientDyn + Send + Sync>,
+        model_name: String,
+    ) -> Self {
         Self { client, model_name }
     }
 }

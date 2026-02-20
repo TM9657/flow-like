@@ -153,7 +153,6 @@ import { BoardMeta } from "./board-meta";
 import { FlowCopilot, type Suggestion } from "./flow-copilot";
 import { FlowCursors } from "./flow-cursors";
 import { FlowDataEdge } from "./flow-data-edge";
-import { WasmSandboxWarningDialog } from "./wasm-sandbox-warning-dialog";
 import { FlowExecutionEdge } from "./flow-execution-edge";
 import { useUndoRedo } from "./flow-history";
 import { FlowLayerIndicators } from "./flow-layer-indicators";
@@ -165,6 +164,7 @@ import { FlowVeilEdge } from "./flow-veil-edge";
 import { LayerInnerNode } from "./layer-inner-node";
 import { LayerNode } from "./layer-node";
 import { RuntimeVariablesPrompt } from "./runtime-variables-prompt";
+import { WasmSandboxWarningDialog } from "./wasm-sandbox-warning-dialog";
 
 export function FlowBoard({
 	appId,
@@ -648,9 +648,15 @@ export function FlowBoard({
 		try {
 			if (localStorage.getItem(`wasm-consent-board-${boardId}`) === "1")
 				return Promise.resolve(true);
-			if (wasmPackageIds.every((id) => localStorage.getItem(`wasm-consent-package-${id}`) === "1"))
+			if (
+				wasmPackageIds.every(
+					(id) => localStorage.getItem(`wasm-consent-package-${id}`) === "1",
+				)
+			)
 				return Promise.resolve(true);
-		} catch { /* ignore */ }
+		} catch {
+			/* ignore */
+		}
 		return new Promise((resolve) => {
 			setWasmConsentResolve(() => resolve);
 			setWasmDialogOpen(true);
@@ -661,10 +667,18 @@ export function FlowBoard({
 		(rememberFor: "none" | "board" | "event" | "package") => {
 			if (rememberFor === "package") {
 				for (const id of wasmPackageIds) {
-					try { localStorage.setItem(`wasm-consent-package-${id}`, "1"); } catch { /* ignore */ }
+					try {
+						localStorage.setItem(`wasm-consent-package-${id}`, "1");
+					} catch {
+						/* ignore */
+					}
 				}
 			} else if (rememberFor === "board") {
-				try { localStorage.setItem(`wasm-consent-board-${boardId}`, "1"); } catch { /* ignore */ }
+				try {
+					localStorage.setItem(`wasm-consent-board-${boardId}`, "1");
+				} catch {
+					/* ignore */
+				}
 			}
 			setWasmDialogOpen(false);
 			wasmConsentResolve?.(true);

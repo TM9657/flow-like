@@ -6,10 +6,7 @@ import type { TauriBackend } from "../tauri-provider";
 export class PageState implements IPageState {
 	constructor(private readonly backend: TauriBackend) {}
 
-	private async pushPageToServer(
-		appId: string,
-		page: IPage,
-	): Promise<void> {
+	private async pushPageToServer(appId: string, page: IPage): Promise<void> {
 		const isOffline = await this.backend.isOffline(appId);
 		if (isOffline || !this.backend.profile || !this.backend.auth) return;
 
@@ -69,7 +66,10 @@ export class PageState implements IPageState {
 			const localUpdated = new Date(localPage.updatedAt ?? 0).getTime();
 
 			if (remoteUpdated > localUpdated) {
-				const merged = { ...remotePage, boardId: remotePage.boardId || localPage.boardId };
+				const merged = {
+					...remotePage,
+					boardId: remotePage.boardId || localPage.boardId,
+				};
 				await invoke("update_page", { appId, page: merged });
 			}
 		})();

@@ -101,7 +101,8 @@ export const koDevelopers: Record<string, string> = {
 	"dev.nodes.quickstart.title": "빠른 시작",
 	"dev.nodes.quickstart.description":
 		"Flow-Like Studio를 열고, 언어 템플릿을 선택하여 커스텀 노드 구축을 시작하세요:",
-	"dev.nodes.quickstart.step1": "1. Flow-Like Studio를 열고 노드 개발자 섹션으로 이동",
+	"dev.nodes.quickstart.step1":
+		"1. Flow-Like Studio를 열고 노드 개발자 섹션으로 이동",
 	"dev.nodes.quickstart.step2": "2. 15개 이상의 지원 언어에서 템플릿 선택",
 	"dev.nodes.quickstart.step3": "3. 노드 로직을 구현하고 WASM 바이너리 빌드",
 	"dev.nodes.quickstart.step4": "4. Studio에서 직접 카탈로그에 게시",

@@ -1,14 +1,14 @@
-import { enDevelopers } from "./developers-en";
 import { deDevelopers } from "./developers-de";
-import { frDevelopers } from "./developers-fr";
+import { enDevelopers } from "./developers-en";
 import { esDevelopers } from "./developers-es";
-import { zhDevelopers } from "./developers-zh";
+import { frDevelopers } from "./developers-fr";
+import { itDevelopers } from "./developers-it";
 import { jaDevelopers } from "./developers-ja";
 import { koDevelopers } from "./developers-ko";
-import { ptDevelopers } from "./developers-pt";
-import { itDevelopers } from "./developers-it";
 import { nlDevelopers } from "./developers-nl";
+import { ptDevelopers } from "./developers-pt";
 import { svDevelopers } from "./developers-sv";
+import { zhDevelopers } from "./developers-zh";
 
 export const translationsDevelopers: Record<string, Record<string, string>> = {
 	en: enDevelopers,
@@ -26,8 +26,6 @@ export const translationsDevelopers: Record<string, Record<string, string>> = {
 
 export function tDevelopers(lang: string, key: string): string {
 	return (
-		translationsDevelopers[lang]?.[key] ??
-		translationsDevelopers.en[key] ??
-		key
+		translationsDevelopers[lang]?.[key] ?? translationsDevelopers.en[key] ?? key
 	);
 }

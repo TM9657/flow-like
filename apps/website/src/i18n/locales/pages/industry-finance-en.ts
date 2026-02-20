@@ -42,17 +42,23 @@ export const enFinance: Record<string, string> = {
 	"ind.features.tagline": "Capabilities",
 	"ind.features.headline": "Built for finance teams",
 	"ind.feature.1.title": "ERP Connectors",
-	"ind.feature.1.desc": "Connect SAP, Oracle, NetSuite, and other ERPs through pre-built nodes.",
+	"ind.feature.1.desc":
+		"Connect SAP, Oracle, NetSuite, and other ERPs through pre-built nodes.",
 	"ind.feature.2.title": "Bank Feed Ingestion",
-	"ind.feature.2.desc": "Import MT940, CAMT.053, BAI2, and other banking formats natively.",
+	"ind.feature.2.desc":
+		"Import MT940, CAMT.053, BAI2, and other banking formats natively.",
 	"ind.feature.3.title": "Period-End Automation",
-	"ind.feature.3.desc": "Schedule month-end, quarter-end, and year-end workflows with dependency chains.",
+	"ind.feature.3.desc":
+		"Schedule month-end, quarter-end, and year-end workflows with dependency chains.",
 	"ind.feature.4.title": "Exception Handling",
-	"ind.feature.4.desc": "Route unmatched transactions to reviewers with context and suggested actions.",
+	"ind.feature.4.desc":
+		"Route unmatched transactions to reviewers with context and suggested actions.",
 	"ind.feature.5.title": "Multi-Currency",
-	"ind.feature.5.desc": "Handle FX conversions, triangulation, and rate lookups within your flows.",
+	"ind.feature.5.desc":
+		"Handle FX conversions, triangulation, and rate lookups within your flows.",
 	"ind.feature.6.title": "Approval Workflows",
-	"ind.feature.6.desc": "Route outputs for review with role-based permissions and digital signatures.",
+	"ind.feature.6.desc":
+		"Route outputs for review with role-based permissions and digital signatures.",
 
 	"ind.cta.headline": "Ready to automate your finance ops?",
 	"ind.cta.description":

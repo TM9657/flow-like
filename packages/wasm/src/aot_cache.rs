@@ -80,9 +80,16 @@ impl AotCache {
         let checksum_file = Self::checksum_path(dir, wasm_hash);
 
         std::fs::write(&artifact, serialized)?;
-        std::fs::write(&checksum_file, blake3::hash(serialized).to_hex().to_string())?;
+        std::fs::write(
+            &checksum_file,
+            blake3::hash(serialized).to_hex().to_string(),
+        )?;
 
-        tracing::info!("Saved AOT cache: {} ({} bytes)", artifact.display(), serialized.len());
+        tracing::info!(
+            "Saved AOT cache: {} ({} bytes)",
+            artifact.display(),
+            serialized.len()
+        );
         Ok(())
     }
 

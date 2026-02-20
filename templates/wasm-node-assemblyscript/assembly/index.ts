@@ -14,17 +14,21 @@
  */
 
 import {
+	type Context,
 	DataType,
-	ExecutionResult,
+	type ExecutionResult,
+	FlowNode,
 	NodeDefinition,
 	PinDefinition,
-	Context,
-	FlowNode,
-	singleNode,
 	runSingle,
+	singleNode,
 } from "@flow-like/wasm-sdk-assemblyscript/assembly/index";
 
-export { alloc, dealloc, get_abi_version } from "@flow-like/wasm-sdk-assemblyscript/assembly/index";
+export {
+	alloc,
+	dealloc,
+	get_abi_version,
+} from "@flow-like/wasm-sdk-assemblyscript/assembly/index";
 
 class MyCustomNode extends FlowNode {
 	define(): NodeDefinition {
@@ -35,13 +39,55 @@ class MyCustomNode extends FlowNode {
 		def.category = "Custom/WASM";
 		def.addPermission("streaming");
 
-		def.addPin(PinDefinition.input("exec", "Execute", "Trigger execution", DataType.Exec));
-		def.addPin(PinDefinition.input("input_text", "Input Text", "Text to process", DataType.String).withDefaultString(""));
-		def.addPin(PinDefinition.input("multiplier", "Multiplier", "Number of times to repeat", DataType.I64).withDefaultI64(1));
+		def.addPin(
+			PinDefinition.input(
+				"exec",
+				"Execute",
+				"Trigger execution",
+				DataType.Exec,
+			),
+		);
+		def.addPin(
+			PinDefinition.input(
+				"input_text",
+				"Input Text",
+				"Text to process",
+				DataType.String,
+			).withDefaultString(""),
+		);
+		def.addPin(
+			PinDefinition.input(
+				"multiplier",
+				"Multiplier",
+				"Number of times to repeat",
+				DataType.I64,
+			).withDefaultI64(1),
+		);
 
-		def.addPin(PinDefinition.output("exec_out", "Done", "Execution complete", DataType.Exec));
-		def.addPin(PinDefinition.output("output_text", "Output Text", "Processed text", DataType.String));
-		def.addPin(PinDefinition.output("char_count", "Character Count", "Number of characters in output", DataType.I64));
+		def.addPin(
+			PinDefinition.output(
+				"exec_out",
+				"Done",
+				"Execution complete",
+				DataType.Exec,
+			),
+		);
+		def.addPin(
+			PinDefinition.output(
+				"output_text",
+				"Output Text",
+				"Processed text",
+				DataType.String,
+			),
+		);
+		def.addPin(
+			PinDefinition.output(
+				"char_count",
+				"Character Count",
+				"Number of characters in output",
+				DataType.I64,
+			),
+		);
 
 		return def;
 	}

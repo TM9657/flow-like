@@ -262,7 +262,9 @@ pub async fn create_remote_interaction_stream<F>(
     on_created: F,
 ) -> crate::Result<RemoteInteractionResult>
 where
-    F: FnOnce(InteractionRequest) -> std::pin::Pin<Box<dyn std::future::Future<Output = ()> + Send>>,
+    F: FnOnce(
+        InteractionRequest,
+    ) -> std::pin::Pin<Box<dyn std::future::Future<Output = ()> + Send>>,
 {
     use futures::StreamExt;
     use reqwest_eventsource::{Event, EventSource};
@@ -279,9 +281,8 @@ where
             "ttl_seconds": params.ttl_seconds
         }));
 
-    let mut es = EventSource::new(request).map_err(|e| {
-        crate::anyhow!("Failed to create SSE connection to {}: {}", url, e)
-    })?;
+    let mut es = EventSource::new(request)
+        .map_err(|e| crate::anyhow!("Failed to create SSE connection to {}: {}", url, e))?;
 
     let mut responder_jwt = String::new();
     let mut on_created = Some(on_created);
@@ -291,9 +292,7 @@ where
             Ok(Event::Open) => {}
             Ok(Event::Message(message)) => match message.event.as_str() {
                 "created" => {
-                    if let Ok(payload) =
-                        serde_json::from_str::<SseCreatedPayload>(&message.data)
-                    {
+                    if let Ok(payload) = serde_json::from_str::<SseCreatedPayload>(&message.data) {
                         responder_jwt = payload.responder_jwt.clone();
 
                         // Update the request with the responder JWT and stream it
@@ -308,8 +307,7 @@ where
                 }
                 "responded" => {
                     es.close();
-                    if let Ok(payload) =
-                        serde_json::from_str::<SseRespondedPayload>(&message.data)
+                    if let Ok(payload) = serde_json::from_str::<SseRespondedPayload>(&message.data)
                     {
                         return Ok(RemoteInteractionResult {
                             responded: true,

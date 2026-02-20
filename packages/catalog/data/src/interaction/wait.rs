@@ -25,7 +25,9 @@ pub async fn wait_for_interaction_response(
     request: InteractionRequest,
     ttl_seconds: u64,
 ) -> flow_like_types::Result<InteractionWaitResult> {
-    use flow_like_types::interaction::{poll_interaction_response, register_interaction, InteractionPollResult};
+    use flow_like_types::interaction::{
+        InteractionPollResult, poll_interaction_response, register_interaction,
+    };
 
     let interaction_id = request.id.clone();
 
@@ -72,7 +74,7 @@ pub async fn wait_for_interaction_response(
     request: InteractionRequest,
     ttl_seconds: u64,
 ) -> flow_like_types::Result<InteractionWaitResult> {
-    use flow_like_types::interaction::{create_remote_interaction_stream, RemoteInteractionParams};
+    use flow_like_types::interaction::{RemoteInteractionParams, create_remote_interaction_stream};
 
     let hub_url = context.profile.hub.clone();
     let token = context

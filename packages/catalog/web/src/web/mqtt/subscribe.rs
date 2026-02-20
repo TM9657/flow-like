@@ -1,11 +1,11 @@
 #[cfg(feature = "execute")]
 use ahash::AHashSet;
+#[cfg(not(feature = "execute"))]
+use flow_like::flow::execution::context::ExecutionContext;
 #[cfg(feature = "execute")]
 use flow_like::flow::execution::{
     LogLevel, context::ExecutionContext, internal_node::InternalNode, log::LogMessage,
 };
-#[cfg(not(feature = "execute"))]
-use flow_like::flow::execution::context::ExecutionContext;
 
 use flow_like::flow::{
     node::{Node, NodeLogic},
@@ -17,9 +17,9 @@ use flow_like_types::{async_trait, json::json};
 #[cfg(feature = "execute")]
 use std::sync::Arc;
 
-use super::MqttSession;
 #[cfg(feature = "execute")]
 use super::MqttQoS;
+use super::MqttSession;
 
 #[crate::register_node]
 #[derive(Default)]
@@ -154,10 +154,7 @@ impl NodeLogic for MqttSubscribeNode {
                 .subscribe(&topic, super::to_rumqttc_qos(&qos))
                 .await
                 .map_err(|e| {
-                    context.log_message(
-                        &format!("MQTT subscribe error: {}", e),
-                        LogLevel::Error,
-                    );
+                    context.log_message(&format!("MQTT subscribe error: {}", e), LogLevel::Error);
                     flow_like_types::anyhow!("MQTT subscribe failed: {}", e)
                 })?;
         }
@@ -218,10 +215,7 @@ impl NodeLogic for MqttSubscribeNode {
         let sub = Arc::new(Mutex::new(
             context.create_sub_context(&on_message_node).await,
         ));
-        connected_nodes.insert(
-            on_message_node.node.lock().await.id.clone(),
-            sub,
-        );
+        connected_nodes.insert(on_message_node.node.lock().await.id.clone(), sub);
 
         let parent_node_id = context.node.node.lock().await.id.clone();
         let close_notify = conn.close_notify.clone();
@@ -264,9 +258,7 @@ impl NodeLogic for MqttSubscribeNode {
                             .node
                             .pins
                             .iter()
-                            .filter(|(_, p)| {
-                                p.pin_type == PinType::Output && p.name == "topic"
-                            })
+                            .filter(|(_, p)| p.pin_type == PinType::Output && p.name == "topic")
                             .map(|(_, p)| p.clone())
                             .collect();
                         for pin in topic_pins {
@@ -304,84 +296,64 @@ impl NodeLogic for MqttSubscribeNode {
                             break;
                         }
                     } else if only_payload {
-                        let parsed = flow_like_types::json::from_str::<flow_like_types::Value>(&text);
+                        let parsed =
+                            flow_like_types::json::from_str::<flow_like_types::Value>(&text);
                         let value = parsed.unwrap_or_else(|_| json!(text.as_ref()));
                         let payload_pins: Vec<_> = ctx
                             .node
                             .pins
                             .iter()
-                            .filter(|(_, p)| {
-                                p.pin_type == PinType::Output && p.name == "payload"
-                            })
+                            .filter(|(_, p)| p.pin_type == PinType::Output && p.name == "payload")
                             .map(|(_, p)| p.clone())
                             .collect();
                         for pin in payload_pins {
                             pin.set_value(value.clone()).await;
                         }
-                    } else {
-                        if let Ok(parsed) =
-                            flow_like_types::json::from_str::<flow_like_types::Value>(&text)
-                        {
-                            if let Some(obj) = parsed.as_object() {
-                                let mut remaining = obj.clone();
-                                let pins: Vec<_> = ctx
-                                    .node
-                                    .pins
-                                    .iter()
-                                    .filter(|(_, p)| {
-                                        p.pin_type == PinType::Output
-                                            && p.data_type != VariableType::Execution
-                                            && p.name != "payload"
-                                            && p.name != "topic"
-                                    })
-                                    .map(|(_, p)| (p.name.clone(), p.clone()))
-                                    .collect();
+                    } else if let Ok(parsed) =
+                        flow_like_types::json::from_str::<flow_like_types::Value>(&text)
+                    {
+                        if let Some(obj) = parsed.as_object() {
+                            let mut remaining = obj.clone();
+                            let pins: Vec<_> = ctx
+                                .node
+                                .pins
+                                .iter()
+                                .filter(|(_, p)| {
+                                    p.pin_type == PinType::Output
+                                        && p.data_type != VariableType::Execution
+                                        && p.name != "payload"
+                                        && p.name != "topic"
+                                })
+                                .map(|(_, p)| (p.name.clone(), p.clone()))
+                                .collect();
 
-                                for (name, pin) in &pins {
-                                    if let Some(val) = remaining.remove(name) {
+                            for (name, pin) in &pins {
+                                if let Some(val) = remaining.remove(name) {
+                                    pin.set_value(val).await;
+                                } else {
+                                    let normalized = name.to_lowercase().replace('_', "");
+                                    let key = remaining
+                                        .keys()
+                                        .find(|k| k.to_lowercase().replace('_', "") == normalized)
+                                        .cloned();
+                                    if let Some(k) = key
+                                        && let Some(val) = remaining.remove(&k)
+                                    {
                                         pin.set_value(val).await;
-                                    } else {
-                                        let normalized =
-                                            name.to_lowercase().replace('_', "");
-                                        let key = remaining
-                                            .keys()
-                                            .find(|k| {
-                                                k.to_lowercase().replace('_', "")
-                                                    == normalized
-                                            })
-                                            .cloned();
-                                        if let Some(k) = key {
-                                            if let Some(val) = remaining.remove(&k) {
-                                                pin.set_value(val).await;
-                                            }
-                                        }
                                     }
                                 }
-                                let payload_pins: Vec<_> = ctx
-                                    .node
-                                    .pins
-                                    .iter()
-                                    .filter(|(_, p)| {
-                                        p.pin_type == PinType::Output && p.name == "payload"
-                                    })
-                                    .map(|(_, p)| p.clone())
-                                    .collect();
-                                for pin in payload_pins {
-                                    pin.set_value(json!(remaining)).await;
-                                }
-                            } else {
-                                let payload_pins: Vec<_> = ctx
-                                    .node
-                                    .pins
-                                    .iter()
-                                    .filter(|(_, p)| {
-                                        p.pin_type == PinType::Output && p.name == "payload"
-                                    })
-                                    .map(|(_, p)| p.clone())
-                                    .collect();
-                                for pin in payload_pins {
-                                    pin.set_value(parsed.clone()).await;
-                                }
+                            }
+                            let payload_pins: Vec<_> = ctx
+                                .node
+                                .pins
+                                .iter()
+                                .filter(|(_, p)| {
+                                    p.pin_type == PinType::Output && p.name == "payload"
+                                })
+                                .map(|(_, p)| p.clone())
+                                .collect();
+                            for pin in payload_pins {
+                                pin.set_value(json!(remaining)).await;
                             }
                         } else {
                             let payload_pins: Vec<_> = ctx
@@ -394,19 +366,26 @@ impl NodeLogic for MqttSubscribeNode {
                                 .map(|(_, p)| p.clone())
                                 .collect();
                             for pin in payload_pins {
-                                pin.set_value(json!(text.as_ref())).await;
+                                pin.set_value(parsed.clone()).await;
                             }
+                        }
+                    } else {
+                        let payload_pins: Vec<_> = ctx
+                            .node
+                            .pins
+                            .iter()
+                            .filter(|(_, p)| p.pin_type == PinType::Output && p.name == "payload")
+                            .map(|(_, p)| p.clone())
+                            .collect();
+                        for pin in payload_pins {
+                            pin.set_value(json!(text.as_ref())).await;
                         }
                     }
 
-                    let mut log_message =
-                        LogMessage::new("MQTT on_message", LogLevel::Debug, None);
-                    let run = InternalNode::trigger(
-                        &mut ctx,
-                        &mut Some(recursion_guard.clone()),
-                        true,
-                    )
-                    .await;
+                    let mut log_message = LogMessage::new("MQTT on_message", LogLevel::Debug, None);
+                    let run =
+                        InternalNode::trigger(&mut ctx, &mut Some(recursion_guard.clone()), true)
+                            .await;
                     log_message.end();
                     ctx.log(log_message);
                     ctx.end_trace();

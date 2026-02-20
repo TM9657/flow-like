@@ -10,11 +10,11 @@
  */
 
 import {
-  NodeDefinition,
-  PinDefinition,
-  PinType,
-  Context,
-  ExecutionResult,
+	type Context,
+	type ExecutionResult,
+	NodeDefinition,
+	PinDefinition,
+	PinType,
 } from "@flow-like/wasm-sdk-typescript";
 
 // ============================================================================
@@ -22,26 +22,26 @@ import {
 // ============================================================================
 
 export function getDefinition(): NodeDefinition {
-  const nd = new NodeDefinition(
-    "http_request_example_ts",
-    "HTTP Request Example",
-    "Fetches a random fact from a public API using HTTP",
-    "Examples/HTTP"
-  );
+	const nd = new NodeDefinition(
+		"http_request_example_ts",
+		"HTTP Request Example",
+		"Fetches a random fact from a public API using HTTP",
+		"Examples/HTTP",
+	);
 
-  nd.addPermission("http");
+	nd.addPermission("http");
 
-  nd.addPin(PinDefinition.inputExec("exec"));
-  nd.addPin(
-    PinDefinition.inputPin("url", PinType.STRING, {
-      defaultValue: "https://httpbin.org/get",
-    })
-  );
-  nd.addPin(PinDefinition.outputExec("exec_out"));
-  nd.addPin(PinDefinition.outputPin("status", PinType.I64));
-  nd.addPin(PinDefinition.outputPin("body", PinType.STRING));
+	nd.addPin(PinDefinition.inputExec("exec"));
+	nd.addPin(
+		PinDefinition.inputPin("url", PinType.STRING, {
+			defaultValue: "https://httpbin.org/get",
+		}),
+	);
+	nd.addPin(PinDefinition.outputExec("exec_out"));
+	nd.addPin(PinDefinition.outputPin("status", PinType.I64));
+	nd.addPin(PinDefinition.outputPin("body", PinType.STRING));
 
-  return nd;
+	return nd;
 }
 
 // ============================================================================
@@ -49,18 +49,20 @@ export function getDefinition(): NodeDefinition {
 // ============================================================================
 
 export function run(ctx: Context): ExecutionResult {
-  const url = ctx.getString("url", "https://httpbin.org/get") ?? "https://httpbin.org/get";
+	const url =
+		ctx.getString("url", "https://httpbin.org/get") ??
+		"https://httpbin.org/get";
 
-  ctx.info(`Making GET request to: ${url}`);
+	ctx.info(`Making GET request to: ${url}`);
 
-  const response = ctx.httpGet(url);
-  if (!response) {
-    return ctx.fail("HTTP request failed or permission denied");
-  }
+	const response = ctx.httpGet(url);
+	if (!response) {
+		return ctx.fail("HTTP request failed or permission denied");
+	}
 
-  ctx.setOutput("status", response.status);
-  ctx.setOutput("body", response.body);
-  ctx.info(`Response status: ${response.status}`);
+	ctx.setOutput("status", response.status);
+	ctx.setOutput("body", response.body);
+	ctx.info(`Response status: ${response.status}`);
 
-  return ctx.success();
+	return ctx.success();
 }

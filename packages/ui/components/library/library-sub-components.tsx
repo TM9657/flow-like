@@ -1,21 +1,16 @@
 "use client";
 
-import { AppCard } from "../ui/app-card";
-import { Button } from "../ui/button";
-import { Input } from "../ui/input";
-import { Skeleton } from "../ui/skeleton";
-import { Tooltip, TooltipContent, TooltipTrigger } from "../ui/tooltip";
 import {
-	closestCenter,
 	DndContext,
 	type DragEndEvent,
 	PointerSensor,
+	closestCenter,
 	useSensor,
 	useSensors,
 } from "@dnd-kit/core";
 import {
-	rectSortingStrategy,
 	SortableContext,
+	rectSortingStrategy,
 	useSortable,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
@@ -32,6 +27,11 @@ import {
 import { useRouter } from "next/navigation";
 import { useCallback, useRef, useState } from "react";
 import { toast } from "sonner";
+import { AppCard } from "../ui/app-card";
+import { Button } from "../ui/button";
+import { Input } from "../ui/input";
+import { Skeleton } from "../ui/skeleton";
+import { Tooltip, TooltipContent, TooltipTrigger } from "../ui/tooltip";
 import type { LibraryItem } from "./library-types";
 import {
 	CARD_MIN_W_DESKTOP,
@@ -162,9 +162,7 @@ export function Section({
 							<div
 								key={`${title}-${meta.id}`}
 								className={`transition-opacity duration-200 ${
-									visibilityMode && !isActive
-										? "opacity-35"
-										: ""
+									visibilityMode && !isActive ? "opacity-35" : ""
 								}`}
 							>
 								<AppCard
@@ -174,9 +172,7 @@ export function Section({
 									variant="small"
 									onClick={() => handleClick(meta.id)}
 									onSettingsClick={
-										visibilityMode
-											? undefined
-											: () => onSettingsClick(meta.id)
+										visibilityMode ? undefined : () => onSettingsClick(meta.id)
 									}
 									className="w-full rounded-none border-0 shadow-none bg-transparent"
 								/>
@@ -198,8 +194,7 @@ export function Section({
 								</>
 							) : (
 								<>
-									{hiddenCount} more{" "}
-									<ChevronDown className="h-3 w-3" />
+									{hiddenCount} more <ChevronDown className="h-3 w-3" />
 								</>
 							)}
 						</button>
@@ -222,9 +217,7 @@ export function Section({
 				<h2 className="text-xs font-medium uppercase tracking-widest text-muted-foreground/60">
 					{title}
 				</h2>
-				<span className="text-xs text-muted-foreground/30">
-					{items.length}
-				</span>
+				<span className="text-xs text-muted-foreground/30">{items.length}</span>
 			</div>
 
 			<div
@@ -240,9 +233,7 @@ export function Section({
 						<div
 							key={`${title}-${meta.id}`}
 							className={`transition-all duration-300 ${
-								visibilityMode && !isActive
-									? "opacity-35 hover:opacity-70"
-									: ""
+								visibilityMode && !isActive ? "opacity-35 hover:opacity-70" : ""
 							}`}
 						>
 							<AppCard
@@ -252,9 +243,7 @@ export function Section({
 								variant={variant}
 								onClick={() => handleClick(meta.id)}
 								onSettingsClick={
-									visibilityMode
-										? undefined
-										: () => onSettingsClick(meta.id)
+									visibilityMode ? undefined : () => onSettingsClick(meta.id)
 								}
 								className="w-full"
 							/>
@@ -276,8 +265,7 @@ export function Section({
 							</>
 						) : (
 							<>
-								{hiddenCount} more{" "}
-								<ChevronDown className="h-3 w-3" />
+								{hiddenCount} more <ChevronDown className="h-3 w-3" />
 							</>
 						)}
 					</button>
@@ -330,7 +318,13 @@ export function FavoritesSection({
 		<section>
 			<div className="flex items-center gap-2.5 mb-2 md:mb-4">
 				<Heart className="h-3.5 w-3.5 text-primary/70 fill-primary/70" />
-				<h2 className={isMobile ? "text-base font-bold tracking-tight text-foreground" : "text-xs font-medium uppercase tracking-widest text-muted-foreground/60"}>
+				<h2
+					className={
+						isMobile
+							? "text-base font-bold tracking-tight text-foreground"
+							: "text-xs font-medium uppercase tracking-widest text-muted-foreground/60"
+					}
+				>
 					Favorites
 				</h2>
 				{!isMobile && (
@@ -404,7 +398,13 @@ export function PinnedHero({
 		<section>
 			<div className="flex items-center gap-2 mb-2 md:mb-3">
 				<Pin className="h-3.5 w-3.5 text-primary/60 fill-primary/60" />
-				<h2 className={isMobile ? "text-base font-bold tracking-tight text-foreground" : "text-xs font-medium uppercase tracking-widest text-muted-foreground/60"}>
+				<h2
+					className={
+						isMobile
+							? "text-base font-bold tracking-tight text-foreground"
+							: "text-xs font-medium uppercase tracking-widest text-muted-foreground/60"
+					}
+				>
 					Pinned
 				</h2>
 			</div>
@@ -509,9 +509,7 @@ export function SearchResults({
 							<div
 								key={`search-${meta.id}`}
 								className={`transition-opacity duration-200 ${
-									visibilityMode && !isActive
-										? "opacity-35"
-										: ""
+									visibilityMode && !isActive ? "opacity-35" : ""
 								}`}
 							>
 								<AppCard
@@ -521,9 +519,7 @@ export function SearchResults({
 									variant="small"
 									onClick={() => handleClick(meta.id)}
 									onSettingsClick={
-										visibilityMode
-											? undefined
-											: () => onSettingsClick(meta.id)
+										visibilityMode ? undefined : () => onSettingsClick(meta.id)
 									}
 									className="w-full rounded-none border-0 shadow-none bg-transparent"
 								/>
@@ -556,9 +552,7 @@ export function SearchResults({
 									variant="extended"
 									onClick={() => handleClick(meta.id)}
 									onSettingsClick={
-										visibilityMode
-											? undefined
-											: () => onSettingsClick(meta.id)
+										visibilityMode ? undefined : () => onSettingsClick(meta.id)
 									}
 									className="w-full"
 								/>

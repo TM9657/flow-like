@@ -5,10 +5,10 @@ use flow_like::flow::{
 };
 use flow_like_types::async_trait;
 
-#[cfg(feature = "execute")]
-use flow_like::flow::execution::{LogLevel, context::ExecutionContext};
 #[cfg(not(feature = "execute"))]
 use flow_like::flow::execution::context::ExecutionContext;
+#[cfg(feature = "execute")]
+use flow_like::flow::execution::{LogLevel, context::ExecutionContext};
 
 use super::WebSocketSession;
 

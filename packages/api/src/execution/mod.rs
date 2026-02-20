@@ -16,6 +16,11 @@ pub use dispatch::{
     ByteStream, DispatchConfig, DispatchError, DispatchRequest, DispatchResponse, Dispatcher,
     ExecutionBackend, StreamChunk, fetch_profile_for_dispatch,
 };
+pub use interaction_jwt::{
+    InteractionClaims, InteractionJwtError, InteractionJwtParams,
+    sign_responder as sign_interaction_responder_jwt,
+    verify_responder as verify_interaction_responder_jwt,
+};
 pub use jwt::{
     ExecutionClaims, ExecutionJwk, ExecutionJwks, ExecutionJwtError, ExecutionJwtParams,
     get_jwks as get_execution_jwks, is_configured as is_jwt_configured, sign as sign_execution_jwt,
@@ -24,11 +29,6 @@ pub use jwt::{
 #[cfg(feature = "redis")]
 pub use queue::QueueWorker;
 pub use queue::{OAuthTokenInput, QueueConfig, QueueError, QueuedJob};
-pub use interaction_jwt::{
-    InteractionClaims, InteractionJwtError, InteractionJwtParams,
-    sign_responder as sign_interaction_responder_jwt,
-    verify_responder as verify_interaction_responder_jwt,
-};
 pub use sse_proxy::proxy_sse_response;
 pub use state::{
     CreateEventInput, CreateRunInput, EventQuery, ExecutionEventRecord, ExecutionRunRecord,

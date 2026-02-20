@@ -180,9 +180,8 @@ pub async fn registry_install_package(
     let installed = registry_client
         .install(&package_id, version.as_deref())
         .await
-        .map_err(|e| {
+        .inspect_err(|_e| {
             emit_package_status(&app_handle, &package_id, "error");
-            e
         })?;
 
     if let Err(e) = reload_wasm_nodes(&app_handle).await {
@@ -247,9 +246,8 @@ pub async fn registry_update_package(
     let installed = registry_client
         .install(&package_id, version.as_deref())
         .await
-        .map_err(|e| {
+        .inspect_err(|_e| {
             emit_package_status(&app_handle, &package_id, "error");
-            e
         })?;
 
     if let Err(e) = reload_wasm_nodes(&app_handle).await {

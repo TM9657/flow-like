@@ -3,13 +3,12 @@
 import { invoke } from "@tauri-apps/api/core";
 import {
 	type InstalledPackage,
-	type PackageUpdate,
 	PackageStatusBadge,
+	type PackageUpdate,
 	useMutation,
 	useQuery,
 	useQueryClient,
 } from "@tm9657/flow-like-ui";
-import { usePackageStatusMap } from "../../../hooks/use-package-status";
 import {
 	Badge,
 	Button,
@@ -36,6 +35,7 @@ import {
 import Link from "next/link";
 import { useState } from "react";
 import { toast } from "sonner";
+import { usePackageStatusMap } from "../../../hooks/use-package-status";
 
 function InstalledPackageCard({
 	pkg,

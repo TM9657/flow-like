@@ -206,13 +206,25 @@ pub async fn prerun_event(
 
     // Process main board nodes
     for node in board.nodes.values() {
-        process_node(node, &mut oauth_scopes, &mut requires_local_execution, &mut wasm_package_ids, &mut wasm_package_permissions);
+        process_node(
+            node,
+            &mut oauth_scopes,
+            &mut requires_local_execution,
+            &mut wasm_package_ids,
+            &mut wasm_package_permissions,
+        );
     }
 
     // Process layer nodes
     for layer in board.layers.values() {
         for node in layer.nodes.values() {
-            process_node(node, &mut oauth_scopes, &mut requires_local_execution, &mut wasm_package_ids, &mut wasm_package_permissions);
+            process_node(
+                node,
+                &mut oauth_scopes,
+                &mut requires_local_execution,
+                &mut wasm_package_ids,
+                &mut wasm_package_permissions,
+            );
         }
     }
 

@@ -169,7 +169,9 @@ impl NodeLogic for ClickTemplateNode {
         // Use xcap screen capture + direct NCC (bypasses rustautogui's broken macOS capture)
         let (matches, _gray_template, _gray_screen) =
             crate::types::screen_match::find_template_on_screen(&template_bytes, confidence as f32)
-                .ok_or_else(|| flow_like_types::anyhow!("Failed to capture screen or decode template"))?;
+                .ok_or_else(|| {
+                    flow_like_types::anyhow!("Failed to capture screen or decode template")
+                })?;
 
         let autogui = session.get_autogui(context).await?;
         let mut gui = autogui.lock().await;

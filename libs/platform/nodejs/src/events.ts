@@ -9,15 +9,11 @@ export function createEventMethods(http: HttpClient) {
 			payload?: unknown,
 			options?: TriggerOptions,
 		): AsyncIterable<SSEChunk> {
-			return http.streamSSE(
-				"POST",
-				`/apps/${appId}/events/${eventId}/invoke`,
-				{
-					body: payload,
-					headers: options?.headers,
-					signal: options?.signal,
-				},
-			);
+			return http.streamSSE("POST", `/apps/${appId}/events/${eventId}/invoke`, {
+				body: payload,
+				headers: options?.headers,
+				signal: options?.signal,
+			});
 		},
 
 		async triggerEventAsync(

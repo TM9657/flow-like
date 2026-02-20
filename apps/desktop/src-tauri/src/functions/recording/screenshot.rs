@@ -61,7 +61,11 @@ pub async fn capture_region(
 
         tracing::debug!(
             "Screenshot capture: click=({}, {}), scale={}, cropped={}x{} (physical pixels)",
-            x, y, scale, crop_width, crop_height
+            x,
+            y,
+            scale,
+            crop_width,
+            crop_height
         );
 
         let artifact_id = flow_like_types::create_id();

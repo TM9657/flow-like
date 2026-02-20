@@ -16,7 +16,6 @@ import {
 	FolderOpen,
 	Loader2,
 	Rocket,
-	Sparkles,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useCallback, useState } from "react";
@@ -51,9 +50,7 @@ function StepDots({ currentStep }: { currentStep: WizardStep }) {
 							<div
 								className={cn(
 									"w-6 h-px transition-colors",
-									idx < currentIdx
-										? "bg-primary"
-										: "bg-muted-foreground/15",
+									idx < currentIdx ? "bg-primary" : "bg-muted-foreground/15",
 								)}
 							/>
 						)}
@@ -92,12 +89,19 @@ function LanguageTile({
 					exit={{ scale: 0, opacity: 0 }}
 					transition={{ type: "spring", stiffness: 500, damping: 30 }}
 				>
-					<Badge variant="default" className="h-5 w-5 p-0 flex items-center justify-center rounded-full">
+					<Badge
+						variant="default"
+						className="h-5 w-5 p-0 flex items-center justify-center rounded-full"
+					>
 						<Check className="h-3 w-3" />
 					</Badge>
 				</motion.div>
 			)}
-			<img src={language.img} alt={language.label} className="w-8 h-8 rounded object-cover mb-2" />
+			<img
+				src={language.img}
+				alt={language.label}
+				className="w-8 h-8 rounded object-cover mb-2"
+			/>
 			<span className="text-sm font-medium block">{language.label}</span>
 			<span className="text-xs text-muted-foreground/70 line-clamp-2 mt-0.5">
 				{language.description}
@@ -191,9 +195,7 @@ export default function NewProjectWizard() {
 									<p className="text-xs font-medium uppercase tracking-widest text-muted-foreground/60 mb-1">
 										Step 1
 									</p>
-									<h2 className="text-lg font-medium">
-										Choose a language
-									</h2>
+									<h2 className="text-lg font-medium">Choose a language</h2>
 									<p className="text-sm text-muted-foreground/70 mt-1">
 										Select the programming language for your node project.
 									</p>
@@ -236,18 +238,20 @@ export default function NewProjectWizard() {
 									<p className="text-xs font-medium uppercase tracking-widest text-muted-foreground/60 mb-1">
 										Step 2
 									</p>
-									<h2 className="text-lg font-medium">
-										Project details
-									</h2>
+									<h2 className="text-lg font-medium">Project details</h2>
 									<p className="text-sm text-muted-foreground/70 mt-1">
-										Configure your new{" "}
-										{selectedLanguageInfo?.label ?? ""} project.
+										Configure your new {selectedLanguageInfo?.label ?? ""}{" "}
+										project.
 									</p>
 								</div>
 
 								{selectedLanguageInfo && (
 									<div className="flex items-center gap-3 rounded-xl border border-border/20 bg-muted/5 p-4">
-										<img src={selectedLanguageInfo.img} alt={selectedLanguageInfo.label} className="w-8 h-8 rounded object-cover" />
+										<img
+											src={selectedLanguageInfo.img}
+											alt={selectedLanguageInfo.label}
+											className="w-8 h-8 rounded object-cover"
+										/>
 										<div>
 											<p className="text-sm font-medium">
 												{selectedLanguageInfo.label}
@@ -271,9 +275,7 @@ export default function NewProjectWizard() {
 											id="name"
 											placeholder="my-custom-node"
 											value={projectName}
-											onChange={(e) =>
-												setProjectName(e.target.value)
-											}
+											onChange={(e) => setProjectName(e.target.value)}
 											className="h-10 rounded-lg bg-muted/5"
 										/>
 									</div>
@@ -310,9 +312,7 @@ export default function NewProjectWizard() {
 												→{" "}
 												<code className="text-primary/80 font-mono">
 													{targetDir}/
-													{projectName
-														.toLowerCase()
-														.replace(/\s+/g, "-")}
+													{projectName.toLowerCase().replace(/\s+/g, "-")}
 												</code>
 											</motion.p>
 										)}
@@ -330,11 +330,7 @@ export default function NewProjectWizard() {
 									</Button>
 									<Button
 										onClick={handleCreate}
-										disabled={
-											!projectName ||
-											!targetDir ||
-											isCreating
-										}
+										disabled={!projectName || !targetDir || isCreating}
 										className="gap-1.5"
 									>
 										<Rocket className="h-4 w-4" />
@@ -356,8 +352,8 @@ export default function NewProjectWizard() {
 									Creating your project…
 								</h2>
 								<p className="text-sm text-muted-foreground/70 max-w-sm">
-									Downloading the template and scaffolding
-									your project. This may take a moment.
+									Downloading the template and scaffolding your project. This
+									may take a moment.
 								</p>
 							</motion.div>
 						)}

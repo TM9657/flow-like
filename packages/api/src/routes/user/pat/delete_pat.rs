@@ -1,5 +1,8 @@
 use crate::{entity::pat, error::ApiError, middleware::jwt::AppUser, state::AppState};
-use axum::{Extension, Json, extract::{Path, State}};
+use axum::{
+    Extension, Json,
+    extract::{Path, State},
+};
 use sea_orm::{ColumnTrait, EntityTrait, QueryFilter};
 
 #[utoipa::path(
@@ -26,11 +29,7 @@ pub async fn delete_pat(
     let sub = user.sub()?;
 
     pat::Entity::delete_many()
-        .filter(
-            pat::Column::Id
-                .eq(pat_id)
-                .and(pat::Column::UserId.eq(sub)),
-        )
+        .filter(pat::Column::Id.eq(pat_id).and(pat::Column::UserId.eq(sub)))
         .exec(&state.db)
         .await?;
 

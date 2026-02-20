@@ -1,14 +1,18 @@
 import {
+	type Context,
 	DataType,
-	ExecutionResult,
-	NodeDefinition,
-	PinDefinition,
-	Context,
+	type ExecutionResult,
 	FlowNode,
+	NodeDefinition,
 	NodePackage,
+	PinDefinition,
 } from "@flow-like/wasm-sdk/assembly/index";
 
-export { alloc, dealloc, get_abi_version } from "@flow-like/wasm-sdk/assembly/index";
+export {
+	alloc,
+	dealloc,
+	get_abi_version,
+} from "@flow-like/wasm-sdk/assembly/index";
 
 export class AddNode extends FlowNode {
 	define(): NodeDefinition {
@@ -18,11 +22,31 @@ export class AddNode extends FlowNode {
 		def.description = "Adds two numbers together";
 		def.category = "Math/Arithmetic";
 
-		def.addPin(PinDefinition.input("exec", "Execute", "Trigger", DataType.Exec));
-		def.addPin(PinDefinition.input("a", "A", "First number", DataType.F64).withDefaultF64(0.0));
-		def.addPin(PinDefinition.input("b", "B", "Second number", DataType.F64).withDefaultF64(0.0));
-		def.addPin(PinDefinition.output("exec_out", "Done", "Complete", DataType.Exec));
-		def.addPin(PinDefinition.output("result", "Result", "Sum of A and B", DataType.F64));
+		def.addPin(
+			PinDefinition.input("exec", "Execute", "Trigger", DataType.Exec),
+		);
+		def.addPin(
+			PinDefinition.input(
+				"a",
+				"A",
+				"First number",
+				DataType.F64,
+			).withDefaultF64(0.0),
+		);
+		def.addPin(
+			PinDefinition.input(
+				"b",
+				"B",
+				"Second number",
+				DataType.F64,
+			).withDefaultF64(0.0),
+		);
+		def.addPin(
+			PinDefinition.output("exec_out", "Done", "Complete", DataType.Exec),
+		);
+		def.addPin(
+			PinDefinition.output("result", "Result", "Sum of A and B", DataType.F64),
+		);
 		return def;
 	}
 
@@ -40,11 +64,31 @@ export class SubtractNode extends FlowNode {
 		def.description = "Subtracts B from A";
 		def.category = "Math/Arithmetic";
 
-		def.addPin(PinDefinition.input("exec", "Execute", "Trigger", DataType.Exec));
-		def.addPin(PinDefinition.input("a", "A", "First number", DataType.F64).withDefaultF64(0.0));
-		def.addPin(PinDefinition.input("b", "B", "Second number", DataType.F64).withDefaultF64(0.0));
-		def.addPin(PinDefinition.output("exec_out", "Done", "Complete", DataType.Exec));
-		def.addPin(PinDefinition.output("result", "Result", "A minus B", DataType.F64));
+		def.addPin(
+			PinDefinition.input("exec", "Execute", "Trigger", DataType.Exec),
+		);
+		def.addPin(
+			PinDefinition.input(
+				"a",
+				"A",
+				"First number",
+				DataType.F64,
+			).withDefaultF64(0.0),
+		);
+		def.addPin(
+			PinDefinition.input(
+				"b",
+				"B",
+				"Second number",
+				DataType.F64,
+			).withDefaultF64(0.0),
+		);
+		def.addPin(
+			PinDefinition.output("exec_out", "Done", "Complete", DataType.Exec),
+		);
+		def.addPin(
+			PinDefinition.output("result", "Result", "A minus B", DataType.F64),
+		);
 		return def;
 	}
 
@@ -62,11 +106,31 @@ export class MultiplyNode extends FlowNode {
 		def.description = "Multiplies two numbers";
 		def.category = "Math/Arithmetic";
 
-		def.addPin(PinDefinition.input("exec", "Execute", "Trigger", DataType.Exec));
-		def.addPin(PinDefinition.input("a", "A", "First number", DataType.F64).withDefaultF64(1.0));
-		def.addPin(PinDefinition.input("b", "B", "Second number", DataType.F64).withDefaultF64(1.0));
-		def.addPin(PinDefinition.output("exec_out", "Done", "Complete", DataType.Exec));
-		def.addPin(PinDefinition.output("result", "Result", "A times B", DataType.F64));
+		def.addPin(
+			PinDefinition.input("exec", "Execute", "Trigger", DataType.Exec),
+		);
+		def.addPin(
+			PinDefinition.input(
+				"a",
+				"A",
+				"First number",
+				DataType.F64,
+			).withDefaultF64(1.0),
+		);
+		def.addPin(
+			PinDefinition.input(
+				"b",
+				"B",
+				"Second number",
+				DataType.F64,
+			).withDefaultF64(1.0),
+		);
+		def.addPin(
+			PinDefinition.output("exec_out", "Done", "Complete", DataType.Exec),
+		);
+		def.addPin(
+			PinDefinition.output("result", "Result", "A times B", DataType.F64),
+		);
 		return def;
 	}
 
@@ -84,12 +148,33 @@ export class DivideNode extends FlowNode {
 		def.description = "Divides A by B";
 		def.category = "Math/Arithmetic";
 
-		def.addPin(PinDefinition.input("exec", "Execute", "Trigger", DataType.Exec));
-		def.addPin(PinDefinition.input("a", "A", "Dividend", DataType.F64).withDefaultF64(0.0));
-		def.addPin(PinDefinition.input("b", "B", "Divisor", DataType.F64).withDefaultF64(1.0));
-		def.addPin(PinDefinition.output("exec_out", "Done", "Complete", DataType.Exec));
-		def.addPin(PinDefinition.output("result", "Result", "A divided by B", DataType.F64));
-		def.addPin(PinDefinition.output("is_valid", "Valid", "False if division by zero", DataType.Bool));
+		def.addPin(
+			PinDefinition.input("exec", "Execute", "Trigger", DataType.Exec),
+		);
+		def.addPin(
+			PinDefinition.input("a", "A", "Dividend", DataType.F64).withDefaultF64(
+				0.0,
+			),
+		);
+		def.addPin(
+			PinDefinition.input("b", "B", "Divisor", DataType.F64).withDefaultF64(
+				1.0,
+			),
+		);
+		def.addPin(
+			PinDefinition.output("exec_out", "Done", "Complete", DataType.Exec),
+		);
+		def.addPin(
+			PinDefinition.output("result", "Result", "A divided by B", DataType.F64),
+		);
+		def.addPin(
+			PinDefinition.output(
+				"is_valid",
+				"Valid",
+				"False if division by zero",
+				DataType.Bool,
+			),
+		);
 		return def;
 	}
 
@@ -116,12 +201,39 @@ export class ClampNode extends FlowNode {
 		def.description = "Clamps a value between min and max";
 		def.category = "Math/Utility";
 
-		def.addPin(PinDefinition.input("exec", "Execute", "Trigger", DataType.Exec));
-		def.addPin(PinDefinition.input("value", "Value", "Value to clamp", DataType.F64).withDefaultF64(0.0));
-		def.addPin(PinDefinition.input("min", "Min", "Minimum value", DataType.F64).withDefaultF64(0.0));
-		def.addPin(PinDefinition.input("max", "Max", "Maximum value", DataType.F64).withDefaultF64(1.0));
-		def.addPin(PinDefinition.output("exec_out", "Done", "Complete", DataType.Exec));
-		def.addPin(PinDefinition.output("result", "Result", "Clamped value", DataType.F64));
+		def.addPin(
+			PinDefinition.input("exec", "Execute", "Trigger", DataType.Exec),
+		);
+		def.addPin(
+			PinDefinition.input(
+				"value",
+				"Value",
+				"Value to clamp",
+				DataType.F64,
+			).withDefaultF64(0.0),
+		);
+		def.addPin(
+			PinDefinition.input(
+				"min",
+				"Min",
+				"Minimum value",
+				DataType.F64,
+			).withDefaultF64(0.0),
+		);
+		def.addPin(
+			PinDefinition.input(
+				"max",
+				"Max",
+				"Maximum value",
+				DataType.F64,
+			).withDefaultF64(1.0),
+		);
+		def.addPin(
+			PinDefinition.output("exec_out", "Done", "Complete", DataType.Exec),
+		);
+		def.addPin(
+			PinDefinition.output("result", "Result", "Clamped value", DataType.F64),
+		);
 		return def;
 	}
 

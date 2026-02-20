@@ -13,7 +13,8 @@ export const nlDevelopers: Record<string, string> = {
 	"dev.hero.cio.prefix": "Op zoek naar het executive overzicht?",
 	"dev.hero.cio.link": "Voor CIO's →",
 	"dev.hero.card.workflows.title": "Workflows Samenstellen",
-	"dev.hero.card.workflows.description": "Slepen, verbinden, deployen — geen code nodig",
+	"dev.hero.card.workflows.description":
+		"Slepen, verbinden, deployen — geen code nodig",
 	"dev.hero.card.nodes.title": "Aangepaste Nodes Schrijven",
 	"dev.hero.card.nodes.description": "15+ talen, gecompileerd naar WebAssembly",
 	"dev.hero.converge": "Naar productie deployen",
@@ -50,7 +51,8 @@ export const nlDevelopers: Record<string, string> = {
 	"dev.workflow.step2.title": "Sleep nodes uit de catalogus",
 	"dev.workflow.step2.description": "Zoek, filter of blader door categorieën",
 	"dev.workflow.step3.title": "Verbind & configureer",
-	"dev.workflow.step3.description": "Typeveilige bedrading met realtime validatie",
+	"dev.workflow.step3.description":
+		"Typeveilige bedrading met realtime validatie",
 	"dev.workflow.step4.title": "Uitvoeren of deployen",
 	"dev.workflow.step4.description": "Lokaal, self-hosted of in de cloud",
 	"dev.workflow.cta.docs": "Lees de Documentatie",
@@ -101,10 +103,14 @@ export const nlDevelopers: Record<string, string> = {
 	"dev.nodes.quickstart.title": "Snel Starten",
 	"dev.nodes.quickstart.description":
 		"Open Flow-Like Studio, kies een taaltemplate en begin met het bouwen van je aangepaste node:",
-	"dev.nodes.quickstart.step1": "1. Open Flow-Like Studio en navigeer naar de Node-ontwikkelaarssectie",
-	"dev.nodes.quickstart.step2": "2. Kies een template uit meer dan 15 ondersteunde talen",
-	"dev.nodes.quickstart.step3": "3. Implementeer je node-logica en bouw de WASM-binary",
-	"dev.nodes.quickstart.step4": "4. Publiceer direct vanuit de Studio naar je catalogus",
+	"dev.nodes.quickstart.step1":
+		"1. Open Flow-Like Studio en navigeer naar de Node-ontwikkelaarssectie",
+	"dev.nodes.quickstart.step2":
+		"2. Kies een template uit meer dan 15 ondersteunde talen",
+	"dev.nodes.quickstart.step3":
+		"3. Implementeer je node-logica en bouw de WASM-binary",
+	"dev.nodes.quickstart.step4":
+		"4. Publiceer direct vanuit de Studio naar je catalogus",
 	"dev.nodes.cta.guide": "Node-ontwikkelgids",
 	"dev.nodes.cta.templates": "Bekijk Alle Templates",
 

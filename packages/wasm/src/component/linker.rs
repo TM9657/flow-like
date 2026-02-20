@@ -31,8 +31,7 @@ impl ComponentStoreData {
 
         if security.allow_wasi_network || has_network_caps {
             if let Some(ref hosts) = security.allowed_hosts {
-                let allowed: std::collections::HashSet<String> =
-                    hosts.iter().cloned().collect();
+                let allowed: std::collections::HashSet<String> = hosts.iter().cloned().collect();
                 builder.socket_addr_check(move |addr, _use| {
                     let ip = addr.ip().to_string();
                     let allowed = allowed.clone();
@@ -845,7 +844,9 @@ fn register_http(linker: &mut Linker<ComponentStoreData>) -> WasmResult<()> {
                     .headers()
                     .iter()
                     .filter_map(|(k, v)| {
-                        v.to_str().ok().map(|s| (k.as_str().to_string(), s.to_string()))
+                        v.to_str()
+                            .ok()
+                            .map(|s| (k.as_str().to_string(), s.to_string()))
                     })
                     .collect();
                 let body_text = resp.text().await.unwrap_or_default();
@@ -897,7 +898,7 @@ fn register_websocket(linker: &mut Linker<ComponentStoreData>) -> WasmResult<()>
     // connect(url, headers_json) -> Option<session_id>
     ws.func_wrap_async(
         "connect",
-        |mut store: wasmtime::StoreContextMut<'_, ComponentStoreData>,
+        |store: wasmtime::StoreContextMut<'_, ComponentStoreData>,
          (url, headers_json): (String, String)| {
             Box::new(async move {
                 if !store
@@ -936,7 +937,7 @@ fn register_websocket(linker: &mut Linker<ComponentStoreData>) -> WasmResult<()>
     // send(session_id, message, is_binary) -> bool
     ws.func_wrap_async(
         "send",
-        |mut store: wasmtime::StoreContextMut<'_, ComponentStoreData>,
+        |store: wasmtime::StoreContextMut<'_, ComponentStoreData>,
          (session_id, message, is_binary): (String, Vec<u8>, bool)| {
             Box::new(async move {
                 if !store
@@ -972,7 +973,7 @@ fn register_websocket(linker: &mut Linker<ComponentStoreData>) -> WasmResult<()>
     // Returns JSON: { "type": "text"|"binary"|"close", "data": "..." }
     ws.func_wrap_async(
         "receive",
-        |mut store: wasmtime::StoreContextMut<'_, ComponentStoreData>,
+        |store: wasmtime::StoreContextMut<'_, ComponentStoreData>,
          (session_id, timeout_ms): (String, u32)| {
             Box::new(async move {
                 if !store
@@ -1032,8 +1033,7 @@ fn register_websocket(linker: &mut Linker<ComponentStoreData>) -> WasmResult<()>
     // close(session_id) -> bool
     ws.func_wrap_async(
         "close",
-        |mut store: wasmtime::StoreContextMut<'_, ComponentStoreData>,
-         (session_id,): (String,)| {
+        |store: wasmtime::StoreContextMut<'_, ComponentStoreData>, (session_id,): (String,)| {
             Box::new(async move {
                 if !store
                     .data()

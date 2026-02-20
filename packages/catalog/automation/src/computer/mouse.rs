@@ -291,10 +291,7 @@ use crate::types::screen_match::TemplateMatchResult;
 /// Captures the screen via `xcap` (bypassing rustautogui's broken macOS
 /// screen capture) and runs NCC directly via rustautogui's `dev` API.
 #[cfg(feature = "execute")]
-fn try_template_match(
-    template_bytes: &[u8],
-    min_confidence: f32,
-) -> Option<TemplateMatchResult> {
+fn try_template_match(template_bytes: &[u8], min_confidence: f32) -> Option<TemplateMatchResult> {
     crate::types::screen_match::try_template_match(template_bytes, min_confidence)
 }
 
@@ -320,7 +317,11 @@ async fn resolve_click_target(
     if use_template {
         if let Some(bytes) = &template_bytes {
             context.log_message(
-                &format!("Template loaded: {} bytes, confidence threshold: {}", bytes.len(), confidence),
+                &format!(
+                    "Template loaded: {} bytes, confidence threshold: {}",
+                    bytes.len(),
+                    confidence
+                ),
                 flow_like::flow::execution::LogLevel::Debug,
             );
 
@@ -329,9 +330,13 @@ async fn resolve_click_target(
                     context.log_message(
                         &format!(
                             "Template {}x{}, screen {}x{} (physical), best match: {:?}",
-                            result.template_dims.0, result.template_dims.1,
-                            result.screen_dims.0, result.screen_dims.1,
-                            result.best_match.map(|(mx, my, c)| format!("({},{}) conf={:.4}", mx, my, c))
+                            result.template_dims.0,
+                            result.template_dims.1,
+                            result.screen_dims.0,
+                            result.screen_dims.1,
+                            result
+                                .best_match
+                                .map(|(mx, my, c)| format!("({},{}) conf={:.4}", mx, my, c))
                                 .unwrap_or_else(|| "NONE (zero correlation)".to_string()),
                         ),
                         flow_like::flow::execution::LogLevel::Debug,
@@ -413,9 +418,8 @@ async fn resolve_click_target(
             if let Some(ref bbox) = fp.bounding_box {
                 let cx = ((bbox.x1 + bbox.x2) / 2.0) as i32;
                 let cy = ((bbox.y1 + bbox.y2) / 2.0) as i32;
-                let dist = (((cx as f64 - x as f64).powi(2)
-                    + (cy as f64 - y as f64).powi(2))
-                .sqrt()) as i64;
+                let dist = (((cx as f64 - x as f64).powi(2) + (cy as f64 - y as f64).powi(2))
+                    .sqrt()) as i64;
                 if dist > 500 {
                     context.log_message(
                         &format!(
@@ -426,10 +430,7 @@ async fn resolve_click_target(
                     );
                 }
                 context.log_message(
-                    &format!(
-                        "Using fingerprint bounding-box center ({}, {})",
-                        cx, cy
-                    ),
+                    &format!("Using fingerprint bounding-box center ({}, {})", cx, cy),
                     flow_like::flow::execution::LogLevel::Debug,
                 );
                 return Ok(ResolvedTarget {
@@ -771,7 +772,10 @@ impl NodeLogic for ComputerMouseClickNode {
         .await?;
 
         context.log_message(
-            &format!("Click target resolved to ({}, {}) via {:?}", target.x, target.y, target.via),
+            &format!(
+                "Click target resolved to ({}, {}) via {:?}",
+                target.x, target.y, target.via
+            ),
             flow_like::flow::execution::LogLevel::Debug,
         );
 
@@ -990,7 +994,10 @@ impl NodeLogic for ComputerMouseDoubleClickNode {
         .await?;
 
         context.log_message(
-            &format!("DoubleClick target resolved to ({}, {}) via {:?}", target.x, target.y, target.via),
+            &format!(
+                "DoubleClick target resolved to ({}, {}) via {:?}",
+                target.x, target.y, target.via
+            ),
             flow_like::flow::execution::LogLevel::Debug,
         );
 
@@ -1284,11 +1291,9 @@ impl NodeLogic for ComputerScrollNode {
                 std::thread::sleep(tick_delay);
             }
             for _ in 0..dx.unsigned_abs() {
-                enigo
-                    .scroll(dx_dir, Axis::Horizontal)
-                    .map_err(|e| {
-                        flow_like_types::anyhow!("Failed to scroll horizontally: {}", e)
-                    })?;
+                enigo.scroll(dx_dir, Axis::Horizontal).map_err(|e| {
+                    flow_like_types::anyhow!("Failed to scroll horizontally: {}", e)
+                })?;
                 std::thread::sleep(tick_delay);
             }
             Ok(())

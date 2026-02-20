@@ -31,10 +31,7 @@ export function createBitMethods(http: HttpClient) {
 			return http.request<Bit>("GET", `/bit/${bitId}`);
 		},
 
-		async listLlms(
-			search?: string,
-			limit = 50,
-		): Promise<ModelInfo[]> {
+		async listLlms(search?: string, limit = 50): Promise<ModelInfo[]> {
 			const bits = await http.request<Bit[]>("POST", "/bit", {
 				body: {
 					bit_types: ["Llm", "Vlm"],
@@ -43,7 +40,9 @@ export function createBitMethods(http: HttpClient) {
 				} satisfies BitSearchQuery,
 			});
 			return bits
-				.filter((b) => (b.type === "Llm" || b.type === "Vlm") && hasRemoteProvider(b))
+				.filter(
+					(b) => (b.type === "Llm" || b.type === "Vlm") && hasRemoteProvider(b),
+				)
 				.map((b) => extractModelInfo(b));
 		},
 

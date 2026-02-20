@@ -6,7 +6,11 @@ use crate::error::{WasmError, WasmResult};
 use crate::host_functions::HostState;
 use crate::limits::WasmSecurityConfig;
 use std::sync::Arc;
-use std::{fs, process::Command, time::{SystemTime, UNIX_EPOCH}};
+use std::{
+    fs,
+    process::Command,
+    time::{SystemTime, UNIX_EPOCH},
+};
 use wasmtime::component::{Instance, Linker};
 use wasmtime::{Engine, Store};
 use wasmtime_wasi::p2::pipe::{MemoryInputPipe, MemoryOutputPipe};
@@ -29,10 +33,7 @@ impl WasmComponentInstance {
         let mut linker: Linker<ComponentStoreData> = Linker::new(engine.engine());
         register_component_host_functions(&mut linker)?;
 
-        let mut store = Store::new(
-            engine.engine(),
-            ComponentStoreData::new(&security),
-        );
+        let mut store = Store::new(engine.engine(), ComponentStoreData::new(&security));
 
         let fuel_limit = security.limits.fuel_limit;
         if engine.config().fuel_metering {
@@ -63,7 +64,11 @@ impl WasmComponentInstance {
         })
     }
 
-    async fn run_cli_component(&mut self, args: &[&str], stdin: Option<&str>) -> WasmResult<String> {
+    async fn run_cli_component(
+        &mut self,
+        args: &[&str],
+        stdin: Option<&str>,
+    ) -> WasmResult<String> {
         let mut linker: Linker<ComponentStoreData> = Linker::new(&self.engine);
         register_component_host_functions(&mut linker)?;
 
@@ -156,7 +161,8 @@ impl WasmComponentInstance {
 
         let mut cmd = Command::new("wasmtime");
         cmd.arg("run")
-            .arg("-S").arg("http")
+            .arg("-S")
+            .arg("http")
             .arg(&temp_path)
             .arg("--");
         for arg in args {
@@ -200,28 +206,25 @@ impl WasmComponentInstance {
             .get_typed_func::<(), (String,)>(&mut self.store, "get-nodes")
         {
             ("get-nodes", get_nodes)
+        } else if let Ok(get_node) = self
+            .instance
+            .get_typed_func::<(), (String,)>(&mut self.store, "get-node")
+        {
+            ("get-node", get_node)
         } else {
-            if let Ok(get_node) = self
-                .instance
-                .get_typed_func::<(), (String,)>(&mut self.store, "get-node")
-            {
-                ("get-node", get_node)
-            } else {
-                let json_str = match self.run_cli_component(&["get-node"], None).await {
-                    Ok(value) => value,
-                    Err(in_process_err) => {
-                        tracing::debug!("In-process CLI component failed: {in_process_err}, trying external wasmtime");
-                        self.run_cli_component_external(&["get-node"]).await?
-                    }
-                };
-                if let Ok(defs) = serde_json::from_str::<Vec<WasmNodeDefinition>>(&json_str) {
-                    return Ok(defs);
+            let json_str = match self.run_cli_component(&["get-node"], None).await {
+                Ok(value) => value,
+                Err(in_process_err) => {
+                    tracing::debug!("In-process CLI component failed: {in_process_err}, trying external wasmtime");
+                    self.run_cli_component_external(&["get-node"]).await?
                 }
-                let def: WasmNodeDefinition = serde_json::from_str(&json_str).map_err(|e| {
-                    WasmError::invalid_node_definition(format!("Invalid JSON: {}", e))
-                })?;
-                return Ok(vec![def]);
+            };
+            if let Ok(defs) = serde_json::from_str::<Vec<WasmNodeDefinition>>(&json_str) {
+                return Ok(defs);
             }
+            let def: WasmNodeDefinition = serde_json::from_str(&json_str)
+                .map_err(|e| WasmError::invalid_node_definition(format!("Invalid JSON: {}", e)))?;
+            return Ok(vec![def]);
         };
 
         let (json_str,) = func
@@ -231,9 +234,7 @@ impl WasmComponentInstance {
 
         func.post_return_async(&mut self.store)
             .await
-            .map_err(|e| {
-                WasmError::execution(func_name, format!("Post-return failed: {}", e))
-            })?;
+            .map_err(|e| WasmError::execution(func_name, format!("Post-return failed: {}", e)))?;
 
         // Try parsing as array first (multi-node), fall back to single object
         if let Ok(defs) = serde_json::from_str::<Vec<WasmNodeDefinition>>(&json_str) {
@@ -283,7 +284,9 @@ impl WasmComponentInstance {
                 let result_json = match in_process {
                     Ok(value) => value,
                     Err(in_process_err) => {
-                        tracing::debug!("In-process CLI run failed: {in_process_err}, trying external wasmtime");
+                        tracing::debug!(
+                            "In-process CLI run failed: {in_process_err}, trying external wasmtime"
+                        );
                         self.run_cli_component_external(&["run-b64", &encoded_input])
                             .await
                             .map_err(|e| {

@@ -37,11 +37,17 @@ interface PendingExecution {
 
 // ---- WASM consent helpers (localStorage-backed) ----
 
-function wasmConsentKey(scope: "board" | "event" | "package", id: string): string {
+function wasmConsentKey(
+	scope: "board" | "event" | "package",
+	id: string,
+): string {
 	return `wasm-consent-${scope}-${id}`;
 }
 
-function hasWasmConsent(scope: "board" | "event" | "package", id: string): boolean {
+function hasWasmConsent(
+	scope: "board" | "event" | "package",
+	id: string,
+): boolean {
 	try {
 		return localStorage.getItem(wasmConsentKey(scope, id)) === "1";
 	} catch {
@@ -49,7 +55,10 @@ function hasWasmConsent(scope: "board" | "event" | "package", id: string): boole
 	}
 }
 
-function saveWasmConsent(scope: "board" | "event" | "package", id: string): void {
+function saveWasmConsent(
+	scope: "board" | "event" | "package",
+	id: string,
+): void {
 	try {
 		localStorage.setItem(wasmConsentKey(scope, id), "1");
 	} catch {
@@ -308,7 +317,12 @@ export function ExecutionServiceProvider({
 			wasmConsentResolve?.(true);
 			setWasmConsentResolve(null);
 		},
-		[wasmConsentResolve, pendingWasmBoardId, pendingWasmEventId, wasmPackageIds],
+		[
+			wasmConsentResolve,
+			pendingWasmBoardId,
+			pendingWasmEventId,
+			wasmPackageIds,
+		],
 	);
 
 	const handleWasmCancel = useCallback(() => {
@@ -338,7 +352,10 @@ export function ExecutionServiceProvider({
 				try {
 					prerunResult = await backend.boardState.prerunBoard(appId, boardId);
 
-					if (prerunResult.has_wasm_nodes && prerunResult.wasm_package_ids?.length) {
+					if (
+						prerunResult.has_wasm_nodes &&
+						prerunResult.wasm_package_ids?.length
+					) {
 						const granted = await checkWasmConsent(
 							prerunResult.wasm_package_ids,
 							boardId,
@@ -596,9 +613,15 @@ export function ExecutionServiceProvider({
 
 			if (backend.eventState.prerunEvent) {
 				try {
-					prerunResult = await backend.eventState.prerunEvent(appId, eventIdStr);
+					prerunResult = await backend.eventState.prerunEvent(
+						appId,
+						eventIdStr,
+					);
 
-					if (prerunResult.has_wasm_nodes && prerunResult.wasm_package_ids?.length) {
+					if (
+						prerunResult.has_wasm_nodes &&
+						prerunResult.wasm_package_ids?.length
+					) {
 						const granted = await checkWasmConsent(
 							prerunResult.wasm_package_ids,
 							prerunResult.board_id,

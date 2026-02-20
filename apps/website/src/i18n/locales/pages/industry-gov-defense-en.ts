@@ -42,17 +42,23 @@ export const enGovDefense: Record<string, string> = {
 	"ind.features.tagline": "Capabilities",
 	"ind.features.headline": "Built for sovereign environments",
 	"ind.feature.1.title": "Cross-Domain Guards",
-	"ind.feature.1.desc": "Build automated data flow guards between classification levels with policy-based filtering.",
+	"ind.feature.1.desc":
+		"Build automated data flow guards between classification levels with policy-based filtering.",
 	"ind.feature.2.title": "SBOM & Supply Chain",
-	"ind.feature.2.desc": "Full software bill of materials. Every dependency is auditable and reproducible.",
+	"ind.feature.2.desc":
+		"Full software bill of materials. Every dependency is auditable and reproducible.",
 	"ind.feature.3.title": "Hardened Deployment",
-	"ind.feature.3.desc": "Deploy as a single binary on hardened OS images. Minimal attack surface by design.",
+	"ind.feature.3.desc":
+		"Deploy as a single binary on hardened OS images. Minimal attack surface by design.",
 	"ind.feature.4.title": "Role-Based Access",
-	"ind.feature.4.desc": "Fine-grained permissions integrated with Active Directory, LDAP, or PKI infrastructure.",
+	"ind.feature.4.desc":
+		"Fine-grained permissions integrated with Active Directory, LDAP, or PKI infrastructure.",
 	"ind.feature.5.title": "Offline AI",
-	"ind.feature.5.desc": "Run local LLMs and ML models within workflows — no cloud API calls, no data leakage.",
+	"ind.feature.5.desc":
+		"Run local LLMs and ML models within workflows — no cloud API calls, no data leakage.",
 	"ind.feature.6.title": "Certificate-Based Auth",
-	"ind.feature.6.desc": "Mutual TLS, smart card auth, and CAC/PIV integration for zero-trust environments.",
+	"ind.feature.6.desc":
+		"Mutual TLS, smart card auth, and CAC/PIV integration for zero-trust environments.",
 
 	"ind.cta.headline": "Ready for sovereign automation?",
 	"ind.cta.description":

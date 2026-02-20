@@ -151,25 +151,22 @@ export default function SettingsProfilesPage() {
 		}
 	}, [debouncedLocalProfile, hasChanges, upsertProfile]);
 
-	const updateProfile = useCallback(
-		(updates: Partial<ISettingsProfile>) => {
-			const current = localProfileRef.current;
-			if (!current) return;
-			const now = new Date().toISOString();
-			const hubProfile = updates.hub_profile
-				? { ...current.hub_profile, ...updates.hub_profile, updated: now }
-				: { ...current.hub_profile, updated: now };
-			const newProfile = {
-				...current,
-				...updates,
-				hub_profile: hubProfile,
-				updated: now,
-			};
-			setLocalProfile(newProfile);
-			setHasChanges(true);
-		},
-		[],
-	);
+	const updateProfile = useCallback((updates: Partial<ISettingsProfile>) => {
+		const current = localProfileRef.current;
+		if (!current) return;
+		const now = new Date().toISOString();
+		const hubProfile = updates.hub_profile
+			? { ...current.hub_profile, ...updates.hub_profile, updated: now }
+			: { ...current.hub_profile, updated: now };
+		const newProfile = {
+			...current,
+			...updates,
+			hub_profile: hubProfile,
+			updated: now,
+		};
+		setLocalProfile(newProfile);
+		setHasChanges(true);
+	}, []);
 
 	const handleProfileImageChange = useCallback(async () => {
 		const current = localProfileRef.current;

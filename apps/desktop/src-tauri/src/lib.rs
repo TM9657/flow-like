@@ -171,7 +171,10 @@ macro_rules! eprintln { ($($t:tt)*) => { tracing::error!($($t)*); } }
 pub fn run() {
     // Ensure panics are logged with backtraces in release too.
     std::panic::set_hook(Box::new(|info| {
-        eprintln!("PANIC: {info}\n{}", std::backtrace::Backtrace::force_capture());
+        eprintln!(
+            "PANIC: {info}\n{}",
+            std::backtrace::Backtrace::force_capture()
+        );
         if let Some(location) = info.location() {
             tracing::error!(
                 target: "panic",
@@ -419,8 +422,8 @@ pub fn run() {
     }
 
     let settings_state_for_sink = settings_state.clone();
-    let shared_wasm_engine = state::TauriWasmEngineState::create_shared()
-        .expect("Failed to create shared WasmEngine");
+    let shared_wasm_engine =
+        state::TauriWasmEngineState::create_shared().expect("Failed to create shared WasmEngine");
     let mut builder = tauri::Builder::default()
         .manage(state::TauriSettingsState(settings_state.clone()))
         .manage(state::TauriFlowLikeState(state_ref.clone()))

@@ -13,9 +13,11 @@ export const ptDevelopers: Record<string, string> = {
 	"dev.hero.cio.prefix": "Procurando a visão executiva?",
 	"dev.hero.cio.link": "Para CIOs →",
 	"dev.hero.card.workflows.title": "Compor Fluxos de Trabalho",
-	"dev.hero.card.workflows.description": "Arrastar, conectar, implementar — sem código",
+	"dev.hero.card.workflows.description":
+		"Arrastar, conectar, implementar — sem código",
 	"dev.hero.card.nodes.title": "Escrever Nós Personalizados",
-	"dev.hero.card.nodes.description": "Mais de 15 linguagens, compiladas para WebAssembly",
+	"dev.hero.card.nodes.description":
+		"Mais de 15 linguagens, compiladas para WebAssembly",
 	"dev.hero.converge": "Implantar em produção",
 
 	// Path Picker
@@ -48,9 +50,11 @@ export const ptDevelopers: Record<string, string> = {
 	"dev.workflow.step1.title": "Abra o canvas visual",
 	"dev.workflow.step1.description": "Na aplicação desktop ou no estúdio web",
 	"dev.workflow.step2.title": "Arraste nós do catálogo",
-	"dev.workflow.step2.description": "Pesquise, filtre ou navegue por categorias",
+	"dev.workflow.step2.description":
+		"Pesquise, filtre ou navegue por categorias",
 	"dev.workflow.step3.title": "Conecte e configure",
-	"dev.workflow.step3.description": "Ligação type-safe com validação em tempo real",
+	"dev.workflow.step3.description":
+		"Ligação type-safe com validação em tempo real",
 	"dev.workflow.step4.title": "Execute ou implemente",
 	"dev.workflow.step4.description": "Localmente, auto-hospedado ou na cloud",
 	"dev.workflow.cta.docs": "Ler a Documentação",
@@ -101,10 +105,14 @@ export const ptDevelopers: Record<string, string> = {
 	"dev.nodes.quickstart.title": "Início Rápido",
 	"dev.nodes.quickstart.description":
 		"Abra o Flow-Like Studio, escolha um template de linguagem e comece a construir seu nó personalizado:",
-	"dev.nodes.quickstart.step1": "1. Abra o Flow-Like Studio e navegue até a seção de Desenvolvimento de Nós",
-	"dev.nodes.quickstart.step2": "2. Escolha um template entre mais de 15 linguagens suportadas",
-	"dev.nodes.quickstart.step3": "3. Implemente a lógica do seu nó e compile o binário WASM",
-	"dev.nodes.quickstart.step4": "4. Publique diretamente no seu catálogo pelo Studio",
+	"dev.nodes.quickstart.step1":
+		"1. Abra o Flow-Like Studio e navegue até a seção de Desenvolvimento de Nós",
+	"dev.nodes.quickstart.step2":
+		"2. Escolha um template entre mais de 15 linguagens suportadas",
+	"dev.nodes.quickstart.step3":
+		"3. Implemente a lógica do seu nó e compile o binário WASM",
+	"dev.nodes.quickstart.step4":
+		"4. Publique diretamente no seu catálogo pelo Studio",
 	"dev.nodes.cta.guide": "Guia de Desenvolvimento de Nós",
 	"dev.nodes.cta.templates": "Explorar Todos os Templates",
 

@@ -385,7 +385,10 @@ posthog.init('phc_hxGZEJaPqyCNzqqfrYyuUDCUSpcc7RSbwh07t4xtfrE', { api_host:'http
 					badge: { text: "Devs", variant: "success" },
 					items: [
 						{ label: "WASM Nodes Overview", slug: "dev/wasm-nodes/overview" },
-						{ label: "Sandboxing & Permissions", slug: "dev/wasm-nodes/sandboxing" },
+						{
+							label: "Sandboxing & Permissions",
+							slug: "dev/wasm-nodes/sandboxing",
+						},
 						{ label: "Manifest Format", slug: "dev/wasm-nodes/manifest" },
 						{
 							label: "Publishing to Registry",

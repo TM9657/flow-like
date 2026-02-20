@@ -4,15 +4,13 @@ use flow_like::flow::{
     variable::VariableType,
 };
 use flow_like_types::{
-    async_trait,
-    create_id,
+    async_trait, create_id,
     interaction::{ChoiceOption, InteractionRequest, InteractionStatus, InteractionType},
     json::json,
 };
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use super::wait::wait_for_interaction_response;
-
 
 #[crate::register_node]
 #[derive(Default)]
@@ -178,28 +176,32 @@ impl NodeLogic for MultipleChoiceInteraction {
         let responded = result.responded;
 
         // Map selected IDs back to labels
-        let selected_labels: Vec<String> = if let Some(selected_ids) = result.value.get("selected_ids") {
-            if let Some(ids_array) = selected_ids.as_array() {
-                ids_array
-                    .iter()
-                    .filter_map(|id| id.as_str())
-                    .filter_map(|id| options_for_lookup.iter().find(|opt| opt.id == id).map(|opt| opt.label.clone()))
-                    .collect()
+        let selected_labels: Vec<String> =
+            if let Some(selected_ids) = result.value.get("selected_ids") {
+                if let Some(ids_array) = selected_ids.as_array() {
+                    ids_array
+                        .iter()
+                        .filter_map(|id| id.as_str())
+                        .filter_map(|id| {
+                            options_for_lookup
+                                .iter()
+                                .find(|opt| opt.id == id)
+                                .map(|opt| opt.label.clone())
+                        })
+                        .collect()
+                } else {
+                    Vec::new()
+                }
             } else {
                 Vec::new()
-            }
-        } else {
-            Vec::new()
-        };
+            };
 
         let response_value = flow_like_types::json::to_string(&selected_labels).unwrap_or_default();
 
         context
             .set_pin_value("response", json!(response_value))
             .await?;
-        context
-            .set_pin_value("responded", json!(responded))
-            .await?;
+        context.set_pin_value("responded", json!(responded)).await?;
 
         if responded {
             context.activate_exec_pin("exec_out").await?;
@@ -211,4 +213,3 @@ impl NodeLogic for MultipleChoiceInteraction {
         Ok(())
     }
 }
-

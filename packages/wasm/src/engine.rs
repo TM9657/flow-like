@@ -303,10 +303,7 @@ impl WasmEngine {
     }
 
     /// Auto-detect format and load from file
-    pub async fn load_auto_from_file(
-        &self,
-        path: impl AsRef<Path>,
-    ) -> WasmResult<LoadedWasm> {
+    pub async fn load_auto_from_file(&self, path: impl AsRef<Path>) -> WasmResult<LoadedWasm> {
         let path = path.as_ref();
         let bytes = tokio::fs::read(path)
             .await

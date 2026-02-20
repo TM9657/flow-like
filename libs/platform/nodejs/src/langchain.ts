@@ -1,14 +1,11 @@
+import type { CallbackManagerForLLMRun } from "@langchain/core/callbacks/manager";
+import { Embeddings, type EmbeddingsParams } from "@langchain/core/embeddings";
 import {
 	BaseChatModel,
 	type BaseChatModelParams,
 } from "@langchain/core/language_models/chat_models";
-import { Embeddings, type EmbeddingsParams } from "@langchain/core/embeddings";
-import {
-	AIMessage,
-	type BaseMessage,
-} from "@langchain/core/messages";
+import { AIMessage, type BaseMessage } from "@langchain/core/messages";
 import type { ChatResult } from "@langchain/core/outputs";
-import type { CallbackManagerForLLMRun } from "@langchain/core/callbacks/manager";
 import { stripTrailingSlashes } from "./client.js";
 
 export interface FlowLikeChatModelParams extends BaseChatModelParams {
@@ -80,9 +77,7 @@ export class FlowLikeChatModel extends BaseChatModel {
 			messages: messages.map((m) => ({
 				role: ROLE_MAP[m._getType()] ?? "user",
 				content:
-					typeof m.content === "string"
-						? m.content
-						: JSON.stringify(m.content),
+					typeof m.content === "string" ? m.content : JSON.stringify(m.content),
 			})),
 			model: this.bitId,
 		};
@@ -91,15 +86,12 @@ export class FlowLikeChatModel extends BaseChatModel {
 		if (this.topP != null) body.top_p = this.topP;
 		if (this.stopSequences) body.stop = this.stopSequences;
 
-		const res = await fetch(
-			`${this.baseUrl}/api/v1/chat/completions`,
-			{
-				method: "POST",
-				headers: buildHeaders(this.token),
-				body: JSON.stringify(body),
-				signal: options?.signal as AbortSignal | undefined,
-			},
-		);
+		const res = await fetch(`${this.baseUrl}/api/v1/chat/completions`, {
+			method: "POST",
+			headers: buildHeaders(this.token),
+			body: JSON.stringify(body),
+			signal: options?.signal as AbortSignal | undefined,
+		});
 
 		if (!res.ok) {
 			const text = await res.text().catch(() => "");

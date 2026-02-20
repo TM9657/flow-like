@@ -64,8 +64,8 @@ pub mod futures {
     pub use futures::StreamExt;
 }
 pub use async_stream;
-pub mod intercom;
 pub mod interaction;
+pub mod intercom;
 pub mod utils;
 
 /// OAuth token input for execution requests

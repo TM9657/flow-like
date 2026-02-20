@@ -362,69 +362,61 @@ pub async fn generate_tool_from_function(
             VariableType::Boolean => (HistoryJSONSchemaType::Boolean, None),
             VariableType::Struct | VariableType::Generic => {
                 // Try to parse nested schema from pin
-                if let Some(schema_str) = &pin.schema {
-                    if let Ok(schema_value) =
-                        flow_like_types::json::from_str::<Value>(schema_str)
-                    {
-                        if let Some(props) = schema_value
-                            .get("properties")
-                            .and_then(|p| p.as_object())
-                        {
-                            let mut nested_props: HashMap<String, Box<HistoryJSONSchemaDefine>> =
-                                HashMap::new();
-                            for (prop_name, prop_schema) in props {
-                                let prop_type = match prop_schema.get("type").and_then(|t| t.as_str())
-                                {
-                                    Some("string") => HistoryJSONSchemaType::String,
-                                    Some("number") | Some("integer") => HistoryJSONSchemaType::Number,
-                                    Some("boolean") => HistoryJSONSchemaType::Boolean,
-                                    Some("array") => HistoryJSONSchemaType::Array,
-                                    _ => HistoryJSONSchemaType::Object,
-                                };
-                                let prop_desc = prop_schema
-                                    .get("description")
-                                    .and_then(|d| d.as_str())
-                                    .map(String::from);
-                                let prop_enum = prop_schema.get("enum").and_then(|e| {
-                                    e.as_array().map(|arr| {
-                                        arr.iter()
-                                            .filter_map(|v| v.as_str().map(String::from))
-                                            .collect()
-                                    })
-                                });
-                                nested_props.insert(
-                                    prop_name.clone(),
-                                    Box::new(HistoryJSONSchemaDefine {
-                                        schema_type: Some(prop_type),
-                                        description: prop_desc,
-                                        enum_values: prop_enum,
-                                        properties: None,
-                                        required: None,
-                                        items: None,
-                                    }),
-                                );
-                            }
-                            return HistoryJSONSchemaDefine {
-                                schema_type: Some(HistoryJSONSchemaType::Object),
-                                description: if pin.description.is_empty() {
-                                    None
-                                } else {
-                                    Some(pin.description.clone())
-                                },
-                                enum_values: None,
-                                properties: Some(nested_props),
-                                required: schema_value
-                                    .get("required")
-                                    .and_then(|r| r.as_array())
-                                    .map(|arr| {
-                                        arr.iter()
-                                            .filter_map(|v| v.as_str().map(String::from))
-                                            .collect()
-                                    }),
+                if let Some(schema_str) = &pin.schema
+                    && let Ok(schema_value) = flow_like_types::json::from_str::<Value>(schema_str)
+                    && let Some(props) = schema_value.get("properties").and_then(|p| p.as_object())
+                {
+                    let mut nested_props: HashMap<String, Box<HistoryJSONSchemaDefine>> =
+                        HashMap::new();
+                    for (prop_name, prop_schema) in props {
+                        let prop_type = match prop_schema.get("type").and_then(|t| t.as_str()) {
+                            Some("string") => HistoryJSONSchemaType::String,
+                            Some("number") | Some("integer") => HistoryJSONSchemaType::Number,
+                            Some("boolean") => HistoryJSONSchemaType::Boolean,
+                            Some("array") => HistoryJSONSchemaType::Array,
+                            _ => HistoryJSONSchemaType::Object,
+                        };
+                        let prop_desc = prop_schema
+                            .get("description")
+                            .and_then(|d| d.as_str())
+                            .map(String::from);
+                        let prop_enum = prop_schema.get("enum").and_then(|e| {
+                            e.as_array().map(|arr| {
+                                arr.iter()
+                                    .filter_map(|v| v.as_str().map(String::from))
+                                    .collect()
+                            })
+                        });
+                        nested_props.insert(
+                            prop_name.clone(),
+                            Box::new(HistoryJSONSchemaDefine {
+                                schema_type: Some(prop_type),
+                                description: prop_desc,
+                                enum_values: prop_enum,
+                                properties: None,
+                                required: None,
                                 items: None,
-                            };
-                        }
+                            }),
+                        );
                     }
+                    return HistoryJSONSchemaDefine {
+                        schema_type: Some(HistoryJSONSchemaType::Object),
+                        description: if pin.description.is_empty() {
+                            None
+                        } else {
+                            Some(pin.description.clone())
+                        },
+                        enum_values: None,
+                        properties: Some(nested_props),
+                        required: schema_value.get("required").and_then(|r| r.as_array()).map(
+                            |arr| {
+                                arr.iter()
+                                    .filter_map(|v| v.as_str().map(String::from))
+                                    .collect()
+                            },
+                        ),
+                        items: None,
+                    };
                 }
                 (HistoryJSONSchemaType::Object, None)
             }
@@ -509,10 +501,11 @@ pub async fn generate_tool_from_function(
     }
 
     // If no data pins exist AND the event has a payload pin defined, add it to the schema
-    if !has_data_pins {
-        if let Some(payload) = payload_pin {
-            properties.insert("payload".to_string(), Box::new(pin_to_schema_define(payload)));
-        }
+    if !has_data_pins && let Some(payload) = payload_pin {
+        properties.insert(
+            "payload".to_string(),
+            Box::new(pin_to_schema_define(payload)),
+        );
     }
 
     let parameters = HistoryFunctionParameters {

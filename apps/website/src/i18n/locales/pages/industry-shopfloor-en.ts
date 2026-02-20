@@ -42,17 +42,23 @@ export const enShopfloor: Record<string, string> = {
 	"ind.features.tagline": "Capabilities",
 	"ind.features.headline": "Built for manufacturing",
 	"ind.feature.1.title": "PLC Integration",
-	"ind.feature.1.desc": "Connect Siemens, Allen-Bradley, Beckhoff and more through native protocol nodes.",
+	"ind.feature.1.desc":
+		"Connect Siemens, Allen-Bradley, Beckhoff and more through native protocol nodes.",
 	"ind.feature.2.title": "TDMS & Time-Series",
-	"ind.feature.2.desc": "Ingest and transform high-frequency measurement data from NI TDMS and other formats.",
+	"ind.feature.2.desc":
+		"Ingest and transform high-frequency measurement data from NI TDMS and other formats.",
 	"ind.feature.3.title": "Quality Gates",
-	"ind.feature.3.desc": "Build automated inspection flows that halt production on out-of-spec readings.",
+	"ind.feature.3.desc":
+		"Build automated inspection flows that halt production on out-of-spec readings.",
 	"ind.feature.4.title": "Edge Deployment",
-	"ind.feature.4.desc": "Deploy workflows to industrial PCs and edge gateways. No cloud round-trips.",
+	"ind.feature.4.desc":
+		"Deploy workflows to industrial PCs and edge gateways. No cloud round-trips.",
 	"ind.feature.5.title": "Digital Twin Feeds",
-	"ind.feature.5.desc": "Stream live sensor data into your digital twin or historians with standardized connectors.",
+	"ind.feature.5.desc":
+		"Stream live sensor data into your digital twin or historians with standardized connectors.",
 	"ind.feature.6.title": "Shift Reports",
-	"ind.feature.6.desc": "Auto-generate production reports, OEE dashboards, and downtime analyses.",
+	"ind.feature.6.desc":
+		"Auto-generate production reports, OEE dashboards, and downtime analyses.",
 
 	"ind.cta.headline": "Ready to modernize your shopfloor?",
 	"ind.cta.description":

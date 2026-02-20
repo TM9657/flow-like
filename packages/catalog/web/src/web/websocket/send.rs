@@ -5,12 +5,12 @@ use flow_like::flow::{
 };
 use flow_like_types::{async_trait, json::json};
 
-#[cfg(feature = "execute")]
-use flow_like::flow::execution::{LogLevel, context::ExecutionContext};
 #[cfg(not(feature = "execute"))]
 use flow_like::flow::execution::context::ExecutionContext;
+#[cfg(feature = "execute")]
+use flow_like::flow::execution::{LogLevel, context::ExecutionContext};
 
-use super::{WebSocketSession};
+use super::WebSocketSession;
 
 #[derive(serde::Serialize, serde::Deserialize, Clone, Debug, schemars::JsonSchema)]
 pub enum WebSocketMessageType {

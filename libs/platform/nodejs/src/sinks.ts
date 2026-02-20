@@ -6,19 +6,15 @@ export function createSinkMethods(http: HttpClient) {
 		async triggerHttpSink(
 			appId: string,
 			path: string,
-			method: string = "POST",
+			method = "POST",
 			body?: unknown,
 			options?: HttpSinkOptions,
 		): Promise<unknown> {
-			return http.request(
-				method,
-				`/sink/trigger/http/${appId}/${path}`,
-				{
-					body,
-					headers: options?.headers,
-					signal: options?.signal,
-				},
-			);
+			return http.request(method, `/sink/trigger/http/${appId}/${path}`, {
+				body,
+				headers: options?.headers,
+				signal: options?.signal,
+			});
 		},
 	};
 }

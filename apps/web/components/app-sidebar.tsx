@@ -725,7 +725,12 @@ interface INavItem {
 
 function isItemActive(item: INavItem, pathname: string): boolean {
 	if (pathname === item.url) return true;
-	if (item.items?.some((sub) => pathname === sub.url || pathname.startsWith(`${sub.url}/`))) return true;
+	if (
+		item.items?.some(
+			(sub) => pathname === sub.url || pathname.startsWith(`${sub.url}/`),
+		)
+	)
+		return true;
 	return item.url !== "/" && pathname.startsWith(`${item.url}/`);
 }
 
@@ -770,7 +775,10 @@ function NavCollapsible({
 					(item.isActive ? "open" : "closed")) === "open"
 			}
 			onOpenChange={(isOpen) => {
-				localStorage.setItem(`sidebar:${item.title}`, isOpen ? "open" : "closed");
+				localStorage.setItem(
+					`sidebar:${item.title}`,
+					isOpen ? "open" : "closed",
+				);
 			}}
 			className="group/collapsible"
 		>
@@ -800,7 +808,14 @@ function NavCollapsible({
 							<SidebarMenuSubItem key={subItem.title}>
 								<SidebarMenuSubButton asChild>
 									<Link href={subItem.url}>
-										<span className={pathname === subItem.url || pathname.startsWith(`${subItem.url}/`) ? "font-bold text-primary" : ""}>
+										<span
+											className={
+												pathname === subItem.url ||
+												pathname.startsWith(`${subItem.url}/`)
+													? "font-bold text-primary"
+													: ""
+											}
+										>
 											{subItem.title}
 										</span>
 									</Link>
@@ -842,11 +857,7 @@ function NavMain({
 									onNavigate={router.push}
 								/>
 							) : (
-								<NavFlatItem
-									key={item.title}
-									item={item}
-									pathname={pathname}
-								/>
+								<NavFlatItem key={item.title} item={item} pathname={pathname} />
 							),
 						)}
 				</SidebarMenu>
@@ -876,7 +887,9 @@ function NavMain({
 											items: item.items?.filter((sub) =>
 												new GlobalPermission(
 													info.data?.permission ?? 0,
-												).hasPermission(sub.permission ?? GlobalPermission.Admin),
+												).hasPermission(
+													sub.permission ?? GlobalPermission.Admin,
+												),
 											),
 										}}
 										pathname={pathname}

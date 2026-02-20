@@ -6,7 +6,7 @@ use dashmap::DashMap;
 use flow_like::flow::node::{Node, NodeLogic, NodeWasm};
 use flow_like_wasm::abi::{WasmExecutionInput, WasmExecutionResult, WasmNodeDefinition};
 use flow_like_wasm::manifest::PackageManifest;
-use flow_like_wasm::{build_node_from_definition, WasmEngine, WasmNodeLogic, WasmSecurityConfig};
+use flow_like_wasm::{WasmEngine, WasmNodeLogic, WasmSecurityConfig, build_node_from_definition};
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, LazyLock};
@@ -67,10 +67,15 @@ fn detect_project_language(project_path: &Path) -> Option<String> {
     if lower.iter().any(|f| f.ends_with(".gr")) || src_lower.iter().any(|f| f.ends_with(".gr")) {
         return Some("grain".into());
     }
-    if lower.iter().any(|f| f.ends_with(".nimble")) || lower.contains("nim.cfg") || lower.contains("config.nims") {
+    if lower.iter().any(|f| f.ends_with(".nimble"))
+        || lower.contains("nim.cfg")
+        || lower.contains("config.nims")
+    {
         return Some("nim".into());
     }
-    if lower.iter().any(|f| f.ends_with(".lua") || f.ends_with(".rockspec"))
+    if lower
+        .iter()
+        .any(|f| f.ends_with(".lua") || f.ends_with(".rockspec"))
         || lower.contains(".luacheckrc")
         || src_lower.iter().any(|f| f.ends_with(".lua"))
     {
@@ -94,7 +99,11 @@ fn detect_project_language(project_path: &Path) -> Option<String> {
     if lower.contains("pom.xml") {
         return Some("java".into());
     }
-    if lower.contains("cmakelists.txt") || lower.iter().any(|f| f.ends_with(".cpp") || f.ends_with(".cc")) {
+    if lower.contains("cmakelists.txt")
+        || lower
+            .iter()
+            .any(|f| f.ends_with(".cpp") || f.ends_with(".cc"))
+    {
         return Some("cpp".into());
     }
     if lower.contains("pyproject.toml") || lower.contains("requirements.txt") {
@@ -161,11 +170,11 @@ pub async fn developer_list_projects(
     let mut changed = false;
     for project in &mut store.projects {
         let path = Path::new(&project.path);
-        if let Some(detected) = detect_project_language(path) {
-            if project.language != detected {
-                project.language = detected;
-                changed = true;
-            }
+        if let Some(detected) = detect_project_language(path)
+            && project.language != detected
+        {
+            project.language = detected;
+            changed = true;
         }
     }
     if changed {
@@ -206,8 +215,7 @@ pub async fn developer_add_project(
                 .as_millis()
         ),
         path: input.path.clone(),
-        language: detect_project_language(Path::new(&input.path))
-            .unwrap_or(input.language),
+        language: detect_project_language(Path::new(&input.path)).unwrap_or(input.language),
         name: input.name,
         created_at: chrono::Utc::now().to_rfc3339(),
     };
@@ -241,8 +249,7 @@ pub async fn developer_list_local_files(
     if !dir.is_dir() {
         return Err(TauriFunctionError::new("Path is not a directory"));
     }
-    let entries = std::fs::read_dir(&dir)
-        .map_err(|e| TauriFunctionError::new(&e.to_string()))?;
+    let entries = std::fs::read_dir(&dir).map_err(|e| TauriFunctionError::new(&e.to_string()))?;
     let names: Vec<String> = entries
         .flatten()
         .filter_map(|e| e.file_name().into_string().ok())
@@ -555,16 +562,14 @@ pub async fn developer_inspect_node(
             .map_err(|e| TauriFunctionError::new(&format!("Failed to load WASM module: {}", e)))?;
 
         let security = WasmSecurityConfig::permissive();
-        let mut instance = loaded
-            .instantiate(&engine, security)
-            .await
-            .map_err(|e| {
-                TauriFunctionError::new(&format!("Failed to instantiate module: {}", e))
-            })?;
+        let mut instance = loaded.instantiate(&engine, security).await.map_err(|e| {
+            TauriFunctionError::new(&format!("Failed to instantiate module: {}", e))
+        })?;
 
-        instance.call_get_nodes().await.map_err(|e| {
-            TauriFunctionError::new(&format!("Failed to get node definitions: {}", e))
-        })
+        instance
+            .call_get_nodes()
+            .await
+            .map_err(|e| TauriFunctionError::new(&format!("Failed to get node definitions: {}", e)))
     })
     .await
     .map_err(|e| TauriFunctionError::new(&format!("Task panicked: {}", e)))?
@@ -604,17 +609,12 @@ pub async fn developer_inspect_package(
         let loaded = engine
             .load_auto_from_file(&wasm_path)
             .await
-            .map_err(|e| {
-                TauriFunctionError::new(&format!("Failed to load WASM module: {}", e))
-            })?;
+            .map_err(|e| TauriFunctionError::new(&format!("Failed to load WASM module: {}", e)))?;
 
         let security = WasmSecurityConfig::permissive();
-        let mut instance = loaded
-            .instantiate(&engine, security)
-            .await
-            .map_err(|e| {
-                TauriFunctionError::new(&format!("Failed to instantiate module: {}", e))
-            })?;
+        let mut instance = loaded.instantiate(&engine, security).await.map_err(|e| {
+            TauriFunctionError::new(&format!("Failed to instantiate module: {}", e))
+        })?;
 
         let is_package = instance.is_package();
         let nodes = instance.call_get_nodes().await.map_err(|e| {
@@ -649,12 +649,12 @@ fn load_manifest_typed(project_path: &Path) -> Result<PackageManifest, TauriFunc
 
 fn find_wasm_file(project_path: &Path) -> Result<PathBuf, TauriFunctionError> {
     // 1. Check manifest wasm_path first
-    if let Ok(manifest) = load_manifest_typed(project_path) {
-        if let Some(wasm_path) = &manifest.wasm_path {
-            let p = project_path.join(wasm_path);
-            if p.exists() {
-                return Ok(p);
-            }
+    if let Ok(manifest) = load_manifest_typed(project_path)
+        && let Some(wasm_path) = &manifest.wasm_path
+    {
+        let p = project_path.join(wasm_path);
+        if p.exists() {
+            return Ok(p);
         }
     }
 
@@ -676,12 +676,31 @@ fn find_wasm_file(project_path: &Path) -> Result<PathBuf, TauriFunctionError> {
 
     // 3. Recursively search for .wasm files, skipping build tooling dirs
     let skip_dirs: &[&str] = &[
-        "node_modules", ".venv", "__pycache__", ".git", "deps",
-        "examples", ".zig-cache", "gradle", ".gradle", "obj",
-        "wasm-sdk-rust", "wasm-sdk-go", "wasm-sdk-cpp", "wasm-sdk-kotlin",
-        "wasm-sdk-zig", "wasm-sdk-assemblyscript", "wasm-sdk-typescript",
-        "wasm-sdk-python", "wasm-sdk-csharp", "wasm-sdk-nim", "wasm-sdk-grain",
-        "wasm-sdk-moonbit", "wasm-sdk-lua", "wasm-sdk-swift", "wasm-sdk-java",
+        "node_modules",
+        ".venv",
+        "__pycache__",
+        ".git",
+        "deps",
+        "examples",
+        ".zig-cache",
+        "gradle",
+        ".gradle",
+        "obj",
+        "wasm-sdk-rust",
+        "wasm-sdk-go",
+        "wasm-sdk-cpp",
+        "wasm-sdk-kotlin",
+        "wasm-sdk-zig",
+        "wasm-sdk-assemblyscript",
+        "wasm-sdk-typescript",
+        "wasm-sdk-python",
+        "wasm-sdk-csharp",
+        "wasm-sdk-nim",
+        "wasm-sdk-grain",
+        "wasm-sdk-moonbit",
+        "wasm-sdk-lua",
+        "wasm-sdk-swift",
+        "wasm-sdk-java",
     ];
     if let Some(wasm) = find_wasm_recursive(project_path, project_path, skip_dirs, 0) {
         return Ok(wasm);
@@ -708,12 +727,17 @@ fn find_wasm_recursive(
     for entry in entries.flatten() {
         let path = entry.path();
         if path.is_file() && path.extension().is_some_and(|ext| ext == "wasm") {
-            let path_str = path.strip_prefix(project_root).unwrap_or(&path).to_string_lossy();
+            let path_str = path
+                .strip_prefix(project_root)
+                .unwrap_or(&path)
+                .to_string_lossy();
             if path_str.contains("/deps/") {
                 continue;
             }
             // .NET publish/ outputs are not self-contained (need external ICU data etc.)
-            if path_str.contains("/publish/") && path.file_name().is_some_and(|n| n == "dotnet.wasm") {
+            if path_str.contains("/publish/")
+                && path.file_name().is_some_and(|n| n == "dotnet.wasm")
+            {
                 continue;
             }
             best = pick_better(best, path, project_root);
@@ -735,10 +759,22 @@ fn find_wasm_recursive(
     best
 }
 
-fn pick_better(current: Option<PathBuf>, candidate: PathBuf, project_root: &Path) -> Option<PathBuf> {
-    let cand_str = candidate.strip_prefix(project_root).unwrap_or(&candidate).to_string_lossy();
-    let Some(cur) = current else { return Some(candidate) };
-    let cur_str = cur.strip_prefix(project_root).unwrap_or(&cur).to_string_lossy();
+fn pick_better(
+    current: Option<PathBuf>,
+    candidate: PathBuf,
+    project_root: &Path,
+) -> Option<PathBuf> {
+    let cand_str = candidate
+        .strip_prefix(project_root)
+        .unwrap_or(&candidate)
+        .to_string_lossy();
+    let Some(cur) = current else {
+        return Some(candidate);
+    };
+    let cur_str = cur
+        .strip_prefix(project_root)
+        .unwrap_or(&cur)
+        .to_string_lossy();
 
     // AppBundle (single-file bundle) is always preferred
     if cur_str.contains("AppBundle") && !cand_str.contains("AppBundle") {
@@ -778,17 +814,12 @@ pub async fn developer_run_node(
         let loaded = engine
             .load_auto_from_file(&path)
             .await
-            .map_err(|e| {
-                TauriFunctionError::new(&format!("Failed to load WASM module: {}", e))
-            })?;
+            .map_err(|e| TauriFunctionError::new(&format!("Failed to load WASM module: {}", e)))?;
 
         let security = WasmSecurityConfig::permissive();
-        let mut instance = loaded
-            .instantiate(&engine, security)
-            .await
-            .map_err(|e| {
-                TauriFunctionError::new(&format!("Failed to instantiate module: {}", e))
-            })?;
+        let mut instance = loaded.instantiate(&engine, security).await.map_err(|e| {
+            TauriFunctionError::new(&format!("Failed to instantiate module: {}", e))
+        })?;
 
         let exec_input = WasmExecutionInput {
             inputs: input.inputs,
@@ -802,9 +833,10 @@ pub async fn developer_run_node(
             node_name: input.node_name,
         };
 
-        instance.call_run(&exec_input).await.map_err(|e| {
-            TauriFunctionError::new(&format!("Node execution failed: {}", e))
-        })
+        instance
+            .call_run(&exec_input)
+            .await
+            .map_err(|e| TauriFunctionError::new(&format!("Node execution failed: {}", e)))
     })
     .await
     .map_err(|e| TauriFunctionError::new(&format!("Task panicked: {}", e)))?
@@ -814,10 +846,10 @@ async fn load_wasm_nodes_from_path(
     wasm_path: &Path,
     engine: Arc<WasmEngine>,
 ) -> Result<Vec<(Node, Arc<dyn NodeLogic>)>, TauriFunctionError> {
-
-    let loaded = engine.load_auto_from_file(wasm_path).await.map_err(|e| {
-        TauriFunctionError::new(&format!("Failed to load WASM module: {}", e))
-    })?;
+    let loaded = engine
+        .load_auto_from_file(wasm_path)
+        .await
+        .map_err(|e| TauriFunctionError::new(&format!("Failed to load WASM module: {}", e)))?;
 
     let security = WasmSecurityConfig::permissive();
     let mut instance = loaded
@@ -825,16 +857,21 @@ async fn load_wasm_nodes_from_path(
         .await
         .map_err(|e| TauriFunctionError::new(&format!("Failed to instantiate module: {}", e)))?;
 
-    let definitions = instance.call_get_nodes().await.map_err(|e| {
-        TauriFunctionError::new(&format!("Failed to get node definitions: {}", e))
-    })?;
+    let definitions = instance
+        .call_get_nodes()
+        .await
+        .map_err(|e| TauriFunctionError::new(&format!("Failed to get node definitions: {}", e)))?;
 
     Ok(definitions
         .into_iter()
         .map(|def| {
             let package_id = format!("local::{}", def.name);
             let mut node = build_node_from_definition(&def);
-            let permissions = node.wasm.as_ref().map(|w| w.permissions.clone()).unwrap_or_default();
+            let permissions = node
+                .wasm
+                .as_ref()
+                .map(|w| w.permissions.clone())
+                .unwrap_or_default();
             node.wasm = Some(NodeWasm {
                 package_id: package_id.clone(),
                 permissions,
@@ -874,12 +911,11 @@ pub async fn developer_load_into_catalog(
     let engine = TauriWasmEngineState::construct(&app_handle)
         .map_err(|e| TauriFunctionError::new(&e.to_string()))?;
     let project = PathBuf::from(&project_path);
-    let wasm_path = find_wasm_file(&project).map_err(|e| {
+    let wasm_path = find_wasm_file(&project).inspect_err(|_e| {
         let _ = app_handle.emit(
             "package-status",
             serde_json::json!({ "packageId": format!("dev:{}", project_path), "status": "error" }),
         );
-        e
     })?;
     let node_pairs = match load_wasm_nodes_from_path(&wasm_path, engine).await {
         Ok(pairs) => pairs,

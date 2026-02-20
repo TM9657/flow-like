@@ -1,14 +1,18 @@
 import {
+	type Context,
 	DataType,
-	ExecutionResult,
-	NodeDefinition,
-	PinDefinition,
-	Context,
+	type ExecutionResult,
 	FlowNode,
+	NodeDefinition,
 	NodePackage,
+	PinDefinition,
 } from "@flow-like/wasm-sdk/assembly/index";
 
-export { alloc, dealloc, get_abi_version } from "@flow-like/wasm-sdk/assembly/index";
+export {
+	alloc,
+	dealloc,
+	get_abi_version,
+} from "@flow-like/wasm-sdk/assembly/index";
 
 export class IfBranchNode extends FlowNode {
 	define(): NodeDefinition {
@@ -18,10 +22,33 @@ export class IfBranchNode extends FlowNode {
 		def.description = "Routes execution based on a condition";
 		def.category = "Control Flow";
 
-		def.addPin(PinDefinition.input("exec", "Execute", "Trigger", DataType.Exec));
-		def.addPin(PinDefinition.input("condition", "Condition", "Branch condition", DataType.Bool).withDefaultBool(false));
-		def.addPin(PinDefinition.output("true_branch", "True", "Executes when true", DataType.Exec));
-		def.addPin(PinDefinition.output("false_branch", "False", "Executes when false", DataType.Exec));
+		def.addPin(
+			PinDefinition.input("exec", "Execute", "Trigger", DataType.Exec),
+		);
+		def.addPin(
+			PinDefinition.input(
+				"condition",
+				"Condition",
+				"Branch condition",
+				DataType.Bool,
+			).withDefaultBool(false),
+		);
+		def.addPin(
+			PinDefinition.output(
+				"true_branch",
+				"True",
+				"Executes when true",
+				DataType.Exec,
+			),
+		);
+		def.addPin(
+			PinDefinition.output(
+				"false_branch",
+				"False",
+				"Executes when false",
+				DataType.Exec,
+			),
+		);
 		return def;
 	}
 
@@ -43,12 +70,34 @@ export class CompareNode extends FlowNode {
 		def.description = "Compares two numbers and outputs comparison results";
 		def.category = "Control Flow";
 
-		def.addPin(PinDefinition.input("exec", "Execute", "Trigger", DataType.Exec));
-		def.addPin(PinDefinition.input("a", "A", "First number", DataType.F64).withDefaultF64(0.0));
-		def.addPin(PinDefinition.input("b", "B", "Second number", DataType.F64).withDefaultF64(0.0));
-		def.addPin(PinDefinition.output("exec_out", "Done", "Complete", DataType.Exec));
-		def.addPin(PinDefinition.output("equal", "Equal", "A equals B", DataType.Bool));
-		def.addPin(PinDefinition.output("greater", "Greater", "A > B", DataType.Bool));
+		def.addPin(
+			PinDefinition.input("exec", "Execute", "Trigger", DataType.Exec),
+		);
+		def.addPin(
+			PinDefinition.input(
+				"a",
+				"A",
+				"First number",
+				DataType.F64,
+			).withDefaultF64(0.0),
+		);
+		def.addPin(
+			PinDefinition.input(
+				"b",
+				"B",
+				"Second number",
+				DataType.F64,
+			).withDefaultF64(0.0),
+		);
+		def.addPin(
+			PinDefinition.output("exec_out", "Done", "Complete", DataType.Exec),
+		);
+		def.addPin(
+			PinDefinition.output("equal", "Equal", "A equals B", DataType.Bool),
+		);
+		def.addPin(
+			PinDefinition.output("greater", "Greater", "A > B", DataType.Bool),
+		);
 		def.addPin(PinDefinition.output("less", "Less", "A < B", DataType.Bool));
 		return def;
 	}
@@ -71,11 +120,31 @@ export class AndGateNode extends FlowNode {
 		def.description = "Logical AND of two boolean inputs";
 		def.category = "Control Flow/Logic";
 
-		def.addPin(PinDefinition.input("exec", "Execute", "Trigger", DataType.Exec));
-		def.addPin(PinDefinition.input("a", "A", "First boolean", DataType.Bool).withDefaultBool(false));
-		def.addPin(PinDefinition.input("b", "B", "Second boolean", DataType.Bool).withDefaultBool(false));
-		def.addPin(PinDefinition.output("exec_out", "Done", "Complete", DataType.Exec));
-		def.addPin(PinDefinition.output("result", "Result", "A AND B", DataType.Bool));
+		def.addPin(
+			PinDefinition.input("exec", "Execute", "Trigger", DataType.Exec),
+		);
+		def.addPin(
+			PinDefinition.input(
+				"a",
+				"A",
+				"First boolean",
+				DataType.Bool,
+			).withDefaultBool(false),
+		);
+		def.addPin(
+			PinDefinition.input(
+				"b",
+				"B",
+				"Second boolean",
+				DataType.Bool,
+			).withDefaultBool(false),
+		);
+		def.addPin(
+			PinDefinition.output("exec_out", "Done", "Complete", DataType.Exec),
+		);
+		def.addPin(
+			PinDefinition.output("result", "Result", "A AND B", DataType.Bool),
+		);
 		return def;
 	}
 
@@ -93,11 +162,31 @@ export class OrGateNode extends FlowNode {
 		def.description = "Logical OR of two boolean inputs";
 		def.category = "Control Flow/Logic";
 
-		def.addPin(PinDefinition.input("exec", "Execute", "Trigger", DataType.Exec));
-		def.addPin(PinDefinition.input("a", "A", "First boolean", DataType.Bool).withDefaultBool(false));
-		def.addPin(PinDefinition.input("b", "B", "Second boolean", DataType.Bool).withDefaultBool(false));
-		def.addPin(PinDefinition.output("exec_out", "Done", "Complete", DataType.Exec));
-		def.addPin(PinDefinition.output("result", "Result", "A OR B", DataType.Bool));
+		def.addPin(
+			PinDefinition.input("exec", "Execute", "Trigger", DataType.Exec),
+		);
+		def.addPin(
+			PinDefinition.input(
+				"a",
+				"A",
+				"First boolean",
+				DataType.Bool,
+			).withDefaultBool(false),
+		);
+		def.addPin(
+			PinDefinition.input(
+				"b",
+				"B",
+				"Second boolean",
+				DataType.Bool,
+			).withDefaultBool(false),
+		);
+		def.addPin(
+			PinDefinition.output("exec_out", "Done", "Complete", DataType.Exec),
+		);
+		def.addPin(
+			PinDefinition.output("result", "Result", "A OR B", DataType.Bool),
+		);
 		return def;
 	}
 
@@ -115,10 +204,23 @@ export class NotGateNode extends FlowNode {
 		def.description = "Logical NOT of a boolean input";
 		def.category = "Control Flow/Logic";
 
-		def.addPin(PinDefinition.input("exec", "Execute", "Trigger", DataType.Exec));
-		def.addPin(PinDefinition.input("value", "Value", "Boolean to negate", DataType.Bool).withDefaultBool(false));
-		def.addPin(PinDefinition.output("exec_out", "Done", "Complete", DataType.Exec));
-		def.addPin(PinDefinition.output("result", "Result", "NOT value", DataType.Bool));
+		def.addPin(
+			PinDefinition.input("exec", "Execute", "Trigger", DataType.Exec),
+		);
+		def.addPin(
+			PinDefinition.input(
+				"value",
+				"Value",
+				"Boolean to negate",
+				DataType.Bool,
+			).withDefaultBool(false),
+		);
+		def.addPin(
+			PinDefinition.output("exec_out", "Done", "Complete", DataType.Exec),
+		);
+		def.addPin(
+			PinDefinition.output("result", "Result", "NOT value", DataType.Bool),
+		);
 		return def;
 	}
 
@@ -136,10 +238,33 @@ export class GateNode extends FlowNode {
 		def.description = "Passes execution only when the gate is open";
 		def.category = "Control Flow";
 
-		def.addPin(PinDefinition.input("exec", "Execute", "Trigger", DataType.Exec));
-		def.addPin(PinDefinition.input("open", "Open", "Gate state", DataType.Bool).withDefaultBool(true));
-		def.addPin(PinDefinition.output("passed", "Passed", "Fires when gate is open", DataType.Exec));
-		def.addPin(PinDefinition.output("blocked", "Blocked", "Fires when gate is closed", DataType.Exec));
+		def.addPin(
+			PinDefinition.input("exec", "Execute", "Trigger", DataType.Exec),
+		);
+		def.addPin(
+			PinDefinition.input(
+				"open",
+				"Open",
+				"Gate state",
+				DataType.Bool,
+			).withDefaultBool(true),
+		);
+		def.addPin(
+			PinDefinition.output(
+				"passed",
+				"Passed",
+				"Fires when gate is open",
+				DataType.Exec,
+			),
+		);
+		def.addPin(
+			PinDefinition.output(
+				"blocked",
+				"Blocked",
+				"Fires when gate is closed",
+				DataType.Exec,
+			),
+		);
 		return def;
 	}
 

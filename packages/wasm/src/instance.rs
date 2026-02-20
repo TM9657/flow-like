@@ -80,9 +80,10 @@ impl WasmInstance {
 
         // Call _start if exported (needed for Grain, MoonBit and similar runtimes)
         if let Ok(start) = instance.get_typed_func::<(), ()>(&mut store, "_start") {
-            start.call_async(&mut store, ()).await.map_err(|e| {
-                WasmError::instantiation(format!("Failed to call _start: {}", e))
-            })?;
+            start
+                .call_async(&mut store, ())
+                .await
+                .map_err(|e| WasmError::instantiation(format!("Failed to call _start: {}", e)))?;
         }
 
         // Get memory export
@@ -373,7 +374,6 @@ impl WasmInstance {
     pub fn memory_size(&self) -> usize {
         self.memory.data_size(&self.store)
     }
-
 }
 
 impl std::fmt::Debug for WasmInstance {

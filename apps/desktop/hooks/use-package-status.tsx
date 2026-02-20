@@ -3,7 +3,12 @@
 import { type Event, type UnlistenFn, listen } from "@tauri-apps/api/event";
 import { useEffect, useSyncExternalStore } from "react";
 
-export type CompileStatus = "idle" | "downloading" | "compiling" | "ready" | "error";
+export type CompileStatus =
+	| "idle"
+	| "downloading"
+	| "compiling"
+	| "ready"
+	| "error";
 
 interface PackageStatusEvent {
 	packageId: string;
@@ -19,7 +24,9 @@ function notifyListeners() {
 
 function subscribe(cb: () => void) {
 	listeners.add(cb);
-	return () => { listeners.delete(cb); };
+	return () => {
+		listeners.delete(cb);
+	};
 }
 
 function getSnapshot() {
@@ -30,15 +37,18 @@ let unlistenPromise: Promise<UnlistenFn> | null = null;
 
 function ensureListener() {
 	if (unlistenPromise) return;
-	unlistenPromise = listen("package-status", (event: Event<PackageStatusEvent>) => {
-		const { packageId, status } = event.payload;
-		if (status === "idle") {
-			statusMap.delete(packageId);
-		} else {
-			statusMap.set(packageId, status);
-		}
-		notifyListeners();
-	});
+	unlistenPromise = listen(
+		"package-status",
+		(event: Event<PackageStatusEvent>) => {
+			const { packageId, status } = event.payload;
+			if (status === "idle") {
+				statusMap.delete(packageId);
+			} else {
+				statusMap.set(packageId, status);
+			}
+			notifyListeners();
+		},
+	);
 }
 
 export function usePackageStatusMap(): Map<string, CompileStatus> {

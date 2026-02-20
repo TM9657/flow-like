@@ -5,10 +5,10 @@ use flow_like::flow::{
 };
 use flow_like_types::async_trait;
 
-#[cfg(feature = "execute")]
-use flow_like::flow::execution::{LogLevel, context::ExecutionContext};
 #[cfg(not(feature = "execute"))]
 use flow_like::flow::execution::context::ExecutionContext;
+#[cfg(feature = "execute")]
+use flow_like::flow::execution::{LogLevel, context::ExecutionContext};
 
 use super::TcpSession;
 
@@ -79,10 +79,7 @@ impl NodeLogic for TcpCloseNode {
         let shutdown_err = {
             let cache = context.cache.read().await;
             if let Some(conn) = cache.get(&session.ref_id) {
-                if let Some(conn) = conn
-                    .as_any()
-                    .downcast_ref::<super::CachedTcpConnection>()
-                {
+                if let Some(conn) = conn.as_any().downcast_ref::<super::CachedTcpConnection>() {
                     let mut writer = conn.writer.lock().await;
                     let err = writer.shutdown().await.err();
                     conn.close_notify.notify_waiters();

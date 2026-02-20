@@ -375,7 +375,7 @@ impl NodeLogic for DelayNode {
         let duration_ms: i64 = context.evaluate_pin("duration_ms").await?;
 
         flow_like_types::tokio::time::sleep(std::time::Duration::from_millis(
-            duration_ms.max(0) as u64,
+            duration_ms.max(0) as u64
         ))
         .await;
 

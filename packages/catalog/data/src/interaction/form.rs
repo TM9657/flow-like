@@ -6,9 +6,7 @@ use flow_like::flow::{
     variable::VariableType,
 };
 use flow_like_types::{
-    Value,
-    async_trait,
-    create_id,
+    Value, async_trait, create_id,
     interaction::{InteractionRequest, InteractionStatus, InteractionType},
     json::{Map, from_slice, json},
 };
@@ -17,7 +15,6 @@ use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use super::wait::wait_for_interaction_response;
-
 
 fn pin_default_value(pin: &Pin) -> Option<Value> {
     pin.default_value
@@ -43,7 +40,9 @@ fn parse_pin_schema(pin: &Pin) -> Option<Value> {
 /// If the value exists as a key in refs, return the resolved value.
 /// Otherwise, return the original value.
 fn resolve_ref(value: &str, refs: &HashMap<String, String>) -> String {
-    refs.get(value).cloned().unwrap_or_else(|| value.to_string())
+    refs.get(value)
+        .cloned()
+        .unwrap_or_else(|| value.to_string())
 }
 
 fn with_pin_metadata(mut property: Value, pin: &Pin, refs: &HashMap<String, String>) -> Value {
@@ -397,7 +396,10 @@ fn validate_enum(schema: &Value, value: &Value) -> flow_like_types::Result<()> {
         return Ok(());
     }
 
-    Err(flow_like_types::anyhow!("Value '{}' is not part of enum", value))
+    Err(flow_like_types::anyhow!(
+        "Value '{}' is not part of enum",
+        value
+    ))
 }
 
 fn coerce_value_by_schema(value: &Value, schema: &Value) -> flow_like_types::Result<Value> {
@@ -422,7 +424,10 @@ fn coerce_value_by_schema(value: &Value, schema: &Value) -> flow_like_types::Res
         Some("integer") => coerce_to_integer(value)?,
         Some("number") => coerce_to_number(value)?,
         Some("string") => {
-            let format = schema.get("format").and_then(Value::as_str).unwrap_or_default();
+            let format = schema
+                .get("format")
+                .and_then(Value::as_str)
+                .unwrap_or_default();
             if matches!(format, "date" | "date-time") {
                 coerce_to_date_string(value)?
             } else {
@@ -523,7 +528,9 @@ fn coerce_value_for_pin(pin: &Pin, value: &Value) -> flow_like_types::Result<Val
 
     if let Some(valid_values) = pin_valid_values(pin)
         && let Some(string_value) = typed.as_str()
-        && !valid_values.iter().any(|candidate| candidate == string_value)
+        && !valid_values
+            .iter()
+            .any(|candidate| candidate == string_value)
     {
         return Err(flow_like_types::anyhow!(
             "Value '{}' is not a valid option for pin '{}'",
@@ -543,9 +550,7 @@ async fn write_form_outputs(
     context
         .set_pin_value("response", json!(response_value.to_string()))
         .await?;
-    context
-        .set_pin_value("responded", json!(responded))
-        .await?;
+    context.set_pin_value("responded", json!(responded)).await?;
 
     if responded {
         context.activate_exec_pin("exec_out").await?;
@@ -728,10 +733,10 @@ impl NodeLogic for FormInteraction {
     }
 
     async fn on_update(&self, node: &mut Node, _board: Arc<Board>) {
-        if let Some(fn_refs) = &mut node.fn_refs {
-            if fn_refs.fn_refs.len() > 1 {
-                fn_refs.fn_refs.truncate(1);
-            }
+        if let Some(fn_refs) = &mut node.fn_refs
+            && fn_refs.fn_refs.len() > 1
+        {
+            fn_refs.fn_refs.truncate(1);
         }
     }
 
@@ -878,7 +883,9 @@ mod tests {
         assert_eq!(schema.get("type").and_then(|v| v.as_str()), Some("array"));
         let items = schema.get("items").expect("should have items");
         assert_eq!(items.get("type").and_then(|v| v.as_str()), Some("object"));
-        let props = items.get("properties").expect("items should have properties");
+        let props = items
+            .get("properties")
+            .expect("items should have properties");
         assert!(props.get("role").is_some());
     }
 
@@ -887,9 +894,7 @@ mod tests {
         let mut pin = make_pin("user_name", VariableType::String, ValueType::Normal);
         pin.friendly_name = "User Name".to_string();
         pin.description = "The user's display name".to_string();
-        pin.default_value = Some(
-            flow_like_types::json::to_vec(&json!("Anonymous")).unwrap(),
-        );
+        pin.default_value = Some(flow_like_types::json::to_vec(&json!("Anonymous")).unwrap());
         let schema = pin_to_schema_property(&pin, &empty_refs());
         assert_eq!(
             schema.get("title").and_then(|v| v.as_str()),
@@ -1041,10 +1046,7 @@ mod tests {
 
     #[test]
     fn test_coerce_string_from_string() {
-        assert_eq!(
-            coerce_to_string(&json!("hello")).unwrap(),
-            json!("hello")
-        );
+        assert_eq!(coerce_to_string(&json!("hello")).unwrap(), json!("hello"));
     }
 
     #[test]
@@ -1194,9 +1196,8 @@ mod tests {
     #[test]
     fn test_build_form_schema_required_fields() {
         let mut pin_with_default = make_pin("optional", VariableType::String, ValueType::Normal);
-        pin_with_default.default_value = Some(
-            flow_like_types::json::to_vec(&json!("default")).unwrap(),
-        );
+        pin_with_default.default_value =
+            Some(flow_like_types::json::to_vec(&json!("default")).unwrap());
         let pin_required = make_pin("required_field", VariableType::String, ValueType::Normal);
 
         let schema = build_form_json_schema(&[pin_required, pin_with_default], &empty_refs());
@@ -1204,7 +1205,11 @@ mod tests {
             .get("required")
             .and_then(|v| v.as_array())
             .expect("should have required array");
-        assert!(required.iter().any(|v| v.as_str() == Some("required_field")));
+        assert!(
+            required
+                .iter()
+                .any(|v| v.as_str() == Some("required_field"))
+        );
         assert!(!required.iter().any(|v| v.as_str() == Some("optional")));
     }
 }

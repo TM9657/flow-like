@@ -13,9 +13,11 @@ export const itDevelopers: Record<string, string> = {
 	"dev.hero.cio.prefix": "Cerchi la panoramica per dirigenti?",
 	"dev.hero.cio.link": "Per CIO →",
 	"dev.hero.card.workflows.title": "Componi Workflow",
-	"dev.hero.card.workflows.description": "Trascina, collega, distribuisci — nessun codice necessario",
+	"dev.hero.card.workflows.description":
+		"Trascina, collega, distribuisci — nessun codice necessario",
 	"dev.hero.card.nodes.title": "Scrivi Nodi Personalizzati",
-	"dev.hero.card.nodes.description": "Oltre 15 linguaggi, compilati in WebAssembly",
+	"dev.hero.card.nodes.description":
+		"Oltre 15 linguaggi, compilati in WebAssembly",
 	"dev.hero.converge": "Distribuisci in produzione",
 
 	// Path Picker
@@ -50,7 +52,8 @@ export const itDevelopers: Record<string, string> = {
 	"dev.workflow.step2.title": "Trascina i nodi dal catalogo",
 	"dev.workflow.step2.description": "Cerca, filtra o esplora le categorie",
 	"dev.workflow.step3.title": "Collega e configura",
-	"dev.workflow.step3.description": "Connessioni type-safe con validazione in tempo reale",
+	"dev.workflow.step3.description":
+		"Connessioni type-safe con validazione in tempo reale",
 	"dev.workflow.step4.title": "Esegui o distribuisci",
 	"dev.workflow.step4.description": "Locale, self-hosted o cloud",
 	"dev.workflow.cta.docs": "Leggi la Documentazione",
@@ -101,10 +104,14 @@ export const itDevelopers: Record<string, string> = {
 	"dev.nodes.quickstart.title": "Avvio Rapido",
 	"dev.nodes.quickstart.description":
 		"Apri Flow-Like Studio, scegli un template di linguaggio e inizia a costruire il tuo nodo personalizzato:",
-	"dev.nodes.quickstart.step1": "1. Apri Flow-Like Studio e vai alla sezione Sviluppo Nodi",
-	"dev.nodes.quickstart.step2": "2. Scegli un template tra oltre 15 linguaggi supportati",
-	"dev.nodes.quickstart.step3": "3. Implementa la logica del tuo nodo e compila il binario WASM",
-	"dev.nodes.quickstart.step4": "4. Pubblica direttamente nel tuo catalogo dallo Studio",
+	"dev.nodes.quickstart.step1":
+		"1. Apri Flow-Like Studio e vai alla sezione Sviluppo Nodi",
+	"dev.nodes.quickstart.step2":
+		"2. Scegli un template tra oltre 15 linguaggi supportati",
+	"dev.nodes.quickstart.step3":
+		"3. Implementa la logica del tuo nodo e compila il binario WASM",
+	"dev.nodes.quickstart.step4":
+		"4. Pubblica direttamente nel tuo catalogo dallo Studio",
 	"dev.nodes.cta.guide": "Guida allo Sviluppo dei Nodi",
 	"dev.nodes.cta.templates": "Esplora Tutti i Template",
 

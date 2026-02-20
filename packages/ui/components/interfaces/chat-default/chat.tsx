@@ -23,7 +23,11 @@ import { MessageComponent } from "./message";
 type ChatItem =
 	| { type: "message"; data: IMessage; timestamp: number }
 	| { type: "interaction"; data: IInteractionRequest; timestamp: number }
-	| { type: "interaction-group"; data: IInteractionRequest[]; timestamp: number };
+	| {
+			type: "interaction-group";
+			data: IInteractionRequest[];
+			timestamp: number;
+	  };
 
 function getInteractionCreatedAt(interaction: IInteractionRequest): number {
 	return (interaction.expires_at - interaction.ttl_seconds) * 1000;
@@ -61,7 +65,15 @@ export interface IChatRef {
 
 const ChatInner = forwardRef<IChatRef, IChatProps>(
 	(
-		{ messages, onSendMessage, onMessageUpdate, config = {}, sessionId, activeInteractions, onRespondToInteraction },
+		{
+			messages,
+			onSendMessage,
+			onMessageUpdate,
+			config = {},
+			sessionId,
+			activeInteractions,
+			onRespondToInteraction,
+		},
 		ref,
 	) => {
 		const { resolvedTheme } = useTheme();
@@ -81,7 +93,11 @@ const ChatInner = forwardRef<IChatRef, IChatProps>(
 
 		const chatItems = useMemo(() => {
 			return localMessages
-				.map((msg) => ({ type: "message" as const, data: msg, timestamp: msg.timestamp }))
+				.map((msg) => ({
+					type: "message" as const,
+					data: msg,
+					timestamp: msg.timestamp,
+				}))
 				.sort((a, b) => a.timestamp - b.timestamp);
 		}, [localMessages]);
 
@@ -94,13 +110,20 @@ const ChatInner = forwardRef<IChatRef, IChatProps>(
 
 			const flushGroup = () => {
 				if (settledGroup.length > 0) {
-					items.push({ type: "interaction-group", data: settledGroup, timestamp: 0 });
+					items.push({
+						type: "interaction-group",
+						data: settledGroup,
+						timestamp: 0,
+					});
 					settledGroup = [];
 				}
 			};
 
 			for (const interaction of activeInteractions) {
-				const remaining = Math.max(0, Math.floor((interaction.expires_at * 1000 - Date.now()) / 1000));
+				const remaining = Math.max(
+					0,
+					Math.floor((interaction.expires_at * 1000 - Date.now()) / 1000),
+				);
 				const isPending = interaction.status === "pending" && remaining > 0;
 
 				if (!isPending) {
@@ -409,9 +432,9 @@ const ChatInner = forwardRef<IChatRef, IChatProps>(
 										onRespond={onRespondToInteraction ?? (() => {})}
 									/>
 								</div>
-							)
+							),
 						)}
-					<div ref={messagesEndRef} />
+						<div ref={messagesEndRef} />
 					</div>
 
 					{/* ChatBox */}

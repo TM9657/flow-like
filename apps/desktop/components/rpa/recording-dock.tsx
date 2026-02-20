@@ -290,10 +290,7 @@ export function RecordingDock({
 			await invoke("insert_recording_to_board", {
 				boardId,
 				actions,
-				position: [
-					window.innerWidth / 2 - 200,
-					window.innerHeight / 2 - 100,
-				],
+				position: [window.innerWidth / 2 - 200, window.innerHeight / 2 - 100],
 				version: version ?? null,
 				usePatternMatching: settings.use_pattern_matching || null,
 				templateConfidence: settings.template_confidence || null,
@@ -336,17 +333,22 @@ export function RecordingDock({
 		if ("Click" in type) return `Click (${type.Click.button})`;
 		if ("DoubleClick" in type) return "Double Click";
 		if ("Drag" in type) return "Drag";
-		if ("Scroll" in type) return `Scroll ${type.Scroll.direction} (${type.Scroll.amount})`;
+		if ("Scroll" in type)
+			return `Scroll ${type.Scroll.direction} (${type.Scroll.amount})`;
 		if ("KeyType" in type) {
 			const text = type.KeyType.text;
-			return text.length > MAX_LABEL_LENGTH ? `"${text.slice(0, MAX_LABEL_LENGTH)}..."` : `"${text}"`;
+			return text.length > MAX_LABEL_LENGTH
+				? `"${text.slice(0, MAX_LABEL_LENGTH)}..."`
+				: `"${text}"`;
 		}
 		if ("KeyPress" in type) return type.KeyPress.key;
 		if ("Copy" in type) return "Copy";
 		if ("Paste" in type) return "Paste";
 		if ("AppLaunch" in type) return type.AppLaunch.app_name;
 		if ("WindowFocus" in type)
-			return type.WindowFocus.window_title?.slice(0, MAX_LABEL_LENGTH) || "Window";
+			return (
+				type.WindowFocus.window_title?.slice(0, MAX_LABEL_LENGTH) || "Window"
+			);
 		return "Action";
 	};
 
@@ -765,27 +767,29 @@ export function RecordingDock({
 								>
 									<ScrollArea className="max-h-36 overflow-y-auto">
 										<div className="px-4 pb-3 space-y-1.5">
-											{actions.slice(-MAX_VISIBLE_ACTIONS).map((action, index) => (
-												<div
-													key={action.id}
-													className="flex items-center gap-2 rounded-lg bg-muted/40 px-3 py-2 text-xs"
-												>
-													<span className="text-muted-foreground w-5 text-right font-mono">
-														{actions.length > 8
-															? actions.length - 8 + index + 1
-															: index + 1}
-													</span>
-													<span className="text-muted-foreground">
-														{getActionIcon(action)}
-													</span>
-													<span className="truncate flex-1">
-														{getActionLabel(action)}
-													</span>
-													{action.screenshot_ref && (
-														<Image className="h-3 w-3 text-green-500" />
-													)}
-												</div>
-											))}
+											{actions
+												.slice(-MAX_VISIBLE_ACTIONS)
+												.map((action, index) => (
+													<div
+														key={action.id}
+														className="flex items-center gap-2 rounded-lg bg-muted/40 px-3 py-2 text-xs"
+													>
+														<span className="text-muted-foreground w-5 text-right font-mono">
+															{actions.length > 8
+																? actions.length - 8 + index + 1
+																: index + 1}
+														</span>
+														<span className="text-muted-foreground">
+															{getActionIcon(action)}
+														</span>
+														<span className="truncate flex-1">
+															{getActionLabel(action)}
+														</span>
+														{action.screenshot_ref && (
+															<Image className="h-3 w-3 text-green-500" />
+														)}
+													</div>
+												))}
 										</div>
 									</ScrollArea>
 								</motion.div>

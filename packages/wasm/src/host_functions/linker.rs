@@ -986,7 +986,7 @@ fn register_storage_functions(linker: &mut Linker<StoreData>) -> WasmResult<()> 
 /// Helper: build a FlowPath for a directory, register the store, and return packed JSON.
 fn storage_dir_impl(
     caller: &Caller<'_, StoreData>,
-    node_scoped: bool,
+    _node_scoped: bool,
     dir_type: &str,
     dir_getter: impl FnOnce(&crate::host_functions::StorageContext) -> Path,
     store_getter: impl FnOnce(
@@ -1087,9 +1087,7 @@ fn register_websocket_functions(linker: &mut Linker<StoreData>) -> WasmResult<()
                 0
             },
         )
-        .map_err(|e| {
-            WasmError::Initialization(format!("Failed to register ws.connect: {}", e))
-        })?;
+        .map_err(|e| WasmError::Initialization(format!("Failed to register ws.connect: {}", e)))?;
 
     // send(session_id, msg_ptr, msg_len, is_binary) -> i32
     linker
@@ -1112,9 +1110,7 @@ fn register_websocket_functions(linker: &mut Linker<StoreData>) -> WasmResult<()
                 0
             },
         )
-        .map_err(|e| {
-            WasmError::Initialization(format!("Failed to register ws.send: {}", e))
-        })?;
+        .map_err(|e| WasmError::Initialization(format!("Failed to register ws.send: {}", e)))?;
 
     // receive(session_id, timeout_ms) -> i32 (result_ptr or -1)
     linker
@@ -1132,9 +1128,7 @@ fn register_websocket_functions(linker: &mut Linker<StoreData>) -> WasmResult<()
                 0
             },
         )
-        .map_err(|e| {
-            WasmError::Initialization(format!("Failed to register ws.receive: {}", e))
-        })?;
+        .map_err(|e| WasmError::Initialization(format!("Failed to register ws.receive: {}", e)))?;
 
     // close(session_id) -> i32
     linker
@@ -1152,9 +1146,7 @@ fn register_websocket_functions(linker: &mut Linker<StoreData>) -> WasmResult<()
                 0
             },
         )
-        .map_err(|e| {
-            WasmError::Initialization(format!("Failed to register ws.close: {}", e))
-        })?;
+        .map_err(|e| WasmError::Initialization(format!("Failed to register ws.close: {}", e)))?;
 
     Ok(())
 }
@@ -1327,7 +1319,7 @@ fn register_model_functions(linker: &mut Linker<StoreData>) -> WasmResult<()> {
                         Err(_) => return 0,
                     };
 
-                    let texts: Vec<String> = match serde_json::from_str(&texts_json) {
+                    let _texts: Vec<String> = match serde_json::from_str(&texts_json) {
                         Ok(t) => t,
                         Err(_) => return 0,
                     };
@@ -1338,21 +1330,10 @@ fn register_model_functions(linker: &mut Linker<StoreData>) -> WasmResult<()> {
                     };
 
                     let app_state = model_ctx.app_state.clone();
-                    let model = {
-                        #[cfg(feature = "model")]
-                        {
-                            let mut factory = app_state.embedding_factory.lock().await;
-                            match factory.build_text(&bit, app_state.clone()).await {
-                                Ok(m) => m,
-                                Err(_) => return 0,
-                            }
-                        }
-                        #[cfg(not(feature = "model"))]
-                        {
-                            let _ = app_state;
-                            let _ = bit;
-                            return 0u64;
-                        }
+                    {
+                        let _ = app_state;
+                        let _ = bit;
+                        return 0u64;
                     };
 
                     #[cfg(feature = "model")]
@@ -1424,89 +1405,184 @@ fn pack_ptr_len(ptr: u32, len: u32) -> u64 {
 /// Register WASI snapshot_preview1 stubs for TinyGo/Go WASM modules
 fn register_wasi_stubs(linker: &mut Linker<StoreData>) -> WasmResult<()> {
     linker
-        .func_wrap("wasi_snapshot_preview1", "proc_exit", |_caller: Caller<'_, StoreData>, _code: i32| {
-        })
-        .map_err(|e| WasmError::Initialization(format!("Failed to register wasi proc_exit stub: {}", e)))?;
+        .func_wrap(
+            "wasi_snapshot_preview1",
+            "proc_exit",
+            |_caller: Caller<'_, StoreData>, _code: i32| {},
+        )
+        .map_err(|e| {
+            WasmError::Initialization(format!("Failed to register wasi proc_exit stub: {}", e))
+        })?;
 
     linker
-        .func_wrap("wasi_snapshot_preview1", "fd_write", |_caller: Caller<'_, StoreData>, _fd: i32, _iovs: i32, _iovs_len: i32, _nwritten: i32| -> i32 {
-            0
-        })
-        .map_err(|e| WasmError::Initialization(format!("Failed to register wasi fd_write stub: {}", e)))?;
+        .func_wrap(
+            "wasi_snapshot_preview1",
+            "fd_write",
+            |_caller: Caller<'_, StoreData>,
+             _fd: i32,
+             _iovs: i32,
+             _iovs_len: i32,
+             _nwritten: i32|
+             -> i32 { 0 },
+        )
+        .map_err(|e| {
+            WasmError::Initialization(format!("Failed to register wasi fd_write stub: {}", e))
+        })?;
 
     linker
-        .func_wrap("wasi_snapshot_preview1", "fd_close", |_caller: Caller<'_, StoreData>, _fd: i32| -> i32 {
-            0
-        })
-        .map_err(|e| WasmError::Initialization(format!("Failed to register wasi fd_close stub: {}", e)))?;
+        .func_wrap(
+            "wasi_snapshot_preview1",
+            "fd_close",
+            |_caller: Caller<'_, StoreData>, _fd: i32| -> i32 { 0 },
+        )
+        .map_err(|e| {
+            WasmError::Initialization(format!("Failed to register wasi fd_close stub: {}", e))
+        })?;
 
     linker
-        .func_wrap("wasi_snapshot_preview1", "fd_seek", |_caller: Caller<'_, StoreData>, _fd: i32, _offset: i64, _whence: i32, _newoffset: i32| -> i32 {
-            0
-        })
-        .map_err(|e| WasmError::Initialization(format!("Failed to register wasi fd_seek stub: {}", e)))?;
+        .func_wrap(
+            "wasi_snapshot_preview1",
+            "fd_seek",
+            |_caller: Caller<'_, StoreData>,
+             _fd: i32,
+             _offset: i64,
+             _whence: i32,
+             _newoffset: i32|
+             -> i32 { 0 },
+        )
+        .map_err(|e| {
+            WasmError::Initialization(format!("Failed to register wasi fd_seek stub: {}", e))
+        })?;
 
     linker
-        .func_wrap("wasi_snapshot_preview1", "fd_fdstat_get", |_caller: Caller<'_, StoreData>, _fd: i32, _buf: i32| -> i32 {
-            0
-        })
-        .map_err(|e| WasmError::Initialization(format!("Failed to register wasi fd_fdstat_get stub: {}", e)))?;
+        .func_wrap(
+            "wasi_snapshot_preview1",
+            "fd_fdstat_get",
+            |_caller: Caller<'_, StoreData>, _fd: i32, _buf: i32| -> i32 { 0 },
+        )
+        .map_err(|e| {
+            WasmError::Initialization(format!("Failed to register wasi fd_fdstat_get stub: {}", e))
+        })?;
 
     linker
-        .func_wrap("wasi_snapshot_preview1", "environ_sizes_get", |_caller: Caller<'_, StoreData>, _count: i32, _buf_size: i32| -> i32 {
-            0
-        })
-        .map_err(|e| WasmError::Initialization(format!("Failed to register wasi environ_sizes_get stub: {}", e)))?;
+        .func_wrap(
+            "wasi_snapshot_preview1",
+            "environ_sizes_get",
+            |_caller: Caller<'_, StoreData>, _count: i32, _buf_size: i32| -> i32 { 0 },
+        )
+        .map_err(|e| {
+            WasmError::Initialization(format!(
+                "Failed to register wasi environ_sizes_get stub: {}",
+                e
+            ))
+        })?;
 
     linker
-        .func_wrap("wasi_snapshot_preview1", "environ_get", |_caller: Caller<'_, StoreData>, _environ: i32, _environ_buf: i32| -> i32 {
-            0
-        })
-        .map_err(|e| WasmError::Initialization(format!("Failed to register wasi environ_get stub: {}", e)))?;
+        .func_wrap(
+            "wasi_snapshot_preview1",
+            "environ_get",
+            |_caller: Caller<'_, StoreData>, _environ: i32, _environ_buf: i32| -> i32 { 0 },
+        )
+        .map_err(|e| {
+            WasmError::Initialization(format!("Failed to register wasi environ_get stub: {}", e))
+        })?;
 
     linker
-        .func_wrap("wasi_snapshot_preview1", "args_sizes_get", |_caller: Caller<'_, StoreData>, _argc: i32, _argv_buf_size: i32| -> i32 {
-            0
-        })
-        .map_err(|e| WasmError::Initialization(format!("Failed to register wasi args_sizes_get stub: {}", e)))?;
+        .func_wrap(
+            "wasi_snapshot_preview1",
+            "args_sizes_get",
+            |_caller: Caller<'_, StoreData>, _argc: i32, _argv_buf_size: i32| -> i32 { 0 },
+        )
+        .map_err(|e| {
+            WasmError::Initialization(format!(
+                "Failed to register wasi args_sizes_get stub: {}",
+                e
+            ))
+        })?;
 
     linker
-        .func_wrap("wasi_snapshot_preview1", "args_get", |_caller: Caller<'_, StoreData>, _argv: i32, _argv_buf: i32| -> i32 {
-            0
-        })
-        .map_err(|e| WasmError::Initialization(format!("Failed to register wasi args_get stub: {}", e)))?;
+        .func_wrap(
+            "wasi_snapshot_preview1",
+            "args_get",
+            |_caller: Caller<'_, StoreData>, _argv: i32, _argv_buf: i32| -> i32 { 0 },
+        )
+        .map_err(|e| {
+            WasmError::Initialization(format!("Failed to register wasi args_get stub: {}", e))
+        })?;
 
     linker
-        .func_wrap("wasi_snapshot_preview1", "clock_time_get", |_caller: Caller<'_, StoreData>, _clock_id: i32, _precision: i64, _time: i32| -> i32 {
-            0
-        })
-        .map_err(|e| WasmError::Initialization(format!("Failed to register wasi clock_time_get stub: {}", e)))?;
+        .func_wrap(
+            "wasi_snapshot_preview1",
+            "clock_time_get",
+            |_caller: Caller<'_, StoreData>, _clock_id: i32, _precision: i64, _time: i32| -> i32 {
+                0
+            },
+        )
+        .map_err(|e| {
+            WasmError::Initialization(format!(
+                "Failed to register wasi clock_time_get stub: {}",
+                e
+            ))
+        })?;
 
     linker
-        .func_wrap("wasi_snapshot_preview1", "fd_read", |_caller: Caller<'_, StoreData>, _fd: i32, _iovs: i32, _iovs_len: i32, _nread: i32| -> i32 {
-            0 // no data read
-        })
-        .map_err(|e| WasmError::Initialization(format!("Failed to register wasi fd_read stub: {}", e)))?;
+        .func_wrap(
+            "wasi_snapshot_preview1",
+            "fd_read",
+            |_caller: Caller<'_, StoreData>,
+             _fd: i32,
+             _iovs: i32,
+             _iovs_len: i32,
+             _nread: i32|
+             -> i32 {
+                0 // no data read
+            },
+        )
+        .map_err(|e| {
+            WasmError::Initialization(format!("Failed to register wasi fd_read stub: {}", e))
+        })?;
 
     linker
-        .func_wrap("wasi_snapshot_preview1", "random_get", |_caller: Caller<'_, StoreData>, _buf: i32, _buf_len: i32| -> i32 {
-            0
-        })
-        .map_err(|e| WasmError::Initialization(format!("Failed to register wasi random_get stub: {}", e)))?;
+        .func_wrap(
+            "wasi_snapshot_preview1",
+            "random_get",
+            |_caller: Caller<'_, StoreData>, _buf: i32, _buf_len: i32| -> i32 { 0 },
+        )
+        .map_err(|e| {
+            WasmError::Initialization(format!("Failed to register wasi random_get stub: {}", e))
+        })?;
 
     // fd_prestat_get / fd_prestat_dir_name — used by Swift/WASM to discover preopened dirs.
     // We have none, so return EBADF (8) immediately.
     linker
-        .func_wrap("wasi_snapshot_preview1", "fd_prestat_get", |_caller: Caller<'_, StoreData>, _fd: i32, _buf: i32| -> i32 {
-            8 // WASI_EBADF — no preopened directories
-        })
-        .map_err(|e| WasmError::Initialization(format!("Failed to register wasi fd_prestat_get stub: {}", e)))?;
+        .func_wrap(
+            "wasi_snapshot_preview1",
+            "fd_prestat_get",
+            |_caller: Caller<'_, StoreData>, _fd: i32, _buf: i32| -> i32 {
+                8 // WASI_EBADF — no preopened directories
+            },
+        )
+        .map_err(|e| {
+            WasmError::Initialization(format!(
+                "Failed to register wasi fd_prestat_get stub: {}",
+                e
+            ))
+        })?;
 
     linker
-        .func_wrap("wasi_snapshot_preview1", "fd_prestat_dir_name", |_caller: Caller<'_, StoreData>, _fd: i32, _path: i32, _path_len: i32| -> i32 {
-            8 // WASI_EBADF
-        })
-        .map_err(|e| WasmError::Initialization(format!("Failed to register wasi fd_prestat_dir_name stub: {}", e)))?;
+        .func_wrap(
+            "wasi_snapshot_preview1",
+            "fd_prestat_dir_name",
+            |_caller: Caller<'_, StoreData>, _fd: i32, _path: i32, _path_len: i32| -> i32 {
+                8 // WASI_EBADF
+            },
+        )
+        .map_err(|e| {
+            WasmError::Initialization(format!(
+                "Failed to register wasi fd_prestat_dir_name stub: {}",
+                e
+            ))
+        })?;
 
     // path_open — opens a file relative to a preopened directory; no filesystem in WASM sandbox.
     linker
@@ -1525,7 +1601,9 @@ fn register_wasi_stubs(linker: &mut Linker<StoreData>) -> WasmResult<()> {
              _opened_fd: i32|
              -> i32 { 28 }, // WASI_ENOSYS
         )
-        .map_err(|e| WasmError::Initialization(format!("Failed to register wasi path_open stub: {}", e)))?;
+        .map_err(|e| {
+            WasmError::Initialization(format!("Failed to register wasi path_open stub: {}", e))
+        })?;
 
     Ok(())
 }
@@ -1533,15 +1611,29 @@ fn register_wasi_stubs(linker: &mut Linker<StoreData>) -> WasmResult<()> {
 /// Register Emscripten stubs for C/C++ WASM modules
 fn register_emscripten_stubs(linker: &mut Linker<StoreData>) -> WasmResult<()> {
     linker
-        .func_wrap("env", "emscripten_notify_memory_growth", |_caller: Caller<'_, StoreData>, _mem_index: i32| {
-        })
-        .map_err(|e| WasmError::Initialization(format!("Failed to register emscripten_notify_memory_growth stub: {}", e)))?;
+        .func_wrap(
+            "env",
+            "emscripten_notify_memory_growth",
+            |_caller: Caller<'_, StoreData>, _mem_index: i32| {},
+        )
+        .map_err(|e| {
+            WasmError::Initialization(format!(
+                "Failed to register emscripten_notify_memory_growth stub: {}",
+                e
+            ))
+        })?;
 
     linker
-        .func_wrap("env", "__syscall_dup3", |_caller: Caller<'_, StoreData>, _old_fd: i32, _new_fd: i32, _flags: i32| -> i32 {
-            -38 // ENOSYS — not supported in WASM sandbox
-        })
-        .map_err(|e| WasmError::Initialization(format!("Failed to register __syscall_dup3 stub: {}", e)))?;
+        .func_wrap(
+            "env",
+            "__syscall_dup3",
+            |_caller: Caller<'_, StoreData>, _old_fd: i32, _new_fd: i32, _flags: i32| -> i32 {
+                -38 // ENOSYS — not supported in WASM sandbox
+            },
+        )
+        .map_err(|e| {
+            WasmError::Initialization(format!("Failed to register __syscall_dup3 stub: {}", e))
+        })?;
 
     // Emscripten longjmp emulation for STANDALONE_WASM + SUPPORT_LONGJMP=emscripten.
     //
@@ -1560,7 +1652,12 @@ fn register_emscripten_stubs(linker: &mut Linker<StoreData>) -> WasmResult<()> {
                 })
             },
         )
-        .map_err(|e| WasmError::Initialization(format!("Failed to register _emscripten_throw_longjmp: {}", e)))?;
+        .map_err(|e| {
+            WasmError::Initialization(format!(
+                "Failed to register _emscripten_throw_longjmp: {}",
+                e
+            ))
+        })?;
 
     linker
         .func_wrap_async(
@@ -1618,9 +1715,8 @@ fn register_emscripten_stubs(linker: &mut Linker<StoreData>) -> WasmResult<()> {
                                 .await;
                         }
 
-                        if let Some(set_threw) = caller
-                            .get_export("setThrew")
-                            .and_then(|e| e.into_func())
+                        if let Some(set_threw) =
+                            caller.get_export("setThrew").and_then(|e| e.into_func())
                         {
                             let _ = set_threw
                                 .call_async(&mut caller, &[Val::I32(1), Val::I32(0)], &mut [])

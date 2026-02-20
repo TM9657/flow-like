@@ -1,6 +1,5 @@
 "use client";
 import {
-	BoxIcon,
 	ExternalLinkIcon,
 	KeyIcon,
 	PackageIcon,
@@ -166,18 +165,14 @@ export function WasmSandboxWarningDialog({
 						<label className="flex items-center gap-2 cursor-pointer">
 							<Checkbox
 								checked={rememberChoice === "event"}
-								onCheckedChange={(c) =>
-									setRememberChoice(c ? "event" : "none")
-								}
+								onCheckedChange={(c) => setRememberChoice(c ? "event" : "none")}
 							/>
 							<Label className="cursor-pointer">For this event</Label>
 						</label>
 						<label className="flex items-center gap-2 cursor-pointer">
 							<Checkbox
 								checked={rememberChoice === "board"}
-								onCheckedChange={(c) =>
-									setRememberChoice(c ? "board" : "none")
-								}
+								onCheckedChange={(c) => setRememberChoice(c ? "board" : "none")}
 							/>
 							<Label className="cursor-pointer">For this entire board</Label>
 						</label>
