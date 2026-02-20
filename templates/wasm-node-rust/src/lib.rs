@@ -31,6 +31,8 @@ node! {
         output_text: String,
         char_count: I64,
     },
+
+    permissions: ["streaming"],
 }
 
 // Wire up the run function

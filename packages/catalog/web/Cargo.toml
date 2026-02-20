@@ -20,6 +20,8 @@ execute = [
     "dep:icalendar",
     "dep:serenity",
     "dep:teloxide",
+    "dep:tokio-tungstenite",
+    "dep:rumqttc",
 ]
 
 [dependencies]
@@ -58,3 +60,9 @@ icalendar = { workspace = true, optional = true }
 # Discord/Telegram bot integrations - only included when execute feature is enabled
 serenity = { version = "0.12.4", default-features = false, features = ["client", "gateway", "model", "rustls_backend", "cache"], optional = true }
 teloxide = { version = "0.17", default-features = false, features = ["macros", "rustls", "ctrlc_handler"], optional = true }
+
+# WebSocket support
+tokio-tungstenite = { workspace = true, optional = true }
+
+# MQTT support
+rumqttc = { workspace = true, optional = true }

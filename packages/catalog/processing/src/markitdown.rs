@@ -97,7 +97,10 @@ async fn safe_convert_bytes(
                 panic_msg
             ))
         }
-        Err(e) => Err(flow_like_types::anyhow!("Document conversion task failed: {}", e)),
+        Err(e) => Err(flow_like_types::anyhow!(
+            "Document conversion task failed: {}",
+            e
+        )),
     }
 }
 
@@ -564,7 +567,9 @@ impl NodeLogic for ExtractDocumentsNode {
         }
 
         let flat_results: Vec<DocumentPage> = all_results.into_iter().flatten().collect();
-        context.set_pin_value("results", json!(flat_results)).await?;
+        context
+            .set_pin_value("results", json!(flat_results))
+            .await?;
         context.activate_exec_pin("exec_out").await?;
 
         Ok(())
@@ -758,7 +763,9 @@ impl NodeLogic for ExtractDocumentsAiNode {
         }
 
         let flat_results: Vec<DocumentPage> = all_results.into_iter().flatten().collect();
-        context.set_pin_value("results", json!(flat_results)).await?;
+        context
+            .set_pin_value("results", json!(flat_results))
+            .await?;
         context.activate_exec_pin("exec_out").await?;
 
         Ok(())

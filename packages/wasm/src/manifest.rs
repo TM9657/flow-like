@@ -179,6 +179,9 @@ impl PackagePermissions {
         if self.network.http_enabled {
             caps |= WasmCapabilities::HTTP_ALL;
         }
+        if self.network.websocket_enabled {
+            caps |= WasmCapabilities::WEBSOCKET;
+        }
 
         // Filesystem
         if self.filesystem.node_storage || self.filesystem.user_storage {
@@ -229,11 +232,13 @@ impl PackagePermissions {
 
     /// Convert to WasmSecurityConfig
     pub fn to_security_config(&self) -> crate::limits::WasmSecurityConfig {
+        let capabilities = self.to_capabilities();
+        let has_network = capabilities.intersects(WasmCapabilities::NETWORK_ALL);
         crate::limits::WasmSecurityConfig {
             limits: self.to_limits(),
-            capabilities: self.to_capabilities(),
+            capabilities,
             allow_wasi: false,
-            allow_wasi_network: false,
+            allow_wasi_network: has_network,
             allowed_hosts: if self.network.allowed_hosts.is_empty() {
                 None
             } else {
@@ -355,9 +360,11 @@ pub struct PackageManifest {
     pub homepage: Option<String>,
 
     /// Required permissions for this package
+    #[serde(default)]
     pub permissions: PackagePermissions,
 
     /// Nodes provided by this package
+    #[serde(default)]
     pub nodes: Vec<PackageNodeEntry>,
 
     /// Keywords for discovery

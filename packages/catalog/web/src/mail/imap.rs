@@ -164,7 +164,8 @@ impl tokio_rustls::rustls::client::danger::ServerCertVerifier for NoVerifier {
         _server_name: &rustls_pki_types::ServerName<'_>,
         _ocsp_response: &[u8],
         _now: rustls_pki_types::UnixTime,
-    ) -> Result<tokio_rustls::rustls::client::danger::ServerCertVerified, tokio_rustls::rustls::Error> {
+    ) -> Result<tokio_rustls::rustls::client::danger::ServerCertVerified, tokio_rustls::rustls::Error>
+    {
         Ok(tokio_rustls::rustls::client::danger::ServerCertVerified::assertion())
     }
 
@@ -173,7 +174,10 @@ impl tokio_rustls::rustls::client::danger::ServerCertVerifier for NoVerifier {
         _message: &[u8],
         _cert: &rustls_pki_types::CertificateDer<'_>,
         _dss: &tokio_rustls::rustls::DigitallySignedStruct,
-    ) -> Result<tokio_rustls::rustls::client::danger::HandshakeSignatureValid, tokio_rustls::rustls::Error> {
+    ) -> Result<
+        tokio_rustls::rustls::client::danger::HandshakeSignatureValid,
+        tokio_rustls::rustls::Error,
+    > {
         Ok(tokio_rustls::rustls::client::danger::HandshakeSignatureValid::assertion())
     }
 
@@ -182,7 +186,10 @@ impl tokio_rustls::rustls::client::danger::ServerCertVerifier for NoVerifier {
         _message: &[u8],
         _cert: &rustls_pki_types::CertificateDer<'_>,
         _dss: &tokio_rustls::rustls::DigitallySignedStruct,
-    ) -> Result<tokio_rustls::rustls::client::danger::HandshakeSignatureValid, tokio_rustls::rustls::Error> {
+    ) -> Result<
+        tokio_rustls::rustls::client::danger::HandshakeSignatureValid,
+        tokio_rustls::rustls::Error,
+    > {
         Ok(tokio_rustls::rustls::client::danger::HandshakeSignatureValid::assertion())
     }
 

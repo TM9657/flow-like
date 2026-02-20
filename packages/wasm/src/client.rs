@@ -499,19 +499,18 @@ impl RegistryClient {
         state.installed.get(package_id).cloned()
     }
 
-    /// Load a WASM node from an installed package
-    /// Returns the WasmNodeLogic with security config based on package permissions
-    pub async fn load_node(
+    /// Load WASM nodes from an installed package
+    /// Returns one WasmNodeLogic per node definition (supports multi-node packages)
+    pub async fn load_nodes(
         &self,
         package_id: &str,
         engine: Arc<crate::WasmEngine>,
-    ) -> Result<crate::WasmNodeLogic> {
+    ) -> Result<Vec<crate::WasmNodeLogic>> {
         let installed = self
             .get_installed(package_id)
             .await
             .ok_or_else(|| anyhow!("Package '{}' is not installed", package_id))?;
 
-        // Load WASM binary
         let wasm_bytes = tokio::fs::read(&installed.wasm_path).await.map_err(|e| {
             anyhow!(
                 "Failed to read WASM file at {:?}: {}",
@@ -520,37 +519,47 @@ impl RegistryClient {
             )
         })?;
 
-        // Create security config from manifest permissions
         let security = installed.manifest.permissions.to_security_config();
+        let loaded = engine.load_auto(&wasm_bytes).await?;
 
-        // Compute hash for module caching
-        let hash = calculate_hash(&wasm_bytes);
+        let mut instance = loaded.instantiate(&engine, security.clone()).await?;
+        let definitions = instance.call_get_nodes().await?;
 
-        // Create module from WASM bytes
-        let module = Arc::new(crate::WasmModule::from_bytes(&engine, &wasm_bytes, hash).await?);
+        let nodes: Vec<crate::WasmNodeLogic> = definitions
+            .into_iter()
+            .map(|def| {
+                crate::WasmNodeLogic::from_loaded_with_target(
+                    loaded.clone(),
+                    engine.clone(),
+                    security.clone(),
+                    def,
+                )
+                .with_package_id(package_id.to_string())
+            })
+            .collect();
 
-        Ok(crate::WasmNodeLogic::new(module, engine, security))
+        Ok(nodes)
     }
 
     /// Load all nodes from all installed packages
     pub async fn load_all_nodes(
         &self,
         engine: Arc<crate::WasmEngine>,
-    ) -> Result<Vec<(String, crate::WasmNodeLogic)>> {
+    ) -> Result<Vec<(String, Vec<crate::WasmNodeLogic>)>> {
         let state = self.state.read().await;
         let package_ids: Vec<String> = state.installed.keys().cloned().collect();
         drop(state);
 
-        let mut nodes = Vec::new();
+        let mut packages = Vec::new();
         for package_id in package_ids {
-            match self.load_node(&package_id, engine.clone()).await {
-                Ok(node) => nodes.push((package_id, node)),
+            match self.load_nodes(&package_id, engine.clone()).await {
+                Ok(nodes) => packages.push((package_id, nodes)),
                 Err(e) => {
                     tracing::warn!("Failed to load package '{}': {}", package_id, e);
                 }
             }
         }
-        Ok(nodes)
+        Ok(packages)
     }
 }
 

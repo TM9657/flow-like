@@ -7,6 +7,7 @@ import type { IProfile } from "../../../lib/schema/profile/profile";
 import type { RegistryEntry } from "../../../lib/schema/wasm";
 import { useBackend } from "../../../state/backend-state";
 import { PackageDetailView } from "../../store/package-detail-view";
+import type { CompileStatus } from "../../ui/package-status-badge";
 
 // biome-ignore lint/suspicious/noExplicitAny: Required for generic fetcher signature compatibility
 export type GenericFetcher = <T>(
@@ -25,6 +26,7 @@ export interface StorePackageDetailProps {
 	onUninstallError?: (error: Error) => void;
 	fetcher: GenericFetcher;
 	auth?: unknown;
+	compileStatus?: CompileStatus;
 }
 
 export function StorePackageDetail({
@@ -36,6 +38,7 @@ export function StorePackageDetail({
 	onUninstallError,
 	fetcher,
 	auth,
+	compileStatus,
 }: StorePackageDetailProps) {
 	const backend = useBackend();
 	const queryClient = useQueryClient();
@@ -113,6 +116,7 @@ export function StorePackageDetail({
 			onUninstall={handleUninstall}
 			isInstalling={installMutation.isPending}
 			isUninstalling={uninstallMutation.isPending}
+			compileStatus={compileStatus}
 		/>
 	);
 }

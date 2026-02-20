@@ -183,13 +183,25 @@ Package workflows as shareable applications with built-in storage. Run them offl
 ## Build from Source
 
 ```bash
-# Prerequisites: Rust, Bun, Tauri prerequisites, Protobuf compiler
+# Prerequisites: mise, Rust, Bun, Tauri prerequisites, Protobuf compiler
 # Full guide: https://docs.flow-like.com/contributing/getting-started/
 
 git clone https://github.com/TM9657/flow-like.git
 cd flow-like
-bun install
-bun run build:desktop
+mise trust && mise install   # install toolchains (Rust, Bun, Node, Python, uv)
+bun install                  # install Node packages
+mise run build:desktop       # production build
+```
+
+All dev / build / deploy tasks are defined in the root [`mise.toml`](./mise.toml).
+Run `mise tasks` to see every available task, or `mise run <task>` to execute one:
+
+```bash
+mise run dev:desktop:mac:arm   # dev mode – macOS Apple Silicon
+mise run dev:web               # dev mode – Next.js web app
+mise run build:desktop         # production desktop build
+mise run fix                   # auto-fix lint (clippy + fmt + biome)
+mise run check                 # run all checks without fixing
 ```
 
 > 💡 Platform-specific hints for macOS, Windows, and Linux are in the [docs](https://docs.flow-like.com/).
@@ -295,7 +307,7 @@ Flow-Like stands on the shoulders of incredible open-source projects:
 
 **Data:** [Zustand](https://github.com/pmndrs/zustand) · [TanStack Query](https://github.com/TanStack/query) · [Dexie.js](https://github.com/dexie/Dexie.js) · [SeaORM](https://github.com/SeaQL/sea-orm) · [Zod](https://github.com/colinhacks/zod)
 
-**Tooling:** [Bun](https://github.com/oven-sh/bun) · [Vite](https://github.com/vitejs/vite) · [Biome](https://github.com/biomejs/biome)
+**Tooling:** [mise](https://github.com/jdx/mise) · [Bun](https://github.com/oven-sh/bun) · [Vite](https://github.com/vitejs/vite) · [Biome](https://github.com/biomejs/biome)
 
 Thank you to all maintainers and contributors of these projects! 🙏
 

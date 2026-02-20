@@ -41,6 +41,7 @@ import {
 	VisibilityIcon,
 	toastError,
 	useBackend,
+	useExecutionServiceOptional,
 	useInvoke,
 	useMobileHeader,
 } from "@tm9657/flow-like-ui";
@@ -190,6 +191,7 @@ export default function Id({
 	children,
 }: Readonly<{ children: React.ReactNode }>) {
 	const backend = useBackend();
+	const executionService = useExecutionServiceOptional();
 	const searchParams = useSearchParams();
 	const id = searchParams.get("id");
 	const online = useLiveQuery(
@@ -465,14 +467,23 @@ export default function Id({
 
 	async function executeEvent(event: IEvent) {
 		if (!id) return;
-		const runMeta = await backend.eventState.executeEvent(
-			id,
-			event.id,
-			{ id: event.node_id },
-			false,
-			() => {},
-			() => {},
-		);
+		const runMeta = executionService
+			? await executionService.executeEvent(
+					id,
+					event.id,
+					{ id: event.node_id },
+					false,
+					() => {},
+					() => {},
+				)
+			: await backend.eventState.executeEvent(
+					id,
+					event.id,
+					{ id: event.node_id },
+					false,
+					() => {},
+					() => {},
+				);
 		if (!runMeta) {
 			toastError(
 				"Failed to execute board",

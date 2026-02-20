@@ -260,10 +260,7 @@ impl LogMeta {
         }
 
         // Create table with data (either didn't exist or was dropped due to corruption)
-        let iter = RecordBatchIterator::new(
-            vec![arrow_batch].into_iter().map(Ok),
-            schema.clone(),
-        );
+        let iter = RecordBatchIterator::new(vec![arrow_batch].into_iter().map(Ok), schema.clone());
         let mut builder = db.create_table("runs", Box::new(iter));
         if let Some(opts) = write_options {
             builder = builder.write_options(opts.clone());
@@ -522,7 +519,10 @@ impl PreparedFlush {
             Err(open_err) => {
                 // Try to drop any corrupted/partial table first
                 if let Err(e) = db.drop_table(&self.run_id, &[]).await {
-                    eprintln!("[DBG-v3] drop_table failed (expected if not exists): {:?}", e);
+                    eprintln!(
+                        "[DBG-v3] drop_table failed (expected if not exists): {:?}",
+                        e
+                    );
                 }
 
                 // Create the table WITH data in one step (avoids create_empty + add issue)

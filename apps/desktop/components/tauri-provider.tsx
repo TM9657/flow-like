@@ -1,5 +1,6 @@
 "use client";
 import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
 import { fetch as tauriFetch } from "@tauri-apps/plugin-http";
 
 import { createId } from "@paralleldrive/cuid2";
@@ -333,6 +334,16 @@ export function TauriProvider({
 			backend.pushQueryClient(queryClient);
 		}
 	}, [backend, queryClient]);
+
+	// Listen for catalog-updated events from the backend to refresh the node catalog
+	useEffect(() => {
+		const unlisten = listen("catalog-updated", () => {
+			queryClient.invalidateQueries({ queryKey: ["getCatalog"] });
+		});
+		return () => {
+			unlisten.then((fn) => fn());
+		};
+	}, [queryClient]);
 
 	useEffect(() => {
 		console.time("TauriProvider Initialization");

@@ -171,6 +171,7 @@ macro_rules! eprintln { ($($t:tt)*) => { tracing::error!($($t)*); } }
 pub fn run() {
     // Ensure panics are logged with backtraces in release too.
     std::panic::set_hook(Box::new(|info| {
+        eprintln!("PANIC: {info}\n{}", std::backtrace::Backtrace::force_capture());
         if let Some(location) = info.location() {
             tracing::error!(
                 target: "panic",
@@ -226,7 +227,10 @@ pub fn run() {
 
         println!("Android CACHE_DIR: {:?}", std::env::var_os("CACHE_DIR"));
         println!("Android TMPDIR: {:?}", std::env::var_os("TMPDIR"));
-        println!("Android LANCE_CACHE_DIR: {:?}", std::env::var_os("LANCE_CACHE_DIR"));
+        println!(
+            "Android LANCE_CACHE_DIR: {:?}",
+            std::env::var_os("LANCE_CACHE_DIR")
+        );
         let root = settings::mobile_storage_root();
         println!("Android mobile_storage_root: {:?}", root);
         let _ = settings::ensure_app_dirs();
@@ -308,7 +312,9 @@ pub fn run() {
 
     // On Android, use a custom ObjectStore wrapper to avoid hard_link() which fails on Android SELinux
     #[cfg(target_os = "android")]
-    config.register_lance_write_options(flow_like::flow_like_storage::android_store::android_write_options());
+    config.register_lance_write_options(
+        flow_like::flow_like_storage::android_store::android_write_options(),
+    );
 
     settings_state.set_config(&config);
     let settings_state = Arc::new(Mutex::new(settings_state));
@@ -413,10 +419,13 @@ pub fn run() {
     }
 
     let settings_state_for_sink = settings_state.clone();
+    let shared_wasm_engine = state::TauriWasmEngineState::create_shared()
+        .expect("Failed to create shared WasmEngine");
     let mut builder = tauri::Builder::default()
         .manage(state::TauriSettingsState(settings_state.clone()))
         .manage(state::TauriFlowLikeState(state_ref.clone()))
         .manage(state::TauriRegistryState(Arc::new(Mutex::new(None))))
+        .manage(state::TauriWasmEngineState(shared_wasm_engine))
         .plugin(tauri_plugin_http::init())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_deep_link::init())
@@ -425,6 +434,14 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_notification::init())
         .setup(move |app| {
+            // Start the WasmEngine epoch ticker inside the async runtime
+            if let Some(wasm_state) = app.try_state::<state::TauriWasmEngineState>() {
+                let engine = wasm_state.0.clone();
+                tauri::async_runtime::spawn(async move {
+                    engine.start_epoch_ticker();
+                });
+            }
+
             #[cfg(desktop)]
             if let Err(e) = app
                 .handle()
@@ -591,6 +608,9 @@ pub fn run() {
                 flow_like_types::tokio::time::sleep(Duration::from_millis(1200)).await;
 
                 let handle = gc_handle;
+
+                // Load developer project WASM nodes into catalog
+                functions::developer::load_all_developer_nodes(&handle).await;
 
                 let model_factory = {
                     println!("Starting GC");
@@ -888,6 +908,20 @@ pub fn run() {
             functions::event_sink_commands::get_event_sink,
             functions::event_sink_commands::list_event_sinks,
             functions::event_sink_commands::is_event_sink_active,
+            functions::developer::developer_list_projects,
+            functions::developer::developer_add_project,
+            functions::developer::developer_remove_project,
+            functions::developer::developer_list_local_files,
+            functions::developer::developer_get_manifest,
+            functions::developer::developer_save_manifest,
+            functions::developer::developer_open_in_editor,
+            functions::developer::developer_get_settings,
+            functions::developer::developer_save_settings,
+            functions::developer::developer_scaffold_project,
+            functions::developer::developer_inspect_node,
+            functions::developer::developer_inspect_package,
+            functions::developer::developer_run_node,
+            functions::developer::developer_load_into_catalog,
             functions::registry::registry_search_packages,
             functions::registry::registry_get_package,
             functions::registry::registry_install_package,

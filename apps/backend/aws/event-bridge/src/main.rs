@@ -93,7 +93,10 @@ async fn event_bridge_handler(
 
     if !response.status().is_success() {
         let status = response.status();
-        let body = response.text().await.unwrap_or_else(|e| format!("<failed to read response body: {}>", e));
+        let body = response
+            .text()
+            .await
+            .unwrap_or_else(|e| format!("<failed to read response body: {}>", e));
         tracing::error!(status = %status, body = %body, "API returned error");
         return Err(Error::from(format!("API error: {} - {}", status, body)));
     }

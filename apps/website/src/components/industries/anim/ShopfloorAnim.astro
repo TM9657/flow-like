@@ -1,0 +1,117 @@
+---
+/**
+ * Shopfloor: Conveyor belt with sensor nodes, PLC data flowing through
+ */
+interface Props { ring: string; dot: string; node: string; line: string; }
+const { ring, dot, node, line } = Astro.props;
+---
+
+<svg viewBox="0 0 400 400" fill="none" xmlns="http://www.w3.org/2000/svg" class="w-full max-w-md">
+  <!-- Factory grid backdrop -->
+  <defs>
+    <linearGradient id="sf-belt" x1="0" y1="0" x2="400" y2="0" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color={ring} stop-opacity="0.05"/>
+      <stop offset="50%" stop-color={ring} stop-opacity="0.12"/>
+      <stop offset="100%" stop-color={ring} stop-opacity="0.05"/>
+    </linearGradient>
+    <linearGradient id="sf-data" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color={dot} stop-opacity="0.8"/>
+      <stop offset="100%" stop-color={dot} stop-opacity="0"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Conveyor belt tracks -->
+  <rect x="40" y="170" width="320" height="60" rx="10" fill="url(#sf-belt)" stroke={ring} stroke-width="0.8" opacity="0.3"/>
+  <line x1="40" y1="200" x2="360" y2="200" stroke={ring} stroke-width="0.5" stroke-dasharray="8 4" opacity="0.2"/>
+
+  <!-- Conveyor rollers -->
+  <circle cx="60" cy="200" r="8" fill={node} opacity="0.08" stroke={ring} stroke-width="0.5" opacity="0.2"/>
+  <circle cx="140" cy="200" r="8" fill={node} opacity="0.08" stroke={ring} stroke-width="0.5" opacity="0.2"/>
+  <circle cx="220" cy="200" r="8" fill={node} opacity="0.08" stroke={ring} stroke-width="0.5" opacity="0.2"/>
+  <circle cx="300" cy="200" r="8" fill={node} opacity="0.08" stroke={ring} stroke-width="0.5" opacity="0.2"/>
+  <circle cx="340" cy="200" r="8" fill={node} opacity="0.08" stroke={ring} stroke-width="0.5" opacity="0.2"/>
+
+  <!-- Product boxes moving along conveyor -->
+  <rect rx="4" width="28" height="24" fill={node} opacity="0.12" stroke={ring} stroke-width="0.8" opacity="0.4">
+    <animateMotion dur="6s" repeatCount="indefinite" path="M 50,183 L 350,183" />
+    <animate attributeName="opacity" values="0;0.12;0.12;0" dur="6s" repeatCount="indefinite"/>
+  </rect>
+  <rect rx="4" width="24" height="20" fill={node} opacity="0.1" stroke={ring} stroke-width="0.8" opacity="0.3">
+    <animateMotion dur="6s" repeatCount="indefinite" path="M 50,185 L 350,185" begin="2s"/>
+    <animate attributeName="opacity" values="0;0.1;0.1;0" dur="6s" repeatCount="indefinite" begin="2s"/>
+  </rect>
+  <rect rx="4" width="20" height="22" fill={node} opacity="0.08" stroke={ring} stroke-width="0.8" opacity="0.3">
+    <animateMotion dur="6s" repeatCount="indefinite" path="M 50,184 L 350,184" begin="4s"/>
+    <animate attributeName="opacity" values="0;0.08;0.08;0" dur="6s" repeatCount="indefinite" begin="4s"/>
+  </rect>
+
+  <!-- Sensors above conveyor -->
+  <g opacity="0.7">
+    <!-- Sensor 1: temperature -->
+    <rect x="106" y="100" width="28" height="40" rx="6" fill={node} opacity="0.06" stroke={ring} stroke-width="0.8" opacity="0.3"/>
+    <line x1="120" y1="140" x2="120" y2="170" stroke={ring} stroke-width="0.5" opacity="0.2" stroke-dasharray="3 2"/>
+    <circle cx="120" cy="106" r="3" fill={dot} opacity="0.7">
+      <animate attributeName="opacity" values="0.4;0.9;0.4" dur="2s" repeatCount="indefinite"/>
+    </circle>
+    <!-- Sensor reading -->
+    <line x1="120" y1="70" x2="120" y2="100" stroke={dot} stroke-width="0.5" opacity="0.3">
+      <animate attributeName="opacity" values="0.1;0.5;0.1" dur="2s" repeatCount="indefinite"/>
+    </line>
+    <circle cx="120" cy="65" r="5" fill={node} opacity="0.04"/>
+    <text x="120" y="68" text-anchor="middle" fill={dot} font-size="7" opacity="0.5">24°C</text>
+
+    <!-- Sensor 2: proximity -->
+    <rect x="196" y="100" width="28" height="40" rx="6" fill={node} opacity="0.06" stroke={ring} stroke-width="0.8" opacity="0.3"/>
+    <line x1="210" y1="140" x2="210" y2="170" stroke={ring} stroke-width="0.5" opacity="0.2" stroke-dasharray="3 2"/>
+    <circle cx="210" cy="106" r="3" fill={dot} opacity="0.7">
+      <animate attributeName="opacity" values="0.5;1;0.5" dur="1.5s" repeatCount="indefinite"/>
+    </circle>
+
+    <!-- Sensor 3: vision -->
+    <rect x="276" y="100" width="28" height="40" rx="6" fill={node} opacity="0.06" stroke={ring} stroke-width="0.8" opacity="0.3"/>
+    <line x1="290" y1="140" x2="290" y2="170" stroke={ring} stroke-width="0.5" opacity="0.2" stroke-dasharray="3 2"/>
+    <circle cx="290" cy="106" r="3" fill={dot} opacity="0.7">
+      <animate attributeName="opacity" values="0.3;0.8;0.3" dur="2.5s" repeatCount="indefinite"/>
+    </circle>
+  </g>
+
+  <!-- PLC node bottom-left -->
+  <rect x="60" y="260" width="70" height="45" rx="8" fill={node} opacity="0.06" stroke={ring} stroke-width="0.8" opacity="0.3"/>
+  <text x="95" y="278" text-anchor="middle" fill={dot} font-size="8" opacity="0.5" font-family="monospace">PLC</text>
+  <circle cx="75" cy="290" r="2" fill={dot} opacity="0.5"><animate attributeName="opacity" values="0.3;0.8;0.3" dur="1s" repeatCount="indefinite"/></circle>
+  <circle cx="85" cy="290" r="2" fill={dot} opacity="0.5"><animate attributeName="opacity" values="0.4;0.9;0.4" dur="1.2s" repeatCount="indefinite"/></circle>
+  <circle cx="95" cy="290" r="2" fill={dot} opacity="0.5"><animate attributeName="opacity" values="0.2;0.7;0.2" dur="0.8s" repeatCount="indefinite"/></circle>
+
+  <!-- Data flow lines from sensors to PLC -->
+  <path d="M 120 140 Q 120 240, 95 260" stroke={line} stroke-width="0.5" opacity="0.15" stroke-dasharray="3 3"/>
+  <path d="M 210 140 Q 180 240, 120 260" stroke={line} stroke-width="0.5" opacity="0.15" stroke-dasharray="3 3"/>
+
+  <!-- Data flowing from PLC to dashboard -->
+  <line x1="130" y1="282" x2="220" y2="282" stroke={line} stroke-width="0.5" opacity="0.15" stroke-dasharray="4 3"/>
+
+  <!-- Dashboard node bottom-right -->
+  <rect x="220" y="260" width="120" height="70" rx="8" fill={node} opacity="0.04" stroke={ring} stroke-width="0.8" opacity="0.25"/>
+  <!-- Mini chart bars -->
+  <rect x="238" y="300" width="8" height="18" rx="2" fill={dot} opacity="0.3"><animate attributeName="height" values="18;24;14;18" dur="3s" repeatCount="indefinite"/><animate attributeName="y" values="300;294;304;300" dur="3s" repeatCount="indefinite"/></rect>
+  <rect x="252" y="295" width="8" height="23" rx="2" fill={dot} opacity="0.4"><animate attributeName="height" values="23;16;28;23" dur="4s" repeatCount="indefinite"/><animate attributeName="y" values="295;302;290;295" dur="4s" repeatCount="indefinite"/></rect>
+  <rect x="266" y="298" width="8" height="20" rx="2" fill={dot} opacity="0.35"><animate attributeName="height" values="20;26;18;20" dur="3.5s" repeatCount="indefinite"/><animate attributeName="y" values="298;292;300;298" dur="3.5s" repeatCount="indefinite"/></rect>
+  <rect x="280" y="302" width="8" height="16" rx="2" fill={dot} opacity="0.25"><animate attributeName="height" values="16;22;12;16" dur="2.5s" repeatCount="indefinite"/><animate attributeName="y" values="302;296;306;302" dur="2.5s" repeatCount="indefinite"/></rect>
+  <rect x="294" y="290" width="8" height="28" rx="2" fill={dot} opacity="0.45"><animate attributeName="height" values="28;20;30;28" dur="3s" repeatCount="indefinite"/><animate attributeName="y" values="290;298;288;290" dur="3s" repeatCount="indefinite"/></rect>
+  <text x="280" y="275" text-anchor="middle" fill={dot} font-size="8" opacity="0.4" font-family="monospace">OEE Dashboard</text>
+
+  <!-- Animated data packets -->
+  <circle r="2.5" fill={dot} opacity="0.8">
+    <animateMotion dur="3s" repeatCount="indefinite" path="M 120,140 Q 120,200, 95,260"/>
+  </circle>
+  <circle r="2" fill={dot} opacity="0.6">
+    <animateMotion dur="3.5s" repeatCount="indefinite" path="M 210,140 Q 180,240, 120,260" begin="0.5s"/>
+  </circle>
+  <circle r="2" fill={dot} opacity="0.7">
+    <animateMotion dur="2s" repeatCount="indefinite" path="M 130,282 L 220,282" begin="1s"/>
+  </circle>
+
+  <!-- Ambient particles -->
+  <circle cx="320" cy="80" r="1.5" fill={dot}><animate attributeName="opacity" values="0.1;0.4;0.1" dur="5s" repeatCount="indefinite"/></circle>
+  <circle cx="50" cy="350" r="1" fill={dot}><animate attributeName="opacity" values="0.15;0.35;0.15" dur="4s" repeatCount="indefinite"/></circle>
+  <circle cx="370" cy="340" r="1.5" fill={dot}><animate attributeName="opacity" values="0.1;0.3;0.1" dur="6s" repeatCount="indefinite"/></circle>
+</svg>

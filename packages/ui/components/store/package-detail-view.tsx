@@ -30,6 +30,10 @@ import {
 	TabsList,
 	TabsTrigger,
 } from "../ui";
+import {
+	type CompileStatus,
+	PackageStatusBadge,
+} from "../ui/package-status-badge";
 
 function PermissionBadge({
 	label,
@@ -102,6 +106,7 @@ export interface PackageDetailViewProps {
 	onUninstall: () => void;
 	isInstalling?: boolean;
 	isUninstalling?: boolean;
+	compileStatus?: CompileStatus;
 }
 
 export function PackageDetailView({
@@ -113,6 +118,7 @@ export function PackageDetailView({
 	onUninstall,
 	isInstalling,
 	isUninstalling,
+	compileStatus,
 }: PackageDetailViewProps) {
 	if (isLoading || !pkg) {
 		return (
@@ -172,6 +178,9 @@ export function PackageDetailView({
 											<Download className="h-4 w-4" />
 											{pkg.downloadCount.toLocaleString()} downloads
 										</span>
+										{compileStatus && compileStatus !== "idle" && (
+											<PackageStatusBadge status={compileStatus} />
+										)}
 									</div>
 								</div>
 							</div>

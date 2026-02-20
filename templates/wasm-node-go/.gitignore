@@ -1,0 +1,4 @@
+node.wasm
+*.test
+coverage.out
+.DS_Store

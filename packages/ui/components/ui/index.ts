@@ -37,6 +37,7 @@ export * from "./mobile-header";
 export * from "./model-card";
 export * from "./model-detail-sheet";
 export * from "./monaco-file-editor";
+export * from "./package-status-badge";
 export * from "./popover";
 export * from "./progress";
 export * from "./progress-toast";

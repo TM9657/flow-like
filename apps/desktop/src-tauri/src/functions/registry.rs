@@ -1,13 +1,103 @@
 use crate::{
     functions::TauriFunctionError,
-    state::{TauriRegistryState, TauriSettingsState},
+    state::{TauriFlowLikeState, TauriRegistryState, TauriSettingsState},
 };
+use flow_like::flow::node::NodeLogic;
+use flow_like_types::intercom::InterComEvent;
 use flow_like_wasm::{
     client::RegistryClient,
     registry::{CachedPackage, InstalledPackage, RegistryConfig, SearchFilters, SearchResults},
+    WasmConfig, WasmEngine,
 };
 use serde::{Deserialize, Serialize};
-use tauri::AppHandle;
+use std::sync::Arc;
+use tauri::{AppHandle, Emitter};
+
+const WASM_COMPILE_TOAST_ID: &str = "wasm-compile-progress";
+
+fn emit_progress(app_handle: &AppHandle, message: &str, done: bool, success: bool) {
+    let event = InterComEvent::with_type(
+        "progress",
+        serde_json::json!({
+            "id": WASM_COMPILE_TOAST_ID,
+            "message": message,
+            "done": done,
+            "success": success
+        }),
+    );
+    let _ = app_handle.emit("progress", vec![event]);
+}
+
+fn emit_package_status(app_handle: &AppHandle, package_id: &str, status: &str) {
+    let _ = app_handle.emit(
+        "package-status",
+        serde_json::json!({ "packageId": package_id, "status": status }),
+    );
+}
+
+async fn reload_wasm_nodes(app_handle: &AppHandle) -> Result<(), TauriFunctionError> {
+    let registry_client = TauriRegistryState::get_client(app_handle).await?;
+    let flow_state = TauriFlowLikeState::construct(app_handle).await?;
+
+    let installed = registry_client.list_installed().await.unwrap_or_default();
+    let total = installed.len();
+
+    if total == 0 {
+        let _ = app_handle.emit("catalog-updated", ());
+        return Ok(());
+    }
+
+    emit_progress(
+        app_handle,
+        &format!("Compiling {} package(s)...", total),
+        false,
+        true,
+    );
+
+    for pkg in &installed {
+        emit_package_status(app_handle, &pkg.id, "compiling");
+    }
+
+    let engine = Arc::new(
+        WasmEngine::new(WasmConfig::default())
+            .map_err(|e| TauriFunctionError::new(&e.to_string()))?,
+    );
+
+    let mut wasm_nodes: Vec<Arc<dyn NodeLogic>> = Vec::new();
+    let mut compiled = 0usize;
+
+    for pkg in &installed {
+        match registry_client.load_nodes(&pkg.id, engine.clone()).await {
+            Ok(nodes) => {
+                compiled += nodes.len();
+                for node in nodes {
+                    wasm_nodes.push(Arc::new(node));
+                }
+                emit_package_status(app_handle, &pkg.id, "ready");
+            }
+            Err(e) => {
+                tracing::warn!("Failed to load package '{}': {}", pkg.id, e);
+                emit_package_status(app_handle, &pkg.id, "error");
+            }
+        }
+    }
+
+    if !wasm_nodes.is_empty() {
+        let registry_guard = flow_state.node_registry.clone();
+        let mut registry = registry_guard.write().await;
+        registry.push_nodes(wasm_nodes);
+    }
+
+    emit_progress(
+        app_handle,
+        &format!("Compiled {} WASM nodes", compiled),
+        true,
+        true,
+    );
+    let _ = app_handle.emit("catalog-updated", ());
+
+    Ok(())
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SearchFiltersInput {
@@ -88,10 +178,20 @@ pub async fn registry_install_package(
     package_id: String,
     version: Option<String>,
 ) -> Result<CachedPackage, TauriFunctionError> {
+    emit_package_status(&app_handle, &package_id, "downloading");
     let registry_client: RegistryClient = TauriRegistryState::get_client(&app_handle).await?;
     let installed = registry_client
         .install(&package_id, version.as_deref())
-        .await?;
+        .await
+        .map_err(|e| {
+            emit_package_status(&app_handle, &package_id, "error");
+            e
+        })?;
+
+    if let Err(e) = reload_wasm_nodes(&app_handle).await {
+        tracing::warn!("Failed to reload WASM nodes after install: {:?}", e);
+    }
+
     Ok(installed)
 }
 
@@ -102,6 +202,11 @@ pub async fn registry_uninstall_package(
 ) -> Result<(), TauriFunctionError> {
     let registry_client: RegistryClient = TauriRegistryState::get_client(&app_handle).await?;
     registry_client.uninstall(&package_id).await?;
+
+    if let Err(e) = reload_wasm_nodes(&app_handle).await {
+        tracing::warn!("Failed to reload WASM nodes after uninstall: {:?}", e);
+    }
+
     Ok(())
 }
 
@@ -140,10 +245,20 @@ pub async fn registry_update_package(
     package_id: String,
     version: Option<String>,
 ) -> Result<CachedPackage, TauriFunctionError> {
+    emit_package_status(&app_handle, &package_id, "downloading");
     let registry_client: RegistryClient = TauriRegistryState::get_client(&app_handle).await?;
     let installed = registry_client
         .install(&package_id, version.as_deref())
-        .await?;
+        .await
+        .map_err(|e| {
+            emit_package_status(&app_handle, &package_id, "error");
+            e
+        })?;
+
+    if let Err(e) = reload_wasm_nodes(&app_handle).await {
+        tracing::warn!("Failed to reload WASM nodes after update: {:?}", e);
+    }
+
     Ok(installed)
 }
 
@@ -187,6 +302,13 @@ pub async fn registry_load_local(
     let registry_client = TauriRegistryState::get_client(&app_handle).await?;
     let local_path = std::path::Path::new(&path);
     let cached = registry_client.load_local(local_path).await?;
+
+    emit_package_status(&app_handle, &cached.entry.id, "compiling");
+
+    if let Err(e) = reload_wasm_nodes(&app_handle).await {
+        tracing::warn!("Failed to reload WASM nodes after local load: {:?}", e);
+    }
+
     Ok(cached)
 }
 
@@ -231,6 +353,11 @@ pub async fn registry_init(
 
     let mut guard = state.0.lock().await;
     *guard = Some(client);
+    drop(guard);
+
+    if let Err(e) = reload_wasm_nodes(&app_handle).await {
+        tracing::warn!("Failed to load WASM nodes during registry init: {:?}", e);
+    }
 
     Ok(())
 }

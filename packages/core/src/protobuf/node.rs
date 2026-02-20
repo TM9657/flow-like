@@ -1,7 +1,7 @@
 use flow_like_types::{FromProto, ToProto};
 
 use crate::flow::{
-    node::{FnRefs, Node, NodeScores},
+    node::{FnRefs, Node, NodeScores, NodeWasm},
     pin::Pin,
 };
 
@@ -47,6 +47,24 @@ impl FromProto<flow_like_types::proto::FnRefs> for FnRefs {
             fn_refs: proto.fn_refs,
             can_reference_fns: proto.can_reference_fns,
             can_be_referenced_by_fns: proto.can_be_referenced_by_fns,
+        }
+    }
+}
+
+impl ToProto<flow_like_types::proto::NodeWasm> for NodeWasm {
+    fn to_proto(&self) -> flow_like_types::proto::NodeWasm {
+        flow_like_types::proto::NodeWasm {
+            package_id: self.package_id.clone(),
+            permissions: self.permissions.clone(),
+        }
+    }
+}
+
+impl FromProto<flow_like_types::proto::NodeWasm> for NodeWasm {
+    fn from_proto(proto: flow_like_types::proto::NodeWasm) -> Self {
+        NodeWasm {
+            package_id: proto.package_id,
+            permissions: proto.permissions,
         }
     }
 }
@@ -97,6 +115,7 @@ impl ToProto<flow_like_types::proto::Node> for Node {
                 .unwrap_or_default(),
             only_offline: self.only_offline,
             version: self.version,
+            wasm: self.wasm.as_ref().map(|w| w.to_proto()),
         }
     }
 }
@@ -152,6 +171,7 @@ impl FromProto<flow_like_types::proto::Node> for Node {
             },
             only_offline: proto.only_offline,
             version: proto.version,
+            wasm: proto.wasm.map(NodeWasm::from_proto),
         }
     }
 }

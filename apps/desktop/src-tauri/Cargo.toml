@@ -55,6 +55,7 @@ tauri-plugin-http = "2.5.6"
 tauri-plugin-devtools = "2.0.1"
 tauri-plugin-fs = "2.4.5"
 urlencoding.workspace = true
+toml.workspace = true
 tauri-plugin-opener = "2.5.3"
 tracing-oslog = "0.3.0"
 rusqlite = { version = "0.32.0", features = ["bundled-full", "serde_json"] }
@@ -63,6 +64,7 @@ teloxide = { version = "0.17", default-features = false, features = ["macros", "
 pulldown-cmark = "0.12"
 lazy_static = "1.5.0"
 async-trait.workspace = true
+dashmap.workspace = true
 cron = "0.15.0"
 chrono.workspace = true
 axum = "0.8.6"

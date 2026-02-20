@@ -12,13 +12,102 @@ pub mod pins;
 pub mod storage;
 pub mod streaming;
 pub mod variables;
+pub mod websocket;
 
 use crate::limits::WasmCapabilities;
+use flow_like_storage::files::store::FlowLikeStore;
+use flow_like_storage::object_store::path::Path;
 use parking_lot::RwLock;
 use serde_json::Value;
 use std::collections::HashMap;
+use std::sync::Arc;
 
 pub use linker::register_host_functions;
+pub use websocket::WsConnection;
+
+/// Storage context for WASM modules — resolves stores server-side without exposing credentials.
+pub struct StorageContext {
+    pub stores: flow_like::state::FlowLikeStores,
+    pub store_cache: RwLock<HashMap<String, FlowLikeStore>>,
+    pub app_id: String,
+    pub board_dir: Path,
+    pub board_id: String,
+    pub node_id: String,
+    pub sub: String,
+}
+
+impl std::fmt::Debug for StorageContext {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("StorageContext")
+            .field("app_id", &self.app_id)
+            .field("board_id", &self.board_id)
+            .field("node_id", &self.node_id)
+            .finish()
+    }
+}
+
+impl StorageContext {
+    pub fn resolve_store(&self, store_ref: &str) -> Option<FlowLikeStore> {
+        self.store_cache.read().get(store_ref).cloned()
+    }
+
+    pub fn register_store(&self, store_ref: &str, store: FlowLikeStore) {
+        self.store_cache
+            .write()
+            .insert(store_ref.to_string(), store);
+    }
+
+    pub fn get_storage_dir(&self, node: bool) -> Path {
+        let base = self.board_dir.child("storage");
+        if node {
+            base.child(self.node_id.clone())
+        } else {
+            base
+        }
+    }
+
+    pub fn get_upload_dir(&self) -> Path {
+        self.board_dir.child("upload")
+    }
+
+    pub fn get_cache_dir(&self, node: bool, user: bool) -> Path {
+        let mut base = Path::from("tmp");
+        if user {
+            base = base.child("user").child(self.sub.clone());
+        } else {
+            base = base.child("global");
+        }
+        base = base.child("apps").child(self.app_id.clone());
+        if node {
+            base.child(self.node_id.clone())
+        } else {
+            base
+        }
+    }
+
+    pub fn get_user_dir(&self, node: bool) -> Path {
+        let base = Path::from("users")
+            .child(self.sub.clone())
+            .child("apps")
+            .child(self.app_id.clone());
+        if node {
+            base.child(self.node_id.clone())
+        } else {
+            base
+        }
+    }
+}
+
+/// Model context for WASM modules — provides embedding access without exposing API keys.
+pub struct ModelContext {
+    pub app_state: Arc<flow_like::state::FlowLikeState>,
+}
+
+impl std::fmt::Debug for ModelContext {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("ModelContext").finish()
+    }
+}
 
 /// Host state accessible from host functions
 #[derive(Debug)]
@@ -47,6 +136,12 @@ pub struct HostState {
     pub metadata: ExecutionMetadata,
     /// Stream events to send
     pub stream_events: RwLock<Vec<StreamEvent>>,
+    /// Storage context for server-side store resolution
+    pub storage_context: Option<StorageContext>,
+    /// Model context for server-side model access
+    pub model_context: Option<ModelContext>,
+    /// Active WebSocket connections (session_id -> connection)
+    pub ws_connections: Arc<tokio::sync::Mutex<HashMap<String, WsConnection>>>,
 }
 
 /// Log entry from WASM
@@ -101,6 +196,9 @@ impl HostState {
             oauth_tokens: RwLock::new(HashMap::new()),
             metadata: ExecutionMetadata::default(),
             stream_events: RwLock::new(Vec::new()),
+            storage_context: None,
+            model_context: None,
+            ws_connections: Arc::new(tokio::sync::Mutex::new(HashMap::new())),
         }
     }
 

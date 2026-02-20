@@ -1,0 +1,19 @@
+[tools]
+go = "1.25"
+"aqua:tinygo-org/tinygo" = "0.40"
+
+[tasks.setup]
+description = "Download Go modules"
+run = "go mod download"
+
+[tasks.build]
+description = "Build the WASM node"
+run = "tinygo build -o node.wasm -target wasm -no-debug ./"
+
+[tasks.test]
+description = "Run unit tests"
+run = "go test ./..."
+
+[tasks.clean]
+description = "Clean build artifacts"
+run = "rm -f node.wasm"

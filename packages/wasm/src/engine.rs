@@ -2,14 +2,20 @@
 //!
 //! The engine is the core compilation and configuration unit for wasmtime.
 
+use crate::aot_cache::AotCache;
 use crate::error::{WasmError, WasmResult};
 use crate::limits::WasmSecurityConfig;
 use crate::module::WasmModule;
+use crate::unified::LoadedWasm;
 use dashmap::DashMap;
+use flow_like::utils::cache::get_cache_dir;
 use parking_lot::RwLock;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
-use wasmtime::{Cache, Config, Engine, OptLevel};
+use wasmtime::{Config, Engine, OptLevel};
+
+#[cfg(feature = "component-model")]
+use crate::component::WasmComponent;
 
 /// Configuration for the WASM engine
 #[derive(Debug, Clone)]
@@ -27,7 +33,7 @@ pub struct WasmConfig {
     /// Enable memory growth
     pub memory_growth: bool,
     /// Cache directory for compiled modules (None = no caching)
-    pub cache_dir: Option<std::path::PathBuf>,
+    pub cache_dir: Option<PathBuf>,
     /// Default security configuration
     pub default_security: WasmSecurityConfig,
 }
@@ -41,7 +47,7 @@ impl Default for WasmConfig {
             fuel_metering: true,
             epoch_interruption: true,
             memory_growth: true,
-            cache_dir: None,
+            cache_dir: Some(get_cache_dir().join("wasm")),
             default_security: WasmSecurityConfig::default(),
         }
     }
@@ -66,7 +72,7 @@ impl WasmConfig {
         }
     }
 
-    /// Production configuration (maximum optimization)
+    /// Production configuration (maximum optimization, auto-detected cache)
     pub fn production() -> Self {
         Self {
             parallel_compilation: true,
@@ -75,13 +81,32 @@ impl WasmConfig {
             fuel_metering: true,
             epoch_interruption: true,
             memory_growth: true,
-            cache_dir: dirs_next::cache_dir().map(|p| p.join("flow-like").join("wasm")),
+            cache_dir: Some(get_cache_dir().join("wasm")),
             default_security: WasmSecurityConfig::default(),
         }
     }
 
-    pub fn with_cache_dir(mut self, path: impl Into<std::path::PathBuf>) -> Self {
+    /// Lambda-optimized configuration with permissive security limits.
+    pub fn lambda() -> Self {
+        Self {
+            parallel_compilation: true,
+            optimizations: true,
+            opt_level: OptLevel::Speed,
+            fuel_metering: true,
+            epoch_interruption: true,
+            memory_growth: true,
+            cache_dir: Some(get_cache_dir().join("wasm")),
+            default_security: WasmSecurityConfig::permissive(),
+        }
+    }
+
+    pub fn with_cache_dir(mut self, path: impl Into<PathBuf>) -> Self {
         self.cache_dir = Some(path.into());
+        self
+    }
+
+    pub fn without_cache(mut self) -> Self {
+        self.cache_dir = None;
         self
     }
 
@@ -103,42 +128,17 @@ impl WasmConfig {
         config.epoch_interruption(self.epoch_interruption);
         config.async_support(true);
 
+        // Enable WASM GC and exception handling proposals (needed for Kotlin/Wasm, etc.)
+        config.wasm_gc(true);
+        config.wasm_exceptions(true);
+        config.wasm_function_references(true);
+
         // Memory settings
         config.memory_init_cow(true);
 
         // Apply resource limits
         let limits = &self.default_security.limits;
         config.max_wasm_stack(limits.max_stack_depth as usize * 1024);
-
-        // Caching
-        if let Some(cache_dir) = &self.cache_dir {
-            if let Err(e) = std::fs::create_dir_all(cache_dir) {
-                tracing::warn!("Failed to create WASM cache directory: {}", e);
-            } else {
-                // Use wasmtime's built-in caching
-                let cache_config_path = cache_dir.join("cache.toml");
-                if !cache_config_path.exists() {
-                    let cache_config = format!(
-                        r#"[cache]
-enabled = true
-directory = "{}"
-"#,
-                        cache_dir.display()
-                    );
-                    if let Err(e) = std::fs::write(&cache_config_path, cache_config) {
-                        tracing::warn!("Failed to write cache config: {}", e);
-                    }
-                }
-                match Cache::from_file(Some(&cache_config_path)) {
-                    Ok(cache) => {
-                        config.cache(Some(cache));
-                    }
-                    Err(e) => {
-                        tracing::warn!("Failed to load cache config: {}", e);
-                    }
-                }
-            }
-        }
 
         Ok(config)
     }
@@ -152,8 +152,13 @@ pub struct WasmEngine {
     config: WasmConfig,
     /// Cached compiled modules (hash -> module)
     module_cache: DashMap<String, Arc<WasmModule>>,
+    /// Cached compiled components (hash -> component)
+    #[cfg(feature = "component-model")]
+    component_cache: DashMap<String, Arc<WasmComponent>>,
     /// Epoch ticker for timeouts
     epoch_ticker: Arc<RwLock<Option<tokio::task::JoinHandle<()>>>>,
+    /// AOT disk cache for precompiled artifacts
+    aot_cache: Option<AotCache>,
 }
 
 impl WasmEngine {
@@ -164,11 +169,16 @@ impl WasmEngine {
             WasmError::compilation(format!("Failed to create wasmtime engine: {}", e))
         })?;
 
+        let aot_cache = config.cache_dir.as_ref().map(AotCache::new);
+
         Ok(Self {
             engine,
             config,
             module_cache: DashMap::new(),
+            #[cfg(feature = "component-model")]
+            component_cache: DashMap::new(),
             epoch_ticker: Arc::new(RwLock::new(None)),
+            aot_cache,
         })
     }
 
@@ -216,22 +226,28 @@ impl WasmEngine {
 
     /// Load a module from bytes
     pub async fn load_module(&self, bytes: &[u8]) -> WasmResult<Arc<WasmModule>> {
-        // Calculate hash for caching
         let hash = blake3::hash(bytes).to_hex().to_string();
 
-        // Check cache
         if let Some(cached) = self.module_cache.get(&hash) {
-            tracing::debug!("Using cached WASM module: {}", hash);
+            tracing::debug!("In-memory cache hit for module: {}", hash);
             return Ok(cached.clone());
         }
 
-        // Compile module
-        let module = WasmModule::from_bytes(self, bytes, hash.clone()).await?;
+        // Try AOT disk cache before expensive Cranelift compilation
+        let module = if let Some(aot) = &self.aot_cache {
+            if let Some(precompiled) = aot.load_module(&self.engine, &hash) {
+                WasmModule::from_precompiled(precompiled, hash.clone())?
+            } else {
+                let m = WasmModule::from_bytes(self, bytes, hash.clone()).await?;
+                aot.save_module(m.module(), &hash);
+                m
+            }
+        } else {
+            WasmModule::from_bytes(self, bytes, hash.clone()).await?
+        };
+
         let module = Arc::new(module);
-
-        // Cache it
         self.module_cache.insert(hash, module.clone());
-
         Ok(module)
     }
 
@@ -248,6 +264,56 @@ impl WasmEngine {
             })?;
 
         self.load_module(&bytes).await
+    }
+
+    /// Load a Component Model binary from bytes
+    #[cfg(feature = "component-model")]
+    pub async fn load_component(&self, bytes: &[u8]) -> WasmResult<Arc<WasmComponent>> {
+        let hash = blake3::hash(bytes).to_hex().to_string();
+
+        if let Some(cached) = self.component_cache.get(&hash) {
+            tracing::debug!("In-memory cache hit for component: {}", hash);
+            return Ok(cached.clone());
+        }
+
+        let component = if let Some(aot) = &self.aot_cache {
+            if let Some(precompiled) = aot.load_component(&self.engine, &hash) {
+                WasmComponent::from_precompiled(precompiled, bytes, hash.clone())?
+            } else {
+                let c = WasmComponent::from_bytes(self, bytes, hash.clone()).await?;
+                aot.save_component(c.component(), &hash);
+                c
+            }
+        } else {
+            WasmComponent::from_bytes(self, bytes, hash.clone()).await?
+        };
+
+        let component = Arc::new(component);
+        self.component_cache.insert(hash, component.clone());
+        Ok(component)
+    }
+
+    /// Auto-detect format and load either a core module or Component Model binary
+    pub async fn load_auto(&self, bytes: &[u8]) -> WasmResult<LoadedWasm> {
+        #[cfg(feature = "component-model")]
+        if crate::component::is_component_model(bytes) {
+            return self.load_component(bytes).await.map(LoadedWasm::Component);
+        }
+        self.load_module(bytes).await.map(LoadedWasm::Module)
+    }
+
+    /// Auto-detect format and load from file
+    pub async fn load_auto_from_file(
+        &self,
+        path: impl AsRef<Path>,
+    ) -> WasmResult<LoadedWasm> {
+        let path = path.as_ref();
+        let bytes = tokio::fs::read(path)
+            .await
+            .map_err(|_e| WasmError::ModuleNotFound {
+                path: path.display().to_string(),
+            })?;
+        self.load_auto(&bytes).await
     }
 
     /// Load a module from URL
@@ -305,11 +371,16 @@ impl WasmEngine {
     /// Clear the module cache
     pub fn clear_cache(&self) {
         self.module_cache.clear();
+        #[cfg(feature = "component-model")]
+        self.component_cache.clear();
     }
 
     /// Get number of cached modules
     pub fn cached_module_count(&self) -> usize {
-        self.module_cache.len()
+        let count = self.module_cache.len();
+        #[cfg(feature = "component-model")]
+        let count = count + self.component_cache.len();
+        count
     }
 
     /// Remove a specific module from cache
@@ -350,5 +421,19 @@ mod tests {
         let config = WasmConfig::production();
         assert!(config.optimizations);
         assert_eq!(config.opt_level, OptLevel::Speed);
+    }
+
+    #[test]
+    fn test_config_lambda() {
+        let config = WasmConfig::lambda();
+        assert!(config.optimizations);
+        assert_eq!(config.opt_level, OptLevel::Speed);
+        assert!(config.cache_dir.is_some());
+    }
+
+    #[test]
+    fn test_without_cache() {
+        let config = WasmConfig::production().without_cache();
+        assert!(config.cache_dir.is_none());
     }
 }

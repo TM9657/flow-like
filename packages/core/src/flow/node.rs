@@ -98,6 +98,13 @@ pub struct FnRefs {
 }
 
 #[derive(Serialize, Deserialize, JsonSchema, Debug, Clone)]
+pub struct NodeWasm {
+    pub package_id: String,
+    #[serde(default)]
+    pub permissions: Vec<String>,
+}
+
+#[derive(Serialize, Deserialize, JsonSchema, Debug, Clone)]
 pub struct Node {
     pub id: String,
     pub name: String,
@@ -127,6 +134,9 @@ pub struct Node {
     /// Schema version for node migration. When catalog version > placed version, pins are synced.
     /// None means unversioned (legacy). Bump this when changing pins in get_node().
     pub version: Option<u32>,
+    /// WASM metadata for external nodes. None for built-in catalog nodes.
+    /// Populated automatically when placing or pasting nodes; never trust frontend-supplied values.
+    pub wasm: Option<NodeWasm>,
 }
 
 impl Node {
@@ -154,6 +164,7 @@ impl Node {
             required_oauth_scopes: None,
             only_offline: false,
             version: None,
+            wasm: None,
         }
     }
 
@@ -565,6 +576,10 @@ impl Node {
 
         if let Some(layer) = &self.layer {
             hasher.append(layer.as_bytes());
+        }
+
+        if let Some(wasm) = &self.wasm {
+            hasher.append(wasm.package_id.as_bytes());
         }
 
         self.hash = Some(hasher.finalize64());

@@ -3,6 +3,7 @@ use flow_like::{
 };
 use flow_like_types::sync::Mutex;
 use flow_like_wasm::client::RegistryClient;
+use flow_like_wasm::{WasmConfig, WasmEngine};
 use std::sync::Arc;
 use tauri::{AppHandle, Manager};
 
@@ -125,6 +126,25 @@ impl TauriRegistryState {
         guard
             .clone()
             .ok_or_else(|| anyhow::anyhow!("Registry client not initialized"))
+    }
+}
+
+pub struct TauriWasmEngineState(pub Arc<WasmEngine>);
+impl TauriWasmEngineState {
+    #[inline]
+    pub fn construct(app_handle: &AppHandle) -> anyhow::Result<Arc<WasmEngine>> {
+        app_handle
+            .try_state::<TauriWasmEngineState>()
+            .map(|state| state.0.clone())
+            .ok_or_else(|| anyhow::anyhow!("WasmEngine State not found"))
+    }
+
+    pub fn create_shared() -> anyhow::Result<Arc<WasmEngine>> {
+        let config = WasmConfig::development()
+            .with_cache_dir(flow_like::utils::cache::get_cache_dir().join("wasm"));
+        let engine = WasmEngine::new(config)
+            .map_err(|e| anyhow::anyhow!("Failed to create shared WasmEngine: {}", e))?;
+        Ok(Arc::new(engine))
     }
 }
 
