@@ -2,8 +2,6 @@
 
 import {
 	Brain,
-	ChevronDown,
-	ChevronUp,
 	Code2,
 	Cpu,
 	DollarSign,
@@ -48,8 +46,6 @@ import {
 	formatContextLength,
 } from "../../ui";
 import { Checkbox } from "../../ui/checkbox";
-import { Skeleton } from "../../ui/skeleton";
-import { Tooltip, TooltipContent, TooltipTrigger } from "../../ui/tooltip";
 import {
 	Sheet,
 	SheetContent,
@@ -57,6 +53,8 @@ import {
 	SheetHeader,
 	SheetTitle,
 } from "../../ui/sheet";
+import { Skeleton } from "../../ui/skeleton";
+import { Tooltip, TooltipContent, TooltipTrigger } from "../../ui/tooltip";
 
 type SortOption =
 	| "name"
@@ -609,7 +607,9 @@ export function AIModelPage({ webMode = false }: AIModelPageProps) {
 
 	return (
 		<main className="flex flex-col w-full flex-1 min-h-0">
-			<div className={`pt-5 pb-3 space-y-3 ${isMobile ? "px-4" : "px-4 sm:px-8"}`}>
+			<div
+				className={`pt-5 pb-3 space-y-3 ${isMobile ? "px-4" : "px-4 sm:px-8"}`}
+			>
 				<div className="flex items-center gap-2">
 					<div className="relative flex-1 max-w-lg">
 						<Search className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground/40 pointer-events-none" />
@@ -665,7 +665,9 @@ export function AIModelPage({ webMode = false }: AIModelPageProps) {
 											? "text-foreground/80 bg-muted/40"
 											: "text-muted-foreground/60 hover:text-foreground/80 hover:bg-muted/30"
 									}`}
-									onClick={() => setViewMode((v) => (v === "grid" ? "list" : "grid"))}
+									onClick={() =>
+										setViewMode((v) => (v === "grid" ? "list" : "grid"))
+									}
 								>
 									{viewMode === "grid" ? (
 										<Grid3X3 className="h-4 w-4" />
@@ -741,15 +743,14 @@ export function AIModelPage({ webMode = false }: AIModelPageProps) {
 					/>
 
 					<span className="text-xs text-muted-foreground/30 ml-auto">
-						{filteredModels.length} model{filteredModels.length !== 1 ? "s" : ""}
+						{filteredModels.length} model
+						{filteredModels.length !== 1 ? "s" : ""}
 					</span>
 				</div>
 
 				{/* Expanded filter panel (desktop) */}
 				{filtersExpanded && (
-					<div className="pt-3 border-t border-border/10">
-						{filterContent}
-					</div>
+					<div className="pt-3 border-t border-border/10">{filterContent}</div>
 				)}
 			</div>
 
@@ -757,21 +758,19 @@ export function AIModelPage({ webMode = false }: AIModelPageProps) {
 			<Sheet open={mobileFiltersOpen} onOpenChange={setMobileFiltersOpen}>
 				<SheetContent side="left" className="w-72 p-0">
 					<SheetHeader className="p-4 border-b border-border/10">
-						<SheetTitle className="text-sm font-medium">
-							Filters
-						</SheetTitle>
+						<SheetTitle className="text-sm font-medium">Filters</SheetTitle>
 						<SheetDescription className="text-xs text-muted-foreground/50">
 							{modalityCounts.total} models available
 						</SheetDescription>
 					</SheetHeader>
-					<div className="p-4 overflow-y-auto">
-						{filterContent}
-					</div>
+					<div className="p-4 overflow-y-auto">{filterContent}</div>
 				</SheetContent>
 			</Sheet>
 
 			{/* Model grid */}
-			<div className={`flex-1 overflow-auto pb-8 ${isMobile ? "px-4" : "px-4 sm:px-8"}`}>
+			<div
+				className={`flex-1 overflow-auto pb-8 ${isMobile ? "px-4" : "px-4 sm:px-8"}`}
+			>
 				{foundBits.isLoading ? (
 					<ModelCatalogSkeleton />
 				) : filteredModels.length === 0 ? (
@@ -781,7 +780,7 @@ export function AIModelPage({ webMode = false }: AIModelPageProps) {
 						</div>
 						<p className="text-sm text-foreground/60 mb-1">
 							{searchTerm
-							? `Nothing found for \u201C${searchTerm}\u201D`
+								? `Nothing found for \u201C${searchTerm}\u201D`
 								: "No models found"}
 						</p>
 						<p className="text-xs text-muted-foreground/60">
@@ -806,7 +805,10 @@ export function AIModelPage({ webMode = false }: AIModelPageProps) {
 						className={viewMode === "grid" ? "grid gap-3" : "space-y-2"}
 						style={
 							viewMode === "grid"
-								? { gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))" }
+								? {
+										gridTemplateColumns:
+											"repeat(auto-fill, minmax(280px, 1fr))",
+									}
 								: undefined
 						}
 					>
@@ -884,7 +886,10 @@ function FilterCheckbox({
 function ModelCatalogSkeleton() {
 	return (
 		<div className="space-y-8 pt-2">
-			<div className="grid gap-3" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))" }}>
+			<div
+				className="grid gap-3"
+				style={{ gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))" }}
+			>
 				{Array.from({ length: 8 }).map((_, i) => (
 					<Skeleton
 						key={`skel-model-${i.toString()}`}

@@ -1,8 +1,5 @@
 "use client";
 
-import { cn } from "../lib/utils";
-import { useInvoke } from "../hooks/use-invoke";
-import { useBackend } from "../state/backend-state";
 import { format } from "date-fns";
 import {
 	CalendarIcon,
@@ -14,8 +11,11 @@ import {
 	ShieldCheckIcon,
 	Trash2Icon,
 } from "lucide-react";
-import { type ReactNode, useCallback, useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { toast } from "sonner";
+import { useInvoke } from "../hooks/use-invoke";
+import { cn } from "../lib/utils";
+import { useBackend } from "../state/backend-state";
 import { Badge } from "./ui/badge";
 import { Button } from "./ui/button";
 import { Calendar } from "./ui/calendar";
@@ -127,7 +127,12 @@ function TokenRow({
 			</div>
 
 			<div className="flex items-center gap-1 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
-				<Button variant="ghost" size="icon" className="h-8 w-8" onClick={copyId}>
+				<Button
+					variant="ghost"
+					size="icon"
+					className="h-8 w-8"
+					onClick={copyId}
+				>
 					{copied ? (
 						<CheckIcon className="h-3.5 w-3.5 text-green-500" />
 					) : (
@@ -255,7 +260,15 @@ function CreateTokenDialog({
 		} finally {
 			setCreating(false);
 		}
-	}, [name, expiration, permission, backend.userState, reset, onOpenChange, onCreated]);
+	}, [
+		name,
+		expiration,
+		permission,
+		backend.userState,
+		reset,
+		onOpenChange,
+		onCreated,
+	]);
 
 	return (
 		<Dialog
@@ -298,10 +311,7 @@ function CreateTokenDialog({
 							</SelectTrigger>
 							<SelectContent>
 								{PERMISSION_LEVELS.map((level) => (
-									<SelectItem
-										key={level.value}
-										value={level.value.toString()}
-									>
+									<SelectItem key={level.value} value={level.value.toString()}>
 										<div className="flex flex-col">
 											<span className="font-medium">{level.label}</span>
 											<span className="text-xs text-muted-foreground">
@@ -365,10 +375,7 @@ function CreateTokenDialog({
 					>
 						Cancel
 					</Button>
-					<Button
-						onClick={handleCreate}
-						disabled={creating || !name.trim()}
-					>
+					<Button onClick={handleCreate} disabled={creating || !name.trim()}>
 						{creating ? "Creating..." : "Create"}
 					</Button>
 				</DialogFooter>
@@ -397,9 +404,7 @@ export function PatManagement() {
 
 	const handleDelete = useCallback(
 		async (id: string, name: string) => {
-			if (
-				!confirm(`Delete "${name}"? This cannot be undone.`)
-			) {
+			if (!confirm(`Delete "${name}"? This cannot be undone.`)) {
 				return;
 			}
 			try {

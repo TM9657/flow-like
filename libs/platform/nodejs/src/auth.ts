@@ -1,5 +1,5 @@
-import type { AuthConfig } from "./types.js";
 import { AuthError } from "./errors.js";
+import type { AuthConfig } from "./types.js";
 
 const PAT_PREFIX = "pat_";
 const API_KEY_PREFIX = "flk_";

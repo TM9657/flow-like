@@ -7,12 +7,9 @@ import {
 	Button,
 	Card,
 	CardContent,
-	CardDescription,
 	CardHeader,
-	CardTitle,
 	Input,
 	Label,
-	ScrollArea,
 	Select,
 	SelectContent,
 	SelectItem,
@@ -21,15 +18,11 @@ import {
 	Separator,
 	Switch,
 	Textarea,
-	cn,
 } from "@tm9657/flow-like-ui";
-import type { PackageManifest } from "@tm9657/flow-like-ui/lib/schema/wasm";
 import { AnimatePresence, motion } from "framer-motion";
 import {
 	AlertCircle,
 	ArrowLeft,
-	Check,
-	Clock,
 	FileText,
 	FolderOpen,
 	Globe,
@@ -207,9 +200,7 @@ function IdentitySection({
 						<Label className="text-xs">Version</Label>
 						<Input
 							value={data.version}
-							onChange={(e) =>
-								onChange({ ...data, version: e.target.value })
-							}
+							onChange={(e) => onChange({ ...data, version: e.target.value })}
 							placeholder="0.1.0"
 							className="h-9 font-mono text-xs"
 						/>
@@ -220,9 +211,7 @@ function IdentitySection({
 						<Label className="text-xs">Name</Label>
 						<Input
 							value={data.name}
-							onChange={(e) =>
-								onChange({ ...data, name: e.target.value })
-							}
+							onChange={(e) => onChange({ ...data, name: e.target.value })}
 							className="h-9"
 						/>
 					</div>
@@ -245,9 +234,7 @@ function IdentitySection({
 					<Label className="text-xs">Description</Label>
 					<Textarea
 						value={data.description}
-						onChange={(e) =>
-							onChange({ ...data, description: e.target.value })
-						}
+						onChange={(e) => onChange({ ...data, description: e.target.value })}
 						rows={2}
 						className="text-sm"
 						placeholder="What does this package do?"
@@ -317,12 +304,9 @@ function AuthorsEditor({
 	onChange: (a: ManifestData["authors"]) => void;
 }) {
 	const addAuthor = () => onChange([...authors, { name: "" }]);
-	const removeAuthor = (i: number) => onChange(authors.filter((_, idx) => idx !== i));
-	const updateAuthor = (
-		i: number,
-		field: string,
-		value: string,
-	) => {
+	const removeAuthor = (i: number) =>
+		onChange(authors.filter((_, idx) => idx !== i));
+	const updateAuthor = (i: number, field: string, value: string) => {
 		const updated = [...authors];
 		updated[i] = { ...updated[i], [field]: value || undefined };
 		onChange(updated);
@@ -668,10 +652,7 @@ function NodesSection({
 			<CardContent>
 				<div className="space-y-4">
 					{data.nodes.map((node, i) => (
-						<div
-							key={`node-${i}`}
-							className="rounded-lg border p-3 space-y-3"
-						>
+						<div key={`node-${i}`} className="rounded-lg border p-3 space-y-3">
 							<div className="flex items-center justify-between">
 								<Badge variant="outline" className="text-xs font-mono">
 									#{i + 1}
@@ -692,9 +673,7 @@ function NodesSection({
 									<Label className="text-xs">ID</Label>
 									<Input
 										value={node.id}
-										onChange={(e) =>
-											updateNode(i, { id: e.target.value })
-										}
+										onChange={(e) => updateNode(i, { id: e.target.value })}
 										className="h-8 text-xs font-mono"
 										placeholder="my_node"
 									/>
@@ -703,9 +682,7 @@ function NodesSection({
 									<Label className="text-xs">Name</Label>
 									<Input
 										value={node.name}
-										onChange={(e) =>
-											updateNode(i, { name: e.target.value })
-										}
+										onChange={(e) => updateNode(i, { name: e.target.value })}
 										className="h-8 text-xs"
 										placeholder="My Node"
 									/>
@@ -770,25 +747,22 @@ function ManifestEditorContent() {
 	const [saving, setSaving] = useState(false);
 	const [hasChanges, setHasChanges] = useState(false);
 
-	const loadManifest = useCallback(
-		async (path: string) => {
-			if (!path) return;
-			setLoading(true);
-			try {
-				const raw = await invoke<Record<string, unknown>>(
-					"developer_get_manifest",
-					{ projectPath: path },
-				);
-				setData(raw as unknown as ManifestData);
-				setHasChanges(false);
-			} catch {
-				setData(null);
-			} finally {
-				setLoading(false);
-			}
-		},
-		[],
-	);
+	const loadManifest = useCallback(async (path: string) => {
+		if (!path) return;
+		setLoading(true);
+		try {
+			const raw = await invoke<Record<string, unknown>>(
+				"developer_get_manifest",
+				{ projectPath: path },
+			);
+			setData(raw as unknown as ManifestData);
+			setHasChanges(false);
+		} catch {
+			setData(null);
+		} finally {
+			setLoading(false);
+		}
+	}, []);
 
 	useEffect(() => {
 		if (initialPath) loadManifest(initialPath);
@@ -910,11 +884,7 @@ function ManifestEditorContent() {
 								className="flex-1 h-9"
 								readOnly
 							/>
-							<Button
-								variant="outline"
-								size="sm"
-								onClick={selectProject}
-							>
+							<Button variant="outline" size="sm" onClick={selectProject}>
 								<FolderOpen className="h-4 w-4 mr-2" />
 								Open
 							</Button>
@@ -950,26 +920,18 @@ function ManifestEditorContent() {
 							className="space-y-4"
 						>
 							<IdentitySection data={data} onChange={handleChange} />
-							<PermissionsSection
-								data={data}
-								onChange={handleChange}
-							/>
+							<PermissionsSection data={data} onChange={handleChange} />
 							<NodesSection data={data} onChange={handleChange} />
 						</motion.div>
 					)}
 
 					{!data && !loading && projectPath && (
-						<motion.div
-							initial={{ opacity: 0 }}
-							animate={{ opacity: 1 }}
-						>
+						<motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
 							<Card>
 								<CardContent className="py-12 text-center space-y-3">
 									<AlertCircle className="h-10 w-10 text-muted-foreground mx-auto" />
 									<div>
-										<p className="font-medium">
-											No flow-like.toml found
-										</p>
+										<p className="font-medium">No flow-like.toml found</p>
 										<p className="text-sm text-muted-foreground">
 											Create a new manifest for this project
 										</p>

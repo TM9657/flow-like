@@ -13,9 +13,9 @@ use flow_like_types::async_trait;
 use flow_like_types::json::json;
 
 #[cfg(feature = "execute")]
-use std::sync::Arc;
-#[cfg(feature = "execute")]
 use flow_like_types::Cacheable;
+#[cfg(feature = "execute")]
+use std::sync::Arc;
 
 use super::{MqttConfig, MqttSession};
 

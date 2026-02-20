@@ -1,14 +1,14 @@
-import { enGovDefense } from "./industry-gov-defense-en";
 import { deGovDefense } from "./industry-gov-defense-de";
-import { frGovDefense } from "./industry-gov-defense-fr";
+import { enGovDefense } from "./industry-gov-defense-en";
 import { esGovDefense } from "./industry-gov-defense-es";
-import { zhGovDefense } from "./industry-gov-defense-zh";
+import { frGovDefense } from "./industry-gov-defense-fr";
+import { itGovDefense } from "./industry-gov-defense-it";
 import { jaGovDefense } from "./industry-gov-defense-ja";
 import { koGovDefense } from "./industry-gov-defense-ko";
-import { ptGovDefense } from "./industry-gov-defense-pt";
-import { itGovDefense } from "./industry-gov-defense-it";
 import { nlGovDefense } from "./industry-gov-defense-nl";
+import { ptGovDefense } from "./industry-gov-defense-pt";
 import { svGovDefense } from "./industry-gov-defense-sv";
+import { zhGovDefense } from "./industry-gov-defense-zh";
 
 export const translationsGovDefense: Record<string, Record<string, string>> = {
 	en: enGovDefense,
@@ -25,5 +25,7 @@ export const translationsGovDefense: Record<string, Record<string, string>> = {
 };
 
 export function tGovDefense(lang: string, key: string): string {
-	return translationsGovDefense[lang]?.[key] ?? translationsGovDefense.en[key] ?? key;
+	return (
+		translationsGovDefense[lang]?.[key] ?? translationsGovDefense.en[key] ?? key
+	);
 }

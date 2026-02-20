@@ -7,10 +7,10 @@
  *   2. Componentize the bundle → WASM component via @bytecodealliance/componentize-js
  */
 
-import { componentize } from "@bytecodealliance/componentize-js";
-import { writeFile, mkdir } from "node:fs/promises";
-import { resolve, dirname } from "node:path";
+import { mkdir, writeFile } from "node:fs/promises";
+import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { componentize } from "@bytecodealliance/componentize-js";
 import { build } from "esbuild";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -18,37 +18,37 @@ const outDir = resolve(__dirname, "build");
 const distDir = resolve(__dirname, "dist");
 
 async function main() {
-  console.log("[1/2] Bundling TypeScript...");
+	console.log("[1/2] Bundling TypeScript...");
 
-  await build({
-    entryPoints: [resolve(__dirname, "src/app.ts")],
-    bundle: true,
-    outfile: resolve(distDir, "app.js"),
-    format: "esm",
-    target: "es2022",
-    platform: "neutral",
-    external: ["flow-like:*"],
-  });
+	await build({
+		entryPoints: [resolve(__dirname, "src/app.ts")],
+		bundle: true,
+		outfile: resolve(distDir, "app.js"),
+		format: "esm",
+		target: "es2022",
+		platform: "neutral",
+		external: ["flow-like:*"],
+	});
 
-  console.log("[2/2] Componentizing to WASM...");
+	console.log("[2/2] Componentizing to WASM...");
 
-  await mkdir(outDir, { recursive: true });
+	await mkdir(outDir, { recursive: true });
 
-  const { component } = await componentize({
-    sourcePath: resolve(distDir, "app.js"),
-    witPath: resolve(__dirname, "wit"),
-    worldName: "flow-like-node",
-    disableFeatures: ["random", "clocks", "http", "stdio", "fetch-event"],
-  });
+	const { component } = await componentize({
+		sourcePath: resolve(distDir, "app.js"),
+		witPath: resolve(__dirname, "wit"),
+		worldName: "flow-like-node",
+		disableFeatures: ["random", "clocks", "http", "stdio", "fetch-event"],
+	});
 
-  const outputPath = resolve(outDir, "node.wasm");
-  await writeFile(outputPath, component);
+	const outputPath = resolve(outDir, "node.wasm");
+	await writeFile(outputPath, component);
 
-  const sizeMB = (component.byteLength / (1024 * 1024)).toFixed(2);
-  console.log(`Done! ${outputPath} (${sizeMB} MB)`);
+	const sizeMB = (component.byteLength / (1024 * 1024)).toFixed(2);
+	console.log(`Done! ${outputPath} (${sizeMB} MB)`);
 }
 
 main().catch((err) => {
-  console.error("Build failed:", err);
-  process.exit(1);
+	console.error("Build failed:", err);
+	process.exit(1);
 });

@@ -1,14 +1,14 @@
-import { enFinance } from "./industry-finance-en";
 import { deFinance } from "./industry-finance-de";
-import { frFinance } from "./industry-finance-fr";
+import { enFinance } from "./industry-finance-en";
 import { esFinance } from "./industry-finance-es";
-import { zhFinance } from "./industry-finance-zh";
+import { frFinance } from "./industry-finance-fr";
+import { itFinance } from "./industry-finance-it";
 import { jaFinance } from "./industry-finance-ja";
 import { koFinance } from "./industry-finance-ko";
-import { ptFinance } from "./industry-finance-pt";
-import { itFinance } from "./industry-finance-it";
 import { nlFinance } from "./industry-finance-nl";
+import { ptFinance } from "./industry-finance-pt";
 import { svFinance } from "./industry-finance-sv";
+import { zhFinance } from "./industry-finance-zh";
 
 export const translationsFinance: Record<string, Record<string, string>> = {
 	en: enFinance,

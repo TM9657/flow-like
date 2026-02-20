@@ -1,7 +1,7 @@
-#[cfg(feature = "execute")]
-use flow_like::flow::execution::{LogLevel, context::ExecutionContext};
 #[cfg(not(feature = "execute"))]
 use flow_like::flow::execution::context::ExecutionContext;
+#[cfg(feature = "execute")]
+use flow_like::flow::execution::{LogLevel, context::ExecutionContext};
 
 use flow_like::flow::{
     node::{Node, NodeLogic},
@@ -77,10 +77,7 @@ impl NodeLogic for MqttDisconnectNode {
         let disconnect_err = {
             let cache = context.cache.read().await;
             if let Some(conn) = cache.get(&session.ref_id) {
-                if let Some(conn) = conn
-                    .as_any()
-                    .downcast_ref::<super::CachedMqttConnection>()
-                {
+                if let Some(conn) = conn.as_any().downcast_ref::<super::CachedMqttConnection>() {
                     let client = conn.client.lock().await;
                     let result = client.disconnect().await.err();
                     conn.close_notify.notify_waiters();

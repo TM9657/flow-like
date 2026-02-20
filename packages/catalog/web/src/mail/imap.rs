@@ -132,7 +132,6 @@ impl ImapConnectNode {
 
 #[cfg(feature = "execute")]
 fn rustls_connector(accept_invalid: bool) -> tokio_rustls::TlsConnector {
-    use rustls_pki_types::ServerName;
     use std::sync::Arc as StdArc;
 
     let config = if accept_invalid {

@@ -23,7 +23,7 @@ pub struct InteractionClaims {
 }
 
 pub struct InteractionJwtParams {
-    pub sub : String,
+    pub sub: String,
     pub interaction_id: String,
     pub ttl_seconds: Option<i64>,
 }
@@ -48,8 +48,7 @@ pub fn sign_responder(params: InteractionJwtParams) -> Result<String, Interactio
 }
 
 pub fn verify_responder(token: &str) -> Result<InteractionClaims, InteractionJwtError> {
-    let claims: InteractionClaims =
-        backend_jwt::verify(token, TokenType::InteractionResponder)?;
+    let claims: InteractionClaims = backend_jwt::verify(token, TokenType::InteractionResponder)?;
     if claims.token_type != TokenType::InteractionResponder {
         return Err(BackendJwtError::TokenTypeMismatch {
             expected: TokenType::InteractionResponder,

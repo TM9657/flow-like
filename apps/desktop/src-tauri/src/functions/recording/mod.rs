@@ -201,11 +201,7 @@ pub async fn stop_recording(handler: AppHandle) -> Result<Vec<RecordedAction>, T
         for _ in 0..20 {
             flow_like_types::tokio::time::sleep(std::time::Duration::from_millis(50)).await;
             let state = recording_state.inner.read().await;
-            let current = state
-                .session
-                .as_ref()
-                .map(|s| s.actions.len())
-                .unwrap_or(0);
+            let current = state.session.as_ref().map(|s| s.actions.len()).unwrap_or(0);
             if current == last_count {
                 stable_ticks += 1;
                 if stable_ticks >= 3 {
@@ -245,10 +241,7 @@ pub async fn stop_recording(handler: AppHandle) -> Result<Vec<RecordedAction>, T
             .coordinates
             .map(|(x, y)| format!("({}, {})", x, y))
             .unwrap_or_else(|| "N/A".to_string());
-        tracing::debug!(
-            "  Action {}: {:?} at {}",
-            i, action.action_type, coords
-        );
+        tracing::debug!("  Action {}: {:?} at {}", i, action.action_type, coords);
     }
     tracing::info!(
         "[Recording] Stopped with {} actions recorded",

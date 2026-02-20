@@ -13,7 +13,8 @@ export const enDevelopers: Record<string, string> = {
 	"dev.hero.cio.prefix": "Looking for the executive overview?",
 	"dev.hero.cio.link": "For CIOs →",
 	"dev.hero.card.workflows.title": "Compose Workflows",
-	"dev.hero.card.workflows.description": "Drag, connect, deploy — no code required",
+	"dev.hero.card.workflows.description":
+		"Drag, connect, deploy — no code required",
 	"dev.hero.card.nodes.title": "Write Custom Nodes",
 	"dev.hero.card.nodes.description": "15+ languages, compiled to WebAssembly",
 	"dev.hero.converge": "Ship to Production",
@@ -50,7 +51,8 @@ export const enDevelopers: Record<string, string> = {
 	"dev.workflow.step2.title": "Drag nodes from the catalog",
 	"dev.workflow.step2.description": "Search, filter, or browse categories",
 	"dev.workflow.step3.title": "Connect & configure",
-	"dev.workflow.step3.description": "Type-safe wiring with real-time validation",
+	"dev.workflow.step3.description":
+		"Type-safe wiring with real-time validation",
 	"dev.workflow.step4.title": "Run or deploy",
 	"dev.workflow.step4.description": "Local, self-hosted, or cloud",
 	"dev.workflow.cta.docs": "Read the Docs",
@@ -101,10 +103,14 @@ export const enDevelopers: Record<string, string> = {
 	"dev.nodes.quickstart.title": "Quick Start",
 	"dev.nodes.quickstart.description":
 		"Open Flow-Like Studio, pick a language template, and start building your custom node:",
-	"dev.nodes.quickstart.step1": "1. Open Flow-Like Studio and navigate to the Node Developer section",
-	"dev.nodes.quickstart.step2": "2. Pick a language template from 15+ supported languages",
-	"dev.nodes.quickstart.step3": "3. Implement your node logic and build the WASM binary",
-	"dev.nodes.quickstart.step4": "4. Publish directly to your catalog from the Studio",
+	"dev.nodes.quickstart.step1":
+		"1. Open Flow-Like Studio and navigate to the Node Developer section",
+	"dev.nodes.quickstart.step2":
+		"2. Pick a language template from 15+ supported languages",
+	"dev.nodes.quickstart.step3":
+		"3. Implement your node logic and build the WASM binary",
+	"dev.nodes.quickstart.step4":
+		"4. Publish directly to your catalog from the Studio",
 	"dev.nodes.cta.guide": "Node Development Guide",
 	"dev.nodes.cta.templates": "Browse All Templates",
 

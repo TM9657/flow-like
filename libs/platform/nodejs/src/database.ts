@@ -1,13 +1,12 @@
+import type { Connection as LanceConnection } from "@lancedb/lancedb";
 import type { HttpClient } from "./client.js";
 import type {
-	PresignDbAccessResponse,
-	SharedCredentials,
-	LanceConnectionInfo,
-	TableSchema,
-	QueryOptions,
 	CountResult,
+	LanceConnectionInfo,
+	PresignDbAccessResponse,
+	QueryOptions,
+	TableSchema,
 } from "./types.js";
-import type { Connection as LanceConnection } from "@lancedb/lancedb";
 
 function resolveConnectionInfo(
 	resp: PresignDbAccessResponse,
@@ -100,16 +99,10 @@ export function createDatabaseMethods(http: HttpClient) {
 		},
 
 		async listTables(appId: string): Promise<string[]> {
-			return http.request<string[]>(
-				"GET",
-				`/apps/${appId}/db/tables`,
-			);
+			return http.request<string[]>("GET", `/apps/${appId}/db/tables`);
 		},
 
-		async getTableSchema(
-			appId: string,
-			table: string,
-		): Promise<TableSchema> {
+		async getTableSchema(appId: string, table: string): Promise<TableSchema> {
 			return http.request<TableSchema>(
 				"GET",
 				`/apps/${appId}/db/${table}/schema`,
@@ -143,17 +136,12 @@ export function createDatabaseMethods(http: HttpClient) {
 			table: string,
 			filter: string,
 		): Promise<void> {
-			await http.request(
-				"DELETE",
-				`/apps/${appId}/db/${table}/delete`,
-				{ body: { filter } },
-			);
+			await http.request("DELETE", `/apps/${appId}/db/${table}/delete`, {
+				body: { filter },
+			});
 		},
 
-		async countItems(
-			appId: string,
-			table: string,
-		): Promise<CountResult> {
+		async countItems(appId: string, table: string): Promise<CountResult> {
 			return http.request<CountResult>(
 				"GET",
 				`/apps/${appId}/db/${table}/count`,

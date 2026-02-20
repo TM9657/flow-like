@@ -1,8 +1,8 @@
 import type { HttpClient, SSEChunk } from "./client.js";
 import type {
 	AsyncInvokeResult,
-	InvokeBoardRequest,
 	InvokeBoardQuery,
+	InvokeBoardRequest,
 	TriggerOptions,
 } from "./types.js";
 
@@ -20,19 +20,15 @@ export function createWorkflowMethods(http: HttpClient) {
 				payload,
 				stream_state: true,
 			};
-			return http.streamSSE(
-				"POST",
-				`/apps/${appId}/board/${boardId}/invoke`,
-				{
-					body,
-					headers: options?.headers,
-					signal: options?.signal,
-					query: {
-						local: options?.local ? "true" : undefined,
-						isolated: options?.isolated ? "true" : undefined,
-					},
+			return http.streamSSE("POST", `/apps/${appId}/board/${boardId}/invoke`, {
+				body,
+				headers: options?.headers,
+				signal: options?.signal,
+				query: {
+					local: options?.local ? "true" : undefined,
+					isolated: options?.isolated ? "true" : undefined,
 				},
-			);
+			});
 		},
 
 		async triggerWorkflowAsync(

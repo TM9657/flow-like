@@ -11,7 +11,7 @@ import (
 	"strconv"
 	"strings"
 
-	sdk "github.com/example/flow-like-wasm-sdk-go"
+	sdk "github.com/TM9657/flow-like/libs/wasm-sdk/wasm-sdk-go"
 )
 
 // get_node returns the node definition as a packed i64 (ptr<<32|len).

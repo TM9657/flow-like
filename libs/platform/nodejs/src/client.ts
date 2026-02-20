@@ -1,6 +1,6 @@
-import type { AuthConfig } from "./types.js";
 import { buildAuthHeaders } from "./auth.js";
-import { FlowLikeError, NotFoundError, AuthError } from "./errors.js";
+import { AuthError, FlowLikeError, NotFoundError } from "./errors.js";
+import type { AuthConfig } from "./types.js";
 
 export function stripTrailingSlashes(url: string): string {
 	let i = url.length;
@@ -43,9 +43,10 @@ function buildQueryString(
 	params?: Record<string, string | number | undefined>,
 ): string {
 	if (!params) return "";
-	const entries = Object.entries(params).filter(
-		([, v]) => v !== undefined,
-	) as [string, string | number][];
+	const entries = Object.entries(params).filter(([, v]) => v !== undefined) as [
+		string,
+		string | number,
+	][];
 	if (entries.length === 0) return "";
 	const qs = new URLSearchParams(
 		entries.map(([k, v]) => [k, String(v)] as [string, string]),

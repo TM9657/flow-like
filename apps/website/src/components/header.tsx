@@ -143,33 +143,37 @@ function NavDropdown({
 					<div className="bg-background/95 backdrop-blur-lg border border-border/50 rounded-xl shadow-xl shadow-black/10 p-2 min-w-[240px]">
 						{items.map((item) => (
 							<div key={item.href}>
-								{item.divider && <div className="my-1.5 mx-2 border-t border-border/30" />}
+								{item.divider && (
+									<div className="my-1.5 mx-2 border-t border-border/30" />
+								)}
 								<a
-								href={item.href}
-								target={item.external ? "_blank" : undefined}
-								rel={item.external ? "noreferrer" : undefined}
-								className={`flex items-start gap-3 px-3 py-2.5 rounded-lg transition-colors duration-300 ${
-									item.highlight
-										? "text-primary hover:bg-primary/10"
-										: "text-foreground/80 hover:bg-muted/50"
-								}`}
-								onClick={() => setOpen(false)}
-							>
-								{item.icon && <item.icon className="w-4 h-4 mt-0.5 shrink-0" />}
-								<div className="flex-1 min-w-0">
-									<div className="flex items-center gap-1.5">
-										<span className="font-medium text-sm">{item.label}</span>
-										{item.external && (
-											<LuExternalLink className="w-3 h-3 opacity-50" />
+									href={item.href}
+									target={item.external ? "_blank" : undefined}
+									rel={item.external ? "noreferrer" : undefined}
+									className={`flex items-start gap-3 px-3 py-2.5 rounded-lg transition-colors duration-300 ${
+										item.highlight
+											? "text-primary hover:bg-primary/10"
+											: "text-foreground/80 hover:bg-muted/50"
+									}`}
+									onClick={() => setOpen(false)}
+								>
+									{item.icon && (
+										<item.icon className="w-4 h-4 mt-0.5 shrink-0" />
+									)}
+									<div className="flex-1 min-w-0">
+										<div className="flex items-center gap-1.5">
+											<span className="font-medium text-sm">{item.label}</span>
+											{item.external && (
+												<LuExternalLink className="w-3 h-3 opacity-50" />
+											)}
+										</div>
+										{item.description && (
+											<p className="text-xs text-muted-foreground mt-0.5 line-clamp-2">
+												{item.description}
+											</p>
 										)}
 									</div>
-									{item.description && (
-										<p className="text-xs text-muted-foreground mt-0.5 line-clamp-2">
-											{item.description}
-										</p>
-									)}
-								</div>
-							</a>
+								</a>
 							</div>
 						))}
 					</div>
@@ -339,12 +343,37 @@ function MobileMenu({
 								label="For CIOs"
 								onClick={onClose}
 							/>
-						<div className="my-1 mx-2 border-t border-border/20" />
-							<MobileNavItem href="/industries/shopfloor" icon={LuFactory} label="Shopfloor" onClick={onClose} />
-							<MobileNavItem href="/industries/finance" icon={LuLandmark} label="Finance" onClick={onClose} />
-							<MobileNavItem href="/industries/office" icon={LuFileStack} label="Office" onClick={onClose} />
-							<MobileNavItem href="/industries/ai-agents" icon={LuBot} label="AI Agents" onClick={onClose} />
-							<MobileNavItem href="/industries/gov-defense" icon={LuShieldCheck} label="Gov & Defense" onClick={onClose} />
+							<div className="my-1 mx-2 border-t border-border/20" />
+							<MobileNavItem
+								href="/industries/shopfloor"
+								icon={LuFactory}
+								label="Shopfloor"
+								onClick={onClose}
+							/>
+							<MobileNavItem
+								href="/industries/finance"
+								icon={LuLandmark}
+								label="Finance"
+								onClick={onClose}
+							/>
+							<MobileNavItem
+								href="/industries/office"
+								icon={LuFileStack}
+								label="Office"
+								onClick={onClose}
+							/>
+							<MobileNavItem
+								href="/industries/ai-agents"
+								icon={LuBot}
+								label="AI Agents"
+								onClick={onClose}
+							/>
+							<MobileNavItem
+								href="/industries/gov-defense"
+								icon={LuShieldCheck}
+								label="Gov & Defense"
+								onClick={onClose}
+							/>
 						</div>
 					</div>
 

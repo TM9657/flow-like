@@ -430,7 +430,7 @@ export class WebUserState implements IUserState {
 	}
 
 	async deletePAT(id: string): Promise<void> {
-		await apiDelete("user/pat", this.backend.auth, { id });
+		await apiDelete(`user/pat/${id}`, this.backend.auth);
 	}
 
 	async getPricing(): Promise<IPricingResponse> {

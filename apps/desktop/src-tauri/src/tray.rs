@@ -188,7 +188,9 @@ pub fn init_tray(app_handle: &AppHandle) -> tauri::Result<()> {
 
                     if is_recording {
                         // Deactivate capture immediately so the tray click isn't recorded
-                        if let Some(rec_state) = app.try_state::<crate::state::TauriRecordingState>() {
+                        if let Some(rec_state) =
+                            app.try_state::<crate::state::TauriRecordingState>()
+                        {
                             let capture = rec_state.capture.read().await;
                             if let Some(c) = capture.as_ref() {
                                 c.set_active(false);
@@ -241,9 +243,9 @@ fn generate_stop_icon() -> Vec<u8> {
 
             if dist <= radius {
                 // Red circle
-                rgba[idx] = 220;     // R
-                rgba[idx + 1] = 50;  // G
-                rgba[idx + 2] = 50;  // B
+                rgba[idx] = 220; // R
+                rgba[idx + 1] = 50; // G
+                rgba[idx + 2] = 50; // B
                 // Anti-alias the edge
                 let alpha = if dist > radius - 1.0 {
                     ((radius - dist).max(0.0) * 255.0) as u8

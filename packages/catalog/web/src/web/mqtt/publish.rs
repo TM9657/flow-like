@@ -1,7 +1,7 @@
-#[cfg(feature = "execute")]
-use flow_like::flow::execution::{LogLevel, context::ExecutionContext};
 #[cfg(not(feature = "execute"))]
 use flow_like::flow::execution::context::ExecutionContext;
+#[cfg(feature = "execute")]
+use flow_like::flow::execution::{LogLevel, context::ExecutionContext};
 
 use flow_like::flow::{
     node::{Node, NodeLogic},
@@ -10,9 +10,9 @@ use flow_like::flow::{
 };
 use flow_like_types::{async_trait, json::json};
 
-use super::MqttSession;
 #[cfg(feature = "execute")]
 use super::MqttQoS;
+use super::MqttSession;
 
 #[crate::register_node]
 #[derive(Default)]
@@ -125,7 +125,12 @@ impl NodeLogic for MqttPublishNode {
         let client = conn.client.lock().await;
 
         client
-            .publish(&topic, super::to_rumqttc_qos(&qos), retain, payload.as_bytes())
+            .publish(
+                &topic,
+                super::to_rumqttc_qos(&qos),
+                retain,
+                payload.as_bytes(),
+            )
             .await
             .map_err(|e| {
                 context.log_message(&format!("MQTT publish error: {}", e), LogLevel::Error);

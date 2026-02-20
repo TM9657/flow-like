@@ -19,7 +19,6 @@ import type {
 	SearchFilters,
 	SearchResults,
 } from "@tm9657/flow-like-ui/lib/schema/wasm";
-import { usePackageStatusMap } from "../../../../hooks/use-package-status";
 import {
 	Check,
 	Download,
@@ -32,6 +31,7 @@ import {
 } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
+import { usePackageStatusMap } from "../../../../hooks/use-package-status";
 
 type SortOption =
 	| "relevance"
@@ -114,8 +114,7 @@ function PackageItem({
 				{isInstalled ? (
 					<div className="flex items-center gap-2">
 						<span className="text-[11px] text-muted-foreground/60 flex items-center gap-1">
-							<Check className="h-3 w-3 text-green-500/70" />
-							v{installedVersion}
+							<Check className="h-3 w-3 text-green-500/70" />v{installedVersion}
 						</span>
 						<Button
 							size="sm"
@@ -335,9 +334,7 @@ export default function ExplorePackagesPage() {
 					}}
 					disabled={isLoading}
 				>
-					<RefreshCw
-						className={`h-4 w-4 ${isLoading ? "animate-spin" : ""}`}
-					/>
+					<RefreshCw className={`h-4 w-4 ${isLoading ? "animate-spin" : ""}`} />
 				</Button>
 			</div>
 

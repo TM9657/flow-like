@@ -76,10 +76,10 @@ impl NodeLogic for UdpCloseNode {
 
         {
             let cache = context.cache.read().await;
-            if let Some(conn) = cache.get(&session.ref_id) {
-                if let Some(conn) = conn.as_any().downcast_ref::<super::CachedUdpSocket>() {
-                    conn.close_notify.notify_waiters();
-                }
+            if let Some(conn) = cache.get(&session.ref_id)
+                && let Some(conn) = conn.as_any().downcast_ref::<super::CachedUdpSocket>()
+            {
+                conn.close_notify.notify_waiters();
             }
         }
 

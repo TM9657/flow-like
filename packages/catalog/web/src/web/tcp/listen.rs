@@ -1,9 +1,9 @@
+#[cfg(not(feature = "execute"))]
+use flow_like::flow::execution::context::ExecutionContext;
 #[cfg(feature = "execute")]
 use flow_like::flow::execution::{
     LogLevel, context::ExecutionContext, internal_node::InternalNode, log::LogMessage,
 };
-#[cfg(not(feature = "execute"))]
-use flow_like::flow::execution::context::ExecutionContext;
 
 use flow_like::flow::{
     node::{Node, NodeLogic},
@@ -111,7 +111,9 @@ impl NodeLogic for TcpListenNode {
         let referenced_fns = context.get_referenced_functions().await?;
         let handler = referenced_fns
             .first()
-            .ok_or_else(|| flow_like_types::anyhow!("No on-connection handler function referenced"))?
+            .ok_or_else(|| {
+                flow_like_types::anyhow!("No on-connection handler function referenced")
+            })?
             .clone();
 
         let addr = format!("{}:{}", config.host, config.port);

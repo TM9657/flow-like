@@ -1,5 +1,5 @@
-use flow_like_types::interaction::submit_interaction_response;
 use flow_like_types::Value;
+use flow_like_types::interaction::submit_interaction_response;
 use tauri::AppHandle;
 
 use crate::functions::TauriFunctionError;

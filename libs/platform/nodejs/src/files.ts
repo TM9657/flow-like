@@ -1,11 +1,11 @@
 import type { HttpClient } from "./client.js";
 import type {
+	DownloadFileOptions,
 	ListFilesOptions,
 	ListFilesResult,
-	UploadFileOptions,
-	DownloadFileOptions,
 	PresignOptions,
 	PresignResult,
+	UploadFileOptions,
 } from "./types.js";
 
 export function createFileMethods(http: HttpClient) {
@@ -14,17 +14,13 @@ export function createFileMethods(http: HttpClient) {
 			appId: string,
 			options?: ListFilesOptions,
 		): Promise<ListFilesResult> {
-			return http.request<ListFilesResult>(
-				"GET",
-				`/apps/${appId}/data/list`,
-				{
-					query: {
-						prefix: options?.prefix,
-						cursor: options?.cursor,
-						limit: options?.limit,
-					},
+			return http.request<ListFilesResult>("GET", `/apps/${appId}/data/list`, {
+				query: {
+					prefix: options?.prefix,
+					cursor: options?.cursor,
+					limit: options?.limit,
 				},
-			);
+			});
 		},
 
 		async uploadFile(
@@ -33,8 +29,7 @@ export function createFileMethods(http: HttpClient) {
 			options?: UploadFileOptions,
 		): Promise<unknown> {
 			const formData = new FormData();
-			const blob =
-				file instanceof Blob ? file : new Blob([file as Buffer]);
+			const blob = file instanceof Blob ? file : new Blob([file as Buffer]);
 			formData.append("file", blob, options?.key);
 
 			const headers: Record<string, string> = {};

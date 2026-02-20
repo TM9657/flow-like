@@ -441,8 +441,16 @@ pub async fn jwt_middleware(
                     request.extensions_mut().insert::<AppUser>(user);
                     return Ok(next.run(request).await);
                 }
-                CachedAuth::Executor { sub, app_id, run_id } => {
-                    let user = AppUser::Executor(ExecutorUser { sub, app_id, run_id });
+                CachedAuth::Executor {
+                    sub,
+                    app_id,
+                    run_id,
+                } => {
+                    let user = AppUser::Executor(ExecutorUser {
+                        sub,
+                        app_id,
+                        run_id,
+                    });
                     request.extensions_mut().insert::<AppUser>(user);
                     return Ok(next.run(request).await);
                 }

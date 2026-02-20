@@ -127,7 +127,9 @@ impl NodeLogic for FindTemplateNode {
         // Use xcap screen capture + direct NCC (bypasses rustautogui's broken macOS capture)
         let (matches, _gray_template, _gray_screen) =
             crate::types::screen_match::find_template_on_screen(&template_bytes, confidence as f32)
-                .ok_or_else(|| flow_like_types::anyhow!("Failed to capture screen or decode template"))?;
+                .ok_or_else(|| {
+                    flow_like_types::anyhow!("Failed to capture screen or decode template")
+                })?;
 
         let (found, x, y) = if let Some(&(px, py, _conf)) = matches.first() {
             let (lx, ly) = crate::types::screen_match::physical_to_logical(px, py);
@@ -261,7 +263,9 @@ impl NodeLogic for FindAllTemplatesNode {
         // Use xcap screen capture + direct NCC (bypasses rustautogui's broken macOS capture)
         let (matches, _gray_template, _gray_screen) =
             crate::types::screen_match::find_template_on_screen(&template_bytes, confidence as f32)
-                .ok_or_else(|| flow_like_types::anyhow!("Failed to capture screen or decode template"))?;
+                .ok_or_else(|| {
+                    flow_like_types::anyhow!("Failed to capture screen or decode template")
+                })?;
 
         let results: Vec<TemplateMatchResult> = matches
             .into_iter()

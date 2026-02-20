@@ -1,11 +1,11 @@
 #[cfg(feature = "execute")]
 use ahash::AHashSet;
+#[cfg(not(feature = "execute"))]
+use flow_like::flow::execution::context::ExecutionContext;
 #[cfg(feature = "execute")]
 use flow_like::flow::execution::{
     LogLevel, context::ExecutionContext, internal_node::InternalNode, log::LogMessage,
 };
-#[cfg(not(feature = "execute"))]
-use flow_like::flow::execution::context::ExecutionContext;
 
 use flow_like::flow::{
     node::{Node, NodeLogic},
@@ -124,8 +124,7 @@ impl NodeLogic for WebSocketConnectNode {
             .ok_or_else(|| flow_like_types::anyhow!("No on-message handler function referenced"))?
             .clone();
 
-        let mut request =
-            tokio_tungstenite::tungstenite::http::Request::builder().uri(&config.url);
+        let mut request = tokio_tungstenite::tungstenite::http::Request::builder().uri(&config.url);
 
         if let Some(headers) = &config.headers {
             for (key, value) in headers {
@@ -193,13 +192,12 @@ impl NodeLogic for WebSocketConnectNode {
                 _ = tokio::time::sleep(std::time::Duration::from_secs(timeout)) => {
                     context.log_message("WebSocket connection timed out", LogLevel::Warn);
                     let cache = context.cache.read().await;
-                    if let Some(conn) = cache.get(&ref_id) {
-                        if let Some(conn) = conn.as_any().downcast_ref::<CachedWebSocketConnection>() {
+                    if let Some(conn) = cache.get(&ref_id)
+                        && let Some(conn) = conn.as_any().downcast_ref::<CachedWebSocketConnection>() {
                             let mut sink = conn.sink.lock().await;
                             use futures::SinkExt;
                             let _ = sink.close().await;
                         }
-                    }
                 }
             }
         } else {
@@ -272,10 +270,7 @@ async fn spawn_message_reader(
     let sub = Arc::new(Mutex::new(
         context.create_sub_context(&on_message_node).await,
     ));
-    connected_nodes.insert(
-        on_message_node.node.lock().await.id.clone(),
-        sub,
-    );
+    connected_nodes.insert(on_message_node.node.lock().await.id.clone(), sub);
 
     let parent_node_id = context.node.node.lock().await.id.clone();
 
@@ -345,71 +340,52 @@ async fn spawn_message_reader(
                                     pin.set_value(json!(text.as_str())).await;
                                 }
                             }
-                        } else {
-                            if let Ok(parsed) =
-                                flow_like_types::json::from_str::<flow_like_types::Value>(text)
-                            {
-                                if let Some(obj) = parsed.as_object() {
-                                    let mut remaining = obj.clone();
-                                    let pins: Vec<_> = ctx
-                                        .node
-                                        .pins
-                                        .iter()
-                                        .filter(|(_, p)| {
-                                            p.pin_type == PinType::Output
-                                                && p.data_type != VariableType::Execution
-                                                && p.name != "payload"
-                                        })
-                                        .map(|(_, p)| (p.name.clone(), p.clone()))
-                                        .collect();
+                        } else if let Ok(parsed) =
+                            flow_like_types::json::from_str::<flow_like_types::Value>(text)
+                        {
+                            if let Some(obj) = parsed.as_object() {
+                                let mut remaining = obj.clone();
+                                let pins: Vec<_> = ctx
+                                    .node
+                                    .pins
+                                    .iter()
+                                    .filter(|(_, p)| {
+                                        p.pin_type == PinType::Output
+                                            && p.data_type != VariableType::Execution
+                                            && p.name != "payload"
+                                    })
+                                    .map(|(_, p)| (p.name.clone(), p.clone()))
+                                    .collect();
 
-                                    for (name, pin) in &pins {
-                                        if let Some(val) = remaining.remove(name) {
+                                for (name, pin) in &pins {
+                                    if let Some(val) = remaining.remove(name) {
+                                        pin.set_value(val).await;
+                                    } else {
+                                        let normalized = name.to_lowercase().replace('_', "");
+                                        let key = remaining
+                                            .keys()
+                                            .find(|k| {
+                                                k.to_lowercase().replace('_', "") == normalized
+                                            })
+                                            .cloned();
+                                        if let Some(k) = key
+                                            && let Some(val) = remaining.remove(&k)
+                                        {
                                             pin.set_value(val).await;
-                                        } else {
-                                            let normalized =
-                                                name.to_lowercase().replace('_', "");
-                                            let key = remaining
-                                                .keys()
-                                                .find(|k| {
-                                                    k.to_lowercase().replace('_', "")
-                                                        == normalized
-                                                })
-                                                .cloned();
-                                            if let Some(k) = key {
-                                                if let Some(val) = remaining.remove(&k) {
-                                                    pin.set_value(val).await;
-                                                }
-                                            }
                                         }
                                     }
-                                    let payload_pins: Vec<_> = ctx
-                                        .node
-                                        .pins
-                                        .iter()
-                                        .filter(|(_, p)| {
-                                            p.pin_type == PinType::Output
-                                                && p.name == "payload"
-                                        })
-                                        .map(|(_, p)| p.clone())
-                                        .collect();
-                                    for pin in payload_pins {
-                                        pin.set_value(json!(remaining)).await;
-                                    }
-                                } else {
-                                    let payload_pins: Vec<_> = ctx
-                                        .node
-                                        .pins
-                                        .iter()
-                                        .filter(|(_, p)| {
-                                            p.pin_type == PinType::Output
-                                                && p.name == "payload"
-                                        })
-                                        .map(|(_, p)| p.clone())
-                                        .collect();
-                                    for pin in payload_pins {
-                                        pin.set_value(parsed.clone()).await;
-                                    }
+                                }
+                                let payload_pins: Vec<_> = ctx
+                                    .node
+                                    .pins
+                                    .iter()
+                                    .filter(|(_, p)| {
+                                        p.pin_type == PinType::Output && p.name == "payload"
+                                    })
+                                    .map(|(_, p)| p.clone())
+                                    .collect();
+                                for pin in payload_pins {
+                                    pin.set_value(json!(remaining)).await;
                                 }
                             } else {
                                 let payload_pins: Vec<_> = ctx
@@ -422,8 +398,21 @@ async fn spawn_message_reader(
                                     .map(|(_, p)| p.clone())
                                     .collect();
                                 for pin in payload_pins {
-                                    pin.set_value(json!(text.as_str())).await;
+                                    pin.set_value(parsed.clone()).await;
                                 }
+                            }
+                        } else {
+                            let payload_pins: Vec<_> = ctx
+                                .node
+                                .pins
+                                .iter()
+                                .filter(|(_, p)| {
+                                    p.pin_type == PinType::Output && p.name == "payload"
+                                })
+                                .map(|(_, p)| p.clone())
+                                .collect();
+                            for pin in payload_pins {
+                                pin.set_value(json!(text.as_str())).await;
                             }
                         }
                     }
@@ -464,12 +453,8 @@ async fn spawn_message_reader(
 
                 let mut log_message =
                     LogMessage::new("WebSocket on_message", LogLevel::Debug, None);
-                let run = InternalNode::trigger(
-                    &mut ctx,
-                    &mut Some(recursion_guard.clone()),
-                    true,
-                )
-                .await;
+                let run =
+                    InternalNode::trigger(&mut ctx, &mut Some(recursion_guard.clone()), true).await;
                 log_message.end();
                 ctx.log(log_message);
                 ctx.end_trace();
@@ -483,11 +468,11 @@ async fn spawn_message_reader(
     });
 
     let cache = context.cache.read().await;
-    if let Some(conn) = cache.get(ref_id) {
-        if let Some(conn) = conn.as_any().downcast_ref::<CachedWebSocketConnection>() {
-            let mut guard = conn.reader_handle.lock().await;
-            *guard = Some(handle);
-        }
+    if let Some(conn) = cache.get(ref_id)
+        && let Some(conn) = conn.as_any().downcast_ref::<CachedWebSocketConnection>()
+    {
+        let mut guard = conn.reader_handle.lock().await;
+        *guard = Some(handle);
     }
 
     Ok(())

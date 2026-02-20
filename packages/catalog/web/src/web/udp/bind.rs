@@ -5,10 +5,10 @@ use flow_like::flow::{
 };
 use flow_like_types::async_trait;
 
-#[cfg(feature = "execute")]
-use flow_like::flow::execution::{LogLevel, context::ExecutionContext};
 #[cfg(not(feature = "execute"))]
 use flow_like::flow::execution::context::ExecutionContext;
+#[cfg(feature = "execute")]
+use flow_like::flow::execution::{LogLevel, context::ExecutionContext};
 
 #[cfg(feature = "execute")]
 use flow_like_types::Cacheable;
@@ -119,10 +119,7 @@ impl NodeLogic for UdpBindNode {
         let cacheable: Arc<dyn Cacheable> = Arc::new(cached);
         context.set_cache(&ref_id, cacheable).await;
 
-        let session = UdpSession {
-            ref_id,
-            local_addr,
-        };
+        let session = UdpSession { ref_id, local_addr };
         context.set_pin_value("session", json!(session)).await?;
 
         context.deactivate_exec_pin("exec_error").await?;

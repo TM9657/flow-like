@@ -80,11 +80,17 @@ fn list_all_files(dir: &std::path::Path, depth: usize) {
             let path = entry.path();
             let indent = "  ".repeat(depth);
             if path.is_dir() {
-                println!("{indent}[dir] {}", path.file_name().unwrap_or_default().to_string_lossy());
+                println!(
+                    "{indent}[dir] {}",
+                    path.file_name().unwrap_or_default().to_string_lossy()
+                );
                 list_all_files(&path, depth + 1);
             } else {
                 let size = std::fs::metadata(&path).map(|m| m.len()).unwrap_or(0);
-                println!("{indent}{} ({size} bytes)", path.file_name().unwrap_or_default().to_string_lossy());
+                println!(
+                    "{indent}{} ({size} bytes)",
+                    path.file_name().unwrap_or_default().to_string_lossy()
+                );
             }
         }
     }

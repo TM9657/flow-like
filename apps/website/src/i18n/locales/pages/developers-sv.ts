@@ -13,7 +13,8 @@ export const svDevelopers: Record<string, string> = {
 	"dev.hero.cio.prefix": "Letar du efter den övergripande sammanfattningen?",
 	"dev.hero.cio.link": "För CIO:er →",
 	"dev.hero.card.workflows.title": "Skapa Arbetsflöden",
-	"dev.hero.card.workflows.description": "Dra, koppla, driftsätt — ingen kod krävs",
+	"dev.hero.card.workflows.description":
+		"Dra, koppla, driftsätt — ingen kod krävs",
 	"dev.hero.card.nodes.title": "Skriv Egna Noder",
 	"dev.hero.card.nodes.description": "15+ språk, kompilerade till WebAssembly",
 	"dev.hero.converge": "Driftsätt i produktion",
@@ -48,7 +49,8 @@ export const svDevelopers: Record<string, string> = {
 	"dev.workflow.step1.title": "Öppna den visuella arbetsytan",
 	"dev.workflow.step1.description": "I skrivbordsappen eller webbstudion",
 	"dev.workflow.step2.title": "Dra noder från katalogen",
-	"dev.workflow.step2.description": "Sök, filtrera eller bläddra bland kategorier",
+	"dev.workflow.step2.description":
+		"Sök, filtrera eller bläddra bland kategorier",
 	"dev.workflow.step3.title": "Koppla & konfigurera",
 	"dev.workflow.step3.description": "Typsäker koppling med realtidsvalidering",
 	"dev.workflow.step4.title": "Kör eller driftsätt",
@@ -101,10 +103,13 @@ export const svDevelopers: Record<string, string> = {
 	"dev.nodes.quickstart.title": "Kom Igång Snabbt",
 	"dev.nodes.quickstart.description":
 		"Öppna Flow-Like Studio, välj en språkmall och börja bygga din anpassade nod:",
-	"dev.nodes.quickstart.step1": "1. Öppna Flow-Like Studio och navigera till Nodutvecklarsektionen",
+	"dev.nodes.quickstart.step1":
+		"1. Öppna Flow-Like Studio och navigera till Nodutvecklarsektionen",
 	"dev.nodes.quickstart.step2": "2. Välj en mall bland över 15 stödda språk",
-	"dev.nodes.quickstart.step3": "3. Implementera din nodlogik och bygg WASM-binären",
-	"dev.nodes.quickstart.step4": "4. Publicera direkt till din katalog från Studio",
+	"dev.nodes.quickstart.step3":
+		"3. Implementera din nodlogik och bygg WASM-binären",
+	"dev.nodes.quickstart.step4":
+		"4. Publicera direkt till din katalog från Studio",
 	"dev.nodes.cta.guide": "Guide för Nodutveckling",
 	"dev.nodes.cta.templates": "Bläddra Bland Alla Mallar",
 

@@ -1,18 +1,18 @@
-import { resolveAuth } from "./auth.js";
-import { createHttpClient, type HttpClient, type SSEChunk } from "./client.js";
-import { createWorkflowMethods } from "./workflows.js";
-import { createEventMethods } from "./events.js";
-import { createFileMethods } from "./files.js";
-import { createDatabaseMethods } from "./database.js";
-import { createExecutionMethods } from "./execution.js";
-import { createSinkMethods } from "./sinks.js";
-import { createChatMethods } from "./chat.js";
-import { createEmbeddingMethods } from "./embeddings.js";
 import { createAppMethods } from "./apps.js";
+import { resolveAuth } from "./auth.js";
 import { createBitMethods } from "./bits.js";
 import { createBoardMethods } from "./boards.js";
+import { createChatMethods } from "./chat.js";
+import { type HttpClient, createHttpClient } from "./client.js";
+import { createDatabaseMethods } from "./database.js";
+import { createEmbeddingMethods } from "./embeddings.js";
+import { FlowLikeError } from "./errors.js";
+import { createEventMethods } from "./events.js";
+import { createExecutionMethods } from "./execution.js";
+import { createFileMethods } from "./files.js";
+import { createSinkMethods } from "./sinks.js";
 import type { FlowLikeClientOptions } from "./types.js";
-import { FlowLikeError, AuthError } from "./errors.js";
+import { createWorkflowMethods } from "./workflows.js";
 
 export type { Connection as LanceConnection } from "@lancedb/lancedb";
 
@@ -64,8 +64,7 @@ export class FlowLikeClient {
 	readonly executeCommands;
 
 	constructor(options?: FlowLikeClientOptions) {
-		const baseUrl =
-			options?.baseUrl ?? process.env.FLOW_LIKE_BASE_URL;
+		const baseUrl = options?.baseUrl ?? process.env.FLOW_LIKE_BASE_URL;
 
 		if (!baseUrl) {
 			throw new FlowLikeError(
@@ -144,7 +143,12 @@ export class FlowLikeClient {
 
 	async asLangChainChat(
 		bitId: string,
-		options?: { temperature?: number; maxTokens?: number; topP?: number; stop?: string[] },
+		options?: {
+			temperature?: number;
+			maxTokens?: number;
+			topP?: number;
+			stop?: string[];
+		},
 	) {
 		const { FlowLikeChatModel } = await import("./langchain.js");
 		return new FlowLikeChatModel({

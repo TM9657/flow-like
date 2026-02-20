@@ -30,8 +30,8 @@ function readTheme(): ThemeSnapshot {
 	const dynamicStyle = document.getElementById("dynamic-theme");
 	if (dynamicStyle?.textContent) {
 		const section = isDark
-			? dynamicStyle.textContent.split(/\.dark\b/)[1] ?? ""
-			: dynamicStyle.textContent.split(":root")[1]?.split("}")[0] ?? "";
+			? (dynamicStyle.textContent.split(/\.dark\b/)[1] ?? "")
+			: (dynamicStyle.textContent.split(":root")[1]?.split("}")[0] ?? "");
 		const varMatch = section.match(
 			/--primary\s*:\s*oklch\(\s*[\d.%]+\s+[\d.]+\s+([\d.]+)\s*\)/,
 		);

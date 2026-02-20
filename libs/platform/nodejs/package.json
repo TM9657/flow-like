@@ -16,20 +16,12 @@
 			"types": "./dist/langchain.d.ts"
 		}
 	},
-	"files": [
-		"dist",
-		"README.md"
-	],
+	"files": ["dist", "README.md"],
 	"scripts": {
 		"build": "tsc",
 		"prepublishOnly": "tsc"
 	},
-	"keywords": [
-		"flow-like",
-		"sdk",
-		"api",
-		"workflow"
-	],
+	"keywords": ["flow-like", "sdk", "api", "workflow"],
 	"license": "MIT",
 	"engines": {
 		"node": ">=18.0.0"

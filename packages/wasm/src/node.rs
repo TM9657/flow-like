@@ -386,7 +386,7 @@ impl NodeLogic for WasmNodeLogic {
         let node_id = context.id.clone();
 
         // Build app_id and board_id from execution cache
-        let (app_id, board_id, sub, board_dir) =
+        let (app_id, board_id, sub, _board_dir) =
             if let Some(ref exec_cache) = context.execution_cache {
                 (
                     exec_cache.app_id.clone(),

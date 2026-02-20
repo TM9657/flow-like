@@ -252,7 +252,7 @@ impl LogMeta {
                 Ok(_) => {
                     return Ok(());
                 }
-                Err(e) => {
+                Err(_e) => {
                     // Table is corrupted (e.g. from failed hard_link on Android), drop and recreate
                     let _ = db.drop_table("runs", &[]).await;
                 }
@@ -516,7 +516,7 @@ impl PreparedFlush {
                 }
                 add.execute().await?;
             }
-            Err(open_err) => {
+            Err(_open_err) => {
                 // Try to drop any corrupted/partial table first
                 if let Err(e) = db.drop_table(&self.run_id, &[]).await {
                     eprintln!(

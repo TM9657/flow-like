@@ -17,7 +17,6 @@ import type {
 	InstalledPackage,
 	PackageUpdate,
 } from "@tm9657/flow-like-ui/lib/schema/wasm";
-import { usePackageStatusMap } from "../../../../hooks/use-package-status";
 import {
 	AlertTriangle,
 	FolderOpen,
@@ -32,6 +31,7 @@ import {
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
+import { usePackageStatusMap } from "../../../../hooks/use-package-status";
 
 function PackageItem({
 	pkg,

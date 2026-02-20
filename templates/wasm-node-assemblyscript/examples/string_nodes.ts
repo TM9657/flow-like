@@ -1,14 +1,18 @@
 import {
+	type Context,
 	DataType,
-	ExecutionResult,
-	NodeDefinition,
-	PinDefinition,
-	Context,
+	type ExecutionResult,
 	FlowNode,
+	NodeDefinition,
 	NodePackage,
+	PinDefinition,
 } from "@flow-like/wasm-sdk/assembly/index";
 
-export { alloc, dealloc, get_abi_version } from "@flow-like/wasm-sdk/assembly/index";
+export {
+	alloc,
+	dealloc,
+	get_abi_version,
+} from "@flow-like/wasm-sdk/assembly/index";
 
 export class UppercaseNode extends FlowNode {
 	define(): NodeDefinition {
@@ -18,10 +22,28 @@ export class UppercaseNode extends FlowNode {
 		def.description = "Converts text to uppercase";
 		def.category = "String/Transform";
 
-		def.addPin(PinDefinition.input("exec", "Execute", "Trigger", DataType.Exec));
-		def.addPin(PinDefinition.input("text", "Text", "Text to convert", DataType.String).withDefaultString(""));
-		def.addPin(PinDefinition.output("exec_out", "Done", "Complete", DataType.Exec));
-		def.addPin(PinDefinition.output("result", "Result", "Uppercase text", DataType.String));
+		def.addPin(
+			PinDefinition.input("exec", "Execute", "Trigger", DataType.Exec),
+		);
+		def.addPin(
+			PinDefinition.input(
+				"text",
+				"Text",
+				"Text to convert",
+				DataType.String,
+			).withDefaultString(""),
+		);
+		def.addPin(
+			PinDefinition.output("exec_out", "Done", "Complete", DataType.Exec),
+		);
+		def.addPin(
+			PinDefinition.output(
+				"result",
+				"Result",
+				"Uppercase text",
+				DataType.String,
+			),
+		);
 		return def;
 	}
 
@@ -39,10 +61,28 @@ export class LowercaseNode extends FlowNode {
 		def.description = "Converts text to lowercase";
 		def.category = "String/Transform";
 
-		def.addPin(PinDefinition.input("exec", "Execute", "Trigger", DataType.Exec));
-		def.addPin(PinDefinition.input("text", "Text", "Text to convert", DataType.String).withDefaultString(""));
-		def.addPin(PinDefinition.output("exec_out", "Done", "Complete", DataType.Exec));
-		def.addPin(PinDefinition.output("result", "Result", "Lowercase text", DataType.String));
+		def.addPin(
+			PinDefinition.input("exec", "Execute", "Trigger", DataType.Exec),
+		);
+		def.addPin(
+			PinDefinition.input(
+				"text",
+				"Text",
+				"Text to convert",
+				DataType.String,
+			).withDefaultString(""),
+		);
+		def.addPin(
+			PinDefinition.output("exec_out", "Done", "Complete", DataType.Exec),
+		);
+		def.addPin(
+			PinDefinition.output(
+				"result",
+				"Result",
+				"Lowercase text",
+				DataType.String,
+			),
+		);
 		return def;
 	}
 
@@ -60,10 +100,23 @@ export class TrimNode extends FlowNode {
 		def.description = "Removes leading and trailing whitespace";
 		def.category = "String/Transform";
 
-		def.addPin(PinDefinition.input("exec", "Execute", "Trigger", DataType.Exec));
-		def.addPin(PinDefinition.input("text", "Text", "Text to trim", DataType.String).withDefaultString(""));
-		def.addPin(PinDefinition.output("exec_out", "Done", "Complete", DataType.Exec));
-		def.addPin(PinDefinition.output("result", "Result", "Trimmed text", DataType.String));
+		def.addPin(
+			PinDefinition.input("exec", "Execute", "Trigger", DataType.Exec),
+		);
+		def.addPin(
+			PinDefinition.input(
+				"text",
+				"Text",
+				"Text to trim",
+				DataType.String,
+			).withDefaultString(""),
+		);
+		def.addPin(
+			PinDefinition.output("exec_out", "Done", "Complete", DataType.Exec),
+		);
+		def.addPin(
+			PinDefinition.output("result", "Result", "Trimmed text", DataType.String),
+		);
 		return def;
 	}
 
@@ -81,11 +134,36 @@ export class LengthNode extends FlowNode {
 		def.description = "Returns the length of a string";
 		def.category = "String/Analysis";
 
-		def.addPin(PinDefinition.input("exec", "Execute", "Trigger", DataType.Exec));
-		def.addPin(PinDefinition.input("text", "Text", "Text to measure", DataType.String).withDefaultString(""));
-		def.addPin(PinDefinition.output("exec_out", "Done", "Complete", DataType.Exec));
-		def.addPin(PinDefinition.output("length", "Length", "Number of characters", DataType.I64));
-		def.addPin(PinDefinition.output("is_empty", "Is Empty", "True if string is empty", DataType.Bool));
+		def.addPin(
+			PinDefinition.input("exec", "Execute", "Trigger", DataType.Exec),
+		);
+		def.addPin(
+			PinDefinition.input(
+				"text",
+				"Text",
+				"Text to measure",
+				DataType.String,
+			).withDefaultString(""),
+		);
+		def.addPin(
+			PinDefinition.output("exec_out", "Done", "Complete", DataType.Exec),
+		);
+		def.addPin(
+			PinDefinition.output(
+				"length",
+				"Length",
+				"Number of characters",
+				DataType.I64,
+			),
+		);
+		def.addPin(
+			PinDefinition.output(
+				"is_empty",
+				"Is Empty",
+				"True if string is empty",
+				DataType.Bool,
+			),
+		);
 		return def;
 	}
 
@@ -105,16 +183,44 @@ export class ContainsNode extends FlowNode {
 		def.description = "Checks if text contains a substring";
 		def.category = "String/Analysis";
 
-		def.addPin(PinDefinition.input("exec", "Execute", "Trigger", DataType.Exec));
-		def.addPin(PinDefinition.input("text", "Text", "Text to search in", DataType.String).withDefaultString(""));
-		def.addPin(PinDefinition.input("search", "Search", "Substring to find", DataType.String).withDefaultString(""));
-		def.addPin(PinDefinition.output("exec_out", "Done", "Complete", DataType.Exec));
-		def.addPin(PinDefinition.output("result", "Found", "True if substring found", DataType.Bool));
+		def.addPin(
+			PinDefinition.input("exec", "Execute", "Trigger", DataType.Exec),
+		);
+		def.addPin(
+			PinDefinition.input(
+				"text",
+				"Text",
+				"Text to search in",
+				DataType.String,
+			).withDefaultString(""),
+		);
+		def.addPin(
+			PinDefinition.input(
+				"search",
+				"Search",
+				"Substring to find",
+				DataType.String,
+			).withDefaultString(""),
+		);
+		def.addPin(
+			PinDefinition.output("exec_out", "Done", "Complete", DataType.Exec),
+		);
+		def.addPin(
+			PinDefinition.output(
+				"result",
+				"Found",
+				"True if substring found",
+				DataType.Bool,
+			),
+		);
 		return def;
 	}
 
 	execute(ctx: Context): ExecutionResult {
-		ctx.setBool("result", ctx.getString("text").includes(ctx.getString("search")));
+		ctx.setBool(
+			"result",
+			ctx.getString("text").includes(ctx.getString("search")),
+		);
 		return ctx.success();
 	}
 }
@@ -127,17 +233,54 @@ export class ReplaceNode extends FlowNode {
 		def.description = "Replaces occurrences of a pattern";
 		def.category = "String/Transform";
 
-		def.addPin(PinDefinition.input("exec", "Execute", "Trigger", DataType.Exec));
-		def.addPin(PinDefinition.input("text", "Text", "Original text", DataType.String).withDefaultString(""));
-		def.addPin(PinDefinition.input("find", "Find", "Pattern to find", DataType.String).withDefaultString(""));
-		def.addPin(PinDefinition.input("replace_with", "Replace With", "Replacement text", DataType.String).withDefaultString(""));
-		def.addPin(PinDefinition.output("exec_out", "Done", "Complete", DataType.Exec));
-		def.addPin(PinDefinition.output("result", "Result", "Modified text", DataType.String));
+		def.addPin(
+			PinDefinition.input("exec", "Execute", "Trigger", DataType.Exec),
+		);
+		def.addPin(
+			PinDefinition.input(
+				"text",
+				"Text",
+				"Original text",
+				DataType.String,
+			).withDefaultString(""),
+		);
+		def.addPin(
+			PinDefinition.input(
+				"find",
+				"Find",
+				"Pattern to find",
+				DataType.String,
+			).withDefaultString(""),
+		);
+		def.addPin(
+			PinDefinition.input(
+				"replace_with",
+				"Replace With",
+				"Replacement text",
+				DataType.String,
+			).withDefaultString(""),
+		);
+		def.addPin(
+			PinDefinition.output("exec_out", "Done", "Complete", DataType.Exec),
+		);
+		def.addPin(
+			PinDefinition.output(
+				"result",
+				"Result",
+				"Modified text",
+				DataType.String,
+			),
+		);
 		return def;
 	}
 
 	execute(ctx: Context): ExecutionResult {
-		ctx.setString("result", ctx.getString("text").replaceAll(ctx.getString("find"), ctx.getString("replace_with")));
+		ctx.setString(
+			"result",
+			ctx
+				.getString("text")
+				.replaceAll(ctx.getString("find"), ctx.getString("replace_with")),
+		);
 		return ctx.success();
 	}
 }
@@ -150,17 +293,52 @@ export class ConcatNode extends FlowNode {
 		def.description = "Joins two strings together";
 		def.category = "String/Transform";
 
-		def.addPin(PinDefinition.input("exec", "Execute", "Trigger", DataType.Exec));
-		def.addPin(PinDefinition.input("a", "A", "First string", DataType.String).withDefaultString(""));
-		def.addPin(PinDefinition.input("b", "B", "Second string", DataType.String).withDefaultString(""));
-		def.addPin(PinDefinition.input("separator", "Separator", "Text between strings", DataType.String).withDefaultString(""));
-		def.addPin(PinDefinition.output("exec_out", "Done", "Complete", DataType.Exec));
-		def.addPin(PinDefinition.output("result", "Result", "Combined string", DataType.String));
+		def.addPin(
+			PinDefinition.input("exec", "Execute", "Trigger", DataType.Exec),
+		);
+		def.addPin(
+			PinDefinition.input(
+				"a",
+				"A",
+				"First string",
+				DataType.String,
+			).withDefaultString(""),
+		);
+		def.addPin(
+			PinDefinition.input(
+				"b",
+				"B",
+				"Second string",
+				DataType.String,
+			).withDefaultString(""),
+		);
+		def.addPin(
+			PinDefinition.input(
+				"separator",
+				"Separator",
+				"Text between strings",
+				DataType.String,
+			).withDefaultString(""),
+		);
+		def.addPin(
+			PinDefinition.output("exec_out", "Done", "Complete", DataType.Exec),
+		);
+		def.addPin(
+			PinDefinition.output(
+				"result",
+				"Result",
+				"Combined string",
+				DataType.String,
+			),
+		);
 		return def;
 	}
 
 	execute(ctx: Context): ExecutionResult {
-		ctx.setString("result", ctx.getString("a") + ctx.getString("separator") + ctx.getString("b"));
+		ctx.setString(
+			"result",
+			ctx.getString("a") + ctx.getString("separator") + ctx.getString("b"),
+		);
 		return ctx.success();
 	}
 }

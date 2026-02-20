@@ -136,8 +136,7 @@ pub async fn create_interaction(
         // Cleanup expired rows that were never deleted (orphans)
         cleanup_expired_for_user(&state.db, &sub, now.timestamp()).await?;
 
-        let open_after_cleanup =
-            count_open_for_user(&state.db, &sub, now.timestamp()).await?;
+        let open_after_cleanup = count_open_for_user(&state.db, &sub, now.timestamp()).await?;
 
         if open_after_cleanup >= MAX_CONCURRENT_PER_USER {
             // Evict the oldest interaction — its SSE stream will see
@@ -156,9 +155,10 @@ pub async fn create_interaction(
         created_at: Set(now.naive_utc()),
         updated_at: Set(now.naive_utc()),
     };
-    model.insert(&state.db).await.map_err(|e| {
-        ApiError::internal(format!("Failed to create interaction: {e}"))
-    })?;
+    model
+        .insert(&state.db)
+        .await
+        .map_err(|e| ApiError::internal(format!("Failed to create interaction: {e}")))?;
 
     let responder_jwt = sign_interaction_responder_jwt(InteractionJwtParams {
         sub: sub.clone(),
@@ -285,9 +285,8 @@ pub async fn respond_to_interaction(
     Json(body): Json<RespondRequest>,
 ) -> Result<Json<RespondResponse>, ApiError> {
     let token = extract_bearer_token(&headers)?;
-    let claims = verify_interaction_responder_jwt(token).map_err(|e| {
-        ApiError::bad_request(format!("Invalid interaction responder JWT: {e}"))
-    })?;
+    let claims = verify_interaction_responder_jwt(token)
+        .map_err(|e| ApiError::bad_request(format!("Invalid interaction responder JWT: {e}")))?;
 
     if claims.interaction_id != id {
         return Err(ApiError::forbidden("JWT does not match this interaction"));
@@ -315,9 +314,10 @@ pub async fn respond_to_interaction(
     active.status = Set(InteractionStatus::Responded);
     active.response_value = Set(Some(response_json));
     active.updated_at = Set(now.naive_utc());
-    active.update(&state.db).await.map_err(|e| {
-        ApiError::internal(format!("Failed to update interaction: {e}"))
-    })?;
+    active
+        .update(&state.db)
+        .await
+        .map_err(|e| ApiError::internal(format!("Failed to update interaction: {e}")))?;
 
     Ok(Json(RespondResponse { accepted: true }))
 }
@@ -367,10 +367,7 @@ async fn cleanup_expired_for_user(
 
 /// The evicted row's SSE stream will see `Ok(None)` on its next poll
 /// and gracefully emit an "expired" event to the consumer.
-async fn evict_oldest(
-    db: &sea_orm::DatabaseConnection,
-    sub: &str,
-) -> Result<(), ApiError> {
+async fn evict_oldest(db: &sea_orm::DatabaseConnection, sub: &str) -> Result<(), ApiError> {
     let oldest = Interaction::find()
         .filter(interaction::Column::Sub.eq(sub))
         .order_by_asc(interaction::Column::CreatedAt)
@@ -382,9 +379,7 @@ async fn evict_oldest(
         Interaction::delete_by_id(&row.id)
             .exec(db)
             .await
-            .map_err(|e| {
-                ApiError::internal(format!("Failed to evict oldest interaction: {e}"))
-            })?;
+            .map_err(|e| ApiError::internal(format!("Failed to evict oldest interaction: {e}")))?;
     }
 
     Ok(())

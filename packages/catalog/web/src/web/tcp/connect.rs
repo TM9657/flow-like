@@ -1,11 +1,11 @@
 #[cfg(feature = "execute")]
 use ahash::AHashSet;
+#[cfg(not(feature = "execute"))]
+use flow_like::flow::execution::context::ExecutionContext;
 #[cfg(feature = "execute")]
 use flow_like::flow::execution::{
     LogLevel, context::ExecutionContext, internal_node::InternalNode, log::LogMessage,
 };
-#[cfg(not(feature = "execute"))]
-use flow_like::flow::execution::context::ExecutionContext;
 
 use flow_like::flow::{
     node::{Node, NodeLogic},
@@ -126,10 +126,7 @@ impl NodeLogic for TcpConnectNode {
         let stream = match tokio::net::TcpStream::connect(&addr).await {
             Ok(s) => s,
             Err(e) => {
-                context.log_message(
-                    &format!("TCP connection failed: {}", e),
-                    LogLevel::Error,
-                );
+                context.log_message(&format!("TCP connection failed: {}", e), LogLevel::Error);
                 return Ok(());
             }
         };
@@ -184,13 +181,12 @@ impl NodeLogic for TcpConnectNode {
                 _ = tokio::time::sleep(std::time::Duration::from_secs(timeout)) => {
                     context.log_message("TCP connection timed out", LogLevel::Warn);
                     let cache = context.cache.read().await;
-                    if let Some(conn) = cache.get(&ref_id) {
-                        if let Some(conn) = conn.as_any().downcast_ref::<CachedTcpConnection>() {
+                    if let Some(conn) = cache.get(&ref_id)
+                        && let Some(conn) = conn.as_any().downcast_ref::<CachedTcpConnection>() {
                             use tokio::io::AsyncWriteExt;
                             let mut writer = conn.writer.lock().await;
                             let _ = writer.shutdown().await;
                         }
-                    }
                 }
             }
         } else {
@@ -345,9 +341,7 @@ async fn spawn_message_reader(
                         .node
                         .pins
                         .iter()
-                        .filter(|(_, p)| {
-                            p.pin_type == PinType::Output && p.name == "payload"
-                        })
+                        .filter(|(_, p)| p.pin_type == PinType::Output && p.name == "payload")
                         .map(|(_, p)| p.clone())
                         .collect();
                     for pin in payload_pins {
@@ -355,14 +349,9 @@ async fn spawn_message_reader(
                     }
                 }
 
-                let mut log_message =
-                    LogMessage::new("TCP on_message", LogLevel::Debug, None);
-                let run = InternalNode::trigger(
-                    &mut ctx,
-                    &mut Some(recursion_guard.clone()),
-                    true,
-                )
-                .await;
+                let mut log_message = LogMessage::new("TCP on_message", LogLevel::Debug, None);
+                let run =
+                    InternalNode::trigger(&mut ctx, &mut Some(recursion_guard.clone()), true).await;
                 log_message.end();
                 ctx.log(log_message);
                 ctx.end_trace();

@@ -335,11 +335,7 @@ function PermissionsDetail({ manifest }: { manifest: PackageManifest }) {
 							<span className="text-xs">Allowed hosts:</span>
 							<div className="flex flex-wrap gap-1 mt-0.5">
 								{p.network.allowedHosts.map((h) => (
-									<Badge
-										key={h}
-										variant="outline"
-										className="text-[10px]"
-									>
+									<Badge key={h} variant="outline" className="text-[10px]">
 										{h}
 									</Badge>
 								))}
@@ -683,10 +679,7 @@ function DebugPageContent() {
 										Nodes ({nodes.length})
 									</TabsTrigger>
 									{manifest && (
-										<TabsTrigger
-											value="permissions"
-											className="gap-1.5"
-										>
+										<TabsTrigger value="permissions" className="gap-1.5">
 											<Shield className="h-3.5 w-3.5" />
 											Permissions
 										</TabsTrigger>
@@ -700,10 +693,7 @@ function DebugPageContent() {
 												Package Nodes
 											</span>
 											{isPackage && (
-												<Badge
-													variant="secondary"
-													className="text-[10px]"
-												>
+												<Badge variant="secondary" className="text-[10px]">
 													Multi-node
 												</Badge>
 											)}
@@ -713,9 +703,7 @@ function DebugPageContent() {
 												<NodeCard
 													key={node.name}
 													node={node}
-													isSelected={
-														i === selectedNodeIndex
-													}
+													isSelected={i === selectedNodeIndex}
 													onSelect={() => {
 														selectNode(i);
 														setActiveTab("debug");
@@ -727,10 +715,7 @@ function DebugPageContent() {
 								</TabsContent>
 
 								{manifest && (
-									<TabsContent
-										value="permissions"
-										className="space-y-3"
-									>
+									<TabsContent value="permissions" className="space-y-3">
 										<div className="rounded-xl border border-border/20 bg-card/50 p-4 space-y-4">
 											<div className="flex items-center gap-2">
 												<Shield className="h-3.5 w-3.5 text-muted-foreground/60" />
@@ -757,9 +742,7 @@ function DebugPageContent() {
 													)}
 													<div>
 														<h2 className="text-lg font-semibold tracking-tight">
-															{
-																selectedNode.friendly_name
-															}
+															{selectedNode.friendly_name}
 														</h2>
 														<p className="text-sm text-muted-foreground/70">
 															{selectedNode.description}
@@ -771,12 +754,8 @@ function DebugPageContent() {
 														{selectedNode.category}
 													</Badge>
 													{nodes.length > 1 && (
-														<Badge
-															variant="outline"
-															className="text-xs"
-														>
-															{selectedNodeIndex + 1}/
-															{nodes.length}
+														<Badge variant="outline" className="text-xs">
+															{selectedNodeIndex + 1}/{nodes.length}
 														</Badge>
 													)}
 												</div>
@@ -791,10 +770,7 @@ function DebugPageContent() {
 													<span className="text-xs font-medium uppercase tracking-widest text-muted-foreground/60">
 														Input Pins
 													</span>
-													<Badge
-														variant="outline"
-														className="text-[10px]"
-													>
+													<Badge variant="outline" className="text-[10px]">
 														{inputPins.length}
 													</Badge>
 												</div>
@@ -820,21 +796,12 @@ function DebugPageContent() {
 												<ScrollArea className="max-h-125">
 													<div className="space-y-4 pr-3">
 														{inputPins.map((pin) => (
-															<div
-																key={pin.name}
-																className="space-y-1.5"
-															>
+															<div key={pin.name} className="space-y-1.5">
 																<div className="flex items-center justify-between gap-2">
 																	<Label className="text-sm font-medium">
-																		{
-																			pin.friendly_name
-																		}
+																		{pin.friendly_name}
 																	</Label>
-																	<DataTypeBadge
-																		dataType={
-																			pin.data_type
-																		}
-																	/>
+																	<DataTypeBadge dataType={pin.data_type} />
 																</div>
 																{pin.description && (
 																	<p className="text-xs text-muted-foreground/60">
@@ -843,17 +810,8 @@ function DebugPageContent() {
 																)}
 																<PinInput
 																	pin={pin}
-																	value={
-																		inputValues[
-																			pin.name
-																		]
-																	}
-																	onChange={(v) =>
-																		setInputValue(
-																			pin.name,
-																			v,
-																		)
-																	}
+																	value={inputValues[pin.name]}
+																	onChange={(v) => setInputValue(pin.name, v)}
 																/>
 															</div>
 														))}
@@ -866,9 +824,7 @@ function DebugPageContent() {
 											<button
 												type="button"
 												className="flex items-center justify-between w-full mb-3"
-												onClick={() =>
-													setOutputsExpanded(!outputsExpanded)
-												}
+												onClick={() => setOutputsExpanded(!outputsExpanded)}
 											>
 												<div className="flex items-center gap-2">
 													<span className="text-xs font-medium uppercase tracking-widest text-muted-foreground/60">
@@ -896,15 +852,12 @@ function DebugPageContent() {
 														<div className="text-center py-8">
 															<Play className="h-8 w-8 text-muted-foreground/20 mx-auto mb-2" />
 															<p className="text-sm text-muted-foreground/60">
-																Run the node to see output
-																values
+																Run the node to see output values
 															</p>
 														</div>
 													) : result.error ? (
 														<div className="bg-destructive/10 text-destructive rounded-lg p-3 text-sm">
-															<p className="font-medium mb-1">
-																Error
-															</p>
+															<p className="font-medium mb-1">Error</p>
 															<pre className="text-xs whitespace-pre-wrap font-mono">
 																{result.error}
 															</pre>
@@ -915,46 +868,33 @@ function DebugPageContent() {
 																{outputPins.map((pin) => (
 																	<OutputValue
 																		key={pin.name}
-																		name={
-																			pin.friendly_name
-																		}
+																		name={pin.friendly_name}
 																		value={
-																			result.outputs[
-																				pin.name
-																			] ??
-																			"(no value)"
+																			result.outputs[pin.name] ?? "(no value)"
 																		}
 																	/>
 																))}
-																{Object.keys(
-																	result.outputs,
-																).length === 0 && (
+																{Object.keys(result.outputs).length === 0 && (
 																	<p className="text-sm text-muted-foreground/60 text-center py-4">
 																		No output values
 																	</p>
 																)}
-																{result.activate_exec
-																	.length > 0 && (
+																{result.activate_exec.length > 0 && (
 																	<div className="pt-2">
 																		<div className="border-t border-border/10 mb-3" />
 																		<Label className="text-xs text-muted-foreground/60">
-																			Activated
-																			Execution Pins
+																			Activated Execution Pins
 																		</Label>
 																		<div className="flex gap-1 mt-1">
-																			{result.activate_exec.map(
-																				(e) => (
-																					<Badge
-																						key={
-																							e
-																						}
-																						variant="outline"
-																						className="text-xs"
-																					>
-																						{e}
-																					</Badge>
-																				),
-																			)}
+																			{result.activate_exec.map((e) => (
+																				<Badge
+																					key={e}
+																					variant="outline"
+																					className="text-xs"
+																				>
+																					{e}
+																				</Badge>
+																			))}
 																		</div>
 																	</div>
 																)}

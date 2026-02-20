@@ -21,7 +21,12 @@ import type {
 	SearchResults,
 } from "../../lib/schema/wasm";
 import { useBackend } from "../../state/backend-state";
+import {
+	type GenericFetcher,
+	StorePackageDetail,
+} from "../pages/store/store-package-detail";
 import { Input } from "../ui/input";
+import type { CompileStatus } from "../ui/package-status-badge";
 import {
 	Select,
 	SelectContent,
@@ -30,11 +35,6 @@ import {
 	SelectValue,
 } from "../ui/select";
 import { Skeleton } from "../ui/skeleton";
-import {
-	StorePackageDetail,
-	type GenericFetcher,
-} from "../pages/store/store-package-detail";
-import type { CompileStatus } from "../ui/package-status-badge";
 
 type SortOption =
 	| "relevance"
@@ -327,7 +327,11 @@ function PackageListContent({
 	);
 }
 
-function PageContent({ fetcher, auth, getPackageStatus }: PackagesStorePageProps) {
+function PageContent({
+	fetcher,
+	auth,
+	getPackageStatus,
+}: PackagesStorePageProps) {
 	const searchParams = useSearchParams();
 	const packageId = searchParams.get("id");
 

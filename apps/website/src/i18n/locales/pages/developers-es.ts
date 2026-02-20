@@ -13,9 +13,11 @@ export const esDevelopers: Record<string, string> = {
 	"dev.hero.cio.prefix": "¿Busca la visión ejecutiva?",
 	"dev.hero.cio.link": "Para CIOs →",
 	"dev.hero.card.workflows.title": "Componer Flujos de Trabajo",
-	"dev.hero.card.workflows.description": "Arrastra, conecta, despliega — sin código",
+	"dev.hero.card.workflows.description":
+		"Arrastra, conecta, despliega — sin código",
 	"dev.hero.card.nodes.title": "Escribir Nodos Personalizados",
-	"dev.hero.card.nodes.description": "Más de 15 lenguajes, compilados a WebAssembly",
+	"dev.hero.card.nodes.description":
+		"Más de 15 lenguajes, compilados a WebAssembly",
 	"dev.hero.converge": "Desplegar en producción",
 
 	// Path Picker
@@ -46,11 +48,13 @@ export const esDevelopers: Record<string, string> = {
 		"Las entradas y salidas se validan en tiempo de compilación. Detecta incompatibilidades antes del despliegue, no en producción.",
 	"dev.workflow.howitworks": "Cómo funciona",
 	"dev.workflow.step1.title": "Abre el lienzo visual",
-	"dev.workflow.step1.description": "En la aplicación de escritorio o el estudio web",
+	"dev.workflow.step1.description":
+		"En la aplicación de escritorio o el estudio web",
 	"dev.workflow.step2.title": "Arrastra nodos del catálogo",
 	"dev.workflow.step2.description": "Busca, filtra o navega por categorías",
 	"dev.workflow.step3.title": "Conecta y configura",
-	"dev.workflow.step3.description": "Conexiones con tipado seguro y validación en tiempo real",
+	"dev.workflow.step3.description":
+		"Conexiones con tipado seguro y validación en tiempo real",
 	"dev.workflow.step4.title": "Ejecuta o despliega",
 	"dev.workflow.step4.description": "Local, autoalojado o en la nube",
 	"dev.workflow.cta.docs": "Leer la Documentación",
@@ -101,10 +105,14 @@ export const esDevelopers: Record<string, string> = {
 	"dev.nodes.quickstart.title": "Inicio Rápido",
 	"dev.nodes.quickstart.description":
 		"Abre Flow-Like Studio, elige una plantilla de lenguaje y comienza a construir tu nodo personalizado:",
-	"dev.nodes.quickstart.step1": "1. Abre Flow-Like Studio y navega a la sección de Desarrollo de Nodos",
-	"dev.nodes.quickstart.step2": "2. Elige una plantilla de entre más de 15 lenguajes soportados",
-	"dev.nodes.quickstart.step3": "3. Implementa la lógica de tu nodo y compila el binario WASM",
-	"dev.nodes.quickstart.step4": "4. Publica directamente en tu catálogo desde el Studio",
+	"dev.nodes.quickstart.step1":
+		"1. Abre Flow-Like Studio y navega a la sección de Desarrollo de Nodos",
+	"dev.nodes.quickstart.step2":
+		"2. Elige una plantilla de entre más de 15 lenguajes soportados",
+	"dev.nodes.quickstart.step3":
+		"3. Implementa la lógica de tu nodo y compila el binario WASM",
+	"dev.nodes.quickstart.step4":
+		"4. Publica directamente en tu catálogo desde el Studio",
 	"dev.nodes.cta.guide": "Guía de Desarrollo de Nodos",
 	"dev.nodes.cta.templates": "Explorar Todas las Plantillas",
 

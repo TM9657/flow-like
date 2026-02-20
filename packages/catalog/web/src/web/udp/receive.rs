@@ -1,11 +1,11 @@
 #[cfg(feature = "execute")]
 use ahash::AHashSet;
+#[cfg(not(feature = "execute"))]
+use flow_like::flow::execution::context::ExecutionContext;
 #[cfg(feature = "execute")]
 use flow_like::flow::execution::{
     LogLevel, context::ExecutionContext, internal_node::InternalNode, log::LogMessage,
 };
-#[cfg(not(feature = "execute"))]
-use flow_like::flow::execution::context::ExecutionContext;
 
 use flow_like::flow::{
     node::{Node, NodeLogic},
@@ -251,9 +251,7 @@ impl NodeLogic for UdpReceiveNode {
                             .node
                             .pins
                             .iter()
-                            .filter(|(_, p)| {
-                                p.pin_type == PinType::Output && p.name == "payload"
-                            })
+                            .filter(|(_, p)| p.pin_type == PinType::Output && p.name == "payload")
                             .map(|(_, p)| p.clone())
                             .collect();
                         for pin in payload_pins {
@@ -261,14 +259,10 @@ impl NodeLogic for UdpReceiveNode {
                         }
                     }
 
-                    let mut log_message =
-                        LogMessage::new("UDP on_message", LogLevel::Debug, None);
-                    let run = InternalNode::trigger(
-                        &mut ctx,
-                        &mut Some(recursion_guard.clone()),
-                        true,
-                    )
-                    .await;
+                    let mut log_message = LogMessage::new("UDP on_message", LogLevel::Debug, None);
+                    let run =
+                        InternalNode::trigger(&mut ctx, &mut Some(recursion_guard.clone()), true)
+                            .await;
                     log_message.end();
                     ctx.log(log_message);
                     ctx.end_trace();

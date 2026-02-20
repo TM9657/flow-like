@@ -101,7 +101,8 @@ export const zhDevelopers: Record<string, string> = {
 	"dev.nodes.quickstart.title": "快速开始",
 	"dev.nodes.quickstart.description":
 		"打开 Flow-Like Studio，选择语言模板，开始构建你的自定义节点：",
-	"dev.nodes.quickstart.step1": "1. 打开 Flow-Like Studio 并导航到节点开发者区域",
+	"dev.nodes.quickstart.step1":
+		"1. 打开 Flow-Like Studio 并导航到节点开发者区域",
 	"dev.nodes.quickstart.step2": "2. 从 15+ 种支持的语言中选择模板",
 	"dev.nodes.quickstart.step3": "3. 实现你的节点逻辑并构建 WASM 二进制文件",
 	"dev.nodes.quickstart.step4": "4. 直接从 Studio 发布到你的目录",

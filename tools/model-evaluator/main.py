@@ -366,7 +366,7 @@ def load_complai_index(cache_path: Path, force_refresh: bool = False) -> Dict[st
             }
             if model_name:
                 idx[str(model_name)] = ComplAIEntry(model_name=str(model_name), model_report=model_report, results=results)
-        except Exception:
+        except (OSError, json.JSONDecodeError, UnicodeDecodeError, KeyError, TypeError, ValueError):
             continue
 
     cache_path.write_text(
@@ -733,7 +733,7 @@ def _best_hf_repo_for_openllm(display_name: str, openrouter_id: str, limit: int 
         seen.add(q)
         try:
             hf_models.extend(fetch_hf_model_search(q, limit=limit))
-        except Exception:
+        except (OSError, requests.RequestException, ConnectionError, TimeoutError):
             continue
 
     best_id: Optional[str] = None
@@ -782,7 +782,7 @@ def _best_hf_repo_for_metadata(display_name: str, openrouter_id: str, limit: int
         seen.add(q)
         try:
             hf_models.extend(fetch_hf_model_search(q, limit=limit))
-        except Exception:
+        except (OSError, requests.RequestException, ConnectionError, TimeoutError):
             continue
 
     best_id: Optional[str] = None
@@ -1068,7 +1068,7 @@ def load_bfcl_results() -> Dict[str, Dict[str, Any]]:
             overall_acc_str = (row.get("Overall Acc") or "").replace("%", "").strip()
             try:
                 overall_acc = float(overall_acc_str) / 100.0
-            except Exception:
+            except (ValueError, ZeroDivisionError):
                 continue
             rank_str = row.get("Rank") or ""
             try:
@@ -1531,7 +1531,7 @@ def arena_elo_min_max() -> Optional[Tuple[float, float]]:
                 v = float(str(r.get("Arena Score") or "").replace(",", ""))
                 if math.isfinite(v):
                     vals.append(v)
-            except Exception:
+            except (ValueError, TypeError):
                 continue
         if len(vals) < 2:
             _ARENA_ELO_MIN_MAX = None

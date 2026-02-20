@@ -28,6 +28,7 @@ import {
 	IRole,
 	Response,
 } from "../../lib";
+import type { IInteractionRequest } from "../../lib/schema/interaction";
 import { useSetQueryParams } from "../../lib/set-query-params";
 import { parseUint8ArrayToJson } from "../../lib/uint8";
 import { useBackend } from "../../state/backend-state";
@@ -53,7 +54,6 @@ import type { ISendMessageFunction } from "./chat-default/chatbox";
 import { processChatEvents } from "./chat-default/event-processor";
 import { ChatHistory } from "./chat-default/history";
 import { ChatWelcome } from "./chat-default/welcome";
-import type { IInteractionRequest } from "../../lib/schema/interaction";
 import type { IUseInterfaceProps } from "./interfaces";
 
 async function prepareAttachments(
@@ -363,8 +363,11 @@ export const ChatInterfaceMemoized = memo(function ChatInterface({
 	const reconnectSubscribed = useRef<Set<string>>(new Set());
 	const [isSendingFromWelcome, setIsSendingFromWelcome] = useState(false);
 	const lastNavigateToRef = useRef<string | null>(null);
-	const [activeInteractions, setActiveInteractions] = useState<IInteractionRequest[]>([]);
-	const activeInteractionsRef = useRef<IInteractionRequest[]>(activeInteractions);
+	const [activeInteractions, setActiveInteractions] = useState<
+		IInteractionRequest[]
+	>([]);
+	const activeInteractionsRef =
+		useRef<IInteractionRequest[]>(activeInteractions);
 	useEffect(() => {
 		activeInteractionsRef.current = activeInteractions;
 	}, [activeInteractions]);
@@ -379,9 +382,14 @@ export const ChatInterfaceMemoized = memo(function ChatInterface({
 
 	const handleRespondToInteraction = useCallback(
 		async (interactionId: string, value: any) => {
-			const interaction = activeInteractionsRef.current.find((i) => i.id === interactionId);
+			const interaction = activeInteractionsRef.current.find(
+				(i) => i.id === interactionId,
+			);
 			if (!interaction) {
-				console.warn("[Chat] Interaction not found for response:", interactionId);
+				console.warn(
+					"[Chat] Interaction not found for response:",
+					interactionId,
+				);
 				return;
 			}
 
@@ -389,11 +397,20 @@ export const ChatInterfaceMemoized = memo(function ChatInterface({
 				if (interaction.responder_jwt) {
 					const profile = backend.profile;
 					let baseUrl = profile?.hub ?? "api.flow-like.com";
-					if (typeof process !== "undefined" && process.env?.NEXT_PUBLIC_API_URL) {
+					if (
+						typeof process !== "undefined" &&
+						process.env?.NEXT_PUBLIC_API_URL
+					) {
 						baseUrl = process.env.NEXT_PUBLIC_API_URL;
 					}
-					if (!baseUrl.startsWith("http://") && !baseUrl.startsWith("https://")) {
-						baseUrl = profile?.secure === false ? `http://${baseUrl}` : `https://${baseUrl}`;
+					if (
+						!baseUrl.startsWith("http://") &&
+						!baseUrl.startsWith("https://")
+					) {
+						baseUrl =
+							profile?.secure === false
+								? `http://${baseUrl}`
+								: `https://${baseUrl}`;
 					}
 					if (!baseUrl.endsWith("/")) baseUrl += "/";
 					const url = `${baseUrl}api/v1/interaction/${interactionId}/respond`;
@@ -420,7 +437,9 @@ export const ChatInterfaceMemoized = memo(function ChatInterface({
 
 				setActiveInteractions((prev) =>
 					prev.map((i) =>
-						i.id === interactionId ? { ...i, status: "responded" as const, response_value: value } : i,
+						i.id === interactionId
+							? { ...i, status: "responded" as const, response_value: value }
+							: i,
 					),
 				);
 			} catch (err) {
@@ -627,7 +646,12 @@ export const ChatInterfaceMemoized = memo(function ChatInterface({
 						console.log("Open chat history");
 					}}
 				>
-					<div className="flex items-center gap-2 text-sm font-medium" style={{paddingTop: "var(--fl-safe-top, env(safe-area-inset-top, 0px))"}}>
+					<div
+						className="flex items-center gap-2 text-sm font-medium"
+						style={{
+							paddingTop: "var(--fl-safe-top, env(safe-area-inset-top, 0px))",
+						}}
+					>
 						<HistoryIcon className="w-3 h-3" />
 						Chat History
 					</div>

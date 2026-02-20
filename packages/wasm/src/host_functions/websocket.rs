@@ -4,7 +4,6 @@
 //! The host acts as a proxy — the WASM guest never gets direct socket access.
 
 use futures::stream::{SplitSink, SplitStream};
-use futures::{SinkExt, StreamExt};
 use tokio::net::TcpStream;
 use tokio_tungstenite::tungstenite::Message;
 use tokio_tungstenite::{MaybeTlsStream, WebSocketStream};

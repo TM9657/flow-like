@@ -1,26 +1,5 @@
 "use client";
 
-import { Alert, AlertDescription } from "../ui/alert";
-import { AppCard } from "../ui/app-card";
-import { Button } from "../ui/button";
-import { Input } from "../ui/input";
-import { Skeleton } from "../ui/skeleton";
-import { Tooltip, TooltipContent, TooltipTrigger } from "../ui/tooltip";
-import { useBackend } from "../../state/backend-state";
-import { useInfiniteInvoke, useInvoke } from "../../hooks/use-invoke";
-import { useIsMobile } from "../../hooks/use-mobile";
-import { useGridColumns } from "../library/use-grid-columns";
-import {
-	CARD_MIN_W_DESKTOP,
-	CARD_MIN_W_MOBILE,
-	CATEGORY_COLORS,
-} from "../library/library-types";
-import {
-	IAppCategory,
-	IAppSearchSort,
-} from "../../lib/schema/app/app-search-query";
-import type { IApp } from "../../lib/schema/app/app";
-import type { IMetadata } from "../../lib/schema/bit/bit-pack";
 import {
 	AlertCircle,
 	ArrowDownAZ,
@@ -35,6 +14,27 @@ import {
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useInfiniteInvoke, useInvoke } from "../../hooks/use-invoke";
+import { useIsMobile } from "../../hooks/use-mobile";
+import type { IApp } from "../../lib/schema/app/app";
+import {
+	IAppCategory,
+	IAppSearchSort,
+} from "../../lib/schema/app/app-search-query";
+import type { IMetadata } from "../../lib/schema/bit/bit-pack";
+import { useBackend } from "../../state/backend-state";
+import {
+	CARD_MIN_W_DESKTOP,
+	CARD_MIN_W_MOBILE,
+	CATEGORY_COLORS,
+} from "../library/library-types";
+import { useGridColumns } from "../library/use-grid-columns";
+import { Alert, AlertDescription } from "../ui/alert";
+import { AppCard } from "../ui/app-card";
+import { Button } from "../ui/button";
+import { Input } from "../ui/input";
+import { Skeleton } from "../ui/skeleton";
+import { Tooltip, TooltipContent, TooltipTrigger } from "../ui/tooltip";
 
 const CATEGORY_LABELS: Record<IAppCategory, string> = {
 	[IAppCategory.Anime]: "Anime",
@@ -88,7 +88,10 @@ const SORT_LABEL: Record<SortOption, string> = {
 	rated: "Best rated",
 	updated: "Recently updated",
 };
-const SORT_ICON: Record<SortOption, React.ComponentType<{ className?: string }>> = {
+const SORT_ICON: Record<
+	SortOption,
+	React.ComponentType<{ className?: string }>
+> = {
 	popular: TrendingUp,
 	newest: Clock,
 	rated: ArrowDownAZ,
@@ -102,7 +105,9 @@ export function ExploreAppsPage() {
 
 	const [searchQuery, setSearchQuery] = useState("");
 	const [debouncedQuery, setDebouncedQuery] = useState("");
-	const [selectedCategory, setSelectedCategory] = useState<IAppCategory | undefined>();
+	const [selectedCategory, setSelectedCategory] = useState<
+		IAppCategory | undefined
+	>();
 	const [sortKey, setSortKey] = useState<SortOption>("popular");
 	const [showCategories, setShowCategories] = useState(false);
 
@@ -142,12 +147,15 @@ export function ExploreAppsPage() {
 
 	const handleAppClick = useCallback(
 		(appId: string) => {
-			router.push(userAppIds.has(appId) ? `/use?id=${appId}` : `/store?id=${appId}`);
+			router.push(
+				userAppIds.has(appId) ? `/use?id=${appId}` : `/store?id=${appId}`,
+			);
 		},
 		[router, userAppIds],
 	);
 
-	const hasActiveFilters = !!debouncedQuery || !!selectedCategory || sortKey !== "popular";
+	const hasActiveFilters =
+		!!debouncedQuery || !!selectedCategory || sortKey !== "popular";
 
 	const clearFilters = useCallback(() => {
 		setSearchQuery("");
@@ -168,7 +176,9 @@ export function ExploreAppsPage() {
 		for (const entry of combinedApps) {
 			const [app] = entry;
 			const cat = app.primary_category ?? "Other";
-			const label = CATEGORY_LABELS[cat as IAppCategory] ?? cat.replace(/([A-Z])/g, " $1").trim();
+			const label =
+				CATEGORY_LABELS[cat as IAppCategory] ??
+				cat.replace(/([A-Z])/g, " $1").trim();
 			const existing = groups.get(label) ?? [];
 			existing.push(entry);
 			groups.set(label, existing);
@@ -190,7 +200,9 @@ export function ExploreAppsPage() {
 
 	return (
 		<main className="flex flex-col w-full flex-1 min-h-0">
-			<div className={`pt-5 pb-3 space-y-3 ${isMobile ? "px-4" : "px-4 sm:px-8 pb-4"}`}>
+			<div
+				className={`pt-5 pb-3 space-y-3 ${isMobile ? "px-4" : "px-4 sm:px-8 pb-4"}`}
+			>
 				<div className="flex items-center gap-2">
 					<div className="relative flex-1 max-w-lg">
 						<Search className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground/40 pointer-events-none" />
@@ -286,36 +298,46 @@ export function ExploreAppsPage() {
 											? "bg-foreground/10 text-foreground ring-1 ring-foreground/20"
 											: "bg-muted/20 text-muted-foreground/70 hover:bg-muted/40 hover:text-foreground/80"
 									}`}
-									onClick={() => setSelectedCategory(isSelected ? undefined : category)}
+									onClick={() =>
+										setSelectedCategory(isSelected ? undefined : category)
+									}
 								>
 									<span
 										className="w-1.5 h-1.5 rounded-full shrink-0"
-										style={{ backgroundColor: color, opacity: isSelected ? 1 : 0.6 }}
+										style={{
+											backgroundColor: color,
+											opacity: isSelected ? 1 : 0.6,
+										}}
 									/>
 									{label}
 								</button>
 							);
 						})}
 
-						{selectedCategory && !FEATURED_CATEGORIES.includes(selectedCategory) && (
-							<button
-								type="button"
-								className="rounded-full px-3 py-1 text-xs bg-foreground/10 text-foreground ring-1 ring-foreground/20 flex items-center gap-1.5"
-								onClick={() => setSelectedCategory(undefined)}
-							>
-								{CATEGORY_LABELS[selectedCategory]}
-								<X className="h-3 w-3" />
-							</button>
-						)}
+						{selectedCategory &&
+							!FEATURED_CATEGORIES.includes(selectedCategory) && (
+								<button
+									type="button"
+									className="rounded-full px-3 py-1 text-xs bg-foreground/10 text-foreground ring-1 ring-foreground/20 flex items-center gap-1.5"
+									onClick={() => setSelectedCategory(undefined)}
+								>
+									{CATEGORY_LABELS[selectedCategory]}
+									<X className="h-3 w-3" />
+								</button>
+							)}
 					</div>
 				)}
 			</div>
 
-			<div className={`flex-1 overflow-auto pb-8 ${isMobile ? "px-4" : "px-4 sm:px-8"}`}>
+			<div
+				className={`flex-1 overflow-auto pb-8 ${isMobile ? "px-4" : "px-4 sm:px-8"}`}
+			>
 				{error ? (
 					<Alert variant="destructive" className="mb-4">
 						<AlertCircle className="h-4 w-4" />
-						<AlertDescription>Failed to load apps: {error.message}</AlertDescription>
+						<AlertDescription>
+							Failed to load apps: {error.message}
+						</AlertDescription>
 					</Alert>
 				) : combinedApps.length === 0 ? (
 					<ExploreEmpty hasFilters={hasActiveFilters} />
@@ -345,7 +367,8 @@ export function ExploreAppsPage() {
 					<div className={isMobile ? "space-y-5" : "space-y-6"}>
 						{(selectedCategory || debouncedQuery) && (
 							<p className="text-xs text-muted-foreground/60">
-								{combinedApps.length} result{combinedApps.length !== 1 ? "s" : ""}
+								{combinedApps.length} result
+								{combinedApps.length !== 1 ? "s" : ""}
 								{selectedCategory && ` in ${CATEGORY_LABELS[selectedCategory]}`}
 							</p>
 						)}
@@ -413,7 +436,9 @@ function ExploreSection({
 						<h2 className="text-base font-bold tracking-tight text-foreground">
 							{title}
 						</h2>
-						<span className="text-xs text-muted-foreground/40">{apps.length}</span>
+						<span className="text-xs text-muted-foreground/40">
+							{apps.length}
+						</span>
 					</div>
 					{needsExpand && !expanded && (
 						<button
@@ -471,7 +496,9 @@ function ExploreSection({
 			<div
 				ref={containerRef}
 				className="grid gap-3"
-				style={{ gridTemplateColumns: `repeat(auto-fill, minmax(${cardMin}px, 1fr))` }}
+				style={{
+					gridTemplateColumns: `repeat(auto-fill, minmax(${cardMin}px, 1fr))`,
+				}}
 			>
 				{visibleApps.map(([app, metadata]) => (
 					<AppCard
@@ -494,7 +521,9 @@ function ExploreSection({
 						className="flex items-center gap-1.5 text-xs text-muted-foreground/60 hover:text-foreground px-4 py-1.5 rounded-full border border-border/30 hover:border-border/50 hover:bg-muted/30 transition-colors"
 					>
 						{expanded ? "Less" : `${hiddenCount} more`}
-						<ChevronDown className={`h-3 w-3 transition-transform ${expanded ? "rotate-180" : ""}`} />
+						<ChevronDown
+							className={`h-3 w-3 transition-transform ${expanded ? "rotate-180" : ""}`}
+						/>
 					</button>
 				</div>
 			)}
@@ -538,7 +567,9 @@ function ExploreGrid({
 		<div
 			ref={containerRef}
 			className="grid gap-3"
-			style={{ gridTemplateColumns: `repeat(auto-fill, minmax(${cardMin}px, 1fr))` }}
+			style={{
+				gridTemplateColumns: `repeat(auto-fill, minmax(${cardMin}px, 1fr))`,
+			}}
 		>
 			{apps.map(([app, metadata]) => (
 				<AppCard

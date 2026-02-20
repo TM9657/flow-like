@@ -244,7 +244,7 @@ pub fn extract_fingerprint_at(x: i32, y: i32) -> Option<RecordedFingerprint> {
 #[cfg(target_os = "windows")]
 pub fn extract_fingerprint_at(x: i32, y: i32) -> Option<RecordedFingerprint> {
     use windows::Win32::Foundation::POINT;
-    use windows::Win32::System::Com::{CoInitializeEx, CoUninitialize, COINIT_MULTITHREADED};
+    use windows::Win32::System::Com::{COINIT_MULTITHREADED, CoInitializeEx, CoUninitialize};
     use windows::Win32::UI::Accessibility::{
         CUIAutomation, IUIAutomation, UIA_ControlTypePropertyId, UIA_NamePropertyId,
     };
@@ -252,11 +252,15 @@ pub fn extract_fingerprint_at(x: i32, y: i32) -> Option<RecordedFingerprint> {
     // SAFETY: CoInitializeEx/CoUninitialize are COM initialization functions.
     // We call CoInitializeEx once at start and CoUninitialize on all return paths.
     // This is safe as long as we don't call COM from other threads without initialization.
-    unsafe { let _ = CoInitializeEx(None, COINIT_MULTITHREADED); }
+    unsafe {
+        let _ = CoInitializeEx(None, COINIT_MULTITHREADED);
+    }
 
     let result = extract_fingerprint_windows_inner(x, y);
 
-    unsafe { CoUninitialize(); }
+    unsafe {
+        CoUninitialize();
+    }
 
     result
 }
@@ -298,7 +302,8 @@ fn extract_fingerprint_windows_inner(x: i32, y: i32) -> Option<RecordedFingerpri
     };
 
     // SAFETY: GetCurrentPropertyValue is safe, returns Result
-    if let Ok(control_type) = unsafe { element.GetCurrentPropertyValue(UIA_ControlTypePropertyId) } {
+    if let Ok(control_type) = unsafe { element.GetCurrentPropertyValue(UIA_ControlTypePropertyId) }
+    {
         // SAFETY: as_raw() is safe, we're just reading the variant value
         let raw = unsafe { control_type.as_raw() };
         if let Ok(ct) = i32::try_from(raw.Anonymous.Anonymous.Anonymous.iVal) {
@@ -442,7 +447,11 @@ async fn extract_fingerprint_atspi(x: i32, y: i32) -> Option<RecordedFingerprint
 
     // This is a simplified implementation - full AT-SPI traversal is complex
     // The atspi crate's API may vary; this gives a starting point
-    tracing::debug!("AT-SPI fingerprinting at ({}, {}) - traversal not fully implemented", x, y);
+    tracing::debug!(
+        "AT-SPI fingerprinting at ({}, {}) - traversal not fully implemented",
+        x,
+        y
+    );
 
     // Return a placeholder for now - full implementation requires tree traversal
     // and hit-testing each accessible's bounding box

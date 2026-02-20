@@ -99,18 +99,21 @@ export const enPitch: Record<string, string> = {
 		"Describe your process in plain language. FlowPilot transforms it into a production-ready workflow — instantly.",
 	"pitch.flowpilot.input.label": "Input",
 	"pitch.flowpilot.input.title": "Process Description",
-	"pitch.flowpilot.input.line1": "\"When a new invoice arrives,\"",
+	"pitch.flowpilot.input.line1": '"When a new invoice arrives,"',
 	"pitch.flowpilot.input.line2": "extract vendor and amount.",
 	"pitch.flowpilot.input.line3": "Route to manager if over €5,000,",
-	"pitch.flowpilot.input.line4": "otherwise auto-approve trusted vendors.\"",
+	"pitch.flowpilot.input.line4": 'otherwise auto-approve trusted vendors."',
 	"pitch.flowpilot.output.label": "Output",
 	"pitch.flowpilot.output.title": "Visual Workflow",
 	"pitch.flowpilot.benefit1.title": "Seconds, not weeks",
-	"pitch.flowpilot.benefit1.description": "Generate complete workflows from natural language in under a minute.",
+	"pitch.flowpilot.benefit1.description":
+		"Generate complete workflows from natural language in under a minute.",
 	"pitch.flowpilot.benefit2.title": "Human in control",
-	"pitch.flowpilot.benefit2.description": "Review, refine, and approve every step. AI assists, you decide.",
+	"pitch.flowpilot.benefit2.description":
+		"Review, refine, and approve every step. AI assists, you decide.",
 	"pitch.flowpilot.benefit3.title": "Production-ready",
-	"pitch.flowpilot.benefit3.description": "Generated workflows are type-safe, auditable, and ready to deploy.",
+	"pitch.flowpilot.benefit3.description":
+		"Generated workflows are type-safe, auditable, and ready to deploy.",
 
 	// CTA
 	"pitch.cta.headline": "Start building with blocks today",

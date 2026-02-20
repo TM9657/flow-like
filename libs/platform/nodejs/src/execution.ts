@@ -1,13 +1,10 @@
 import type { HttpClient } from "./client.js";
-import type { RunStatus, PollOptions, PollResult } from "./types.js";
+import type { PollOptions, PollResult, RunStatus } from "./types.js";
 
 export function createExecutionMethods(http: HttpClient) {
 	return {
 		async getRunStatus(runId: string): Promise<RunStatus> {
-			return http.request<RunStatus>(
-				"GET",
-				`/execution/run/${runId}`,
-			);
+			return http.request<RunStatus>("GET", `/execution/run/${runId}`);
 		},
 
 		async pollExecution(

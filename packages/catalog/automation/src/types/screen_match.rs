@@ -36,7 +36,12 @@ pub fn capture_screen_png() -> Option<Vec<u8>> {
     let rgba = monitor.capture_image().ok()?;
     let mut buf = Vec::new();
     image::codecs::png::PngEncoder::new(&mut buf)
-        .write_image(rgba.as_raw(), rgba.width(), rgba.height(), image::ExtendedColorType::Rgba8)
+        .write_image(
+            rgba.as_raw(),
+            rgba.width(),
+            rgba.height(),
+            image::ExtendedColorType::Rgba8,
+        )
         .ok()?;
     Some(buf)
 }
@@ -83,7 +88,10 @@ pub fn find_template_in_image(
     if tw > sw || th > sh {
         tracing::warn!(
             "find_template_in_image: template {}x{} larger than screen {}x{}",
-            tw, th, sw, sh
+            tw,
+            th,
+            sw,
+            sh
         );
         return Vec::new();
     }
@@ -113,7 +121,11 @@ pub fn find_template_on_screen(
     let (sw, sh) = gray_screen.dimensions();
     tracing::debug!(
         "find_template_on_screen: template {}x{}, screen {}x{}, precision {}",
-        tw, th, sw, sh, precision
+        tw,
+        th,
+        sw,
+        sh,
+        precision
     );
 
     let matches = find_template_in_image(&gray_screen, &gray_template, precision);
@@ -159,14 +171,21 @@ pub fn try_template_match(
 
     tracing::debug!(
         "try_template_match: template {}x{}, screen {}x{}, confidence threshold {}",
-        template_dims.0, template_dims.1, screen_dims.0, screen_dims.1, min_confidence
+        template_dims.0,
+        template_dims.1,
+        screen_dims.0,
+        screen_dims.1,
+        min_confidence
     );
 
     // Bounds check: template must be smaller than screen
     if template_dims.0 > screen_dims.0 || template_dims.1 > screen_dims.1 {
         tracing::warn!(
             "Template {}x{} is larger than screen {}x{} — cannot search",
-            template_dims.0, template_dims.1, screen_dims.0, screen_dims.1
+            template_dims.0,
+            template_dims.1,
+            screen_dims.0,
+            screen_dims.1
         );
         return Some(TemplateMatchResult {
             best_match: None,
@@ -202,20 +221,19 @@ pub fn try_template_match(
     };
 
     // First try at desired confidence
-    let matches = segmented_ncc::fast_ncc_template_match(
-        &gray_screen,
-        min_confidence,
-        &data,
-        &false,
-    );
+    let matches =
+        segmented_ncc::fast_ncc_template_match(&gray_screen, min_confidence, &data, &false);
     tracing::debug!(
         "NCC at confidence {}: {} matches found",
-        min_confidence, matches.len()
+        min_confidence,
+        matches.len()
     );
     if !matches.is_empty() {
         tracing::debug!(
             "Best match at ({}, {}) with confidence {:.4}",
-            matches[0].0, matches[0].1, matches[0].2
+            matches[0].0,
+            matches[0].1,
+            matches[0].2
         );
         return Some(TemplateMatchResult {
             best_match: Some(matches[0]),
@@ -227,21 +245,15 @@ pub fn try_template_match(
     }
 
     // Re-search at minimum threshold to get the best achievable score
-    let fallback = segmented_ncc::fast_ncc_template_match(
-        &gray_screen,
-        0.01,
-        &data,
-        &false,
-    );
-    tracing::debug!(
-        "NCC fallback at 0.01: {} matches found",
-        fallback.len()
-    );
+    let fallback = segmented_ncc::fast_ncc_template_match(&gray_screen, 0.01, &data, &false);
+    tracing::debug!("NCC fallback at 0.01: {} matches found", fallback.len());
     let best = fallback.into_iter().next();
     if let Some((x, y, c)) = best {
         tracing::debug!("Fallback best at ({}, {}) with confidence {:.4}", x, y, c);
     } else {
-        tracing::warn!("No matches found even at 0.01 threshold — template may not be visible on screen");
+        tracing::warn!(
+            "No matches found even at 0.01 threshold — template may not be visible on screen"
+        );
     }
 
     Some(TemplateMatchResult {

@@ -42,17 +42,23 @@ export const enAiAgents: Record<string, string> = {
 	"ind.features.tagline": "Capabilities",
 	"ind.features.headline": "Built for AI teams",
 	"ind.feature.1.title": "Multi-Model Support",
-	"ind.feature.1.desc": "Switch between OpenAI, Anthropic, local models, or custom endpoints with a single node swap.",
+	"ind.feature.1.desc":
+		"Switch between OpenAI, Anthropic, local models, or custom endpoints with a single node swap.",
 	"ind.feature.2.title": "Vector Store Nodes",
-	"ind.feature.2.desc": "Connect Qdrant, Pinecone, Weaviate, or pgvector for semantic search and retrieval.",
+	"ind.feature.2.desc":
+		"Connect Qdrant, Pinecone, Weaviate, or pgvector for semantic search and retrieval.",
 	"ind.feature.3.title": "Tool Calling",
-	"ind.feature.3.desc": "Give agents access to APIs, databases, and code execution through sandboxed tool nodes.",
+	"ind.feature.3.desc":
+		"Give agents access to APIs, databases, and code execution through sandboxed tool nodes.",
 	"ind.feature.4.title": "Evaluation Loops",
-	"ind.feature.4.desc": "Build automated eval pipelines that test prompts against golden datasets on every change.",
+	"ind.feature.4.desc":
+		"Build automated eval pipelines that test prompts against golden datasets on every change.",
 	"ind.feature.5.title": "Guardrails",
-	"ind.feature.5.desc": "Add content filters, PII detection, and output validation nodes to any agent pipeline.",
+	"ind.feature.5.desc":
+		"Add content filters, PII detection, and output validation nodes to any agent pipeline.",
 	"ind.feature.6.title": "Streaming Output",
-	"ind.feature.6.desc": "Stream LLM responses to UIs in real-time while maintaining the full audit trace.",
+	"ind.feature.6.desc":
+		"Stream LLM responses to UIs in real-time while maintaining the full audit trace.",
 
 	"ind.cta.headline": "Ready to ship AI you can trust?",
 	"ind.cta.description":

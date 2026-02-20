@@ -4,8 +4,7 @@ use flow_like::flow::{
     variable::VariableType,
 };
 use flow_like_types::{
-    async_trait,
-    create_id,
+    async_trait, create_id,
     interaction::{ChoiceOption, InteractionRequest, InteractionStatus, InteractionType},
     json::json,
 };
@@ -192,9 +191,7 @@ impl NodeLogic for SingleChoiceInteraction {
         context
             .set_pin_value("response", json!(response_value))
             .await?;
-        context
-            .set_pin_value("responded", json!(responded))
-            .await?;
+        context.set_pin_value("responded", json!(responded)).await?;
 
         if responded {
             context.activate_exec_pin("exec_out").await?;

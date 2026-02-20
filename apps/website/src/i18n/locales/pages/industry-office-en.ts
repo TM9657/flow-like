@@ -42,17 +42,23 @@ export const enOffice: Record<string, string> = {
 	"ind.features.tagline": "Capabilities",
 	"ind.features.headline": "Built for modern offices",
 	"ind.feature.1.title": "AI Document Extraction",
-	"ind.feature.1.desc": "Use LLM-powered nodes to extract structured data from unstructured documents.",
+	"ind.feature.1.desc":
+		"Use LLM-powered nodes to extract structured data from unstructured documents.",
 	"ind.feature.2.title": "Email & Notification",
-	"ind.feature.2.desc": "Send branded emails, Slack messages, or Teams notifications at any workflow step.",
+	"ind.feature.2.desc":
+		"Send branded emails, Slack messages, or Teams notifications at any workflow step.",
 	"ind.feature.3.title": "Form Builder",
-	"ind.feature.3.desc": "Create input forms that feed directly into your workflows. No separate form tool needed.",
+	"ind.feature.3.desc":
+		"Create input forms that feed directly into your workflows. No separate form tool needed.",
 	"ind.feature.4.title": "Calendar & Scheduling",
-	"ind.feature.4.desc": "Trigger workflows on schedule or sync with calendar events for time-sensitive processes.",
+	"ind.feature.4.desc":
+		"Trigger workflows on schedule or sync with calendar events for time-sensitive processes.",
 	"ind.feature.5.title": "File Management",
-	"ind.feature.5.desc": "Convert, merge, split, and route documents through your storage systems automatically.",
+	"ind.feature.5.desc":
+		"Convert, merge, split, and route documents through your storage systems automatically.",
 	"ind.feature.6.title": "Dashboards",
-	"ind.feature.6.desc": "Track SLAs, throughput, and bottlenecks in real-time across all your office workflows.",
+	"ind.feature.6.desc":
+		"Track SLAs, throughput, and bottlenecks in real-time across all your office workflows.",
 
 	"ind.cta.headline": "Ready to eliminate the busywork?",
 	"ind.cta.description":

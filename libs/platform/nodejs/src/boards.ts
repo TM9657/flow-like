@@ -1,18 +1,15 @@
 import type { HttpClient } from "./client.js";
 import type {
 	Board,
+	PrerunBoardResponse,
 	UpsertBoardRequest,
 	UpsertBoardResponse,
-	PrerunBoardResponse,
 } from "./types.js";
 
 export function createBoardMethods(http: HttpClient) {
 	return {
 		async listBoards(appId: string): Promise<Board[]> {
-			return http.request<Board[]>(
-				"GET",
-				`/apps/${appId}/board`,
-			);
+			return http.request<Board[]>("GET", `/apps/${appId}/board`);
 		},
 
 		async getBoard(
@@ -20,11 +17,9 @@ export function createBoardMethods(http: HttpClient) {
 			boardId: string,
 			version?: string,
 		): Promise<Board> {
-			return http.request<Board>(
-				"GET",
-				`/apps/${appId}/board/${boardId}`,
-				{ query: { version } },
-			);
+			return http.request<Board>("GET", `/apps/${appId}/board/${boardId}`, {
+				query: { version },
+			});
 		},
 
 		async upsertBoard(
@@ -39,14 +34,8 @@ export function createBoardMethods(http: HttpClient) {
 			);
 		},
 
-		async deleteBoard(
-			appId: string,
-			boardId: string,
-		): Promise<void> {
-			await http.request(
-				"DELETE",
-				`/apps/${appId}/board/${boardId}`,
-			);
+		async deleteBoard(appId: string, boardId: string): Promise<void> {
+			await http.request("DELETE", `/apps/${appId}/board/${boardId}`);
 		},
 
 		async prerunBoard(
@@ -61,24 +50,15 @@ export function createBoardMethods(http: HttpClient) {
 			);
 		},
 
-		async getBoardVersions(
-			appId: string,
-			boardId: string,
-		): Promise<unknown[]> {
+		async getBoardVersions(appId: string, boardId: string): Promise<unknown[]> {
 			return http.request<unknown[]>(
 				"GET",
 				`/apps/${appId}/board/${boardId}/version`,
 			);
 		},
 
-		async versionBoard(
-			appId: string,
-			boardId: string,
-		): Promise<unknown> {
-			return http.request(
-				"PATCH",
-				`/apps/${appId}/board/${boardId}`,
-			);
+		async versionBoard(appId: string, boardId: string): Promise<unknown> {
+			return http.request("PATCH", `/apps/${appId}/board/${boardId}`);
 		},
 
 		async executeCommands(

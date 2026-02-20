@@ -12,9 +12,9 @@ import {
 	ChevronRight,
 	Cpu,
 	ExternalLink,
-	Scroll,
 	type LucideIcon,
 	Package,
+	Scroll,
 	User,
 	Zap,
 } from "lucide-react";
@@ -67,7 +67,8 @@ const SETTINGS_SECTIONS: SettingsSection[] = [
 			},
 			{
 				title: "Sinks & Triggers",
-				description: "Manage active event triggers like webhooks, cron jobs, and more",
+				description:
+					"Manage active event triggers like webhooks, cron jobs, and more",
 				href: "/settings/sinks",
 				icon: Zap,
 			},

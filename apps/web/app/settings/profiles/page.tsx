@@ -187,16 +187,13 @@ export default function SettingsProfilesPage() {
 		return !!id && !Object.values(IThemes).includes(id as IThemes);
 	}, [localProfile]);
 
-	const updateProfile = useCallback(
-		(updates: Partial<ISettingsProfile>) => {
-			const current = localProfileRef.current;
-			if (!current) return;
-			const newProfile = { ...current, ...updates };
-			setLocalProfile(newProfile);
-			setHasChanges(true);
-		},
-		[],
-	);
+	const updateProfile = useCallback((updates: Partial<ISettingsProfile>) => {
+		const current = localProfileRef.current;
+		if (!current) return;
+		const newProfile = { ...current, ...updates };
+		setLocalProfile(newProfile);
+		setHasChanges(true);
+	}, []);
 
 	const requestProfileUpsert = useCallback(
 		async (

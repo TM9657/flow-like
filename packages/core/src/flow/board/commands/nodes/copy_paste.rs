@@ -170,16 +170,17 @@ impl Command for CopyPasteCommand {
 
         for node in self.original_nodes.iter() {
             let mut new_node = node.clone();
-            let blueprint_node = node_registry
-                .get_node(&node.name)
-                .ok();
+            let blueprint_node = node_registry.get_node(&node.name).ok();
 
             // If the pasted node is external (has wasm metadata) but not in the registry, reject it
             if blueprint_node.is_none() && node.wasm.is_some() {
                 return Err(flow_like_types::anyhow!(
                     "External node '{}' from package '{}' is not installed. Please install the package first.",
                     node.friendly_name,
-                    node.wasm.as_ref().map(|w| w.package_id.as_str()).unwrap_or("unknown")
+                    node.wasm
+                        .as_ref()
+                        .map(|w| w.package_id.as_str())
+                        .unwrap_or("unknown")
                 ));
             }
 

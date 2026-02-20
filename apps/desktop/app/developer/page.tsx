@@ -16,6 +16,7 @@ import {
 	EmptyState,
 	Input,
 	Label,
+	PackageStatusBadge,
 	Select,
 	SelectContent,
 	SelectItem,
@@ -25,7 +26,6 @@ import {
 	Tooltip,
 	TooltipContent,
 	TooltipTrigger,
-	PackageStatusBadge,
 } from "@tm9657/flow-like-ui";
 import type {
 	DeveloperProject,
@@ -36,7 +36,6 @@ import {
 	EDITOR_OPTIONS,
 	TEMPLATE_LANGUAGES,
 } from "@tm9657/flow-like-ui/lib/schema/developer";
-import { usePackageStatus } from "../../hooks/use-package-status";
 import {
 	Bug,
 	Code2,
@@ -56,6 +55,7 @@ import {
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
+import { usePackageStatus } from "../../hooks/use-package-status";
 
 function useIsVisible(ref: React.RefObject<HTMLElement | null>) {
 	const [isVisible, setIsVisible] = useState(false);
@@ -85,7 +85,11 @@ function LanguageBadge({ language }: { language: string }) {
 			className="gap-1.5 text-[10px] whitespace-nowrap rounded-full px-2 py-0.5 bg-muted/30 border-transparent text-foreground"
 		>
 			{info?.img ? (
-				<img src={info.img} alt={info.label} className="w-5 h-5 rounded-full object-cover" />
+				<img
+					src={info.img}
+					alt={info.label}
+					className="w-5 h-5 rounded-full object-cover"
+				/>
 			) : (
 				<span>{info?.icon ?? "📦"}</span>
 			)}
@@ -123,7 +127,9 @@ function ProjectCard({
 			.finally(() => {
 				if (!cancelled) setInspecting(false);
 			});
-		return () => { cancelled = true; };
+		return () => {
+			cancelled = true;
+		};
 	}, [isVisible, project.path, inspection, inspecting]);
 
 	const openInEditor = async () => {
@@ -156,7 +162,10 @@ function ProjectCard({
 	const nodeCount = inspection?.nodes?.length ?? 0;
 
 	return (
-		<div ref={cardRef} className="rounded-xl border border-border/40 bg-card shadow-sm hover:bg-accent/30 p-4 transition-colors duration-150">
+		<div
+			ref={cardRef}
+			className="rounded-xl border border-border/40 bg-card shadow-sm hover:bg-accent/30 p-4 transition-colors duration-150"
+		>
 			<div className="flex items-start justify-between gap-3">
 				<div className="flex items-center gap-2.5 min-w-0 flex-1">
 					<div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-muted/20">
@@ -205,9 +214,7 @@ function ProjectCard({
 							<TooltipContent side="bottom" className="max-w-xs">
 								<p className="font-medium">{node.friendly_name}</p>
 								{node.description && (
-									<p className="text-xs text-foreground">
-										{node.description}
-									</p>
+									<p className="text-xs text-foreground">{node.description}</p>
 								)}
 								<p className="text-[10px] text-foreground mt-0.5">
 									{node.category}
@@ -378,9 +385,7 @@ export default function DeveloperPage() {
 	const fetchProjects = useCallback(async () => {
 		setIsLoading(true);
 		try {
-			const list = await invoke<DeveloperProject[]>(
-				"developer_list_projects",
-			);
+			const list = await invoke<DeveloperProject[]>("developer_list_projects");
 			setProjects(list);
 		} catch (err) {
 			console.error("Failed to list projects:", err);
@@ -599,11 +604,7 @@ export default function DeveloperPage() {
 				) : filtered.length > 0 ? (
 					<div className="grid grid-cols-[repeat(auto-fill,minmax(340px,1fr))] gap-3">
 						{filtered.map((p) => (
-							<ProjectCard
-								key={p.id}
-								project={p}
-								onRemove={handleRemove}
-							/>
+							<ProjectCard key={p.id} project={p} onRemove={handleRemove} />
 						))}
 					</div>
 				) : projects.length > 0 ? (

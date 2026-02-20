@@ -13,7 +13,8 @@ export const jaDevelopers: Record<string, string> = {
 	"dev.hero.cio.prefix": "経営層向けの概要をお探しですか？",
 	"dev.hero.cio.link": "CIO向け →",
 	"dev.hero.card.workflows.title": "ワークフローの構成",
-	"dev.hero.card.workflows.description": "ドラッグ、接続、デプロイ — コード不要",
+	"dev.hero.card.workflows.description":
+		"ドラッグ、接続、デプロイ — コード不要",
 	"dev.hero.card.nodes.title": "カスタムノードの作成",
 	"dev.hero.card.nodes.description": "15以上の言語、WebAssemblyにコンパイル",
 	"dev.hero.converge": "本番環境にデプロイ",
@@ -101,9 +102,11 @@ export const jaDevelopers: Record<string, string> = {
 	"dev.nodes.quickstart.title": "クイックスタート",
 	"dev.nodes.quickstart.description":
 		"Flow-Like Studioを開き、言語テンプレートを選択して、カスタムノードの構築を開始しましょう：",
-	"dev.nodes.quickstart.step1": "1. Flow-Like Studioを開き、ノード開発者セクションに移動",
+	"dev.nodes.quickstart.step1":
+		"1. Flow-Like Studioを開き、ノード開発者セクションに移動",
 	"dev.nodes.quickstart.step2": "2. 15以上の対応言語からテンプレートを選択",
-	"dev.nodes.quickstart.step3": "3. ノードロジックを実装し、WASMバイナリをビルド",
+	"dev.nodes.quickstart.step3":
+		"3. ノードロジックを実装し、WASMバイナリをビルド",
 	"dev.nodes.quickstart.step4": "4. Studioから直接カタログに公開",
 	"dev.nodes.cta.guide": "ノード開発ガイド",
 	"dev.nodes.cta.templates": "全テンプレートを見る",

@@ -15,9 +15,30 @@ export {
 	get_abi_version,
 } from "@flow-like/wasm-sdk-assemblyscript/assembly/index";
 
-import { AddNode, SubtractNode, MultiplyNode, DivideNode, ClampNode } from "../examples/math_nodes";
-import { UppercaseNode, LowercaseNode, TrimNode, LengthNode, ContainsNode, ReplaceNode, ConcatNode } from "../examples/string_nodes";
-import { IfBranchNode, CompareNode, AndGateNode, OrGateNode, NotGateNode, GateNode } from "../examples/control_flow";
+import {
+	AndGateNode,
+	CompareNode,
+	GateNode,
+	IfBranchNode,
+	NotGateNode,
+	OrGateNode,
+} from "../examples/control_flow";
+import {
+	AddNode,
+	ClampNode,
+	DivideNode,
+	MultiplyNode,
+	SubtractNode,
+} from "../examples/math_nodes";
+import {
+	ConcatNode,
+	ContainsNode,
+	LengthNode,
+	LowercaseNode,
+	ReplaceNode,
+	TrimNode,
+	UppercaseNode,
+} from "../examples/string_nodes";
 
 const pkg = new NodePackage();
 
