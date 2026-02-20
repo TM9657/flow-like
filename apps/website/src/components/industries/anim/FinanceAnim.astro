@@ -1,0 +1,100 @@
+---
+/**
+ * Finance: Ledger with transaction matching, flowing between accounts
+ */
+interface Props { ring: string; dot: string; node: string; line: string; }
+const { ring, dot, node, line } = Astro.props;
+---
+
+<svg viewBox="0 0 400 400" fill="none" xmlns="http://www.w3.org/2000/svg" class="w-full max-w-md">
+  <defs>
+    <linearGradient id="fn-glow" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color={dot} stop-opacity="0.15"/>
+      <stop offset="100%" stop-color={dot} stop-opacity="0"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Left ledger (Source A) -->
+  <rect x="30" y="60" width="120" height="170" rx="10" fill={node} opacity="0.04" stroke={ring} stroke-width="0.8" opacity="0.25"/>
+  <text x="90" y="85" text-anchor="middle" fill={dot} font-size="9" opacity="0.5" font-family="monospace">Bank Feed</text>
+  <line x1="42" y1="95" x2="138" y2="95" stroke={ring} stroke-width="0.4" opacity="0.15"/>
+  <!-- Ledger rows -->
+  <rect x="42" y="105" width="96" height="10" rx="3" fill={node} opacity="0.06"/><rect x="42" y="105" width="60" height="10" rx="3" fill={dot} opacity="0.12"><animate attributeName="opacity" values="0.08;0.18;0.08" dur="3s" repeatCount="indefinite"/></rect>
+  <rect x="42" y="122" width="96" height="10" rx="3" fill={node} opacity="0.06"/><rect x="42" y="122" width="75" height="10" rx="3" fill={dot} opacity="0.1"><animate attributeName="opacity" values="0.06;0.15;0.06" dur="4s" repeatCount="indefinite"/></rect>
+  <rect x="42" y="139" width="96" height="10" rx="3" fill={node} opacity="0.06"/><rect x="42" y="139" width="48" height="10" rx="3" fill={dot} opacity="0.08"><animate attributeName="opacity" values="0.05;0.14;0.05" dur="3.5s" repeatCount="indefinite"/></rect>
+  <rect x="42" y="156" width="96" height="10" rx="3" fill={node} opacity="0.06"/><rect x="42" y="156" width="82" height="10" rx="3" fill={dot} opacity="0.1"><animate attributeName="opacity" values="0.07;0.16;0.07" dur="2.8s" repeatCount="indefinite"/></rect>
+  <rect x="42" y="173" width="96" height="10" rx="3" fill={node} opacity="0.06"/><rect x="42" y="173" width="55" height="10" rx="3" fill={dot} opacity="0.09"><animate attributeName="opacity" values="0.06;0.13;0.06" dur="4.2s" repeatCount="indefinite"/></rect>
+  <rect x="42" y="190" width="96" height="10" rx="3" fill={node} opacity="0.06"/><rect x="42" y="190" width="70" height="10" rx="3" fill={dot} opacity="0.1"/>
+
+  <!-- Right ledger (Source B) -->
+  <rect x="250" y="60" width="120" height="170" rx="10" fill={node} opacity="0.04" stroke={ring} stroke-width="0.8" opacity="0.25"/>
+  <text x="310" y="85" text-anchor="middle" fill={dot} font-size="9" opacity="0.5" font-family="monospace">ERP Journal</text>
+  <line x1="262" y1="95" x2="358" y2="95" stroke={ring} stroke-width="0.4" opacity="0.15"/>
+  <rect x="262" y="105" width="96" height="10" rx="3" fill={node} opacity="0.06"/><rect x="298" y="105" width="60" height="10" rx="3" fill={dot} opacity="0.12"><animate attributeName="opacity" values="0.08;0.18;0.08" dur="3.2s" repeatCount="indefinite"/></rect>
+  <rect x="262" y="122" width="96" height="10" rx="3" fill={node} opacity="0.06"/><rect x="283" y="122" width="75" height="10" rx="3" fill={dot} opacity="0.1"><animate attributeName="opacity" values="0.06;0.15;0.06" dur="3.8s" repeatCount="indefinite"/></rect>
+  <rect x="262" y="139" width="96" height="10" rx="3" fill={node} opacity="0.06"/><rect x="310" y="139" width="48" height="10" rx="3" fill={dot} opacity="0.08"><animate attributeName="opacity" values="0.05;0.14;0.05" dur="4.5s" repeatCount="indefinite"/></rect>
+  <rect x="262" y="156" width="96" height="10" rx="3" fill={node} opacity="0.06"/><rect x="276" y="156" width="82" height="10" rx="3" fill={dot} opacity="0.1"/>
+  <rect x="262" y="173" width="96" height="10" rx="3" fill={node} opacity="0.06"/><rect x="303" y="173" width="55" height="10" rx="3" fill={dot} opacity="0.09"/>
+  <rect x="262" y="190" width="96" height="10" rx="3" fill={node} opacity="0.06"/><rect x="288" y="190" width="70" height="10" rx="3" fill={dot} opacity="0.1"/>
+
+  <!-- Matching center node -->
+  <circle cx="200" cy="170" r="30" fill={node} opacity="0.06" stroke={ring} stroke-width="1" opacity="0.3"/>
+  <circle cx="200" cy="170" r="18" fill={node} opacity="0.08"/>
+  <text x="200" y="167" text-anchor="middle" fill={dot} font-size="7" opacity="0.6" font-family="monospace">Match</text>
+  <text x="200" y="178" text-anchor="middle" fill={dot} font-size="7" opacity="0.6" font-family="monospace">Engine</text>
+
+  <!-- Connection lines left → center -->
+  <path d="M 150 120 Q 170 120, 175 155" stroke={line} stroke-width="0.7" opacity="0.2" stroke-dasharray="4 3"/>
+  <path d="M 150 150 Q 165 150, 172 165" stroke={line} stroke-width="0.7" opacity="0.2" stroke-dasharray="4 3"/>
+  <path d="M 150 180 Q 165 180, 172 175" stroke={line} stroke-width="0.7" opacity="0.2" stroke-dasharray="4 3"/>
+
+  <!-- Connection lines center → right -->
+  <path d="M 228 155 Q 235 120, 250 120" stroke={line} stroke-width="0.7" opacity="0.2" stroke-dasharray="4 3"/>
+  <path d="M 228 165 Q 240 150, 250 150" stroke={line} stroke-width="0.7" opacity="0.2" stroke-dasharray="4 3"/>
+  <path d="M 228 175 Q 240 180, 250 180" stroke={line} stroke-width="0.7" opacity="0.2" stroke-dasharray="4 3"/>
+
+  <!-- Animated matching packets left → center -->
+  <circle r="2.5" fill={dot} opacity="0.8">
+    <animateMotion dur="2s" repeatCount="indefinite" path="M 150,120 Q 170,120, 175,155"/>
+  </circle>
+  <circle r="2" fill={dot} opacity="0.6">
+    <animateMotion dur="2.5s" repeatCount="indefinite" path="M 150,150 Q 165,150, 172,165" begin="0.4s"/>
+  </circle>
+  <circle r="2" fill={dot} opacity="0.7">
+    <animateMotion dur="2.2s" repeatCount="indefinite" path="M 150,180 Q 165,180, 172,175" begin="0.8s"/>
+  </circle>
+
+  <!-- Animated matching packets center → right -->
+  <circle r="2.5" fill={dot} opacity="0.8">
+    <animateMotion dur="2s" repeatCount="indefinite" path="M 228,155 Q 235,120, 250,120" begin="1s"/>
+  </circle>
+  <circle r="2" fill={dot} opacity="0.6">
+    <animateMotion dur="2.3s" repeatCount="indefinite" path="M 228,165 Q 240,150, 250,150" begin="1.3s"/>
+  </circle>
+
+  <!-- Match status indicators -->
+  <circle cx="200" cy="170" r="5" fill={dot} opacity="0.15">
+    <animate attributeName="r" values="5;8;5" dur="2s" repeatCount="indefinite"/>
+    <animate attributeName="opacity" values="0.15;0.3;0.15" dur="2s" repeatCount="indefinite"/>
+  </circle>
+
+  <!-- Output report below -->
+  <line x1="200" y1="200" x2="200" y2="270" stroke={line} stroke-width="0.5" opacity="0.15" stroke-dasharray="4 3"/>
+  <rect x="140" y="270" width="120" height="80" rx="10" fill={node} opacity="0.04" stroke={ring} stroke-width="0.8" opacity="0.25"/>
+  <text x="200" y="292" text-anchor="middle" fill={dot} font-size="8" opacity="0.5" font-family="monospace">Audit Report</text>
+  <line x1="155" y1="300" x2="245" y2="300" stroke={ring} stroke-width="0.4" opacity="0.15"/>
+  <!-- Check marks -->
+  <path d="M 160 315 l 4 4 l 8 -8" stroke={dot} stroke-width="1.2" fill="none" opacity="0.4"><animate attributeName="opacity" values="0.2;0.6;0.2" dur="3s" repeatCount="indefinite"/></path>
+  <rect x="180" y="313" width="52" height="6" rx="2" fill={dot} opacity="0.08"/>
+  <path d="M 160 330 l 4 4 l 8 -8" stroke={dot} stroke-width="1.2" fill="none" opacity="0.4"><animate attributeName="opacity" values="0.3;0.6;0.3" dur="3.5s" repeatCount="indefinite"/></path>
+  <rect x="180" y="328" width="40" height="6" rx="2" fill={dot} opacity="0.08"/>
+
+  <!-- Animated data packet down to report -->
+  <circle r="2" fill={dot} opacity="0.7">
+    <animateMotion dur="2s" repeatCount="indefinite" path="M 200,200 L 200,270" begin="1.5s"/>
+  </circle>
+
+  <!-- Ambient -->
+  <circle cx="20" cy="350" r="1.5" fill={dot}><animate attributeName="opacity" values="0.1;0.3;0.1" dur="5s" repeatCount="indefinite"/></circle>
+  <circle cx="380" cy="30" r="1.5" fill={dot}><animate attributeName="opacity" values="0.15;0.35;0.15" dur="4s" repeatCount="indefinite"/></circle>
+</svg>

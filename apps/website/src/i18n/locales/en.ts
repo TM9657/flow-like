@@ -93,20 +93,25 @@ export const en = {
 		"Start with a paid 90-day pilot. If Flow-Like doesn't outperform your current stack, we refund the difference.",
 
 	// Target Audience
-	"audience.tagline": "Who it's for",
+	"audience.tagline": "Enterprise-grade by design",
 	"audience.headline": "Built for teams who can't afford uncertainty",
 	"audience.cto.title": "CTOs & Tech Leads",
+	"audience.cto.highlight": "Ship fast. Fix in seconds.",
 	"audience.cto.description":
-		'You need speed — but not at the cost of observability. Flow-Like lets you ship fast with typed contracts and instant rollbacks, so "move fast and break things" becomes "move fast and fix things in seconds."',
+		"Typed contracts and instant rollbacks give you speed without sacrificing observability.",
 	"audience.ciso.title": "CISOs & Security Teams",
+	"audience.ciso.highlight": "Data never leaves your network.",
 	"audience.ciso.description":
-		"Data never has to leave your network. Every workflow is auditable, every LLM call is logged, and approval gates can be enforced at the DAG level. Compliance isn't a checkbox — it's baked in.",
+		"Every workflow is auditable, every LLM call is logged, with approval gates enforced at the DAG level.",
 	"audience.ops.title": "Operations & Platform Teams",
+	"audience.ops.highlight": "Self-healing. Zero firefighting.",
 	"audience.ops.description":
-		"Tired of firefighting RPA bots at 2 a.m.? Flow-Like gives you self-healing workflows, parallel execution, and a single pane of glass for every automated process — whether it touches Salesforce, SAP, or your internal APIs.",
+		"Parallel execution and a single pane of glass for every automated process — Salesforce, SAP, or internal APIs.",
 	"audience.gov.title": "Government & Defense",
+	"audience.gov.highlight": "Air-gapped. On your hardware.",
 	"audience.gov.description":
-		"Classified data. Sovereign infrastructure. Zero tolerance for leaks. Flow-Like runs fully air-gapped, on your hardware, under your control — with audit trails that satisfy the strictest compliance regimes.",
+		"Fully sovereign, under your control, with audit trails that satisfy the strictest compliance regimes.",
+	"audience.cta": "Learn more",
 	"audience.closing": "If you can't audit it, you shouldn't automate it.",
 
 	// CTA

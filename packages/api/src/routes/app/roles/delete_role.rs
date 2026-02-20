@@ -74,8 +74,8 @@ pub async fn delete_role(
     }
 
     membership::Entity::update_many()
-        .filter(membership::Column::AppId.eq(app_id))
-        .filter(membership::Column::RoleId.eq(role_id))
+        .filter(membership::Column::AppId.eq(app_id.clone()))
+        .filter(membership::Column::RoleId.eq(role_id.clone()))
         .col_expr(membership::Column::RoleId, Expr::value(default_role_id))
         .exec(&txn)
         .await?;
@@ -84,6 +84,10 @@ pub async fn delete_role(
     role.delete(&txn).await?;
 
     txn.commit().await?;
+
+    if let Err(e) = state.invalidate_role_permissions(&role_id, &app_id).await {
+        tracing::warn!(error = %e, "Failed to invalidate permission cache after role deletion");
+    }
 
     Ok(Json(()))
 }

@@ -172,8 +172,18 @@ impl Command for CopyPasteCommand {
             let mut new_node = node.clone();
             let blueprint_node = node_registry
                 .get_node(&node.name)
-                .ok()
-                .unwrap_or(node.clone());
+                .ok();
+
+            // If the pasted node is external (has wasm metadata) but not in the registry, reject it
+            if blueprint_node.is_none() && node.wasm.is_some() {
+                return Err(flow_like_types::anyhow!(
+                    "External node '{}' from package '{}' is not installed. Please install the package first.",
+                    node.friendly_name,
+                    node.wasm.as_ref().map(|w| w.package_id.as_str()).unwrap_or("unknown")
+                ));
+            }
+
+            let blueprint_node = blueprint_node.unwrap_or(node.clone());
             let old_id = new_node.id.clone();
             let new_id = create_id();
             translated_connection.insert(old_id, new_id.clone());
@@ -184,6 +194,7 @@ impl Command for CopyPasteCommand {
             new_node.scores = blueprint_node.scores.clone();
             new_node.start = blueprint_node.start;
             new_node.event_callback = blueprint_node.event_callback;
+            new_node.wasm = blueprint_node.wasm.clone();
 
             // Preserve user-customized friendly_name and description for start nodes (events)
             let is_start_node = blueprint_node.start.unwrap_or(false);

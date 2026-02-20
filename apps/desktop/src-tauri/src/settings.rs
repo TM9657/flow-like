@@ -218,7 +218,10 @@ impl Settings {
             }
         }
 
-        println!("Settings::new() bit_dir={:?} project_dir={:?} user_dir={:?}", bit_dir, project_dir, user_dir);
+        println!(
+            "Settings::new() bit_dir={:?} project_dir={:?} user_dir={:?}",
+            bit_dir, project_dir, user_dir
+        );
 
         Self {
             loaded: false,

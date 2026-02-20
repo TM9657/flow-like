@@ -12,7 +12,7 @@ crate-type = ["cdylib"]
 
 [dependencies]
 # Core SDK for building WASM nodes
-flow-like-wasm-sdk = { path = "../wasm-sdk" }
+flow-like-wasm-sdk = { version = "0.1.0"}
 
 # JSON serialization
 serde = { version = "1", features = ["derive"] }

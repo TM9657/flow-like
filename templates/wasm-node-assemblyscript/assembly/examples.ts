@@ -1,72 +1,54 @@
 /**
- * Example Nodes Entry Point
+ * Example Nodes Entry Point (Multi-Node Package)
  *
- * This file imports and re-exports all example nodes so they can be built
- * into a single WASM module. Use this as a reference for creating multi-node packages.
+ * Uses NodePackage from the SDK to register all nodes.
+ * NodePackage handles get_nodes() serialization and run() dispatch automatically.
  *
  * Build with: npx asc assembly/examples.ts --target release -o build/examples.wasm
  */
 
-// Re-export SDK utilities that are always needed
+import { NodePackage } from "@flow-like/wasm-sdk-assemblyscript/assembly/index";
+
 export {
 	alloc,
 	dealloc,
 	get_abi_version,
-} from "./sdk";
+} from "@flow-like/wasm-sdk-assemblyscript/assembly/index";
 
-// ============================================================================
-// Math Nodes
-// ============================================================================
+import { AddNode, SubtractNode, MultiplyNode, DivideNode, ClampNode } from "../examples/math_nodes";
+import { UppercaseNode, LowercaseNode, TrimNode, LengthNode, ContainsNode, ReplaceNode, ConcatNode } from "../examples/string_nodes";
+import { IfBranchNode, CompareNode, AndGateNode, OrGateNode, NotGateNode, GateNode } from "../examples/control_flow";
 
-export {
-	get_add_definition,
-	run_add,
-	get_subtract_definition,
-	run_subtract,
-	get_multiply_definition,
-	run_multiply,
-	get_divide_definition,
-	run_divide,
-	get_clamp_definition,
-	run_clamp,
-} from "../examples/math_nodes";
+const pkg = new NodePackage();
 
-// ============================================================================
-// String Nodes
-// ============================================================================
+// Math nodes
+pkg.register(new AddNode());
+pkg.register(new SubtractNode());
+pkg.register(new MultiplyNode());
+pkg.register(new DivideNode());
+pkg.register(new ClampNode());
 
-export {
-	get_uppercase_definition,
-	run_uppercase,
-	get_lowercase_definition,
-	run_lowercase,
-	get_trim_definition,
-	run_trim,
-	get_length_definition,
-	run_length,
-	get_contains_definition,
-	run_contains,
-	get_replace_definition,
-	run_replace,
-	get_concat_definition,
-	run_concat,
-} from "../examples/string_nodes";
+// String nodes
+pkg.register(new UppercaseNode());
+pkg.register(new LowercaseNode());
+pkg.register(new TrimNode());
+pkg.register(new LengthNode());
+pkg.register(new ContainsNode());
+pkg.register(new ReplaceNode());
+pkg.register(new ConcatNode());
 
-// ============================================================================
-// Control Flow Nodes
-// ============================================================================
+// Control flow nodes
+pkg.register(new IfBranchNode());
+pkg.register(new CompareNode());
+pkg.register(new AndGateNode());
+pkg.register(new OrGateNode());
+pkg.register(new NotGateNode());
+pkg.register(new GateNode());
 
-export {
-	get_if_branch_definition,
-	run_if_branch,
-	get_compare_definition,
-	run_compare,
-	get_and_gate_definition,
-	run_and_gate,
-	get_or_gate_definition,
-	run_or_gate,
-	get_not_gate_definition,
-	run_not_gate,
-	get_gate_definition,
-	run_gate,
-} from "../examples/control_flow";
+export function get_nodes(): i64 {
+	return pkg.getNodes();
+}
+
+export function run(ptr: i32, len: i32): i64 {
+	return pkg.run(ptr, len);
+}

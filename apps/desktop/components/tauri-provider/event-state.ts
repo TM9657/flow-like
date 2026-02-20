@@ -7,6 +7,7 @@ import {
 	type IHub,
 	type IIntercomEvent,
 	type ILogMetadata,
+	type INode,
 	type IOAuthProvider,
 	type IOAuthToken,
 	type IPrerunEventResponse,
@@ -705,6 +706,26 @@ export class EventState implements IEventState {
 				can_execute_locally,
 			} = extractOAuthRequirementsFromBoard(board);
 
+			// Collect all WASM (external) node package_ids and permissions
+			const wasmPackageIds = new Set<string>();
+			const wasmPackagePermissions: Record<string, string[]> = {};
+			const collectWasm = (node: INode) => {
+				if (node.wasm?.package_id) {
+					wasmPackageIds.add(node.wasm.package_id);
+					if (node.wasm.permissions?.length) {
+						const existing = wasmPackagePermissions[node.wasm.package_id] ?? [];
+						for (const perm of node.wasm.permissions) {
+							if (!existing.includes(perm)) existing.push(perm);
+						}
+						wasmPackagePermissions[node.wasm.package_id] = existing;
+					}
+				}
+			};
+			for (const node of Object.values(board.nodes)) collectWasm(node);
+			for (const layer of Object.values(board.layers)) {
+				for (const node of Object.values(layer.nodes)) collectWasm(node);
+			}
+
 			return {
 				board_id: event.board_id,
 				runtime_variables: runtimeVariables,
@@ -712,6 +733,9 @@ export class EventState implements IEventState {
 				requires_local_execution,
 				execution_mode,
 				can_execute_locally,
+				has_wasm_nodes: wasmPackageIds.size > 0,
+				wasm_package_ids: Array.from(wasmPackageIds),
+				wasm_package_permissions: wasmPackagePermissions,
 			};
 		};
 

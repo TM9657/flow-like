@@ -6,12 +6,18 @@ import {
 	LuArrowRight,
 	LuBookMarked,
 	LuBookOpen,
+	LuBot,
+	LuBuilding2,
 	LuDownload,
 	LuExternalLink,
+	LuFactory,
+	LuFileStack,
 	LuFileText,
 	LuGlobe,
+	LuLandmark,
 	LuScale,
 	LuServer,
+	LuShieldCheck,
 	LuZap,
 } from "react-icons/lu";
 import { translationsCommon } from "../i18n/locales/pages/common";
@@ -93,6 +99,7 @@ interface DropdownItem {
 	description?: string;
 	external?: boolean;
 	highlight?: boolean;
+	divider?: boolean;
 }
 
 function NavDropdown({
@@ -135,8 +142,9 @@ function NavDropdown({
 				<div className="absolute top-full left-0 pt-2 z-50">
 					<div className="bg-background/95 backdrop-blur-lg border border-border/50 rounded-xl shadow-xl shadow-black/10 p-2 min-w-[240px]">
 						{items.map((item) => (
-							<a
-								key={item.href}
+							<div key={item.href}>
+								{item.divider && <div className="my-1.5 mx-2 border-t border-border/30" />}
+								<a
 								href={item.href}
 								target={item.external ? "_blank" : undefined}
 								rel={item.external ? "noreferrer" : undefined}
@@ -162,6 +170,7 @@ function NavDropdown({
 									)}
 								</div>
 							</a>
+							</div>
 						))}
 					</div>
 				</div>
@@ -318,6 +327,24 @@ function MobileMenu({
 								label={t("header.compare")}
 								onClick={onClose}
 							/>
+							<MobileNavItem
+								href="/developers"
+								icon={LuBookOpen}
+								label="For Developers"
+								onClick={onClose}
+							/>
+							<MobileNavItem
+								href="/pitch"
+								icon={LuBuilding2}
+								label="For CIOs"
+								onClick={onClose}
+							/>
+						<div className="my-1 mx-2 border-t border-border/20" />
+							<MobileNavItem href="/industries/shopfloor" icon={LuFactory} label="Shopfloor" onClick={onClose} />
+							<MobileNavItem href="/industries/finance" icon={LuLandmark} label="Finance" onClick={onClose} />
+							<MobileNavItem href="/industries/office" icon={LuFileStack} label="Office" onClick={onClose} />
+							<MobileNavItem href="/industries/ai-agents" icon={LuBot} label="AI Agents" onClick={onClose} />
+							<MobileNavItem href="/industries/gov-defense" icon={LuShieldCheck} label="Gov & Defense" onClick={onClose} />
 						</div>
 					</div>
 
@@ -521,6 +548,49 @@ export function Header() {
 			href: "/compare",
 			icon: LuScale,
 			description: "See how we stack up",
+		},
+		{
+			label: "For Developers",
+			href: "/developers",
+			icon: LuBookOpen,
+			description: "Build workflows or write custom nodes",
+		},
+		{
+			label: "For CIOs",
+			href: "/pitch",
+			icon: LuBuilding2,
+			description: "Executive overview & ROI",
+		},
+		{
+			label: "Shopfloor",
+			href: "/industries/shopfloor",
+			icon: LuFactory,
+			description: "Machines, sensors & PLCs",
+			divider: true,
+		},
+		{
+			label: "Finance",
+			href: "/industries/finance",
+			icon: LuLandmark,
+			description: "Reconciliation & compliance",
+		},
+		{
+			label: "Office",
+			href: "/industries/office",
+			icon: LuFileStack,
+			description: "Documents & approvals",
+		},
+		{
+			label: "AI Agents",
+			href: "/industries/ai-agents",
+			icon: LuBot,
+			description: "LLMs, RAG & multi-agent",
+		},
+		{
+			label: "Gov & Defense",
+			href: "/industries/gov-defense",
+			icon: LuShieldCheck,
+			description: "Air-gapped & sovereign",
 		},
 	];
 

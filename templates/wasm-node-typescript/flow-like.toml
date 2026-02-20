@@ -1,0 +1,27 @@
+# Flow-Like Package Manifest
+# This file declares your package's metadata and node entries.
+# The runtime uses this to determine capabilities and display information.
+
+manifest_version = 1
+
+# --- Package Identity ---
+id = "com.example.custom-node-ts"
+name = "Custom Node (TypeScript)"
+version = "0.1.0"
+description = "Template for creating Flow-Like WASM nodes in TypeScript"
+license = "MIT"
+repository = "https://github.com/example/flow-like-nodes"
+keywords = ["template", "example", "typescript"]
+
+[[authors]]
+name = "Your Name"
+
+# --- Nodes ---
+# Each [[nodes]] entry describes a node this package provides.
+# For single-node packages, list just one. For multi-node, list all of them.
+
+[[nodes]]
+id = "my_custom_node_ts"
+name = "My Custom Node (TS)"
+description = "A template WASM node built with TypeScript"
+category = "Custom/WASM"

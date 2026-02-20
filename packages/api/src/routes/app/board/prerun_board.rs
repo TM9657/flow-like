@@ -58,6 +58,12 @@ pub struct PrerunBoardResponse {
     /// Whether the user can execute locally (has ReadBoards permission)
     /// If false, execution must happen on server
     pub can_execute_locally: bool,
+    /// Whether the board contains any WASM (external) nodes
+    pub has_wasm_nodes: bool,
+    /// package_id values of all WASM nodes present in the board
+    pub wasm_package_ids: Vec<String>,
+    /// Per-package permissions declared by WASM nodes (package_id -> list of permission strings)
+    pub wasm_package_permissions: HashMap<String, Vec<String>>,
 }
 
 fn parse_version(version_str: &str) -> Option<(u32, u32, u32)> {
@@ -125,13 +131,31 @@ pub async fn prerun_board(
         })
         .collect();
 
-    // Collect OAuth requirements from all nodes (including layers)
+    // Collect OAuth requirements and WASM info from all nodes (including layers)
     let mut oauth_scopes: HashMap<String, Vec<String>> = HashMap::new();
     let mut requires_local_execution = false;
+    let mut wasm_package_ids: Vec<String> = Vec::new();
+    let mut wasm_package_permissions: HashMap<String, Vec<String>> = HashMap::new();
 
     let process_node = |node: &flow_like::flow::node::Node,
                         oauth_scopes: &mut HashMap<String, Vec<String>>,
-                        requires_local: &mut bool| {
+                        requires_local: &mut bool,
+                        wasm_ids: &mut Vec<String>,
+                        wasm_perms: &mut HashMap<String, Vec<String>>| {
+        // Collect WASM (external) node package IDs
+        if let Some(wasm) = &node.wasm {
+            if !wasm_ids.contains(&wasm.package_id) {
+                wasm_ids.push(wasm.package_id.clone());
+            }
+            if !wasm.permissions.is_empty() {
+                let entry = wasm_perms.entry(wasm.package_id.clone()).or_default();
+                for perm in &wasm.permissions {
+                    if !entry.contains(perm) {
+                        entry.push(perm.clone());
+                    }
+                }
+            }
+        }
         // Check if node requires local execution
         if node.only_offline {
             *requires_local = true;
@@ -163,13 +187,13 @@ pub async fn prerun_board(
 
     // Process main board nodes
     for node in board.nodes.values() {
-        process_node(node, &mut oauth_scopes, &mut requires_local_execution);
+        process_node(node, &mut oauth_scopes, &mut requires_local_execution, &mut wasm_package_ids, &mut wasm_package_permissions);
     }
 
     // Process layer nodes
     for layer in board.layers.values() {
         for node in layer.nodes.values() {
-            process_node(node, &mut oauth_scopes, &mut requires_local_execution);
+            process_node(node, &mut oauth_scopes, &mut requires_local_execution, &mut wasm_package_ids, &mut wasm_package_permissions);
         }
     }
 
@@ -187,5 +211,8 @@ pub async fn prerun_board(
         requires_local_execution,
         execution_mode: board.execution_mode.clone(),
         can_execute_locally,
+        has_wasm_nodes: !wasm_package_ids.is_empty(),
+        wasm_package_ids,
+        wasm_package_permissions,
     }))
 }

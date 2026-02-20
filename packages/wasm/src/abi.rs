@@ -92,6 +92,10 @@ pub struct WasmNodeDefinition {
     /// ABI version this module was built for
     #[serde(default)]
     pub abi_version: Option<u32>,
+    /// Per-node permissions declared by the WASM module.
+    /// Empty means the node needs no additional permissions.
+    #[serde(default)]
+    pub permissions: Vec<String>,
 }
 
 /// Pin definition for WASM nodes

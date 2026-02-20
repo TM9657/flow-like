@@ -34,6 +34,7 @@ import {
 	StorePackageDetail,
 	type GenericFetcher,
 } from "../pages/store/store-package-detail";
+import type { CompileStatus } from "../ui/package-status-badge";
 
 type SortOption =
 	| "relevance"
@@ -45,6 +46,7 @@ type SortOption =
 interface PackagesStorePageProps {
 	fetcher: GenericFetcher;
 	auth: AuthContextProps;
+	getPackageStatus?: (packageId: string) => CompileStatus | undefined;
 }
 
 function PackageCard({ pkg }: { pkg: PackageSummary }) {
@@ -117,12 +119,18 @@ function PackageCardSkeleton() {
 function PackageDetailWrapper({
 	fetcher,
 	auth,
-}: { fetcher: GenericFetcher; auth: AuthContextProps }) {
+	getPackageStatus,
+}: {
+	fetcher: GenericFetcher;
+	auth: AuthContextProps;
+	getPackageStatus?: (packageId: string) => CompileStatus | undefined;
+}) {
 	const searchParams = useSearchParams();
 	const router = useRouter();
 	const packageId = searchParams.get("id") ?? "";
 
 	const handleBack = useCallback(() => router.back(), [router]);
+	const compileStatus = getPackageStatus?.(packageId);
 
 	return (
 		<StorePackageDetail
@@ -140,6 +148,7 @@ function PackageDetailWrapper({
 			}
 			fetcher={fetcher}
 			auth={auth}
+			compileStatus={compileStatus}
 		/>
 	);
 }
@@ -318,14 +327,18 @@ function PackageListContent({
 	);
 }
 
-function PageContent({ fetcher, auth }: PackagesStorePageProps) {
+function PageContent({ fetcher, auth, getPackageStatus }: PackagesStorePageProps) {
 	const searchParams = useSearchParams();
 	const packageId = searchParams.get("id");
 
 	if (packageId) {
 		return (
 			<Suspense fallback={<Skeleton className="h-full w-full" />}>
-				<PackageDetailWrapper fetcher={fetcher} auth={auth} />
+				<PackageDetailWrapper
+					fetcher={fetcher}
+					auth={auth}
+					getPackageStatus={getPackageStatus}
+				/>
 			</Suspense>
 		);
 	}
@@ -333,10 +346,18 @@ function PageContent({ fetcher, auth }: PackagesStorePageProps) {
 	return <PackageListContent fetcher={fetcher} auth={auth} />;
 }
 
-export function PackagesStorePage({ fetcher, auth }: PackagesStorePageProps) {
+export function PackagesStorePage({
+	fetcher,
+	auth,
+	getPackageStatus,
+}: PackagesStorePageProps) {
 	return (
 		<Suspense fallback={<Skeleton className="h-full w-full" />}>
-			<PageContent fetcher={fetcher} auth={auth} />
+			<PageContent
+				fetcher={fetcher}
+				auth={auth}
+				getPackageStatus={getPackageStatus}
+			/>
 		</Suspense>
 	);
 }

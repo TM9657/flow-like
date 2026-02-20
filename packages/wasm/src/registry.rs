@@ -192,7 +192,7 @@ impl Default for RegistryConfig {
 }
 
 /// Search filters for registry queries
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 pub struct SearchFilters {
     /// Search query (matches name, description, keywords)
@@ -225,6 +225,23 @@ pub struct SearchFilters {
     /// Sort direction
     #[serde(default)]
     pub sort_desc: bool,
+}
+
+impl Default for SearchFilters {
+    fn default() -> Self {
+        Self {
+            query: None,
+            category: None,
+            keywords: Vec::new(),
+            author: None,
+            verified_only: false,
+            include_deprecated: false,
+            offset: 0,
+            limit: default_limit(),
+            sort_by: SortField::default(),
+            sort_desc: false,
+        }
+    }
 }
 
 fn default_limit() -> usize {

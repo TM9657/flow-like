@@ -11,6 +11,7 @@ import {
 } from "@xyflow/react";
 import {
 	BanIcon,
+	BoxIcon,
 	CircleStopIcon,
 	CircleXIcon,
 	ClockIcon,
@@ -187,6 +188,11 @@ const FlowNodeInner = memo(
 		const isReroute = useMemo(() => {
 			return props.data.node.name === "reroute";
 		}, [props.data.node.name]);
+
+		const isWasmNode = useMemo(
+			() => Boolean(props.data.node.wasm?.package_id),
+			[props.data.node.wasm],
+		);
 
 		const nodeStyle = useMemo(
 			() => ({
@@ -435,7 +441,7 @@ const FlowNodeInner = memo(
 				setOutputPins(outputPins);
 				setIsExec(isExec);
 			},
-			[addPin, sortPins, props.data.node],
+			[addPin, sortPins, props.data.node, props.data.node.hash],
 		);
 
 		// Parse pins when node pins change
@@ -443,7 +449,7 @@ const FlowNodeInner = memo(
 			parsePins(Object.values(props.data.node?.pins || []));
 			// Update React Flow internals when pins change (handles may have changed)
 			updateNodeInternals(props.id);
-		}, [props.data.node.pins, props.id, props.data.node.hash]);
+		}, [props.data.node.pins, props.data.node.hash, props.id]);
 
 		function isPinAction(pin: IPin | IPinAction): pin is IPinAction {
 			return typeof (pin as IPinAction).onAction === "function";
@@ -791,6 +797,19 @@ const FlowNodeInner = memo(
 						{useMemo(
 							() => (
 								<MonitorIcon className="w-2 h-2 text-blue-500" />
+							),
+							[],
+						)}
+					</div>
+				)}
+				{isWasmNode && !isReroute && (
+					<div
+						className="absolute bottom-0 z-10 translate-y-[calc(50%)] translate-x-[calc(50%)] right-0 text-center bg-background rounded-full"
+						title={`WASM sandbox node — package: ${props.data.node.wasm?.package_id}`}
+					>
+						{useMemo(
+							() => (
+								<BoxIcon className="w-2 h-2 text-amber-500" />
 							),
 							[],
 						)}

@@ -5,6 +5,14 @@ import { invoke } from "@tauri-apps/api/core";
 import { WebviewWindow } from "@tauri-apps/api/webviewWindow";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import {
+	AlertDialog,
+	AlertDialogAction,
+	AlertDialogCancel,
+	AlertDialogContent,
+	AlertDialogDescription,
+	AlertDialogFooter,
+	AlertDialogHeader,
+	AlertDialogTitle,
 	Avatar,
 	AvatarFallback,
 	AvatarImage,
@@ -63,13 +71,15 @@ import {
 	BarChart3,
 	BellIcon,
 	BookOpenIcon,
+	BrainCircuitIcon,
 	BugIcon,
+	Check,
 	ChevronRight,
 	ChevronsUpDown,
+	Code2Icon,
 	CreditCard,
 	Edit3Icon,
-	ExternalLinkIcon,
-	HeartIcon,
+	HomeIcon,
 	KeyIcon,
 	KeyRoundIcon,
 	LayoutDashboardIcon,
@@ -80,10 +90,13 @@ import {
 	Moon,
 	Package2Icon,
 	Plus,
+	SettingsIcon,
+	ShoppingBagIcon,
 	SidebarCloseIcon,
 	SidebarOpenIcon,
 	Sparkles,
 	Sun,
+	Trash2Icon,
 	UsersRoundIcon,
 	WorkflowIcon,
 	ZapIcon,
@@ -102,25 +115,28 @@ import { useTauriInvoke } from "./useInvoke";
 const data = {
 	navMain: [
 		{
-			title: "Hub",
+			title: "Home",
 			url: "/",
-			icon: HeartIcon,
+			icon: HomeIcon,
 			isActive: true,
 			permission: false,
-			items: [
-				{
-					title: "Home",
-					url: "/",
-				},
-				{
-					title: "Explore Apps",
-					url: "/store/explore/apps",
-				},
-				{
-					title: "Explore Models",
-					url: "/settings/ai",
-				},
-			],
+			items: [],
+		},
+		{
+			title: "Explore Apps",
+			url: "/store/explore/apps",
+			icon: ShoppingBagIcon,
+			isActive: false,
+			permission: false,
+			items: [],
+		},
+		{
+			title: "Explore Models",
+			url: "/settings/ai",
+			icon: BrainCircuitIcon,
+			isActive: false,
+			permission: false,
+			items: [],
 		},
 		{
 			title: "Library",
@@ -128,40 +144,8 @@ const data = {
 			icon: LibraryIcon,
 			isActive: false,
 			permission: false,
-			items: [
-				{
-					title: "Overview",
-					url: "/library",
-				},
-				// {
-				// 	title: "Favorites",
-				// 	url: "/library/favorites",
-				// },
-			],
+			items: [],
 		},
-		// {
-		// 	title: "Developer",
-		// 	url: "/settings/registry",
-		// 	icon: Code2Icon,
-		// 	isActive: false,
-		// 	permission: false,
-		// 	items: [
-		// 		{
-		// 			title: "Installed",
-		// 			url: "/settings/registry/installed",
-		// 		},
-		// 		{
-		// 			title: "Explore",
-		// 			url: "/settings/registry/explore",
-		// 		},
-		// 	],
-		// },
-		// {
-		// 	title: "Documentation",
-		// 	url: "https://docs.flow-like.com/",
-		// 	permission: false,
-		// 	icon: BookOpenIcon,
-		// },
 		{
 			title: "User Actions",
 			url: "/admin/user",
@@ -244,6 +228,24 @@ const data = {
 					title: "Service Tokens",
 					url: "/admin/sinks",
 					permission: GlobalPermission.Admin,
+				},
+			],
+		},
+	],
+	navDev: [
+		{
+			title: "Developer",
+			url: "/developer",
+			icon: Code2Icon,
+			isActive: false,
+			items: [
+				{
+					title: "My Nodes",
+					url: "/developer",
+				},
+				{
+					title: "Custom Nodes",
+					url: "/developer/installed",
 				},
 			],
 		},
@@ -387,7 +389,7 @@ function InnerSidebar() {
 				<SpotlightTrigger />
 			</SidebarHeader>
 			<SidebarContent>
-				<NavMain items={data.navMain} />
+				<NavMain items={data.navMain} devItems={data.navDev} />
 				<Shortcuts />
 				<Flows />
 			</SidebarContent>
@@ -502,19 +504,27 @@ function InnerSidebar() {
 						</DropdownMenuContent>
 					</DropdownMenu>
 
+					<a href="/settings">
+						<SidebarMenuButton tooltip="Settings">
+							<SettingsIcon className="size-4" />
+							<span className="w-full flex flex-row items-center justify-between">
+								Settings
+							</span>
+						</SidebarMenuButton>
+					</a>
 					<a
 						href="https://docs.flow-like.com"
 						target="_blank"
 						rel="noopener noreferrer"
 					>
-						<SidebarMenuButton>
+						<SidebarMenuButton tooltip="Documentation">
 							<BookOpenIcon className="size-4" />
 							<span className="w-full flex flex-row items-center justify-between">
 								Documentation{" "}
 							</span>
 						</SidebarMenuButton>
 					</a>
-					<SidebarMenuButton onClick={toggleSidebar}>
+					<SidebarMenuButton tooltip="Toggle Sidebar" onClick={toggleSidebar}>
 						{open ? <SidebarCloseIcon /> : <SidebarOpenIcon />}
 						<span className="w-full flex flex-row items-center justify-between">
 							Toggle Sidebar{" "}
@@ -584,6 +594,43 @@ function Profiles() {
 		]);
 	}, []);
 
+	const [deleteTarget, setDeleteTarget] = useState<{
+		id: string;
+		name: string;
+	} | null>(null);
+	const [isDeleting, setIsDeleting] = useState(false);
+
+	const handleDeleteProfile = useCallback(
+		(profileId: string, profileName: string, e: React.MouseEvent) => {
+			e.stopPropagation();
+			e.preventDefault();
+			const profileCount = Object.keys(profiles.data ?? {}).length;
+			if (profileCount <= 1) {
+				toast.error("Cannot delete your only profile");
+				return;
+			}
+			setDeleteTarget({ id: profileId, name: profileName });
+		},
+		[profiles],
+	);
+
+	const confirmDeleteProfile = useCallback(async () => {
+		if (!deleteTarget) return;
+		setIsDeleting(true);
+		try {
+			await invoke("delete_profile", { profileId: deleteTarget.id });
+			toast.success("Profile removed");
+			await profiles.refetch();
+			await invalidate(backend.userState.getProfile, []);
+			await invalidate(backend.userState.getSettingsProfile, []);
+		} catch (err) {
+			toast.error(`${err}`);
+		} finally {
+			setIsDeleting(false);
+			setDeleteTarget(null);
+		}
+	}, [deleteTarget, profiles, invalidate, backend.userState]);
+
 	return (
 		<SidebarMenu>
 			<SidebarMenuItem>
@@ -633,35 +680,61 @@ function Profiles() {
 							Profiles
 						</DropdownMenuLabel>
 						{profiles.data &&
-							Object.values(profiles.data).map((profile, index) => (
-								<DropdownMenuItem
-									key={profile.hub_profile.id}
-									onClick={async () => {
-										if (profile.hub_profile.id)
-											handleProfileChange(profile.hub_profile.id);
-									}}
-									className="gap-4 p-2"
-								>
-									<div className="flex size-6 items-center justify-center rounded-sm border">
-										<Avatar className="h-8 w-8 rounded-sm">
-											<AvatarImage
-												className="rounded-sm w-8 h-8"
-												src={
-													profile.hub_profile.icon ??
-													"/thumbnail-placeholder.webp"
-												}
-											/>
-											<AvatarImage
-												className="rounded-sm w-8 h-8"
-												src="/app-logo.webp"
-											/>
-											<AvatarFallback>NA</AvatarFallback>
-										</Avatar>
-									</div>
-									{profile.hub_profile.name}
-									<DropdownMenuShortcut>⌘{index + 1}</DropdownMenuShortcut>
-								</DropdownMenuItem>
-							))}
+							Object.values(profiles.data).map((profile, index) => {
+								const isActive =
+									profile.hub_profile.id ===
+									currentProfile.data?.hub_profile.id;
+								return (
+									<DropdownMenuItem
+										key={profile.hub_profile.id}
+										onClick={async () => {
+											if (profile.hub_profile.id)
+												handleProfileChange(profile.hub_profile.id);
+										}}
+										className="group gap-2 p-2"
+									>
+										<div className="flex size-6 items-center justify-center rounded-sm border">
+											<Avatar className="h-8 w-8 rounded-sm">
+												<AvatarImage
+													className="rounded-sm w-8 h-8"
+													src={
+														profile.hub_profile.icon ??
+														"/thumbnail-placeholder.webp"
+													}
+												/>
+												<AvatarImage
+													className="rounded-sm w-8 h-8"
+													src="/app-logo.webp"
+												/>
+												<AvatarFallback>NA</AvatarFallback>
+											</Avatar>
+										</div>
+										<span className="flex-1 truncate">
+											{profile.hub_profile.name}
+										</span>
+										{isActive && (
+											<Check className="size-4 text-primary shrink-0" />
+										)}
+										{!isActive &&
+											Object.keys(profiles.data ?? {}).length > 1 && (
+												<button
+													type="button"
+													className="text-muted-foreground/40 hover:text-destructive hover:bg-destructive/10 transition-colors p-1 rounded shrink-0"
+													onClick={(e) =>
+														handleDeleteProfile(
+															profile.hub_profile.id ?? "",
+															profile.hub_profile.name ?? "Profile",
+															e,
+														)
+													}
+												>
+													<Trash2Icon className="size-3.5" />
+												</button>
+											)}
+										<DropdownMenuShortcut>⌘{index + 1}</DropdownMenuShortcut>
+									</DropdownMenuItem>
+								);
+							})}
 						<DropdownMenuSeparator />
 						<DropdownMenuItem
 							className="gap-2 p-2"
@@ -692,25 +765,166 @@ function Profiles() {
 				setOpen={setCreateProfile}
 				onCreate={handleCreateProfile}
 			/>
+			<AlertDialog
+				open={!!deleteTarget}
+				onOpenChange={(open) => {
+					if (!open) setDeleteTarget(null);
+				}}
+			>
+				<AlertDialogContent>
+					<AlertDialogHeader>
+						<AlertDialogTitle>Delete profile</AlertDialogTitle>
+						<AlertDialogDescription>
+							Are you sure you want to delete{" "}
+							<span className="font-medium text-foreground">
+								{deleteTarget?.name}
+							</span>
+							? This action cannot be undone.
+						</AlertDialogDescription>
+					</AlertDialogHeader>
+					<AlertDialogFooter>
+						<AlertDialogCancel disabled={isDeleting}>
+							Cancel
+						</AlertDialogCancel>
+						<AlertDialogAction
+							onClick={confirmDeleteProfile}
+							disabled={isDeleting}
+							className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+						>
+							{isDeleting ? "Deleting…" : "Delete"}
+						</AlertDialogAction>
+					</AlertDialogFooter>
+				</AlertDialogContent>
+			</AlertDialog>
 		</SidebarMenu>
+	);
+}
+
+interface INavItem {
+	title: string;
+	url: string;
+	icon?: LucideIcon;
+	isActive?: boolean;
+	permission?: boolean;
+	items?: {
+		title: string;
+		url: string;
+		permission?: GlobalPermission;
+	}[];
+}
+
+function isItemActive(item: INavItem, pathname: string): boolean {
+	if (pathname === item.url) return true;
+	if (item.items?.some((sub) => pathname === sub.url || pathname.startsWith(`${sub.url}/`))) return true;
+	return pathname.startsWith(`${item.url}/`);
+}
+
+function NavFlatItem({
+	item,
+	pathname,
+}: Readonly<{ item: INavItem; pathname: string }>) {
+	const active = isItemActive(item, pathname);
+	return (
+		<SidebarMenuItem>
+			<SidebarMenuButton
+				asChild
+				variant={active ? "outline" : "default"}
+				tooltip={item.title}
+			>
+				<Link href={item.url}>
+					{item.icon && <item.icon />}
+					<span>{item.title}</span>
+				</Link>
+			</SidebarMenuButton>
+		</SidebarMenuItem>
+	);
+}
+
+function NavCollapsible({
+	item,
+	pathname,
+	sidebarOpen,
+	onNavigate,
+}: Readonly<{
+	item: INavItem;
+	pathname: string;
+	sidebarOpen: boolean;
+	onNavigate: (url: string) => void;
+}>) {
+	const active = isItemActive(item, pathname);
+	return (
+		<Collapsible
+			asChild
+			defaultOpen={
+				(localStorage.getItem(`sidebar:${item.title}`) ??
+					(item.isActive ? "open" : "closed")) === "open"
+			}
+			onOpenChange={(isOpen) => {
+				localStorage.setItem(`sidebar:${item.title}`, isOpen ? "open" : "closed");
+			}}
+			className="group/collapsible"
+		>
+			<SidebarMenuItem>
+				<CollapsibleTrigger asChild>
+					<SidebarMenuButton
+						variant={active ? "outline" : "default"}
+						tooltip={item.title}
+						onClick={() => {
+							if (!sidebarOpen) onNavigate(item.url);
+						}}
+						onMouseDown={async (e) => {
+							if (e.button === 1) {
+								e.preventDefault();
+								try {
+									const webview = new WebviewWindow(`sidebar-${createId()}`, {
+										url: item.url,
+										title: item.title,
+										focus: true,
+										resizable: true,
+										maximized: false,
+										width: 1200,
+										height: 800,
+									});
+									webview.once("tauri://error", (error) => {
+										console.error("Failed to open new window:", error);
+									});
+								} catch (error) {
+									console.error("Failed to open new window:", error);
+								}
+							}
+						}}
+					>
+						{item.icon && <item.icon />}
+						<span>{item.title}</span>
+						<ChevronRight className="ml-auto transition-transform duration-200 group-data-[state=open]/collapsible:rotate-90" />
+					</SidebarMenuButton>
+				</CollapsibleTrigger>
+				<CollapsibleContent>
+					<SidebarMenuSub>
+						{item.items?.map((subItem) => (
+							<SidebarMenuSubItem key={subItem.title}>
+								<SidebarMenuSubButton asChild>
+									<Link href={subItem.url}>
+										<span className={pathname === subItem.url || pathname.startsWith(`${subItem.url}/`) ? "font-bold text-primary" : ""}>
+											{subItem.title}
+										</span>
+									</Link>
+								</SidebarMenuSubButton>
+							</SidebarMenuSubItem>
+						))}
+					</SidebarMenuSub>
+				</CollapsibleContent>
+			</SidebarMenuItem>
+		</Collapsible>
 	);
 }
 
 function NavMain({
 	items,
+	devItems,
 }: Readonly<{
-	items: {
-		title: string;
-		url: string;
-		icon?: LucideIcon;
-		isActive?: boolean;
-		permission?: boolean;
-		items?: {
-			title: string;
-			url: string;
-			permission?: GlobalPermission;
-		}[];
-	}[];
+	items: INavItem[];
+	devItems: INavItem[];
 }>) {
 	const backend = useBackend();
 	const auth = useAuth();
@@ -734,112 +948,43 @@ function NavMain({
 						.filter((item) => !item.permission)
 						.map((item) =>
 							item.items && item.items.length > 0 ? (
-								<Collapsible
+								<NavCollapsible
 									key={item.title}
-									asChild
-									defaultOpen={
-										(localStorage.getItem(`sidebar:${item.title}`) ??
-											(item.isActive ? "open" : "closed")) === "open"
-									}
-									onOpenChange={(open) => {
-										localStorage.setItem(
-											`sidebar:${item.title}`,
-											open ? "open" : "closed",
-										);
-									}}
-									className="group/collapsible"
-								>
-									<SidebarMenuItem>
-										<CollapsibleTrigger asChild>
-											<SidebarMenuButton
-												variant={
-													pathname === item.url ||
-													typeof item.items?.find(
-														(item) => item.url === pathname,
-													) !== "undefined"
-														? "outline"
-														: "default"
-												}
-												tooltip={item.title}
-												onClick={() => {
-													if (!open) router.push(item.url);
-												}}
-												onMouseDown={async (e) => {
-													// Middle mouse button (button 1)
-													if (e.button === 1) {
-														e.preventDefault();
-														try {
-															const webview = new WebviewWindow(
-																`sidebar-${createId()}`,
-																{
-																	url: item.url,
-																	title: item.title,
-																	focus: true,
-																	resizable: true,
-																	maximized: false,
-																	width: 1200,
-																	height: 800,
-																},
-															);
-															// Listen for webview creation errors
-															webview.once("tauri://error", (error) => {
-																console.error(
-																	"Failed to open new window:",
-																	error,
-																);
-															});
-														} catch (error) {
-															console.error(
-																"Failed to open new window:",
-																error,
-															);
-														}
-													}
-												}}
-											>
-												{item.icon && <item.icon />}
-												<span>{item.title}</span>
-												<ChevronRight className="ml-auto transition-transform duration-200 group-data-[state=open]/collapsible:rotate-90" />
-											</SidebarMenuButton>
-										</CollapsibleTrigger>
-										<CollapsibleContent>
-											<SidebarMenuSub>
-												{item.items?.map((subItem) => (
-													<SidebarMenuSubItem key={subItem.title}>
-														<SidebarMenuSubButton asChild>
-															<Link href={subItem.url}>
-																<span
-																	className={
-																		pathname === subItem.url
-																			? "font-bold text-primary"
-																			: ""
-																	}
-																>
-																	{subItem.title}
-																</span>
-															</Link>
-														</SidebarMenuSubButton>
-													</SidebarMenuSubItem>
-												))}
-											</SidebarMenuSub>
-										</CollapsibleContent>
-									</SidebarMenuItem>
-								</Collapsible>
+									item={item}
+									pathname={pathname}
+									sidebarOpen={open}
+									onNavigate={router.push}
+								/>
 							) : (
-								<SidebarMenuItem key={item.title}>
-									<a href={item.url} target="_blank" rel="noreferrer">
-										<SidebarMenuButton
-											variant={pathname === item.url ? "outline" : "default"}
-											tooltip={item.title}
-										>
-											{item.icon && <item.icon />}
-											<span>{item.title}</span>
-											<ExternalLinkIcon className="ml-auto" />
-										</SidebarMenuButton>
-									</a>
-								</SidebarMenuItem>
+								<NavFlatItem
+									key={item.title}
+									item={item}
+									pathname={pathname}
+								/>
 							),
 						)}
+				</SidebarMenu>
+			</SidebarGroup>
+			<SidebarGroup>
+				<SidebarGroupLabel>Development</SidebarGroupLabel>
+				<SidebarMenu>
+					{devItems.map((item) =>
+						item.items && item.items.length > 0 ? (
+							<NavCollapsible
+								key={item.title}
+								item={item}
+								pathname={pathname}
+								sidebarOpen={open}
+								onNavigate={router.push}
+							/>
+						) : (
+							<NavFlatItem
+								key={item.title}
+								item={item}
+								pathname={pathname}
+							/>
+						),
+					)}
 				</SidebarMenu>
 			</SidebarGroup>
 			{(info.data?.permission ?? 0) > 0 && (
@@ -860,85 +1005,32 @@ function NavMain({
 							)
 							.map((item) =>
 								item.items && item.items.length > 0 ? (
-									<Collapsible
+									<NavCollapsible
 										key={item.title}
-										asChild
-										defaultOpen={
-											(localStorage.getItem(`sidebar:${item.title}`) ??
-												(item.isActive ? "open" : "closed")) === "open"
-										}
-										onOpenChange={(open) => {
-											localStorage.setItem(
-												`sidebar:${item.title}`,
-												open ? "open" : "closed",
-											);
+										item={{
+											...item,
+											items: item.items?.filter((sub) =>
+												new GlobalPermission(
+													info.data?.permission ?? 0,
+												).hasPermission(sub.permission ?? GlobalPermission.Admin),
+											),
 										}}
-										className="group/collapsible"
-									>
-										<SidebarMenuItem>
-											<CollapsibleTrigger asChild>
-												<SidebarMenuButton
-													variant={
-														pathname === item.url ||
-														typeof item.items?.find(
-															(item) => item.url === pathname,
-														) !== "undefined"
-															? "outline"
-															: "default"
-													}
-													tooltip={item.title}
-													onClick={() => {
-														if (!open) router.push(item.url);
-													}}
-												>
-													{item.icon && <item.icon />}
-													<span>{item.title}</span>
-													<ChevronRight className="ml-auto transition-transform duration-200 group-data-[state=open]/collapsible:rotate-90" />
-												</SidebarMenuButton>
-											</CollapsibleTrigger>
-											<CollapsibleContent>
-												<SidebarMenuSub>
-													{item.items
-														?.filter((item) =>
-															new GlobalPermission(
-																info.data?.permission ?? 0,
-															).hasPermission(
-																item.permission ?? GlobalPermission.Admin,
-															),
-														)
-														.map((subItem) => (
-															<SidebarMenuSubItem key={subItem.title}>
-																<SidebarMenuSubButton asChild>
-																	<Link href={subItem.url}>
-																		<span
-																			className={
-																				pathname === subItem.url
-																					? "font-bold text-primary"
-																					: ""
-																			}
-																		>
-																			{subItem.title}
-																		</span>
-																	</Link>
-																</SidebarMenuSubButton>
-															</SidebarMenuSubItem>
-														))}
-												</SidebarMenuSub>
-											</CollapsibleContent>
-										</SidebarMenuItem>
-									</Collapsible>
+										pathname={pathname}
+										sidebarOpen={open}
+										onNavigate={router.push}
+									/>
 								) : (
 									<SidebarMenuItem key={item.title}>
-										<a href={item.url} target="_blank" rel="noreferrer">
-											<SidebarMenuButton
-												variant={pathname === item.url ? "outline" : "default"}
-												tooltip={item.title}
-											>
+										<SidebarMenuButton
+											asChild
+											variant={pathname === item.url ? "outline" : "default"}
+											tooltip={item.title}
+										>
+											<Link href={item.url}>
 												{item.icon && <item.icon />}
 												<span>{item.title}</span>
-												<ExternalLinkIcon className="ml-auto" />
-											</SidebarMenuButton>
-										</a>
+											</Link>
+										</SidebarMenuButton>
 									</SidebarMenuItem>
 								),
 							)}

@@ -441,6 +441,30 @@ impl State {
         self.permission_cache.invalidate(&key);
     }
 
+    pub async fn invalidate_role_permissions(
+        &self,
+        role_id: &str,
+        app_id: &str,
+    ) -> flow_like_types::Result<()> {
+        use crate::entity::membership;
+        use sea_orm::{ColumnTrait, EntityTrait, QueryFilter, QuerySelect};
+
+        let user_ids: Vec<String> = membership::Entity::find()
+            .filter(membership::Column::RoleId.eq(role_id))
+            .filter(membership::Column::AppId.eq(app_id))
+            .select_only()
+            .column(membership::Column::UserId)
+            .into_tuple()
+            .all(&self.db)
+            .await?;
+
+        for user_id in &user_ids {
+            self.invalidate_permission(user_id, app_id);
+        }
+
+        Ok(())
+    }
+
     pub fn get_cache<T>(&self, key: &str) -> Option<T>
     where
         T: serde::de::DeserializeOwned,

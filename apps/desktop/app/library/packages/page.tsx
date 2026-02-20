@@ -4,10 +4,12 @@ import { invoke } from "@tauri-apps/api/core";
 import {
 	type InstalledPackage,
 	type PackageUpdate,
+	PackageStatusBadge,
 	useMutation,
 	useQuery,
 	useQueryClient,
 } from "@tm9657/flow-like-ui";
+import { usePackageStatusMap } from "../../../hooks/use-package-status";
 import {
 	Badge,
 	Button,
@@ -42,6 +44,7 @@ function InstalledPackageCard({
 	onUpdate,
 	isUpdating,
 	isUninstalling,
+	compileStatus,
 }: {
 	pkg: InstalledPackage;
 	updateAvailable?: string;
@@ -49,6 +52,7 @@ function InstalledPackageCard({
 	onUpdate: () => void;
 	isUpdating: boolean;
 	isUninstalling: boolean;
+	compileStatus?: "idle" | "downloading" | "compiling" | "ready" | "error";
 }) {
 	return (
 		<Card className="flex flex-col h-full">
@@ -58,12 +62,17 @@ function InstalledPackageCard({
 						<Package className="h-5 w-5 text-muted-foreground" />
 						<CardTitle className="text-base">{pkg.manifest.name}</CardTitle>
 					</div>
-					{updateAvailable && (
-						<Badge variant="secondary" className="gap-1">
-							<AlertCircle className="h-3 w-3" />
-							Update
-						</Badge>
-					)}
+					<div className="flex items-center gap-1.5">
+						{compileStatus && compileStatus !== "idle" && (
+							<PackageStatusBadge status={compileStatus} />
+						)}
+						{updateAvailable && (
+							<Badge variant="secondary" className="gap-1">
+								<AlertCircle className="h-3 w-3" />
+								Update
+							</Badge>
+						)}
+					</div>
 				</div>
 				<CardDescription className="line-clamp-2 text-sm">
 					{pkg.manifest.description}
@@ -162,6 +171,7 @@ function PackageCardSkeleton() {
 export default function InstalledPackagesPage() {
 	const queryClient = useQueryClient();
 	const [searchQuery, setSearchQuery] = useState("");
+	const packageStatusMap = usePackageStatusMap();
 	const [updatingPackages, setUpdatingPackages] = useState<Set<string>>(
 		new Set(),
 	);
@@ -390,6 +400,7 @@ export default function InstalledPackagesPage() {
 								}
 								isUpdating={updatingPackages.has(pkg.id)}
 								isUninstalling={uninstallingPackages.has(pkg.id)}
+								compileStatus={packageStatusMap.get(pkg.id)}
 							/>
 						))}
 					</div>

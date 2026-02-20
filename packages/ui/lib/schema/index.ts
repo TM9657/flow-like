@@ -1,3 +1,4 @@
+export * from "./developer";
 export type { IIntercomEvent } from "./events/intercom-event";
 export type { IRunPayload } from "./flow/run-payload";
 export * from "./bit/bit";

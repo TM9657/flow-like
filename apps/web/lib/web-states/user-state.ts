@@ -400,11 +400,13 @@ export class WebUserState implements IUserState {
 		validUntil?: Date,
 		permissions?: number,
 	): Promise<{ pat: string; permission: number }> {
-		return apiPost<{ pat: string; permission: number }>(
+		return apiPut<{ pat: string; permission: number }>(
 			"user/pat",
 			{
 				name,
-				valid_until: validUntil?.toISOString(),
+				valid_until: validUntil
+					? Math.floor(validUntil.getTime() / 1000)
+					: undefined,
 				permissions,
 			},
 			this.backend.auth,
@@ -428,7 +430,7 @@ export class WebUserState implements IUserState {
 	}
 
 	async deletePAT(id: string): Promise<void> {
-		await apiDelete(`user/pat/${id}`, this.backend.auth);
+		await apiDelete("user/pat", this.backend.auth, { id });
 	}
 
 	async getPricing(): Promise<IPricingResponse> {

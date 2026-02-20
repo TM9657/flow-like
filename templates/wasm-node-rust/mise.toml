@@ -1,0 +1,22 @@
+[tools]
+rust = "latest"
+
+[tasks.setup]
+description = "Install wasm32 target"
+run = "rustup target add wasm32-unknown-unknown"
+
+[tasks.build]
+description = "Build the WASM node"
+run = "cargo build --release --target wasm32-unknown-unknown"
+
+[tasks.build-examples]
+description = "Build all example nodes"
+run = "cargo build --release --target wasm32-unknown-unknown --examples"
+
+[tasks.test]
+description = "Run unit tests"
+run = "cargo test"
+
+[tasks.clean]
+description = "Clean build artifacts"
+run = "cargo clean"

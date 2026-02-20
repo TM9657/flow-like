@@ -176,6 +176,63 @@ const OverviewSection = memo(({ node }: { node: INode }) => {
 });
 OverviewSection.displayName = "OverviewSection";
 
+const PERMISSION_LABELS: Record<string, { label: string; icon: string }> = {
+	"network:http": { label: "Network Access (HTTP)", icon: "🌐" },
+	"network:websocket": { label: "WebSocket Connections", icon: "🔌" },
+	"storage:read": { label: "Storage Read", icon: "📖" },
+	"storage:write": { label: "Storage Write", icon: "💾" },
+	"storage:node": { label: "Node Storage", icon: "📦" },
+	"storage:user": { label: "User Storage", icon: "👤" },
+	variables: { label: "Flow Variables", icon: "🔀" },
+	cache: { label: "Execution Cache", icon: "⚡" },
+	streaming: { label: "Streaming Output", icon: "📡" },
+	models: { label: "AI Model Access", icon: "🤖" },
+	a2ui: { label: "Dynamic UI (A2UI)", icon: "🖼️" },
+	oauth: { label: "OAuth Authentication", icon: "🔑" },
+	functions: { label: "Function Calls", icon: "⚙️" },
+};
+
+function formatPermission(perm: string): { label: string; icon: string } {
+	return PERMISSION_LABELS[perm] ?? { label: perm, icon: "🔒" };
+}
+
+const PermissionsSection = memo(({ node }: { node: INode }) => {
+	const permissions = node.wasm?.permissions;
+	if (!permissions?.length && !node.wasm?.package_id) return null;
+
+	return (
+		<div className="space-y-3 md:space-y-4">
+			<h3 className="text-xs md:text-sm font-semibold tracking-wide text-muted-foreground uppercase">
+				WASM Node
+			</h3>
+			{node.wasm?.package_id && (
+				<div className="flex items-center gap-2 text-xs text-muted-foreground font-mono">
+					<span className="shrink-0">Package:</span>
+					<span className="truncate">{node.wasm.package_id}</span>
+				</div>
+			)}
+			{permissions && permissions.length > 0 ? (
+				<div className="flex flex-wrap gap-1.5">
+					{permissions.map((perm) => {
+						const { label, icon } = formatPermission(perm);
+						return (
+							<Badge key={perm} variant="secondary" className="text-xs gap-1">
+								<span>{icon}</span>
+								{label}
+							</Badge>
+						);
+					})}
+				</div>
+			) : (
+				<p className="text-xs text-muted-foreground">
+					No additional permissions required.
+				</p>
+			)}
+		</div>
+	);
+});
+PermissionsSection.displayName = "PermissionsSection";
+
 const DocsPreview = memo(({ url }: { url: string }) => {
 	const [showPreview, setShowPreview] = useState(true);
 	const togglePreview = useCallback(() => setShowPreview((prev) => !prev), []);
@@ -659,6 +716,13 @@ export const FlowNodeInfoOverlay = forwardRef<
 					{/* Left side - Node info */}
 					<div className="flex-1 overflow-y-auto space-y-6 md:space-y-8 py-4 px-4 md:py-6 md:px-6 min-w-0">
 						<OverviewSection node={selectedNode} />
+
+						{selectedNode.wasm && (
+							<>
+								<Separator />
+								<PermissionsSection node={selectedNode} />
+							</>
+						)}
 
 						<Separator />
 						<PinsSection

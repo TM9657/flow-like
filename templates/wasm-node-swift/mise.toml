@@ -1,0 +1,15 @@
+[tasks.setup]
+description = "Resolve Swift package dependencies"
+run = "swift package resolve"
+
+[tasks.build]
+description = "Build the WASM node"
+run = "swift build --swift-sdk swift-6.2.3-RELEASE_wasm -c release"
+
+[tasks.test]
+description = "Run tests (native)"
+run = "swift test"
+
+[tasks.clean]
+description = "Clean build artifacts"
+run = "swift package clean"

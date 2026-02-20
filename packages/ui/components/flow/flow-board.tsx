@@ -153,6 +153,7 @@ import { BoardMeta } from "./board-meta";
 import { FlowCopilot, type Suggestion } from "./flow-copilot";
 import { FlowCursors } from "./flow-cursors";
 import { FlowDataEdge } from "./flow-data-edge";
+import { WasmSandboxWarningDialog } from "./wasm-sandbox-warning-dialog";
 import { FlowExecutionEdge } from "./flow-execution-edge";
 import { useUndoRedo } from "./flow-history";
 import { FlowLayerIndicators } from "./flow-layer-indicators";
@@ -603,6 +604,81 @@ export function FlowBoard({
 		return getRuntimeConfiguredVariables(board.data);
 	}, [board.data]);
 
+	// Collect WASM (external) node package IDs from the board
+	const wasmPackageIds = useMemo(() => {
+		if (!board.data) return [];
+		const ids = new Set<string>();
+		for (const node of Object.values(board.data.nodes)) {
+			if (node.wasm?.package_id) ids.add(node.wasm.package_id);
+		}
+		for (const layer of Object.values(board.data.layers)) {
+			for (const node of Object.values(layer.nodes)) {
+				if (node.wasm?.package_id) ids.add(node.wasm.package_id);
+			}
+		}
+		return Array.from(ids);
+	}, [board.data]);
+
+	const wasmPackagePermissions = useMemo(() => {
+		if (!board.data) return {};
+		const perms: Record<string, string[]> = {};
+		const collect = (node: INode) => {
+			if (!node.wasm?.package_id || !node.wasm.permissions?.length) return;
+			const existing = perms[node.wasm.package_id] ?? [];
+			for (const p of node.wasm.permissions) {
+				if (!existing.includes(p)) existing.push(p);
+			}
+			perms[node.wasm.package_id] = existing;
+		};
+		for (const node of Object.values(board.data.nodes)) collect(node);
+		for (const layer of Object.values(board.data.layers)) {
+			for (const node of Object.values(layer.nodes)) collect(node);
+		}
+		return perms;
+	}, [board.data]);
+
+	// WASM consent dialog state
+	const [wasmDialogOpen, setWasmDialogOpen] = useState(false);
+	const [wasmConsentResolve, setWasmConsentResolve] = useState<
+		((granted: boolean) => void) | null
+	>(null);
+
+	const checkWasmConsent = useCallback((): Promise<boolean> => {
+		if (wasmPackageIds.length === 0) return Promise.resolve(true);
+		try {
+			if (localStorage.getItem(`wasm-consent-board-${boardId}`) === "1")
+				return Promise.resolve(true);
+			if (wasmPackageIds.every((id) => localStorage.getItem(`wasm-consent-package-${id}`) === "1"))
+				return Promise.resolve(true);
+		} catch { /* ignore */ }
+		return new Promise((resolve) => {
+			setWasmConsentResolve(() => resolve);
+			setWasmDialogOpen(true);
+		});
+	}, [wasmPackageIds, boardId]);
+
+	const handleWasmConfirm = useCallback(
+		(rememberFor: "none" | "board" | "event" | "package") => {
+			if (rememberFor === "package") {
+				for (const id of wasmPackageIds) {
+					try { localStorage.setItem(`wasm-consent-package-${id}`, "1"); } catch { /* ignore */ }
+				}
+			} else if (rememberFor === "board") {
+				try { localStorage.setItem(`wasm-consent-board-${boardId}`, "1"); } catch { /* ignore */ }
+			}
+			setWasmDialogOpen(false);
+			wasmConsentResolve?.(true);
+			setWasmConsentResolve(null);
+		},
+		[boardId, wasmConsentResolve, wasmPackageIds],
+	);
+
+	const handleWasmCancel = useCallback(() => {
+		setWasmDialogOpen(false);
+		wasmConsentResolve?.(false);
+		setWasmConsentResolve(null);
+	}, [wasmConsentResolve]);
+
 	// Check if runtime variables need configuration before execution
 	// Returns { intercepted: false, runtimeVariables: map } if all configured
 	// Returns { intercepted: true } if prompting user for values
@@ -912,9 +988,11 @@ export function FlowBoard({
 		],
 	);
 
-	// Public execution function - checks runtime vars first
+	// Public execution function - checks WASM consent + runtime vars first
 	const executeBoard = useCallback(
 		async (node: INode, payload?: object, skipConsentCheck?: boolean) => {
+			const wasmOk = await checkWasmConsent();
+			if (!wasmOk) return;
 			const result = await checkRuntimeVarsAndExecute(node, payload, false);
 			if (!result.intercepted) {
 				await executeBoardInternal(
@@ -925,12 +1003,14 @@ export function FlowBoard({
 				);
 			}
 		},
-		[checkRuntimeVarsAndExecute, executeBoardInternal],
+		[checkWasmConsent, checkRuntimeVarsAndExecute, executeBoardInternal],
 	);
 
-	// Public remote execution function - checks runtime vars first
+	// Public remote execution function - checks WASM consent + runtime vars first
 	const executeBoardRemote = useCallback(
 		async (node: INode, payload?: object) => {
+			const wasmOk = await checkWasmConsent();
+			if (!wasmOk) return;
 			const result = await checkRuntimeVarsAndExecute(node, payload, true);
 			if (!result.intercepted) {
 				await executeBoardRemoteInternal(
@@ -940,7 +1020,7 @@ export function FlowBoard({
 				);
 			}
 		},
-		[checkRuntimeVarsAndExecute, executeBoardRemoteInternal],
+		[checkWasmConsent, checkRuntimeVarsAndExecute, executeBoardRemoteInternal],
 	);
 
 	// Listen for OAuth retry events to re-execute after authorization
@@ -2538,6 +2618,15 @@ export function FlowBoard({
 				existingValues={existingRuntimeVars}
 				onSave={handleRuntimeVarsSave}
 				onCancel={handleRuntimeVarsCancel}
+			/>
+
+			{/* WASM Sandbox Warning */}
+			<WasmSandboxWarningDialog
+				open={wasmDialogOpen}
+				packageIds={wasmPackageIds}
+				packagePermissions={wasmPackagePermissions}
+				onConfirm={handleWasmConfirm}
+				onCancel={handleWasmCancel}
 			/>
 		</div>
 	);

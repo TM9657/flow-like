@@ -10,6 +10,7 @@ export * from "./interfaces/index";
 export * from "./settings/index";
 export * from "./pages/index";
 export * from "./pat-selector-dialog";
+export * from "./pat-management";
 export * from "./oauth/index";
 export * from "./shortcuts";
 export * from "./spotlight/index";

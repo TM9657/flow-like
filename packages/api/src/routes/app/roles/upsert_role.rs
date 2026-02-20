@@ -71,6 +71,10 @@ pub async fn upsert_role(
         payload.update(&txn).await?;
         txn.commit().await?;
 
+        if let Err(e) = state.invalidate_role_permissions(&role_id, &app_id).await {
+            tracing::warn!(error = %e, "Failed to invalidate permission cache after role update");
+        }
+
         return Ok(Json(()));
     }
 
@@ -88,6 +92,10 @@ pub async fn upsert_role(
     let role = role.reset_all();
     role.insert(&txn).await?;
     txn.commit().await?;
+
+    if let Err(e) = state.invalidate_role_permissions(&role_id, &app_id).await {
+        tracing::warn!(error = %e, "Failed to invalidate permission cache after role creation");
+    }
 
     Ok(Json(()))
 }

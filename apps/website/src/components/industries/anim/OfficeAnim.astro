@@ -1,0 +1,102 @@
+---
+/**
+ * Office: Document flow — papers moving through processing stages
+ */
+interface Props { ring: string; dot: string; node: string; line: string; }
+const { ring, dot, node, line } = Astro.props;
+---
+
+<svg viewBox="0 0 420 420" fill="none" xmlns="http://www.w3.org/2000/svg" class="w-full max-w-md">
+  <!-- Stage 1: Document Inbox (top-left) -->
+  <rect x="20" y="30" width="110" height="90" rx="10" fill={node} opacity="0.04" stroke={ring} stroke-width="0.8" opacity="0.25"/>
+  <text x="75" y="52" text-anchor="middle" fill={dot} font-size="8" opacity="0.5" font-family="monospace">Inbox</text>
+  <line x1="32" y1="60" x2="118" y2="60" stroke={ring} stroke-width="0.4" opacity="0.15"/>
+  <!-- Stacked docs -->
+  <rect x="38" y="68" width="44" height="8" rx="2" fill={dot} opacity="0.1"><animate attributeName="opacity" values="0.08;0.18;0.08" dur="3s" repeatCount="indefinite"/></rect>
+  <rect x="38" y="80" width="36" height="8" rx="2" fill={dot} opacity="0.08"><animate attributeName="opacity" values="0.06;0.14;0.06" dur="4s" repeatCount="indefinite"/></rect>
+  <rect x="38" y="92" width="50" height="8" rx="2" fill={dot} opacity="0.12"><animate attributeName="opacity" values="0.08;0.20;0.08" dur="2.5s" repeatCount="indefinite"/></rect>
+  <!-- Doc icon -->
+  <rect x="95" y="70" width="20" height="26" rx="3" fill={node} opacity="0.08" stroke={ring} stroke-width="0.5" opacity="0.2"/>
+  <line x1="100" y1="78" x2="110" y2="78" stroke={dot} stroke-width="0.5" opacity="0.3"/>
+  <line x1="100" y1="83" x2="108" y2="83" stroke={dot} stroke-width="0.5" opacity="0.2"/>
+  <line x1="100" y1="88" x2="111" y2="88" stroke={dot} stroke-width="0.5" opacity="0.3"/>
+
+  <!-- Arrow 1→2: wide upward arc, no overlap -->
+  <path d="M 130 70 C 180 25, 240 25, 280 70" stroke={line} stroke-width="0.7" opacity="0.2" stroke-dasharray="4 3"/>
+  <circle r="2.5" fill={dot} opacity="0.8">
+    <animateMotion dur="2s" repeatCount="indefinite" path="M 130,70 C 180,25, 240,25, 280,70"/>
+  </circle>
+
+  <!-- Stage 2: AI Extraction (top-right) -->
+  <rect x="280" y="30" width="120" height="90" rx="10" fill={node} opacity="0.04" stroke={ring} stroke-width="0.8" opacity="0.25"/>
+  <text x="340" y="52" text-anchor="middle" fill={dot} font-size="8" opacity="0.5" font-family="monospace">AI Extract</text>
+  <line x1="292" y1="60" x2="388" y2="60" stroke={ring} stroke-width="0.4" opacity="0.15"/>
+  <!-- Brain/sparkle icon -->
+  <circle cx="315" cy="90" r="12" fill={node} opacity="0.06" stroke={ring} stroke-width="0.5" opacity="0.2"/>
+  <circle cx="315" cy="90" r="4" fill={dot} opacity="0.3">
+    <animate attributeName="r" values="4;6;4" dur="2s" repeatCount="indefinite"/>
+    <animate attributeName="opacity" values="0.3;0.6;0.3" dur="2s" repeatCount="indefinite"/>
+  </circle>
+  <!-- Extracted fields -->
+  <rect x="338" y="72" width="46" height="6" rx="2" fill={dot} opacity="0.12"/>
+  <rect x="338" y="84" width="38" height="6" rx="2" fill={dot} opacity="0.09"/>
+  <rect x="338" y="96" width="42" height="6" rx="2" fill={dot} opacity="0.1"/>
+
+  <!-- Arrow 2→3: sweeps right then down to avoid overlap -->
+  <path d="M 340 120 C 385 155, 340 175, 280 195" stroke={line} stroke-width="0.7" opacity="0.2" stroke-dasharray="4 3"/>
+  <circle r="2.5" fill={dot} opacity="0.7">
+    <animateMotion dur="2.5s" repeatCount="indefinite" path="M 340,120 C 385,155, 340,175, 280,195" begin="0.5s"/>
+  </circle>
+
+  <!-- Stage 3: Approval (center-right) -->
+  <rect x="140" y="175" width="140" height="70" rx="10" fill={node} opacity="0.05" stroke={ring} stroke-width="1" opacity="0.3"/>
+  <text x="210" y="197" text-anchor="middle" fill={dot} font-size="9" opacity="0.6" font-family="monospace">Approval</text>
+  <line x1="155" y1="205" x2="265" y2="205" stroke={ring} stroke-width="0.4" opacity="0.15"/>
+  <!-- Approval avatars -->
+  <circle cx="180" cy="225" r="9" fill={node} opacity="0.08" stroke={ring} stroke-width="0.5" opacity="0.2"/>
+  <text x="180" y="228" text-anchor="middle" fill={dot} font-size="7" opacity="0.5">✓</text>
+  <circle cx="210" cy="225" r="9" fill={node} opacity="0.08" stroke={ring} stroke-width="0.5" opacity="0.2"/>
+  <text x="210" y="228" text-anchor="middle" fill={dot} font-size="7" opacity="0.4">?</text>
+  <circle cx="240" cy="225" r="9" fill={node} opacity="0.08" stroke={ring} stroke-width="0.5" opacity="0.2"/>
+  <text x="240" y="228" text-anchor="middle" fill={dot} font-size="7" opacity="0.3">—</text>
+  <!-- Animated check appearing -->
+  <circle cx="210" cy="225" r="9" fill={dot} opacity="0">
+    <animate attributeName="opacity" values="0;0.15;0" dur="4s" repeatCount="indefinite" begin="2s"/>
+  </circle>
+
+  <!-- Arrow 3→4a: wide left arc to Archive -->
+  <path d="M 150 245 C 100 265, 55 275, 75 310" stroke={line} stroke-width="0.7" opacity="0.2" stroke-dasharray="4 3"/>
+  <circle r="2" fill={dot} opacity="0.7">
+    <animateMotion dur="2s" repeatCount="indefinite" path="M 150,245 C 100,265, 55,275, 75,310" begin="1.5s"/>
+  </circle>
+
+  <!-- Arrow 3→4b: wide right arc to Notify -->
+  <path d="M 270 245 C 320 265, 370 280, 340 310" stroke={line} stroke-width="0.7" opacity="0.2" stroke-dasharray="4 3"/>
+  <circle r="2" fill={dot} opacity="0.6">
+    <animateMotion dur="2s" repeatCount="indefinite" path="M 270,245 C 320,265, 370,280, 340,310" begin="1.8s"/>
+  </circle>
+
+  <!-- Stage 4a: Archive (bottom-left) -->
+  <rect x="20" y="300" width="110" height="70" rx="10" fill={node} opacity="0.04" stroke={ring} stroke-width="0.8" opacity="0.25"/>
+  <text x="75" y="322" text-anchor="middle" fill={dot} font-size="8" opacity="0.5" font-family="monospace">Archive</text>
+  <line x1="32" y1="330" x2="118" y2="330" stroke={ring} stroke-width="0.4" opacity="0.12"/>
+  <rect x="48" y="338" width="20" height="24" rx="3" fill={dot} opacity="0.06"/>
+  <rect x="54" y="335" width="20" height="24" rx="3" fill={dot} opacity="0.08"/>
+  <rect x="60" y="332" width="20" height="24" rx="3" fill={dot} opacity="0.1"/>
+
+  <!-- Stage 4b: Notify (bottom-right) -->
+  <rect x="290" y="300" width="110" height="70" rx="10" fill={node} opacity="0.04" stroke={ring} stroke-width="0.8" opacity="0.25"/>
+  <text x="345" y="322" text-anchor="middle" fill={dot} font-size="8" opacity="0.5" font-family="monospace">Notify</text>
+  <line x1="302" y1="330" x2="388" y2="330" stroke={ring} stroke-width="0.4" opacity="0.12"/>
+  <!-- Notification bell -->
+  <circle cx="345" cy="350" r="8" fill={node} opacity="0.06" stroke={ring} stroke-width="0.5" opacity="0.2"/>
+  <circle cx="345" cy="350" r="3" fill={dot} opacity="0.4">
+    <animate attributeName="opacity" values="0.2;0.6;0.2" dur="2s" repeatCount="indefinite"/>
+  </circle>
+
+  <!-- Ambient particles -->
+  <circle cx="395" cy="50" r="1.5" fill={dot}><animate attributeName="opacity" values="0.1;0.35;0.1" dur="5s" repeatCount="indefinite"/></circle>
+  <circle cx="10" cy="200" r="1" fill={dot}><animate attributeName="opacity" values="0.15;0.4;0.15" dur="6s" repeatCount="indefinite"/></circle>
+  <circle cx="405" cy="210" r="1.5" fill={dot}><animate attributeName="opacity" values="0.1;0.3;0.1" dur="4s" repeatCount="indefinite"/></circle>
+  <circle cx="210" cy="400" r="2" fill={dot}><animate attributeName="opacity" values="0.05;0.2;0.05" dur="7s" repeatCount="indefinite"/></circle>
+</svg>
