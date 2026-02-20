@@ -7,6 +7,12 @@ edition = "2024"
 default = []
 local-ml = ["flow-like-catalog-core/local-ml"]
 
+# Execution environment - determines how interactions are handled
+# local: Desktop app with polling-based interactions
+# remote: Server execution with SSE-based interactions via API
+local = []
+remote = []
+
 # Execution feature - enables heavy dependencies for node execution
 # APIs that only serve catalog metadata should NOT enable this
 execute = [

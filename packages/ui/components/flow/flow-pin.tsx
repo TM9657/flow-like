@@ -334,10 +334,14 @@ function pinPropsAreEqual(prevProps: any, nextProps: any) {
 		prevProps.boardId === nextProps.boardId &&
 		prevProps.node?.id === nextProps.node?.id &&
 		prevProps.pin.id === nextProps.pin.id &&
+		prevProps.pin.index === nextProps.pin.index &&
+		prevProps.pin.name === nextProps.pin.name &&
+		prevProps.pin.friendly_name === nextProps.pin.friendly_name &&
 		prevProps.pin.default_value === nextProps.pin.default_value &&
 		prevProps.pin.data_type === nextProps.pin.data_type &&
 		prevProps.pin.value_type === nextProps.pin.value_type &&
-		prevProps.pin.pin_type === nextProps.pin.pin_type
+		prevProps.pin.pin_type === nextProps.pin.pin_type &&
+		prevProps.pin.schema === nextProps.pin.schema
 	);
 }
 

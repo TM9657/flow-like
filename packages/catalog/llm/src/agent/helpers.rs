@@ -8,7 +8,7 @@ use ahash::AHashSet;
 use flow_like::flow::execution::LogLevel;
 use flow_like::flow::{
     execution::{context::ExecutionContext, internal_node::InternalNode},
-    pin::PinType,
+    pin::{Pin, PinType, ValueType},
     variable::VariableType,
 };
 use flow_like_model_provider::{
@@ -348,6 +348,140 @@ pub async fn generate_tool_from_function(
     };
     use std::collections::HashMap;
 
+    /// Convert a Pin to HistoryJSONSchemaDefine, handling ValueType (Array/HashSet/HashMap),
+    /// pin schemas for Struct/Generic, and enum values from pin options.
+    fn pin_to_schema_define(pin: &Pin) -> HistoryJSONSchemaDefine {
+        // Map base VariableType to schema type
+        let (base_type, base_properties) = match pin.data_type {
+            VariableType::String | VariableType::PathBuf | VariableType::Date => {
+                (HistoryJSONSchemaType::String, None)
+            }
+            VariableType::Integer | VariableType::Float | VariableType::Byte => {
+                (HistoryJSONSchemaType::Number, None)
+            }
+            VariableType::Boolean => (HistoryJSONSchemaType::Boolean, None),
+            VariableType::Struct | VariableType::Generic => {
+                // Try to parse nested schema from pin
+                if let Some(schema_str) = &pin.schema {
+                    if let Ok(schema_value) =
+                        flow_like_types::json::from_str::<Value>(schema_str)
+                    {
+                        if let Some(props) = schema_value
+                            .get("properties")
+                            .and_then(|p| p.as_object())
+                        {
+                            let mut nested_props: HashMap<String, Box<HistoryJSONSchemaDefine>> =
+                                HashMap::new();
+                            for (prop_name, prop_schema) in props {
+                                let prop_type = match prop_schema.get("type").and_then(|t| t.as_str())
+                                {
+                                    Some("string") => HistoryJSONSchemaType::String,
+                                    Some("number") | Some("integer") => HistoryJSONSchemaType::Number,
+                                    Some("boolean") => HistoryJSONSchemaType::Boolean,
+                                    Some("array") => HistoryJSONSchemaType::Array,
+                                    _ => HistoryJSONSchemaType::Object,
+                                };
+                                let prop_desc = prop_schema
+                                    .get("description")
+                                    .and_then(|d| d.as_str())
+                                    .map(String::from);
+                                let prop_enum = prop_schema.get("enum").and_then(|e| {
+                                    e.as_array().map(|arr| {
+                                        arr.iter()
+                                            .filter_map(|v| v.as_str().map(String::from))
+                                            .collect()
+                                    })
+                                });
+                                nested_props.insert(
+                                    prop_name.clone(),
+                                    Box::new(HistoryJSONSchemaDefine {
+                                        schema_type: Some(prop_type),
+                                        description: prop_desc,
+                                        enum_values: prop_enum,
+                                        properties: None,
+                                        required: None,
+                                        items: None,
+                                    }),
+                                );
+                            }
+                            return HistoryJSONSchemaDefine {
+                                schema_type: Some(HistoryJSONSchemaType::Object),
+                                description: if pin.description.is_empty() {
+                                    None
+                                } else {
+                                    Some(pin.description.clone())
+                                },
+                                enum_values: None,
+                                properties: Some(nested_props),
+                                required: schema_value
+                                    .get("required")
+                                    .and_then(|r| r.as_array())
+                                    .map(|arr| {
+                                        arr.iter()
+                                            .filter_map(|v| v.as_str().map(String::from))
+                                            .collect()
+                                    }),
+                                items: None,
+                            };
+                        }
+                    }
+                }
+                (HistoryJSONSchemaType::Object, None)
+            }
+            VariableType::Execution => (HistoryJSONSchemaType::Null, None),
+        };
+
+        // Get enum values from pin options
+        let enum_values = pin
+            .options
+            .as_ref()
+            .and_then(|opts| opts.valid_values.as_ref())
+            .cloned();
+
+        // Build base definition
+        let base_def = HistoryJSONSchemaDefine {
+            schema_type: Some(base_type.clone()),
+            description: if pin.description.is_empty() {
+                None
+            } else {
+                Some(pin.description.clone())
+            },
+            enum_values,
+            properties: base_properties,
+            required: None,
+            items: None,
+        };
+
+        // Wrap based on ValueType
+        match pin.value_type {
+            ValueType::Array | ValueType::HashSet => HistoryJSONSchemaDefine {
+                schema_type: Some(HistoryJSONSchemaType::Array),
+                description: if pin.description.is_empty() {
+                    None
+                } else {
+                    Some(pin.description.clone())
+                },
+                enum_values: None,
+                properties: None,
+                required: None,
+                items: Some(Box::new(base_def)),
+            },
+            ValueType::HashMap => HistoryJSONSchemaDefine {
+                schema_type: Some(HistoryJSONSchemaType::Object),
+                description: if pin.description.is_empty() {
+                    None
+                } else {
+                    Some(pin.description.clone())
+                },
+                enum_values: None,
+                properties: None, // additionalProperties not supported in HistoryJSONSchemaDefine
+                required: None,
+                items: None,
+            },
+            ValueType::Normal => base_def,
+        }
+    }
+
     let node = referenced_node.node.lock().await;
     // Use friendly_name (user-customizable) and convert to snake_case for LLM
     let function_name = node.friendly_name.to_lowercase().replace([' ', '-'], "_");
@@ -356,7 +490,7 @@ pub async fn generate_tool_from_function(
     // Collect all non-execution output pins to build parameter schema
     let mut properties: HashMap<String, Box<HistoryJSONSchemaDefine>> = HashMap::new();
     let mut has_data_pins = false;
-    let mut payload_pin = None;
+    let mut payload_pin: Option<&Pin> = None;
 
     for (_pin_id, pin) in node.pins.iter() {
         // Skip execution pins and input pins
@@ -371,63 +505,14 @@ pub async fn generate_tool_from_function(
         }
 
         has_data_pins = true;
-
-        // Map VariableType to JSONSchemaType
-        let schema_type = match pin.data_type {
-            VariableType::String => HistoryJSONSchemaType::String,
-            VariableType::Integer => HistoryJSONSchemaType::Number,
-            VariableType::Float => HistoryJSONSchemaType::Number,
-            VariableType::Boolean => HistoryJSONSchemaType::Boolean,
-            VariableType::Struct | VariableType::Generic => HistoryJSONSchemaType::Object,
-            VariableType::Date | VariableType::PathBuf | VariableType::Byte => {
-                HistoryJSONSchemaType::String
-            }
-            VariableType::Execution => continue, // Already filtered above
-        };
-
-        let property_def = HistoryJSONSchemaDefine {
-            schema_type: Some(schema_type),
-            description: if pin.description.is_empty() {
-                None
-            } else {
-                Some(pin.description.clone())
-            },
-            enum_values: None,
-            properties: None,
-            required: None,
-            items: None,
-        };
-
-        properties.insert(pin.name.clone(), Box::new(property_def));
+        properties.insert(pin.name.clone(), Box::new(pin_to_schema_define(pin)));
     }
 
     // If no data pins exist AND the event has a payload pin defined, add it to the schema
-    if !has_data_pins && let Some(payload) = payload_pin {
-        let schema_type = match payload.data_type {
-            VariableType::String => HistoryJSONSchemaType::String,
-            VariableType::Integer => HistoryJSONSchemaType::Number,
-            VariableType::Float => HistoryJSONSchemaType::Number,
-            VariableType::Boolean => HistoryJSONSchemaType::Boolean,
-            VariableType::Struct | VariableType::Generic => HistoryJSONSchemaType::Object,
-            VariableType::Date | VariableType::PathBuf | VariableType::Byte => {
-                HistoryJSONSchemaType::String
-            }
-            VariableType::Execution => HistoryJSONSchemaType::Object, // Fallback
-        };
-
-        let payload_def = HistoryJSONSchemaDefine {
-            schema_type: Some(schema_type),
-            description: if payload.description.is_empty() {
-                None
-            } else {
-                Some(payload.description.clone())
-            },
-            enum_values: None,
-            properties: None,
-            required: None,
-            items: None,
-        };
-        properties.insert("payload".to_string(), Box::new(payload_def));
+    if !has_data_pins {
+        if let Some(payload) = payload_pin {
+            properties.insert("payload".to_string(), Box::new(pin_to_schema_define(payload)));
+        }
     }
 
     let parameters = HistoryFunctionParameters {

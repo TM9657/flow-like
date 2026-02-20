@@ -1,4 +1,5 @@
 import { DndContext, MouseSensor, useSensor, useSensors } from "@dnd-kit/core";
+import type { ReactNode } from "react";
 import { useCallback, useState } from "react";
 import type { IVariable } from "../../lib/schema/flow/variable";
 import { Button } from "../ui/button";
@@ -10,12 +11,23 @@ export function FlowWrapper({
 	appId,
 	nodeId,
 	version,
+	extraDockItems,
+	renderOverlay,
 	sub,
 }: Readonly<{
 	boardId: string;
 	appId: string;
 	nodeId?: string;
 	version?: [number, number, number];
+	extraDockItems?: Array<{
+		title: string;
+		icon: ReactNode;
+		onClick: () => Promise<void> | void;
+		separator?: string;
+		highlight?: boolean;
+		special?: boolean;
+	}>;
+	renderOverlay?: () => ReactNode;
 	/** The authenticated user's sub (subject) from the auth token - used for realtime collaboration */
 	sub?: string;
 }>) {
@@ -85,6 +97,8 @@ export function FlowWrapper({
 				appId={appId}
 				nodeId={nodeId}
 				initialVersion={version}
+				extraDockItems={extraDockItems}
+				renderOverlay={renderOverlay}
 				sub={sub}
 			/>
 			<Dialog

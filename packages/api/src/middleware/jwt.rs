@@ -22,7 +22,7 @@ use sea_orm::{ColumnTrait, EntityTrait, JoinType, QueryFilter, QuerySelect, Rela
 use serde::de::{self, Unexpected};
 use serde::{Deserialize, Deserializer};
 
-use crate::state::AppState;
+use crate::state::{AppState, CachedAuth};
 
 fn deserialize_opt_bool<'de, D>(deserializer: D) -> Result<Option<bool>, D::Error>
 where
@@ -111,10 +111,18 @@ pub struct ApiKey {
 }
 
 #[derive(Debug, Clone)]
+pub struct ExecutorUser {
+    pub sub: String,
+    pub app_id: String,
+    pub run_id: String,
+}
+
+#[derive(Debug, Clone)]
 pub enum AppUser {
     OpenID(OpenIDUser),
     PAT(PATUser),
     APIKey(ApiKey),
+    Executor(ExecutorUser),
     Unauthorized,
 }
 
@@ -178,6 +186,25 @@ impl AppUser {
         match self {
             AppUser::OpenID(user) => Ok(user.sub.clone()),
             AppUser::PAT(user) => Ok(user.sub.clone()),
+            AppUser::Executor(_) => Err(AuthorizationError::from(anyhow!(
+                "Executor user is not allowed on this endpoint"
+            ))),
+            AppUser::APIKey(_) => Err(AuthorizationError::from(anyhow!(
+                "APIKey user does not have a sub"
+            ))),
+            AppUser::Unauthorized => Err(AuthorizationError::from(anyhow!(
+                "Unauthorized user does not have a sub"
+            ))),
+        }
+    }
+
+    /// Like `sub()` but also accepts Executor JWTs.
+    /// Only call this on endpoints that explicitly opt into executor auth.
+    pub fn executor_scoped_sub(&self) -> Result<String, AuthorizationError> {
+        match self {
+            AppUser::OpenID(user) => Ok(user.sub.clone()),
+            AppUser::PAT(user) => Ok(user.sub.clone()),
+            AppUser::Executor(user) => Ok(user.sub.clone()),
             AppUser::APIKey(_) => Err(AuthorizationError::from(anyhow!(
                 "APIKey user does not have a sub"
             ))),
@@ -191,7 +218,7 @@ impl AppUser {
         &self,
         state: &AppState,
     ) -> Result<Option<String>, AuthorizationError> {
-        let sub = self.sub()?;
+        let sub = self.executor_scoped_sub()?;
         let user = user::Entity::find_by_id(&sub)
             .one(&state.db)
             .await?
@@ -200,7 +227,7 @@ impl AppUser {
     }
 
     pub async fn tier(&self, state: &AppState) -> Result<UserTier, AuthorizationError> {
-        let sub = self.sub()?;
+        let sub = self.executor_scoped_sub()?;
         let user = user::Entity::find_by_id(&sub)
             .one(&state.db)
             .await?
@@ -235,6 +262,7 @@ impl AppUser {
             AppUser::OpenID(user) => user,
             AppUser::PAT(_) => return Err(anyhow!("PAT user does not have user info")),
             AppUser::APIKey(_) => return Err(anyhow!("APIKey user does not have user info")),
+            AppUser::Executor(_) => return Err(anyhow!("Executor user does not have user info")),
             AppUser::Unauthorized => {
                 return Err(anyhow!("Unauthorized user does not have user info"));
             }
@@ -376,8 +404,6 @@ impl AppUser {
     }
 }
 
-use crate::state::CachedAuth;
-
 fn hash_token(token: &str) -> String {
     let mut hasher = blake3::Hasher::new();
     hasher.update(token.as_bytes());
@@ -391,7 +417,7 @@ pub async fn jwt_middleware(
 ) -> Result<Response<Body>, AuthorizationError> {
     let mut request = request;
 
-    // Try OpenID/JWT auth
+    // Try OpenID/JWT or Executor JWT auth
     if let Some(auth_header) = request.headers().get(AUTHORIZATION)
         && let Ok(token) = auth_header.to_str()
         && !token.starts_with("pat_")
@@ -405,36 +431,64 @@ pub async fn jwt_middleware(
         let cache_key = hash_token(token);
 
         // Check cache first
-        if let Some(cached) = state.auth_cache.get(&cache_key)
-            && let CachedAuth::OpenID { sub } = cached
-        {
+        if let Some(cached) = state.auth_cache.get(&cache_key) {
+            match cached {
+                CachedAuth::OpenID { sub } => {
+                    let user = AppUser::OpenID(OpenIDUser {
+                        sub,
+                        access_token: token.to_string(),
+                    });
+                    request.extensions_mut().insert::<AppUser>(user);
+                    return Ok(next.run(request).await);
+                }
+                CachedAuth::Executor { sub, app_id, run_id } => {
+                    let user = AppUser::Executor(ExecutorUser { sub, app_id, run_id });
+                    request.extensions_mut().insert::<AppUser>(user);
+                    return Ok(next.run(request).await);
+                }
+                _ => {}
+            }
+        }
+
+        // Cache miss - validate token
+        let claims = state.validate_token(token);
+        if let Ok(claims) = claims {
+            let sub = claims.get("sub").ok_or(anyhow!("sub not found"))?;
+            let sub = sub.as_str().ok_or(anyhow!("sub not a string"))?;
+
+            state.auth_cache.insert(
+                cache_key,
+                CachedAuth::OpenID {
+                    sub: sub.to_string(),
+                },
+            );
+
             let user = AppUser::OpenID(OpenIDUser {
-                sub,
+                sub: sub.to_string(),
                 access_token: token.to_string(),
             });
             request.extensions_mut().insert::<AppUser>(user);
             return Ok(next.run(request).await);
         }
 
-        // Cache miss - validate token
-        let claims = state.validate_token(token)?;
-        let sub = claims.get("sub").ok_or(anyhow!("sub not found"))?;
-        let sub = sub.as_str().ok_or(anyhow!("sub not a string"))?;
-
-        // Cache the result
-        state.auth_cache.insert(
-            cache_key,
-            CachedAuth::OpenID {
-                sub: sub.to_string(),
-            },
-        );
-
-        let user = AppUser::OpenID(OpenIDUser {
-            sub: sub.to_string(),
-            access_token: token.to_string(),
-        });
-        request.extensions_mut().insert::<AppUser>(user);
-        return Ok(next.run(request).await);
+        // OpenID failed — try executor JWT
+        if let Ok(claims) = crate::execution::verify_execution_jwt(token) {
+            state.auth_cache.insert(
+                cache_key,
+                CachedAuth::Executor {
+                    sub: claims.sub.clone(),
+                    app_id: claims.app_id.clone(),
+                    run_id: claims.run_id.clone(),
+                },
+            );
+            let user = AppUser::Executor(ExecutorUser {
+                sub: claims.sub,
+                app_id: claims.app_id,
+                run_id: claims.run_id,
+            });
+            request.extensions_mut().insert::<AppUser>(user);
+            return Ok(next.run(request).await);
+        }
     }
 
     // Try PAT auth

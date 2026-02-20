@@ -122,6 +122,14 @@ pub enum ExecutionStatus {
     Fatal,
 }
 #[derive(Debug, Clone, PartialEq, Eq, EnumIter, DeriveActiveEnum, Serialize, Deserialize)]
+#[sea_orm(rs_type = "String", db_type = "Enum", enum_name = "InteractionStatus")]
+pub enum InteractionStatus {
+    #[sea_orm(string_value = "PENDING")]
+    Pending,
+    #[sea_orm(string_value = "RESPONDED")]
+    Responded,
+}
+#[derive(Debug, Clone, PartialEq, Eq, EnumIter, DeriveActiveEnum, Serialize, Deserialize)]
 #[sea_orm(rs_type = "String", db_type = "Enum", enum_name = "NotificationType")]
 pub enum NotificationType {
     #[sea_orm(string_value = "WORKFLOW")]

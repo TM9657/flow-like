@@ -66,7 +66,6 @@ pub async fn execute(body: &str) -> flow_like_types::Result<()> {
         event_json: payload.event_json,
         payload: payload.payload,
         executor_jwt: payload.executor_jwt,
-        token: payload.token,
         oauth_tokens: payload.oauth_tokens,
         stream_state: payload.stream_state,
         runtime_variables: payload.runtime_variables,

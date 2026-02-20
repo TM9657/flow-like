@@ -53,6 +53,7 @@ import type { ISendMessageFunction } from "./chat-default/chatbox";
 import { processChatEvents } from "./chat-default/event-processor";
 import { ChatHistory } from "./chat-default/history";
 import { ChatWelcome } from "./chat-default/welcome";
+import type { IInteractionRequest } from "../../lib/schema/interaction";
 import type { IUseInterfaceProps } from "./interfaces";
 
 async function prepareAttachments(
@@ -260,6 +261,7 @@ async function handleStreamCompletion(
 	sessionId: string,
 	initialLocalState?: any,
 	initialGlobalState?: any,
+	onInteractions?: (interactions: IInteractionRequest[]) => void,
 ) {
 	if (processedCompletedStreams.current.has(streamId)) {
 		return;
@@ -278,6 +280,10 @@ async function handleStreamCompletion(
 	});
 
 	processedCompletedStreams.current.add(streamId);
+
+	if (result.interactions?.length && onInteractions) {
+		onInteractions(result.interactions);
+	}
 
 	if (result.tmpLocalState) {
 		await chatDb.localStage.put(result.tmpLocalState);
@@ -357,6 +363,73 @@ export const ChatInterfaceMemoized = memo(function ChatInterface({
 	const reconnectSubscribed = useRef<Set<string>>(new Set());
 	const [isSendingFromWelcome, setIsSendingFromWelcome] = useState(false);
 	const lastNavigateToRef = useRef<string | null>(null);
+	const [activeInteractions, setActiveInteractions] = useState<IInteractionRequest[]>([]);
+	const activeInteractionsRef = useRef<IInteractionRequest[]>(activeInteractions);
+	useEffect(() => {
+		activeInteractionsRef.current = activeInteractions;
+	}, [activeInteractions]);
+
+	const addInteractions = useCallback((interactions: IInteractionRequest[]) => {
+		setActiveInteractions((prev) => {
+			const existingIds = new Set(prev.map((i) => i.id));
+			const newOnes = interactions.filter((i) => !existingIds.has(i.id));
+			return newOnes.length > 0 ? [...prev, ...newOnes] : prev;
+		});
+	}, []);
+
+	const handleRespondToInteraction = useCallback(
+		async (interactionId: string, value: any) => {
+			const interaction = activeInteractionsRef.current.find((i) => i.id === interactionId);
+			if (!interaction) {
+				console.warn("[Chat] Interaction not found for response:", interactionId);
+				return;
+			}
+
+			try {
+				if (interaction.responder_jwt) {
+					const profile = backend.profile;
+					let baseUrl = profile?.hub ?? "api.flow-like.com";
+					if (typeof process !== "undefined" && process.env?.NEXT_PUBLIC_API_URL) {
+						baseUrl = process.env.NEXT_PUBLIC_API_URL;
+					}
+					if (!baseUrl.startsWith("http://") && !baseUrl.startsWith("https://")) {
+						baseUrl = profile?.secure === false ? `http://${baseUrl}` : `https://${baseUrl}`;
+					}
+					if (!baseUrl.endsWith("/")) baseUrl += "/";
+					const url = `${baseUrl}api/v1/interaction/${interactionId}/respond`;
+
+					const res = await fetch(url, {
+						method: "POST",
+						headers: {
+							"Content-Type": "application/json",
+							Authorization: `Bearer ${interaction.responder_jwt}`,
+						},
+						body: JSON.stringify({ value }),
+					});
+					if (!res.ok) {
+						const errorText = await res.text();
+						throw new Error(`API responded ${res.status}: ${errorText}`);
+					}
+				} else {
+					const { invoke } = await import("@tauri-apps/api/core");
+					await invoke("respond_to_interaction", {
+						interactionId,
+						value,
+					});
+				}
+
+				setActiveInteractions((prev) =>
+					prev.map((i) =>
+						i.id === interactionId ? { ...i, status: "responded" as const, response_value: value } : i,
+					),
+				);
+			} catch (err) {
+				console.error("[Chat] Failed to respond to interaction:", err);
+				toast.error("Failed to submit response. Please try again.");
+			}
+		},
+		[backend.profile],
+	);
 
 	const buildUseNavigationUrl = useCallback(
 		(route: string, queryParams?: Record<string, string>): string => {
@@ -449,8 +522,9 @@ export const ChatInterfaceMemoized = memo(function ChatInterface({
 		}
 	}, [sessionIdParameter, setQueryParams]);
 
-	// Cleanup active subscriptions on unmount or session change
+	// Cleanup active subscriptions and interactions on unmount or session change
 	useEffect(() => {
+		setActiveInteractions([]);
 		return () => {
 			activeSubscriptions.current.forEach((subId) => {
 				executionEngine.unsubscribeFromEventStream(sessionIdParameter, subId);
@@ -765,6 +839,7 @@ export const ChatInterfaceMemoized = memo(function ChatInterface({
 					sessionIdParameter,
 					null,
 					null,
+					addInteractions,
 				);
 			}
 			return;
@@ -798,6 +873,10 @@ export const ChatInterfaceMemoized = memo(function ChatInterface({
 
 				intermediateResponse = result.intermediateResponse;
 
+				if (result.interactions?.length) {
+					addInteractions(result.interactions);
+				}
+
 				if (result.shouldUpdate) {
 					chatRef.current?.pushCurrentMessageUpdate({
 						...responseMessage,
@@ -822,6 +901,7 @@ export const ChatInterfaceMemoized = memo(function ChatInterface({
 					sessionIdParameter,
 					null,
 					null,
+					addInteractions,
 				);
 				// Clean up the reconnect subscriber tracking after completion
 				reconnectSubscribed.current.delete(subscriberId);
@@ -841,6 +921,7 @@ export const ChatInterfaceMemoized = memo(function ChatInterface({
 		handleNavigationEvents,
 		messagesLoaded,
 		hasMessages,
+		addInteractions,
 	]);
 
 	// Internal function to execute the chat (called after OAuth is confirmed)
@@ -1017,6 +1098,10 @@ export const ChatInterfaceMemoized = memo(function ChatInterface({
 					// Update responseMessage in place for incremental save
 					Object.assign(responseMessage, result.responseMessage);
 
+					if (result.interactions?.length) {
+						addInteractions(result.interactions);
+					}
+
 					if (result.shouldUpdate) {
 						chatRef.current?.pushCurrentMessageUpdate({
 							...result.responseMessage,
@@ -1043,6 +1128,7 @@ export const ChatInterfaceMemoized = memo(function ChatInterface({
 							sessionIdParameter,
 							tmpLocalState,
 							tmpGlobalState,
+							addInteractions,
 						);
 					} finally {
 						activeSubscriptions.current = activeSubscriptions.current.filter(
@@ -1064,6 +1150,7 @@ export const ChatInterfaceMemoized = memo(function ChatInterface({
 			globalState,
 			handleNavigationEvents,
 			pathname,
+			addInteractions,
 		],
 	);
 
@@ -1203,6 +1290,8 @@ export const ChatInterfaceMemoized = memo(function ChatInterface({
 					onSendMessage={handleSendMessage}
 					onMessageUpdate={onMessageUpdate}
 					config={config}
+					activeInteractions={activeInteractions}
+					onRespondToInteraction={handleRespondToInteraction}
 				/>
 			)}
 		</>

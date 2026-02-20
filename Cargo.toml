@@ -32,6 +32,7 @@ members = [
     "packages/catalog/llm",
     "packages/catalog/processing",
     "packages/catalog/geo",
+    "packages/catalog/automation",
     "packages/catalog-macros",
     "packages/storage",
     "packages/api",
@@ -58,6 +59,7 @@ flow-like-catalog-onnx = { path = "packages/catalog/onnx" }
 flow-like-catalog-llm = { path = "packages/catalog/llm" }
 flow-like-catalog-processing = { path = "packages/catalog/processing" }
 flow-like-catalog-geo = { path = "packages/catalog/geo" }
+flow-like-catalog-automation = { path = "packages/catalog/automation" }
 flow-like-catalog-macros = { path = "packages/catalog-macros" }
 flow-like-storage = { path = "packages/storage" }
 flow-like-sinks = { path = "packages/sinks" }
@@ -77,7 +79,7 @@ iana-time-zone = "0.1.64"
 axum = {version="0.8.4", features=["http2", "multipart"]}
 sea-orm = { version = "1.1.17", features = ["sqlx-postgres", "runtime-tokio-rustls", "macros", "with-json", "seaography" ] }
 tower = "0.5.2"
-tracing-subscriber = "0.3.19"
+tracing-subscriber = "0.3.22"
 dotenv = "0.15.0"
 jsonwebtoken = "9.3.0"
 hyper = {version = "1.5.2", features = ["full", "client"]}
@@ -126,7 +128,7 @@ jsonschema = "0.33.0"
 rmcp = {version="0.13.0", features = ["auth", "client", "client-side-sse","macros","transport-streamable-http-client-reqwest","transport-streamable-http-server"]}
 thiserror = "2.0.17"
 mimalloc = { version = "0.1.48", default-features = false }
-lettre = { version = "0.11.17", features = ["tokio1-rustls-tls"] }
+lettre = { version = "0.11.17", default-features = false, features = ["tokio1-rustls-tls", "builder", "hostname", "pool", "smtp-transport"] }
 reqwest = { version = "0.12.15", default-features = false, features = ["json", "rustls-tls"] }
 markitdown = { git = "https://github.com/TM9657/markitdown-rs.git", rev = "a586b0d", default-features = false, features = ["rustls-tls"] }
 kube = { version = "0.98", features = ["runtime", "derive"] }
@@ -137,6 +139,8 @@ toml = "0.8"
 flate2 = { version = "1.1", default-features = false, features = ["rust_backend"] }
 getrandom = "0.4.1"
 dashmap = "6"
+
+rdev = { git = "https://github.com/TM9657/rdev", branch = "macos-thread-safety" }
 
 # Patch esaxx-rs to fix Windows CRT mismatch (upstream hardcodes static CRT /MT,
 # conflicting with ort_sys which uses dynamic CRT /MD → LNK2038)

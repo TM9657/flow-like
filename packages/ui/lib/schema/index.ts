@@ -100,3 +100,5 @@ export * from "./copilot";
 export * from "./wasm";
 // Usage tracking types
 export * from "./usage";
+// Human-in-the-loop interaction types
+export * from "./interaction";
