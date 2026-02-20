@@ -306,7 +306,12 @@ pub async fn developer_open_in_editor(
         "fleet" => "fleet",
         "sublime" => "subl",
         "vim" | "nvim" => "nvim",
-        custom => custom,
+        other => {
+            return Err(TauriFunctionError::new(&format!(
+                "Unknown editor '{}'. Please select a supported editor in settings.",
+                other
+            )));
+        }
     };
 
     std::process::Command::new(cmd)
@@ -458,6 +463,11 @@ async fn download_github_dir(api_url: &str, target: &Path) -> Result<(), TauriFu
             continue;
         }
 
+        let safe_name = match std::path::Path::new(name).file_name() {
+            Some(n) => n.to_owned(),
+            None => continue,
+        };
+
         match entry_type {
             "file" => {
                 let download_url = entry["download_url"]
@@ -473,7 +483,7 @@ async fn download_github_dir(api_url: &str, target: &Path) -> Result<(), TauriFu
                     .await
                     .map_err(|e| TauriFunctionError::new(&e.to_string()))?;
 
-                let file_path = target.join(name);
+                let file_path = target.join(&safe_name);
                 if let Some(parent) = file_path.parent() {
                     std::fs::create_dir_all(parent)
                         .map_err(|e| TauriFunctionError::new(&e.to_string()))?;
@@ -485,7 +495,7 @@ async fn download_github_dir(api_url: &str, target: &Path) -> Result<(), TauriFu
                 let sub_url = entry["url"]
                     .as_str()
                     .ok_or_else(|| TauriFunctionError::new("Missing dir url"))?;
-                let sub_dir = target.join(name);
+                let sub_dir = target.join(&safe_name);
                 std::fs::create_dir_all(&sub_dir)
                     .map_err(|e| TauriFunctionError::new(&e.to_string()))?;
                 Box::pin(download_github_dir(sub_url, &sub_dir)).await?;
@@ -505,31 +515,22 @@ fn patch_manifest(target: &Path, project_name: &str) -> Result<(), TauriFunction
 
     let content = std::fs::read_to_string(&manifest_path)
         .map_err(|e| TauriFunctionError::new(&e.to_string()))?;
-    let mut doc: toml::Value =
-        toml::from_str(&content).map_err(|e| TauriFunctionError::new(&e.to_string()))?;
+    let mut doc = content
+        .parse::<toml_edit::DocumentMut>()
+        .map_err(|e| TauriFunctionError::new(&e.to_string()))?;
 
-    if let Some(table) = doc.as_table_mut() {
-        if let Some(pkg) = table.get_mut("package").and_then(|v| v.as_table_mut()) {
-            let slug = project_name
-                .to_lowercase()
-                .replace(' ', "-")
-                .chars()
-                .filter(|c| c.is_alphanumeric() || *c == '-')
-                .collect::<String>();
-            pkg.insert(
-                "name".to_string(),
-                toml::Value::String(project_name.to_string()),
-            );
-            pkg.insert(
-                "id".to_string(),
-                toml::Value::String(format!("com.custom.{}", slug)),
-            );
-        }
+    if let Some(pkg) = doc.get_mut("package").and_then(|v| v.as_table_mut()) {
+        let slug = project_name
+            .to_lowercase()
+            .replace(' ', "-")
+            .chars()
+            .filter(|c| c.is_alphanumeric() || *c == '-')
+            .collect::<String>();
+        pkg["name"] = toml_edit::value(project_name);
+        pkg["id"] = toml_edit::value(format!("com.custom.{}", slug));
     }
 
-    let toml_str =
-        toml::to_string_pretty(&doc).map_err(|e| TauriFunctionError::new(&e.to_string()))?;
-    std::fs::write(&manifest_path, toml_str)
+    std::fs::write(&manifest_path, doc.to_string())
         .map_err(|e| TauriFunctionError::new(&e.to_string()))?;
 
     Ok(())
@@ -873,7 +874,13 @@ pub async fn developer_load_into_catalog(
     let engine = TauriWasmEngineState::construct(&app_handle)
         .map_err(|e| TauriFunctionError::new(&e.to_string()))?;
     let project = PathBuf::from(&project_path);
-    let wasm_path = find_wasm_file(&project)?;
+    let wasm_path = find_wasm_file(&project).map_err(|e| {
+        let _ = app_handle.emit(
+            "package-status",
+            serde_json::json!({ "packageId": format!("dev:{}", project_path), "status": "error" }),
+        );
+        e
+    })?;
     let node_pairs = match load_wasm_nodes_from_path(&wasm_path, engine).await {
         Ok(pairs) => pairs,
         Err(e) => {

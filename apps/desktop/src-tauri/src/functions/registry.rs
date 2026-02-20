@@ -1,13 +1,12 @@
 use crate::{
     functions::TauriFunctionError,
-    state::{TauriFlowLikeState, TauriRegistryState, TauriSettingsState},
+    state::{TauriFlowLikeState, TauriRegistryState, TauriSettingsState, TauriWasmEngineState},
 };
 use flow_like::flow::node::NodeLogic;
 use flow_like_types::intercom::InterComEvent;
 use flow_like_wasm::{
     client::RegistryClient,
     registry::{CachedPackage, InstalledPackage, RegistryConfig, SearchFilters, SearchResults},
-    WasmConfig, WasmEngine,
 };
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
@@ -58,10 +57,8 @@ async fn reload_wasm_nodes(app_handle: &AppHandle) -> Result<(), TauriFunctionEr
         emit_package_status(app_handle, &pkg.id, "compiling");
     }
 
-    let engine = Arc::new(
-        WasmEngine::new(WasmConfig::default())
-            .map_err(|e| TauriFunctionError::new(&e.to_string()))?,
-    );
+    let engine = TauriWasmEngineState::construct(app_handle)
+        .map_err(|e| TauriFunctionError::new(&e.to_string()))?;
 
     let mut wasm_nodes: Vec<Arc<dyn NodeLogic>> = Vec::new();
     let mut compiled = 0usize;

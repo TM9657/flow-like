@@ -74,8 +74,8 @@ pub async fn delete_role(
     }
 
     membership::Entity::update_many()
-        .filter(membership::Column::AppId.eq(app_id))
-        .filter(membership::Column::RoleId.eq(role_id))
+        .filter(membership::Column::AppId.eq(app_id.clone()))
+        .filter(membership::Column::RoleId.eq(role_id.clone()))
         .col_expr(membership::Column::RoleId, Expr::value(default_role_id))
         .exec(&txn)
         .await?;

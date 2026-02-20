@@ -4,7 +4,6 @@ import weakref
 
 from typing import TypeVar, Generic, Self, cast
 from types import TracebackType
-from componentize_py_async_support import _ReturnCode
 
 class ByteStreamReader:
     def __init__(self, type_: int, handle: int):
@@ -19,7 +18,7 @@ class ByteStreamReader:
 
         code, values = await self._read(max_count)
 
-        if code == _ReturnCode.DROPPED:
+        if code == componentize_py_async_support._ReturnCode.DROPPED:
             self.writer_dropped = True
 
         return values
@@ -59,7 +58,7 @@ class ByteStreamWriter:
 
         code, count = await self._write(source)
 
-        if code == _ReturnCode.DROPPED:
+        if code == componentize_py_async_support._ReturnCode.DROPPED:
             self.reader_dropped = True
 
         return count
@@ -111,7 +110,7 @@ class StreamReader(Generic[T]):
 
         code, values = await self._read(max_count)
 
-        if code == _ReturnCode.DROPPED:
+        if code == componentize_py_async_support._ReturnCode.DROPPED:
             self.writer_dropped = True
 
         return values
@@ -151,7 +150,7 @@ class StreamWriter(Generic[T]):
 
         code, count = await self._write(source)
 
-        if code == _ReturnCode.DROPPED:
+        if code == componentize_py_async_support._ReturnCode.DROPPED:
             self.reader_dropped = True
 
         return count

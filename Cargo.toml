@@ -134,7 +134,8 @@ markitdown = { git = "https://github.com/TM9657/markitdown-rs.git", rev = "a586b
 kube = { version = "0.98", features = ["runtime", "derive"] }
 k8s-openapi = { version = "0.24", features = ["v1_32"] }
 percent-encoding = "2.3.2"
-toml = "0.8"
+toml = "0.9.8"
+toml_edit = "0.23.9"
 # Force flate2 to use pure Rust backend (no C zlib) for iOS compatibility
 flate2 = { version = "1.1", default-features = false, features = ["rust_backend"] }
 getrandom = "0.4.1"
