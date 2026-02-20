@@ -9,6 +9,7 @@ import {
 } from "@langchain/core/messages";
 import type { ChatResult } from "@langchain/core/outputs";
 import type { CallbackManagerForLLMRun } from "@langchain/core/callbacks/manager";
+import { stripTrailingSlashes } from "./client.js";
 
 export interface FlowLikeChatModelParams extends BaseChatModelParams {
 	baseUrl: string;
@@ -57,7 +58,7 @@ export class FlowLikeChatModel extends BaseChatModel {
 
 	constructor(params: FlowLikeChatModelParams) {
 		super(params);
-		this.baseUrl = params.baseUrl.replace(/\/+$/, "");
+		this.baseUrl = stripTrailingSlashes(params.baseUrl);
 		this.token = params.token;
 		this.bitId = params.bitId;
 		this.temperature = params.temperature;
@@ -121,7 +122,7 @@ export class FlowLikeEmbeddings extends Embeddings {
 
 	constructor(params: FlowLikeEmbeddingsParams) {
 		super(params);
-		this.baseUrl = params.baseUrl.replace(/\/+$/, "");
+		this.baseUrl = stripTrailingSlashes(params.baseUrl);
 		this.token = params.token;
 		this.bitId = params.bitId;
 	}

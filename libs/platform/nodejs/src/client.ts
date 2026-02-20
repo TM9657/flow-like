@@ -2,6 +2,12 @@ import type { AuthConfig } from "./types.js";
 import { buildAuthHeaders } from "./auth.js";
 import { FlowLikeError, NotFoundError, AuthError } from "./errors.js";
 
+export function stripTrailingSlashes(url: string): string {
+	let i = url.length;
+	while (i > 0 && url[i - 1] === "/") i--;
+	return url.slice(0, i);
+}
+
 export interface HttpClient {
 	request<T = unknown>(
 		method: string,
@@ -70,7 +76,7 @@ export function createHttpClient(
 	auth: AuthConfig,
 ): HttpClient {
 	const authHeaders = buildAuthHeaders(auth);
-	const base = baseUrl.replace(/\/+$/, "");
+	const base = stripTrailingSlashes(baseUrl);
 
 	async function doFetch(
 		method: string,
