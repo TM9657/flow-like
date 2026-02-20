@@ -98,6 +98,7 @@ pub async fn error_reporting_middleware(
     let user_id = req.extensions().get::<AppUser>().and_then(|u| match u {
         AppUser::OpenID(u) => Some(u.sub.clone()),
         AppUser::PAT(u) => Some(u.sub.clone()),
+        AppUser::Executor(u) => Some(u.sub.clone()),
         AppUser::APIKey(_) => None,
         AppUser::Unauthorized => None,
     });

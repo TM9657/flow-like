@@ -440,18 +440,19 @@ export class WebBoardState implements IBoardState {
 
 						// Parse SSE format: "event: xxx\ndata: {...}"
 						let eventName = "message";
-						let eventData = "";
+						const dataLines: string[] = [];
 
 						for (const line of part.split("\n")) {
 							if (line.startsWith("event:")) {
 								eventName = line.slice(6).trim();
 							} else if (line.startsWith("data:")) {
-								eventData = line.slice(5).trim();
+								dataLines.push(line.slice(5).trim());
 							} else if (line.startsWith(":")) {
-								// Comment/keep-alive, ignore
 								continue;
 							}
 						}
+
+						const eventData = dataLines.join("\n");
 
 						if (!eventData || eventData === "keep-alive") continue;
 

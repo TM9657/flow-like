@@ -136,7 +136,6 @@ async fn process_queued_job(job: QueuedJob, executor_config: ExecutorConfig) -> 
         event_json: job.event_json,
         payload: job.payload,
         executor_jwt: job.executor_jwt,
-        token: job.token,
         oauth_tokens: job.oauth_tokens,
         stream_state: job.stream_state,
         runtime_variables: job.runtime_variables,

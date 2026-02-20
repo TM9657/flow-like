@@ -171,13 +171,23 @@ export function FlowBoard({
 	boardId,
 	nodeId,
 	initialVersion,
+	extraDockItems,
+	renderOverlay,
 	sub,
 }: Readonly<{
 	appId: string;
 	boardId: string;
 	nodeId?: string;
 	initialVersion?: [number, number, number];
-	/** The authenticated user's sub (subject) from the auth token - used for realtime collaboration */
+	extraDockItems?: Array<{
+		title: string;
+		icon: React.ReactNode;
+		onClick: () => Promise<void> | void;
+		separator?: string;
+		highlight?: boolean;
+		special?: boolean;
+	}>;
+	renderOverlay?: () => React.ReactNode;
 	sub?: string;
 }>) {
 	const { pushCommand, pushCommands, redo, undo } = useUndoRedo(appId, boardId);
@@ -1056,6 +1066,17 @@ export function FlowBoard({
 			window.removeEventListener("flow:oauth-retry", handleOAuthRetry);
 		};
 	}, [appId, boardId, nodes, executeBoard]);
+
+	// Listen for external refetch requests (e.g., after recording insertion)
+	useEffect(() => {
+		const handleRefetchBoard = () => {
+			board.refetch();
+		};
+		window.addEventListener("flow:refetch-board", handleRefetchBoard);
+		return () => {
+			window.removeEventListener("flow:refetch-board", handleRefetchBoard);
+		};
+	}, [board]);
 
 	const handlePasteCB = useCallback(
 		async (event: ClipboardEvent) => {
@@ -2133,6 +2154,7 @@ export function FlowBoard({
 									},
 								]
 							: []),
+						...(extraDockItems ?? []),
 						{
 							icon: <SparklesIcon className="text-white" />,
 							title: "FlowPilot",
@@ -2142,6 +2164,7 @@ export function FlowBoard({
 						},
 					]}
 				/>
+				{renderOverlay?.()}
 			</div>
 
 			{/* Template Selector Overlay - FigJam style centered overlay */}

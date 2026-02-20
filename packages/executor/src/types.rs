@@ -31,9 +31,6 @@ pub struct ExecutionRequest {
     pub payload: Option<serde_json::Value>,
     /// JWT containing callback_url and run metadata
     pub executor_jwt: String,
-    /// User's auth token for the flow to access
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub token: Option<String>,
     /// OAuth tokens keyed by provider name
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub oauth_tokens: Option<HashMap<String, OAuthTokenInput>>,

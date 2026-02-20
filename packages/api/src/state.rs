@@ -42,6 +42,8 @@ pub enum CachedAuth {
     PAT { sub: String },
     /// API key with key_id and app_id
     ApiKey { key_id: String, app_id: String },
+    /// Executor JWT with sub, app_id, run_id
+    Executor { sub: String, app_id: String, run_id: String },
     /// Invalid/expired token
     Invalid,
 }
