@@ -2,6 +2,7 @@ import { describe, expect, it } from "bun:test";
 import { MAX_HOME_LAYOUT_BYTES } from "./home-layout";
 import {
 	formatHomeLayoutJson,
+	homeLayoutFingerprint,
 	homeLayoutsEqual,
 	parseHomeLayoutJson,
 	serializeHomeLayout,
@@ -62,6 +63,16 @@ describe("home layout JSON transfer", () => {
 		expect(homeLayoutsEqual(left, right)).toBe(true);
 		right.widgets[0].title = "Different";
 		expect(homeLayoutsEqual(left, right)).toBe(false);
+	});
+
+	it("fingerprints structurally equal config objects consistently", () => {
+		const left = structuredClone(layout);
+		const right = structuredClone(layout);
+		left.widgets[0].config = { first: 1, second: 2 };
+		right.widgets[0].config = { second: 2, first: 1 };
+		expect(homeLayoutFingerprint(left)).toBe(homeLayoutFingerprint(right));
+		right.widgets[0].config.second = 3;
+		expect(homeLayoutFingerprint(left)).not.toBe(homeLayoutFingerprint(right));
 	});
 
 	it("rejects malformed JSON and layouts with ambiguous widget identity", () => {

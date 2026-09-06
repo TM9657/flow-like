@@ -223,6 +223,15 @@ fn approval_session_key(spec: &PlatformToolSpec, args: &Value) -> String {
         };
         return format!("interact_app_page:{app_scope}:page:{page_scope}");
     }
+    if spec.name == "apply_home_layout" {
+        let profile_id = spec_arg_str(args, "expected_profile_id", "expectedProfileId");
+        let profile_scope = if profile_id.is_empty() {
+            "current-profile"
+        } else {
+            profile_id
+        };
+        return format!("apply_home_layout:{profile_scope}");
+    }
     if spec.name != "database_tool" {
         return spec.name.to_string();
     }
@@ -413,6 +422,18 @@ fn flowpilot_widget_message(args: &Value) -> String {
         format!("FlowPilot wants to {subject}.")
     } else {
         format!("FlowPilot wants to {subject}: {instruction}")
+    }
+}
+
+fn apply_home_layout_message(args: &Value) -> String {
+    let profile_id = spec_arg_str(args, "expected_profile_id", "expectedProfileId");
+    if profile_id.is_empty() {
+        "FlowPilot wants to stage a generated Home layout in the current profile's editor for review. It will not be saved until you choose Save."
+            .to_string()
+    } else {
+        format!(
+            "FlowPilot wants to stage a generated Home layout in profile '{profile_id}' for review. It will not be saved until you choose Save."
+        )
     }
 }
 
@@ -952,10 +973,21 @@ access. Every callable event carries its Event `id`, `kind`, and one exact `cons
 (simple/REST/MCP/…) → `call_app_event`. A page may also expose `page_id` and `route`; neither is its
 Event `id`, so never pass them as `event_id`. An `unavailable` event has no consumer and must not be
 called. Use this before acting on any app. Only apps in the current profile are returned.
-`complete: false`, truncation, or an app's `events_status: "error"` means the
-inventory cannot prove that no suitable local interface exists; do not use public-web fallback from
-that partial result."#,
-            schema: || json!({ "type": "object", "properties": {} }),
+Pass `query` to filter app ids, names, and descriptions before the 250-item cap. `complete: false`,
+truncation, or an app's `events_status: "error"` means the inventory cannot prove that no suitable
+local interface exists. Refine `query` before concluding that an app is absent, and do not use
+public-web fallback from a partial result."#,
+            schema: || {
+                json!({
+                    "type": "object",
+                    "properties": {
+                        "query": {
+                            "type": "string",
+                            "description": "Optional case-insensitive text filter over app ids, names, and descriptions, applied before the 250-item cap."
+                        }
+                    }
+                })
+            },
             approval: ToolApprovalSpec::None,
             timeout_secs: 120,
         },
@@ -1162,6 +1194,26 @@ When IDs are fixed, pass the same board/page/UI contract to this tool and `flowp
                 timing: ToolApprovalTiming::BeforeExecution,
             },
             timeout_secs: 600,
+        },
+        PlatformToolSpec {
+            name: "flowpilot_home",
+            description: r#"The Home specialist for creating or adjusting the CURRENT profile's personal Home landing-page layout. It inspects the visible Home JSON, including unsaved edits, plus the supported widget catalog, visible apps, and relevant tables, ontologies, or saved queries before composing a complete version 1 layout.
+
+Use this directly for Home layout and Home widget requests. Do not send personal Home work through the app-page UI specialist or the BUILD intake/scout pipeline. The specialist validates the full profile-bound layout and can stage it in the live Home editor after nested approval. Staged is not saved or published; the user must review it and choose Save. It never creates apps or data sources and never changes administrator Home defaults."#,
+            schema: || {
+                json!({
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                        "instruction": { "type": "string", "description": "Complete request for the current profile's personal Home layout, including content priorities, widgets to retain or change, and any named apps or data sources." }
+                    },
+                    "required": ["instruction"]
+                })
+            },
+            approval: ToolApprovalSpec::None,
+            // Discovery, composition and validator-driven repair may take several specialist rounds.
+            // Applying the resulting draft asks for approval inside the specialist.
+            timeout_secs: 900,
         },
         PlatformToolSpec {
             name: "ask_user",
@@ -2017,7 +2069,7 @@ const CREATE_TABLE_FIELD_TYPES: &[&str] = &[
     "timestamp_ms",
 ];
 
-/// Cross-app discovery both nested specialists share: they must be able to identify the app they
+/// Cross-app discovery nested specialists share: they must be able to identify the app they
 /// were pointed at without holding the orchestrator's mutating app tools.
 const SPECIALIST_APP_DISCOVERY_TOOL_NAMES: [&str; 2] = ["list_apps", "describe_app_interface"];
 
@@ -2157,6 +2209,211 @@ Operations:
         },
         timeout_secs: 120,
     }
+}
+
+fn home_layout_schema() -> Value {
+    json!({
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+            "version": {
+                "type": "integer",
+                "enum": [1],
+                "description": "Home layout format version. Must be 1."
+            },
+            "title": { "type": "string", "description": "Optional title for the Home layout." },
+            "description": { "type": "string", "description": "Optional description for the Home layout." },
+            "widgets": {
+                "type": "array",
+                "maxItems": 80,
+                "description": "Every widget in display order. Submit the complete layout, including retained widgets.",
+                "items": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                        "id": { "type": "string", "minLength": 1, "description": "Unique stable widget id." },
+                        "type": { "type": "string", "minLength": 1, "description": "Exact supported widget type from get_home_widget_catalog." },
+                        "title": { "type": "string" },
+                        "description": { "type": "string" },
+                        "size": {
+                            "type": "object",
+                            "additionalProperties": false,
+                            "properties": {
+                                "columns": { "type": "integer", "minimum": 1, "maximum": 12 },
+                                "rows": { "type": "integer", "minimum": 1, "maximum": 12 },
+                                "heightMode": { "type": "string", "enum": ["auto", "content", "fixed"] },
+                                "height": { "type": "number", "minimum": 96, "maximum": 1240 }
+                            },
+                            "required": ["columns", "rows"]
+                        },
+                        "appearance": {
+                            "type": "object",
+                            "additionalProperties": false,
+                            "properties": {
+                                "variant": { "type": "string", "minLength": 1, "description": "Exact supported variant from the widget catalog." },
+                                "accent": { "type": "string", "minLength": 1, "description": "Exact supported accent from the widget catalog." }
+                            },
+                            "required": ["variant", "accent"]
+                        },
+                        "config": {
+                            "type": "object",
+                            "description": "Widget-specific config matching the selected catalog entry."
+                        }
+                    },
+                    "required": ["id", "type", "size", "appearance", "config"]
+                }
+            }
+        },
+        "required": ["version", "widgets"]
+    })
+}
+
+fn get_home_context_schema() -> Value {
+    json!({
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {}
+    })
+}
+
+fn get_home_widget_catalog_schema() -> Value {
+    json!({
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+            "category": {
+                "type": "string",
+                "enum": ["assistant", "apps", "data", "content", "activity"],
+                "description": "Optional widget category filter."
+            },
+            "type": { "type": "string", "description": "Optional exact widget type filter." },
+            "query": { "type": "string", "description": "Optional text search over widget names and descriptions." }
+        }
+    })
+}
+
+fn list_home_data_sources_schema() -> Value {
+    json!({
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+            "app_id": { "type": "string", "description": "Exact app id from list_apps." },
+            "scope": {
+                "type": "string",
+                "enum": ["project", "personal"],
+                "description": "Project data or the current user's personal data. Defaults to project."
+            },
+            "kinds": {
+                "type": "array",
+                "uniqueItems": true,
+                "items": { "type": "string", "enum": ["table", "ontology", "query"] },
+                "description": "Optional source kinds to return. Omit to list all supported kinds."
+            },
+            "query": {
+                "type": "string",
+                "description": "Optional case-insensitive text filter over source ids and names, applied before result caps."
+            },
+            "source_id": {
+                "type": "string",
+                "description": "Optional exact table name, ontology id, or saved-query id, applied before top-level source caps."
+            },
+            "object_type_query": {
+                "type": "string",
+                "description": "Optional case-insensitive filter over ontology object-type labels and backing table names, applied before the 80-object-type cap."
+            },
+            "column_query": {
+                "type": "string",
+                "description": "Optional case-insensitive filter over table or ontology column names and types, applied before each 80-column cap."
+            }
+        },
+        "required": ["app_id"]
+    })
+}
+
+fn validate_home_layout_schema() -> Value {
+    json!({
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+            "layout": home_layout_schema(),
+            "expected_profile_id": { "type": "string", "description": "Profile id from get_home_context. Optional for read-only validation; a mismatch is reported and never mutates state." },
+            "expected_fingerprint": { "type": "string", "description": "Layout fingerprint from get_home_context. Optional for read-only validation; a mismatch is reported and never mutates state." }
+        },
+        "required": ["layout"]
+    })
+}
+
+fn apply_home_layout_schema() -> Value {
+    json!({
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+            "layout": home_layout_schema(),
+            "expected_profile_id": { "type": "string", "description": "Exact current profile id returned by validation or get_home_context." },
+            "expected_fingerprint": { "type": "string", "description": "Exact current-layout fingerprint returned by validation or get_home_context." }
+        },
+        "required": ["layout", "expected_profile_id", "expected_fingerprint"]
+    })
+}
+
+/// Exact tool set advertised to the nested Home specialist. It can inspect the current profile's
+/// Home layout and discover valid references, then validate and stage one guarded editor draft.
+/// Saving and administrator-default changes stay outside this surface.
+pub fn home_specialist_tool_specs() -> Vec<PlatformToolSpec> {
+    let mut specs = vec![
+        PlatformToolSpec {
+            name: "get_home_context",
+            description: r#"Read the CURRENT profile and live personal Home editor state. Returns profile metadata, exact profile id, current visible version 1 layout including any unsaved draft, base/default layouts for comparison, source, concurrency fingerprint, and editor availability. Call this first and edit the current layout. Read-only."#,
+            schema: get_home_context_schema,
+            approval: ToolApprovalSpec::None,
+            timeout_secs: 120,
+        },
+        PlatformToolSpec {
+            name: "get_home_widget_catalog",
+            description: r#"List supported Home widget presets and their exact types, categories, default sizes, appearances, and config contracts. Filter by category, exact type, or text when useful. Call before authoring widget JSON and never invent values absent from the result. Read-only."#,
+            schema: get_home_widget_catalog_schema,
+            approval: ToolApprovalSpec::None,
+            timeout_secs: 120,
+        },
+        PlatformToolSpec {
+            name: "list_home_data_sources",
+            description: r#"List Home-compatible tables, ontologies, and saved queries for one exact app and scope. Use ids from this result in data-backed widgets. Use `query` for top-level source id/name search or `source_id` for an exact table name, ontology id, or saved-query id before source caps. Use `object_type_query` for ontology labels/tables and `column_query` for table or ontology column names/types before their 80-item caps. `complete: false` or truncation at any level cannot prove absence, so refine the corresponding filter before choosing a fallback. This returns metadata rather than mutating or querying the source. Read-only."#,
+            schema: list_home_data_sources_schema,
+            approval: ToolApprovalSpec::None,
+            timeout_secs: 120,
+        },
+        PlatformToolSpec {
+            name: "validate_home_layout",
+            description: r#"Validate and normalize one complete version 1 Home layout against its structural limits, current widget catalog, referenced apps and data sources, and optional profile/fingerprint guards. Reports stale guards without changing editor state. Use the returned `canonical_layout` and `guards` verbatim for Apply. Read-only."#,
+            schema: validate_home_layout_schema,
+            approval: ToolApprovalSpec::None,
+            timeout_secs: 120,
+        },
+        PlatformToolSpec {
+            name: "apply_home_layout",
+            description: r#"Stage one successfully validated complete Home layout in the live personal editor for the guarded current profile. Requires the exact profile id and fingerprint from validation. This changes only the editor draft: it does not save, publish, change an administrator default, or write another profile. After success, tell the user to review the draft and choose Save."#,
+            schema: apply_home_layout_schema,
+            approval: ToolApprovalSpec::Mutating {
+                title: "Approve Home layout draft",
+                message: apply_home_layout_message,
+                timing: ToolApprovalTiming::BeforeExecution,
+            },
+            timeout_secs: 120,
+        },
+    ];
+    specs.extend(
+        SPECIALIST_APP_DISCOVERY_TOOL_NAMES
+            .iter()
+            .filter_map(|name| find_global_tool_spec(name)),
+    );
+    specs
+}
+
+/// Look up one Home specialist tool spec by name.
+pub fn find_home_tool_spec(name: &str) -> Option<PlatformToolSpec> {
+    home_specialist_tool_specs()
+        .into_iter()
+        .find(|spec| spec.name == name)
 }
 
 /// Exact tool set advertised to the nested Data Studio specialist: its tables, its overlays, and
@@ -2306,20 +2563,135 @@ mod tests {
             .iter()
             .map(|spec| spec.name)
             .collect::<Vec<_>>();
+        let home = home_specialist_tool_specs()
+            .iter()
+            .map(|spec| spec.name)
+            .collect::<Vec<_>>();
         let scout = scout_specialist_tool_specs()
             .iter()
             .map(|spec| spec.name)
             .collect::<Vec<_>>();
 
-        for names in [&data, &scout] {
+        for names in [&data, &home, &scout] {
             assert!(names.contains(&"list_apps"));
             assert!(names.contains(&"describe_app_interface"));
             assert!(!names.contains(&"create_app"));
             assert!(!names.contains(&"ask_user"));
         }
         assert!(find_data_studio_tool_spec("database_tool").is_some());
+        assert!(find_home_tool_spec("validate_home_layout").is_some());
+        assert!(find_home_tool_spec("database_tool").is_none());
         assert!(find_scout_tool_spec("search_apps").is_some());
         assert!(find_scout_tool_spec("database_tool").is_none());
+    }
+
+    #[test]
+    fn home_specialist_tool_contract_is_staged_and_profile_bound() {
+        let names = home_specialist_tool_specs()
+            .iter()
+            .map(|spec| spec.name)
+            .collect::<Vec<_>>();
+        assert_eq!(
+            names,
+            vec![
+                "get_home_context",
+                "get_home_widget_catalog",
+                "list_home_data_sources",
+                "validate_home_layout",
+                "apply_home_layout",
+                "list_apps",
+                "describe_app_interface",
+            ]
+        );
+
+        for read in [
+            "get_home_context",
+            "get_home_widget_catalog",
+            "list_home_data_sources",
+            "validate_home_layout",
+        ] {
+            let spec = find_home_tool_spec(read).expect("Home read tool");
+            assert!(matches!(spec.approval, ToolApprovalSpec::None));
+            assert_eq!(resolve_tool_effect(&spec, &json!({})), ToolEffect::ReadOnly);
+        }
+
+        let sources = find_home_tool_spec("list_home_data_sources").unwrap();
+        let sources_schema = (sources.schema)();
+        assert_eq!(sources_schema["required"], json!(["app_id"]));
+        for filter in ["query", "source_id", "object_type_query", "column_query"] {
+            assert_eq!(
+                sources_schema["properties"][filter]["type"], "string",
+                "missing {filter}"
+            );
+        }
+        assert_eq!(
+            sources_schema["properties"]["kinds"]["items"]["enum"],
+            json!(["table", "ontology", "query"])
+        );
+        assert!(sources.description.contains("`complete: false`"));
+        assert!(
+            sources
+                .description
+                .contains("exact table name, ontology id")
+        );
+        assert!(sources.description.contains("`object_type_query`"));
+        assert!(sources.description.contains("`column_query`"));
+        assert!(sources.description.contains("corresponding filter"));
+
+        let apps = find_home_tool_spec("list_apps").unwrap();
+        let apps_schema = (apps.schema)();
+        assert_eq!(apps_schema["properties"]["query"]["type"], "string");
+        assert!(apps.description.contains("before the 250-item cap"));
+        assert!(apps.description.contains("Refine `query`"));
+
+        let validate = find_home_tool_spec("validate_home_layout").unwrap();
+        let validate_schema = (validate.schema)();
+        assert_eq!(validate_schema["required"], json!(["layout"]));
+        assert!(
+            validate_schema["properties"]
+                .get("expected_profile_id")
+                .is_some()
+        );
+        assert!(
+            validate_schema["properties"]
+                .get("expected_fingerprint")
+                .is_some()
+        );
+
+        let apply = find_home_tool_spec("apply_home_layout").unwrap();
+        let apply_schema = (apply.schema)();
+        assert_eq!(
+            apply_schema["required"],
+            json!(["layout", "expected_profile_id", "expected_fingerprint"])
+        );
+        assert_eq!(
+            apply_schema["properties"]["layout"]["properties"]["widgets"]["maxItems"],
+            json!(80)
+        );
+        assert!(missing_required_args(&apply, &json!({ "layout": {} })).is_some());
+        assert_eq!(
+            resolve_tool_effect(
+                &apply,
+                &json!({
+                    "layout": { "version": 1, "widgets": [] },
+                    "expected_profile_id": "profile-a",
+                    "expected_fingerprint": "fingerprint-a"
+                })
+            ),
+            ToolEffect::Mutating
+        );
+        let approval = resolve_tool_approval(
+            &apply,
+            &json!({
+                "layout": { "version": 1, "widgets": [] },
+                "expected_profile_id": "profile-a",
+                "expected_fingerprint": "fingerprint-a"
+            }),
+        );
+        assert_eq!(approval.kind, "mutating");
+        assert_eq!(approval.session_key, "apply_home_layout:profile-a");
+        assert!(approval.description.contains("stage"));
+        assert!(approval.description.contains("will not be saved"));
     }
 
     #[test]
@@ -2753,6 +3125,7 @@ mod tests {
         for name in [
             "flowpilot_board",
             "flowpilot_widget",
+            "flowpilot_home",
             "data_studio_agent",
             "project_scout",
             RESEARCH_AGENT_TOOL,
@@ -2769,6 +3142,15 @@ mod tests {
         assert_eq!(research_schema["properties"], json!({}));
         assert_eq!(research_schema["additionalProperties"], json!(false));
         assert!(research_schema.get("required").is_none());
+
+        let home = find_global_tool_spec("flowpilot_home").unwrap();
+        let home_schema = (home.schema)();
+        assert_eq!(home_schema["additionalProperties"], json!(false));
+        assert_eq!(home_schema["required"], json!(["instruction"]));
+        assert!(
+            home.description
+                .contains("Staged is not saved or published")
+        );
 
         let chat = find_global_tool_spec("call_app_chat").unwrap();
         assert!(
@@ -2818,7 +3200,9 @@ mod tests {
         // Reviewed 2026-08-25: +~0.2 KB of accumulated description drift since 2026-08-22 pushed
         // the memory-off payload to 33,375; re-based just above the measurement (memory-on
         // measured 34,119, still inside its budget).
-        for (memory_enabled, budget) in [(false, 33_400usize), (true, 35_200usize)] {
+        // Reviewed 2026-09-06: +~0.2 KB for the narrow `flowpilot_home` delegation contract.
+        // +~0.2 KB the same day for `list_apps.query`, which makes its 250-item cap recoverable.
+        for (memory_enabled, budget) in [(false, 34_000usize), (true, 35_200usize)] {
             let specs = global_assistant_tool_specs(memory_enabled);
             let total: usize = specs
                 .iter()

@@ -1274,6 +1274,7 @@ export class WebBoardState implements IBoardState {
 						const dispatch = dispatchSpecialistToolRequest({
 							data,
 							onToolRequest: runGlobalChatTool,
+							parentRequestId: toolContext?.parentRequestId,
 						}).catch((error) => {
 							// The specialist is blocked on this request; failing the stream beats
 							// leaving it to time out with no explanation.

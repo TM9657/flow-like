@@ -8,6 +8,8 @@ export type CopilotScope =
 	| "Frontend"
 	| "Both"
 	| "DataStudio"
+	/** Personal Home layout authoring through the mounted Home editor. */
+	| "Home"
 	/** Read-only prior-art research; returns a foundation plan, mutates nothing. */
 	| "Scout"
 	/** Read-only public-web research; holds the only search/page-read tools. */

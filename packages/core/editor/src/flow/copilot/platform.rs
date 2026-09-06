@@ -49,9 +49,9 @@ use super::stream::{
 use super::tool_spec::{
     ARCHIVE_LOOKUP_TOOL, INTERNET_SEARCH_TOOL, MEMORY_SEARCH_TOOL, MEMORY_STORE_TOOL,
     OPEN_URL_TOOL, PlatformToolSpec, RESEARCH_AGENT_TOOL, data_studio_specialist_tool_specs,
-    find_data_studio_tool_spec, find_global_tool_spec, find_scout_tool_spec,
-    global_assistant_tool_specs, public_web_tool_specs, resolve_tool_effect,
-    scout_specialist_tool_specs, spec_arg_str,
+    find_data_studio_tool_spec, find_global_tool_spec, find_home_tool_spec, find_scout_tool_spec,
+    global_assistant_tool_specs, home_specialist_tool_specs, public_web_tool_specs,
+    resolve_tool_effect, scout_specialist_tool_specs, spec_arg_str,
 };
 use super::types::{ChatImage, ChatMessage, ChatRole, PlanStepStatus};
 use crate::bit::{Bit, BitModelPreference, BitTypes, LLMParameters};
@@ -242,6 +242,8 @@ pub enum PlatformSurface {
     Scout,
     /// Nested tables/overlays specialist behind `data_studio_agent`.
     DataStudio,
+    /// Nested personal Home layout specialist behind `flowpilot_home`.
+    Home,
     /// Tool-free planner used by the embedded ontology natural-language query input.
     OntologyQuery,
 }
@@ -252,6 +254,7 @@ impl PlatformSurface {
             Self::Orchestrator => platform_loop_tool_specs(memory_enabled),
             Self::Scout => scout_specialist_tool_specs(),
             Self::DataStudio => data_studio_specialist_tool_specs(),
+            Self::Home => home_specialist_tool_specs(),
             Self::OntologyQuery => Vec::new(),
         }
     }
@@ -262,7 +265,7 @@ impl PlatformSurface {
     fn max_tool_rounds(self) -> usize {
         match self {
             Self::Orchestrator => MAX_PLATFORM_TOOL_ROUNDS,
-            Self::Scout | Self::DataStudio => MAX_SPECIALIST_TOOL_ROUNDS,
+            Self::Scout | Self::DataStudio | Self::Home => MAX_SPECIALIST_TOOL_ROUNDS,
             Self::OntologyQuery => 0,
         }
     }
@@ -272,7 +275,7 @@ impl PlatformSurface {
             Self::Orchestrator => {
                 "The research tools completed, but the model did not produce a final synthesis within the tool budget."
             }
-            Self::Scout | Self::DataStudio => {
+            Self::Scout | Self::DataStudio | Self::Home => {
                 "The specialist's tools completed, but it did not produce a final report within the tool budget. Treat any work it started as unverified."
             }
             Self::OntologyQuery => {
@@ -361,6 +364,7 @@ fn platform_tool_requires_ordered_execution(name: &str, arguments: &Value) -> bo
     // serialized behind the others.
     let Some(spec) = find_global_tool_spec(name)
         .or_else(|| find_data_studio_tool_spec(name))
+        .or_else(|| find_home_tool_spec(name))
         .or_else(|| find_scout_tool_spec(name))
     else {
         return true;
@@ -460,7 +464,7 @@ fn platform_tool_serialization_lane(name: &str, arguments: &Value) -> Option<Str
     };
     let app = || arg("app_id", "appId").unwrap_or_else(|| "*".to_string());
 
-    // The three authoring specialists are laned by the state they OWN, not by their approval spec.
+    // The authoring specialists are laned by the state they own, not by their approval spec.
     // `data_studio_agent` in particular needs no approval and so reads as read-only to the effect
     // classifier, yet two data builds on one app absolutely do contend.
     match name {
@@ -494,6 +498,9 @@ fn platform_tool_serialization_lane(name: &str, arguments: &Value) -> Option<Str
         }
         // Tables and overlays are app-scoped state.
         "data_studio_agent" => return Some(format!("data:{}", app())),
+        // Personal Home layout edits are bound to the current profile by the nested tool guards.
+        // The root delegation schema intentionally carries no model-authored profile id.
+        "flowpilot_home" => return Some("home:current-profile".to_string()),
         _ => {}
     }
 
@@ -2151,7 +2158,11 @@ mod tests {
     /// it holds exactly its own tools, so it can neither re-delegate nor make an outbound request.
     #[test]
     fn specialist_surfaces_hold_only_their_own_tools() {
-        for surface in [PlatformSurface::Scout, PlatformSurface::DataStudio] {
+        for surface in [
+            PlatformSurface::Scout,
+            PlatformSurface::DataStudio,
+            PlatformSurface::Home,
+        ] {
             let names: Vec<&str> = surface
                 .tool_specs(true)
                 .iter()
@@ -2169,6 +2180,7 @@ mod tests {
                 "project_scout",
                 "flowpilot_board",
                 "flowpilot_widget",
+                "flowpilot_home",
             ] {
                 assert!(
                     !names.contains(&forbidden),
@@ -2198,6 +2210,32 @@ mod tests {
             .collect();
         assert!(data.contains(&"database_tool"));
         assert!(data.contains(&"graph_overlay_tool"));
+
+        let home: Vec<&str> = PlatformSurface::Home
+            .tool_specs(false)
+            .iter()
+            .map(|spec| spec.name)
+            .collect();
+        assert_eq!(
+            home,
+            vec![
+                "get_home_context",
+                "get_home_widget_catalog",
+                "list_home_data_sources",
+                "validate_home_layout",
+                "apply_home_layout",
+                "list_apps",
+                "describe_app_interface",
+            ]
+        );
+        for forbidden in [
+            "create_app",
+            "database_tool",
+            "graph_overlay_tool",
+            "flowpilot_widget",
+        ] {
+            assert!(!home.contains(&forbidden));
+        }
 
         let query = PlatformSurface::OntologyQuery;
         assert!(query.tool_specs(true).is_empty());
@@ -2544,17 +2582,23 @@ mod tests {
         let widget =
             json!({ "app_id": "app", "route": "/dashboard", "instruction": "Build the page" });
         let data = json!({ "app_id": "app", "instruction": "Create the tables" });
+        let home = json!({ "instruction": "Build the personal landing page" });
 
         let board_lane = platform_tool_serialization_lane("flowpilot_board", &board);
         let widget_lane = platform_tool_serialization_lane("flowpilot_widget", &widget);
         let data_lane = platform_tool_serialization_lane("data_studio_agent", &data);
+        let home_lane = platform_tool_serialization_lane("flowpilot_home", &home);
 
         assert_eq!(board_lane, Some("board:app:b1".to_string()));
         assert_eq!(widget_lane, Some("widget:app:/dashboard".to_string()));
         assert_eq!(data_lane, Some("data:app".to_string()));
+        assert_eq!(home_lane, Some("home:current-profile".to_string()));
         assert_ne!(board_lane, widget_lane);
         assert_ne!(board_lane, data_lane);
+        assert_ne!(board_lane, home_lane);
         assert_ne!(widget_lane, data_lane);
+        assert_ne!(widget_lane, home_lane);
+        assert_ne!(data_lane, home_lane);
     }
 
     #[test]

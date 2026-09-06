@@ -17,6 +17,10 @@ pub enum CopilotScope {
     Board,
     /// Only UI modifications (A2UI components)
     Frontend,
+    /// Only the current profile's personal Home layout. This scope reads and
+    /// validates Home JSON, then stages a draft in the live Home editor for
+    /// the user to review and save.
+    Home,
     /// Both board and UI modifications
     Both,
     /// Only data-layer work (databases, ontologies/overlays, graph queries,
@@ -203,4 +207,18 @@ pub enum UnifiedStreamEvent {
     ComponentPreview(Vec<SurfaceComponent>),
     /// Agent determined which scope to focus on
     ScopeDecision(CopilotScope),
+}
+
+#[cfg(test)]
+mod tests {
+    use super::CopilotScope;
+
+    #[test]
+    fn home_scope_keeps_the_cross_client_wire_value() {
+        assert_eq!(serde_json::to_value(CopilotScope::Home).unwrap(), "Home");
+        assert_eq!(
+            serde_json::from_str::<CopilotScope>("\"Home\"").unwrap(),
+            CopilotScope::Home
+        );
+    }
 }

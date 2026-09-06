@@ -142,6 +142,11 @@ export function minimumHomeWidgetRows(widget: IHomeWidget): number {
 			? 2
 			: 3;
 	if (widget.type === "app-embed") return 3;
+	if (
+		widget.type === "section-heading" ||
+		(widget.type === "workspace-pulse" && widget.config.mode === "strip")
+	)
+		return 1;
 	return ["greeting", "flowpilot", "quick-actions"].includes(widget.type)
 		? 1
 		: 2;

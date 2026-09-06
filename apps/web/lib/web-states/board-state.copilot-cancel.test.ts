@@ -1,8 +1,10 @@
 import type { IChannelHandle } from "@flow-like/flow-like-ui/lib/schema/channel";
+import type { CopilotToolContext } from "@flow-like/flow-like-ui/lib/schema/copilot";
 import { beforeEach, describe, expect, test, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
 	cancelChannel: vi.fn<(handle: unknown) => Promise<void>>(async () => {}),
+	dispatchSpecialistToolRequest: vi.fn(async () => undefined),
 	isChannelHandle: vi.fn((value: unknown) => Boolean(value)),
 }));
 
@@ -21,7 +23,9 @@ vi.mock(
 );
 vi.mock(
 	"@flow-like/flow-like-ui/state/global-chat/global-chat-web-transport",
-	() => ({ dispatchSpecialistToolRequest: vi.fn() }),
+	() => ({
+		dispatchSpecialistToolRequest: mocks.dispatchSpecialistToolRequest,
+	}),
 );
 vi.mock("sonner", () => ({ toast: vi.fn() }));
 vi.mock("../oauth-db", () => ({
@@ -86,6 +90,19 @@ function copilotStream(runChannel: IChannelHandle, announceRun = true) {
 		sendToken(token: string) {
 			controller?.enqueue(encoder.encode(`event: token\ndata: ${token}\n\n`));
 		},
+		sendToolRequest(request: Record<string, unknown>) {
+			controller?.enqueue(
+				encoder.encode(
+					`event: tool_request\ndata: ${JSON.stringify(request)}\n\n`,
+				),
+			);
+		},
+		finish(result: Record<string, unknown> = { message: "done" }) {
+			controller?.enqueue(
+				encoder.encode(`event: final\ndata: ${JSON.stringify(result)}\n\n`),
+			);
+			controller?.close();
+		},
 	};
 }
 
@@ -93,6 +110,7 @@ function startChat(
 	state: WebBoardState,
 	requestId: string,
 	onToken: (token: string) => void = () => undefined,
+	toolContext?: CopilotToolContext,
 ) {
 	return state.copilot_chat(
 		"DataStudio",
@@ -113,7 +131,7 @@ function startChat(
 		undefined,
 		true,
 		true,
-		undefined,
+		toolContext,
 		requestId,
 	);
 }
@@ -216,5 +234,34 @@ describe("WebBoardState Copilot cancellation", () => {
 		]);
 		expect(await first).toBeInstanceOf(Error);
 		expect(await second).toBeInstanceOf(Error);
+	});
+
+	test("carries the outer request id into hosted specialist tool dispatch", async () => {
+		const runChannel = channel("run-home");
+		const stream = copilotStream(runChannel);
+		vi.stubGlobal(
+			"fetch",
+			vi.fn(async () => stream.response),
+		);
+
+		const state = new WebBoardState({ auth: undefined } as never);
+		const chat = startChat(state, "home-agent", () => undefined, {
+			parentRequestId: "outer-home-1",
+		});
+		await vi.waitFor(() => expect(mocks.isChannelHandle).toHaveBeenCalled());
+		stream.sendToolRequest({
+			requestId: "home-apply-1",
+			toolName: "apply_home_layout",
+			arguments: {},
+			channel: channel("home-tool"),
+		});
+
+		await vi.waitFor(() =>
+			expect(mocks.dispatchSpecialistToolRequest).toHaveBeenCalledWith(
+				expect.objectContaining({ parentRequestId: "outer-home-1" }),
+			),
+		);
+		stream.finish();
+		await chat;
 	});
 });

@@ -203,6 +203,7 @@ fn sdk_tool_handler_watchdog_timeout(tool_name: &str) -> Duration {
                 .into_iter()
                 .find(|spec| spec.name == tool_name)
         })
+        .or_else(|| flow_like::flow::copilot::tool_spec::find_home_tool_spec(tool_name))
         .map(|spec| Duration::from_secs(spec.timeout_secs))
         .or_else(|| {
             (tool_name == "ui_inspect").then_some(super::copilot_sdk_tools::UI_INSPECT_TOOL_TIMEOUT)
@@ -3191,9 +3192,9 @@ fn specialist_host_context(
 
 /// Run one nested specialist scope on the Bits/rig backend.
 ///
-/// The board and UI specialists are served by the `UnifiedCopilot`; Data Studio and Scout have no
-/// such copilot, so they run the shared platform tool loop with their own prompt and tool set,
-/// dispatching through the same frontend bridge every other backend uses.
+/// The board and UI specialists are served by the `UnifiedCopilot`; Data Studio, Scout, and Home
+/// run the shared platform tool loop with their own prompt and tool set through the same frontend
+/// bridge every other backend uses.
 #[allow(clippy::too_many_arguments)]
 async fn run_bits_specialist_chat(
     app_handle: AppHandle,
@@ -3217,8 +3218,8 @@ async fn run_bits_specialist_chat(
             .as_deref()
             .or(stream_parent_request_id.as_deref()),
     );
-    // Nested specialist runs take the same per-target gate as the board/widget specialists, so two
-    // delegations against one app's data serialize while different apps proceed concurrently.
+    // Every backend uses the same mutation-lane gates. Data changes serialize per app, while Home
+    // changes serialize against the process-wide active profile.
     let _nested_run_permit = if nested {
         Some(
             acquire_nested_copilot_run_permit(
@@ -3258,6 +3259,7 @@ async fn run_bits_specialist_chat(
         tool_set: match specialist {
             PlatformSpecialist::DataStudio => FrontendPlatformToolSet::DataStudio,
             PlatformSpecialist::Scout => FrontendPlatformToolSet::Scout,
+            PlatformSpecialist::Home => FrontendPlatformToolSet::Home,
         },
         cancellation: run_cancellation.clone(),
         // A delegated specialist is not steerable; the user steers the orchestrator that called it.
@@ -3343,7 +3345,7 @@ pub async fn copilot_chat(
     action_context: Option<UIActionContext>,
     // Sub-agent run spawned while another Copilot session is mid-turn (needs its own CLI)
     nested: Option<bool>,
-    // Read-only sub-run (flowpilot_board explain): answer questions about the board without editing.
+    // Read-only specialist sub-run: inspect and answer without mutation tools.
     read_only: Option<bool>,
     // App scope for hosted-model usage attribution. Omit for genuine global chat.
     app_id: Option<String>,
@@ -3512,13 +3514,14 @@ pub async fn copilot_chat(
         };
     }
 
-    // Data Studio and Scout are tool-loop specialists: the board/UI copilots cannot author their
-    // artifacts, so on the Bits backend they run the shared platform loop with their own prompt and
-    // tool set. Their availability is a property of the host, never of the selected model — every
-    // FlowPilot backend advertises the same specialist tools.
+    // Data Studio, Scout, and Home are tool-loop specialists. The board/UI copilots cannot author
+    // their artifacts, so on the Bits backend they run the shared platform loop with their own
+    // prompt and tool set. Their availability is a property of the host, independent of the
+    // selected model. Every FlowPilot backend advertises the same specialist tools.
     if let Some(specialist) = match scope {
         CopilotScope::DataStudio => Some(PlatformSpecialist::DataStudio),
         CopilotScope::Scout => Some(PlatformSpecialist::Scout),
+        CopilotScope::Home => Some(PlatformSpecialist::Home),
         _ => None,
     } {
         return run_bits_specialist_chat(
@@ -3611,7 +3614,7 @@ pub async fn copilot_chat(
 
     // Only create catalog provider if we might need it (Board or Both scope)
     let catalog_provider: Option<Arc<dyn CatalogProvider>> = match scope {
-        CopilotScope::Frontend => None,
+        CopilotScope::Frontend | CopilotScope::Home => None,
         _ => Some(Arc::new(DesktopCatalogProvider::new(catalog_nodes))),
     };
 
@@ -3627,9 +3630,8 @@ pub async fn copilot_chat(
             .as_deref()
             .or(stream_parent_request_id.as_deref()),
     );
-    // The in-process Bits/rig loop shares the board-scoped retained draft stores with the agent
-    // backends, so its nested runs take the same per-board gate (same-board runs serialize,
-    // different boards proceed concurrently). Held for the entire run.
+    // The in-process Bits/rig loop shares mutable editor state with the agent backends, so its
+    // nested runs take the same mutation-lane gate. The permit is held for the entire run.
     let _nested_run_permit = if nested {
         Some(
             acquire_nested_copilot_run_permit(
@@ -3705,7 +3707,7 @@ pub async fn copilot_chat(
 
     let mut bits_draft_snapshot = None;
     if !read_only
-        && !matches!(scope, CopilotScope::Frontend)
+        && !matches!(scope, CopilotScope::Frontend | CopilotScope::Home)
         && let Some(board) = board.as_ref()
     {
         let flow_ir_drafts = retained_flow_ir_draft_store_for_board(board)?;
@@ -4557,6 +4559,7 @@ enum FrontendPlatformToolSet {
     BoardRuntime,
     DataStudio,
     Scout,
+    Home,
 }
 
 fn frontend_platform_tool_spec(
@@ -4565,7 +4568,8 @@ fn frontend_platform_tool_spec(
 ) -> Option<flow_like::flow::copilot::tool_spec::PlatformToolSpec> {
     use flow_like::flow::copilot::tool_spec::{
         find_cross_board_source_tool_spec, find_data_studio_tool_spec, find_global_tool_spec,
-        find_runtime_execution_tool_spec, find_scout_tool_spec, find_workflow_context_tool_spec,
+        find_home_tool_spec, find_runtime_execution_tool_spec, find_scout_tool_spec,
+        find_workflow_context_tool_spec,
     };
 
     match tool_set {
@@ -4577,6 +4581,7 @@ fn frontend_platform_tool_spec(
         // spec here and is rejected as unadvertised rather than silently dispatched.
         FrontendPlatformToolSet::DataStudio => find_data_studio_tool_spec(tool_name),
         FrontendPlatformToolSet::Scout => find_scout_tool_spec(tool_name),
+        FrontendPlatformToolSet::Home => find_home_tool_spec(tool_name),
     }
 }
 
@@ -4612,7 +4617,7 @@ struct DesktopPlatformBridge {
     tool_set: FrontendPlatformToolSet,
     cancellation: CancellationToken,
     /// True for global-chat runs, which drain steering text pushed onto their channel;
-    /// board/widget runs share a channel with their owner and must not consume its inbox.
+    /// Nested specialist runs share a channel with their owner and must not consume its inbox.
     steerable: bool,
 }
 
@@ -5383,8 +5388,8 @@ async fn external_code_agent_chat_internal(
     let (run_cancellation, _run_registration) =
         register_copilot_run(request_id.as_deref().or(parent_request_id.as_deref()));
     // Codex/Claude Code CLI processes are already per-invocation, so no process pool is needed
-    // here; the per-board gate alone gives nested runs the same same-board serialization as the
-    // SDK and Bits paths (retained draft base-fingerprint integrity). Held for the entire run.
+    // here. Mutation-lane gates give nested runs the same state serialization as SDK and Bits.
+    // The permit is held for the entire run.
     let _nested_run_permit = if nested {
         Some(
             acquire_nested_copilot_run_permit(
@@ -5400,7 +5405,7 @@ async fn external_code_agent_chat_internal(
     } else {
         None
     };
-    // Started after the same-board gate so serialized queue time does not consume the budget.
+    // Started after the mutation-lane gate so serialized queue time does not consume the budget.
     let nested_wall_clock_deadline = nested.then(|| Instant::now() + NESTED_RUN_WALL_CLOCK_BUDGET);
     let tool_channel = frontend_tool_channel(tool_context.as_ref(), request_id.as_deref()).await;
     let mut tools = build_flowpilot_sdk_tools(
@@ -7189,6 +7194,7 @@ async fn copilot_sdk_chat_internal(
                 CopilotScope::Both => "Copilot",
                 CopilotScope::DataStudio => "Data Studio agent",
                 CopilotScope::Scout => "Project scout",
+                CopilotScope::Home => "Home designer",
                 CopilotScope::Research => "Researcher",
             }
         };
@@ -8239,6 +8245,18 @@ fn specialist_tool_policy(
         ]);
     }
 
+    if matches!(scope, CopilotScope::Home) {
+        names.extend([
+            "get_home_context",
+            "get_home_widget_catalog",
+            "list_home_data_sources",
+            "validate_home_layout",
+            "apply_home_layout",
+            "list_apps",
+            "describe_app_interface",
+        ]);
+    }
+
     names
 }
 
@@ -8265,6 +8283,11 @@ fn is_flowpilot_read_only_tool(tool_name: &str) -> bool {
             | "fork_preview"
             | "list_apps"
             | "describe_app_interface"
+            // Home inspection and validation do not persist a layout.
+            | "get_home_context"
+            | "get_home_widget_catalog"
+            | "list_home_data_sources"
+            | "validate_home_layout"
             // The Research scope is read-only in full: reading public pages changes
             // nothing, so explain mode keeps its whole tool set.
             | "internet_search"
@@ -8288,7 +8311,7 @@ fn build_flowpilot_sdk_tools(
         copilot_sdk_tools::{
             create_board_support_tools, create_board_tools, create_data_studio_tools,
             create_frontend_support_tools, create_frontend_tools, create_global_assistant_tools,
-            create_research_tools, create_scout_tools,
+            create_home_tools, create_research_tools, create_scout_tools,
         },
         frontend_tool_bridge::{FrontendToolBridge, GLOBAL_FRONTEND_TOOL_EVENT},
     };
@@ -8345,9 +8368,12 @@ fn build_flowpilot_sdk_tools(
             )));
             all_tools
         }
-        // Data Studio and Scout are not board/UI specialists: they get only their own tool sets,
-        // added from the runtime bridge below.
-        CopilotScope::DataStudio | CopilotScope::Scout | CopilotScope::Research => Vec::new(),
+        // These scopes are not board/UI specialists. They get only their own tool sets from the
+        // runtime bridge below.
+        CopilotScope::DataStudio
+        | CopilotScope::Scout
+        | CopilotScope::Home
+        | CopilotScope::Research => Vec::new(),
     };
     match scope {
         CopilotScope::Board | CopilotScope::Both => {
@@ -8361,6 +8387,9 @@ fn build_flowpilot_sdk_tools(
         }
         CopilotScope::Scout => {
             tools.extend(create_scout_tools(runtime_bridge));
+        }
+        CopilotScope::Home => {
+            tools.extend(create_home_tools(runtime_bridge));
         }
         CopilotScope::Research => {
             // Seeded from the immutable top-level user message so this researcher joins
@@ -8421,7 +8450,11 @@ impl Drop for McpToolCancellationGuard {
 fn is_delegated_agent_tool(tool_name: &str) -> bool {
     matches!(
         tool_name,
-        "flowpilot_board" | "flowpilot_widget" | "project_scout" | "research_agent"
+        "flowpilot_board"
+            | "flowpilot_widget"
+            | "flowpilot_home"
+            | "project_scout"
+            | "research_agent"
     )
 }
 
@@ -8433,9 +8466,9 @@ struct DelegatedRunToolProgress {
 }
 
 /// Most recent tool progress reported by any FlowPilot MCP run in this process. While the outer
-/// agent waits on flowpilot_board/flowpilot_widget its only signal is the progress heartbeat, so
+/// agent waits on a delegated FlowPilot specialist, its only signal is the progress heartbeat, so
 /// this single bounded slot gives those heartbeats substance (last tool used plus loop budget
-/// counts) without cross-run plumbing. Diagnostic prose only — never used for control flow.
+/// counts) without cross-run plumbing. Diagnostic prose only, never used for control flow.
 static LATEST_DELEGATED_RUN_TOOL_PROGRESS: LazyLock<
     StdMutex<Option<(Instant, DelegatedRunToolProgress)>>,
 > = LazyLock::new(|| StdMutex::new(None));
@@ -8586,7 +8619,7 @@ fn mcp_progress_heartbeat_notification(
     rmcp::model::ProgressNotificationParam::new(progress_token, progress).with_message(message)
 }
 
-/// Wall-clock budget for one NESTED delegated FlowPilot run (flowpilot_board/flowpilot_widget).
+/// Wall-clock budget for one nested delegated FlowPilot run.
 /// It must stay well below the outer 30-minute bridge dispatch bound so budget exhaustion reaches
 /// the waiting agent as a terminal, actionable incomplete result (retained draft coordinates plus
 /// diagnostics) instead of an opaque outer-channel timeout after a burned turn.
@@ -12045,6 +12078,7 @@ fn workflow_status_requires_repair(status: &str) -> bool {
             | "timeout"
             | "validation_error"
             | "validation_errors"
+            | "stale"
             | "no_changes"
             | "infeasible"
             | "candidate_regression"
@@ -13176,10 +13210,20 @@ fn flowpilot_mcp_server_instructions<'a>(
         || names.contains("write_flowscript");
     let has_ui = names.contains("emit_ui");
     let has_data = names.contains("graph_overlay_tool") || names.contains("graph_query_tool");
+    let has_home = names.contains("get_home_context") || names.contains("apply_home_layout");
+    let can_apply_home = names.contains("apply_home_layout");
     let has_global = names.contains("list_apps") && names.contains("flowpilot_board");
 
     if has_global {
-        return "You are the FlowPilot platform orchestrator. Search this server for tools in three modes. DIRECT: execute ordinary one-call, one-app, or simple two-app tasks without planning. COMPLEX SOLVE: make a dependency plan only when likely to need at least three apps/interfaces or intrinsic multi-stage, reconciliation, approval, verification, or recovery complexity. For either use mode, begin app work with list_apps. Active configured chat/page/headless Events, including REST/API and MCP, are primary: choose the best match and exact consumer. Call data_studio_agent directly for any work about an app's data — schema, queries, analytics, corrections, migrations, ontologies — on existing apps as well as during a build; it needs no preflight, and a failed, declined, timed-out, or approval-blocked Event is a stop to report rather than work to redo through raw data. Use the sealed no-argument research_agent only after a returned inventory has no suitable local app or useful local research candidates returned no answer. BUILD: use project_scout for prior art, then create/fork/acquire a base and coordinate flowpilot_widget, data_studio_agent, flowpilot_board, Events, and safe runtime verification by dependency wave. Board logic, UI, and data are strict specialist boundaries. Preserve exact returned IDs, approvals, partial/manual work, and the user's full acceptance contract; never claim success from a requested, declined, timed-out, or unknown operation. Do not use shell or file-edit tools for FlowPilot artifacts.";
+        return "You are the FlowPilot platform orchestrator. Use three modes. DIRECT handles ordinary one-call, one-app, or simple two-app tasks without planning. COMPLEX SOLVE makes a dependency plan only for work likely to need at least three apps/interfaces or intrinsic multi-stage, reconciliation, approval, verification, or recovery complexity. Begin app work with list_apps. Active configured chat/page/headless Events, including REST/API and MCP, are primary. Choose the best match and exact consumer. Call data_studio_agent directly for app data work on existing apps as well as during a build; it needs no preflight. Report a failed, declined, timed-out, or approval-blocked Event as a stop. Use flowpilot_home only when the user explicitly requests work on the current profile's Home landing page. Keep it out of ordinary app builds; in a mixed request, delegate Home as a separate work item. Use the sealed no-argument research_agent only after the inventory has no suitable local app or useful local research candidates returned no answer. BUILD: use project_scout for prior art, then create, fork, or acquire a base and coordinate flowpilot_widget, data_studio_agent, flowpilot_board, Events, and safe runtime verification by dependency wave. Home layout, board logic, UI, and data are strict specialist boundaries. Preserve exact returned IDs, approvals, partial work, and the user's acceptance contract. Never claim success from a requested, declined, timed-out, or unknown operation. Do not use shell or file-edit tools for FlowPilot artifacts.";
+    }
+
+    if has_home {
+        return if can_apply_home {
+            "You are the FlowPilot HOME specialist. Own only the current profile's Home landing-page layout JSON. Inspect the current context and widget catalog, discover referenced apps and data sources when useful, validate the complete candidate, then stage it with apply_home_layout. Never author A2UI pages, FlowScript, app data, or another profile's layout. Do not use shell or file-edit tools for FlowPilot artifacts."
+        } else {
+            "You are the read-only FlowPilot HOME specialist. Inspect the current profile's Home layout and supported references, then answer without staging a change. Never author A2UI pages, FlowScript, app data, or another profile's layout. Do not use shell or file-edit tools for FlowPilot artifacts."
+        };
     }
 
     if workflow_mutation && has_ui {
@@ -13498,9 +13542,12 @@ fn register_mcp_active_handler(
 }
 
 fn is_recoverable_platform_mutation(tool_name: &str) -> bool {
-    use flow_like::flow::copilot::tool_spec::{ToolApprovalSpec, find_global_tool_spec};
+    use flow_like::flow::copilot::tool_spec::{
+        ToolApprovalSpec, find_global_tool_spec, find_home_tool_spec,
+    };
 
     find_global_tool_spec(tool_name)
+        .or_else(|| find_home_tool_spec(tool_name))
         .is_some_and(|spec| !matches!(spec.approval, ToolApprovalSpec::None))
 }
 
@@ -14151,7 +14198,7 @@ Entry-node rule: cron/schedules are app Event setup on an `eventsSimple()` entry
         ""
     };
     let role_contract = if global_agent {
-        "You are the PLATFORM orchestrator described in the system instructions. Own the complete cross-specialist request by sequencing the provided global tools: create or select the app, delegate UI to the widget specialist, data setup to the data specialist, workflow behavior to the board specialist, and then configure app Events from the returned identifiers. Do not author specialist artifacts yourself, but do call and coordinate every required specialist until the full request is complete."
+        "You are the PLATFORM orchestrator described in the system instructions. Own the complete cross-specialist request by sequencing the provided global tools: create or select the app, delegate UI to the widget specialist, data setup to the data specialist, workflow behavior to the board specialist, and then configure app Events from the returned identifiers. Delegate the current profile's landing-page layout to the Home specialist only when the user explicitly requests Home work. Keep Home out of ordinary app builds and make it a separate work item in a mixed request. Do not author specialist artifacts yourself, but do call and coordinate every required specialist until the full request is complete."
     } else {
         match scope {
             CopilotScope::Board => {
@@ -14168,6 +14215,9 @@ Entry-node rule: cron/schedules are app Event setup on an `eventsSimple()` entry
             }
             CopilotScope::Scout => {
                 "You are the SCOUT specialist. Own only read-only prior-art research: search and inspect existing apps and templates, then return a foundation plan. Never fork, join, purchase, create or edit anything, and never author FlowScript, UI or data changes — every mutation belongs to the orchestrator that called you. Return references to reusable sources, never their inlined contents."
+            }
+            CopilotScope::Home => {
+                "You are the HOME specialist. Own only the current profile's Home landing-page layout JSON through the provided Home tools. Inspect the current layout and widget catalog, and discover referenced apps and data sources when useful. For a create or modify request, validate the complete candidate and stage it with apply_home_layout when that tool is available. For a pure explain or review request, inspect and answer without staging. Never author FlowScript, A2UI pages or widgets, app data, or another profile's layout."
             }
             CopilotScope::Both => {
                 "This is an explicit combined root session, not a widget or board subagent. Keep UI work in emit_ui and workflow work in the FlowScript lifecycle; never substitute one representation for the other."
@@ -16130,19 +16180,18 @@ static COPILOT_START_GATE: Lazy<Semaphore> = Lazy::new(|| Semaphore::new(1));
 static COPILOT_START_OPTIONS: Lazy<Mutex<Option<FlowPilotBackendStartOptions>>> =
     Lazy::new(|| Mutex::new(None));
 
-/// Retained draft stores are board-scoped and their base-fingerprint integrity requires that two
-/// nested runs mutating the same board never interleave. Runs targeting DIFFERENT boards are
-/// independent and may proceed concurrently, so nested runs are serialized per gate key instead
-/// of process-wide. All four agent backends (Bits/rig, GitHub Copilot SDK, Codex CLI, Claude Code
-/// CLI) acquire the same per-board gate for nested runs.
+/// Nested specialists share mutable editor state across backends. Each run acquires a gate for its
+/// mutation lane, so runs that can touch the same state do not interleave while independent lanes
+/// can proceed concurrently. All four agent backends (Bits/rig, GitHub Copilot SDK, Codex CLI, and
+/// Claude Code CLI) use the same gate keys.
 static NESTED_COPILOT_RUN_GATES: Lazy<StdMutex<HashMap<String, Arc<Semaphore>>>> =
     Lazy::new(|| StdMutex::new(HashMap::new()));
 
 /// Gate key for a nested run. The gate exists to protect MUTABLE state from interleaving, so it is
 /// keyed by the *lane* a run writes to, never merely by whatever board happens to be in context.
-/// The three authoring specialists own disjoint state — FlowScript drafts (`flowpilot_board`),
-/// A2UI surfaces (`flowpilot_widget`), tables/overlays (`data_studio_agent`) — so a widget build,
-/// a data build and a workflow build for one feature are independent and must run concurrently.
+/// The four authoring specialists own disjoint state: FlowScript drafts (`flowpilot_board`), A2UI
+/// surfaces (`flowpilot_widget`), tables/overlays (`data_studio_agent`), and the active profile's
+/// Home layout (`flowpilot_home`). A widget, data, workflow, and Home build can run concurrently.
 /// Sharing a `board:<id>` key across lanes silently made them queue, which is the single largest
 /// source of avoidable latency in a build turn.
 fn nested_copilot_run_gate_key(
@@ -16194,6 +16243,10 @@ fn nested_copilot_run_gate_key(
         // smallest safe lock scope: two different overlays in one app may still update the same
         // database catalog, while different apps remain independent.
         CopilotScope::DataStudio => lane("data", context_app()),
+        // The active desktop profile is process-wide and FrontendToolContext has no profile id.
+        // Serialize Home mutations in their own lane. Optimistic fingerprint checks still reject a
+        // stale candidate if the profile changes while a run is in progress.
+        CopilotScope::Home => lane("home", None),
         // Retained draft stores are board-scoped and their base-fingerprint integrity requires that
         // two runs mutating the same board never interleave. Runs targeting DIFFERENT boards are
         // independent. A board run with no resolved target yet still has to serialize per app, since
@@ -16237,18 +16290,18 @@ async fn acquire_nested_copilot_run_permit(
     }
 }
 
-/// Dedicated CLI processes for NESTED FlowPilot runs (flowpilot_board / flowpilot_widget
-/// sub-agents spawned while a parent Copilot session is mid-turn). The copilot CLI serializes
+/// Dedicated CLI processes for nested FlowPilot specialist runs spawned while a parent Copilot
+/// session is mid-turn. The copilot CLI serializes
 /// requests within one process: a `session.create` sent while the parent session has a pending
 /// tool call is never answered, deadlocking the sub-run until the tool bridge times out. Separate
 /// processes isolate nested sessions completely. This is a PER-PROCESS constraint, so nested runs
 /// use a small pool: clients start lazily with the same options as the main client (up to
 /// `NESTED_COPILOT_POOL_SIZE`) and idle processes are reused. A checked-out client is exclusively
 /// owned by one run, preserving one-session-at-a-time per process by construction.
-/// Sized for the widest fan-out a plan realistically produces in one wavefront: the three authoring
-/// lanes (board / widget / data) plus a few independent boards, or a scout fan-out across several
-/// candidates. Too small a pool silently converts a parallel plan back into a sequential one, since
-/// the excess runs block on a slot while holding their turn open.
+/// Sized for the widest fan-out a plan realistically produces in one wavefront: the four authoring
+/// lanes (board / widget / data / home) plus a few independent boards, or a scout fan-out across
+/// several candidates. Too small a pool silently converts a parallel plan back into a sequential
+/// one, since the excess runs block on a slot while holding their turn open.
 const NESTED_COPILOT_POOL_SIZE: usize = 6;
 
 struct NestedCopilotPool {
@@ -16827,6 +16880,7 @@ fn build_flowpilot_agent_surface(
         CopilotScope::Frontend
         | CopilotScope::DataStudio
         | CopilotScope::Scout
+        | CopilotScope::Home
         | CopilotScope::Research => None,
     };
 
@@ -16835,6 +16889,7 @@ fn build_flowpilot_agent_surface(
         CopilotScope::Frontend
         | CopilotScope::DataStudio
         | CopilotScope::Scout
+        | CopilotScope::Home
         | CopilotScope::Research => None,
     };
 
@@ -16845,6 +16900,7 @@ fn build_flowpilot_agent_surface(
         CopilotScope::Frontend
         | CopilotScope::DataStudio
         | CopilotScope::Scout
+        | CopilotScope::Home
         | CopilotScope::Research => None,
     };
 
@@ -16855,6 +16911,7 @@ fn build_flowpilot_agent_surface(
         CopilotScope::Frontend
         | CopilotScope::DataStudio
         | CopilotScope::Scout
+        | CopilotScope::Home
         | CopilotScope::Research => None,
     };
 
@@ -16896,6 +16953,7 @@ fn build_flowpilot_agent_surface(
             }
             CopilotScope::DataStudio => flow_like::copilot::prompts::data_studio_system_prompt(""),
             CopilotScope::Scout => flow_like::copilot::prompts::scout_system_prompt(""),
+            CopilotScope::Home => flow_like::copilot::prompts::home_system_prompt(""),
             CopilotScope::Research => {
                 flow_like::copilot::prompts::research_system_prompt(&format!(
                     "Current UTC date: {}.",
@@ -20272,6 +20330,21 @@ mod tests {
             crate::functions::ai::copilot_sdk_tools::UI_INSPECT_TOOL_TIMEOUT
                 + SDK_CONTROL_RPC_TIMEOUT
         );
+        let home_timeout = Duration::from_secs(
+            flow_like::flow::copilot::tool_spec::find_home_tool_spec("apply_home_layout")
+                .expect("shared Home apply spec")
+                .timeout_secs,
+        );
+        assert_eq!(
+            sdk_tool_handler_watchdog_timeout("apply_home_layout"),
+            SDK_EVENT_INACTIVITY_TIMEOUT.max(home_timeout + SDK_CONTROL_RPC_TIMEOUT)
+        );
+    }
+
+    #[test]
+    fn home_delegation_gets_long_running_progress_handling() {
+        assert!(is_delegated_agent_tool("flowpilot_home"));
+        assert!(!is_delegated_agent_tool("apply_home_layout"));
     }
 
     #[test]
@@ -20553,18 +20626,37 @@ event onTicket() {
             ..Default::default()
         };
 
-        // The whole point of the plan fan-out: for ONE feature the workflow, its page and its
-        // tables are built at the same time. Keying all three on the board id made them queue.
+        // For a mixed user request, app workflow, page, and tables can be built alongside an
+        // explicitly requested Home layout because each has a separate mutation lane.
         let board_key =
             nested_copilot_run_gate_key(CopilotScope::Board, Some(&board), Some(&context));
         let widget_key = nested_copilot_run_gate_key(CopilotScope::Frontend, None, Some(&context));
         let data_key = nested_copilot_run_gate_key(CopilotScope::DataStudio, None, Some(&context));
+        let home_key = nested_copilot_run_gate_key(CopilotScope::Home, None, Some(&context));
         assert_eq!(board_key, format!("board:{}", board.id));
         assert_eq!(widget_key, format!("widget:{}", board.id));
         assert_eq!(data_key, "data:app-a");
+        assert_eq!(home_key, "home");
         assert_ne!(board_key, widget_key);
         assert_ne!(board_key, data_key);
+        assert_ne!(board_key, home_key);
         assert_ne!(widget_key, data_key);
+        assert_ne!(widget_key, home_key);
+        assert_ne!(data_key, home_key);
+
+        // FrontendToolContext does not expose a profile id, so Home runs share one safe desktop
+        // lane even when their app context differs.
+        assert_eq!(
+            home_key,
+            nested_copilot_run_gate_key(
+                CopilotScope::Home,
+                None,
+                Some(&FrontendToolContext {
+                    app_id: Some("app-b".to_string()),
+                    ..Default::default()
+                })
+            )
+        );
 
         // Data work is app-scoped, so two data runs on different apps stay independent while any
         // two overlays in the same app serialize around shared tables and catalogs.
@@ -25900,13 +25992,25 @@ eventsSimple() {
     fn provider_exit_recovery_only_uses_successful_mutating_platform_tools() {
         assert!(is_recoverable_platform_mutation("flowpilot_board"));
         assert!(is_recoverable_platform_mutation("create_app"));
+        assert!(is_recoverable_platform_mutation("apply_home_layout"));
         assert!(!is_recoverable_platform_mutation("list_apps"));
+        assert!(!is_recoverable_platform_mutation("validate_home_layout"));
         assert!(!is_recoverable_platform_mutation("get_declarations"));
 
         let success = copilot_sdk::ToolResultObject::text(
             serde_json::json!({ "status": "ok", "applied_commands": 65 }).to_string(),
         );
         assert!(!flowpilot_tool_result_is_error(&success));
+
+        let staged_home = copilot_sdk::ToolResultObject::text(
+            serde_json::json!({ "status": "staged", "changed": true }).to_string(),
+        );
+        assert!(!flowpilot_tool_result_is_error(&staged_home));
+
+        let stale_home = copilot_sdk::ToolResultObject::text(
+            serde_json::json!({ "status": "stale", "code": "home_layout_changed" }).to_string(),
+        );
+        assert!(flowpilot_tool_result_is_error(&stale_home));
 
         let failure = copilot_sdk::ToolResultObject::text(
             serde_json::json!({ "status": "validation_errors" }).to_string(),
@@ -26236,6 +26340,20 @@ eventsSimple() {
             assert!(!data_names.contains(foreign_tool));
         }
 
+        let home = FlowPilotAgentCapabilitySet::shared_for(CopilotScope::Home, false, false);
+        assert_eq!(
+            home.tool_names,
+            vec![
+                "apply_home_layout".to_string(),
+                "describe_app_interface".to_string(),
+                "get_home_context".to_string(),
+                "get_home_widget_catalog".to_string(),
+                "list_apps".to_string(),
+                "list_home_data_sources".to_string(),
+                "validate_home_layout".to_string(),
+            ]
+        );
+
         for legacy_typed_tool in [
             "plan_flow_ir",
             "begin_flow_ir_draft",
@@ -26257,7 +26375,8 @@ eventsSimple() {
     #[test]
     fn bits_specialists_advertise_exactly_the_agent_backend_tool_policy() {
         use flow_like::flow::copilot::tool_spec::{
-            data_studio_specialist_tool_specs, scout_specialist_tool_specs,
+            data_studio_specialist_tool_specs, home_specialist_tool_specs,
+            scout_specialist_tool_specs,
         };
 
         // The Bits loop advertises these specs directly, while the agent-CLI backends filter their
@@ -26269,6 +26388,7 @@ eventsSimple() {
                 data_studio_specialist_tool_specs(),
             ),
             (CopilotScope::Scout, scout_specialist_tool_specs()),
+            (CopilotScope::Home, home_specialist_tool_specs()),
         ] {
             let advertised = specs
                 .iter()
@@ -26284,7 +26404,9 @@ eventsSimple() {
             for name in advertised {
                 let tool_set = match scope {
                     CopilotScope::DataStudio => FrontendPlatformToolSet::DataStudio,
-                    _ => FrontendPlatformToolSet::Scout,
+                    CopilotScope::Scout => FrontendPlatformToolSet::Scout,
+                    CopilotScope::Home => FrontendPlatformToolSet::Home,
+                    _ => unreachable!("only direct platform specialists are tested"),
                 };
                 assert!(
                     frontend_platform_tool_spec(tool_set, name).is_some(),
@@ -26349,6 +26471,7 @@ eventsSimple() {
             CopilotScope::Frontend,
             CopilotScope::Both,
             CopilotScope::DataStudio,
+            CopilotScope::Home,
         ] {
             let specialist = FlowPilotAgentCapabilitySet::for_surface(scope, true, true, false);
             for tool in ["internet_search", "open_url", "archive_lookup"] {
@@ -26385,6 +26508,10 @@ eventsSimple() {
             "storage_tool",
             "ui_inspect",
             "query_execution_logs",
+            "get_home_context",
+            "get_home_widget_catalog",
+            "list_home_data_sources",
+            "validate_home_layout",
         ] {
             assert!(
                 is_flowpilot_read_only_tool(tool),
@@ -26403,6 +26530,7 @@ eventsSimple() {
             "commit_flowscript",
             "emit_ui",
             "graph_overlay_tool",
+            "apply_home_layout",
             "ask_user",
         ] {
             assert!(
@@ -26427,6 +26555,7 @@ eventsSimple() {
             CopilotScope::Both,
             CopilotScope::DataStudio,
             CopilotScope::Scout,
+            CopilotScope::Home,
         ] {
             let policy = specialist_tool_policy(scope, true, true);
             for tool in ["internet_search", "open_url", "archive_lookup"] {
@@ -26467,6 +26596,24 @@ eventsSimple() {
     }
 
     #[test]
+    fn external_home_prompt_enforces_the_layout_boundary() {
+        let prompt = build_external_agent_prompt(
+            "home-system",
+            "Improve my Home landing page",
+            CopilotScope::Home,
+            false,
+            false,
+        );
+        assert!(prompt.contains("You are the HOME specialist"));
+        assert!(prompt.contains("current profile's Home landing-page layout JSON"));
+        assert!(prompt.contains("validate the complete candidate"));
+        assert!(prompt.contains("apply_home_layout"));
+        assert!(prompt.contains("pure explain or review request"));
+        assert!(prompt.contains("answer without staging"));
+        assert!(prompt.contains("Never author FlowScript"));
+    }
+
+    #[test]
     fn external_global_prompt_keeps_the_platform_orchestrator_role() {
         let prompt = build_external_agent_prompt(
             "global-system",
@@ -26477,6 +26624,8 @@ eventsSimple() {
         );
         assert!(prompt.contains("You are the PLATFORM orchestrator"));
         assert!(prompt.contains("coordinate every required specialist"));
+        assert!(prompt.contains("only when the user explicitly requests Home work"));
+        assert!(prompt.contains("Keep Home out of ordinary app builds"));
         assert!(!prompt.contains("You are the UI specialist"));
     }
 
@@ -26500,7 +26649,12 @@ eventsSimple() {
         assert!(board.contains("Cross-domain context tools are read-only"));
 
         let global = flowpilot_mcp_server_instructions(
-            ["list_apps", "flowpilot_board", RESEARCH_AGENT_TOOL],
+            [
+                "list_apps",
+                "flowpilot_board",
+                "flowpilot_home",
+                RESEARCH_AGENT_TOOL,
+            ],
             false,
         );
         assert!(global.contains("platform orchestrator"));
@@ -26513,8 +26667,30 @@ eventsSimple() {
         assert!(global.contains("on existing apps as well as during a build"));
         assert!(global.contains("it needs no preflight"));
         assert!(global.contains("BUILD"));
+        assert!(global.contains("flowpilot_home"));
+        assert!(global.contains("only when the user explicitly requests"));
+        assert!(global.contains("Keep it out of ordinary app builds"));
         assert!(global.contains("sealed no-argument research_agent"));
         assert!(global.len() < 2_000);
+
+        let home = flowpilot_mcp_server_instructions(
+            [
+                "get_home_context",
+                "validate_home_layout",
+                "apply_home_layout",
+            ],
+            false,
+        );
+        assert!(home.contains("HOME specialist"));
+        assert!(home.contains("current profile's Home landing-page layout JSON"));
+        assert!(home.contains("validate the complete candidate"));
+        assert!(home.contains("Never author A2UI pages"));
+
+        let home_read_only =
+            flowpilot_mcp_server_instructions(["get_home_context", "validate_home_layout"], false);
+        assert!(home_read_only.contains("read-only FlowPilot HOME specialist"));
+        assert!(home_read_only.contains("answer without staging a change"));
+        assert!(!home_read_only.contains("apply_home_layout"));
     }
 
     #[test]

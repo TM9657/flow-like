@@ -48,7 +48,7 @@ pub fn routes() -> Router<AppState> {
 /// Request payload for the unified copilot endpoint
 #[derive(Deserialize)]
 pub struct CopilotChatRequest {
-    /// The scope of operation: "Board", "Frontend", or "Both"
+    /// The copilot surface to run.
     pub scope: CopilotScope,
 
     /// App owning `board`. Required whenever board context is supplied so the server can authorize
@@ -545,7 +545,7 @@ async fn build_unified_copilot(
     let flow_like_state = master_flow_like_state(state).await?;
 
     let catalog_provider: Option<Arc<dyn CatalogProvider>> = match scope {
-        CopilotScope::Frontend => None,
+        CopilotScope::Frontend | CopilotScope::Home => None,
         _ => {
             // Package nodes are a per-app pin, so an unscoped request legitimately resolves to the
             // builtin catalog. A lookup failure must not, however, silently downgrade a scoped one.
@@ -693,14 +693,11 @@ pub async fn copilot_chat(
 
     let token = user_access_token(&user);
 
-    // Data Studio and Scout are tool-loop specialists — the UnifiedCopilot has no copilot for them.
+    // Data Studio, Scout and Home are tool-loop specialists. UnifiedCopilot has no copilot for
+    // these scopes.
     // They run the shared platform loop instead, with their tools round-tripped to the browser over
     // this response's own SSE stream.
-    if let Some(specialist) = match payload.scope {
-        CopilotScope::DataStudio => Some(PlatformSpecialist::DataStudio),
-        CopilotScope::Scout => Some(PlatformSpecialist::Scout),
-        _ => None,
-    } {
+    if let Some(specialist) = platform_specialist_for_scope(payload.scope) {
         return specialist_chat(state, sub, specialist, payload, token).await;
     }
 
@@ -728,7 +725,7 @@ pub async fn copilot_chat(
         None => None,
     };
     let flow_ir_draft_store = payload.board.as_ref().and_then(|board| {
-        (!matches!(payload.scope, CopilotScope::Frontend)).then(|| {
+        (!matches!(payload.scope, CopilotScope::Frontend | CopilotScope::Home)).then(|| {
             let app_id = retained_app_id
                 .as_deref()
                 .expect("board context was authorized with an app id");
@@ -888,6 +885,16 @@ pub async fn copilot_chat(
     Ok(<Sse<_> as axum::response::IntoResponse>::into_response(sse))
 }
 
+/// Map scopes served by the browser platform loop to their specialist roles.
+fn platform_specialist_for_scope(scope: CopilotScope) -> Option<PlatformSpecialist> {
+    match scope {
+        CopilotScope::DataStudio => Some(PlatformSpecialist::DataStudio),
+        CopilotScope::Scout => Some(PlatformSpecialist::Scout),
+        CopilotScope::Home => Some(PlatformSpecialist::Home),
+        _ => None,
+    }
+}
+
 /// The ids the host already knows, handed to a specialist so it defaults to the app and overlay the
 /// user is looking at instead of asking for them.
 fn specialist_host_context(app_id: Option<&str>, overlay_id: Option<&str>) -> String {
@@ -912,7 +919,7 @@ fn specialist_host_context(app_id: Option<&str>, overlay_id: Option<&str>) -> St
     lines.join("\n")
 }
 
-/// Run one nested specialist (`data_studio_agent` / `project_scout`) for the browser.
+/// Run one nested Data Studio, Scout, or Home specialist for the browser.
 ///
 /// Every specialist tool executes in the browser, so this is meaningful only as a stream: the SSE
 /// response opens with a `run` frame (`{ runId, channel }`) and carries `tool_request` frames
@@ -929,7 +936,7 @@ async fn specialist_chat(
 ) -> Result<axum::response::Response, ApiError> {
     if !payload.stream {
         return Err(ApiError::bad_request(
-            "The Data Studio and Scout specialists execute their tools in the browser, so they are available only on the streaming endpoint.",
+            "The Data Studio, Scout, and Home specialists execute their tools in the browser, so they are available only on the streaming endpoint.",
         ));
     }
     // Same requirement as the orchestrator turn: a hosted Bit bills its model calls against the
@@ -1085,17 +1092,43 @@ async fn specialist_chat(
 mod tests {
     use super::MAX_ONTOLOGY_QUERY_PROMPT_CHARS;
     use super::MAX_PROMPT_CHARS;
+    use super::platform_specialist_for_scope;
     use super::request_identity_prompt_for;
     use super::resolve_copilot_app_id;
     use super::specialist_host_context;
     use super::user_prompt_char_limit;
     use super::wait_for_channel_cancellation;
     use flow_like::copilot::CopilotScope;
+    use flow_like::flow::copilot::PlatformSpecialist;
     use flow_like_types::channel::{
         Channel, ChannelPush, ChannelPushKind, InProcessChannel, InProcessPushResult,
     };
     use std::sync::Arc;
     use std::time::Duration;
+
+    #[test]
+    fn browser_routes_only_tool_loop_scopes_to_platform_specialists() {
+        assert_eq!(
+            platform_specialist_for_scope(CopilotScope::Home),
+            Some(PlatformSpecialist::Home)
+        );
+        assert_eq!(
+            platform_specialist_for_scope(CopilotScope::DataStudio),
+            Some(PlatformSpecialist::DataStudio)
+        );
+        assert_eq!(
+            platform_specialist_for_scope(CopilotScope::Scout),
+            Some(PlatformSpecialist::Scout)
+        );
+        for scope in [
+            CopilotScope::Board,
+            CopilotScope::Frontend,
+            CopilotScope::Both,
+            CopilotScope::Research,
+        ] {
+            assert_eq!(platform_specialist_for_scope(scope), None);
+        }
+    }
 
     #[test]
     fn ontology_query_prompt_budget_has_room_for_the_bounded_schema() {

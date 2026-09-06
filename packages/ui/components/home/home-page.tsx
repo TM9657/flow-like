@@ -158,6 +158,12 @@ export function HomePage() {
 			<HomeEditor
 				key={JSON.stringify([origin, viewer, profileId])}
 				draftKey={JSON.stringify(["home", origin, viewer, profileId])}
+				profileId={profileId}
+				profileName={profile.data?.name ?? ""}
+				profileDescription={profile.data?.description ?? undefined}
+				profileInterests={profile.data?.interests ?? []}
+				profileTags={profile.data?.tags ?? []}
+				layoutSource={resolved.source}
 				layout={resolved.layout}
 				defaultLayout={inherited.layout}
 				onSave={save}

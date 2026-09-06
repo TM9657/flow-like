@@ -52,7 +52,8 @@ use flow_like::flow::copilot::memory::{AssistantMemory, MemoryEntry, MemoryStatu
 use flow_like::flow::copilot::platform::{PlatformToolBridge, run_internet_search};
 use flow_like::flow::copilot::tool_spec::{
     INTERNET_SEARCH_TOOL, PlatformToolSpec, ResolvedToolApproval, find_data_studio_tool_spec,
-    find_global_tool_spec, find_scout_tool_spec, missing_required_args, resolve_tool_approval,
+    find_global_tool_spec, find_home_tool_spec, find_scout_tool_spec, missing_required_args,
+    resolve_tool_approval,
 };
 use flow_like::flow::copilot::{
     AttachmentManifestEntry, ChatMessage, GlobalDataStudioContext, GlobalOpenBoardContext,
@@ -604,10 +605,47 @@ impl ServerPlatformBridge {
     }
 
     fn tool_spec(&self, tool_name: &str) -> Option<PlatformToolSpec> {
-        match self.specialist {
-            None => find_global_tool_spec(tool_name),
-            Some(PlatformSpecialist::DataStudio) => find_data_studio_tool_spec(tool_name),
-            Some(PlatformSpecialist::Scout) => find_scout_tool_spec(tool_name),
+        server_platform_tool_spec(self.specialist, tool_name)
+    }
+}
+
+fn server_platform_tool_spec(
+    specialist: Option<PlatformSpecialist>,
+    tool_name: &str,
+) -> Option<PlatformToolSpec> {
+    match specialist {
+        None => find_global_tool_spec(tool_name),
+        Some(PlatformSpecialist::DataStudio) => find_data_studio_tool_spec(tool_name),
+        Some(PlatformSpecialist::Scout) => find_scout_tool_spec(tool_name),
+        Some(PlatformSpecialist::Home) => find_home_tool_spec(tool_name),
+    }
+}
+
+#[cfg(test)]
+mod specialist_tool_spec_tests {
+    use super::*;
+
+    #[test]
+    fn home_specialist_resolves_only_its_scoped_tools() {
+        for tool_name in [
+            "get_home_context",
+            "get_home_widget_catalog",
+            "list_home_data_sources",
+            "validate_home_layout",
+            "apply_home_layout",
+            "list_apps",
+            "describe_app_interface",
+        ] {
+            assert!(
+                server_platform_tool_spec(Some(PlatformSpecialist::Home), tool_name).is_some(),
+                "Home bridge cannot resolve {tool_name}"
+            );
+        }
+        for foreign_tool in ["flowpilot_board", "emit_ui", "database_tool"] {
+            assert!(
+                server_platform_tool_spec(Some(PlatformSpecialist::Home), foreign_tool).is_none(),
+                "Home bridge must reject {foreign_tool}"
+            );
         }
     }
 }

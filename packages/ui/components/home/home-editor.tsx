@@ -63,6 +63,13 @@ import { createPortal } from "react-dom";
 import { toast } from "sonner";
 import { cn } from "../../lib/utils";
 import {
+	type AssistantHomeLayoutSource,
+	type AssistantHomeSnapshot,
+	type AssistantHomeStageGuard,
+	type AssistantHomeStageResult,
+	useAssistantSurface,
+} from "../../state/assistant-surface";
+import {
 	AlertDialog,
 	AlertDialogAction,
 	AlertDialogCancel,
@@ -115,7 +122,11 @@ import {
 	moveHomeWidget,
 	responsiveHomeColumns,
 } from "./home-layout";
-import { homeLayoutsEqual } from "./home-layout-json";
+import {
+	homeLayoutFingerprint,
+	homeLayoutsEqual,
+	parseHomeLayoutJson,
+} from "./home-layout-json";
 import { HomeWidgetContent } from "./home-widget-content";
 import { HomeWidgetIcon } from "./home-widget-icon";
 import { HomeWidgetSettings } from "./home-widget-settings";
@@ -140,6 +151,12 @@ const homeDrafts = new Map<string, { layout: IHomeLayout; reset: boolean }>();
 
 export interface HomeEditorProps {
 	draftKey?: string;
+	profileId?: string;
+	profileName?: string;
+	profileDescription?: string;
+	profileInterests?: string[];
+	profileTags?: string[];
+	layoutSource?: AssistantHomeLayoutSource;
 	layout: IHomeLayout;
 	onSave: (layout: IHomeLayout) => Promise<void>;
 	onReset: () => Promise<void>;
@@ -153,6 +170,12 @@ export interface HomeEditorProps {
 
 export function HomeEditor({
 	draftKey,
+	profileId,
+	profileName = "",
+	profileDescription,
+	profileInterests = [],
+	profileTags = [],
+	layoutSource = "personal",
 	layout,
 	onSave,
 	onReset,
@@ -163,6 +186,9 @@ export function HomeEditor({
 	toolbar,
 	onEditingChange,
 }: HomeEditorProps) {
+	const requestOpenAssistant = useAssistantSurface(
+		(state) => state.requestOpenAssistant,
+	);
 	const [editing, setEditing] = useState(false);
 	const [hasDraft, setHasDraft] = useState(() =>
 		Boolean(draftKey && homeDrafts.has(draftKey)),
@@ -188,6 +214,42 @@ export function HomeEditor({
 	const [resetPending, setResetPending] = useState(false);
 	const [dirty, setDirty] = useState(false);
 	const [announcement, setAnnouncement] = useState("");
+	const editingRef = useRef(editing);
+	const dirtyRef = useRef(dirty);
+	const savingRef = useRef(saving);
+	const resetPendingRef = useRef(resetPending);
+	const jsonOpenRef = useRef(jsonOpen);
+	const confirmRef = useRef(confirm);
+	const draftRef = useRef(draft);
+	const runtimeLayoutRef = useRef(runtimeLayout);
+	const baseLayoutRef = useRef(structuredClone(layout));
+	const baseFingerprintRef = useRef(homeLayoutFingerprint(layout));
+	const defaultLayoutRef = useRef(defaultLayout);
+	const profileMetadataRef = useRef({
+		profileId,
+		profileName,
+		profileDescription,
+		profileInterests,
+		profileTags,
+		layoutSource,
+	});
+	editingRef.current = editing;
+	dirtyRef.current = dirty;
+	savingRef.current = saving;
+	resetPendingRef.current = resetPending;
+	jsonOpenRef.current = jsonOpen;
+	confirmRef.current = confirm;
+	draftRef.current = draft;
+	runtimeLayoutRef.current = runtimeLayout;
+	defaultLayoutRef.current = defaultLayout;
+	profileMetadataRef.current = {
+		profileId,
+		profileName,
+		profileDescription,
+		profileInterests,
+		profileTags,
+		layoutSource,
+	};
 	const editorRef = useRef<HTMLDivElement>(null);
 	const pointer = useRef<HomeDragPoint | null>(null);
 	const lastPlacement = useRef<{ x: number; y: number; scroll: number } | null>(
@@ -293,8 +355,16 @@ export function HomeEditor({
 		if (!editing) setHasDraft(Boolean(draftKey && homeDrafts.has(draftKey)));
 	}, [draftKey, editing]);
 	useEffect(() => {
-		if (!editing) setDraft(layout);
-		if (!editing && !runtimeSaving) setRuntimeLayout(layout);
+		if (!editing) {
+			setDraft(layout);
+			draftRef.current = layout;
+		}
+		if (!editing && !runtimeSaving) {
+			setRuntimeLayout(layout);
+			runtimeLayoutRef.current = layout;
+			baseLayoutRef.current = structuredClone(layout);
+			baseFingerprintRef.current = homeLayoutFingerprint(layout);
+		}
 	}, [layout, editing, runtimeSaving]);
 	useEffect(() => {
 		editingChangeRef.current = onEditingChange;
@@ -329,8 +399,11 @@ export function HomeEditor({
 			]);
 			setFuture([]);
 			setDirty(true);
+			dirtyRef.current = true;
 			setResetPending(false);
+			resetPendingRef.current = false;
 			setDraft(value);
+			draftRef.current = value;
 		},
 		[draft, resetPending, saving],
 	);
@@ -366,9 +439,12 @@ export function HomeEditor({
 			...history,
 		]);
 		setDraft(previous.layout);
+		draftRef.current = previous.layout;
 		setResetPending(previous.reset);
+		resetPendingRef.current = previous.reset;
 		setPast((history) => history.slice(0, -1));
 		setDirty(true);
+		dirtyRef.current = true;
 	}, [past, draft, resetPending, saving]);
 	const redo = useCallback(() => {
 		if (
@@ -381,14 +457,18 @@ export function HomeEditor({
 		const next = future[0];
 		setPast((history) => [...history, { layout: draft, reset: resetPending }]);
 		setDraft(next.layout);
+		draftRef.current = next.layout;
 		setResetPending(next.reset);
+		resetPendingRef.current = next.reset;
 		setFuture((history) => history.slice(1));
 		setDirty(true);
+		dirtyRef.current = true;
 	}, [future, draft, resetPending, saving]);
 	const finishEditing = useCallback(() => {
 		if (draftKey) homeDrafts.delete(draftKey);
 		setHasDraft(false);
 		setEditing(false);
+		editingRef.current = false;
 		setDrag(null);
 		dragRef.current = null;
 		pointer.current = null;
@@ -398,7 +478,13 @@ export function HomeEditor({
 		setPast([]);
 		setFuture([]);
 		setDirty(false);
+		dirtyRef.current = false;
 		setResetPending(false);
+		resetPendingRef.current = false;
+		baseLayoutRef.current = structuredClone(runtimeLayoutRef.current);
+		baseFingerprintRef.current = homeLayoutFingerprint(
+			runtimeLayoutRef.current,
+		);
 		setPreview("desktop");
 	}, [draftKey]);
 	const save = useCallback(async () => {
@@ -415,9 +501,15 @@ export function HomeEditor({
 			return;
 		}
 		setSaving(true);
+		savingRef.current = true;
 		try {
 			if (resetPending) await onReset();
 			else await onSave(draft);
+			const persisted = structuredClone(
+				resetPending ? defaultLayoutRef.current : draft,
+			);
+			setRuntimeLayout(persisted);
+			runtimeLayoutRef.current = persisted;
 			finishEditing();
 			toast.success(
 				admin
@@ -434,6 +526,7 @@ export function HomeEditor({
 			);
 		} finally {
 			setSaving(false);
+			savingRef.current = false;
 		}
 	}, [saving, draft, resetPending, onReset, onSave, finishEditing, admin]);
 	useEffect(() => {
@@ -474,11 +567,13 @@ export function HomeEditor({
 			),
 		};
 		setRuntimeLayout(next);
+		runtimeLayoutRef.current = next;
 		setRuntimeSaving(true);
 		try {
 			await onSave(next);
 		} catch {
 			setRuntimeLayout(previous);
+			runtimeLayoutRef.current = previous;
 			toast.error("Could not save this change. Try again.");
 		} finally {
 			runtimeSavingRef.current = false;
@@ -487,15 +582,185 @@ export function HomeEditor({
 	};
 	const begin = () => {
 		const restored = draftKey ? homeDrafts.get(draftKey) : undefined;
-		setDraft(structuredClone(restored?.layout ?? layout));
+		const base = structuredClone(runtimeLayoutRef.current);
+		const initial = structuredClone(restored?.layout ?? base);
+		baseLayoutRef.current = base;
+		baseFingerprintRef.current = homeLayoutFingerprint(base);
+		setDraft(initial);
+		draftRef.current = initial;
 		setResetPending(restored?.reset ?? false);
+		resetPendingRef.current = restored?.reset ?? false;
 		setDirty(Boolean(restored));
+		dirtyRef.current = Boolean(restored);
 		if (restored) toast.info("Your unsaved draft is restored.");
 		setEditing(true);
+		editingRef.current = true;
 		setPanel("catalog");
 		setPast([]);
 		setFuture([]);
 	};
+	const getHomeSnapshot = useCallback((): AssistantHomeSnapshot => {
+		const metadata = profileMetadataRef.current;
+		const candidate = editingRef.current
+			? draftRef.current
+			: runtimeLayoutRef.current;
+		return {
+			profileId: metadata.profileId ?? "",
+			profileName: metadata.profileName,
+			profileDescription: metadata.profileDescription,
+			profileInterests: [...metadata.profileInterests],
+			profileTags: [...metadata.profileTags],
+			source: metadata.layoutSource,
+			layout: structuredClone(candidate),
+			baseLayout: structuredClone(baseLayoutRef.current),
+			defaultLayout: structuredClone(defaultLayoutRef.current),
+			editing: editingRef.current,
+			dirty: dirtyRef.current,
+			baseFingerprint: baseFingerprintRef.current,
+			candidateFingerprint: homeLayoutFingerprint(candidate),
+		};
+	}, []);
+	const stageHomeLayout = useCallback(
+		(
+			candidate: IHomeLayout,
+			guard: AssistantHomeStageGuard,
+		): AssistantHomeStageResult => {
+			const activeProfileId = profileMetadataRef.current.profileId ?? "";
+			const current = editingRef.current
+				? draftRef.current
+				: runtimeLayoutRef.current;
+			const currentFingerprint = homeLayoutFingerprint(current);
+			if (admin || !activeProfileId) {
+				return {
+					status: "error",
+					code: "home_surface_unavailable",
+					message: "A personal Home editor is not available.",
+					profileId: activeProfileId,
+					candidateFingerprint: currentFingerprint,
+				};
+			}
+			if (
+				savingRef.current ||
+				runtimeSavingRef.current ||
+				jsonOpenRef.current ||
+				confirmRef.current ||
+				dragRef.current ||
+				editorRef.current?.querySelector("[data-home-resizing]")
+			) {
+				return {
+					status: "error",
+					code: "home_editor_busy",
+					message:
+						"Finish the active Home save, dialog, drag, resize, or JSON edit before applying a generated layout.",
+					profileId: activeProfileId,
+					candidateFingerprint: currentFingerprint,
+				};
+			}
+			if (guard.expectedProfileId !== activeProfileId) {
+				return {
+					status: "stale",
+					code: "home_profile_changed",
+					message: `The active profile changed to '${activeProfileId}'. Read Home context again before applying.`,
+					profileId: activeProfileId,
+					candidateFingerprint: currentFingerprint,
+				};
+			}
+			if (guard.expectedFingerprint !== currentFingerprint) {
+				return {
+					status: "stale",
+					code: "home_layout_changed",
+					message:
+						"The visible Home draft changed. Read Home context again and merge the user's latest edits.",
+					profileId: activeProfileId,
+					candidateFingerprint: currentFingerprint,
+				};
+			}
+
+			let candidateSource: string;
+			try {
+				candidateSource = JSON.stringify(candidate);
+			} catch {
+				return {
+					status: "error",
+					code: "home_layout_not_json",
+					message: "The staged Home layout must be JSON-serializable.",
+					profileId: activeProfileId,
+					candidateFingerprint: currentFingerprint,
+				};
+			}
+			const parsed = parseHomeLayoutJson(candidateSource);
+			if (!parsed.ok) {
+				return {
+					status: "error",
+					code: "home_layout_invalid",
+					message: parsed.error,
+					profileId: activeProfileId,
+					candidateFingerprint: currentFingerprint,
+				};
+			}
+			const next = structuredClone(parsed.layout);
+			const nextFingerprint = homeLayoutFingerprint(next);
+			const changed = !homeLayoutsEqual(current, next);
+			if (!changed) {
+				return {
+					status: "staged",
+					changed: false,
+					profileId: activeProfileId,
+					baseFingerprint: baseFingerprintRef.current,
+					candidateFingerprint: currentFingerprint,
+				};
+			}
+
+			if (!editingRef.current) {
+				baseLayoutRef.current = structuredClone(current);
+				baseFingerprintRef.current = currentFingerprint;
+				setPast([{ layout: structuredClone(current), reset: false }]);
+			} else {
+				setPast((history) => [
+					...history.slice(-49),
+					{
+						layout: structuredClone(current),
+						reset: resetPendingRef.current,
+					},
+				]);
+			}
+			setFuture([]);
+			setDraft(next);
+			draftRef.current = next;
+			setDirty(true);
+			dirtyRef.current = true;
+			setResetPending(false);
+			resetPendingRef.current = false;
+			setEditing(true);
+			editingRef.current = true;
+			setPanel(null);
+			setSelectedId(null);
+			setAnnouncement(
+				"FlowPilot staged a Home layout. Review it, then Save or Cancel.",
+			);
+			return {
+				status: "staged",
+				changed: true,
+				profileId: activeProfileId,
+				baseFingerprint: baseFingerprintRef.current,
+				candidateFingerprint: nextFingerprint,
+			};
+		},
+		[admin],
+	);
+	useEffect(() => {
+		if (admin || !profileId) return;
+		const surface = {
+			getSnapshot: getHomeSnapshot,
+			stageLayout: stageHomeLayout,
+		};
+		useAssistantSurface.getState().setHomeSurface(surface);
+		return () => {
+			if (useAssistantSurface.getState().homeSurface === surface) {
+				useAssistantSurface.getState().setHomeSurface(null);
+			}
+		};
+	}, [admin, profileId, getHomeSnapshot, stageHomeLayout]);
 	const applyJson = useCallback(
 		(value: IHomeLayout) => {
 			if (homeLayoutsEqual(draft, value)) {
@@ -668,6 +933,10 @@ export function HomeEditor({
 		setSelectedId(null);
 		setPanel("catalog");
 	};
+	const editWithFlowPilot = () => {
+		if (!editingRef.current) begin();
+		requestOpenAssistant();
+	};
 
 	return (
 		<div
@@ -723,6 +992,18 @@ export function HomeEditor({
 									</Button>
 								))}
 							</div>
+							{!admin && (
+								<Button
+									variant="outline"
+									size="sm"
+									onClick={editWithFlowPilot}
+									disabled={saving}
+									aria-label="Edit with FlowPilot"
+								>
+									<Sparkles className="h-4 w-4" />
+									<span className="hidden md:inline">FlowPilot</span>
+								</Button>
+							)}
 							<Button
 								variant="ghost"
 								size="icon"
@@ -826,19 +1107,32 @@ export function HomeEditor({
 							</Button>
 						</>
 					) : (
-						<Button
-							variant="outline"
-							size="sm"
-							onClick={begin}
-							disabled={disabled || runtimeSaving}
-						>
-							<Pencil className="h-3.5 w-3.5" />
-							{hasDraft
-								? "Resume editing"
-								: admin
-									? "Edit default"
-									: "Customize"}
-						</Button>
+						<>
+							{!admin && (
+								<Button
+									variant="outline"
+									size="sm"
+									onClick={editWithFlowPilot}
+									disabled={disabled || runtimeSaving}
+								>
+									<Sparkles className="h-3.5 w-3.5" />
+									Edit with FlowPilot
+								</Button>
+							)}
+							<Button
+								variant="outline"
+								size="sm"
+								onClick={begin}
+								disabled={disabled || runtimeSaving}
+							>
+								<Pencil className="h-3.5 w-3.5" />
+								{hasDraft
+									? "Resume editing"
+									: admin
+										? "Edit default"
+										: "Customize"}
+							</Button>
+						</>
 					)}
 				</div>
 			</div>

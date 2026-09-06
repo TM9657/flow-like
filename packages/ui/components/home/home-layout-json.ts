@@ -1,3 +1,4 @@
+import { appBuildFingerprint } from "../../lib/app-build/fingerprint";
 import {
 	MAX_HOME_LAYOUT_BYTES,
 	MAX_HOME_WIDGETS,
@@ -158,6 +159,14 @@ export function homeLayoutsEqual(left: IHomeLayout, right: IHomeLayout) {
 	} catch {
 		return false;
 	}
+}
+
+/**
+ * Stable change token for a canonical Home layout. The token detects stale editor drafts; it is
+ * not an authorization credential.
+ */
+export function homeLayoutFingerprint(layout: IHomeLayout) {
+	return appBuildFingerprint("home-layout-v1", layout);
 }
 
 export function parseHomeLayoutJson(source: string): HomeLayoutJsonResult {

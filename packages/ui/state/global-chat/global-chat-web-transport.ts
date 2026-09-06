@@ -413,10 +413,16 @@ export async function dispatchSpecialistToolRequest(params: {
 	data: string;
 	onToolRequest: (request: WebToolRequest) => Promise<WebToolResponse>;
 	onToolCancel?: ToolDispatchOptions["onToolCancel"];
+	/** Outer frontend request that owns this specialist stream. */
+	parentRequestId?: string;
 }): Promise<void> {
+	const request = parseToolRequest(params.data);
+	if (params.parentRequestId && !parentRequestId(request)) {
+		request.parentRequestId = params.parentRequestId;
+	}
 	await dispatchToolRequest(
 		{ onToolRequest: params.onToolRequest, onToolCancel: params.onToolCancel },
-		parseToolRequest(params.data),
+		request,
 	);
 }
 

@@ -112,10 +112,17 @@ Classify each work item as DIRECT (straightforward use of existing apps/evidence
 These ownership boundaries are strict:
 - `flowpilot_board`: all board/workflow logic, FlowScript, nodes, connections, entry points, debugging, and board explanations.
 - `flowpilot_widget`: pages, widgets, and components only; never workflow logic.
+- `flowpilot_home`: the current profile's personal Home landing-page layout and Home widgets only.
 - `data_studio_agent`: app databases, ontologies, queries, analytics, actions, and data visualizations — reading AND changing them, on existing apps as much as during BUILD.
 - `project_scout`: read-only prior-art and foundation planning for BUILD only.
 
 Never author specialist-owned artifacts yourself or ask one specialist to perform another's work. Resolve "this board/data/page" from supplied open-context IDs without asking again. Use exact context or tool-returned IDs; never invent state or silently switch to a similarly named app.
+
+Treat a request that only creates, rearranges, restyles, imports, or repairs the personal Home layout
+as DIRECT work. Call `flowpilot_home` immediately and skip BUILD intake, `project_scout`, app
+creation, and `flowpilot_widget`. When the same request also changes an underlying app or data
+source, delegate those separate work items to their owning specialists and keep Home JSON with
+`flowpilot_home`.
 
 Outside BUILD intake, ask only for a genuinely blocking choice; otherwise use safe defaults or explicit placeholders. Act only on the current user's profiles and apps. Mutations and executions use the tool's approval flow. Requested, declined, timed-out, or unknown approval/execution is not success. Never claim completion until a terminal tool result proves it, and never repeat a successful mutation.
 
@@ -501,6 +508,7 @@ where
 pub enum PlatformSpecialist {
     Scout,
     DataStudio,
+    Home,
 }
 
 impl PlatformSpecialist {
@@ -508,6 +516,7 @@ impl PlatformSpecialist {
         match self {
             Self::Scout => PlatformSurface::Scout,
             Self::DataStudio => PlatformSurface::DataStudio,
+            Self::Home => PlatformSurface::Home,
         }
     }
 
@@ -515,11 +524,13 @@ impl PlatformSpecialist {
         match self {
             Self::Scout => crate::copilot::prompts::scout_system_prompt(context),
             Self::DataStudio => crate::copilot::prompts::data_studio_system_prompt(context),
+            Self::Home => crate::copilot::prompts::home_system_prompt(context),
         }
     }
 }
 
-/// Run one nested specialist (`project_scout` / `data_studio_agent`) on a profile ("Bits") model.
+/// Run one nested specialist (`project_scout`, `data_studio_agent`, or `flowpilot_home`) on a
+/// profile ("Bits") model.
 ///
 /// This is the Bits counterpart of the agent-CLI backends' specialist sessions: same prompts, same
 /// tool sets, same host bridge — so delegation no longer depends on the user having Claude Code,
@@ -686,6 +697,7 @@ mod tests {
         for tool in [
             "flowpilot_board",
             "flowpilot_widget",
+            "flowpilot_home",
             "data_studio_agent",
             "project_scout",
         ] {
@@ -723,6 +735,22 @@ mod tests {
         assert!(prompt.contains("`timestamp:ms:UTC`"));
         assert!(prompt.contains("FlowScript `Date`"));
         assert!(prompt.contains("checkout link"));
+    }
+
+    #[test]
+    fn personal_home_work_routes_directly_to_its_specialist() {
+        let prompt = global_assistant_system_prompt();
+
+        assert!(
+            prompt.contains(
+                "`flowpilot_home`: the current profile's personal Home landing-page layout"
+            )
+        );
+        assert!(
+            prompt.contains("Treat a request that only creates, rearranges, restyles, imports")
+        );
+        assert!(prompt.contains("Call `flowpilot_home` immediately and skip BUILD intake"));
+        assert!(prompt.contains("keep Home JSON with\n`flowpilot_home`"));
     }
 
     /// Boards are the serialization unit: one board per page keeps each board small enough to commit
@@ -812,6 +840,7 @@ mod tests {
             "call_app_chat",
             "flowpilot_board",
             "flowpilot_widget",
+            "flowpilot_home",
             "data_studio_agent",
             "project_scout",
             "fork_app",

@@ -8,23 +8,19 @@ import { useAuth } from "react-oidc-context";
 import { useFrontendRuntimeToolExecutor } from "../../hooks/use-frontend-runtime-tool-executor";
 import {
 	IAppVisibility,
-	type IEvent,
 	IExecutionStage,
 	ILogLevel,
 	type IPage,
 	IRole,
 	Response,
-	nowSystemTime,
 	useAssistantSurface,
 	useBackend,
 	useQueryClient,
 } from "../../index";
 import { addAppToProfile } from "../../lib/add-app-to-profile";
-import { upsertAppEvent } from "./tools/event-tools";
-import { createAppTool } from "./tools/app-provisioning";
+import { createInteractiveScenarioAdapter } from "../../lib/app-build/interactive-scenario-adapter";
 import { executeAppBuildTool } from "../../lib/app-build/tool-controller";
 import { generateAppBuildWidget } from "../../lib/app-build/widget-generator";
-import { createInteractiveScenarioAdapter } from "../../lib/app-build/interactive-scenario-adapter";
 import {
 	captureInlineAppPageSnapshots,
 	isAppPageSnapshotSourceCurrent,
@@ -146,6 +142,9 @@ import {
 	validateCanvasSettings,
 	validateComponents,
 } from "../flowpilot/validateComponents";
+import { createDefaultHomeLayout } from "../home/catalog";
+import { resolveHomeLayout } from "../home/home-layout";
+import { homeLayoutFingerprint } from "../home/home-layout-json";
 import type {
 	IBuildLaneDetail,
 	IChatUsageStat,
@@ -185,6 +184,16 @@ import {
 	scoutSearchApps,
 	scoutSearchTemplates,
 } from "./scout-tools";
+import { createAppTool } from "./tools/app-provisioning";
+import { upsertAppEvent } from "./tools/event-tools";
+import {
+	getHomeWidgetCatalog,
+	listHomeDataSources,
+	validateHomeLayoutCandidate,
+	validateHomeLayoutReferences,
+	validateUnknownHomeWidgetPreservation,
+	withHomeReferenceIssues,
+} from "./tools/home-tools";
 import {
 	type RunnableWorkflowEventEntry,
 	WORKFLOW_EVENT_ENTRY_NODE_NAMES,
@@ -1376,6 +1385,17 @@ export function GlobalToolBridge() {
 	// Crash-durable record of artifacts created per conversation. A retried creating tool (after a
 	// crash, reload, or lost tool response) is answered with the recorded ids instead of a duplicate.
 	const createdArtifactJournalRef = useRef(new CreatedArtifactJournal());
+	/** Successful Home stages keyed by the owning flowpilot_home request. */
+	const homeStageReceiptsByParentRef = useRef<
+		Map<
+			string,
+			{
+				profileId: string;
+				candidateFingerprint: string;
+				changed: boolean;
+			}
+		>
+	>(new Map());
 	const boardRecoveryScopeByRequestRef = useRef<
 		Map<
 			string,
@@ -2080,6 +2100,56 @@ export function GlobalToolBridge() {
 					return new Set<string>();
 				}
 			};
+			const readHomeSnapshot = async () => {
+				const liveSurface = useAssistantSurface.getState().homeSurface;
+				if (liveSurface) {
+					const snapshot = liveSurface.getSnapshot();
+					return {
+						profileId: snapshot.profileId,
+						profileName: snapshot.profileName,
+						profileDescription: snapshot.profileDescription,
+						profileInterests: snapshot.profileInterests,
+						profileTags: snapshot.profileTags,
+						source: snapshot.source,
+						layout: snapshot.layout,
+						baseLayout: snapshot.baseLayout,
+						defaultLayout: snapshot.defaultLayout,
+						editing: snapshot.editing,
+						dirty: snapshot.dirty,
+						baseFingerprint: snapshot.baseFingerprint,
+						candidateFingerprint: snapshot.candidateFingerprint,
+						surfaceAvailable: true,
+					};
+				}
+				const profile = await backend.userState.getProfile();
+				const bundled = createDefaultHomeLayout();
+				const defaults = await backend.userState
+					.getHomeDefaults(profile.home_default_id ?? undefined)
+					.catch(() => undefined);
+				const inherited = resolveHomeLayout(null, defaults, bundled);
+				const resolved = resolveHomeLayout(
+					profile.home_layout,
+					defaults,
+					bundled,
+				);
+				const fingerprint = homeLayoutFingerprint(resolved.layout);
+				return {
+					profileId: profile.id ?? "",
+					profileName: profile.name,
+					profileDescription: profile.description ?? undefined,
+					profileInterests: profile.interests ?? [],
+					profileTags: profile.tags ?? [],
+					source: resolved.source,
+					layout: resolved.layout,
+					baseLayout: resolved.layout,
+					defaultLayout: inherited.layout,
+					editing: false,
+					dirty: false,
+					baseFingerprint: fingerprint,
+					candidateFingerprint: fingerprint,
+					surfaceAvailable: false,
+				};
+			};
 			switch (request.toolName) {
 				case "read_flowscript_source": {
 					const appId = argString(args, "app_id") || argString(args, "appId");
@@ -2117,15 +2187,261 @@ export function GlobalToolBridge() {
 				case "graph_element_tool":
 				case "ontology_action_tool":
 					return executeRuntimeTool(request.toolName, args);
+				case "get_home_context": {
+					const snapshot = await readHomeSnapshot();
+					if (!snapshot.profileId) {
+						return {
+							status: "error",
+							code: "home_profile_unavailable",
+							message: "Choose a profile before editing Home.",
+						};
+					}
+					return {
+						status: "ok",
+						profile_id: snapshot.profileId,
+						profile: {
+							id: snapshot.profileId,
+							name: snapshot.profileName,
+							description: snapshot.profileDescription,
+							interests: snapshot.profileInterests,
+							tags: snapshot.profileTags,
+						},
+						source: snapshot.source,
+						layout: snapshot.layout,
+						current_layout: snapshot.layout,
+						base_layout: snapshot.baseLayout,
+						default_layout: snapshot.defaultLayout,
+						editing: snapshot.editing,
+						dirty: snapshot.dirty,
+						surface_available: snapshot.surfaceAvailable,
+						can_stage: snapshot.surfaceAvailable,
+						base_fingerprint: snapshot.baseFingerprint,
+						candidate_fingerprint: snapshot.candidateFingerprint,
+						fingerprint: snapshot.candidateFingerprint,
+						guards: {
+							expected_profile_id: snapshot.profileId,
+							expected_fingerprint: snapshot.candidateFingerprint,
+						},
+						...(!snapshot.surfaceAvailable
+							? {
+									note: "Open the Home page before apply_home_layout so the result can be staged for review.",
+									route: "/",
+								}
+							: {}),
+					};
+				}
+				case "get_home_widget_catalog":
+					return getHomeWidgetCatalog(args);
+				case "list_home_data_sources": {
+					const profileAppIds = await getProfileAppIds();
+					return listHomeDataSources(backend, args, async (appId) =>
+						profileAppIds.has(appId),
+					);
+				}
+				case "validate_home_layout": {
+					const validation = validateHomeLayoutCandidate(args.layout);
+					const snapshot = await readHomeSnapshot();
+					const profileAppIds = validation.layout
+						? await getProfileAppIds()
+						: new Set<string>();
+					const referenceIssues = validation.layout
+						? await validateHomeLayoutReferences(backend, validation.layout, {
+								profileAppIds,
+							})
+						: [];
+					if (validation.layout) {
+						referenceIssues.push(
+							...validateUnknownHomeWidgetPreservation(
+								validation.layout,
+								snapshot.layout,
+							),
+						);
+					}
+					const expectedProfileId =
+						argString(args, "expected_profile_id") ||
+						argString(args, "expectedProfileId");
+					const expectedFingerprint =
+						argString(args, "expected_fingerprint") ||
+						argString(args, "expectedFingerprint");
+					if (expectedProfileId && expectedProfileId !== snapshot.profileId) {
+						referenceIssues.push({
+							severity: "error",
+							code: "home_profile_changed",
+							path: "$.expected_profile_id",
+							message: `The active profile changed to '${snapshot.profileId}'.`,
+						});
+					}
+					if (
+						expectedFingerprint &&
+						expectedFingerprint !== snapshot.candidateFingerprint
+					) {
+						referenceIssues.push({
+							severity: "error",
+							code: "home_layout_changed",
+							path: "$.expected_fingerprint",
+							message:
+								"The visible Home draft changed. Merge the user's latest layout before applying.",
+						});
+					}
+					const latest = await readHomeSnapshot();
+					if (
+						latest.profileId !== snapshot.profileId ||
+						latest.candidateFingerprint !== snapshot.candidateFingerprint
+					) {
+						referenceIssues.push({
+							severity: "error",
+							code: "home_layout_changed_during_validation",
+							path: "$",
+							message:
+								"The visible Home draft changed while references were being checked. Validate the candidate again against the latest context.",
+						});
+					}
+					const checked = withHomeReferenceIssues(validation, referenceIssues);
+					return {
+						...checked,
+						profile_id: latest.profileId,
+						current_fingerprint: latest.candidateFingerprint,
+						...(checked.valid
+							? {
+									guards: {
+										expected_profile_id: latest.profileId,
+										expected_fingerprint: latest.candidateFingerprint,
+									},
+								}
+							: {}),
+					};
+				}
+				case "apply_home_layout": {
+					const expectedProfileId =
+						argString(args, "expected_profile_id") ||
+						argString(args, "expectedProfileId");
+					const expectedFingerprint =
+						argString(args, "expected_fingerprint") ||
+						argString(args, "expectedFingerprint");
+					if (!expectedProfileId || !expectedFingerprint) {
+						return {
+							status: "error",
+							code: "home_apply_guard_required",
+							message:
+								"apply_home_layout requires expected_profile_id and expected_fingerprint from the latest Home context or validation result.",
+						};
+					}
+					const surface = useAssistantSurface.getState().homeSurface;
+					if (!surface) {
+						return {
+							status: "error",
+							code: "home_surface_unavailable",
+							message:
+								"Open the personal Home page before applying a generated layout. No layout was saved.",
+							route: "/",
+						};
+					}
+					const validation = validateHomeLayoutCandidate(args.layout);
+					if (!validation.layout) return validation;
+					const initialSnapshot = surface.getSnapshot();
+					const profileAppIds = await getProfileAppIds();
+					const checked = withHomeReferenceIssues(validation, [
+						...(await validateHomeLayoutReferences(backend, validation.layout, {
+							profileAppIds,
+						})),
+						...validateUnknownHomeWidgetPreservation(
+							validation.layout,
+							initialSnapshot.layout,
+						),
+					]);
+					if (!checked.valid) {
+						const latest = surface.getSnapshot();
+						const changedDuringValidation =
+							latest.profileId !== initialSnapshot.profileId ||
+							latest.candidateFingerprint !==
+								initialSnapshot.candidateFingerprint;
+						return {
+							...checked,
+							...(changedDuringValidation
+								? {
+										issues: [
+											...checked.issues,
+											{
+												severity: "error" as const,
+												code: "home_layout_changed_during_validation",
+												path: "$",
+												message:
+													"The visible Home draft changed while references were being checked. Read Home context and validate the candidate again.",
+											},
+										],
+									}
+								: {}),
+							profile_id: latest.profileId,
+							current_fingerprint: latest.candidateFingerprint,
+						};
+					}
+					assertRequestActive(request, "Home layout staging");
+					const latestSurface = useAssistantSurface.getState().homeSurface;
+					if (latestSurface !== surface) {
+						return {
+							status: "stale",
+							code: "home_surface_changed",
+							message:
+								"The visible Home editor changed while references were being checked. Read Home context again.",
+						};
+					}
+					const staged = latestSurface.stageLayout(validation.layout, {
+						expectedProfileId,
+						expectedFingerprint,
+					});
+					const parentId = parentRequestId(request);
+					if (staged.status === "staged" && parentId) {
+						homeStageReceiptsByParentRef.current.set(parentId, {
+							profileId: staged.profileId,
+							candidateFingerprint: staged.candidateFingerprint,
+							changed: staged.changed,
+						});
+						while (homeStageReceiptsByParentRef.current.size > 256) {
+							const oldest = homeStageReceiptsByParentRef.current
+								.keys()
+								.next().value;
+							if (typeof oldest !== "string") break;
+							homeStageReceiptsByParentRef.current.delete(oldest);
+						}
+					}
+					return {
+						...staged,
+						profile_id: staged.profileId,
+						base_fingerprint:
+							"baseFingerprint" in staged ? staged.baseFingerprint : undefined,
+						candidate_fingerprint: staged.candidateFingerprint,
+						fingerprint: staged.candidateFingerprint,
+						...(staged.status === "staged"
+							? {
+									guards: {
+										expected_profile_id: staged.profileId,
+										expected_fingerprint: staged.candidateFingerprint,
+									},
+									note: staged.changed
+										? "The layout is staged in the visible Home editor. The user must choose Save to persist it or Cancel to discard it."
+										: "The proposed layout already matches the visible Home layout.",
+								}
+							: {}),
+					};
+				}
 				case "list_apps": {
 					// Selection is driven by app + EVENT metadata only (no board loading): each app's
 					// active events and their event_type tell the agent which interfaces it can call.
 					const profileAppIds = await getProfileAppIds();
 					const apps = await backend.appState.getApps();
+					const query = argString(args, "query").toLowerCase();
 					// Sort by display name so the output is stable across calls (getApps returns
 					// object-store order, i.e. app id) and truncation, if any, is deterministic.
-					const visible = apps
-						.filter(([app]) => profileAppIds.has(app.id))
+					const profileVisible = apps.filter(([app]) =>
+						profileAppIds.has(app.id),
+					);
+					const visible = profileVisible
+						.filter(([app, meta]) => {
+							if (!query) return true;
+							return [app.id, meta?.name, meta?.description]
+								.filter((value): value is string => typeof value === "string")
+								.some((value) => value.toLowerCase().includes(query));
+						})
 						.sort(([, a], [, b]) =>
 							(a?.name ?? "").localeCompare(b?.name ?? ""),
 						);
@@ -2197,10 +2513,19 @@ export function GlobalToolBridge() {
 						complete: inventoryComplete,
 						total: visible.length,
 						returned: detailed.length,
+						...(query
+							? {
+									query,
+									matched_total: visible.length,
+									profile_total: profileVisible.length,
+								}
+							: {}),
 						...(truncated
 							? {
 									truncated: true,
-									note: `Only the first ${MAX_LISTED_APPS} of ${visible.length} profile apps are listed (sorted by name). If the user references an app not shown, it may fall past this cap rather than not exist.`,
+									note: query
+										? `Only the first ${MAX_LISTED_APPS} of ${visible.length} matching profile apps are listed. Refine query before concluding that an app is absent.`
+										: `Only the first ${MAX_LISTED_APPS} of ${visible.length} profile apps are listed (sorted by name). If the user references an app not shown, it may fall past this cap rather than not exist.`,
 								}
 							: {}),
 						apps: detailed,
@@ -3166,6 +3491,191 @@ export function GlobalToolBridge() {
 						};
 					} finally {
 						releasePageLifecycle();
+					}
+				}
+				case "flowpilot_home": {
+					const instruction = argString(args, "instruction");
+					if (!instruction) {
+						return {
+							status: "error",
+							message: "flowpilot_home requires an instruction.",
+						};
+					}
+					const initialHome = await readHomeSnapshot();
+					if (!initialHome.profileId) {
+						return {
+							status: "error",
+							code: "home_profile_unavailable",
+							message: "Choose a profile before editing Home.",
+						};
+					}
+					homeStageReceiptsByParentRef.current.delete(request.requestId);
+					const consumeHomeStageOutcome = () => {
+						const receipt = homeStageReceiptsByParentRef.current.get(
+							request.requestId,
+						);
+						homeStageReceiptsByParentRef.current.delete(request.requestId);
+						const latestSurface = useAssistantSurface.getState().homeSurface;
+						const latest = latestSurface?.getSnapshot();
+						const currentMatches = Boolean(
+							receipt &&
+								latest?.profileId === receipt.profileId &&
+								latest.candidateFingerprint === receipt.candidateFingerprint,
+						);
+						const staged = Boolean(
+							receipt?.changed &&
+								currentMatches &&
+								latest?.editing &&
+								latest.dirty,
+						);
+						const alreadyCurrent = Boolean(
+							receipt && !receipt.changed && currentMatches,
+						);
+						return {
+							staged,
+							changed: receipt?.changed ?? false,
+							apply_observed: Boolean(receipt),
+							apply_status: staged
+								? "staged"
+								: alreadyCurrent
+									? "already_current"
+									: receipt
+										? "no_longer_staged"
+										: "not_applied",
+							fingerprint:
+								latest?.candidateFingerprint ??
+								receipt?.candidateFingerprint ??
+								initialHome.candidateFingerprint,
+						};
+					};
+
+					const turnSelection = scope.turnSelection();
+					const owningUserPrompt = sourceUserPrompt(request);
+					const owningConversationId = conversationScopeId(request);
+					const rawSpecialistPrompt = composeDelegatedRawUserPrompt(
+						owningUserPrompt,
+						instruction,
+					);
+					const modelId = flowPilotModelIdForProvider(
+						normalizeAIProvider(turnSelection.provider),
+						turnSelection.selectedModelId,
+					);
+					const nestedRunRequestId = `${request.requestId}:agent`;
+					const {
+						pushSubRunChunk,
+						flushSubRunStream,
+						subAcc,
+						publishSubSteps,
+						failProgressSteps,
+					} = createSubRunStream({
+						requestId: nestedRunRequestId,
+						parentRequestId: request.requestId,
+						scope,
+						recordDebugEvent: (event) => recordNestedDebug(request, event),
+					});
+					const consumeSubRunEvents = (
+						events: ReturnType<typeof pushSubRunChunk>,
+					) => {
+						let stepsChanged = false;
+						for (const event of events) {
+							if (event.type === "usage_stat") {
+								const stat = readUsageStat(event.data);
+								if (stat) scope.addSubUsageStats([stat]);
+								continue;
+							}
+							if (event.type === "text") continue;
+							applyStreamEvent(subAcc, event);
+							stepsChanged = true;
+						}
+						if (stepsChanged) publishSubSteps();
+					};
+					const onToken = (chunk: string) =>
+						consumeSubRunEvents(pushSubRunChunk(chunk));
+					let subRunFlushed = false;
+					const flushSubRun = () => {
+						if (subRunFlushed) return;
+						subRunFlushed = true;
+						consumeSubRunEvents(flushSubRunStream());
+					};
+
+					recordNestedDebug(
+						request,
+						nestedAgentRunEvent({
+							requestId: nestedRunRequestId,
+							parentRequestId: request.requestId,
+							toolName: "flowpilot_home",
+							stage: "started",
+							input: {
+								scope: "Home",
+								provider: normalizeAIProvider(turnSelection.provider),
+								model_id: modelId,
+								reasoning_effort: turnSelection.reasoningEffort || undefined,
+								profile_id: initialHome.profileId,
+								instruction,
+							},
+							summary: "Delegated Home layout specialist started.",
+						}),
+					);
+
+					try {
+						const response = await backend.boardState.copilot_chat(
+							"Home",
+							null,
+							undefined,
+							[],
+							null,
+							null,
+							[],
+							instruction,
+							[],
+							undefined,
+							onToken,
+							modelId,
+							turnSelection.reasoningEffort || undefined,
+							undefined,
+							undefined,
+							undefined,
+							true,
+							false,
+							{
+								parentRequestId: request.requestId,
+								conversationId: owningConversationId,
+								runId: scope.runId,
+								sourceUserPrompt: owningUserPrompt,
+							},
+							nestedRunRequestId,
+							rawSpecialistPrompt,
+							undefined,
+						);
+						flushSubRun();
+						const stageOutcome = consumeHomeStageOutcome();
+						return settleNestedSpecialist(request, {
+							nestedRunRequestId,
+							toolName: "flowpilot_home",
+							result: {
+								status: "ok",
+								profile_id: initialHome.profileId,
+								...stageOutcome,
+								response: response.message,
+							},
+							summary: "Delegated Home layout specialist finished.",
+						});
+					} catch (error) {
+						const stageOutcome = consumeHomeStageOutcome();
+						failProgressSteps();
+						flushSubRun();
+						return settleNestedSpecialist(request, {
+							nestedRunRequestId,
+							toolName: "flowpilot_home",
+							result: {
+								status: "error",
+								...stageOutcome,
+								message: error instanceof Error ? error.message : String(error),
+							},
+							error,
+							summary: "Delegated Home layout specialist failed.",
+							failureKind: "subagent_dispatch",
+						});
 					}
 				}
 				case "data_studio_agent": {
