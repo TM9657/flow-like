@@ -49,8 +49,6 @@ export const ADMIN_SECTIONS: AdminSection[] = [
 		icon: Cpu,
 		href: "/admin/bits/edit",
 		permission: GlobalPermission.WriteBits,
-		actionLabel: "Add Hosted LLM",
-		color: "text-yellow-500",
 		links: [
 			{ label: "Add Bit", href: "/admin/bits/add" },
 			{ label: "Edit Bits", href: "/admin/bits/edit" },
@@ -63,8 +61,6 @@ export const ADMIN_SECTIONS: AdminSection[] = [
 		icon: Package,
 		href: "/admin/packages",
 		permission: GlobalPermission.ManagePackages,
-		actionLabel: "Review Queue",
-		color: "text-green-500",
 	},
 	{
 		title: "Governance",
@@ -73,8 +69,6 @@ export const ADMIN_SECTIONS: AdminSection[] = [
 		icon: BookOpen,
 		href: "/admin/governance",
 		permission: GlobalPermission.ReadPublishing,
-		actionLabel: "Publication Requests",
-		color: "text-orange-500",
 		links: [
 			{ label: "Overview", href: "/admin/governance" },
 			{ label: "Review Queue", href: "/admin/governance" },
@@ -89,8 +83,6 @@ export const ADMIN_SECTIONS: AdminSection[] = [
 		icon: ShieldAlert,
 		href: "/admin/ai-act",
 		permission: GlobalPermission.ReadPublishing,
-		actionLabel: "Open Inventory",
-		color: "text-indigo-500",
 		feature: "ai_act",
 		links: [
 			{ label: "Inventory", href: "/admin/ai-act" },
@@ -104,8 +96,6 @@ export const ADMIN_SECTIONS: AdminSection[] = [
 		href: "/learn/admin",
 		permission: GlobalPermission.ReadCourses,
 		alternatePermissions: [GlobalPermission.WriteCourses],
-		actionLabel: "Open Courses",
-		color: "text-sky-500",
 		links: [
 			{ label: "Catalog", href: "/learn" },
 			{ label: "Authoring", href: "/learn/admin" },
@@ -118,8 +108,6 @@ export const ADMIN_SECTIONS: AdminSection[] = [
 		icon: SlidersHorizontal,
 		href: "/admin/home",
 		permission: GlobalPermission.WriteLandingPage,
-		actionLabel: "Edit Default Home",
-		color: "text-orange-500",
 	},
 	{
 		title: "Starter Profiles",
@@ -128,8 +116,6 @@ export const ADMIN_SECTIONS: AdminSection[] = [
 		icon: Users,
 		href: "/admin/profiles",
 		permission: GlobalPermission.ReadProfile,
-		actionLabel: "Manage Profiles",
-		color: "text-purple-500",
 		links: [
 			{ label: "Browse", href: "/admin/profiles" },
 			{ label: "Manage", href: "/admin/profiles" },
@@ -142,8 +128,6 @@ export const ADMIN_SECTIONS: AdminSection[] = [
 		icon: UserCog,
 		href: "/admin/users",
 		permission: GlobalPermission.Admin,
-		actionLabel: "Manage Users",
-		color: "text-blue-500",
 	},
 	{
 		title: "Solutions",
@@ -151,8 +135,6 @@ export const ADMIN_SECTIONS: AdminSection[] = [
 		icon: Lightbulb,
 		href: "/admin/solutions",
 		permission: GlobalPermission.ReadSolutions,
-		actionLabel: "Manage Requests",
-		color: "text-cyan-500",
 	},
 	{
 		title: "Service Tokens",
@@ -160,8 +142,6 @@ export const ADMIN_SECTIONS: AdminSection[] = [
 		icon: Key,
 		href: "/admin/sinks",
 		permission: GlobalPermission.Admin,
-		actionLabel: "Manage Tokens",
-		color: "text-rose-500",
 	},
 	{
 		title: "Process Graph",
@@ -170,8 +150,6 @@ export const ADMIN_SECTIONS: AdminSection[] = [
 		icon: Waypoints,
 		href: "/admin/connections",
 		permission: GlobalPermission.Admin,
-		actionLabel: "Open Process Graph",
-		color: "text-teal-500",
 	},
 	{
 		title: "Resources",
@@ -180,8 +158,6 @@ export const ADMIN_SECTIONS: AdminSection[] = [
 		icon: HardDrive,
 		href: "/admin/resources",
 		permission: GlobalPermission.Admin,
-		actionLabel: "Open",
-		color: "text-fuchsia-500",
 	},
 	{
 		title: "Logs & Observability",
@@ -190,8 +166,6 @@ export const ADMIN_SECTIONS: AdminSection[] = [
 		icon: Activity,
 		href: "/admin/logs",
 		permission: GlobalPermission.ReadLogs,
-		actionLabel: "Open Control Tower",
-		color: "text-red-500",
 		links: [
 			{ label: "Errors", href: "/admin/logs" },
 			{ label: "Audit chain", href: "/admin/logs?tab=audit" },
@@ -204,8 +178,6 @@ export const ADMIN_SECTIONS: AdminSection[] = [
 		icon: Activity,
 		href: "/admin/telemetry",
 		permission: GlobalPermission.Admin,
-		actionLabel: "Open Telemetry",
-		color: "text-emerald-500",
 		feature: "telemetry",
 		links: [
 			{ label: "Overview", href: "/admin/telemetry" },
@@ -224,8 +196,6 @@ export const ADMIN_SECTIONS: AdminSection[] = [
 		icon: Bug,
 		href: "/admin/telemetry/issues",
 		permission: GlobalPermission.Admin,
-		actionLabel: "Open Issues",
-		color: "text-amber-500",
 		feature: "telemetry",
 	},
 	{
@@ -235,8 +205,6 @@ export const ADMIN_SECTIONS: AdminSection[] = [
 		icon: MessageSquareHeart,
 		href: "/admin/telemetry/prompt-feedback",
 		permission: GlobalPermission.Admin,
-		actionLabel: "Open Prompt Feedback",
-		color: "text-lime-500",
 		feature: "telemetry",
 	},
 	{
@@ -246,8 +214,6 @@ export const ADMIN_SECTIONS: AdminSection[] = [
 		icon: GitBranch,
 		href: "/admin/telemetry/traces",
 		permission: GlobalPermission.Admin,
-		actionLabel: "Open Traces",
-		color: "text-violet-500",
 		feature: "telemetry",
 	},
 	{
@@ -257,8 +223,6 @@ export const ADMIN_SECTIONS: AdminSection[] = [
 		icon: BellRing,
 		href: "/admin/telemetry/alerts",
 		permission: GlobalPermission.Admin,
-		actionLabel: "Open Alerts",
-		color: "text-rose-500",
 		feature: "telemetry",
 	},
 	{
@@ -268,8 +232,6 @@ export const ADMIN_SECTIONS: AdminSection[] = [
 		icon: SlidersHorizontal,
 		href: "/admin/telemetry/query",
 		permission: GlobalPermission.Admin,
-		actionLabel: "Open Query Builder",
-		color: "text-cyan-500",
 		feature: "telemetry",
 		links: [
 			{ label: "Query builder", href: "/admin/telemetry/query" },
