@@ -460,7 +460,7 @@ async fn materialize_missing_flow_paths(
                         file_name
                     )
                 })?;
-                let object_path = Path::from("files").child(file_name.as_str());
+                let object_path = Path::from("files").join(file_name.as_str());
                 FlowPath::new(object_path.as_ref().to_string(), store_ref.clone(), None)
             }
         };

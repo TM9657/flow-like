@@ -30,20 +30,17 @@ pub(crate) async fn graph_connection(
     user_scoped: bool,
 ) -> flow_like_types::Result<Connection> {
     let flow_like_state = TauriFlowLikeState::construct(app_handle).await?;
-    let project_db_dir = Path::from("apps")
-        .child(app_id)
-        .child("storage")
-        .child("db");
+    let project_db_dir = Path::from("apps").join(app_id).join("storage").join("db");
 
     let builder = if user_scoped {
         let sub = current_user_sub(app_handle)
             .await
             .map_err(|e| flow_like_types::anyhow!(e.to_string()))?;
         let user_db_dir = Path::from("users")
-            .child(sub)
-            .child("apps")
-            .child(app_id)
-            .child("db");
+            .join(sub)
+            .join("apps")
+            .join(app_id)
+            .join("db");
         flow_like_state
             .config
             .read()

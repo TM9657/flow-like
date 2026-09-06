@@ -27,22 +27,22 @@ pub async fn delete_artifacts(
         (
             &content,
             "wasm",
-            Path::from(WASM_PACKAGES_PATH).child(package_id),
+            Path::from(WASM_PACKAGES_PATH).join(package_id),
         ),
         (
             &content,
             "widget bundles",
-            Path::from(WIDGET_BUNDLES_PATH).child(package_id),
+            Path::from(WIDGET_BUNDLES_PATH).join(package_id),
         ),
         (
             &content,
             "widget assets",
-            Path::from(WIDGET_ASSETS_PATH).child(package_id),
+            Path::from(WIDGET_ASSETS_PATH).join(package_id),
         ),
         (
             &meta,
             "compiled wasm",
-            Path::from(WASM_COMPILED_PATH).child(package_id),
+            Path::from(WASM_COMPILED_PATH).join(package_id),
         ),
     ] {
         if delete_prefix(store, &prefix, label, pass).await? == Flow::Suspend {

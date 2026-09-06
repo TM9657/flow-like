@@ -57,9 +57,9 @@ pub async fn sign_avatar(
     let master_store = state.master_credentials().await?;
     let master_store = master_store.to_store(false).await?;
     let path = flow_like_storage::Path::from("media")
-        .child("users")
-        .child(sub)
-        .child(avatar_file_name(avatar_id));
+        .join("users")
+        .join(sub)
+        .join(avatar_file_name(avatar_id));
     let url = master_store
         .sign("GET", &path, std::time::Duration::from_secs(60 * 5))
         .await?;

@@ -154,7 +154,7 @@ impl NodeLogic for LazyRegisterFunctionToolsNode {
                 credentials.to_db(&context_cache.app_id).await?
             } else {
                 let board_dir = context_cache.get_storage(false)?;
-                let agents_dir = board_dir.child(".agents");
+                let agents_dir = board_dir.join(".agents");
                 context
                     .app_state
                     .config

@@ -215,7 +215,7 @@ pub(crate) async fn open_runs_db(
         .map_err(|e| {
             ApiError::internal_error(anyhow!("Failed to create logs db builder: {}", e))
         })?;
-    let base_path = StoragePath::from("runs").child(app_id).child(board_id);
+    let base_path = StoragePath::from("runs").join(app_id).join(board_id);
     let db = logs_db_builder(base_path.clone())
         .execute()
         .await

@@ -123,7 +123,7 @@ impl NodeLogic for QueryRemoteOntologyChildrenNode {
         let database = if let Some(credentials) = &context.credentials {
             credentials.to_db(&app_id).await?
         } else {
-            let path = execution.get_storage(false)?.child("db");
+            let path = execution.get_storage(false)?.join("db");
             context
                 .app_state
                 .config

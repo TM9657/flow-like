@@ -3381,7 +3381,7 @@ dependencies = [
  "futures 0.3.32",
  "indexmap 2.14.0",
  "itertools 0.14.0",
- "object_store 0.13.2",
+ "object_store",
  "parquet",
  "percent-encoding",
  "rand 0.9.3",
@@ -5508,7 +5508,7 @@ dependencies = [
  "itertools 0.14.0",
  "liblzma",
  "log",
- "object_store 0.13.2",
+ "object_store",
  "parking_lot",
  "parquet",
  "rand 0.9.3",
@@ -5542,7 +5542,7 @@ dependencies = [
  "futures 0.3.32",
  "itertools 0.14.0",
  "log",
- "object_store 0.13.2",
+ "object_store",
  "parking_lot",
  "tokio",
 ]
@@ -5567,7 +5567,7 @@ dependencies = [
  "futures 0.3.32",
  "itertools 0.14.0",
  "log",
- "object_store 0.13.2",
+ "object_store",
 ]
 
 [[package]]
@@ -5586,7 +5586,7 @@ dependencies = [
  "itertools 0.14.0",
  "libc",
  "log",
- "object_store 0.13.2",
+ "object_store",
  "parquet",
  "paste",
  "recursive",
@@ -5633,7 +5633,7 @@ dependencies = [
  "itertools 0.14.0",
  "liblzma",
  "log",
- "object_store 0.13.2",
+ "object_store",
  "rand 0.9.3",
  "tokio",
  "tokio-util",
@@ -5661,7 +5661,7 @@ dependencies = [
  "datafusion-session",
  "futures 0.3.32",
  "itertools 0.14.0",
- "object_store 0.13.2",
+ "object_store",
  "tokio",
 ]
 
@@ -5683,7 +5683,7 @@ dependencies = [
  "datafusion-physical-plan",
  "datafusion-session",
  "futures 0.3.32",
- "object_store 0.13.2",
+ "object_store",
  "regex",
  "tokio",
 ]
@@ -5706,7 +5706,7 @@ dependencies = [
  "datafusion-physical-plan",
  "datafusion-session",
  "futures 0.3.32",
- "object_store 0.13.2",
+ "object_store",
  "serde_json",
  "tokio",
  "tokio-stream",
@@ -5736,7 +5736,7 @@ dependencies = [
  "futures 0.3.32",
  "itertools 0.14.0",
  "log",
- "object_store 0.13.2",
+ "object_store",
  "parking_lot",
  "parquet",
  "tokio",
@@ -5764,7 +5764,7 @@ dependencies = [
  "datafusion-physical-expr-common",
  "futures 0.3.32",
  "log",
- "object_store 0.13.2",
+ "object_store",
  "parking_lot",
  "rand 0.9.3",
  "tempfile",
@@ -6117,7 +6117,7 @@ dependencies = [
  "datafusion-physical-expr-common",
  "datafusion-physical-plan",
  "datafusion-proto-common",
- "object_store 0.13.2",
+ "object_store",
  "prost 0.14.3",
  "rand 0.9.3",
 ]
@@ -6344,7 +6344,7 @@ dependencies = [
  "indexmap 2.14.0",
  "itertools 0.14.0",
  "num_cpus",
- "object_store 0.13.2",
+ "object_store",
  "parking_lot",
  "parquet",
  "percent-encoding",
@@ -9424,7 +9424,7 @@ dependencies = [
  "lance-io",
  "lancedb",
  "num_cpus",
- "object_store 0.13.2",
+ "object_store",
  "petgraph",
  "schemars 1.2.1",
  "serde",
@@ -9462,7 +9462,7 @@ dependencies = [
  "futures 0.3.32",
  "infer 0.19.0",
  "mime_guess",
- "object_store 0.13.2",
+ "object_store",
  "percent-encoding",
  "reqwest 0.12.28",
  "schemars 1.2.1",
@@ -14023,7 +14023,7 @@ dependencies = [
  "lance-tokenizer",
  "log",
  "moka",
- "object_store 0.13.2",
+ "object_store",
  "permutation",
  "pin-project",
  "prost 0.14.3",
@@ -14123,7 +14123,7 @@ dependencies = [
  "log",
  "moka",
  "num_cpus",
- "object_store 0.13.2",
+ "object_store",
  "pin-project",
  "prost 0.14.3",
  "rand 0.9.3",
@@ -14258,7 +14258,7 @@ dependencies = [
  "lance-io",
  "log",
  "num-traits 0.2.19",
- "object_store 0.13.2",
+ "object_store",
  "prost 0.14.3",
  "prost-build",
  "prost-types 0.14.3",
@@ -14372,7 +14372,7 @@ dependencies = [
  "log",
  "ndarray 0.16.1",
  "num-traits 0.2.19",
- "object_store 0.13.2",
+ "object_store",
  "prost 0.14.3",
  "prost-build",
  "prost-types 0.14.3",
@@ -14419,7 +14419,7 @@ dependencies = [
  "lance-namespace",
  "log",
  "moka",
- "object_store 0.13.2",
+ "object_store",
  "object_store_opendal",
  "opendal",
  "path_abs",
@@ -14487,7 +14487,7 @@ dependencies = [
  "lance-namespace",
  "lance-table",
  "log",
- "object_store 0.13.2",
+ "object_store",
  "quick-xml 0.38.4",
  "rand 0.9.3",
  "reqwest 0.12.28",
@@ -14554,7 +14554,7 @@ dependencies = [
  "lance-io",
  "lance-select",
  "log",
- "object_store 0.13.2",
+ "object_store",
  "prost 0.14.3",
  "prost-build",
  "prost-types 0.14.3",
@@ -14648,7 +14648,7 @@ dependencies = [
  "log",
  "moka",
  "num-traits 0.2.19",
- "object_store 0.13.2",
+ "object_store",
  "pin-project",
  "rand 0.9.3",
  "regex",
@@ -15850,7 +15850,7 @@ checksum = "3e2e65a1a2e43cfcb47a895c4c8b10d1f4a61097f9f254f183aee60cad9c651d"
 [[package]]
 name = "markitdown"
 version = "0.2.0"
-source = "git+https://github.com/Rheosoph/markitdown-rs.git?rev=2dac5f1#2dac5f1eeca24a9a538b9094ee121da96fafcd7b"
+source = "git+https://github.com/Rheosoph/markitdown-rs.git?rev=1bd98da0de6f90143b25452d74b275da21f2d175#1bd98da0de6f90143b25452d74b275da21f2d175"
 dependencies = [
  "async-trait",
  "base64 0.22.1",
@@ -15875,7 +15875,7 @@ dependencies = [
  "liteparse",
  "mail-parser",
  "mime_guess",
- "object_store 0.12.5",
+ "object_store",
  "quick-xml 0.39.4",
  "rbook",
  "regex",
@@ -17780,44 +17780,6 @@ dependencies = [
 
 [[package]]
 name = "object_store"
-version = "0.12.5"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fbfbfff40aeccab00ec8a910b57ca8ecf4319b335c542f2edcd19dd25a1e2a00"
-dependencies = [
- "async-trait",
- "base64 0.22.1",
- "bytes",
- "chrono",
- "form_urlencoded",
- "futures 0.3.32",
- "http 1.4.0",
- "http-body-util",
- "httparse",
- "humantime",
- "hyper 1.10.1",
- "itertools 0.14.0",
- "md-5 0.10.6",
- "parking_lot",
- "percent-encoding",
- "quick-xml 0.38.4",
- "rand 0.9.3",
- "reqwest 0.12.28",
- "ring",
- "rustls-pemfile",
- "serde",
- "serde_json",
- "serde_urlencoded",
- "thiserror 2.0.18",
- "tokio",
- "tracing",
- "url",
- "walkdir",
- "wasm-bindgen-futures",
- "web-time",
-]
-
-[[package]]
-name = "object_store"
 version = "0.13.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "622acbc9100d3c10e2ee15804b0caa40e55c933d5aa53814cd520805b7958a49"
@@ -17867,7 +17829,7 @@ dependencies = [
  "chrono",
  "futures 0.3.32",
  "mea",
- "object_store 0.13.2",
+ "object_store",
  "opendal",
  "pin-project",
  "tokio",
@@ -18714,7 +18676,7 @@ dependencies = [
  "num-bigint",
  "num-integer",
  "num-traits 0.2.19",
- "object_store 0.13.2",
+ "object_store",
  "paste",
  "ring",
  "seq-macro",
@@ -27358,7 +27320,7 @@ checksum = "0b928f33d975fc6ad9f86c8f283853ad26bdd5b10b7f1542aa2fa15e2289105a"
 [[package]]
 name = "video-utils-rs"
 version = "0.1.0"
-source = "git+https://github.com/Rheosoph/video-utils-rs.git?rev=4b4e380fd719390dd8598120ebfb50566d234d5c#4b4e380fd719390dd8598120ebfb50566d234d5c"
+source = "git+https://github.com/Rheosoph/video-utils-rs.git?rev=b4c9185504f98b1eb8eb9d34c8baa0b6f5f8cab4#b4c9185504f98b1eb8eb9d34c8baa0b6f5f8cab4"
 dependencies = [
  "ab_glyph",
  "bytes",
@@ -27374,7 +27336,7 @@ dependencies = [
  "m3u8-rs",
  "matroska-demuxer",
  "muxide",
- "object_store 0.12.5",
+ "object_store",
  "png 0.18.1",
  "rav1e",
  "ravif",

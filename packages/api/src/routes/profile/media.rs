@@ -50,15 +50,12 @@ fn upload_stem(upload_id: &str) -> Result<&str, ApiError> {
 
 fn metadata_path(sub: &str, stem: &str) -> Path {
     Path::from("profile-media-uploads")
-        .child(sub)
-        .child(format!("{stem}.json"))
+        .join(sub)
+        .join(format!("{stem}.json"))
 }
 
 fn image_path(sub: &str, filename: &str) -> Path {
-    Path::from("media")
-        .child("users")
-        .child(sub)
-        .child(filename)
+    Path::from("media").join("users").join(sub).join(filename)
 }
 
 /// Allocate a private upload without changing the account or profile image.
@@ -78,8 +75,8 @@ fn sync_slot_path(sub: &str, scope: &str) -> Path {
         .to_hex()
         .to_string();
     Path::from("profile-media-upload-slots")
-        .child(sub)
-        .child(format!("{key}.json"))
+        .join(sub)
+        .join(format!("{key}.json"))
 }
 
 pub(crate) async fn prepare_sync_upload(

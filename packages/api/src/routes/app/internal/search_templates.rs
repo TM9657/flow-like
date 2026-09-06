@@ -176,8 +176,8 @@ pub async fn search_templates(
             Some(meta) => {
                 let mut metadata = Metadata::from(meta.clone());
                 let prefix = flow_like_storage::Path::from("media")
-                    .child("apps")
-                    .child(template_model.app_id.clone());
+                    .join("apps")
+                    .join(template_model.app_id.clone());
                 metadata.presign(prefix, &store).await;
                 Some(metadata)
             }

@@ -282,13 +282,13 @@ pub async fn get_requests(
 
         // Presign icon/thumbnail if they are storage keys (not already URLs)
         let prefix = flow_like_storage::Path::from("media")
-            .child("apps")
-            .child(app_id.clone());
+            .join("apps")
+            .join(app_id.clone());
         if let Some(ref icon) = app_icon
             && !icon.starts_with("http://")
             && !icon.starts_with("https://")
         {
-            let icon_path = prefix.child(format!("{icon}.webp"));
+            let icon_path = prefix.clone().join(format!("{icon}.webp"));
             if let Ok(url) = store
                 .sign("GET", &icon_path, std::time::Duration::from_secs(60 * 60))
                 .await
@@ -300,7 +300,7 @@ pub async fn get_requests(
             && !thumb.starts_with("http://")
             && !thumb.starts_with("https://")
         {
-            let thumb_path = prefix.child(format!("{thumb}.webp"));
+            let thumb_path = prefix.join(format!("{thumb}.webp"));
             if let Ok(url) = store
                 .sign("GET", &thumb_path, std::time::Duration::from_secs(60 * 60))
                 .await

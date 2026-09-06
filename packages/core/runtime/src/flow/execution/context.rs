@@ -186,46 +186,46 @@ impl ExecutionContextCache {
 
     pub fn get_user_dir(&self, node: bool) -> flow_like_types::Result<Path> {
         let base = Path::from("users")
-            .child(self.sub.clone())
-            .child("apps")
-            .child(self.app_id.clone());
+            .join(self.sub.clone())
+            .join("apps")
+            .join(self.app_id.clone());
         if !node {
             return Ok(base);
         }
 
-        Ok(base.child(self.node_id.as_ref()))
+        Ok(base.join(self.node_id.as_ref()))
     }
 
     pub fn get_cache(&self, node: bool, user: bool) -> flow_like_types::Result<Path> {
         let mut base = Path::from("tmp");
 
         if user {
-            base = base.child("user").child(self.sub.clone());
+            base = base.join("user").join(self.sub.clone());
         } else {
-            base = base.child("global");
+            base = base.join("global");
         }
 
-        base = base.child("apps").child(self.app_id.clone());
+        base = base.join("apps").join(self.app_id.clone());
 
         if !node {
             return Ok(base);
         }
 
-        Ok(base.child(self.node_id.as_ref()))
+        Ok(base.join(self.node_id.as_ref()))
     }
 
     pub fn get_storage(&self, node: bool) -> flow_like_types::Result<Path> {
-        let base = self.board_dir.child("storage");
+        let base = self.board_dir.clone().join("storage");
 
         if !node {
             return Ok(base);
         }
 
-        Ok(base.child(self.node_id.as_ref()))
+        Ok(base.join(self.node_id.as_ref()))
     }
 
     pub fn get_upload_dir(&self) -> flow_like_types::Result<Path> {
-        let base = self.board_dir.child("upload");
+        let base = self.board_dir.clone().join("upload");
         Ok(base)
     }
 }

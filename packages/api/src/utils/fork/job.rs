@@ -739,15 +739,15 @@ async fn copy_content(
     let mirrors: [(&str, Path, Path, bool, bool); 3] = [
         (
             "upload storage",
-            ctx.src_prefix.child("upload"),
-            ctx.dst_prefix.child("upload"),
+            ctx.src_prefix.clone().join("upload"),
+            ctx.dst_prefix.clone().join("upload"),
             ctx.policy.files,
             false,
         ),
         (
             "app storage",
-            ctx.src_prefix.child("storage"),
-            ctx.dst_prefix.child("storage"),
+            ctx.src_prefix.clone().join("storage"),
+            ctx.dst_prefix.clone().join("storage"),
             true,
             true,
         ),

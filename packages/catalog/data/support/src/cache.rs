@@ -180,14 +180,14 @@ fn resolve_transport(context: &ExecutionContext) -> flow_like_types::Result<Cach
     Ok(CacheTransport::Local {
         store,
         root: Path::from("apps")
-            .child(execution_cache.app_id.clone())
-            .child(LOCAL_CACHE_DIR),
+            .join(execution_cache.app_id.clone())
+            .join(LOCAL_CACHE_DIR),
     })
 }
 
 fn local_scope_dir(root: &Path, scope: CacheScope, sub: &str) -> flow_like_types::Result<Path> {
     match scope {
-        CacheScope::App => Ok(root.child(LOCAL_APP_SCOPE_DIR)),
+        CacheScope::App => Ok(root.clone().join(LOCAL_APP_SCOPE_DIR)),
         CacheScope::User => {
             let sub = sub.trim();
             if sub.is_empty() {
@@ -195,7 +195,10 @@ fn local_scope_dir(root: &Path, scope: CacheScope, sub: &str) -> flow_like_types
                     "User-scoped cache requires an identifiable user"
                 ));
             }
-            Ok(root.child(LOCAL_USER_SCOPE_DIR).child(sub.to_string()))
+            Ok(root
+                .clone()
+                .join(LOCAL_USER_SCOPE_DIR)
+                .join(sub.to_string()))
         }
     }
 }
@@ -216,7 +219,7 @@ fn local_entry_path(
     hasher.update(namespace.as_bytes());
     hasher.update(key.as_bytes());
     let file = hasher.finalize().to_hex().to_string();
-    Ok(scoped.child(format!("{file}.json")))
+    Ok(scoped.join(format!("{file}.json")))
 }
 
 /// Read an entry. Returns `None` for both "absent" and "expired".
@@ -729,7 +732,7 @@ mod tests {
 
     #[test]
     fn local_paths_separate_scopes_users_and_namespaces() {
-        let root = Path::from("apps").child("app-1").child(LOCAL_CACHE_DIR);
+        let root = Path::from("apps").join("app-1").join(LOCAL_CACHE_DIR);
 
         let app = local_entry_path(&root, CacheScope::App, "", "", "k").unwrap();
         let alice = local_entry_path(&root, CacheScope::User, "alice", "", "k").unwrap();
@@ -755,7 +758,7 @@ mod tests {
 
     #[test]
     fn keys_with_path_separators_stay_inside_the_scope_directory() {
-        let root = Path::from("apps").child("app-1").child(LOCAL_CACHE_DIR);
+        let root = Path::from("apps").join("app-1").join(LOCAL_CACHE_DIR);
         let traversal =
             local_entry_path(&root, CacheScope::App, "", "../ns", "../../escape").unwrap();
         assert!(traversal.as_ref().starts_with("apps/app-1/cache/global/"));

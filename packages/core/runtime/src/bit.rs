@@ -521,7 +521,7 @@ async fn presign_media_asset(name: &str, prefix: &Path, store: &FlowLikeStore) -
         return None;
     }
 
-    let path = prefix.child(format!("{name}.webp"));
+    let path = prefix.clone().join(format!("{name}.webp"));
     store
         .sign_cached("GET", &path, MEDIA_URL_TTL)
         .await
@@ -1026,7 +1026,7 @@ impl BitPack {
                 None => continue,
             };
             let file_name = file_name.unwrap();
-            let bit_path = Path::from(bit.hash.clone()).child(file_name);
+            let bit_path = Path::from(bit.hash.clone()).join(file_name);
             let meta = match bits_store.head(&bit_path).await {
                 Ok(meta) => meta,
                 Err(_) => continue,
@@ -1171,7 +1171,7 @@ impl BitPack {
                     break;
                 }
             };
-            let bit_path = Path::from(bit.hash.clone()).child(file_name);
+            let bit_path = Path::from(bit.hash.clone()).join(file_name);
             let metadata = match bits_store.head(&bit_path).await {
                 Ok(metadata) => metadata,
                 Err(_) => {
@@ -1554,7 +1554,7 @@ impl Bit {
         } else {
             &self.dependency_tree_hash
         };
-        let cache_dir = Path::from("deps-cache").child(format!("bit-deps-{}.bin", cache_key));
+        let cache_dir = Path::from("deps-cache").join(format!("bit-deps-{}.bin", cache_key));
 
         let metadata = bits_store.head(&cache_dir).await;
 
@@ -1666,7 +1666,7 @@ impl Bit {
 
     pub fn to_path(&self, file_system: &Arc<LocalObjectStore>) -> Option<PathBuf> {
         let file_name = self.file_name.clone()?;
-        let bit_path = Path::from(self.hash.clone()).child(file_name);
+        let bit_path = Path::from(self.hash.clone()).join(file_name);
         let path = file_system.path_to_filesystem(&bit_path).ok()?;
         Some(path)
     }

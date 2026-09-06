@@ -66,10 +66,7 @@ async fn db_connection_handle(
     sub: Option<String>,
 ) -> flow_like_types::Result<Connection> {
     let flow_like_state = TauriFlowLikeState::construct(app_handle).await?;
-    let project_db_dir = Path::from("apps")
-        .child(app_id)
-        .child("storage")
-        .child("db");
+    let project_db_dir = Path::from("apps").join(app_id).join("storage").join("db");
     let db = if let Some(credentials) = &credentials {
         if user_scoped {
             let sub = sub.ok_or_else(|| {
@@ -89,10 +86,10 @@ async fn db_connection_handle(
                 .map_err(|e| flow_like_types::anyhow!(e.to_string()))?,
         };
         let user_db_dir = Path::from("users")
-            .child(sub)
-            .child("apps")
-            .child(app_id)
-            .child("db");
+            .join(sub)
+            .join("apps")
+            .join(app_id)
+            .join("db");
         flow_like_state
             .config
             .read()

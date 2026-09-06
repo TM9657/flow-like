@@ -252,7 +252,7 @@ impl FlowLikeStore {
     }
 
     pub async fn construct_upload(&self, app_id: &str, prefix: &str) -> Result<Path> {
-        let base_path = Path::from("apps").child(app_id).child("upload");
+        let base_path = Path::from("apps").join(app_id).join("upload");
 
         let final_path = prefix
             .split('/')
@@ -260,7 +260,7 @@ impl FlowLikeStore {
             .fold(base_path, |acc, seg| {
                 // Decode URL-encoded segments (e.g., %CC%88 -> combining umlaut)
                 let decoded = decode(seg).unwrap_or(std::borrow::Cow::Borrowed(seg));
-                acc.child(decoded.as_ref())
+                acc.join(decoded.as_ref())
             });
 
         Ok(final_path)
@@ -272,14 +272,14 @@ impl FlowLikeStore {
         app_id: &str,
         prefix: &str,
     ) -> Result<Path> {
-        let base_path = Path::from("users").child(sub).child("apps").child(app_id);
+        let base_path = Path::from("users").join(sub).join("apps").join(app_id);
 
         let final_path = prefix
             .split('/')
             .filter(|s| !s.is_empty())
             .fold(base_path, |acc, seg| {
                 let decoded = decode(seg).unwrap_or(std::borrow::Cow::Borrowed(seg));
-                acc.child(decoded.as_ref())
+                acc.join(decoded.as_ref())
             });
 
         Ok(final_path)
@@ -441,7 +441,7 @@ mod tests {
 
     #[test]
     fn relative_to_strips_the_app_base_and_keeps_nested_paths() {
-        let base = Path::from("apps").child("app-1").child("upload");
+        let base = Path::from("apps").join("app-1").join("upload");
 
         let file = StorageItem::from(Path::from("apps/app-1/upload/logo.jpg")).relative_to(&base);
         assert_eq!(file.location, "logo.jpg");
@@ -450,10 +450,7 @@ mod tests {
             .relative_to(&base);
         assert_eq!(nested.location, "media/inner/logo.jpg");
 
-        let user_base = Path::from("users")
-            .child("sub-1")
-            .child("apps")
-            .child("app-1");
+        let user_base = Path::from("users").join("sub-1").join("apps").join("app-1");
         let user_file = StorageItem::from(Path::from("users/sub-1/apps/app-1/media/logo.jpg"))
             .relative_to(&user_base);
         assert_eq!(user_file.location, "media/logo.jpg");
@@ -461,7 +458,7 @@ mod tests {
 
     #[test]
     fn relative_to_leaves_unrelated_locations_untouched() {
-        let base = Path::from("apps").child("app-1").child("upload");
+        let base = Path::from("apps").join("app-1").join("upload");
 
         let other = StorageItem::from(Path::from("apps/app-2/upload/logo.jpg")).relative_to(&base);
         assert_eq!(other.location, "apps/app-2/upload/logo.jpg");

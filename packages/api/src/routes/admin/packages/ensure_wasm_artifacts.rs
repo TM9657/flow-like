@@ -53,11 +53,11 @@ fn current_linux_x86_64_platform() -> String {
 
 fn artifact_paths(package_id: &str, version: &str, target_platform: &str) -> (Path, Path) {
     let base = Path::from(WASM_COMPILED_PATH)
-        .child(package_id)
-        .child(version);
+        .join(package_id)
+        .join(version);
     (
-        base.child(format!("{}.cwasm", target_platform)),
-        base.child(format!("{}.cwasm.b3", target_platform)),
+        base.clone().join(format!("{}.cwasm", target_platform)),
+        base.join(format!("{}.cwasm.b3", target_platform)),
     )
 }
 

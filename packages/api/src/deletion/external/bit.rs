@@ -14,7 +14,7 @@ pub async fn delete_cdn_artifact(state: &AppState, bit_id: &str) -> Result<(), A
     let Some(hash) = bit.hash.filter(|hash| !hash.is_empty()) else {
         return Ok(());
     };
-    let path = Path::from("bits").child(hash.as_str());
+    let path = Path::from("bits").join(hash.as_str());
     match state.cdn_bucket.as_generic().delete(&path).await {
         Ok(()) => Ok(()),
         Err(flow_like_storage::object_store::Error::NotFound { .. }) => Ok(()),

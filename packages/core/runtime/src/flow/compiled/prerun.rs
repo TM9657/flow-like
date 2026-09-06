@@ -2718,7 +2718,7 @@ fn permission_string(permission: &NodePermission) -> String {
 /// serving and repairing its legacy artifact during a rolling deployment
 /// without overwriting authority minted by a newer Lambda.
 pub fn manifest_path(board_dir: &Path, board_id: &str, version: (u32, u32, u32)) -> Path {
-    super::version_artifact_dir(board_dir, board_id).child(format!(
+    super::version_artifact_dir(board_dir, board_id).join(format!(
         "{}_{}_{}.v{MANIFEST_FORMAT_VERSION}.prerun",
         version.0, version.1, version.2
     ))
@@ -2730,7 +2730,7 @@ pub fn manifest_path(board_dir: &Path, board_id: &str, version: (u32, u32, u32))
 /// hint while old Lambdas in a rolling deployment continue using it.
 pub fn legacy_manifest_path(board_dir: &Path, board_id: &str, version: (u32, u32, u32)) -> Path {
     super::version_artifact_dir(board_dir, board_id)
-        .child(format!("{}_{}_{}.prerun", version.0, version.1, version.2))
+        .join(format!("{}_{}_{}.prerun", version.0, version.1, version.2))
 }
 
 /// Page execution manifest of an immutable board version.
@@ -2750,7 +2750,7 @@ pub fn version_page_manifest_path(
     hash_string(&mut hasher, page_id);
     hash_string(&mut hasher, page_revision);
     let page_key = hasher.finalize().to_hex();
-    super::version_artifact_dir(board_dir, board_id).child(format!(
+    super::version_artifact_dir(board_dir, board_id).join(format!(
         "{}_{}_{}.v{MANIFEST_FORMAT_VERSION}.{}.page.prerun",
         version.0,
         version.1,
@@ -2763,7 +2763,7 @@ pub fn version_page_manifest_path(
 /// by the same `.board` etag.
 pub fn draft_manifest_path(app_id: &str, board_id: &str, e_tag: &str) -> Path {
     super::draft_artifact_dir(app_id, board_id)
-        .child(format!("{}.prerun", super::draft_artifact_stem(e_tag)))
+        .join(format!("{}.prerun", super::draft_artifact_stem(e_tag)))
 }
 
 /// Page-aware prerun manifest for a floating draft. The Board ETag and
@@ -2781,7 +2781,7 @@ pub fn draft_page_manifest_path(
     hash_string(&mut hasher, page_id);
     hash_string(&mut hasher, page_revision);
     let page_key = hasher.finalize().to_hex();
-    super::draft_artifact_dir(app_id, board_id).child(format!(
+    super::draft_artifact_dir(app_id, board_id).join(format!(
         "{}_{}.page.prerun",
         super::draft_artifact_stem(e_tag),
         &page_key.as_str()[..32]

@@ -137,7 +137,7 @@ pub async fn get_detail(
         let mut metadata = Metadata::from(meta_model);
         let master_store = state.master_credentials().await?;
         let store = master_store.to_store(false).await?;
-        let prefix = FlowPath::from("media").child("apps").child(app_id.clone());
+        let prefix = FlowPath::from("media").join("apps").join(app_id.clone());
         metadata.presign(prefix, &store).await;
         Some(metadata)
     } else {

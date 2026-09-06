@@ -1105,7 +1105,7 @@ async fn upload_model_file(
             if !matches!(
                 &multipart_error,
                 flow_like_storage::object_store::Error::NotSupported { .. }
-                    | flow_like_storage::object_store::Error::NotImplemented
+                    | flow_like_storage::object_store::Error::NotImplemented { .. }
             ) {
                 return Err(anyhow!(
                     "Failed to start multipart model cache upload: {multipart_error}"

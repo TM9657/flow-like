@@ -29,10 +29,10 @@ pub(crate) fn db_path_from_base(base_path: &str) -> Path {
     let base = Path::from(base_path);
 
     if base_path.starts_with("users/") {
-        return base.child("db");
+        return base.join("db");
     }
 
-    base.child("storage").child("db")
+    base.join("storage").join("db")
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

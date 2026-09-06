@@ -2283,7 +2283,7 @@ async fn file_route_response(
         } => {
             let filename = rest_file_route_filename(path, &request_path)?;
             let decoded_filename = decode_rest_file_name(&filename);
-            let object_path = prefix.path.child(decoded_filename.as_str());
+            let object_path = prefix.path.clone().join(decoded_filename.as_str());
             let file = match prefix.store.as_generic().get(&object_path).await {
                 Ok(file) => file,
                 Err(_) => {
@@ -2936,14 +2936,14 @@ mod tests {
         let memory = Arc::new(InMemory::new());
         memory
             .put(
-                &Path::from("assets").child("hello.txt"),
+                &Path::from("assets").join("hello.txt"),
                 PutPayload::from("hello"),
             )
             .await
             .unwrap();
         memory
             .put(
-                &Path::from("assets").child("nested/name.txt"),
+                &Path::from("assets").join("nested/name.txt"),
                 PutPayload::from("encoded slash"),
             )
             .await

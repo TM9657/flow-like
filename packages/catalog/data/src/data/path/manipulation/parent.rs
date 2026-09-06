@@ -68,9 +68,9 @@ impl NodeLogic for ParentNode {
         let mut parts = path.path.parts().collect::<Vec<_>>();
         parts.pop();
         let mut new_path = Path::from("");
-        parts.iter().for_each(|part| {
-            new_path = new_path.child(part.as_ref());
-        });
+        for part in &parts {
+            new_path = new_path.join(part.as_ref());
+        }
         path.path = new_path;
         let path = path.serialize().await;
 

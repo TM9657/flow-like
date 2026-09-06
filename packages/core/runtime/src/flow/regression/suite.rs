@@ -338,29 +338,29 @@ impl RegressionSuite {
     /// `apps/{app_id}/regression` — the storage root every regression object
     /// lives under.
     fn storage_root(app_id: &str) -> Path {
-        Path::from("apps").child(app_id).child("regression")
+        Path::from("apps").join(app_id).join("regression")
     }
 
     fn suite_path(app_id: &str, suite_id: &str) -> Path {
-        Self::storage_root(app_id).child(format!("{suite_id}.suite"))
+        Self::storage_root(app_id).join(format!("{suite_id}.suite"))
     }
 
     fn fixtures_root(app_id: &str, suite_id: &str) -> Path {
-        Self::storage_root(app_id).child("fixtures").child(suite_id)
+        Self::storage_root(app_id).join("fixtures").join(suite_id)
     }
 
     fn fixture_path(app_id: &str, suite_id: &str, fixture_id: &str) -> Path {
-        Self::fixtures_root(app_id, suite_id).child(format!("{fixture_id}.fixture"))
+        Self::fixtures_root(app_id, suite_id).join(format!("{fixture_id}.fixture"))
     }
 
     /// Desktop-only run archive root; cloud stores runs in Postgres and
     /// writes nothing here.
     pub fn runs_root(app_id: &str, suite_id: &str) -> Path {
-        Self::storage_root(app_id).child("runs").child(suite_id)
+        Self::storage_root(app_id).join("runs").join(suite_id)
     }
 
     pub fn run_archive_path(app_id: &str, suite_id: &str, suite_run_id: &str) -> Path {
-        Self::runs_root(app_id, suite_id).child(format!("{suite_run_id}.run"))
+        Self::runs_root(app_id, suite_id).join(format!("{suite_run_id}.run"))
     }
 
     async fn store(

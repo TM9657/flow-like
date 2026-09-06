@@ -946,7 +946,7 @@ async fn execute_prepared(
             let db_fn = db_fn
                 .as_ref()
                 .ok_or_else(|| flow_like_types::anyhow!("No log database configured"))?;
-            let base_path = Path::from("runs").child(app_id).child(board_id);
+            let base_path = Path::from("runs").join(app_id).join(board_id);
             let db = flow_like_state
                 .with_lance_session(db_fn(base_path.clone()))
                 .execute()
@@ -1174,7 +1174,7 @@ pub(crate) async fn open_runs_db(
     let db_fn = db
         .as_ref()
         .ok_or_else(|| flow_like_types::anyhow!("No log database configured"))?;
-    let base_path = Path::from("runs").child(app_id).child(board_id);
+    let base_path = Path::from("runs").join(app_id).join(board_id);
     db_fn(base_path.clone())
         .execute()
         .await

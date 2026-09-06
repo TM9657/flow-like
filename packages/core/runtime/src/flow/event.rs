@@ -1316,20 +1316,20 @@ impl Event {
     /// under. All path construction goes through these helpers; the layout
     /// literal must exist exactly once.
     fn storage_root(app_id: &str) -> Path {
-        Path::from("apps").child(app_id).child("events")
+        Path::from("apps").join(app_id).join("events")
     }
 
     fn live_path(app_id: &str, event_id: &str) -> Path {
-        Self::storage_root(app_id).child(format!("{event_id}.event"))
+        Self::storage_root(app_id).join(format!("{event_id}.event"))
     }
 
     fn versions_root(app_id: &str, event_id: &str) -> Path {
-        Self::storage_root(app_id).child("versions").child(event_id)
+        Self::storage_root(app_id).join("versions").join(event_id)
     }
 
     fn version_path(app_id: &str, event_id: &str, version: (u32, u32, u32)) -> Path {
         Self::versions_root(app_id, event_id)
-            .child(format!("{}.{}.{}", version.0, version.1, version.2))
+            .join(format!("{}.{}.{}", version.0, version.1, version.2))
     }
 
     pub async fn get_versions(&self, app: &App) -> flow_like_types::Result<Vec<(u32, u32, u32)>> {
@@ -1791,9 +1791,9 @@ mod tests {
             .unwrap()
             .as_generic();
         let live_path = Path::from("apps")
-            .child(app.id.clone())
-            .child("events")
-            .child("evt-upsert.event");
+            .join(app.id.clone())
+            .join("events")
+            .join("evt-upsert.event");
         store
             .put(&live_path, PutPayload::from_static(b"not lz4 protobuf"))
             .await

@@ -117,8 +117,8 @@ pub async fn delete_storage_prefixes(
     let credentials = state.master_credentials().await?;
     let meta = credentials.to_store(true).await?.as_generic();
     let content = credentials.to_store(false).await?.as_generic();
-    let app_prefix = Path::from("apps").child(app_id);
-    let media_prefix = Path::from("media").child("apps").child(app_id);
+    let app_prefix = Path::from("apps").join(app_id);
+    let media_prefix = Path::from("media").join("apps").join(app_id);
     for (store, prefix, label) in [
         (&meta, &app_prefix, "meta"),
         (&content, &app_prefix, "content"),

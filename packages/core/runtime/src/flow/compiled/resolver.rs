@@ -140,7 +140,7 @@ impl TemplateCache {
             ));
         }
         let expected_etag = expected_etag.map(str::trim).filter(|etag| !etag.is_empty());
-        let storage_root = Path::from("apps").child(app_id.to_string());
+        let storage_root = Path::from("apps").join(app_id.to_string());
         let proto_path = Board::proto_path(&storage_root, board_id, version);
 
         let meta_store = state
@@ -404,7 +404,7 @@ pub async fn sweep_draft_artifacts(
 
     let cutoff = chrono::Utc::now()
         - chrono::Duration::from_std(max_age).unwrap_or(chrono::Duration::days(7));
-    let draft_prefix = Path::from("tmp").child("apps");
+    let draft_prefix = Path::from("tmp").join("apps");
     let current_cutoff = cutoff;
     let current = meta_store
         .list(Some(&draft_prefix))
@@ -416,7 +416,7 @@ pub async fn sweep_draft_artifacts(
         .map_ok(|meta| meta.location)
         .boxed();
 
-    let legacy_prefix = Path::from("tmp").child("compiled");
+    let legacy_prefix = Path::from("tmp").join("compiled");
     let legacy = meta_store
         .list(Some(&legacy_prefix))
         .try_filter(move |meta| futures::future::ready(meta.last_modified < cutoff))

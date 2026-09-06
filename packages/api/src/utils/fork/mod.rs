@@ -314,7 +314,7 @@ pub async fn compute_offline_fork_bundle(
     let src_meta_store = credentials.to_store(true).await?.as_generic();
     let src_content_store = credentials.to_store(false).await?.as_generic();
 
-    let src_prefix = Path::from("apps").child(src_app_id.to_string());
+    let src_prefix = Path::from("apps").join(src_app_id.to_string());
     let new_app_id = ids::fresh_seed();
 
     // ---- 1. Load manifest from storage, overlay DB row -------------
@@ -325,10 +325,12 @@ pub async fn compute_offline_fork_bundle(
     // `price`, `version`, `execution_mode`, `allow_forking`, etc. can
     // be arbitrarily stale. Overlay the DB row's authoritative values
     // before remap so the bundle ships current state to the desktop.
-    let mut manifest_proto: proto::App =
-        from_compressed(src_meta_store.clone(), src_prefix.child("manifest.app"))
-            .await
-            .map_err(|e| ApiError::internal_error(anyhow!("read source manifest: {e}")))?;
+    let mut manifest_proto: proto::App = from_compressed(
+        src_meta_store.clone(),
+        src_prefix.clone().join("manifest.app"),
+    )
+    .await
+    .map_err(|e| ApiError::internal_error(anyhow!("read source manifest: {e}")))?;
     overlay_app_row_into_manifest(state, src_app_id, &mut manifest_proto).await?;
 
     // Owner-defined policy, loaded server-side. The desktop is told what
@@ -447,7 +449,7 @@ pub async fn compute_offline_fork_bundle(
         .iter()
         .filter(|_| policy.flows)
     {
-        let board_path = src_prefix.child(format!("{}.board", src_board_id));
+        let board_path = src_prefix.clone().join(format!("{}.board", src_board_id));
         let mut board_proto: proto::Board = match from_compressed::<proto::Board>(
             src_meta_store.clone(),
             board_path,
@@ -726,9 +728,10 @@ pub async fn compute_offline_fork_bundle(
         }
         let dst_board_id = maps.translate_board(src_board_id);
         let src_versioned_path = src_prefix
-            .child("versions")
-            .child(src_board_id.clone())
-            .child(format!("{}_{}_{}.board", version.0, version.1, version.2));
+            .clone()
+            .join("versions")
+            .join(src_board_id.clone())
+            .join(format!("{}_{}_{}.board", version.0, version.1, version.2));
         let board_proto: proto::Board = match from_compressed::<proto::Board>(
             src_meta_store.clone(),
             src_versioned_path,
@@ -788,7 +791,7 @@ pub async fn compute_offline_fork_bundle(
         }
     }
     for (src_widget_id, new_widget_id) in maps.widgets.clone().iter().filter(|_| policy.widgets) {
-        let src_path = src_prefix.child(format!("{}.widget", src_widget_id));
+        let src_path = src_prefix.clone().join(format!("{}.widget", src_widget_id));
         let mut widget: flow_like_types::Value =
             match from_compressed_json(src_meta_store.clone(), src_path).await {
                 Ok(w) => w,
@@ -853,7 +856,9 @@ pub async fn compute_offline_fork_bundle(
             let page_id = maps.mint(src_page_id);
             maps.pages.entry(src_page_id.clone()).or_insert(page_id);
         }
-        let src_path = src_prefix.child(format!("{}.template", src_template_id));
+        let src_path = src_prefix
+            .clone()
+            .join(format!("{}.template", src_template_id));
         let board_proto: proto::Board =
             match from_compressed::<proto::Board>(src_meta_store.clone(), src_path).await {
                 Ok(b) => b,
@@ -1379,8 +1384,8 @@ async fn append_media_blobs_from_store(
     use base64::Engine as _;
 
     let src_media_dir = Path::from("media")
-        .child("apps")
-        .child(src_app_id.to_string());
+        .join("apps")
+        .join(src_app_id.to_string());
     let src_media_dir_str = src_media_dir.as_ref().to_string();
     let mut listing = src_store.list(Some(&src_media_dir));
 
@@ -1434,7 +1439,7 @@ pub async fn detect_meta_in_content_store(
         .await
         .map_err(ApiError::internal_error)?
         .as_generic();
-    let prefix = flow_like_storage::Path::from("apps").child(src_app_id.to_string());
+    let prefix = flow_like_storage::Path::from("apps").join(src_app_id.to_string());
 
     const META_SUFFIXES: &[&str] = &[".board", ".event", ".template", ".widget", ".page"];
     let mut leaks: Vec<String> = Vec::new();
@@ -1598,8 +1603,8 @@ impl ForkContext {
             remote_event_token: spec.remote_event_token(state),
             dst_visibility: spec.visibility.clone(),
             now: chrono::Utc::now().fixed_offset(),
-            src_prefix: Path::from("apps").child(src_app_id.clone()),
-            dst_prefix: Path::from("apps").child(fork_job.dest_app_id.clone()),
+            src_prefix: Path::from("apps").join(src_app_id.clone()),
+            dst_prefix: Path::from("apps").join(fork_job.dest_app_id.clone()),
             policy: spec.policy.clone(),
             src_meta_rows: meta::Entity::find()
                 .filter(meta::Column::AppId.eq(src_app_id.as_str()))
@@ -1640,14 +1645,14 @@ impl ForkContext {
 
     pub(crate) fn src_media_prefix(&self) -> Path {
         Path::from("media")
-            .child("apps")
-            .child(self.src_app_id.clone())
+            .join("apps")
+            .join(self.src_app_id.clone())
     }
 
     pub(crate) fn dst_media_prefix(&self) -> Path {
         Path::from("media")
-            .child("apps")
-            .child(self.dest_app_id.clone())
+            .join("apps")
+            .join(self.dest_app_id.clone())
     }
 }
 
@@ -1715,7 +1720,7 @@ pub(crate) async fn materialize_meta(
     // `visibility`, `version`, `execution_mode`, `allow_forking`, etc.
     // can be arbitrarily stale. Overlay the DB row's authoritative
     // values before remap so the fork ships current state.
-    let manifest_path = src_prefix.child("manifest.app");
+    let manifest_path = src_prefix.clone().join("manifest.app");
     let mut src_app_proto: proto::App =
         from_compressed(src_meta_store.clone(), manifest_path.clone())
             .await
@@ -1806,7 +1811,7 @@ pub(crate) async fn materialize_meta(
         );
     }
     for src_board_id in src_app_proto.boards.iter().filter(|_| policy.flows) {
-        let board_path = src_prefix.child(format!("{}.board", src_board_id));
+        let board_path = src_prefix.clone().join(format!("{}.board", src_board_id));
         let mut board_proto: proto::Board = match from_compressed::<proto::Board>(
             src_meta_store.clone(),
             board_path,
@@ -1858,7 +1863,7 @@ pub(crate) async fn materialize_meta(
         .collect();
     for (_src_board_id, new_board_id, mut board) in new_board_protos {
         retain_shipped_board_pages(&mut board, &shipped_page_dst_ids);
-        let board_path = dst_prefix.child(format!("{}.board", new_board_id));
+        let board_path = dst_prefix.clone().join(format!("{}.board", new_board_id));
         compress_to_file(dst_meta_store.clone(), board_path, &board)
             .await
             .map_err(|e| ApiError::internal_error(anyhow!("write board: {e}")))?;
@@ -1880,7 +1885,7 @@ pub(crate) async fn materialize_meta(
     // versioned board files in step 4d below — versions not pointed to
     // are intentionally NOT copied (forks are seeded from the live
     // board, not from the version archive).
-    let dst_events_dir = dst_prefix.child("events");
+    let dst_events_dir = dst_prefix.clone().join("events");
     let mut pointed_board_versions: std::collections::HashSet<(String, (u32, u32, u32))> =
         std::collections::HashSet::new();
     let mut rewritten_events: HashMap<String, flow_like::flow::event::Event> = HashMap::new();
@@ -1997,7 +2002,9 @@ pub(crate) async fn materialize_meta(
 
         remap_event(&mut event_proto, &maps);
         let new_event_id = event_proto.id.clone();
-        let dst_event_path = dst_events_dir.child(format!("{}.event", new_event_id));
+        let dst_event_path = dst_events_dir
+            .clone()
+            .join(format!("{}.event", new_event_id));
         compress_to_file(dst_meta_store.clone(), dst_event_path, &event_proto)
             .await
             .map_err(|e| ApiError::internal_error(anyhow!("write event: {e}")))?;
@@ -2024,9 +2031,10 @@ pub(crate) async fn materialize_meta(
         }
         let dst_board_id = maps.translate_board(src_board_id);
         let src_path = src_prefix
-            .child("versions")
-            .child(src_board_id.clone())
-            .child(format!("{}_{}_{}.board", version.0, version.1, version.2));
+            .clone()
+            .join("versions")
+            .join(src_board_id.clone())
+            .join(format!("{}_{}_{}.board", version.0, version.1, version.2));
         let board_proto: proto::Board = match from_compressed::<proto::Board>(
             src_meta_store.clone(),
             src_path,
@@ -2059,9 +2067,10 @@ pub(crate) async fn materialize_meta(
         // destination live-board id so the archive stays addressable.
         remapped.id = dst_board_id.clone();
         let dst_path = dst_prefix
-            .child("versions")
-            .child(dst_board_id)
-            .child(format!("{}_{}_{}.board", version.0, version.1, version.2));
+            .clone()
+            .join("versions")
+            .join(dst_board_id)
+            .join(format!("{}_{}_{}.board", version.0, version.1, version.2));
         compress_to_file(dst_meta_store.clone(), dst_path, &remapped)
             .await
             .map_err(|e| ApiError::internal_error(anyhow!("write versioned board: {e}")))?;
@@ -2139,8 +2148,8 @@ pub(crate) async fn materialize_meta(
     copy_metadata_with_translation(
         &src_content_store,
         &dst_content_store,
-        &src_prefix.child("metadata"),
-        &dst_prefix.child("metadata"),
+        &src_prefix.clone().join("metadata"),
+        &dst_prefix.clone().join("metadata"),
         &maps,
         &shipped_widgets,
         &shipped_templates,
@@ -2269,7 +2278,7 @@ pub(crate) async fn materialize_meta(
 
     compress_to_file(
         dst_meta_store.clone(),
-        dst_prefix.child("manifest.app"),
+        dst_prefix.clone().join("manifest.app"),
         &src_app_proto,
     )
     .await
@@ -2651,8 +2660,8 @@ pub async fn materialize_uploaded_app_media(
 ) -> Result<(), ApiError> {
     let credentials = state.master_credentials().await?;
     let content_store = credentials.to_store(false).await?.as_generic();
-    let src_media_dir = Path::from("apps").child(app_id.to_string()).child("media");
-    let dst_media_dir = Path::from("media").child("apps").child(app_id.to_string());
+    let src_media_dir = Path::from("apps").join(app_id.to_string()).join("media");
+    let dst_media_dir = Path::from("media").join("apps").join(app_id.to_string());
 
     // NOT a fork: this is offline → online upload finalization, and the
     // source is deleted immediately below. A skip predicate here would
@@ -2685,9 +2694,7 @@ pub async fn sync_uploaded_metadata_media_to_db(
 ) -> Result<(), ApiError> {
     let credentials = state.master_credentials().await?;
     let content_store = credentials.to_store(false).await?.as_generic();
-    let metadata_dir = Path::from("apps")
-        .child(app_id.to_string())
-        .child("metadata");
+    let metadata_dir = Path::from("apps").join(app_id.to_string()).join("metadata");
     let metadata_dir_str = metadata_dir.as_ref().to_string();
 
     let mut listing = content_store.list(Some(&metadata_dir));
@@ -3114,9 +3121,9 @@ async fn copy_one(
 /// Append a `/`-separated *relative* path below `prefix`, one segment at
 /// a time.
 ///
-/// `Path::child` treats its argument as a single `PathPart` and
-/// percent-encodes the delimiter, so `prefix.child("db/x.lance/data/y")`
-/// yields `prefix/db%2Fx.lance%2Fdata%2Fy` — one flat key instead of a
+/// `Path::join` treats its argument as a single `PathPart` and
+/// percent-encodes the delimiter, so `prefix.join("db/x.lance/data/y")`
+/// yields `prefix/db%2Fx.lance%2Fdata%2Fy`, one flat key instead of a
 /// nested path. Every content mirror below has to fold per segment or
 /// the destination silently ends up with garbage keys (this is what
 /// used to drop the entire project LanceDB under `storage/db/**` on
@@ -3125,7 +3132,7 @@ fn join_relative(prefix: &Path, relative: &str) -> Path {
     relative
         .split('/')
         .filter(|segment| !segment.is_empty())
-        .fold(prefix.clone(), |acc, segment| acc.child(segment))
+        .fold(prefix.clone(), |acc, segment| acc.join(segment))
 }
 
 /// Bytes + objects a single prefix mirror moved. Summed into
@@ -3424,7 +3431,7 @@ async fn read_source_page(
     src_board_id: Option<&str>,
     src_page_id: &str,
 ) -> Option<proto::Page> {
-    let app_level = src_prefix.child(format!("{}.page", src_page_id));
+    let app_level = src_prefix.clone().join(format!("{}.page", src_page_id));
     if let Ok(page) =
         from_compressed_json::<flow_like::a2ui::widget::Page>(src_store.clone(), app_level).await
     {
@@ -3433,8 +3440,9 @@ async fn read_source_page(
 
     if let Some(board_id) = src_board_id {
         let board_level = src_prefix
-            .child(format!("_{}", board_id))
-            .child(format!("{}.page", src_page_id));
+            .clone()
+            .join(format!("_{}", board_id))
+            .join(format!("{}.page", src_page_id));
         if let Ok(page) = from_compressed::<proto::Page>(src_store.clone(), board_level).await {
             return Some(page);
         }
@@ -3571,8 +3579,9 @@ async fn write_destination_page(
         return Ok(());
     };
     let board_level = dst_prefix
-        .child(format!("_{}", board_id))
-        .child(format!("{}.page", page_proto.id));
+        .clone()
+        .join(format!("_{}", board_id))
+        .join(format!("{}.page", page_proto.id));
     compress_to_file(dst_store.clone(), board_level, page_proto)
         .await
         .map_err(|e| ApiError::internal_error(anyhow!("write page: {e}")))?;
@@ -3771,7 +3780,7 @@ async fn fork_widgets(
 ) -> Result<HashSet<String>, ApiError> {
     let mut shipped_widgets = HashSet::new();
     for (src_widget_id, new_widget_id) in &maps.widgets {
-        let src_path = src_prefix.child(format!("{}.widget", src_widget_id));
+        let src_path = src_prefix.clone().join(format!("{}.widget", src_widget_id));
         let mut widget: flow_like_types::Value =
             match from_compressed_json(src_store.clone(), src_path).await {
                 Ok(w) => w,
@@ -3806,7 +3815,7 @@ async fn fork_widgets(
                 ),
             });
         }
-        let dst_path = dst_prefix.child(format!("{}.widget", new_widget_id));
+        let dst_path = dst_prefix.clone().join(format!("{}.widget", new_widget_id));
         compress_to_file_json(dst_store.clone(), dst_path, &widget)
             .await
             .map_err(|e| ApiError::internal_error(anyhow!("write widget: {e}")))?;
@@ -3840,7 +3849,9 @@ async fn fork_templates(
             let page_id = maps.mint(src_page_id);
             maps.pages.entry(src_page_id.clone()).or_insert(page_id);
         }
-        let src_path = src_prefix.child(format!("{}.template", src_template_id));
+        let src_path = src_prefix
+            .clone()
+            .join(format!("{}.template", src_template_id));
         let board_proto: proto::Board =
             match from_compressed::<proto::Board>(src_store.clone(), src_path).await {
                 Ok(b) => b,
@@ -3864,7 +3875,9 @@ async fn fork_templates(
         // remap_board rewrote board.id to a fresh id; force it back to
         // the chosen template id for path consistency.
         remapped.id = new_template_id.clone();
-        let dst_path = dst_prefix.child(format!("{}.template", new_template_id));
+        let dst_path = dst_prefix
+            .clone()
+            .join(format!("{}.template", new_template_id));
         compress_to_file(dst_store.clone(), dst_path, &remapped)
             .await
             .map_err(|e| ApiError::internal_error(anyhow!("write template: {e}")))?;
@@ -3880,8 +3893,9 @@ async fn fork_templates(
         .await?
         {
             let dst_page_path = dst_prefix
-                .child(format!("_template_{}", new_template_id))
-                .child(format!("{}.page", template_page.id));
+                .clone()
+                .join(format!("_template_{}", new_template_id))
+                .join(format!("{}.page", template_page.id));
             compress_to_file(dst_store.clone(), dst_page_path, &template_page)
                 .await
                 .map_err(|e| ApiError::internal_error(anyhow!("write template page: {e}")))?;
@@ -3916,7 +3930,9 @@ async fn list_template_page_ids(
     src_template_id: &str,
     skipped: &mut Vec<SkippedItem>,
 ) -> Vec<String> {
-    let template_dir = src_prefix.child(format!("_template_{}", src_template_id));
+    let template_dir = src_prefix
+        .clone()
+        .join(format!("_template_{}", src_template_id));
     let mut listing = src_store.list(Some(&template_dir));
     let mut source_page_ids: Vec<String> = Vec::new();
     loop {
@@ -3969,10 +3985,12 @@ async fn read_template_pages(
     maps: &ForkIdMap,
     skipped: &mut Vec<SkippedItem>,
 ) -> Result<Vec<proto::Page>, ApiError> {
-    let template_dir = src_prefix.child(format!("_template_{}", src_template_id));
+    let template_dir = src_prefix
+        .clone()
+        .join(format!("_template_{}", src_template_id));
     let mut pages = Vec::with_capacity(src_page_ids.len());
     for src_page_id in src_page_ids {
-        let src_path = template_dir.child(format!("{}.page", src_page_id));
+        let src_path = template_dir.clone().join(format!("{}.page", src_page_id));
         let mut page_proto = match from_compressed::<proto::Page>(src_store.clone(), src_path).await
         {
             Ok(page) => page,
@@ -4846,7 +4864,7 @@ mod tests {
 
     #[test]
     fn join_relative_keeps_nested_paths_nested() {
-        let prefix = Path::from("apps").child("dst").child("storage");
+        let prefix = Path::from("apps").join("dst").join("storage");
 
         assert_eq!(
             join_relative(&prefix, "db/tables.lance/data/chunk.lance").as_ref(),
@@ -4858,10 +4876,13 @@ mod tests {
         );
         assert_eq!(join_relative(&prefix, "").as_ref(), "apps/dst/storage");
 
-        // The bug this guards against: `child` percent-encodes the
+        // The bug this guards against: `join` percent-encodes the
         // delimiter, flattening the whole relative path into one key.
         assert_ne!(
-            prefix.child("db/tables.lance/data/chunk.lance").as_ref(),
+            prefix
+                .clone()
+                .join("db/tables.lance/data/chunk.lance")
+                .as_ref(),
             join_relative(&prefix, "db/tables.lance/data/chunk.lance").as_ref()
         );
     }

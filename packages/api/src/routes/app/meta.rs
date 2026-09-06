@@ -104,11 +104,11 @@ impl MetaMode {
     pub fn media_prefix(&self, app_id: &str) -> FlowPath {
         match self {
             MetaMode::Group(group_id) => FlowPath::from("media")
-                .child("groups")
-                .child(group_id.clone()),
+                .join("groups")
+                .join(group_id.clone()),
             _ => FlowPath::from("media")
-                .child("apps")
-                .child(app_id.to_string()),
+                .join("apps")
+                .join(app_id.to_string()),
         }
     }
 

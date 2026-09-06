@@ -56,14 +56,17 @@ const MAX_DECOMPRESSED_LEN: usize = 512 * 1024 * 1024;
 
 /// Directory holding a board's version artifacts (compiled board + prerun manifest).
 fn version_artifact_dir(board_dir: &Path, board_id: &str) -> Path {
-    board_dir.child("compiled").child(board_id.to_string())
+    board_dir
+        .clone()
+        .join("compiled")
+        .join(board_id.to_string())
 }
 
 /// Compiled artifact of an immutable board version. Lives beside the version
 /// snapshots inside the app's meta prefix, so deleting the app removes it.
 pub fn artifact_path(board_dir: &Path, board_id: &str, version: (u32, u32, u32)) -> Path {
     version_artifact_dir(board_dir, board_id)
-        .child(format!("{}_{}_{}.flcb", version.0, version.1, version.2))
+        .join(format!("{}_{}_{}.flcb", version.0, version.1, version.2))
 }
 
 /// Directory holding a board's content-addressed draft artifacts.
@@ -75,11 +78,11 @@ pub fn artifact_path(board_dir: &Path, board_id: &str, version: (u32, u32, u32))
 /// sweep removes old entries from local stores, which have no lifecycle rules.
 pub fn draft_artifact_dir(app_id: &str, board_id: &str) -> Path {
     Path::from("tmp")
-        .child("apps")
-        .child(app_id)
-        .child("compiled")
-        .child("drafts")
-        .child(board_id)
+        .join("apps")
+        .join(app_id)
+        .join("compiled")
+        .join("drafts")
+        .join(board_id)
 }
 
 /// Compiled artifact of a floating draft, keyed by the source `.board`'s ETag
@@ -93,7 +96,7 @@ pub fn draft_artifact_path(
     registry_fingerprint: &[u8; 32],
 ) -> Path {
     let fingerprint = blake3::Hash::from_bytes(*registry_fingerprint).to_hex();
-    draft_artifact_dir(app_id, board_id).child(format!(
+    draft_artifact_dir(app_id, board_id).join(format!(
         "{}_{}.flcb",
         draft_artifact_stem(e_tag),
         &fingerprint.as_str()[..16]
@@ -104,7 +107,7 @@ pub fn draft_artifact_path(
 /// `.board` object that produced it. This lets an executor rebuild an exact
 /// artifact after the floating source advances.
 pub fn draft_source_path(app_id: &str, board_id: &str, e_tag: &str) -> Path {
-    draft_artifact_dir(app_id, board_id).child(format!("{}.board", draft_artifact_stem(e_tag)))
+    draft_artifact_dir(app_id, board_id).join(format!("{}.board", draft_artifact_stem(e_tag)))
 }
 
 /// File stem shared by every draft artifact of one `.board` etag.

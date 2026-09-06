@@ -409,8 +409,8 @@ pub async fn get_meta(
 
     // Presign icon, thumbnail and preview_media CUIDs to full URLs
     let prefix = FlowPath::from("media")
-        .child("packages")
-        .child(package_id.as_str());
+        .join("packages")
+        .join(package_id.as_str());
     if let Ok(master_creds) = state.master_credentials().await
         && let Ok(store) = master_creds.to_store(false).await
     {
@@ -418,7 +418,7 @@ pub async fn get_meta(
             && !icon.starts_with("http://")
             && !icon.starts_with("https://")
         {
-            let path = prefix.child(format!("{icon}.webp"));
+            let path = prefix.clone().join(format!("{icon}.webp"));
             if let Ok(url) = store
                 .sign_cached("GET", &path, Duration::from_secs(86400))
                 .await
@@ -430,7 +430,7 @@ pub async fn get_meta(
             && !thumb.starts_with("http://")
             && !thumb.starts_with("https://")
         {
-            let path = prefix.child(format!("{thumb}.webp"));
+            let path = prefix.clone().join(format!("{thumb}.webp"));
             if let Ok(url) = store
                 .sign_cached("GET", &path, Duration::from_secs(86400))
                 .await
@@ -441,7 +441,7 @@ pub async fn get_meta(
         if let Some(media) = &mut resp.preview_media {
             for item in media.iter_mut() {
                 if !item.starts_with("http://") && !item.starts_with("https://") {
-                    let path = prefix.child(format!("{item}.webp"));
+                    let path = prefix.clone().join(format!("{item}.webp"));
                     if let Ok(url) = store
                         .sign_cached("GET", &path, Duration::from_secs(86400))
                         .await
@@ -699,9 +699,9 @@ pub async fn push_package_media(
 
 fn package_media_path(package_id: &str, file_name: &str) -> FlowPath {
     FlowPath::from("media")
-        .child("packages")
-        .child(package_id)
-        .child(file_name)
+        .join("packages")
+        .join(package_id)
+        .join(file_name)
 }
 
 /// DELETE /registry/package/{package_id}/meta/media/{media_id}

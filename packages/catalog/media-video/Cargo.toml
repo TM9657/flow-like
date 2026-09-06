@@ -22,7 +22,7 @@ tokio = { workspace = true, features = ["rt-multi-thread", "macros", "time"] }
 async-trait.workspace = true
 http = "1.4.0"
 zip = { version = "8.2.0", default-features = false, features = ["deflate-flate2-zlib-rs"], optional = true }
-video-utils-rs = { git = "https://github.com/Rheosoph/video-utils-rs.git", rev = "4b4e380fd719390dd8598120ebfb50566d234d5c", default-features = false, features = ["portable-core", "platform-codecs", "audio-io", "image-io", "preview", "codec-h264-rust", "codec-h265-rust", "codec-av1-rust", "codec-openh264-ffi", "codec-apple", "codec-android", "codec-windows", "codec-gstreamer", "codec-web"], optional = true }
+video-utils-rs = { git = "https://github.com/Rheosoph/video-utils-rs.git", rev = "b4c9185504f98b1eb8eb9d34c8baa0b6f5f8cab4", default-features = false, features = ["portable-core", "platform-codecs", "audio-io", "image-io", "preview", "codec-h264-rust", "codec-h265-rust", "codec-av1-rust", "codec-openh264-ffi", "codec-apple", "codec-android", "codec-windows", "codec-gstreamer", "codec-web"], optional = true }
 flow-like-catalog-media-support.workspace = true
 
 [build-dependencies]

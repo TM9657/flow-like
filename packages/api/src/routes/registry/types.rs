@@ -47,12 +47,12 @@ impl MetaSummary {
     }
 
     pub async fn presign_media(&mut self, package_id: &str, store: &FlowLikeStore) {
-        let prefix = FlowPath::from("media").child("packages").child(package_id);
+        let prefix = FlowPath::from("media").join("packages").join(package_id);
         if let Some(icon) = &self.icon
             && !icon.starts_with("http://")
             && !icon.starts_with("https://")
         {
-            let path = prefix.child(format!("{icon}.webp"));
+            let path = prefix.clone().join(format!("{icon}.webp"));
             if let Ok(url) = store
                 .sign_cached("GET", &path, Duration::from_secs(86400))
                 .await
@@ -64,7 +64,7 @@ impl MetaSummary {
             && !thumb.starts_with("http://")
             && !thumb.starts_with("https://")
         {
-            let path = prefix.child(format!("{thumb}.webp"));
+            let path = prefix.join(format!("{thumb}.webp"));
             if let Ok(url) = store
                 .sign_cached("GET", &path, Duration::from_secs(86400))
                 .await

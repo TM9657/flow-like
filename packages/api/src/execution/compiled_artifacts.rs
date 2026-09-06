@@ -71,7 +71,7 @@ pub async fn ensure_compiled_artifact(
     let registry = state.artifact_registry(wasm_packages).await?;
     let fingerprint = registry.fingerprint();
     let fingerprint_hex = blake3::Hash::from_bytes(fingerprint).to_hex();
-    let storage_root = Path::from("apps").child(app_id.to_string());
+    let storage_root = Path::from("apps").join(app_id.to_string());
     let meta_store = state.meta_bucket.as_generic();
 
     if expected_etag.is_some() {

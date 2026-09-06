@@ -14,11 +14,11 @@
 use flow_like_storage::Path;
 
 pub fn app_upload_base(app_id: &str) -> Path {
-    Path::from("apps").child(app_id).child("upload")
+    Path::from("apps").join(app_id).join("upload")
 }
 
 pub fn user_upload_base(sub: &str, app_id: &str) -> Path {
-    Path::from("users").child(sub).child("apps").child(app_id)
+    Path::from("users").join(sub).join("apps").join(app_id)
 }
 
 pub fn resolve_app_upload(app_id: &str, prefix: &str) -> Path {
@@ -35,7 +35,7 @@ fn append(base: Path, relative: &str) -> Path {
     relative
         .split('/')
         .filter(|segment| !segment.is_empty())
-        .fold(base, |path, segment| path.child(segment))
+        .fold(base, |path, segment| path.join(segment))
 }
 
 fn strip_app_layout(prefix: &str) -> Option<&str> {

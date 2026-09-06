@@ -238,8 +238,8 @@ pub async fn get_event_runs(
     // one board with an unreadable log store must not hide the others.
     for board_id in &board_ids {
         let base_path = StoragePath::from("runs")
-            .child(app_id.as_str())
-            .child(board_id.as_str());
+            .join(app_id.as_str())
+            .join(board_id.as_str());
         let db = match logs_db_builder(base_path.clone()).execute().await {
             Ok(db) => db,
             Err(error) => {

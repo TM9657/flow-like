@@ -139,8 +139,8 @@ pub async fn bootstrap(
         {
             let mut metadata = Metadata::from(m.clone());
             let prefix = flow_like_storage::Path::from("media")
-                .child("apps")
-                .child(app_model.id.clone());
+                .join("apps")
+                .join(app_model.id.clone());
             metadata.presign(prefix, &store).await;
             Some(metadata)
         } else {

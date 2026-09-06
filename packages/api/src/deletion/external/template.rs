@@ -33,9 +33,9 @@ pub async fn delete_storage(
 
     let credentials = state.master_credentials().await?;
     let meta = credentials.to_store(true).await?.as_generic();
-    let app_dir = Path::from("apps").child(row.app_id);
+    let app_dir = Path::from("apps").join(row.app_id);
 
-    let board = app_dir.child(format!("{template_id}.template"));
+    let board = app_dir.clone().join(format!("{template_id}.template"));
     match meta.delete(&board).await {
         Ok(()) | Err(ObjectStoreError::NotFound { .. }) => {}
         Err(error) => {

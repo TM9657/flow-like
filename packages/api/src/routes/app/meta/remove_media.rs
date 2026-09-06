@@ -58,7 +58,7 @@ pub async fn remove_media(
     let language = query.language.clone().unwrap_or_else(|| "en".to_string());
     let media_path = mode
         .media_prefix(&app_id)
-        .child(format!("{}.webp", media_id));
+        .join(format!("{}.webp", media_id));
     let mode = Arc::new(mode);
     let query = Arc::new(query);
 

@@ -905,12 +905,12 @@ pub async fn build_compilation_job(
     let mut targets = Vec::with_capacity(raw_targets.len());
 
     let base = Path::from(WASM_COMPILED_PATH)
-        .child(params.package_id.as_str())
-        .child(params.version.as_str());
+        .join(params.package_id.as_str())
+        .join(params.version.as_str());
 
     for t in &raw_targets {
-        let cwasm_path = base.child(format!("{}.cwasm", t.platform_key));
-        let checksum_path = base.child(format!("{}.cwasm.b3", t.platform_key));
+        let cwasm_path = base.clone().join(format!("{}.cwasm", t.platform_key));
+        let checksum_path = base.clone().join(format!("{}.cwasm.b3", t.platform_key));
 
         let cwasm_upload_url = meta_bucket
             .sign("PUT", &cwasm_path, Duration::from_secs(URL_TTL_SECS))

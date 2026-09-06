@@ -1279,7 +1279,7 @@ impl State {
     ) -> flow_like_types::Result<Board> {
         let credentials = self.scoped_credentials(sub, app_id, mode).await?;
         let app_state = Arc::new(credentials.to_state(state.clone()).await?);
-        let storage_root = Path::from("apps").child(app_id.to_string());
+        let storage_root = Path::from("apps").join(app_id.to_string());
         let board = Board::load(storage_root, board_id, app_state, version).await?;
         Ok(board)
     }
@@ -1365,7 +1365,7 @@ impl State {
 
         let cached = self.board_cache.get(&cache_key);
         let store = Board::meta_store(&app_state).await?;
-        let storage_root = Path::from("apps").child(app_id.to_string());
+        let storage_root = Path::from("apps").join(app_id.to_string());
         let read = Board::load_proto_if_changed(
             store,
             &storage_root,
@@ -1462,7 +1462,7 @@ impl State {
         version: Option<(u32, u32, u32)>,
     ) -> flow_like_types::Result<Board> {
         let app_state = self.master_state(state).await?;
-        let storage_root = Path::from("apps").child(app_id.to_string());
+        let storage_root = Path::from("apps").join(app_id.to_string());
         let board = Board::load_template(storage_root, template_id, app_state, version).await?;
         Ok(board)
     }
@@ -1479,7 +1479,7 @@ impl State {
         let credentials = self.scoped_credentials(sub, app_id, mode).await?;
         let app_state = Arc::new(credentials.to_state(state.clone()).await?);
 
-        let storage_root = Path::from("apps").child(app_id.to_string());
+        let storage_root = Path::from("apps").join(app_id.to_string());
 
         let board = Board::load_template(storage_root, template_id, app_state, version).await?;
 

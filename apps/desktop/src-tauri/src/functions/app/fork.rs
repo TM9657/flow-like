@@ -160,7 +160,7 @@ pub async fn summarize_local_app_bundle(
         return Err(TauriFunctionError::new("app_id is empty"));
     }
 
-    let prefix = Path::from("apps").child(app_id);
+    let prefix = Path::from("apps").join(app_id);
     let meta_store = TauriFlowLikeState::get_project_meta_store(&app_handle).await?;
     let content_store = TauriFlowLikeState::get_project_storage_store(&app_handle).await?;
 
@@ -215,7 +215,7 @@ pub async fn upload_local_app_content_bundle(
         .map_err(|e| TauriFunctionError::new(&format!("build dst content store: {e}")))?
         .as_generic();
 
-    let src_prefix = Path::from("apps").child(args.source_app_id);
+    let src_prefix = Path::from("apps").join(args.source_app_id);
     let src_prefix_str = src_prefix.as_ref().to_string();
     let dst_prefix = parse_storage_path(&args.destination_content_prefix);
 
@@ -252,7 +252,7 @@ pub async fn upload_local_app_content_bundle(
         let dst_path = relative_path
             .split('/')
             .filter(|s| !s.is_empty())
-            .fold(dst_prefix.clone(), |acc, seg| acc.child(seg));
+            .fold(dst_prefix.clone(), |acc, seg| acc.join(seg));
 
         match copy_one(
             &src_content_store,
@@ -296,7 +296,7 @@ pub async fn apply_fork_bundle(
 
     let dst_meta_store = TauriFlowLikeState::get_project_meta_store(&app_handle).await?;
     let dst_content_store = TauriFlowLikeState::get_project_storage_store(&app_handle).await?;
-    let dst_app_prefix = Path::from("apps").child(args.app_id.clone());
+    let dst_app_prefix = Path::from("apps").join(args.app_id.clone());
 
     let mut meta_blobs_written: u64 = 0;
     let mut content_objects_copied: u64 = 0;
@@ -320,7 +320,7 @@ pub async fn apply_fork_bundle(
         let dst_path = relative_path
             .split('/')
             .filter(|s| !s.is_empty())
-            .fold(dst_app_prefix.clone(), |acc, seg| acc.child(seg));
+            .fold(dst_app_prefix.clone(), |acc, seg| acc.join(seg));
         let dst_store = if is_content_blob_path(&relative_path) {
             &dst_content_store
         } else {
@@ -401,7 +401,7 @@ pub async fn apply_fork_bundle(
         let dst_path = translated
             .split('/')
             .filter(|s| !s.is_empty())
-            .fold(dst_app_prefix.clone(), |acc, seg| acc.child(seg));
+            .fold(dst_app_prefix.clone(), |acc, seg| acc.join(seg));
 
         match copy_one(
             &src_content_store,
@@ -501,10 +501,7 @@ async fn open_local_project_db(
     let write_options = config.callbacks.lance_write_options.clone();
     drop(config);
 
-    let db_dir = Path::from("apps")
-        .child(app_id)
-        .child("storage")
-        .child("db");
+    let db_dir = Path::from("apps").join(app_id).join("storage").join("db");
     let connection = builder(db_dir)
         .execute()
         .await
@@ -675,7 +672,7 @@ fn is_missing_prefix_error(error: &impl std::fmt::Display) -> bool {
 fn parse_storage_path(raw: &str) -> Path {
     raw.split('/')
         .filter(|s| !s.is_empty())
-        .fold(Path::default(), |acc, seg| acc.child(seg))
+        .fold(Path::default(), |acc, seg| acc.join(seg))
 }
 
 fn relative_to_prefix(path: &str, prefix: &str) -> Option<String> {

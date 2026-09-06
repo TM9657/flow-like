@@ -96,9 +96,9 @@ pub async fn sign_profile_image(
         format!("{}.webp", image_id)
     };
     let path = flow_like_storage::Path::from("media")
-        .child("users")
-        .child(sub)
-        .child(file_name);
+        .join("users")
+        .join(sub)
+        .join(file_name);
     let url = master_store
         .sign("GET", &path, Duration::from_secs(60 * 5))
         .await?;

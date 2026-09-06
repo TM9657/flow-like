@@ -152,9 +152,9 @@ fn transformed_course_media_file_name(value: &str) -> String {
 
 fn course_media_storage_path(course_id: &str, file_name: &str) -> FlowPath {
     FlowPath::from("media")
-        .child("courses")
-        .child(course_id)
-        .child(file_name)
+        .join("courses")
+        .join(course_id)
+        .join(file_name)
 }
 
 async fn resolve_course_media_url(

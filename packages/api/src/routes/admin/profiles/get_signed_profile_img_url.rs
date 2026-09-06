@@ -45,7 +45,7 @@ pub async fn get_signed_profile_img_url(
     let id = create_id();
     let cdn_bucket = state.cdn_bucket.clone();
     let path = flow_like_storage::object_store::path::Path::from("profiles")
-        .child(format!("{id}.{extension}"));
+        .join(format!("{id}.{extension}"));
 
     let url = cdn_bucket
         .sign("PUT", &path, Duration::from_secs(60 * 60))

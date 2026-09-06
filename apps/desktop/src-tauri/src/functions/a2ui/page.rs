@@ -45,7 +45,7 @@ pub struct PageInfo {
 fn detached_board(app_id: &str, board_id: &str, state: Arc<FlowLikeState>) -> Board {
     Board::new(
         Some(board_id.to_string()),
-        Path::from("apps").child(app_id.to_string()),
+        Path::from("apps").join(app_id.to_string()),
         state,
     )
 }

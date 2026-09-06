@@ -54,7 +54,7 @@ pub async fn find_orphan_app_prefixes(state: &AppState) -> Result<Vec<OrphanPref
         .as_generic();
 
     let apps_prefix = Path::from("apps");
-    let media_prefix = Path::from("media").child("apps");
+    let media_prefix = Path::from("media").join("apps");
     let mut counters: HashMap<String, (u64, u64)> = HashMap::new();
     tally_prefix(&meta_store, &apps_prefix, &mut counters).await?;
     tally_prefix(&content_store, &apps_prefix, &mut counters).await?;
@@ -135,8 +135,8 @@ pub async fn delete_orphan_app_prefix(state: &AppState, app_id: &str) -> Result<
         .map_err(ApiError::internal_error)?
         .as_generic();
 
-    let app_prefix = Path::from("apps").child(app_id.to_string());
-    let media_prefix = Path::from("media").child("apps").child(app_id.to_string());
+    let app_prefix = Path::from("apps").join(app_id.to_string());
+    let media_prefix = Path::from("media").join("apps").join(app_id.to_string());
     let mut deleted = 0u64;
     for (store, prefix, label) in [
         (&meta_store, &app_prefix, "orphan meta prefix"),

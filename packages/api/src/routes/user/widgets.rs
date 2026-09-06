@@ -114,8 +114,8 @@ async fn get_widgets_with_metadata(
         if let Some(meta) = find_best_metadata(&metadata, language) {
             let mut metadata = Metadata::from(meta.clone());
             let prefix = flow_like_storage::Path::from("media")
-                .child("apps")
-                .child(widget_model.app_id.clone());
+                .join("apps")
+                .join(widget_model.app_id.clone());
             metadata.presign(prefix, &store).await;
             result.push((
                 widget_model.app_id.clone(),
