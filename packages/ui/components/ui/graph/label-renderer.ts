@@ -1,6 +1,10 @@
 import type { Settings } from "sigma/settings";
 import type { NodeDisplayData, PartialButFor } from "sigma/types";
-import { computeViewportLabelPlacement } from "./graph-layout";
+import {
+	GRAPH_LABEL_LEFT_INSET,
+	GRAPH_LABEL_RIGHT_INSET,
+	computeViewportLabelPlacement,
+} from "./graph-layout";
 import { getGraphTheme } from "./theme-colors";
 
 type NodeData = PartialButFor<
@@ -17,9 +21,6 @@ const BADGE_GAP = 6;
 const BADGE_PADDING_X = 5;
 const BADGE_HEIGHT = 15;
 const LABEL_GAP = 6;
-/** Space occupied by the canvas controls and their right-hand breathing room. */
-const RIGHT_CONTROL_INSET = 64;
-const LEFT_LABEL_INSET = 8;
 
 /** Shortest a caption is ever cut; below this a truncation hides more than it helps. */
 const TRUNCATE_MIN_CHARS = 16;
@@ -181,12 +182,7 @@ export function drawNodeLabel(
 
 	context.font = `${weight} ${size}px ${font}`;
 	context.textBaseline = "middle";
-	const badgeWidth = measureBadgeWidth(
-		context,
-		data.badge,
-		size,
-		font,
-	);
+	const badgeWidth = measureBadgeWidth(context, data.badge, size, font);
 	const preferredTextWidth = context.measureText(preferredLabel).width;
 	const placement = computeViewportLabelPlacement(
 		data.x,
@@ -195,8 +191,8 @@ export function drawNodeLabel(
 		canvasCssWidth(context),
 		{
 			gap: LABEL_GAP,
-			leftInset: LEFT_LABEL_INSET,
-			rightInset: RIGHT_CONTROL_INSET,
+			leftInset: GRAPH_LABEL_LEFT_INSET,
+			rightInset: GRAPH_LABEL_RIGHT_INSET,
 		},
 	);
 	const badge =
@@ -217,7 +213,7 @@ export function drawNodeLabel(
 		placement.side === "right"
 			? data.x + data.size + LABEL_GAP
 			: data.x - data.size - LABEL_GAP;
-	context.textAlign = placement.side;
+	context.textAlign = placement.side === "right" ? "left" : "right";
 
 	const [bgR, bgG, bgB] = theme.bgRgb;
 	if (label) {
@@ -275,12 +271,7 @@ export function drawNodeHover(
 	context.textAlign = "left";
 	context.textBaseline = "middle";
 
-	const badgeWidth = measureBadgeWidth(
-		context,
-		data.badge,
-		fontSize,
-		font,
-	);
+	const badgeWidth = measureBadgeWidth(context, data.badge, fontSize, font);
 	const preferredTextWidth = context.measureText(data.label).width;
 	const placement = computeViewportLabelPlacement(
 		x,
@@ -291,8 +282,8 @@ export function drawNodeHover(
 		canvasCssWidth(context),
 		{
 			gap: LABEL_GAP,
-			leftInset: LEFT_LABEL_INSET,
-			rightInset: RIGHT_CONTROL_INSET,
+			leftInset: GRAPH_LABEL_LEFT_INSET,
+			rightInset: GRAPH_LABEL_RIGHT_INSET,
 		},
 	);
 	const badge =
@@ -313,9 +304,7 @@ export function drawNodeHover(
 	if (!label && !badge) return;
 
 	const textX =
-		placement.side === "right"
-			? x + size + LABEL_GAP
-			: x - size - LABEL_GAP;
+		placement.side === "right" ? x + size + LABEL_GAP : x - size - LABEL_GAP;
 	const textWidth = label ? context.measureText(label).width : 0;
 	const cardHeight = fontSize + HOVER_PADDING_Y * 2;
 	const cardLeft =
@@ -332,7 +321,7 @@ export function drawNodeHover(
 		context.lineWidth = 1;
 		context.stroke();
 
-		context.textAlign = placement.side;
+		context.textAlign = placement.side === "right" ? "left" : "right";
 		context.fillStyle = `rgb(${fgR},${fgG},${fgB})`;
 		context.fillText(label, textX, y);
 	}

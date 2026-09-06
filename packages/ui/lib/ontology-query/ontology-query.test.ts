@@ -6,6 +6,8 @@ import type {
 	IGraphState,
 } from "../../state/backend-state/graph-state";
 import {
+	ONTOLOGY_QUERY_API_PROMPT_LIMIT,
+	ONTOLOGY_QUERY_GENERATOR_PROMPT_BUDGET,
 	ONTOLOGY_QUERY_MAX_SCHEMA_CONTEXT_LENGTH,
 	ONTOLOGY_QUERY_RECEIPT_SCHEMA,
 	OntologyQueryController,
@@ -16,6 +18,7 @@ import {
 	buildOntologyQueryGeneratorPrompt,
 	buildOntologyQuerySchemaContext,
 	createGraphStateOntologyQueryRuntime,
+	normalizeReadOnlyOntologyQuery,
 	parseOntologyQueryProposal,
 	validateReadOnlyOntologyQuery,
 } from "./ontology-query";
@@ -77,6 +80,15 @@ function deferred<T>() {
 }
 
 describe("ontology query proposal validation", () => {
+	test("normalizes a valid manual statement before backend execution", () => {
+		expect(
+			normalizeReadOnlyOntologyQuery(
+				"cypher",
+				"  MATCH (person:Person) RETURN person;  ",
+			),
+		).toBe("MATCH (person:Person) RETURN person");
+	});
+
 	test("accepts one strict read-only proposal and removes its trailing semicolon", () => {
 		const parsed = parseOntologyQueryProposal(
 			'```json\n{"language":"sql","query":"SELECT name FROM people WHERE id = $person_id;","params":{"person_id":"p-1"},"presentation":"table"}\n```',
@@ -489,10 +501,33 @@ describe("ontology query controller", () => {
 			error: { stage: "execution", message: "Permission denied" },
 		});
 	});
+
+	test("returns transport setup failures as visible generation errors", async () => {
+		const controller = new OntologyQueryController({
+			target,
+			generator: async () => {
+				throw new Error(
+					"A modelId is required for the selected FlowPilot agent backend.",
+				);
+			},
+			runtime: runtime(),
+			idFactory: () => "generation-error-1",
+		});
+
+		const result = await controller.run({ prompt: "Show everyone" });
+
+		expect(result.status).toBe("error");
+		if (result.status !== "error") throw new Error("expected error");
+		expect(result.receipt.error).toEqual({
+			stage: "generation",
+			message:
+				"A modelId is required for the selected FlowPilot agent backend.",
+		});
+	});
 });
 
 describe("ontology query specialist prompt", () => {
-	test("contains only the question, language, bounded schema, and repair state", () => {
+	test("contains only the bounded planner inputs and parameter syntax", () => {
 		const prompt = buildOntologyQueryGeneratorPrompt({
 			requestId: "prompt-1",
 			prompt: "Show everyone",
@@ -505,11 +540,63 @@ describe("ontology query specialist prompt", () => {
 		expect(payload).toEqual({
 			question: "Show everyone",
 			requestedLanguage: "auto",
+			parameterSyntax:
+				"Use $name placeholders for bound values in both Cypher and SQL. Parameter keys in params omit the leading $.",
 			schema: schemaContext,
 		});
 		expect(prompt.userPrompt).not.toContain(target.appId);
 		expect(prompt.userPrompt).not.toContain(target.overlayId);
 		expect(prompt.systemPrompt).toContain("one read-only query");
 		expect(prompt.systemPrompt).toContain("do not execute the query");
+		expect(prompt.systemPrompt).toContain("$name placeholders");
+	});
+
+	test("compacts repair context and a cloned schema below the API boundary", () => {
+		const longField = "\\".repeat(128);
+		const largeSchema: OntologyQuerySchemaContext = {
+			ontologyName: "Large ontology",
+			nodes: Array.from({ length: 40 }, (_, index) => ({
+				label: `Node${index}${longField}`,
+				table: `table${index}${longField}`,
+				idColumn: `id${index}${longField}`,
+				properties: [
+					{
+						name: `property${index}${longField}`,
+						dataType: `type${index}${longField}`,
+						nullable: false,
+					},
+				],
+			})),
+			edges: [],
+			truncated: false,
+		};
+		const originalSchema = JSON.stringify(largeSchema);
+
+		const prompt = buildOntologyQueryGeneratorPrompt({
+			requestId: "prompt-boundary",
+			prompt: "\0".repeat(8_000),
+			language: "sql",
+			schema: largeSchema,
+			attempt: 2,
+			repair: {
+				message: "\0".repeat(1_000),
+				previousOutput: "\\".repeat(20_000),
+			},
+		});
+		const payload = JSON.parse(prompt.userPrompt);
+
+		expect(prompt.userPrompt.length).toBeLessThanOrEqual(
+			ONTOLOGY_QUERY_GENERATOR_PROMPT_BUDGET,
+		);
+		expect(prompt.userPrompt.length).toBeLessThan(
+			ONTOLOGY_QUERY_API_PROMPT_LIMIT,
+		);
+		expect(JSON.stringify(largeSchema)).toBe(originalSchema);
+		expect(payload.schema.truncated).toBe(true);
+		expect(JSON.stringify(payload.schema).length).toBeLessThan(
+			originalSchema.length,
+		);
+		expect(payload.repair.message).toHaveLength(1_000);
+		expect(payload.repair.previousProposal).toContain("[truncated]");
 	});
 });

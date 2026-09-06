@@ -209,27 +209,23 @@ describe("computeViewportLabelPlacement", () => {
 	const options = { gap: 6, leftInset: 8, rightInset: 64 };
 
 	test("keeps a caption on the right when it clears the control gutter", () => {
-		expect(
-			computeViewportLabelPlacement(160, 10, 120, 500, options),
-		).toEqual({ side: "right", availableWidth: 160 });
+		expect(computeViewportLabelPlacement(160, 10, 120, 500, options)).toEqual({
+			side: "right",
+			availableWidth: 260,
+		});
 	});
 
 	test("moves an edge caption to the left before it clips", () => {
-		const placement = computeViewportLabelPlacement(
-			420,
-			10,
-			100,
-			500,
-			options,
-		);
+		const placement = computeViewportLabelPlacement(420, 10, 100, 500, options);
 		expect(placement.side).toBe("left");
 		expect(placement.availableWidth).toBe(396);
 	});
 
 	test("uses the roomier side and reports a bounded width when neither fits", () => {
-		expect(
-			computeViewportLabelPlacement(70, 10, 200, 180, options),
-		).toEqual({ side: "left", availableWidth: 46 });
+		expect(computeViewportLabelPlacement(70, 10, 200, 180, options)).toEqual({
+			side: "left",
+			availableWidth: 46,
+		});
 	});
 });
 

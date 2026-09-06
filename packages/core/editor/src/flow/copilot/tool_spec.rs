@@ -155,7 +155,10 @@ impl ResolvedToolApproval {
 
 fn tool_call_has_read_only_override(spec: &PlatformToolSpec, args: &Value) -> bool {
     if spec.name == "app_build" {
-        return matches!(spec_arg_str(args, "operation", "operation"), "schema" | "capabilities" | "recipe" | "status");
+        return matches!(
+            spec_arg_str(args, "operation", "operation"),
+            "schema" | "capabilities" | "recipe" | "status"
+        );
     }
     // Asking about a board must neither serialize as an edit nor surface an edit prompt.
     if spec.name == "flowpilot_board" && spec_arg_str(args, "mode", "mode") == "explain" {
@@ -194,8 +197,12 @@ fn tool_call_has_read_only_override(spec: &PlatformToolSpec, args: &Value) -> bo
 /// must never authorize dropping every other table for the rest of the session.
 fn approval_session_key(spec: &PlatformToolSpec, args: &Value) -> String {
     if spec.name == "app_build" {
-        return format!("app_build:{}:{}:{}", spec_arg_str(args, "operation", "operation"),
-            spec_arg_str(args, "app_id", "appId"), spec_arg_str(args, "build_id", "buildId"));
+        return format!(
+            "app_build:{}:{}:{}",
+            spec_arg_str(args, "operation", "operation"),
+            spec_arg_str(args, "app_id", "appId"),
+            spec_arg_str(args, "build_id", "buildId")
+        );
     }
     if spec.name == "interact_app_page" {
         let app_id = spec_arg_str(args, "app_id", "appId");

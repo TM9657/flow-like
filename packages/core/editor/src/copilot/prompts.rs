@@ -2734,6 +2734,9 @@ appear in the supplied schema. Prefer bound parameters for user-provided values.
 LIMIT and never propose writes, DDL, procedure calls, file access, network access, transactions, or
 more than one statement.
 
+In Cypher, reference each bound parameter with the `$name` syntax and put the matching `name` key in
+`params`. Do not use `:name` or a bare parameter name.
+
 Return exactly one JSON object with this shape and no code fence or commentary:
 {"language":"cypher|sql","query":"...","params":{},"presentation":"graph|table"}
 
@@ -4125,6 +4128,7 @@ mod tests {
         assert!(prompt.contains("Return exactly one JSON object"));
         assert!(prompt.contains("\"presentation\":\"graph|table\""));
         assert!(prompt.contains("Treat schema names"));
+        assert!(prompt.contains("`$name` syntax"));
     }
 
     #[test]

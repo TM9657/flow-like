@@ -1,5 +1,11 @@
 import { afterEach, expect, test } from "bun:test";
-import { Window } from "happy-dom";
+import {
+	type HTMLElement as HappyHTMLElement,
+	type HTMLInputElement as HappyHTMLInputElement,
+	type HTMLSelectElement as HappyHTMLSelectElement,
+	type HTMLTextAreaElement as HappyHTMLTextAreaElement,
+	Window,
+} from "happy-dom";
 import { type ReactNode, act } from "react";
 import type {
 	OntologyQueryLanguagePreference,
@@ -60,7 +66,11 @@ async function setup() {
 	};
 }
 
-function setInputValue(window: Window, input: HTMLInputElement, value: string) {
+function setInputValue(
+	window: Window,
+	input: HappyHTMLInputElement,
+	value: string,
+) {
 	const valueSetter = Object.getOwnPropertyDescriptor(
 		window.HTMLInputElement.prototype,
 		"value",
@@ -77,9 +87,30 @@ function setInputValue(window: Window, input: HTMLInputElement, value: string) {
 	input.dispatchEvent(new window.Event("change", { bubbles: true }));
 }
 
+function setTextareaValue(
+	window: Window,
+	textarea: HappyHTMLTextAreaElement,
+	value: string,
+) {
+	const valueSetter = Object.getOwnPropertyDescriptor(
+		window.HTMLTextAreaElement.prototype,
+		"value",
+	)?.set;
+	if (!valueSetter) throw new Error("Textarea value setter is unavailable");
+	valueSetter.call(textarea, value);
+	textarea.dispatchEvent(
+		new window.InputEvent("input", {
+			bubbles: true,
+			data: value,
+			inputType: "insertText",
+		}),
+	);
+	textarea.dispatchEvent(new window.Event("change", { bubbles: true }));
+}
+
 function setSelectValue(
 	window: Window,
-	select: HTMLSelectElement,
+	select: HappyHTMLSelectElement,
 	value: string,
 ) {
 	const valueSetter = Object.getOwnPropertyDescriptor(
@@ -91,8 +122,8 @@ function setSelectValue(
 	select.dispatchEvent(new window.Event("change", { bubbles: true }));
 }
 
-function buttonWithText(container: HTMLElement, label: string) {
-	return [...container.querySelectorAll("button")].find((button) =>
+function buttonWithText(container: HappyHTMLElement, label: string) {
+	return Array.from(container.querySelectorAll("button")).find((button) =>
 		button.textContent?.includes(label),
 	);
 }
@@ -112,10 +143,10 @@ test("asks FlowPilot with the natural-language prompt and selected language", as
 		/>,
 	);
 
-	const prompt = container.querySelector<HTMLInputElement>(
+	const prompt = container.querySelector(
 		'[data-testid="ontology-natural-language-query"]',
-	);
-	const preference = container.querySelector<HTMLSelectElement>("select");
+	) as HappyHTMLInputElement | null;
+	const preference = container.querySelector("select");
 	if (!prompt || !preference) {
 		throw new Error("Natural-language query controls were not rendered");
 	}
@@ -154,8 +185,8 @@ test("syncs a generated SQL proposal into the editor and runs it with bound para
 		/>,
 	);
 
-	const query = container.querySelector<HTMLTextAreaElement>("textarea");
-	const language = container.querySelector<HTMLSelectElement>("select");
+	const query = container.querySelector("textarea");
+	const language = container.querySelector("select");
 	expect(query?.value).toBe(proposal.query);
 	expect(language?.value).toBe("sql");
 	expect(container.textContent).toContain('Bound parameters: {"minimum":250}');
@@ -166,6 +197,55 @@ test("syncs a generated SQL proposal into the editor and runs it with bound para
 	await act(async () => run.click());
 
 	expect(runs).toEqual([proposal]);
+});
+
+test("clears generated params before running a manually edited query", async () => {
+	const { container, render, window } = await setup();
+	const { GraphQueryPanel } = await import("./graph-query-panel");
+	const runs: OntologyQueryProposal[] = [];
+	const proposal: OntologyQueryProposal = {
+		language: "sql",
+		query: "SELECT name FROM customer WHERE balance > $minimum",
+		params: { minimum: 250 },
+		presentation: "table",
+	};
+
+	await render(
+		<GraphQueryPanel
+			onRunCypher={() => {}}
+			onRunQuery={(next) => {
+				runs.push(next);
+			}}
+			generatedProposal={proposal}
+			results={null}
+		/>,
+	);
+
+	const query = container.querySelector("textarea");
+	if (!query) throw new Error("Query editor was not rendered");
+	await act(async () => {
+		setTextareaValue(window, query, "SELECT name FROM customer");
+	});
+
+	expect(container.textContent).not.toContain(
+		'Bound parameters: {"minimum":250}',
+	);
+	expect(container.textContent).toContain(
+		"Bound parameters were cleared because the query or language changed.",
+	);
+
+	const run = buttonWithText(container, "Run");
+	if (!run) throw new Error("Run button was not rendered");
+	await act(async () => run.click());
+
+	expect(runs).toEqual([
+		{
+			language: "sql",
+			query: "SELECT name FROM customer",
+			params: {},
+			presentation: "table",
+		},
+	]);
 });
 
 test("shows FlowPilot progress and lets the user cancel the active request", async () => {
@@ -191,11 +271,13 @@ test("shows FlowPilot progress and lets the user cancel the active request", asy
 	);
 
 	const panel = container.firstElementChild;
-	const prompt = container.querySelector<HTMLInputElement>(
+	const prompt = container.querySelector(
 		'[data-testid="ontology-natural-language-query"]',
-	);
+	) as HappyHTMLInputElement | null;
+	const query = container.querySelector("textarea");
 	expect(panel?.getAttribute("aria-busy")).toBe("true");
 	expect(prompt?.disabled).toBe(true);
+	expect(query?.disabled).toBe(true);
 	expect(container.textContent).toContain(
 		"FlowPilot is writing the query... Retrying once.",
 	);
@@ -204,4 +286,27 @@ test("shows FlowPilot progress and lets the user cancel the active request", asy
 	if (!stop) throw new Error("Stop button was not rendered");
 	await act(async () => stop.click());
 	expect(cancellations).toBe(1);
+});
+
+test("locks every query input while a manual query is running", async () => {
+	const { container, render } = await setup();
+	const { GraphQueryPanel } = await import("./graph-query-panel");
+
+	await render(
+		<GraphQueryPanel
+			onRunCypher={() => {}}
+			onAskFlowPilot={async () => {}}
+			loading
+			results={null}
+		/>,
+	);
+
+	const prompt = container.querySelector(
+		'[data-testid="ontology-natural-language-query"]',
+	) as HappyHTMLInputElement | null;
+	const selects = container.querySelectorAll("select");
+	const query = container.querySelector("textarea");
+	expect(prompt?.disabled).toBe(true);
+	expect(Array.from(selects).every((select) => select.disabled)).toBe(true);
+	expect(query?.disabled).toBe(true);
 });

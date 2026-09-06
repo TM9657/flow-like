@@ -1788,7 +1788,7 @@ export function GraphViewer({
 					ref={workspaceRef}
 					className="flex min-h-0 flex-1 flex-col overflow-hidden"
 				>
-				{/* Canvas. Zoom, fit, and reset controls render inside SigmaContainer. */}
+					{/* Canvas. Zoom, fit, and reset controls render inside SigmaContainer. */}
 					<div
 						data-testid="graph-stage"
 						className="relative flex-1"

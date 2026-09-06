@@ -1,8 +1,13 @@
 import type { IHomeDefaults, IHomeLayout, IHomeWidget } from "./types";
 
 export const MAX_HOME_WIDGETS = 80;
+export const MAX_HOME_LAYOUT_BYTES = 128 * 1024;
 export const HOME_ROW_HEIGHT = 88;
 export const HOME_GRID_GAP = 16;
+
+export function homeLayoutByteLength(layout: IHomeLayout) {
+	return new TextEncoder().encode(JSON.stringify(layout)).byteLength;
+}
 
 export function homeWidgetHeight(widget: IHomeWidget) {
 	return (

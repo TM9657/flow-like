@@ -28,6 +28,7 @@ import {
 	ArrowLeft,
 	ArrowUp,
 	Check,
+	Code2,
 	Copy,
 	GripVertical,
 	Loader2,
@@ -100,10 +101,13 @@ import {
 	homeInsertionIndex,
 	insertHomeWidget,
 } from "./home-drag";
+import { HomeJsonEditor } from "./home-json-editor";
 import {
 	HOME_GRID_GAP,
 	HOME_ROW_HEIGHT,
+	MAX_HOME_LAYOUT_BYTES,
 	MAX_HOME_WIDGETS,
+	homeLayoutByteLength,
 	homeWidgetAutoHeight,
 	homeWidgetHeight,
 	homeWidgetSpan,
@@ -111,6 +115,7 @@ import {
 	moveHomeWidget,
 	responsiveHomeColumns,
 } from "./home-layout";
+import { homeLayoutsEqual } from "./home-layout-json";
 import { HomeWidgetContent } from "./home-widget-content";
 import { HomeWidgetIcon } from "./home-widget-icon";
 import { HomeWidgetSettings } from "./home-widget-settings";
@@ -176,6 +181,7 @@ export function HomeEditor({
 	const [panel, setPanel] = useState<"catalog" | "settings" | null>(null);
 	const [saving, setSaving] = useState(false);
 	const [confirm, setConfirm] = useState<"reset" | "discard" | null>(null);
+	const [jsonOpen, setJsonOpen] = useState(false);
 	const [preview, setPreview] = useState<"desktop" | "tablet" | "phone">(
 		"desktop",
 	);
@@ -387,6 +393,7 @@ export function HomeEditor({
 		dragRef.current = null;
 		pointer.current = null;
 		setPanel(null);
+		setJsonOpen(false);
 		setSelectedId(null);
 		setPast([]);
 		setFuture([]);
@@ -401,7 +408,7 @@ export function HomeEditor({
 		)
 			return;
 		if (saving) return;
-		if (new Blob([JSON.stringify(draft)]).size > 128 * 1024) {
+		if (homeLayoutByteLength(draft) > MAX_HOME_LAYOUT_BYTES) {
 			toast.error(
 				"This layout is too large. Shorten its content before saving.",
 			);
@@ -432,6 +439,7 @@ export function HomeEditor({
 	useEffect(() => {
 		if (!editing) return;
 		const keyboard = (event: KeyboardEvent) => {
+			if (jsonOpen) return;
 			if (saving) return;
 			const target = event.target as HTMLElement;
 			const input = target.closest("input, textarea, [contenteditable=true]");
@@ -451,7 +459,7 @@ export function HomeEditor({
 		};
 		window.addEventListener("keydown", keyboard);
 		return () => window.removeEventListener("keydown", keyboard);
-	}, [editing, saving, undo, redo, save, panel]);
+	}, [editing, saving, undo, redo, save, panel, jsonOpen]);
 	const saveRuntimeConfig = async (
 		widget: IHomeWidget,
 		config: Record<string, unknown>,
@@ -488,6 +496,19 @@ export function HomeEditor({
 		setPast([]);
 		setFuture([]);
 	};
+	const applyJson = useCallback(
+		(value: IHomeLayout) => {
+			if (homeLayoutsEqual(draft, value)) {
+				setAnnouncement("JSON layout already matches the draft.");
+				return;
+			}
+			change(value);
+			setSelectedId(null);
+			setPanel(null);
+			setAnnouncement("JSON layout applied. Save to keep it.");
+		},
+		[change, draft],
+	);
 	const add = (presetId: string, beforeId?: string) => {
 		if (draft.widgets.length >= MAX_HOME_WIDGETS) {
 			toast.error(`A home can contain up to ${MAX_HOME_WIDGETS} widgets.`);
@@ -721,6 +742,20 @@ export function HomeEditor({
 								onClick={redo}
 							>
 								<Redo2 className="h-4 w-4" />
+							</Button>
+							<Button
+								variant="outline"
+								size="sm"
+								onClick={() => {
+									setPanel(null);
+									setJsonOpen(true);
+								}}
+								disabled={saving}
+								aria-haspopup="dialog"
+								aria-label="Edit JSON"
+							>
+								<Code2 className="h-4 w-4" />
+								<span className="hidden md:inline">Edit JSON</span>
 							</Button>
 							<Button
 								variant="outline"
@@ -991,6 +1026,13 @@ export function HomeEditor({
 					</AlertDialogFooter>
 				</AlertDialogContent>
 			</AlertDialog>
+			{jsonOpen && (
+				<HomeJsonEditor
+					layout={draft}
+					onApply={applyJson}
+					onClose={() => setJsonOpen(false)}
+				/>
+			)}
 		</div>
 	);
 }

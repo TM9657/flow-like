@@ -5,6 +5,10 @@ import type { GraphCluster } from "./graph-clusters";
 export const DEFAULT_NODE_SIZE = 10;
 /** Breathing room in the active collision coordinate space. */
 export const NODE_GAP = 8;
+/** Left edge kept clear when a canvas caption has to switch sides. */
+export const GRAPH_LABEL_LEFT_INSET = 8;
+/** Width reserved for the right-side canvas controls and their breathing room. */
+export const GRAPH_LABEL_RIGHT_INSET = 64;
 /** Share of an overlap resolved per relaxation pass. */
 const RELAX_STRENGTH = 0.55;
 /** Ceiling on pair tests per pass so degenerate inputs cannot lock the frame. */
@@ -313,9 +317,7 @@ export function computeViewportLabelPlacement(
 	viewportWidth: number,
 	options: ViewportLabelPlacementOptions = {},
 ): ViewportLabelPlacement {
-	const width = Number.isFinite(viewportWidth)
-		? Math.max(0, viewportWidth)
-		: 0;
+	const width = Number.isFinite(viewportWidth) ? Math.max(0, viewportWidth) : 0;
 	const x = Number.isFinite(centerX) ? centerX : width / 2;
 	const radius = Number.isFinite(nodeRadius) ? Math.max(0, nodeRadius) : 0;
 	const requestedWidth = Number.isFinite(contentWidth)
@@ -327,10 +329,7 @@ export function computeViewportLabelPlacement(
 		Math.max(0, width - leftInset),
 		finiteInset(options.rightInset),
 	);
-	const rightWidth = Math.max(
-		0,
-		width - rightInset - (x + radius + gap),
-	);
+	const rightWidth = Math.max(0, width - rightInset - (x + radius + gap));
 	const leftWidth = Math.max(0, x - radius - gap - leftInset);
 
 	if (requestedWidth <= rightWidth) {

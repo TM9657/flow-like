@@ -13786,6 +13786,7 @@ impl ExternalAgentInvocation {
                 reasoning_effort,
                 mcp_url,
                 prompt,
+                tool_names,
                 images,
             ),
             FlowPilotAgentBackendKind::ClaudeCode => Self::claude(
@@ -13813,6 +13814,7 @@ impl ExternalAgentInvocation {
         reasoning_effort: Option<&str>,
         mcp_url: &str,
         prompt: String,
+        tool_names: Vec<String>,
         images: &[ChatImage],
     ) -> Result<Self, String> {
         // Mirrors @openai/codex-sdk's stdio protocol: spawn
@@ -13835,21 +13837,6 @@ impl ExternalAgentInvocation {
             std::env::temp_dir().display().to_string(),
             "--skip-git-repo-check".to_string(),
             "--config".to_string(),
-            format!("mcp_servers.flowpilot.url={:?}", mcp_url),
-            "--config".to_string(),
-            "mcp_servers.flowpilot.startup_timeout_sec=10".to_string(),
-            "--config".to_string(),
-            // Outer bound for every FlowPilot MCP tool call. Must be >= the longest per-tool
-            // `timeout_secs` in the shared platform tool specs, which is now the delegated board
-            // run — it earns wall clock by proving progress and can run for hours. Anything
-            // smaller here aborts a healthy build at the MCP layer, below where FlowPilot could
-            // report it. Other tools return their own shorter bridge-timeout result long before.
-            format!("mcp_servers.flowpilot.tool_timeout_sec={MAX_DELEGATED_RUN_DISPATCH_SECS}"),
-            "--config".to_string(),
-            "mcp_servers.flowpilot.default_tools_approval_mode=\"approve\"".to_string(),
-            "--config".to_string(),
-            "features.use_rmcp_client=true".to_string(),
-            "--config".to_string(),
             "approval_policy=\"never\"".to_string(),
             "--config".to_string(),
             // Keep this explicit even with --ignore-user-config: it prevents Codex defaults or
@@ -13858,6 +13845,62 @@ impl ExternalAgentInvocation {
             // specialists must remain unable to reach the public web at all.
             "web_search=\"disabled\"".to_string(),
         ];
+        if tool_names.is_empty() {
+            // Ontology query planning is a pure text transformation. Remove Codex's native data
+            // access surfaces as well as the empty FlowPilot MCP server. Keep only the isolated
+            // V8 code-mode host available because some Codex models require it; optional code mode
+            // stays disabled and the host has no Node, filesystem, network, or nested data tools.
+            // The remaining CLI-owned interaction and patch tools cannot read data, and the
+            // read-only sandbox prevents the patch tool from changing the neutral temporary
+            // working directory.
+            args.extend(["--ephemeral".to_string(), "--ignore-rules".to_string()]);
+            for feature in [
+                "apps",
+                "artifact",
+                "browser_use",
+                "browser_use_external",
+                "code_mode",
+                "computer_use",
+                "goals",
+                "hooks",
+                "image_generation",
+                "in_app_browser",
+                "in_app_local_automation",
+                "memories",
+                "multi_agent",
+                "plugins",
+                "plugin_sharing",
+                "request_permissions_tool",
+                "shell_snapshot",
+                "shell_snapshot_v2",
+                "shell_tool",
+                "skill_mcp_dependency_install",
+                "skill_search",
+                "sleep_tool",
+                "tool_suggest",
+                "unified_exec",
+                "view_image",
+                "workspace_dependencies",
+            ] {
+                args.extend(["--disable".to_string(), feature.to_string()]);
+            }
+        } else {
+            args.extend([
+                "--config".to_string(),
+                format!("mcp_servers.flowpilot.url={:?}", mcp_url),
+                "--config".to_string(),
+                "mcp_servers.flowpilot.startup_timeout_sec=10".to_string(),
+                "--config".to_string(),
+                // Outer bound for every FlowPilot MCP tool call. Must be >= the longest per-tool
+                // `timeout_secs` in the shared platform tool specs, which is now the delegated
+                // board run. It earns wall clock by proving progress and can run for hours.
+                format!("mcp_servers.flowpilot.tool_timeout_sec={MAX_DELEGATED_RUN_DISPATCH_SECS}"),
+                "--config".to_string(),
+                "mcp_servers.flowpilot.default_tools_approval_mode=\"approve\"".to_string(),
+                "--config".to_string(),
+                "features.use_rmcp_client=true".to_string(),
+            ]);
+        }
         // Model ids reach this point straight from Codex's own auth-aware catalog
         // (discovered via `codex app-server`'s `model/list`), so an explicit
         // selection is safe to forward. "default" defers to Codex's configured
@@ -26631,6 +26674,86 @@ eventsSimple() {
                 invocation.args
             );
         }
+    }
+
+    #[test]
+    fn codex_data_isolated_invocation_disables_native_data_access() {
+        let invocation = ExternalAgentInvocation::new(
+            FlowPilotAgentBackendKind::Codex,
+            CliResolution::new(
+                std::path::PathBuf::from("/usr/bin/codex"),
+                CliResolutionSource::Path,
+            ),
+            "default",
+            None,
+            "http://127.0.0.1:12345/mcp",
+            "return one query envelope".to_string(),
+            Vec::new(),
+            &[],
+            None,
+            None,
+        )
+        .expect("data-isolated Codex invocation should build");
+
+        for feature in [
+            "apps",
+            "artifact",
+            "browser_use",
+            "browser_use_external",
+            "code_mode",
+            "computer_use",
+            "goals",
+            "hooks",
+            "image_generation",
+            "in_app_browser",
+            "in_app_local_automation",
+            "memories",
+            "multi_agent",
+            "plugins",
+            "plugin_sharing",
+            "request_permissions_tool",
+            "shell_snapshot",
+            "shell_snapshot_v2",
+            "shell_tool",
+            "skill_mcp_dependency_install",
+            "skill_search",
+            "sleep_tool",
+            "tool_suggest",
+            "unified_exec",
+            "view_image",
+            "workspace_dependencies",
+        ] {
+            assert!(
+                invocation
+                    .args
+                    .windows(2)
+                    .any(|args| args == ["--disable", feature]),
+                "data-isolated Codex invocation must disable {feature}: {:?}",
+                invocation.args
+            );
+        }
+        assert!(
+            invocation.args.contains(&"--ephemeral".to_string())
+                && invocation.args.contains(&"--ignore-rules".to_string()),
+            "data-isolated Codex invocation must avoid persisted sessions and ambient rules: {:?}",
+            invocation.args
+        );
+        assert!(
+            !invocation
+                .args
+                .windows(2)
+                .any(|args| args == ["--disable", "code_mode_host"]),
+            "data-isolated Codex invocation must retain the isolated host required by code-mode-only models: {:?}",
+            invocation.args
+        );
+        assert!(
+            !invocation
+                .args
+                .iter()
+                .any(|arg| arg.starts_with("mcp_servers.flowpilot.")),
+            "data-isolated Codex invocation must not attach an empty MCP surface: {:?}",
+            invocation.args
+        );
     }
 
     #[test]

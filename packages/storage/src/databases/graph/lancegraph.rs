@@ -472,19 +472,13 @@ impl LanceGraphStore {
             .await
             .map_err(|e| anyhow!("Semaphore acquire failed: {}", e))?;
 
-        let parsed =
-            CypherQuery::new(query).map_err(|e| anyhow!("Failed to parse Cypher query: {}", e))?;
+        let parsed = parse_cypher_for_execution(query)?;
         preflight_cypher(parsed.ast(), &self.safety)?;
-        let limited_query = if parsed.ast().limit.is_some() {
-            query.trim().to_string()
-        } else {
-            append_limit_clause(query, limit)
-        };
+        let limited_query = enforce_cypher_limit(query, parsed.ast(), limit)?;
         let limited_query =
             expand_relationship_return_items(&limited_query, parsed.ast(), &self.graph_config)
                 .unwrap_or(limited_query);
-        let cypher = CypherQuery::new(&limited_query)
-            .map_err(|e| anyhow!("Failed to parse Cypher query: {}", e))?
+        let cypher = parse_cypher_for_execution(&limited_query)?
             .with_config(self.graph_config.clone())
             .with_parameters(params);
 
@@ -1050,6 +1044,131 @@ fn append_limit_clause(query: &str, limit: usize) -> String {
     let trimmed = query.trim();
     let trimmed = trimmed.strip_suffix(';').unwrap_or(trimmed).trim_end();
     format!("{trimmed} LIMIT {limit}")
+}
+
+/// lance-graph currently parses LIMIT as an `i64` with an internal unwrap.
+/// Reject an out-of-range literal before entering that parser so an untrusted
+/// query becomes a normal validation error instead of unwinding the process.
+fn parse_cypher_for_execution(query: &str) -> Result<CypherQuery> {
+    for (literal_start, literal_end) in top_level_limit_literal_spans(query) {
+        if query[literal_start..literal_end].parse::<i64>().is_err() {
+            return Err(anyhow!(
+                "Cypher LIMIT literal is outside the supported signed 64-bit range"
+            ));
+        }
+    }
+
+    CypherQuery::new(query).map_err(|error| anyhow!("Failed to parse Cypher query: {}", error))
+}
+
+fn top_level_limit_literal_spans(query: &str) -> Vec<(usize, usize)> {
+    let bytes = query.as_bytes();
+    let mut depth = 0usize;
+    let mut cursor = 0usize;
+    let mut limit_literals = Vec::new();
+
+    while cursor < bytes.len() {
+        match bytes[cursor] {
+            b'\'' | b'"' | b'`' => {
+                cursor = skip_quoted(bytes, cursor);
+                continue;
+            }
+            b'(' | b'[' | b'{' => {
+                depth += 1;
+                cursor += 1;
+                continue;
+            }
+            b')' | b']' | b'}' => {
+                depth = depth.saturating_sub(1);
+                cursor += 1;
+                continue;
+            }
+            _ if depth > 0 || !is_word_byte(bytes[cursor]) => {
+                cursor += 1;
+                continue;
+            }
+            _ => {}
+        }
+
+        let word_start = cursor;
+        while cursor < bytes.len() && is_word_byte(bytes[cursor]) {
+            cursor += 1;
+        }
+        if !query[word_start..cursor].eq_ignore_ascii_case("limit") {
+            continue;
+        }
+
+        let whitespace_start = cursor;
+        let mut number_start = cursor;
+        while number_start < bytes.len() {
+            let Some(character) = query
+                .get(number_start..)
+                .and_then(|remaining| remaining.chars().next())
+            else {
+                break;
+            };
+            if !character.is_whitespace() {
+                break;
+            }
+            number_start += character.len_utf8();
+        }
+        if number_start == whitespace_start {
+            continue;
+        }
+        let mut number_end = number_start;
+        if number_end < bytes.len() && bytes[number_end] == b'-' {
+            number_end += 1;
+        }
+        let digits_start = number_end;
+        while number_end < bytes.len() && bytes[number_end].is_ascii_digit() {
+            number_end += 1;
+        }
+        if number_end > digits_start {
+            limit_literals.push((number_start, number_end));
+        }
+    }
+
+    limit_literals
+}
+
+/// Applies the host row cap to the query text before lance-graph plans or
+/// materializes it. Slicing the returned batch is too late for an explicit
+/// `LIMIT` because the engine has already executed that larger request.
+fn enforce_cypher_limit(
+    query: &str,
+    ast: &lance_graph::ast::CypherQuery,
+    limit: usize,
+) -> Result<String> {
+    let parsed_limits = ast
+        .with_clause
+        .as_ref()
+        .and_then(|with_clause| with_clause.limit)
+        .into_iter()
+        .chain(ast.limit)
+        .collect::<Vec<_>>();
+
+    let limit_literals = top_level_limit_literal_spans(query);
+
+    if limit_literals.len() != parsed_limits.len() {
+        return Err(anyhow!(
+            "Failed to locate every parsed Cypher LIMIT clause for safety clamping"
+        ));
+    }
+
+    let mut limited_query = query.to_string();
+    for ((number_start, number_end), parsed_limit) in
+        limit_literals.into_iter().zip(parsed_limits).rev()
+    {
+        if parsed_limit > limit as u64 {
+            limited_query.replace_range(number_start..number_end, &limit.to_string());
+        }
+    }
+
+    if ast.limit.is_some() {
+        Ok(limited_query.trim().to_string())
+    } else {
+        Ok(append_limit_clause(&limited_query, limit))
+    }
 }
 
 /// Trailing clauses that end the RETURN item list.
@@ -2777,6 +2896,102 @@ mod tests {
 
     fn parse(query: &str) -> CypherQuery {
         CypherQuery::new(query).expect("query should parse")
+    }
+
+    #[test]
+    fn cypher_limit_is_added_when_the_query_has_none() {
+        let query = "MATCH (n:Person) RETURN n";
+        assert_eq!(
+            enforce_cypher_limit(query, parse(query).ast(), 501).unwrap(),
+            "MATCH (n:Person) RETURN n LIMIT 501"
+        );
+    }
+
+    #[test]
+    fn cypher_limit_preserves_a_smaller_explicit_limit() {
+        let query = "MATCH (n:Person) RETURN n LIMIT 10";
+        assert_eq!(
+            enforce_cypher_limit(query, parse(query).ast(), 501).unwrap(),
+            query
+        );
+    }
+
+    #[test]
+    fn cypher_limit_clamps_an_explicit_limit_before_execution() {
+        let query = "MATCH (n:Person) RETURN n.name ORDER BY n.name LIMIT 50000";
+        assert_eq!(
+            enforce_cypher_limit(query, parse(query).ast(), 501).unwrap(),
+            "MATCH (n:Person) RETURN n.name ORDER BY n.name LIMIT 501"
+        );
+    }
+
+    #[test]
+    fn cypher_limit_clamp_ignores_limit_words_in_values_and_properties() {
+        let query =
+            "MATCH (n:Person) WHERE n.note = 'limit 9999' RETURN n.limit LIMIT 50000 SKIP 2";
+        assert_eq!(
+            enforce_cypher_limit(query, parse(query).ast(), 501).unwrap(),
+            "MATCH (n:Person) WHERE n.note = 'limit 9999' RETURN n.limit LIMIT 501 SKIP 2"
+        );
+    }
+
+    #[test]
+    fn cypher_limit_clamps_negative_values_cast_by_the_parser() {
+        let query = "MATCH (n:Person) RETURN n LIMIT -1";
+        assert_eq!(
+            enforce_cypher_limit(query, parse(query).ast(), 501).unwrap(),
+            "MATCH (n:Person) RETURN n LIMIT 501"
+        );
+    }
+
+    #[test]
+    fn cypher_limit_rejects_out_of_range_literals_without_panicking() {
+        for literal in [
+            "9223372036854775808",
+            "18446744073709551616",
+            "-9223372036854775809",
+        ] {
+            let query = format!("MATCH (n:Person) RETURN n LIMIT {literal}");
+            let outcome = std::panic::catch_unwind(|| parse_cypher_for_execution(&query));
+            assert!(
+                outcome.is_ok(),
+                "out-of-range LIMIT must not reach the parser"
+            );
+            let error = outcome
+                .unwrap()
+                .expect_err("out-of-range LIMIT must be rejected");
+            assert!(
+                error
+                    .to_string()
+                    .contains("outside the supported signed 64-bit range"),
+                "unexpected validation error: {error}"
+            );
+        }
+    }
+
+    #[test]
+    fn cypher_limit_range_check_ignores_quoted_text() {
+        let query =
+            "MATCH (n:Person) WHERE n.note = 'LIMIT 18446744073709551616' RETURN n LIMIT 10";
+        parse_cypher_for_execution(query).expect("quoted LIMIT-like text must keep normal parsing");
+    }
+
+    #[test]
+    fn cypher_limit_clamps_intermediate_and_final_limits_independently() {
+        let query = "MATCH (n:Person) WITH n LIMIT 50000 RETURN n LIMIT 10";
+        assert_eq!(
+            enforce_cypher_limit(query, parse(query).ast(), 501).unwrap(),
+            "MATCH (n:Person) WITH n LIMIT 501 RETURN n LIMIT 10"
+        );
+    }
+
+    #[test]
+    fn cypher_limit_adds_a_final_cap_after_a_smaller_intermediate_limit() {
+        let query = "MATCH (n:Person) WITH n LIMIT 10 RETURN n";
+        assert_eq!(
+            enforce_cypher_limit(query, parse(query).ast(), 501).unwrap(),
+            "MATCH (n:Person) WITH n LIMIT 10 RETURN n LIMIT 501"
+        );
     }
 
     #[test]

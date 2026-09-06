@@ -20,7 +20,7 @@ export const ONTOLOGY_QUERY_API_PROMPT_LIMIT = 70_000;
 export const ONTOLOGY_QUERY_GENERATOR_PROMPT_BUDGET = 69_000;
 
 const ONTOLOGY_QUERY_MAX_REPAIR_MESSAGE_LENGTH = 1_000;
-const ONTOLOGY_QUERY_MAX_REPAIR_PREVIEW_LENGTH = 12_000;
+const ONTOLOGY_QUERY_MAX_REPAIR_PREVIEW_LENGTH = 5_000;
 const ONTOLOGY_QUERY_PARAMETER_SYNTAX_GUIDANCE =
 	"Use $name placeholders for bound values in both Cypher and SQL. Parameter keys in params omit the leading $.";
 
@@ -492,6 +492,14 @@ export function validateReadOnlyOntologyQuery(
 	assertCypherPathBounds(scan.masked);
 }
 
+export function normalizeReadOnlyOntologyQuery(
+	language: OntologyQueryLanguage,
+	query: string,
+): string {
+	validateReadOnlyOntologyQuery(language, query);
+	return query.trim().replace(/;\s*$/, "");
+}
+
 function parseProposalEnvelope(output: unknown): Record<string, unknown> {
 	if (isRecord(output)) return output;
 	if (typeof output !== "string") {
@@ -609,12 +617,14 @@ export function parseOntologyQueryProposal(
 
 	const proposal: OntologyQueryProposal = {
 		language,
-		query: envelope.query.trim(),
+		query: envelope.query,
 		params: parseParams(envelope.params),
 		presentation: envelope.presentation,
 	};
-	validateReadOnlyOntologyQuery(proposal.language, proposal.query);
-	proposal.query = proposal.query.replace(/;\s*$/, "");
+	proposal.query = normalizeReadOnlyOntologyQuery(
+		proposal.language,
+		proposal.query,
+	);
 	return proposal;
 }
 
@@ -1130,29 +1140,78 @@ function cloneOntologyQuerySchema(
 	schema: OntologyQuerySchemaContext,
 ): OntologyQuerySchemaContext {
 	return {
-		ontologyName: schema.ontologyName,
+		ontologyName: schema.ontologyName.slice(0, 128),
 		nodes: schema.nodes.map((node) => ({
-			...node,
-			properties: node.properties.map((property) => ({ ...property })),
+			label: node.label.slice(0, 128),
+			table: node.table.slice(0, 128),
+			idColumn: node.idColumn.slice(0, 128),
+			displayColumn: node.displayColumn?.slice(0, 128),
+			properties: node.properties.map((property) => ({
+				name: property.name.slice(0, 128),
+				dataType: property.dataType.slice(0, 128),
+				nullable: property.nullable,
+			})),
 		})),
 		edges: schema.edges.map((edge) => ({
-			...edge,
-			properties: edge.properties.map((property) => ({ ...property })),
+			label: edge.label.slice(0, 128),
+			table: edge.table.slice(0, 128),
+			sourceLabel: edge.sourceLabel.slice(0, 128),
+			targetLabel: edge.targetLabel.slice(0, 128),
+			sourceColumn: edge.sourceColumn.slice(0, 128),
+			targetColumn: edge.targetColumn.slice(0, 128),
+			properties: edge.properties.map((property) => ({
+				name: property.name.slice(0, 128),
+				dataType: property.dataType.slice(0, 128),
+				nullable: property.nullable,
+			})),
 		})),
 		truncated: schema.truncated,
 	};
 }
 
+function truncateJsonString(
+	value: string,
+	maxSerializedLength: number,
+): string {
+	if (JSON.stringify(value).length <= maxSerializedLength) return value;
+	const suffix = " [truncated]";
+	let lower = 0;
+	let upper = Math.min(value.length, maxSerializedLength);
+	while (lower < upper) {
+		const middle = Math.ceil((lower + upper) / 2);
+		if (
+			JSON.stringify(`${value.slice(0, middle)}${suffix}`).length <=
+			maxSerializedLength
+		) {
+			lower = middle;
+		} else {
+			upper = middle - 1;
+		}
+	}
+	return `${value.slice(0, lower)}${suffix}`;
+}
+
 function boundedRepairPreview(value: unknown): unknown {
 	try {
 		const serialized = JSON.stringify(value);
-		if (serialized === undefined) return String(value).slice(0, 1_000);
+		if (serialized === undefined) {
+			return truncateJsonString(
+				String(value),
+				ONTOLOGY_QUERY_MAX_REPAIR_PREVIEW_LENGTH,
+			);
+		}
 		if (serialized.length <= ONTOLOGY_QUERY_MAX_REPAIR_PREVIEW_LENGTH) {
 			return JSON.parse(serialized);
 		}
-		return `${serialized.slice(0, ONTOLOGY_QUERY_MAX_REPAIR_PREVIEW_LENGTH)} [truncated]`;
+		return truncateJsonString(
+			serialized,
+			ONTOLOGY_QUERY_MAX_REPAIR_PREVIEW_LENGTH,
+		);
 	} catch {
-		return String(value).slice(0, ONTOLOGY_QUERY_MAX_REPAIR_PREVIEW_LENGTH);
+		return truncateJsonString(
+			String(value),
+			ONTOLOGY_QUERY_MAX_REPAIR_PREVIEW_LENGTH,
+		);
 	}
 }
 
@@ -1165,7 +1224,7 @@ function trimSchemaForGeneratorPrompt(
 	);
 	if (mappingsWithProperties.length > 0) {
 		for (const mapping of mappingsWithProperties) {
-			mapping.properties.splice(Math.ceil(mapping.properties.length / 2));
+			mapping.properties.splice(Math.floor(mapping.properties.length / 2));
 		}
 		schema.truncated = true;
 		return true;

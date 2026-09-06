@@ -67,6 +67,7 @@ export function GraphQueryPanel({
 		useState<OntologyQueryLanguage>("cypher");
 	const [query, setQuery] = useState("");
 	const [params, setParams] = useState<Record<string, unknown>>({});
+	const [paramsClearedAfterEdit, setParamsClearedAfterEdit] = useState(false);
 	const [activeTab, setActiveTab] = useState("table");
 	const flowPilotBusy = flowPilotStatus != null;
 
@@ -75,8 +76,15 @@ export function GraphQueryPanel({
 		setQueryLanguage(generatedProposal.language);
 		setQuery(generatedProposal.query);
 		setParams(generatedProposal.params);
+		setParamsClearedAfterEdit(false);
 		setActiveTab(generatedProposal.presentation === "graph" ? "json" : "table");
 	}, [generatedProposal]);
+
+	const clearGeneratedParams = useCallback(() => {
+		if (Object.keys(params).length === 0) return;
+		setParams({});
+		setParamsClearedAfterEdit(true);
+	}, [params]);
 	const columns = useMemo(
 		() => [
 			...new Set(
@@ -105,9 +113,9 @@ export function GraphQueryPanel({
 
 	const handleAskFlowPilot = useCallback(() => {
 		const trimmed = prompt.trim();
-		if (!trimmed || !onAskFlowPilot) return;
+		if (loading || flowPilotBusy || !trimmed || !onAskFlowPilot) return;
 		void onAskFlowPilot(trimmed, languagePreference);
-	}, [languagePreference, onAskFlowPilot, prompt]);
+	}, [flowPilotBusy, languagePreference, loading, onAskFlowPilot, prompt]);
 
 	const handleKeyDown = useCallback(
 		(e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -206,7 +214,7 @@ export function GraphQueryPanel({
 								"Ask this ontology in plain language...",
 							)}
 							className="h-9 min-w-48 flex-1 rounded-md border bg-background px-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-							disabled={flowPilotBusy}
+							disabled={loading || flowPilotBusy}
 						/>
 						<label htmlFor={preferenceInputId} className="sr-only">
 							{t("queryLanguage", "Query language")}
@@ -220,7 +228,7 @@ export function GraphQueryPanel({
 								)
 							}
 							className="h-9 rounded-md border bg-background px-2 text-xs focus:outline-none focus:ring-2 focus:ring-ring"
-							disabled={flowPilotBusy}
+							disabled={loading || flowPilotBusy}
 						>
 							<option value="auto">{t("auto", "Auto")}</option>
 							<option value="cypher">Cypher</option>
@@ -259,7 +267,7 @@ export function GraphQueryPanel({
 						value={queryLanguage}
 						onChange={(event) => {
 							setQueryLanguage(event.target.value as OntologyQueryLanguage);
-							setParams({});
+							clearGeneratedParams();
 						}}
 						className="h-10 rounded-md border bg-background px-2 text-xs focus:outline-none focus:ring-2 focus:ring-ring"
 						disabled={!onRunQuery || loading || flowPilotBusy}
@@ -273,11 +281,15 @@ export function GraphQueryPanel({
 							"Generated or manual query",
 						)}
 						value={query}
-						onChange={(event) => setQuery(event.target.value)}
+						onChange={(event) => {
+							setQuery(event.target.value);
+							clearGeneratedParams();
+						}}
 						onKeyDown={handleKeyDown}
+						disabled={loading || flowPilotBusy}
 						wrap="off"
 						placeholder="MATCH (n:Person)-[r]->(m) RETURN n, r, m LIMIT 100"
-						className="h-10 min-h-10 max-h-20 w-full resize-y rounded-md border bg-muted/50 px-3 py-2 font-mono text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+						className="h-10 min-h-10 max-h-20 w-full resize-y rounded-md border bg-muted/50 px-3 py-2 font-mono text-sm focus:outline-none focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-60"
 						spellCheck={false}
 					/>
 					<Button
@@ -300,6 +312,17 @@ export function GraphQueryPanel({
 					>
 						{t("boundParameters", "Bound parameters")}: {JSON.stringify(params)}
 					</p>
+				)}
+				{paramsClearedAfterEdit && (
+					<output
+						className="block text-xs text-muted-foreground"
+						aria-live="polite"
+					>
+						{t(
+							"boundParametersClearedAfterQueryEdit",
+							"Bound parameters were cleared because the query or language changed.",
+						)}
+					</output>
 				)}
 				{flowPilotStatusLabel && (
 					<output
@@ -350,8 +373,8 @@ export function GraphQueryPanel({
 							</TabsTrigger>
 						</TabsList>
 						<TabsContent value="table" className="m-0 min-h-0 flex-1 p-3">
-							<ScrollArea className="h-full">
-								<div className="min-w-max overflow-auto rounded border">
+							<ScrollArea className="h-full" orientation="both">
+								<div className="min-w-max rounded border">
 									<table className="w-full text-xs">
 										<thead>
 											<tr className="bg-muted/50">

@@ -180,18 +180,29 @@ describe("FlowPilot ontology query completion adapter", () => {
 		expect(state.copilot_chat).not.toHaveBeenCalled();
 	});
 
-	test("requires a model for an agent backend", () => {
-		expect(() =>
-			createFlowPilotOntologyQueryTextCompletion({
-				boardState: boardState(),
-				target: {
-					appId: "app-1",
-					overlayId: "overlay-1",
-					userScoped: false,
-					surfaceInstanceId: "surface-1",
-				},
-				provider: "claude-code",
+	test("reports a missing agent model when completion starts", async () => {
+		const state = boardState();
+		const complete = createFlowPilotOntologyQueryTextCompletion({
+			boardState: state,
+			target: {
+				appId: "app-1",
+				overlayId: "overlay-1",
+				userScoped: false,
+				surfaceInstanceId: "surface-1",
+			},
+			provider: "claude-code",
+		});
+
+		await expect(
+			complete({
+				requestId: "missing-model",
+				attempt: 1,
+				sourcePrompt: "Show everyone",
+				systemPrompt: "backend prompt",
+				userPrompt: "payload",
+				signal: new AbortController().signal,
 			}),
-		).toThrow("modelId is required");
+		).rejects.toThrow("modelId is required");
+		expect(state.copilot_chat).not.toHaveBeenCalled();
 	});
 });

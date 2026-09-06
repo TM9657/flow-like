@@ -50,6 +50,8 @@ import type { ClusterModel } from "./graph-clusters";
 import {
 	type ConnectivityPartition,
 	DEFAULT_NODE_SIZE,
+	GRAPH_LABEL_LEFT_INSET,
+	GRAPH_LABEL_RIGHT_INSET,
 	type GraphLayoutMode,
 	type LayoutPosition as GraphPosition,
 	type ViewportDimensions,
@@ -60,6 +62,7 @@ import {
 	createAnchoredPosition,
 	createDeterministicPosition,
 	defaultRelaxIterations,
+	expandGraphBoundsByViewportInsets,
 	getLayoutBounds,
 	packNodesOnGrid,
 	partitionByConnectivity,
@@ -296,6 +299,13 @@ const MIN_FIT_SIZE_SCALE = 0.28;
 /** How much of the room a node gets its circle may fill, edge to edge. */
 const MAX_NODE_PITCH_SHARE = 0.3;
 const MIN_RENDERED_NODE_SIZE = 2;
+/** Below this height, persistent captions compete with the graph for one row. */
+const MIN_PERSISTENT_LABEL_STAGE_HEIGHT = 280;
+/** Tiny result sets remain readable even in the query-dock stage. */
+const COMPACT_STAGE_LABEL_NODE_LIMIT = 6;
+/** Keeps viewport settling inside the same camera frame after auto-rescale. */
+const VIEWPORT_COLLISION_INSET = 8;
+const LABEL_FIT_PASSES = 4;
 
 /**
  * Shrinks nodes as the sample grows, because `autoRescale` fits the whole layout
@@ -1013,7 +1023,7 @@ async function buildGraphAsync(
 		publish(
 			NODE_PROGRESS_WEIGHT + EDGE_PROGRESS_WEIGHT + SIZE_PROGRESS_WEIGHT,
 			i18next.t("keepingLayoutStable", "Keeping layout stable"),
-			`Reusing the current node positions while adding new connections.`,
+			"Reusing the current node positions while adding new connections.",
 			"ready",
 		);
 		return {
@@ -1655,15 +1665,91 @@ function SigmaViewportManager({
 						visibleNodeIds.push(nodeId);
 					}
 				});
+				const visibleNodeSet = new Set(visibleNodeIds);
 				updateHighlightSizing(
 					highlightRef.current,
 					currentGraph.order,
 					visibleNodeIds.length,
 					stage,
 				);
+				sigma.setCustomBBox(null);
+				sigma.refresh();
+
+				// Sigma fits node centres, while captions stay screen-sized. Extend the
+				// fitted box just enough to keep the captions Sigma chose away from the
+				// right control rail. The renderer still has a side-switch fallback for
+				// labels revealed later by hover or selection.
+				let viewportBounds = sigma.getBBox();
+				const expandBoundsForDisplayedLabels = () => {
+					const displayedLabelIds = [...sigma.getNodeDisplayedLabels()].filter(
+						(nodeId) => visibleNodeSet.has(nodeId),
+					);
+					const labelExtents = computeLabelExtents(
+						currentGraph,
+						displayedLabelIds,
+						{ labelSize: sigma.getSetting("labelSize") },
+					);
+					if (!labelExtents) return false;
+
+					const rightBoundary = Math.max(
+						GRAPH_LABEL_LEFT_INSET,
+						stage.width - GRAPH_LABEL_RIGHT_INSET,
+					);
+					let rightOverflow = 0;
+					for (const nodeId of displayedLabelIds) {
+						const extent = labelExtents.get(nodeId);
+						if (!extent) continue;
+						const attrs = currentGraph.getNodeAttributes(nodeId);
+						const position = sigma.graphToViewport({
+							x: attrs.x as number,
+							y: attrs.y as number,
+						});
+						const radius = getRenderedNodeSize(
+							nodeId,
+							attrs,
+							highlightRef.current,
+						);
+						rightOverflow = Math.max(
+							rightOverflow,
+							position.x + radius + extent - rightBoundary,
+						);
+					}
+					if (rightOverflow <= 1) return false;
+
+					viewportBounds = expandGraphBoundsByViewportInsets(
+						viewportBounds,
+						{
+							right: Math.min(stage.width * 0.35, rightOverflow * 2 + 4),
+						},
+						sigma.getGraphToViewportRatio(),
+					);
+					return true;
+				};
+				for (let pass = 0; pass < LABEL_FIT_PASSES; pass += 1) {
+					sigma.setCustomBBox(viewportBounds);
+					sigma.refresh();
+					if (!expandBoundsForDisplayedLabels()) break;
+				}
+				sigma.setCustomBBox(viewportBounds);
 				sigma.refresh();
 
 				if (!settleOverlaps || visibleNodeIds.length < 2) return;
+
+				// Freeze a slightly roomier normalization before moving screen-sized
+				// circles. Otherwise refresh immediately auto-fits their new extent and
+				// scales much of the separation back out.
+				viewportBounds = expandGraphBoundsByViewportInsets(
+					viewportBounds,
+					{
+						left: VIEWPORT_COLLISION_INSET,
+						right: VIEWPORT_COLLISION_INSET,
+						top: VIEWPORT_COLLISION_INSET,
+						bottom: VIEWPORT_COLLISION_INSET,
+					},
+					sigma.getGraphToViewportRatio(),
+				);
+				sigma.setCustomBBox(viewportBounds);
+				sigma.refresh();
 
 				let remainingPasses = currentGraph.order < 500 ? 2 : 1;
 				const settleInViewport = () => {
@@ -1671,6 +1757,9 @@ function SigmaViewportManager({
 					if (disposed || remainingPasses <= 0) return;
 					remainingPasses -= 1;
 					try {
+						const displayedLabelIds = [
+							...sigma.getNodeDisplayedLabels(),
+						].filter((nodeId) => visibleNodeSet.has(nodeId));
 						relaxOverlaps(currentGraph, visibleNodeIds, {
 							iterations:
 								currentGraph.order >= HUGE_THRESHOLD
@@ -1680,7 +1769,11 @@ function SigmaViewportManager({
 										: currentGraph.order >= 500
 											? 4
 											: 8,
-							labelExtents: computeLabelExtents(currentGraph, visibleNodeIds),
+							labelExtents: computeLabelExtents(
+								currentGraph,
+								displayedLabelIds,
+								{ labelSize: sigma.getSetting("labelSize") },
+							),
 							coordinateMapper: {
 								fromGraph: (position) => sigma.graphToViewport(position),
 								toGraph: (position) => sigma.viewportToGraph(position),
@@ -1693,6 +1786,11 @@ function SigmaViewportManager({
 								),
 						});
 						sigma.refresh();
+						for (let pass = 0; pass < 2; pass += 1) {
+							if (!expandBoundsForDisplayedLabels()) break;
+							sigma.setCustomBBox(viewportBounds);
+							sigma.refresh();
+						}
 						if (remainingPasses > 0) {
 							settleFrame = window.requestAnimationFrame(settleInViewport);
 						}
@@ -2461,7 +2559,7 @@ export function GraphCanvas({
 		return () => {
 			cancelled = true;
 		};
-	}, [data, layoutRunKey, clusters, storedScene, stageReady]);
+	}, [data, layoutRunKey, clusters, storedScene, stageReady, t]);
 
 	useEffect(() => {
 		if (!graph || !data) return;
@@ -2505,8 +2603,8 @@ export function GraphCanvas({
 					? t("refreshingGraphSnapshot", "Refreshing graph snapshot")
 					: t("loadingGraphSnapshot", "Loading graph snapshot"),
 				detail: graph
-					? `Keeping the current view visible while new graph data arrives.`
-					: `Fetching nodes and connections from the database.`,
+					? "Keeping the current view visible while new graph data arrives."
+					: "Fetching nodes and connections from the database.",
 				progress: graph ? 0.16 : 0.08,
 				nodeCount,
 				edgeCount,
@@ -2564,6 +2662,7 @@ export function GraphCanvas({
 		loading,
 		preparationState,
 		preparedForCurrentData,
+		t,
 	]);
 
 	const isBusy = overlayState !== null;
@@ -2633,7 +2732,7 @@ export function GraphCanvas({
 			edgeCount: nextData.edges.length,
 		});
 		setLayoutRunKey((current) => current + 1);
-	}, [data, isBusy]);
+	}, [data, isBusy, t]);
 
 	const highlightRef = useRef<HighlightState>({
 		hoveredNode: null,
@@ -2974,6 +3073,9 @@ export function GraphCanvas({
 		const isHuge = nodeCount >= HUGE_THRESHOLD;
 		const isLarge = nodeCount >= LARGE_THRESHOLD;
 		const isDense = edgeCount / Math.max(1, nodeCount) > 3;
+		const renderPersistentLabels =
+			stageDimensions.height >= MIN_PERSISTENT_LABEL_STAGE_HEIGHT ||
+			nodeCount <= COMPACT_STAGE_LABEL_NODE_LIMIT;
 
 		const defaultNode = getDefaultNodeColor();
 		const defaultEdgeHex = getDefaultEdgeColor();
@@ -2991,6 +3093,7 @@ export function GraphCanvas({
 				arrow: EdgeArrowProgram,
 				curvedArrow: EdgeCurvedArrowProgram,
 			},
+			renderLabels: renderPersistentLabels,
 			renderEdgeLabels: !isHuge,
 			enableEdgeEvents: !isHuge,
 			// Text and faint edges are what the eye cannot track mid-pan anyway;
@@ -3029,7 +3132,7 @@ export function GraphCanvas({
 			autoRescale: true,
 			autoCenter: true,
 		};
-	}, [graph, nodeReducer, edgeReducer, themeTick]);
+	}, [graph, nodeReducer, edgeReducer, themeTick, stageDimensions.height]);
 
 	if (!graph && !hasRenderableData && !loading) {
 		return (

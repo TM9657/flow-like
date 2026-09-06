@@ -30,6 +30,7 @@ use flow_like::flow::variable::VariableType;
 use flow_like::models::llm::ModelUsageContext;
 use flow_like::profile::Profile;
 use flow_like::state::FlowLikeState;
+use flow_like_types::channel::Channel;
 use flow_like_types::tokio::sync::{mpsc, oneshot};
 use serde::Deserialize;
 use std::{convert::Infallible, sync::Arc, time::Duration};
@@ -127,6 +128,7 @@ pub struct CopilotChatRequest {
 }
 
 const MAX_PROMPT_CHARS: usize = 20_000;
+const ONTOLOGY_QUERY_CANCEL_POLL_INTERVAL: Duration = Duration::from_millis(250);
 // The embedded ontology planner carries a bounded schema in `user_prompt`. Its frontend schema
 // budget is 60,000 serialized characters, so this route needs enough headroom for the question,
 // language preference, and repair context around that schema. This larger limit applies only to
@@ -148,6 +150,15 @@ fn user_prompt_char_limit(scope: &CopilotScope, read_only: bool) -> usize {
         MAX_ONTOLOGY_QUERY_PROMPT_CHARS
     } else {
         MAX_PROMPT_CHARS
+    }
+}
+
+async fn wait_for_channel_cancellation(channel: Arc<dyn Channel>, poll_interval: Duration) {
+    loop {
+        if channel.is_cancelled().await {
+            return;
+        }
+        flow_like_types::tokio::time::sleep(poll_interval).await;
     }
 }
 
@@ -960,16 +971,22 @@ async fn specialist_chat(
         let query_proposal_only =
             payload.read_only && matches!(specialist, PlatformSpecialist::DataStudio);
         let result = if query_proposal_only {
-            run_ontology_query_chat(
-                flow_like_state,
-                profile,
-                payload.user_prompt,
-                payload.model_id,
-                token,
-                bridge,
-                Some(on_token),
-            )
-            .await
+            let cancellation_channel = channel_for_task.clone();
+            flow_like_types::tokio::select! {
+                result = run_ontology_query_chat(
+                    flow_like_state,
+                    profile,
+                    payload.user_prompt,
+                    payload.model_id,
+                    token,
+                    bridge,
+                    Some(on_token),
+                ) => result,
+                _ = wait_for_channel_cancellation(
+                    cancellation_channel,
+                    ONTOLOGY_QUERY_CANCEL_POLL_INTERVAL,
+                ) => Err(flow_like_types::anyhow!("Run cancelled")),
+            }
         } else {
             run_specialist_chat(
                 flow_like_state,
@@ -1072,7 +1089,13 @@ mod tests {
     use super::resolve_copilot_app_id;
     use super::specialist_host_context;
     use super::user_prompt_char_limit;
+    use super::wait_for_channel_cancellation;
     use flow_like::copilot::CopilotScope;
+    use flow_like_types::channel::{
+        Channel, ChannelPush, ChannelPushKind, InProcessChannel, InProcessPushResult,
+    };
+    use std::sync::Arc;
+    use std::time::Duration;
 
     #[test]
     fn ontology_query_prompt_budget_has_room_for_the_bounded_schema() {
@@ -1090,6 +1113,34 @@ mod tests {
             user_prompt_char_limit(&CopilotScope::Board, true),
             MAX_PROMPT_CHARS
         );
+    }
+
+    #[tokio::test]
+    async fn ontology_query_cancellation_watcher_observes_channel_cancel() {
+        let channel_id = format!("ontology-query-{}", flow_like_types::create_id());
+        let channel = InProcessChannel::register(&channel_id, Duration::from_secs(30)).await;
+        let observed_channel: Arc<dyn Channel> = channel.clone();
+        let watcher = tokio::spawn(wait_for_channel_cancellation(
+            observed_channel,
+            Duration::from_millis(1),
+        ));
+
+        assert_eq!(
+            channel
+                .push(ChannelPush {
+                    channel_id,
+                    request_id: None,
+                    kind: ChannelPushKind::Cancel,
+                    value: serde_json::Value::Null,
+                })
+                .await,
+            InProcessPushResult::Delivered
+        );
+        tokio::time::timeout(Duration::from_millis(100), watcher)
+            .await
+            .expect("cancellation watcher should finish")
+            .expect("cancellation watcher task should not panic");
+        channel.close().await;
     }
 
     #[test]

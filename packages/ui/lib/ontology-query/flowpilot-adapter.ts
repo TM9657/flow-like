@@ -38,24 +38,23 @@ export function createFlowPilotOntologyQueryTextCompletion(
 	if (!target.appId.trim() || !target.overlayId.trim()) {
 		throw new Error("Ontology query appId and overlayId are required.");
 	}
-	if (
-		normalizeAIProvider(options.provider) !== "bits" &&
-		!options.modelId?.trim()
-	) {
-		throw new Error(
-			"A modelId is required for the selected FlowPilot agent backend.",
-		);
-	}
-	const effectiveModelId = flowPilotModelIdForProvider(
-		options.provider,
-		options.modelId,
-	);
-
 	return async ({ requestId, sourcePrompt, userPrompt, signal }) => {
 		if (!requestId.trim()) {
 			throw new Error("Ontology query requestId is required.");
 		}
 		if (signal.aborted) throw abortError();
+		if (
+			normalizeAIProvider(options.provider) !== "bits" &&
+			!options.modelId?.trim()
+		) {
+			throw new Error(
+				"A modelId is required for the selected FlowPilot agent backend.",
+			);
+		}
+		const effectiveModelId = flowPilotModelIdForProvider(
+			options.provider,
+			options.modelId,
+		);
 
 		let settled = false;
 		const cancel = () => {
