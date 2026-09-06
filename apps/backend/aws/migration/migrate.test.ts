@@ -27,6 +27,7 @@ import {
 	clientConfig,
 	composeDatabaseUrl,
 	drainClusterJobs,
+	grantRuntimeRole,
 	grantStatements,
 	interruption,
 	isAlreadyExistsError,
@@ -584,9 +585,8 @@ describe("_prisma_migrations bookkeeping", () => {
 describe("grants and retries", () => {
 	test("grant script targets the runtime role for existing and future objects", () => {
 		const statements = grantStatements(parseConfig(validSettings()));
-		expect(statements).toHaveLength(5);
-		expect(statements[0]).toBe("GRANT USAGE ON SCHEMA public TO flow_like_api");
-		expect(statements[1]).toBe(
+		expect(statements).toHaveLength(4);
+		expect(statements[0]).toBe(
 			"GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO flow_like_api",
 		);
 		expect(
@@ -594,6 +594,58 @@ describe("grants and retries", () => {
 				s.startsWith("ALTER DEFAULT PRIVILEGES IN SCHEMA public"),
 			),
 		).toHaveLength(2);
+	});
+
+	test("runtime bootstrap uses inherited public schema access without changing the system schema", async () => {
+		const calls: Call[] = [];
+		const session: Executor = {
+			async run<R extends pg.QueryResultRow>(
+				sql: string,
+				values: unknown[] = [],
+			) {
+				calls.push({ sql, values });
+				if (/^GRANT .* ON SCHEMA public\b/.test(sql)) {
+					throw new Error("feature not supported on system entity");
+				}
+				return queryResult<R>(
+					sql.includes("has_schema_privilege") ? [{ can_use: true }] : [],
+				);
+			},
+			async close() {},
+		};
+		await grantRuntimeRole(session, parseConfig(validSettings()), ROLE_ARN);
+		expect(
+			calls.find((call) => call.sql.includes("has_schema_privilege"))?.values,
+		).toEqual(["flow_like_api"]);
+		expect(calls.map((call) => call.sql)).toContain(
+			`AWS IAM GRANT flow_like_api TO '${ROLE_ARN}'`,
+		);
+		expect(calls.slice(-4).map((call) => call.sql)).toEqual(
+			grantStatements(parseConfig(validSettings())),
+		);
+	});
+
+	test("runtime bootstrap fails before granting access when inherited schema usage is missing", async () => {
+		const calls: string[] = [];
+		const session: Executor = {
+			async run<R extends pg.QueryResultRow>(sql: string) {
+				calls.push(sql);
+				return queryResult<R>(
+					sql.includes("has_schema_privilege")
+						? [{ can_use: false }]
+						: [{ exists: 1 }],
+				);
+			},
+			async close() {},
+		};
+		await expect(
+			grantRuntimeRole(session, parseConfig(validSettings()), ROLE_ARN),
+		).rejects.toThrow(/lacks inherited USAGE on schema public/);
+		expect(
+			calls.some((sql) =>
+				/^(AWS IAM GRANT|GRANT|ALTER DEFAULT PRIVILEGES)\b/.test(sql),
+			),
+		).toBe(false);
 	});
 
 	test("OCC conflicts and connection loss are transient, everything else is not", () => {

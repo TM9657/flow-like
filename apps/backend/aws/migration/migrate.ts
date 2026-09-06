@@ -851,7 +851,6 @@ async function assertSchemaValid(session: Executor): Promise<void> {
 export function grantStatements(config: MigrationConfig): string[] {
 	const role = config.runtimeDbRole;
 	return [
-		`GRANT USAGE ON SCHEMA public TO ${role}`,
 		`GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO ${role}`,
 		`GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO ${role}`,
 		`ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO ${role}`,
@@ -859,7 +858,7 @@ export function grantStatements(config: MigrationConfig): string[] {
 	];
 }
 
-async function grantRuntimeRole(
+export async function grantRuntimeRole(
 	session: Executor,
 	config: MigrationConfig,
 	runtimeRoleArn: string,
@@ -872,6 +871,17 @@ async function grantRuntimeRole(
 	if ((exists.rowCount ?? 0) === 0) {
 		await session.run(`CREATE ROLE ${role} WITH LOGIN`);
 		log(`created database role ${role}`);
+	}
+	// DSQL rejects grants on the system-owned public schema. Its USAGE
+	// privilege is inherited through PUBLIC; verify it before granting access.
+	const schemaUsage = await session.run<{ can_use: boolean }>(
+		"SELECT has_schema_privilege($1, 'public', 'USAGE') AS can_use",
+		[role],
+	);
+	if (schemaUsage.rows[0]?.can_use !== true) {
+		throw new MigrationError(
+			`database role ${role} lacks inherited USAGE on schema public; Aurora DSQL does not support granting privileges on this system schema`,
+		);
 	}
 	const mapped = await session.run(
 		"SELECT 1 FROM sys.iam_pg_role_mappings WHERE pg_role_name = $1 AND arn = $2",

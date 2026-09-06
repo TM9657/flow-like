@@ -57,11 +57,14 @@ job applies each statement itself and keeps Prisma's bookkeeping:
    `pg_constraint` has no `NOT VALID` foreign key, then set `finished_at` on
    the rows from step 3 that were only awaiting their jobs.
 7. Grant the runtime role idempotently when `DSQL_RUNTIME_ROLE_ARN` is set:
-   `CREATE ROLE <role> WITH LOGIN` if missing, `AWS IAM GRANT <role> TO
+   `CREATE ROLE <role> WITH LOGIN` if missing, verify inherited `USAGE` on
+   `public`, `AWS IAM GRANT <role> TO
    '<DSQL_RUNTIME_ROLE_ARN>'` if not yet in `sys.iam_pg_role_mappings`, then
-   `GRANT USAGE ON SCHEMA public`, `GRANT SELECT, INSERT, UPDATE, DELETE ON ALL
+   `GRANT SELECT, INSERT, UPDATE, DELETE ON ALL
    TABLES`, `GRANT USAGE, SELECT ON ALL SEQUENCES` and the matching `ALTER
-   DEFAULT PRIVILEGES`. Without the ARN the step is skipped with a warning.
+   DEFAULT PRIVILEGES`. DSQL rejects grants on the system-owned `public`
+   schema itself; schema usage is inherited through `PUBLIC`. Without the
+   ARN the step is skipped with a warning.
 8. Run `PRISMA_SCHEMA_DISABLE_ADVISORY_LOCK=1 prisma migrate status --config
    prisma.dsql.config.ts` (DATABASE_URL only in that child's environment) and
    fail unless it reports the history as up to date.

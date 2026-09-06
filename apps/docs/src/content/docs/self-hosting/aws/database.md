@@ -106,12 +106,17 @@ reference, or to run it by hand as `admin`:
 ```sql
 CREATE ROLE flow_like_api WITH LOGIN;
 AWS IAM GRANT flow_like_api TO 'arn:aws:iam::<account>:role/<runtime-role>';
-GRANT USAGE ON SCHEMA public TO flow_like_api;
 GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO flow_like_api;
 GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO flow_like_api;
 ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO flow_like_api;
 ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT USAGE, SELECT ON SEQUENCES TO flow_like_api;
 ```
+
+The role inherits `USAGE` on `public` through `PUBLIC`. DSQL rejects
+`GRANT USAGE ON SCHEMA public` because `public` is a system schema. The
+migration job checks inherited access with
+`SELECT has_schema_privilege('flow_like_api', 'public', 'USAGE');` and fails
+if it is missing.
 
 Check the mapping with `SELECT * FROM sys.iam_pg_role_mappings;`. The Lambdas
 then run with `DSQL_USER=flow_like_api`.
