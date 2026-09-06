@@ -1903,5 +1903,7 @@
 	"yourEntitynounStaysTitleUntilTheReviewIsComplete": "Your {{entityNoun}} stays {{title}} until the review is complete.",
 	"yourMembershipEndsImmediatelyAndTheLocalCopyIsRemovedYouWillNeedANewInviteToReturn": "Your membership ends immediately and the local copy is removed. You will need a new invite to return.",
 	"yourProfile": "Your profile",
-	"yourSemanticLayer": "Your semantic layer"
+	"yourSemanticLayer": "Your semantic layer",
+	"geometryWgs84": "Geometry (WGS 84)",
+	"geometryColumnHint": "GeoJSON geometry objects with WGS 84 longitude, latitude coordinates in degrees. Scalar values only."
 }

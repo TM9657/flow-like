@@ -1192,5 +1192,15 @@
 	"yAxis": "Y 轴",
 	"yAxisTitle": "Y 轴标题",
 	"yesterday": "",
-	"you": "你"
+	"you": "你",
+	"geometry": "",
+	"geometrySubtype": "",
+	"anyGeometry": "",
+	"geometryGeoJson": "",
+	"geometryCoordinateOrder": "",
+	"geometryPreview": "",
+	"geometryStoredCoordinateOrder": "",
+	"geometryUnknownCrs": "",
+	"hideGeometryValue": "",
+	"showGeometryValue": ""
 }

@@ -1892,5 +1892,7 @@
 	"yourEntitynounStaysTitleUntilTheReviewIsComplete": "검토가 완료될 때까지 {{entityNoun}}은(는) {{title}} 상태로 유지됩니다.",
 	"yourMembershipEndsImmediatelyAndTheLocalCopyIsRemovedYouWillNeedANewInviteToReturn": "",
 	"yourProfile": "내 프로필",
-	"yourSemanticLayer": "나의 시맨틱 레이어"
+	"yourSemanticLayer": "나의 시맨틱 레이어",
+	"geometryWgs84": "",
+	"geometryColumnHint": ""
 }

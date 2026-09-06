@@ -1192,5 +1192,15 @@
 	"yAxis": "Y軸",
 	"yAxisTitle": "Y軸タイトル",
 	"yesterday": "",
-	"you": "あなた"
+	"you": "あなた",
+	"geometry": "",
+	"geometrySubtype": "",
+	"anyGeometry": "",
+	"geometryGeoJson": "",
+	"geometryCoordinateOrder": "",
+	"geometryPreview": "",
+	"geometryStoredCoordinateOrder": "",
+	"geometryUnknownCrs": "",
+	"hideGeometryValue": "",
+	"showGeometryValue": ""
 }

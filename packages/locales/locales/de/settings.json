@@ -1903,5 +1903,7 @@
 	"yourEntitynounStaysTitleUntilTheReviewIsComplete": "Dein {{entityNoun}} bleibt {{title}}, bis die Prüfung abgeschlossen ist.",
 	"yourMembershipEndsImmediatelyAndTheLocalCopyIsRemovedYouWillNeedANewInviteToReturn": "",
 	"yourProfile": "Dein Profil",
-	"yourSemanticLayer": "Deine semantische Schicht"
+	"yourSemanticLayer": "Deine semantische Schicht",
+	"geometryWgs84": "",
+	"geometryColumnHint": ""
 }

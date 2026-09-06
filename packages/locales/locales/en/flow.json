@@ -1236,5 +1236,15 @@
 	"yAxis": "Y Axis",
 	"yAxisTitle": "Y Axis Title",
 	"yesterday": "Yesterday",
-	"you": "You"
+	"you": "You",
+	"geometry": "Geometry",
+	"geometrySubtype": "Geometry subtype",
+	"anyGeometry": "Any geometry",
+	"geometryGeoJson": "GeoJSON geometry",
+	"geometryCoordinateOrder": "WGS 84 coordinates: longitude, latitude in degrees. Leave empty to unset.",
+	"geometryPreview": "Geometry map preview",
+	"geometryStoredCoordinateOrder": "WGS 84: longitude, latitude in degrees.",
+	"geometryUnknownCrs": "Map preview requires WGS 84 CRS metadata and planar edges.",
+	"hideGeometryValue": "Hide geometry value",
+	"showGeometryValue": "Show geometry value"
 }

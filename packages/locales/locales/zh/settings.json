@@ -1892,5 +1892,7 @@
 	"yourEntitynounStaysTitleUntilTheReviewIsComplete": "在审核完成之前，您的 {{entityNoun}} 将保持 {{title}} 状态。",
 	"yourMembershipEndsImmediatelyAndTheLocalCopyIsRemovedYouWillNeedANewInviteToReturn": "",
 	"yourProfile": "您的个人资料",
-	"yourSemanticLayer": "您的语义层"
+	"yourSemanticLayer": "您的语义层",
+	"geometryWgs84": "",
+	"geometryColumnHint": ""
 }

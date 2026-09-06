@@ -1192,5 +1192,15 @@
 	"yAxis": "Y축",
 	"yAxisTitle": "Y축 제목",
 	"yesterday": "",
-	"you": "나"
+	"you": "나",
+	"geometry": "",
+	"geometrySubtype": "",
+	"anyGeometry": "",
+	"geometryGeoJson": "",
+	"geometryCoordinateOrder": "",
+	"geometryPreview": "",
+	"geometryStoredCoordinateOrder": "",
+	"geometryUnknownCrs": "",
+	"hideGeometryValue": "",
+	"showGeometryValue": ""
 }

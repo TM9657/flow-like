@@ -1390,5 +1390,15 @@
 	"yAxis": "",
 	"yAxisTitle": "",
 	"yesterday": "",
-	"you": ""
+	"you": "",
+	"geometry": "",
+	"geometrySubtype": "",
+	"anyGeometry": "",
+	"geometryGeoJson": "",
+	"geometryCoordinateOrder": "",
+	"geometryPreview": "",
+	"geometryStoredCoordinateOrder": "",
+	"geometryUnknownCrs": "",
+	"hideGeometryValue": "",
+	"showGeometryValue": ""
 }

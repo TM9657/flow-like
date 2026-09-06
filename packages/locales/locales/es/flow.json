@@ -1313,5 +1313,15 @@
 	"yAxis": "Eje Y",
 	"yAxisTitle": "Título del eje Y",
 	"yesterday": "",
-	"you": "Tú"
+	"you": "Tú",
+	"geometry": "",
+	"geometrySubtype": "",
+	"anyGeometry": "",
+	"geometryGeoJson": "",
+	"geometryCoordinateOrder": "",
+	"geometryPreview": "",
+	"geometryStoredCoordinateOrder": "",
+	"geometryUnknownCrs": "",
+	"hideGeometryValue": "",
+	"showGeometryValue": ""
 }

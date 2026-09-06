@@ -1236,5 +1236,15 @@
 	"yAxis": "Y-Achse",
 	"yAxisTitle": "Y-Achsentitel",
 	"yesterday": "",
-	"you": "Du"
+	"you": "Du",
+	"geometry": "",
+	"geometrySubtype": "",
+	"anyGeometry": "",
+	"geometryGeoJson": "",
+	"geometryCoordinateOrder": "",
+	"geometryPreview": "",
+	"geometryStoredCoordinateOrder": "",
+	"geometryUnknownCrs": "",
+	"hideGeometryValue": "",
+	"showGeometryValue": ""
 }
