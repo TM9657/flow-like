@@ -1,5 +1,6 @@
 # Git
 .git/
+**/.git
 .gitignore
 
 # Build artifacts
@@ -19,17 +20,35 @@ node_modules/
 .env.*
 **/.env
 **/.env.*
+# Credentials from developer tooling must not enter COPY . . or build caches.
+**/.git-credentials
+**/.netrc
+**/.npmrc
+**/.cargo/credentials
+**/.cargo/credentials.toml
+**/.aws/**
+**/.azure/**
+**/.config/gcloud/**
+**/.ssh/**
+**/.kube/**
+**/*.key
+**/*.p12
+**/*.pfx
+**/*.tfstate
+**/*.tfstate.*
 *.local
 **/*.local
 *.pem
 **/*.pem
 api.config.json
 **/api.config.json
-# Deployment-specific Azure config enters builds only as a BuildKit secret,
+# Deployment-specific cloud configs enter builds only as BuildKit secrets,
 # never via the context. The tracked flow-like.config.json public default must
 # stay in the context - builds read it.
 flow-like.azure.config.json
 **/flow-like.azure.config.json
+flow-like.gcp.config.json
+**/flow-like.gcp.config.json
 .cargo/config
 **/.cargo/config
 # Keep per-example Cargo overrides out of backend build contexts, while
@@ -51,13 +70,25 @@ tmp/
 apps/desktop/dist/
 apps/desktop/out/
 apps/desktop/.tauri/
+apps/desktop/src-tauri/gen/
+apps/desktop/src-tauri/binaries/linux/x64/libggml-vulkan.so*
+apps/desktop/src-tauri/binaries/win/x64/ggml-vulkan.dll
 apps/web-app/dist/
 apps/website/dist/
 apps/docs/dist/
 apps/embedded/dist/
 thirdparty/
 tests/data/
-assets/
+# Rust embeds the MCP browser inspector when building the API and web catalog.
+assets/*
+!assets/mcp-inspector.html
+
+# Local build outputs are also excluded when AWS builds use this repository.
+**/*.tsbuildinfo
+**/.gradle/
+**/_build/
+**/build/
+.codacy/
 
 # IDE and OS
 .vscode/

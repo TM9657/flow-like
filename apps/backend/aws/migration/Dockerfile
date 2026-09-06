@@ -21,6 +21,8 @@
 
 FROM oven/bun:1.3.8-alpine
 
+COPY LICENSE /usr/share/licenses/flow-like/LICENSE
+
 # openssl provides libssl3/libcrypto3 for the schema engine (and picks the
 # linux-musl-openssl-3.0.x engine at install), ca-certificates is what lets
 # both node-postgres and Prisma verify the cluster's public-CA certificate,

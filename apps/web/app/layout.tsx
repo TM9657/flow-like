@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import "@flow-like/flow-like-ui/global.css";
 import { Inter } from "next/font/google";
+import Script from "next/script";
 import { ClientProviders } from "../components/client-providers";
 
 const inter = Inter({ subsets: ["latin"], preload: true });
@@ -92,6 +93,9 @@ export default function RootLayout({
 	return (
 		<html lang="en" suppressHydrationWarning suppressContentEditableWarning>
 			<body className={inter.className}>
+				{process.env.NEXT_PUBLIC_FLOW_LIKE_RUNTIME_CONFIG === "1" && (
+					<Script src="/runtime-config.js" strategy="beforeInteractive" />
+				)}
 				<ClientProviders>{children}</ClientProviders>
 			</body>
 		</html>

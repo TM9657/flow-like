@@ -127,6 +127,9 @@ services:
     pids_limit: ${DB_INIT_PIDS:-256}
   api:
     image: ${API_IMAGE:-flow-like-api:latest}
+    configs:
+      - source: flowlike_runtime_config
+        target: /app/flow-like.config.json
     scale: ${API_REPLICAS:-2}
     build:
       context: ../../..
@@ -148,6 +151,10 @@ services:
     environment:
       PORT: 8080
       RUST_LOG: ${RUST_LOG:-info,docker_compose_api=debug}
+      # An explicit empty FILE selects JSON/SECRET_REF without the default file.
+      FLOW_LIKE_CONFIG_FILE: ${FLOW_LIKE_CONFIG_FILE-/app/flow-like.config.json}
+      FLOW_LIKE_CONFIG_JSON: ${FLOW_LIKE_CONFIG_JSON:-}
+      FLOW_LIKE_CONFIG_SECRET_REF: ${FLOW_LIKE_CONFIG_SECRET_REF:-}
       DATABASE_URL: ${DATABASE_URL:?Run scripts/setup-env.py and configure .env}
       DATABASE_POOL_MAX_CONNECTIONS: ${DATABASE_POOL_MAX_CONNECTIONS:-10}
       DATABASE_POOL_MIN_CONNECTIONS: ${DATABASE_POOL_MIN_CONNECTIONS:-1}
@@ -603,10 +610,11 @@ services:
     build:
       context: ../../..
       dockerfile: apps/backend/docker-compose/web/Dockerfile
-      args:
-        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:8080}
-        NEXT_PUBLIC_REDIRECT_URL: ${NEXT_PUBLIC_REDIRECT_URL:-http://localhost:3001/callback}
-        NEXT_PUBLIC_REDIRECT_LOGOUT_URL: ${NEXT_PUBLIC_REDIRECT_LOGOUT_URL:-http://localhost:3001/}
+    # Existing setup-env.py values now configure the same prebuilt artifact.
+    environment:
+      FLOW_LIKE_WEB_API_URL: ${FLOW_LIKE_WEB_API_URL:-${NEXT_PUBLIC_API_URL:-http://localhost:8080}}
+      FLOW_LIKE_WEB_REDIRECT_URL: ${FLOW_LIKE_WEB_REDIRECT_URL:-${NEXT_PUBLIC_REDIRECT_URL:-}}
+      FLOW_LIKE_WEB_LOGOUT_URL: ${FLOW_LIKE_WEB_LOGOUT_URL:-${NEXT_PUBLIC_REDIRECT_LOGOUT_URL:-}}
     healthcheck:
       test:
         - CMD
@@ -974,8 +982,8 @@ services:
       - /tmp:size=64m,mode=1777
   object-store-init:
     build:
-      context: ./object-store
-      dockerfile: Dockerfile
+      context: ../../..
+      dockerfile: apps/backend/docker-compose/object-store/Dockerfile
     image: ${OBJECT_STORE_INIT_IMAGE:-flow-like-object-store-init:local}
     environment:
       S3_INTERNAL_ENDPOINT: http://object-store:9000

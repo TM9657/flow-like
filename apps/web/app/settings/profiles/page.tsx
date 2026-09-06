@@ -20,6 +20,10 @@ import { useCallback, useMemo } from "react";
 import { useAuth } from "react-oidc-context";
 import { toast } from "sonner";
 import { appsDB } from "../../../lib/apps-db";
+import {
+	getPublicApiUrl,
+	getPublicWebConfig,
+} from "../../../lib/public-config";
 import AMBER_MINIMAL from "./themes/amber-minimal.json";
 import AMETHYST_HAZE from "./themes/amethyst-haze.json";
 import BOLD_TECH from "./themes/bold-tech.json";
@@ -169,8 +173,7 @@ export default function SettingsProfilesPage() {
 			if (!auth.user?.access_token) {
 				throw new Error("Sign in again to save your profile.");
 			}
-			const baseUrl =
-				process.env.NEXT_PUBLIC_API_URL || "https://api.flow-like.com";
+			const baseUrl = getPublicApiUrl();
 			const response = await fetch(
 				`${baseUrl.replace(/\/+$/, "")}/api/v1/profile/${encodeURIComponent(profileId)}`,
 				{
@@ -217,7 +220,7 @@ export default function SettingsProfilesPage() {
 		workspaceProfileDraftScope(
 			"web",
 			auth.user?.profile.sub,
-			process.env.NEXT_PUBLIC_API_URL ??
+			getPublicWebConfig().apiUrl ??
 				currentProfile.data?.hub_profile.hub ??
 				auth.user?.profile.iss,
 		),
@@ -294,8 +297,7 @@ export default function SettingsProfilesPage() {
 		if (profileCount <= 1) return;
 
 		const profileId = current.hub_profile.id;
-		const baseUrl =
-			process.env.NEXT_PUBLIC_API_URL || "https://api.flow-like.com";
+		const baseUrl = getPublicApiUrl();
 
 		await draft.flush();
 		const response = await fetch(

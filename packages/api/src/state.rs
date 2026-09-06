@@ -46,6 +46,7 @@ use crate::mail::{DynMailClient, create_mail_client};
 use crate::permission::wasm_package_permission::WasmPackagePermission;
 use crate::realtime_ice::RealtimeIceService;
 use crate::routes::registry::ServerRegistry;
+use crate::runtime_config::{ConfigSource, OAuthProviderConfig, OpenIdValidationOverrides};
 
 pub type AppState = Arc<State>;
 
@@ -246,15 +247,10 @@ impl BoardMutationGuard {
     }
 }
 
-const CONFIG: &str = include_str!("../../../flow-like.config.json");
 const JWKS_REFRESH_MIN_INTERVAL: Duration = Duration::from_secs(30);
 const JWKS_REQUEST_TIMEOUT: Duration = Duration::from_secs(10);
 const JWKS_MAX_RESPONSE_BYTES: usize = 1024 * 1024;
 const JWKS_MAX_KEYS: usize = 64;
-/// Clock-skew tolerance applied to `exp`/`nbf`. Matches the historical
-/// `jsonwebtoken` default so IdPs and clients with slightly offset clocks keep
-/// working; override with `authentication.openid.leeway_seconds`.
-const DEFAULT_OPENID_LEEWAY_SECONDS: u64 = 60;
 
 /// Cached auth result for JWT/PAT/API key
 #[derive(Clone, Debug)]
@@ -314,30 +310,6 @@ struct OpenIdValidationSettings {
     leeway: u64,
 }
 
-/// Additive OpenID validation settings read from the embedded deployment
-/// config. Every field defaults to the historical behaviour, so configs that
-/// do not declare them validate exactly as before.
-#[derive(Debug, serde::Deserialize)]
-struct OpenIdValidationOverrides {
-    #[serde(default = "default_openid_leeway_seconds")]
-    leeway_seconds: u64,
-    #[serde(default)]
-    additional_client_ids: Vec<String>,
-}
-
-impl Default for OpenIdValidationOverrides {
-    fn default() -> Self {
-        Self {
-            leeway_seconds: DEFAULT_OPENID_LEEWAY_SECONDS,
-            additional_client_ids: Vec::new(),
-        }
-    }
-}
-
-fn default_openid_leeway_seconds() -> u64 {
-    DEFAULT_OPENID_LEEWAY_SECONDS
-}
-
 /// Statement pinning a pooled Postgres session to UTC.
 ///
 /// Every timestamp column is `timestamptz`, so `date_trunc`/`to_char` and any
@@ -377,6 +349,8 @@ pub(crate) struct ValidatedOpenIdToken {
 
 pub struct State {
     pub platform_config: Hub,
+    pub(crate) oauth_providers: HashMap<String, OAuthProviderConfig>,
+    openid_validation_overrides: OpenIdValidationOverrides,
     pub db: DatabaseConnection,
     pub db_dialect: DbDialect,
     jwks: flow_like_types::tokio::sync::RwLock<JwkSet>,
@@ -678,6 +652,27 @@ impl State {
         // so individual get_secret() calls below hit the warm cache.
         secrets.warmup().await;
 
+        // Select a single complete document before initializing any service.
+        // Loader errors carry no document, filesystem path, or provider details.
+        let effective_config = ConfigSource::from_env()
+            .unwrap_or_else(|error| panic!("{error}"))
+            .load(&secrets)
+            .await
+            .unwrap_or_else(|error| panic!("{error}"));
+        let platform_config = effective_config.hub;
+        let oauth_providers = effective_config.oauth_providers;
+        let openid_validation_overrides = effective_config.openid;
+        if platform_config
+            .authentication
+            .as_ref()
+            .is_some_and(|authentication| authentication.variant.eq_ignore_ascii_case("openid"))
+        {
+            openid_validation_settings_for_hub(&platform_config, &openid_validation_overrides)
+                .unwrap_or_else(|_| {
+                    panic!("OpenID validation configuration must be complete and exact")
+                });
+        }
+
         let sink_secret = secrets
             .get_secret_string(&SecretRef::new("SINK_SECRET"))
             .await
@@ -768,16 +763,6 @@ impl State {
                 .expect("AUDIT_VERIFYING_KEYS must contain named P-256 public keys");
         }
 
-        let platform_config: Hub =
-            serde_json::from_str(CONFIG).expect("Failed to parse config file");
-        if platform_config
-            .authentication
-            .as_ref()
-            .is_some_and(|authentication| authentication.variant.eq_ignore_ascii_case("openid"))
-        {
-            openid_validation_settings_for_hub(&platform_config)
-                .expect("OpenID validation configuration must be complete and exact");
-        }
         let realtime_ice =
             RealtimeIceService::from_config(&platform_config.realtime, Arc::clone(&secrets))
                 .unwrap_or_else(|error| {
@@ -1000,6 +985,8 @@ impl State {
 
         Self {
             platform_config,
+            oauth_providers,
+            openid_validation_overrides,
             db,
             db_dialect,
             client,
@@ -1107,7 +1094,7 @@ impl State {
     }
 
     fn openid_validation_settings(&self) -> Result<OpenIdValidationSettings> {
-        openid_validation_settings_for_hub(&self.platform_config)
+        openid_validation_settings_for_hub(&self.platform_config, &self.openid_validation_overrides)
     }
 
     async fn configured_jwk(&self, kid: &str) -> Result<Jwk> {
@@ -1599,7 +1586,10 @@ impl State {
     }
 }
 
-fn openid_validation_settings_for_hub(hub: &Hub) -> Result<OpenIdValidationSettings> {
+fn openid_validation_settings_for_hub(
+    hub: &Hub,
+    overrides: &OpenIdValidationOverrides,
+) -> Result<OpenIdValidationSettings> {
     let authentication = hub
         .authentication
         .as_ref()
@@ -1627,7 +1617,6 @@ fn openid_validation_settings_for_hub(hub: &Hub) -> Result<OpenIdValidationSetti
     let jwks_url = exact_nonempty_str("authentication.openid.jwks_url", &config.jwks_url)?;
     validate_jwks_url(jwks_url)?;
 
-    let overrides = openid_validation_overrides();
     let mut client_ids = BTreeSet::new();
     client_ids.insert(client_id.to_string());
     for additional in &overrides.additional_client_ids {
@@ -1644,21 +1633,6 @@ fn openid_validation_settings_for_hub(hub: &Hub) -> Result<OpenIdValidationSetti
         jwks_url: jwks_url.to_string(),
         leeway: overrides.leeway_seconds,
     })
-}
-
-/// `OpenIdConfig` ignores unknown keys, so the additive validation settings are
-/// read from the same embedded config document that produced the `Hub`.
-fn openid_validation_overrides() -> OpenIdValidationOverrides {
-    serde_json::from_str::<Value>(CONFIG)
-        .ok()
-        .and_then(|config| {
-            config
-                .get("authentication")
-                .and_then(|authentication| authentication.get("openid"))
-                .cloned()
-        })
-        .and_then(|openid| serde_json::from_value(openid).ok())
-        .unwrap_or_default()
 }
 
 fn exact_nonempty_setting<'a>(name: &str, value: &'a Option<String>) -> Result<&'a str> {
@@ -2003,6 +1977,58 @@ mod tests {
         jwk::{Jwk, JwkSet},
     };
     use std::collections::{BTreeSet, HashMap};
+
+    #[test]
+    fn runtime_document_controls_openid_clients_and_clock_skew() {
+        let mut document: Value = serde_json::from_str(include_str!(
+            "../../../apps/backend/kubernetes/flow-like.config.example.json"
+        ))
+        .unwrap();
+        document["authentication"]["openid"]["issuer"] =
+            serde_json::json!("https://runtime-issuer.example.test");
+        document["authentication"]["openid"]["client_id"] = serde_json::json!("runtime-client");
+        document["authentication"]["openid"]["audience"] = serde_json::json!("runtime-audience");
+        document["authentication"]["openid"]["jwks_url"] =
+            serde_json::json!("https://runtime-issuer.example.test/keys");
+        document["authentication"]["openid"]["additional_client_ids"] =
+            serde_json::json!(["second-runtime-client"]);
+        document["authentication"]["openid"]["leeway_seconds"] = serde_json::json!(3);
+        let config = crate::runtime_config::EffectiveConfig::parse(&document.to_string()).unwrap();
+        let settings =
+            super::openid_validation_settings_for_hub(&config.hub, &config.openid).unwrap();
+        assert_eq!(settings.issuer, "https://runtime-issuer.example.test");
+        assert_eq!(settings.audience, "runtime-audience");
+        assert_eq!(
+            settings.jwks_url,
+            "https://runtime-issuer.example.test/keys"
+        );
+        assert_eq!(
+            settings.client_ids,
+            client_ids(&["runtime-client", "second-runtime-client"])
+        );
+        assert_eq!(settings.leeway, 3);
+
+        document["authentication"]["openid"]
+            .as_object_mut()
+            .unwrap()
+            .remove("additional_client_ids");
+        document["authentication"]["openid"]
+            .as_object_mut()
+            .unwrap()
+            .remove("leeway_seconds");
+        let config = crate::runtime_config::EffectiveConfig::parse(&document.to_string()).unwrap();
+        let settings =
+            super::openid_validation_settings_for_hub(&config.hub, &config.openid).unwrap();
+        assert_eq!(settings.client_ids, client_ids(&["runtime-client"]));
+        assert_eq!(settings.leeway, 60);
+
+        document["authentication"]["openid"]["additional_client_ids"] =
+            serde_json::json!([" private-invalid-client-marker "]);
+        let config = crate::runtime_config::EffectiveConfig::parse(&document.to_string()).unwrap();
+        let error =
+            super::openid_validation_settings_for_hub(&config.hub, &config.openid).unwrap_err();
+        assert!(!format!("{error:?} {error}").contains("private-invalid-client-marker"));
+    }
 
     fn claims(values: &[(&str, Value)]) -> HashMap<String, Value> {
         values

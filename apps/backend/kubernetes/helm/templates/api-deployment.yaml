@@ -2,6 +2,22 @@
 {{- $provider := default "s3" .Values.storage.provider }}
 {{- $storageSecretName := include "flow-like.storageSecretName" . }}
 {{- $redisUsesExistingSecret := and .Values.redis.auth.enabled (ne (default "" .Values.redis.auth.existingSecret) "") }}
+{{- $runtime := .Values.api.runtimeConfig }}
+{{- $sources := 0 }}
+{{- range list $runtime.existingSecret $runtime.existingConfigMap $runtime.secretKeyRef.name $runtime.secretRef }}
+{{- if . }}{{- $sources = add1 $sources }}{{- end }}
+{{- end }}
+{{- if gt (int $sources) 1 }}
+{{- fail "api.runtimeConfig must select at most one of existingSecret, existingConfigMap, secretKeyRef.name or secretRef" }}
+{{- end }}
+{{- $mountRuntime := or $runtime.existingSecret $runtime.existingConfigMap }}
+{{- if gt (int $sources) 0 }}
+{{- range .Values.api.env }}
+{{- if has .name (list "FLOW_LIKE_CONFIG_FILE" "FLOW_LIKE_CONFIG_JSON" "FLOW_LIKE_CONFIG_SECRET_REF") }}
+{{- fail "Use api.runtimeConfig instead of duplicating FLOW_LIKE_CONFIG_* in api.env" }}
+{{- end }}
+{{- end }}
+{{- end }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -93,6 +109,19 @@ spec:
               containerPort: 9090
               protocol: TCP
           env:
+            {{- if $mountRuntime }}
+            - name: FLOW_LIKE_CONFIG_FILE
+              value: /etc/flow-like/flow-like.config.json
+            {{- else if $runtime.secretKeyRef.name }}
+            - name: FLOW_LIKE_CONFIG_JSON
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $runtime.secretKeyRef.name | quote }}
+                  key: {{ required "api.runtimeConfig.secretKeyRef.key is required" $runtime.secretKeyRef.key | quote }}
+            {{- else if $runtime.secretRef }}
+            - name: FLOW_LIKE_CONFIG_SECRET_REF
+              value: {{ $runtime.secretRef | quote }}
+            {{- end }}
             - name: PORT
               value: "8080"
             - name: METRICS_PORT
@@ -342,6 +371,11 @@ spec:
           volumeMounts:
             - name: tmp
               mountPath: /tmp
+            {{- if $mountRuntime }}
+            - name: api-runtime-config
+              mountPath: /etc/flow-like
+              readOnly: true
+            {{- end }}
             {{- if or .Values.sinkServices.enabled (eq .Values.execution.backend "kubernetes_job") (eq .Values.execution.asyncBackend "kubernetes_job") }}
             - name: migration-api-access
               mountPath: /var/run/secrets/kubernetes.io/serviceaccount
@@ -373,6 +407,21 @@ spec:
         - name: tmp
           emptyDir:
             sizeLimit: 256Mi
+        {{- if $mountRuntime }}
+        - name: api-runtime-config
+          {{- if $runtime.existingSecret }}
+          secret:
+            secretName: {{ $runtime.existingSecret | quote }}
+            defaultMode: 0440
+          {{- else }}
+          configMap:
+            name: {{ $runtime.existingConfigMap | quote }}
+            defaultMode: 0444
+          {{- end }}
+            items:
+              - key: {{ required "api.runtimeConfig.key is required" $runtime.key | quote }}
+                path: flow-like.config.json
+        {{- end }}
         {{- if or .Values.database.migration.enabled .Values.rustfs.enabled .Values.sinkServices.enabled (eq .Values.execution.backend "kubernetes_job") (eq .Values.execution.asyncBackend "kubernetes_job") }}
         - name: migration-api-access
           projected:

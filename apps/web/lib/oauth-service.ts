@@ -4,6 +4,7 @@ import {
 	createOAuthService,
 } from "@flow-like/flow-like-ui";
 import { oauthTokenStore } from "./oauth-db";
+import { getPublicApiUrl } from "./public-config";
 import { tauriOAuthRuntime } from "./tauri-oauth-runtime";
 
 export type { IOAuthProvider } from "@flow-like/flow-like-ui";
@@ -29,10 +30,7 @@ function normalizeApiBaseUrl(apiBaseUrl?: string | null): string | undefined {
 }
 
 export function getDefaultOAuthApiBaseUrl(): string {
-	return (
-		normalizeApiBaseUrl(process.env.NEXT_PUBLIC_API_URL) ??
-		"https://api.flow-like.com"
-	);
+	return normalizeApiBaseUrl(getPublicApiUrl()) ?? "https://api.flow-like.com";
 }
 
 export function getOAuthApiBaseUrl(hub?: string | null): string {

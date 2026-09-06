@@ -8,35 +8,67 @@ is present rather than ignoring it.
 
 ## Secure image build
 
-The API embeds reviewed, non-secret identity and OAuth-provider metadata at
-compile time; JWKS are fetched through the bounded runtime cache. Pass the GCP
-configuration contents through a BuildKit secret, and pass only its non-secret
-SHA-256 digest as a build argument so a metadata change invalidates the cached
-compile layer. A local `flow-like.gcp.config.json` must be gitignored and
-dockerignored so it stays out of version control and the build context. The
-tracked repo-root `flow-like.config.json` is the committed public default that
-builds require; it does enter the context, the builder overwrites it with the
-secret for the duration of the build `RUN`, and the same `RUN` removes the copy
-as a standalone file. The reviewed non-secret contents are intentionally
-embedded in `/app/api`, so this input must never contain client secrets:
+The shared image needs no installation configuration, cloud credentials, or
+build secrets. Build from the `flow-like` repository root:
+
+```sh
+docker buildx build \
+  --platform linux/amd64 \
+  --load --tag flow-like-gcp-api:local \
+  -f apps/backend/gcp/api/Dockerfile \
+  .
+```
+
+The image embeds the committed public `flow-like.config.json` as a fallback.
+Supply the complete GCP installation configuration at runtime, including
+`provider: "gcp"`, your OIDC/OAuth settings, and the `mail.smtp` block described
+under [SMTP relay](#smtp-relay). The public fallback is not a GCP deployment
+configuration. JWKS remain fetched through the bounded runtime cache.
+
+### Runtime configuration
+
+Set exactly one nonempty API environment variable:
+
+- `FLOW_LIKE_CONFIG_JSON`: the complete JSON document, optionally injected from
+  a Cloud Run secret.
+- `FLOW_LIKE_CONFIG_FILE`: the path to a readable, read-only mounted JSON file.
+- `FLOW_LIKE_CONFIG_SECRET_REF`: a Secret Manager key or qualified reference,
+  such as `secret://gcp-secret-manager/HUB_CONFIG`, resolved with this API's
+  existing provider configuration and runtime service-account permissions.
+
+The selected document replaces the whole fallback and is loaded once at
+startup. Invalid or conflicting sources stop startup; changing the document
+requires a new revision or restart. Grant access to the configuration secret
+individually, as described under [IAM roles](#iam-roles-for-the-api-service-account).
+Keep OAuth client secrets in separate secret-store entries referenced by
+`client_secret_env`; literal OAuth client secrets are rejected. See the shared
+[runtime API configuration contract](../../CONTAINERS.md#runtime-api-configuration)
+for source handling and public metadata boundaries.
+
+### Optional custom compiled fallback
+
+Legacy deployments can still compile a reviewed, non-secret default. Pass the
+file as a BuildKit secret and its SHA-256 digest as a build argument. The digest
+is verified and participates in the compile-layer cache key. Keep the file
+outside the build context and version control:
 
 ```sh
 CONFIG_PATH=/secure/path/flow-like.gcp.config.json
 CONFIG_SHA256="$(openssl dgst -sha256 "$CONFIG_PATH" | awk '{print $NF}')"
 docker buildx build \
+  --platform linux/amd64 \
   --secret id=flow_like_config,src="$CONFIG_PATH" \
   --build-arg FLOW_LIKE_CONFIG_SHA256="$CONFIG_SHA256" \
   -f apps/backend/gcp/api/Dockerfile \
   .
 ```
 
-The Dockerfile verifies the digest and rejects a config whose provider is not `gcp`. Keep the source
-under the protected CI workspace, record its digest in release evidence, and do
-not include client secrets in it.
-
-The configuration must also carry a `mail.smtp` block — see
-[SMTP relay](#smtp-relay). The tracked public default has none, and its absence
-is not detected at startup.
+The Dockerfile requires a matching digest and checks for a `gcp` provider
+declaration when this optional input is supplied. Record the digest in release
+evidence. The builder temporarily replaces the public default, compiles it into
+`/app/api`, then removes the standalone copy. A BuildKit secret does not make
+those embedded contents private: never include client secrets. Runtime
+configuration can still replace this custom fallback without rebuilding.
 
 ## Environment contract
 
@@ -238,15 +270,16 @@ startup rejects any value other than `smtp` on this image. Two things it cannot
 check:
 
 1. `SmtpMailClient::new` reads the relay host, port, username and password from
-   **environment variables whose names come from the compiled-in
+   **environment variables whose names come from the selected runtime
    `mail.smtp` block**. Cloud Run must mount those four names from Secret
    Manager versions. The password therefore lives in the process environment,
    unlike every other secret this API uses — keep the relay credential scoped to
    sending and rotate it on its own schedule.
 2. The tracked public `flow-like.config.json` sets `mail.provider = "ses"` and
-   carries **no** `smtp` block. With that config the process starts cleanly and
-   then fails with `SMTP settings required for SMTP provider` at the first
-   outbound email. The BuildKit-secret configuration must supply the block.
+   carries **no** `smtp` block. With that fallback the process logs
+   `SMTP settings required for SMTP provider` during mail initialization and
+   continues without a mail client. Supply the block in your complete runtime
+   configuration and verify outbound email before routing traffic.
 
 ## Health and metrics contract
 
@@ -293,8 +326,10 @@ restart-loop the revision:
 5. The Firestore database and the Pub/Sub topics exist. The API publishes on
    dispatch; a missing topic surfaces as a failed user action, not a failed
    startup.
-6. The image was built from a `flow-like.config.json` whose provider is `gcp`
-   and which contains a `mail.smtp` block.
+6. The API receives a complete runtime configuration whose provider is `gcp`
+   and which contains a `mail.smtp` block. The referenced SMTP environment
+   values are present. A reviewed custom compiled fallback can also provide
+   the configuration, but the shared image's public fallback cannot.
 
 ## GCP references
 

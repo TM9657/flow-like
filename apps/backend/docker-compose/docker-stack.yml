@@ -77,9 +77,15 @@ services:
     healthcheck: {}
   api:
     image: ${API_IMAGE:-flow-like-api:latest}
+    configs:
+      - source: flowlike_runtime_config
+        target: /app/flow-like.config.json
     environment:
       PORT: 8080
       RUST_LOG: ${RUST_LOG:-info,docker_compose_api=debug}
+      FLOW_LIKE_CONFIG_FILE: ${FLOW_LIKE_CONFIG_FILE-/app/flow-like.config.json}
+      FLOW_LIKE_CONFIG_JSON: ${FLOW_LIKE_CONFIG_JSON:-}
+      FLOW_LIKE_CONFIG_SECRET_REF: ${FLOW_LIKE_CONFIG_SECRET_REF:-}
       DATABASE_URL: ${DATABASE_URL:?Run scripts/setup-env.py and configure .env}
       DATABASE_POOL_MAX_CONNECTIONS: ${DATABASE_POOL_MAX_CONNECTIONS:-10}
       DATABASE_POOL_MIN_CONNECTIONS: ${DATABASE_POOL_MIN_CONNECTIONS:-1}
@@ -375,6 +381,10 @@ services:
       - flowlike
   web:
     image: ${WEB_IMAGE:-flow-like-web:latest}
+    environment:
+      FLOW_LIKE_WEB_API_URL: ${FLOW_LIKE_WEB_API_URL:-${NEXT_PUBLIC_API_URL:-http://localhost:8080}}
+      FLOW_LIKE_WEB_REDIRECT_URL: ${FLOW_LIKE_WEB_REDIRECT_URL:-${NEXT_PUBLIC_REDIRECT_URL:-}}
+      FLOW_LIKE_WEB_LOGOUT_URL: ${FLOW_LIKE_WEB_LOGOUT_URL:-${NEXT_PUBLIC_REDIRECT_LOGOUT_URL:-}}
     healthcheck:
       test:
         - CMD
@@ -387,7 +397,6 @@ services:
       retries: 5
     networks:
       - flowlike
-    environment: {}
     deploy:
       replicas: ${WEB_REPLICAS:-1}
       resources:

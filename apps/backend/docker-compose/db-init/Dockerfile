@@ -1,5 +1,7 @@
 # syntax=docker/dockerfile:1.7
 FROM oven/bun:1.3.8-debian
+
+COPY LICENSE /usr/share/licenses/flow-like/LICENSE
 USER root
 RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates openssl \
     && rm -rf /var/lib/apt/lists/*

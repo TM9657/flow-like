@@ -26,7 +26,7 @@ class DeploymentTest(unittest.TestCase):
         self.text = setup.generate((ROOT / ".env.example").read_text(), "per-run", "http://localhost:3001", "http://localhost:8080", "http://s3.localhost:9000")
         self.text = self.text.replace("SANDBOX_IMAGE=", "SANDBOX_IMAGE=sha256:" + "a" * 64).replace("SANDBOX_GATEWAY_IMAGE=", "SANDBOX_GATEWAY_IMAGE=sha256:" + "b" * 64)
 
-    def render(self, changes=None):
+    def render(self, changes=None, compose_file=None):
         values = {}
         for line in self.text.splitlines():
             if line and not line.startswith("#"):
@@ -38,10 +38,77 @@ class DeploymentTest(unittest.TestCase):
         env = os.environ.copy()
         for key in values:
             env.pop(key, None)
-        process = subprocess.run(["docker", "compose", "--env-file", str(self.path), "config", "--format", "json"], cwd=ROOT, env=env, capture_output=True, text=True, timeout=30)
+        files = ["-f", compose_file] if compose_file else []
+        process = subprocess.run(["docker", "compose", *files, "--env-file", str(self.path), "config", "--format", "json"], cwd=ROOT, env=env, capture_output=True, text=True, timeout=30)
         self.assertEqual(process.returncode, 0, process.stderr)
         config = json.loads(process.stdout)
         return values, config
+
+    def test_api_runtime_file_mount_and_explicit_source_switches(self):
+        for compose_file in ("docker-compose.yml", "docker-stack.yml"):
+            with self.subTest(compose_file=compose_file):
+                _, config = self.render(compose_file=compose_file)
+                api = config["services"]["api"]
+                self.assertEqual(api["environment"]["FLOW_LIKE_CONFIG_FILE"], "/app/flow-like.config.json")
+                self.assertIn({"source": "flowlike_runtime_config", "target": "/app/flow-like.config.json"}, api["configs"])
+                self.assertEqual(config["configs"]["flowlike_runtime_config"]["file"], str(ROOT / "flow-like.config.example.json"))
+                for source, value in (("FLOW_LIKE_CONFIG_JSON", "{\"name\":\"runtime\"}"), ("FLOW_LIKE_CONFIG_SECRET_REF", "hub-reference")):
+                    _, config = self.render({"FLOW_LIKE_CONFIG_FILE": "", source: value}, compose_file=compose_file)
+                    env = config["services"]["api"]["environment"]
+                    self.assertEqual(env["FLOW_LIKE_CONFIG_FILE"], "")
+                    self.assertEqual(env[source], value)
+
+    def test_preflight_rejects_conflicting_api_runtime_sources(self):
+        values, config = self.render({"FLOW_LIKE_CONFIG_JSON": "{}"})
+        self.assertTrue(any("Select one API runtime config source" in error for error in preflight.validate(values, config)))
+        values, config = self.render({"FLOW_LIKE_CONFIG_FILE": "", "FLOW_LIKE_CONFIG_SECRET_REF": "hub-reference"})
+        self.assertEqual(preflight.validate(values, config), [])
+
+    def test_generator_switches_source_and_preserves_json_as_literal_data(self):
+        template = (ROOT / ".env.example").read_text()
+        for source, value in (("FLOW_LIKE_CONFIG_JSON", "{\"name\":\"Runtime's $PUBLIC_API_URL\"}"), ("FLOW_LIKE_CONFIG_SECRET_REF", "hub-reference")):
+            self.text = setup.generate(template, "per-run", "http://localhost:3001", "http://localhost:8080", "http://s3.localhost:9000", {source: value})
+            _, config = self.render()
+            env = config["services"]["api"]["environment"]
+            self.assertEqual(env["FLOW_LIKE_CONFIG_FILE"], "")
+            # `compose config` escapes literal dollars for reloading its output.
+            self.assertEqual(env[source], value.replace("$", "$$"))
+        with self.assertRaisesRegex(ValueError, "Select only one"):
+            setup.generate(template, "per-run", "http://localhost:3001", "http://localhost:8080", "http://s3.localhost:9000", {"FLOW_LIKE_CONFIG_FILE": "/app/config", "FLOW_LIKE_CONFIG_JSON": "{}"})
+
+    def test_generator_rejects_whitespace_and_duplicate_json_keys(self):
+        template = (ROOT / ".env.example").read_text()
+        for key in ("FLOW_LIKE_CONFIG_JSON", "FLOW_LIKE_CONFIG_FILE", "FLOW_LIKE_CONFIG_SECRET_REF", "FLOW_LIKE_RUNTIME_CONFIG_FILE"):
+            inputs = [" ", "\t\n"]
+            if key != "FLOW_LIKE_CONFIG_JSON":
+                inputs += [" sensitive-marker", "sensitive-marker "]
+            for value in inputs:
+                with self.subTest(source=key), self.assertRaisesRegex(ValueError, "whitespace") as error:
+                    setup.generate(template, "per-run", "http://localhost:3001", "http://localhost:8080", "http://s3.localhost:9000", {key: value})
+                self.assertNotIn("sensitive-marker", str(error.exception))
+        for text in ('{"authentication":{},"authentication":{}}', '{"authentication":{"variant":"first","variant":"second"}}'):
+            with self.assertRaisesRegex(ValueError, "JSON object"):
+                setup.generate(template, "per-run", "http://localhost:3001", "http://localhost:8080", "http://s3.localhost:9000", {"FLOW_LIKE_CONFIG_JSON": text})
+        self.text = setup.generate(template, "per-run", "http://localhost:3001", "http://localhost:8080", "http://s3.localhost:9000", {"FLOW_LIKE_CONFIG_JSON": " \n{}\t"})
+        _, config = self.render()
+        self.assertEqual(config["services"]["api"]["environment"]["FLOW_LIKE_CONFIG_JSON"], "{}")
+        self.assertEqual(config["services"]["api"]["environment"]["FLOW_LIKE_CONFIG_FILE"], "")
+
+    def test_compose_preserves_invalid_whitespace_for_preflight_rejection(self):
+        for key in ("FLOW_LIKE_CONFIG_JSON", "FLOW_LIKE_CONFIG_FILE", "FLOW_LIKE_CONFIG_SECRET_REF"):
+            inputs = ["   "] if key == "FLOW_LIKE_CONFIG_JSON" else ["   ", " sensitive-marker", "sensitive-marker "]
+            for value in inputs:
+                with self.subTest(source=key):
+                    values, config = self.render({"FLOW_LIKE_CONFIG_FILE": "", key: "'" + value + "'"})
+                    self.assertEqual(config["services"]["api"]["environment"][key], value)
+                    self.assertTrue(any("whitespace" in error for error in preflight.validate(values, config)))
+
+    def test_whitespace_setup_creates_no_environment_file(self):
+        env = {"PATH": os.environ["PATH"], "FLOW_LIKE_CONFIG_JSON": " \t "}
+        result = subprocess.run(["python3", str(ROOT / "scripts/setup-env.py"), "--output", str(self.path)], env=env, capture_output=True, text=True)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("whitespace", result.stderr)
+        self.assertFalse(self.path.exists())
 
     def test_per_run_graph_and_secret_boundaries(self):
         values, config = self.render()

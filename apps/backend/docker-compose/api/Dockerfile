@@ -14,9 +14,8 @@ WORKDIR /app
 
 COPY . .
 
-# packages/api embeds flow-like.config.json at compile time. Use the
-# docker-compose config by default so self-hosted images do not inherit the
-# repo-root hosted production config.
+# Runtime FLOW_LIKE_CONFIG_* sources override this public fallback. Keep the
+# self-hosting example as the default; never bake deployment secrets into images.
 ARG FLOW_LIKE_CONFIG=apps/backend/docker-compose/flow-like.config.example.json
 RUN cp "$FLOW_LIKE_CONFIG" /app/flow-like.config.json
 
@@ -40,6 +39,8 @@ RUN --mount=type=cache,target=/cargo-home,id=cargo-home,sharing=shared \
 # Stage 2: Runtime
 # ============================================================
 FROM debian:bookworm-slim
+
+COPY LICENSE /usr/share/licenses/flow-like/LICENSE
 
 RUN apt-get update && apt-get install -y \
     ca-certificates \
