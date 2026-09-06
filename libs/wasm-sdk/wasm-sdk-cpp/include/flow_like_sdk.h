@@ -22,7 +22,7 @@ static constexpr uint32_t ABI_VERSION = 1;
 
 enum class PinType { Input, Output };
 
-enum class DataType { Exec, String, I64, F64, Bool, Generic, Bytes, Date, PathBuf, Struct };
+enum class DataType { Exec, String, I64, F64, Bool, Generic, Bytes, Date, PathBuf, Struct, Geometry };
 
 inline const char* data_type_str(DataType dt) {
     switch (dt) {
@@ -36,6 +36,7 @@ inline const char* data_type_str(DataType dt) {
         case DataType::Date:    return "Date";
         case DataType::PathBuf: return "PathBuf";
         case DataType::Struct:  return "Struct";
+        case DataType::Geometry: return "Geometry";
     }
     return "String";
 }

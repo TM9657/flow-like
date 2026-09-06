@@ -5,6 +5,10 @@ import {
 	redactApiPathSecrets,
 } from "@flow-like/flow-like-ui/lib/api-error";
 import { getApiOrigin, getApiUrl } from "@flow-like/flow-like-ui/lib/api-url";
+import {
+	BOARD_FORMAT_HEADER,
+	CURRENT_BOARD_FORMAT_VERSION,
+} from "@flow-like/flow-like-ui/lib/board-format";
 import type { AuthContextProps } from "react-oidc-context";
 
 const PROTECTED_APP_ROUTE_SEGMENTS = new Set([
@@ -16,6 +20,7 @@ const PROTECTED_APP_ROUTE_SEGMENTS = new Set([
 	"data",
 	"db",
 	"events",
+	"flowpilot-builds",
 	"fork",
 	"graph",
 	"invoke",
@@ -133,6 +138,7 @@ export async function apiFetch<T>(
 	ensureProtectedAppRouteAuth(path, auth, methodOf(options));
 	const headers: HeadersInit = {
 		"Content-Type": "application/json",
+		[BOARD_FORMAT_HEADER]: String(CURRENT_BOARD_FORMAT_VERSION),
 	};
 
 	if (auth?.user?.access_token) {

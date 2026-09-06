@@ -1944,6 +1944,9 @@ fn pin_schema(
         VariableType::Integer | VariableType::Byte => json!({"type": "integer"}),
         VariableType::Float => json!({"type": "number"}),
         VariableType::Boolean => json!({"type": "boolean"}),
+        VariableType::Geometry => flow_like::flow::variable::geometry_kind_from_schema(schema)
+            .map(flow_like_types::geometry::geometry_json_schema)
+            .unwrap_or_else(|_| json!(false)),
         VariableType::Struct | VariableType::Generic => schema
             .and_then(|schema| serde_json::from_str::<Value>(schema).ok())
             .unwrap_or_else(|| json!({"type": "object"})),

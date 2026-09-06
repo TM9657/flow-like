@@ -7,6 +7,15 @@ use flow_like_types::{FromProto, ToProto, sync::Mutex};
 use std::sync::Arc;
 
 impl VariableType {
+    pub fn try_from_proto(value: i32) -> flow_like_types::Result<Self> {
+        if !(0..=10).contains(&value) {
+            return Err(flow_like_types::anyhow!(
+                "Unsupported variable type code {value}. Upgrade this Flow-Like client or executor."
+            ));
+        }
+        Ok(Self::from_proto(value))
+    }
+
     pub fn to_proto(&self) -> i32 {
         match self {
             VariableType::Execution => 0,
@@ -19,6 +28,7 @@ impl VariableType {
             VariableType::Generic => 7,
             VariableType::Struct => 8,
             VariableType::Byte => 9,
+            VariableType::Geometry => 10,
         }
     }
 
@@ -34,6 +44,7 @@ impl VariableType {
             7 => VariableType::Generic,
             8 => VariableType::Struct,
             9 => VariableType::Byte,
+            10 => VariableType::Geometry,
             _ => VariableType::Generic, // Default for unknown values
         }
     }

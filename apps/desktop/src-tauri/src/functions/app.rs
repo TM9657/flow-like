@@ -24,6 +24,7 @@ use image::ImageReader;
 use serde::Deserialize;
 use serde_json::Value;
 use tauri::AppHandle;
+pub mod flowpilot_builds;
 pub mod fork;
 pub mod graph;
 pub mod saved_queries;

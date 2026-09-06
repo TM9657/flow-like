@@ -111,3 +111,19 @@ describe("apiResponseError", () => {
 		);
 	});
 });
+
+test("Board format upgrade responses tell users how to reopen the board", () => {
+	const error = apiResponseError(
+		response(426, "Upgrade Required"),
+		JSON.stringify({
+			error: {
+				code: "BOARD_FORMAT_UPGRADE_REQUIRED",
+				message: "This board requires board format version 2.",
+			},
+		}),
+	);
+	expect(error.status).toBe(426);
+	expect(error.code).toBe("BOARD_FORMAT_UPGRADE_REQUIRED");
+	expect(error.message).toContain("Update FlowLike");
+	expect(error.message).toContain("reopen");
+});

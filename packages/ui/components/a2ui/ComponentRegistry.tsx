@@ -7,6 +7,10 @@ import type {
 	DataScope,
 	Style,
 } from "./types";
+import { registerComponentType } from "./component-type-registry";
+import type { A2UIComponentType } from "./component-prop-manifest";
+
+export { getRegisteredTypes } from "./component-type-registry";
 
 import { A2UIMicroWidget } from "./layout/A2UIMicroWidget";
 import { A2UIWidgetInstance } from "./layout/A2UIWidgetInstance";
@@ -119,7 +123,7 @@ function named(name: string) {
 	});
 }
 
-const registry: Record<string, ComponentRenderer> = {
+const builtInRenderers = {
 	// Layout
 	row: A2UIRow as ComponentRenderer,
 	column: A2UIColumn as ComponentRenderer,
@@ -244,7 +248,9 @@ const registry: Record<string, ComponentRenderer> = {
 	miniMap: lazyRenderer(() =>
 		import("./game/MiniMap").then(named("A2UIMiniMap")),
 	),
-};
+} satisfies Record<A2UIComponentType, ComponentRenderer>;
+
+const registry: Record<string, ComponentRenderer> = { ...builtInRenderers };
 
 export function getComponentRenderer(type: string): ComponentRenderer | null {
 	return registry[type] ?? null;
@@ -255,8 +261,5 @@ export function registerComponent(
 	renderer: ComponentRenderer,
 ): void {
 	registry[type] = renderer;
-}
-
-export function getRegisteredTypes(): string[] {
-	return Object.keys(registry);
+	registerComponentType(type);
 }

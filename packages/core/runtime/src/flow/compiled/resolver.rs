@@ -90,7 +90,10 @@ impl TemplateCache {
     /// A cached template by exact key, without revalidation. Callers that key
     /// on a content identity (source ETag or pinned version) need none.
     pub fn get(&self, key: &str) -> Option<Arc<CompiledRunTemplate>> {
-        self.inner.get(key).map(|cached| cached.template.clone())
+        self.inner.get(key).and_then(|cached| {
+            cached.template.board.ensure_supported_format().ok()?;
+            Some(cached.template.clone())
+        })
     }
 
     /// Cache a template the caller built itself. Entries carry no storage
@@ -163,6 +166,7 @@ impl TemplateCache {
 
         let mut source_head: Option<ObjectMeta> = None;
         if let Some(cached) = self.inner.get(&cache_key) {
+            cached.template.board.ensure_supported_format()?;
             if version.is_some() || expected_etag.is_some() {
                 tracing::debug!(cache_key = %cache_key, "Template cache hit (content-addressed)");
                 return Ok(cached.template.clone());
@@ -252,7 +256,7 @@ impl TemplateCache {
                 .await
                 .map_err(|e| anyhow!("Failed to load board {board_id}: {e}"))?
         };
-        let board = Board::from_loaded_proto(loaded, storage_root.clone(), state.clone()).await;
+        let board = Board::from_loaded_proto(loaded, storage_root.clone(), state.clone()).await?;
 
         let compiled_board = super::compile::compile_board_with_catalog(&board, registry.as_ref())
             .map_err(|e| anyhow!("Failed to compile board {board_id}: {e}"))?;

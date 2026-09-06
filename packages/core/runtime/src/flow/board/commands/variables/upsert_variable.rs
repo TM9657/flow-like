@@ -51,6 +51,29 @@ impl Command for UpsertVariableCommand {
             &board.variables
         };
 
+        if self.variable.data_type == VariableType::Geometry {
+            let schema = self
+                .variable
+                .schema
+                .as_deref()
+                .map(|schema| crate::flow::pin::resolve_schema(schema, &board.refs))
+                .transpose()?;
+            let default = self.variable.default_value.as_deref().or_else(|| {
+                self.variable
+                    .secret
+                    .then(|| variables.get(&self.variable.id))
+                    .flatten()
+                    .filter(|variable| variable.secret)
+                    .and_then(|variable| variable.default_value.as_deref())
+            });
+            crate::flow::variable::validate_typed_default(
+                &self.variable.data_type,
+                &self.variable.value_type,
+                schema,
+                default,
+            )?;
+        }
+
         if let Some(old_variable) = variables.get(&self.variable.id)
             && !old_variable.editable
         {
@@ -65,6 +88,24 @@ impl Command for UpsertVariableCommand {
         board: &mut Board,
         _: Arc<FlowLikeState>,
     ) -> flow_like_types::Result<()> {
+        if self.variable.data_type == VariableType::Geometry {
+            let schema = self
+                .variable
+                .schema
+                .as_deref()
+                .map(|schema| crate::flow::pin::resolve_schema(schema, &board.refs))
+                .transpose()?;
+            let kind = crate::flow::variable::geometry_kind_from_schema(schema)?;
+            self.variable.schema =
+                kind.map(|kind| flow_like_types::geometry::marker(kind).to_string());
+            crate::flow::variable::validate_typed_default(
+                &self.variable.data_type,
+                &self.variable.value_type,
+                self.variable.schema.as_deref(),
+                self.variable.default_value.as_deref(),
+            )?;
+        }
+
         // If the variable is a Struct type and has a schema that looks like example JSON,
         // infer the proper JSON Schema from it. For other types, preserve the schema as-is.
         if self.variable.data_type == VariableType::Struct

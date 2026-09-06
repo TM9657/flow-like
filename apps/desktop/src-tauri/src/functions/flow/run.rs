@@ -2,6 +2,7 @@
 
 use flow_like::app::{App, AppVisibility};
 use flow_like::credentials::SharedCredentials;
+use flow_like::flow::board::format::CURRENT_BOARD_FORMAT_VERSION;
 use flow_like::flow::compiled::{
     CompiledRunTemplate, TemplateCache,
     prerun::{PAGE_ACTION_ID_PREFIX, PrerunPageExecution, page_execution_revision},
@@ -415,6 +416,10 @@ async fn report_run_to_backend(
     match client
         .post(&url)
         .header("Authorization", &auth_val)
+        .header(
+            "x-flow-like-board-format",
+            CURRENT_BOARD_FORMAT_VERSION.to_string(),
+        )
         .json(&body)
         .timeout(Duration::from_secs(10))
         .send()
@@ -1480,7 +1485,9 @@ mod tests {
             capability_jwt: None,
             manifest_revision: Some("per1_current".to_string()),
         };
-        assert!(resolve_compiled_page_trigger(&page_execution(), "per1_current", &removed).is_err());
+        assert!(
+            resolve_compiled_page_trigger(&page_execution(), "per1_current", &removed).is_err()
+        );
     }
 
     #[test]

@@ -1377,16 +1377,18 @@ impl State {
 
         let (proto, meta) = match read {
             ConditionalRead::NotModified => {
-                return cached.ok_or_else(|| {
+                let cached = cached.ok_or_else(|| {
                     flow_like_types::anyhow!(
                         "storage reported NotModified for {app_id}/{board_id} without a cached ETag"
                     )
-                });
+                })?;
+                cached.board.ensure_supported_format()?;
+                return Ok(cached);
             }
             ConditionalRead::Fresh(proto, meta) => (proto, meta),
         };
 
-        let board = Board::from_loaded_proto(proto, storage_root, app_state).await;
+        let board = Board::from_loaded_proto(proto, storage_root, app_state).await?;
         let entry = Arc::new(CachedBoard {
             e_tag: meta.e_tag.clone().unwrap_or_default(),
             board: Arc::new(board),

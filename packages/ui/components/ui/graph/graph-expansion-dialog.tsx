@@ -19,6 +19,7 @@ import {
 } from "../dialog";
 import { Label } from "../label";
 import { Slider } from "../slider";
+import { useGraphNodeCaption } from "./graph-node-caption";
 import { getGraphIcon } from "./icons";
 
 export type ExpansionDirection = "outgoing" | "incoming" | "both";
@@ -72,12 +73,14 @@ function directionOf(choices: readonly ExpansionChoice[]): ExpansionDirection {
  */
 export function GraphExpansionDialog({
 	node,
+	overlay,
 	choices,
 	maxLimit,
 	onClose,
 	onExpand,
 }: GraphExpansionDialogProps) {
 	const { t } = useTranslation("common");
+	const caption = useGraphNodeCaption(node, overlay);
 	const [selected, setSelected] = useState<Set<string>>(new Set());
 	const [limitIndex, setLimitIndex] = useState(DEFAULT_LIMIT_INDEX);
 
@@ -136,7 +139,7 @@ export function GraphExpansionDialog({
 					<DialogTitle className="flex items-center gap-2">
 						<Expand className="h-4 w-4" />
 						{t("expandFromName", "Expand from {{name}}", {
-							name: node.caption ?? node.id,
+							name: caption,
 						})}
 					</DialogTitle>
 					<DialogDescription>

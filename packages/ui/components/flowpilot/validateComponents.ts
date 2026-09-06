@@ -7,7 +7,7 @@
  * never receives invalid data.
  */
 
-import { getRegisteredTypes } from "../a2ui/ComponentRegistry";
+import { getRegisteredTypes } from "../a2ui/component-type-registry";
 import {
 	type A2UIComponentType,
 	COMPONENT_BASE_PROPS,

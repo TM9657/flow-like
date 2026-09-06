@@ -1294,6 +1294,13 @@ impl InternalRun {
                 };
 
                 let mut var = variable.clone();
+                if tv.variable.data_type == crate::flow::variable::VariableType::Geometry {
+                    // The caller supplies the value; the board owns its Geometry contract.
+                    var = tv.variable.clone();
+                    if variable.default_value.is_some() || !value.is_null() {
+                        var.validate_value(&value)?;
+                    }
+                }
                 var.value = Arc::new(Mutex::new(value));
                 map.insert(tv.variable.id.clone(), var);
             }

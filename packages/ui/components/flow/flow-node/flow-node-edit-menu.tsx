@@ -185,6 +185,7 @@ export function FlowNodeEditMenu({
 
 		return (
 			<VariableOverlay
+				appId={appId}
 				key={variable.id}
 				open={open}
 				onOpenChange={onOpenChange}
@@ -212,6 +213,7 @@ export function FlowNodeEditMenu({
 
 	return (
 		<FunctionOverlay
+			appId={appId}
 			key={layer.id}
 			open={open}
 			onOpenChange={onOpenChange}

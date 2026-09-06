@@ -263,6 +263,38 @@ export class DatabaseState implements IDatabaseState {
 		});
 	}
 
+	async getSchemaAuthoritative(
+		appId: string,
+		tableName: string,
+		userScoped?: boolean,
+	): Promise<any> {
+		if (await this.backend.isLocalOnly(appId)) {
+			return invoke<any>("db_schema", {
+				appId,
+				tableName,
+				userScoped: userScoped ?? false,
+			});
+		}
+		if (
+			!this.backend.profile ||
+			!this.backend.auth?.isAuthenticated ||
+			!this.backend.auth.user?.access_token
+		) {
+			throw new Error(
+				"Hosted database schema reads require an authenticated hub session",
+			);
+		}
+		return fetcher(
+			this.backend.profile,
+			appendScope(
+				`apps/${appId}/db/${parseTableName(tableName)}/schema`,
+				userScoped,
+			),
+			{ method: "GET" },
+			this.backend.auth,
+		);
+	}
+
 	async getIndices(
 		appId: string,
 		tableName: string,
@@ -337,6 +369,27 @@ export class DatabaseState implements IDatabaseState {
 		}
 
 		return await invoke("db_table_names", { appId });
+	}
+
+	async listTablesAuthoritative(appId: string): Promise<string[]> {
+		if (await this.backend.isLocalOnly(appId)) {
+			return invoke<string[]>("db_table_names", { appId });
+		}
+		if (
+			!this.backend.profile ||
+			!this.backend.auth?.isAuthenticated ||
+			!this.backend.auth.user?.access_token
+		) {
+			throw new Error(
+				"Hosted database inventory requires an authenticated hub session",
+			);
+		}
+		return fetcher<string[]>(
+			this.backend.profile,
+			`apps/${appId}/db`,
+			{ method: "GET" },
+			this.backend.auth,
+		);
 	}
 
 	async listTablesUser(appId: string): Promise<string[]> {

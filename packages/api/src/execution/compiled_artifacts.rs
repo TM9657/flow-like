@@ -187,7 +187,7 @@ pub async fn ensure_compiled_artifact(
             )
         })?;
         let app_state = state.master_state(state).await?;
-        let board = Board::from_loaded_proto(proto, storage_root.clone(), app_state).await;
+        let board = Board::from_loaded_proto(proto, storage_root.clone(), app_state).await?;
         if board.id != board_id {
             return Err(anyhow!(
                 "exact source snapshot for Latest board {board_id} contains board {}",
@@ -282,7 +282,7 @@ async fn rehydrate_with_registry(
         parent: None,
     }));
     let board =
-        Board::from_loaded_proto(proto, storage_root.clone(), Arc::new(hydration_state)).await;
+        Board::from_loaded_proto(proto, storage_root.clone(), Arc::new(hydration_state)).await?;
     if board.id != board_id {
         return Err(anyhow!(
             "source for board {board_id} contains board {}",

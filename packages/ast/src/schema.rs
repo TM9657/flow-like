@@ -246,6 +246,19 @@ fn interface_from_object_schema(
 }
 
 fn interface_type_from_schema(schema: &Value, defs: &Map<String, Value>) -> Option<InterfaceType> {
+    if schema.get("x-flow-like-type").and_then(Value::as_str) == Some("geometry") {
+        let kind = schema
+            .get("x-geometry")
+            .map(|kind| serde_json::from_value(kind.clone()))
+            .transpose()
+            .ok()?;
+        return Some(InterfaceType::Geometry(kind));
+    }
+    if schema.get("$id").and_then(Value::as_str) == Some("flow:geometry") {
+        let kind =
+            flow_like_types_contracts::geometry::kind_from_schema(&schema.to_string()).ok()?;
+        return Some(InterfaceType::Geometry(kind));
+    }
     if schema == &Value::Bool(true) {
         return Some(InterfaceType::Any);
     }
@@ -386,7 +399,13 @@ fn interface_schema_value(interface: &InterfaceDecl, include_title: bool) -> Opt
 
 fn schema_value_from_type(ty: &InterfaceType) -> Option<Value> {
     match ty {
+        InterfaceType::Geometry(kind) => Some(
+            flow_like_types_contracts::geometry::geometry_json_schema(*kind),
+        ),
         InterfaceType::Named(name) => match name.as_str() {
+            "geometry" => Some(flow_like_types_contracts::geometry::geometry_json_schema(
+                None,
+            )),
             "string" => Some(json!({ "type": "string" })),
             "Date" => Some(json!({ "type": "string", "format": "date-time" })),
             "int" => Some(json!({ "type": "integer" })),
@@ -478,7 +497,15 @@ fn collect_type_refs(ty: &InterfaceType, refs: &mut BTreeSet<String>) {
         InterfaceType::Named(name)
             if !matches!(
                 name.as_str(),
-                "string" | "int" | "float" | "number" | "bool" | "boolean" | "Date" | "Struct"
+                "string"
+                    | "int"
+                    | "float"
+                    | "number"
+                    | "bool"
+                    | "boolean"
+                    | "Date"
+                    | "Struct"
+                    | "geometry"
             ) =>
         {
             refs.insert(name.clone());

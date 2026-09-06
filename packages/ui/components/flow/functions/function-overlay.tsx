@@ -19,7 +19,9 @@ import {
 	useMemo,
 	useState,
 } from "react";
+import { useBoardFormat } from "../../../hooks/use-board-format";
 import { IVariableType } from "../../../lib";
+import { GEOMETRY_BOARD_FORMAT_VERSION } from "../../../lib/board-format";
 import {
 	type IBoard,
 	type ILayer,
@@ -64,6 +66,7 @@ const buildCache = (layer: ILayer): ILayerCache => ({
 });
 
 export interface IFunctionOverlayProps {
+	appId?: string;
 	open: boolean;
 	onOpenChange: (open: boolean) => void;
 	/** The function layer being edited. */
@@ -81,6 +84,7 @@ export interface IFunctionOverlayProps {
 }
 
 export function FunctionOverlay({
+	appId,
 	open,
 	onOpenChange,
 	layer,
@@ -92,6 +96,8 @@ export function FunctionOverlay({
 	onOpenLayer,
 }: Readonly<IFunctionOverlayProps>): JSX.Element {
 	const { t } = useTranslation("flow");
+	const geometryEnabled =
+		useBoardFormat(appId) >= GEOMETRY_BOARD_FORMAT_VERSION;
 
 	const {
 		inputs,
@@ -305,6 +311,7 @@ export function FunctionOverlay({
 						</Button>
 					</div>
 					<PinList
+						geometryEnabled={geometryEnabled}
 						items={inputs}
 						onEdit={editPin}
 						onMoveUp={(id) => movePin(id, "up")}
@@ -329,6 +336,7 @@ export function FunctionOverlay({
 						</Button>
 					</div>
 					<PinList
+						geometryEnabled={geometryEnabled}
 						items={outputs}
 						onEdit={editPin}
 						onMoveUp={(id) => movePin(id, "up")}

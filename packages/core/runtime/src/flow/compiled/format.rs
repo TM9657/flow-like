@@ -19,7 +19,7 @@ use rkyv::{Archive, Deserialize, Serialize};
 
 /// Bump on ANY change to the structs in this file. A mismatch invalidates
 /// every persisted artifact; loaders fall back to compiling from the proto.
-pub const FORMAT_VERSION: u16 = 1;
+pub const FORMAT_VERSION: u16 = 3;
 
 pub const MAGIC: [u8; 4] = *b"FLCB";
 
@@ -28,6 +28,8 @@ pub const NONE_IDX: u32 = u32::MAX;
 
 #[derive(Archive, Serialize, Deserialize, Debug, Clone, PartialEq)]
 pub struct CompiledBoard {
+    /// Board document compatibility, separate from this artifact's binary layout version.
+    pub board_format_version: u32,
     pub id: String,
     /// Kept: surfaces in run bookkeeping (desktop run list).
     pub name: String,
@@ -49,12 +51,37 @@ pub struct CompiledBoard {
 }
 
 impl CompiledBoard {
+    pub fn required_board_format_version(&self) -> u32 {
+        use crate::flow::{board::format, variable::VariableType};
+        if self.board_format_version >= format::CURRENT_BOARD_FORMAT_VERSION {
+            return self.board_format_version;
+        }
+        let geometry_code = super::codes::variable_type_code(&VariableType::Geometry);
+        let variables = self
+            .variables
+            .iter()
+            .chain(self.layers.iter().flat_map(|layer| layer.variables.iter()));
+        let types = variables
+            .map(|value| (value.data_type == geometry_code, value.schema.as_deref()))
+            .chain(
+                self.pins
+                    .iter()
+                    .map(|value| (value.data_type == geometry_code, value.schema.as_deref())),
+            );
+        format::required_version(
+            self.board_format_version,
+            types,
+            &self.refs.iter().cloned().collect(),
+        )
+    }
+
     /// Bounds-check every arena index. rkyv validation guarantees structure,
     /// not semantics — a bit-flipped or mis-produced artifact can decode fine
     /// and then panic deep inside template build or per-run wiring. Loaders
     /// call this after decode so a bad artifact falls back to compiling from
     /// source instead of wedging the board in a panic loop.
     pub fn validate(&self) -> flow_like_types::Result<()> {
+        crate::flow::board::format::ensure_supported(self.required_board_format_version())?;
         let pins = self.pins.len() as u32;
         let nodes = self.nodes.len() as u32;
         let layers = self.layers.len() as u32;

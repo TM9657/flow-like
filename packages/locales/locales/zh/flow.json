@@ -1202,5 +1202,21 @@
 	"geometryStoredCoordinateOrder": "",
 	"geometryUnknownCrs": "",
 	"hideGeometryValue": "",
-	"showGeometryValue": ""
+	"showGeometryValue": "",
+	"geometryBackendUpgrade": "",
+	"geometryRequiredCoordinateOrder": "",
+	"geometryInvalidValue": "无效的几何图形",
+	"geometryMapUnavailable": "地图不可用",
+	"geometryLoadingMap": "正在加载地图…",
+	"geometryLongitude": "经度",
+	"geometryLatitude": "纬度",
+	"geometryGeoJsonCoordinates": "GeoJSON 坐标",
+	"geometryInspectValue": "查看 {{type}}：{{summary}}",
+	"geometryInspectDescription": "查看已存储的形状及其坐标。",
+	"geometryPolygonCount_other": "{{count}} 个多边形",
+	"geometryLineCount_other": "{{count}} 条线",
+	"geometryPartCount_other": "{{count}} 个部分",
+	"geometryPointCount_other": "{{count}} 个点",
+	"geometryVertexCount_other": "{{count}} 个顶点",
+	"geometryHoleCount_other": "{{count}} 个孔洞"
 }

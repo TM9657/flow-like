@@ -17,10 +17,14 @@ use flow_like_types::Value;
 /// Validates that a value matches the map's declared value type before insertion.
 ///
 /// Keys are always strings, so only the value is checked. Structs are validated
-/// structurally (must be an object) — their JSON schema is enforced at connection
-/// time and in the variable editor, not here, because the runtime pin does not
-/// carry the schema. `Generic`, execution pins, and JSON `null` always pass.
+/// structurally (must be an object). Runtime pin boundaries enforce Geometry
+/// subtypes; this helper validates the Geometry value profile before insertion.
+/// `Generic`, execution pins, and non-Geometry JSON `null` always pass.
 pub fn validate_value_type(value: &Value, expected: &VariableType) -> flow_like_types::Result<()> {
+    if *expected == VariableType::Geometry {
+        flow_like_types::geometry::validate_geometry(value, None)?;
+        return Ok(());
+    }
     if value.is_null() {
         return Ok(());
     }
@@ -35,6 +39,7 @@ pub fn validate_value_type(value: &Value, expected: &VariableType) -> flow_like_
         VariableType::Boolean => value.is_boolean(),
         VariableType::PathBuf => value.is_string() || value.is_object(),
         VariableType::Struct => value.is_object(),
+        VariableType::Geometry => unreachable!("Geometry was validated above"),
         // A single byte value is an integer in 0..=255.
         VariableType::Byte => value
             .as_i64()

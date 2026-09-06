@@ -133,6 +133,9 @@ pub async fn upsert_page(
         .open_board(board_id.clone(), None, None)
         .await
         .map_err(|e| {
+            if let Some(upgrade) = ApiError::from_board_format_error(&e) {
+                return upgrade;
+            }
             // A board this app does not own is a bad request, not a server fault — but the
             // manifest alone cannot decide that. `manifest.app` is a last-write-wins document
             // several endpoints rewrite without a shared lock, so a board created moments ago can

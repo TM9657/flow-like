@@ -116,6 +116,8 @@ fn resolve_ref<'a>(value: &'a str, refs: &'a HashMap<String, String>) -> &'a str
 /// on every edit (`updated_at`), which is exactly what lets the client's fingerprint move.
 #[derive(Serialize, Deserialize, JsonSchema, Clone, Debug, PartialEq)]
 pub struct BoardMeta {
+    #[serde(default = "super::format::legacy_board_format_version")]
+    pub format_version: u32,
     pub id: String,
     pub name: String,
     pub description: String,
@@ -133,6 +135,7 @@ pub struct BoardMeta {
 impl BoardMeta {
     pub fn from_board(board: &Board) -> Self {
         Self {
+            format_version: board.required_format_version(),
             id: board.id.clone(),
             name: board.name.clone(),
             description: board.description.clone(),

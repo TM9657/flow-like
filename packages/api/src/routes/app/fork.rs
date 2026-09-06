@@ -15,7 +15,12 @@ pub mod preview;
 pub fn routes() -> Router<AppState> {
     Router::new()
         .route("/preview", get(preview::get_fork_preview))
-        .route("/offline/begin", post(begin_offline::begin_offline_fork))
+        .route(
+            "/offline/begin",
+            post(begin_offline::begin_offline_fork).route_layer(axum::middleware::from_fn(
+                super::board::capabilities::negotiate_board_format,
+            )),
+        )
         .route(
             "/online/finalize",
             post(finalize_online::finalize_online_fork),

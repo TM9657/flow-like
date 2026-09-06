@@ -115,6 +115,7 @@ export type IColumnFamily =
 	| "bool"
 	| "vector"
 	| "struct"
+	| "geo"
 	| "binary"
 	| "other";
 
@@ -218,6 +219,12 @@ export interface IDatabaseState {
 		tableName: string,
 		userScoped?: boolean,
 	): Promise<any>;
+	/** Read the schema from one explicit authority without cache or routing fallback. */
+	getSchemaAuthoritative(
+		appId: string,
+		tableName: string,
+		userScoped?: boolean,
+	): Promise<any>;
 	getIndices(
 		appId: string,
 		tableName: string,
@@ -230,6 +237,8 @@ export interface IDatabaseState {
 		userScoped?: boolean,
 	): Promise<void>;
 	listTables(appId: string): Promise<string[]>;
+	/** List tables from one explicit authority and propagate read failures. */
+	listTablesAuthoritative(appId: string): Promise<string[]>;
 	listTablesUser(appId: string): Promise<string[]>;
 	/**
 	 * One metadata-only pass over every table: rows, schema, indexes, storage

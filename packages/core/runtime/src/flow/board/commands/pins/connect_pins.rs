@@ -70,6 +70,19 @@ fn upsert_node_or_layer(board: &mut Board, entity: NodeOrLayer) {
 
 #[async_trait]
 impl Command for ConnectPinsCommand {
+    async fn validate(&self, board: &Board, _: Arc<FlowLikeState>) -> flow_like_types::Result<()> {
+        if let (Some(source), Some(target)) = (
+            board.get_pin_by_id(&self.from_pin),
+            board.get_pin_by_id(&self.to_pin),
+        ) && !crate::flow::pin::geometry_pins_are_compatible(source, target, &board.refs)?
+        {
+            return Err(flow_like_types::anyhow!(
+                "Incompatible Geometry connection. Match containers and subtypes, or use an explicit validating cast."
+            ));
+        }
+        Ok(())
+    }
+
     async fn execute(
         &mut self,
         board: &mut Board,
@@ -144,6 +157,12 @@ pub fn connect_pins(
     if to_pin_ref.pin_type == PinType::Output && !to_is_layer {
         return Err(flow_like_types::anyhow!(
             "Cannot connect an output pin".to_string()
+        ));
+    }
+
+    if !crate::flow::pin::geometry_pins_are_compatible(from_pin_ref, to_pin_ref, &board.refs)? {
+        return Err(flow_like_types::anyhow!(
+            "Incompatible Geometry connection. Match containers and subtypes, or use an explicit validating cast."
         ));
     }
 

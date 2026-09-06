@@ -163,7 +163,8 @@ pub struct FlowIrToolError(pub String);
 pub fn typed_ir_schema_hint() -> serde_json::Value {
     json!({
         "type_object": { "data_type": "string", "container": "normal", "interface": null },
-        "primitive_data_types": ["string", "boolean", "integer", "float", "struct"],
+        "primitive_data_types": ["string", "boolean", "integer", "float", "struct", "geometry"],
+        "geometry_type": { "data_type": "geometry", "container": "normal", "geometry_kind": "Point" },
         "literal_boolean": { "kind": "literal", "value": { "type": "boolean", "value": true } },
         "literal_integer": { "kind": "literal", "value": { "type": "integer", "value": 1 } },
         "value_ref": { "kind": "ref", "name": "customer_id" },
@@ -4934,7 +4935,7 @@ impl<'a> FlowScriptAcceptanceProjection<'a> {
             .iter()
             .map(|variable| FlowIrVariable {
                 name: variable.name.clone(),
-                value_type: acceptance_projection_type(),
+                value_type: acceptance_projection_ast_type(&variable.ty),
                 default: variable.default.as_ref().map(project_ast_literal),
                 exposed: variable.exposed,
                 secret: variable.secret,
@@ -5533,6 +5534,24 @@ fn acceptance_projection_type() -> FlowIrType {
         data_type: FlowIrDataType::Generic,
         container: FlowIrContainer::Normal,
         interface: None,
+        geometry_kind: None,
+    }
+}
+
+fn acceptance_projection_ast_type(ty: &flow_like_ast::TypeRef) -> FlowIrType {
+    if ty.base != "geometry" {
+        return acceptance_projection_type();
+    }
+    FlowIrType {
+        data_type: FlowIrDataType::Geometry,
+        container: match ty.container {
+            flow_like_ast::Container::Normal => FlowIrContainer::Normal,
+            flow_like_ast::Container::Array => FlowIrContainer::Array,
+            flow_like_ast::Container::Map => FlowIrContainer::Map,
+            flow_like_ast::Container::Set => FlowIrContainer::Set,
+        },
+        interface: None,
+        geometry_kind: ty.geometry_kind,
     }
 }
 
@@ -5541,7 +5560,7 @@ fn project_ast_params(params: &[AstParam]) -> Vec<FlowIrParam> {
         .iter()
         .map(|param| FlowIrParam {
             name: param.name.clone(),
-            value_type: acceptance_projection_type(),
+            value_type: acceptance_projection_ast_type(&param.ty),
         })
         .collect()
 }

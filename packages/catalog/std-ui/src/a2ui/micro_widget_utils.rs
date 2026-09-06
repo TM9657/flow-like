@@ -218,6 +218,12 @@ impl PinShape {
 
 /// Pin `VariableType` for a raw JSON Schema (query args / results).
 pub fn json_schema_variable_type(schema: &Value) -> VariableType {
+    if schema.get("$id").and_then(Value::as_str) == Some("flow:geometry")
+        || schema.get("x-flow-like-type").and_then(Value::as_str) == Some("geometry")
+    {
+        return VariableType::Geometry;
+    }
+
     match schema.get("type").and_then(|t| t.as_str()) {
         Some("string") => VariableType::String,
         Some("number") => VariableType::Float,
@@ -242,6 +248,42 @@ pub fn json_schema_variable_type(schema: &Value) -> VariableType {
 /// `Make Struct` reporting "Schema has no object properties" — it needs the
 /// `items` schema.
 pub fn json_schema_pin_shape(schema: &Value) -> PinShape {
+    if json_schema_variable_type(schema) == VariableType::Geometry {
+        let marker = if schema.get("x-flow-like-type").and_then(Value::as_str) == Some("geometry") {
+            match schema.get("x-geometry") {
+                None => None,
+                Some(kind) => flow_like_types::json::from_value::<
+                    flow_like_types::geometry::GeometryKind,
+                >(kind.clone())
+                .map(|kind| flow_like_types::geometry::marker(kind).to_string())
+                .ok()
+                .or_else(|| schema_string(schema)),
+            }
+        } else {
+            schema_string(schema).map(|raw| {
+                flow_like_types::geometry::kind_from_schema(&raw)
+                    .ok()
+                    .flatten()
+                    .map(|kind| flow_like_types::geometry::marker(kind).to_string())
+                    .unwrap_or(raw)
+            })
+        };
+        return PinShape {
+            data_type: VariableType::Geometry,
+            value_type: ValueType::Normal,
+            schema: marker,
+        };
+    }
+    if schema.get("type").and_then(Value::as_str) == Some("object")
+        && let Some(items) = schema.get("additionalProperties")
+        && json_schema_variable_type(items) == VariableType::Geometry
+    {
+        return PinShape {
+            value_type: ValueType::HashMap,
+            ..json_schema_pin_shape(items)
+        };
+    }
+
     if schema.get("type").and_then(|t| t.as_str()) == Some("array") {
         let untyped_list = PinShape {
             data_type: VariableType::Generic,
@@ -256,7 +298,13 @@ pub fn json_schema_pin_shape(schema: &Value) -> PinShape {
                     untyped_list
                 } else {
                     PinShape {
-                        value_type: ValueType::Array,
+                        value_type: if element.data_type == VariableType::Geometry
+                            && schema.get("uniqueItems").and_then(Value::as_bool) == Some(true)
+                        {
+                            ValueType::HashSet
+                        } else {
+                            ValueType::Array
+                        },
                         ..element
                     }
                 }
@@ -483,6 +531,40 @@ mod tests {
         let mut input = input(ContractInputType::Json);
         input.schema = Some(schema);
         input
+    }
+
+    #[test]
+    fn geometry_contract_pins_retain_subtypes_and_container_shapes() {
+        use flow_like_types::geometry::{GeometryKind, geometry_json_schema, marker};
+        let point: Value = flow_like_types::json::from_str(marker(GeometryKind::Point)).unwrap();
+        for schema in [
+            point.clone(),
+            geometry_json_schema(Some(GeometryKind::Point)),
+        ] {
+            let shape = json_schema_pin_shape(&schema);
+            assert_eq!(shape.data_type, VariableType::Geometry);
+            assert_eq!(shape.schema.as_deref(), Some(marker(GeometryKind::Point)));
+            assert_eq!(shape.value_type, ValueType::Normal);
+        }
+        let generic = json_schema_pin_shape(&geometry_json_schema(None));
+        assert_eq!(generic.data_type, VariableType::Geometry);
+        assert_eq!(generic.schema, None);
+        for (schema, container) in [
+            (json!({"type":"array","items":point}), ValueType::Array),
+            (
+                json!({"type":"array","items":point,"uniqueItems":true}),
+                ValueType::HashSet,
+            ),
+            (
+                json!({"type":"object","additionalProperties":point}),
+                ValueType::HashMap,
+            ),
+        ] {
+            let shape = json_schema_pin_shape(&schema);
+            assert_eq!(shape.data_type, VariableType::Geometry);
+            assert_eq!(shape.schema.as_deref(), Some(marker(GeometryKind::Point)));
+            assert_eq!(shape.value_type, container);
+        }
     }
 
     #[test]

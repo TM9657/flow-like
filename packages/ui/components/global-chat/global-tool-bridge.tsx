@@ -9,10 +9,8 @@ import { useFrontendRuntimeToolExecutor } from "../../hooks/use-frontend-runtime
 import {
 	IAppVisibility,
 	type IEvent,
-	IEventExecutionMode,
 	IExecutionStage,
 	ILogLevel,
-	type IMetadata,
 	type IPage,
 	IRole,
 	Response,
@@ -22,6 +20,11 @@ import {
 	useQueryClient,
 } from "../../index";
 import { addAppToProfile } from "../../lib/add-app-to-profile";
+import { upsertAppEvent } from "./tools/event-tools";
+import { createAppTool } from "./tools/app-provisioning";
+import { executeAppBuildTool } from "../../lib/app-build/tool-controller";
+import { generateAppBuildWidget } from "../../lib/app-build/widget-generator";
+import { createInteractiveScenarioAdapter } from "../../lib/app-build/interactive-scenario-adapter";
 import {
 	captureInlineAppPageSnapshots,
 	isAppPageSnapshotSourceCurrent,
@@ -55,10 +58,7 @@ import {
 } from "../../lib/interact-app-page";
 import type { IChannelHandle } from "../../lib/schema/channel";
 import type { BoardEditJob, FlowIrCommitToken } from "../../lib/schema/copilot";
-import {
-	convertJsonToUint8Array,
-	parseUint8ArrayToJson,
-} from "../../lib/uint8";
+import { parseUint8ArrayToJson } from "../../lib/uint8";
 import type {
 	IApplyFlowIrCommitResponse,
 	IBoardState,
@@ -160,11 +160,6 @@ import {
 	consumerToolForEventKind,
 	resolveOpenAppPageRequest,
 } from "./app-event-interface";
-import {
-	pageEventPersistenceReset,
-	resolveAppEventTarget,
-	resolveAppEventType,
-} from "./app-event-target";
 import {
 	type DetachedPageLookup,
 	assertDetachedWriteSafe,
@@ -2882,389 +2877,136 @@ export function GlobalToolBridge() {
 						logs: compactLogEvents(logs),
 					};
 				}
-				case "create_app": {
-					const name = argString(args, "name").trim();
-					if (!name)
-						return {
-							status: "error",
-							message: `create_app requires a \`name\`. Derive a short name from the request (e.g. "Weather App") and call create_app once with it — do not call it again with empty arguments.`,
-						};
-					const description = argString(args, "description");
-					const idempotencyKey =
-						argString(args, "idempotency_key") ||
-						argString(args, "idempotencyKey");
-					const creationConversationId = conversationScopeId(request);
-					const creationIdentity = creationConversationId
-						? {
-								conversationId: creationConversationId,
-								toolName: "create_app",
-								instruction: `${name}\n${description}`,
-								...(idempotencyKey ? { idempotencyKey } : {}),
-							}
-						: undefined;
-					const journaled = creationIdentity
-						? createdArtifactJournalRef.current.find(creationIdentity)
-						: undefined;
-					if (journaled?.artifacts.appId) {
-						const existingAppId = journaled.artifacts.appId;
-						const ownerMessageId = ownerMessageIdForRequest(request);
-						if (ownerMessageId) {
-							createdAppTargetsByOwnerRef.current.set(
-								ownerMessageId,
-								existingAppId,
-							);
-						}
-						scope.referenceApp(existingAppId);
-						return {
-							status: "ok",
-							app_id: existingAppId,
-							name,
-							already_created: true,
-							note: "An app for this exact request was already created earlier in this conversation; its app_id is returned instead of creating a duplicate. Continue building on this app_id. Only if the user truly wants a second, separate app, call create_app again with a distinct `idempotency_key`.",
-						};
-					}
-					const meta: IMetadata = {
-						name,
-						description,
-						tags: [],
-						use_case: "",
-						created_at: nowSystemTime(),
-						updated_at: nowSystemTime(),
-						preview_media: [],
-					};
-					// Default to a cloud app when signed in (mirrors the library's create dialog),
-					// let the model force local via online:false, but never attempt online without
-					// auth — createApp's remote PUT would fail without a token.
-					const authenticated = Boolean(authRef.current?.isAuthenticated);
-					const online =
-						(argBool(args, "online") ?? authenticated) && authenticated;
-					let app: Awaited<ReturnType<typeof backend.appState.createApp>>;
-					try {
-						app = await backend.appState.createApp(meta, [], online);
-					} catch (error) {
-						console.error(
-							"[global-tool-bridge] create_app: creation failed",
-							error,
-						);
-						if (handleUpgradeRequiredError(error, "project-limit")) {
-							return {
-								status: "error",
-								message: `The user's plan does not allow creating another online project; an upgrade dialog was shown to them. Either wait for the user to upgrade, or offer to create the app locally instead (online:false).`,
-							};
-						}
-						return {
-							status: "error",
-							message: `create_app failed: ${error instanceof Error ? error.message : String(error)}`,
-						};
-					}
-					// Associate the app with the current profile so it surfaces in list_apps
-					// (which is profile-scoped) and the user's library, matching the other
-					// create-app entry points.
-					try {
-						const profile = await backend.userState.getSettingsProfile();
-						if (profile) {
-							await backend.userState.updateProfileApp(
-								profile,
-								{ app_id: app.id, favorite: false, pinned: false },
-								"Upsert",
-							);
-						}
-					} catch (error) {
-						console.error(
-							"[global-tool-bridge] create_app: profile registration failed",
-							error,
-						);
-					}
-					queryClient.invalidateQueries({ queryKey: ["getApps"] });
-					queryClient.invalidateQueries({ queryKey: ["getSettingsProfile"] });
-					const ownerMessageId = ownerMessageIdForRequest(request);
-					if (ownerMessageId) {
-						createdAppTargetsByOwnerRef.current.set(ownerMessageId, app.id);
-						while (createdAppTargetsByOwnerRef.current.size > 128) {
-							const oldest = createdAppTargetsByOwnerRef.current
-								.keys()
-								.next().value;
-							if (typeof oldest !== "string") break;
-							createdAppTargetsByOwnerRef.current.delete(oldest);
-						}
-					}
-					scope.referenceApp(app.id);
-					if (creationIdentity) {
-						createdArtifactJournalRef.current.record(
-							creationIdentity,
-							{ appId: app.id },
-							request.requestId,
-						);
-					}
-					return { status: "ok", app_id: app.id, name, online };
-				}
-				case "upsert_event": {
-					const appId = argString(args, "app_id") || argString(args, "appId");
-					if (!appId)
-						return {
-							status: "error",
-							message: "upsert_event requires an app_id.",
-						};
-					const name = argString(args, "name").trim();
-					if (!name)
-						return {
-							status: "error",
-							message: "upsert_event requires a name.",
-						};
-					const eventId =
-						argString(args, "event_id") || argString(args, "eventId");
-					let existingEvent: IEvent | undefined;
-					if (eventId) {
-						try {
-							existingEvent = await backend.eventState.getEvent(appId, eventId);
-						} catch (error) {
-							return {
-								status: "error",
-								message: `Cannot update event '${eventId}': ${error instanceof Error ? error.message : String(error)}`,
-							};
-						}
-					}
-
-					const target = resolveAppEventTarget({
-						requestedPageId:
-							argString(args, "page_id") || argString(args, "pageId"),
-						requestedBoardId:
-							argString(args, "board_id") || argString(args, "boardId"),
-						requestedNodeId:
-							argString(args, "node_id") || argString(args, "nodeId"),
-						existingPageId: existingEvent?.default_page_id,
-						existingBoardId: existingEvent?.board_id,
-						existingNodeId: existingEvent?.node_id,
-					});
-					if (!target.ok) {
-						return {
-							status: "error",
-							message: target.message,
-						};
-					}
-					const { pageId, boardId: eventBoardId, nodeId: eventNodeId } = target;
-					// A page Event may retain its owning board as metadata, but never a workflow
-					// entry node. Clearing a stale node also repairs previously misclassified page
-					// Events the next time FlowPilot updates them.
-
-					let entryNodeName: string | undefined;
-					let entryConfig: (typeof EVENT_CONFIG)[string] | undefined;
-					let boardExecutionMode: string | undefined;
-					if (eventBoardId && eventNodeId) {
-						let eventBoard: Awaited<
-							ReturnType<typeof backend.boardState.getBoard>
-						>;
-						try {
-							eventBoard = await backend.boardState.getBoard(
-								appId,
-								eventBoardId,
-								undefined,
-								true,
-							);
-						} catch (error) {
-							return {
-								status: "error",
-								message: `Failed to load the Event's board: ${error instanceof Error ? error.message : String(error)}`,
-							};
-						}
-						const entryNode = eventBoard?.nodes?.[eventNodeId];
-						entryNodeName = entryNode?.name;
-						boardExecutionMode = eventBoard?.execution_mode;
-						entryConfig = entryNodeName
-							? EVENT_CONFIG[entryNodeName]
+				case "app_build": {
+					const operation = argString(args, "operation");
+					const appId = argString(args, "app_id");
+					const inspection = [
+						"schema",
+						"capabilities",
+						"recipe",
+						"status",
+					].includes(operation);
+					if (!["schema", "capabilities", "recipe"].includes(operation)) {
+						const owner = ownerMessageIdForRequest(request);
+						const created = owner
+							? createdAppTargetsByOwnerRef.current.get(owner)
 							: undefined;
-						if (!entryNodeName || !entryConfig) {
-							return {
-								status: "error",
-								message: `Node '${eventNodeId}' is not a supported Event entry. Use flowpilot_board to create eventsSimple(), eventsGeneric(payload: Struct, fieldName: string, ...), or eventsChat(...), then pass the returned event_nodes id.`,
-							};
-						}
-						if (!isRunnableWorkflowEventEntry(eventBoard, eventNodeId)) {
-							return {
-								status: "error",
-								message: `Node '${eventNodeId}' is an empty or unconnected Event entry. Build and connect the board logic first, then use the exact runnable event_nodes id returned by flowpilot_board. No Event was registered.`,
-							};
+						if (!(await getProfileAppIds()).has(appId) && created !== appId) {
+							throw new Error(
+								"App build target is not visible in the current profile.",
+							);
 						}
 					}
-
-					const requestedEventType = argString(args, "event_type").trim();
-					const eventType = resolveAppEventType({
-						pageId,
-						requestedEventType,
-						existingEventType: existingEvent?.event_type,
-						supportedWorkflowEventTypes: entryConfig?.eventTypes,
-						defaultWorkflowEventType: entryConfig?.defaultEventType,
-					});
-					if (entryConfig && !entryConfig.eventTypes.includes(eventType)) {
-						return {
-							status: "error",
-							message: `Event type '${eventType}' is incompatible with ${entryNodeName}. Supported types: ${entryConfig.eventTypes.join(", ")}. Cron setup requires an events_simple entry.`,
-						};
-					}
-
-					const requestedExecutionMode =
-						argString(args, "execution_mode") ||
-						argString(args, "executionMode");
-					let executionMode =
-						requestedExecutionMode.toLowerCase() === "remote"
-							? IEventExecutionMode.Remote
-							: requestedExecutionMode.toLowerCase() === "local"
-								? IEventExecutionMode.Local
-								: (existingEvent?.execution_mode ?? IEventExecutionMode.Local);
-					// Core enforces a concrete board mode on its Events. Resolve it here too so
-					// sink_execution and the persisted Event cannot contradict one another.
-					if (boardExecutionMode === "Local")
-						executionMode = IEventExecutionMode.Local;
-					if (boardExecutionMode === "Remote")
-						executionMode = IEventExecutionMode.Remote;
-
-					const existingConfig = pageId
-						? undefined
-						: parseUint8ArrayToJson(existingEvent?.config);
-					const defaultConfig = entryConfig?.configs[eventType] ?? {};
-					const keepExistingConfig =
-						existingEvent?.event_type === eventType &&
-						existingConfig &&
-						typeof existingConfig === "object";
-					let eventConfig: Record<string, unknown> = pageId
-						? {}
-						: {
-								...(keepExistingConfig
-									? (existingConfig as Record<string, unknown>)
-									: (defaultConfig as Record<string, unknown>)),
-								...(argObject(args, "config") ?? {}),
-							};
-					if (!pageId && eventType === "cron") {
-						const expression =
-							argString(args, "cron_expression") ||
-							argString(args, "cronExpression") ||
-							(typeof eventConfig.expression === "string"
-								? eventConfig.expression.trim()
-								: "");
-						const scheduledFor =
-							argObject(args, "scheduled_for") ||
-							argObject(args, "scheduledFor") ||
-							(eventConfig.scheduled_for &&
-							typeof eventConfig.scheduled_for === "object"
-								? (eventConfig.scheduled_for as Record<string, unknown>)
-								: undefined);
-						if (!expression && !scheduledFor) {
-							return {
-								status: "error",
-								message:
-									"A cron Event requires cron_expression for a recurring schedule OR scheduled_for {date, time} for a one-time run.",
-							};
-						}
-						if (
-							scheduledFor &&
-							(typeof scheduledFor.date !== "string" ||
-								typeof scheduledFor.time !== "string")
-						) {
-							return {
-								status: "error",
-								message:
-									"scheduled_for requires string fields date (YYYY-MM-DD) and time (HH:mm).",
-							};
-						}
-						const timezone =
-							argString(args, "timezone") ||
-							(typeof eventConfig.timezone === "string"
-								? eventConfig.timezone
-								: "UTC");
-						eventConfig = {
-							...eventConfig,
-							sink_type: "cron",
-							timezone,
-							last_fired: null,
-							sink_execution:
-								executionMode === IEventExecutionMode.Remote
-									? "REMOTE"
-									: "LOCAL",
-						};
-						if (expression) {
-							eventConfig.expression = expression;
-							eventConfig.scheduled_for = undefined;
-						} else {
-							eventConfig.scheduled_for = scheduledFor;
-							eventConfig.expression = undefined;
-						}
-					}
-
-					const now = nowSystemTime();
-					const pagePersistenceReset = pageEventPersistenceReset(pageId);
-					const event: IEvent = {
-						...(existingEvent ?? {}),
-						id: eventId || createId(),
-						name,
-						description:
-							argString(args, "description") ||
-							existingEvent?.description ||
-							"",
-						board_id: eventBoardId,
-						node_id: pagePersistenceReset?.nodeId ?? eventNodeId,
-						config:
-							pagePersistenceReset?.config ??
-							convertJsonToUint8Array(eventConfig) ??
-							[],
-						inputs: pagePersistenceReset?.inputs ?? existingEvent?.inputs,
-						canary: pagePersistenceReset ? null : existingEvent?.canary,
-						board_version:
-							target.kind === "page" && !target.preserveExistingPageMetadata
-								? undefined
-								: existingEvent?.board_version,
-						active: argBool(args, "active") ?? existingEvent?.active ?? true,
-						event_type: eventType,
-						event_version: existingEvent?.event_version ?? [0, 0, 0],
-						priority: existingEvent?.priority ?? 0,
-						variables: existingEvent?.variables ?? {},
-						created_at: existingEvent?.created_at ?? now,
-						updated_at: now,
-						execution_mode: executionMode,
-						...(pageId ? { default_page_id: pageId } : {}),
-					};
-					let savedEvent: IEvent;
-					try {
-						savedEvent = await backend.eventState.upsertEvent(appId, event);
-					} catch (error) {
-						return {
-							status: "error",
-							message: `Failed to upsert event: ${error instanceof Error ? error.message : String(error)}`,
-						};
-					}
-					// Optional URL route mapping (path -> eventId) so the event is reachable.
-					const rawRoute = argString(args, "route");
-					let routePath: string | undefined;
-					if (rawRoute) {
-						routePath = rawRoute.startsWith("/") ? rawRoute : `/${rawRoute}`;
-						try {
-							await backend.routeState.setRoute(
+					const signal =
+						requestExecutionLeasesRef.current.get(request)?.controller.signal;
+					const assertActive = () => assertRequestActive(request, "app build");
+					const delegate = async (
+						toolName: string,
+						arguments_: Record<string, unknown>,
+					) => {
+						assertActive();
+						const response = await executeRef.current({
+							requestId: `${request.requestId}:build:${createId()}`,
+							toolName,
+							arguments: arguments_,
+							parentRequestId: request.requestId,
+							deadlineAtMs: requestDeadline(request),
+							context: {
+								...request.context,
 								appId,
-								routePath,
-								savedEvent.id,
+								parentRequestId: request.requestId,
+								runId: scope.runId,
+								conversationId: conversationScopeId(request),
+								sourceUserPrompt: sourceUserPrompt(request),
+							},
+						});
+						assertActive();
+						if (!response.approved || response.error)
+							throw new Error(
+								response.error || "Build operation was declined.",
 							);
-						} catch (error) {
-							console.error(
-								"[global-tool-bridge] upsert_event: setRoute failed",
-								error,
-							);
-						}
-					}
-					scope.referenceApp(appId);
-					return {
-						status: "ok",
-						event_id: savedEvent.id,
-						event_type: savedEvent.event_type,
-						...(entryNodeName ? { entry_node_type: entryNodeName } : {}),
-						execution_mode: savedEvent.execution_mode,
-						...(pageId ? { page_id: pageId } : {}),
-						...(routePath ? { route: routePath } : {}),
-						note: pageId
-							? "Page event upserted (bound to the page)."
-							: eventType === "cron"
-								? "Cron setup attached to the Simple Event entry."
-								: "Compatible Event setup attached to the workflow entry.",
+						return response.result;
 					};
+					const selection = scope.turnSelection();
+					const release = inspection
+						? undefined
+						: await boardEditCoordinator.acquire(`app-build:${appId}`, {
+								signal,
+								deadlineAtMs: requestDeadline(request),
+							});
+					try {
+						return await executeAppBuildTool(args, {
+							backend,
+							signal,
+							originalRequest: sourceUserPrompt(request),
+							operationOwnerId: request.requestId,
+							deadlineAtMs: requestDeadline(request),
+							dispatch: {
+								assertActive,
+								delegate,
+								referenceApp: scope.referenceApp,
+								generateWidget: (instruction, widgetId) =>
+									generateAppBuildWidget(backend.boardState, instruction, {
+										appId,
+										requestId: `${request.requestId}:widget:${widgetId}:agent`,
+										parentRequestId: request.requestId,
+										conversationId: conversationScopeId(request),
+										runId: scope.runId,
+										sourceUserPrompt: sourceUserPrompt(request),
+										modelId: flowPilotModelIdForProvider(
+											normalizeAIProvider(selection.provider),
+											selection.selectedModelId,
+										),
+										reasoningEffort: selection.reasoningEffort || undefined,
+										signal,
+										assertActive,
+									}),
+							},
+							scenarios: createInteractiveScenarioAdapter(
+								appId,
+								delegate,
+								assertActive,
+							),
+						});
+					} finally {
+						release?.();
+					}
 				}
+				case "create_app":
+					return createAppTool(backend, args, {
+						authenticated: Boolean(authRef.current?.isAuthenticated),
+						conversationId: conversationScopeId(request),
+						requestId: request.requestId,
+						journal: createdArtifactJournalRef.current,
+						assertActive: () =>
+							assertRequestActive(request, "app provisioning"),
+						referenceApp: scope.referenceApp,
+						handleUpgrade: (error) =>
+							handleUpgradeRequiredError(error, "project-limit"),
+						invalidate: () => {
+							queryClient.invalidateQueries({ queryKey: ["getApps"] });
+							queryClient.invalidateQueries({
+								queryKey: ["getSettingsProfile"],
+							});
+						},
+						rememberTarget: (appId) => {
+							const owner = ownerMessageIdForRequest(request);
+							if (owner) createdAppTargetsByOwnerRef.current.set(owner, appId);
+							while (createdAppTargetsByOwnerRef.current.size > 128) {
+								const oldest = createdAppTargetsByOwnerRef.current
+									.keys()
+									.next().value;
+								if (typeof oldest !== "string") break;
+								createdAppTargetsByOwnerRef.current.delete(oldest);
+							}
+						},
+					});
+				case "upsert_event":
+					return upsertAppEvent(backend, args, {
+						assertActive: () =>
+							assertRequestActive(request, "Event provisioning"),
+						referenceApp: scope.referenceApp,
+					});
 				case "delete_event": {
 					const appId = argString(args, "app_id") || argString(args, "appId");
 					const eventId =

@@ -24,6 +24,17 @@ export class WebPageState implements IPageState {
 		}
 	}
 
+	async getPagesAuthoritative(
+		appId: string,
+		boardId?: string,
+	): Promise<PageListItem[]> {
+		const params = boardId ? `?board_id=${boardId}` : "";
+		return apiGet<PageListItem[]>(
+			`apps/${appId}/pages${params}`,
+			this.backend.auth,
+		);
+	}
+
 	private pageUrl(
 		appId: string,
 		pageId: string,
@@ -68,6 +79,18 @@ export class WebPageState implements IPageState {
 				this.backend.auth,
 			);
 		}
+	}
+
+	async getPageAuthoritative(
+		appId: string,
+		pageId: string,
+		boardId?: string,
+		version?: [number, number, number],
+	): Promise<IPage> {
+		return apiGet<IPage>(
+			this.pageUrl(appId, pageId, boardId, version),
+			this.backend.auth,
+		);
 	}
 
 	async getPageBootstrap(

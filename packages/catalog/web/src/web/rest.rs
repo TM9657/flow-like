@@ -12,7 +12,6 @@ use flow_like::flow::{
     variable::VariableType,
 };
 use flow_like_catalog_core::FlowPath;
-#[cfg(all(feature = "execute", not(feature = "remote")))]
 use flow_like_storage::object_store::ObjectStoreExt;
 use flow_like_types::async_trait;
 #[cfg(all(feature = "execute", not(feature = "remote")))]
@@ -1936,6 +1935,12 @@ fn openapi_pin_schema(
         VariableType::Integer | VariableType::Byte => json!({"type": "integer"}),
         VariableType::Float => json!({"type": "number"}),
         VariableType::Boolean => json!({"type": "boolean"}),
+        VariableType::Geometry => schema
+            .map(|schema| flow_like::flow::pin::resolve_schema(schema, board_refs))
+            .transpose()
+            .and_then(flow_like::flow::variable::geometry_kind_from_schema)
+            .map(flow_like_types::geometry::geometry_json_schema)
+            .unwrap_or_else(|_| json!(false)),
         VariableType::Struct | VariableType::Generic => schema
             .and_then(|schema| json::from_str::<flow_like_types::Value>(schema).ok())
             .unwrap_or_else(|| json!({"type": "object", "additionalProperties": true})),

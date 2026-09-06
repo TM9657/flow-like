@@ -111,6 +111,8 @@ export interface AssistantDataStudioSurface {
 	overlayName?: string;
 	/** Table currently selected in the explorer, if any. */
 	selectedTable?: string;
+	/** Whether the visible data comes from the signed-in user's private store. */
+	userScoped?: boolean;
 	/** Names of the overlays available in the app, for grounding. */
 	overlayNames?: string[];
 }

@@ -2428,6 +2428,16 @@ impl<'a> Lowering<'a> {
 
     fn type_ref_for_pin(&self, pin: &Pin) -> TypeRef {
         let mut ty = util::type_ref(&pin.data_type, &pin.value_type);
+        if pin.data_type == VariableType::Geometry {
+            let schema = pin.schema.as_deref().map(|schema| {
+                self.board
+                    .refs
+                    .get(schema)
+                    .map(String::as_str)
+                    .unwrap_or(schema)
+            });
+            return super::types::type_ref_with_schema(&pin.data_type, &pin.value_type, schema);
+        }
         if pin.data_type != VariableType::Struct {
             return ty;
         }
@@ -3820,7 +3830,13 @@ fn var_decl_of(v: &Variable, refs: &HashMap<String, String>, name: &str) -> VarD
     };
     VarDecl {
         name: name.to_string(),
-        ty: util::type_ref(&v.data_type, &v.value_type),
+        ty: super::types::type_ref_with_schema(
+            &v.data_type,
+            &v.value_type,
+            v.schema
+                .as_deref()
+                .map(|schema| refs.get(schema).map(String::as_str).unwrap_or(schema)),
+        ),
         // Secret values must never enter the text domain: rendered FlowScript is shown in
         // editors, copied, and sent to LLMs. Reconcile lowers the live board through this
         // same path, so both sides agree the decl is value-free and round-trips can neither

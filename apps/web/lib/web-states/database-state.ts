@@ -161,6 +161,17 @@ export class WebDatabaseState implements IDatabaseState {
 		);
 	}
 
+	async getSchemaAuthoritative(
+		appId: string,
+		tableName: string,
+		userScoped?: boolean,
+	): Promise<any> {
+		return apiGet<any>(
+			`apps/${appId}/db/${encodeURIComponent(tableName)}/schema${this.scopeQuery(userScoped)}`,
+			this.backend.auth,
+		);
+	}
+
 	async getIndices(
 		appId: string,
 		tableName: string,
@@ -194,6 +205,10 @@ export class WebDatabaseState implements IDatabaseState {
 		} catch {
 			return [];
 		}
+	}
+
+	async listTablesAuthoritative(appId: string): Promise<string[]> {
+		return apiGet<string[]>(`apps/${appId}/db`, this.backend.auth);
 	}
 
 	async listTablesUser(appId: string): Promise<string[]> {

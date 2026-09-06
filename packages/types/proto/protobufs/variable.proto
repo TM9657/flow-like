@@ -29,6 +29,7 @@ enum VariableType {
     GENERIC = 7;
     STRUCT = 8;
     BYTE = 9;
+    GEOMETRY = 10;
 }
 
 enum ValueType {

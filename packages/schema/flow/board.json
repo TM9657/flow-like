@@ -108,6 +108,13 @@
 		},
 		"updated_at": {
 			"$ref": "#/$defs/SystemTime"
+		},
+		"format_version": {
+			"description": "Minimum document format understood by readers and writers. Missing versions mean 1.",
+			"default": 1,
+			"type": "integer",
+			"format": "uint32",
+			"minimum": 0
 		}
 	},
 	"required": [
@@ -711,7 +718,7 @@
 					"type": ["boolean", "null"]
 				},
 				"node_id": {
-					"description": "Soft reference to a board node this comment is attached to (e.g. the statement a FlowScript thread anchors on).\nPresentation metadata only \u2014 dangling references are legal; a missing node means unanchored.",
+					"description": "Soft reference to a board node this comment is attached to (e.g. the statement a FlowScript thread anchors on).\nPresentation metadata only — dangling references are legal; a missing node means unanchored.",
 					"type": ["string", "null"]
 				}
 			},

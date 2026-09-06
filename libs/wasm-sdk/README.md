@@ -72,6 +72,23 @@ Every node run returns an `ExecutionResult` with:
 
 The runtime provides a **Host Bridge** — a set of functions the WASM module can call to interact with the Flow-Like environment. Each SDK wraps these low-level WASM imports into idiomatic high-level APIs.
 
+## Geometry pins
+
+Declare the `Geometry` data type to exchange GeoJSON geometry objects with the host.
+A point value is `{"type":"Point","coordinates":[13.405,52.52]}`. Coordinates are
+finite WGS 84 longitude then latitude, with exactly two numbers per position.
+Feature wrappers and projected coordinates require explicit conversion before the pin.
+
+Omit the schema to accept any geometry, or set the schema string to a frozen subtype
+marker such as `{"$id":"flow:geometry","x-geometry":"Point"}`. Subtypes are Point,
+LineString, Polygon, MultiPoint, MultiLineString, MultiPolygon, and GeometryCollection.
+The host validates geometry inputs and outputs, including subtype constraints. Invalid
+values fail the node invocation. Null represents an unset value and is not a geometry.
+
+`ValueType` still describes the surrounding container. For example, an Array of Point
+geometries differs from one MultiPoint geometry. SDK JSON getters and output methods
+carry geometry values; no new binary ABI or serialized geometry wrapper is required.
+
 ## Single Node vs. Node Package
 
 SDKs support two export modes:

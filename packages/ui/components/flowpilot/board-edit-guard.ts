@@ -1343,6 +1343,8 @@ export function isCreatedAppBuildTargetMismatch(
 	}
 
 	switch (options.toolName) {
+		case "app_build":
+			return !["schema", "capabilities", "recipe", "status"].includes(options.operation ?? "");
 		case "flowpilot_board":
 		case "flowpilot_widget":
 			return options.mode !== "explain";

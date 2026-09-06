@@ -1240,6 +1240,7 @@ fn base_type(data_type: &str) -> &'static str {
         "PathBuf" => "Path",
         "Struct" => "Struct",
         "Byte" => "bytes",
+        "Geometry" => "geometry",
         "Execution" => "exec",
         _ => "any",
     }
@@ -1262,7 +1263,17 @@ fn pin_to_sig_param(pin: &PinMetadata) -> SigParam {
     };
     SigParam {
         name: pin.name.clone(),
-        ty: TypeRef::new(base_type(&pin.data_type), container(&pin.value_type)),
+        ty: {
+            let mut ty = TypeRef::new(base_type(&pin.data_type), container(&pin.value_type));
+            if pin.data_type == "Geometry" {
+                ty.geometry_kind = pin.schema.as_deref().and_then(|schema| {
+                    flow_like_types::geometry::kind_from_schema(schema)
+                        .ok()
+                        .flatten()
+                });
+            }
+            ty
+        },
         optional: pin
             .default_value
             .as_ref()

@@ -22,6 +22,7 @@ object DataType {
     const val DATE = "Date"
     const val PATH_BUF = "PathBuf"
     const val STRUCT = "Struct"
+    const val GEOMETRY = "Geometry"
 }
 
 object ValueType {

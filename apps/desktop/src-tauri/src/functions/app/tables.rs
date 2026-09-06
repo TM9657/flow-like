@@ -396,6 +396,7 @@ pub async fn db_query(
         flow_like::flow_like_storage::databases::sql_guard::validate_readonly_sql(&sql)
             .map_err(|e| anyhow!("Invalid query SQL: {e}"))?;
         let context = SessionContext::new();
+        flow_like_storage::geometry::register_geo_functions(&context);
         let fusion = db.to_datafusion().await?;
         context
             .register_table(table_name, fusion)

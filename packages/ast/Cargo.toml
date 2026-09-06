@@ -7,3 +7,4 @@ description = "FlowScript: text-domain IR (AST) for flow-like boards — pure la
 [dependencies]
 serde = { workspace = true, features = ["derive"] }
 serde_json.workspace = true
+flow-like-types-contracts = { path = "../types/contracts", default-features = false, features = ["geometry"] }

@@ -151,12 +151,14 @@ export function useCreateFunction(
 }
 
 export function VariablesMenu({
+	appId,
 	board,
 	executeCommand,
 	currentLayerId,
 	pushLayer,
 	boardRef,
 }: Readonly<{
+	appId?: string;
 	board: IBoard;
 	executeCommand: (
 		command: IGenericCommand,
@@ -941,6 +943,7 @@ export function VariablesMenu({
 			</div>
 
 			<NewVariableDialog
+				appId={appId}
 				open={showNewVariableDialog}
 				onOpenChange={setShowNewVariableDialog}
 				onCreateVariable={
@@ -952,6 +955,7 @@ export function VariablesMenu({
 
 			{editingVariable && (
 				<VariableOverlay
+					appId={appId}
 					key={editingVariable.id}
 					open={editingVariable !== null}
 					onOpenChange={(open) => {
@@ -976,6 +980,7 @@ export function VariablesMenu({
 
 			{editingFunction && (
 				<FunctionOverlay
+					appId={appId}
 					open={editingFunction !== null}
 					onOpenChange={(open) => {
 						if (!open) setEditingFunction(null);
@@ -1013,6 +1018,7 @@ function TokenLegend() {
 		IVariableType.Float,
 		IVariableType.Boolean,
 		IVariableType.Struct,
+		IVariableType.Geometry,
 		IVariableType.Date,
 		IVariableType.Byte,
 		IVariableType.Generic,

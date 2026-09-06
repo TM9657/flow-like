@@ -9,6 +9,11 @@ import {
 	namespaceSegments,
 	resolveFlowScriptNames,
 } from "../../../lib/flowscript/names";
+import {
+	GEOMETRY_KINDS,
+	type GeometryKind,
+	geometryKindFromSchema,
+} from "../../../lib/geometry";
 import type { INode, IPin } from "../../../lib/schema/flow/node";
 import {
 	IPinType,
@@ -52,6 +57,8 @@ const CONTROL_KEYWORDS = [
 ];
 
 const TYPE_KEYWORDS = [
+	"geometry",
+	...GEOMETRY_KINDS,
 	"string",
 	"int",
 	"float",
@@ -107,6 +114,7 @@ export const RESERVED_WORDS: ReadonlySet<string> = new Set([
 export const UNIVERSAL_CLASS = "universal";
 
 const VALUE_CLASSES = new Set([
+	"geometry",
 	"string",
 	"int",
 	"float",
@@ -170,6 +178,8 @@ function variableTypeBase(dataType: IVariableType): string {
 			return "Path";
 		case IVariableType.Generic:
 			return "any";
+		case IVariableType.Geometry:
+			return "geometry";
 		case IVariableType.Struct:
 			return "Struct";
 		case IVariableType.Byte:
@@ -181,7 +191,15 @@ function variableTypeBase(dataType: IVariableType): string {
 
 /** Mirrors `render_type_ref` in packages/ast/src/render.rs. */
 function pinTypeString(pin: IPin): string {
-	const base = variableTypeBase(pin.data_type);
+	let base = variableTypeBase(pin.data_type);
+	if (pin.data_type === IVariableType.Geometry) {
+		try {
+			const kind = geometryKindFromSchema(pin.schema);
+			if (kind) base = `geometry<${kind}>`;
+		} catch {
+			base = "geometry<invalid>";
+		}
+	}
 	switch (pin.value_type) {
 		case IValueType.Array:
 			return `${base}[]`;
@@ -230,6 +248,8 @@ export function methodClassFor(
 			return "float";
 		case IVariableType.Boolean:
 			return "bool";
+		case IVariableType.Geometry:
+			return "geometry";
 		case IVariableType.Struct:
 			return title ?? "struct";
 		case IVariableType.Date:
@@ -1580,6 +1600,18 @@ function objectBranch(schema: unknown, defs: Schema): Schema | undefined {
 function schemaTypeLabel(schema: unknown, defs: Schema): string {
 	const s = resolveRef(schema, defs);
 	if (!s) return "any";
+	if (s["x-flow-like-type"] === "geometry") {
+		const kind = s["x-geometry"];
+		return typeof kind === "string" ? `geometry<${kind}>` : "geometry";
+	}
+	if (s.$id === "flow:geometry") {
+		try {
+			const kind = geometryKindFromSchema(JSON.stringify(s));
+			return kind ? `geometry<${kind}>` : "geometry";
+		} catch {
+			return "geometry<invalid>";
+		}
+	}
 	if (typeof s.title === "string") return s.title;
 	const union = (s.anyOf ?? s.oneOf) as unknown[] | undefined;
 	if (Array.isArray(union)) {
@@ -1677,6 +1709,7 @@ type TypeGroup =
 	| "number"
 	| "bool"
 	| "struct"
+	| "geometry"
 	| "date"
 	| "path"
 	| "bytes"
@@ -1686,6 +1719,7 @@ type TypeGroup =
 export interface ValueType {
 	group: TypeGroup;
 	isArray: boolean;
+	geometryKind?: GeometryKind | null;
 	schemaTitle?: string;
 	dataType?: IVariableType;
 	container?: IValueType;
@@ -1702,6 +1736,8 @@ function groupOf(dataType: IVariableType): TypeGroup {
 			return "number";
 		case IVariableType.Boolean:
 			return "bool";
+		case IVariableType.Geometry:
+			return "geometry";
 		case IVariableType.Struct:
 			return "struct";
 		case IVariableType.Date:
@@ -1719,7 +1755,18 @@ const pinValueType = (pin: {
 	dataType: IVariableType;
 	container: IValueType;
 	schemaTitle?: string;
+	schema?: string;
 }): ValueType => ({
+	geometryKind:
+		pin.dataType === IVariableType.Geometry
+			? (() => {
+					try {
+						return geometryKindFromSchema(pin.schema);
+					} catch {
+						return null;
+					}
+				})()
+			: undefined,
 	group: groupOf(pin.dataType),
 	isArray: pin.container === IValueType.Array,
 	schemaTitle: pin.schemaTitle,
@@ -1768,8 +1815,25 @@ function parseTypeAnnotation(text: string): ValueType {
 		container = IValueType.HashSet;
 		base = setMatch[1].trim();
 	}
-	if (/^Map</.test(base))
+	const mapMatch = /^Map<string,\s*(.+)>$/.exec(base);
+	if (mapMatch) {
+		container = IValueType.HashMap;
+		base = mapMatch[1].trim();
+	} else if (/^Map</.test(base))
 		return { group: "any", isArray: false, container: IValueType.HashMap };
+	const geometryMatch = /^geometry(?:<([A-Za-z]+)>)?$/.exec(base);
+	if (
+		geometryMatch &&
+		(!geometryMatch[1] ||
+			GEOMETRY_KINDS.includes(geometryMatch[1] as GeometryKind))
+	)
+		return {
+			group: "geometry",
+			isArray,
+			container,
+			dataType: IVariableType.Geometry,
+			geometryKind: geometryMatch[1] as GeometryKind | undefined,
+		};
 	if (base.includes("|") || base.includes("("))
 		return { group: "any", isArray, container };
 	switch (base.toLowerCase()) {
@@ -2096,6 +2160,7 @@ function elementOf(current: ExprInfo): ExprInfo {
 			group: v.group,
 			isArray: false,
 			schemaTitle: v.schemaTitle,
+			geometryKind: v.geometryKind,
 			dataType: v.dataType,
 		},
 		source: current.source,
@@ -3668,6 +3733,15 @@ function typeCompatibility(
 	// A bare multi-output call result is a bundle, never a usable value on its own.
 	if (actual.multiOutput) return "returns multiple values";
 	if (actual.group === "any" || actual.group === "null") return null;
+	if (expected.group === "geometry" && actual.group === "geometry") {
+		if (
+			(expected.container ?? IValueType.Normal) !==
+			(actual.container ?? IValueType.Normal)
+		)
+			return "geometry containers do not match";
+		if (expected.geometryKind && expected.geometryKind !== actual.geometryKind)
+			return `expected geometry<${expected.geometryKind}>, got ${actual.geometryKind ? `geometry<${actual.geometryKind}>` : "geometry"}`;
+	}
 	if (expected.isArray !== actual.isArray) {
 		return expected.isArray
 			? "expected an array"

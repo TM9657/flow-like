@@ -257,7 +257,11 @@ impl NodeLogic for BreakStructNode {
                 existing_pin.value_type = value_type.clone();
                 existing_pin.index = index;
 
-                if var_type == VariableType::Struct {
+                if var_type == VariableType::Geometry {
+                    existing_pin.schema =
+                        super::schema::geometry_marker_for_schema(prop_schema, &schema);
+                    existing_pin.options = None;
+                } else if var_type == VariableType::Struct {
                     let standalone = build_standalone_schema(prop_schema, &schema);
                     if let Ok(sub_schema_str) = flow_like_types::json::to_string(&standalone) {
                         existing_pin.schema = Some(sub_schema_str);
@@ -283,7 +287,9 @@ impl NodeLogic for BreakStructNode {
             pin.index = index;
 
             // If it's a struct/object type or array, set the sub-schema with definitions
-            if var_type == VariableType::Struct {
+            if var_type == VariableType::Geometry {
+                pin.schema = super::schema::geometry_marker_for_schema(prop_schema, &schema);
+            } else if var_type == VariableType::Struct {
                 let standalone = build_standalone_schema(prop_schema, &schema);
                 if let Ok(sub_schema_str) = flow_like_types::json::to_string(&standalone) {
                     pin.schema = Some(sub_schema_str);

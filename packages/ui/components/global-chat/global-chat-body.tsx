@@ -702,6 +702,7 @@ export function GlobalChatBody({ variant = "page" }: GlobalChatBodyProps) {
 						overlay_id: dataStudio.overlayId || undefined,
 						overlay_name: dataStudio.overlayName || undefined,
 						selected_table: dataStudio.selectedTable || undefined,
+						user_scoped: dataStudio.userScoped || undefined,
 						overlay_names:
 							dataStudio.overlayNames && dataStudio.overlayNames.length > 0
 								? dataStudio.overlayNames

@@ -366,6 +366,9 @@ pub struct FlowIrType {
     /// Optional nominal interface name for `struct` values.
     #[serde(default)]
     pub interface: Option<String>,
+    /// Optional GeoJSON geometry subtype; only valid with data_type geometry.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub geometry_kind: Option<flow_like_types::geometry::GeometryKind>,
 }
 
 impl<'de> Deserialize<'de> for FlowIrType {
@@ -382,6 +385,8 @@ impl<'de> Deserialize<'de> for FlowIrType {
             container: FlowIrContainer,
             #[serde(default)]
             interface: Option<String>,
+            #[serde(default)]
+            geometry_kind: Option<flow_like_types::geometry::GeometryKind>,
         }
 
         #[derive(Deserialize)]
@@ -397,6 +402,7 @@ impl<'de> Deserialize<'de> for FlowIrType {
                 data_type: value.data_type,
                 container: value.container,
                 interface: value.interface,
+                geometry_kind: value.geometry_kind,
             },
         })
     }
@@ -408,6 +414,7 @@ impl FlowIrType {
             data_type,
             container: FlowIrContainer::Normal,
             interface: None,
+            geometry_kind: None,
         }
     }
 }
@@ -422,6 +429,7 @@ pub enum FlowIrDataType {
     #[serde(alias = "bool")]
     Boolean,
     Struct,
+    Geometry,
     Generic,
     Date,
     Path,
@@ -502,6 +510,14 @@ fn validate_authored_type(
             format!("{path}/data_type"),
             scope,
             "unsupported is an internal fail-closed type and cannot be authored",
+        ));
+    }
+    if value_type.geometry_kind.is_some() && value_type.data_type != FlowIrDataType::Geometry {
+        diagnostics.push(FlowIrDiagnostic::new(
+            "IR_GEOMETRY_TYPE_INVALID",
+            format!("{path}/geometry_kind"),
+            scope,
+            "a geometry subtype may only qualify a geometry type",
         ));
     }
     if let Some(interface) = value_type.interface.as_deref() {
@@ -1041,7 +1057,7 @@ pub fn compile_flow_ir(program: &FlowIrProgram, catalog: &[NodeMetadata]) -> Flo
             }
             if let Some(default) = &field.default {
                 let actual = literal_type(default);
-                if !types_compatible(&actual, &field.value_type) {
+                if !literal_matches_type(default, &field.value_type) {
                     let mut diagnostic = FlowIrDiagnostic::new(
                         "IR_INTERFACE_DEFAULT_TYPE",
                         format!("/interfaces/{interface_index}/fields/{field_index}/default"),
@@ -1156,7 +1172,7 @@ pub fn compile_flow_ir(program: &FlowIrProgram, catalog: &[NodeMetadata]) -> Flo
         );
         if let Some(default) = &variable.default {
             let actual = literal_type(default);
-            if !types_compatible(&actual, &variable.value_type) {
+            if !literal_matches_type(default, &variable.value_type) {
                 let mut diagnostic = FlowIrDiagnostic::new(
                     "IR_VARIABLE_DEFAULT_TYPE",
                     format!("/variables/{index}/default"),
@@ -1983,6 +1999,7 @@ fn compile_steps_with_offset(
                     data_type: array_source.value_type.data_type,
                     container: FlowIrContainer::Normal,
                     interface: array_source.value_type.interface.clone(),
+                    geometry_kind: array_source.value_type.geometry_kind,
                 };
                 body_context.symbols.insert(
                     normalize_symbol(item),
@@ -3100,11 +3117,17 @@ fn validate_unreachable_steps(
 }
 
 fn pin_type(pin: &PinMetadata) -> FlowIrType {
-    FlowIrType {
-        data_type: data_type_from_label(&pin.data_type),
-        container: container_from_label(&pin.value_type),
-        interface: None,
+    let mut ty = FlowIrType::scalar(data_type_from_label(&pin.data_type));
+    ty.container = container_from_label(&pin.value_type);
+    if ty.data_type == FlowIrDataType::Geometry
+        && let Some(schema) = pin.schema.as_deref()
+    {
+        match flow_like_types::geometry::kind_from_schema(schema) {
+            Ok(Some(kind)) => ty.geometry_kind = Some(kind),
+            _ => ty.data_type = FlowIrDataType::Unsupported,
+        }
     }
+    ty
 }
 
 fn data_type_from_label(label: &str) -> FlowIrDataType {
@@ -3114,6 +3137,7 @@ fn data_type_from_label(label: &str) -> FlowIrDataType {
         "float" | "double" | "number" => FlowIrDataType::Float,
         "boolean" | "bool" => FlowIrDataType::Boolean,
         "struct" | "object" => FlowIrDataType::Struct,
+        "geometry" => FlowIrDataType::Geometry,
         "generic" | "any" => FlowIrDataType::Generic,
         "date" => FlowIrDataType::Date,
         "path" | "pathbuf" => FlowIrDataType::Path,
@@ -3142,6 +3166,37 @@ fn types_compatible(actual: &FlowIrType, expected: &FlowIrType) -> bool {
         && (expected.data_type != FlowIrDataType::Struct
             || expected.interface.is_none()
             || actual.interface == expected.interface)
+        && (expected.data_type != FlowIrDataType::Geometry
+            || flow_like_types::geometry::compatible(actual.geometry_kind, expected.geometry_kind))
+}
+
+fn literal_matches_type(literal: &FlowIrLiteral, expected: &FlowIrType) -> bool {
+    if expected.data_type == FlowIrDataType::Geometry {
+        let FlowIrLiteral::Json(value) = literal else {
+            return false;
+        };
+        let valid = |value: &serde_json::Value| {
+            flow_like_types::geometry::validate_geometry(value, expected.geometry_kind).is_ok()
+        };
+        return match expected.container {
+            FlowIrContainer::Normal => valid(value),
+            FlowIrContainer::Array | FlowIrContainer::Set => value
+                .as_array()
+                .is_some_and(|items| items.iter().all(valid)),
+            FlowIrContainer::Map => value
+                .as_object()
+                .is_some_and(|items| items.values().all(valid)),
+        };
+    }
+    // A JSON literal with GeoJSON members may still be authored for a legacy Struct input.
+    if expected.data_type == FlowIrDataType::Struct
+        && expected.container == FlowIrContainer::Normal
+        && expected.interface.is_none()
+        && matches!(literal, FlowIrLiteral::Json(value) if value.is_object())
+    {
+        return true;
+    }
+    types_compatible(&literal_type(literal), expected)
 }
 
 fn authored_value_compatible(
@@ -3149,6 +3204,9 @@ fn authored_value_compatible(
     expected: &FlowIrType,
     authored: &FlowIrValue,
 ) -> bool {
+    if let FlowIrValue::Literal { value } = authored {
+        return literal_matches_type(value, expected);
+    }
     types_compatible(actual, expected)
         || (matches!(authored, FlowIrValue::List { items } if items.is_empty())
             && actual.container == FlowIrContainer::Array
@@ -3165,6 +3223,10 @@ fn type_label(value_type: &FlowIrType) -> String {
             .interface
             .clone()
             .unwrap_or_else(|| "struct".to_string()),
+        FlowIrDataType::Geometry => flow_like_ast::render_type_ref(&TypeRef::geometry(
+            value_type.geometry_kind,
+            Container::Normal,
+        )),
         FlowIrDataType::Generic => "generic".to_string(),
         FlowIrDataType::Date => "date".to_string(),
         FlowIrDataType::Path => "path".to_string(),
@@ -3180,6 +3242,16 @@ fn type_label(value_type: &FlowIrType) -> String {
 }
 
 fn literal_type(literal: &FlowIrLiteral) -> FlowIrType {
+    if let FlowIrLiteral::Json(value) = literal
+        && flow_like_types::geometry::validate_geometry(value, None).is_ok()
+    {
+        let mut ty = FlowIrType::scalar(FlowIrDataType::Geometry);
+        ty.geometry_kind = value
+            .get("type")
+            .cloned()
+            .and_then(|kind| serde_json::from_value(kind).ok());
+        return ty;
+    }
     FlowIrType::scalar(match literal {
         FlowIrLiteral::String(_) => FlowIrDataType::String,
         FlowIrLiteral::Integer(_) => FlowIrDataType::Integer,
@@ -3191,6 +3263,7 @@ fn literal_type(literal: &FlowIrLiteral) -> FlowIrType {
                 data_type: FlowIrDataType::Generic,
                 container: FlowIrContainer::Array,
                 interface: None,
+                geometry_kind: None,
             };
         }
         FlowIrLiteral::Json(_) => FlowIrDataType::Struct,
@@ -3223,13 +3296,14 @@ fn param_to_ast(param: &FlowIrParam) -> Param {
 }
 
 fn type_to_ast(value_type: &FlowIrType) -> TypeRef {
-    TypeRef::new(
+    let mut ty = TypeRef::new(
         match value_type.data_type {
             FlowIrDataType::String => "string",
             FlowIrDataType::Integer => "int",
             FlowIrDataType::Float => "float",
             FlowIrDataType::Boolean => "bool",
             FlowIrDataType::Struct => value_type.interface.as_deref().unwrap_or("Struct"),
+            FlowIrDataType::Geometry => "geometry",
             FlowIrDataType::Generic => "any",
             FlowIrDataType::Date => "Date",
             FlowIrDataType::Path => "Path",
@@ -3242,7 +3316,9 @@ fn type_to_ast(value_type: &FlowIrType) -> TypeRef {
             FlowIrContainer::Map => Container::Map,
             FlowIrContainer::Set => Container::Set,
         },
-    )
+    );
+    ty.geometry_kind = value_type.geometry_kind;
+    ty
 }
 
 fn variable_to_ast(variable: &FlowIrVariable) -> VarDecl {
@@ -3256,7 +3332,7 @@ fn variable_to_ast(variable: &FlowIrVariable) -> VarDecl {
         runtime_configured: variable.runtime_configured,
         category: variable.category.clone(),
         description: variable.description.clone(),
-        schema: None,
+        schema: type_to_ast(&variable.value_type).geometry_schema(),
         anchor: variable.anchor.clone(),
     }
 }
@@ -3278,11 +3354,15 @@ fn interface_to_ast(interface: &FlowIrInterface) -> InterfaceDecl {
                 } else {
                     type_label(&element_type)
                 };
-                let element = InterfaceType::Named(if label == "struct" {
-                    "Struct".to_string()
+                let element = if element_type.data_type == FlowIrDataType::Geometry {
+                    InterfaceType::Geometry(element_type.geometry_kind)
                 } else {
-                    label
-                });
+                    InterfaceType::Named(if label == "struct" {
+                        "Struct".to_string()
+                    } else {
+                        label
+                    })
+                };
                 InterfaceField {
                     name: field.name.clone(),
                     ty: match field.value_type.container {
@@ -4749,6 +4829,65 @@ mod tests {
     }
 
     #[test]
+    fn geometry_ir_preserves_subtypes_and_validates_literals_in_all_containers() {
+        use flow_like_types::geometry::{GeometryKind, marker};
+        let point_type: FlowIrType = serde_json::from_value(serde_json::json!({
+            "data_type": "geometry", "geometry_kind": "Point"
+        }))
+        .unwrap();
+        let any = FlowIrType::scalar(FlowIrDataType::Geometry);
+        assert!(types_compatible(&point_type, &any));
+        assert!(!types_compatible(&any, &point_type));
+        let polygon = FlowIrType {
+            geometry_kind: Some(GeometryKind::Polygon),
+            ..any.clone()
+        };
+        assert!(!types_compatible(&point_type, &polygon));
+        let value = serde_json::json!({"type":"Point", "coordinates":[13.405,52.52]});
+        assert_eq!(
+            literal_type(&FlowIrLiteral::Json(value.clone())),
+            point_type
+        );
+        for (container, value) in [
+            (FlowIrContainer::Normal, value.clone()),
+            (FlowIrContainer::Array, serde_json::json!([value])),
+            (FlowIrContainer::Set, serde_json::json!([value])),
+            (FlowIrContainer::Map, serde_json::json!({"origin":value})),
+        ] {
+            let expected = FlowIrType {
+                container,
+                ..point_type.clone()
+            };
+            assert!(literal_matches_type(&FlowIrLiteral::Json(value), &expected));
+        }
+        assert!(!literal_matches_type(
+            &FlowIrLiteral::Json(serde_json::json!({"type":"Point", "coordinates":[13,52,3]})),
+            &point_type
+        ));
+        let mut metadata = pin("shape", "Geometry", "Normal");
+        metadata.schema = Some(marker(GeometryKind::Point).to_string());
+        assert_eq!(pin_type(&metadata), point_type);
+        metadata.schema = Some("{}".to_string());
+        assert_eq!(pin_type(&metadata).data_type, FlowIrDataType::Unsupported);
+        let program: FlowIrProgram = serde_json::from_value(serde_json::json!({
+            "variables": [{"name":"origin", "type":{"data_type":"geometry", "geometry_kind":"Point"},
+                "default":{"type":"json", "value":value}}]
+        })).unwrap();
+        let compiled = compile_flow_ir(&program, &[]);
+        assert!(
+            compiled.diagnostics.is_empty(),
+            "{:?}",
+            compiled.diagnostics
+        );
+        let variable = variable_to_ast(&program.variables[0]);
+        assert_eq!(
+            variable.schema.as_deref(),
+            Some(marker(GeometryKind::Point))
+        );
+        assert_eq!(variable.ty.geometry_kind, Some(GeometryKind::Point));
+    }
+
+    #[test]
     fn common_model_aliases_deserialize_but_serialize_canonically() {
         let shorthand: FlowIrType = serde_json::from_value(serde_json::json!("string")).unwrap();
         assert_eq!(shorthand, FlowIrType::scalar(FlowIrDataType::String));
@@ -5830,6 +5969,7 @@ mod tests {
             data_type: FlowIrDataType::Struct,
             container: FlowIrContainer::Normal,
             interface: Some("Payload".to_string()),
+            geometry_kind: None,
         };
         let nominal = compile_flow_ir(
             &FlowIrProgram {
@@ -5911,6 +6051,7 @@ mod tests {
                                 data_type: FlowIrDataType::Date,
                                 container: FlowIrContainer::Array,
                                 interface: None,
+                                geometry_kind: None,
                             },
                             optional: true,
                             default: None,

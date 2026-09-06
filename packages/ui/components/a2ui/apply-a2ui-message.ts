@@ -1,4 +1,5 @@
 import { normalizeBoxes, resolveBoxesField } from "./bbox-utils";
+import { geoMapViewportValue } from "./geoConversions";
 import { applyMediaSourceUpdate } from "./media-source";
 import { applyCalendarUpdate, applyGanttUpdate } from "./planning-updates";
 import { applyStyleUpdate } from "./style-updates";
@@ -34,6 +35,9 @@ export function normalizeGeoMapViewport(raw: unknown): unknown {
 	if (!raw || typeof raw !== "object") return undefined;
 	if (isBoundValueLike(raw)) return raw;
 
+	if ((raw as Record<string, unknown>).type === "Point") {
+		return { literalJson: JSON.stringify(geoMapViewportValue(raw)) };
+	}
 	const obj = raw as Record<string, unknown>;
 	const center =
 		(obj.center as Record<string, unknown> | undefined) ??
@@ -223,6 +227,16 @@ export function applyElementUpdate(
 				checked,
 				value: checked,
 				valueRevision: nextValueRevision(data),
+			});
+		}
+		case "setGeoMapGeometry": {
+			const geometry = isBoundValueLike(updateValue.geometry)
+				? updateValue.geometry
+				: { literalJson: JSON.stringify(updateValue.geometry) };
+			return withComponentData(component, {
+				...data,
+				markers: geometry,
+				routes: geometry,
 			});
 		}
 		case "setGeoMapViewport":

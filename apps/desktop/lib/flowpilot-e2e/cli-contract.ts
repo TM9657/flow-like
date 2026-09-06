@@ -1,15 +1,32 @@
-import { isFlowPilotE2EModelKey } from "./cases";
+import {
+	aggregateFlowPilotE2EBehavioralMetrics,
+	flowPilotE2EArtifactMeetsTier,
+	resolveFlowPilotE2ETier,
+} from "./behavioral-validation";
+import {
+	flowPilotE2EModel,
+	getFlowPilotAppCreationCase,
+	isFlowPilotE2EModelKey,
+} from "./cases";
+import {
+	assertFlowPilotE2ECohortsComparable,
+	createFlowPilotE2EEvaluationIdentity,
+} from "./evaluation-identity";
 import type {
 	FlowPilotE2EArtifact,
 	FlowPilotE2ECaseId,
 	FlowPilotE2ECliEnvelope,
+	FlowPilotE2EEvaluationIdentity,
 	FlowPilotE2EModelKey,
+	FlowPilotE2ETier,
 } from "./types";
 
 export interface FlowPilotE2ECliExpectation {
 	runId: string;
 	caseIds: readonly FlowPilotE2ECaseId[];
 	modelKey: FlowPilotE2EModelKey;
+	tier?: FlowPilotE2ETier;
+	evaluationIdentity?: FlowPilotE2EEvaluationIdentity;
 	repeat: number;
 	minFlowScriptNonWhitespaceChars?: number;
 	failFast: boolean;
@@ -21,6 +38,21 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function isNonNegativeInteger(value: unknown): value is number {
 	return Number.isSafeInteger(value) && Number(value) >= 0;
+}
+
+function isEvaluationIdentity(
+	value: unknown,
+): value is FlowPilotE2EEvaluationIdentity {
+	return (
+		isRecord(value) &&
+		typeof value.harnessContractVersion === "string" &&
+		typeof value.caseSuiteFingerprint === "string" &&
+		typeof value.cohortKey === "string" &&
+		typeof value.provider === "string" &&
+		typeof value.model === "string" &&
+		typeof value.reasoningEffort === "string" &&
+		(value.tier === "structural" || value.tier === "behavioral")
+	);
 }
 
 function isArtifact(value: unknown): value is FlowPilotE2EArtifact {
@@ -41,11 +73,19 @@ function isArtifact(value: unknown): value is FlowPilotE2EArtifact {
 	}
 	if (value.error !== undefined && typeof value.error !== "string")
 		return false;
+	if (
+		value.requestedTier !== undefined &&
+		value.requestedTier !== "structural" &&
+		value.requestedTier !== "behavioral"
+	) {
+		return false;
+	}
 	if (value.report === undefined) return true;
 	return (
 		isRecord(value.report) &&
 		value.report.schema === "flowpilot.app-creation-e2e-report/v1" &&
 		typeof value.report.passed === "boolean" &&
+		isEvaluationIdentity(value.report.evaluationIdentity) &&
 		Array.isArray(value.report.checks) &&
 		Array.isArray(value.report.failures)
 	);
@@ -71,6 +111,10 @@ export function isFlowPilotE2ECliEnvelope(
 		!Array.isArray(value.selection.caseIds) ||
 		!value.selection.caseIds.every((caseId) => typeof caseId === "string") ||
 		!isFlowPilotE2EModelKey(value.selection.modelKey) ||
+		(value.selection.tier !== undefined &&
+			value.selection.tier !== "structural" &&
+			value.selection.tier !== "behavioral") ||
+		!isEvaluationIdentity(value.selection.evaluationIdentity) ||
 		!isNonNegativeInteger(value.selection.repeat) ||
 		typeof value.selection.failFast !== "boolean" ||
 		!Array.isArray(value.artifacts) ||
@@ -95,8 +139,9 @@ export function isFlowPilotE2ECliEnvelope(
 
 export function flowPilotE2EArtifactPassed(
 	artifact: FlowPilotE2EArtifact,
+	tier: FlowPilotE2ETier = artifact.requestedTier ?? "structural",
 ): boolean {
-	return !artifact.error && artifact.report?.passed === true;
+	return flowPilotE2EArtifactMeetsTier(artifact, tier);
 }
 
 function sameCaseIds(
@@ -114,6 +159,16 @@ export function normalizeFlowPilotE2ECliEnvelope(
 	envelope: FlowPilotE2ECliEnvelope,
 	expected: FlowPilotE2ECliExpectation,
 ): FlowPilotE2ECliEnvelope {
+	const expectedTier = resolveFlowPilotE2ETier(expected.tier);
+	const actualTier = resolveFlowPilotE2ETier(envelope.selection.tier);
+	const expectedIdentity =
+		expected.evaluationIdentity ??
+		createFlowPilotE2EEvaluationIdentity(
+			flowPilotE2EModel(expected.modelKey),
+			expectedTier,
+			expected.caseIds.map(getFlowPilotAppCreationCase),
+			expected.minFlowScriptNonWhitespaceChars,
+		);
 	if (envelope.runId !== expected.runId) {
 		throw new Error(
 			"FlowPilot E2E callback run id does not match the controller run.",
@@ -122,6 +177,7 @@ export function normalizeFlowPilotE2ECliEnvelope(
 	if (
 		!sameCaseIds(envelope.selection.caseIds, expected.caseIds) ||
 		envelope.selection.modelKey !== expected.modelKey ||
+		actualTier !== expectedTier ||
 		envelope.selection.repeat !== expected.repeat ||
 		envelope.selection.minFlowScriptNonWhitespaceChars !==
 			expected.minFlowScriptNonWhitespaceChars ||
@@ -131,6 +187,15 @@ export function normalizeFlowPilotE2ECliEnvelope(
 			"FlowPilot E2E callback selection does not match the request.",
 		);
 	}
+	if (!envelope.selection.evaluationIdentity) {
+		throw new Error(
+			"FlowPilot E2E callback has no evaluation cohort identity.",
+		);
+	}
+	assertFlowPilotE2ECohortsComparable(
+		envelope.selection.evaluationIdentity,
+		expectedIdentity,
+	);
 
 	const expectedOrder = Array.from({ length: expected.repeat }, () => [
 		...expected.caseIds,
@@ -151,15 +216,26 @@ export function normalizeFlowPilotE2ECliEnvelope(
 				`FlowPilot E2E artifact ${index + 1} requested model ${artifact.requestedModelKey}; expected ${expected.modelKey}.`,
 			);
 		}
+		if (resolveFlowPilotE2ETier(artifact.requestedTier) !== expectedTier) {
+			throw new Error(
+				`FlowPilot E2E artifact ${index + 1} requested tier ${resolveFlowPilotE2ETier(artifact.requestedTier)}; expected ${expectedTier}.`,
+			);
+		}
+		if (artifact.report) {
+			assertFlowPilotE2ECohortsComparable(
+				artifact.report.evaluationIdentity,
+				expectedIdentity,
+			);
+		}
 	}
 
 	const error = envelope.error?.trim() || undefined;
-	const passedRuns = envelope.artifacts.filter(
-		flowPilotE2EArtifactPassed,
+	const passedRuns = envelope.artifacts.filter((artifact) =>
+		flowPilotE2EArtifactPassed(artifact, expectedTier),
 	).length;
 	const requestedRuns = expectedOrder.length;
 	const firstFailedArtifact = envelope.artifacts.findIndex(
-		(artifact) => !flowPilotE2EArtifactPassed(artifact),
+		(artifact) => !flowPilotE2EArtifactPassed(artifact, expectedTier),
 	);
 	if (
 		expected.failFast &&
@@ -176,7 +252,7 @@ export function normalizeFlowPilotE2ECliEnvelope(
 		if (
 			!expected.failFast ||
 			!lastArtifact ||
-			flowPilotE2EArtifactPassed(lastArtifact)
+			flowPilotE2EArtifactPassed(lastArtifact, expectedTier)
 		) {
 			throw new Error(
 				"FlowPilot E2E callback ended before all requested runs completed.",
@@ -194,6 +270,8 @@ export function normalizeFlowPilotE2ECliEnvelope(
 		selection: {
 			caseIds: [...expected.caseIds],
 			modelKey: expected.modelKey,
+			tier: expectedTier,
+			evaluationIdentity: expectedIdentity,
 			repeat: expected.repeat,
 			minFlowScriptNonWhitespaceChars: expected.minFlowScriptNonWhitespaceChars,
 			failFast: expected.failFast,
@@ -205,6 +283,13 @@ export function normalizeFlowPilotE2ECliEnvelope(
 			passed: passedRuns,
 			failed: envelope.artifacts.length - passedRuns,
 			skipped: requestedRuns - envelope.artifacts.length,
+			...(expectedTier === "behavioral"
+				? {
+						behavioral: aggregateFlowPilotE2EBehavioralMetrics(
+							envelope.artifacts,
+						),
+					}
+				: {}),
 		},
 		error,
 	};

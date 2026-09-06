@@ -149,6 +149,16 @@ impl NodeLogic for GetVariable {
                 if pin.data_type != mut_value.data_type || pin.value_type != mut_value.value_type {
                     return false;
                 }
+                if mut_value.data_type == VariableType::Geometry
+                    || pin.data_type == VariableType::Geometry
+                {
+                    return flow_like::flow::pin::geometry_pins_are_compatible(
+                        mut_value,
+                        pin,
+                        &board.refs,
+                    )
+                    .unwrap_or(false);
+                }
                 schemas_are_compatible(mut_value.schema.as_deref(), pin.schema.as_deref())
             })
         });

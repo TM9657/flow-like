@@ -38,6 +38,7 @@ import type {
 	SurfaceComponent,
 } from "@flow-like/flow-like-ui/components/a2ui/types";
 import { apiResponseError } from "@flow-like/flow-like-ui/lib/api-error";
+import type { BoardFormatCapabilities } from "@flow-like/flow-like-ui/lib/board-format";
 import {
 	BoardSyncClient,
 	type IBoardSyncRequest,
@@ -170,6 +171,10 @@ export class WebBoardState implements IBoardState {
 
 	constructor(private readonly backend: WebBackendRef) {}
 
+	async getBoardFormat(appId: string): Promise<BoardFormatCapabilities> {
+		return apiGet(`apps/${appId}/board/capabilities`, this.backend.auth);
+	}
+
 	async getBoards(appId: string): Promise<IBoard[]> {
 		try {
 			const boards = await apiGet<IBoard[]>(
@@ -198,6 +203,17 @@ export class WebBoardState implements IBoardState {
 			this.appIdByBoardId.set(summary.id, appId);
 		}
 		return summaries;
+	}
+
+	async getBoardSummariesAuthoritative(
+		appId: string,
+		include?: IBoardSummaryInclude[],
+	): Promise<IBoardSummary[]> {
+		const query = include?.length ? `?include=${include.join(",")}` : "";
+		return apiGet<IBoardSummary[]>(
+			`apps/${appId}/board/summaries${query}`,
+			this.backend.auth,
+		);
 	}
 
 	async getBoardVariables(appId: string): Promise<IBoardVariables[]> {
@@ -245,6 +261,18 @@ export class WebBoardState implements IBoardState {
 		await this.presignMediaComments(appId, boardId, board);
 
 		return board;
+	}
+
+	async getBoardAuthoritative(
+		appId: string,
+		boardId: string,
+		version?: [number, number, number],
+	): Promise<IBoard> {
+		const params = version ? `?version=${version.join("_")}` : "";
+		return apiGet<IBoard>(
+			`apps/${appId}/board/${boardId}${params}`,
+			this.backend.auth,
+		);
 	}
 
 	private async presignMediaComments(
@@ -871,6 +899,22 @@ export class WebBoardState implements IBoardState {
 	}
 
 	async getFlowScript(
+		appId: string,
+		boardId: string,
+		version?: [number, number, number],
+		anchors = true,
+	): Promise<string> {
+		const params = new URLSearchParams();
+		if (version) params.set("version", version.join("_"));
+		params.set("anchors", String(anchors));
+		const response = await apiGet<{ flowscript: string }>(
+			`apps/${appId}/board/${boardId}/flowscript?${params}`,
+			this.backend.auth,
+		);
+		return response.flowscript;
+	}
+
+	async getFlowScriptAuthoritative(
 		appId: string,
 		boardId: string,
 		version?: [number, number, number],

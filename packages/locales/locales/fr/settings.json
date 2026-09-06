@@ -1933,5 +1933,6 @@
 	"yourProfile": "",
 	"yourSemanticLayer": "",
 	"geometryWgs84": "",
-	"geometryColumnHint": ""
+	"geometryColumnHint": "",
+	"geometryBackendUpgrade": ""
 }

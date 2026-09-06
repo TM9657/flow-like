@@ -3,7 +3,7 @@
 //! Provides storage access for WASM modules.
 
 use flow_like_storage::object_store::ObjectStoreExt;
-use flow_like_storage::object_store::{PutPayload, path::Path};
+use flow_like_storage::object_store::{path::Path, PutPayload};
 use flow_like_types::Bytes;
 use std::collections::HashMap;
 

@@ -87,6 +87,41 @@ const overlay = overlayWith(
 );
 
 describe("subgraphFromCypherRows", () => {
+	test("preserves metadata by exact output column on nodes and relationships", () => {
+		const geometryMetadata = {
+			"ARROW:extension:name": "geoarrow.wkb",
+			"ARROW:extension:metadata": '{"crs":"EPSG:4326"}',
+		};
+		const point = { type: "Point", coordinates: [13, 52] };
+		const result = subgraphFromCypherRows(
+			[
+				{
+					"n.id": "s1",
+					"n.title": "Place",
+					"n.location": point,
+					"n.payload": point,
+					"r.submission_id": "s1",
+					"r.reporter_sub": "u1",
+					"r.location": point,
+				},
+			],
+			overlay,
+			{ "n.location": geometryMetadata, "r.location": geometryMetadata },
+		);
+		const node = result?.nodes.find(
+			(entry) => entry.id === "FeedbackSubmission:s1",
+		);
+		expect(node?.property_metadata).toEqual({ location: geometryMetadata });
+		expect(node?.props.payload).toEqual(point);
+		expect(result?.edges[0].property_metadata).toEqual({
+			location: geometryMetadata,
+		});
+		expect(
+			result?.nodes.find((entry) => entry.label === "Reporter")
+				?.property_metadata,
+		).toBeUndefined();
+	});
+
 	test("resolves node variables through their id and display columns", () => {
 		const result = subgraphFromCypherRows(
 			[

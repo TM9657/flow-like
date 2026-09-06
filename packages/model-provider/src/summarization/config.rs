@@ -1,6 +1,6 @@
+use schemars::JsonSchema;
 use serde::Deserialize;
 use serde::Serialize;
-use schemars::JsonSchema;
 
 /// Primary summarization strategy controlling how chunks are processed.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema, Default)]
@@ -95,10 +95,7 @@ impl TryFrom<&str> for DensificationStrategy {
         match s {
             "None" => Ok(Self::None),
             "ChainOfDensity" => Ok(Self::ChainOfDensity),
-            _ => Err(anyhow::anyhow!(
-                "Unknown densification strategy: {}",
-                s
-            )),
+            _ => Err(anyhow::anyhow!("Unknown densification strategy: {}", s)),
         }
     }
 }

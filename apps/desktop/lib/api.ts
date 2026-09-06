@@ -1,5 +1,9 @@
 import type { IProfile } from "@flow-like/flow-like-ui";
 import { getApiUrl } from "@flow-like/flow-like-ui/lib/api-url";
+import {
+	BOARD_FORMAT_HEADER,
+	CURRENT_BOARD_FORMAT_VERSION,
+} from "@flow-like/flow-like-ui/lib/board-format";
 import { fetch as tauriFetch } from "@tauri-apps/plugin-http";
 import { type EventSourceMessage, createEventSource } from "eventsource-client";
 import type { AuthContextProps } from "react-oidc-context";
@@ -23,6 +27,7 @@ const PROTECTED_APP_ROUTE_SEGMENTS = new Set([
 	"data",
 	"db",
 	"events",
+	"flowpilot-builds",
 	"fork",
 	"graph",
 	"invoke",
@@ -188,9 +193,12 @@ export async function streamFetcher<T>(
 ): Promise<void> {
 	const method = methodOf(options);
 	ensureProtectedAppRouteAuth(path, auth, method);
-	const authHeader: Record<string, string> = auth?.user?.access_token
-		? { Authorization: `Bearer ${auth.user.access_token}` }
-		: {};
+	const authHeader: Record<string, string> = {
+		[BOARD_FORMAT_HEADER]: String(CURRENT_BOARD_FORMAT_VERSION),
+		...(auth?.user?.access_token
+			? { Authorization: `Bearer ${auth.user.access_token}` }
+			: {}),
+	};
 	const url = constructUrl(profile, path);
 
 	console.log("[SSE Debug] Starting stream to:", redactApiPathSecrets(url));
@@ -512,7 +520,9 @@ async function requestJson<T>(
 		const statKey = normalizeApiPath(methodOf(options), path);
 		__apiCallStats.set(statKey, (__apiCallStats.get(statKey) ?? 0) + 1);
 	}
-	const headers: HeadersInit = {};
+	const headers: HeadersInit = {
+		[BOARD_FORMAT_HEADER]: String(CURRENT_BOARD_FORMAT_VERSION),
+	};
 	if (auth?.user?.access_token) {
 		headers["Authorization"] = `Bearer ${auth?.user?.access_token}`;
 	}

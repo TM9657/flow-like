@@ -150,12 +150,98 @@ pub fn is_open_object_schema(schema: &str) -> bool {
 /// Only two concrete schemas can contradict one another: an absent schema declares nothing, and an
 /// open-object schema declares that the shape is open. See [`is_open_object_schema`].
 pub fn schemas_are_compatible(left: Option<&str>, right: Option<&str>) -> bool {
+    let marker_kind = |schema: Option<&str>| {
+        schema.and_then(|schema| {
+            flow_like_types::geometry::kind_from_schema(schema)
+                .ok()
+                .flatten()
+        })
+    };
+    let left_kind = marker_kind(left);
+    let right_kind = marker_kind(right);
+    if left_kind.is_some() || right_kind.is_some() {
+        return (left.is_none() || left_kind.is_some())
+            && (right.is_none() || right_kind.is_some())
+            && flow_like_types::geometry::compatible(left_kind, right_kind);
+    }
     match (left, right) {
         (Some(left), Some(right)) => {
             left == right || is_open_object_schema(left) || is_open_object_schema(right)
         }
         _ => true,
     }
+}
+
+/// Resolve compact schema references before interpreting a subtype marker.
+pub fn resolve_schema<'a>(
+    schema: &'a str,
+    refs: &'a std::collections::HashMap<String, String>,
+) -> flow_like_types::Result<&'a str> {
+    let mut schema = schema;
+    let mut seen = std::collections::HashSet::new();
+    while let Some(resolved) = refs.get(schema) {
+        if !seen.insert(schema) {
+            return Err(flow_like_types::anyhow!("Cyclic schema reference"));
+        }
+        schema = resolved;
+    }
+    Ok(schema)
+}
+
+/// Geometry connections always enforce directional subtypes. Generic peers retain
+/// their existing container policy and actual Geometry inputs validate at runtime.
+pub fn geometry_pins_are_compatible(
+    source: &Pin,
+    target: &Pin,
+    refs: &std::collections::HashMap<String, String>,
+) -> flow_like_types::Result<bool> {
+    if source.data_type != VariableType::Geometry && target.data_type != VariableType::Geometry {
+        return Ok(true);
+    }
+    for pin in [source, target] {
+        if pin.data_type == VariableType::Geometry {
+            let schema = pin
+                .schema
+                .as_deref()
+                .map(|schema| resolve_schema(schema, refs))
+                .transpose()?;
+            super::variable::geometry_kind_from_schema(schema)?;
+        }
+    }
+    if source.data_type == VariableType::Generic || target.data_type == VariableType::Generic {
+        let enforce = source
+            .options
+            .as_ref()
+            .and_then(|options| options.enforce_generic_value_type)
+            .unwrap_or(false)
+            || target
+                .options
+                .as_ref()
+                .and_then(|options| options.enforce_generic_value_type)
+                .unwrap_or(false);
+        return Ok(!enforce || source.value_type == target.value_type);
+    }
+    if source.data_type != target.data_type || source.value_type != target.value_type {
+        return Ok(false);
+    }
+    let source_kind = super::variable::geometry_kind_from_schema(
+        source
+            .schema
+            .as_deref()
+            .map(|schema| resolve_schema(schema, refs))
+            .transpose()?,
+    )?;
+    let target_kind = super::variable::geometry_kind_from_schema(
+        target
+            .schema
+            .as_deref()
+            .map(|schema| resolve_schema(schema, refs))
+            .transpose()?,
+    )?;
+    Ok(flow_like_types::geometry::compatible(
+        source_kind,
+        target_kind,
+    ))
 }
 
 impl Pin {
@@ -274,6 +360,56 @@ mod tests {
     use flow_like_types::{Message, Value, tokio};
     use std::collections::BTreeSet;
     use std::sync::Arc;
+
+    #[test]
+    fn geometry_connection_matrix_preserves_direction_containers_and_refs() {
+        use flow_like_types::geometry::{GeometryKind, marker};
+        let mut node = crate::flow::node::Node::new("geometry-test", "Geometry", "", "");
+        let mut output = node
+            .add_output_pin("out", "Out", "", super::VariableType::Geometry)
+            .clone();
+        let mut input = node
+            .add_input_pin("in", "In", "", super::VariableType::Geometry)
+            .clone();
+        let refs = std::collections::HashMap::from([(
+            "point-ref".into(),
+            marker(GeometryKind::Point).into(),
+        )]);
+        let schemas: Vec<Option<String>> = std::iter::once(None)
+            .chain(
+                GeometryKind::ALL
+                    .into_iter()
+                    .map(|kind| Some(marker(kind).to_string())),
+            )
+            .collect();
+        for source in &schemas {
+            for target in &schemas {
+                for enforce in [None, Some(false), Some(true)] {
+                    output.schema = source.clone();
+                    input.schema = target.clone();
+                    input.options = Some(super::PinOptions {
+                        enforce_schema: enforce,
+                        ..Default::default()
+                    });
+                    assert_eq!(
+                        super::geometry_pins_are_compatible(&output, &input, &refs).unwrap(),
+                        target.is_none() || source == target
+                    );
+                }
+            }
+        }
+        output.schema = Some("point-ref".into());
+        input.schema = Some(marker(GeometryKind::Point).into());
+        assert!(super::geometry_pins_are_compatible(&output, &input, &refs).unwrap());
+        input.value_type = super::ValueType::Array;
+        assert!(!super::geometry_pins_are_compatible(&output, &input, &refs).unwrap());
+        input.data_type = super::VariableType::Generic;
+        assert!(super::geometry_pins_are_compatible(&output, &input, &refs).unwrap());
+        input.options.as_mut().unwrap().enforce_generic_value_type = Some(true);
+        assert!(!super::geometry_pins_are_compatible(&output, &input, &refs).unwrap());
+        output.schema = Some(r#"{"$id":"flow:geometry","x-geometry":"Triangle"}"#.into());
+        assert!(super::geometry_pins_are_compatible(&output, &input, &refs).is_err());
+    }
 
     #[test]
     fn the_open_marker_is_recognized_however_it_is_formatted() {

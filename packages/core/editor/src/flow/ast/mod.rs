@@ -155,7 +155,8 @@ mod generate_flowscript {
         use std::{collections::BTreeMap, sync::OnceLock};
         static NAMES: OnceLock<BTreeMap<String, NodeNames>> = OnceLock::new();
         let names = NAMES.get_or_init(|| {
-            let path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../ast/flow.d/names.json");
+            let path =
+                PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../ast/flow.d/names.json");
             let text = std::fs::read_to_string(&path)
                 .unwrap_or_else(|e| panic!("read {}: {e}", path.display()));
             flow_like_types::json::from_str(&text).expect("parse flow.d/names.json")

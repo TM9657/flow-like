@@ -61,6 +61,7 @@ pub async fn version_board(
     let mut board = state
         .master_board(&sub, &app_id, &board_id, &state, None)
         .await?;
+
     mutation_guard.ensure_held()?;
     let (version, published) = board
         .create_version_returning_published(params.version_type.unwrap_or(VersionType::Patch), None)

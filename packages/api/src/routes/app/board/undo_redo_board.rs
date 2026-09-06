@@ -76,6 +76,7 @@ pub async fn undo_board(
 
     let command_count = params.commands.len();
     board.undo(params.commands, flow_state.clone()).await?;
+
     mutation_guard.ensure_held()?;
     let put = save_board_and_refresh_summary(&state, &app_id, &board).await?;
     drop(mutation_guard);
@@ -147,6 +148,7 @@ pub async fn redo_board(
 
     let command_count = params.commands.len();
     board.redo(params.commands, flow_state.clone()).await?;
+
     mutation_guard.ensure_held()?;
     let put = save_board_and_refresh_summary(&state, &app_id, &board).await?;
     drop(mutation_guard);

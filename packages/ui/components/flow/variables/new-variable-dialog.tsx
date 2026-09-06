@@ -9,6 +9,8 @@ import {
 	ListIcon,
 } from "lucide-react";
 import { memo, useCallback, useState } from "react";
+import { useBoardFormat } from "../../../hooks/use-board-format";
+import { GEOMETRY_BOARD_FORMAT_VERSION } from "../../../lib/board-format";
 import type { IVariable } from "../../../lib/schema/flow/board";
 import { IVariableType } from "../../../lib/schema/flow/node";
 import { IValueType } from "../../../lib/schema/flow/pin";
@@ -34,8 +36,10 @@ import {
 	SelectValue,
 } from "../../ui/select";
 import { typeToColor } from "../utils";
+import { GeometrySubtypeSelect } from "./geometry-variable";
 
 interface NewVariableDialogProps {
+	appId?: string;
 	open: boolean;
 	onOpenChange: (open: boolean) => void;
 	onCreateVariable: (variable: IVariable) => Promise<void>;
@@ -133,17 +137,24 @@ const ValueTypePreview = memo(
 ValueTypePreview.displayName = "ValueTypePreview";
 
 const NewVariableDialog = memo(
-	({ open, onOpenChange, onCreateVariable }: NewVariableDialogProps) => {
+	({ open, onOpenChange, onCreateVariable, appId }: NewVariableDialogProps) => {
+		const geometryEnabled =
+			useBoardFormat(appId) >= GEOMETRY_BOARD_FORMAT_VERSION;
 		const [name, setName] = useState("New Variable");
 		const [dataType, setDataType] = useState<IVariableType>(
 			IVariableType.String,
 		);
 		const [valueType, setValueType] = useState<IValueType>(IValueType.Normal);
+		const [geometrySchema, setGeometrySchema] = useState<string | null>(null);
 		const [category, setCategory] = useState("");
 		const [isCreating, setIsCreating] = useState(false);
 
 		const handleCreate = useCallback(async () => {
-			if (!name.trim()) return;
+			if (
+				!name.trim() ||
+				(dataType === IVariableType.Geometry && !geometryEnabled)
+			)
+				return;
 
 			setIsCreating(true);
 			try {
@@ -160,6 +171,7 @@ const NewVariableDialog = memo(
 						defaultValueFromType(valueType, dataType),
 					),
 					description: "",
+					schema: dataType === IVariableType.Geometry ? geometrySchema : null,
 				};
 
 				await onCreateVariable(variable);
@@ -170,10 +182,20 @@ const NewVariableDialog = memo(
 				setDataType(IVariableType.String);
 				setValueType(IValueType.Normal);
 				setCategory("");
+				setGeometrySchema(null);
 			} finally {
 				setIsCreating(false);
 			}
-		}, [name, dataType, valueType, category, onCreateVariable, onOpenChange]);
+		}, [
+			name,
+			dataType,
+			valueType,
+			category,
+			geometrySchema,
+			geometryEnabled,
+			onCreateVariable,
+			onOpenChange,
+		]);
 
 		return (
 			<Dialog open={open} onOpenChange={onOpenChange}>
@@ -257,6 +279,9 @@ const NewVariableDialog = memo(
 											<SelectItem value="PathBuf">
 												<TypePreview type={IVariableType.PathBuf} />
 											</SelectItem>
+											<SelectItem value="Geometry" disabled={!geometryEnabled}>
+												<TypePreview type={IVariableType.Geometry} />
+											</SelectItem>
 											<SelectItem value="Struct">
 												<TypePreview type={IVariableType.Struct} />
 											</SelectItem>
@@ -314,6 +339,22 @@ const NewVariableDialog = memo(
 						</div>
 					</div>
 
+					{dataType === IVariableType.Geometry && (
+						<GeometrySubtypeSelect
+							schema={geometrySchema}
+							onChange={setGeometrySchema}
+							disabled={isCreating}
+						/>
+					)}
+
+					{!geometryEnabled && (
+						<p className="text-xs text-muted-foreground">
+							{i18next.t(
+								"flow:geometryBackendUpgrade",
+								"Update the backend to a version that supports Geometry, then reopen this editor.",
+							)}
+						</p>
+					)}
 					<DialogFooter>
 						<Button
 							variant="outline"

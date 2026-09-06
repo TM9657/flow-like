@@ -579,6 +579,18 @@ pub async fn generate_tool_from_function(
             defs: &flow_like_types::json::Map<String, Value>,
         ) -> HistoryJSONSchemaDefine {
             let resolved = resolve_schema_value(prop_schema, defs).unwrap_or(prop_schema);
+            if resolved.get("x-flow-like-type").and_then(Value::as_str) == Some("geometry")
+                || resolved.get("$id").and_then(Value::as_str) == Some("flow:geometry")
+            {
+                let kind = resolved
+                    .get("x-geometry")
+                    .and_then(Value::as_str)
+                    .and_then(|kind| kind.parse().ok());
+                return flow_like_types::json::from_value(
+                    flow_like_types::geometry::geometry_tool_schema(kind),
+                )
+                .expect("the shared Geometry tool projection uses supported schema fields");
+            }
 
             let prop_type = match resolved.get("type").and_then(|t| t.as_str()) {
                 Some("string") => HistoryJSONSchemaType::String,
@@ -729,6 +741,22 @@ pub async fn generate_tool_from_function(
                 (HistoryJSONSchemaType::Number, None)
             }
             VariableType::Boolean => (HistoryJSONSchemaType::Boolean, None),
+            VariableType::Geometry => {
+                let schema = pin
+                    .schema
+                    .as_deref()
+                    .map(|schema| flow_like::flow::pin::resolve_schema(schema, refs))
+                    .transpose()
+                    .and_then(flow_like::flow::variable::geometry_kind_from_schema);
+                // Invalid declarations are rejected when the board is loaded or compiled.
+                // Retain a descriptive object projection for metadata inspection.
+                let projection = schema.map(flow_like_types::geometry::geometry_tool_schema)
+                    .unwrap_or_else(|error| flow_like_types::json::json!({"type":"object","description":error.to_string()}));
+                let definition: HistoryJSONSchemaDefine =
+                    flow_like_types::json::from_value(projection)
+                        .expect("the shared Geometry tool projection uses supported schema fields");
+                return wrap_value_type(definition, &pin.value_type, &pin_description);
+            }
             VariableType::Struct | VariableType::Generic => {
                 if let Some(schema_str) = &pin.schema
                     && let Some(schema_define) =

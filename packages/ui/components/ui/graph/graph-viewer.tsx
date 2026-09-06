@@ -8,11 +8,19 @@ import {
 	Filter,
 	FilterX,
 	LayoutGrid,
+	MoreHorizontal,
 	Route,
 	Search,
 	X,
 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+	useCallback,
+	useEffect,
+	useId,
+	useMemo,
+	useRef,
+	useState,
+} from "react";
 import type {
 	GraphAnalyticsResult,
 	GraphOverlay,
@@ -27,9 +35,20 @@ import {
 	DropdownMenu,
 	DropdownMenuContent,
 	DropdownMenuItem,
+	DropdownMenuRadioGroup,
+	DropdownMenuRadioItem,
+	DropdownMenuSeparator,
+	DropdownMenuSub,
+	DropdownMenuSubContent,
+	DropdownMenuSubTrigger,
 	DropdownMenuTrigger,
 } from "../dropdown-menu";
-import { Popover, PopoverContent, PopoverTrigger } from "../popover";
+import {
+	Popover,
+	PopoverAnchor,
+	PopoverContent,
+	PopoverTrigger,
+} from "../popover";
 import { subgraphFromCypherRows } from "./cypher-subgraph";
 import {
 	GraphCanvas,
@@ -56,11 +75,20 @@ import {
 import { GraphHistogramPanel } from "./graph-histogram-panel";
 import type { GraphLayoutMode } from "./graph-layout";
 import { GraphLegend, type LegendEntry } from "./graph-legend";
+import { GraphNodeCaption, useGraphAccountLabels } from "./graph-node-caption";
 import {
 	type ConnectionInfo,
 	GraphNodeInspector,
 } from "./graph-node-inspector";
 import { GraphQueryPanel } from "./graph-query-panel";
+import {
+	GRAPH_MIN_STAGE_HEIGHT,
+	GRAPH_QUERY_DOCK_DEFAULT_HEIGHT,
+	GRAPH_QUERY_DOCK_MIN_HEIGHT,
+	clampGraphQueryDockHeight,
+	getGraphShellMode,
+} from "./graph-shell-layout";
+import { nodeCaptionAccountId } from "./graph-user-caption";
 
 const GRAPH_VIEW_LIMIT_OPTIONS = [
 	50, 100, 200, 500, 1000, 2500, 5000, 10000,
@@ -134,6 +162,38 @@ function getSearchErrorMessage(error: unknown): string {
 	return String(error);
 }
 
+function useObservedElementSize<T extends HTMLElement>() {
+	const elementRef = useRef<T>(null);
+	const [size, setSize] = useState({ width: 0, height: 0 });
+
+	useEffect(() => {
+		const element = elementRef.current;
+		if (!element) return;
+
+		const update = () => {
+			const next = element.getBoundingClientRect();
+			setSize((current) =>
+				current.width === next.width && current.height === next.height
+					? current
+					: { width: next.width, height: next.height },
+			);
+		};
+
+		update();
+		const observer =
+			typeof ResizeObserver === "undefined" ? null : new ResizeObserver(update);
+		observer?.observe(element);
+		window.addEventListener("resize", update);
+
+		return () => {
+			observer?.disconnect();
+			window.removeEventListener("resize", update);
+		};
+	}, []);
+
+	return [elementRef, size] as const;
+}
+
 export interface GraphViewerProps {
 	overlay: GraphOverlay;
 	data: SubgraphResult | null;
@@ -141,6 +201,7 @@ export interface GraphViewerProps {
 	truncated?: boolean;
 	onRunCypher?: (query: string) => void;
 	cypherResults?: unknown[] | null;
+	cypherMetadata?: Record<string, Record<string, string>>;
 	cypherLoading?: boolean;
 	cypherError?: string | null;
 	/**
@@ -211,6 +272,7 @@ export function GraphViewer({
 	truncated,
 	onRunCypher,
 	cypherResults,
+	cypherMetadata,
 	cypherLoading,
 	cypherError,
 	onExpandNode,
@@ -236,15 +298,28 @@ export function GraphViewer({
 	enableClusterLayout = false,
 }: GraphViewerProps) {
 	const { t } = useTranslation("common");
+	const searchListId = useId();
+	const [viewerRef, viewerSize] = useObservedElementSize<HTMLDivElement>();
+	const [workspaceRef, workspaceSize] =
+		useObservedElementSize<HTMLDivElement>();
+	const shellMode = getGraphShellMode(viewerSize.width);
 	const [selectedNode, setSelectedNode] = useState<SubgraphNode | null>(null);
 	const [selectedEdge, setSelectedEdge] = useState<SubgraphEdge | null>(null);
 	const [selectedEdgeKey, setSelectedEdgeKey] = useState<string | null>(null);
 	const [showQuery, setShowQuery] = useState(false);
+	const [queryDockHeight, setQueryDockHeight] = useState(
+		GRAPH_QUERY_DOCK_DEFAULT_HEIGHT,
+	);
+	const queryResizeRef = useRef<{
+		startY: number;
+		startHeight: number;
+	} | null>(null);
 	const [hiddenLabels, setHiddenLabels] = useState<Set<string>>(new Set());
 	const [searchHighlight, setSearchHighlight] = useState<Set<string>>(
 		new Set(),
 	);
 	const [searchQuery, setSearchQuery] = useState("");
+	const [remoteSearchOpen, setRemoteSearchOpen] = useState(true);
 	const [remoteSearchMatches, setRemoteSearchMatches] = useState<
 		SubgraphNode[]
 	>([]);
@@ -314,6 +389,7 @@ export function GraphViewer({
 
 	const nodeCount = data?.nodes.length ?? 0;
 	const edgeCount = data?.edges.length ?? 0;
+	const accountLabels = useGraphAccountLabels(data?.nodes, overlay);
 
 	// Grouping is computed over the loaded sample, never over the collapsed view:
 	// collapsing must not change which groups exist, or opening one would land the
@@ -490,6 +566,7 @@ export function GraphViewer({
 					label: edge.label,
 					direction: "outgoing",
 					targetCaption: target?.caption ?? target?.id ?? edge.target,
+					targetAccountId: nodeCaptionAccountId(target, overlay),
 					targetId: edge.target,
 				});
 			} else if (edge.target === selectedNode.id) {
@@ -498,12 +575,13 @@ export function GraphViewer({
 					label: edge.label,
 					direction: "incoming",
 					targetCaption: source?.caption ?? source?.id ?? edge.source,
+					targetAccountId: nodeCaptionAccountId(source, overlay),
 					targetId: edge.source,
 				});
 			}
 		}
 		return conns;
-	}, [selectedNode, data, nodeMap]);
+	}, [selectedNode, data, nodeMap, overlay]);
 
 	const edgeSourceCaption = useMemo(() => {
 		if (!selectedEdge) return undefined;
@@ -567,7 +645,11 @@ export function GraphViewer({
 
 		const matches = new Set<string>();
 		for (const node of data.nodes) {
-			const caption = (node.caption ?? "").toLowerCase();
+			const caption = (
+				accountLabels.get(node.id) ??
+				node.caption ??
+				""
+			).toLowerCase();
 			const fullId = node.id.toLowerCase();
 			const label = node.label.toLowerCase();
 			if (
@@ -592,7 +674,7 @@ export function GraphViewer({
 				setSelectedEdgeKey(null);
 			}
 		}
-	}, [data, searchQuery]);
+	}, [data, searchQuery, accountLabels]);
 
 	useEffect(() => {
 		const trimmedQuery = searchQuery.trim();
@@ -1091,9 +1173,9 @@ export function GraphViewer({
 	const cypherSubgraph = useMemo(
 		() =>
 			cypherResults && onMergeSubgraph
-				? subgraphFromCypherRows(cypherResults, overlay)
+				? subgraphFromCypherRows(cypherResults, overlay, cypherMetadata)
 				: null,
-		[cypherResults, onMergeSubgraph, overlay],
+		[cypherResults, cypherMetadata, onMergeSubgraph, overlay],
 	);
 
 	const addCypherToCanvas = useCallback(() => {
@@ -1140,8 +1222,20 @@ export function GraphViewer({
 		[],
 	);
 
+	const toggleFacets = useCallback(() => {
+		setFacetsOpen((open) => {
+			if (!open) {
+				setSelectedNode(null);
+				setSelectedEdge(null);
+				setSelectedEdgeKey(null);
+			}
+			return !open;
+		});
+	}, []);
+
 	const handleSearch = useCallback((query: string) => {
 		setSearchQuery(query);
+		setRemoteSearchOpen(true);
 	}, []);
 
 	const handleRemoteSearchMatchClick = useCallback(
@@ -1168,6 +1262,7 @@ export function GraphViewer({
 		autoExpandedSearchQueryRef.current = null;
 		setPendingSearchNodeId(null);
 		setSearchQuery("");
+		setRemoteSearchOpen(false);
 		setSearchHighlight(new Set());
 		setRemoteSearchMatches([]);
 		setRemoteSearchError(null);
@@ -1176,117 +1271,205 @@ export function GraphViewer({
 
 	const hasRemoteSearchQuery = searchQuery.trim().length >= 2;
 	const showRemoteSearchPanel =
+		remoteSearchOpen &&
 		hasRemoteSearchQuery &&
 		!!onSearchNodes &&
 		(remoteSearchLoading ||
 			remoteSearchError !== null ||
 			unloadedRemoteSearchMatches.length > 0 ||
 			searchHighlight.size === 0);
+	const effectiveQueryDockHeight = clampGraphQueryDockHeight(
+		queryDockHeight,
+		workspaceSize.height,
+	);
+	const maximumQueryDockHeight = Math.max(
+		GRAPH_QUERY_DOCK_MIN_HEIGHT,
+		workspaceSize.height - GRAPH_MIN_STAGE_HEIGHT,
+	);
+
+	const resizeQueryDock = useCallback(
+		(nextHeight: number) => {
+			const availableHeight =
+				workspaceRef.current?.getBoundingClientRect().height ??
+				workspaceSize.height;
+			setQueryDockHeight(
+				clampGraphQueryDockHeight(nextHeight, availableHeight),
+			);
+		},
+		[workspaceRef, workspaceSize.height],
+	);
+
+	const handleQueryResizeStart = useCallback(
+		(event: React.PointerEvent<HTMLDivElement>) => {
+			event.preventDefault();
+			event.currentTarget.setPointerCapture(event.pointerId);
+			queryResizeRef.current = {
+				startY: event.clientY,
+				startHeight: effectiveQueryDockHeight,
+			};
+		},
+		[effectiveQueryDockHeight],
+	);
+
+	const handleQueryResizeMove = useCallback(
+		(event: React.PointerEvent<HTMLDivElement>) => {
+			const resize = queryResizeRef.current;
+			if (!resize) return;
+			resizeQueryDock(resize.startHeight + resize.startY - event.clientY);
+		},
+		[resizeQueryDock],
+	);
+
+	const handleQueryResizeEnd = useCallback(
+		(event: React.PointerEvent<HTMLDivElement>) => {
+			queryResizeRef.current = null;
+			if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+				event.currentTarget.releasePointerCapture(event.pointerId);
+			}
+		},
+		[],
+	);
+
+	const handleQueryResizeKeyDown = useCallback(
+		(event: React.KeyboardEvent<HTMLDivElement>) => {
+			if (event.key !== "ArrowUp" && event.key !== "ArrowDown") return;
+			event.preventDefault();
+			resizeQueryDock(
+				effectiveQueryDockHeight + (event.key === "ArrowUp" ? 24 : -24),
+			);
+		},
+		[effectiveQueryDockHeight, resizeQueryDock],
+	);
 
 	return (
-		<div className="flex h-full min-h-0 w-full relative">
+		<div
+			ref={viewerRef}
+			className="relative flex h-full min-h-[440px] w-full overflow-hidden"
+		>
 			{/* Main graph area */}
 			<div className="flex-1 flex flex-col min-w-0 min-h-0">
 				{/* Toolbar */}
 				{showToolbar && (
-					<div className="flex min-w-0 items-center gap-2 overflow-hidden border-b bg-background p-2">
+					<div className="relative z-40 flex min-w-0 flex-wrap items-center gap-2 border-b bg-background p-2">
 						{showSearch && (
-							<>
-								{/* Live search */}
-								<div className="relative flex-1 max-w-sm">
+							<Popover
+								open={showRemoteSearchPanel}
+								onOpenChange={setRemoteSearchOpen}
+							>
+								<PopoverAnchor asChild>
+									<div
+										className={
+											shellMode.compactToolbar
+												? "relative order-first w-full"
+												: "relative min-w-56 max-w-sm flex-1"
+										}
+									>
 									<Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground pointer-events-none" />
 									<input
 										type="text"
+										role="combobox"
+										aria-autocomplete="list"
+										aria-controls={searchListId}
+										aria-expanded={showRemoteSearchPanel}
 										value={searchQuery}
 										onChange={(e) => handleSearch(e.target.value)}
+										onFocus={() => setRemoteSearchOpen(true)}
 										placeholder={t(
 											"searchLoadedNodesThenFallbackToFullGraph",
 											"Search loaded nodes, then fallback to full graph...",
 										)}
-										className="w-full h-9 pl-8 pr-8 text-sm rounded-md border bg-transparent focus:outline-none focus:ring-1 focus:ring-ring"
+										className="h-9 w-full rounded-md border bg-transparent pl-8 pr-8 text-sm focus:outline-none focus:ring-1 focus:ring-ring"
 									/>
 									{searchQuery && (
 										<button
 											type="button"
-											className="absolute right-2 top-2.5 h-4 w-4 text-muted-foreground hover:text-foreground"
+											className="absolute right-1.5 top-1.5 flex h-6 w-6 items-center justify-center rounded text-muted-foreground hover:bg-accent hover:text-foreground"
 											onClick={clearSearch}
+											aria-label={t("clearSearch", "Clear search")}
 										>
 											<X className="h-4 w-4" />
 										</button>
 									)}
-									{showRemoteSearchPanel && (
-										<div className="absolute left-0 right-0 top-full z-20 mt-1 rounded-md border bg-popover shadow-lg overflow-hidden">
-											{remoteSearchLoading ? (
-												<div className="px-3 py-2 text-xs text-muted-foreground">
-													{t("searchingFullGraph", "Searching full graph...")}
-												</div>
-											) : remoteSearchError ? (
-												<div className="px-3 py-2 text-xs text-destructive">
-													{remoteSearchError}
-												</div>
-											) : unloadedRemoteSearchMatches.length > 0 ? (
-												<div className="max-h-64 overflow-y-auto py-1">
-													{unloadedRemoteSearchMatches.map((node) => (
-														<button
-															key={node.id}
-															type="button"
-															className="flex w-full flex-col items-start gap-0.5 px-3 py-2 text-left hover:bg-accent"
-															onClick={() =>
-																void handleRemoteSearchMatchClick(node)
-															}
-														>
-															<span className="text-sm font-medium truncate max-w-full">
-																{node.caption ?? node.id}
-															</span>
-															<span className="text-[11px] text-muted-foreground truncate max-w-full">{`${node.label} · ${node.id}`}</span>
-														</button>
-													))}
-												</div>
-											) : searchHighlight.size === 0 ? (
-												<div className="px-3 py-2 text-xs text-muted-foreground">
-													{t(
-														"noNodesFoundInTheFullGraph",
-														"No nodes found in the full graph.",
-													)}
-												</div>
-											) : null}
+									</div>
+								</PopoverAnchor>
+								<PopoverContent
+									id={searchListId}
+									role="listbox"
+									align="start"
+									className="w-[var(--radix-popover-trigger-width)] max-w-[calc(100vw-1rem)] overflow-hidden p-0"
+									onOpenAutoFocus={(event) => event.preventDefault()}
+									onCloseAutoFocus={(event) => event.preventDefault()}
+								>
+									{remoteSearchLoading ? (
+										<div className="px-3 py-2 text-xs text-muted-foreground">
+											{t("searchingFullGraph", "Searching full graph...")}
 										</div>
-									)}
-								</div>
-
+									) : remoteSearchError ? (
+										<div className="px-3 py-2 text-xs text-destructive">
+											{remoteSearchError}
+										</div>
+									) : unloadedRemoteSearchMatches.length > 0 ? (
+										<div className="max-h-64 overflow-y-auto py-1">
+											{unloadedRemoteSearchMatches.map((node) => (
+												<button
+													key={node.id}
+													type="button"
+													role="option"
+													aria-selected={false}
+													className="flex w-full flex-col items-start gap-0.5 px-3 py-2 text-left hover:bg-accent"
+													onClick={() => {
+														setRemoteSearchOpen(false);
+														void handleRemoteSearchMatchClick(node);
+													}}
+												>
+													<span className="max-w-full truncate text-sm font-medium">
+														<GraphNodeCaption node={node} overlay={overlay} />
+													</span>
+													<span className="max-w-full truncate text-[11px] text-muted-foreground">{`${node.label} · ${node.id}`}</span>
+												</button>
+											))}
+										</div>
+									) : searchHighlight.size === 0 ? (
+										<div className="px-3 py-2 text-xs text-muted-foreground">
+											{t(
+												"noNodesFoundInTheFullGraph",
+												"No nodes found in the full graph.",
+											)}
+										</div>
+									) : null}
+								</PopoverContent>
+							</Popover>
+						)}
+						{showSearch && !shellMode.compactToolbar && (
+							<>
 								{searchHighlight.size > 0 && (
-									<span className="text-xs text-muted-foreground whitespace-nowrap">
+									<span className="whitespace-nowrap text-xs text-muted-foreground">
 										{searchHighlight.size} loaded match
 										{searchHighlight.size !== 1 ? "es" : ""}
 									</span>
 								)}
-
 								{unloadedRemoteSearchMatches.length > 0 && (
-									<span className="text-xs text-muted-foreground whitespace-nowrap">
+									<span className="whitespace-nowrap text-xs text-muted-foreground">
 										{t("lengthMoreInGraph", "{{length}} more in graph", {
 											length: unloadedRemoteSearchMatches.length,
 										})}
 									</span>
 								)}
-
-								{hasRemoteSearchQuery && remoteSearchLoading && (
-									<span className="text-xs text-muted-foreground whitespace-nowrap">
-										{t("searchingFullGraph", "Searching full graph...")}
-									</span>
-								)}
-
-								<div className="h-5 w-px bg-border" />
+								<div className="h-5 w-px shrink-0 bg-border" />
 							</>
 						)}
 
 						{/* Node / edge count */}
-						<span className="shrink-0 text-xs text-muted-foreground whitespace-nowrap">
+						<span
+							className="shrink-0 whitespace-nowrap text-xs text-muted-foreground"
+							title={`${nodeCount.toLocaleString()} nodes, ${edgeCount.toLocaleString()} edges`}
+						>
 							{nodeCount.toLocaleString()} nodes · {edgeCount.toLocaleString()}{" "}
 							edges
 						</span>
 
 						{/* Limit selector */}
-						{onLimitChange && (
+						{!shellMode.compactToolbar && onLimitChange && (
 							<>
 								<div className="h-5 w-px shrink-0 bg-border" />
 								<select
@@ -1303,7 +1486,9 @@ export function GraphViewer({
 							</>
 						)}
 
-						<div className="h-5 w-px shrink-0 bg-border" />
+						{!shellMode.compactToolbar && (
+							<div className="h-5 w-px shrink-0 bg-border" />
+						)}
 
 						{onRunCypher && (
 							<button
@@ -1325,7 +1510,7 @@ export function GraphViewer({
 							hiddenLeaves={hiddenLeafCount}
 						/>
 
-						<DropdownMenu>
+						{!shellMode.compactToolbar && <DropdownMenu>
 							<DropdownMenuTrigger asChild>
 								<button
 									type="button"
@@ -1359,25 +1544,16 @@ export function GraphViewer({
 									</DropdownMenuItem>
 								))}
 							</DropdownMenuContent>
-						</DropdownMenu>
+						</DropdownMenu>}
 
-						<button
+						{!shellMode.compactToolbar && <button
 							type="button"
 							className={`flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded border px-2 py-1 text-xs transition-colors ${
 								facetsOpen || facetFilters.length > 0
 									? "border-primary/40 bg-primary/10 text-foreground"
 									: "text-muted-foreground hover:text-foreground"
 							}`}
-							onClick={() => {
-								setFacetsOpen((open) => {
-									if (!open) {
-										setSelectedNode(null);
-										setSelectedEdge(null);
-										setSelectedEdgeKey(null);
-									}
-									return !open;
-								});
-							}}
+							onClick={toggleFacets}
 							title={t(
 								"summarizeAndFilterTheLoadedObjects",
 								"Summarize and filter the loaded objects",
@@ -1385,7 +1561,74 @@ export function GraphViewer({
 						>
 							<BarChart3 className="h-3.5 w-3.5" />
 							{t("facets", "Facets")}
-						</button>
+						</button>}
+
+						{shellMode.compactToolbar && (
+							<DropdownMenu>
+								<DropdownMenuTrigger asChild>
+									<button
+										type="button"
+										className="flex h-8 w-8 shrink-0 items-center justify-center rounded border text-muted-foreground hover:text-foreground"
+										aria-label={t("moreGraphControls", "More graph controls")}
+									>
+										<MoreHorizontal className="h-4 w-4" />
+									</button>
+								</DropdownMenuTrigger>
+								<DropdownMenuContent align="end" className="w-52">
+									<DropdownMenuItem onSelect={toggleFacets}>
+										<BarChart3 className="h-4 w-4" />
+										{t("facets", "Facets")}
+										{facetFilters.length > 0 && (
+											<span className="ml-auto tabular-nums text-muted-foreground">
+												{facetFilters.length}
+											</span>
+										)}
+									</DropdownMenuItem>
+									<DropdownMenuSub>
+										<DropdownMenuSubTrigger>
+											<LayoutGrid className="mr-2 h-4 w-4" />
+											{t("layout", "Layout")}
+										</DropdownMenuSubTrigger>
+										<DropdownMenuSubContent>
+											<DropdownMenuRadioGroup value={layoutMode}>
+												{LAYOUT_MODE_OPTIONS.map((option) => (
+													<DropdownMenuRadioItem
+														key={option.mode}
+														value={option.mode}
+														onSelect={() => applyLayoutMode(option.mode)}
+													>
+														{option.label}
+													</DropdownMenuRadioItem>
+												))}
+											</DropdownMenuRadioGroup>
+										</DropdownMenuSubContent>
+									</DropdownMenuSub>
+									{onLimitChange && (
+										<>
+											<DropdownMenuSeparator />
+											<DropdownMenuSub>
+												<DropdownMenuSubTrigger>
+													{t("resultLimit", "Result limit")}
+												</DropdownMenuSubTrigger>
+												<DropdownMenuSubContent>
+													<DropdownMenuRadioGroup value={String(limit ?? 200)}>
+														{GRAPH_VIEW_LIMIT_OPTIONS.map((option) => (
+															<DropdownMenuRadioItem
+																key={option}
+																value={String(option)}
+																onSelect={() => onLimitChange(option)}
+															>
+																{formatGraphLimitOption(option)}
+															</DropdownMenuRadioItem>
+														))}
+													</DropdownMenuRadioGroup>
+												</DropdownMenuSubContent>
+											</DropdownMenuSub>
+										</>
+									)}
+								</DropdownMenuContent>
+							</DropdownMenu>
+						)}
 
 						<div className="ml-auto flex min-w-0 items-center gap-2">
 							{warnings.length > 0 && !warningsDismissed && (
@@ -1427,7 +1670,7 @@ export function GraphViewer({
 									</PopoverContent>
 								</Popover>
 							)}
-							{censusSummary && (
+							{!shellMode.compactToolbar && censusSummary && (
 								<span
 									className="min-w-0 flex-1 truncate text-xs text-muted-foreground"
 									title={censusSummary}
@@ -1502,6 +1745,7 @@ export function GraphViewer({
 						<GraphQueryPanel
 							onRunCypher={onRunCypher}
 							results={cypherResults ?? null}
+							propertyMetadata={cypherMetadata}
 							loading={cypherLoading}
 							error={cypherError}
 							onAddToCanvas={onMergeSubgraph ? addCypherToCanvas : undefined}
@@ -1514,6 +1758,7 @@ export function GraphViewer({
 				<div className="flex-1 relative min-h-0">
 					<GraphCanvas
 						data={viewData}
+						nodeLabels={accountLabels}
 						loading={loading}
 						selectedNodeId={selectedNode?.id}
 						selectedEdgeKey={selectedEdgeKey}
@@ -1537,6 +1782,7 @@ export function GraphViewer({
 					/>
 
 					<GraphContextMenu
+						overlay={overlay}
 						state={contextMenu}
 						node={contextNode}
 						isGroup={
@@ -1640,7 +1886,9 @@ export function GraphViewer({
 												count: focusedNodeIds.size,
 												total: nodeCount,
 												name:
-													nodeMap.get(focus.nodeId)?.caption ?? focus.nodeId,
+													accountLabels.get(focus.nodeId) ??
+													nodeMap.get(focus.nodeId)?.caption ??
+													focus.nodeId,
 											})
 										: t("showingCountOfTotalObjectsAroundName", {
 												defaultValue_one:
@@ -1650,7 +1898,9 @@ export function GraphViewer({
 												count: focusedNodeIds.size,
 												total: nodeCount,
 												name:
-													nodeMap.get(focus.nodeId)?.caption ?? focus.nodeId,
+													accountLabels.get(focus.nodeId) ??
+													nodeMap.get(focus.nodeId)?.caption ??
+													focus.nodeId,
 											})}
 								</span>
 								<button
@@ -1715,7 +1965,7 @@ export function GraphViewer({
 									<span className="whitespace-nowrap">
 										{t("findingPathFrom", "Finding path from")}{" "}
 										<span className="font-medium">
-											{pathSource.caption ?? pathSource.id}
+											<GraphNodeCaption node={pathSource} overlay={overlay} />
 										</span>{" "}
 										{t("selectATargetNode", "— select a target node")}
 									</span>
@@ -1863,6 +2113,14 @@ export function GraphViewer({
 					edge={selectedEdge}
 					sourceCaption={edgeSourceCaption}
 					targetCaption={edgeTargetCaption}
+					sourceAccountId={nodeCaptionAccountId(
+						nodeMap.get(selectedEdge.source),
+						overlay,
+					)}
+					targetAccountId={nodeCaptionAccountId(
+						nodeMap.get(selectedEdge.target),
+						overlay,
+					)}
 					onClose={() => {
 						setSelectedEdge(null);
 						setSelectedEdgeKey(null);

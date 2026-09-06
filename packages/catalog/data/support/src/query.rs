@@ -28,6 +28,22 @@ pub fn ensure_unique_columns(headers: &[String]) -> flow_like_types::Result<()> 
 }
 
 #[cfg(feature = "execute")]
+fn ensure_consistent_batches(
+    batches: &[flow_like_storage::datafusion::arrow::record_batch::RecordBatch],
+) -> flow_like_types::Result<()> {
+    if let Some(first) = batches.first() {
+        for (index, batch) in batches.iter().enumerate().skip(1) {
+            if batch.schema() != first.schema() {
+                return Err(flow_like_types::anyhow!(
+                    "Query result batch {index} has a different schema"
+                ));
+            }
+        }
+    }
+    Ok(())
+}
+
+#[cfg(feature = "execute")]
 pub fn batches_to_rows(
     batches: &[flow_like_storage::datafusion::arrow::record_batch::RecordBatch],
 ) -> flow_like_types::Result<Vec<QueryRow>> {
@@ -35,6 +51,7 @@ pub fn batches_to_rows(
         return Ok(vec![]);
     }
 
+    ensure_consistent_batches(batches)?;
     let schema = batches[0].schema();
     let headers: Vec<String> = schema.fields().iter().map(|f| f.name().clone()).collect();
     ensure_unique_columns(&headers)?;
@@ -46,7 +63,11 @@ pub fn batches_to_rows(
 
             for (col_idx, header) in headers.iter().enumerate() {
                 let col = batch.column(col_idx);
-                let value = array_value_to_json(col.as_ref(), row_idx)?;
+                let value = array_value_to_json_with_field(
+                    col.as_ref(),
+                    Some(batch.schema().field(col_idx)),
+                    row_idx,
+                )?;
                 row.insert(header.clone(), value);
             }
 
@@ -67,6 +88,7 @@ pub fn batches_to_csv_table(
         return Ok(CSVTable::new(vec![], vec![], None));
     }
 
+    ensure_consistent_batches(batches)?;
     let schema = batches[0].schema();
     let headers: Vec<String> = schema.fields().iter().map(|f| f.name().clone()).collect();
 
@@ -78,7 +100,11 @@ pub fn batches_to_csv_table(
 
             for col_idx in 0..batch.num_columns() {
                 let col = batch.column(col_idx);
-                let value = array_value_to_json(col.as_ref(), row_idx)?;
+                let value = array_value_to_json_with_field(
+                    col.as_ref(),
+                    Some(batch.schema().field(col_idx)),
+                    row_idx,
+                )?;
                 row.push(value);
             }
 
@@ -89,11 +115,24 @@ pub fn batches_to_csv_table(
     Ok(CSVTable::new(headers, rows, None))
 }
 
-#[cfg(feature = "execute")]
+#[cfg(all(test, feature = "execute"))]
 fn array_value_to_json(
     array: &dyn flow_like_storage::datafusion::arrow::array::Array,
     idx: usize,
 ) -> flow_like_types::Result<flow_like_types::Value> {
+    array_value_to_json_with_field(array, None, idx)
+}
+
+#[cfg(feature = "execute")]
+fn array_value_to_json_with_field(
+    array: &dyn flow_like_storage::datafusion::arrow::array::Array,
+    field: Option<&flow_like_storage::arrow_schema::Field>,
+    idx: usize,
+) -> flow_like_types::Result<Value> {
+    if let Some(field) = field.filter(|field| flow_like_storage::geometry::is_geometry_field(field))
+    {
+        return flow_like_storage::geometry::decode_value(array, field, idx);
+    }
     use flow_like_storage::datafusion::arrow::array::*;
     use flow_like_storage::datafusion::arrow::datatypes::{DataType, TimeUnit};
     use flow_like_types::Value as JsonValue;
@@ -104,6 +143,46 @@ fn array_value_to_json(
 
     let dt = array.data_type();
     let value = match dt {
+        DataType::Binary => {
+            let arr = typed_column::<BinaryArray>(array)?;
+            JsonValue::Array(
+                arr.value(idx)
+                    .iter()
+                    .copied()
+                    .map(JsonValue::from)
+                    .collect(),
+            )
+        }
+        DataType::LargeBinary => {
+            let arr = typed_column::<LargeBinaryArray>(array)?;
+            JsonValue::Array(
+                arr.value(idx)
+                    .iter()
+                    .copied()
+                    .map(JsonValue::from)
+                    .collect(),
+            )
+        }
+        DataType::BinaryView => {
+            let arr = typed_column::<BinaryViewArray>(array)?;
+            JsonValue::Array(
+                arr.value(idx)
+                    .iter()
+                    .copied()
+                    .map(JsonValue::from)
+                    .collect(),
+            )
+        }
+        DataType::FixedSizeBinary(_) => {
+            let arr = typed_column::<FixedSizeBinaryArray>(array)?;
+            JsonValue::Array(
+                arr.value(idx)
+                    .iter()
+                    .copied()
+                    .map(JsonValue::from)
+                    .collect(),
+            )
+        }
         DataType::Boolean => {
             let arr = typed_column::<BooleanArray>(array)?;
             JsonValue::Bool(arr.value(idx))
@@ -214,17 +293,17 @@ fn array_value_to_json(
                 timestamp_to_json(arr.value(idx), *unit, timezone.as_deref())
             }
         },
-        DataType::List(_) => {
+        DataType::List(child) => {
             let arr = typed_column::<ListArray>(array)?;
-            list_values_to_json(arr.value(idx).as_ref())?
+            list_values_to_json_with_field(arr.value(idx).as_ref(), Some(child))?
         }
-        DataType::LargeList(_) => {
+        DataType::LargeList(child) => {
             let arr = typed_column::<LargeListArray>(array)?;
-            list_values_to_json(arr.value(idx).as_ref())?
+            list_values_to_json_with_field(arr.value(idx).as_ref(), Some(child))?
         }
-        DataType::FixedSizeList(_, _) => {
+        DataType::FixedSizeList(child, _) => {
             let arr = typed_column::<FixedSizeListArray>(array)?;
-            list_values_to_json(arr.value(idx).as_ref())?
+            list_values_to_json_with_field(arr.value(idx).as_ref(), Some(child))?
         }
         DataType::Struct(fields) => {
             let arr = typed_column::<StructArray>(array)?;
@@ -232,7 +311,7 @@ fn array_value_to_json(
             for (field, column) in fields.iter().zip(arr.columns().iter()) {
                 object.insert(
                     field.name().clone(),
-                    array_value_to_json(column.as_ref(), idx)?,
+                    array_value_to_json_with_field(column.as_ref(), Some(field), idx)?,
                 );
             }
             JsonValue::Object(object)
@@ -272,12 +351,13 @@ fn typed_column<T: flow_like_storage::datafusion::arrow::array::Array + 'static>
 /// Materialize the child values of one Arrow list cell as a JSON array. The slice handed in is
 /// already narrowed to a single row's values, so every index belongs to that row.
 #[cfg(feature = "execute")]
-fn list_values_to_json(
+fn list_values_to_json_with_field(
     values: &dyn flow_like_storage::datafusion::arrow::array::Array,
+    field: Option<&flow_like_storage::arrow_schema::Field>,
 ) -> flow_like_types::Result<Value> {
     let mut items = Vec::with_capacity(values.len());
     for idx in 0..values.len() {
-        items.push(array_value_to_json(values, idx)?);
+        items.push(array_value_to_json_with_field(values, field, idx)?);
     }
     Ok(Value::Array(items))
 }
@@ -360,6 +440,49 @@ mod tests {
     use flow_like_storage::datafusion::arrow::record_batch::RecordBatch;
     use flow_like_types::tokio;
     use std::sync::Arc;
+
+    #[tokio::test]
+    async fn geometry_and_bytes_survive_row_and_csv_conversion() -> flow_like_types::Result<()> {
+        let ctx = flow_like_storage::datafusion::prelude::SessionContext::new();
+        flow_like_storage::geometry::register_geo_functions(&ctx);
+        let batches = ctx.sql("SELECT ST_Centroid(flow_geomfromtext('LINESTRING(10 20,20 30)')) AS center, arrow_cast('abc', 'Binary') AS bytes")
+            .await?.collect().await?;
+        let rows = batches_to_rows(&batches)?;
+        assert_eq!(
+            rows[0]["center"],
+            json!({"type":"Point", "coordinates":[15.,25.]})
+        );
+        assert_eq!(rows[0]["bytes"], json!([97, 98, 99]));
+        let csv = batches_to_csv_table(&batches)?;
+        assert_eq!(
+            csv.rows_as_values()[0]
+                .iter()
+                .map(
+                    |value| flow_like_types::json::from_str::<Value>(value.as_str().unwrap())
+                        .unwrap()
+                )
+                .collect::<Vec<_>>(),
+            vec![rows[0]["center"].clone(), rows[0]["bytes"].clone()]
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn mismatched_batches_are_rejected_before_rows_are_mislabeled() {
+        let first = create_simple_batch();
+        let second = RecordBatch::try_new(
+            Arc::new(Schema::new(vec![Field::new(
+                "other",
+                DataType::Int64,
+                false,
+            )])),
+            vec![Arc::new(Int64Array::from(vec![1]))],
+        )
+        .unwrap();
+        let batches = [first, second];
+        assert!(batches_to_rows(&batches).is_err());
+        assert!(batches_to_csv_table(&batches).is_err());
+    }
 
     fn create_simple_batch() -> RecordBatch {
         let schema = Arc::new(Schema::new(vec![

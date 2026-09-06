@@ -681,6 +681,9 @@ pub async fn flow_ir_commit_disposition(
     {
         Ok(board) => board,
         Err(error) => {
+            if let Some(error) = ApiError::from_board_format_error(&error) {
+                return Err(error);
+            }
             return Ok(Json(FlowIrCommitDispositionResult::error(
                 "IR_COMMIT_BOARD_UNAVAILABLE",
                 format!(
@@ -689,6 +692,7 @@ pub async fn flow_ir_commit_disposition(
             )));
         }
     };
+
     let now_ms = wall_clock_ms();
     let pending_key = pending_claim_ref_key(&scope_key, &params.token);
     let durable_pending_present = board.internal_ref(&pending_key).is_some();
@@ -714,6 +718,7 @@ pub async fn flow_ir_commit_disposition(
                 .map_err(|error| {
                     ApiError::internal(format!("durable FlowScript claim pruning failed: {error}"))
                 })?;
+
                 mutation_guard.ensure_held()?;
                 board.save(None).await?;
             }
@@ -810,6 +815,9 @@ pub async fn apply_flow_ir_commit(
     {
         Ok(board) => board,
         Err(error) => {
+            if let Some(error) = ApiError::from_board_format_error(&error) {
+                return Err(error);
+            }
             return Ok(Json(ApplyFlowIrCommitResult::empty(
                 "error",
                 "IR_COMMIT_BOARD_UNAVAILABLE",
@@ -819,6 +827,7 @@ pub async fn apply_flow_ir_commit(
             )));
         }
     };
+
     let now_ms = wall_clock_ms();
     let requested_receipt_key = applied_receipt_ref_key(&scope_key, &params.token);
     let requested_pending_key = pending_claim_ref_key(&scope_key, &params.token);
@@ -1023,6 +1032,9 @@ pub async fn apply_flow_ir_commit(
     {
         Ok(result) => result,
         Err(error) => {
+            if let Some(error) = ApiError::from_board_format_error(&error) {
+                return Err(error);
+            }
             return Ok(Json(ApplyFlowIrCommitResult::apply_error(
                 "IR_COMMIT_APPLY_FAILED",
                 format!(
@@ -1057,6 +1069,9 @@ pub async fn apply_flow_ir_commit(
     {
         Ok(board) => board,
         Err(error) => {
+            if let Some(error) = ApiError::from_board_format_error(&error) {
+                return Err(error);
+            }
             return Ok(Json(ApplyFlowIrCommitResult::apply_error(
                 "IR_COMMIT_BOARD_UNAVAILABLE",
                 format!(
@@ -1131,11 +1146,15 @@ pub async fn apply_flow_ir_commit(
     // The mutation and its exact success receipt share one compressed board write. A retry can
     // therefore observe either neither or both, including after this process exits immediately
     // after persistence.
+
     mutation_guard.ensure_held()?;
     let saved = super::scoring::save_board_and_refresh_summary(&state, &app_id, &board).await;
     let put = match saved {
         Ok(put) => put,
         Err(error) => {
+            if let Some(error) = ApiError::from_board_format_error(&error) {
+                return Err(error);
+            }
             let restore_error = restore_persisted_snapshot(&persisted_original).await;
             let mut diagnostics = vec![format!("Board persistence failed: {error}")];
             if let Some(error) = restore_error {

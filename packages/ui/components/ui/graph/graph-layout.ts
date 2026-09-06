@@ -38,6 +38,18 @@ export interface LayoutPosition {
 	y: number;
 }
 
+export interface ViewportDimensions {
+	width: number;
+	height: number;
+}
+
+export interface CollisionSpaceMapper {
+	/** Converts graph coordinates into the space where radii and gaps are measured. */
+	fromGraph: (position: LayoutPosition) => LayoutPosition;
+	/** Converts the relaxed position back into graph coordinates. */
+	toGraph: (position: LayoutPosition) => LayoutPosition;
+}
+
 export interface LayoutBounds {
 	minX: number;
 	minY: number;
@@ -183,10 +195,53 @@ export function defaultRelaxIterations(nodeCount: number): number {
 	return 60;
 }
 
+export interface ViewportNodeSizeOptions {
+	/** Sigma stage padding on each side, in CSS pixels. */
+	padding?: number;
+	/** Smallest useful rendered radius, in CSS pixels. */
+	minSize?: number;
+	/** Maximum share of each node's estimated pitch occupied by its diameter. */
+	maxPitchShare?: number;
+}
+
+/**
+ * Computes a rendered-radius ceiling from the space the live viewport gives
+ * each node. Node sizes in Sigma are screen pixels, so a fixed reference stage
+ * produces the wrong answer as soon as a panel or drawer changes the canvas.
+ */
+export function computeViewportNodeSizeCap(
+	nodeCount: number,
+	viewport: ViewportDimensions,
+	options: ViewportNodeSizeOptions = {},
+): number {
+	const padding = Math.max(0, options.padding ?? 0);
+	const minSize = Math.max(0, options.minSize ?? 2);
+	const maxPitchShare = Math.max(0, options.maxPitchShare ?? 0.3);
+	const width = Number.isFinite(viewport.width)
+		? Math.max(0, viewport.width - padding * 2)
+		: 0;
+	const height = Number.isFinite(viewport.height)
+		? Math.max(0, viewport.height - padding * 2)
+		: 0;
+
+	if (width === 0 || height === 0 || maxPitchShare === 0) return minSize;
+
+	const pitch = Math.sqrt((width * height) / Math.max(1, nodeCount));
+	return Math.max(minSize, (pitch * maxPitchShare) / 2);
+}
+
 export interface RelaxOverlapsOptions {
 	iterations?: number;
 	gap?: number;
 	maxPairChecks?: number;
+	/**
+	 * Maps graph positions into the coordinate space used by `size`, `gap`, and
+	 * label extents. Pass Sigma's graph/viewport converters when sizes are screen
+	 * pixels. The identity mapping keeps layout-only callers deterministic.
+	 */
+	coordinateMapper?: CollisionSpaceMapper;
+	/** Supplies the rendered radius when reducers alter a node's stored size. */
+	radiusForNode?: (nodeId: string) => number;
 	/**
 	 * Estimated caption width extending to the RIGHT of each node, in layout
 	 * units. When present, a node also defends the horizontal strip its label
@@ -255,6 +310,7 @@ export function relaxOverlaps(
 	const iterations = options.iterations ?? defaultRelaxIterations(count);
 	const pairBudget = options.maxPairChecks ?? MAX_PAIR_CHECKS;
 	const labelExtents = options.labelExtents;
+	const coordinateMapper = options.coordinateMapper;
 
 	const xs = new Float64Array(count);
 	const ys = new Float64Array(count);
@@ -266,9 +322,26 @@ export function relaxOverlaps(
 
 	for (let index = 0; index < count; index += 1) {
 		const nodeId = nodeIds[index];
-		xs[index] = readCoordinate(graph, nodeId, "x");
-		ys[index] = readCoordinate(graph, nodeId, "y");
-		radii[index] = readRadius(graph, nodeId);
+		const graphPosition = {
+			x: readCoordinate(graph, nodeId, "x"),
+			y: readCoordinate(graph, nodeId, "y"),
+		};
+		const mappedPosition = coordinateMapper?.fromGraph(graphPosition);
+		xs[index] =
+			mappedPosition && Number.isFinite(mappedPosition.x)
+				? mappedPosition.x
+				: graphPosition.x;
+		ys[index] =
+			mappedPosition && Number.isFinite(mappedPosition.y)
+				? mappedPosition.y
+				: graphPosition.y;
+		const mappedRadius = options.radiusForNode?.(nodeId);
+		radii[index] =
+			typeof mappedRadius === "number" &&
+			Number.isFinite(mappedRadius) &&
+			mappedRadius > 0
+				? mappedRadius
+				: readRadius(graph, nodeId);
 		maxRadius = Math.max(maxRadius, radii[index]);
 		if (extents && labelExtents) {
 			extents[index] = labelExtents.get(nodeId) ?? 0;
@@ -375,8 +448,22 @@ export function relaxOverlaps(
 	}
 
 	for (let index = 0; index < count; index += 1) {
-		graph.setNodeAttribute(nodeIds[index], "x", xs[index]);
-		graph.setNodeAttribute(nodeIds[index], "y", ys[index]);
+		const collisionPosition = { x: xs[index], y: ys[index] };
+		const graphPosition = coordinateMapper?.toGraph(collisionPosition);
+		graph.setNodeAttribute(
+			nodeIds[index],
+			"x",
+			graphPosition && Number.isFinite(graphPosition.x)
+				? graphPosition.x
+				: collisionPosition.x,
+		);
+		graph.setNodeAttribute(
+			nodeIds[index],
+			"y",
+			graphPosition && Number.isFinite(graphPosition.y)
+				? graphPosition.y
+				: collisionPosition.y,
+		);
 	}
 
 	return performed;

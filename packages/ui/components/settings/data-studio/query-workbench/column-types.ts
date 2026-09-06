@@ -1,10 +1,12 @@
 import { looksLikeTemporalName } from "../../../../lib/date";
+import { isGeometryMetadata } from "../../../../lib/geometry-columns";
 import { resolveStorageFile } from "../../../../lib/storage-file";
 import { looksLikeUserColumnName } from "../../../../lib/user-display";
 import type { QueryColumn } from "../../../../state/backend-state/query-state";
 import { accountIdFromValue } from "../../../../state/backend-state/user-state";
 
 export type ColumnKind =
+	| "geometry"
 	| "number"
 	| "temporal"
 	| "boolean"
@@ -14,6 +16,7 @@ export type ColumnKind =
 	| "text";
 
 export function classifyColumn(column: QueryColumn): ColumnKind {
+	if (isGeometryMetadata(column.metadata)) return "geometry";
 	const type = column.type_name.toLowerCase();
 	if (/bool/.test(type)) return "boolean";
 	if (/date|time|timestamp|instant|duration|interval/.test(type))

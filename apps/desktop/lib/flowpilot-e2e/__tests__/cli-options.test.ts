@@ -45,6 +45,16 @@ describe("FlowPilot E2E CLI options", () => {
 		});
 	});
 
+	test("keeps structural as the default and accepts an explicit behavioral tier", () => {
+		expect(parseArgs([])).toMatchObject({ tier: "structural" });
+		expect(parseArgs(["--tier", "behavioral"])).toMatchObject({
+			tier: "behavioral",
+		});
+		expect(() => parseArgs(["--tier", "smoke"])).toThrow(
+			"Unknown FlowPilot E2E tier",
+		);
+	});
+
 	test("runs cases in parallel only when fail-fast is not requested", () => {
 		expect(parseArgs(["--suite", "smoke", "--concurrency", "3"])).toMatchObject(
 			{

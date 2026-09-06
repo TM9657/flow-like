@@ -808,7 +808,7 @@ impl FlowScriptApplyPlanner {
                     let mut layer =
                         Layer::new(layer_id.clone(), name.clone(), LayerType::Collapsed);
                     layer.coordinates = self.position_or_next(position.as_ref());
-                    layer.pins = placeholder_pins(pins.as_deref());
+                    layer.pins = placeholder_pins(pins.as_deref())?;
 
                     let mut command = UpsertLayerCommand::new(layer);
                     command.current_layer =
@@ -853,7 +853,7 @@ impl FlowScriptApplyPlanner {
                     let mut layer = Layer::new(layer_id.clone(), name.clone(), resolved_layer_type);
                     layer.coordinates = self.position_or_base(position.as_ref());
                     layer.color = color.clone();
-                    layer.pins = layer_pins(pins.as_deref());
+                    layer.pins = layer_pins(pins.as_deref())?;
                     layer.cache = cache.clone();
 
                     let mut command = UpsertLayerCommand::new(layer.clone());
@@ -972,7 +972,7 @@ impl FlowScriptApplyPlanner {
                 } => {
                     let mut variable = Variable::new(
                         name,
-                        variable_type_from_str(data_type),
+                        variable_type_from_str(data_type)?,
                         value_type_from_str(value_type),
                     );
                     variable.id = variable_id.clone().unwrap_or_else(create_id);
@@ -1013,7 +1013,19 @@ impl FlowScriptApplyPlanner {
                     value,
                     ..
                 } => {
-                    let Some(existing_variable) = board.variables.get(variable_id) else {
+                    let scoped_variable = board
+                        .variables
+                        .get(variable_id)
+                        .map(|variable| (None, variable))
+                        .or_else(|| {
+                            board.layers.iter().find_map(|(layer_id, layer)| {
+                                layer
+                                    .variables
+                                    .get(variable_id)
+                                    .map(|variable| (Some(layer_id.clone()), variable))
+                            })
+                        });
+                    let Some((layer_id, existing_variable)) = scoped_variable else {
                         return Err(flow_like_types::anyhow!(
                             "Variable `{variable_id}` not found"
                         ));
@@ -1023,7 +1035,7 @@ impl FlowScriptApplyPlanner {
                         variable.name = name.clone();
                     }
                     if let Some(data_type) = data_type {
-                        variable.data_type = variable_type_from_str(data_type);
+                        variable.data_type = variable_type_from_str(data_type)?;
                     }
                     if let Some(value_type) = value_type {
                         variable.value_type = value_type_from_str(value_type);
@@ -1061,9 +1073,9 @@ impl FlowScriptApplyPlanner {
                     if let Some(runtime_configured) = runtime_configured {
                         variable.runtime_configured = *runtime_configured;
                     }
-                    generic_commands.push(GenericCommand::UpsertVariable(
-                        UpsertVariableCommand::new(variable),
-                    ));
+                    let mut command = UpsertVariableCommand::new(variable);
+                    command.layer_id = layer_id;
+                    generic_commands.push(GenericCommand::UpsertVariable(command));
                 }
                 BoardCommand::UpdateNodePin {
                     node_id,
@@ -1327,7 +1339,7 @@ impl FlowScriptApplyPlanner {
                     let mut layer = Layer::new(create_id(), name.clone(), resolved_layer_type);
                     layer.coordinates = self.position_or_base(position.as_ref());
                     layer.color = color.clone();
-                    layer.pins = layer_pins(pins.as_deref());
+                    layer.pins = layer_pins(pins.as_deref())?;
                     layer.cache = cache.clone();
                     let node_ids = self.resolve_node_ids(board, node_ids)?;
                     let layer_type = layer.r#type.clone();
@@ -1775,7 +1787,9 @@ impl FlowScriptApplyPlanner {
     }
 }
 
-fn placeholder_pins(defs: Option<&[PlaceholderPinDef]>) -> HashMap<String, Pin> {
+fn placeholder_pins(
+    defs: Option<&[PlaceholderPinDef]>,
+) -> flow_like_types::Result<HashMap<String, Pin>> {
     let mut pins = HashMap::new();
     insert_placeholder_pin(
         &mut pins,
@@ -1803,10 +1817,10 @@ fn placeholder_pins(defs: Option<&[PlaceholderPinDef]>) -> HashMap<String, Pin> 
     );
 
     let Some(defs) = defs else {
-        return pins;
+        return Ok(pins);
     };
-    insert_layer_pins(&mut pins, defs, 2);
-    pins
+    insert_layer_pins(&mut pins, defs, 2)?;
+    Ok(pins)
 }
 
 fn append_additional_node_pins(
@@ -1844,7 +1858,7 @@ fn append_additional_node_pins(
             &def.name,
             &def.friendly_name,
             def.description.as_deref().unwrap_or(""),
-            variable_type_from_str(&def.data_type),
+            variable_type_from_str(&def.data_type)?,
         );
         pin.set_value_type(
             def.value_type
@@ -1864,19 +1878,19 @@ fn append_additional_node_pins(
     Ok(())
 }
 
-fn layer_pins(defs: Option<&[PlaceholderPinDef]>) -> HashMap<String, Pin> {
+fn layer_pins(defs: Option<&[PlaceholderPinDef]>) -> flow_like_types::Result<HashMap<String, Pin>> {
     let mut pins = HashMap::new();
     if let Some(defs) = defs {
-        insert_layer_pins(&mut pins, defs, 0);
+        insert_layer_pins(&mut pins, defs, 0)?;
     }
-    pins
+    Ok(pins)
 }
 
 fn insert_layer_pins(
     pins: &mut HashMap<String, Pin>,
     defs: &[PlaceholderPinDef],
     start_index: usize,
-) {
+) -> flow_like_types::Result<()> {
     for (offset, def) in defs.iter().enumerate() {
         insert_placeholder_pin(
             pins,
@@ -1884,7 +1898,7 @@ fn insert_layer_pins(
             &def.friendly_name,
             def.description.as_deref().unwrap_or(""),
             pin_type_from_str(&def.pin_type),
-            variable_type_from_str(&def.data_type),
+            variable_type_from_str(&def.data_type)?,
             def.value_type
                 .as_deref()
                 .map(value_type_from_str)
@@ -1894,6 +1908,7 @@ fn insert_layer_pins(
             (offset + start_index) as u16,
         );
     }
+    Ok(())
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -2091,8 +2106,9 @@ fn pin_lookup_keys(value: &str) -> HashSet<String> {
     .collect()
 }
 
-fn variable_type_from_str(value: &str) -> VariableType {
-    match value {
+fn variable_type_from_str(value: &str) -> flow_like_types::Result<VariableType> {
+    Ok(match value {
+        "String" | "string" => VariableType::String,
         "Execution" | "exec" => VariableType::Execution,
         "Integer" | "int" => VariableType::Integer,
         "Float" | "float" => VariableType::Float,
@@ -2102,8 +2118,9 @@ fn variable_type_from_str(value: &str) -> VariableType {
         "Generic" | "any" => VariableType::Generic,
         "Struct" => VariableType::Struct,
         "Byte" | "bytes" => VariableType::Byte,
-        _ => VariableType::String,
-    }
+        "Geometry" | "geometry" => VariableType::Geometry,
+        _ => return Err(flow_like_types::anyhow!("Unknown variable type `{value}`")),
+    })
 }
 
 fn value_type_from_str(value: &str) -> ValueType {
@@ -2339,6 +2356,41 @@ mod tests {
             value: None,
             summary: None,
         }
+    }
+
+    #[tokio::test]
+    async fn geometry_variable_applies_and_round_trips_with_its_marker() {
+        use flow_like_types::geometry::{GeometryKind, marker};
+        let mut board = empty_board();
+        let state = Arc::new(crate::state::FlowLikeState::new(
+            FlowLikeConfig::new(),
+            HTTPClient::new_without_refetch(),
+        ));
+        let source =
+            "const origin: geometry<Point> = {\"type\":\"Point\",\"coordinates\":[13.405,52.52]}\n";
+        let result = apply_flowscript_to_board(&mut board, source, &[], state, None, true)
+            .await
+            .unwrap();
+        assert!(result.diagnostics.is_empty(), "{:?}", result.diagnostics);
+        let variable = board.variables.values().next().unwrap();
+        assert_eq!(variable.data_type, VariableType::Geometry);
+        let raw = variable.schema.as_deref().unwrap();
+        assert_eq!(
+            board.refs.get(raw).map(String::as_str).unwrap_or(raw),
+            marker(GeometryKind::Point)
+        );
+        let ast = crate::flow::ast::lower::lower_board(&board);
+        assert_eq!(ast.variables[0].ty.geometry_kind, Some(GeometryKind::Point));
+        let text = flow_like_ast::render(&ast, &Default::default());
+        assert!(text.contains("geometry<Point>"));
+        let reconciled = crate::flow::ast::reconcile::reconcile_text(&board, &text);
+        assert!(
+            reconciled.diagnostics.is_empty(),
+            "{:?}",
+            reconciled.diagnostics
+        );
+        assert!(reconciled.commands.is_empty(), "{:?}", reconciled.commands);
+        assert!(variable_type_from_str("TypoGeometry").is_err());
     }
 
     #[test]

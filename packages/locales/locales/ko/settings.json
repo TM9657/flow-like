@@ -1894,5 +1894,6 @@
 	"yourProfile": "내 프로필",
 	"yourSemanticLayer": "나의 시맨틱 레이어",
 	"geometryWgs84": "",
-	"geometryColumnHint": ""
+	"geometryColumnHint": "",
+	"geometryBackendUpgrade": ""
 }

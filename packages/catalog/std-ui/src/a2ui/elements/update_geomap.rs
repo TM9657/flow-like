@@ -64,6 +64,7 @@ impl NodeLogic for UpdateGeoMap {
                     "Markers".to_string(),
                     "Routes".to_string(),
                     "Viewport".to_string(),
+                    "Geometry".to_string(),
                 ])
                 .build(),
         )
@@ -111,8 +112,13 @@ impl NodeLogic for UpdateGeoMap {
                     "routes": { "literalJson": flow_like_types::json::to_string(&routes)? }
                 })
             }
+            "Geometry" => {
+                let geometry: Value = context.evaluate_pin("geometry").await?;
+                let geometry = flow_like_types::geometry::canonicalize_geometry(&geometry, None)?;
+                json!({"type":"setGeoMapGeometry", "geometry":{"literalJson":flow_like_types::json::to_string(&geometry)?}})
+            }
             "Viewport" => {
-                let viewport: GeoMapViewport = context.evaluate_pin("viewport").await?;
+                let viewport = GeoMapViewport::from_value(context.evaluate_pin("viewport").await?)?;
                 // The GeoMap component consumes viewport as a BoundValue with a
                 // nested center — mirror the Markers/Routes arms' literalJson
                 // wrapping (the frontend reducer also normalizes legacy flat
@@ -158,8 +164,20 @@ impl NodeLogic for UpdateGeoMap {
         let markers_pin = node.get_pin_by_name("markers").cloned();
         let routes_pin = node.get_pin_by_name("routes").cloned();
         let viewport_pin = node.get_pin_by_name("viewport").cloned();
+        let geometry_pin = node.get_pin_by_name("geometry").cloned();
+        if property != "Geometry" {
+            remove_pin(node, geometry_pin.clone());
+        }
 
         match property.as_str() {
+            "Geometry" => {
+                remove_pin(node, markers_pin);
+                remove_pin(node, routes_pin);
+                remove_pin(node, viewport_pin);
+                if geometry_pin.is_none() {
+                    node.add_input_pin("geometry", "Geometry", "Native WGS 84 geometry. Points render markers; lines and polygon rings render outlines.", VariableType::Geometry);
+                }
+            }
             "Markers" => {
                 remove_pin(node, routes_pin);
                 remove_pin(node, viewport_pin);

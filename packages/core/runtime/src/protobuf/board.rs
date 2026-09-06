@@ -9,6 +9,44 @@ use flow_like_storage::Path;
 use flow_like_types::{FromProto, Timestamp, ToProto};
 use std::{collections::HashMap, time::SystemTime};
 
+impl Board {
+    /// Check wire codes before infallible protobuf conversion can erase unknown types.
+    pub fn validate_proto_types(
+        proto: &flow_like_types::proto::Board,
+    ) -> flow_like_types::Result<()> {
+        Self::ensure_supported_proto_format(proto)?;
+        use crate::flow::variable::VariableType;
+        let pin = |pin: &flow_like_types::proto::Pin| -> flow_like_types::Result<()> {
+            VariableType::try_from_proto(pin.data_type)?;
+            Ok(())
+        };
+        let node = |node: &flow_like_types::proto::Node| -> flow_like_types::Result<()> {
+            for value in node.pins.values() {
+                pin(value)?;
+            }
+            Ok(())
+        };
+        for value in proto.variables.values() {
+            VariableType::try_from_proto(value.data_type)?;
+        }
+        for value in proto.nodes.values() {
+            node(value)?;
+        }
+        for layer in proto.layers.values() {
+            for value in layer.variables.values() {
+                VariableType::try_from_proto(value.data_type)?;
+            }
+            for value in layer.pins.values() {
+                pin(value)?;
+            }
+            for value in layer.nodes.values() {
+                node(value)?;
+            }
+        }
+        Ok(())
+    }
+}
+
 impl ExecutionStage {
     fn to_proto(&self) -> i32 {
         match self {
@@ -98,6 +136,7 @@ impl LogLevel {
 impl ToProto<flow_like_types::proto::Board> for Board {
     fn to_proto(&self) -> flow_like_types::proto::Board {
         flow_like_types::proto::Board {
+            format_version: self.required_format_version(),
             id: self.id.clone(),
             name: self.name.clone(),
             description: self.description.clone(),
@@ -142,6 +181,7 @@ impl ToProto<flow_like_types::proto::Board> for Board {
 
 impl FromProto<flow_like_types::proto::Board> for Board {
     fn from_proto(proto: flow_like_types::proto::Board) -> Self {
+        let format_version = Self::required_proto_format_version(&proto);
         // v1 receipts were stored under a reserved prefix in the semantic `refs` map. Partition
         // them on every load so old boards migrate without a separate storage rewrite. The
         // dedicated protobuf field wins if a partially migrated object contains the same key in
@@ -160,6 +200,7 @@ impl FromProto<flow_like_types::proto::Board> for Board {
             }
         }
         Board {
+            format_version,
             id: proto.id,
             name: proto.name,
             description: proto.description,

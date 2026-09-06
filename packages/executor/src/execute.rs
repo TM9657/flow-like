@@ -4,12 +4,12 @@
 
 use crate::config::ExecutorConfig;
 use crate::error::ExecutorError;
-use crate::jwt::{ExecutorClaims, ExecutorPageExecutionClaims, verify_jwt_async};
+use crate::jwt::{verify_jwt_async, ExecutorClaims, ExecutorPageExecutionClaims};
 use crate::resolve::{fetch_bounded, max_remote_payload_bytes};
 use crate::types::{EventType, ExecutionEvent, ExecutionRequest, ExecutionResult, ExecutionStatus};
 use crate::widgets::{HubAccess, HubWidgetSource};
 use flow_like::credentials::StoreType;
-use flow_like::flow::compiled::{CompiledRunTemplate, TemplateCache, template_from_bytes};
+use flow_like::flow::compiled::{template_from_bytes, CompiledRunTemplate, TemplateCache};
 use flow_like::flow::event::Event;
 use flow_like::flow::execution::rejection::{RejectedRun, RejectionStage};
 use flow_like::flow::execution::{ExecutionEnvironment, InternalRun, RunPayload};
@@ -1776,16 +1776,14 @@ mod page_request_binding_tests {
         let page = latest_page();
         validate_page_request_binding(&page, None, Some("etag-a"), "entry-1", None)
             .expect("the decoded ETag-bound Latest selector is accepted");
-        assert!(
-            validate_page_request_binding(
-                &page,
-                Some(ETAG_BOUND_LATEST_VERSION_SENTINEL),
-                Some("etag-a"),
-                "entry-1",
-                None,
-            )
-            .is_err()
-        );
+        assert!(validate_page_request_binding(
+            &page,
+            Some(ETAG_BOUND_LATEST_VERSION_SENTINEL),
+            Some("etag-a"),
+            "entry-1",
+            None,
+        )
+        .is_err());
     }
 
     #[test]
@@ -1820,10 +1818,14 @@ mod page_request_binding_tests {
                 cwasm_checksum: "cwasm-checksum".into(),
             },
         )]);
-        assert!(
-            validate_page_request_binding(&page, None, Some("etag-a"), "entry-1", Some(&packages),)
-                .is_err()
-        );
+        assert!(validate_page_request_binding(
+            &page,
+            None,
+            Some("etag-a"),
+            "entry-1",
+            Some(&packages),
+        )
+        .is_err());
     }
 }
 
@@ -1873,33 +1875,25 @@ mod callback_acknowledgement_tests {
 
     #[test]
     fn terminal_acknowledgement_requires_persisted_terminal_state() {
-        assert!(
-            ensure_terminal_acknowledgement(
-                &acknowledgement(true, "Completed"),
-                &ExecutionStatus::Completed,
-            )
-            .is_ok()
-        );
-        assert!(
-            ensure_terminal_acknowledgement(
-                &acknowledgement(true, "Running"),
-                &ExecutionStatus::Completed,
-            )
-            .is_err()
-        );
-        assert!(
-            ensure_terminal_acknowledgement(
-                &acknowledgement(true, "Failed"),
-                &ExecutionStatus::Completed,
-            )
-            .is_err()
-        );
-        assert!(
-            ensure_terminal_acknowledgement(
-                &acknowledgement(false, "Failed"),
-                &ExecutionStatus::Completed,
-            )
-            .is_ok()
-        );
+        assert!(ensure_terminal_acknowledgement(
+            &acknowledgement(true, "Completed"),
+            &ExecutionStatus::Completed,
+        )
+        .is_ok());
+        assert!(ensure_terminal_acknowledgement(
+            &acknowledgement(true, "Running"),
+            &ExecutionStatus::Completed,
+        )
+        .is_err());
+        assert!(ensure_terminal_acknowledgement(
+            &acknowledgement(true, "Failed"),
+            &ExecutionStatus::Completed,
+        )
+        .is_err());
+        assert!(ensure_terminal_acknowledgement(
+            &acknowledgement(false, "Failed"),
+            &ExecutionStatus::Completed,
+        )
+        .is_ok());
     }
 }

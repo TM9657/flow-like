@@ -1,6 +1,7 @@
 #![recursion_limit = "256"]
 
 pub mod a2ui;
+pub mod app_build;
 pub mod credentials;
 #[cfg(feature = "flow-metadata")]
 pub mod flow;

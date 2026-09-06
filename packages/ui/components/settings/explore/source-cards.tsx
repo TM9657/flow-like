@@ -55,6 +55,7 @@ const FAMILY_CLASS: Record<IColumnFamily, string> = {
 	bool: "bg-emerald-500 dark:bg-emerald-400",
 	vector: "bg-cyan-500 dark:bg-cyan-400",
 	struct: "bg-amber-500 dark:bg-amber-400",
+	geo: "bg-[#f97316]",
 	binary: "bg-pink-500 dark:bg-pink-400",
 	other: "bg-muted-foreground",
 };

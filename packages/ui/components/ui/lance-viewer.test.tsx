@@ -60,10 +60,10 @@ describe("arrowToLanceSchema", () => {
 			],
 		}).fields;
 		expect(interleaved).toMatchObject({
-			kind: "object",
+			kind: "geometry",
 			indexKind: "unsupported-geometry",
 		});
-		expect(point).toMatchObject({ kind: "object", indexKind: "geometry" });
+		expect(point).toMatchObject({ kind: "geometry", indexKind: "geometry" });
 		expect(embedding).toMatchObject({ kind: "vector", dims: 2 });
 		expect(embedding.indexKind).toBeUndefined();
 	});

@@ -1894,5 +1894,6 @@
 	"yourProfile": "您的个人资料",
 	"yourSemanticLayer": "您的语义层",
 	"geometryWgs84": "",
-	"geometryColumnHint": ""
+	"geometryColumnHint": "",
+	"geometryBackendUpgrade": ""
 }

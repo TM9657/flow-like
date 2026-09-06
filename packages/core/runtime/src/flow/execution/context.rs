@@ -895,26 +895,22 @@ impl ExecutionContext {
         variable_id: &str,
         value: Value,
     ) -> flow_like_types::Result<()> {
-        // Check local variables first
-        if let Some(local) = &self.local_variables
-            && let Some(var) = local.lock().await.get(variable_id)
-        {
-            let value_ref = var.value.clone();
-            let mut guard = value_ref.lock().await;
-            *guard = value;
-            return Ok(());
+        let variable = self.get_variable(variable_id).await?;
+        if variable.data_type == VariableType::Geometry {
+            let board = self.get_board().await?;
+            let schema = variable
+                .schema
+                .as_deref()
+                .map(|schema| crate::flow::pin::resolve_schema(schema, &board.refs))
+                .transpose()?;
+            crate::flow::variable::validate_typed_value(
+                &variable.data_type,
+                &variable.value_type,
+                schema,
+                &value,
+            )?;
         }
-
-        let value_ref = self
-            .variables
-            .lock()
-            .await
-            .get(variable_id)
-            .ok_or_else(|| flow_like_types::anyhow!("Variable not found"))?
-            .value
-            .clone();
-        let mut guard = value_ref.lock().await;
-        *guard = value;
+        *variable.value.lock().await = value;
         Ok(())
     }
 
@@ -1097,6 +1093,7 @@ impl ExecutionContext {
         pin: &Arc<InternalPin>,
         value: Value,
     ) -> flow_like_types::Result<()> {
+        pin.validate_value(&value)?;
         let pin_id = pin.id();
 
         // When in an override context, write to BOTH the override map AND the

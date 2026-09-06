@@ -18,6 +18,7 @@ import type {
 	IVersionType,
 } from "../../lib";
 import type { IJwks, IRealtimeAccess } from "../../lib";
+import type { BoardFormatCapabilities } from "../../lib/board-format";
 import type { FlowScriptApplyOrigin } from "../../lib/flowscript-apply-failure";
 import type {
 	BoardEditJob,
@@ -137,6 +138,7 @@ export interface IBoardMutationOptions {
 }
 
 export interface IBoardState {
+	getBoardFormat?(appId: string): Promise<BoardFormatCapabilities>;
 	/**
 	 * Every board of the app **in full**, graph included. Roughly a megabyte of JSON per
 	 * medium board, so only reach for this when the nodes themselves are needed.
@@ -152,6 +154,14 @@ export interface IBoardState {
 		appId: string,
 		include?: IBoardSummaryInclude[],
 	): Promise<IBoardSummary[]>;
+	/**
+	 * List boards from the app's authoritative store. Read failures propagate and this call never
+	 * repairs, caches, or falls back to another store.
+	 */
+	getBoardSummariesAuthoritative(
+		appId: string,
+		include?: IBoardSummaryInclude[],
+	): Promise<IBoardSummary[]>;
 	/** Every board's variables (secret values stripped) without the boards themselves. */
 	getBoardVariables(appId: string): Promise<IBoardVariables[]>;
 	getCatalog(appId: string): Promise<INode[]>;
@@ -160,6 +170,12 @@ export interface IBoardState {
 		boardId: string,
 		version?: [number, number, number],
 		forceFresh?: boolean,
+	): Promise<IBoard>;
+	/** Read exactly one board revision from the authoritative store without cache repair. */
+	getBoardAuthoritative(
+		appId: string,
+		boardId: string,
+		version?: [number, number, number],
 	): Promise<IBoard>;
 
 	// Realtime collaboration
@@ -319,6 +335,14 @@ export interface IBoardState {
 
 	/** Render the board as FlowScript source text (anchored by default for stable round-trips). */
 	getFlowScript(
+		appId: string,
+		boardId: string,
+		version?: [number, number, number],
+		anchors?: boolean,
+	): Promise<string>;
+
+	/** Render an exact authoritative board revision without consulting or updating local caches. */
+	getFlowScriptAuthoritative(
 		appId: string,
 		boardId: string,
 		version?: [number, number, number],

@@ -402,6 +402,33 @@ export class PageState implements IPageState {
 		}
 	}
 
+	async getPagesAuthoritative(
+		appId: string,
+		boardId?: string,
+	): Promise<PageListItem[]> {
+		if (await this.backend.isLocalOnly(appId)) {
+			return invoke<PageListItem[]>("get_pages", { appId, boardId });
+		}
+		if (
+			!this.backend.profile ||
+			!this.backend.auth?.isAuthenticated ||
+			!this.backend.auth.user?.access_token
+		) {
+			throw new Error(
+				"Hosted Page inventory requires an authenticated hub session",
+			);
+		}
+		const url = boardId
+			? `apps/${appId}/pages?board_id=${boardId}`
+			: `apps/${appId}/pages`;
+		return fetcher<PageListItem[]>(
+			this.backend.profile,
+			url,
+			{ method: "GET" },
+			this.backend.auth,
+		);
+	}
+
 	/**
 	 * A pinned board version resolves against the published snapshot, which is immutable:
 	 * whatever answers first is correct, and nothing is written back to the current page
@@ -515,6 +542,39 @@ export class PageState implements IPageState {
 			boardId,
 		);
 		return refreshed ?? localPage;
+	}
+
+	async getPageAuthoritative(
+		appId: string,
+		pageId: string,
+		boardId?: string,
+		version?: [number, number, number],
+	): Promise<IPage> {
+		if (await this.backend.isLocalOnly(appId)) {
+			return invoke<IPage>("get_page", {
+				appId,
+				pageId,
+				boardId,
+				version,
+			});
+		}
+		if (
+			!this.backend.profile ||
+			!this.backend.auth?.isAuthenticated ||
+			!this.backend.auth.user?.access_token
+		) {
+			throw new Error("Hosted Page read requires an authenticated hub session");
+		}
+		const query = new URLSearchParams();
+		if (boardId) query.set("board_id", boardId);
+		if (version) query.set("version", version.join("_"));
+		const params = query.size > 0 ? `?${query.toString()}` : "";
+		return fetcher<IPage>(
+			this.backend.profile,
+			`apps/${appId}/pages/${pageId}${params}`,
+			{ method: "GET" },
+			this.backend.auth,
+		);
 	}
 
 	async createPage(

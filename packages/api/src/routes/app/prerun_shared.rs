@@ -541,7 +541,9 @@ pub async fn load_exact_prerun_manifest(
                         .await
                         .map_err(ApiError::internal_error)?;
                     let storage_root = Path::from("apps").child(app_id.to_string());
-                    Ok(Board::from_loaded_proto(proto, storage_root, app_state).await)
+                    Board::from_loaded_proto(proto, storage_root, app_state)
+                        .await
+                        .map_err(ApiError::internal_error)
                 },
             )
             .await?

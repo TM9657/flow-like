@@ -77,6 +77,7 @@ pub const NAMESPACES: &[(&str, NamespaceSpec)] = &[
         spec("math.vector", &["utils", "float"], true),
     ),
     ("Structs", spec("struct", &[], true)),
+    ("Utils/Geometry", spec("geometry", &[], true)),
     // Utilities
     ("Utils/Hash", spec("hash", &["utils"], true)),
     ("Utils/Crypto", spec("crypto", &["utils"], true)),
@@ -261,6 +262,7 @@ pub const VALUE_TYPE_NAMESPACES: &[(&str, &str, &str)] = &[
     ("map", "*", "HashMap"),
     ("set", "*", "HashSet"),
     ("struct", "Struct", "Normal"),
+    ("geometry", "Geometry", "Normal"),
     // A SCALAR byte is its own class. Sharing the `bytes` class with `Byte/Array` meant a single
     // byte dispatched to buffer methods (`sentinel.toHex()`) and only failed later at connection
     // validation with a pin-type error, instead of "no method `toHex` on `byte`" up front. No

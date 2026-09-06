@@ -1202,5 +1202,21 @@
 	"geometryStoredCoordinateOrder": "",
 	"geometryUnknownCrs": "",
 	"hideGeometryValue": "",
-	"showGeometryValue": ""
+	"showGeometryValue": "",
+	"geometryBackendUpgrade": "",
+	"geometryRequiredCoordinateOrder": "",
+	"geometryInvalidValue": "유효하지 않은 지오메트리",
+	"geometryMapUnavailable": "지도를 사용할 수 없음",
+	"geometryLoadingMap": "지도 불러오는 중…",
+	"geometryLongitude": "경도",
+	"geometryLatitude": "위도",
+	"geometryGeoJsonCoordinates": "GeoJSON 좌표",
+	"geometryInspectValue": "{{type}} 살펴보기: {{summary}}",
+	"geometryInspectDescription": "저장된 도형과 좌표를 확인합니다.",
+	"geometryPolygonCount_other": "폴리곤 {{count}}개",
+	"geometryLineCount_other": "선 {{count}}개",
+	"geometryPartCount_other": "부분 {{count}}개",
+	"geometryPointCount_other": "점 {{count}}개",
+	"geometryVertexCount_other": "꼭짓점 {{count}}개",
+	"geometryHoleCount_other": "구멍 {{count}}개"
 }

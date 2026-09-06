@@ -258,6 +258,9 @@ impl LanceDBVectorStore {
         schema: Schema,
         if_not_exists: bool,
     ) -> Result<bool> {
+        for field in schema.fields() {
+            crate::geometry::validate_geometry_field(field)?;
+        }
         let existed = self.table.is_some();
         if existed && if_not_exists {
             let existing_schema = self
@@ -341,6 +344,34 @@ impl LanceDBVectorStore {
             .ok_or_else(|| anyhow!("Table not initialized"))?;
 
         validate_new_columns(&transform)?;
+        if let NewColumnTransform::SqlExpressions(expressions) = &transform {
+            let schema = table.schema().await?;
+            for (_, expression) in expressions {
+                use datafusion::sql::sqlparser::{
+                    dialect::GenericDialect,
+                    tokenizer::{Token, Tokenizer},
+                };
+                let tokens = Tokenizer::new(&GenericDialect {}, expression)
+                    .tokenize()
+                    .map_err(|error| anyhow!("Invalid column expression: {error}"))?;
+                for token in tokens {
+                    if let Token::Word(word) = token {
+                        let name = word.value.to_ascii_lowercase();
+                        if name.starts_with("st_")
+                            || name.starts_with("flow_geom")
+                            || schema.fields().iter().any(|field| {
+                                crate::geometry::is_geometry_field(field)
+                                    && field.name().eq_ignore_ascii_case(&word.value)
+                            })
+                        {
+                            return Err(anyhow!(
+                                "Geometry expressions cannot add columns without preserving metadata; declare geometry when creating the table"
+                            ));
+                        }
+                    }
+                }
+            }
+        }
         let result = table.add_columns(transform, read_columns).await?;
         Ok(result)
     }
@@ -364,6 +395,19 @@ impl LanceDBVectorStore {
             .clone()
             .ok_or_else(|| anyhow!("Table not initialized"))?;
 
+        let schema = table.schema().await?;
+        for change in alteration {
+            let root = change.path.split('.').next().unwrap_or(&change.path);
+            if change.data_type.is_some()
+                && schema.fields().iter().any(|field| {
+                    field.name() == root && crate::geometry::contains_geometry_field(field)
+                })
+            {
+                return Err(anyhow!(
+                    "Geometry column types cannot be altered; create a declared geometry column and insert validated values"
+                ));
+            }
+        }
         let result = table.alter_columns(alteration).await?;
         Ok(result)
     }
@@ -398,6 +442,14 @@ impl LanceDBVectorStore {
         let mut op = table.update();
         op = op.only_if(filter);
 
+        let schema = table.schema().await?;
+        for column in updates.keys() {
+            if crate::geometry::is_geometry_field(schema.field_with_name(column)?) {
+                return Err(anyhow!(
+                    "Geometry column '{column}' cannot be updated with SQL expressions; use a validated upsert"
+                ));
+            }
+        }
         for (column, value) in updates {
             let value_str = match &value {
                 Value::String(s) => format!("'{}'", s.replace('\'', "''")),
@@ -464,6 +516,7 @@ impl LanceDBVectorStore {
         crate::databases::sql_guard::validate_lance_dml_sql(sql)?;
         let table = self.to_datafusion().await?;
         let ctx = SessionContext::new();
+        crate::geometry::register_geo_functions(&ctx);
         ctx.register_table(table_name, table)?;
         let results = ctx.sql(sql).await?;
 
@@ -471,6 +524,7 @@ impl LanceDBVectorStore {
     }
 
     pub async fn insert_record_batch(&mut self, batch: RecordBatch) -> Result<()> {
+        crate::geometry::validate_batch(&batch)?;
         let items = vec![batch];
 
         if self.table.is_none() {
@@ -502,7 +556,8 @@ impl LanceDBVectorStore {
         }
 
         let table = self.table.clone().unwrap();
-        let mut add = table.add(items);
+        let batch = crate::geometry::normalize_batch(&items[0], &table.schema().await?)?;
+        let mut add = table.add(vec![batch]);
         if let Some(opts) = &self.write_options {
             add = add.write_options(opts.clone());
         }
@@ -561,16 +616,10 @@ pub fn record_batches_to_vec(batches: Option<Vec<RecordBatch>>) -> Result<Vec<Va
     let batches = batches.unwrap();
     let mut items = vec![];
 
-    for batch in batches {
-        let values = record_batch_to_value(&batch);
-        match values {
-            Ok(mut values) => {
-                items.append(&mut values);
-            }
-            Err(err) => {
-                eprintln!("[LanceDB] Error converting batch to value: {err:#}");
-            }
-        }
+    for (index, batch) in batches.iter().enumerate() {
+        let mut values = record_batch_to_value(batch)
+            .map_err(|error| anyhow!("Unable to decode result batch {index}: {error}"))?;
+        items.append(&mut values);
     }
 
     Ok(items)
@@ -1444,6 +1493,7 @@ mod tests {
                 "indexed {selection}"
             );
             let ctx = SessionContext::new();
+            crate::geometry::register_geo_functions(&ctx);
             ctx.register_table("scalar_indices", db.to_datafusion().await?)?;
             assert_eq!(
                 ctx.sql(&format!("SELECT id FROM scalar_indices WHERE {filter}"))
@@ -1499,6 +1549,119 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn geometry_wkb_roundtrip_index_and_spatial_fallback() -> Result<()> {
+        use crate::geometry::geometry_field;
+        use datafusion::common::ScalarValue;
+        let test_path = format!("./tmp/{}", create_id());
+        std::fs::create_dir_all(&test_path)?;
+        let mut db = LanceDBVectorStore::new(PathBuf::from(&test_path), "places".into()).await?;
+        let schema = Schema::new(vec![
+            Field::new("id", DataType::Int64, false),
+            geometry_field("geom", true),
+        ]);
+        db.create_empty_table(schema, false).await?;
+        let points = [(2., 2.), (9., 9.), (0.5, 0.5), (3.5, 3.5)];
+        let mut rows: Vec<Value> = points
+            .iter()
+            .enumerate()
+            .map(|(id, (x, y))| {
+                json!({
+                    "id": id, "geom": {"type": "Point", "coordinates": [x, y]}
+                })
+            })
+            .collect();
+        rows.push(json!({"id": 4, "geom": null}));
+        db.insert(rows.clone()).await?;
+        let polygon = "POLYGON ((0 0,4 0,4 4,0 4,0 0),(1 1,1 3,3 3,3 1,1 1))";
+        let predicate = format!("ST_Intersects(geom, ST_GeomFromText('{polygon}'))");
+        assert_eq!(db.count(Some(predicate.clone())).await?, 2);
+        db.index("geom", Some("RTREE")).await?;
+        assert_eq!(db.count(Some(predicate.clone())).await?, 2);
+        let plan = db
+            .raw()
+            .await?
+            .query()
+            .only_if(&predicate)
+            .explain_plan(false)
+            .await?;
+        assert!(plan.contains("ScalarIndexQuery"), "{plan}");
+        let reopened = LanceDBVectorStore::new(PathBuf::from(&test_path), "places".into()).await?;
+        assert_eq!(
+            reopened.schema().await?.field(1),
+            &geometry_field("geom", true)
+        );
+        let stored = reopened
+            .sql("places", "SELECT * FROM places ORDER BY id")
+            .await?
+            .collect()
+            .await?;
+        assert_eq!(record_batches_to_vec(Some(stored))?, rows);
+        let ctx = SessionContext::new();
+        crate::geometry::register_geo_functions(&ctx);
+        ctx.register_table("places", reopened.to_datafusion().await?)?;
+        let result = ctx.sql("SELECT id FROM places WHERE ST_Intersects(geom, flow_geomfromtext($1)) ORDER BY id LIMIT 1")
+            .await?.with_param_values(vec![ScalarValue::Utf8(Some(polygon.into()))])?
+            .collect().await?;
+        assert_eq!(record_batches_to_vec(Some(result))?, vec![json!({"id": 2})]);
+        let computed = ctx
+            .sql("SELECT ST_Centroid(geom) AS center FROM places WHERE id = 2")
+            .await?
+            .collect()
+            .await?;
+        assert_eq!(
+            record_batches_to_vec(Some(computed))?[0]["center"],
+            rows[2]["geom"]
+        );
+        assert!(
+            ctx.sql("UPDATE places SET geom = flow_geomfromtext('POINT(0 0)') WHERE id = 2")
+                .await?
+                .collect()
+                .await
+                .is_err()
+        );
+        assert!(
+            db.insert(vec![
+                json!({"id": 5, "geom": {"type":"Point", "coordinates":[181, 0]}})
+            ])
+            .await
+            .is_err()
+        );
+        assert_eq!(db.count(None).await?, 5);
+        db.drop_index(&db.list_indices().await?[0].name).await?;
+        assert_eq!(db.count(Some(predicate)).await?, 2);
+        std::fs::remove_dir_all(&test_path)?;
+        Ok(())
+    }
+
+    #[test]
+    fn geometry_batch_decode_errors_do_not_drop_rows() -> Result<()> {
+        use arrow_array::BinaryArray;
+        let ordinary = RecordBatch::try_new(
+            Arc::new(Schema::new(vec![Field::new(
+                "bytes",
+                DataType::Binary,
+                true,
+            )])),
+            vec![Arc::new(BinaryArray::from(vec![
+                Some(&[1_u8, 2][..]),
+                None,
+            ]))],
+        )?;
+        assert_eq!(
+            record_batches_to_vec(Some(vec![ordinary.clone()]))?,
+            vec![json!({"bytes":[1,2]}), json!({"bytes":null})]
+        );
+        let invalid = RecordBatch::try_new(
+            Arc::new(Schema::new(vec![crate::geometry::geometry_field(
+                "geom", true,
+            )])),
+            vec![Arc::new(BinaryArray::from(vec![Some(&[1_u8, 2][..])]))],
+        )?;
+        assert!(record_batches_to_vec(Some(vec![ordinary, invalid])).is_err());
+        Ok(())
+    }
+
+    #[tokio::test]
     async fn regression_rtree_index_retains_geoarrow_metadata() -> Result<()> {
         use arrow_array::{Float64Array, StructArray};
 
@@ -1512,7 +1675,10 @@ mod tests {
         let geometry_type = DataType::Struct(coords.clone());
         let metadata = HashMap::from([
             ("ARROW:extension:name".into(), "geoarrow.point".into()),
-            ("ARROW:extension:metadata".into(), "{}".into()),
+            (
+                "ARROW:extension:metadata".into(),
+                crate::geometry::WGS84_METADATA.into(),
+            ),
         ]);
         let schema = Arc::new(Schema::new(vec![
             Field::new("point", geometry_type, false).with_metadata(metadata.clone()),
@@ -1570,7 +1736,10 @@ mod tests {
             Field::new("point", DataType::FixedSizeList(coords.clone(), 2), false).with_metadata(
                 HashMap::from([
                     ("ARROW:extension:name".into(), "geoarrow.point".into()),
-                    ("ARROW:extension:metadata".into(), "{}".into()),
+                    (
+                        "ARROW:extension:metadata".into(),
+                        crate::geometry::WGS84_METADATA.into(),
+                    ),
                 ]),
             ),
         ]));
@@ -2099,6 +2268,7 @@ mod tests {
         .await?;
 
         let ctx = SessionContext::new();
+        crate::geometry::register_geo_functions(&ctx);
         ctx.register_table("people", db.to_datafusion().await?)?;
 
         let count = |ctx: SessionContext| async move {
@@ -2236,6 +2406,7 @@ mod tests {
         db.insert_record_batch(batch).await?;
 
         let ctx = SessionContext::new();
+        crate::geometry::register_geo_functions(&ctx);
         ctx.register_table("events", db.to_datafusion().await?)?;
 
         let batches = ctx
@@ -3143,7 +3314,10 @@ mod scalar_maintenance_tests {
             Field::new("point", DataType::Struct(coordinates.clone().into()), true).with_metadata(
                 std::collections::HashMap::from([
                     ("ARROW:extension:name".into(), "geoarrow.point".into()),
-                    ("ARROW:extension:metadata".into(), "{}".into()),
+                    (
+                        "ARROW:extension:metadata".into(),
+                        crate::geometry::WGS84_METADATA.into(),
+                    ),
                 ]),
             ),
         ]));
@@ -3153,10 +3327,10 @@ mod scalar_maintenance_tests {
                 coordinates.clone().into(),
                 vec![
                     Arc::new(Float64Array::from_iter_values(
-                        ids.iter().map(|id| *id as f64),
+                        ids.iter().map(|id| (*id % 80) as f64),
                     )),
                     Arc::new(Float64Array::from_iter_values(
-                        ids.iter().map(|id| *id as f64),
+                        ids.iter().map(|id| (*id % 80) as f64),
                     )),
                 ],
                 Some(ids.iter().map(|id| id % 4 != 0).collect::<Vec<_>>().into()),

@@ -52,6 +52,7 @@ members = [
     "packages/model-provider",
     "packages/model-provider/protocol",
     "packages/types",
+    "packages/geometry",
     "packages/types/contracts",
     "packages/types/proto",
     "packages/catalog",
@@ -147,6 +148,7 @@ flow-like-catalog-embedding = { path = "packages/catalog/embedding", default-fea
 flow-like = { path = "packages/core", default-features = false, features = ["flow-metadata"] }
 flow-like-ast = { path = "packages/ast" }
 flow-like-types = { path = "packages/types", default-features = false }
+flow-like-geometry = { path = "packages/geometry" }
 flow-like-types-contracts = { path = "packages/types/contracts", default-features = false }
 flow-like-types-proto = { path = "packages/types/proto", default-features = false }
 flow-like-api = { path = "packages/api", default-features = false }

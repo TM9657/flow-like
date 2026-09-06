@@ -134,6 +134,7 @@ pub struct ArtifactHeader {
 
 /// Serialize a compiled board into a persistable artifact.
 pub fn encode_artifact(board: &CompiledBoard, registry_fingerprint: &[u8; 32]) -> Result<Vec<u8>> {
+    crate::flow::board::format::ensure_supported(board.required_board_format_version())?;
     let archive = rkyv::to_bytes::<rkyv::rancor::Error>(board)
         .map_err(|e| anyhow!("failed to serialize compiled board {}: {e}", board.id))?;
     let compressed = zstd::bulk::compress(&archive, ZSTD_LEVEL)

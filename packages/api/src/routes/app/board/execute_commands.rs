@@ -277,6 +277,7 @@ pub async fn execute_commands(
     let mut board = state
         .master_board(&sub, &app_id, &board_id, &state, None)
         .await?;
+
     let now_ms = wall_clock_ms();
     // Capture exact-key presence before global pruning. An invalid/corrupt receipt is still
     // evidence that this delivery may already have mutated the board; it must fail closed instead
@@ -400,6 +401,9 @@ pub async fn execute_commands(
         .instrument(tracing::debug_span!("execute_commands.apply", batch))
         .await
         .map_err(|error| {
+            if let Some(error) = ApiError::from_board_format_error(&error) {
+                return error;
+            }
             ApiError::unprocessable(format!(
                 "The command batch could not be applied to this board: {error}"
             ))

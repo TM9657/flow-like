@@ -1051,6 +1051,8 @@ pub fn run() {
             functions::app::create_app,
             functions::app::update_app,
             functions::app::delete_app,
+            functions::app::flowpilot_builds::read_app_build,
+            functions::app::flowpilot_builds::write_app_build,
             functions::app::app_add_package,
             functions::app::app_remove_package,
             functions::app::app_list_packages,

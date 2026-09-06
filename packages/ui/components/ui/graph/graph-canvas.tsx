@@ -2,6 +2,7 @@
 
 import { i18n as i18next, useTranslation } from "@flow-like/locales";
 import { SigmaContainer, useRegisterEvents, useSigma } from "@react-sigma/core";
+import { applyNodeCaptionLabels } from "./graph-user-caption";
 import "@react-sigma/core/lib/style.css";
 import {
 	DEFAULT_EDGE_CURVATURE,
@@ -29,6 +30,7 @@ import {
 	startTransition,
 	useCallback,
 	useEffect,
+	useLayoutEffect,
 	useMemo,
 	useRef,
 	useState,
@@ -50,9 +52,11 @@ import {
 	DEFAULT_NODE_SIZE,
 	type GraphLayoutMode,
 	type LayoutPosition as GraphPosition,
+	type ViewportDimensions,
 	applyClusterLayout,
 	computeLabelExtents,
 	computeSeedSpread,
+	computeViewportNodeSizeCap,
 	createAnchoredPosition,
 	createDeterministicPosition,
 	defaultRelaxIterations,
@@ -131,6 +135,8 @@ export interface GraphCanvasApi {
 
 export interface GraphCanvasProps {
 	data: SubgraphResult | null;
+	/** Resolved display labels, kept separate from stored node data and layout inputs. */
+	nodeLabels?: ReadonlyMap<string, string>;
 	loading?: boolean;
 	selectedNodeId?: string | null;
 	selectedEdgeKey?: string | null;
@@ -282,11 +288,12 @@ function hubNodeSize(represented: number): number {
 /** Nodes a stage seats comfortably before circles start crowding the edges out. */
 const SIZE_FIT_REFERENCE_NODES = 40;
 const MIN_FIT_SIZE_SCALE = 0.28;
-/** Stage the size ceiling is reckoned against, in CSS pixels. */
-const REFERENCE_STAGE_AREA = 1200 * 700;
 /** How much of the room a node gets its circle may fill, edge to edge. */
 const MAX_NODE_PITCH_SHARE = 0.3;
 const MIN_RENDERED_NODE_SIZE = 2;
+/** Below this the renderer has too little room to produce a useful graph. */
+const MIN_GRAPH_STAGE_WIDTH = 280;
+const MIN_GRAPH_STAGE_HEIGHT = 280;
 
 /**
  * Shrinks nodes as the sample grows, because `autoRescale` fits the whole layout
@@ -314,9 +321,16 @@ function fitSizeScale(nodeCount: number): number {
  * auto-fit can hold two nodes — is what the reader actually has, so the ceiling
  * is a share of that and the declared size only matters below it.
  */
-function maxNodeSize(nodeCount: number): number {
-	const pitch = Math.sqrt(REFERENCE_STAGE_AREA / Math.max(1, nodeCount));
-	return Math.max(MIN_RENDERED_NODE_SIZE, (pitch * MAX_NODE_PITCH_SHARE) / 2);
+function maxNodeSize(
+	nodeCount: number,
+	stage: ViewportDimensions,
+	stagePadding: number,
+): number {
+	return computeViewportNodeSizeCap(nodeCount, stage, {
+		padding: stagePadding,
+		minSize: MIN_RENDERED_NODE_SIZE,
+		maxPitchShare: MAX_NODE_PITCH_SHARE,
+	});
 }
 
 /**
@@ -610,6 +624,7 @@ interface GraphLoadingOverlayState {
 
 interface GraphBuildOptions {
 	previousPositions: ReadonlyMap<string, GraphPosition>;
+	stageDimensions: ViewportDimensions;
 	anchorNodeId?: string | null;
 	forceLayout?: boolean;
 	clusters?: ClusterModel | null;
@@ -723,6 +738,7 @@ async function buildGraphAsync(
 	isCancelled: () => boolean,
 	{
 		previousPositions,
+		stageDimensions,
 		anchorNodeId,
 		forceLayout = false,
 		clusters,
@@ -936,7 +952,8 @@ async function buildGraphAsync(
 
 	const density = graph.size / Math.max(1, graph.order);
 	const fitScale = fitSizeScale(graph.order);
-	const sizeCeiling = maxNodeSize(graph.order);
+	const stagePadding = isLarge ? 60 : 40;
+	const sizeCeiling = maxNodeSize(graph.order, stageDimensions, stagePadding);
 	const sized = await processInChunks(
 		data.nodes,
 		getNodeChunkSize(nodeCount),
@@ -956,10 +973,12 @@ async function buildGraphAsync(
 				? Math.max(styledSize, hubNodeSize(assignment.represented))
 				: styledSize;
 
-			const scaledSize = Math.max(
+			const baseRenderedSize = Math.max(
 				MIN_RENDERED_NODE_SIZE,
-				Math.min(baseSize * fitScale * (density > 4 ? 0.85 : 1), sizeCeiling),
+				baseSize * fitScale * (density > 4 ? 0.85 : 1),
 			);
+			const scaledSize = Math.min(baseRenderedSize, sizeCeiling);
+			graph.setNodeAttribute(node.id, "baseRenderedSize", baseRenderedSize);
 			graph.setNodeAttribute(node.id, "size", scaledSize);
 		},
 		(fraction) => {
@@ -1137,6 +1156,102 @@ interface HighlightState {
 	/** >1 when a filter shrank the visible set: survivors get the freed room. */
 	visibleBoost: number;
 	visibleSizeCap: number;
+}
+
+function isNodeVisible(
+	nodeId: string,
+	attrs: Record<string, unknown>,
+	highlight: HighlightState,
+): boolean {
+	if (
+		highlight.visibleNodeIds &&
+		!highlight.visibleNodeIds.has(nodeId)
+	) {
+		return false;
+	}
+	const nodeLabel = attrs.nodeLabel;
+	return !(
+		typeof nodeLabel === "string" && highlight.hiddenLabels?.has(nodeLabel)
+	);
+}
+
+/** Mirrors the reducer's size changes so viewport collision uses what Sigma draws. */
+function getRenderedNodeSize(
+	nodeId: string,
+	attrs: Record<string, unknown>,
+	highlight: HighlightState,
+): number {
+	const storedSize = attrs.size;
+	let size =
+		typeof storedSize === "number" &&
+		Number.isFinite(storedSize) &&
+		storedSize > 0
+			? storedSize
+			: DEFAULT_NODE_SIZE;
+
+	size *= highlight.visibleBoost;
+
+	if (
+		highlight.highlightedNodeIds &&
+		highlight.highlightedNodeIds.size > 0
+	) {
+		if (!highlight.highlightedNodeIds.has(nodeId)) {
+			size *= CONTEXT_DIM_NODE_SCALE;
+		}
+	} else {
+		const activeNode = highlight.selectedNodeId ?? highlight.hoveredNode;
+		if (highlight.neighborSet && activeNode) {
+			if (nodeId === activeNode) size *= 1.3;
+			else if (!highlight.neighborSet.has(nodeId)) {
+				size *= CONTEXT_DIM_NODE_SCALE;
+			}
+		}
+	}
+
+	return Math.max(
+		MIN_RENDERED_NODE_SIZE,
+		Math.min(size, highlight.visibleSizeCap),
+	);
+}
+
+function getVisibleNodeCount(
+	graph: Graph | null,
+	hiddenLabels?: ReadonlySet<string>,
+	visibleNodeIds?: ReadonlySet<string>,
+): number {
+	if (!graph) return 0;
+	if (!hiddenLabels?.size && !visibleNodeIds) return graph.order;
+
+	let count = 0;
+	graph.forEachNode((nodeId, attrs) => {
+		if (visibleNodeIds && !visibleNodeIds.has(nodeId)) return;
+		const nodeLabel = attrs.nodeLabel;
+		if (typeof nodeLabel === "string" && hiddenLabels?.has(nodeLabel)) return;
+		count += 1;
+	});
+	return count;
+}
+
+function updateHighlightSizing(
+	highlight: HighlightState,
+	graphNodeCount: number,
+	visibleNodeCount: number,
+	stage: ViewportDimensions,
+): void {
+	const effectiveNodeCount = Math.max(1, visibleNodeCount || graphNodeCount);
+	highlight.visibleBoost = Math.max(
+		1,
+		Math.min(
+			3,
+			fitSizeScale(effectiveNodeCount) /
+				fitSizeScale(Math.max(1, graphNodeCount)),
+		),
+	);
+	highlight.visibleSizeCap = maxNodeSize(
+		effectiveNodeCount,
+		stage,
+		graphNodeCount >= LARGE_THRESHOLD ? 60 : 40,
+	);
 }
 
 /**
@@ -1929,6 +2044,7 @@ function SigmaControls({
 
 export function GraphCanvas({
 	data,
+	nodeLabels,
 	loading,
 	selectedNodeId,
 	selectedEdgeKey,
@@ -2152,6 +2268,11 @@ export function GraphCanvas({
 			cancelled = true;
 		};
 	}, [data, layoutRunKey, clusters, storedScene]);
+
+	useEffect(() => {
+		if (!graph || !data) return;
+		applyNodeCaptionLabels(graph, data.nodes, nodeLabels);
+	}, [graph, data, nodeLabels]);
 
 	// Every settled build is a scene worth remembering.
 	useEffect(() => {

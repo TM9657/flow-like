@@ -66,11 +66,27 @@ impl NodeLogic for TryTransformNode {
             VariableType::Byte => value_to_byte(&input_value, &mut out_value),
             VariableType::Date => value_to_date(&input_value, &mut out_value),
             VariableType::PathBuf => value_to_pathbuf(&input_value, &mut out_value),
+            VariableType::Geometry => {
+                let kind = flow_like::flow::variable::geometry_kind_from_schema(
+                    output_value.schema.as_deref(),
+                )?;
+                match flow_like_types::geometry::canonicalize_geometry(&input_value, kind) {
+                    Ok(value) => {
+                        out_value = value;
+                        true
+                    }
+                    Err(_) => false,
+                }
+            }
             VariableType::Execution => false,
             VariableType::Generic => false,
         };
 
-        context.set_pin_value("type_out", out_value).await?;
+        if success || out_type != VariableType::Geometry {
+            context.set_pin_value("type_out", out_value).await?;
+        } else {
+            output_value.reset().await;
+        }
         context.set_pin_value("success", json!(success)).await?;
 
         Ok(())

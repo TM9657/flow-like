@@ -190,6 +190,9 @@ pub async fn apply_flowscript(
     let result = match result {
         Ok(result) => result,
         Err(error) => {
+            if let Some(error) = ApiError::from_board_format_error(&error) {
+                return Err(error);
+            }
             let message = error.to_string();
             capture(
                 OUTCOME_ERROR,

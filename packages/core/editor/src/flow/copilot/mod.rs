@@ -4,6 +4,8 @@
 //! interaction with flow graphs, supporting both explanation and modification.
 
 pub mod assistant;
+mod app_build_tool_spec;
+mod app_build_prompt;
 mod context;
 mod declarations;
 pub mod evaluation;
@@ -28,7 +30,7 @@ pub use assistant::{
     AttachmentManifestEntry, GlobalDataStudioContext, GlobalOpenBoardContext, PlatformContextInput,
     PlatformSpecialist, WebResearchCapability, build_platform_context, data_studio_section,
     global_assistant_system_prompt, global_assistant_system_prompt_for, open_board_section,
-    run_platform_chat, run_specialist_chat,
+	run_ontology_query_chat, run_platform_chat, run_specialist_chat,
 };
 pub use context::{
     BoardLayoutContext, EdgeContext, GraphContext, LayerCacheContext, LayerContext, NodeContext,

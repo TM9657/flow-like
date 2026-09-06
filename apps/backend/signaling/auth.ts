@@ -214,16 +214,26 @@ export function extractRealtimeToken(protocolHeader: string | null): string {
 	return token;
 }
 
-export function deriveRealtimeTopic(appId: unknown, boardId: unknown): string {
+export function deriveRealtimeTopic(
+	appId: unknown,
+	boardId: unknown,
+	boardFormatVersion: unknown = 1,
+): string {
 	if (
 		typeof appId !== "string" ||
 		typeof boardId !== "string" ||
 		!ID_PATTERN.test(appId) ||
-		!ID_PATTERN.test(boardId)
+		!ID_PATTERN.test(boardId) ||
+		typeof boardFormatVersion !== "number" ||
+		!Number.isInteger(boardFormatVersion) ||
+		boardFormatVersion < 1 ||
+		boardFormatVersion > 0xffff_ffff
 	) {
 		throw new RealtimeAuthError();
 	}
-	return `${appId}:${boardId}`;
+	const suffix =
+		boardFormatVersion === 1 ? "" : `:format-v${boardFormatVersion}`;
+	return `${appId}:${boardId}${suffix}`;
 }
 
 function requiredBoundedString(value: unknown, maximum: number): string {
@@ -310,7 +320,11 @@ export async function createRealtimeAuthenticator(config: RealtimeAuthConfig) {
 			const subject = requiredBoundedString(payload.sub, 256);
 			requiredBoundedString(payload.jti, 256);
 			return {
-				allowedTopic: deriveRealtimeTopic(payload.app_id, payload.board_id),
+				allowedTopic: deriveRealtimeTopic(
+					payload.app_id,
+					payload.board_id,
+					payload.board_format_version,
+				),
 				expiresAtMs: expiresAt * 1000,
 				subject,
 				insecureLocalDev: false,

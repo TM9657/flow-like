@@ -57,6 +57,7 @@ pub fn reconstruct_board(
     board_dir: Path,
     catalog: Option<&FlowNodeRegistryInner>,
 ) -> Result<Board> {
+    compiled.validate()?;
     let pin_ids: Vec<&str> = compiled.pins.iter().map(|p| p.id.as_str()).collect();
 
     let mut layers: HashMap<String, Layer> = HashMap::with_capacity(compiled.layers.len());
@@ -116,7 +117,8 @@ pub fn reconstruct_board(
         variables.insert(v.id.clone(), v);
     }
 
-    Ok(Board {
+    let board = Board {
+        format_version: compiled.required_board_format_version(),
         id: compiled.id.clone(),
         name: compiled.name.clone(),
         description: String::new(),
@@ -140,7 +142,9 @@ pub fn reconstruct_board(
         logic_nodes: HashMap::new(),
         app_state: None,
         pin_index: None,
-    })
+    };
+    board.ensure_supported_format()?;
+    Ok(board)
 }
 
 fn reconstruct_node(

@@ -147,6 +147,13 @@ export function apiResponseError(
 		}
 	}
 
+	if (response.status === 426) {
+		message = message
+			? `${message} Update FlowLike to a version that supports this board, then reopen it.`
+			: "Update FlowLike to a version that supports this board, then reopen it.";
+		code ??= "CLIENT_UPGRADE_REQUIRED";
+	}
+
 	errorId =
 		errorId ??
 		nonEmptyString(response.headers.get("x-error-id")) ??

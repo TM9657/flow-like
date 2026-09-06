@@ -83,6 +83,8 @@ fn compile_board_inner(
     board: &Board,
     catalog: Option<&FlowNodeRegistryInner>,
 ) -> Result<CompiledBoard> {
+    board.ensure_supported_format()?;
+    board.validate_geometry_contracts()?;
     let mut layer_idx: AHashMap<&str, u32> = AHashMap::with_capacity(board.layers.len());
     for (i, layer_id) in sorted_keys(&board.layers).iter().enumerate() {
         layer_idx.insert(layer_id.as_str(), i as u32);
@@ -219,6 +221,7 @@ fn compile_board_inner(
     }
 
     Ok(CompiledBoard {
+        board_format_version: board.required_format_version(),
         id: board.id.clone(),
         name: board.name.clone(),
         version: board.version,
@@ -388,6 +391,12 @@ fn splicable_reroute(node: &Node) -> Option<(String, String)> {
         }
     }
     let (input, output) = (input?, output?);
+    if input.data_type == crate::flow::variable::VariableType::Geometry
+        || output.data_type == crate::flow::variable::VariableType::Geometry
+    {
+        // Retain the runtime validator even when a Generic peer supplies the value.
+        return None;
+    }
     if input.depends_on.is_empty() && input.default_value.is_some() {
         return None;
     }

@@ -32,7 +32,8 @@ use flow_like::flow::copilot::{
     build_platform_context, default_flowscript_module_templates,
     emit_validation_requires_flowscript, enrich_node_metadata, flowscript_workspace_envelope,
     global_assistant_system_prompt, profile_flowscript_candidate,
-    render_flowscript_modular_partial_result, run_platform_chat, run_specialist_chat,
+	render_flowscript_modular_partial_result, run_ontology_query_chat, run_platform_chat,
+	run_specialist_chat,
     score_catalog_metadata, validate_model_facing_emit_commands_scope,
     workflow_authoring_defers_runtime_tool, workflow_authoring_tool_allowed,
     workflow_runtime_verification_deferred_payload, workflow_strategy_fingerprint,
@@ -3206,6 +3207,7 @@ async fn run_bits_specialist_chat(
     tool_context: Option<FrontendToolContext>,
     host_context_guidance: Option<String>,
     nested: bool,
+	read_only: bool,
     request_id: Option<String>,
     channel: Channel<String>,
 ) -> Result<UnifiedCopilotResponse, String> {
@@ -3266,17 +3268,33 @@ async fn run_bits_specialist_chat(
     let on_token = move |token: String| {
         let _ = channel.send(token);
     };
-    let specialist_chat = run_specialist_chat(
-        state,
-        profile,
-        specialist,
-        context,
-        user_prompt,
-        model_id,
-        auth_token,
-        bridge,
-        Some(on_token),
-    );
+	let specialist_chat = async {
+		if read_only && matches!(specialist, PlatformSpecialist::DataStudio) {
+			run_ontology_query_chat(
+				state,
+				profile,
+				user_prompt,
+				model_id,
+				auth_token,
+				bridge,
+				Some(on_token),
+			)
+			.await
+		} else {
+			run_specialist_chat(
+				state,
+				profile,
+				specialist,
+				context,
+				user_prompt,
+				model_id,
+				auth_token,
+				bridge,
+				Some(on_token),
+			)
+			.await
+		}
+	};
     let message = tokio::select! {
         result = specialist_chat => result.map_err(|error| error.to_string())?,
         _ = run_cancellation.cancelled() => {
@@ -3515,6 +3533,7 @@ pub async fn copilot_chat(
             tool_context,
             host_context_guidance,
             nested,
+			read_only,
             request_id,
             channel,
         )
@@ -5396,7 +5415,9 @@ async fn external_code_agent_chat_internal(
         &raw_user_prompt,
         tool_channel,
     );
-    if read_only {
+	if read_only && matches!(scope, CopilotScope::DataStudio) {
+		tools.clear();
+	} else if read_only {
         tools.retain(|(tool, _)| is_flowpilot_read_only_tool(&tool.name));
     } else if workflow_edit_request {
         // A live FlowScript already contains the graph structure. Hiding legacy/manual discovery
@@ -6151,7 +6172,9 @@ async fn copilot_sdk_chat_internal(
         &raw_user_prompt,
         tool_channel,
     );
-    if read_only {
+	if read_only && matches!(scope, CopilotScope::DataStudio) {
+		tools.clear();
+	} else if read_only {
         tools.retain(|(tool, _)| is_flowpilot_read_only_tool(&tool.name));
     } else if workflow_edit_request {
         tools.retain(|(tool, _)| workflow_authoring_tool_allowed(&tool.name));
@@ -14705,9 +14728,11 @@ async fn run_external_agent_invocation(
                         }
                     }
 
-                    if let Some(frame) =
-                        external_agent_reasoning_frame(invocation.backend, &value, &mut stream_state)
-                    {
+                    if let Some(frame) = external_agent_reasoning_frame(
+                        invocation.backend,
+                        &value,
+                        &mut stream_state,
+                    ) {
                         let frame = correlate_stream_frame(&frame, parent_request_id.as_deref());
                         let _ = channel.send(frame);
                     }
@@ -16816,7 +16841,10 @@ fn build_flowpilot_agent_surface(
                 None => flow_like::copilot::prompts::board_sdk_system_prompt(),
             },
             CopilotScope::Frontend => flow_like::copilot::prompts::frontend_sdk_system_prompt(),
-            CopilotScope::DataStudio => flow_like::copilot::prompts::data_studio_system_prompt(""),
+			CopilotScope::DataStudio if read_only => {
+				flow_like::copilot::prompts::ontology_query_system_prompt()
+			}
+			CopilotScope::DataStudio => flow_like::copilot::prompts::data_studio_system_prompt(""),
             CopilotScope::Scout => flow_like::copilot::prompts::scout_system_prompt(""),
             CopilotScope::Research => {
                 flow_like::copilot::prompts::research_system_prompt(&format!(

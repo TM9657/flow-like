@@ -55,9 +55,13 @@ impl<const N: usize> InlineVisitedPins<N> {
 
 pub async fn evaluate_pin_value_reference(pin: Arc<InternalPin>) -> flow_like_types::Result<Value> {
     let mut current_pin = pin;
+    let mut geometry_contracts = Vec::new();
     let mut visited_pins = InlineVisitedPins::<16>::new();
 
     loop {
+        if current_pin.data_type == super::variable::VariableType::Geometry {
+            geometry_contracts.push(current_pin.clone());
+        }
         // Check for circular dependencies
         if !visited_pins.insert(&current_pin) {
             return Err(flow_like_types::anyhow!(
@@ -67,7 +71,7 @@ pub async fn evaluate_pin_value_reference(pin: Arc<InternalPin>) -> flow_like_ty
 
         // Case 1: Pin has a value - directly return from here
         if let Some(value) = current_pin.get_raw_value().await {
-            return Ok(value);
+            return validate_geometry_pin_chain(value, &geometry_contracts);
         }
 
         // Case 2: Pin depends on another pin
@@ -81,7 +85,10 @@ pub async fn evaluate_pin_value_reference(pin: Arc<InternalPin>) -> flow_like_ty
 
         // Case 3: Use default value if available
         if let Some(default_value) = &current_pin.default_value {
-            return Ok(default_value.as_ref().clone());
+            return validate_geometry_pin_chain(
+                default_value.as_ref().clone(),
+                &geometry_contracts,
+            );
         }
 
         // Case 4: No value found
@@ -107,10 +114,14 @@ pub async fn evaluate_pin_value(
     overrides: &Option<BTreeMap<String, Arc<Value>>>,
 ) -> flow_like_types::Result<Value> {
     let mut current_pin = pin;
+    let mut geometry_contracts = Vec::new();
     let mut visited_pins = InlineVisitedPins::<16>::new();
     let has_overrides = overrides.is_some();
 
     loop {
+        if current_pin.data_type == super::variable::VariableType::Geometry {
+            geometry_contracts.push(current_pin.clone());
+        }
         if !visited_pins.insert(&current_pin) {
             return Err(flow_like_types::anyhow!(
                 "Detected circular dependency in pin chain"
@@ -119,7 +130,10 @@ pub async fn evaluate_pin_value(
 
         // Check overrides first — they short-circuit the entire chain
         if let Some(found_override) = overrides.as_ref().and_then(|map| map.get(current_pin.id())) {
-            return Ok(found_override.as_ref().clone());
+            return validate_geometry_pin_chain(
+                found_override.as_ref().clone(),
+                &geometry_contracts,
+            );
         }
 
         let deps = current_pin.depends_on();
@@ -130,7 +144,7 @@ pub async fn evaluate_pin_value(
         // data from previous invocations due to dual-write. Only fall back to
         // shared pin at leaf pins (no deps) where it's the sole value source.
         if !has_overrides && let Some(value) = current_pin.get_raw_value().await {
-            return Ok(value);
+            return validate_geometry_pin_chain(value, &geometry_contracts);
         }
 
         if let Some(dep_pin) = has_deps {
@@ -140,11 +154,14 @@ pub async fn evaluate_pin_value(
 
         // Leaf pin — no dependency chain to follow. Use shared pin or default.
         if has_overrides && let Some(value) = current_pin.get_raw_value().await {
-            return Ok(value);
+            return validate_geometry_pin_chain(value, &geometry_contracts);
         }
 
         if let Some(default_value) = &current_pin.default_value {
-            return Ok(default_value.as_ref().clone());
+            return validate_geometry_pin_chain(
+                default_value.as_ref().clone(),
+                &geometry_contracts,
+            );
         }
 
         return Err(flow_like_types::anyhow!(
@@ -154,6 +171,16 @@ pub async fn evaluate_pin_value(
     }
 }
 
+fn validate_geometry_pin_chain(
+    value: Value,
+    pins: &[Arc<InternalPin>],
+) -> flow_like_types::Result<Value> {
+    for pin in pins {
+        pin.validate_value(&value)?;
+    }
+    Ok(value)
+}
+
 #[cfg(test)]
 mod tests {
     use std::{
@@ -161,7 +188,7 @@ mod tests {
         sync::Arc,
     };
 
-    use flow_like_types::{json::json, tokio};
+    use flow_like_types::{Value, json::json, tokio};
 
     use super::{InlineVisitedPins, evaluate_pin_value, evaluate_pin_value_reference};
     use crate::flow::{
@@ -190,6 +217,36 @@ mod tests {
             },
             false,
         ))
+    }
+
+    #[tokio::test]
+    async fn geometry_input_validates_generic_sources_and_overrides() {
+        use flow_like_types::geometry::{GeometryKind, marker};
+        let source = internal_pin(0);
+        let mut node = crate::flow::node::Node::new("geo", "Geometry", "", "");
+        let pin = node.add_input_pin("point", "Point", "", VariableType::Geometry);
+        pin.schema = Some(marker(GeometryKind::Point).into());
+        let consumer = Arc::new(InternalPin::new(pin, false));
+        consumer.init_depends_on(vec![Arc::downgrade(&source)]);
+        let point = json!({"type":"Point","coordinates":[13.405,52.52]});
+        source.set_value(point.clone()).await;
+        assert_eq!(
+            evaluate_pin_value(consumer.clone(), &None).await.unwrap(),
+            point
+        );
+        source
+            .set_value(json!({"type":"MultiPoint","coordinates":[]}))
+            .await;
+        assert!(
+            evaluate_pin_value_reference(consumer.clone())
+                .await
+                .is_err()
+        );
+        let overrides = Some(BTreeMap::from([(
+            source.id.to_string(),
+            Arc::new(Value::Null),
+        )]));
+        assert!(evaluate_pin_value(consumer, &overrides).await.is_err());
     }
 
     #[test]

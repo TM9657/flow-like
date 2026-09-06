@@ -9,6 +9,7 @@ import {
 	applyClusterLayout,
 	computeLabelExtents,
 	computeSeedSpread,
+	computeViewportNodeSizeCap,
 	createDeterministicPosition,
 	getLayoutBounds,
 	packClusterDiscs,
@@ -109,6 +110,71 @@ describe("relaxOverlaps", () => {
 		const graph = buildGraph(1, () => ({ x: 3, y: 4 }));
 		expect(relaxOverlaps(graph, graph.nodes())).toBe(0);
 		expect(graph.getNodeAttribute("n0", "x")).toBe(3);
+	});
+
+	test("resolves screen-pixel radii through a viewport coordinate mapper", () => {
+		const graph = new Graph();
+		graph.addNode("left", { x: 0, y: 0, size: 10 });
+		graph.addNode("right", { x: 0.1, y: 0, size: 10 });
+
+		relaxOverlaps(graph, ["left", "right"], {
+			iterations: 200,
+			coordinateMapper: {
+				fromGraph: ({ x, y }) => ({ x: x * 100, y: y * 100 }),
+				toGraph: ({ x, y }) => ({ x: x / 100, y: y / 100 }),
+			},
+		});
+
+		const screenDistance =
+			Math.abs(
+				(graph.getNodeAttribute("right", "x") as number) -
+					(graph.getNodeAttribute("left", "x") as number),
+			) * 100;
+		expect(screenDistance).toBeGreaterThanOrEqual(20 + NODE_GAP - 1e-6);
+	});
+
+	test("uses reducer-adjusted radii in the selected collision space", () => {
+		const graph = new Graph();
+		graph.addNode("selected", { x: 0, y: 0, size: 8 });
+		graph.addNode("other", { x: 1, y: 0, size: 8 });
+
+		relaxOverlaps(graph, ["selected", "other"], {
+			iterations: 200,
+			radiusForNode: (nodeId) => (nodeId === "selected" ? 16 : 8),
+		});
+
+		const distance = Math.abs(
+			(graph.getNodeAttribute("other", "x") as number) -
+				(graph.getNodeAttribute("selected", "x") as number),
+		);
+		expect(distance).toBeGreaterThanOrEqual(24 + NODE_GAP - 1e-6);
+	});
+});
+
+describe("computeViewportNodeSizeCap", () => {
+	test("shrinks the ceiling with the live stage", () => {
+		const desktop = computeViewportNodeSizeCap(
+			100,
+			{ width: 1200, height: 700 },
+			{ padding: 40 },
+		);
+		const compact = computeViewportNodeSizeCap(
+			100,
+			{ width: 480, height: 320 },
+			{ padding: 40 },
+		);
+
+		expect(compact).toBeLessThan(desktop);
+		expect(compact).toBeGreaterThanOrEqual(2);
+	});
+
+	test("returns the minimum for an unusable stage", () => {
+		expect(
+			computeViewportNodeSizeCap(20, { width: 0, height: 500 }),
+		).toBe(2);
+		expect(
+			computeViewportNodeSizeCap(20, { width: Number.NaN, height: 500 }),
+		).toBe(2);
 	});
 });
 

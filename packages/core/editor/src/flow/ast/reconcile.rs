@@ -3149,6 +3149,9 @@ fn variable_default_value(var: &VarDecl) -> Option<flow_like_types::Value> {
 }
 
 fn variable_data_type(var: &VarDecl) -> &'static str {
+    if matches!(var.ty.base.as_str(), "geometry" | "Geometry") {
+        return "Geometry";
+    }
     if var.schema.is_some() {
         return "Struct";
     }
@@ -3163,6 +3166,7 @@ fn variable_data_type(var: &VarDecl) -> &'static str {
         "any" | "Generic" => "Generic",
         "Struct" => "Struct",
         "bytes" | "Byte" => "Byte",
+        "geometry" | "Geometry" => "Geometry",
         _ => "Struct",
     }
 }
@@ -3368,7 +3372,10 @@ fn execution_pin_metadata(name: &str, friendly_name: &str) -> PinMetadata {
 }
 
 fn param_pin_metadata(param: &Param, interface_schemas: &HashMap<String, String>) -> PinMetadata {
-    let schema = interface_schemas.get(&param.ty.base).cloned();
+    let schema = param
+        .ty
+        .geometry_schema()
+        .or_else(|| interface_schemas.get(&param.ty.base).cloned());
     let data_type = type_ref_data_type(&param.ty).to_string();
     PinMetadata {
         name: param.name.clone(),
@@ -3409,7 +3416,10 @@ fn param_output_pin_def(
     param: &Param,
     interface_schemas: &HashMap<String, String>,
 ) -> PlaceholderPinDef {
-    let schema = interface_schemas.get(&param.ty.base).cloned();
+    let schema = param
+        .ty
+        .geometry_schema()
+        .or_else(|| interface_schemas.get(&param.ty.base).cloned());
     PlaceholderPinDef {
         name: param.name.clone(),
         friendly_name: param.name.clone(),
@@ -3510,7 +3520,10 @@ fn layer_pin_from_param(
     pin_type: &str,
     interface_schemas: &HashMap<String, String>,
 ) -> LayerPinMetadata {
-    let schema = interface_schemas.get(&param.ty.base).cloned();
+    let schema = param
+        .ty
+        .geometry_schema()
+        .or_else(|| interface_schemas.get(&param.ty.base).cloned());
     LayerPinMetadata {
         name: param.name.clone(),
         friendly_name: param.name.clone(),
@@ -3545,6 +3558,7 @@ fn type_ref_data_type(ty: &TypeRef) -> &'static str {
         "any" | "Generic" => "Generic",
         "Struct" => "Struct",
         "bytes" | "Byte" => "Byte",
+        "geometry" | "Geometry" => "Geometry",
         _ => "Struct",
     }
 }
@@ -3559,6 +3573,9 @@ fn type_ref_value_type(ty: &TypeRef) -> &'static str {
 }
 
 fn visible_variable_schema(ast: &BoardAst, var: &VarDecl) -> Option<String> {
+    if matches!(var.ty.base.as_str(), "geometry" | "Geometry") {
+        return var.ty.geometry_schema().or_else(|| var.schema.clone());
+    }
     let schema = var.schema.as_deref()?;
     let interface_name = flow_like_ast::interface_name_for_schema(&ast.interfaces, schema)?;
     let interface = ast
@@ -4864,6 +4881,22 @@ fn nullable_contract_matches(left: &str, right: &str) -> bool {
     same_as(left, right) || same_as(right, left)
 }
 
+fn geometry_schemas_are_compatible(source: Option<&str>, target: Option<&str>) -> bool {
+    let kind = |schema: Option<&str>| -> Option<Option<flow_like_types::geometry::GeometryKind>> {
+        match schema {
+            None => Some(None),
+            Some(schema) => flow_like_types::geometry::kind_from_schema(schema)
+                .ok()
+                .flatten()
+                .map(Some),
+        }
+    };
+    match (kind(source), kind(target)) {
+        (Some(source), Some(target)) => flow_like_types::geometry::compatible(source, target),
+        _ => false,
+    }
+}
+
 #[allow(clippy::too_many_arguments)]
 fn schema_constraints_are_compatible(
     input_name: &str,
@@ -4880,6 +4913,11 @@ fn schema_constraints_are_compatible(
 ) -> bool {
     let input_schema = normalized_pin_schema(input_schema, refs);
     let output_schema = normalized_pin_schema(output_schema, refs);
+
+    if input_data_type == "Geometry" && output_data_type == "Geometry" {
+        return input_value_type == output_value_type
+            && geometry_schemas_are_compatible(output_schema.as_deref(), input_schema.as_deref());
+    }
 
     // struct_make/struct_break/struct_set/struct_cast boundary pins adopt the connected schema
     // dynamically. Preserve that behavior before applying the ordinary two-sided schema equality
@@ -5021,6 +5059,13 @@ fn variable_assignment_schemas_are_compatible(
     output: &PlannedOutputType,
     refs: &HashMap<String, String>,
 ) -> bool {
+    if input.data_type == "Geometry" && output.data_type == "Geometry" {
+        return input.value_type == output.value_type
+            && geometry_schemas_are_compatible(
+                normalized_pin_schema(output.schema.as_deref(), refs).as_deref(),
+                normalized_pin_schema(input.schema.as_deref(), refs).as_deref(),
+            );
+    }
     match (
         normalized_pin_schema(input.schema.as_deref(), refs),
         normalized_pin_schema(output.schema.as_deref(), refs),
@@ -6724,6 +6769,14 @@ fn function_boundary_contract_matches(
         || live.is_generic != authored.is_generic
     {
         return false;
+    }
+
+    if live.data_type == "Geometry" {
+        let live_schema = normalized_pin_schema(live.schema.as_deref(), refs);
+        let authored_schema = normalized_pin_schema(authored.schema.as_deref(), refs);
+        // An anchored function signature must retain its exact subtype in both directions.
+        return geometry_schemas_are_compatible(live_schema.as_deref(), authored_schema.as_deref())
+            && geometry_schemas_are_compatible(authored_schema.as_deref(), live_schema.as_deref());
     }
 
     // Legacy lowering could not surface a live boundary schema in FlowScript. Do not interpret a
@@ -13740,7 +13793,11 @@ impl<'a> StructuralPlanner<'a> {
         if current.as_ref() == Some(literal) {
             return;
         }
-        let (data_type, value_type) = infer_variable_types(Some(literal));
+        let (data_type, value_type) = if existing.data_type == VariableType::Geometry {
+            ("Geometry".to_string(), format!("{:?}", existing.value_type))
+        } else {
+            infer_variable_types(Some(literal))
+        };
         let data_type = (data_type != format!("{:?}", existing.data_type)).then_some(data_type);
         let value_type = (value_type != format!("{:?}", existing.value_type)).then_some(value_type);
         self.update_commands.push(BoardCommand::UpdateVariable {
@@ -13777,13 +13834,22 @@ impl<'a> StructuralPlanner<'a> {
     ) -> Option<ValueSource> {
         let name =
             self.unique_local_variable_name(&format!("{function_name}_{}", return_param.name));
-        let (data_type, value_type) = infer_variable_types(Some(&literal));
+        let (data_type, value_type, schema) = if return_param.data_type == "Geometry" {
+            (
+                return_param.data_type.clone(),
+                return_param.value_type.clone(),
+                return_param.schema.clone(),
+            )
+        } else {
+            let (data_type, value_type) = infer_variable_types(Some(&literal));
+            (data_type, value_type, None)
+        };
         let variable_id = self.create_typed_local_variable(
             &name,
             Some(literal),
             data_type,
             value_type,
-            None,
+            schema,
             target_layer.clone(),
         );
         self.add_variable_get_source(&variable_id, target_layer)
@@ -16542,6 +16608,85 @@ mod tests {
             friendly_name: name.to_string(),
             index,
         }
+    }
+
+    #[test]
+    fn geometry_compatibility_is_directional_for_pins_variables_and_function_boundaries() {
+        use flow_like_types::geometry::{GeometryKind, marker};
+        let point = marker(GeometryKind::Point);
+        let polygon = marker(GeometryKind::Polygon);
+        let refs = HashMap::from([("point-ref".to_string(), point.to_string())]);
+        for (source, target, expected) in [
+            (Some(point), Some(point), true),
+            (Some(point), Some(polygon), false),
+            (Some(point), None, true),
+            (None, Some(point), false),
+            (None, None, true),
+            (Some("point-ref"), Some(point), true),
+            (Some("{}"), None, false),
+        ] {
+            for container in ["Normal", "Array", "HashSet", "HashMap"] {
+                let mut input = pin_meta("value_in", "Geometry", PinType::Input);
+                input.schema = target.map(str::to_string);
+                input.value_type = container.to_string();
+                let output = PlannedOutputType {
+                    source: "geometry-node".to_string(),
+                    pin_name: "value_ref".to_string(),
+                    data_type: "Geometry".to_string(),
+                    value_type: container.to_string(),
+                    is_generic: false,
+                    schema: source.map(str::to_string),
+                    enforce_schema: false,
+                };
+                assert_eq!(
+                    variable_assignment_schemas_are_compatible(&input, &output, &refs),
+                    expected,
+                    "variable assignment {source:?} -> {target:?}, {container}"
+                );
+                for enforced in [false, true] {
+                    assert_eq!(
+                        schema_constraints_are_compatible(
+                            "value_in",
+                            "Geometry",
+                            container,
+                            target,
+                            enforced,
+                            "value_ref",
+                            "Geometry",
+                            container,
+                            source,
+                            enforced,
+                            &refs,
+                        ),
+                        expected,
+                        "{source:?} -> {target:?}, {container}, enforced={enforced}"
+                    );
+                }
+            }
+        }
+        let ast = flow_like_ast::parse("const origin: geometry<Point>\nfunction shape(position: geometry<Point>): (value: geometry) {\n    return position\n}\n").unwrap();
+        assert_eq!(variable_data_type(&ast.variables[0]), "Geometry");
+        assert_eq!(
+            visible_variable_schema(&ast, &ast.variables[0]).as_deref(),
+            Some(point)
+        );
+        let param = &ast.functions[0].params[0];
+        assert_eq!(
+            param_pin_metadata(param, &HashMap::new()).schema.as_deref(),
+            Some(point)
+        );
+        assert_eq!(
+            param_output_pin_def(param, &HashMap::new())
+                .schema
+                .as_deref(),
+            Some(point)
+        );
+        assert_eq!(
+            layer_pin_from_param(param, "Input", &HashMap::new())
+                .schema
+                .as_deref(),
+            Some(point)
+        );
     }
 
     #[test]
@@ -23236,6 +23381,71 @@ function constantFlag(): (flag: bool) {
             "re-applying the board's own lowered script must be a no-op: {:?}",
             result.commands
         );
+    }
+
+    #[tokio::test]
+    async fn geometry_literal_returns_keep_subtypes_when_applied_and_edited() {
+        use crate::state::{FlowLikeConfig, FlowLikeState};
+        use crate::utils::http::HTTPClient;
+        use flow_like_types::geometry::{GeometryKind, marker};
+        use std::sync::Arc;
+
+        let mut variable_get = Node::new("variable_get", "Get Variable", "", "variables");
+        variable_get.add_input_pin("var_ref", "Variable", "", VariableType::String);
+        variable_get.add_output_pin("value_ref", "Value", "", VariableType::Generic);
+        let catalog_nodes = vec![variable_get];
+        let mut board = empty_board();
+        let state = Arc::new(FlowLikeState::new(
+            FlowLikeConfig::new(),
+            HTTPClient::new_without_refetch(),
+        ));
+        for longitude in [13, 14] {
+            let script = format!(
+                "function origin(): (position: geometry<Point>) {{\n    return {{\"type\":\"Point\",\"coordinates\":[{longitude},52]}}\n}}\n"
+            );
+            let applied = super::super::apply_flowscript_to_board(
+                &mut board,
+                &script,
+                &catalog_nodes,
+                state.clone(),
+                None,
+                false,
+            )
+            .await
+            .expect("geometry literal return applies");
+            assert!(applied.diagnostics.is_empty(), "{:?}", applied.diagnostics);
+            let variables: Vec<_> = board
+                .layers
+                .values()
+                .flat_map(|layer| layer.variables.values())
+                .collect();
+            assert!(
+                board.variables.is_empty(),
+                "function defaults stay inside their layer"
+            );
+            assert_eq!(variables.len(), 1);
+            let variable = variables[0];
+            assert_eq!(variable.data_type, VariableType::Geometry);
+            let schema = variable.schema.as_deref().unwrap();
+            assert_eq!(
+                board.refs.get(schema).map(String::as_str).unwrap_or(schema),
+                marker(GeometryKind::Point)
+            );
+            let value: flow_like_types::Value =
+                flow_like_types::json::from_slice(variable.default_value.as_deref().unwrap())
+                    .unwrap();
+            assert_eq!(value["coordinates"][0], longitude);
+            let text = anchored_text(&board);
+            assert!(text.contains("geometry<Point>"), "{text}");
+            let catalog: Vec<NodeMetadata> = catalog_nodes.iter().map(node_to_metadata).collect();
+            let reconciled = reconcile_text_with_catalog(&board, &text, &catalog);
+            assert!(
+                reconciled.diagnostics.is_empty(),
+                "{:?}",
+                reconciled.diagnostics
+            );
+            assert!(reconciled.commands.is_empty(), "{:?}", reconciled.commands);
+        }
     }
 
     #[tokio::test]

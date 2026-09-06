@@ -7,8 +7,8 @@ use crate::host_functions::HostState;
 use crate::limits::WasmCapabilities;
 use crate::llm_message::sdk_message_content;
 use crate::memory::WasmAllocator;
-use flow_like_storage::object_store::ObjectStoreExt;
 use flow_like_storage::object_store::path::Path;
+use flow_like_storage::object_store::ObjectStoreExt;
 use std::sync::Arc;
 use wasmtime::{Caller, Linker, Memory, Ref, Val};
 

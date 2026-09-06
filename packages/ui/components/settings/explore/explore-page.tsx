@@ -160,6 +160,7 @@ export const ExploreDataPage: React.FC<ExploreDataPageProps> = ({ appId }) => {
 			overlayName,
 			overlayNames,
 			selectedTable: table || undefined,
+			userScoped,
 		});
 		return () => setDataStudioSurface(null);
 	}, [
@@ -169,6 +170,7 @@ export const ExploreDataPage: React.FC<ExploreDataPageProps> = ({ appId }) => {
 		overlayName,
 		overlayNames,
 		table,
+		userScoped,
 		setDataStudioSurface,
 	]);
 
@@ -181,9 +183,11 @@ export const ExploreDataPage: React.FC<ExploreDataPageProps> = ({ appId }) => {
 			<OverlayView
 				appId={appId}
 				overlayId={overlayParam}
+				userScoped={userScoped}
 				onBack={() => {
 					const params = new URLSearchParams(searchParams?.toString() ?? "");
 					params.delete("overlay");
+					params.delete("scope");
 					router.push(`${pathname}?${params.toString()}`);
 				}}
 			/>
@@ -1445,8 +1449,9 @@ const OverlayDescription: React.FC<{ description: string }> = ({
 const OverlayView: React.FC<{
 	appId: string;
 	overlayId: string;
+	userScoped?: boolean;
 	onBack: () => void;
-}> = ({ appId, overlayId, onBack }) => {
+}> = ({ appId, overlayId, userScoped, onBack }) => {
 	const { t } = useTranslation("settings");
 	const [overlay, setOverlay] = useState<GraphOverlay | null>(null);
 
@@ -1474,6 +1479,7 @@ const OverlayView: React.FC<{
 				<OntologyExplorer
 					appId={appId}
 					overlayId={overlayId}
+					userScoped={userScoped}
 					allowCypher
 					allowStyleEdit
 					onOverlayLoaded={setOverlay}

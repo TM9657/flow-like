@@ -27,7 +27,15 @@ import {
 } from "../../../lib/uint8";
 import { cn } from "../../../lib/utils";
 
+import {
+	geometrySchemaField,
+	normalizeSchemaGeometryValues,
+} from "../../../lib/geometry-schema";
+import { GeometryValueInput } from "./geometry-variable";
+
 interface SchemaProperty {
+	"x-flow-like-type"?: string;
+	"x-geometry"?: string;
 	$ref?: string;
 	allOf?: SchemaProperty[];
 	anyOf?: SchemaProperty[];
@@ -198,6 +206,7 @@ const defaultForSchema = (
 	const type = schemaType(resolved, root);
 
 	if (resolved.default !== undefined) return resolved.default;
+	if (geometrySchemaField(schema, root)) return null;
 	if (type === "string") return "";
 	if (type === "number" || type === "integer") return 0;
 	if (type === "boolean") return false;
@@ -458,17 +467,20 @@ export function StructVariable({
 		(newJson: string) => {
 			setJsonValue(newJson);
 			try {
-				const parsed = JSON.parse(newJson);
+				const parsed = normalizeSchemaGeometryValues(
+					JSON.parse(newJson),
+					schema,
+				);
 				setJsonError(null);
 				onChange({
 					...variable,
 					default_value: convertJsonToUint8Array(parsed),
 				});
 			} catch (e) {
-				setJsonError("Invalid JSON");
+				setJsonError(e instanceof Error ? e.message : "Invalid JSON");
 			}
 		},
-		[onChange, variable],
+		[onChange, variable, schema],
 	);
 
 	const handleFieldChange = useCallback((path: string[], value: unknown) => {
@@ -519,6 +531,21 @@ export function StructVariable({
 			nextSeenRefs.add(prop.$ref);
 		}
 
+		const geometry = geometrySchemaField(prop, schema);
+		if (geometry)
+			return (
+				<div key={key} className="space-y-1">
+					<Label className="text-xs">{label}</Label>
+					<GeometryValueInput
+						{...geometry}
+						value={value}
+						disabled={disabled}
+						onChange={(next, valid) => {
+							if (valid) updateField(next);
+						}}
+					/>
+				</div>
+			);
 		const resolvedProp = resolveSchema(prop, schema);
 		const type = schemaType(resolvedProp, schema);
 		const properties = resolvedProp.properties ?? {};

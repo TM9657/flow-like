@@ -784,6 +784,7 @@ mod tests {
         use std::time::SystemTime;
 
         Board {
+            format_version: crate::flow::board::format::LEGACY_BOARD_FORMAT_VERSION,
             id: "board".to_string(),
             name: "Board".to_string(),
             description: String::new(),

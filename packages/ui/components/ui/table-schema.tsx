@@ -56,6 +56,10 @@ export const CREATE_COLUMN_TYPE_GROUPS: ColumnTypeGroup[] = [
 			{ value: "timestamp", label: "Timestamp" },
 		],
 	},
+	{
+		label: "Geometry",
+		options: [{ value: "geometry", label: "Geometry (WGS 84)" }],
+	},
 	{ label: "Binary", options: [{ value: "binary", label: "Binary" }] },
 	{
 		label: "Vector",
@@ -331,6 +335,7 @@ export function validateTableName(name: string): string | null {
 
 export function ColumnTypeSelect({
 	value,
+	geometryEnabled = false,
 	onChange,
 	groups = CREATE_COLUMN_TYPE_GROUPS,
 	disabled,
@@ -338,6 +343,7 @@ export function ColumnTypeSelect({
 	className,
 }: Readonly<{
 	value: string;
+	geometryEnabled?: boolean;
 	onChange: (value: string) => void;
 	groups?: ColumnTypeGroup[];
 	disabled?: boolean;
@@ -354,8 +360,14 @@ export function ColumnTypeSelect({
 					<SelectGroup key={group.label}>
 						<SelectLabel>{group.label}</SelectLabel>
 						{group.options.map((option) => (
-							<SelectItem key={option.value} value={option.value}>
-								{option.label}
+							<SelectItem
+								key={option.value}
+								value={option.value}
+								disabled={option.value === "geometry" && !geometryEnabled}
+							>
+								{option.value === "geometry"
+									? i18next.t("settings:geometryWgs84", "Geometry (WGS 84)")
+									: option.label}
 							</SelectItem>
 						))}
 					</SelectGroup>

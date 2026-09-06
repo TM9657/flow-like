@@ -26,6 +26,10 @@ use utoipa::ToSchema;
 
 const SCOPE: &str = "realtime.read";
 
+const fn legacy_board_format_version() -> u32 {
+    1
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct RealtimeClaims {
     pub sub: String,
@@ -33,6 +37,9 @@ pub struct RealtimeClaims {
     pub app_id: String,
     pub board_id: String,
     pub scope: String,
+    /// Negotiated board format isolates peers that understand different wire values.
+    #[serde(default = "legacy_board_format_version")]
+    pub board_format_version: u32,
     #[serde(rename = "typ")]
     pub token_type: TokenType,
     pub iss: String,
@@ -134,10 +141,11 @@ pub async fn jwks(
 )]
 #[tracing::instrument(
     name = "POST /apps/{app_id}/board/{board_id}/realtime",
-    skip(state, user)
+    skip(client_headers, state, user)
 )]
 pub async fn access(
     State(state): State<AppState>,
+    client_headers: axum::http::HeaderMap,
     Extension(user): Extension<AppUser>,
     Path((app_id, board_id)): Path<(String, String)>,
 ) -> Result<impl axum::response::IntoResponse, ApiError> {
@@ -148,6 +156,11 @@ pub async fn access(
     let permission = ensure_permission!(user, &app_id, &state, RolePermissions::ReadBoards);
     let sub = permission.sub()?;
 
+    let board_format_version = super::capabilities::supported_version(&client_headers)?
+        .min(flow_like::flow::board::format::CURRENT_BOARD_FORMAT_VERSION);
+    state
+        .master_board_shared(&app_id, &board_id, &state, None)
+        .await?;
     let user_model = User::find_by_id(&sub)
         .one(&state.db)
         .await?
@@ -173,6 +186,7 @@ pub async fn access(
         app_id: app_id.clone(),
         board_id: board_id.clone(),
         scope: SCOPE.to_string(),
+        board_format_version,
         token_type: TokenType::Realtime,
         iss: issuer().to_string(),
         aud: TokenType::Realtime.audience().to_string(),

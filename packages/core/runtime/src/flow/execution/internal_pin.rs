@@ -6,7 +6,7 @@ use std::{
     sync::{Arc, OnceLock, Weak},
 };
 
-use crate::flow::pin::{Pin, PinType};
+use crate::flow::pin::{Pin, PinType, ValueType};
 use crate::flow::variable::VariableType;
 
 use super::internal_node::InternalNode;
@@ -29,6 +29,8 @@ pub struct InternalPin {
     pub pin_type: PinType,
     /// Data type (Execution, String, Number, etc.)
     pub data_type: VariableType,
+    pub value_type: ValueType,
+    pub schema: Option<Arc<str>>,
     /// Whether this pin has a default value
     pub has_default: bool,
     /// Cached default value, parsed once and shared across runs
@@ -60,6 +62,8 @@ impl InternalPin {
             name: Arc::from(pin.name.as_str()),
             pin_type: pin.pin_type.clone(),
             data_type: pin.data_type.clone(),
+            value_type: pin.value_type.clone(),
+            schema: pin.schema.as_deref().map(Arc::from),
             has_default: pin.default_value.is_some(),
             default_value: pin
                 .default_value
@@ -83,6 +87,8 @@ impl InternalPin {
             name: pin.name.clone(),
             pin_type: pin.pin_type.clone(),
             data_type: pin.data_type.clone(),
+            value_type: pin.value_type.clone(),
+            schema: pin.schema.clone(),
             has_default: pin.default_value.is_some(),
             default_value: pin.default_value.clone(),
             layer_pin: pin.layer_pin,
@@ -142,6 +148,15 @@ impl InternalPin {
     #[inline]
     pub async fn set_value(&self, value: Value) {
         *self.value.write() = Some(value);
+    }
+
+    pub fn validate_value(&self, value: &Value) -> flow_like_types::Result<()> {
+        crate::flow::variable::validate_typed_value(
+            &self.data_type,
+            &self.value_type,
+            self.schema.as_deref(),
+            value,
+        )
     }
 
     /// Get value deserialized to type T

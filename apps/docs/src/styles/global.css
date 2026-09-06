@@ -251,6 +251,7 @@ html:has(.node-doc) {
 	--pin-float: oklch(79.2% 0.209 151.711);
 	--pin-boolean: oklch(51.4% 0.222 16.935);
 	--pin-struct: oklch(55.8% 0.288 302.321);
+	--pin-geometry: oklch(0.7049 0.1867 47.6);
 	--pin-byte: oklch(43.2% 0.095 166.913);
 	--pin-generic: oklch(55.4% 0.046 257.417);
 	--pin-date: oklch(82.8% 0.189 84.429);
@@ -690,6 +691,11 @@ html:has(.node-doc) mobile-starlight-toc {
 .node-type-struct,
 .node-pin-color-struct {
 	--node-pin-color: var(--pin-struct);
+}
+
+.node-type-geometry,
+.node-pin-color-geometry {
+	--node-pin-color: var(--pin-geometry);
 }
 
 .node-type-byte,

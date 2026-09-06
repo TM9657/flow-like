@@ -20,6 +20,7 @@ public final class Types {
     public static final String DATA_TYPE_DATE = "Date";
     public static final String DATA_TYPE_PATH_BUF = "PathBuf";
     public static final String DATA_TYPE_STRUCT = "Struct";
+    public static final String DATA_TYPE_GEOMETRY = "Geometry";
 
     // ValueType constants
     public static final String VALUE_TYPE_NORMAL = "Normal";

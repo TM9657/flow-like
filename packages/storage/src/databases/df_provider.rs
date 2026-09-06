@@ -67,6 +67,22 @@ pub fn zero_column_safe_writable(
     })
 }
 
+/// Spatial expressions stay above the Lance scan until exact pushdown is verified.
+fn contains_spatial_function(expression: &Expr) -> bool {
+    use datafusion::common::tree_node::{TreeNode, TreeNodeRecursion};
+    let mut spatial = false;
+    let _ = expression.apply(|expression| {
+        if let Expr::ScalarFunction(function) = expression {
+            let name = function.func.name().to_ascii_lowercase();
+            if name.starts_with("st_") || name.starts_with("flow_geom") {
+                spatial = true;
+            }
+        }
+        Ok(TreeNodeRecursion::Continue)
+    });
+    spatial
+}
+
 /// Picks the column a row-count-only scan should read. Reading an embedding or
 /// a nested column just to count rows would move orders of magnitude more data
 /// than a scalar column, so the widest types are chosen last.
@@ -133,6 +149,17 @@ impl TableProvider for ZeroColumnSafeProvider {
         filters: &[Expr],
         limit: Option<usize>,
     ) -> DataFusionResult<Arc<dyn ExecutionPlan>> {
+        let safe_filters: Vec<Expr> = filters
+            .iter()
+            .filter(|expr| !contains_spatial_function(expr))
+            .cloned()
+            .collect();
+        let limit = if safe_filters.len() != filters.len() {
+            None
+        } else {
+            limit
+        };
+        let filters = safe_filters.as_slice();
         let placeholder = self
             .placeholder_column
             .filter(|_| projection.is_some_and(|projection| projection.is_empty()));
@@ -161,7 +188,13 @@ impl TableProvider for ZeroColumnSafeProvider {
         if self.dml_table.is_some() {
             return Ok(vec![TableProviderFilterPushDown::Inexact; filters.len()]);
         }
-        self.inner.supports_filters_pushdown(filters)
+        let mut supported = self.inner.supports_filters_pushdown(filters)?;
+        for (expression, support) in filters.iter().zip(&mut supported) {
+            if contains_spatial_function(expression) {
+                *support = TableProviderFilterPushDown::Inexact;
+            }
+        }
+        Ok(supported)
     }
 
     fn statistics(&self) -> Option<Statistics> {
@@ -174,6 +207,14 @@ impl TableProvider for ZeroColumnSafeProvider {
         input: Arc<dyn ExecutionPlan>,
         insert_op: InsertOp,
     ) -> DataFusionResult<Arc<dyn ExecutionPlan>> {
+        if self
+            .schema()
+            .fields()
+            .iter()
+            .any(|field| crate::geometry::is_geometry_field(field))
+        {
+            return Err(DataFusionError::Plan("SQL INSERT into geometry tables is unsupported; use validated JSON or Arrow insert/upsert".into()));
+        }
         self.inner.insert_into(state, input, insert_op).await
     }
 

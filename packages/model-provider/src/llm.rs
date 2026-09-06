@@ -1,7 +1,6 @@
-use async_trait::async_trait;
 use anyhow::Result;
-use serde_json::Value;
 use anyhow::anyhow;
+use async_trait::async_trait;
 use futures::StreamExt;
 use http::{HeaderMap, HeaderName, HeaderValue};
 use rig::agent::AgentBuilder;
@@ -15,6 +14,7 @@ use rig::streaming::{
 };
 use rig::wasm_compat::{WasmBoxedFuture, WasmCompatSend, WasmCompatSync};
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 use std::collections::HashMap;
 use std::{future::Future, pin::Pin, sync::Arc};
 

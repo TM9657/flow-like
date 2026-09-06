@@ -38,6 +38,7 @@ pub fn variable_type_code(v: &VariableType) -> u8 {
         VariableType::Generic => 7,
         VariableType::Struct => 8,
         VariableType::Byte => 9,
+        VariableType::Geometry => 10,
     }
 }
 
@@ -53,6 +54,7 @@ pub fn variable_type_from(code: u8) -> Result<VariableType> {
         7 => VariableType::Generic,
         8 => VariableType::Struct,
         9 => VariableType::Byte,
+        10 => VariableType::Geometry,
         _ => {
             return Err(anyhow!(
                 "invalid VariableType code {code} in compiled board"

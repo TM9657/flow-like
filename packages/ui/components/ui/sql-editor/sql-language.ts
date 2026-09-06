@@ -70,6 +70,133 @@ const SQL_KEYWORDS = [
 	"COALESCE",
 ];
 
+/** Names registered by geodatafusion 0.4.0, plus the explicit WGS 84 importer. */
+export const GEOMETRY_SQL_FUNCTIONS: ReadonlyArray<{
+	name: string;
+	detail: string;
+}> = [
+	{
+		name: "flow_geomfromtext",
+		detail:
+			"Import 2D WKT as WGS 84 geometry. Validates longitude, latitude; does not transform coordinates.",
+	},
+	{
+		name: "ST_GeomFromText",
+		detail:
+			"Parse WKT with unknown CRS. Use flow_geomfromtext for WGS 84 flow values.",
+	},
+	{
+		name: "ST_GeomFromWKB",
+		detail:
+			"Parse WKB; input CRS metadata is required for flow Geometry values.",
+	},
+	{
+		name: "ST_AsText",
+		detail: "Geometry to WKT text; foreign GeoJSON members are not preserved.",
+	},
+	{
+		name: "ST_AsBinary",
+		detail: "Geometry to WKB with Arrow extension metadata.",
+	},
+	{
+		name: "ST_Area",
+		detail:
+			"Planar area in squared coordinate units; WGS 84 coordinates yield square degrees.",
+	},
+	{
+		name: "ST_Distance",
+		detail:
+			"Planar distance in coordinate units; WGS 84 coordinates yield degrees.",
+	},
+	{
+		name: "ST_Length",
+		detail:
+			"Planar length in coordinate units; WGS 84 coordinates yield degrees.",
+	},
+	...[
+		"ST_Contains",
+		"ST_CoveredBy",
+		"ST_Covers",
+		"ST_Crosses",
+		"ST_Disjoint",
+		"ST_Equals",
+		"ST_Intersects",
+		"ST_Overlaps",
+		"ST_Touches",
+		"ST_Within",
+	].map((name) => ({
+		name,
+		detail: "Planar spatial relationship between geometries.",
+	})),
+	...[
+		"ST_Centroid",
+		"ST_ConvexHull",
+		"ST_OrientedEnvelope",
+		"ST_PointOnSurface",
+	].map((name) => ({
+		name,
+		detail: "Planar geometry operation; retains input coordinate units.",
+	})),
+	...["ST_Simplify", "ST_SimplifyPreserveTopology", "ST_SimplifyVW"].map(
+		(name) => ({
+			name,
+			detail: "Simplify geometry using a tolerance in coordinate units.",
+		}),
+	),
+	...["ST_IsValid", "ST_IsValidReason"].map((name) => ({
+		name,
+		detail: "Check geometric validity.",
+	})),
+	...[
+		"ST_CoordDim",
+		"ST_NDims",
+		"GeometryType",
+		"ST_GeometryType",
+		"ST_EndPoint",
+		"ST_StartPoint",
+		"ST_NPoints",
+		"ST_NumInteriorRings",
+		"ST_X",
+		"ST_Y",
+		"ST_Z",
+		"ST_M",
+	].map((name) => ({
+		name,
+		detail: "Read a geometry attribute or coordinate.",
+	})),
+	...[
+		"Box2D",
+		"Box3D",
+		"ST_Extent",
+		"ST_XMax",
+		"ST_XMin",
+		"ST_YMax",
+		"ST_YMin",
+		"ST_ZMax",
+		"ST_ZMin",
+		"ST_MakeBox2D",
+		"ST_3DMakeBox",
+	].map((name) => ({
+		name,
+		detail: "Geometry bounds in input coordinate units.",
+	})),
+	...[
+		"ST_MakePoint",
+		"ST_MakePointM",
+		"ST_Point",
+		"ST_PointM",
+		"ST_PointZ",
+		"ST_PointZM",
+	].map((name) => ({
+		name,
+		detail:
+			"Construct a point. Native flow Geometry supports 2D WGS 84 values only.",
+	})),
+	...["ST_GeoHash", "ST_Box2DFromGeoHash", "ST_PointFromGeoHash"].map(
+		(name) => ({ name, detail: "Convert between geometry and geohash." }),
+	),
+];
+
 /** Clause keywords that can never be a table alias. */
 const CLAUSE_KEYWORDS = new Set([
 	"where",
@@ -332,6 +459,15 @@ export function ensureSqlProviders(monaco: Monaco): void {
 				return { suggestions: items as never };
 			}
 
+			for (const { name, detail } of GEOMETRY_SQL_FUNCTIONS) {
+				items.push({
+					label: name,
+					kind: kinds.Function,
+					insertText: name,
+					detail,
+					range,
+				});
+			}
 			for (const keyword of SQL_KEYWORDS) {
 				items.push({
 					label: keyword,

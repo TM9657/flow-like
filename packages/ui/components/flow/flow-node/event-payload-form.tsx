@@ -6,6 +6,7 @@ import {
 	CloudIcon,
 	FileIcon,
 	HashIcon,
+	MapPinIcon,
 	PlayCircleIcon,
 	ToggleLeftIcon,
 	TypeIcon,
@@ -17,6 +18,11 @@ import {
 	parseDateValue,
 	toDateTimeInputValue,
 } from "../../../lib/date";
+import { normalizeGeometryValue } from "../../../lib/geometry";
+import {
+	geometrySchemaField,
+	normalizeSchemaGeometryValues,
+} from "../../../lib/geometry-schema";
 import type { IBoard } from "../../../lib/schema/flow/board";
 import type { INode } from "../../../lib/schema/flow/node";
 import {
@@ -39,6 +45,7 @@ import {
 } from "../../ui/select";
 import { Textarea } from "../../ui/textarea";
 import { typeToColor } from "../utils";
+import { GeometryValueInput } from "../variables/geometry-variable";
 
 /** The instant, rendered as wall-clock time in the viewer's zone for the input. */
 function dateTimeInputValue(value: unknown): string {
@@ -134,6 +141,8 @@ const getIconForType = (dataType: IVariableType) => {
 			return <CalendarIcon className="w-3 h-3" />;
 		case IVariableType.PathBuf:
 			return <FileIcon className="w-3 h-3" />;
+		case IVariableType.Geometry:
+			return <MapPinIcon className="w-3 h-3" />;
 		case IVariableType.Struct:
 			return <BracesIcon className="w-3 h-3" />;
 		default:
@@ -210,6 +219,7 @@ export function EventPayloadForm({
 
 	const hasFormFields = useMemo(() => {
 		return outputPins.some((pin) => {
+			if (pin.data_type === IVariableType.Geometry) return true;
 			if (isSimpleType(pin.data_type) && pin.value_type === IValueType.Normal)
 				return true;
 			if (pin.data_type === IVariableType.Struct && pinSchemas[pin.id])
@@ -222,6 +232,11 @@ export function EventPayloadForm({
 		const initial: Record<string, unknown> = {};
 		for (const pin of outputPins) {
 			if (isSimpleType(pin.data_type) && pin.value_type === IValueType.Normal) {
+				initial[pin.name] = getDefaultValueForType(
+					pin.data_type,
+					pin.value_type,
+				);
+			} else if (pin.data_type === IVariableType.Geometry) {
 				initial[pin.name] = getDefaultValueForType(
 					pin.data_type,
 					pin.value_type,
@@ -258,18 +273,49 @@ export function EventPayloadForm({
 
 	const buildPayload = useCallback((): object | undefined => {
 		if (useJsonMode) {
-			try {
-				return jsonPayload ? JSON.parse(jsonPayload) : undefined;
-			} catch {
-				return undefined;
+			const payload = jsonPayload ? JSON.parse(jsonPayload) : {};
+			if (!payload || typeof payload !== "object" || Array.isArray(payload))
+				throw new Error("Payload must be a JSON object");
+			for (const pin of outputPins) {
+				if (pin.data_type === IVariableType.Struct)
+					payload[pin.name] = normalizeSchemaGeometryValues(
+						payload[pin.name],
+						pinSchemas[pin.id],
+						pinSchemas[pin.id],
+						false,
+					);
+				if (pin.data_type === IVariableType.Geometry)
+					payload[pin.name] = normalizeGeometryValue(payload[pin.name], {
+						schema: pin.schema,
+						refs,
+						valueType: pin.value_type,
+					});
 			}
+			return payload;
 		}
 
 		const payload: Record<string, unknown> = {};
 		let hasValues = false;
 
 		for (const pin of outputPins) {
-			const value = formValues[pin.name];
+			const value =
+				pin.data_type === IVariableType.Struct
+					? normalizeSchemaGeometryValues(
+							formValues[pin.name],
+							pinSchemas[pin.id],
+							pinSchemas[pin.id],
+							false,
+						)
+					: formValues[pin.name];
+			if (pin.data_type === IVariableType.Geometry) {
+				payload[pin.name] = normalizeGeometryValue(value, {
+					schema: pin.schema,
+					refs,
+					valueType: pin.value_type,
+				});
+				hasValues = true;
+				continue;
+			}
 			if (value !== undefined && value !== null && value !== "") {
 				if (
 					typeof value === "object" &&
@@ -283,21 +329,30 @@ export function EventPayloadForm({
 		}
 
 		return hasValues ? payload : undefined;
-	}, [useJsonMode, jsonPayload, formValues, outputPins]);
+	}, [useJsonMode, jsonPayload, formValues, outputPins, refs, pinSchemas]);
+
+	const payloadError = useMemo(() => {
+		try {
+			buildPayload();
+			return null;
+		} catch (e) {
+			return e instanceof Error ? e.message : String(e);
+		}
+	}, [buildPayload]);
 
 	const handleLocalExecute = useCallback(async () => {
-		if (!onLocalExecute) return;
+		if (!onLocalExecute || payloadError) return;
 		const payload = buildPayload();
 		await onLocalExecute(payload);
 		onClose();
-	}, [buildPayload, onLocalExecute, onClose]);
+	}, [buildPayload, onLocalExecute, onClose, payloadError]);
 
 	const handleRemoteExecute = useCallback(async () => {
-		if (!onRemoteExecute) return;
+		if (!onRemoteExecute || payloadError) return;
 		const payload = buildPayload();
 		await onRemoteExecute(payload);
 		onClose();
-	}, [buildPayload, onRemoteExecute, onClose]);
+	}, [buildPayload, onRemoteExecute, onClose, payloadError]);
 
 	const renderSchemaField = useCallback(
 		(
@@ -310,6 +365,29 @@ export function EventPayloadForm({
 			const value = structValue?.[fieldName];
 			const label = `${fieldName}${required ? " *" : ""}`;
 
+			const pin = outputPins.find((pin) => pin.name === pinName);
+			const geometry = geometrySchemaField(
+				prop,
+				pin ? pinSchemas[pin.id] : undefined,
+			);
+			if (geometry)
+				return (
+					<div key={fieldName} className="space-y-1">
+						<Label className="text-xs">{label}</Label>
+						<GeometryValueInput
+							{...geometry}
+							value={value}
+							allowUnset={!required}
+							onChange={(next, valid) =>
+								handleStructFieldChange(
+									pinName,
+									fieldName,
+									valid ? next : undefined,
+								)
+							}
+						/>
+					</div>
+				);
 			if (prop.enum && prop.enum.length > 0) {
 				return (
 					<div key={fieldName} className="space-y-1">
@@ -458,7 +536,7 @@ export function EventPayloadForm({
 					);
 			}
 		},
-		[formValues, handleStructFieldChange],
+		[formValues, handleStructFieldChange, outputPins, pinSchemas],
 	);
 
 	const renderPinField = useCallback(
@@ -467,6 +545,24 @@ export function EventPayloadForm({
 			const icon = getIconForType(pin.data_type);
 			const value = formValues[pin.name];
 			const description = resolveRef(pin.description, refs);
+
+			if (pin.data_type === IVariableType.Geometry) {
+				return (
+					<div key={pin.id} className="space-y-2">
+						<Label style={{ color }}>{pin.friendly_name}</Label>
+						<GeometryValueInput
+							value={value}
+							schema={pin.schema}
+							refs={refs}
+							valueType={pin.value_type}
+							allowUnset={false}
+							onChange={(value, valid) =>
+								handleFieldChange(pin.name, valid ? value : undefined)
+							}
+						/>
+					</div>
+				);
+			}
 
 			// Handle struct with schema
 			if (pin.data_type === IVariableType.Struct) {
@@ -718,6 +814,7 @@ export function EventPayloadForm({
 	const formFields = useMemo(
 		() =>
 			outputPins.filter((pin) => {
+				if (pin.data_type === IVariableType.Geometry) return true;
 				if (isSimpleType(pin.data_type) && pin.value_type === IValueType.Normal)
 					return true;
 				if (pin.data_type === IVariableType.Struct && pinSchemas[pin.id])
@@ -730,6 +827,7 @@ export function EventPayloadForm({
 	const complexFields = useMemo(
 		() =>
 			outputPins.filter((pin) => {
+				if (pin.data_type === IVariableType.Geometry) return false;
 				if (isSimpleType(pin.data_type) && pin.value_type === IValueType.Normal)
 					return false;
 				if (pin.data_type === IVariableType.Struct && pinSchemas[pin.id])
@@ -809,9 +907,18 @@ export function EventPayloadForm({
 				</ScrollArea>
 			)}
 
+			{payloadError && (
+				<p role="alert" className="text-xs text-destructive">
+					{payloadError}
+				</p>
+			)}
 			<div className="flex gap-2 pt-4 border-t">
 				{canLocalExecute && (
-					<Button className="flex-1" onClick={handleLocalExecute}>
+					<Button
+						className="flex-1"
+						onClick={handleLocalExecute}
+						disabled={Boolean(payloadError)}
+					>
 						<PlayCircleIcon className="w-4 h-4 mr-2" />
 						{t("executeLocally2", "Execute Locally")}
 					</Button>
@@ -821,6 +928,7 @@ export function EventPayloadForm({
 						className="flex-1"
 						variant={canLocalExecute ? "secondary" : "default"}
 						onClick={handleRemoteExecute}
+						disabled={Boolean(payloadError)}
 					>
 						<CloudIcon className="w-4 h-4 mr-2" />
 						{t("executeOnServer2", "Execute on Server")}

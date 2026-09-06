@@ -30,6 +30,7 @@ import {
 } from "../select";
 import { Switch } from "../switch";
 import { Textarea } from "../textarea";
+import { GraphNodeCaption } from "./graph-node-caption";
 
 export interface OntologyActionTarget {
 	action: OntologyActionDefinition;
@@ -236,7 +237,15 @@ export const OntologyActionDialog: React.FC<OntologyActionDialogProps> = ({
 							{t("target", "Target")} {node?.label ?? "object"}
 						</p>
 						<p className="mt-1 font-medium">
-							{String(targetTitle ?? "Object")}
+							{node ? (
+								<GraphNodeCaption
+									node={node}
+									overlay={overlay}
+									fallback={String(targetTitle ?? "Object")}
+								/>
+							) : (
+								String(targetTitle ?? "Object")
+							)}
 						</p>
 						<p className="mt-0.5 font-mono text-[10px] text-muted-foreground break-all">
 							{node?.id}

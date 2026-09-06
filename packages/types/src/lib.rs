@@ -5,6 +5,7 @@ pub use anyhow::{Context, Error, Ok, Result, anyhow, bail};
 pub use async_trait::async_trait;
 pub use base64;
 pub use cuid2::create_id;
+pub use flow_like_types_contracts::geometry;
 pub use mime_guess;
 pub use reqwest;
 pub use reqwest_eventsource;

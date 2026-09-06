@@ -66,7 +66,7 @@ impl ApiError {
     };
 
     pub fn internal_error(err: flow_like_types::Error) -> Self {
-        Self::internal(err.to_string())
+        Self::from_board_format_error(&err).unwrap_or_else(|| Self::internal(err.to_string()))
     }
 
     /// The client-safe message, for callers that need to record the same
@@ -86,6 +86,23 @@ impl ApiError {
 }
 
 impl ApiError {
+    pub fn board_format_upgrade_required(required: u32, supported: u32) -> Self {
+        Self::new(
+            StatusCode::UPGRADE_REQUIRED,
+            "BOARD_FORMAT_UPGRADE_REQUIRED",
+            Some(format!(
+                "This board requires format version {required}, but this request supports up to {supported}. Upgrade the client or server to support the required board format."
+            )),
+            ReportPolicy::Ignore,
+        )
+    }
+
+    pub(crate) fn from_board_format_error(error: &flow_like_types::Error) -> Option<Self> {
+        error
+            .downcast_ref::<flow_like::flow::board::format::BoardFormatError>()
+            .map(|error| Self::board_format_upgrade_required(error.required, error.supported))
+    }
+
     fn new(
         status: StatusCode,
         public_code: impl Into<String>,
@@ -346,6 +363,9 @@ impl IntoResponse for ApiError {
 // Implement From for flow_like_types::Error
 impl From<flow_like_types::Error> for ApiError {
     fn from(err: flow_like_types::Error) -> Self {
+        if let Some(error) = Self::from_board_format_error(&err) {
+            return error;
+        }
         tracing::error!("Internal error: {:?}", err);
         Self::new(
             StatusCode::INTERNAL_SERVER_ERROR,

@@ -5,6 +5,10 @@ import {
 } from "@flow-like/flow-like-ui";
 import { apiResponseError } from "@flow-like/flow-like-ui/lib/api-error";
 import { getApiUrl } from "@flow-like/flow-like-ui/lib/api-url";
+import {
+	BOARD_FORMAT_HEADER,
+	CURRENT_BOARD_FORMAT_VERSION,
+} from "@flow-like/flow-like-ui/lib/board-format";
 import type { IProfile } from "@flow-like/flow-like-ui/types";
 import {
 	type WebBackendRef,
@@ -119,6 +123,7 @@ export class WebApiState implements IApiState {
 	private getHeaders(): HeadersInit {
 		const headers: HeadersInit = {
 			"Content-Type": "application/json",
+			[BOARD_FORMAT_HEADER]: String(CURRENT_BOARD_FORMAT_VERSION),
 		};
 		if (this.backend.auth?.user?.access_token) {
 			headers["Authorization"] =

@@ -128,6 +128,9 @@ function splitTopLevel(text: string, separator: string): string[] {
 }
 
 interface JsonSchema {
+	$id?: string;
+	"x-flow-like-type"?: string;
+	"x-geometry"?: string;
 	type?: string | string[];
 	title?: string;
 	properties?: Record<string, JsonSchema>;
@@ -176,6 +179,13 @@ function schemaToShape(
 	defs: Record<string, JsonSchema>,
 	seen: Set<string>,
 ): Shape {
+	if (
+		schema.$id === "flow:geometry" ||
+		schema["x-flow-like-type"] === "geometry"
+	) {
+		const kind = schema["x-geometry"];
+		return { kind: "scalar", text: kind ? `geometry<${kind}>` : "geometry" };
+	}
 	if (schema.$ref) {
 		if (seen.has(schema.$ref)) {
 			const name = schema.$ref.split("/").pop() ?? "Struct";
@@ -375,6 +385,9 @@ export function shapeClass(shape: Shape | undefined): string | undefined {
 		return shape.text && shape.text !== "Struct" && /^[A-Z][\w$]*$/.test(shape.text)
 			? shape.text
 			: "struct";
+	}
+	if (/^geometry(?:\s*<[^>]+>)?$/.test(shape.text ?? "")) {
+		return "geometry";
 	}
 	switch (shape.text) {
 		case "string":

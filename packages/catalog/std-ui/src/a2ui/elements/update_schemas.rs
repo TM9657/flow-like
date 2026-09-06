@@ -70,6 +70,58 @@ pub struct GeoMapViewport {
     pub pitch: Option<f64>,
 }
 
+impl GeoMapViewport {
+    /// Accept legacy flat coordinates, the current center wrapper, or a native Point.
+    pub fn from_value(value: flow_like_types::Value) -> flow_like_types::Result<Self> {
+        use flow_like_types::{
+            Value,
+            geometry::{GeometryKind, validate_geometry},
+            json,
+        };
+        if let Some(raw) = value.get("literalJson").and_then(Value::as_str) {
+            return Self::from_value(json::from_str(raw)?);
+        }
+        let center = value.get("center").unwrap_or(&value);
+        let (longitude, latitude) = if center.get("type").is_some() {
+            validate_geometry(center, Some(GeometryKind::Point))?;
+            (
+                center["coordinates"][0].as_f64().unwrap(),
+                center["coordinates"][1].as_f64().unwrap(),
+            )
+        } else {
+            let longitude = center
+                .get("longitude")
+                .and_then(Value::as_f64)
+                .filter(|value| value.is_finite())
+                .ok_or_else(|| flow_like_types::anyhow!("Viewport longitude is required"))?;
+            let latitude = center
+                .get("latitude")
+                .and_then(Value::as_f64)
+                .filter(|value| value.is_finite())
+                .ok_or_else(|| flow_like_types::anyhow!("Viewport latitude is required"))?;
+            // Legacy map viewports retain wrapped longitudes emitted while panning.
+            (longitude, latitude)
+        };
+        let optional = |key: &str| -> flow_like_types::Result<Option<f64>> {
+            match value.get(key) {
+                None | Some(Value::Null) => Ok(None),
+                Some(value) => value
+                    .as_f64()
+                    .filter(|value| value.is_finite())
+                    .map(Some)
+                    .ok_or_else(|| flow_like_types::anyhow!("Viewport {key} must be finite")),
+            }
+        };
+        Ok(Self {
+            longitude,
+            latitude,
+            zoom: optional("zoom")?,
+            bearing: optional("bearing")?,
+            pitch: optional("pitch")?,
+        })
+    }
+}
+
 // =============================================================================
 // Graph Input Schemas
 // =============================================================================
@@ -942,5 +994,39 @@ mod tests {
         let schema = flow_like_types::json::to_value(schemars::schema_for!(CalendarEvent)).unwrap();
         assert_eq!(schema["properties"]["start"]["format"], "date-time");
         assert_eq!(schema["properties"]["end"]["format"], "date-time");
+    }
+}
+
+#[cfg(test)]
+mod geometry_viewport_tests {
+    use super::GeoMapViewport;
+    use flow_like_types::json::json;
+
+    #[test]
+    fn native_and_legacy_viewports_keep_longitude_latitude_order() {
+        for value in [
+            json!({"longitude":13.405,"latitude":52.52,"zoom":8}),
+            json!({"center":{"longitude":13.405,"latitude":52.52},"zoom":8}),
+            json!({"center":{"type":"Point","coordinates":[13.405,52.52]},"zoom":8}),
+        ] {
+            let viewport = GeoMapViewport::from_value(value).unwrap();
+            assert_eq!(viewport.longitude, 13.405);
+            assert_eq!(viewport.latitude, 52.52);
+            assert_eq!(viewport.zoom, Some(8.0));
+        }
+        let viewport = GeoMapViewport::from_value(
+            json!({"literalJson":"{\"type\":\"Point\",\"coordinates\":[13.405,52.52]}"}),
+        )
+        .unwrap();
+        assert_eq!(viewport.longitude, 13.405);
+        assert!(
+            GeoMapViewport::from_value(json!({"type":"Point","coordinates":[13,100]})).is_err()
+        );
+        assert_eq!(
+            GeoMapViewport::from_value(json!({"longitude":181,"latitude":52}))
+                .unwrap()
+                .longitude,
+            181.0
+        );
     }
 }

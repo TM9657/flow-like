@@ -220,6 +220,7 @@ fn map_wasm_data_type(wasm_type: &str) -> VariableType {
         "byte" | "bytes" | "binary" => VariableType::Byte,
         "exec" | "execution" => VariableType::Execution,
         "struct" | "object" | "json" => VariableType::Struct,
+        "geometry" => VariableType::Geometry,
         _ => VariableType::Generic,
     }
 }
@@ -559,6 +560,12 @@ impl NodeLogic for WasmNodeLogic {
                     Ok(val) => {
                         inputs.insert(pin.name.clone(), val);
                     }
+                    Err(error) if map_wasm_data_type(&pin.data_type) == VariableType::Geometry => {
+                        return Err(flow_like_types::anyhow!(
+                            "Invalid WASM geometry input {}: {error}",
+                            pin.name
+                        ));
+                    }
                     Err(_) => {
                         // No value available (unconnected, no default) — skip
                     }
@@ -863,6 +870,8 @@ mod tests {
         assert_eq!(map_wasm_data_type("Byte"), VariableType::Byte);
         assert_eq!(map_wasm_data_type("Struct"), VariableType::Struct);
         assert_eq!(map_wasm_data_type("Generic"), VariableType::Generic);
+        assert_eq!(map_wasm_data_type("Geometry"), VariableType::Geometry);
+        assert_eq!(map_wasm_data_type("geometry"), VariableType::Geometry);
         assert_eq!(map_wasm_data_type("unknown_thing"), VariableType::Generic);
     }
 

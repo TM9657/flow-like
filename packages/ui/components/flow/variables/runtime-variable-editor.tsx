@@ -13,6 +13,7 @@ import {
 import { Button } from "../../ui/button";
 import { Input } from "../../ui/input";
 import { GenericVariable } from "./generic-variable";
+import { GeometryVariable } from "./geometry-variable";
 import { VariablesMenuEdit } from "./variables-menu-edit";
 
 /**
@@ -51,6 +52,7 @@ function hasTypedEditor(variable: IVariable): boolean {
 		case IVariableType.Integer:
 		case IVariableType.PathBuf:
 		case IVariableType.Generic:
+		case IVariableType.Geometry:
 			return true;
 		case IVariableType.Struct:
 			return variable.value_type === IValueType.Normal;
@@ -147,6 +149,18 @@ export function RuntimeVariableEditor({
 	updateVariable: (variable: IVariable) => Promise<void>;
 	refs?: Record<string, string>;
 }>) {
+	if (variable.data_type === IVariableType.Geometry)
+		return (
+			<GeometryVariable
+				disabled={disabled}
+				variable={variable}
+				refs={refs}
+				onChange={(next) => {
+					void updateVariable(next);
+				}}
+			/>
+		);
+
 	if (variable.secret && !selfMasksSecret(variable)) {
 		return (
 			<MaskedSecretInput

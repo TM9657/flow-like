@@ -45,6 +45,7 @@ pub enum DataType {
   DateTime
   PathBuf
   StructType
+  GeometryType
 }
 
 pub fn DataType::json_name(self : DataType) -> String {
@@ -59,6 +60,7 @@ pub fn DataType::json_name(self : DataType) -> String {
     DateTime => "Date"
     PathBuf => "PathBuf"
     StructType => "Struct"
+    GeometryType => "Geometry"
   }
 }
 
@@ -81,6 +83,8 @@ pub fn data_type_datetime() -> DataType { DateTime }
 pub fn data_type_pathbuf() -> DataType { PathBuf }
 
 pub fn data_type_struct() -> DataType { StructType }
+
+pub fn data_type_geometry() -> DataType { GeometryType }
 
 ///| Value container types
 pub enum ValueType {

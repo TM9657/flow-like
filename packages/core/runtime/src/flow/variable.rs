@@ -49,6 +49,15 @@ impl PartialEq for Variable {
 impl Eq for Variable {}
 
 impl Variable {
+    pub fn validate_value(&self, value: &Value) -> flow_like_types::Result<()> {
+        validate_typed_value(
+            &self.data_type,
+            &self.value_type,
+            self.schema.as_deref(),
+            value,
+        )
+    }
+
     pub fn new(name: &str, data_type: VariableType, value_type: ValueType) -> Self {
         Self {
             id: create_id(),
@@ -261,12 +270,205 @@ pub enum VariableType {
     Generic,
     Struct,
     Byte,
+    Geometry,
+}
+
+/// Resolve the frozen marker for a Geometry declaration. `None` means any shape.
+pub fn geometry_kind_from_schema(
+    schema: Option<&str>,
+) -> flow_like_types::Result<Option<flow_like_types::geometry::GeometryKind>> {
+    let Some(schema) = schema else {
+        return Ok(None);
+    };
+    flow_like_types::geometry::kind_from_schema(schema)?
+        .map(Some)
+        .ok_or_else(|| {
+            flow_like_types::anyhow!(
+                "Geometry schema must be a frozen flow:geometry subtype marker"
+            )
+        })
+}
+
+/// Validate geometry values without changing the existing behavior of other types.
+pub fn validate_typed_value(
+    data_type: &VariableType,
+    value_type: &ValueType,
+    schema: Option<&str>,
+    value: &Value,
+) -> flow_like_types::Result<()> {
+    if *data_type != VariableType::Geometry {
+        return Ok(());
+    }
+    let kind = geometry_kind_from_schema(schema)?;
+    match value_type {
+        ValueType::Normal => flow_like_types::geometry::validate_geometry(value, kind)?,
+        ValueType::Array | ValueType::HashSet => {
+            let values = value.as_array().ok_or_else(|| {
+                flow_like_types::anyhow!("Geometry Array/HashSet requires an array")
+            })?;
+            for value in values {
+                flow_like_types::geometry::validate_geometry(value, kind)?;
+            }
+        }
+        ValueType::HashMap => {
+            let values = value
+                .as_object()
+                .ok_or_else(|| flow_like_types::anyhow!("Geometry HashMap requires an object"))?;
+            for value in values.values() {
+                flow_like_types::geometry::validate_geometry(value, kind)?;
+            }
+        }
+    }
+    Ok(())
+}
+
+pub fn validate_typed_default(
+    data_type: &VariableType,
+    value_type: &ValueType,
+    schema: Option<&str>,
+    default: Option<&[u8]>,
+) -> flow_like_types::Result<()> {
+    if *data_type != VariableType::Geometry {
+        return Ok(());
+    }
+    geometry_kind_from_schema(schema)?;
+    if let Some(default) = default {
+        if default.len() > flow_like_types::geometry::MAX_GEOMETRY_BYTES {
+            return Err(flow_like_types::anyhow!(
+                "Geometry default exceeds the byte limit"
+            ));
+        }
+        let value = json::from_slice(default)?;
+        validate_typed_value(data_type, value_type, schema, &value)?;
+    }
+    Ok(())
+}
+
+impl crate::flow::board::Board {
+    /// Check every declared Geometry default before saving or compiling a board.
+    pub fn validate_geometry_contracts(&self) -> flow_like_types::Result<()> {
+        let check = |data_type: &VariableType,
+                     value_type: &ValueType,
+                     schema: Option<&str>,
+                     default: Option<&[u8]>| {
+            if *data_type != VariableType::Geometry {
+                return Ok(());
+            }
+            let schema = schema
+                .map(|schema| super::pin::resolve_schema(schema, &self.refs))
+                .transpose()?;
+            validate_typed_default(data_type, value_type, schema, default)
+        };
+        for variable in self.variables.values().chain(
+            self.layers
+                .values()
+                .flat_map(|layer| layer.variables.values()),
+        ) {
+            check(
+                &variable.data_type,
+                &variable.value_type,
+                variable.schema.as_deref(),
+                variable.default_value.as_deref(),
+            )?;
+        }
+        let pins = self
+            .nodes
+            .values()
+            .flat_map(|node| node.pins.values())
+            .chain(self.layers.values().flat_map(|layer| layer.pins.values()))
+            .chain(
+                self.layers
+                    .values()
+                    .flat_map(|layer| layer.nodes.values())
+                    .flat_map(|node| node.pins.values()),
+            );
+        for pin in pins {
+            check(
+                &pin.data_type,
+                &pin.value_type,
+                pin.schema.as_deref(),
+                pin.default_value.as_deref(),
+            )?;
+        }
+        Ok(())
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use flow_like_types::{FromProto, ToProto};
     use flow_like_types::{Message, tokio};
+
+    #[test]
+    fn geometry_containers_defaults_and_wire_codes_are_checked() {
+        use super::*;
+        use flow_like_types::geometry::{GeometryKind, marker};
+        let point = json::json!({"type":"Point","coordinates":[13.405,52.52]});
+        for (container, value) in [
+            (ValueType::Normal, point.clone()),
+            (ValueType::Array, json::json!([point])),
+            (ValueType::HashSet, json::json!([point])),
+            (ValueType::HashMap, json::json!({"berlin":point})),
+        ] {
+            validate_typed_value(
+                &VariableType::Geometry,
+                &container,
+                Some(marker(GeometryKind::Point)),
+                &value,
+            )
+            .unwrap();
+            assert!(
+                validate_typed_value(
+                    &VariableType::Geometry,
+                    &container,
+                    Some(marker(GeometryKind::Polygon)),
+                    &value
+                )
+                .is_err()
+            );
+            assert!(
+                validate_typed_value(&VariableType::Geometry, &container, None, &Value::Null)
+                    .is_err()
+            );
+        }
+        validate_typed_default(&VariableType::Geometry, &ValueType::Normal, None, None).unwrap();
+        assert!(
+            validate_typed_default(
+                &VariableType::Geometry,
+                &ValueType::Normal,
+                None,
+                Some(b"null")
+            )
+            .is_err()
+        );
+        assert!(geometry_kind_from_schema(Some(r#"{"type":"object"}"#)).is_err());
+        assert_eq!(VariableType::Byte.to_proto(), 9);
+        assert_eq!(VariableType::Geometry.to_proto(), 10);
+        assert_eq!(
+            VariableType::try_from_proto(10).unwrap(),
+            VariableType::Geometry
+        );
+        assert!(VariableType::try_from_proto(11).is_err());
+        assert!(VariableType::try_from_proto(-1).is_err());
+    }
+
+    #[test]
+    fn geometry_schemas_resolve_collections_when_embedded_in_containers() {
+        use flow_like_types::geometry::{GeometryKind, geometry_json_schema, geometry_tool_schema};
+        use flow_like_types::json;
+        let collection = json::json!({"type":"GeometryCollection","geometries":[{"type":"Point","coordinates":[13.405,52.52]}]});
+        for kind in [None, Some(GeometryKind::GeometryCollection)] {
+            let schema = json::json!({"type":"object","properties":{"places":{"type":"array","items":geometry_json_schema(kind)}},"required":["places"]});
+            let validator = jsonschema::validator_for(&schema).unwrap();
+            assert!(validator.is_valid(&json::json!({"places":[collection]})));
+            assert!(!validator.is_valid(&json::json!({"places":[{"type":"GeometryCollection","geometries":[{"type":"Point","coordinates":[0,91]}]}]})));
+        }
+        for kind in std::iter::once(None).chain(GeometryKind::ALL.into_iter().map(Some)) {
+            let projection = geometry_tool_schema(kind);
+            assert!(projection.get("$ref").is_none());
+            assert!(projection["properties"]["type"]["enum"].is_array());
+        }
+    }
 
     #[tokio::test]
     async fn serialize_variable() {

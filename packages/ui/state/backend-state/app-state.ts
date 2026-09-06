@@ -87,7 +87,26 @@ export interface IAppState {
 	getMyGroups(): Promise<IGroup[]>;
 	getApps(): Promise<[IApp, IMetadata | undefined][]>;
 	getApp(appId: string): Promise<IApp>;
+	/** Bypass display caches when a lifecycle transition depends on the current app status. */
+	getAppAuthoritative(appId: string): Promise<IApp>;
 	updateApp(app: IApp): Promise<void>;
+	/**
+	 * Persist a lifecycle transition to the app's authoritative store. The host must use an
+	 * explicit local-only classification or authenticated remote authority, with no fallback.
+	 */
+	updateAppAuthoritative(app: IApp): Promise<void>;
+	/** Read a durable FlowPilot app-build checkpoint, or `null` when it does not exist. */
+	readAppBuild(appId: string, buildId: string): Promise<unknown | null>;
+	/**
+	 * Create with `expectedRevision: null`, or replace the exact expected revision.
+	 * The record owns its revision and an update must advance it by one.
+	 */
+	writeAppBuild(
+		appId: string,
+		buildId: string,
+		record: unknown,
+		expectedRevision: number | null,
+	): Promise<void>;
 	getAppMeta(appId: string, language?: string): Promise<IMetadata>;
 	pushAppMeta(
 		appId: string,

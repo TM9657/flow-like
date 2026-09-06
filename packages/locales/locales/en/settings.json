@@ -1905,5 +1905,6 @@
 	"yourProfile": "Your profile",
 	"yourSemanticLayer": "Your semantic layer",
 	"geometryWgs84": "Geometry (WGS 84)",
-	"geometryColumnHint": "GeoJSON geometry objects with WGS 84 longitude, latitude coordinates in degrees. Scalar values only."
+	"geometryColumnHint": "GeoJSON geometry objects with WGS 84 longitude, latitude coordinates in degrees. Scalar values only.",
+	"geometryBackendUpgrade": "Update the backend to a version that supports Geometry."
 }

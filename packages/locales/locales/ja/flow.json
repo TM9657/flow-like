@@ -1202,5 +1202,21 @@
 	"geometryStoredCoordinateOrder": "",
 	"geometryUnknownCrs": "",
 	"hideGeometryValue": "",
-	"showGeometryValue": ""
+	"showGeometryValue": "",
+	"geometryBackendUpgrade": "",
+	"geometryRequiredCoordinateOrder": "",
+	"geometryInvalidValue": "無効なジオメトリ",
+	"geometryMapUnavailable": "地図を表示できません",
+	"geometryLoadingMap": "地図を読み込み中…",
+	"geometryLongitude": "経度",
+	"geometryLatitude": "緯度",
+	"geometryGeoJsonCoordinates": "GeoJSON 座標",
+	"geometryInspectValue": "{{type}}を確認: {{summary}}",
+	"geometryInspectDescription": "保存された形状と座標を確認します。",
+	"geometryPolygonCount_other": "{{count}} 個のポリゴン",
+	"geometryLineCount_other": "{{count}} 本のライン",
+	"geometryPartCount_other": "{{count}} 個のパーツ",
+	"geometryPointCount_other": "{{count}} 個のポイント",
+	"geometryVertexCount_other": "{{count}} 個の頂点",
+	"geometryHoleCount_other": "{{count}} 個の穴"
 }

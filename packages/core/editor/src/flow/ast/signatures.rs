@@ -7,7 +7,6 @@
 
 use flow_like_ast::{NameEntry, NodeNames, SigParam, Signature, to_camel_case};
 
-use super::types::type_ref;
 use crate::flow::node::Node;
 use crate::flow::pin::{Pin, PinType};
 use crate::flow::variable::VariableType;
@@ -27,7 +26,11 @@ fn sig_param(pin: &Pin) -> SigParam {
     };
     SigParam {
         name: pin.name.clone(),
-        ty: type_ref(&pin.data_type, &pin.value_type),
+        ty: super::types::type_ref_with_schema(
+            &pin.data_type,
+            &pin.value_type,
+            pin.schema.as_deref(),
+        ),
         // An input is optional if it carries a default value.
         optional: pin
             .default_value

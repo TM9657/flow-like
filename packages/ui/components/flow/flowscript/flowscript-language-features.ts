@@ -2224,6 +2224,11 @@ function inferredTypeLabel(value: ValueType | null): string | undefined {
 		case IVariableType.Byte:
 			base = "bytes";
 			break;
+		case IVariableType.Geometry:
+			base = value.geometryKind
+				? `geometry<${value.geometryKind}>`
+				: "geometry";
+			break;
 		case IVariableType.Struct:
 			base = value.schemaTitle ?? "Struct";
 			break;

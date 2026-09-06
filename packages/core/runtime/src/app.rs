@@ -394,6 +394,9 @@ impl App {
         let mut board = Board::new(id, storage_root.clone(), state.clone());
         let mut pages = Vec::new();
         if let Some(mut template) = template {
+            template.ensure_supported_format()?;
+            template.validate_geometry_contracts()?;
+            board.format_version = template.required_format_version();
             // A template that crossed a serialization boundary — an API request body, the desktop
             // IPC bridge — arrives without `app_state`/`board_dir`, which are runtime-only. Its
             // page payloads still live on this app's store under the template layout, so rebind it
@@ -495,6 +498,7 @@ impl App {
             let board = app_state.get_board(&board_id, version);
 
             if let Ok(board) = board {
+                board.lock().await.ensure_supported_format()?;
                 return Ok(board);
             }
         }

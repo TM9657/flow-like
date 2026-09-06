@@ -7,6 +7,7 @@ export interface QueryColumn {
 	name: string;
 	type_name: string;
 	position: number;
+	metadata?: Record<string, string>;
 }
 
 export interface ExecuteSqlPayload {

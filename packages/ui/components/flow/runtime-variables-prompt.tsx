@@ -1,7 +1,9 @@
 import { useTranslation } from "@flow-like/locales";
 import { AlertCircleIcon, CheckIcon, KeyIcon, SaveIcon } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
+import { normalizeGeometryValue } from "../../lib/geometry";
 import type { IVariable } from "../../lib/schema/flow/board";
+import { IVariableType } from "../../lib/schema/flow/pin";
 import { parseUint8ArrayToJson } from "../../lib/uint8";
 import type { RuntimeVariableValue } from "../../state/runtime-variables-context";
 import { Badge } from "../ui/badge";
@@ -36,9 +38,24 @@ export interface RuntimeVariablesPromptProps {
  * and structured values count as configured as soon as they decode; strings
  * (including paths) must be non-empty.
  */
-function isRuntimeVariableConfigured(variable: IVariable): boolean {
+function isRuntimeVariableConfigured(
+	variable: IVariable,
+	refs?: Record<string, string>,
+): boolean {
 	const decoded = parseUint8ArrayToJson(variable.default_value);
 	if (decoded === undefined || decoded === null) return false;
+	if (variable.data_type === IVariableType.Geometry) {
+		try {
+			normalizeGeometryValue(decoded, {
+				schema: variable.schema,
+				refs,
+				valueType: variable.value_type,
+			});
+			return true;
+		} catch {
+			return false;
+		}
+	}
 	if (typeof decoded === "string") return decoded.trim().length > 0;
 	return true;
 }
@@ -115,9 +132,9 @@ function RuntimeVariablesForm({
 	const missingCount = useMemo(() => {
 		return variables.filter((variable) => {
 			const current = values.get(variable.id) ?? variable;
-			return !isRuntimeVariableConfigured(current);
+			return !isRuntimeVariableConfigured(current, refs);
 		}).length;
-	}, [variables, values]);
+	}, [variables, values, refs]);
 
 	const canSave = missingCount === 0;
 
@@ -152,7 +169,7 @@ function RuntimeVariablesForm({
 			<div className="space-y-4 py-4">
 				{variables.map((variable) => {
 					const current = values.get(variable.id) ?? variable;
-					const isConfigured = isRuntimeVariableConfigured(current);
+					const isConfigured = isRuntimeVariableConfigured(current, refs);
 
 					return (
 						<Card key={variable.id} className="p-4">

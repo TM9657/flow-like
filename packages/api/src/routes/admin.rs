@@ -81,7 +81,9 @@ pub fn routes() -> Router<AppState> {
         )
         .route(
             "/publication/apps/{app_id}/board/{board_id}",
-            get(publication::get_board::get_board),
+            get(publication::get_board::get_board).route_layer(axum::middleware::from_fn(
+                super::app::board::capabilities::negotiate_board_format,
+            )),
         )
         .route(
             "/publication/apps/{app_id}/page/{page_id}",

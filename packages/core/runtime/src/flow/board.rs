@@ -39,6 +39,7 @@ use tracing::instrument;
 pub mod cleanup;
 pub mod commands;
 pub mod dirty;
+pub mod format;
 pub mod summary;
 pub mod sync;
 
@@ -309,6 +310,9 @@ pub struct LoadedPages {
 
 #[derive(Serialize, Deserialize, JsonSchema, Clone)]
 pub struct Board {
+    /// Minimum document format understood by readers and writers. Missing versions mean 1.
+    #[serde(default = "format::legacy_board_format_version")]
+    pub format_version: u32,
     pub id: String,
     pub name: String,
     pub description: String,
@@ -445,6 +449,7 @@ impl Board {
         let board_dir = base_dir;
 
         let mut board = Board {
+            format_version: format::LEGACY_BOARD_FORMAT_VERSION,
             id,
             name: "New Board".to_string(),
             description: "Your new Workflow!".to_string(),
@@ -474,6 +479,7 @@ impl Board {
     }
 
     pub fn mark_changed(&mut self) {
+        self.format_version = self.required_format_version();
         self.updated_at = SystemTime::now();
         self.hash();
     }
@@ -629,6 +635,10 @@ impl Board {
         hasher.append(&self.version.0.to_le_bytes());
         hasher.append(&self.version.1.to_le_bytes());
         hasher.append(&self.version.2.to_le_bytes());
+        let format_version = self.required_format_version();
+        if format_version > format::LEGACY_BOARD_FORMAT_VERSION {
+            hasher.append(&format_version.to_le_bytes());
+        }
         hasher.append(&self.viewport.0.to_le_bytes());
         hasher.append(&self.viewport.1.to_le_bytes());
         hasher.append(&self.viewport.2.to_le_bytes());
@@ -975,6 +985,8 @@ impl Board {
         command: GenericCommand,
         state: Arc<FlowLikeState>,
     ) -> flow_like_types::Result<GenericCommand> {
+        self.ensure_supported_format()?;
+        let format_snapshot = self.format_rollback_snapshot();
         let mut command = command;
         if tracing::enabled!(tracing::Level::DEBUG) {
             let cmd_json = serde_json::to_string(&command).unwrap_or_default();
@@ -1005,6 +1017,7 @@ impl Board {
         command.touched(&mut touched);
         self.node_updates_scoped(state, Some(&touched)).await;
         self.cleanup();
+        self.finish_format_mutation(format_snapshot)?;
         self.mark_changed();
         Ok(command)
     }
@@ -1080,6 +1093,8 @@ impl Board {
         commands: Vec<GenericCommand>,
         state: Arc<FlowLikeState>,
     ) -> flow_like_types::Result<Vec<GenericCommand>> {
+        self.ensure_supported_format()?;
+        let format_snapshot = self.format_rollback_snapshot();
         let mut commands = commands;
         let nodes_before = self.nodes.clone();
         for index in 0..commands.len() {
@@ -1124,6 +1139,7 @@ impl Board {
         }
         self.node_updates_scoped(state, Some(&touched)).await;
         self.cleanup();
+        self.finish_format_mutation(format_snapshot)?;
         self.mark_changed();
         let derived = self.derived_node_state_commands(&nodes_before, &commands);
         commands.extend(derived);
@@ -1135,6 +1151,8 @@ impl Board {
         commands: Vec<GenericCommand>,
         state: Arc<FlowLikeState>,
     ) -> flow_like_types::Result<()> {
+        self.ensure_supported_format()?;
+        let format_snapshot = self.format_rollback_snapshot();
         let mut commands = commands;
         for index in (0..commands.len()).rev() {
             if let Err(error) = commands[index].undo(self, state.clone()).await {
@@ -1160,6 +1178,7 @@ impl Board {
         }
         self.node_updates(state).await;
         self.cleanup();
+        self.finish_format_mutation(format_snapshot)?;
         self.mark_changed();
         Ok(())
     }
@@ -1169,6 +1188,8 @@ impl Board {
         commands: Vec<GenericCommand>,
         state: Arc<FlowLikeState>,
     ) -> flow_like_types::Result<()> {
+        self.ensure_supported_format()?;
+        let format_snapshot = self.format_rollback_snapshot();
         let mut commands = commands;
         for index in 0..commands.len() {
             if let Err(error) = commands[index].validate(self, state.clone()).await {
@@ -1208,6 +1229,7 @@ impl Board {
         }
         self.node_updates(state).await;
         self.cleanup();
+        self.finish_format_mutation(format_snapshot)?;
         self.mark_changed();
         Ok(())
     }
@@ -1344,6 +1366,8 @@ impl Board {
         version: (u32, u32, u32),
         store: Option<Arc<dyn ObjectStore>>,
     ) -> flow_like_types::Result<()> {
+        self.ensure_supported_format()?;
+        self.validate_geometry_contracts()?;
         if version == flow_like_types::dispatch::ETAG_BOUND_LATEST_VERSION_SENTINEL {
             return Err(flow_like_types::anyhow!(
                 "board version {}.{}.{} is reserved for ETag-bound Latest dispatch",
@@ -1542,6 +1566,7 @@ impl Board {
             Self::proto_path(&self.board_dir, &self.id, Some(version)),
         )
         .await?;
+        Self::validate_proto_types(&proto)?;
         let snapshot = Self::from_proto(proto);
         // Compare what persistence keeps, not what the draft holds in memory. Protobuf stores
         // several `Option<bool>` / `Option<f64>` fields as bare proto3 scalars, so an explicit
@@ -1591,6 +1616,7 @@ impl Board {
         // "changed" on every publish. The question here is only whether another writer replaced
         // the draft, and that shows up in the stored bytes.
         let proto: proto::Board = from_compressed(store.clone(), floating_path).await?;
+        Self::validate_proto_types(&proto)?;
         let mut floating = Self::from_proto(proto);
         floating.board_dir = self.board_dir.clone();
         floating.app_state = self.app_state.clone();
@@ -1629,6 +1655,7 @@ impl Board {
         let store = self.get_store(store).await?;
         let floating_path = Self::proto_path(&self.board_dir, &self.id, None);
         let proto: proto::Board = from_compressed(store, floating_path).await?;
+        Self::validate_proto_types(&proto)?;
         let mut floating = Self::from_proto(proto);
         floating.board_dir = self.board_dir.clone();
         floating.app_state = self.app_state.clone();
@@ -1801,6 +1828,8 @@ impl Board {
         prepared: &PreparedBoardSnapshot,
         store: Option<Arc<dyn ObjectStore>>,
     ) -> flow_like_types::Result<bool> {
+        self.ensure_supported_format()?;
+        self.validate_geometry_contracts()?;
         if prepared.version == flow_like_types::dispatch::ETAG_BOUND_LATEST_VERSION_SENTINEL {
             return Err(flow_like_types::anyhow!(
                 "the prepared board version is reserved for ETag-bound Latest dispatch"
@@ -1840,6 +1869,7 @@ impl Board {
                     _ => return Err(load_error),
                 },
             };
+        Self::validate_proto_types(&floating_proto)?;
         let mut floating = Self::from_proto(floating_proto);
         floating.board_dir = self.board_dir.clone();
         if floating.version > prepared.version
@@ -1926,6 +1956,8 @@ impl Board {
         version_type: VersionType,
         store: Option<Arc<dyn ObjectStore>>,
     ) -> flow_like_types::Result<((u32, u32, u32), (u32, u32, u32))> {
+        self.ensure_supported_format()?;
+        self.validate_geometry_contracts()?;
         let store = self.get_store(store).await?;
         let existing = self.get_versions(Some(store.clone())).await?;
         let mut published = self.version;
@@ -2071,7 +2103,9 @@ impl Board {
         version: Option<(u32, u32, u32)>,
     ) -> flow_like_types::Result<flow_like_types::proto::Board> {
         let path = Self::proto_path(board_dir, id, version);
-        from_compressed(store, path).await
+        let proto = from_compressed(store, path).await?;
+        Self::validate_proto_types(&proto)?;
+        Ok(proto)
     }
 
     /// Like [`Self::load_proto`] but additionally returns the storage
@@ -2089,7 +2123,9 @@ impl Board {
         flow_like_storage::object_store::ObjectMeta,
     )> {
         let path = Self::proto_path(board_dir, id, version);
-        from_compressed_with_meta(store, path).await
+        let (proto, meta) = from_compressed_with_meta(store, path).await?;
+        Self::validate_proto_types(&proto)?;
+        Ok((proto, meta))
     }
 
     /// Conditional [`Self::load_proto_with_meta`]: given the `e_tag` of a cached copy, one
@@ -2108,7 +2144,11 @@ impl Board {
         e_tag: Option<&str>,
     ) -> flow_like_types::Result<ConditionalRead<flow_like_types::proto::Board>> {
         let path = Self::proto_path(board_dir, id, version);
-        from_compressed_if_changed(store, path, e_tag).await
+        let result = from_compressed_if_changed(store, path, e_tag).await?;
+        if let ConditionalRead::Fresh(proto, _) = &result {
+            Self::validate_proto_types(proto)?;
+        }
+        Ok(result)
     }
 
     /// The object store the board's `.board` file lives in.
@@ -2134,8 +2174,12 @@ impl Board {
         proto: flow_like_types::proto::Board,
         board_dir: Path,
         app_state: Arc<FlowLikeState>,
-    ) -> Self {
+    ) -> flow_like_types::Result<Self> {
+        Self::validate_proto_types(&proto)?;
         let mut board = Board::from_proto(proto);
+        board.ensure_supported_format()?;
+        board.format_version = board.required_format_version();
+        board.validate_geometry_contracts()?;
         board.board_dir = board_dir;
         board.app_state = Some(app_state.clone());
         board.logic_nodes = HashMap::new();
@@ -2147,9 +2191,12 @@ impl Board {
         // board `execute_commands` saves (which hashes after its own cleanup) — the client keys
         // its rendered-node cache on `node.hash`, and the sync protocol ships it, so a hash that
         // depends on the code path and not the content invalidates both for nothing.
+        board.ensure_supported_format()?;
+        board.format_version = board.required_format_version();
         board.hash();
+        board.validate_geometry_contracts()?;
 
-        board
+        Ok(board)
     }
 
     #[instrument(name = "Board::load", skip(app_state, path), level = "debug")]
@@ -2173,7 +2220,7 @@ impl Board {
             .as_generic();
 
         let proto = Self::load_proto(store, &path, id, version).await?;
-        Ok(Self::from_loaded_proto(proto, path, app_state).await)
+        Self::from_loaded_proto(proto, path, app_state).await
     }
 
     /// Persist the floating draft. Returns the store's [`PutResult`] so a caller that keeps this
@@ -2183,6 +2230,8 @@ impl Board {
         &self,
         store: Option<Arc<dyn ObjectStore>>,
     ) -> flow_like_types::Result<PutResult> {
+        self.ensure_supported_format()?;
+        self.validate_geometry_contracts()?;
         let to = self.board_dir.child(format!("{}.board", self.id));
         let store = match store {
             Some(store) => store,
@@ -2558,6 +2607,8 @@ impl Board {
         source_board_id: Option<&str>,
         store: Option<Arc<dyn ObjectStore>>,
     ) -> flow_like_types::Result<()> {
+        self.ensure_supported_format()?;
+        self.validate_geometry_contracts()?;
         let to = self.board_dir.child(format!("{}.template", self.id));
         let store = self.get_store(store).await?;
 
@@ -2583,6 +2634,8 @@ impl Board {
         source_board_id: Option<&str>,
         store: Option<Arc<dyn ObjectStore>>,
     ) -> flow_like_types::Result<()> {
+        self.ensure_supported_format()?;
+        self.validate_geometry_contracts()?;
         let store = self.get_store(store).await?;
 
         let to = Self::versioned_template_path(&self.board_dir, &self.id, version);
@@ -2608,6 +2661,8 @@ impl Board {
         old_template: Option<Board>,
         store: Option<Arc<dyn ObjectStore>>,
     ) -> flow_like_types::Result<(u32, u32, u32)> {
+        self.ensure_supported_format()?;
+        self.validate_geometry_contracts()?;
         let store = self.get_store(store).await?;
 
         let version = old_template
@@ -2622,6 +2677,8 @@ impl Board {
         // before this fix live under the source board's id instead and are unreachable — they were
         // already invisible to all three, so there is nothing to migrate, only orphans to ignore.
         if let Some(old_template) = &old_template {
+            old_template.ensure_supported_format()?;
+            old_template.validate_geometry_contracts()?;
             let to = Self::versioned_template_path(&self.board_dir, &template_id, version);
             let mut old_template = old_template.clone();
             old_template.clear_internal_refs();
@@ -2679,7 +2736,11 @@ impl Board {
         };
 
         let board: flow_like_types::proto::Board = from_compressed(store, path).await?;
+        Self::validate_proto_types(&board)?;
         let mut board = Board::from_proto(board);
+        board.ensure_supported_format()?;
+        board.format_version = board.required_format_version();
+        board.validate_geometry_contracts()?;
         board.board_dir = board_dir;
         board.app_state = Some(app_state.clone());
         board.logic_nodes = HashMap::new();
@@ -2687,6 +2748,9 @@ impl Board {
         // Sync node schemas on load to handle version migrations
         board.node_updates(app_state).await;
         board.cleanup();
+        board.ensure_supported_format()?;
+        board.format_version = board.required_format_version();
+        board.validate_geometry_contracts()?;
 
         Ok(board)
     }

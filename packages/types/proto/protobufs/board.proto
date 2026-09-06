@@ -103,4 +103,6 @@ message Board {
   // mutation and its receipt share one object-store commit, but it is not part
   // of the workflow schema and must never be exposed through Board JSON.
   map<string, string> internal_refs = 22;
+  // Document compatibility version. Zero in legacy protobufs means version 1.
+  uint32 format_version = 23;
 }

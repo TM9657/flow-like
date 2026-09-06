@@ -239,9 +239,16 @@ pub fn sync_node_with_catalog(placed_node: &mut Node, catalog_node: &Node) {
 
                 // Update schema reference. The open marker is the absence of a contract, so it
                 // must never erase a concrete schema the node resolved at runtime.
-                if catalog_pin.schema.as_deref().is_none_or(|catalog_schema| {
-                    catalog_schema_may_replace(catalog_schema, placed_pin.schema.as_deref())
-                }) {
+                let preserves_geometry_subtype = placed_pin.data_type
+                    == crate::flow::variable::VariableType::Geometry
+                    && catalog_pin.data_type == crate::flow::variable::VariableType::Geometry
+                    && catalog_pin.schema.is_none()
+                    && placed_pin.schema.is_some();
+                if !preserves_geometry_subtype
+                    && catalog_pin.schema.as_deref().is_none_or(|catalog_schema| {
+                        catalog_schema_may_replace(catalog_schema, placed_pin.schema.as_deref())
+                    })
+                {
                     placed_pin.schema = catalog_pin.schema.clone();
                 }
             }
@@ -423,6 +430,43 @@ pub fn should_sync_node(logic: &Arc<dyn NodeLogic>, placed_node: &Node) -> bool 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn geometry_subtypes_survive_catalog_sync_cleanup_and_proto_roundtrip() {
+        use crate::flow::pin::ValueType;
+        use crate::flow::variable::{Variable, VariableType};
+        use flow_like_types::geometry::{GeometryKind, marker};
+        use flow_like_types::{FromProto, ToProto};
+        let mut placed = Node::new("geo-cast", "Cast", "", "");
+        placed
+            .add_output_pin("geometry", "Geometry", "", VariableType::Geometry)
+            .schema = Some(marker(GeometryKind::Point).into());
+        placed.version = Some(1);
+        let mut catalog = Node::new("geo-cast", "Cast", "", "");
+        catalog.add_output_pin("geometry", "Geometry", "", VariableType::Geometry);
+        catalog.version = Some(2);
+        sync_node_with_catalog(&mut placed, &catalog);
+        assert_eq!(
+            placed
+                .get_pin_by_name("geometry")
+                .unwrap()
+                .schema
+                .as_deref(),
+            Some(marker(GeometryKind::Point))
+        );
+        let mut board = Board::new_detached(Some("geo".into()), flow_like_storage::Path::default());
+        board.nodes.insert(placed.id.clone(), placed);
+        let mut variable = Variable::new("geo", VariableType::Geometry, ValueType::Normal);
+        variable.schema = Some(marker(GeometryKind::Polygon).into());
+        board.variables.insert(variable.id.clone(), variable);
+        board.cleanup();
+        let restored = Board::from_proto(board.to_proto());
+        restored.validate_geometry_contracts().unwrap();
+        let mut second = restored.clone();
+        second.cleanup();
+        assert_eq!(restored.refs, second.refs);
+        assert_eq!(restored.variables, second.variables);
+    }
     use crate::flow::{node::Node, variable::VariableType};
 
     #[test]

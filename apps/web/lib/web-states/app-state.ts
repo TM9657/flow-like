@@ -16,6 +16,7 @@ import {
 	isAzureBlobStorageUrl,
 } from "@flow-like/flow-like-ui";
 import type { IGroup } from "@flow-like/flow-like-ui";
+import { isMissingResourceError } from "@flow-like/flow-like-ui/lib/api-error";
 import {
 	type IForkJobView,
 	resolveOnlineFork,
@@ -207,8 +208,41 @@ export class WebAppState implements IAppState {
 		return apiGet<IApp>(`apps/${appId}`, this.backend.auth);
 	}
 
+	async getAppAuthoritative(appId: string): Promise<IApp> {
+		return this.getApp(appId);
+	}
+
 	async updateApp(app: IApp): Promise<void> {
 		await apiPut(`apps/${app.id}`, { app }, this.backend.auth);
+	}
+
+	async updateAppAuthoritative(app: IApp): Promise<void> {
+		await apiPut(`apps/${app.id}`, { app }, this.backend.auth);
+	}
+
+	async readAppBuild(appId: string, buildId: string): Promise<unknown | null> {
+		try {
+			return await apiGet<unknown>(
+				`apps/${appId}/flowpilot-builds/${buildId}`,
+				this.backend.auth,
+			);
+		} catch (error) {
+			if (isMissingResourceError(error)) return null;
+			throw error;
+		}
+	}
+
+	async writeAppBuild(
+		appId: string,
+		buildId: string,
+		record: unknown,
+		expectedRevision: number | null,
+	): Promise<void> {
+		await apiPut(
+			`apps/${appId}/flowpilot-builds/${buildId}`,
+			{ record, expected_revision: expectedRevision },
+			this.backend.auth,
+		);
 	}
 
 	async getAppMeta(appId: string, language?: string): Promise<IMetadata> {

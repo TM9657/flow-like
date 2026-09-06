@@ -1162,6 +1162,7 @@ fn validate_placeholder_pins(
                 | "Date"
                 | "PathBuf"
                 | "Byte"
+                | "Geometry"
         ) {
             errors.push(issue(
                 "error",

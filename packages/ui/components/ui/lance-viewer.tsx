@@ -56,7 +56,6 @@ import * as React from "react";
 import { useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { cn } from "../../lib";
-import { geoArrowIndexKind } from "../../lib/geoarrow-index";
 import {
 	detectEpochUnit,
 	formatAbsoluteDateTime,
@@ -71,6 +70,7 @@ import {
 	toDateTimeInputValue,
 	toEpochNumber,
 } from "../../lib/date";
+import { geoArrowIndexKind } from "../../lib/geoarrow-index";
 import { resolveStorageFile } from "../../lib/storage-file";
 import { looksLikeUserColumnName } from "../../lib/user-display";
 import type { IIndexConfig } from "../../state/backend-state/db-state";
@@ -107,6 +107,7 @@ import {
 	TooltipTrigger,
 	buttonVariants,
 } from "./";
+import { GeometryCell, GeometryDetails } from "./geometry-cell";
 import { StorageFileChip, StorageFilePreview } from "./storage-file-cell";
 import {
 	Table as DataTable,
@@ -126,6 +127,7 @@ import {
 import { UserIdentityCard, UserInlineTag } from "./user-identity";
 
 export type LanceFieldKind =
+	| "geometry"
 	| "string"
 	| "number"
 	| "boolean"
@@ -146,6 +148,7 @@ export interface LanceField {
 	name: string;
 	kind: LanceFieldKind;
 	indexKind?: "geometry" | "unsupported-geometry" | "binary";
+	metadata?: Record<string, unknown>;
 	dims?: number;
 	items?: LanceFieldKind | LanceField;
 	nullable?: boolean;
@@ -1241,6 +1244,14 @@ const Cell: React.FC<{
 		}
 
 		switch (field.kind) {
+			case "geometry":
+				return (
+					<GeometryCell
+						value={value}
+						metadata={field.metadata}
+						onClick={openDialog}
+					/>
+				);
 			case "boolean":
 				return (
 					<Button
@@ -1546,7 +1557,7 @@ const CellViewDialog: React.FC<{
 	}, [open]);
 
 	const handleSave = useCallback(async () => {
-		if (!onUpdateItem) return;
+		if (!onUpdateItem || field.kind === "geometry") return;
 
 		setSaving(true);
 		try {
@@ -1601,6 +1612,8 @@ const CellViewDialog: React.FC<{
 		}
 
 		switch (field.kind) {
+			case "geometry":
+				return <GeometryDetails value={value} metadata={field.metadata} />;
 			case "boolean":
 				return (
 					<div className="flex items-center gap-2">
@@ -1641,7 +1654,16 @@ const CellViewDialog: React.FC<{
 				);
 			}
 		}
-	}, [field.kind, field.dims, value, temporal, userId, file, appId]);
+	}, [
+		field.kind,
+		field.dims,
+		field.metadata,
+		value,
+		temporal,
+		userId,
+		file,
+		appId,
+	]);
 
 	return (
 		<Dialog open={open} onOpenChange={onOpenChange}>
@@ -1663,6 +1685,7 @@ const CellViewDialog: React.FC<{
 								</Label>
 								<Switch
 									id="edit-switch"
+									disabled={field.kind === "geometry"}
 									checked={isEditing}
 									onCheckedChange={setIsEditing}
 								/>
@@ -2365,7 +2388,13 @@ const arrowFieldToLance = (f: any): LanceField => {
 	const nullable = f?.nullable ?? true;
 	const geometryKind = geoArrowIndexKind(f);
 	if (geometryKind) {
-		return { name, kind: "object", indexKind: geometryKind, nullable };
+		return {
+			name,
+			kind: "geometry",
+			indexKind: geometryKind,
+			nullable,
+			metadata: f.metadata,
+		};
 	}
 
 	if (typeof dt === "string") {

@@ -829,7 +829,7 @@ EXAMPLES: search_by_pin("String", true) finds nodes with String input pins"#.to_
                 "properties": {
                     "pin_type": {
                         "type": "string",
-                        "description": "Data type: String, Integer, Float, Boolean, Struct, Generic, Date, PathBuf, Byte, Execution"
+                        "description": "Data type: String, Integer, Float, Boolean, Struct, Geometry, Generic, Date, PathBuf, Byte, Execution"
                     },
                     "is_input": {
                         "type": "boolean",
@@ -1428,7 +1428,7 @@ REF_IDS: Use '$0', '$1', etc. to reference nodes in same batch"#.to_string(),
                                                     "friendly_name": { "type": "string" },
                                                     "description": { "type": "string" },
                                                     "pin_type": { "const": "Output" },
-                                                    "data_type": { "type": "string", "enum": ["String", "Integer", "Float", "Boolean", "Struct", "Generic", "Date", "PathBuf", "Byte"] },
+                                                    "data_type": { "type": "string", "enum": ["String", "Integer", "Float", "Boolean", "Struct", "Geometry", "Generic", "Date", "PathBuf", "Byte"] },
                                                     "value_type": { "type": "string", "enum": ["Normal", "Array", "HashMap", "HashSet"] }
                                                 },
                                                 "required": ["name", "friendly_name", "pin_type", "data_type"]
@@ -1458,7 +1458,7 @@ REF_IDS: Use '$0', '$1', etc. to reference nodes in same batch"#.to_string(),
                                                     "friendly_name": { "type": "string", "description": "Display name (e.g., 'Order Data')" },
                                                     "description": { "type": "string", "description": "Optional description" },
                                                     "pin_type": { "type": "string", "enum": ["Input", "Output"], "description": "Whether this is an input or output pin" },
-                                                    "data_type": { "type": "string", "enum": ["String", "Integer", "Float", "Boolean", "Struct", "Generic", "Execution"], "description": "The data type of the pin" },
+                                                    "data_type": { "type": "string", "enum": ["String", "Integer", "Float", "Boolean", "Struct", "Geometry", "Generic", "Execution"], "description": "The data type of the pin" },
                                                     "value_type": { "type": "string", "enum": ["Normal", "Array", "HashMap", "HashSet"], "description": "Value type (default: Normal)" }
                                                 },
                                                 "required": ["name", "friendly_name", "pin_type", "data_type"]
@@ -1528,7 +1528,7 @@ REF_IDS: Use '$0', '$1', etc. to reference nodes in same batch"#.to_string(),
                                         "command_type": { "const": "CreateVariable" },
                                         "variable_id": { "type": "string", "description": "Optional variable ID. Omit to let the frontend generate one." },
                                         "name": { "type": "string", "description": "Variable name" },
-                                        "data_type": { "type": "string", "description": "Data type: String, Integer, Float, Boolean, Struct, etc." },
+                                        "data_type": { "type": "string", "description": "Data type: String, Integer, Float, Boolean, Struct, Geometry, etc." },
                                         "value_type": { "type": "string", "description": "Value type: Normal, Array, HashMap, HashSet" },
                                         "default_value": { "description": "Optional default value" },
                                         "description": { "type": "string", "description": "Optional description" },

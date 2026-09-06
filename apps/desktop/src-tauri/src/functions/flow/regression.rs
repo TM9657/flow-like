@@ -19,9 +19,9 @@ use flow_like::{
         regression::{
             CAVEAT_GRADING_BLIND, CorpusCandidate, FIXTURE_PAYLOAD_CAP_BYTES, FixtureBaseline,
             GateMode, RegressionFixture, RegressionSuite, RunGradeEvidence, SUITE_CASE_CAP,
-            SuiteCase, TestVerdict, drop_raw_body_duplicates, error_class_of, grade_run, payload_preview,
-            plan_suite_cases, prepare_fixture_payload, redact_by_key_name, select_corpus_window,
-            shape_hash,
+            SuiteCase, TestVerdict, drop_raw_body_duplicates, error_class_of, grade_run,
+            payload_preview, plan_suite_cases, prepare_fixture_payload, redact_by_key_name,
+            select_corpus_window, shape_hash,
         },
     },
     flow_like_storage::{

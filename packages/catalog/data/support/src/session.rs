@@ -290,7 +290,9 @@ pub fn create_session_context(
         .with_default_features()
         .build();
 
-    SessionContext::new_with_state(state)
+    let context = SessionContext::new_with_state(state);
+    flow_like_storage::geometry::register_geo_functions(&context);
+    context
 }
 
 /// Every DataFusion session in this crate must be built through here so the
@@ -300,5 +302,7 @@ pub fn create_session_context(
     config: SessionConfig,
     environment: ExecutionEnvironment,
 ) -> SessionContext {
-    SessionContext::new_with_config_rt(config, create_runtime_env(environment))
+    let context = SessionContext::new_with_config_rt(config, create_runtime_env(environment));
+    flow_like_storage::geometry::register_geo_functions(&context);
+    context
 }

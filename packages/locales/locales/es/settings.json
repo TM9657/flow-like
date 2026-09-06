@@ -1933,5 +1933,6 @@
 	"yourProfile": "Tu perfil",
 	"yourSemanticLayer": "Tu capa semántica",
 	"geometryWgs84": "",
-	"geometryColumnHint": ""
+	"geometryColumnHint": "",
+	"geometryBackendUpgrade": ""
 }

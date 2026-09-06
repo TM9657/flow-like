@@ -37,7 +37,11 @@ use std::{convert::Infallible, sync::Arc, time::Duration};
 use super::global_chat::{GlobalChatFrame, ServerPlatformBridge};
 
 pub fn routes() -> Router<AppState> {
-    Router::new().route("/chat", post(copilot_chat))
+    Router::new()
+        .route("/chat", post(copilot_chat))
+        .route_layer(axum::middleware::from_fn(
+            crate::routes::app::board::capabilities::negotiate_board_format,
+        ))
 }
 
 /// Request payload for the unified copilot endpoint
@@ -771,43 +775,47 @@ pub async fn copilot_chat(
     let delivery_sub = sub.clone();
     let delivery_app_id = retained_app_id.clone();
     let delivery_store = flow_ir_draft_store.clone();
-    flow_like_types::tokio::spawn(async move {
-        let result = copilot
-            .chat_with_raw_user_prompt(
-                payload.scope,
-                payload.board.as_ref(),
-                &payload.selected_node_ids,
-                payload.current_surface.as_ref(),
-                payload.current_canvas_settings.as_ref(),
-                &payload.selected_component_ids,
-                payload.user_prompt,
-                payload.raw_user_prompt,
-                payload.request_images,
-                payload.history,
-                payload.model_id,
-                token,
-                context,
-                on_token,
-            )
-            .await
-            .map_err(|e| e.to_string());
-        let result = match result {
-            Ok(response) => persist_response_flow_ir_claim(
-                &delivery_state,
-                &delivery_sub,
-                delivery_app_id.as_deref(),
-                delivery_store.as_ref(),
-                &response,
-            )
-            .await
-            .map(|()| response)
-            .map_err(|error| error.to_string()),
-            Err(error) => Err(error),
-        };
+    let board_format = flow_like::flow::board::format::supported_version();
+    flow_like_types::tokio::spawn(flow_like::flow::board::format::with_supported_version(
+        board_format,
+        async move {
+            let result = copilot
+                .chat_with_raw_user_prompt(
+                    payload.scope,
+                    payload.board.as_ref(),
+                    &payload.selected_node_ids,
+                    payload.current_surface.as_ref(),
+                    payload.current_canvas_settings.as_ref(),
+                    &payload.selected_component_ids,
+                    payload.user_prompt,
+                    payload.raw_user_prompt,
+                    payload.request_images,
+                    payload.history,
+                    payload.model_id,
+                    token,
+                    context,
+                    on_token,
+                )
+                .await
+                .map_err(|e| e.to_string());
+            let result = match result {
+                Ok(response) => persist_response_flow_ir_claim(
+                    &delivery_state,
+                    &delivery_sub,
+                    delivery_app_id.as_deref(),
+                    delivery_store.as_ref(),
+                    &response,
+                )
+                .await
+                .map(|()| response)
+                .map_err(|error| error.to_string()),
+                Err(error) => Err(error),
+            };
 
-        let _ = done_tx.send(result);
-        // If the receiver is already dropped, ignore.
-    });
+            let _ = done_tx.send(result);
+            // If the receiver is already dropped, ignore.
+        },
+    ));
 
     let stream = async_stream::stream! {
         let mut token_stream_open = true;

@@ -154,6 +154,9 @@ impl ResolvedToolApproval {
 }
 
 fn tool_call_has_read_only_override(spec: &PlatformToolSpec, args: &Value) -> bool {
+    if spec.name == "app_build" {
+        return matches!(spec_arg_str(args, "operation", "operation"), "schema" | "capabilities" | "recipe" | "status");
+    }
     // Asking about a board must neither serialize as an edit nor surface an edit prompt.
     if spec.name == "flowpilot_board" && spec_arg_str(args, "mode", "mode") == "explain" {
         return true;
@@ -190,6 +193,10 @@ fn tool_call_has_read_only_override(spec: &PlatformToolSpec, args: &Value) -> bo
 /// destroys one irreplaceable target scopes its memory to that target: approving one table drop
 /// must never authorize dropping every other table for the rest of the session.
 fn approval_session_key(spec: &PlatformToolSpec, args: &Value) -> String {
+    if spec.name == "app_build" {
+        return format!("app_build:{}:{}:{}", spec_arg_str(args, "operation", "operation"),
+            spec_arg_str(args, "app_id", "appId"), spec_arg_str(args, "build_id", "buildId"));
+    }
     if spec.name == "interact_app_page" {
         let app_id = spec_arg_str(args, "app_id", "appId");
         let event_id = spec_arg_str(args, "event_id", "eventId");
@@ -983,18 +990,13 @@ conversation. Non-destructive UI change."#,
         },
         PlatformToolSpec {
             name: "open_app_page",
-            description: r#"Embed an app's UI page/interface inline in the conversation (like an artifact), so the
-USER can see and use the app's frontend without leaving the chat. After the page finishes loading,
-the result includes a bounded semantic inventory of rendered elements plus ordered screenshots as
-image attachments for YOU to inspect. Elements expose labels, text, current state, available events,
-and an `element_ref` accepted by `interact_app_page`; password values are redacted. Use this tool when
-the user asks to show an app page or asks about information displayed in it. Check `status`,
-`semantic_inspection_complete`, `screenshot_count`, and `screenshot_complete`. Inspect every attached
-image before answering and never claim to have read uncaptured regions. This works only for events
-with kind "page" in `list_apps`. Use `open_app_chat` or `call_app_chat` for chat events and
-`call_app_event` for headless events. Pass the page Event's `id` as `event_id`, never its `page_id`.
-A structured failure supersedes older inventory: do not guess another Event or route; relist at most
-once only when `relist_required`."#,
+            description: r#"Show an app page inline for the user. Returns bounded rendered elements (labels, state,
+events, redacted passwords, and `element_ref` for `interact_app_page`) plus ordered screenshots.
+Check `status`, `semantic_inspection_complete`, `screenshot_count`, and `screenshot_complete`.
+Inspect every attached image; never claim to have read uncaptured regions. Only for kind "page"
+in `list_apps`: pass its Event `id`, never `page_id`. Use chat tools for chat, `call_app_event` for
+headless interfaces. A structured failure supersedes older inventory: never guess another Event
+or route; relist at most once, only when `relist_required`."#,
             schema: || {
                 json!({
                     "type": "object",
@@ -1074,6 +1076,7 @@ approval dialog with a "don't ask again this session" option before it runs."#,
                     "properties": {
                         "name": { "type": "string", "description": "Human-readable app name." },
                         "description": { "type": "string", "description": "Short description of what the app does." },
+                        "idempotency_key": { "type": "string", "description": "Conversation-local retry key. Reuse for the same target; a lost creation response still needs inspection." },
                         "online": { "type": "boolean", "description": "Create an online/cloud app synced to the user's account (the default when signed in) or a local-only app when false. Forced to local when the user is not signed in." }
                     },
                     "required": ["name"]
@@ -1206,23 +1209,11 @@ genuinely blocking choice, and never for anything a tool can inspect."#,
         },
         PlatformToolSpec {
             name: "call_app_chat",
-            description: r#"Talk to a Flow-Like app that exposes a chat event: send it a message and get its reply.
-
-Use this to interact with an app's own chat agent on the user's behalf (e.g. ask a knowledge-base app
-a question). Running the app's chat is side-effecting, so it asks for approval unless the user selected
-"don't ask again this session".
-
-Returns the app chat's TEXT response — interpret it and answer the user in your own words, don't just
-paste it. The app is automatically shown to the user as a linked chip on your message, so you can refer
-to it by name (e.g. "According to the Knowledge Base app, …"). Any UI the app pushes and any files it
-produces are shown to the user directly; you receive only the text and a short list of returned files.
-
-Independent calls run in parallel: to consult several apps for one request, emit their `call_app_chat`
-tool calls together in one turn instead of waiting for each.
-
-Hand over the user's attached files with `forward_files` (see the FILES ATTACHED THIS TURN context):
-pass the exact names of the files this specific app needs. Choose by file type and what the app does —
-don't blindly forward everything — but when unsure whether a file is relevant, include it."#,
+            description: r#"Send a message to an app's chat agent on the user's behalf. Side-effecting; requires
+approval unless already granted for this session. Interpret the returned text for the user; the app
+appears as a linked chip. Generated UI/files are shown directly; you receive text and file summaries.
+Emit independent app calls together for parallel execution. Set `forward_files` explicitly to exact
+names from FILES ATTACHED THIS TURN, chosen for this app's task; [] forwards none."#,
             schema: || {
                 json!({
                     "type": "object",
@@ -1252,17 +1243,17 @@ don't blindly forward everything — but when unsure whether a file is relevant,
         },
         PlatformToolSpec {
             name: "upsert_event",
-            description: r#"Create or update an app-level EVENT — either a page route or the interface/sink setup attached to a board entry node. A board entry node and an Event type are separate layers:
-- events_simple entry: quick_action (default), api, cron, daemon, deeplink, rest, mcp. Cron is configured HERE on an events_simple node; it is not a catalog node.
-- events_generic entry: generic_form (default), api, deeplink. Its payload and typed output pins carry request/form values; a new FlowScript `eventsGeneric(payload: Struct, field: type, ...)` entry materializes those field pins.
-- events_chat entry: simple_chat (default), advanced_chat, discord, telegram.
-
-`flowpilot_board` returns compatible entries under `event_nodes`. For a WORKFLOW event, this tool must run in a separate, later assistant turn: first wait for `flowpilot_board` to succeed and persist the board, then pass the exact returned board_id and node id here. Never call `flowpilot_board` and workflow `upsert_event` in the same response/tool batch, and do not call this tool when the board result failed or contained no compatible `event_nodes`. This tool checks node/Event compatibility and fills the Event type's default config. Pass `config` for sink/interface-specific overrides. For cron pass `cron_expression` (recurring) OR `scheduled_for` (one-time), plus an explicit IANA `timezone` when known.
-
-Two target forms:
-- PAGE event (shows a page at a URL): pass page_id (the page to render) and route (e.g. "/weather"). This forces event_type to `page`; do not pass node_id or a workflow event_type. board_id is optional page-owner metadata. Register workflow entries separately.
-- WORKFLOW event: pass board_id and node_id (an events_simple/events_generic/events_chat entry node), plus a compatible event_type and optional route.
-Omit event_id to create; pass it to update. Side-effecting; asks for approval."#,
+            description: r#"Create/update an app Event. Omit event_id to create. Entry compatibility:
+- events_simple: quick_action (default), api, cron, daemon, deeplink, rest, mcp. Cron is Event config, not a catalog node.
+- events_generic: generic_form (default), api, deeplink; typed payload pins carry request values.
+- events_chat: simple_chat (default), discord, telegram. events_mail: email.
+WORKFLOW: pass exact board_id/node_id from a successful persisted `flowpilot_board.event_nodes`,
+compatible event_type, optional route. Use a separate, later assistant turn. Never call `flowpilot_board` and workflow `upsert_event` in the same batch or after a failed board result.
+PAGE: page_id and route forces event_type to `page`; no node_id or workflow event_type.
+board_id is optional owner metadata. Register workflow entries separately.
+`config` overrides type defaults. Cron needs cron_expression OR scheduled_for, plus IANA timezone
+(default UTC). Active defaults true; staged apps refuse activation outside app_build promotion.
+Side-effecting; requires approval."#,
             schema: || {
                 json!({
                     "type": "object",
@@ -1347,11 +1338,13 @@ Omit event_id to create; pass it to update. Side-effecting; asks for approval."#
         },
         PlatformToolSpec {
             name: "data_studio_agent",
-            description: r#"The data specialist for app databases/tables; SQL and Cypher; ontologies/overlays; graph queries/elements; analytics; ontology actions; and data visualizations. It reads AND changes data — create, insert, update, correct, migrate, seed, index, or drop — on apps that already exist as well as during BUILD. It does not edit workflow boards or UI.
-
-Call it directly for any work item about the data itself: schema, ad-hoc queries, analytics, corrections, migrations, ontologies, or data setup for a build. It needs no preflight; pass `app_id` from context or `list_apps`. Choose a configured active Event instead when one already performs exactly what was asked — a routing preference, not a restriction on this tool. A failed, declined, timed-out, or approval-blocked Event is a stop to report, not work to redo through raw data.
-
-Give one complete question/change with the exact app and optional overlay from context. It returns its answer plus material query/action/chart evidence. Read-only inspection needs no approval; nested destructive/mutating operations ask separately and report their effects. If optional data setup is unavailable or declined during a larger build, disclose it but continue independent board work; do not retry in a loop."#,
+            description: r#"Data specialist for tables, SQL/Cypher, ontologies, graphs, analytics, actions and charts.
+Reads/changes data on apps that already exist and during BUILD; never edits boards or UI. It needs no preflight:
+pass the exact app_id, optional overlay_id, and complete question/change. Prefer an active Event that
+already performs the requested action; this is not a restriction on this tool. Never bypass a failed,
+declined, timed-out or approval-blocked Event through raw data. Returns answers and query/action/chart
+evidence. Reads need no approval; nested mutations ask separately and report effects. Disclose unavailable
+or declined optional setup, continue independent board work, and never retry it in a loop."#,
             schema: || {
                 json!({
                     "type": "object",
@@ -1478,6 +1471,7 @@ Prefer this over `fork_app` when the existing app already does what the user wan
     // Global FlowPilot can execute a persisted board node directly and inspect any resulting run.
     // Event execution remains `call_app_event` at platform scope because that tool also performs
     // interface discovery/validation; board-scoped agents use `execute_event` from the runtime set.
+    specs.push(super::app_build_tool_spec::app_build_tool_spec());
     specs.extend(global_runtime_verification_tool_specs());
 
     if memory_enabled {

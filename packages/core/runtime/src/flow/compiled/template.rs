@@ -17,7 +17,7 @@ use super::view::reconstruct_board;
 use crate::flow::board::{Board, ExecutionStage, LayerType};
 use crate::flow::execution::LogLevel;
 use crate::flow::node::{Node, NodeLogic};
-use crate::flow::pin::PinType;
+use crate::flow::pin::{PinType, ValueType};
 use crate::flow::variable::{Variable, VariableType};
 use crate::state::FlowNodeRegistryInner;
 use ahash::{AHashMap, AHashSet};
@@ -30,6 +30,8 @@ pub struct TemplatePin {
     pub name: Arc<str>,
     pub pin_type: PinType,
     pub data_type: VariableType,
+    pub value_type: ValueType,
+    pub schema: Option<Arc<str>>,
     /// Parsed once at template build; runs share the parsed tree.
     pub default_value: Option<Arc<Value>>,
     pub layer_pin: bool,
@@ -115,11 +117,29 @@ impl CompiledRunTemplate {
     ) -> Result<Self> {
         let mut pins = Vec::with_capacity(compiled.pins.len());
         for cp in &compiled.pins {
+            let data_type = codes::variable_type_from(cp.data_type)?;
+            let value_type = codes::value_type_from(cp.value_type)?;
+            let schema = if data_type == VariableType::Geometry {
+                cp.schema
+                    .as_deref()
+                    .map(|schema| crate::flow::pin::resolve_schema(schema, &view.refs))
+                    .transpose()?
+            } else {
+                cp.schema.as_deref()
+            };
+            crate::flow::variable::validate_typed_default(
+                &data_type,
+                &value_type,
+                schema,
+                cp.default_value.as_deref(),
+            )?;
             pins.push(TemplatePin {
                 id: Arc::from(cp.id.as_str()),
                 name: Arc::from(cp.name.as_str()),
                 pin_type: codes::pin_type_from(cp.pin_type)?,
-                data_type: codes::variable_type_from(cp.data_type)?,
+                data_type,
+                value_type,
+                schema: schema.map(Arc::from),
                 default_value: cp
                     .default_value
                     .as_ref()
@@ -194,6 +214,22 @@ impl CompiledRunTemplate {
 
         let mut variables = Vec::with_capacity(view.variables.len());
         for variable in view.variables.values() {
+            let mut variable = variable.clone();
+            if variable.data_type == VariableType::Geometry {
+                variable.schema = variable
+                    .schema
+                    .as_deref()
+                    .map(|schema| {
+                        crate::flow::pin::resolve_schema(schema, &view.refs).map(str::to_string)
+                    })
+                    .transpose()?;
+                crate::flow::variable::validate_typed_default(
+                    &variable.data_type,
+                    &variable.value_type,
+                    variable.schema.as_deref(),
+                    variable.default_value.as_deref(),
+                )?;
+            }
             variables.push(TemplateVariable {
                 parsed_default: variable
                     .default_value

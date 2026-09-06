@@ -38,11 +38,53 @@ impl UpsertPinCommand {
 
 #[async_trait]
 impl Command for UpsertPinCommand {
+    async fn validate(&self, board: &Board, _: Arc<FlowLikeState>) -> flow_like_types::Result<()> {
+        if self.pin.data_type == VariableType::Geometry {
+            let schema = self
+                .pin
+                .schema
+                .as_deref()
+                .map(|schema| crate::flow::pin::resolve_schema(schema, &board.refs))
+                .transpose()?;
+            let mut pin = self.pin.clone();
+            pin.keep_sensitive_value_from(
+                board
+                    .nodes
+                    .get(&self.node_id)
+                    .and_then(|node| node.pins.get(&self.pin.id)),
+            );
+            crate::flow::variable::validate_typed_default(
+                &pin.data_type,
+                &pin.value_type,
+                schema,
+                pin.default_value.as_deref(),
+            )?;
+        }
+        Ok(())
+    }
+
     async fn execute(
         &mut self,
         board: &mut Board,
         _: Arc<FlowLikeState>,
     ) -> flow_like_types::Result<()> {
+        if self.pin.data_type == VariableType::Geometry {
+            let schema = self
+                .pin
+                .schema
+                .as_deref()
+                .map(|schema| crate::flow::pin::resolve_schema(schema, &board.refs))
+                .transpose()?;
+            let kind = crate::flow::variable::geometry_kind_from_schema(schema)?;
+            self.pin.schema = kind.map(|kind| flow_like_types::geometry::marker(kind).to_string());
+            crate::flow::variable::validate_typed_default(
+                &self.pin.data_type,
+                &self.pin.value_type,
+                self.pin.schema.as_deref(),
+                self.pin.default_value.as_deref(),
+            )?;
+        }
+
         if self.pin.data_type == VariableType::Struct
             && let Some(ref schema_str) = self.pin.schema
             && !schema_str.trim().is_empty()

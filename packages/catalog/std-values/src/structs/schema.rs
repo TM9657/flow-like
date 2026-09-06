@@ -136,6 +136,9 @@ fn is_date_format(schema: &Value) -> bool {
 /// Map a scalar JSON-schema type to a pin type (`"format": "date-time"`/`"date"` strings become
 /// Date pins).
 pub(crate) fn scalar_type(type_str: &str, schema: &Value) -> VariableType {
+    if is_geometry_schema(schema) {
+        return VariableType::Geometry;
+    }
     match type_str {
         "boolean" => VariableType::Boolean,
         "integer" => VariableType::Integer,
@@ -150,6 +153,9 @@ pub(crate) fn scalar_type(type_str: &str, schema: &Value) -> VariableType {
 pub(crate) fn array_type(resolved: &Value, root_schema: &Value) -> (VariableType, ValueType) {
     if let Some(items) = resolved.get("items") {
         let item_resolved = resolve_schema(items, root_schema);
+        if is_geometry_schema(item_resolved) {
+            return (VariableType::Geometry, ValueType::Array);
+        }
         match item_resolved
             .get("type")
             .and_then(|item_type| item_type.as_str())
@@ -165,6 +171,17 @@ pub(crate) fn array_type(resolved: &Value, root_schema: &Value) -> (VariableType
 /// Get the variable type from a resolved schema.
 pub(crate) fn get_schema_type(schema: &Value, root_schema: &Value) -> (VariableType, ValueType) {
     let resolved = resolve_schema(schema, root_schema);
+
+    if is_geometry_schema(resolved) {
+        return (VariableType::Geometry, ValueType::Normal);
+    }
+    if resolved.get("type").and_then(Value::as_str) == Some("object")
+        && resolved
+            .get("additionalProperties")
+            .is_some_and(|schema| is_geometry_schema(resolve_schema(schema, root_schema)))
+    {
+        return (VariableType::Geometry, ValueType::HashMap);
+    }
 
     if union_object_properties(resolved, root_schema).is_some() {
         return (VariableType::Struct, ValueType::Normal);
@@ -197,6 +214,34 @@ pub(crate) fn get_schema_type(schema: &Value, root_schema: &Value) -> (VariableT
     }
 
     (VariableType::Generic, ValueType::Normal)
+}
+
+fn is_geometry_schema(schema: &Value) -> bool {
+    schema.get("x-flow-like-type").and_then(Value::as_str) == Some("geometry")
+        || schema.get("$id").and_then(Value::as_str)
+            == Some(flow_like_types::geometry::GEOMETRY_SCHEMA_ID)
+}
+
+/// Extract a field's subtype marker, including array and map fields. Keep a
+/// malformed marker visible so the runtime rejects it instead of widening it.
+pub(crate) fn geometry_marker_for_schema(schema: &Value, root: &Value) -> Option<String> {
+    let mut schema = resolve_schema(schema, root);
+    if !is_geometry_schema(schema) {
+        schema = resolve_schema(
+            schema
+                .get("items")
+                .or_else(|| schema.get("additionalProperties"))?,
+            root,
+        );
+    }
+    if schema.get("$id").and_then(Value::as_str)
+        == Some(flow_like_types::geometry::GEOMETRY_SCHEMA_ID)
+    {
+        return Some(schema.to_string());
+    }
+    schema.get("x-geometry").map(|kind| {
+        flow_like_types::json::json!({"$id":"flow:geometry","x-geometry":kind}).to_string()
+    })
 }
 
 pub(crate) fn capitalize_first(s: &str) -> String {
@@ -320,6 +365,13 @@ fn check(
     }
 
     let schema = deref(schema, root);
+    if is_geometry_schema(schema) {
+        let marker = geometry_marker_for_schema(schema, root);
+        let kind = flow_like::flow::variable::geometry_kind_from_schema(marker.as_deref())
+            .map_err(|error| error.to_string())?;
+        return flow_like_types::geometry::validate_geometry(value, kind)
+            .map_err(|error| format!("{path}: {error}"));
+    }
 
     match schema {
         Value::Bool(true) => return Ok(()),

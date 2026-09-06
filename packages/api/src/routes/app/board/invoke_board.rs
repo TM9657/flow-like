@@ -142,6 +142,9 @@ pub async fn invoke_board(
             "Invoking requires a caller that is linked to a user account",
         )
     })?;
+    state
+        .master_board_shared(&app_id, &board_id, &state, params.version)
+        .await?;
     let technical_user_id = permission.technical_user_id().map(ToOwned::to_owned);
     let caller_app_chain = match &user {
         AppUser::ConnectedApp(connected) => Some(connected.app_chain.clone()),

@@ -1,15 +1,17 @@
 "use client";
 
 import { useTranslation } from "@flow-like/locales";
-import { Network, Play, Table2 } from "lucide-react";
-import { useCallback, useState } from "react";
+import { Network, Play, Table2, X } from "lucide-react";
+import { useCallback, useMemo, useState } from "react";
 import { Button } from "../button";
 import { ScrollArea } from "../scroll-area";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../tabs";
+import { PropertyValue } from "./graph-node-inspector";
 
 export interface GraphQueryPanelProps {
 	onRunCypher: (query: string) => void;
 	results: unknown[] | null;
+	propertyMetadata?: Record<string, Record<string, string>>;
 	loading?: boolean;
 	error?: string | null;
 	/**
@@ -18,19 +20,32 @@ export interface GraphQueryPanelProps {
 	 */
 	onAddToCanvas?: () => void;
 	addToCanvasCount?: number;
+	onClose?: () => void;
 }
 
 export function GraphQueryPanel({
 	onRunCypher,
 	results,
+	propertyMetadata,
 	loading,
 	error,
 	onAddToCanvas,
 	addToCanvasCount,
+	onClose,
 }: GraphQueryPanelProps) {
 	const { t } = useTranslation("common");
 	const [query, setQuery] = useState("");
 	const [activeTab, setActiveTab] = useState("table");
+	const columns = useMemo(
+		() => [
+			...new Set(
+				(results ?? []).flatMap((row) =>
+					typeof row === "object" && row !== null ? Object.keys(row) : [],
+				),
+			),
+		],
+		[results],
+	);
 
 	const handleRun = useCallback(() => {
 		if (query.trim()) {
@@ -49,8 +64,11 @@ export function GraphQueryPanel({
 	);
 
 	return (
-		<div className="flex flex-col border rounded-lg bg-background overflow-hidden">
-			<div className="p-3 border-b space-y-2">
+		<div
+			className="flex h-full min-h-0 flex-col overflow-hidden rounded-lg border bg-background"
+			aria-busy={loading || undefined}
+		>
+			<div className="shrink-0 space-y-2 border-b p-2 sm:p-3">
 				<div className="flex items-center justify-between gap-2">
 					<p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
 						{t("cypherQuery", "Cypher Query")}
@@ -76,28 +94,45 @@ export function GraphQueryPanel({
 							size="sm"
 							onClick={handleRun}
 							disabled={loading || !query.trim()}
+							title={t("runQueryShortcut", "Run query (Ctrl/Cmd + Enter)")}
 						>
 							<Play className="h-3.5 w-3.5 mr-1" />
-							{loading ? "Running..." : "Run"}
+							{loading ? t("running", "Running...") : t("run", "Run")}
 						</Button>
+						{onClose && (
+							<Button
+								type="button"
+								size="icon"
+								variant="ghost"
+								className="h-8 w-8"
+								onClick={onClose}
+								aria-label={t("closeQueryPanel", "Close query panel")}
+							>
+								<X className="h-4 w-4" />
+							</Button>
+						)}
 					</div>
 				</div>
 				<textarea
+					aria-label={t("cypherQuery", "Cypher Query")}
 					value={query}
 					onChange={(e) => setQuery(e.target.value)}
 					onKeyDown={handleKeyDown}
 					placeholder="MATCH (n:Person)-[r]->(m) RETURN n, r, m LIMIT 100"
-					className="w-full min-h-[80px] max-h-[200px] rounded-md border bg-muted/50 px-3 py-2 text-sm font-mono resize-y focus:outline-none focus:ring-2 focus:ring-ring"
+					className="min-h-16 max-h-28 w-full resize-none rounded-md border bg-muted/50 px-3 py-2 font-mono text-sm focus:outline-none focus:ring-2 focus:ring-ring"
 					spellCheck={false}
 				/>
 			</div>
 			{error && (
-				<div className="px-3 py-2 bg-destructive/10 text-destructive text-xs border-b">
+				<div
+					className="shrink-0 border-b bg-destructive/10 px-3 py-2 text-xs text-destructive"
+					role="alert"
+				>
 					{error}
 				</div>
 			)}
 			{results && results.length > 0 && (
-				<div className="flex-1 min-h-0">
+				<div className="min-h-0 flex-1" aria-live="polite">
 					<Tabs
 						value={activeTab}
 						onValueChange={setActiveTab}
@@ -110,19 +145,17 @@ export function GraphQueryPanel({
 							</TabsTrigger>
 							<TabsTrigger value="json" className="text-xs gap-1">
 								<Network className="h-3.5 w-3.5" />
-								{`JSON`}
+								JSON
 							</TabsTrigger>
 						</TabsList>
-						<TabsContent value="table" className="flex-1 m-0 p-3 min-h-0">
-							<ScrollArea className="max-h-[300px]">
-								<div className="border rounded overflow-auto">
+						<TabsContent value="table" className="m-0 min-h-0 flex-1 p-3">
+							<ScrollArea className="h-full">
+								<div className="min-w-max overflow-auto rounded border">
 									<table className="w-full text-xs">
 										<thead>
 											<tr className="bg-muted/50">
-												{results[0] &&
-												typeof results[0] === "object" &&
-												results[0] !== null ? (
-													Object.keys(results[0]).map((key) => (
+												{columns.length > 0 ? (
+													columns.map((key) => (
 														<th
 															key={key}
 															className="px-3 py-2 text-left font-medium text-muted-foreground"
@@ -139,16 +172,20 @@ export function GraphQueryPanel({
 										</thead>
 										<tbody>
 											{results.map((row, i) => (
+												// biome-ignore lint/suspicious/noArrayIndexKey: Query rows have no unique ID and arrive as one result set.
 												<tr key={i} className="border-t">
 													{typeof row === "object" && row !== null ? (
-														Object.values(row).map((val, j) => (
+														columns.map((key) => (
 															<td
-																key={j}
-																className="px-3 py-1.5 max-w-[200px] truncate"
+																key={key}
+																className="px-3 py-1.5 min-w-[120px] max-w-[280px] align-top"
 															>
-																{typeof val === "object"
-																	? JSON.stringify(val)
-																	: String(val ?? "")}
+																<PropertyValue
+																	value={(row as Record<string, unknown>)[key]}
+																	propKey={key}
+																	metadata={propertyMetadata?.[key]}
+																	compact
+																/>
 															</td>
 														))
 													) : (
@@ -161,8 +198,8 @@ export function GraphQueryPanel({
 								</div>
 							</ScrollArea>
 						</TabsContent>
-						<TabsContent value="json" className="flex-1 m-0 p-3 min-h-0">
-							<ScrollArea className="max-h-[300px]">
+						<TabsContent value="json" className="m-0 min-h-0 flex-1 p-3">
+							<ScrollArea className="h-full">
 								<pre className="text-xs font-mono bg-muted/50 rounded p-3 whitespace-pre-wrap">
 									{JSON.stringify(results, null, 2)}
 								</pre>
@@ -172,7 +209,10 @@ export function GraphQueryPanel({
 				</div>
 			)}
 			{results && results.length === 0 && (
-				<div className="p-4 text-center text-sm text-muted-foreground">
+				<div
+					className="p-4 text-center text-sm text-muted-foreground"
+					aria-live="polite"
+				>
 					{t("queryReturnedNoResults", "Query returned no results")}
 				</div>
 			)}
