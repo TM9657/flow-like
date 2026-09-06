@@ -235,6 +235,11 @@ function computeColumnRanges(
 const NODE_SIZE_MIN = 5;
 const NODE_SIZE_MAX = 18;
 
+function toValidNodeSize(value: unknown, fallback: number): number {
+	const numeric = toFiniteNumber(value);
+	return Math.max(NODE_SIZE_MIN, numeric ?? fallback);
+}
+
 function styleToNodeSize(
 	style?: LabelStyle,
 	degree?: number,
@@ -244,15 +249,15 @@ function styleToNodeSize(
 	if (!style?.size) return DEFAULT_NODE_SIZE;
 	const { mode } = style.size;
 	if (mode === "fixed")
-		return Math.max(NODE_SIZE_MIN, style.size.value ?? DEFAULT_NODE_SIZE);
+		return toValidNodeSize(style.size.value, DEFAULT_NODE_SIZE);
 	if (mode === "by-degree" && degree !== undefined) {
-		const min = style.size.min ?? NODE_SIZE_MIN;
-		const max = style.size.max ?? NODE_SIZE_MAX;
+		const min = toValidNodeSize(style.size.min, NODE_SIZE_MIN);
+		const max = Math.max(min, toValidNodeSize(style.size.max, NODE_SIZE_MAX));
 		return Math.min(max, min + degree * 1.2);
 	}
 	if (mode === "by-column" && style.size.column) {
-		const min = style.size.min ?? NODE_SIZE_MIN;
-		const max = style.size.max ?? NODE_SIZE_MAX;
+		const min = toValidNodeSize(style.size.min, NODE_SIZE_MIN);
+		const max = Math.max(min, toValidNodeSize(style.size.max, NODE_SIZE_MAX));
 		const value = toFiniteNumber(props?.[style.size.column]);
 		const range = columnRanges?.get(style.size.column);
 		if (value === undefined || !range || range.max <= range.min) {
@@ -1663,7 +1668,7 @@ function SigmaViewportManager({
 
 				if (!settleOverlaps || visibleNodeIds.length < 2) return;
 
-				let remainingPasses = currentGraph.order < LARGE_THRESHOLD ? 2 : 1;
+				let remainingPasses = currentGraph.order < 500 ? 2 : 1;
 				const settleInViewport = () => {
 					settleFrame = 0;
 					if (disposed || remainingPasses <= 0) return;
@@ -1674,8 +1679,10 @@ function SigmaViewportManager({
 								currentGraph.order >= HUGE_THRESHOLD
 									? 2
 									: currentGraph.order >= LARGE_THRESHOLD
-										? 4
-										: 10,
+										? 3
+										: currentGraph.order >= 500
+											? 4
+											: 8,
 							labelExtents: computeLabelExtents(currentGraph, visibleNodeIds),
 							coordinateMapper: {
 								fromGraph: (position) => sigma.graphToViewport(position),
@@ -2775,6 +2782,10 @@ export function GraphCanvas({
 			themeTick,
 		],
 	);
+	const viewportSizingTrigger = useMemo(
+		() => [hiddenLabels, visibleNodeIds, nodeLabels, graphRevision],
+		[hiddenLabels, visibleNodeIds, nodeLabels, graphRevision],
+	);
 
 	// Stable reducers — read all dynamic state from the ref, and everything about
 	// the element from its own attributes: attribute-only reducers are what makes
@@ -3027,7 +3038,11 @@ export function GraphCanvas({
 		return (
 			<div
 				ref={stageRef}
-				className={`relative flex h-full min-h-[280px] w-full min-w-[280px] items-center justify-center overflow-hidden text-muted-foreground ${className ?? ""}`}
+				className={`relative flex h-full w-full items-center justify-center overflow-hidden text-muted-foreground ${className ?? ""}`}
+				style={{
+					minWidth: MIN_GRAPH_STAGE_WIDTH,
+					minHeight: MIN_GRAPH_STAGE_HEIGHT,
+				}}
 			>
 				{t("noGraphDataToDisplay", "No graph data to display")}
 			</div>
@@ -3039,7 +3054,11 @@ export function GraphCanvas({
 	return (
 		<div
 			ref={stageRef}
-			className={`relative h-full min-h-[280px] w-full min-w-[280px] overflow-hidden ${className ?? ""}`}
+			className={`relative h-full w-full overflow-hidden ${className ?? ""}`}
+			style={{
+				minWidth: MIN_GRAPH_STAGE_WIDTH,
+				minHeight: MIN_GRAPH_STAGE_HEIGHT,
+			}}
 			onContextMenu={
 				onNodeContextMenu ? (event) => event.preventDefault() : undefined
 			}
@@ -3084,7 +3103,7 @@ export function GraphCanvas({
 					/>
 					<SigmaViewportManager
 						highlightRef={highlightRef}
-						refreshKey={sigmaRefreshTrigger}
+						refreshKey={viewportSizingTrigger}
 						settleOverlaps={!isWorkerLayoutRunning}
 						layoutRevision={viewportLayoutRevision}
 					/>

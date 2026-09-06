@@ -114,6 +114,7 @@ export interface OntologyQueryRepairContext {
 }
 
 export interface OntologyQueryGenerationRequest {
+	requestId: string;
 	prompt: string;
 	language: OntologyQueryLanguagePreference;
 	schema: OntologyQuerySchemaContext;
@@ -176,6 +177,9 @@ export interface OntologyQueryControllerOptions {
 }
 
 export interface OntologyQueryTextCompletionRequest {
+	requestId: string;
+	attempt: number;
+	sourcePrompt: string;
 	systemPrompt: string;
 	userPrompt: string;
 	signal: AbortSignal;
@@ -960,6 +964,7 @@ export class OntologyQueryController {
 			try {
 				generated = await this.generator(
 					{
+						requestId,
 						prompt,
 						language: preference,
 						schema,
@@ -1143,6 +1148,12 @@ export function createTextCompletionOntologyQueryGenerator(
 ): OntologyQueryProposalGenerator {
 	return async (request, { signal }) => {
 		const prompts = buildOntologyQueryGeneratorPrompt(request);
-		return await complete({ ...prompts, signal });
+		return await complete({
+			...prompts,
+			requestId: request.requestId,
+			attempt: request.attempt,
+			sourcePrompt: request.prompt,
+			signal,
+		});
 	};
 }

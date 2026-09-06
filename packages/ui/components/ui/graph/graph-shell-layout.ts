@@ -1,5 +1,6 @@
 export const GRAPH_MIN_STAGE_HEIGHT = 280;
-export const GRAPH_QUERY_DOCK_MIN_HEIGHT = 160;
+export const GRAPH_COMPACT_MIN_STAGE_HEIGHT = 220;
+export const GRAPH_QUERY_DOCK_MIN_HEIGHT = 144;
 export const GRAPH_QUERY_DOCK_DEFAULT_HEIGHT = 240;
 
 const COMPACT_TOOLBAR_WIDTH = 1100;
@@ -39,10 +40,30 @@ export function clampGraphQueryDockHeight(
 	const requested = Number.isFinite(requestedHeight)
 		? requestedHeight
 		: GRAPH_QUERY_DOCK_DEFAULT_HEIGHT;
-	const available = Number.isFinite(workspaceHeight)
-		? workspaceHeight - GRAPH_MIN_STAGE_HEIGHT
-		: GRAPH_QUERY_DOCK_DEFAULT_HEIGHT;
-	const maximum = Math.max(GRAPH_QUERY_DOCK_MIN_HEIGHT, available);
+	if (!Number.isFinite(workspaceHeight) || workspaceHeight <= 0) {
+		return Math.max(requested, GRAPH_QUERY_DOCK_MIN_HEIGHT);
+	}
 
-	return Math.min(Math.max(requested, GRAPH_QUERY_DOCK_MIN_HEIGHT), maximum);
+	const maximum = Math.max(
+		0,
+		workspaceHeight - getGraphStageMinHeight(workspaceHeight),
+	);
+	const minimum = Math.min(GRAPH_QUERY_DOCK_MIN_HEIGHT, maximum);
+
+	return Math.min(Math.max(requested, minimum), maximum);
+}
+
+/** Keeps the ideal stage size until a short container must share with the dock. */
+export function getGraphStageMinHeight(workspaceHeight: number): number {
+	if (!Number.isFinite(workspaceHeight) || workspaceHeight <= 0) {
+		return GRAPH_MIN_STAGE_HEIGHT;
+	}
+
+	return Math.min(
+		GRAPH_MIN_STAGE_HEIGHT,
+		Math.max(
+			GRAPH_COMPACT_MIN_STAGE_HEIGHT,
+			workspaceHeight - GRAPH_QUERY_DOCK_MIN_HEIGHT,
+		),
+	);
 }

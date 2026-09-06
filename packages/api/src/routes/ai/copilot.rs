@@ -22,7 +22,7 @@ use flow_like::flow::board::Board;
 use flow_like::flow::copilot::platform::PlatformToolBridge;
 use flow_like::flow::copilot::{
     CatalogProvider, FlowIrDraftStore, NodeMetadata, PinMetadata, PlatformSpecialist,
-	enrich_node_metadata, run_ontology_query_chat, run_specialist_chat, score_catalog_metadata,
+    enrich_node_metadata, run_ontology_query_chat, run_specialist_chat, score_catalog_metadata,
 };
 use flow_like::flow::node::{Node, NodeLogic};
 use flow_like::flow::pin::{Pin, PinType};
@@ -117,9 +117,9 @@ pub struct CopilotChatRequest {
     #[serde(default)]
     pub overlay_id: Option<String>,
 
-	/// Restrict a Data Studio run to producing one tool-free read-only query proposal.
-	#[serde(default)]
-	pub read_only: bool,
+    /// Restrict a Data Studio run to producing one tool-free read-only query proposal.
+    #[serde(default)]
+    pub read_only: bool,
 
     /// Whether to stream the response
     #[serde(default)]
@@ -127,6 +127,11 @@ pub struct CopilotChatRequest {
 }
 
 const MAX_PROMPT_CHARS: usize = 20_000;
+// The embedded ontology planner carries a bounded schema in `user_prompt`. Its frontend schema
+// budget is 60,000 serialized characters, so this route needs enough headroom for the question,
+// language preference, and repair context around that schema. This larger limit applies only to
+// the tool-free Data Studio query mode.
+const MAX_ONTOLOGY_QUERY_PROMPT_CHARS: usize = 70_000;
 const MAX_HISTORY_MESSAGES: usize = 32;
 const MAX_HISTORY_MESSAGE_CHARS: usize = 4_000;
 const MAX_REQUEST_IMAGES: usize = 4;
@@ -138,10 +143,19 @@ const MAX_SELECTED_ID_CHARS: usize = 256;
 const MAX_CONVERSATION_ID_CHARS: usize = 256;
 const ALLOWED_IMAGE_MEDIA_TYPES: &[&str] = &["image/png", "image/jpeg", "image/webp", "image/gif"];
 
+fn user_prompt_char_limit(scope: &CopilotScope, read_only: bool) -> usize {
+    if read_only && matches!(scope, CopilotScope::DataStudio) {
+        MAX_ONTOLOGY_QUERY_PROMPT_CHARS
+    } else {
+        MAX_PROMPT_CHARS
+    }
+}
+
 fn validate_copilot_payload(payload: &CopilotChatRequest) -> Result<(), ApiError> {
-    if payload.user_prompt.chars().count() > MAX_PROMPT_CHARS {
+    let max_user_prompt_chars = user_prompt_char_limit(&payload.scope, payload.read_only);
+    if payload.user_prompt.chars().count() > max_user_prompt_chars {
         return Err(ApiError::bad_request(format!(
-            "Prompt is too large. Maximum is {MAX_PROMPT_CHARS} characters."
+            "Prompt is too large. Maximum is {max_user_prompt_chars} characters."
         )));
     }
     if payload
@@ -943,34 +957,34 @@ async fn specialist_chat(
     let (done_tx, mut done_rx) = oneshot::channel::<Result<UnifiedCopilotResponse, String>>();
     let channel_for_task = channel.clone();
     flow_like_types::tokio::spawn(async move {
-		let query_proposal_only =
-			payload.read_only && matches!(specialist, PlatformSpecialist::DataStudio);
-		let result = if query_proposal_only {
-			run_ontology_query_chat(
-				flow_like_state,
-				profile,
-				payload.user_prompt,
-				payload.model_id,
-				token,
-				bridge,
-				Some(on_token),
-			)
-			.await
-		} else {
-			run_specialist_chat(
-				flow_like_state,
-				profile,
-				specialist,
-				context,
-				payload.user_prompt,
-				payload.model_id,
-				token,
-				bridge,
-				Some(on_token),
-			)
-			.await
-		}
-		.map(|message| UnifiedCopilotResponse {
+        let query_proposal_only =
+            payload.read_only && matches!(specialist, PlatformSpecialist::DataStudio);
+        let result = if query_proposal_only {
+            run_ontology_query_chat(
+                flow_like_state,
+                profile,
+                payload.user_prompt,
+                payload.model_id,
+                token,
+                bridge,
+                Some(on_token),
+            )
+            .await
+        } else {
+            run_specialist_chat(
+                flow_like_state,
+                profile,
+                specialist,
+                context,
+                payload.user_prompt,
+                payload.model_id,
+                token,
+                bridge,
+                Some(on_token),
+            )
+            .await
+        }
+        .map(|message| UnifiedCopilotResponse {
             message,
             commands: Vec::new(),
             components: Vec::new(),
@@ -1052,9 +1066,31 @@ async fn specialist_chat(
 
 #[cfg(test)]
 mod tests {
+    use super::MAX_ONTOLOGY_QUERY_PROMPT_CHARS;
+    use super::MAX_PROMPT_CHARS;
     use super::request_identity_prompt_for;
     use super::resolve_copilot_app_id;
     use super::specialist_host_context;
+    use super::user_prompt_char_limit;
+    use flow_like::copilot::CopilotScope;
+
+    #[test]
+    fn ontology_query_prompt_budget_has_room_for_the_bounded_schema() {
+        assert!(MAX_ONTOLOGY_QUERY_PROMPT_CHARS >= 60_000);
+        assert!(MAX_ONTOLOGY_QUERY_PROMPT_CHARS > MAX_PROMPT_CHARS);
+        assert_eq!(
+            user_prompt_char_limit(&CopilotScope::DataStudio, true),
+            MAX_ONTOLOGY_QUERY_PROMPT_CHARS
+        );
+        assert_eq!(
+            user_prompt_char_limit(&CopilotScope::DataStudio, false),
+            MAX_PROMPT_CHARS
+        );
+        assert_eq!(
+            user_prompt_char_limit(&CopilotScope::Board, true),
+            MAX_PROMPT_CHARS
+        );
+    }
 
     #[test]
     fn specialist_host_context_names_only_the_ids_it_was_given() {

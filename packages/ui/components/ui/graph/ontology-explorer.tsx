@@ -5,6 +5,18 @@ import { createId } from "@paralleldrive/cuid2";
 import type React from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
+import {
+	ONTOLOGY_QUERY_MAX_LIMIT,
+	OntologyQueryController,
+	type OntologyQueryLanguagePreference,
+	type OntologyQueryProposal,
+	type OntologyQueryReceipt,
+	type OntologyQueryStatusEvent,
+	createFlowPilotOntologyQueryTextCompletion,
+	createGraphStateOntologyQueryRuntime,
+	createTextCompletionOntologyQueryGenerator,
+	validateReadOnlyOntologyQuery,
+} from "../../../lib/ontology-query";
 import { useBackend } from "../../../state/backend-state";
 import type {
 	GraphAnalyticsResult,
@@ -19,6 +31,7 @@ import type {
 	SubgraphNode,
 	SubgraphResult,
 } from "../../../state/backend-state/graph-state";
+import { useGlobalChatStore } from "../../../state/global-chat/global-chat-store";
 import { Button } from "../button";
 import type { ExpansionOptions } from "./graph-expansion-dialog";
 import { GraphViewer, getNodeRawId } from "./graph-viewer";
@@ -125,6 +138,12 @@ export const OntologyExplorer: React.FC<OntologyExplorerProps> = ({
 	);
 	const [cypherLoading, setCypherLoading] = useState(false);
 	const [cypherError, setCypherError] = useState<string | null>(null);
+	const [flowPilotQueryStatus, setFlowPilotQueryStatus] =
+		useState<OntologyQueryStatusEvent | null>(null);
+	const [flowPilotQueryProposal, setFlowPilotQueryProposal] =
+		useState<OntologyQueryProposal | null>(null);
+	const [flowPilotQueryReceipt, setFlowPilotQueryReceipt] =
+		useState<OntologyQueryReceipt | null>(null);
 	const [nodeLimit, setNodeLimit] = useState(
 		limitOverride ?? GRAPH_DEFAULT_LIMIT,
 	);
@@ -143,6 +162,43 @@ export const OntologyExplorer: React.FC<OntologyExplorerProps> = ({
 	const styleRevertRef = useRef<Map<string, LabelStyle>>(new Map());
 	const initialLoadRequestRef = useRef(0);
 	const overlayRequestRef = useRef(0);
+	const queryUiRequestRef = useRef(0);
+	const querySurfaceInstanceIdRef = useRef(createId());
+	const flowPilotProvider = useGlobalChatStore((state) => state.provider);
+	const flowPilotModelId = useGlobalChatStore((state) => state.selectedModelId);
+	const flowPilotReasoningEffort = useGlobalChatStore(
+		(state) => state.reasoningEffort,
+	);
+	const ontologyQueryTarget = useMemo(
+		() => ({
+			appId,
+			overlayId,
+			userScoped,
+			surfaceInstanceId: querySurfaceInstanceIdRef.current,
+		}),
+		[appId, overlayId, userScoped],
+	);
+	const ontologyQueryController = useMemo(() => {
+		const complete = createFlowPilotOntologyQueryTextCompletion({
+			boardState: backend.boardState,
+			target: ontologyQueryTarget,
+			provider: flowPilotProvider,
+			modelId: flowPilotModelId || undefined,
+			reasoningEffort: flowPilotReasoningEffort || undefined,
+		});
+		return new OntologyQueryController({
+			target: ontologyQueryTarget,
+			generator: createTextCompletionOntologyQueryGenerator(complete),
+			runtime: createGraphStateOntologyQueryRuntime(backend.graphState),
+		});
+	}, [
+		backend.boardState,
+		backend.graphState,
+		flowPilotModelId,
+		flowPilotProvider,
+		flowPilotReasoningEffort,
+		ontologyQueryTarget,
+	]);
 
 	useEffect(() => {
 		overlayRef.current = overlay;
@@ -164,6 +220,14 @@ export const OntologyExplorer: React.FC<OntologyExplorerProps> = ({
 			timers.clear();
 		};
 	}, []);
+
+	useEffect(
+		() => () => {
+			queryUiRequestRef.current += 1;
+			ontologyQueryController.cancel();
+		},
+		[ontologyQueryController],
+	);
 
 	// Consumers routinely pass inline callbacks. Holding them in refs keeps the
 	// loader identity stable, otherwise every parent render would refetch.
@@ -207,12 +271,7 @@ export const OntologyExplorer: React.FC<OntologyExplorerProps> = ({
 				// a small pool of connection permits, and the whole-population counts
 				// are a caption on the view rather than a prerequisite for drawing it.
 				void backend.graphState
-					.analytics(
-						appId,
-						overlayId,
-						GRAPH_ANALYTICS_EDGE_LIMIT,
-						userScoped,
-					)
+					.analytics(appId, overlayId, GRAPH_ANALYTICS_EDGE_LIMIT, userScoped)
 					.then((result) => {
 						if (initialLoadRequestRef.current === requestId) {
 							setAnalytics(result);
@@ -280,36 +339,146 @@ export const OntologyExplorer: React.FC<OntologyExplorerProps> = ({
 		void loadOverlay();
 	}, [loadOverlay]);
 
-	const handleRunCypher = useCallback(
-		async (query: string) => {
+	const handleRunQuery = useCallback(
+		async (proposal: OntologyQueryProposal) => {
+			ontologyQueryController.cancel();
+			const uiRequest = ++queryUiRequestRef.current;
 			setCypherLoading(true);
 			setCypherError(null);
+			setCypherResult(null);
+			setFlowPilotQueryStatus(null);
+			setFlowPilotQueryReceipt(null);
+			setFlowPilotQueryProposal(proposal);
 			try {
-				const result = backend.graphState.cypherWithMetadata
-					? await backend.graphState.cypherWithMetadata(
-							appId,
-							overlayId,
-							{ query },
-							userScoped,
-						)
-					: {
-							rows: await backend.graphState.cypher(
-								appId,
-								overlayId,
-								{ query },
-								userScoped,
-							),
-							property_metadata: {},
-						};
+				validateReadOnlyOntologyQuery(proposal.language, proposal.query);
+				const limit = Math.min(nodeLimit, ONTOLOGY_QUERY_MAX_LIMIT);
+				const result: GraphQueryResult =
+					proposal.language === "cypher"
+						? backend.graphState.cypherWithMetadata
+							? await backend.graphState.cypherWithMetadata(
+									appId,
+									overlayId,
+									{
+										query: proposal.query,
+										params: proposal.params,
+										limit,
+									},
+									userScoped,
+								)
+							: {
+									rows: await backend.graphState.cypher(
+										appId,
+										overlayId,
+										{
+											query: proposal.query,
+											params: proposal.params,
+											limit,
+										},
+										userScoped,
+									),
+									property_metadata: {},
+								}
+						: {
+								rows: await backend.graphState.sql(
+									appId,
+									overlayId,
+									{
+										query: proposal.query,
+										params: proposal.params,
+										limit,
+									},
+									userScoped,
+								),
+								property_metadata: {},
+							};
+				if (queryUiRequestRef.current !== uiRequest) return;
 				setCypherResult(result);
 			} catch (err) {
+				if (queryUiRequestRef.current !== uiRequest) return;
 				setCypherError(extractGraphErrorMessage(err));
 			} finally {
-				setCypherLoading(false);
+				if (queryUiRequestRef.current === uiRequest) {
+					setCypherLoading(false);
+				}
 			}
 		},
-		[backend.graphState, appId, overlayId, userScoped],
+		[
+			appId,
+			backend.graphState,
+			nodeLimit,
+			ontologyQueryController,
+			overlayId,
+			userScoped,
+		],
 	);
+
+	const handleRunCypher = useCallback(
+		(query: string) =>
+			handleRunQuery({
+				language: "cypher",
+				query,
+				params: {},
+				presentation: "graph",
+			}),
+		[handleRunQuery],
+	);
+
+	const handleAskFlowPilot = useCallback(
+		async (
+			prompt: string,
+			language: OntologyQueryLanguagePreference = "auto",
+		) => {
+			const uiRequest = ++queryUiRequestRef.current;
+			setCypherLoading(true);
+			setCypherError(null);
+			setCypherResult(null);
+			setFlowPilotQueryStatus(null);
+			setFlowPilotQueryProposal(null);
+			setFlowPilotQueryReceipt(null);
+
+			const result = await ontologyQueryController.run({
+				prompt,
+				language,
+				limit: Math.min(nodeLimit, ONTOLOGY_QUERY_MAX_LIMIT),
+				onStatus: (status) => {
+					if (queryUiRequestRef.current !== uiRequest) return;
+					setFlowPilotQueryStatus(status);
+					if (status.proposal) setFlowPilotQueryProposal(status.proposal);
+				},
+			});
+
+			if (queryUiRequestRef.current !== uiRequest) return result;
+			setCypherLoading(false);
+			setFlowPilotQueryStatus(null);
+			if (result.status === "success") {
+				setFlowPilotQueryReceipt(result.receipt);
+				setFlowPilotQueryProposal({
+					language: result.receipt.language ?? "cypher",
+					query: result.receipt.query,
+					params: result.receipt.params,
+					presentation: result.receipt.presentation,
+				});
+				setCypherResult({
+					rows: result.receipt.rows,
+					property_metadata: result.receipt.propertyMetadata,
+				});
+			} else if (result.status === "error") {
+				setFlowPilotQueryReceipt(result.receipt);
+				setCypherError(
+					result.receipt.error?.message ?? "FlowPilot could not run the query.",
+				);
+			}
+			return result;
+		},
+		[ontologyQueryController, nodeLimit],
+	);
+
+	const handleCancelFlowPilotQuery = useCallback(() => {
+		queryUiRequestRef.current += 1;
+		ontologyQueryController.cancel();
+		setCypherLoading(false);
+		setFlowPilotQueryStatus(null);
+	}, [ontologyQueryController]);
 
 	const handleExpandNode = useCallback(
 		async (
@@ -773,6 +942,12 @@ export const OntologyExplorer: React.FC<OntologyExplorerProps> = ({
 				onNodeSelect={onNodeSelect}
 				onEdgeSelect={onEdgeSelect}
 				onRunCypher={allowCypher ? handleRunCypher : undefined}
+				onRunQuery={allowCypher ? handleRunQuery : undefined}
+				onAskFlowPilot={allowCypher ? handleAskFlowPilot : undefined}
+				onCancelFlowPilot={allowCypher ? handleCancelFlowPilotQuery : undefined}
+				flowPilotStatus={flowPilotQueryStatus}
+				generatedQueryProposal={flowPilotQueryProposal}
+				queryReceipt={flowPilotQueryReceipt}
 				cypherResults={cypherResult?.rows ?? null}
 				cypherMetadata={cypherResult?.property_metadata}
 				cypherLoading={cypherLoading}

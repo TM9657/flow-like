@@ -32,9 +32,8 @@ use flow_like::flow::copilot::{
     build_platform_context, default_flowscript_module_templates,
     emit_validation_requires_flowscript, enrich_node_metadata, flowscript_workspace_envelope,
     global_assistant_system_prompt, profile_flowscript_candidate,
-	render_flowscript_modular_partial_result, run_ontology_query_chat, run_platform_chat,
-	run_specialist_chat,
-    score_catalog_metadata, validate_model_facing_emit_commands_scope,
+    render_flowscript_modular_partial_result, run_ontology_query_chat, run_platform_chat,
+    run_specialist_chat, score_catalog_metadata, validate_model_facing_emit_commands_scope,
     workflow_authoring_defers_runtime_tool, workflow_authoring_tool_allowed,
     workflow_runtime_verification_deferred_payload, workflow_strategy_fingerprint,
     workflow_tool_result_succeeded,
@@ -3207,7 +3206,7 @@ async fn run_bits_specialist_chat(
     tool_context: Option<FrontendToolContext>,
     host_context_guidance: Option<String>,
     nested: bool,
-	read_only: bool,
+    read_only: bool,
     request_id: Option<String>,
     channel: Channel<String>,
 ) -> Result<UnifiedCopilotResponse, String> {
@@ -3268,33 +3267,33 @@ async fn run_bits_specialist_chat(
     let on_token = move |token: String| {
         let _ = channel.send(token);
     };
-	let specialist_chat = async {
-		if read_only && matches!(specialist, PlatformSpecialist::DataStudio) {
-			run_ontology_query_chat(
-				state,
-				profile,
-				user_prompt,
-				model_id,
-				auth_token,
-				bridge,
-				Some(on_token),
-			)
-			.await
-		} else {
-			run_specialist_chat(
-				state,
-				profile,
-				specialist,
-				context,
-				user_prompt,
-				model_id,
-				auth_token,
-				bridge,
-				Some(on_token),
-			)
-			.await
-		}
-	};
+    let specialist_chat = async {
+        if read_only && matches!(specialist, PlatformSpecialist::DataStudio) {
+            run_ontology_query_chat(
+                state,
+                profile,
+                user_prompt,
+                model_id,
+                auth_token,
+                bridge,
+                Some(on_token),
+            )
+            .await
+        } else {
+            run_specialist_chat(
+                state,
+                profile,
+                specialist,
+                context,
+                user_prompt,
+                model_id,
+                auth_token,
+                bridge,
+                Some(on_token),
+            )
+            .await
+        }
+    };
     let message = tokio::select! {
         result = specialist_chat => result.map_err(|error| error.to_string())?,
         _ = run_cancellation.cancelled() => {
@@ -3533,7 +3532,7 @@ pub async fn copilot_chat(
             tool_context,
             host_context_guidance,
             nested,
-			read_only,
+            read_only,
             request_id,
             channel,
         )
@@ -5415,9 +5414,9 @@ async fn external_code_agent_chat_internal(
         &raw_user_prompt,
         tool_channel,
     );
-	if read_only && matches!(scope, CopilotScope::DataStudio) {
-		tools.clear();
-	} else if read_only {
+    if read_only && matches!(scope, CopilotScope::DataStudio) {
+        tools.clear();
+    } else if read_only {
         tools.retain(|(tool, _)| is_flowpilot_read_only_tool(&tool.name));
     } else if workflow_edit_request {
         // A live FlowScript already contains the graph structure. Hiding legacy/manual discovery
@@ -6172,9 +6171,9 @@ async fn copilot_sdk_chat_internal(
         &raw_user_prompt,
         tool_channel,
     );
-	if read_only && matches!(scope, CopilotScope::DataStudio) {
-		tools.clear();
-	} else if read_only {
+    if read_only && matches!(scope, CopilotScope::DataStudio) {
+        tools.clear();
+    } else if read_only {
         tools.retain(|(tool, _)| is_flowpilot_read_only_tool(&tool.name));
     } else if workflow_edit_request {
         tools.retain(|(tool, _)| workflow_authoring_tool_allowed(&tool.name));
@@ -13954,7 +13953,14 @@ impl ExternalAgentInvocation {
             "--mcp-config".to_string(),
             mcp_config_path.display().to_string(),
         ];
-        if !tool_names.is_empty() {
+        const DISALLOWED_BUILTIN_TOOLS: &str =
+            "Task,Bash,Glob,Grep,Read,Edit,Write,NotebookEdit,WebFetch,WebSearch";
+        if tool_names.is_empty() {
+            // Claude documents an empty --tools value as the way to remove every built-in tool.
+            // The ontology query planner has no MCP tools either, so this produces a genuinely
+            // tool-free completion instead of leaving file, shell, or web tools in its context.
+            args.extend(["--tools".to_string(), String::new()]);
+        } else {
             let allowed_mcp_tools = tool_names
                 .iter()
                 .map(|name| format!("mcp__flowpilot__{name}"))
@@ -13966,15 +13972,16 @@ impl ExternalAgentInvocation {
             // text-only answers. Allow the FlowPilot MCP tools, auto-deny
             // everything else via `dontAsk`, and strip the built-in file/shell
             // tools from context entirely so headless runs cannot stall on them.
-            args.extend([
-                "--allowedTools".to_string(),
-                allowed_mcp_tools,
-                "--disallowedTools".to_string(),
-                "Task,Bash,Glob,Grep,Read,Edit,Write,NotebookEdit,WebFetch,WebSearch".to_string(),
-                "--permission-mode".to_string(),
-                "dontAsk".to_string(),
-            ]);
+            args.extend(["--allowedTools".to_string(), allowed_mcp_tools]);
         }
+        // Keep the built-ins out even when the reviewed MCP allowlist is empty. `dontAsk` makes
+        // any unexpected capability fail closed instead of stalling a headless request.
+        args.extend([
+            "--disallowedTools".to_string(),
+            DISALLOWED_BUILTIN_TOOLS.to_string(),
+            "--permission-mode".to_string(),
+            "dontAsk".to_string(),
+        ]);
         if !model_id.trim().is_empty() && model_id != "default" {
             args.extend(["--model".to_string(), model_id.to_string()]);
         }
@@ -16841,10 +16848,10 @@ fn build_flowpilot_agent_surface(
                 None => flow_like::copilot::prompts::board_sdk_system_prompt(),
             },
             CopilotScope::Frontend => flow_like::copilot::prompts::frontend_sdk_system_prompt(),
-			CopilotScope::DataStudio if read_only => {
-				flow_like::copilot::prompts::ontology_query_system_prompt()
-			}
-			CopilotScope::DataStudio => flow_like::copilot::prompts::data_studio_system_prompt(""),
+            CopilotScope::DataStudio if read_only => {
+                flow_like::copilot::prompts::ontology_query_system_prompt()
+            }
+            CopilotScope::DataStudio => flow_like::copilot::prompts::data_studio_system_prompt(""),
             CopilotScope::Scout => flow_like::copilot::prompts::scout_system_prompt(""),
             CopilotScope::Research => {
                 flow_like::copilot::prompts::research_system_prompt(&format!(
@@ -27079,6 +27086,47 @@ eventsSimple() {
             invocation.prompt.contains("hello"),
             "codex prompt must stay on stdin"
         );
+    }
+
+    #[test]
+    fn claude_tool_free_invocation_disables_builtin_and_mcp_tools() {
+        let invocation = ExternalAgentInvocation::new(
+            FlowPilotAgentBackendKind::ClaudeCode,
+            CliResolution::new(
+                std::path::PathBuf::from("/usr/bin/claude"),
+                CliResolutionSource::Path,
+            ),
+            "sonnet",
+            None,
+            "http://127.0.0.1:23456/mcp",
+            "query proposal".to_string(),
+            Vec::new(),
+            &[],
+            None,
+            None,
+        )
+        .expect("tool-free Claude invocation should build");
+
+        assert!(
+            invocation
+                .args
+                .windows(2)
+                .any(|args| args == ["--tools", ""]),
+            "an empty reviewed tool set must also remove Claude's built-in tools: {:?}",
+            invocation.args
+        );
+        assert!(
+            !invocation.args.contains(&"--allowedTools".to_string()),
+            "a tool-free invocation must not advertise an MCP allowlist: {:?}",
+            invocation.args
+        );
+        assert!(invocation.args.contains(&"--disallowedTools".to_string()));
+        assert!(invocation.args.contains(&"dontAsk".to_string()));
+        let config_path = invocation
+            .final_output_path
+            .as_ref()
+            .expect("tool-free Claude invocation stores temp MCP config");
+        let _ = std::fs::remove_file(config_path);
     }
 
     #[test]

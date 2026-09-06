@@ -183,7 +183,7 @@ describe("ontology query schema and graph runtime", () => {
 					dst_column: "target",
 				},
 			],
-		} as GraphOverlay;
+		} as unknown as GraphOverlay;
 		const schema = {
 			node_labels: [
 				{
@@ -245,7 +245,7 @@ describe("ontology query schema and graph runtime", () => {
 				id_column: `id${index}${longName}`,
 			})),
 			edges: [],
-		} as GraphOverlay;
+		} as unknown as GraphOverlay;
 		const schema = {
 			node_labels: overlay.nodes.map((node) => ({
 				label: node.label,
@@ -494,6 +494,7 @@ describe("ontology query controller", () => {
 describe("ontology query specialist prompt", () => {
 	test("contains only the question, language, bounded schema, and repair state", () => {
 		const prompt = buildOntologyQueryGeneratorPrompt({
+			requestId: "prompt-1",
 			prompt: "Show everyone",
 			language: "auto",
 			schema: schemaContext,

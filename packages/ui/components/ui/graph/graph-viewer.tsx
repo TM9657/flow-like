@@ -22,6 +22,12 @@ import {
 	useState,
 } from "react";
 import type {
+	OntologyQueryLanguagePreference,
+	OntologyQueryProposal,
+	OntologyQueryReceipt,
+	OntologyQueryStatusEvent,
+} from "../../../lib/ontology-query";
+import type {
 	GraphAnalyticsResult,
 	GraphOverlay,
 	GraphPathsResult,
@@ -87,6 +93,7 @@ import {
 	GRAPH_QUERY_DOCK_MIN_HEIGHT,
 	clampGraphQueryDockHeight,
 	getGraphShellMode,
+	getGraphStageMinHeight,
 } from "./graph-shell-layout";
 import { nodeCaptionAccountId } from "./graph-user-caption";
 
@@ -200,6 +207,15 @@ export interface GraphViewerProps {
 	loading?: boolean;
 	truncated?: boolean;
 	onRunCypher?: (query: string) => void;
+	onRunQuery?: (proposal: OntologyQueryProposal) => void | Promise<void>;
+	onAskFlowPilot?: (
+		prompt: string,
+		language: OntologyQueryLanguagePreference,
+	) => Promise<unknown>;
+	onCancelFlowPilot?: () => void;
+	flowPilotStatus?: OntologyQueryStatusEvent | null;
+	generatedQueryProposal?: OntologyQueryProposal | null;
+	queryReceipt?: OntologyQueryReceipt | null;
 	cypherResults?: unknown[] | null;
 	cypherMetadata?: Record<string, Record<string, string>>;
 	cypherLoading?: boolean;
@@ -271,6 +287,12 @@ export function GraphViewer({
 	loading,
 	truncated,
 	onRunCypher,
+	onRunQuery,
+	onAskFlowPilot,
+	onCancelFlowPilot,
+	flowPilotStatus,
+	generatedQueryProposal,
+	queryReceipt,
 	cypherResults,
 	cypherMetadata,
 	cypherLoading,
@@ -1170,10 +1192,18 @@ export function GraphViewer({
 	// Cypher rows resolved back into drawable structure, when they can be.
 	const cypherSubgraph = useMemo(
 		() =>
-			cypherResults && onMergeSubgraph
+			cypherResults &&
+			onMergeSubgraph &&
+			generatedQueryProposal?.language !== "sql"
 				? subgraphFromCypherRows(cypherResults, overlay, cypherMetadata)
 				: null,
-		[cypherResults, cypherMetadata, onMergeSubgraph, overlay],
+		[
+			cypherResults,
+			cypherMetadata,
+			generatedQueryProposal?.language,
+			onMergeSubgraph,
+			overlay,
+		],
 	);
 
 	const addCypherToCanvas = useCallback(() => {
@@ -1280,9 +1310,14 @@ export function GraphViewer({
 		queryDockHeight,
 		workspaceSize.height,
 	);
+	const effectiveGraphMinHeight = getGraphStageMinHeight(workspaceSize.height);
 	const maximumQueryDockHeight = Math.max(
+		0,
+		workspaceSize.height - effectiveGraphMinHeight,
+	);
+	const minimumQueryDockHeight = Math.min(
 		GRAPH_QUERY_DOCK_MIN_HEIGHT,
-		workspaceSize.height - GRAPH_MIN_STAGE_HEIGHT,
+		maximumQueryDockHeight,
 	);
 
 	const resizeQueryDock = useCallback(
@@ -1342,13 +1377,17 @@ export function GraphViewer({
 	return (
 		<div
 			ref={viewerRef}
-			className="relative flex h-full min-h-[440px] w-full overflow-hidden"
+			data-testid="graph-viewer"
+			className="relative flex h-full min-h-0 w-full overflow-hidden"
 		>
 			{/* Main graph area */}
 			<div className="flex-1 flex flex-col min-w-0 min-h-0">
 				{/* Toolbar */}
 				{showToolbar && (
-					<div className="relative z-40 flex min-w-0 flex-wrap items-center gap-2 border-b bg-background p-2">
+					<div
+						data-testid="graph-toolbar"
+						className="relative z-40 flex min-w-0 flex-wrap items-center gap-2 border-b bg-background p-2"
+					>
 						{showSearch && (
 							<Popover
 								open={showRemoteSearchPanel}
@@ -1493,6 +1532,7 @@ export function GraphViewer({
 						{onRunCypher && (
 							<button
 								type="button"
+								data-testid="graph-query-toggle"
 								className="shrink-0 text-xs text-muted-foreground hover:text-foreground px-2 py-1 rounded border whitespace-nowrap"
 								onClick={() => setShowQuery(!showQuery)}
 							>
@@ -1572,6 +1612,7 @@ export function GraphViewer({
 								<DropdownMenuTrigger asChild>
 									<button
 										type="button"
+										data-testid="graph-more-controls"
 										className="flex h-8 w-8 shrink-0 items-center justify-center rounded border text-muted-foreground hover:text-foreground"
 										aria-label={t("moreGraphControls", "More graph controls")}
 									>
@@ -1748,7 +1789,15 @@ export function GraphViewer({
 					className="flex min-h-0 flex-1 flex-col overflow-hidden"
 				>
 					{/* Canvas — zoom/fit/reset controls are rendered inside SigmaContainer */}
-					<div className="relative min-h-[280px] flex-1">
+					<div
+						data-testid="graph-stage"
+						className="relative flex-1"
+						style={{
+							minHeight: showQuery
+								? effectiveGraphMinHeight
+								: GRAPH_MIN_STAGE_HEIGHT,
+						}}
+					>
 						<GraphCanvas
 							data={viewData}
 							nodeLabels={accountLabels}
@@ -2052,6 +2101,7 @@ export function GraphViewer({
 					{/* A bottom dock preserves graph context while the query is edited. */}
 					{showQuery && onRunCypher && (
 						<div
+							data-testid="graph-query-dock"
 							className="relative shrink-0 border-t bg-background p-2 pt-3"
 							style={{ height: effectiveQueryDockHeight }}
 						>
@@ -2060,7 +2110,7 @@ export function GraphViewer({
 								role="separator"
 								aria-label={t("resizeQueryPanel", "Resize query panel")}
 								aria-orientation="horizontal"
-								aria-valuemin={GRAPH_QUERY_DOCK_MIN_HEIGHT}
+								aria-valuemin={minimumQueryDockHeight}
 								aria-valuemax={maximumQueryDockHeight}
 								aria-valuenow={Math.round(effectiveQueryDockHeight)}
 								tabIndex={0}
@@ -2078,6 +2128,12 @@ export function GraphViewer({
 							</div>
 							<GraphQueryPanel
 								onRunCypher={onRunCypher}
+								onRunQuery={onRunQuery}
+								onAskFlowPilot={onAskFlowPilot}
+								onCancelFlowPilot={onCancelFlowPilot}
+								flowPilotStatus={flowPilotStatus}
+								generatedProposal={generatedQueryProposal}
+								receipt={queryReceipt}
 								results={cypherResults ?? null}
 								propertyMetadata={cypherMetadata}
 								loading={cypherLoading}

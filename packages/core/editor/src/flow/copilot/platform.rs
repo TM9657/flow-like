@@ -242,8 +242,8 @@ pub enum PlatformSurface {
     Scout,
     /// Nested tables/overlays specialist behind `data_studio_agent`.
     DataStudio,
-	/// Tool-free planner used by the embedded ontology natural-language query input.
-	OntologyQuery,
+    /// Tool-free planner used by the embedded ontology natural-language query input.
+    OntologyQuery,
 }
 
 impl PlatformSurface {
@@ -252,7 +252,7 @@ impl PlatformSurface {
             Self::Orchestrator => platform_loop_tool_specs(memory_enabled),
             Self::Scout => scout_specialist_tool_specs(),
             Self::DataStudio => data_studio_specialist_tool_specs(),
-			Self::OntologyQuery => Vec::new(),
+            Self::OntologyQuery => Vec::new(),
         }
     }
 
@@ -263,7 +263,7 @@ impl PlatformSurface {
         match self {
             Self::Orchestrator => MAX_PLATFORM_TOOL_ROUNDS,
             Self::Scout | Self::DataStudio => MAX_SPECIALIST_TOOL_ROUNDS,
-			Self::OntologyQuery => 0,
+            Self::OntologyQuery => 0,
         }
     }
 
@@ -275,9 +275,9 @@ impl PlatformSurface {
             Self::Scout | Self::DataStudio => {
                 "The specialist's tools completed, but it did not produce a final report within the tool budget. Treat any work it started as unverified."
             }
-			Self::OntologyQuery => {
-				"The query planner did not return a proposal. Please retry with a more specific request."
-			}
+            Self::OntologyQuery => {
+                "The query planner did not return a proposal. Please retry with a more specific request."
+            }
         }
     }
 
@@ -2199,9 +2199,9 @@ mod tests {
         assert!(data.contains(&"database_tool"));
         assert!(data.contains(&"graph_overlay_tool"));
 
-		let query = PlatformSurface::OntologyQuery;
-		assert!(query.tool_specs(true).is_empty());
-		assert_eq!(query.max_tool_rounds(), 0);
+        let query = PlatformSurface::OntologyQuery;
+        assert!(query.tool_specs(true).is_empty());
+        assert_eq!(query.max_tool_rounds(), 0);
     }
 
     #[test]

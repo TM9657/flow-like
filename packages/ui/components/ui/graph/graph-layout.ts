@@ -3,7 +3,7 @@ import type { GraphCluster } from "./graph-clusters";
 
 /** Matches the size a node gets when no style override applies. */
 export const DEFAULT_NODE_SIZE = 10;
-/** Breathing room, in layout units, kept between two node circles. */
+/** Breathing room in the active collision coordinate space. */
 export const NODE_GAP = 8;
 /** Share of an overlap resolved per relaxation pass. */
 const RELAX_STRENGTH = 0.55;
@@ -214,9 +214,19 @@ export function computeViewportNodeSizeCap(
 	viewport: ViewportDimensions,
 	options: ViewportNodeSizeOptions = {},
 ): number {
-	const padding = Math.max(0, options.padding ?? 0);
-	const minSize = Math.max(0, options.minSize ?? 2);
-	const maxPitchShare = Math.max(0, options.maxPitchShare ?? 0.3);
+	const padding =
+		typeof options.padding === "number" && Number.isFinite(options.padding)
+			? Math.max(0, options.padding)
+			: 0;
+	const minSize =
+		typeof options.minSize === "number" && Number.isFinite(options.minSize)
+			? Math.max(0, options.minSize)
+			: 2;
+	const maxPitchShare =
+		typeof options.maxPitchShare === "number" &&
+		Number.isFinite(options.maxPitchShare)
+			? Math.max(0, options.maxPitchShare)
+			: 0.3;
 	const width = Number.isFinite(viewport.width)
 		? Math.max(0, viewport.width - padding * 2)
 		: 0;
@@ -226,7 +236,9 @@ export function computeViewportNodeSizeCap(
 
 	if (width === 0 || height === 0 || maxPitchShare === 0) return minSize;
 
-	const pitch = Math.sqrt((width * height) / Math.max(1, nodeCount));
+	const safeNodeCount =
+		Number.isFinite(nodeCount) && nodeCount > 0 ? nodeCount : 1;
+	const pitch = Math.sqrt((width * height) / safeNodeCount);
 	return Math.max(minSize, (pitch * maxPitchShare) / 2);
 }
 
@@ -243,9 +255,9 @@ export interface RelaxOverlapsOptions {
 	/** Supplies the rendered radius when reducers alter a node's stored size. */
 	radiusForNode?: (nodeId: string) => number;
 	/**
-	 * Estimated caption width extending to the RIGHT of each node, in layout
-	 * units. When present, a node also defends the horizontal strip its label
-	 * occupies, which is what keeps captions from running into the next disc.
+	 * Estimated caption width extending to the right of each node, in the active
+	 * collision coordinate space. A node then defends the horizontal strip its
+	 * label occupies, which keeps captions from running into the next disc.
 	 */
 	labelExtents?: ReadonlyMap<string, number>;
 }
@@ -450,19 +462,25 @@ export function relaxOverlaps(
 	for (let index = 0; index < count; index += 1) {
 		const collisionPosition = { x: xs[index], y: ys[index] };
 		const graphPosition = coordinateMapper?.toGraph(collisionPosition);
+		const fallbackX = readCoordinate(graph, nodeIds[index], "x");
+		const fallbackY = readCoordinate(graph, nodeIds[index], "y");
 		graph.setNodeAttribute(
 			nodeIds[index],
 			"x",
 			graphPosition && Number.isFinite(graphPosition.x)
 				? graphPosition.x
-				: collisionPosition.x,
+				: coordinateMapper
+					? fallbackX
+					: collisionPosition.x,
 		);
 		graph.setNodeAttribute(
 			nodeIds[index],
 			"y",
 			graphPosition && Number.isFinite(graphPosition.y)
 				? graphPosition.y
-				: collisionPosition.y,
+				: coordinateMapper
+					? fallbackY
+					: collisionPosition.y,
 		);
 	}
 
