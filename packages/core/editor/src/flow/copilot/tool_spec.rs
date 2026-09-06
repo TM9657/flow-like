@@ -2421,6 +2421,20 @@ pub fn find_home_tool_spec(name: &str) -> Option<PlatformToolSpec> {
         .find(|spec| spec.name == name)
 }
 
+/// Home review runs keep inspection and validation tools, but cannot stage an editor draft.
+pub fn home_specialist_tool_specs_for_access(read_only: bool) -> Vec<PlatformToolSpec> {
+    home_specialist_tool_specs()
+        .into_iter()
+        .filter(|spec| !read_only || matches!(spec.approval, ToolApprovalSpec::None))
+        .collect()
+}
+
+pub fn find_home_tool_spec_for_access(name: &str, read_only: bool) -> Option<PlatformToolSpec> {
+    home_specialist_tool_specs_for_access(read_only)
+        .into_iter()
+        .find(|spec| spec.name == name)
+}
+
 /// Exact tool set advertised to the nested Data Studio specialist: its tables, its overlays, and
 /// the shared app-discovery reads. Every backend advertises this same set, so the specialist's
 /// authority does not change with the selected model.
@@ -2588,6 +2602,29 @@ mod tests {
         assert!(find_home_tool_spec("database_tool").is_none());
         assert!(find_scout_tool_spec("search_apps").is_some());
         assert!(find_scout_tool_spec("database_tool").is_none());
+    }
+
+    #[test]
+    fn home_read_only_tools_exclude_mutations_and_foreign_tools() {
+        let names = home_specialist_tool_specs_for_access(true)
+            .into_iter()
+            .map(|spec| spec.name)
+            .collect::<Vec<_>>();
+        assert_eq!(
+            names,
+            vec![
+                "get_home_context",
+                "get_home_widget_catalog",
+                "list_home_data_sources",
+                "validate_home_layout",
+                "list_apps",
+                "describe_app_interface",
+            ]
+        );
+        assert!(find_home_tool_spec_for_access("apply_home_layout", true).is_none());
+        assert!(find_home_tool_spec_for_access("apply_home_layout", false).is_some());
+        assert!(find_home_tool_spec_for_access("database_tool", true).is_none());
+        assert!(find_home_tool_spec_for_access("database_tool", false).is_none());
     }
 
     #[test]

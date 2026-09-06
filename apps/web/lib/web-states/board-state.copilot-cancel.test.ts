@@ -236,7 +236,7 @@ describe("WebBoardState Copilot cancellation", () => {
 		expect(await second).toBeInstanceOf(Error);
 	});
 
-	test("carries the outer request id into hosted specialist tool dispatch", async () => {
+	test("carries the pinned Home profile into model resolution and nested tool dispatch", async () => {
 		const runChannel = channel("run-home");
 		const stream = copilotStream(runChannel);
 		vi.stubGlobal(
@@ -244,11 +244,18 @@ describe("WebBoardState Copilot cancellation", () => {
 			vi.fn(async () => stream.response),
 		);
 
-		const state = new WebBoardState({ auth: undefined } as never);
+		const state = new WebBoardState({
+			auth: undefined,
+			profile: { id: "profile-b" },
+		} as never);
 		const chat = startChat(state, "home-agent", () => undefined, {
 			parentRequestId: "outer-home-1",
+			profileId: "profile-a",
 		});
 		await vi.waitFor(() => expect(mocks.isChannelHandle).toHaveBeenCalled());
+		expect(
+			JSON.parse(vi.mocked(fetch).mock.calls[0][1]?.body as string),
+		).toMatchObject({ profile_id: "profile-a" });
 		stream.sendToolRequest({
 			requestId: "home-apply-1",
 			toolName: "apply_home_layout",
@@ -258,9 +265,31 @@ describe("WebBoardState Copilot cancellation", () => {
 
 		await vi.waitFor(() =>
 			expect(mocks.dispatchSpecialistToolRequest).toHaveBeenCalledWith(
-				expect.objectContaining({ parentRequestId: "outer-home-1" }),
+				expect.objectContaining({
+					parentRequestId: "outer-home-1",
+					profileId: "profile-a",
+				}),
 			),
 		);
+		stream.finish();
+		await chat;
+	});
+
+	test("sends the selected profile when the caller has no pinned Home context", async () => {
+		const stream = copilotStream(channel("run-selected-profile"));
+		vi.stubGlobal(
+			"fetch",
+			vi.fn(async () => stream.response),
+		);
+		const state = new WebBoardState({
+			auth: undefined,
+			profile: { id: "selected-profile" },
+		} as never);
+		const chat = startChat(state, "selected-profile-agent");
+		await vi.waitFor(() => expect(fetch).toHaveBeenCalled());
+		expect(
+			JSON.parse(vi.mocked(fetch).mock.calls[0][1]?.body as string),
+		).toMatchObject({ profile_id: "selected-profile" });
 		stream.finish();
 		await chat;
 	});

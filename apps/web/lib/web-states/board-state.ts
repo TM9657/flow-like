@@ -1172,12 +1172,14 @@ export class WebBoardState implements IBoardState {
 			this.copilotRequestControls.set(requestId, requestControl);
 		}
 		try {
+			const profileId = toolContext?.profileId ?? this.backend.profile?.id;
 			const response = await fetch(url, {
 				method: "POST",
 				headers,
 				signal: abortController.signal,
 				body: JSON.stringify({
 					scope,
+					profile_id: profileId,
 					board,
 					selected_node_ids: selectedNodeIds,
 					current_surface: currentSurface,
@@ -1275,6 +1277,7 @@ export class WebBoardState implements IBoardState {
 							data,
 							onToolRequest: runGlobalChatTool,
 							parentRequestId: toolContext?.parentRequestId,
+							profileId: toolContext?.profileId,
 						}).catch((error) => {
 							// The specialist is blocked on this request; failing the stream beats
 							// leaving it to time out with no explanation.

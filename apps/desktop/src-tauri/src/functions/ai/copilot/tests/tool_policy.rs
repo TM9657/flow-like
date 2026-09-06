@@ -373,6 +373,35 @@ fn bits_specialists_advertise_exactly_the_agent_backend_tool_policy() {
 }
 
 #[test]
+fn bits_home_review_matches_agent_read_only_tool_authority() {
+    use flow_like::flow::copilot::tool_spec::home_specialist_tool_specs_for_access;
+
+    let agent_tools = specialist_tool_policy(CopilotScope::Home, false, false)
+        .into_iter()
+        .filter(|name| is_flowpilot_read_only_tool(name))
+        .collect::<HashSet<_>>();
+    let bits_tools = home_specialist_tool_specs_for_access(true)
+        .into_iter()
+        .map(|spec| spec.name)
+        .collect::<HashSet<_>>();
+    assert_eq!(bits_tools, agent_tools);
+    for name in bits_tools {
+        assert!(frontend_platform_tool_spec(FrontendPlatformToolSet::HomeReadOnly, name).is_some());
+    }
+    for name in [
+        "apply_home_layout",
+        "database_tool",
+        "emit_ui",
+        "unknown_tool",
+    ] {
+        assert!(frontend_platform_tool_spec(FrontendPlatformToolSet::HomeReadOnly, name).is_none());
+    }
+    assert!(
+        frontend_platform_tool_spec(FrontendPlatformToolSet::Home, "apply_home_layout").is_some()
+    );
+}
+
+#[test]
 fn specialist_host_context_names_the_ids_the_host_already_knows() {
     let context = specialist_host_context(
         Some(&FrontendToolContext {

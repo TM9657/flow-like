@@ -512,19 +512,28 @@ pub enum PlatformSpecialist {
 }
 
 impl PlatformSpecialist {
-    fn surface(self) -> PlatformSurface {
-        match self {
-            Self::Scout => PlatformSurface::Scout,
-            Self::DataStudio => PlatformSurface::DataStudio,
-            Self::Home => PlatformSurface::Home,
+    fn surface(self, read_only: bool) -> PlatformSurface {
+        match (self, read_only) {
+            (Self::Scout, _) => PlatformSurface::Scout,
+            (Self::DataStudio, true) => PlatformSurface::OntologyQuery,
+            (Self::DataStudio, false) => PlatformSurface::DataStudio,
+            (Self::Home, true) => PlatformSurface::HomeReadOnly,
+            (Self::Home, false) => PlatformSurface::Home,
         }
     }
 
-    fn system_prompt(self, context: &str) -> String {
-        match self {
-            Self::Scout => crate::copilot::prompts::scout_system_prompt(context),
-            Self::DataStudio => crate::copilot::prompts::data_studio_system_prompt(context),
-            Self::Home => crate::copilot::prompts::home_system_prompt(context),
+    fn system_prompt(self, context: &str, read_only: bool) -> String {
+        match (self, read_only) {
+            (Self::Scout, _) => crate::copilot::prompts::scout_system_prompt(context),
+            (Self::DataStudio, true) => crate::copilot::prompts::ontology_query_system_prompt(),
+            (Self::DataStudio, false) => {
+                crate::copilot::prompts::data_studio_system_prompt(context)
+            }
+            (Self::Home, false) => crate::copilot::prompts::home_system_prompt(context),
+            (Self::Home, true) => format!(
+                "{}\n\n## READ-ONLY HOME REVIEW\nThis run can inspect and validate Home layouts only. Answer the user's review or explanation request without staging a change. apply_home_layout is unavailable; do not attempt it or claim that a layout was applied or saved.",
+                crate::copilot::prompts::home_system_prompt(context)
+            ),
         }
     }
 }
@@ -551,11 +560,43 @@ pub async fn run_specialist_chat<F>(
 where
     F: Fn(String) + Send + Sync + 'static,
 {
+    run_specialist_chat_with_access(
+        state,
+        profile,
+        specialist,
+        false,
+        context,
+        user_prompt,
+        model_id,
+        token,
+        bridge,
+        on_token,
+    )
+    .await
+}
+
+/// Run a specialist with host-selected read-only authority. The model cannot override this flag.
+#[allow(clippy::too_many_arguments)]
+pub async fn run_specialist_chat_with_access<F>(
+    state: Arc<FlowLikeState>,
+    profile: Option<Arc<Profile>>,
+    specialist: PlatformSpecialist,
+    read_only: bool,
+    context: String,
+    user_prompt: String,
+    model_id: Option<String>,
+    token: Option<String>,
+    bridge: Arc<dyn PlatformToolBridge>,
+    on_token: Option<F>,
+) -> flow_like_types::Result<String>
+where
+    F: Fn(String) + Send + Sync + 'static,
+{
     let assistant = PlatformCopilot::new(state, profile);
     assistant
         .chat(
-            specialist.surface(),
-            specialist.system_prompt(&context),
+            specialist.surface(read_only),
+            specialist.system_prompt(&context, read_only),
             user_prompt,
             None,
             Vec::new(),
@@ -603,6 +644,31 @@ where
 mod tests {
     use super::*;
     use crate::flow::copilot::tool_spec::global_assistant_tool_specs;
+
+    #[test]
+    fn home_review_selects_read_only_authority_and_prompt() {
+        assert_eq!(
+            PlatformSpecialist::Home.surface(true),
+            PlatformSurface::HomeReadOnly
+        );
+        assert_eq!(
+            PlatformSpecialist::Home.surface(false),
+            PlatformSurface::Home
+        );
+        assert_eq!(
+            PlatformSpecialist::DataStudio.surface(true),
+            PlatformSurface::OntologyQuery
+        );
+        let prompt = PlatformSpecialist::Home.system_prompt("profile: owner", true);
+        assert!(prompt.contains("profile: owner"));
+        assert!(prompt.contains("READ-ONLY HOME REVIEW"));
+        assert!(prompt.contains("without staging a change"));
+        assert!(
+            !PlatformSpecialist::Home
+                .system_prompt("", false)
+                .contains("READ-ONLY HOME REVIEW")
+        );
+    }
 
     #[test]
     fn prompt_selects_one_explicit_web_capability() {

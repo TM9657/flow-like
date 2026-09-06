@@ -831,6 +831,51 @@ fn provider_exit_recovery_only_uses_successful_mutating_platform_tools() {
 }
 
 #[test]
+fn denied_home_apply_is_an_error_and_never_records_successful_recovery() {
+    let activity = Arc::new(StdMutex::new(McpToolActivityState::default()));
+    for status in [
+        "denied",
+        "declined",
+        "approval_required",
+        "DENIED",
+        "cancelled",
+    ] {
+        let result = copilot_sdk::ToolResultObject::text(
+            serde_json::json!({
+                "status": status,
+                "tool": "apply_home_layout",
+                "message": "The Home draft was not approved."
+            })
+            .to_string(),
+        );
+        assert!(flowpilot_tool_result_is_error(&result), "{status}");
+        record_recoverable_platform_mutation(&activity, "apply_home_layout", &result);
+        assert!(
+            activity.lock().unwrap().last_successful_mutation.is_none(),
+            "{status}"
+        );
+        assert_eq!(
+            flowpilot_tool_result_to_mcp(result).is_error,
+            Some(true),
+            "{status}"
+        );
+    }
+
+    let staged = copilot_sdk::ToolResultObject::text(
+        serde_json::json!({ "status": "staged", "changed": true }).to_string(),
+    );
+    record_recoverable_platform_mutation(&activity, "apply_home_layout", &staged);
+    let recorded = activity
+        .lock()
+        .unwrap()
+        .last_successful_mutation
+        .clone()
+        .unwrap();
+    assert_eq!(recorded.tool_name, "apply_home_layout");
+    assert_eq!(recorded.result_text, staged.text_result_for_llm);
+}
+
+#[test]
 fn recovered_mutation_message_preserves_result_and_redacts_secrets() {
     let completion = McpToolCompletion {
         tool_name: "flowpilot_board".to_string(),

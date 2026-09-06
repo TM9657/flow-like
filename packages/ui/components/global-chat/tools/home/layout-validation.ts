@@ -8,7 +8,7 @@ import {
 	homeLayoutFingerprint,
 	parseHomeLayoutJson,
 } from "../../../home/home-layout-json";
-import type { IHomeWidget } from "../../../home/types";
+import type { IHomeLayout, IHomeWidget } from "../../../home/types";
 import { HOME_VARIANTS, HOME_WIDGET_TYPES, issue } from "./shared";
 import type { HomeLayoutValidationResult, HomeToolIssue } from "./types";
 import { validateKnownHomeWidgetConfig } from "./widget-contracts/validation";
@@ -38,6 +38,53 @@ const SOLID_WIDGET_TYPES = new Set([
 	"app-collection-feature",
 	"model-spotlight",
 ]);
+
+const FUTURE_VALUE_ISSUES = new Set([
+	"unknown_widget_variant",
+	"unknown_widget_accent",
+	"home_widget_config_option_invalid",
+	"home_widget_config_list_option_invalid",
+]);
+
+function widgetValueAtPath(widget: IHomeWidget, path: string): unknown {
+	let value: unknown = widget;
+	for (const key of path.replace(/\[(\d+)\]/g, ".$1").split(".")) {
+		if (!value || typeof value !== "object" || !Object.hasOwn(value, key))
+			return undefined;
+		value = (value as Record<string, unknown>)[key];
+	}
+	return value;
+}
+
+/** A newer client's enum value may survive an edit; this client cannot author it. */
+function preserveFutureWidgetValues(
+	issues: HomeToolIssue[],
+	widget: IHomeWidget,
+	index: number,
+	current: IHomeWidget | undefined,
+): HomeToolIssue[] {
+	if (!current || current.type !== widget.type) return issues;
+	const prefix = `$.widgets[${index}].`;
+	return issues.map((entry) => {
+		if (!FUTURE_VALUE_ISSUES.has(entry.code) || !entry.path.startsWith(prefix))
+			return entry;
+		const relativePath = entry.path.slice(prefix.length);
+		const value = widgetValueAtPath(widget, relativePath);
+		if (
+			value === undefined ||
+			stableStringify(value) !==
+				stableStringify(widgetValueAtPath(current, relativePath))
+		)
+			return entry;
+		return {
+			...entry,
+			severity: "warning",
+			code: "home_widget_future_value_preserved",
+			message:
+				"This unsupported value is unchanged from the current widget. Preserve it exactly or choose a value advertised by this client.",
+		};
+	});
+}
 
 function asJsonSource(value: unknown): string | undefined {
 	try {
@@ -125,6 +172,7 @@ function validateWidget(
 /** Validate and canonicalize an untrusted Home JSON value without reading external resources. */
 export function validateHomeLayoutCandidate(
 	value: unknown,
+	currentLayout?: IHomeLayout,
 ): HomeLayoutValidationResult {
 	const source = asJsonSource(value);
 	if (source === undefined) {
@@ -170,9 +218,21 @@ export function validateHomeLayoutCandidate(
 			),
 		);
 	}
-	parsed.layout.widgets.forEach((widget, index) =>
-		validateWidget(widget, index, issues),
+	const currentById = new Map(
+		currentLayout?.widgets.map((widget) => [widget.id, widget]),
 	);
+	parsed.layout.widgets.forEach((widget, index) => {
+		const widgetIssues: HomeToolIssue[] = [];
+		validateWidget(widget, index, widgetIssues);
+		issues.push(
+			...preserveFutureWidgetValues(
+				widgetIssues,
+				widget,
+				index,
+				currentById.get(widget.id),
+			),
+		);
+	});
 	const valid = !issues.some((entry) => entry.severity === "error");
 	return {
 		status: valid ? "ok" : "validation_error",

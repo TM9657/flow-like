@@ -1,6 +1,28 @@
 use super::*;
 
 #[test]
+fn home_run_rejects_a_changed_or_missing_pinned_profile() {
+    let context = FrontendToolContext {
+        profile_id: Some("profile-a".to_string()),
+        ..Default::default()
+    };
+    assert!(
+        home_profile_scope_error(CopilotScope::Home, Some(&context), Some("profile-a")).is_none()
+    );
+    for selected in [Some("profile-b"), None] {
+        let error = home_profile_scope_error(CopilotScope::Home, Some(&context), selected).unwrap();
+        let result: serde_json::Value = serde_json::from_str(&error).unwrap();
+        assert_eq!(result["status"], "stale");
+        assert_eq!(result["code"], "home_profile_changed");
+        assert_eq!(result["profile_id"], "profile-a");
+    }
+    assert!(
+        home_profile_scope_error(CopilotScope::Board, Some(&context), Some("profile-b")).is_none()
+    );
+    assert!(home_profile_scope_error(CopilotScope::Home, None, Some("profile-b")).is_none());
+}
+
+#[test]
 fn nested_gate_key_prefers_board_then_context_target_then_app() {
     let board = flowscript_recovery_test_board();
     let context = FrontendToolContext {

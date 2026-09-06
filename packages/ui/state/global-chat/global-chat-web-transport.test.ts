@@ -74,4 +74,26 @@ describe("dispatchSpecialistToolRequest", () => {
 			expect.objectContaining({ parentRequestId: "server-parent" }),
 		);
 	});
+
+	it("pins Home ownership to the launching host even if a frame carries different metadata", async () => {
+		const onToolRequest = vi.fn(async (request: WebToolRequest) => ({
+			requestId: request.requestId,
+			approved: true,
+		}));
+		await dispatchSpecialistToolRequest({
+			data: JSON.stringify({
+				...JSON.parse(toolRequest("wrong-parent")),
+				context: { profileId: "profile-b" },
+			}),
+			parentRequestId: "home-parent",
+			profileId: "profile-a",
+			onToolRequest,
+		});
+		expect(onToolRequest).toHaveBeenCalledWith(
+			expect.objectContaining({
+				parentRequestId: "home-parent",
+				context: expect.objectContaining({ profileId: "profile-a" }),
+			}),
+		);
+	});
 });

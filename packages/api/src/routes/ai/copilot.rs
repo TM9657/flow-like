@@ -22,7 +22,8 @@ use flow_like::flow::board::Board;
 use flow_like::flow::copilot::platform::PlatformToolBridge;
 use flow_like::flow::copilot::{
     CatalogProvider, FlowIrDraftStore, NodeMetadata, PinMetadata, PlatformSpecialist,
-    enrich_node_metadata, run_ontology_query_chat, run_specialist_chat, score_catalog_metadata,
+    enrich_node_metadata, run_ontology_query_chat, run_specialist_chat_with_access,
+    score_catalog_metadata,
 };
 use flow_like::flow::node::{Node, NodeLogic};
 use flow_like::flow::pin::{Pin, PinType};
@@ -50,6 +51,10 @@ pub fn routes() -> Router<AppState> {
 pub struct CopilotChatRequest {
     /// The copilot surface to run.
     pub scope: CopilotScope,
+
+    /// Selected profile, pinned by the launching host and authorized against the signed-in user.
+    #[serde(default, alias = "profileId")]
+    pub profile_id: Option<String>,
 
     /// App owning `board`. Required whenever board context is supplied so the server can authorize
     /// and canonically reload it before retaining a compiled FlowScript review. Also the app that
@@ -163,6 +168,13 @@ async fn wait_for_channel_cancellation(channel: Arc<dyn Channel>, poll_interval:
 }
 
 fn validate_copilot_payload(payload: &CopilotChatRequest) -> Result<(), ApiError> {
+    if payload.profile_id.as_deref().is_some_and(|id| {
+        id.is_empty() || id.trim() != id || id.chars().count() > MAX_CONVERSATION_ID_CHARS
+    }) {
+        return Err(ApiError::bad_request(
+            "Profile id must be a nonempty identifier of at most 256 characters.",
+        ));
+    }
     let max_user_prompt_chars = user_prompt_char_limit(&payload.scope, payload.read_only);
     if payload.user_prompt.chars().count() > max_user_prompt_chars {
         return Err(ApiError::bad_request(format!(
@@ -715,7 +727,11 @@ pub async fn copilot_chat(
     // resolves against their own Bits instead of the server default. With a hosted Bit + the user's
     // token, the model call loops through this server's metered `/chat/completions`, so tier
     // enforcement + usage tracking apply. Falls back to `None` only when the user has no profile.
-    let profile = match super::global_chat::load_user_profile_access(&state, &sub, None).await? {
+    let profile = match ensure_requested_profile(
+        payload.profile_id.as_deref(),
+        super::global_chat::load_user_profile_access(&state, &sub, payload.profile_id.as_deref())
+            .await?,
+    )? {
         Some((profile, access)) => {
             if let Some(rejection) = access.rejection(payload.model_id.as_deref()) {
                 return Err(rejection);
@@ -919,6 +935,18 @@ fn specialist_host_context(app_id: Option<&str>, overlay_id: Option<&str>) -> St
     lines.join("\n")
 }
 
+fn ensure_requested_profile<T>(
+    profile_id: Option<&str>,
+    profile: Option<T>,
+) -> Result<Option<T>, ApiError> {
+    if profile_id.is_some() && profile.is_none() {
+        return Err(ApiError::not_found(
+            "The requested profile is not available to this user.",
+        ));
+    }
+    Ok(profile)
+}
+
 /// Run one nested Data Studio, Scout, or Home specialist for the browser.
 ///
 /// Every specialist tool executes in the browser, so this is meaningful only as a stream: the SSE
@@ -948,7 +976,11 @@ async fn specialist_chat(
     }
 
     let flow_like_state = master_flow_like_state(&state).await?;
-    let profile = match super::global_chat::load_user_profile_access(&state, &sub, None).await? {
+    let profile = match ensure_requested_profile(
+        payload.profile_id.as_deref(),
+        super::global_chat::load_user_profile_access(&state, &sub, payload.profile_id.as_deref())
+            .await?,
+    )? {
         Some((profile, access)) => {
             if let Some(rejection) = access.rejection(payload.model_id.as_deref()) {
                 return Err(rejection);
@@ -961,11 +993,10 @@ async fn specialist_chat(
     let run_id = super::global_chat::next_run_id();
     let channel = super::global_chat::build_chat_channel(&state, &run_id, &sub).await?;
     let (frames_tx, mut frames_rx) = mpsc::unbounded_channel::<GlobalChatFrame>();
-    let bridge: Arc<dyn PlatformToolBridge> = Arc::new(ServerPlatformBridge::specialist(
-        channel.clone(),
-        frames_tx.clone(),
-        specialist,
-    ));
+    let bridge: Arc<dyn PlatformToolBridge> = Arc::new(
+        ServerPlatformBridge::specialist(channel.clone(), frames_tx.clone(), specialist)
+            .with_read_only(payload.read_only),
+    );
     let on_token = move |chunk: String| {
         let _ = frames_tx.send(GlobalChatFrame::Token(chunk));
     };
@@ -995,10 +1026,11 @@ async fn specialist_chat(
                 ) => Err(flow_like_types::anyhow!("Run cancelled")),
             }
         } else {
-            run_specialist_chat(
+            run_specialist_chat_with_access(
                 flow_like_state,
                 profile,
                 specialist,
+                payload.read_only,
                 context,
                 payload.user_prompt,
                 payload.model_id,
@@ -1098,6 +1130,7 @@ mod tests {
     use super::specialist_host_context;
     use super::user_prompt_char_limit;
     use super::wait_for_channel_cancellation;
+    use super::{CopilotChatRequest, ensure_requested_profile, validate_copilot_payload};
     use flow_like::copilot::CopilotScope;
     use flow_like::flow::copilot::PlatformSpecialist;
     use flow_like_types::channel::{
@@ -1105,6 +1138,35 @@ mod tests {
     };
     use std::sync::Arc;
     use std::time::Duration;
+
+    #[test]
+    fn explicit_copilot_profile_never_falls_back_to_another_profile() {
+        assert!(ensure_requested_profile::<()>(Some("missing-or-foreign-profile"), None).is_err());
+        assert_eq!(
+            ensure_requested_profile(Some("selected"), Some("selected")).unwrap(),
+            Some("selected")
+        );
+        assert_eq!(ensure_requested_profile::<()>(None, None).unwrap(), None);
+    }
+
+    #[test]
+    fn home_request_accepts_a_pinned_profile_and_rejects_invalid_identifiers() {
+        for field in ["profile_id", "profileId"] {
+            let payload: CopilotChatRequest = serde_json::from_value(serde_json::json!({
+                "scope": "Home", "user_prompt": "Adjust my Home", field: "profile-a",
+            }))
+            .unwrap();
+            assert_eq!(payload.profile_id.as_deref(), Some("profile-a"));
+            assert!(validate_copilot_payload(&payload).is_ok());
+        }
+        for profile_id in [String::new(), " profile-a ".to_string(), "a".repeat(257)] {
+            let payload: CopilotChatRequest = serde_json::from_value(serde_json::json!({
+                "scope": "Home", "user_prompt": "Adjust my Home", "profile_id": profile_id,
+            }))
+            .unwrap();
+            assert!(validate_copilot_payload(&payload).is_err());
+        }
+    }
 
     #[test]
     fn browser_routes_only_tool_loop_scopes_to_platform_specialists() {

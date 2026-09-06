@@ -1729,6 +1729,8 @@ pub fn workflow_tool_result_succeeded(result_text: &str) -> bool {
             | "cancelled"
             | "canceled"
             | "denied"
+            | "declined"
+            | "approval_required"
             | "timeout"
             | "timed_out"
             | "interrupted"
@@ -2066,6 +2068,9 @@ mod tests {
     fn semantic_tool_failures_do_not_commit_leases_or_infer_artifacts_from_arguments() {
         for result in [
             r#"{"status":"denied"}"#,
+            r#"{"status":"declined"}"#,
+            r#"{"status":"approval_required"}"#,
+            r#"{"status":"DENIED"}"#,
             r#"{"status":"timeout"}"#,
             r#"{"status":"scope_violation"}"#,
             r#"{"status":"ok","error":"frontend bridge failed"}"#,

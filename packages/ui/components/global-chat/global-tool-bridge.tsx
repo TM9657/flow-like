@@ -199,6 +199,11 @@ import {
 	withHomeReferenceIssues,
 } from "./tools/home-tools";
 import {
+	HomeProfileRunError,
+	HomeProfileRuns,
+	assertHomeProfileRun,
+} from "./tools/home/profile-run";
+import {
 	type RunnableWorkflowEventEntry,
 	WORKFLOW_EVENT_ENTRY_NODE_NAMES,
 	buildWorkflowBoardResultEnvelope,
@@ -288,6 +293,8 @@ export interface FrontendToolRequest {
 	parentRequestId?: string;
 	/** Nested tools inherit their parent request so cancellation/diagnostics remain one tree. */
 	context?: {
+		profileId?: string;
+		profile_id?: string;
 		appId?: string;
 		app_id?: string;
 		boardId?: string;
@@ -1390,6 +1397,7 @@ export function GlobalToolBridge() {
 	// crash, reload, or lost tool response) is answered with the recorded ids instead of a duplicate.
 	const createdArtifactJournalRef = useRef(new CreatedArtifactJournal());
 	/** Successful Home stages keyed by the owning flowpilot_home request. */
+	const homeProfileRunsRef = useRef(new HomeProfileRuns());
 	const homeStageReceiptsByParentRef = useRef<
 		Map<
 			string,
@@ -2088,6 +2096,24 @@ export function GlobalToolBridge() {
 		[recordRequestDebug, setToolPrompt],
 	);
 
+	const assertHomeProfile = useCallback(
+		async (request: FrontendToolRequest, surfaceProfileId?: string) => {
+			const homeScope = {
+				parentRequestId: parentRequestId(request),
+				profileId: request.context?.profileId ?? request.context?.profile_id,
+			};
+			await assertHomeProfileRun(
+				homeProfileRunsRef.current,
+				homeScope,
+				async () => (await backend.userState.getProfile()).id ?? undefined,
+				() =>
+					useAssistantSurface.getState().homeSurface?.getSnapshot().profileId,
+				surfaceProfileId,
+			);
+		},
+		[backend.userState],
+	);
+
 	const runTool = useCallback(
 		async (request: FrontendToolRequest, scope: RunScope): Promise<unknown> => {
 			assertRequestActive(request, "tool execution");
@@ -2097,10 +2123,12 @@ export function GlobalToolBridge() {
 			const getProfileAppIds = async (): Promise<Set<string>> => {
 				try {
 					const profile = await backend.userState.getSettingsProfile();
+					await assertHomeProfile(request, profile?.hub_profile?.id ?? "");
 					return new Set(
 						(profile?.hub_profile?.apps ?? []).map((entry) => entry.app_id),
 					);
 				} catch (error) {
+					if (error instanceof HomeProfileRunError) throw error;
 					throw new Error(
 						`The current profile app inventory could not be read: ${error instanceof Error ? error.message : String(error)}`,
 					);
@@ -2110,6 +2138,7 @@ export function GlobalToolBridge() {
 				const liveSurface = useAssistantSurface.getState().homeSurface;
 				if (liveSurface) {
 					const snapshot = liveSurface.getSnapshot();
+					await assertHomeProfile(request, snapshot.profileId);
 					return {
 						profileId: snapshot.profileId,
 						profileName: snapshot.profileName,
@@ -2129,6 +2158,7 @@ export function GlobalToolBridge() {
 					};
 				}
 				const profile = await backend.userState.getProfile();
+				await assertHomeProfile(request, profile.id ?? "");
 				const bundled = createDefaultHomeLayout();
 				const personalLayout = normalizeHomeLayout(profile.home_layout);
 				let defaults: Awaited<
@@ -2273,8 +2303,11 @@ export function GlobalToolBridge() {
 					);
 				}
 				case "validate_home_layout": {
-					const validation = validateHomeLayoutCandidate(args.layout);
 					const snapshot = await readHomeSnapshot();
+					const validation = validateHomeLayoutCandidate(
+						args.layout,
+						snapshot.layout,
+					);
 					const profileAppIds = validation.layout
 						? await getProfileAppIds()
 						: new Set<string>();
@@ -2365,6 +2398,14 @@ export function GlobalToolBridge() {
 								"apply_home_layout requires expected_profile_id and expected_fingerprint from the latest Home context or validation result.",
 						};
 					}
+					homeProfileRunsRef.current.assertCurrent(
+						{
+							parentRequestId: parentRequestId(request),
+							profileId:
+								request.context?.profileId ?? request.context?.profile_id,
+						},
+						expectedProfileId,
+					);
 					const surface = useAssistantSurface.getState().homeSurface;
 					if (!surface) {
 						return {
@@ -2375,9 +2416,13 @@ export function GlobalToolBridge() {
 							route: "/",
 						};
 					}
-					const validation = validateHomeLayoutCandidate(args.layout);
-					if (!validation.layout) return publicHomeLayoutValidation(validation);
 					const initialSnapshot = surface.getSnapshot();
+					await assertHomeProfile(request, initialSnapshot.profileId);
+					const validation = validateHomeLayoutCandidate(
+						args.layout,
+						initialSnapshot.layout,
+					);
+					if (!validation.layout) return publicHomeLayoutValidation(validation);
 					const profileAppIds = await getProfileAppIds();
 					const checked = withHomeReferenceIssues(validation, [
 						...(await validateHomeLayoutReferences(backend, validation.layout, {
@@ -2418,6 +2463,7 @@ export function GlobalToolBridge() {
 							current_fingerprint: latest.candidateFingerprint,
 						};
 					}
+					await assertHomeProfile(request, surface.getSnapshot().profileId);
 					assertRequestActive(request, "Home layout staging");
 					const latestSurface = useAssistantSurface.getState().homeSurface;
 					if (latestSurface !== surface) {
@@ -2583,13 +2629,12 @@ export function GlobalToolBridge() {
 							? {
 									query,
 									matched_total: visible.length,
-								profile_total: profileAppIds.size,
-							}
+									profile_total: profileAppIds.size,
+								}
 							: {}),
 						...(!inventoryCoverage.complete
 							? {
-									missing_profile_app_count:
-										inventoryCoverage.missing_count,
+									missing_profile_app_count: inventoryCoverage.missing_count,
 									missing_profile_app_ids:
 										inventoryCoverage.missing_profile_app_ids,
 									...(inventoryCoverage.missing_ids_truncated
@@ -3584,6 +3629,13 @@ export function GlobalToolBridge() {
 							message: "Choose a profile before editing Home.",
 						};
 					}
+					const activeProfile = await backend.userState.getProfile();
+					if (activeProfile.id !== initialHome.profileId) {
+						throw new HomeProfileRunError(
+							"home_profile_changed",
+							initialHome.profileId,
+						);
+					}
 					homeStageReceiptsByParentRef.current.delete(request.requestId);
 					const consumeHomeStageOutcome = () => {
 						const receipt = homeStageReceiptsByParentRef.current.get(
@@ -3594,6 +3646,7 @@ export function GlobalToolBridge() {
 						const latest = latestSurface?.getSnapshot();
 						const currentMatches = Boolean(
 							receipt &&
+								receipt.profileId === initialHome.profileId &&
 								latest?.profileId === receipt.profileId &&
 								latest.candidateFingerprint === receipt.candidateFingerprint,
 						);
@@ -3618,7 +3671,9 @@ export function GlobalToolBridge() {
 										? "no_longer_staged"
 										: "not_applied",
 							fingerprint:
-								latest?.candidateFingerprint ??
+								(latest?.profileId === initialHome.profileId
+									? latest.candidateFingerprint
+									: undefined) ??
 								receipt?.candidateFingerprint ??
 								initialHome.candidateFingerprint,
 						};
@@ -3692,7 +3747,17 @@ export function GlobalToolBridge() {
 						}),
 					);
 
+					homeProfileRunsRef.current.begin(
+						request.requestId,
+						initialHome.profileId,
+					);
+					const homeRunRequest: FrontendToolRequest = {
+						...request,
+						parentRequestId: request.requestId,
+						context: { ...request.context, profileId: initialHome.profileId },
+					};
 					try {
+						await assertHomeProfile(homeRunRequest);
 						const response = await backend.boardState.copilot_chat(
 							"Home",
 							null,
@@ -3713,6 +3778,7 @@ export function GlobalToolBridge() {
 							true,
 							false,
 							{
+								profileId: initialHome.profileId,
 								parentRequestId: request.requestId,
 								conversationId: owningConversationId,
 								runId: scope.runId,
@@ -3722,6 +3788,7 @@ export function GlobalToolBridge() {
 							rawSpecialistPrompt,
 							undefined,
 						);
+						await assertHomeProfile(homeRunRequest);
 						flushSubRun();
 						const stageOutcome = consumeHomeStageOutcome();
 						return settleNestedSpecialist(request, {
@@ -3744,13 +3811,19 @@ export function GlobalToolBridge() {
 							toolName: "flowpilot_home",
 							result: {
 								status: "error",
+								profile_id: initialHome.profileId,
 								...stageOutcome,
 								message: error instanceof Error ? error.message : String(error),
+								...(error instanceof HomeProfileRunError
+									? { ...error.result, staged: false }
+									: {}),
 							},
 							error,
 							summary: "Delegated Home layout specialist failed.",
 							failureKind: "subagent_dispatch",
 						});
+					} finally {
+						homeProfileRunsRef.current.finish(request.requestId);
 					}
 				}
 				case "data_studio_agent": {
@@ -7127,6 +7200,7 @@ Completion contract: build complete helper logic first and add the Event entry l
 			recordNestedDebug,
 			settleNestedSpecialist,
 			recordSettledGenerationReceipt,
+			assertHomeProfile,
 			assertRequestActive,
 			isRequestExpired,
 			markRequestExpired,
@@ -7141,6 +7215,7 @@ Completion contract: build complete helper logic first and add the Event entry l
 		): Promise<FrontendToolResponse> => {
 			try {
 				assertRequestActive(request, "approval handling");
+				await assertHomeProfile(request);
 				if (request.toolName === "ask_user") {
 					// An empty form would show a card with nothing to answer, so tell the model how
 					// to fix its call instead of trapping the user in an unanswerable prompt.
@@ -7248,10 +7323,19 @@ Completion contract: build complete helper logic first and add the Event entry l
 				}
 
 				assertRequestActive(request, "tool mutation");
+				await assertHomeProfile(request);
 				const result = await runTool(request, scope);
+				await assertHomeProfile(request);
 				assertRequestActive(request, "tool completion");
 				return { requestId: request.requestId, approved: true, result };
 			} catch (error) {
+				if (error instanceof HomeProfileRunError) {
+					return {
+						requestId: request.requestId,
+						approved: true,
+						result: error.result,
+					};
+				}
 				// approved:true + error => the bridge reports status:"error" (not a user denial).
 				return {
 					requestId: request.requestId,
@@ -7260,7 +7344,13 @@ Completion contract: build complete helper logic first and add the Event entry l
 				};
 			}
 		},
-		[assertRequestActive, openDialog, ownerMessageIdForRequest, runTool],
+		[
+			assertHomeProfile,
+			assertRequestActive,
+			openDialog,
+			ownerMessageIdForRequest,
+			runTool,
+		],
 	);
 
 	const executeWithDiagnostics = useCallback(
@@ -7447,6 +7537,7 @@ Completion contract: build complete helper logic first and add the Event entry l
 			const resultTimedOut = ["timeout", "timed_out"].includes(resultStatus);
 			const resultFailed = [
 				"error",
+				"stale",
 				"failed",
 				"failure",
 				"validation_error",

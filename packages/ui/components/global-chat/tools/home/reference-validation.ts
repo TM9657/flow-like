@@ -1,7 +1,6 @@
 import type { IBackendState } from "../../../../state/backend-state";
 import type { GraphOverlay } from "../../../../state/backend-state/graph-state";
 import type { SavedQuery } from "../../../../state/backend-state/query-state";
-import { parseHomeEmbedTarget } from "../../../home/home-content/config";
 import {
 	extractHomeQueryParameters,
 	homeDataColumns,
@@ -9,6 +8,7 @@ import {
 	normalizeHomeDataConfig,
 } from "../../../home/home-data-query";
 import type { IHomeLayout, IHomeWidget } from "../../../home/types";
+import { validateHomeEmbedReference } from "./embed-validation";
 import { issue, objectRecord, stringArg } from "./shared";
 import type { HomeReferenceValidationOptions, HomeToolIssue } from "./types";
 import { HOME_WIDGET_CONFIG_CONTRACTS } from "./widget-contracts/definitions";
@@ -86,16 +86,23 @@ function dataFieldReferences(widget: IHomeWidget) {
 	const config = normalizeHomeDataConfig(widget.config);
 	const fields: Array<[string, string]> = [];
 	const add = (field: string, suffix: string) => {
-		if (field && field !== "value" && field !== "group") {
-			fields.push([field, suffix]);
-		}
+		if (field) fields.push([field, suffix]);
 	};
 	if (config.dateRange !== "all") add(config.dateField, "dateField");
 	if (config.mode === "records" && config.visualization !== "histogram") {
-		add(config.groupBy, "groupBy");
-		add(config.xField, "xField");
-		add(config.yField, "yField");
-		add(config.sortBy, "sortBy");
+		// An explicit projection selects these fields even if the renderer does not use them.
+		if (config.fields.length || config.visualization === "kanban")
+			add(config.groupBy, "groupBy");
+		const xy = ["graph", "scatter"].includes(config.visualization);
+		if (
+			config.fields.length ||
+			xy ||
+			["timeline", "recordcalendar"].includes(config.visualization)
+		)
+			add(config.xField, "xField");
+		if (config.fields.length || xy) add(config.yField, "yField");
+		if (config.sortBy !== "value" && config.sortBy !== "group")
+			add(config.sortBy, "sortBy");
 		config.fields.forEach((field, index) => add(field, `fields[${index}]`));
 	} else {
 		add(config.groupBy, "groupBy");
@@ -165,68 +172,7 @@ export async function validateHomeLayoutReferences(
 		) {
 			try {
 				const events = await getEvents(appId);
-				const target = stringArg(widget.config, "target") || "landing";
-				if (target === "event") {
-					const eventId = stringArg(widget.config, "eventId");
-					const event = events.find((candidate) => candidate.id === eventId);
-					if (!event) {
-						issues.push(
-							issue(
-								"error",
-								"home_app_event_missing",
-								`${path}.eventId`,
-								`Event '${eventId}' is not available in app '${appId}'.`,
-							),
-						);
-					} else {
-						if (
-							!event.default_page_id?.trim() &&
-							!["simple_chat", "generic_form", "quick_action"].includes(
-								event.event_type,
-							)
-						) {
-							issues.push(
-								issue(
-									"error",
-									"home_app_event_not_embeddable",
-									`${path}.eventId`,
-									`Event '${eventId}' does not expose a Home-compatible page, chat, form, or quick action.`,
-								),
-							);
-						}
-						if (!event.active) {
-							issues.push(
-								issue(
-									"error",
-									"home_app_event_inactive",
-									`${path}.eventId`,
-									`Event '${eventId}' is inactive.`,
-								),
-							);
-						}
-					}
-				} else if (target === "route") {
-					const route = parseHomeEmbedTarget(widget.config).routePath;
-					const eventRoute = (value: string | null | undefined) => {
-						const path = (value ?? "").split("?", 1)[0];
-						return path ? `/${path.replace(/^\/+/, "")}` : "";
-					};
-					if (
-						route !== "/" &&
-						!events.some(
-							(event) => event.active && eventRoute(event.route) === route,
-						)
-					) {
-						issues.push(
-							issue(
-								"error",
-								"home_app_route_missing",
-								`${path}.route`,
-								`Route '${route}' was not found in the app's active interface metadata.`,
-							),
-						);
-					}
-				}
+				issues.push(...validateHomeEmbedReference(widget.config, events, path));
 			} catch {
 				issues.push(
 					issue(

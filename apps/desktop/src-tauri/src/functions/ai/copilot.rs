@@ -32,8 +32,8 @@ use flow_like::flow::copilot::{
     build_platform_context, default_flowscript_module_templates,
     emit_validation_requires_flowscript, enrich_node_metadata, flowscript_workspace_envelope,
     global_assistant_system_prompt, profile_flowscript_candidate,
-    render_flowscript_modular_partial_result, run_ontology_query_chat, run_platform_chat,
-    run_specialist_chat, score_catalog_metadata, validate_model_facing_emit_commands_scope,
+    render_flowscript_modular_partial_result, run_platform_chat, run_specialist_chat_with_access,
+    score_catalog_metadata, validate_model_facing_emit_commands_scope,
     workflow_authoring_defers_runtime_tool, workflow_authoring_tool_allowed,
     workflow_runtime_verification_deferred_payload, workflow_strategy_fingerprint,
     workflow_tool_result_succeeded,
@@ -3151,6 +3151,26 @@ async fn copilot_profile(app_handle: &AppHandle) -> Option<Arc<flow_like::profil
     Some(Arc::new(profile.hub_profile))
 }
 
+fn home_profile_scope_error(
+    scope: CopilotScope,
+    tool_context: Option<&FrontendToolContext>,
+    current_profile_id: Option<&str>,
+) -> Option<String> {
+    if scope != CopilotScope::Home {
+        return None;
+    }
+    let expected = tool_context.and_then(|context| context.profile_id.as_deref())?;
+    (expected.is_empty() || current_profile_id != Some(expected)).then(|| {
+        serde_json::json!({
+            "status": "stale",
+            "code": "home_profile_changed",
+            "profile_id": expected,
+            "message": "The active profile changed after this Home run started. No Home changes were applied. Start a new Home request for the selected profile."
+        })
+        .to_string()
+    })
+}
+
 /// The ids the host already knows, handed to a specialist so it defaults to the app/overlay the
 /// user is actually looking at instead of asking for them or guessing.
 fn specialist_host_context(
@@ -3212,6 +3232,13 @@ async fn run_bits_specialist_chat(
     channel: Channel<String>,
 ) -> Result<UnifiedCopilotResponse, String> {
     let profile = copilot_profile(&app_handle).await;
+    if let Some(error) = home_profile_scope_error(
+        scope,
+        tool_context.as_ref(),
+        profile.as_ref().map(|profile| profile.id.as_str()),
+    ) {
+        return Err(error);
+    }
     let stream_parent_request_id = scoped_parent_request_id(tool_context.as_ref());
     let (run_cancellation, _run_registration) = register_copilot_run(
         request_id
@@ -3259,6 +3286,7 @@ async fn run_bits_specialist_chat(
         tool_set: match specialist {
             PlatformSpecialist::DataStudio => FrontendPlatformToolSet::DataStudio,
             PlatformSpecialist::Scout => FrontendPlatformToolSet::Scout,
+            PlatformSpecialist::Home if read_only => FrontendPlatformToolSet::HomeReadOnly,
             PlatformSpecialist::Home => FrontendPlatformToolSet::Home,
         },
         cancellation: run_cancellation.clone(),
@@ -3269,33 +3297,18 @@ async fn run_bits_specialist_chat(
     let on_token = move |token: String| {
         let _ = channel.send(token);
     };
-    let specialist_chat = async {
-        if read_only && matches!(specialist, PlatformSpecialist::DataStudio) {
-            run_ontology_query_chat(
-                state,
-                profile,
-                user_prompt,
-                model_id,
-                auth_token,
-                bridge,
-                Some(on_token),
-            )
-            .await
-        } else {
-            run_specialist_chat(
-                state,
-                profile,
-                specialist,
-                context,
-                user_prompt,
-                model_id,
-                auth_token,
-                bridge,
-                Some(on_token),
-            )
-            .await
-        }
-    };
+    let specialist_chat = run_specialist_chat_with_access(
+        state,
+        profile,
+        specialist,
+        read_only,
+        context,
+        user_prompt,
+        model_id,
+        auth_token,
+        bridge,
+        Some(on_token),
+    );
     let message = tokio::select! {
         result = specialist_chat => result.map_err(|error| error.to_string())?,
         _ = run_cancellation.cancelled() => {
@@ -3359,6 +3372,22 @@ pub async fn copilot_chat(
     channel: Channel<String>,
 ) -> Result<UnifiedCopilotResponse, String> {
     let nested = nested.unwrap_or(false);
+    if matches!(scope, CopilotScope::Home)
+        && tool_context
+            .as_ref()
+            .is_some_and(|context| context.profile_id.is_some())
+    {
+        let current_profile = TauriSettingsState::current_profile(&app_handle).await.ok();
+        if let Some(error) = home_profile_scope_error(
+            scope,
+            tool_context.as_ref(),
+            current_profile
+                .as_ref()
+                .map(|profile| profile.hub_profile.id.as_str()),
+        ) {
+            return Err(error);
+        }
+    }
     let raw_user_prompt = raw_user_prompt
         .filter(|prompt| !prompt.trim().is_empty())
         .or_else(|| {
@@ -4560,6 +4589,7 @@ enum FrontendPlatformToolSet {
     DataStudio,
     Scout,
     Home,
+    HomeReadOnly,
 }
 
 fn frontend_platform_tool_spec(
@@ -4568,8 +4598,8 @@ fn frontend_platform_tool_spec(
 ) -> Option<flow_like::flow::copilot::tool_spec::PlatformToolSpec> {
     use flow_like::flow::copilot::tool_spec::{
         find_cross_board_source_tool_spec, find_data_studio_tool_spec, find_global_tool_spec,
-        find_home_tool_spec, find_runtime_execution_tool_spec, find_scout_tool_spec,
-        find_workflow_context_tool_spec,
+        find_home_tool_spec, find_home_tool_spec_for_access, find_runtime_execution_tool_spec,
+        find_scout_tool_spec, find_workflow_context_tool_spec,
     };
 
     match tool_set {
@@ -4582,6 +4612,7 @@ fn frontend_platform_tool_spec(
         FrontendPlatformToolSet::DataStudio => find_data_studio_tool_spec(tool_name),
         FrontendPlatformToolSet::Scout => find_scout_tool_spec(tool_name),
         FrontendPlatformToolSet::Home => find_home_tool_spec(tool_name),
+        FrontendPlatformToolSet::HomeReadOnly => find_home_tool_spec_for_access(tool_name, true),
     }
 }
 
@@ -4636,7 +4667,6 @@ impl PlatformToolBridge for DesktopPlatformBridge {
 
     async fn call(&self, tool_name: &str, arguments: serde_json::Value) -> String {
         use super::copilot_sdk_tools::approval_from_spec;
-        use super::frontend_tool_bridge::FrontendToolApproval;
         use flow_like::flow::copilot::tool_spec::missing_required_args;
 
         // Do not even enqueue a frontend event after the owning model run has ended. Cancellation
@@ -4652,25 +4682,27 @@ impl PlatformToolBridge for DesktopPlatformBridge {
         if let Some(error) = global_orchestrator_tool_scope_error(self.tool_set, tool_name) {
             return error;
         }
-        let spec = frontend_platform_tool_spec(self.tool_set, tool_name);
+        let Some(spec) = frontend_platform_tool_spec(self.tool_set, tool_name) else {
+            return serde_json::json!({
+                "status": "error",
+                "code": "platform_tool_not_advertised",
+                "tool": tool_name,
+                "retryable": false,
+                "message": "This tool is unavailable in the active FlowPilot surface and was not executed."
+            })
+            .to_string();
+        };
 
         // Reject calls with missing required arguments before any approval dialog or dispatch,
         // so the model retries with complete arguments (same guard as the SDK/MCP backends).
-        if let Some(spec) = &spec
-            && let Some(error) = missing_required_args(spec, &arguments)
-        {
+        if let Some(error) = missing_required_args(&spec, &arguments) {
             return serde_json::json!({ "status": "error", "error": error }).to_string();
         }
 
         // Approval + timeout come from the shared platform tool spec, so the Bits path enforces
         // exactly the same policy as the Copilot SDK / MCP backends.
-        let (approval, timeout) = match spec {
-            Some(spec) => (
-                approval_from_spec(&spec, &arguments),
-                Duration::from_secs(spec.timeout_secs),
-            ),
-            None => (FrontendToolApproval::none(), Duration::from_secs(120)),
-        };
+        let approval = approval_from_spec(&spec, &arguments);
+        let timeout = Duration::from_secs(spec.timeout_secs);
 
         let bridge = self.bridge.clone();
         let name = tool_name.to_string();
@@ -13430,15 +13462,7 @@ impl rmcp::ServerHandler for FlowPilotMcpServer {
                     workflow_state.as_ref(),
                 );
 
-                if is_recoverable_platform_mutation(&recorded_tool_name)
-                    && !flowpilot_tool_result_is_error(&result)
-                    && let Ok(mut activity) = tool_activity.lock()
-                {
-                    activity.last_successful_mutation = Some(McpToolCompletion {
-                        tool_name: recorded_tool_name,
-                        result_text: result.text_result_for_llm.clone(),
-                    });
-                }
+                record_recoverable_platform_mutation(&tool_activity, &recorded_tool_name, &result);
 
                 result
             })
@@ -13551,6 +13575,22 @@ fn is_recoverable_platform_mutation(tool_name: &str) -> bool {
         .is_some_and(|spec| !matches!(spec.approval, ToolApprovalSpec::None))
 }
 
+fn record_recoverable_platform_mutation(
+    tool_activity: &Arc<StdMutex<McpToolActivityState>>,
+    tool_name: &str,
+    result: &copilot_sdk::ToolResultObject,
+) {
+    if is_recoverable_platform_mutation(tool_name)
+        && !flowpilot_tool_result_is_error(result)
+        && let Ok(mut activity) = tool_activity.lock()
+    {
+        activity.last_successful_mutation = Some(McpToolCompletion {
+            tool_name: tool_name.to_string(),
+            result_text: result.text_result_for_llm.clone(),
+        });
+    }
+}
+
 fn flowpilot_tool_result_is_error(result: &copilot_sdk::ToolResultObject) -> bool {
     let semantic_error = serde_json::from_str::<serde_json::Value>(&result.text_result_for_llm)
         .ok()
@@ -13562,7 +13602,12 @@ fn flowpilot_tool_result_is_error(result: &copilot_sdk::ToolResultObject) -> boo
         })
         .is_some_and(|status| workflow_status_requires_repair(&status));
 
-    result.result_type == "error" || result.error.is_some() || semantic_error
+    // Frontend approval denials use a successful SDK text envelope. Reuse the shared semantic
+    // result check so a denied draft can never become provider-exit recovery evidence.
+    result.result_type == "error"
+        || result.error.is_some()
+        || !workflow_tool_result_succeeded(&result.text_result_for_llm)
+        || semantic_error
 }
 
 fn flowpilot_tool_result_to_mcp(

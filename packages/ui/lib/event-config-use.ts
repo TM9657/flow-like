@@ -1,6 +1,7 @@
 import { ChatInterface } from "../components/interfaces/chat-default";
 import { GenericEventFormInterface } from "../components/interfaces/generic-event-form";
 import type { IUseEventMapping } from "../components/interfaces/interfaces";
+import { BUILTIN_RUNTIME_EVENT_TYPES } from "./runtime-route";
 
 /**
  * The runtime half of `EVENT_CONFIG`: which event types a running app can render, and with
@@ -16,7 +17,7 @@ export const USE_EVENT_CONFIG: IUseEventMapping = {
 	events_chat: {
 		eventTypes: ["simple_chat", "discord", "telegram"],
 		useInterfaces: {
-			simple_chat: ChatInterface,
+			[BUILTIN_RUNTIME_EVENT_TYPES.chat]: ChatInterface,
 		},
 	},
 	events_mail: {
@@ -26,7 +27,7 @@ export const USE_EVENT_CONFIG: IUseEventMapping = {
 	events_generic: {
 		eventTypes: ["generic_form", "api", "deeplink"],
 		useInterfaces: {
-			generic_form: GenericEventFormInterface,
+			[BUILTIN_RUNTIME_EVENT_TYPES.form]: GenericEventFormInterface,
 		},
 	},
 	events_simple: {
@@ -40,7 +41,7 @@ export const USE_EVENT_CONFIG: IUseEventMapping = {
 			"mcp",
 		],
 		useInterfaces: {
-			quick_action: GenericEventFormInterface,
+			[BUILTIN_RUNTIME_EVENT_TYPES.quickAction]: GenericEventFormInterface,
 		},
 	},
 };

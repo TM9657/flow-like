@@ -50,8 +50,8 @@ use super::tool_spec::{
     ARCHIVE_LOOKUP_TOOL, INTERNET_SEARCH_TOOL, MEMORY_SEARCH_TOOL, MEMORY_STORE_TOOL,
     OPEN_URL_TOOL, PlatformToolSpec, RESEARCH_AGENT_TOOL, data_studio_specialist_tool_specs,
     find_data_studio_tool_spec, find_global_tool_spec, find_home_tool_spec, find_scout_tool_spec,
-    global_assistant_tool_specs, home_specialist_tool_specs, public_web_tool_specs,
-    resolve_tool_effect, scout_specialist_tool_specs, spec_arg_str,
+    global_assistant_tool_specs, home_specialist_tool_specs, home_specialist_tool_specs_for_access,
+    public_web_tool_specs, resolve_tool_effect, scout_specialist_tool_specs, spec_arg_str,
 };
 use super::types::{ChatImage, ChatMessage, ChatRole, PlanStepStatus};
 use crate::bit::{Bit, BitModelPreference, BitTypes, LLMParameters};
@@ -244,6 +244,8 @@ pub enum PlatformSurface {
     DataStudio,
     /// Nested personal Home layout specialist behind `flowpilot_home`.
     Home,
+    /// Home inspection and validation with no authority to stage an editor draft.
+    HomeReadOnly,
     /// Tool-free planner used by the embedded ontology natural-language query input.
     OntologyQuery,
 }
@@ -255,6 +257,7 @@ impl PlatformSurface {
             Self::Scout => scout_specialist_tool_specs(),
             Self::DataStudio => data_studio_specialist_tool_specs(),
             Self::Home => home_specialist_tool_specs(),
+            Self::HomeReadOnly => home_specialist_tool_specs_for_access(true),
             Self::OntologyQuery => Vec::new(),
         }
     }
@@ -265,7 +268,9 @@ impl PlatformSurface {
     fn max_tool_rounds(self) -> usize {
         match self {
             Self::Orchestrator => MAX_PLATFORM_TOOL_ROUNDS,
-            Self::Scout | Self::DataStudio | Self::Home => MAX_SPECIALIST_TOOL_ROUNDS,
+            Self::Scout | Self::DataStudio | Self::Home | Self::HomeReadOnly => {
+                MAX_SPECIALIST_TOOL_ROUNDS
+            }
             Self::OntologyQuery => 0,
         }
     }
@@ -275,7 +280,7 @@ impl PlatformSurface {
             Self::Orchestrator => {
                 "The research tools completed, but the model did not produce a final synthesis within the tool budget."
             }
-            Self::Scout | Self::DataStudio | Self::Home => {
+            Self::Scout | Self::DataStudio | Self::Home | Self::HomeReadOnly => {
                 "The specialist's tools completed, but it did not produce a final report within the tool budget. Treat any work it started as unverified."
             }
             Self::OntologyQuery => {
@@ -2162,6 +2167,7 @@ mod tests {
             PlatformSurface::Scout,
             PlatformSurface::DataStudio,
             PlatformSurface::Home,
+            PlatformSurface::HomeReadOnly,
         ] {
             let names: Vec<&str> = surface
                 .tool_specs(true)
@@ -2240,6 +2246,30 @@ mod tests {
         let query = PlatformSurface::OntologyQuery;
         assert!(query.tool_specs(true).is_empty());
         assert_eq!(query.max_tool_rounds(), 0);
+    }
+
+    #[test]
+    fn home_read_only_surface_never_advertises_apply() {
+        let names: Vec<&str> = PlatformSurface::HomeReadOnly
+            .tool_specs(false)
+            .iter()
+            .map(|spec| spec.name)
+            .collect();
+        assert_eq!(
+            names,
+            vec![
+                "get_home_context",
+                "get_home_widget_catalog",
+                "list_home_data_sources",
+                "validate_home_layout",
+                "list_apps",
+                "describe_app_interface",
+            ]
+        );
+        assert_eq!(
+            PlatformSurface::HomeReadOnly.max_tool_rounds(),
+            MAX_SPECIALIST_TOOL_ROUNDS
+        );
     }
 
     #[test]
