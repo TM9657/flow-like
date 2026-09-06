@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use crate::{
-    ensure_permission,
+    audit_branch, ensure_permission,
     error::ApiError,
     middleware::{jwt::AppUser, trace_context::TraceContext},
     permission::role_permission::RolePermissions,
@@ -67,7 +67,8 @@ pub struct ApplyFlowScriptBody {
         (status = 200, description = "FlowScript applied, returns resulting commands", body = Object),
         (status = 400, description = "Invalid FlowScript or generated command plan, or an invalid `module`/`current_layer`/`scope_anchors` combination"),
         (status = 401, description = "Unauthorized"),
-        (status = 403, description = "Forbidden")
+        (status = 403, description = "Forbidden"),
+        (status = 423, description = "Another writer holds this board's mutation lease (code BOARD_LOCKED). Nothing was written; retry the identical request shortly.")
     )
 )]
 #[tracing::instrument(
@@ -91,7 +92,7 @@ pub async fn apply_flowscript(
     )
     .map_err(ApiError::bad_request)?;
 
-    let _mutation_guard = state.board_mutation_guard(&app_id, &board_id).await?;
+    let mutation_guard = state.board_mutation_guard(&app_id, &board_id).await?;
 
     let mut board = state
         .master_board(&sub, &app_id, &board_id, &state, None)
@@ -189,6 +190,9 @@ pub async fn apply_flowscript(
     let result = match result {
         Ok(result) => result,
         Err(error) => {
+            if let Some(error) = ApiError::from_board_format_error(&error) {
+                return Err(error);
+            }
             let message = error.to_string();
             capture(
                 OUTCOME_ERROR,
@@ -218,8 +222,23 @@ pub async fn apply_flowscript(
     }
 
     if !result.commands.is_empty() {
+        mutation_guard.ensure_held()?;
         let put = save_board_and_refresh_summary(&state, &app_id, &board).await?;
         seed_board_revision(&state, &app_id, &board_id, board, &put).await;
+        audit_branch!(
+            state,
+            user,
+            app_id,
+            "board.flowscript.apply",
+            "Board",
+            board_id,
+            "Applied FlowScript to a board",
+            serde_json::json!({
+                "command_count": result.commands.len(),
+                "origin": origin,
+                "allow_deletions": params.allow_deletions,
+            })
+        );
     }
 
     Ok(Json(result))

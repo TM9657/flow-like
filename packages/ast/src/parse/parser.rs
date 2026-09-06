@@ -346,6 +346,79 @@ impl Parser<'_> {
                 other => return Err(self.err(format!("unknown decorator `@{other}`"))),
             }
         }
+        if matches!(var.ty.base.as_str(), "geometry" | "Geometry") {
+            if let Some(schema) = var.schema.as_deref() {
+                let kind = flow_like_types_contracts::geometry::kind_from_schema(schema)
+                    .map_err(|error| self.err(error.to_string()))?;
+                let Some(kind) = kind else {
+                    return Err(
+                        self.err("geometry @schema must be a concrete flow:geometry marker")
+                    );
+                };
+                if var
+                    .ty
+                    .geometry_kind
+                    .is_some_and(|declared| declared != kind)
+                {
+                    return Err(self.err("geometry type annotation contradicts @schema subtype"));
+                }
+                var.ty.geometry_kind = Some(kind);
+            }
+            var.schema = var.ty.geometry_schema();
+            if let Some(default) = &var.default {
+                let Literal::Json(raw) = default else {
+                    return Err(self.err(
+                        "geometry defaults must be GeoJSON geometry objects or matching containers",
+                    ));
+                };
+                let value: serde_json::Value =
+                    serde_json::from_str(raw).map_err(|error| self.err(error.to_string()))?;
+                let valid = |value: &serde_json::Value| {
+                    flow_like_types_contracts::geometry::validate_geometry(
+                        value,
+                        var.ty.geometry_kind,
+                    )
+                };
+                match var.ty.container {
+                    Container::Normal => valid(&value),
+                    Container::Array | Container::Set => value
+                        .as_array()
+                        .ok_or_else(|| {
+                            flow_like_types_contracts::geometry::GeometryError(
+                                "geometry Array/Set default requires an array".to_string(),
+                            )
+                        })
+                        .and_then(|items| {
+                            items
+                                .iter()
+                                .try_for_each(|item| valid(item).map(|_| ()))
+                                .map(|_| ())
+                        }),
+                    Container::Map => value
+                        .as_object()
+                        .ok_or_else(|| {
+                            flow_like_types_contracts::geometry::GeometryError(
+                                "geometry Map default requires an object".to_string(),
+                            )
+                        })
+                        .and_then(|items| {
+                            items
+                                .values()
+                                .try_for_each(|item| valid(item).map(|_| ()))
+                                .map(|_| ())
+                        }),
+                }
+                .map_err(|error| self.err(error.to_string()))?;
+            }
+        } else if let Some(schema) = var.schema.as_deref() {
+            match flow_like_types_contracts::geometry::kind_from_schema(schema) {
+                Ok(Some(_)) => {
+                    return Err(self.err("a geometry marker requires a geometry type annotation"));
+                }
+                Err(error) => return Err(self.err(error.to_string())),
+                _ => {}
+            }
+        }
         Ok(())
     }
 
@@ -837,29 +910,61 @@ impl Parser<'_> {
         Ok(params)
     }
 
+    fn geometry_kind(
+        &mut self,
+    ) -> Result<Option<flow_like_types_contracts::geometry::GeometryKind>, ParseError> {
+        if !self.eat(&Tok::Op("<".to_string())) {
+            return Ok(None);
+        }
+        let name = self.ident()?;
+        let kind = serde_json::from_value(serde_json::Value::String(name.clone()))
+            .map_err(|_| self.err(format!("unknown geometry subtype `{name}`")))?;
+        self.expect(&Tok::Op(">".to_string()))?;
+        Ok(Some(kind))
+    }
+
     fn type_ref(&mut self) -> Result<TypeRef, ParseError> {
         let base = self.ident()?;
-        // `Map<string, T>` / `Set<T>` containers.
-        if base == "Map" && self.cur() == &Tok::Op("<".to_string()) {
-            self.bump(); // <
-            let _ = self.ident()?; // key type (always `string` in render)
-            self.expect(&Tok::Comma)?;
+        if matches!(base.as_str(), "Map" | "Set") && self.eat(&Tok::Op("<".to_string())) {
+            if base == "Map" {
+                if self.ident()? != "string" {
+                    return Err(self.err("Map key type must be `string`"));
+                }
+                self.expect(&Tok::Comma)?;
+            }
+            // Containers hold one flow value; nested containers are not a Variable ValueType.
             let inner = self.ident()?;
+            let kind = if inner == "geometry" {
+                self.geometry_kind()?
+            } else {
+                None
+            };
             self.expect(&Tok::Op(">".to_string()))?;
-            return Ok(TypeRef::new(inner, Container::Map));
+            let mut ty = TypeRef::new(
+                inner,
+                if base == "Map" {
+                    Container::Map
+                } else {
+                    Container::Set
+                },
+            );
+            ty.geometry_kind = kind;
+            return Ok(ty);
         }
-        if base == "Set" && self.cur() == &Tok::Op("<".to_string()) {
-            self.bump(); // <
-            let inner = self.ident()?;
-            self.expect(&Tok::Op(">".to_string()))?;
-            return Ok(TypeRef::new(inner, Container::Set));
-        }
-        if self.cur() == &Tok::LBracket {
-            self.bump();
+        let kind = if base == "geometry" {
+            self.geometry_kind()?
+        } else {
+            None
+        };
+        let container = if self.eat(&Tok::LBracket) {
             self.expect(&Tok::RBracket)?;
-            return Ok(TypeRef::new(base, Container::Array));
-        }
-        Ok(TypeRef::new(base, Container::Normal))
+            Container::Array
+        } else {
+            Container::Normal
+        };
+        let mut ty = TypeRef::new(base, container);
+        ty.geometry_kind = kind;
+        Ok(ty)
     }
 
     fn interface_type(&mut self) -> Result<InterfaceType, ParseError> {
@@ -905,6 +1010,10 @@ impl Parser<'_> {
             Tok::Ident(name) if name == "any" => {
                 self.bump();
                 InterfaceType::Any
+            }
+            Tok::Ident(name) if name == "geometry" => {
+                self.bump();
+                InterfaceType::Geometry(self.geometry_kind()?)
             }
             Tok::Ident(name) if name == "Set" => {
                 self.bump();

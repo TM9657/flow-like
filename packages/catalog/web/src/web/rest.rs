@@ -12,6 +12,7 @@ use flow_like::flow::{
     variable::VariableType,
 };
 use flow_like_catalog_core::FlowPath;
+use flow_like_storage::object_store::ObjectStoreExt;
 use flow_like_types::async_trait;
 #[cfg(all(feature = "execute", not(feature = "remote")))]
 use flow_like_types::json;
@@ -1934,6 +1935,12 @@ fn openapi_pin_schema(
         VariableType::Integer | VariableType::Byte => json!({"type": "integer"}),
         VariableType::Float => json!({"type": "number"}),
         VariableType::Boolean => json!({"type": "boolean"}),
+        VariableType::Geometry => schema
+            .map(|schema| flow_like::flow::pin::resolve_schema(schema, board_refs))
+            .transpose()
+            .and_then(flow_like::flow::variable::geometry_kind_from_schema)
+            .map(flow_like_types::geometry::geometry_json_schema)
+            .unwrap_or_else(|_| json!(false)),
         VariableType::Struct | VariableType::Generic => schema
             .and_then(|schema| json::from_str::<flow_like_types::Value>(schema).ok())
             .unwrap_or_else(|| json!({"type": "object", "additionalProperties": true})),
@@ -2276,7 +2283,7 @@ async fn file_route_response(
         } => {
             let filename = rest_file_route_filename(path, &request_path)?;
             let decoded_filename = decode_rest_file_name(&filename);
-            let object_path = prefix.path.child(decoded_filename.as_str());
+            let object_path = prefix.path.clone().join(decoded_filename.as_str());
             let file = match prefix.store.as_generic().get(&object_path).await {
                 Ok(file) => file,
                 Err(_) => {
@@ -2929,14 +2936,14 @@ mod tests {
         let memory = Arc::new(InMemory::new());
         memory
             .put(
-                &Path::from("assets").child("hello.txt"),
+                &Path::from("assets").join("hello.txt"),
                 PutPayload::from("hello"),
             )
             .await
             .unwrap();
         memory
             .put(
-                &Path::from("assets").child("nested/name.txt"),
+                &Path::from("assets").join("nested/name.txt"),
                 PutPayload::from("encoded slash"),
             )
             .await

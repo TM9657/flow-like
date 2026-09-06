@@ -3,11 +3,16 @@
 
 use std::collections::{HashMap, VecDeque};
 use std::sync::{Mutex, MutexGuard};
+use std::time::Instant;
 
 use flow_like_types::Value;
 use flow_like_types::channel::{ChannelPush, ChannelPushKind};
 use flow_like_types::tokio::sync::oneshot;
 use flow_like_types::tokio_util::sync::CancellationToken;
+
+use super::reply_chunks::{
+    AppendResult, MAX_ACTIVE_TRANSFERS, MAX_PAYLOAD_BYTES, ReplyAssembly, ReplyChunk,
+};
 
 /// Unsolicited messages buffered between drains.
 pub(crate) const MAX_INBOUND: usize = 8;
@@ -22,6 +27,7 @@ pub(crate) enum RouteResult {
     UnknownRequest,
     Duplicate,
     InboundFull,
+    ChunkBuffered,
 }
 
 /// A registered request: the sender is consumed by the first reply, the receiver is parked
@@ -29,6 +35,20 @@ pub(crate) enum RouteResult {
 struct Pending {
     sender: Option<oneshot::Sender<Value>>,
     receiver: Option<oneshot::Receiver<Value>>,
+    chunks: Option<ReplyAssembly>,
+    retired_transfers: VecDeque<String>,
+}
+
+impl Pending {
+    fn retire_chunks(&mut self) {
+        if let Some(chunks) = self.chunks.take() {
+            self.retired_transfers.push_back(chunks.transfer_id);
+            // Remember recent retries so late duplicates cannot replace the active fallback.
+            if self.retired_transfers.len() > 8 {
+                self.retired_transfers.pop_front();
+            }
+        }
+    }
 }
 
 pub(crate) struct PushRouter {
@@ -61,6 +81,8 @@ impl PushRouter {
             Pending {
                 sender: Some(sender),
                 receiver: Some(receiver),
+                chunks: None,
+                retired_transfers: VecDeque::new(),
             },
         );
     }
@@ -91,12 +113,84 @@ impl PushRouter {
     }
 
     pub fn route_payload(&self, payload: &[u8]) -> RouteResult {
+        if payload.len() > MAX_PAYLOAD_BYTES {
+            return RouteResult::Malformed;
+        }
         match serde_json::from_slice::<ChannelPush>(payload) {
             Ok(push) => self.route(push),
             Err(error) => {
+                if let Ok(chunk) = serde_json::from_slice::<ReplyChunk>(payload) {
+                    return self.route_chunk(chunk, Instant::now());
+                }
                 tracing::debug!(%error, channel_id = %self.channel_id, "dropping malformed channel push");
                 RouteResult::Malformed
             }
+        }
+    }
+
+    fn route_chunk(&self, chunk: ReplyChunk, now: Instant) -> RouteResult {
+        if chunk.channel_id != self.channel_id {
+            return RouteResult::ForeignChannel;
+        }
+        if self.is_cancelled() {
+            return RouteResult::UnknownRequest;
+        }
+        let mut pending = lock(&self.pending);
+        for slot in pending.values_mut() {
+            if slot
+                .chunks
+                .as_ref()
+                .is_some_and(|chunks| chunks.expired(now))
+            {
+                slot.retire_chunks();
+            }
+        }
+        let active = pending
+            .values()
+            .filter(|slot| slot.chunks.is_some())
+            .count();
+        let Some(slot) = pending.get_mut(&chunk.request_id) else {
+            return RouteResult::UnknownRequest;
+        };
+        if slot.sender.is_none() {
+            return RouteResult::Duplicate;
+        }
+        if slot.retired_transfers.contains(&chunk.transfer_id) {
+            return RouteResult::Malformed;
+        }
+        let appended = if slot
+            .chunks
+            .as_ref()
+            .is_some_and(|chunks| chunks.transfer_id == chunk.transfer_id)
+        {
+            slot.chunks.as_mut().unwrap().append(&chunk, now)
+        } else {
+            // A fallback starts a new transfer for the same still-pending reply.
+            if slot.chunks.is_none() && active >= MAX_ACTIVE_TRANSFERS {
+                return RouteResult::Malformed;
+            }
+            let Ok(mut assembly) = ReplyAssembly::new(&chunk, now) else {
+                return RouteResult::Malformed;
+            };
+            // Decode and validate frame zero before replacing a healthy partial transfer.
+            let Ok(appended) = assembly.append(&chunk, now) else {
+                return RouteResult::Malformed;
+            };
+            slot.retire_chunks();
+            slot.chunks = Some(assembly);
+            Ok(appended)
+        };
+        match appended {
+            Ok(AppendResult::Pending) => RouteResult::ChunkBuffered,
+            Ok(AppendResult::Duplicate) => RouteResult::Duplicate,
+            Ok(AppendResult::Complete(push)) => {
+                slot.chunks = None;
+                match slot.sender.take().unwrap().send(push.value) {
+                    Ok(()) => RouteResult::Reply,
+                    Err(_) => RouteResult::UnknownRequest,
+                }
+            }
+            Err(_) => RouteResult::Malformed,
         }
     }
 
@@ -111,6 +205,9 @@ impl PushRouter {
         }
         match push.kind {
             ChannelPushKind::Cancel => {
+                for slot in lock(&self.pending).values_mut() {
+                    slot.chunks = None;
+                }
                 self.cancelled.cancel();
                 RouteResult::Cancel
             }
@@ -137,6 +234,7 @@ impl PushRouter {
                     tracing::debug!(channel_id = %self.channel_id, %request_id, "dropping duplicate reply");
                     return RouteResult::Duplicate;
                 };
+                slot.chunks = None;
                 match sender.send(push.value) {
                     Ok(()) => RouteResult::Reply,
                     Err(_) => RouteResult::UnknownRequest,
@@ -145,6 +243,10 @@ impl PushRouter {
         }
     }
 }
+
+#[cfg(test)]
+#[path = "router_chunk_tests.rs"]
+mod chunk_tests;
 
 #[cfg(test)]
 mod tests {

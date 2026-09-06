@@ -1808,3 +1808,68 @@ describe("FlowScript rename", () => {
 		providers.dispose();
 	});
 });
+
+describe("Geometry FlowScript types", () => {
+	test("checks subtype direction and containers for catalog pins", () => {
+		const marker = (kind: string) =>
+			JSON.stringify({ $id: "flow:geometry", "x-geometry": kind });
+		const nodes = [
+			node(
+				"geometry_point_source",
+				[],
+				[
+					{
+						name: "point",
+						type: IVariableType.Geometry,
+						schema: marker("Point"),
+					},
+				],
+			),
+			node(
+				"geometry_any_source",
+				[],
+				[{ name: "geometry", type: IVariableType.Geometry }],
+			),
+			node(
+				"geometry_use_point",
+				[
+					{
+						name: "geometry",
+						type: IVariableType.Geometry,
+						schema: marker("Point"),
+					},
+				],
+				[],
+			),
+			node(
+				"geometry_use_any",
+				[{ name: "geometry", type: IVariableType.Geometry }],
+				[],
+			),
+		].map((entry) => ({
+			...entry,
+			namespace: "geometry",
+			alias: entry.name
+				.slice("geometry_".length)
+				.replace(/_([a-z])/g, (_, char: string) => char.toUpperCase()),
+		}));
+		const messages = (text: string) =>
+			(
+				computeFlowScriptDiagnostics(diagnosticMonaco, text, nodes).markers as {
+					message: string;
+				}[]
+			).map((marker) => marker.message);
+		expect(
+			messages(
+				"const p: geometry<Point> = geometry::pointSource()\ngeometry::useAny({ geometry: p })",
+			),
+		).toEqual([]);
+		expect(
+			messages(
+				"const p = geometry::anySource()\ngeometry::usePoint({ geometry: p })",
+			).some(
+				(message) => message.includes("type") || message.includes("geometry"),
+			),
+		).toBeTrue();
+	});
+});

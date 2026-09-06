@@ -9,13 +9,15 @@ use crate::permission::global_permission::GlobalPermission;
 use crate::state::AppState;
 use axum::extract::State;
 use axum::{Extension, Json};
-use chrono::{DateTime, Duration, Utc};
+use chrono::{Duration, Utc};
 use sea_orm::sea_query::Expr;
 use sea_orm::{
     ColumnTrait, EntityTrait, Order, PaginatorTrait, QueryFilter, QueryOrder, QuerySelect,
 };
 use serde::Serialize;
 use utoipa::ToSchema;
+
+const AUTOMATIC_VERIFICATION_ENTRY_LIMIT: i64 = 1_000;
 
 #[derive(Debug, Serialize, ToSchema)]
 pub struct ChainSummary {
@@ -28,6 +30,9 @@ pub struct ChainSummary {
     pub signed: bool,
     pub kid: Option<String>,
     pub valid: Option<bool>,
+    pub fully_authenticated: Option<bool>,
+    pub first_broken_at: Option<i64>,
+    pub unverifiable_signatures: Option<u64>,
 }
 
 #[derive(Debug, Serialize, ToSchema)]
@@ -70,7 +75,7 @@ async fn build_summary(
     let (last_sequence, last_entry_at, last_entry_hash, signed, kid) = match tail {
         Some(e) => (
             Some(e.sequence),
-            Some(DateTime::<Utc>::from_naive_utc_and_offset(e.timestamp, Utc).to_rfc3339()),
+            Some(e.timestamp.to_rfc3339()),
             Some(e.entry_hash),
             e.signature.is_some(),
             e.kid,
@@ -78,13 +83,24 @@ async fn build_summary(
         None => (None, None, None, false, None),
     };
 
-    let valid = if verify && entries > 0 {
-        match AuditService::verify_chain(&state.db, chain_id, None, None).await {
-            Ok(v) => Some(v.valid),
-            Err(_) => None,
+    let (valid, fully_authenticated, first_broken_at, unverifiable_signatures) = if verify
+        && entries > 0
+        && entries <= AUTOMATIC_VERIFICATION_ENTRY_LIMIT
+    {
+        match AuditService::verify_chain(&state.db, state.db_dialect, chain_id, None, None).await {
+            Ok(v) => (
+                Some(v.valid),
+                Some(v.fully_authenticated),
+                v.first_broken_at,
+                Some(v.unverifiable_signatures),
+            ),
+            Err(error) => {
+                tracing::error!(%error, chain_id, "Audit chain status verification failed");
+                (None, None, None, None)
+            }
         }
     } else {
-        None
+        (None, None, None, None)
     };
 
     Ok(ChainSummary {
@@ -97,6 +113,9 @@ async fn build_summary(
         signed,
         kid,
         valid,
+        fully_authenticated,
+        first_broken_at,
+        unverifiable_signatures,
     })
 }
 
@@ -133,7 +152,7 @@ pub async fn chain_status(
         .count(&state.db)
         .await? as i64;
 
-    let last_24h_cutoff = Utc::now().naive_utc() - Duration::hours(24);
+    let last_24h_cutoff = Utc::now().fixed_offset() - Duration::hours(24);
     let last_24h_entries = audit_entry::Entity::find()
         .filter(audit_entry::Column::Timestamp.gte(last_24h_cutoff))
         .count(&state.db)

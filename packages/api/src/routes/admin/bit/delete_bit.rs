@@ -7,6 +7,7 @@ use axum::{
     extract::{Path, State},
 };
 use flow_like::bit::Bit;
+use flow_like_storage::object_store::ObjectStoreExt;
 use sea_orm::EntityTrait;
 
 #[utoipa::path(
@@ -36,12 +37,12 @@ pub async fn delete_bit(
         .exec_with_returning(&state.db)
         .await?;
 
-    let mut bits = Vec::with_capacity(deleted_bits.len());
+    let mut bits = Vec::new();
     for bit in deleted_bits {
         let bit: Bit = bit.into();
         if !bit.hash.is_empty() {
             let path =
-                flow_like_storage::object_store::path::Path::from("bits").child(bit.hash.clone());
+                flow_like_storage::object_store::path::Path::from("bits").join(bit.hash.clone());
             cdn_bucket.as_generic().delete(&path).await?;
         }
         bits.push(bit);

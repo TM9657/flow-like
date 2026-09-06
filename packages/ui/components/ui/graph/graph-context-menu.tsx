@@ -16,8 +16,12 @@ import {
 	Ungroup,
 } from "lucide-react";
 import { useLayoutEffect, useRef, useState } from "react";
-import type { SubgraphNode } from "../../../state/backend-state/graph-state";
+import type {
+	GraphOverlay,
+	SubgraphNode,
+} from "../../../state/backend-state/graph-state";
 import type { ExpansionChoice } from "./graph-expansion-dialog";
+import { GraphNodeCaption } from "./graph-node-caption";
 import { getGraphIcon } from "./icons";
 
 export interface GraphContextMenuState {
@@ -29,6 +33,7 @@ export interface GraphContextMenuState {
 export interface GraphContextMenuProps {
 	state: GraphContextMenuState | null;
 	node: SubgraphNode | null;
+	overlay?: GraphOverlay;
 	isGroup: boolean;
 	/** Cluster the object belongs to, when that cluster can be collapsed. */
 	collapsibleClusterId?: string | null;
@@ -78,6 +83,7 @@ function MenuItem({
 export function GraphContextMenu({
 	state,
 	node,
+	overlay,
 	isGroup,
 	collapsibleClusterId,
 	pinned,
@@ -144,7 +150,11 @@ export function GraphContextMenu({
 			>
 				<div className="px-2 py-1.5">
 					<p className="truncate text-xs font-medium">
-						{node?.caption ?? state.nodeId}
+						{node ? (
+							<GraphNodeCaption node={node} overlay={overlay} />
+						) : (
+							state.nodeId
+						)}
 					</p>
 					<p className="truncate text-[10px] text-muted-foreground">
 						{isGroup

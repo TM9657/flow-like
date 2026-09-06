@@ -66,10 +66,7 @@ async fn db_connection_handle(
     sub: Option<String>,
 ) -> flow_like_types::Result<Connection> {
     let flow_like_state = TauriFlowLikeState::construct(app_handle).await?;
-    let project_db_dir = Path::from("apps")
-        .child(app_id)
-        .child("storage")
-        .child("db");
+    let project_db_dir = Path::from("apps").join(app_id).join("storage").join("db");
     let db = if let Some(credentials) = &credentials {
         if user_scoped {
             let sub = sub.ok_or_else(|| {
@@ -89,10 +86,10 @@ async fn db_connection_handle(
                 .map_err(|e| flow_like_types::anyhow!(e.to_string()))?,
         };
         let user_db_dir = Path::from("users")
-            .child(sub)
-            .child("apps")
-            .child(app_id)
-            .child("db");
+            .join(sub)
+            .join("apps")
+            .join(app_id)
+            .join("db");
         flow_like_state
             .config
             .read()
@@ -396,6 +393,7 @@ pub async fn db_query(
         flow_like::flow_like_storage::databases::sql_guard::validate_readonly_sql(&sql)
             .map_err(|e| anyhow!("Invalid query SQL: {e}"))?;
         let context = SessionContext::new();
+        flow_like_storage::geometry::register_geo_functions(&context);
         let fusion = db.to_datafusion().await?;
         context
             .register_table(table_name, fusion)

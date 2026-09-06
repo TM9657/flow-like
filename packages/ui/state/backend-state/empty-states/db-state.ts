@@ -54,6 +54,9 @@ export class EmptyDatabaseState implements IDatabaseState {
 	getSchema(appId: string, tableName: string): Promise<any> {
 		throw new Error("Method not implemented.");
 	}
+	getSchemaAuthoritative(appId: string, tableName: string): Promise<any> {
+		throw new Error("Method not implemented.");
+	}
 	getIndices(appId: string, tableName: string): Promise<IIndexConfig[]> {
 		throw new Error("Method not implemented.");
 	}
@@ -65,6 +68,9 @@ export class EmptyDatabaseState implements IDatabaseState {
 		throw new Error("Method not implemented.");
 	}
 	listTables(appId: string): Promise<string[]> {
+		throw new Error("Method not implemented.");
+	}
+	listTablesAuthoritative(appId: string): Promise<string[]> {
 		throw new Error("Method not implemented.");
 	}
 	listTablesUser(appId: string): Promise<string[]> {

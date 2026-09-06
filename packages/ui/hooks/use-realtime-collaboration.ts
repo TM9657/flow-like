@@ -9,7 +9,10 @@ import {
 } from "react";
 import type { RemoteSelectionParticipant } from "../components/flow/flow-node";
 import { type IRealtimeAccess, createRealtimeSession } from "../lib";
-import { decodeJwtExpiryMs } from "../lib/realtime/authenticated-websocket";
+import {
+	decodeJwtExpiryMs,
+	realtimeRoomForAccess,
+} from "../lib/realtime/authenticated-websocket";
 import {
 	type PeerPresence,
 	createPeerActivityTracker,
@@ -118,6 +121,7 @@ export function useRealtimeCollaboration({
 	// The room key the live provider was built with; the server rotates it
 	// daily and a session on the old key cannot decrypt anyone who joined after.
 	const keyIdRef = useRef<string | null>(null);
+	const roomRef = useRef<string | null>(null);
 	const [peerStates, setPeerStates] = useState<PeerPresence[]>([]);
 	const remoteSelectionsRef = useRef<Map<string, RemoteSelectionParticipant[]>>(
 		new Map(),
@@ -206,10 +210,12 @@ export function useRealtimeCollaboration({
 					boardId,
 				);
 				if (disposed || !sessionRef.current) return;
-				if (keyIdRef.current && access.key_id !== keyIdRef.current) {
-					// New room key: the provider's AES key is fixed at construction,
-					// so a swapped JWT alone would leave this session deaf to every
-					// peer on the new key (and them to us) while both say "Live".
+				if (
+					(keyIdRef.current && access.key_id !== keyIdRef.current) ||
+					roomRef.current !== realtimeRoomForAccess(appId, boardId, access.jwt)
+				) {
+					// The provider's room and AES key are fixed at construction.
+					// Recreate it when format negotiation or key rotation changes either.
 					teardownSession();
 					await setup(access);
 					return;
@@ -239,6 +245,7 @@ export function useRealtimeCollaboration({
 			sessionRef.current = null;
 			sessionInitializedRef.current = null;
 			keyIdRef.current = null;
+			roomRef.current = null;
 			tokenExpiresAtRef.current = null;
 			iceExpiresAtRef.current = null;
 			awarenessRef.current = undefined;
@@ -273,11 +280,11 @@ export function useRealtimeCollaboration({
 				if (!hasBoardData || typeof version !== "undefined") return;
 				if (offline) return;
 
-				const room = sessionKey;
 				const access: IRealtimeAccess =
 					prefetchedAccess ??
 					(await backend.boardState.getRealtimeAccess(appId, boardId));
 
+				const room = realtimeRoomForAccess(appId, boardId, access.jwt);
 				const session = await createRealtimeSession({
 					room,
 					access,
@@ -309,6 +316,7 @@ export function useRealtimeCollaboration({
 				tokenExpiresAtRef.current = decodeJwtExpiryMs(access.jwt);
 				iceExpiresAtRef.current = realtimeIceExpiryMs(access);
 				keyIdRef.current = access.key_id ?? null;
+				roomRef.current = room;
 				scheduleAccessRefresh();
 				awarenessRef.current = session.awareness;
 				commandAwarenessRef.current = session.awareness;
@@ -354,6 +362,7 @@ export function useRealtimeCollaboration({
 			tokenExpiresAtRef.current = null;
 			iceExpiresAtRef.current = null;
 			keyIdRef.current = null;
+			roomRef.current = null;
 			awarenessRef.current = undefined;
 			commandAwarenessRef.current = undefined;
 			setAwareness(undefined);

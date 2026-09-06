@@ -87,11 +87,11 @@
 			"patterns": [
 				{
 					"name": "support.type.primitive.flow",
-					"match": "\\b(string|int|float|bool|void|Date|Generic|Byte|PathBuf)\\b"
+					"match": "\\b(string|int|float|bool|void|Date|Generic|Byte|PathBuf|geometry)\\b"
 				},
 				{
 					"name": "support.type.flow",
-					"match": "\\b(Struct|Map|Set|any|null)\\b"
+					"match": "\\b(Struct|Map|Set|Point|LineString|Polygon|MultiPoint|MultiLineString|MultiPolygon|GeometryCollection|any|null)\\b"
 				},
 				{
 					"name": "entity.name.type.flow",

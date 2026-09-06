@@ -45,7 +45,12 @@ impl NodeLogic for IndexLocalDatabaseNode {
 
         node.add_input_pin("column", "Column", "Column to Index", VariableType::String)
             .set_default_value(Some(json!("")));
-        node.add_input_pin("type", "Type", "Index Type to build", VariableType::String)
+        node.add_input_pin(
+            "type",
+            "Type",
+            "Index type to build. Vector indexes use cosine distance; VECTOR and vector AUTO retain IVF-PQ.",
+            VariableType::String,
+        )
             .set_options(
                 PinOptions::new()
                     .set_valid_values(vec![
@@ -55,6 +60,18 @@ impl NodeLogic for IndexLocalDatabaseNode {
                         "FULL TEXT".to_string(),
                         "VECTOR".to_string(),
                         "AUTO".to_string(),
+                        "FM".to_string(),
+                        "NGRAM".to_string(),
+                        "ZONEMAP".to_string(),
+                        "BLOOMFILTER".to_string(),
+                        "RTREE".to_string(),
+                        "IVF_FLAT".to_string(),
+                        "IVF_PQ".to_string(),
+                        "IVF_SQ".to_string(),
+                        "IVF_RQ".to_string(),
+                        "IVF_HNSW_FLAT".to_string(),
+                        "IVF_HNSW_PQ".to_string(),
+                        "IVF_HNSW_SQ".to_string(),
                     ])
                     .build(),
             )

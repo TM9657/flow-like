@@ -4,6 +4,8 @@ pub mod android_store;
 pub mod arrow_utils;
 #[cfg(any(feature = "query-parser", feature = "database-runtime"))]
 pub mod databases;
+#[cfg(feature = "database-runtime")]
+pub mod geometry;
 #[cfg(feature = "files")]
 pub use flow_like_storage_files as files;
 #[cfg(feature = "database-runtime")]

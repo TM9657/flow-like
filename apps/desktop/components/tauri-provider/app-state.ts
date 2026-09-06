@@ -15,6 +15,10 @@ import {
 	injectDataFunction,
 } from "@flow-like/flow-like-ui";
 import type { IGroup } from "@flow-like/flow-like-ui";
+import {
+	type IForkJobView,
+	resolveOnlineFork,
+} from "@flow-like/flow-like-ui/lib/fork-job";
 import type { IAppSearchSort } from "@flow-like/flow-like-ui/lib/schema/app/app-search-query";
 import type {
 	IBeginOfflineForkBody,
@@ -398,19 +402,14 @@ export class AppState implements IAppState {
 			return this.getApps();
 		}
 
-		try {
-			return stabilizeMetadataEntries(
-				await fetcher<[IApp, IMetadata | undefined][]>(
-					this.backend.profile,
-					`apps/search?${new URLSearchParams(queryParams)}`,
-					undefined,
-					this.backend.auth,
-				),
-			);
-		} catch (error) {
-			console.error("Failed to search apps:", error);
-			return [];
-		}
+		return stabilizeMetadataEntries(
+			await fetcher<[IApp, IMetadata | undefined][]>(
+				this.backend.profile,
+				`apps/search?${new URLSearchParams(queryParams)}`,
+				undefined,
+				this.backend.auth,
+			),
+		);
 	}
 
 	async getStoreGroups(offset?: number, limit?: number): Promise<IGroup[]> {
@@ -602,6 +601,26 @@ export class AppState implements IAppState {
 
 		return this.fetchRemoteApp(appId);
 	}
+
+	async getAppAuthoritative(appId: string): Promise<IApp> {
+		if (await this.backend.isLocalOnly(appId)) {
+			return invoke<IApp>("get_app", { appId });
+		}
+		if (
+			!this.backend.profile ||
+			!this.backend.auth?.isAuthenticated ||
+			!this.backend.auth.user?.access_token
+		) {
+			throw new Error("Hosted App read requires an authenticated hub session");
+		}
+		return fetcher<IApp>(
+			this.backend.profile,
+			`apps/${appId}`,
+			{ method: "GET" },
+			this.backend.auth,
+		);
+	}
+
 	async updateApp(app: IApp): Promise<void> {
 		const isOffline = await this.backend.isOffline(app.id);
 
@@ -629,6 +648,93 @@ export class AppState implements IAppState {
 				method: "PUT",
 				body: JSON.stringify({
 					app: app,
+				}),
+			},
+			this.backend.auth,
+		);
+	}
+
+	async updateAppAuthoritative(app: IApp): Promise<void> {
+		if (await this.backend.isLocalOnly(app.id)) {
+			await invoke("update_app", { app });
+			return;
+		}
+		if (
+			!this.backend.profile ||
+			!this.backend.auth?.isAuthenticated ||
+			!this.backend.auth.user?.access_token
+		) {
+			throw new Error(
+				"Hosted App update requires an authenticated hub session",
+			);
+		}
+		await fetcher(
+			this.backend.profile,
+			`apps/${app.id}`,
+			{
+				method: "PUT",
+				body: JSON.stringify({ app }),
+			},
+			this.backend.auth,
+		);
+	}
+
+	async readAppBuild(appId: string, buildId: string): Promise<unknown | null> {
+		if (await this.backend.isLocalOnly(appId)) {
+			return invoke<unknown | null>("read_app_build", { appId, buildId });
+		}
+
+		if (
+			!this.backend.profile ||
+			!this.backend.auth?.isAuthenticated ||
+			!this.backend.auth.user?.access_token
+		) {
+			throw new Error("Profile or auth not set. Cannot read app build.");
+		}
+		try {
+			return await fetcher<unknown>(
+				this.backend.profile,
+				`apps/${appId}/flowpilot-builds/${buildId}`,
+				{ method: "GET" },
+				this.backend.auth,
+			);
+		} catch (error) {
+			if (isMissingResourceError(error)) return null;
+			throw error;
+		}
+	}
+
+	async writeAppBuild(
+		appId: string,
+		buildId: string,
+		record: unknown,
+		expectedRevision: number | null,
+	): Promise<void> {
+		if (await this.backend.isLocalOnly(appId)) {
+			await invoke("write_app_build", {
+				appId,
+				buildId,
+				record,
+				expectedRevision,
+			});
+			return;
+		}
+
+		if (
+			!this.backend.profile ||
+			!this.backend.auth?.isAuthenticated ||
+			!this.backend.auth.user?.access_token
+		) {
+			throw new Error("Profile or auth not set. Cannot write app build.");
+		}
+		await fetcher(
+			this.backend.profile,
+			`apps/${appId}/flowpilot-builds/${buildId}`,
+			{
+				method: "PUT",
+				body: JSON.stringify({
+					record,
+					expected_revision: expectedRevision,
 				}),
 			},
 			this.backend.auth,
@@ -820,7 +926,7 @@ export class AppState implements IAppState {
 				try {
 					await this.backend.uploadSignedUrl(uploadUrl, file, 0, 1, () => {});
 				} catch (error) {
-					console.error(`Failed to upload file ${uploadUrl}:`, error);
+					console.error("Failed to upload file");
 					throw error;
 				}
 			}
@@ -975,17 +1081,27 @@ export class AppState implements IAppState {
 		appId: string,
 		body: IOnlineForkBody,
 	): Promise<IOnlineForkResponse> {
-		if (!this.backend.profile || !this.backend.auth) {
+		const profile = this.backend.profile;
+		const auth = this.backend.auth;
+		if (!profile || !auth) {
 			throw new Error("not authenticated");
 		}
-		return fetcher<IOnlineForkResponse>(
-			this.backend.profile,
+		const response = await fetcher<IOnlineForkResponse | IForkJobView>(
+			profile,
 			`apps/${appId}/fork`,
 			{
 				method: "POST",
 				body: JSON.stringify(body),
 			},
-			this.backend.auth,
+			auth,
+		);
+		return resolveOnlineFork(response, (jobId) =>
+			fetcher<IForkJobView>(
+				profile,
+				`apps/fork/jobs/${jobId}`,
+				{ method: "GET" },
+				auth,
+			),
 		);
 	}
 

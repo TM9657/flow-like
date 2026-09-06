@@ -60,6 +60,8 @@ export interface IBoardSyncRequest {
 }
 
 export interface IBoardMeta {
+	/** Missing on legacy backends, which use board format version 1. */
+	format_version?: number;
 	id: string;
 	name: string;
 	description: string;

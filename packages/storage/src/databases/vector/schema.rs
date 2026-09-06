@@ -61,7 +61,7 @@ fn field_data_type(field: &DatabaseSchemaField) -> Result<DataType> {
         "uint64" => Some(DataType::UInt64),
         "float32" | "float" => Some(DataType::Float32),
         "float64" | "double" => Some(DataType::Float64),
-        "binary" | "bytes" => Some(DataType::Binary),
+        "binary" | "bytes" | "geometry" => Some(DataType::Binary),
         "date" | "date32" => Some(DataType::Date32),
         // FlowLike Date values represent instants and serialize as RFC3339,
         // so their physical timestamp column must carry UTC timezone metadata.
@@ -71,7 +71,7 @@ fn field_data_type(field: &DatabaseSchemaField) -> Result<DataType> {
         "vector" | "vector_float32" => None,
         _ => {
             return Err(anyhow!(
-                "Unsupported type '{}' for column '{}'. Supported types: string, boolean, int8, int16, int32, int64, uint8, uint16, uint32, uint64, float32, float64, binary, date32, timestamp:ms:UTC, vector",
+                "Unsupported type '{}' for column '{}'. Supported types: string, boolean, int8, int16, int32, int64, uint8, uint16, uint32, uint64, float32, float64, binary, geometry, date32, timestamp:ms:UTC, vector",
                 field.data_type,
                 field.name
             ));
@@ -128,11 +128,12 @@ pub fn database_fields_to_arrow_schema(fields: &[DatabaseSchemaField]) -> Result
         if !names.insert(normalized_name) {
             return Err(anyhow!("Duplicate column name '{}'", field.name));
         }
-        arrow_fields.push(Field::new(
-            &field.name,
-            field_data_type(field)?,
-            field.nullable,
-        ));
+        let data_type = field_data_type(field)?;
+        arrow_fields.push(if field.data_type.trim().eq_ignore_ascii_case("geometry") {
+            crate::geometry::geometry_field(&field.name, field.nullable)
+        } else {
+            Field::new(&field.name, data_type, field.nullable)
+        });
     }
 
     Ok(Schema::new(arrow_fields))

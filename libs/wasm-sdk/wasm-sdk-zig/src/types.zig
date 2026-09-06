@@ -23,6 +23,7 @@ pub const DataType = enum {
     date_time,
     path_buf,
     struct_type,
+    geometry,
 
     pub fn jsonName(self: DataType) []const u8 {
         return switch (self) {
@@ -36,6 +37,7 @@ pub const DataType = enum {
             .date_time => "Date",
             .path_buf => "PathBuf",
             .struct_type => "Struct",
+            .geometry => "Geometry",
         };
     }
 };

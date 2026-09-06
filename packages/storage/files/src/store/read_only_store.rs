@@ -1,15 +1,16 @@
 //! Read-only [`ObjectStore`] decorator for shadow/replay runs.
 //!
 //! Every mutating operation fails loudly with a `NotSupported` error instead of
-//! silently no-oping — a fabricated success would make a shadow-run diff a lie.
+//! silently succeeding. A fabricated success would hide changes in a shadow-run diff.
 //! All read operations delegate to the wrapped store unchanged.
 
-use flow_like_types::{Bytes, async_trait};
+use async_trait::async_trait;
+use bytes::Bytes;
 use futures::stream::BoxStream;
 use object_store::path::Path;
 use object_store::{
-    GetOptions, GetResult, ListResult, MultipartUpload, ObjectMeta, ObjectStore,
-    PutMultipartOptions, PutOptions, PutPayload, PutResult, Result,
+    CopyOptions, GetOptions, GetResult, ListResult, MultipartUpload, ObjectMeta, ObjectStore,
+    PutMultipartOptions, PutOptions, PutPayload, PutResult, RenameOptions, Result,
 };
 use std::ops::Range;
 use std::sync::Arc;
@@ -42,10 +43,6 @@ impl std::fmt::Display for ReadOnlyStore {
 
 #[async_trait]
 impl ObjectStore for ReadOnlyStore {
-    async fn put(&self, location: &Path, _payload: PutPayload) -> Result<PutResult> {
-        Err(Self::write_denied("put", location.as_ref()))
-    }
-
     async fn put_opts(
         &self,
         location: &Path,
@@ -53,10 +50,6 @@ impl ObjectStore for ReadOnlyStore {
         _opts: PutOptions,
     ) -> Result<PutResult> {
         Err(Self::write_denied("put", location.as_ref()))
-    }
-
-    async fn put_multipart(&self, location: &Path) -> Result<Box<dyn MultipartUpload>> {
-        Err(Self::write_denied("multipart upload", location.as_ref()))
     }
 
     async fn put_multipart_opts(
@@ -67,34 +60,18 @@ impl ObjectStore for ReadOnlyStore {
         Err(Self::write_denied("multipart upload", location.as_ref()))
     }
 
-    async fn get(&self, location: &Path) -> Result<GetResult> {
-        self.inner.get(location).await
-    }
-
     async fn get_opts(&self, location: &Path, opts: GetOptions) -> Result<GetResult> {
         self.inner.get_opts(location, opts).await
-    }
-
-    async fn get_range(&self, location: &Path, range: Range<u64>) -> Result<Bytes> {
-        self.inner.get_range(location, range).await
     }
 
     async fn get_ranges(&self, location: &Path, ranges: &[Range<u64>]) -> Result<Vec<Bytes>> {
         self.inner.get_ranges(location, ranges).await
     }
 
-    async fn head(&self, location: &Path) -> Result<ObjectMeta> {
-        self.inner.head(location).await
-    }
-
-    async fn delete(&self, location: &Path) -> Result<()> {
-        Err(Self::write_denied("delete", location.as_ref()))
-    }
-
-    fn delete_stream<'a>(
-        &'a self,
-        locations: BoxStream<'a, Result<Path>>,
-    ) -> BoxStream<'a, Result<Path>> {
+    fn delete_stream(
+        &self,
+        locations: BoxStream<'static, Result<Path>>,
+    ) -> BoxStream<'static, Result<Path>> {
         Box::pin(futures::StreamExt::map(locations, |location| {
             let location = location?;
             Err(Self::write_denied("delete", location.as_ref()))
@@ -117,28 +94,14 @@ impl ObjectStore for ReadOnlyStore {
         self.inner.list_with_delimiter(prefix).await
     }
 
-    async fn copy(&self, from: &Path, to: &Path) -> Result<()> {
+    async fn copy_opts(&self, from: &Path, to: &Path, _options: CopyOptions) -> Result<()> {
         Err(Self::write_denied(
             "copy",
             &format!("{from} -> {to}", from = from.as_ref(), to = to.as_ref()),
         ))
     }
 
-    async fn copy_if_not_exists(&self, from: &Path, to: &Path) -> Result<()> {
-        Err(Self::write_denied(
-            "copy",
-            &format!("{from} -> {to}", from = from.as_ref(), to = to.as_ref()),
-        ))
-    }
-
-    async fn rename(&self, from: &Path, to: &Path) -> Result<()> {
-        Err(Self::write_denied(
-            "rename",
-            &format!("{from} -> {to}", from = from.as_ref(), to = to.as_ref()),
-        ))
-    }
-
-    async fn rename_if_not_exists(&self, from: &Path, to: &Path) -> Result<()> {
+    async fn rename_opts(&self, from: &Path, to: &Path, _options: RenameOptions) -> Result<()> {
         Err(Self::write_denied(
             "rename",
             &format!("{from} -> {to}", from = from.as_ref(), to = to.as_ref()),
@@ -150,7 +113,7 @@ impl ObjectStore for ReadOnlyStore {
 mod tests {
     use super::*;
     use futures::TryStreamExt;
-    use object_store::memory::InMemory;
+    use object_store::{ObjectStoreExt, memory::InMemory};
 
     fn store_with_object() -> (Arc<InMemory>, ReadOnlyStore) {
         let inner = Arc::new(InMemory::new());

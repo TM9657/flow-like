@@ -43,7 +43,10 @@ function backend() {
 	return new TauriBackend(
 		() => undefined,
 		undefined,
-		{ user: { profile: { sub: "user-1" } } } as never,
+		{
+			isAuthenticated: true,
+			user: { access_token: "token", profile: { sub: "user-1" } },
+		} as never,
 		{ id: "profile-1", hub: "hub-1" } as never,
 	);
 }
@@ -105,5 +108,91 @@ describe("app visibility resolution", () => {
 		await expect(target.isLocalOnly(APP)).resolves.toBe(false);
 		await expect(target.isOffline(APP)).resolves.toBe(false);
 		expect(mocks.invoke).not.toHaveBeenCalledWith("get_app", { appId: APP });
+	});
+
+	test("an authoritative hosted App read does not fall back to or update local cache", async () => {
+		const remote = { id: APP, visibility: IAppVisibility.Private };
+		mocks.invoke.mockRejectedValueOnce(new Error("No local manifest"));
+		mocks.fetcher.mockResolvedValueOnce(remote);
+
+		await expect(backend().appState.getAppAuthoritative(APP)).resolves.toBe(
+			remote,
+		);
+		expect(mocks.fetcher).toHaveBeenCalledWith(
+			{ id: "profile-1", hub: "hub-1" },
+			`apps/${APP}`,
+			{ method: "GET" },
+			expect.objectContaining({ isAuthenticated: true }),
+		);
+		expect(mocks.invoke).not.toHaveBeenCalledWith(
+			"update_app",
+			expect.anything(),
+		);
+		expect(mocks.visibilityPut).not.toHaveBeenCalled();
+	});
+
+	test("an authoritative local-only App read stays native", async () => {
+		const local = { id: APP, visibility: IAppVisibility.Offline };
+		mocks.visibilityGet.mockResolvedValueOnce({
+			appId: APP,
+			visibility: IAppVisibility.Offline,
+		});
+		mocks.invoke.mockResolvedValueOnce(local);
+
+		await expect(backend().appState.getAppAuthoritative(APP)).resolves.toBe(
+			local,
+		);
+		expect(mocks.invoke).toHaveBeenCalledWith("get_app", { appId: APP });
+		expect(mocks.fetcher).not.toHaveBeenCalled();
+	});
+
+	test("an authoritative hosted App update never follows the offline guess", async () => {
+		const app = { id: APP, visibility: IAppVisibility.Private };
+		mocks.invoke.mockRejectedValueOnce(new Error("No local manifest"));
+		mocks.fetcher.mockResolvedValueOnce(undefined);
+
+		await backend().appState.updateAppAuthoritative(app as never);
+		expect(mocks.fetcher).toHaveBeenCalledWith(
+			{ id: "profile-1", hub: "hub-1" },
+			`apps/${APP}`,
+			{
+				method: "PUT",
+				body: JSON.stringify({ app }),
+			},
+			expect.objectContaining({ isAuthenticated: true }),
+		);
+		expect(mocks.invoke).not.toHaveBeenCalledWith(
+			"update_app",
+			expect.anything(),
+		);
+	});
+
+	test("an authoritative local-only App update stays native", async () => {
+		const app = { id: APP, visibility: IAppVisibility.Offline };
+		mocks.visibilityGet.mockResolvedValueOnce({
+			appId: APP,
+			visibility: IAppVisibility.Offline,
+		});
+
+		await backend().appState.updateAppAuthoritative(app as never);
+		expect(mocks.invoke).toHaveBeenCalledWith("update_app", { app });
+		expect(mocks.fetcher).not.toHaveBeenCalled();
+	});
+
+	test("an unknown-visibility App build uses durable remote storage", async () => {
+		const record = { app_id: APP, build_id: "build-1", revision: 0 };
+		mocks.invoke.mockRejectedValueOnce(new Error("No local manifest"));
+		mocks.fetcher.mockResolvedValueOnce(record);
+
+		await expect(backend().appState.readAppBuild(APP, "build-1")).resolves.toBe(
+			record,
+		);
+		expect(mocks.fetcher.mock.calls[0][1]).toBe(
+			`apps/${APP}/flowpilot-builds/build-1`,
+		);
+		expect(mocks.invoke).not.toHaveBeenCalledWith(
+			"read_app_build",
+			expect.anything(),
+		);
 	});
 });

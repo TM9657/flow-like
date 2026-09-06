@@ -21,4 +21,7 @@ pub fn routes() -> Router<AppState> {
             "/{template_id}/preview",
             get(get_template_preview::get_template_preview),
         )
+        .route_layer(axum::middleware::from_fn(
+            super::board::capabilities::negotiate_board_format,
+        ))
 }

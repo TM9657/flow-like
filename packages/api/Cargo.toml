@@ -11,6 +11,7 @@ serde_json.workspace = true
 axum.workspace = true
 sea-orm.workspace = true
 flow-like-api-entity = { workspace = true, features = ["domain-conversions"] }
+flow-like-db.workspace = true
 serde = { workspace = true, features = ["derive", "rc"] }
 pin-project-lite = "0.2.16"
 tower.workspace = true
@@ -24,7 +25,7 @@ flow-like-secrets.workspace = true
 flow-like-channels.workspace = true
 flow-like-wasm-schema = { workspace = true, features = ["bundle", "nodes", "openapi"] }
 tempfile = "3"
-serde_json.workspace = true
+serde_json = { workspace = true, features = ["float_roundtrip"] }
 base64.workspace = true
 jsonwebtoken.workspace = true
 hyper.workspace = true
@@ -99,17 +100,13 @@ async-stream = "0.3"
 eventsource-stream = "0.2"
 # -----
 
-# ----- Sentry (optional) ----
-sentry = { workspace = true, optional = true }
-# -----
-
 # ----- Kubernetes dependencies ----
 kube = { workspace = true, optional = true }
 k8s-openapi = { workspace = true, optional = true }
 # -----
 
 # ----- State store dependencies ----
-redis = { version = "0.27", features = ["tokio-comp", "connection-manager"], optional = true }
+redis = { version = "0.27", features = ["tokio-comp", "tokio-rustls-comp", "connection-manager"], optional = true }
 tokio = { workspace = true, features = ["sync", "time"], optional = true }
 aws-sdk-dynamodb = { workspace = true, optional = true }
 aws-sdk-s3 = { workspace = true, optional = true }
@@ -159,7 +156,6 @@ dynamodb = ["aws-config", "aws-sdk-dynamodb", "dep:tokio"]  # Uses FlowLikeStore
 cosmos = ["dep:flow-like-azure-data", "dep:tokio"]
 firestore = ["dep:flow-like-gcp-data", "dep:tokio"]
 s3 = ["aws-config", "aws-sdk-s3"]
-sentry = ["dep:sentry"]
 # Channel transports (`CHANNEL_TRANSPORT`): credential minting + push forwarding per cloud.
 channel-aws = ["aws", "flow-like-channels/aws", "dep:aws-sdk-iotdataplane"]
 channel-azure = ["flow-like-channels/azure"]
@@ -181,14 +177,16 @@ full=[
     "storage-queue",
     "pubsub",
     "s3",
-    "sentry",
     "channel-aws",
     "channel-azure",
     "channel-gcp",
 ]
 urlencoding = []
+# Fault injection for retried transactions (`crate::db::testing`); never on in a shipped binary.
+db-chaos = []
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
 dotenv = { workspace = true }
 flow-like-wasm.workspace = true
+flow-like-aws-data.workspace = true

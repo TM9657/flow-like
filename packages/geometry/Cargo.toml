@@ -1,0 +1,13 @@
+[package]
+name = "flow-like-geometry"
+version = "0.1.0"
+edition = "2024"
+description = "Validated WGS84 geometry interchange without a database runtime"
+
+[dependencies]
+flow-like-types-contracts = { workspace = true, features = ["geometry"] }
+serde_json.workspace = true
+anyhow = "1"
+geo-types = "=0.7.18"
+wkt = "=0.14.0"
+

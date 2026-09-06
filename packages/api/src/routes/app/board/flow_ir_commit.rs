@@ -15,7 +15,7 @@ use flow_like::flow::{
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    ensure_permission,
+    audit_branch, ensure_permission,
     error::ApiError,
     middleware::jwt::AppUser,
     permission::role_permission::RolePermissions,
@@ -566,7 +566,7 @@ pub(crate) async fn persist_pending_flow_ir_commit(
         ));
     }
     let scope_key = flow_ir_draft_store_key(sub, app_id, &token.board_id);
-    let _mutation_guard = state.board_mutation_guard(app_id, &token.board_id).await?;
+    let mutation_guard = state.board_mutation_guard(app_id, &token.board_id).await?;
     let mut board = state
         .master_board(sub, app_id, &token.board_id, state, None)
         .await?;
@@ -625,6 +625,7 @@ pub(crate) async fn persist_pending_flow_ir_commit(
         board_commands,
     )
     .map_err(|error| ApiError::internal(format!("durable FlowScript claim failed: {error}")))?;
+    mutation_guard.ensure_held()?;
     board.save(None).await?;
     Ok(())
 }
@@ -641,7 +642,8 @@ pub(crate) async fn persist_pending_flow_ir_commit(
     responses(
         (status = 200, description = "Retained FlowScript review disposition", body = Object),
         (status = 401, description = "Unauthorized"),
-        (status = 403, description = "Forbidden")
+        (status = 403, description = "Forbidden"),
+        (status = 423, description = "Another writer holds this board's mutation lease (code BOARD_LOCKED). Nothing was written; retry the identical request shortly.")
     )
 )]
 #[tracing::instrument(
@@ -665,7 +667,7 @@ pub async fn flow_ir_commit_disposition(
     }
 
     let scope_key = flow_ir_draft_store_key(&sub, &app_id, &board_id);
-    let _mutation_guard = state.board_mutation_guard(&app_id, &board_id).await?;
+    let mutation_guard = state.board_mutation_guard(&app_id, &board_id).await?;
     if matches!(params.disposition, FlowIrCommitDisposition::Applied) {
         return Ok(Json(FlowIrCommitDispositionResult::error(
             "IR_COMMIT_ATOMIC_APPLY_REQUIRED",
@@ -679,6 +681,9 @@ pub async fn flow_ir_commit_disposition(
     {
         Ok(board) => board,
         Err(error) => {
+            if let Some(error) = ApiError::from_board_format_error(&error) {
+                return Err(error);
+            }
             return Ok(Json(FlowIrCommitDispositionResult::error(
                 "IR_COMMIT_BOARD_UNAVAILABLE",
                 format!(
@@ -687,6 +692,7 @@ pub async fn flow_ir_commit_disposition(
             )));
         }
     };
+
     let now_ms = wall_clock_ms();
     let pending_key = pending_claim_ref_key(&scope_key, &params.token);
     let durable_pending_present = board.internal_ref(&pending_key).is_some();
@@ -712,6 +718,8 @@ pub async fn flow_ir_commit_disposition(
                 .map_err(|error| {
                     ApiError::internal(format!("durable FlowScript claim pruning failed: {error}"))
                 })?;
+
+                mutation_guard.ensure_held()?;
                 board.save(None).await?;
             }
             let released_local = store.as_ref().is_some_and(|store| {
@@ -773,7 +781,8 @@ pub async fn flow_ir_commit_disposition(
     responses(
         (status = 200, description = "Exact retained FlowScript command batch apply result", body = Object),
         (status = 401, description = "Unauthorized"),
-        (status = 403, description = "Forbidden")
+        (status = 403, description = "Forbidden"),
+        (status = 423, description = "Another writer holds this board's mutation lease (code BOARD_LOCKED). Nothing was written; retry the identical request shortly.")
     )
 )]
 #[tracing::instrument(
@@ -798,7 +807,7 @@ pub async fn apply_flow_ir_commit(
     }
 
     let scope_key = flow_ir_draft_store_key(&sub, &app_id, &board_id);
-    let _mutation_guard = state.board_mutation_guard(&app_id, &board_id).await?;
+    let mutation_guard = state.board_mutation_guard(&app_id, &board_id).await?;
 
     let mut board = match state
         .master_board(&sub, &app_id, &board_id, &state, None)
@@ -806,6 +815,9 @@ pub async fn apply_flow_ir_commit(
     {
         Ok(board) => board,
         Err(error) => {
+            if let Some(error) = ApiError::from_board_format_error(&error) {
+                return Err(error);
+            }
             return Ok(Json(ApplyFlowIrCommitResult::empty(
                 "error",
                 "IR_COMMIT_BOARD_UNAVAILABLE",
@@ -815,6 +827,7 @@ pub async fn apply_flow_ir_commit(
             )));
         }
     };
+
     let now_ms = wall_clock_ms();
     let requested_receipt_key = applied_receipt_ref_key(&scope_key, &params.token);
     let requested_pending_key = pending_claim_ref_key(&scope_key, &params.token);
@@ -844,7 +857,11 @@ pub async fn apply_flow_ir_commit(
         replay_applied_receipt_from_board(&board, &scope_key, &params.token, now_ms)
     {
         let obsolete_pending_removed = board.remove_internal_ref(&requested_pending_key).is_some();
+        // Bookkeeping-only, but still a full-object PUT of a board loaded before the lease
+        // lapsed: skipping it costs one more prune later, writing it would erase another
+        // replica's graph mutation.
         if (receipts_pruned || obsolete_pending_removed)
+            && mutation_guard.ensure_held().is_ok()
             && let Err(error) = board.save(None).await
         {
             tracing::warn!(
@@ -923,7 +940,9 @@ pub async fn apply_flow_ir_commit(
                 .map_err(ApiError::internal)?;
             (board_commands, replacement_mode, payload_digest, false)
         } else {
+            // Same reasoning as the replay path above: bookkeeping never outranks the lease.
             if (receipts_pruned || pending_claims_pruned)
+                && mutation_guard.ensure_held().is_ok()
                 && let Err(error) = board.save(None).await
             {
                 tracing::warn!(
@@ -1013,6 +1032,9 @@ pub async fn apply_flow_ir_commit(
     {
         Ok(result) => result,
         Err(error) => {
+            if let Some(error) = ApiError::from_board_format_error(&error) {
+                return Err(error);
+            }
             return Ok(Json(ApplyFlowIrCommitResult::apply_error(
                 "IR_COMMIT_APPLY_FAILED",
                 format!(
@@ -1047,6 +1069,9 @@ pub async fn apply_flow_ir_commit(
     {
         Ok(board) => board,
         Err(error) => {
+            if let Some(error) = ApiError::from_board_format_error(&error) {
+                return Err(error);
+            }
             return Ok(Json(ApplyFlowIrCommitResult::apply_error(
                 "IR_COMMIT_BOARD_UNAVAILABLE",
                 format!(
@@ -1121,10 +1146,15 @@ pub async fn apply_flow_ir_commit(
     // The mutation and its exact success receipt share one compressed board write. A retry can
     // therefore observe either neither or both, including after this process exits immediately
     // after persistence.
+
+    mutation_guard.ensure_held()?;
     let saved = super::scoring::save_board_and_refresh_summary(&state, &app_id, &board).await;
     let put = match saved {
         Ok(put) => put,
         Err(error) => {
+            if let Some(error) = ApiError::from_board_format_error(&error) {
+                return Err(error);
+            }
             let restore_error = restore_persisted_snapshot(&persisted_original).await;
             let mut diagnostics = vec![format!("Board persistence failed: {error}")];
             if let Some(error) = restore_error {
@@ -1140,6 +1170,20 @@ pub async fn apply_flow_ir_commit(
             )));
         }
     };
+
+    audit_branch!(
+        state,
+        user,
+        app_id,
+        "board.flow_ir.commit",
+        "Board",
+        board_id,
+        "Applied a compiled workflow commit",
+        serde_json::json!({
+            "command_count": result.commands.len(),
+            "approved_destructive": params.approve_destructive,
+        })
+    );
 
     if let Some(store) = store
         && !store.acknowledge_applied_commit(

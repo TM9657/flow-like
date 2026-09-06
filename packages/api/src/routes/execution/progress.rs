@@ -336,19 +336,32 @@ async fn mirror_run_update_to_sql(
     store: &dyn ExecutionStateStore,
     run: &ExecutionRunRecord,
 ) -> Result<(), ApiError> {
-    if store.backend_name() == "postgres" {
-        return Ok(());
+    if store.backend_name() != "postgres" {
+        PostgresStateStore::new(Arc::new(state.db.clone()))
+            .mirror_run_update(run)
+            .await
+            .map_err(|error| {
+                ApiError::internal_error(anyhow!(
+                    "Failed to mirror run '{}' into canonical SQL: {error}",
+                    run.id
+                ))
+            })?;
     }
-
-    PostgresStateStore::new(Arc::new(state.db.clone()))
-        .mirror_run_update(run)
-        .await
-        .map_err(|error| {
-            ApiError::internal_error(anyhow!(
-                "Failed to mirror run '{}' into canonical SQL: {error}",
-                run.id
-            ))
-        })
+    if run.status.is_terminal() {
+        let persisted = crate::entity::execution_run::Entity::find_by_id(&run.id)
+            .filter(crate::entity::execution_run::Column::AppId.eq(&run.app_id))
+            .one(&state.db)
+            .await?
+            .ok_or(ApiError::NOT_FOUND)?;
+        crate::audit::record_execution_result(
+            &crate::audit::ExecutionAuditContext::from(state),
+            &persisted,
+            &run.id,
+            crate::entity::sea_orm_active_enums::AuditActorType::Executor,
+        )
+        .await?;
+    }
+    Ok(())
 }
 
 /// POST /execution/events
@@ -458,6 +471,30 @@ pub async fn push_events(
 // User endpoints (require user JWT or app access)
 // ============================================================================
 
+/// Read persisted state with the run's executor capability. Trusted queue
+/// consumers use this before acknowledgement, independently of sandbox stdout.
+pub async fn executor_result(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    let token = extract_bearer_token(&headers)?;
+    let claims =
+        verify_execution_jwt(token).map_err(|_| ApiError::bad_request("Invalid executor JWT"))?;
+    let store = get_state_store(&state).await?;
+    let run = store
+        .get_run_for_app(&claims.run_id, &claims.app_id)
+        .await
+        .map_err(|error| {
+            ApiError::internal_error(anyhow!("Failed to read execution result: {error}"))
+        })?
+        .ok_or(ApiError::NOT_FOUND)?;
+    Ok(Json(serde_json::json!({
+        "run_id": run.id,
+        "status": run.status,
+        "terminal": run.status.is_terminal(),
+    })))
+}
+
 /// Query params for long polling
 #[derive(Clone, Debug, Deserialize, IntoParams, ToSchema)]
 pub struct PollParams {
@@ -562,6 +599,11 @@ pub async fn poll_status(
         let is_terminal = run.status.is_terminal();
         if is_terminal || !events.is_empty() || std::time::Instant::now() >= deadline {
             // Legacy clients have no cursor, so retain their delivery marker.
+            // Marking one delivered retires it for good, which is only safe
+            // because `get_events` fails the poll rather than handing back an
+            // event whose staged payload it could not read for a transient
+            // reason. Only a payload the store reports as gone comes through,
+            // marked, and it would not come back on a retry either.
             if !events.is_empty() && !cursor_manages_delivery {
                 let event_ids: Vec<String> = events.iter().map(|e| e.id.clone()).collect();
                 let _ = store
@@ -706,7 +748,7 @@ async fn track_execution_usage(
         return Ok(());
     }
 
-    let now = chrono::Utc::now().naive_utc();
+    let now = chrono::Utc::now().fixed_offset();
     let instance = std::env::var("INSTANCE_ID").ok();
     let record = execution_usage_tracking::ActiveModel {
         id: Set(create_id()),
@@ -1070,7 +1112,7 @@ fn map_lease_error(error: StateStoreError) -> ApiError {
 }
 
 fn backend_requires_queue_lease(backend: &str) -> bool {
-    matches!(backend, "cosmos" | "dynamodb" | "firestore")
+    matches!(backend, "cosmos" | "dynamodb" | "firestore" | "redis")
 }
 
 /// Get or create the execution state store from app state
@@ -1087,10 +1129,7 @@ pub(crate) async fn get_state_store(
         config = config.with_aws_config(state.aws_client.clone());
     }
 
-    #[cfg(any(feature = "dynamodb", feature = "cosmos", feature = "firestore"))]
-    {
-        config = config.with_content_store(state.content_bucket.clone());
-    }
+    config = config.with_content_store(state.content_bucket.clone());
 
     #[cfg(feature = "s3")]
     {
@@ -1135,10 +1174,10 @@ mod page_action_delivery_tests {
 
     #[test]
     fn stateless_lambda_cloud_queue_backends_require_lease_proof() {
-        for backend in ["cosmos", "dynamodb", "firestore"] {
+        for backend in ["cosmos", "dynamodb", "firestore", "redis"] {
             assert!(backend_requires_queue_lease(backend));
         }
-        for backend in ["postgres", "redis", "object_storage"] {
+        for backend in ["postgres", "object_storage"] {
             assert!(!backend_requires_queue_lease(backend));
         }
     }

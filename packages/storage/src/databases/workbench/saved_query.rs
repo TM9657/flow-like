@@ -392,11 +392,21 @@ async fn save_manifest_if_revision(
     let reader: Box<dyn arrow::record_batch::RecordBatchReader + Send> = Box::new(
         arrow::record_batch::RecordBatchIterator::new(vec![Ok(batch)], schema),
     );
-    let result = merger
-        .execute(reader)
-        .await
-        .map_err(|error| anyhow!("Failed to update saved query manifest: {}", error))?;
-    Ok(result.num_updated_rows == 1)
+    match merger.execute(reader).await {
+        Ok(result) => Ok(result.num_updated_rows == 1),
+        Err(lancedb::Error::Lance {
+            source:
+                lance::Error::CommitConflict { .. }
+                | lance::Error::RetryableCommitConflict { .. }
+                | lance::Error::IncompatibleTransaction { .. },
+        }) => {
+            // Lance cannot always rebase an update across a concurrent commit.
+            // Reload the manifest in the outer CAS loop, which also rechecks
+            // query revisions, view names and limits before trying again.
+            Ok(false)
+        }
+        Err(error) => Err(anyhow!("Failed to update saved query manifest: {}", error)),
+    }
 }
 
 /// Atomically creates a saved query while enforcing case-insensitive view-name
@@ -505,6 +515,7 @@ pub async fn delete_saved_query(connection: &Connection, query_id: &str) -> Resu
 mod tests {
     use super::*;
     use flow_like_types::tokio;
+    use futures::StreamExt;
 
     fn saved_query(id: &str, name: &str, kind: SavedQueryKind) -> SavedQueryDef {
         SavedQueryDef {
@@ -728,6 +739,180 @@ mod tests {
         drop(left);
         drop(right);
         std::fs::remove_dir_all(path).ok();
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn manifest_cas_reloads_after_an_incompatible_transaction() -> Result<()> {
+        let (path, left, right) = test_connections().await?;
+        let (stale_table, mut stale_manifest, stale_revision) =
+            load_or_initialize_manifest(&left).await?;
+        let winner = saved_query("winner", "Winner", SavedQueryKind::Query);
+        let replacement = SavedQueryManifest {
+            queries: vec![winner.clone()],
+        };
+        let (_, batch) = manifest_batch(&replacement, "replacement-revision")?;
+        open_latest_table(&right, SAVED_QUERIES_MANIFEST_TABLE)
+            .await?
+            .add(vec![batch])
+            .mode(lancedb::table::AddDataMode::Overwrite)
+            .execute()
+            .await?;
+
+        let candidate = saved_query("candidate", "Candidate", SavedQueryKind::Query);
+        stale_manifest.queries.push(candidate.clone());
+        assert!(!save_manifest_if_revision(&stale_table, &stale_manifest, &stale_revision).await?);
+        let saved = list_saved_queries(&left).await?;
+        assert_eq!(saved.len(), 1);
+        assert_eq!(saved[0].id, winner.id);
+        assert_eq!(
+            save_saved_query(&left, &candidate).await?,
+            SavedQuerySaveResult::Saved
+        );
+        let saved = list_saved_queries(&right).await?;
+        assert_eq!(saved.len(), 2);
+        assert!(saved.iter().any(|query| query.id == winner.id));
+        assert!(saved.iter().any(|query| query.id == candidate.id));
+        drop(stale_table);
+        drop(left);
+        drop(right);
+        std::fs::remove_dir_all(path).ok();
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn delayed_manifest_create_preserves_another_writers_saved_query() -> Result<()> {
+        for mode in [
+            lance::dataset::WriteMode::Create,
+            lance::dataset::WriteMode::Overwrite,
+        ] {
+            let overwrite = matches!(mode, lance::dataset::WriteMode::Overwrite);
+            let (path, left, right) = test_connections().await?;
+            let ready = Arc::new(tokio::sync::Notify::new());
+            let resume = Arc::new(tokio::sync::Notify::new());
+            let (schema, batch) = manifest_batch(&SavedQueryManifest::default(), "delayed-seed")?;
+            let first_batch = arrow::record_batch::RecordBatch::new_empty(schema.clone());
+            let stream_ready = ready.clone();
+            let stream_resume = resume.clone();
+            let stream: datafusion::execution::SendableRecordBatchStream = Box::pin(
+                datafusion::physical_plan::stream::RecordBatchStreamAdapter::new(
+                    schema,
+                    futures::stream::iter(vec![Ok(first_batch)]).chain(futures::stream::once(
+                        async move {
+                            stream_ready.notify_one();
+                            stream_resume.notified().await;
+                            Ok(batch)
+                        },
+                    )),
+                ),
+            );
+            let uri = format!("{path}/{SAVED_QUERIES_MANIFEST_TABLE}.lance");
+            let delayed_create = tokio::spawn(async move {
+                let params = lance::dataset::WriteParams {
+                    mode,
+                    ..Default::default()
+                };
+                lance::dataset::InsertBuilder::new(uri.as_str())
+                    .with_params(&params)
+                    .execute_stream(stream)
+                    .await
+            });
+            ready.notified().await;
+
+            let query = saved_query("winner", "Winner", SavedQueryKind::Query);
+            assert_eq!(
+                save_saved_query(&left, &query).await?,
+                SavedQuerySaveResult::Saved
+            );
+            resume.notify_one();
+            let result = delayed_create.await?;
+            let saved = list_saved_queries(&right).await?;
+            if overwrite {
+                assert!(result.is_ok(), "an explicit overwrite must still succeed");
+                assert!(
+                    saved.is_empty(),
+                    "an explicit overwrite replaces the manifest"
+                );
+            } else {
+                assert_eq!(
+                    saved.len(),
+                    1,
+                    "a delayed create must retain the committed query"
+                );
+                assert_eq!(saved[0].id, query.id);
+                assert!(
+                    matches!(result, Err(lance::Error::DatasetAlreadyExists { .. })),
+                    "a delayed create must reject an existing table"
+                );
+            }
+            drop(left);
+            drop(right);
+            std::fs::remove_dir_all(path).ok();
+        }
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn concurrent_connection_create_modes_preserve_committed_saved_queries() -> Result<()> {
+        for exist_ok in [false, true] {
+            let (path, left, right) = test_connections().await?;
+            let ready = Arc::new(tokio::sync::Notify::new());
+            let resume = Arc::new(tokio::sync::Notify::new());
+            let (schema, batch) = manifest_batch(&SavedQueryManifest::default(), "delayed-seed")?;
+            let first_batch = arrow::record_batch::RecordBatch::new_empty(schema.clone());
+            let stream_ready = ready.clone();
+            let stream_resume = resume.clone();
+            let stream: lancedb::arrow::SendableRecordBatchStream =
+                Box::pin(lancedb::arrow::SimpleRecordBatchStream {
+                    schema,
+                    stream: futures::stream::iter(vec![Ok(first_batch)]).chain(
+                        futures::stream::once(async move {
+                            stream_ready.notify_one();
+                            stream_resume.notified().await;
+                            Ok(batch)
+                        }),
+                    ),
+                });
+            let creating_connection = left.clone();
+            let delayed_create = tokio::spawn(async move {
+                let mut builder =
+                    creating_connection.create_table(SAVED_QUERIES_MANIFEST_TABLE, stream);
+                if exist_ok {
+                    builder =
+                        builder.mode(lancedb::database::CreateTableMode::exist_ok(|open| open));
+                }
+                builder.execute().await
+            });
+            ready.notified().await;
+            let query = saved_query("winner", "Winner", SavedQueryKind::Query);
+            assert_eq!(
+                save_saved_query(&right, &query).await?,
+                SavedQuerySaveResult::Saved
+            );
+            resume.notify_one();
+            let result = delayed_create.await?;
+            let saved = list_saved_queries(&right).await?;
+            assert_eq!(
+                saved.len(),
+                1,
+                "create mode must retain the committed query"
+            );
+            assert_eq!(saved[0].id, query.id);
+            if exist_ok {
+                let table = result?;
+                let (manifest, _) = load_manifest_from_table(&table).await?.unwrap();
+                assert_eq!(manifest.queries.len(), 1);
+                assert_eq!(manifest.queries[0].id, query.id);
+            } else {
+                assert!(matches!(
+                    result,
+                    Err(lancedb::Error::TableAlreadyExists { .. })
+                ));
+            }
+            drop(left);
+            drop(right);
+            std::fs::remove_dir_all(path).ok();
+        }
         Ok(())
     }
 

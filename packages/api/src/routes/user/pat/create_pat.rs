@@ -1,4 +1,4 @@
-use crate::{entity::pat, error::ApiError, middleware::jwt::AppUser, state::AppState};
+use crate::{audit, entity::pat, error::ApiError, middleware::jwt::AppUser, state::AppState};
 use axum::{Extension, Json, extract::State};
 use flow_like_types::{
     base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD},
@@ -53,11 +53,11 @@ pub async fn create_pat(
     let valid_until = match input.valid_until {
         Some(ts) => Some(
             chrono::DateTime::from_timestamp(ts, 0)
-                .ok_or_else(|| ApiError::bad_request("Invalid valid_until timestamp"))?,
+                .ok_or_else(|| ApiError::bad_request("Invalid valid_until timestamp"))?
+                .fixed_offset(),
         ),
         None => None,
     };
-    let naive_datetime = valid_until.map(|dt| dt.naive_utc());
 
     let mut secret_bytes = [0u8; 32];
     OsRng
@@ -74,13 +74,25 @@ pub async fn create_pat(
         key: Set(secret_hash),
         name: Set(input.name),
         user_id: Set(sub.to_string()),
-        valid_until: Set(naive_datetime),
+        valid_until: Set(valid_until),
         permissions: Set(permissions),
-        created_at: Set(chrono::Utc::now().naive_utc()),
-        updated_at: Set(chrono::Utc::now().naive_utc()),
+        created_at: Set(chrono::Utc::now().fixed_offset()),
+        updated_at: Set(chrono::Utc::now().fixed_offset()),
     };
 
     let pat = pat.insert(&state.db).await?;
+    audit!(
+        state,
+        user,
+        "pat.create",
+        "PersonalAccessToken",
+        pat.id,
+        "Created a personal access token",
+        serde_json::json!({
+            "permissions": pat.permissions,
+            "valid_until": pat.valid_until,
+        })
+    );
     let pat_out = PatOut {
         pat: format!("pat_{}.{}", pat.id, secret_b64),
         permission: pat.permissions,

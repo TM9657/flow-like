@@ -16,7 +16,8 @@
 //! body-size and error-reporting layers in `lib.rs` (without the JWT
 //! middleware).
 
-use std::{collections::HashMap, convert::Infallible, str::FromStr, sync::Arc, time::Duration};
+use flow_like_storage::object_store::ObjectStoreExt;
+use std::{collections::HashMap, convert::Infallible, str::FromStr, time::Duration};
 
 use axum::{
     Json, Router,
@@ -1305,7 +1306,7 @@ fn app_scoped_content_path(
         relative = rest.to_string();
     }
 
-    let mut path = flow_like_storage::Path::from("apps").child(app_id);
+    let mut path = flow_like_storage::Path::from("apps").join(app_id);
     if !relative.is_empty() {
         path = append_object_path_segments(path, relative.as_str());
     }
@@ -1324,7 +1325,7 @@ fn append_object_path_segments(
     value: &str,
 ) -> flow_like_storage::Path {
     for segment in value.split('/').filter(|segment| !segment.is_empty()) {
-        path = path.child(segment);
+        path = path.join(segment);
     }
     path
 }
@@ -2284,7 +2285,7 @@ async fn dispatch_event_collect(
         artifact: None,
     };
 
-    let now = chrono::Utc::now().naive_utc();
+    let now = chrono::Utc::now().fixed_offset();
     let run = execution_run::ActiveModel {
         id: Set(run_id.clone()),
         board_id: Set(board_id),
@@ -2309,7 +2310,7 @@ async fn dispatch_event_collect(
         expires_at: Set(Some(now + chrono::Duration::hours(24))),
         user_id: Set(actor_user_id),
         technical_user_id: Set(None),
-        caller_app_chain: Set(caller.app_chain.clone()),
+        caller_app_chain: Set(caller.app_chain.clone().map(Into::into)),
         trace_id: Set(correlation.trace_id.clone()),
         parent_run_id: Set(parent_run_id.clone()),
         correlation_keys: Set(correlation.keys_json()),
@@ -2317,17 +2318,24 @@ async fn dispatch_event_collect(
         created_at: Set(now),
         updated_at: Set(now),
     };
-    run.insert(&state.db)
+    crate::entity::caller_apps::insert_run_with_caller_apps(&state.db, run)
         .await
         .map_err(|e| ApiError::internal_error(flow_like_types::anyhow!(e)))?;
 
-    let db = Some(Arc::new(state.db.clone()));
+    crate::audit::record_execution_dispatch(state, &run_id, "inbound").await?;
+
+    let db = Some(crate::audit::ExecutionAuditContext::from(state));
     match state.dispatcher.backend() {
         ExecutionBackend::LambdaStream => {
-            let (_dispatch_response, byte_stream) = state
-                .dispatcher
-                .dispatch_streaming(request)
-                .await
+            let (_dispatch_response, byte_stream) =
+                match state.dispatcher.dispatch_streaming(request).await {
+                    Ok(response) => Ok(response),
+                    Err(error) => {
+                        crate::audit::record_execution_dispatch_failure(state, &run_id, "inbound")
+                            .await?;
+                        Err(error)
+                    }
+                }
                 .map_err(|e| ApiError::internal_error(flow_like_types::anyhow!(e)))?;
             collect_generic_result_bytes(byte_stream, run_id, db, INBOUND_RESULT_TIMEOUT)
                 .await
@@ -2338,10 +2346,15 @@ async fn dispatch_event_collect(
                 })
         }
         _ => {
-            let (_dispatch_response, executor_response) = state
-                .dispatcher
-                .dispatch_http_sse(request)
-                .await
+            let (_dispatch_response, executor_response) =
+                match state.dispatcher.dispatch_http_sse(request).await {
+                    Ok(response) => Ok(response),
+                    Err(error) => {
+                        crate::audit::record_execution_dispatch_failure(state, &run_id, "inbound")
+                            .await?;
+                        Err(error)
+                    }
+                }
                 .map_err(|e| ApiError::internal_error(flow_like_types::anyhow!(e)))?;
             collect_generic_result(executor_response, run_id, db, INBOUND_RESULT_TIMEOUT)
                 .await
@@ -3518,6 +3531,9 @@ fn pin_schema(
         VariableType::Integer | VariableType::Byte => json!({"type": "integer"}),
         VariableType::Float => json!({"type": "number"}),
         VariableType::Boolean => json!({"type": "boolean"}),
+        VariableType::Geometry => flow_like::flow::variable::geometry_kind_from_schema(schema)
+            .map(flow_like_types::geometry::geometry_json_schema)
+            .unwrap_or_else(|_| json!(false)),
         VariableType::Struct | VariableType::Generic => schema
             .and_then(|schema| serde_json::from_str::<Value>(schema).ok())
             .unwrap_or_else(|| json!({"type": "object"})),

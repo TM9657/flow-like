@@ -147,6 +147,7 @@ pub struct InterfaceField {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum InterfaceType {
     Named(String),
+    Geometry(Option<flow_like_types_contracts::geometry::GeometryKind>),
     Array(Box<InterfaceType>),
     Map(Box<InterfaceType>),
     /// `Set<T>` — accepted in an interface field for symmetry with `type_ref`, which has always
@@ -617,13 +618,32 @@ pub enum Container {
 pub struct TypeRef {
     pub base: String,
     pub container: Container,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub geometry_kind: Option<flow_like_types_contracts::geometry::GeometryKind>,
 }
 
 impl TypeRef {
+    pub fn geometry(
+        kind: Option<flow_like_types_contracts::geometry::GeometryKind>,
+        container: Container,
+    ) -> Self {
+        Self {
+            base: "geometry".to_string(),
+            container,
+            geometry_kind: kind,
+        }
+    }
+
+    pub fn geometry_schema(&self) -> Option<String> {
+        self.geometry_kind
+            .map(|kind| flow_like_types_contracts::geometry::marker(kind).to_string())
+    }
+
     pub fn new(base: impl Into<String>, container: Container) -> Self {
         Self {
             base: base.into(),
             container,
+            geometry_kind: None,
         }
     }
 }

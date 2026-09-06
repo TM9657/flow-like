@@ -16,6 +16,11 @@ import {
 	isAzureBlobStorageUrl,
 } from "@flow-like/flow-like-ui";
 import type { IGroup } from "@flow-like/flow-like-ui";
+import { isMissingResourceError } from "@flow-like/flow-like-ui/lib/api-error";
+import {
+	type IForkJobView,
+	resolveOnlineFork,
+} from "@flow-like/flow-like-ui/lib/fork-job";
 import type { IAppSearchSort } from "@flow-like/flow-like-ui/lib/schema/app/app-search-query";
 import type {
 	IBeginOfflineForkBody,
@@ -152,16 +157,12 @@ export class WebAppState implements IAppState {
 			return this.getApps();
 		}
 
-		try {
-			return stabilizeMetadataEntries(
-				await apiGet<[IApp, IMetadata | undefined][]>(
-					`apps/search?${params}`,
-					this.backend.auth,
-				),
-			);
-		} catch {
-			return [];
-		}
+		return stabilizeMetadataEntries(
+			await apiGet<[IApp, IMetadata | undefined][]>(
+				`apps/search?${params}`,
+				this.backend.auth,
+			),
+		);
 	}
 
 	async getStoreGroups(offset?: number, limit?: number): Promise<IGroup[]> {
@@ -207,8 +208,41 @@ export class WebAppState implements IAppState {
 		return apiGet<IApp>(`apps/${appId}`, this.backend.auth);
 	}
 
+	async getAppAuthoritative(appId: string): Promise<IApp> {
+		return this.getApp(appId);
+	}
+
 	async updateApp(app: IApp): Promise<void> {
 		await apiPut(`apps/${app.id}`, { app }, this.backend.auth);
+	}
+
+	async updateAppAuthoritative(app: IApp): Promise<void> {
+		await apiPut(`apps/${app.id}`, { app }, this.backend.auth);
+	}
+
+	async readAppBuild(appId: string, buildId: string): Promise<unknown | null> {
+		try {
+			return await apiGet<unknown>(
+				`apps/${appId}/flowpilot-builds/${buildId}`,
+				this.backend.auth,
+			);
+		} catch (error) {
+			if (isMissingResourceError(error)) return null;
+			throw error;
+		}
+	}
+
+	async writeAppBuild(
+		appId: string,
+		buildId: string,
+		record: unknown,
+		expectedRevision: number | null,
+	): Promise<void> {
+		await apiPut(
+			`apps/${appId}/flowpilot-builds/${buildId}`,
+			{ record, expected_revision: expectedRevision },
+			this.backend.auth,
+		);
 	}
 
 	async getAppMeta(appId: string, language?: string): Promise<IMetadata> {
@@ -326,10 +360,13 @@ export class WebAppState implements IAppState {
 		appId: string,
 		body: IOnlineForkBody,
 	): Promise<IOnlineForkResponse> {
-		return apiPost<IOnlineForkResponse>(
+		const response = await apiPost<IOnlineForkResponse | IForkJobView>(
 			`apps/${appId}/fork`,
 			body,
 			this.backend.auth,
+		);
+		return resolveOnlineFork(response, (jobId) =>
+			apiGet<IForkJobView>(`apps/fork/jobs/${jobId}`, this.backend.auth),
 		);
 	}
 

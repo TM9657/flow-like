@@ -172,6 +172,34 @@ export class RouteState implements IAppRouteState {
 		return local;
 	}
 
+	async getRouteByPathAuthoritative(
+		appId: string,
+		path: string,
+	): Promise<IRouteMapping | null> {
+		if (await this.backend.isLocalOnly(appId)) {
+			return invoke<IRouteMapping | null>("get_app_route_by_path", {
+				appId,
+				path,
+			});
+		}
+		if (
+			!this.backend.profile ||
+			!this.backend.auth?.isAuthenticated ||
+			!this.backend.auth.user?.access_token
+		) {
+			throw new Error(
+				"Hosted route reads require an authenticated hub session",
+			);
+		}
+		const remote = await fetcher<RemoteRouteMapping | null>(
+			this.backend.profile,
+			`apps/${appId}/routes/by-path?path=${encodeURIComponent(path)}`,
+			{ method: "GET" },
+			this.backend.auth,
+		);
+		return remote ? toRouteMapping(remote) : null;
+	}
+
 	async getDefaultRoute(appId: string): Promise<IRouteMapping | null> {
 		const local = await invoke<IRouteMapping | null>("get_default_app_route", {
 			appId,

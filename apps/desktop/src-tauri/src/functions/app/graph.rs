@@ -30,20 +30,17 @@ pub(crate) async fn graph_connection(
     user_scoped: bool,
 ) -> flow_like_types::Result<Connection> {
     let flow_like_state = TauriFlowLikeState::construct(app_handle).await?;
-    let project_db_dir = Path::from("apps")
-        .child(app_id)
-        .child("storage")
-        .child("db");
+    let project_db_dir = Path::from("apps").join(app_id).join("storage").join("db");
 
     let builder = if user_scoped {
         let sub = current_user_sub(app_handle)
             .await
             .map_err(|e| flow_like_types::anyhow!(e.to_string()))?;
         let user_db_dir = Path::from("users")
-            .child(sub)
-            .child("apps")
-            .child(app_id)
-            .child("db");
+            .join(sub)
+            .join("apps")
+            .join(app_id)
+            .join("db");
         flow_like_state
             .config
             .read()
@@ -1369,6 +1366,8 @@ pub struct CypherPayload {
     pub query: String,
     pub params: Option<serde_json::Map<String, serde_json::Value>>,
     pub limit: Option<usize>,
+    #[serde(default, alias = "include_metadata")]
+    pub include_metadata: bool,
 }
 
 #[tauri::command(async)]
@@ -1387,13 +1386,17 @@ pub async fn graph_cypher(
         None => serde_json::Value::Null,
     };
     let result = store
-        .cypher(
+        .cypher_with_metadata(
             &payload.query,
             params,
             Some(payload.limit.unwrap_or(DEFAULT_GRAPH_QUERY_LIMIT)),
         )
         .await?;
-    serde_json::to_value(result).map_err(|e| e.into())
+    if payload.include_metadata {
+        serde_json::to_value(result).map_err(|e| e.into())
+    } else {
+        serde_json::to_value(result.rows).map_err(|e| e.into())
+    }
 }
 
 #[derive(Debug, Deserialize)]
@@ -1574,6 +1577,8 @@ pub struct SqlPayload {
     #[serde(default)]
     pub params: serde_json::Value,
     pub limit: Option<usize>,
+    #[serde(default, alias = "include_metadata")]
+    pub include_metadata: bool,
 }
 
 #[tauri::command(async)]
@@ -1588,13 +1593,17 @@ pub async fn graph_sql(
     let overlay = lancegraph::load_overlay(&conn, &overlay_id).await?;
     let store = LanceGraphStore::new(conn, overlay, None).await?;
     let result = store
-        .sql(
+        .sql_with_metadata(
             &payload.query,
             payload.params,
             Some(payload.limit.unwrap_or(DEFAULT_GRAPH_QUERY_LIMIT)),
         )
         .await?;
-    serde_json::to_value(result).map_err(|e| e.into())
+    if payload.include_metadata {
+        serde_json::to_value(result).map_err(|e| e.into())
+    } else {
+        serde_json::to_value(result.rows).map_err(|e| e.into())
+    }
 }
 
 #[tauri::command(async)]

@@ -418,6 +418,17 @@ export interface IEventState {
 		version?: [number, number, number],
 	): Promise<IEvent>;
 	getEvents(appId: string, force?: boolean): Promise<IEvent[]>;
+	/** Read exactly one Event revision from the authoritative store without cache repair. */
+	getEventAuthoritative(
+		appId: string,
+		eventId: string,
+		version?: [number, number, number],
+	): Promise<IEvent>;
+	/**
+	 * List Events from the app's authoritative store. Read failures propagate and this call never
+	 * merges, repairs, caches, or falls back to another store.
+	 */
+	getEventsAuthoritative(appId: string): Promise<IEvent[]>;
 	getEventVersions(
 		appId: string,
 		eventId: string,

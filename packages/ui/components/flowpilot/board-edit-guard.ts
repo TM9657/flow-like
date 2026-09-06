@@ -305,6 +305,7 @@ export function isCancellableNestedCopilotTool(toolName: string | undefined) {
 	return (
 		toolName === "flowpilot_board" ||
 		toolName === "flowpilot_widget" ||
+		toolName === "flowpilot_home" ||
 		toolName === "data_studio_agent" ||
 		toolName === "project_scout" ||
 		toolName === "research_agent"
@@ -1343,6 +1344,10 @@ export function isCreatedAppBuildTargetMismatch(
 	}
 
 	switch (options.toolName) {
+		case "app_build":
+			return !["schema", "capabilities", "recipe", "status"].includes(
+				options.operation ?? "",
+			);
 		case "flowpilot_board":
 		case "flowpilot_widget":
 			return options.mode !== "explain";

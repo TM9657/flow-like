@@ -1892,5 +1892,8 @@
 	"yourEntitynounStaysTitleUntilTheReviewIsComplete": "審査が完了するまで、{{entityNoun}} は{{title}}のままです。",
 	"yourMembershipEndsImmediatelyAndTheLocalCopyIsRemovedYouWillNeedANewInviteToReturn": "",
 	"yourProfile": "あなたのプロファイル",
-	"yourSemanticLayer": "あなたのセマンティックレイヤー"
+	"yourSemanticLayer": "あなたのセマンティックレイヤー",
+	"geometryWgs84": "",
+	"geometryColumnHint": "",
+	"geometryBackendUpgrade": ""
 }

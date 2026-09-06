@@ -9,6 +9,7 @@ use flow_like::flow::execution::{
     DEFAULT_CONTEXT_LOG_SPILL_THRESHOLD, DEFAULT_RUN_LOG_FLUSH_INTERVAL, ExecutionEnvironment,
     ExecutionMode, RunMeta,
 };
+use flow_like::flow_like_storage::object_store::ObjectStoreExt;
 use flow_like::state::{FlowLikeConfig, FlowLikeState};
 use flow_like::utils::http::HTTPClient;
 use flow_like_storage::Path;
@@ -24,7 +25,7 @@ fn run_meta(shadow: bool) -> RunMeta {
         app_id: "app-1".to_string(),
         model_usage_app_id: None,
         board_id: "board-1".to_string(),
-        board_dir: Path::from("apps").child("app-1"),
+        board_dir: Path::from("apps").join("app-1"),
         sub: "user-1".to_string(),
         stream_state: false,
         environment: ExecutionEnvironment::Local,
@@ -33,6 +34,7 @@ fn run_meta(shadow: bool) -> RunMeta {
         log_flush_interval: DEFAULT_RUN_LOG_FLUSH_INTERVAL,
         nodes_executed: Arc::new(AtomicU64::new(0)),
         elements: Arc::new(RwLock::new(ElementCache::default())),
+        resources: Arc::new(flow_like::flow::execution::resources::RunResources::default()),
         shadow,
     }
 }
@@ -53,7 +55,7 @@ async fn cache_for(shadow: bool, state: &Arc<FlowLikeState>) -> ExecutionContext
 #[tokio::test]
 async fn shadow_context_cannot_write_app_storage_while_a_normal_one_can() {
     let state = state_with_memory_stores();
-    let path = Path::from("apps").child("app-1").child("file.txt");
+    let path = Path::from("apps").join("app-1").join("file.txt");
 
     let normal = cache_for(false, &state).await;
     normal
@@ -109,7 +111,7 @@ async fn shadow_context_cannot_write_app_storage_while_a_normal_one_can() {
         store
             .as_ref()
             .unwrap_or_else(|| panic!("{name} is configured"))
-            .put(&Path::from("tmp").child("scratch.txt"), b"ok".to_vec())
+            .put(&Path::from("tmp").join("scratch.txt"), b"ok".to_vec())
             .await
             .unwrap_or_else(|e| panic!("{name} must stay writable for a shadow run: {e}"));
     }

@@ -27,7 +27,9 @@ import {
 } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
 import { toast } from "sonner";
+import { useBoardFormat } from "../../../hooks/use-board-format";
 import { cn } from "../../../lib";
+import { GEOMETRY_BOARD_FORMAT_VERSION } from "../../../lib/board-format";
 import { useBackend } from "../../../state/backend-state";
 import type { IDatabaseSchemaField } from "../../../state/backend-state/db-state";
 import { Badge } from "../../ui/badge";
@@ -53,6 +55,7 @@ import {
 import { Switch } from "../../ui/switch";
 import {
 	ColumnTypeSelect,
+	IndexTypeHelp,
 	IndexTypeSelect,
 	NullableSelect,
 	indexTypeEnum,
@@ -99,6 +102,8 @@ export function TableDesignerDialog({
 }: Readonly<TableDesignerDialogProps>) {
 	const { t } = useTranslation("settings");
 	const backend = useBackend();
+	const geometryEnabled =
+		useBoardFormat(appId) >= GEOMETRY_BOARD_FORMAT_VERSION;
 	const [tableName, setTableName] = useState("");
 	const [scope, setScope] = useState<"project" | "user">("project");
 	const [columns, setColumns] = useState<ColumnDraft[]>(() => [newColumn()]);
@@ -188,6 +193,11 @@ export function TableDesignerDialog({
 			if (nameError) return column.name.trim() ? nameError : null;
 			if (duplicateNames.has(column.name.trim().toLowerCase()))
 				return t("duplicateColumnName", "Duplicate column name");
+			if (column.type === "geometry" && !geometryEnabled)
+				return t(
+					"geometryBackendUpgrade",
+					"Update the backend to a version that supports Geometry.",
+				);
 			if (column.type === "vector") {
 				const size = Number.parseInt(column.vectorSize, 10);
 				if (!Number.isFinite(size) || size <= 0)
@@ -198,7 +208,7 @@ export function TableDesignerDialog({
 			}
 			return null;
 		},
-		[duplicateNames],
+		[duplicateNames, geometryEnabled],
 	);
 
 	const canSubmit = useMemo(() => {
@@ -355,6 +365,7 @@ export function TableDesignerDialog({
 							<div className="space-y-2">
 								{columns.map((column) => (
 									<ColumnDesignerRow
+										geometryEnabled={geometryEnabled}
 										key={column.id}
 										column={column}
 										error={columnError(column)}
@@ -391,12 +402,14 @@ export function TableDesignerDialog({
 }
 
 function ColumnDesignerRow({
+	geometryEnabled,
 	column,
 	error,
 	canRemove,
 	onChange,
 	onRemove,
 }: Readonly<{
+	geometryEnabled: boolean;
 	column: ColumnDraft;
 	error: string | null;
 	canRemove: boolean;
@@ -445,11 +458,13 @@ function ColumnDesignerRow({
 						aria-invalid={error ? true : undefined}
 					/>
 					<ColumnTypeSelect
+						geometryEnabled={geometryEnabled}
 						value={column.type}
 						onChange={(type) =>
 							onChange({
 								type,
 								...(type === "vector" ? {} : { vectorSize: "" }),
+								indexType: "auto",
 							})
 						}
 					/>
@@ -469,6 +484,15 @@ function ColumnDesignerRow({
 					<Trash2 className="h-4 w-4" />
 				</Button>
 			</div>
+
+			{column.type === "geometry" && (
+				<p className="mt-2 pl-6 text-xs text-muted-foreground">
+					{t(
+						"geometryColumnHint",
+						"GeoJSON geometry objects with WGS 84 longitude, latitude coordinates in degrees. Scalar values only.",
+					)}
+				</p>
+			)}
 
 			{isVector && (
 				<div className="mt-2 flex items-center gap-2 pl-6">
@@ -501,11 +525,16 @@ function ColumnDesignerRow({
 					{t("index", "Index")}
 				</Label>
 				{column.indexed && !isVector && (
-					<IndexTypeSelect
-						value={column.indexType}
-						onChange={(indexType) => onChange({ indexType })}
-						className="h-8 w-36"
-					/>
+					<>
+						<IndexTypeSelect
+							value={column.indexType}
+							onChange={(indexType) => onChange({ indexType })}
+							className="h-8 w-44"
+							category="scalar"
+							columnType={column.type}
+						/>
+						<IndexTypeHelp value={column.indexType} />
+					</>
 				)}
 				{isVector && (
 					<Badge variant="secondary" className="text-[10px]">

@@ -9,12 +9,22 @@ bun run flowpilot:e2e -- --case simple-agent
 bun run flowpilot:e2e -- --suite smoke --min-chars 1200 --json
 bun run flowpilot:e2e -- --case forum --case ops-dashboard --repeat 3 --fail-fast
 bun run flowpilot:e2e -- --case ai-adventure --model sol
+bun run flowpilot:e2e -- --case simple-agent --tier behavioral
 ```
 
 `--model` pins the generation model for the parent turn and every nested specialist. It accepts a
 benchmark alias or the model id itself: `terra` / `gpt-5.6-terra` (default) and `sol` /
-`gpt-5.6-sol`. Model comparisons only vary that pin — cases, thresholds, and acceptance evidence are
-identical, and the controller rejects a callback whose runs used a different model than requested.
+`gpt-5.6-sol`. The harness assigns each result a cohort key derived from its declared harness
+contract version, exact provider/model/reasoning tuple, validation tier, and case-suite fingerprint.
+The comparison guard rejects scores from different cohorts. Changing a model or fixture therefore
+requires a new baseline; the cohort key does not claim that thresholds were recalibrated.
+
+The default `structural` tier checks compiler receipts, persisted readback, and app structure.
+`--tier behavioral` additionally requires host-produced scenario results from an attested isolated
+runtime, complete assertions, and successful outcomes for every started run. The current desktop
+host does not advertise runtime isolation, so this opt-in tier fails explicitly until a real
+isolated adapter supplies that evidence. It never treats a transport acknowledgement as workflow
+success.
 
 Useful inspection modes do not start Tauri or spend model budget:
 
@@ -35,7 +45,8 @@ including on infrastructure errors. Use `--output /tmp/flowpilot-e2e.json` for a
 path. Exit code `0` means every requested run passed, `1` means at least one completed benchmark
 failed, and `2` means CLI/startup/transport failure. The controller independently verifies the
 selection and artifact order and recomputes the final summary instead of trusting the webview's
-pass bit.
+pass bit. It also recomputes behavioral run totals across every case and repeat and checks each
+report against the requested evaluation cohort.
 
 This is intentionally a thin controller, not a second FlowPilot implementation. Codex, GitHub
 Copilot, Claude Code, and Bits still execute through the shared desktop global-chat and

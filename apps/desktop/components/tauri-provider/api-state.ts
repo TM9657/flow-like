@@ -5,6 +5,10 @@ import {
 	getTelemetryTraceparent,
 } from "@flow-like/flow-like-ui";
 import { getApiUrl } from "@flow-like/flow-like-ui/lib/api-url";
+import {
+	BOARD_FORMAT_HEADER,
+	CURRENT_BOARD_FORMAT_VERSION,
+} from "@flow-like/flow-like-ui/lib/board-format";
 import { fetch as tauriFetch } from "@tauri-apps/plugin-http";
 import { type EventSourceMessage, createEventSource } from "eventsource-client";
 import type { AuthContextProps } from "react-oidc-context";
@@ -136,9 +140,12 @@ export class TauriApiState implements IApiState {
 	}
 
 	private getAuthHeader(): Record<string, string> {
-		return this.auth?.user?.access_token
-			? { Authorization: `Bearer ${this.auth.user.access_token}` }
-			: {};
+		return {
+			[BOARD_FORMAT_HEADER]: String(CURRENT_BOARD_FORMAT_VERSION),
+			...(this.auth?.user?.access_token
+				? { Authorization: `Bearer ${this.auth.user.access_token}` }
+				: {}),
+		};
 	}
 
 	async fetch<T>(

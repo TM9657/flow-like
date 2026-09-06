@@ -1,0 +1,1268 @@
+use flow_like_storage::files::store::FlowLikeStore;
+#[cfg(feature = "flow-runtime")]
+use flow_like_storage::lance::session::Session as LanceSession;
+#[cfg(feature = "flow-runtime")]
+use flow_like_storage::lancedb::connection::ConnectBuilder;
+#[cfg(any(feature = "flow-runtime", test))]
+use flow_like_storage::object_store::path::Path;
+use flow_like_types::Ok;
+#[cfg(feature = "flow-metadata")]
+use flow_like_types::sync::DashMap;
+use flow_like_types::sync::{Mutex, RwLock};
+#[cfg(feature = "flow-runtime")]
+use flow_like_types::tokio_util::sync::CancellationToken;
+use serde::{Deserialize, Serialize};
+#[cfg(feature = "flow-metadata")]
+use std::collections::HashMap;
+use std::sync::Arc;
+#[cfg(feature = "flow-metadata")]
+use std::sync::Weak;
+#[cfg(feature = "flow-runtime")]
+use std::time::Instant;
+
+#[cfg(feature = "flow-runtime")]
+use crate::flow::event::Event;
+#[cfg(feature = "flow-metadata")]
+use crate::flow::execution::ExecutionEnvironment;
+#[cfg(feature = "flow-runtime")]
+use crate::flow::execution::{LogMeta, log::LogMessage};
+
+#[cfg(feature = "flow-metadata")]
+use crate::flow::board::Board;
+#[cfg(feature = "flow-metadata")]
+use crate::flow::node::Node;
+#[cfg(feature = "flow-metadata")]
+use crate::flow::node::NodeLogic;
+
+#[cfg(feature = "model")]
+use crate::models::embedding_factory::EmbeddingFactory;
+#[cfg(feature = "model")]
+use crate::models::llm::ModelFactory;
+#[cfg(feature = "bit")]
+use crate::utils::download_manager::DownloadManager;
+use crate::utils::http::HTTPClient;
+#[cfg(feature = "model")]
+use flow_like_model_provider::provider::ModelProviderConfiguration;
+
+#[derive(Clone, Default)]
+pub struct FlowLikeStores {
+    pub bits_store: Option<FlowLikeStore>,
+    pub user_store: Option<FlowLikeStore>,
+    pub app_storage_store: Option<FlowLikeStore>,
+    pub app_meta_store: Option<FlowLikeStore>,
+    pub temporary_store: Option<FlowLikeStore>,
+    pub log_store: Option<FlowLikeStore>,
+}
+
+#[derive(Clone)]
+pub struct FlowLikeCallbacks {
+    #[cfg(feature = "flow-runtime")]
+    pub build_project_database: Option<Arc<dyn (Fn(Path) -> ConnectBuilder) + Send + Sync>>,
+    #[cfg(feature = "flow-runtime")]
+    pub build_user_database: Option<Arc<dyn (Fn(Path) -> ConnectBuilder) + Send + Sync>>,
+    #[cfg(feature = "flow-runtime")]
+    pub build_logs_database: Option<Arc<dyn (Fn(Path) -> ConnectBuilder) + Send + Sync>>,
+    /// Default write options for LanceDB. Android overrides these to add its object store wrapper.
+    #[cfg(feature = "flow-runtime")]
+    pub lance_write_options: Option<flow_like_storage::lancedb::table::WriteOptions>,
+}
+
+impl Default for FlowLikeCallbacks {
+    fn default() -> Self {
+        Self {
+            #[cfg(feature = "flow-runtime")]
+            build_project_database: None,
+            #[cfg(feature = "flow-runtime")]
+            build_user_database: None,
+            #[cfg(feature = "flow-runtime")]
+            build_logs_database: None,
+            #[cfg(feature = "flow-runtime")]
+            lance_write_options: Some(
+                flow_like_storage::lancedb_write_options::default_write_options(),
+            ),
+        }
+    }
+}
+
+#[derive(Clone, Default)]
+pub struct FlowLikeConfig {
+    pub stores: FlowLikeStores,
+    pub callbacks: FlowLikeCallbacks,
+}
+
+impl FlowLikeConfig {
+    pub fn new() -> Self {
+        FlowLikeConfig {
+            callbacks: FlowLikeCallbacks::default(),
+            stores: FlowLikeStores::default(),
+        }
+    }
+
+    pub fn with_default_store(store: FlowLikeStore) -> Self {
+        FlowLikeConfig {
+            callbacks: FlowLikeCallbacks::default(),
+            stores: FlowLikeStores {
+                app_storage_store: Some(store.clone()),
+                app_meta_store: Some(store.clone()),
+                bits_store: Some(store.clone()),
+                user_store: Some(store.clone()),
+                temporary_store: Some(store.clone()),
+                log_store: Some(store),
+            },
+        }
+    }
+
+    pub fn register_app_storage_store(&mut self, store: FlowLikeStore) {
+        self.stores.app_storage_store = Some(store);
+    }
+
+    pub fn register_app_meta_store(&mut self, store: FlowLikeStore) {
+        self.stores.app_meta_store = Some(store);
+    }
+
+    pub fn register_user_store(&mut self, store: FlowLikeStore) {
+        self.stores.user_store = Some(store);
+    }
+
+    pub fn register_bits_store(&mut self, store: FlowLikeStore) {
+        self.stores.bits_store = Some(store);
+    }
+
+    pub fn register_temporary_store(&mut self, store: FlowLikeStore) {
+        self.stores.temporary_store = Some(store);
+    }
+
+    pub fn register_log_store(&mut self, store: FlowLikeStore) {
+        self.stores.log_store = Some(store);
+    }
+
+    #[cfg(feature = "flow-runtime")]
+    pub fn register_build_project_database(
+        &mut self,
+        callback: Arc<dyn (Fn(Path) -> ConnectBuilder) + Send + Sync>,
+    ) {
+        self.callbacks.build_project_database = Some(callback);
+    }
+
+    #[cfg(feature = "flow-runtime")]
+    pub fn register_build_user_database(
+        &mut self,
+        callback: Arc<dyn (Fn(Path) -> ConnectBuilder) + Send + Sync>,
+    ) {
+        self.callbacks.build_user_database = Some(callback);
+    }
+
+    #[cfg(feature = "flow-runtime")]
+    pub fn register_build_logs_database(
+        &mut self,
+        callback: Arc<dyn (Fn(Path) -> ConnectBuilder) + Send + Sync>,
+    ) {
+        self.callbacks.build_logs_database = Some(callback);
+    }
+
+    #[cfg(feature = "flow-runtime")]
+    pub fn register_lance_write_options(
+        &mut self,
+        options: flow_like_storage::lancedb::table::WriteOptions,
+    ) {
+        self.callbacks.lance_write_options = Some(options);
+    }
+}
+
+#[cfg(feature = "flow-metadata")]
+#[derive(Default, Clone)]
+pub struct FlowNodeRegistryInner {
+    pub registry: HashMap<String, (Node, Arc<dyn NodeLogic>)>,
+    /// Cached [`Self::fingerprint`]; reset by `insert` so any mutation
+    /// invalidates it.
+    fingerprint_cell: std::sync::OnceLock<[u8; 32]>,
+    /// Cached [`Self::get_nodes_shared`]; reset by `insert` alongside the
+    /// fingerprint.
+    nodes_cell: std::sync::OnceLock<Arc<Vec<Node>>>,
+}
+
+#[cfg(feature = "flow-metadata")]
+impl FlowNodeRegistryInner {
+    pub fn new(size: usize) -> Self {
+        FlowNodeRegistryInner {
+            registry: HashMap::with_capacity(size),
+            fingerprint_cell: std::sync::OnceLock::new(),
+            nodes_cell: std::sync::OnceLock::new(),
+        }
+    }
+
+    /// A registry seeded with an existing node map. The derived caches start empty, so callers
+    /// outside this crate never have to know they exist.
+    pub fn from_registry(registry: HashMap<String, (Node, Arc<dyn NodeLogic>)>) -> Self {
+        FlowNodeRegistryInner {
+            registry,
+            fingerprint_cell: std::sync::OnceLock::new(),
+            nodes_cell: std::sync::OnceLock::new(),
+        }
+    }
+
+    pub fn insert(&mut self, mut node: Node, logic: Arc<dyn NodeLogic>) {
+        node.ensure_flowscript_names();
+        self.registry.insert(node.name.clone(), (node, logic));
+        self.fingerprint_cell = std::sync::OnceLock::new();
+        self.nodes_cell = std::sync::OnceLock::new();
+    }
+
+    pub fn get_nodes(&self) -> Vec<Node> {
+        self.registry.values().map(|node| node.0.clone()).collect()
+    }
+
+    /// The catalog as a shared snapshot. Callers that only read it — board hydration, command
+    /// sanitization, sync snapshots — would otherwise clone every node definition per request.
+    pub fn get_nodes_shared(&self) -> Arc<Vec<Node>> {
+        self.nodes_cell
+            .get_or_init(|| Arc::new(self.get_nodes()))
+            .clone()
+    }
+
+    pub fn prepare(nodes: &Arc<Vec<Arc<dyn NodeLogic>>>) -> Self {
+        let mut registry = FlowNodeRegistryInner {
+            registry: HashMap::with_capacity(nodes.len()),
+            fingerprint_cell: std::sync::OnceLock::new(),
+            nodes_cell: std::sync::OnceLock::new(),
+        };
+
+        for logic in nodes.iter() {
+            let node = logic.get_node();
+            registry.insert(node, logic.clone());
+        }
+
+        registry
+    }
+
+    #[inline]
+    pub fn get_node(&self, node_id: &str) -> flow_like_types::Result<Node> {
+        let node = self.registry.get(node_id);
+        match node {
+            Some(node) => Ok(node.0.clone()),
+            None => Err(flow_like_types::anyhow!(
+                "Node not found - Get Node: '{}'",
+                node_id
+            )),
+        }
+    }
+
+    #[inline]
+    pub fn instantiate(&self, node: &Node) -> flow_like_types::Result<Arc<dyn NodeLogic>> {
+        let result = self.registry.get(&node.name);
+        match result {
+            Some(entry) => Ok(entry.1.clone()),
+            None => Err(flow_like_types::anyhow!(
+                "Node not found - Instancing: '{}' (id: {}, category: {})",
+                node.name,
+                node.id,
+                node.category
+            )),
+        }
+    }
+
+    /// Identity of this registry for compiled-board artifacts: hash of every
+    /// registered node type, its schema version, and the semantic hash of its
+    /// catalog default node (name, display strings, full pin set). A compiled
+    /// artifact built against a different fingerprint is recompiled instead of
+    /// trusted, since its baked `on_update` output may not match the running
+    /// catalog. The semantic hash also covers WASM nodes, whose `version` is
+    /// often unset — a package update that changes pin definitions changes the
+    /// fingerprint even without a version bump. `on_update` body changes with
+    /// an identical `get_node` still require a node version bump.
+    pub fn fingerprint(&self) -> [u8; 32] {
+        *self.fingerprint_cell.get_or_init(|| {
+            let mut entries: Vec<(&str, u32, u64)> = self
+                .registry
+                .iter()
+                .map(|(name, (node, _))| {
+                    (
+                        name.as_str(),
+                        node.version.unwrap_or(u32::MAX),
+                        node.semantic_hash(),
+                    )
+                })
+                .collect();
+            entries.sort_unstable();
+
+            let mut hasher = blake3::Hasher::new();
+            for (name, version, semantic) in entries {
+                hasher.update(name.as_bytes());
+                hasher.update(&[0]);
+                hasher.update(&version.to_le_bytes());
+                hasher.update(&semantic.to_le_bytes());
+            }
+            *hasher.finalize().as_bytes()
+        })
+    }
+}
+
+#[cfg(feature = "flow-metadata")]
+pub struct FlowNodeRegistry {
+    pub node_registry: Arc<FlowNodeRegistryInner>,
+    pub parent: Option<Weak<FlowLikeState>>,
+}
+
+#[cfg(feature = "flow-metadata")]
+impl Default for FlowNodeRegistry {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+#[cfg(feature = "flow-metadata")]
+impl FlowNodeRegistry {
+    pub fn new() -> Self {
+        FlowNodeRegistry {
+            node_registry: Arc::new(FlowNodeRegistryInner::new(0)),
+            parent: None,
+        }
+    }
+
+    pub fn initialize(&mut self, parent: Weak<FlowLikeState>) {
+        self.parent = Some(parent);
+    }
+
+    pub fn get_nodes(&self) -> flow_like_types::Result<Vec<Node>> {
+        let nodes = self.node_registry.get_nodes();
+        Ok(nodes)
+    }
+
+    pub fn push_node(&mut self, logic: Arc<dyn NodeLogic>) {
+        let mut registry =
+            FlowNodeRegistryInner::from_registry(self.node_registry.registry.clone());
+        let node = logic.get_node();
+        registry.insert(node, logic);
+        self.node_registry = Arc::new(registry);
+    }
+
+    pub fn push_nodes(&mut self, nodes: Vec<Arc<dyn NodeLogic>>) {
+        let mut registry =
+            FlowNodeRegistryInner::from_registry(self.node_registry.registry.clone());
+
+        for logic in nodes {
+            let node = logic.get_node();
+            registry.insert(node, logic);
+        }
+        self.node_registry = Arc::new(registry);
+    }
+
+    pub fn get_node(&self, node_id: &str) -> flow_like_types::Result<Node> {
+        let node = self.node_registry.get_node(node_id)?;
+        Ok(node)
+    }
+
+    pub fn instantiate(&self, node: &Node) -> flow_like_types::Result<Arc<dyn NodeLogic>> {
+        let node = self.node_registry.instantiate(node)?;
+        Ok(node)
+    }
+}
+
+#[cfg(feature = "flow-runtime")]
+use std::sync::atomic::AtomicU64;
+
+#[cfg(feature = "flow-runtime")]
+#[derive(Clone)]
+pub struct RunData {
+    pub start_time: Instant,
+    pub app_id: Option<Arc<str>>,
+    pub board_id: Arc<str>,
+    pub node_id: Arc<str>,
+    pub event_id: Option<Arc<str>>,
+    pub cancellation_token: CancellationToken,
+    pub board_name: Option<Arc<str>>,
+    pub event_name: Option<Arc<str>>,
+    pub event_type: Option<Arc<str>>,
+    /// Timestamp (ms since epoch) of the last node update event
+    last_node_update_ms: Arc<AtomicU64>,
+}
+
+#[cfg(feature = "flow-runtime")]
+impl RunData {
+    pub fn new(
+        board_id: &str,
+        node_id: &str,
+        event_id: Option<String>,
+        cancellation_token: CancellationToken,
+    ) -> Self {
+        RunData {
+            start_time: Instant::now(),
+            app_id: None,
+            board_id: Arc::from(board_id),
+            node_id: Arc::from(node_id),
+            event_id: event_id.map(|s| Arc::from(s.as_str())),
+            cancellation_token,
+            board_name: None,
+            event_name: None,
+            event_type: None,
+            last_node_update_ms: Arc::new(AtomicU64::new(0)),
+        }
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub fn with_metadata(
+        app_id: Option<String>,
+        board_id: &str,
+        node_id: &str,
+        event_id: Option<String>,
+        cancellation_token: CancellationToken,
+        board_name: Option<String>,
+        event_name: Option<String>,
+        event_type: Option<String>,
+    ) -> Self {
+        RunData {
+            start_time: Instant::now(),
+            app_id: app_id.map(|s| Arc::from(s.as_str())),
+            board_id: Arc::from(board_id),
+            node_id: Arc::from(node_id),
+            event_id: event_id.map(|s| Arc::from(s.as_str())),
+            cancellation_token,
+            board_name: board_name.map(|s| Arc::from(s.as_str())),
+            event_name: event_name.map(|s| Arc::from(s.as_str())),
+            event_type: event_type.map(|s| Arc::from(s.as_str())),
+            last_node_update_ms: Arc::new(AtomicU64::new(0)),
+        }
+    }
+
+    pub fn is_cancelled(&self) -> bool {
+        self.cancellation_token.is_cancelled()
+    }
+
+    pub fn cancel(&self) {
+        self.cancellation_token.cancel();
+    }
+
+    pub fn elapsed(&self) -> std::time::Duration {
+        self.start_time.elapsed()
+    }
+
+    /// Update the last node update timestamp to now
+    pub fn touch_last_node_update(&self) {
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_millis() as u64)
+            .unwrap_or(0);
+        self.last_node_update_ms
+            .store(now, std::sync::atomic::Ordering::Relaxed);
+    }
+
+    /// Get the last node update timestamp in milliseconds since epoch
+    pub fn get_last_node_update_ms(&self) -> u64 {
+        self.last_node_update_ms
+            .load(std::sync::atomic::Ordering::Relaxed)
+    }
+
+    pub fn from_event(event: &Event, cancellation_token: CancellationToken) -> Self {
+        RunData {
+            start_time: Instant::now(),
+            app_id: None,
+            board_id: Arc::from(event.board_id.as_str()),
+            node_id: Arc::from(event.node_id.as_str()),
+            event_id: Some(Arc::from(event.id.as_str())),
+            cancellation_token,
+            board_name: None,
+            event_name: Some(Arc::from(event.name.as_str())),
+            event_type: Some(Arc::from(event.event_type.as_str())),
+            last_node_update_ms: Arc::new(AtomicU64::new(0)),
+        }
+    }
+}
+
+// TODO: implement dashmap
+#[derive(Clone)]
+pub struct FlowLikeState {
+    pub config: Arc<RwLock<FlowLikeConfig>>,
+    pub http_client: Arc<HTTPClient>,
+    #[cfg(feature = "flow-runtime")]
+    pub lance_session: Arc<LanceSession>,
+
+    #[cfg(feature = "bit")]
+    pub download_manager: Arc<Mutex<DownloadManager>>,
+
+    #[cfg(feature = "model")]
+    pub model_provider_config: Arc<ModelProviderConfiguration>,
+
+    #[cfg(feature = "model")]
+    pub model_factory: Arc<Mutex<ModelFactory>>,
+    #[cfg(feature = "model")]
+    pub embedding_factory: Arc<Mutex<EmbeddingFactory>>,
+
+    #[cfg(feature = "flow-metadata")]
+    pub node_registry: Arc<RwLock<FlowNodeRegistry>>,
+    #[cfg(feature = "flow-metadata")]
+    pub board_registry: Arc<DashMap<String, Arc<Mutex<Board>>>>, // TODO: should board be wrapped in RWLock or Mutex?
+    #[cfg(feature = "flow-runtime")]
+    pub board_run_registry: Arc<DashMap<String, Arc<RunData>>>,
+
+    // A2UI registries for open widgets/pages
+    #[cfg(feature = "flow-runtime")]
+    pub widget_registry: Arc<DashMap<String, crate::a2ui::widget::Widget>>,
+    #[cfg(feature = "flow-runtime")]
+    pub page_registry: Arc<DashMap<String, crate::a2ui::widget::Page>>,
+
+    /// Host-registered source resolving micro widgets from the manifests of
+    /// packages added to an app (see `a2ui::micro_widget::WidgetProvider`).
+    pub package_widget_source:
+        Arc<RwLock<Option<Arc<dyn crate::a2ui::micro_widget::PackageWidgetSource>>>>,
+
+    /// Host-registered source of an app's declarative widgets (see
+    /// `a2ui::micro_widget::load_app_widgets`). Server executors register a
+    /// hub-API client here so runs never read widgets from the meta store.
+    pub app_widget_source: Arc<RwLock<Option<Arc<dyn crate::a2ui::micro_widget::AppWidgetSource>>>>,
+
+    /// Where this state's process runs. Server-side entry points set
+    /// [`ExecutionEnvironment::Server`] so process-level services without a
+    /// run context (the model factory) can refuse ambient host credentials.
+    #[cfg(feature = "flow-metadata")]
+    pub execution_environment: ExecutionEnvironment,
+}
+
+/// Local completion runtimes available to the current host.
+///
+/// The llama-server runtime cannot run on mobile targets. MLX has its own
+/// Apple-silicon platform constraint, so a local Bit store and the `local-ml`
+/// feature do not by themselves make every local completion Bit executable.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct CompletionModelCapabilities {
+    pub local_server: bool,
+    pub mlx: bool,
+}
+
+impl FlowLikeState {
+    pub fn new(config: FlowLikeConfig, client: HTTPClient) -> Self {
+        FlowLikeState {
+            config: Arc::new(RwLock::new(config)),
+            http_client: Arc::new(client),
+            #[cfg(feature = "flow-runtime")]
+            lance_session: Arc::new(LanceSession::default()),
+            #[cfg(feature = "flow-metadata")]
+            execution_environment: ExecutionEnvironment::default(),
+
+            #[cfg(feature = "bit")]
+            download_manager: Arc::new(Mutex::new(DownloadManager::new())),
+
+            #[cfg(feature = "model")]
+            model_provider_config: Arc::new(ModelProviderConfiguration::default()),
+            #[cfg(feature = "model")]
+            model_factory: Arc::new(Mutex::new(ModelFactory::new())),
+
+            #[cfg(feature = "model")]
+            embedding_factory: Arc::new(Mutex::new(EmbeddingFactory::new())),
+
+            #[cfg(feature = "flow-metadata")]
+            node_registry: Arc::new(RwLock::new(FlowNodeRegistry::new())),
+            #[cfg(feature = "flow-metadata")]
+            board_registry: Arc::new(DashMap::new()),
+            #[cfg(feature = "flow-runtime")]
+            board_run_registry: Arc::new(DashMap::new()),
+
+            #[cfg(feature = "flow-runtime")]
+            widget_registry: Arc::new(DashMap::new()),
+            #[cfg(feature = "flow-runtime")]
+            page_registry: Arc::new(DashMap::new()),
+
+            package_widget_source: Arc::new(RwLock::new(None)),
+            app_widget_source: Arc::new(RwLock::new(None)),
+        }
+    }
+
+    #[cfg(feature = "model")]
+    pub fn new_with_model_config(
+        config: FlowLikeConfig,
+        client: HTTPClient,
+        model_provider_config: ModelProviderConfiguration,
+    ) -> Self {
+        FlowLikeState {
+            config: Arc::new(RwLock::new(config)),
+            http_client: Arc::new(client),
+            #[cfg(feature = "flow-runtime")]
+            lance_session: Arc::new(LanceSession::default()),
+            #[cfg(feature = "flow-metadata")]
+            execution_environment: ExecutionEnvironment::default(),
+
+            #[cfg(feature = "bit")]
+            download_manager: Arc::new(Mutex::new(DownloadManager::new())),
+
+            model_provider_config: Arc::new(model_provider_config),
+            model_factory: Arc::new(Mutex::new(ModelFactory::new())),
+            embedding_factory: Arc::new(Mutex::new(EmbeddingFactory::new())),
+
+            #[cfg(feature = "flow-metadata")]
+            node_registry: Arc::new(RwLock::new(FlowNodeRegistry::new())),
+            #[cfg(feature = "flow-metadata")]
+            board_registry: Arc::new(DashMap::new()),
+            #[cfg(feature = "flow-runtime")]
+            board_run_registry: Arc::new(DashMap::new()),
+
+            #[cfg(feature = "flow-runtime")]
+            widget_registry: Arc::new(DashMap::new()),
+            #[cfg(feature = "flow-runtime")]
+            page_registry: Arc::new(DashMap::new()),
+
+            package_widget_source: Arc::new(RwLock::new(None)),
+            app_widget_source: Arc::new(RwLock::new(None)),
+        }
+    }
+
+    /// Register the host implementation resolving package widgets for apps.
+    pub async fn register_package_widget_source(
+        &self,
+        source: Arc<dyn crate::a2ui::micro_widget::PackageWidgetSource>,
+    ) {
+        let mut guard = self.package_widget_source.write().await;
+        *guard = Some(source);
+    }
+
+    pub async fn package_widget_source(
+        &self,
+    ) -> Option<Arc<dyn crate::a2ui::micro_widget::PackageWidgetSource>> {
+        self.package_widget_source.read().await.clone()
+    }
+
+    /// Register the host implementation supplying an app's declarative widgets.
+    pub async fn register_app_widget_source(
+        &self,
+        source: Arc<dyn crate::a2ui::micro_widget::AppWidgetSource>,
+    ) {
+        let mut guard = self.app_widget_source.write().await;
+        *guard = Some(source);
+    }
+
+    pub async fn app_widget_source(
+        &self,
+    ) -> Option<Arc<dyn crate::a2ui::micro_widget::AppWidgetSource>> {
+        self.app_widget_source.read().await.clone()
+    }
+
+    #[cfg(feature = "bit")]
+    pub fn download_manager(&self) -> Arc<Mutex<DownloadManager>> {
+        self.download_manager.clone()
+    }
+
+    #[cfg(feature = "model")]
+    pub fn model_factory(&self) -> Arc<Mutex<ModelFactory>> {
+        self.model_factory.clone()
+    }
+
+    #[cfg(feature = "flow-runtime")]
+    pub fn with_lance_session(&self, builder: ConnectBuilder) -> ConnectBuilder {
+        builder.session(self.lance_session.clone())
+    }
+
+    /// Persist a trigger that never became a run, so it still shows up in the
+    /// board's run history with the reason attached.
+    #[cfg(feature = "flow-runtime")]
+    pub async fn record_rejected_run(
+        &self,
+        rejection: &crate::flow::execution::rejection::RejectedRun,
+    ) -> flow_like_types::Result<LogMeta> {
+        use flow_like_types::anyhow;
+
+        let (db_fn, write_options) = {
+            let guard = self.config.read().await;
+            (
+                guard.callbacks.build_logs_database.clone(),
+                guard.callbacks.lance_write_options.clone(),
+            )
+        };
+
+        let db_fn = db_fn.ok_or_else(|| anyhow!("No log database configured"))?;
+        let base_path = rejection.base_path()?;
+        let db = self
+            .with_lance_session(db_fn(base_path.clone()))
+            .execute()
+            .await
+            .map_err(|e| anyhow!("Failed to open log database: {}, {:?}", base_path, e))?;
+
+        rejection.write(db, write_options.as_ref()).await
+    }
+
+    pub fn for_execution_run(&self) -> Self {
+        FlowLikeState {
+            config: self.config.clone(),
+            http_client: self.http_client.clone(),
+            #[cfg(feature = "flow-runtime")]
+            lance_session: Arc::new(LanceSession::default()),
+            #[cfg(feature = "flow-metadata")]
+            execution_environment: self.execution_environment,
+
+            #[cfg(feature = "bit")]
+            download_manager: self.download_manager.clone(),
+
+            #[cfg(feature = "model")]
+            model_provider_config: self.model_provider_config.clone(),
+            #[cfg(feature = "model")]
+            model_factory: self.model_factory.clone(),
+            #[cfg(feature = "model")]
+            embedding_factory: self.embedding_factory.clone(),
+
+            #[cfg(feature = "flow-metadata")]
+            node_registry: self.node_registry.clone(),
+            #[cfg(feature = "flow-metadata")]
+            board_registry: Arc::new(DashMap::new()),
+            #[cfg(feature = "flow-runtime")]
+            board_run_registry: Arc::new(DashMap::new()),
+
+            #[cfg(feature = "flow-runtime")]
+            widget_registry: Arc::new(DashMap::new()),
+            #[cfg(feature = "flow-runtime")]
+            page_registry: Arc::new(DashMap::new()),
+
+            package_widget_source: self.package_widget_source.clone(),
+            app_widget_source: self.app_widget_source.clone(),
+        }
+    }
+
+    #[cfg(feature = "flow-metadata")]
+    pub fn node_registry(&self) -> Arc<RwLock<FlowNodeRegistry>> {
+        self.node_registry.clone()
+    }
+
+    #[cfg(feature = "flow-metadata")]
+    pub fn board_registry(&self) -> Arc<DashMap<String, Arc<Mutex<Board>>>> {
+        self.board_registry.clone()
+    }
+
+    #[cfg(feature = "flow-metadata")]
+    pub fn get_board(
+        &self,
+        board_id: &str,
+        version: Option<(u32, u32, u32)>,
+    ) -> flow_like_types::Result<Arc<Mutex<Board>>> {
+        let key = if let Some(version) = version {
+            format!("{}-{}-{}-{}", board_id, version.0, version.1, version.2)
+        } else {
+            board_id.to_string()
+        };
+
+        let board = self.board_registry.try_get(&key);
+
+        match board.try_unwrap() {
+            Some(board) => Ok(board.clone()),
+            None => Err(flow_like_types::anyhow!(
+                "Board not found or could not be locked"
+            )),
+        }
+    }
+
+    #[cfg(feature = "flow-metadata")]
+    pub fn get_template(
+        &self,
+        template_id: &str,
+        version: Option<(u32, u32, u32)>,
+    ) -> flow_like_types::Result<Arc<Mutex<Board>>> {
+        let key = if let Some(version) = version {
+            format!("{}-{}-{}-{}", template_id, version.0, version.1, version.2)
+        } else {
+            template_id.to_string()
+        };
+
+        let board = self.board_registry.try_get(&key);
+
+        match board.try_unwrap() {
+            Some(board) => Ok(board.clone()),
+            None => Err(flow_like_types::anyhow!(
+                "Board not found or could not be locked"
+            )),
+        }
+    }
+
+    #[cfg(feature = "flow-metadata")]
+    pub fn remove_board(
+        &self,
+        board_id: &str,
+    ) -> flow_like_types::Result<Option<Arc<Mutex<Board>>>> {
+        let removed = self.board_registry.remove(board_id);
+
+        match removed {
+            Some((_id, board)) => Ok(Some(board)),
+            None => Ok(None),
+        }
+    }
+
+    #[cfg(feature = "flow-metadata")]
+    pub fn register_board(
+        &self,
+        board_id: &str,
+        board: Arc<Mutex<Board>>,
+        version: Option<(u32, u32, u32)>,
+    ) -> flow_like_types::Result<()> {
+        let key = if let Some(version) = version {
+            format!("{}-{}-{}-{}", board_id, version.0, version.1, version.2)
+        } else {
+            board_id.to_string()
+        };
+        self.board_registry.insert(key, board.clone());
+        Ok(())
+    }
+
+    #[cfg(feature = "flow-runtime")]
+    pub fn board_run_registry(&self) -> Arc<DashMap<String, Arc<RunData>>> {
+        self.board_run_registry.clone()
+    }
+
+    #[cfg(feature = "flow-runtime")]
+    pub fn list_runs(&self) -> flow_like_types::Result<Vec<(String, Arc<RunData>)>> {
+        let runs = self
+            .board_run_registry
+            .iter()
+            .map(|entry| (entry.key().clone(), entry.value().clone()))
+            .collect::<Vec<_>>();
+        Ok(runs)
+    }
+
+    #[cfg(feature = "flow-runtime")]
+    pub fn register_run(&self, run_id: &str, run: RunData) {
+        self.board_run_registry
+            .insert(run_id.to_string(), Arc::new(run));
+    }
+
+    #[cfg(feature = "flow-runtime")]
+    pub fn remove_and_cancel_run(&self, run_id: &str) -> flow_like_types::Result<()> {
+        let removed = self.board_run_registry.remove(run_id);
+        if let Some((_id, run)) = removed
+            && !run.is_cancelled()
+        {
+            run.cancel();
+        }
+
+        Ok(())
+    }
+
+    #[cfg(feature = "flow-runtime")]
+    pub fn get_run(&self, run_id: &str) -> flow_like_types::Result<Arc<RunData>> {
+        let run = self.board_run_registry.try_get(run_id);
+
+        match run.try_unwrap() {
+            Some(run) => Ok(run.clone()),
+            None => Err(flow_like_types::anyhow!(
+                "Run not found or could not be locked"
+            )),
+        }
+    }
+
+    #[cfg(feature = "flow-runtime")]
+    pub async fn query_run(
+        &self,
+        meta: &LogMeta,
+        query: &str,
+        limit: Option<usize>,
+        offset: Option<usize>,
+    ) -> flow_like_types::Result<Vec<LogMessage>> {
+        use flow_like_storage::{
+            lancedb::query::{ExecutableQuery, QueryBase},
+            serde_arrow,
+        };
+        use flow_like_types::anyhow;
+        use futures::TryStreamExt;
+
+        use crate::flow::execution::log::StoredLogMessage;
+
+        let limit = limit.unwrap_or(100);
+        let offset = offset.unwrap_or(0);
+
+        let db = {
+            let guard = self.config.read().await;
+
+            guard.callbacks.build_logs_database.clone()
+        };
+
+        let db_fn = db
+            .as_ref()
+            .ok_or_else(|| anyhow!("No log database configured"))?;
+        let base_path = Path::from("runs")
+            .join(meta.app_id.clone())
+            .join(meta.board_id.clone());
+        let db = db_fn(base_path.clone()).execute().await?;
+
+        let db = db.open_table(meta.run_id.clone()).execute().await?;
+        let mut q = db.query();
+
+        if !query.is_empty() {
+            q = q.only_if(query);
+        }
+
+        let results = q.offset(offset).limit(limit).execute().await?;
+        let results = results.try_collect::<Vec<_>>().await?;
+
+        let mut log_messages = Vec::with_capacity(results.len() * 10);
+        for result in results {
+            let result = serde_arrow::from_record_batch::<Vec<StoredLogMessage>>(&result)
+                .unwrap_or_default();
+            let result = result
+                .into_iter()
+                .map(|log| {
+                    let log: LogMessage = log.into();
+                    log
+                })
+                .collect::<Vec<_>>();
+            log_messages.extend(result);
+        }
+
+        Ok(log_messages)
+    }
+
+    #[inline]
+    pub async fn stores(state: &Arc<FlowLikeState>) -> FlowLikeStores {
+        state.config.read().await.stores.clone()
+    }
+
+    #[inline]
+    pub async fn project_storage_store(
+        state: &Arc<FlowLikeState>,
+    ) -> flow_like_types::Result<FlowLikeStore> {
+        state
+            .config
+            .read()
+            .await
+            .stores
+            .app_storage_store
+            .clone()
+            .ok_or(flow_like_types::anyhow!("No project store"))
+    }
+
+    #[inline]
+    pub async fn project_meta_store(
+        state: &Arc<FlowLikeState>,
+    ) -> flow_like_types::Result<FlowLikeStore> {
+        state
+            .config
+            .read()
+            .await
+            .stores
+            .app_meta_store
+            .clone()
+            .ok_or(flow_like_types::anyhow!("No project store"))
+    }
+
+    #[inline]
+    pub async fn bit_store(state: &Arc<FlowLikeState>) -> flow_like_types::Result<FlowLikeStore> {
+        state
+            .config
+            .read()
+            .await
+            .stores
+            .bits_store
+            .clone()
+            .ok_or(flow_like_types::anyhow!("No bit store"))
+    }
+
+    /// Whether this host can execute models whose weights must be loaded from
+    /// the local Bit store.
+    ///
+    /// Feature availability alone is insufficient for a server binary because
+    /// Cargo can unify `local-ml` through another dependency while the runtime
+    /// keeps Bits in object storage. Local model loaders require both compiled
+    /// support and a filesystem-backed Bit store.
+    #[inline]
+    pub async fn can_execute_local_bit_models(state: &Arc<FlowLikeState>) -> bool {
+        let has_local_bit_store = Self::bit_store(state)
+            .await
+            .is_ok_and(|store| matches!(store, FlowLikeStore::Local(_)));
+        local_ml_execution_available(cfg!(feature = "local-ml"), has_local_bit_store)
+    }
+
+    /// Completion runtimes this host can execute without an API proxy.
+    #[cfg(feature = "model")]
+    pub async fn completion_model_capabilities(
+        state: &Arc<FlowLikeState>,
+    ) -> CompletionModelCapabilities {
+        completion_model_capabilities_for_host(
+            Self::can_execute_local_bit_models(state).await,
+            cfg!(any(target_os = "ios", target_os = "android")),
+            crate::bit::can_host_mlx(),
+        )
+    }
+
+    #[inline]
+    pub async fn user_store(state: &Arc<FlowLikeState>) -> flow_like_types::Result<FlowLikeStore> {
+        state
+            .config
+            .read()
+            .await
+            .stores
+            .user_store
+            .clone()
+            .ok_or(flow_like_types::anyhow!("No user store"))
+    }
+}
+
+fn local_ml_execution_available(local_ml_enabled: bool, has_local_bit_store: bool) -> bool {
+    local_ml_enabled && has_local_bit_store
+}
+
+fn completion_model_capabilities_for_host(
+    local_bit_models_available: bool,
+    is_mobile: bool,
+    can_host_mlx: bool,
+) -> CompletionModelCapabilities {
+    CompletionModelCapabilities {
+        local_server: local_bit_models_available && !is_mobile,
+        mlx: local_bit_models_available && can_host_mlx,
+    }
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+#[serde(rename_all = "lowercase")]
+pub enum ToastLevel {
+    Success,
+    Info,
+    Warning,
+    Error,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct ToastEvent {
+    pub message: String,
+    pub level: ToastLevel,
+}
+
+impl ToastEvent {
+    pub fn new(message: &str, level: ToastLevel) -> Self {
+        ToastEvent {
+            message: message.to_string(),
+            level,
+        }
+    }
+}
+
+impl Default for ToastEvent {
+    fn default() -> Self {
+        ToastEvent {
+            message: "".to_string(),
+            level: ToastLevel::Info,
+        }
+    }
+}
+
+/// Event sent via InterCom to show progress to the user
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct ProgressEvent {
+    /// Unique identifier to update/dismiss this progress toast
+    pub id: String,
+    /// The message shown to the user
+    pub message: String,
+    /// Progress value between 0 and 100 (None to dismiss)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub progress: Option<u8>,
+    /// Whether this is the final update (dismisses or completes the progress)
+    #[serde(default)]
+    pub done: bool,
+    /// Whether the operation succeeded (only relevant when done=true)
+    #[serde(default)]
+    pub success: bool,
+}
+
+impl ProgressEvent {
+    pub fn new(id: &str, message: &str, progress: Option<u8>) -> Self {
+        ProgressEvent {
+            id: id.to_string(),
+            message: message.to_string(),
+            progress,
+            done: false,
+            success: false,
+        }
+    }
+
+    pub fn done(id: &str, message: &str, success: bool) -> Self {
+        ProgressEvent {
+            id: id.to_string(),
+            message: message.to_string(),
+            progress: if success { Some(100) } else { None },
+            done: true,
+            success,
+        }
+    }
+}
+
+/// Event sent via InterCom to notify the user
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct NotificationEvent {
+    pub title: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub icon: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub link: Option<String>,
+    pub show_desktop: bool,
+
+    /// Event ID that triggered this workflow execution.
+    /// If present, UIs can persist the notification via the backend API.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub event_id: Option<String>,
+
+    /// Target user sub (for project-user notifications)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub target_user_sub: Option<String>,
+
+    /// Optional tracking info
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub source_run_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub source_node_id: Option<String>,
+}
+
+impl NotificationEvent {
+    pub fn new(title: &str) -> Self {
+        NotificationEvent {
+            title: title.to_string(),
+            description: None,
+            icon: None,
+            link: None,
+            show_desktop: true,
+            event_id: None,
+            target_user_sub: None,
+            source_run_id: None,
+            source_node_id: None,
+        }
+    }
+
+    pub fn with_description(mut self, description: &str) -> Self {
+        self.description = Some(description.to_string());
+        self
+    }
+
+    pub fn with_icon(mut self, icon: &str) -> Self {
+        self.icon = Some(icon.to_string());
+        self
+    }
+
+    pub fn with_link(mut self, link: &str) -> Self {
+        self.link = Some(link.to_string());
+        self
+    }
+
+    pub fn with_event_id(mut self, event_id: &str) -> Self {
+        if !event_id.trim().is_empty() {
+            self.event_id = Some(event_id.to_string());
+        }
+        self
+    }
+
+    pub fn with_target_user_sub(mut self, target_user_sub: &str) -> Self {
+        if !target_user_sub.trim().is_empty() {
+            self.target_user_sub = Some(target_user_sub.to_string());
+        }
+        self
+    }
+
+    pub fn with_source_run_id(mut self, run_id: &str) -> Self {
+        if !run_id.trim().is_empty() {
+            self.source_run_id = Some(run_id.to_string());
+        }
+        self
+    }
+
+    pub fn with_source_node_id(mut self, node_id: &str) -> Self {
+        if !node_id.trim().is_empty() {
+            self.source_node_id = Some(node_id.to_string());
+        }
+        self
+    }
+
+    pub fn with_desktop(mut self, show_desktop: bool) -> Self {
+        self.show_desktop = show_desktop;
+        self
+    }
+}
+
+impl Default for NotificationEvent {
+    fn default() -> Self {
+        NotificationEvent {
+            title: String::new(),
+            description: None,
+            icon: None,
+            link: None,
+            show_desktop: true,
+            event_id: None,
+            target_user_sub: None,
+            source_run_id: None,
+            source_node_id: None,
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use flow_like_storage::object_store::{ObjectStoreExt, PutPayload};
+    use flow_like_types::{Bytes, Cacheable, tokio};
+
+    use super::*;
+    use std::path::PathBuf;
+
+    #[test]
+    fn object_store_path_serialization() {
+        let path = Path::from("test").join("path").join("one");
+        let event = PathBuf::from("random").join(path.to_string());
+        assert_eq!(path.to_string(), "test/path/one".to_string());
+        assert_eq!(event.to_str().unwrap(), "random/test/path/one");
+    }
+
+    #[tokio::test]
+    async fn test_object_store_any_cast() {
+        let memory_store = flow_like_storage::object_store::memory::InMemory::new();
+        let test_string = b"Hi, I am Testing";
+        let test_path = Path::from("test");
+        memory_store
+            .put(&test_path, PutPayload::from_static(test_string))
+            .await
+            .unwrap();
+        let store: FlowLikeStore = FlowLikeStore::Other(Arc::new(memory_store));
+        let store: Arc<dyn Cacheable> = Arc::new(store.clone());
+        let down_casted: &FlowLikeStore = store.downcast_ref().unwrap();
+        let read_bytes: Bytes = down_casted
+            .as_generic()
+            .get(&test_path)
+            .await
+            .unwrap()
+            .bytes()
+            .await
+            .unwrap();
+        let test_bytes = Bytes::from_static(test_string);
+        assert_eq!(read_bytes, test_bytes);
+    }
+
+    #[test]
+    fn local_ml_execution_requires_compiled_support_and_a_local_bit_store() {
+        assert!(local_ml_execution_available(true, true));
+        assert!(!local_ml_execution_available(true, false));
+        assert!(!local_ml_execution_available(false, true));
+        assert!(!local_ml_execution_available(false, false));
+    }
+
+    #[test]
+    fn completion_capabilities_keep_mobile_and_mlx_constraints_separate() {
+        assert_eq!(
+            completion_model_capabilities_for_host(true, true, true),
+            CompletionModelCapabilities {
+                local_server: false,
+                mlx: true,
+            }
+        );
+        assert_eq!(
+            completion_model_capabilities_for_host(true, false, false),
+            CompletionModelCapabilities {
+                local_server: true,
+                mlx: false,
+            }
+        );
+        assert_eq!(
+            completion_model_capabilities_for_host(false, false, true),
+            CompletionModelCapabilities::default()
+        );
+    }
+
+    #[tokio::test]
+    async fn object_backed_bit_store_disables_local_ml_execution() {
+        let store = FlowLikeStore::Memory(Arc::new(
+            flow_like_storage::object_store::memory::InMemory::new(),
+        ));
+        let state = Arc::new(FlowLikeState::new(
+            FlowLikeConfig::with_default_store(store),
+            crate::utils::http::HTTPClient::new_without_refetch(),
+        ));
+
+        assert!(!FlowLikeState::can_execute_local_bit_models(&state).await);
+    }
+}

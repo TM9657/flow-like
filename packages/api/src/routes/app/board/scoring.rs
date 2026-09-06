@@ -248,6 +248,8 @@ pub async fn save_board_and_refresh_summary(
     app_id: &str,
     board: &Board,
 ) -> flow_like_types::Result<flow_like::flow_like_storage::object_store::PutResult> {
+    // Reject an unsupported edit before either the board or its summary changes.
+    board.ensure_supported_format()?;
     let (put, summary) = flow_like_types::tokio::join!(
         board.save(None),
         persist_board_score(&state.db, app_id, board)
@@ -282,7 +284,7 @@ pub async fn persist_board_score_with<C: ConnectionTrait>(
     board: &Board,
     computation: &BoardScoreComputation,
 ) -> flow_like_types::Result<()> {
-    let now = chrono::Utc::now().naive_utc();
+    let now = chrono::Utc::now().fixed_offset();
 
     let scores = computation.scores.clone().unwrap_or(BoardScores {
         security: 10,

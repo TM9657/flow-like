@@ -3,8 +3,12 @@ import type { GraphCluster } from "./graph-clusters";
 
 /** Matches the size a node gets when no style override applies. */
 export const DEFAULT_NODE_SIZE = 10;
-/** Breathing room, in layout units, kept between two node circles. */
+/** Breathing room in the active collision coordinate space. */
 export const NODE_GAP = 8;
+/** Left edge kept clear when a canvas caption has to switch sides. */
+export const GRAPH_LABEL_LEFT_INSET = 8;
+/** Width reserved for the right-side canvas controls and their breathing room. */
+export const GRAPH_LABEL_RIGHT_INSET = 64;
 /** Share of an overlap resolved per relaxation pass. */
 const RELAX_STRENGTH = 0.55;
 /** Ceiling on pair tests per pass so degenerate inputs cannot lock the frame. */
@@ -36,6 +40,45 @@ const TAU = Math.PI * 2;
 export interface LayoutPosition {
 	x: number;
 	y: number;
+}
+
+export interface ViewportDimensions {
+	width: number;
+	height: number;
+}
+
+/** Sigma's axis-aligned graph extent. */
+export interface GraphBoundsBox {
+	x: [number, number];
+	y: [number, number];
+}
+
+export interface ViewportInsets {
+	left?: number;
+	right?: number;
+	top?: number;
+	bottom?: number;
+}
+
+export type ViewportLabelSide = "left" | "right";
+
+export interface ViewportLabelPlacement {
+	side: ViewportLabelSide;
+	/** Width available for the complete label block on the chosen side. */
+	availableWidth: number;
+}
+
+export interface ViewportLabelPlacementOptions {
+	gap?: number;
+	leftInset?: number;
+	rightInset?: number;
+}
+
+export interface CollisionSpaceMapper {
+	/** Converts graph coordinates into the space where radii and gaps are measured. */
+	fromGraph: (position: LayoutPosition) => LayoutPosition;
+	/** Converts the relaxed position back into graph coordinates. */
+	toGraph: (position: LayoutPosition) => LayoutPosition;
 }
 
 export interface LayoutBounds {
@@ -183,14 +226,139 @@ export function defaultRelaxIterations(nodeCount: number): number {
 	return 60;
 }
 
+export interface ViewportNodeSizeOptions {
+	/** Sigma stage padding on each side, in CSS pixels. */
+	padding?: number;
+	/** Smallest useful rendered radius, in CSS pixels. */
+	minSize?: number;
+	/** Maximum share of each node's estimated pitch occupied by its diameter. */
+	maxPitchShare?: number;
+}
+
+/**
+ * Computes a rendered-radius ceiling from the space the live viewport gives
+ * each node. Node sizes in Sigma are screen pixels, so a fixed reference stage
+ * produces the wrong answer as soon as a panel or drawer changes the canvas.
+ */
+export function computeViewportNodeSizeCap(
+	nodeCount: number,
+	viewport: ViewportDimensions,
+	options: ViewportNodeSizeOptions = {},
+): number {
+	const padding =
+		typeof options.padding === "number" && Number.isFinite(options.padding)
+			? Math.max(0, options.padding)
+			: 0;
+	const minSize =
+		typeof options.minSize === "number" && Number.isFinite(options.minSize)
+			? Math.max(0, options.minSize)
+			: 2;
+	const maxPitchShare =
+		typeof options.maxPitchShare === "number" &&
+		Number.isFinite(options.maxPitchShare)
+			? Math.max(0, options.maxPitchShare)
+			: 0.3;
+	const width = Number.isFinite(viewport.width)
+		? Math.max(0, viewport.width - padding * 2)
+		: 0;
+	const height = Number.isFinite(viewport.height)
+		? Math.max(0, viewport.height - padding * 2)
+		: 0;
+
+	if (width === 0 || height === 0 || maxPitchShare === 0) return minSize;
+
+	const safeNodeCount =
+		Number.isFinite(nodeCount) && nodeCount > 0 ? nodeCount : 1;
+	const pitch = Math.sqrt((width * height) / safeNodeCount);
+	return Math.max(minSize, (pitch * maxPitchShare) / 2);
+}
+
+function finiteInset(value: number | undefined): number {
+	return typeof value === "number" && Number.isFinite(value)
+		? Math.max(0, value)
+		: 0;
+}
+
+/**
+ * Converts viewport-pixel breathing room into graph coordinates and adds it to
+ * a Sigma bounding box. This lets the camera reserve room for screen-sized
+ * captions without guessing how large a graph-space label should be.
+ */
+export function expandGraphBoundsByViewportInsets(
+	bounds: GraphBoundsBox,
+	insets: ViewportInsets,
+	graphToViewportRatio: number,
+): GraphBoundsBox {
+	const ratio =
+		Number.isFinite(graphToViewportRatio) && graphToViewportRatio > 0
+			? graphToViewportRatio
+			: 1;
+
+	return {
+		x: [
+			bounds.x[0] - finiteInset(insets.left) / ratio,
+			bounds.x[1] + finiteInset(insets.right) / ratio,
+		],
+		y: [
+			bounds.y[0] - finiteInset(insets.top) / ratio,
+			bounds.y[1] + finiteInset(insets.bottom) / ratio,
+		],
+	};
+}
+
+/**
+ * Chooses the side that keeps a screen-sized caption inside the usable stage.
+ * The right inset can reserve space for canvas controls that sit above Sigma.
+ */
+export function computeViewportLabelPlacement(
+	centerX: number,
+	nodeRadius: number,
+	contentWidth: number,
+	viewportWidth: number,
+	options: ViewportLabelPlacementOptions = {},
+): ViewportLabelPlacement {
+	const width = Number.isFinite(viewportWidth) ? Math.max(0, viewportWidth) : 0;
+	const x = Number.isFinite(centerX) ? centerX : width / 2;
+	const radius = Number.isFinite(nodeRadius) ? Math.max(0, nodeRadius) : 0;
+	const requestedWidth = Number.isFinite(contentWidth)
+		? Math.max(0, contentWidth)
+		: 0;
+	const gap = finiteInset(options.gap);
+	const leftInset = Math.min(width, finiteInset(options.leftInset));
+	const rightInset = Math.min(
+		Math.max(0, width - leftInset),
+		finiteInset(options.rightInset),
+	);
+	const rightWidth = Math.max(0, width - rightInset - (x + radius + gap));
+	const leftWidth = Math.max(0, x - radius - gap - leftInset);
+
+	if (requestedWidth <= rightWidth) {
+		return { side: "right", availableWidth: rightWidth };
+	}
+	if (requestedWidth <= leftWidth) {
+		return { side: "left", availableWidth: leftWidth };
+	}
+	return leftWidth > rightWidth
+		? { side: "left", availableWidth: leftWidth }
+		: { side: "right", availableWidth: rightWidth };
+}
+
 export interface RelaxOverlapsOptions {
 	iterations?: number;
 	gap?: number;
 	maxPairChecks?: number;
 	/**
-	 * Estimated caption width extending to the RIGHT of each node, in layout
-	 * units. When present, a node also defends the horizontal strip its label
-	 * occupies, which is what keeps captions from running into the next disc.
+	 * Maps graph positions into the coordinate space used by `size`, `gap`, and
+	 * label extents. Pass Sigma's graph/viewport converters when sizes are screen
+	 * pixels. The identity mapping keeps layout-only callers deterministic.
+	 */
+	coordinateMapper?: CollisionSpaceMapper;
+	/** Supplies the rendered radius when reducers alter a node's stored size. */
+	radiusForNode?: (nodeId: string) => number;
+	/**
+	 * Estimated caption width extending to the right of each node, in the active
+	 * collision coordinate space. A node then defends the horizontal strip its
+	 * label occupies, which keeps captions from running into the next disc.
 	 */
 	labelExtents?: ReadonlyMap<string, number>;
 }
@@ -255,6 +423,7 @@ export function relaxOverlaps(
 	const iterations = options.iterations ?? defaultRelaxIterations(count);
 	const pairBudget = options.maxPairChecks ?? MAX_PAIR_CHECKS;
 	const labelExtents = options.labelExtents;
+	const coordinateMapper = options.coordinateMapper;
 
 	const xs = new Float64Array(count);
 	const ys = new Float64Array(count);
@@ -266,9 +435,26 @@ export function relaxOverlaps(
 
 	for (let index = 0; index < count; index += 1) {
 		const nodeId = nodeIds[index];
-		xs[index] = readCoordinate(graph, nodeId, "x");
-		ys[index] = readCoordinate(graph, nodeId, "y");
-		radii[index] = readRadius(graph, nodeId);
+		const graphPosition = {
+			x: readCoordinate(graph, nodeId, "x"),
+			y: readCoordinate(graph, nodeId, "y"),
+		};
+		const mappedPosition = coordinateMapper?.fromGraph(graphPosition);
+		xs[index] =
+			mappedPosition && Number.isFinite(mappedPosition.x)
+				? mappedPosition.x
+				: graphPosition.x;
+		ys[index] =
+			mappedPosition && Number.isFinite(mappedPosition.y)
+				? mappedPosition.y
+				: graphPosition.y;
+		const mappedRadius = options.radiusForNode?.(nodeId);
+		radii[index] =
+			typeof mappedRadius === "number" &&
+			Number.isFinite(mappedRadius) &&
+			mappedRadius > 0
+				? mappedRadius
+				: readRadius(graph, nodeId);
 		maxRadius = Math.max(maxRadius, radii[index]);
 		if (extents && labelExtents) {
 			extents[index] = labelExtents.get(nodeId) ?? 0;
@@ -375,8 +561,28 @@ export function relaxOverlaps(
 	}
 
 	for (let index = 0; index < count; index += 1) {
-		graph.setNodeAttribute(nodeIds[index], "x", xs[index]);
-		graph.setNodeAttribute(nodeIds[index], "y", ys[index]);
+		const collisionPosition = { x: xs[index], y: ys[index] };
+		const graphPosition = coordinateMapper?.toGraph(collisionPosition);
+		const fallbackX = readCoordinate(graph, nodeIds[index], "x");
+		const fallbackY = readCoordinate(graph, nodeIds[index], "y");
+		graph.setNodeAttribute(
+			nodeIds[index],
+			"x",
+			graphPosition && Number.isFinite(graphPosition.x)
+				? graphPosition.x
+				: coordinateMapper
+					? fallbackX
+					: collisionPosition.x,
+		);
+		graph.setNodeAttribute(
+			nodeIds[index],
+			"y",
+			graphPosition && Number.isFinite(graphPosition.y)
+				? graphPosition.y
+				: coordinateMapper
+					? fallbackY
+					: collisionPosition.y,
+		);
 	}
 
 	return performed;

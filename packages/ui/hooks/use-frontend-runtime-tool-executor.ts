@@ -29,7 +29,7 @@ import {
 } from "../lib/package-widgets";
 import { type IBackendState, useBackend } from "../state/backend-state";
 import type { IBoardState } from "../state/backend-state/board-state";
-import { IIndexType } from "../state/backend-state/db-state";
+import { parseIndexType } from "../state/backend-state/db-state";
 import type {
 	IDatabaseSchemaField,
 	IDatabaseState,
@@ -572,27 +572,6 @@ function summarizeWidget(widget: IWidget) {
 			.map((action) => (action as { id?: string }).id)
 			.filter((id): id is string => typeof id === "string" && id.length > 0),
 	};
-}
-
-function mapIndexType(value: unknown): IIndexType {
-	const normalized = String(value ?? "Auto")
-		.replace(/[\s-]/g, "_")
-		.toLowerCase();
-	switch (normalized) {
-		case "fulltext":
-		case "full_text":
-			return IIndexType.FullText;
-		case "btree":
-		case "b_tree":
-			return IIndexType.BTree;
-		case "bitmap":
-			return IIndexType.Bitmap;
-		case "labellist":
-		case "label_list":
-			return IIndexType.LabelList;
-		default:
-			return IIndexType.Auto;
-	}
 }
 
 function splitStoragePath(path: string): { prefix: string; fileName: string } {
@@ -1567,7 +1546,7 @@ export function useFrontendRuntimeToolExecutor(
 								toolAppId,
 								tableName,
 								column,
-								mapIndexType(args.index_type ?? args.indexType),
+								parseIndexType(args.index_type ?? args.indexType),
 								getArgBool(args, "optimize", "optimize", false),
 								userScoped,
 							);

@@ -29,12 +29,13 @@ use flow_like_storage::serde_arrow;
 use flow_like_types::{anyhow, create_id, tokio};
 use futures::{StreamExt, TryStreamExt};
 use sea_orm::{
-    ActiveModelTrait, ActiveValue::Set, ColumnTrait, EntityTrait, QueryFilter, QueryOrder,
-    QuerySelect,
+    ActiveModelTrait, ActiveValue::Set, ColumnTrait, Condition, EntityTrait, QueryFilter,
+    QueryOrder, QuerySelect, sea_query::Expr,
 };
 
 use crate::{
     credentials::CredentialsAccess,
+    db::{DEFAULT_WRITE_CHUNK, update_in_batches},
     entity::{
         event_sink, execution_run, regression_case_result, regression_suite, regression_suite_run,
         sea_orm_active_enums::{RunMode, RunStatus, RunVariant},
@@ -155,8 +156,8 @@ pub(crate) fn parse_gate_mode(raw: &str) -> Option<GateMode> {
     }
 }
 
-pub(crate) fn datetime_micros(dt: chrono::NaiveDateTime) -> u64 {
-    dt.and_utc().timestamp_micros().max(0) as u64
+pub(crate) fn datetime_micros(dt: chrono::DateTime<chrono::FixedOffset>) -> u64 {
+    dt.timestamp_micros().max(0) as u64
 }
 
 /// Rebuild a suite config from its Postgres projection row — the degraded
@@ -214,7 +215,7 @@ pub(crate) async fn open_runs_db(
         .map_err(|e| {
             ApiError::internal_error(anyhow!("Failed to create logs db builder: {}", e))
         })?;
-    let base_path = StoragePath::from("runs").child(app_id).child(board_id);
+    let base_path = StoragePath::from("runs").join(app_id).join(board_id);
     let db = logs_db_builder(base_path.clone())
         .execute()
         .await
@@ -344,8 +345,8 @@ fn outcome_label(outcome: &CaseOutcome) -> &'static str {
     }
 }
 
-fn now_naive() -> chrono::NaiveDateTime {
-    chrono::Utc::now().naive_utc()
+fn now_naive() -> chrono::DateTime<chrono::FixedOffset> {
+    chrono::Utc::now().fixed_offset()
 }
 
 /// Resolve the candidate into the dispatch pin and the `SuiteRun.boardVersion`
@@ -931,6 +932,15 @@ async fn dispatch_case(
         return (None, Some(format!("failed to create the run row: {error}")));
     }
 
+    if let Err(error) = crate::audit::record_execution_dispatch(state, &run_id, "regression").await
+    {
+        fail_replay_run(state, &run_id).await;
+        return (
+            Some(run_id),
+            Some(format!("failed to record execution audit: {error}")),
+        );
+    }
+
     let executor_jwt = match sign_execution_jwt(ExecutionJwtParams {
         user_id: context.subject.clone(),
         technical_user_id: None,
@@ -982,7 +992,7 @@ async fn dispatch_case(
         artifact: None,
     };
 
-    let db_arc = Arc::new(state.db.clone());
+    let db_arc = crate::audit::ExecutionAuditContext::from(state);
     let dispatch_error = match state.dispatcher.backend() {
         ExecutionBackend::LambdaStream => {
             match state.dispatcher.dispatch_streaming(request).await {
@@ -1023,7 +1033,14 @@ async fn dispatch_case(
 /// Mark a replay run failed when its dispatch never reached the executor, so
 /// the row does not sit `Pending` until the run sweeper finds it.
 async fn fail_replay_run(state: &AppState, run_id: &str) {
-    if let Err(error) = update_run_on_completion(&state.db, run_id, RunStatus::Failed, 0).await {
+    if let Err(error) = update_run_on_completion(
+        &crate::audit::ExecutionAuditContext::from(state),
+        run_id,
+        RunStatus::Failed,
+        0,
+    )
+    .await
+    {
         tracing::warn!(run_id, %error, "Failed to mark the replay run as failed");
     }
 }
@@ -1054,22 +1071,34 @@ pub async fn maintenance_tick(state: &AppState) -> Result<RegressionMaintenanceO
         - chrono::Duration::from_std(SUITE_WALL_CLOCK + SUITE_LIVENESS_GRACE)
             .unwrap_or_else(|_| chrono::Duration::minutes(20));
     // Keyed on startedAt, not createdAt: a queued run may start long after
-    // its row was inserted, and every `running` row has a startedAt.
-    let swept = regression_suite_run::Entity::update_many()
-        .set(regression_suite_run::ActiveModel {
-            status: Set(SUITE_RUN_ERRORED.to_string()),
-            completed_at: Set(Some(now)),
-            error: Set(Some(
-                "Suite run exceeded the wall clock plus grace without completing".to_string(),
-            )),
-            ..Default::default()
-        })
-        .filter(regression_suite_run::Column::Status.eq(SUITE_RUN_RUNNING))
-        .filter(regression_suite_run::Column::StartedAt.lt(liveness_cutoff))
-        .exec(&state.db)
-        .await
-        .map_err(|e| ApiError::internal_error(anyhow!("Suite-run liveness sweep failed: {e}")))?;
-    outcome.swept = swept.rows_affected;
+    // its row was inserted, and every `running` row has a startedAt. Dead
+    // rows are flipped in primary-key pages, each its own transaction.
+    outcome.swept = update_in_batches::<regression_suite_run::Entity>(
+        &state.db,
+        state.db_dialect,
+        Condition::all()
+            .add(regression_suite_run::Column::Status.eq(SUITE_RUN_RUNNING))
+            .add(regression_suite_run::Column::StartedAt.lt(liveness_cutoff)),
+        vec![
+            (
+                regression_suite_run::Column::Status,
+                Expr::value(SUITE_RUN_ERRORED),
+            ),
+            (
+                regression_suite_run::Column::CompletedAt,
+                Expr::value(Some(now)),
+            ),
+            (
+                regression_suite_run::Column::Error,
+                Expr::value(Some(
+                    "Suite run exceeded the wall clock plus grace without completing".to_string(),
+                )),
+            ),
+        ],
+        DEFAULT_WRITE_CHUNK,
+    )
+    .await
+    .map_err(|e| ApiError::internal_error(anyhow!("Suite-run liveness sweep failed: {e}")))?;
 
     let due: Vec<regression_suite::Model> = regression_suite::Entity::find()
         .filter(regression_suite::Column::Schedule.is_not_null())
@@ -1086,7 +1115,7 @@ pub async fn maintenance_tick(state: &AppState) -> Result<RegressionMaintenanceO
             continue;
         };
         let next = match flow_like_sinks::scheduler::next_cron_occurrence_utc(schedule) {
-            Ok(next) => next.naive_utc(),
+            Ok(next) => next.fixed_offset(),
             Err(error) => {
                 tracing::warn!(suite_id = %row.id, %error, "Stored cron schedule no longer parses; skipping");
                 continue;

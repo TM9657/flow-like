@@ -62,7 +62,7 @@ impl NodeLogic for ChildNode {
 
         let mut path = parent_path.to_runtime(context).await?;
         for child_segment in child_segments {
-            path.path = path.path.child(child_segment);
+            path.path = path.path.join(child_segment);
         }
         let path = path.serialize().await;
 

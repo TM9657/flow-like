@@ -20,6 +20,8 @@ export function typeToColor(type: IVariableType): string {
 			return "var(--pin-generic)";
 		case "Struct":
 			return "var(--pin-struct)";
+		case "Geometry":
+			return "var(--pin-geometry)";
 		case "Byte":
 			return "var(--pin-byte)";
 	}

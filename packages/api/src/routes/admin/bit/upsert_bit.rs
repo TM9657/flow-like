@@ -1,3 +1,4 @@
+use flow_like_storage::object_store::ObjectStoreExt;
 use std::sync::Arc;
 
 use crate::{
@@ -261,7 +262,7 @@ pub async fn upsert_bit(
                 }
                 updated_bit.hub = Set(state_cloned.platform_config.domain.clone());
                 updated_bit.authors = Set(model.authors);
-                updated_bit.updated_at = Set(chrono::Utc::now().naive_utc());
+                updated_bit.updated_at = Set(chrono::Utc::now().fixed_offset());
                 updated_bit.dependencies = Set(model.dependencies);
                 updated_bit.file_name = Set(model.file_name);
                 updated_bit.hub = Set(model.hub);
@@ -325,8 +326,8 @@ pub async fn upsert_bit(
                 let mut new_bit: bit::ActiveModel = model.into();
                 new_bit.id = Set(create_id());
                 new_bit.hub = Set(state_cloned.platform_config.domain.clone());
-                new_bit.created_at = Set(chrono::Utc::now().naive_utc());
-                new_bit.updated_at = Set(chrono::Utc::now().naive_utc());
+                new_bit.created_at = Set(chrono::Utc::now().fixed_offset());
+                new_bit.updated_at = Set(chrono::Utc::now().fixed_offset());
                 match new_bit.insert(&state_cloned.db).await {
                     Ok(inserted) => {
                         let _ = tx
@@ -407,7 +408,7 @@ async fn download_and_hash(
     let store = state.cdn_bucket.clone();
 
     let old_location = flow_like_storage::object_store::path::Path::from("bits")
-        .child(bit.hash.clone().unwrap_or(bit.id.clone()));
+        .join(bit.hash.clone().unwrap_or(bit.id.clone()));
     let _delete = store.as_generic().delete(&old_location).await;
 
     let url = match bit.download_link {
@@ -465,7 +466,7 @@ async fn download_and_hash(
             .await;
     }
 
-    let path = flow_like_storage::object_store::path::Path::from("bits").child(e_tag.clone());
+    let path = flow_like_storage::object_store::path::Path::from("bits").join(e_tag.clone());
 
     // For ranged downloads
     const CHUNK_SIZE: usize = 50 * 1024 * 1024; // 50MB chunks
@@ -824,7 +825,7 @@ mod tests {
         assert!(bit_identity_changed(&existing, &retyped));
 
         let mut rewired = existing.clone();
-        rewired.dependencies = Some(vec!["hub:other-dependency".to_string()]);
+        rewired.dependencies = Some(vec!["hub:other-dependency".to_string()].into());
         assert!(bit_identity_changed(&existing, &rewired));
     }
 

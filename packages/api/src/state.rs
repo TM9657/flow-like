@@ -26,20 +26,21 @@ use jsonwebtoken::{
         AlgorithmParameters, EllipticCurve, Jwk, JwkSet, KeyAlgorithm, KeyOperations, PublicKeyUse,
     },
 };
-use sea_orm::{
-    ConnectOptions, ConnectionTrait, Database, DatabaseBackend, DatabaseConnection,
-    DatabaseTransaction, IsolationLevel, Statement, TransactionTrait,
-};
+use sea_orm::{ConnectOptions, Database, DatabaseConnection, DatabaseTransaction, IsolationLevel};
 use std::{
     collections::{BTreeSet, HashMap},
     sync::{Arc, Weak},
     time::{Duration, Instant},
 };
 
+pub use crate::db::DbDialect;
+
 use crate::channel::ChannelIssuer;
 use crate::compilation::{CompilationDispatchConfig, CompilationDispatcher};
 use crate::credentials::{CredentialsAccess, RuntimeCredentials};
+use crate::db::lease::MutationLease;
 use crate::entity::role;
+use crate::error::ApiError;
 use crate::execution::{DispatchConfig, Dispatcher};
 use crate::mail::{DynMailClient, create_mail_client};
 use crate::permission::wasm_package_permission::WasmPackagePermission;
@@ -122,10 +123,53 @@ fn keyed_local_lock(
     lock
 }
 
-const ENSURE_MUTATION_LOCK_SQL: &str =
-    r#"INSERT INTO "MutationLock" ("id") VALUES ($1) ON CONFLICT ("id") DO NOTHING"#;
-const ACQUIRE_MUTATION_LOCK_SQL: &str =
-    r#"UPDATE "MutationLock" SET "updatedAt" = CURRENT_TIMESTAMP WHERE "id" = $1"#;
+fn scoped_credential_minimum_lifetime(
+    mode: &CredentialsAccess,
+) -> flow_like_types::Result<chrono::Duration> {
+    if std::env::var("EXECUTION_ISOLATION_MODE").as_deref() != Ok("per_run")
+        || !matches!(
+            mode,
+            CredentialsAccess::ServerExecute | CredentialsAccess::ShadowExecute
+        )
+    {
+        return Ok(chrono::Duration::seconds(120));
+    }
+    let timeout = std::env::var("EXECUTION_TIMEOUT_SECONDS")
+        .or_else(|_| std::env::var("EXECUTOR_TIMEOUT_SECS"))
+        .unwrap_or_else(|_| "3600".into());
+    let queue_wait =
+        std::env::var("EXECUTION_QUEUE_MAX_WAIT_SECONDS").unwrap_or_else(|_| "300".into());
+    let margin =
+        std::env::var("EXECUTION_CREDENTIAL_MARGIN_SECONDS").unwrap_or_else(|_| "120".into());
+    execution_credential_lifetime(
+        &timeout,
+        &queue_wait,
+        &margin,
+        crate::execution::queue::supervision_grace_seconds()?,
+    )
+}
+
+fn execution_credential_lifetime(
+    timeout: &str,
+    queue_wait: &str,
+    margin: &str,
+    supervision_grace: u64,
+) -> flow_like_types::Result<chrono::Duration> {
+    let bounded = |value: &str, name: &str, maximum: i64| -> flow_like_types::Result<i64> {
+        value
+            .parse::<i64>()
+            .ok()
+            .filter(|value| (1..=maximum).contains(value))
+            .ok_or_else(|| flow_like_types::anyhow!("{name} must be 1..{maximum}"))
+    };
+    Ok(chrono::Duration::seconds(
+        bounded(timeout, "EXECUTION_TIMEOUT_SECONDS", 86400)?
+            + bounded(queue_wait, "EXECUTION_QUEUE_MAX_WAIT_SECONDS", 86400)?
+            + bounded(margin, "EXECUTION_CREDENTIAL_MARGIN_SECONDS", 3600)?
+            + i64::try_from(supervision_grace)
+                .map_err(|_| flow_like_types::anyhow!("Invalid supervision grace"))?,
+    ))
+}
 
 fn scoped_mutation_lock_id(domain: &[u8], parts: &[&str]) -> i64 {
     let mut hasher = blake3::Hasher::new();
@@ -157,83 +201,48 @@ pub(crate) fn course_attempt_lock_id(user_id: &str) -> i64 {
     scoped_mutation_lock_id(b"course-attempt-user", &[user_id])
 }
 
-async fn ensure_mutation_lock<C: ConnectionTrait>(
-    connection: &C,
-    lock_id: i64,
-) -> std::result::Result<(), sea_orm::DbErr> {
-    connection
-        .execute(Statement::from_sql_and_values(
-            DatabaseBackend::Postgres,
-            ENSURE_MUTATION_LOCK_SQL,
-            [lock_id.into()],
-        ))
-        .await?;
-    Ok(())
-}
-
-async fn acquire_mutation_lock<C: ConnectionTrait>(
-    connection: &C,
-    lock_id: i64,
-) -> std::result::Result<(), sea_orm::DbErr> {
-    let result = connection
-        .execute(Statement::from_sql_and_values(
-            DatabaseBackend::Postgres,
-            ACQUIRE_MUTATION_LOCK_SQL,
-            [lock_id.into()],
-        ))
-        .await?;
-    if result.rows_affected() != 1 {
-        return Err(sea_orm::DbErr::RecordNotFound(format!(
-            "mutation lock row {lock_id} disappeared before acquisition"
-        )));
-    }
-    Ok(())
-}
-
-/// Holds both serialization layers for a canonical board mutation.
+/// Holds both serialization layers for a canonical board mutation: the process-local mutex and
+/// the committed `MutationLock` lease every API replica competes for.
 ///
-/// Dropping the transaction releases the database write intent. Call [`Self::release`] when a
-/// normal path wants to commit work performed through [`Self::connection`]; error and early-return
-/// paths can safely rely on drop/rollback.
+/// No database transaction stays open while the guard is held; callers do their row writes
+/// through [`State::transaction`] after the storage work. Dropping the guard hands the lease
+/// back in the background; [`Self::release`] waits for it so the next writer does not spin.
 pub(crate) struct BoardMutationGuard {
-    _locals: Vec<flow_like_types::tokio::sync::OwnedMutexGuard<()>>,
-    transaction: Option<DatabaseTransaction>,
+    lease: MutationLease,
 }
 
 impl BoardMutationGuard {
-    pub(crate) fn connection(&self) -> &DatabaseTransaction {
-        self.transaction
-            .as_ref()
-            .expect("mutation guard connection is unavailable after release")
-    }
-
-    /// Add another canonical board to this guard without opening a second transaction.
+    /// Add another canonical board to this guard under the same lease owner.
     ///
-    /// Page mutations first lock the globally unique page id, then add its owning board. Keeping
-    /// both database lock rows on one transaction prevents concurrent cross-board page-id claims
-    /// without consuming two pooled database connections per request.
+    /// Page mutations first lock the globally unique page id, then add its owning board, so
+    /// concurrent cross-board page-id claims serialize on the page id row.
     pub(crate) async fn acquire_additional_board(
         &mut self,
         state: &State,
         app_id: &str,
         board_id: &str,
-    ) -> std::result::Result<(), sea_orm::DbErr> {
+    ) -> std::result::Result<(), ApiError> {
         let local = state
             .board_mutation_lock(app_id, board_id)
             .lock_owned()
             .await;
-        let lock_id = board_mutation_lock_id(app_id, board_id);
-        ensure_mutation_lock(self.connection(), lock_id).await?;
-        acquire_mutation_lock(self.connection(), lock_id).await?;
-        self._locals.push(local);
-        Ok(())
+        self.lease
+            .claim_additional(state, board_mutation_lock_id(app_id, board_id), local)
+            .await
     }
 
-    pub(crate) async fn release(mut self) -> std::result::Result<(), sea_orm::DbErr> {
-        if let Some(transaction) = self.transaction.take() {
-            transaction.commit().await?;
-        }
-        Ok(())
+    /// Fail the request when the lease is no longer provably ours.
+    ///
+    /// Call immediately before every canonical board or app write made under this guard. The
+    /// heartbeat can only report a lapsed lease, never renew one retroactively: without this
+    /// check a writer whose lease expired mid-request goes on to a full-object PUT that a second
+    /// replica is already making, and the lost update is recorded as nothing but a log line.
+    pub(crate) fn ensure_held(&self) -> std::result::Result<(), ApiError> {
+        self.lease.ensure_held()
+    }
+
+    pub(crate) async fn release(self) {
+        self.lease.release().await
     }
 }
 
@@ -329,6 +338,37 @@ fn default_openid_leeway_seconds() -> u64 {
     DEFAULT_OPENID_LEEWAY_SECONDS
 }
 
+/// Statement pinning a pooled Postgres session to UTC.
+///
+/// Every timestamp column is `timestamptz`, so `date_trunc`/`to_char` and any
+/// offset-less literal resolve against the session `TimeZone`. The Rust half of
+/// the analytics endpoints is UTC by construction, so a non-UTC default would
+/// silently bucket rows onto the wrong calendar day rather than fail. The SQL
+/// in `utils::stats_period` and the telemetry timeseries pins UTC per
+/// expression; this pins it per connection so nothing new can drift.
+const PIN_SESSION_TIME_ZONE_SQL: &str = "SET TIME ZONE 'UTC'";
+
+/// Runs [`PIN_SESSION_TIME_ZONE_SQL`] on every newly established pooled
+/// connection.
+///
+/// sea-orm's own `ConnectOptions::after_connect` fires once against the whole
+/// pool, which would leave later connections unpinned; sqlx's pool-level hook
+/// is the per-connection one. Non-Postgres backends ignore this entirely.
+fn pin_session_time_zone_to_utc(opt: &mut ConnectOptions) {
+    opt.map_sqlx_postgres_pool_opts(|pool_opts| {
+        pool_opts.after_connect(|conn, _meta| {
+            Box::pin(async move {
+                sea_orm::sqlx::Executor::execute(
+                    conn,
+                    sea_orm::sqlx::AssertSqlSafe(PIN_SESSION_TIME_ZONE_SQL.to_owned()),
+                )
+                .await
+                .map(|_| ())
+            })
+        })
+    });
+}
+
 #[derive(Debug)]
 pub(crate) struct ValidatedOpenIdToken {
     pub(crate) claims: HashMap<String, Value>,
@@ -338,6 +378,7 @@ pub(crate) struct ValidatedOpenIdToken {
 pub struct State {
     pub platform_config: Hub,
     pub db: DatabaseConnection,
+    pub db_dialect: DbDialect,
     jwks: flow_like_types::tokio::sync::RwLock<JwkSet>,
     jwks_refresh: flow_like_types::tokio::sync::Mutex<JwksRefreshState>,
     pub client: Client<HttpConnector, Body>,
@@ -345,6 +386,8 @@ pub struct State {
     pub mail_client: Option<DynMailClient>,
     #[cfg(feature = "aws")]
     pub aws_client: Arc<SdkConfig>,
+    #[cfg(feature = "aws")]
+    pub(crate) scoped_sts_client: std::sync::OnceLock<aws_sdk_sts::Client>,
     pub catalog: Arc<Vec<Arc<dyn NodeLogic>>>,
     pub registry: Arc<FlowNodeRegistryInner>,
     pub provider: Arc<ModelProviderConfiguration>,
@@ -356,13 +399,16 @@ pub struct State {
     pub realtime_ice: RealtimeIceService,
     pub permission_cache: moka::sync::Cache<String, Arc<role::Model>>,
     pub credentials_cache: moka::sync::Cache<String, Arc<RuntimeCredentials>>,
+    /// Collapse simultaneous credential refreshes for one subject, app and grant.
+    credential_refresh_locks:
+        parking_lot::Mutex<HashMap<String, Weak<flow_like_types::tokio::sync::Mutex<()>>>>,
     pub state_cache: moka::sync::Cache<String, Arc<FlowLikeState>>,
     /// User+app+board-scoped typed workflow drafts retained across stateless chat HTTP requests.
     /// Each store is internally bounded; the outer TTL/cap keeps abandoned board sessions finite.
     pub flow_ir_draft_stores:
         moka::sync::Cache<String, Arc<flow_like::flow::copilot::FlowIrDraftStore>>,
     /// Process-local half of canonical app+board serialization. `board_mutation_guard` pairs each
-    /// mutex with a database lock row so API replicas enter the same mutation lane.
+    /// mutex with a leased database lock row so API replicas enter the same mutation lane.
     board_mutation_locks:
         parking_lot::Mutex<HashMap<String, Weak<flow_like_types::tokio::sync::Mutex<()>>>>,
     /// Hydrated boards pinned to the object identity they were loaded from. See
@@ -489,6 +535,64 @@ impl State {
         Ok(overlay)
     }
 
+    /// Run `body` in a transaction and retry it on a lost commit race.
+    ///
+    /// See [`crate::db::retry_transaction`] for what a body may and may not do.
+    pub async fn transaction<F, T, E>(&self, body: F) -> std::result::Result<T, E>
+    where
+        F: for<'c> Fn(
+                &'c DatabaseTransaction,
+            ) -> std::pin::Pin<
+                Box<dyn std::future::Future<Output = std::result::Result<T, E>> + Send + 'c>,
+            > + Send
+            + Sync,
+        T: Send,
+        E: From<sea_orm::DbErr>
+            + crate::db::AsDbConflict
+            + std::fmt::Display
+            + std::fmt::Debug
+            + Send,
+    {
+        crate::db::retry_transaction(
+            &self.db,
+            self.db_dialect,
+            None,
+            &crate::db::RetryPolicy::default(),
+            body,
+        )
+        .await
+    }
+
+    /// [`Self::transaction`] with an isolation level, honoured where the engine has one.
+    pub async fn transaction_with<F, T, E>(
+        &self,
+        isolation: IsolationLevel,
+        body: F,
+    ) -> std::result::Result<T, E>
+    where
+        F: for<'c> Fn(
+                &'c DatabaseTransaction,
+            ) -> std::pin::Pin<
+                Box<dyn std::future::Future<Output = std::result::Result<T, E>> + Send + 'c>,
+            > + Send
+            + Sync,
+        T: Send,
+        E: From<sea_orm::DbErr>
+            + crate::db::AsDbConflict
+            + std::fmt::Display
+            + std::fmt::Debug
+            + Send,
+    {
+        crate::db::retry_transaction(
+            &self.db,
+            self.db_dialect,
+            Some(isolation),
+            &crate::db::RetryPolicy::default(),
+            body,
+        )
+        .await
+    }
+
     fn board_mutation_lock(
         &self,
         app_id: &str,
@@ -500,48 +604,24 @@ impl State {
         )
     }
 
-    /// Open a transaction and acquire one durable, database-backed mutation lock.
-    ///
-    /// The lock row is created outside the transaction so rollback-only board mutations do not
-    /// remove it. `READ COMMITTED` gives CockroachDB durable locking reads/write intents and avoids
-    /// its retry-prone default `SERIALIZABLE` behavior for this mutex-only transaction; it also
-    /// matches PostgreSQL's default isolation.
-    pub(crate) async fn mutation_transaction(
-        &self,
-        lock_id: i64,
-    ) -> std::result::Result<DatabaseTransaction, sea_orm::DbErr> {
-        ensure_mutation_lock(&self.db, lock_id).await?;
-        let transaction = self
-            .db
-            .begin_with_config(Some(IsolationLevel::ReadCommitted), None)
-            .await?;
-        acquire_mutation_lock(&transaction, lock_id).await?;
-        Ok(transaction)
-    }
-
     /// Serialize one board writer both within this process and across API replicas.
     ///
-    /// The local mutex is acquired first to avoid spending a database connection on same-process
-    /// waiters. The database transaction remains open solely to retain its lock-row write intent
-    /// for the guard's lifetime; canonical board bytes continue to be read and written through
-    /// storage.
+    /// The local mutex is acquired first so same-process waiters never touch the database. The
+    /// lease row is then claimed in a short retried transaction and kept alive by a heartbeat;
+    /// canonical board bytes continue to be read and written through storage while it is held.
+    /// A lease that stays busy for [`crate::db::lease::LEASE_WAIT_BUDGET`] fails the request.
     pub(crate) async fn board_mutation_guard(
         &self,
         app_id: &str,
         board_id: &str,
-    ) -> std::result::Result<BoardMutationGuard, sea_orm::DbErr> {
+    ) -> std::result::Result<BoardMutationGuard, ApiError> {
         let local = self
             .board_mutation_lock(app_id, board_id)
             .lock_owned()
             .await;
-        let transaction = self
-            .mutation_transaction(board_mutation_lock_id(app_id, board_id))
-            .await?;
-
-        Ok(BoardMutationGuard {
-            _locals: vec![local],
-            transaction: Some(transaction),
-        })
+        let lease =
+            MutationLease::claim(self, board_mutation_lock_id(app_id, board_id), local).await?;
+        Ok(BoardMutationGuard { lease })
     }
 
     pub async fn new(
@@ -549,7 +629,7 @@ impl State {
         cdn_bucket: Arc<FlowLikeStore>,
         secret_store_config: Option<SecretStoreConfig>,
     ) -> Self {
-        Self::new_inner(catalog, cdn_bucket, secret_store_config, None).await
+        Self::new_inner(catalog, cdn_bucket, secret_store_config, None, None).await
     }
 
     /// Construct API state around a caller-managed database connection.
@@ -558,13 +638,24 @@ impl State {
     /// must create the pool themselves so the access token never has to be stored
     /// in `DATABASE_URL`. The standard constructor intentionally retains its
     /// existing `DATABASE_URL` behavior for all other deployment targets.
+    ///
+    /// A caller that already knows which engine it connected to passes the
+    /// `dialect`; `None` falls back to `FLOW_LIKE_DB_DIALECT` and a probe.
     pub async fn new_with_database(
         catalog: Arc<Vec<Arc<dyn NodeLogic>>>,
         cdn_bucket: Arc<FlowLikeStore>,
         secret_store_config: Option<SecretStoreConfig>,
         database: DatabaseConnection,
+        dialect: Option<DbDialect>,
     ) -> Self {
-        Self::new_inner(catalog, cdn_bucket, secret_store_config, Some(database)).await
+        Self::new_inner(
+            catalog,
+            cdn_bucket,
+            secret_store_config,
+            Some(database),
+            dialect,
+        )
+        .await
     }
 
     async fn new_inner(
@@ -572,6 +663,7 @@ impl State {
         cdn_bucket: Arc<FlowLikeStore>,
         secret_store_config: Option<SecretStoreConfig>,
         database: Option<DatabaseConnection>,
+        dialect: Option<DbDialect>,
     ) -> Self {
         let secrets = {
             let config = secret_store_config.unwrap_or_else(|| {
@@ -667,6 +759,13 @@ impl State {
                 backend_kid.clone(),
             );
             crate::audit::sign::init(backend_key.as_deref(), backend_kid);
+            let audit_verifying_keys = secrets
+                .get_secret_string(&SecretRef::new("AUDIT_VERIFYING_KEYS"))
+                .await
+                .ok()
+                .map(|value| value.expose_secret().to_string());
+            crate::audit::sign::init_verifying_keys(audit_verifying_keys.as_deref())
+                .expect("AUDIT_VERIFYING_KEYS must contain named P-256 public keys");
         }
 
         let platform_config: Hub =
@@ -720,11 +819,15 @@ impl State {
                     .await
                     .expect("DATABASE_URL must be set");
                 let mut opt = ConnectOptions::new(db_url.expose_secret().to_owned());
-                opt.max_connections(10)
-                    .min_connections(1)
+                let pool = flow_like_db::pool::PoolConfig::from_env()
+                    .expect("Invalid database connection pool configuration");
+                opt.max_connections(pool.max_connections)
+                    .min_connections(pool.min_connections)
                     .connect_timeout(Duration::from_secs(8))
+                    .acquire_timeout(Duration::from_secs(8))
                     .connect_lazy(true)
                     .sqlx_logging(platform_config.environment == Environment::Development);
+                pin_session_time_zone_to_utc(&mut opt);
 
                 Database::connect(opt)
                     .await
@@ -732,7 +835,10 @@ impl State {
             }
         };
 
-        if let Err(error) = crate::db_backfills::run_startup_backfills(&db).await {
+        let db_dialect = DbDialect::resolve(dialect, &db).await;
+        tracing::info!(dialect = %db_dialect, "database dialect resolved");
+
+        if let Err(error) = crate::db_backfills::run_startup_backfills(&db, db_dialect).await {
             tracing::warn!("Failed to run startup database backfills: {error}");
         }
 
@@ -768,7 +874,7 @@ impl State {
 
         let cache = moka::sync::Cache::builder()
             .max_capacity(32 * 1024 * 1024) // 32 MB
-            .time_to_live(Duration::from_secs(20 * 60)) // 20 minutes — credentials are valid for 1h, so cached ones always have ≥40min remaining
+            .time_to_live(Duration::from_secs(20 * 60)) // Each cache hit also checks the provider expiration.
             .build();
 
         let response_cache = moka::sync::Cache::builder()
@@ -895,6 +1001,7 @@ impl State {
         Self {
             platform_config,
             db,
+            db_dialect,
             client,
             jwks: flow_like_types::tokio::sync::RwLock::new(jwks),
             jwks_refresh: flow_like_types::tokio::sync::Mutex::new(JwksRefreshState::default()),
@@ -902,6 +1009,8 @@ impl State {
             mail_client,
             #[cfg(feature = "aws")]
             aws_client,
+            #[cfg(feature = "aws")]
+            scoped_sts_client: std::sync::OnceLock::new(),
             catalog,
             provider: Arc::new(provider),
             registry: Arc::new(registry),
@@ -967,6 +1076,7 @@ impl State {
                 .build(),
             board_load_locks: parking_lot::Mutex::new(HashMap::new()),
             credentials_cache: cache,
+            credential_refresh_locks: parking_lot::Mutex::new(HashMap::new()),
             content_bucket,
             cdn_bucket,
             meta_bucket,
@@ -1088,14 +1198,32 @@ impl State {
         app_id: &str,
         mode: CredentialsAccess,
     ) -> flow_like_types::Result<Arc<RuntimeCredentials>> {
-        let key = format!("{}:{}:{}", sub, app_id, mode);
+        let key = format!("{}:{}:{}:{}:{}", sub.len(), sub, app_id.len(), app_id, mode);
+        let minimum_lifetime = scoped_credential_minimum_lifetime(&mode)?;
         if let Some(credentials) = self.credentials_cache.get(&key) {
-            return Ok(credentials);
+            if !credentials.expires_soon(minimum_lifetime) {
+                return Ok(credentials);
+            }
         }
-        let credentials = RuntimeCredentials::scoped(sub, app_id, self, mode).await?;
-        self.credentials_cache
-            .insert(key, Arc::new(credentials.clone()));
-        Ok(Arc::new(credentials))
+        let refresh_lock = keyed_local_lock(&self.credential_refresh_locks, key.clone());
+        let _refresh = refresh_lock.lock().await;
+        // The first concurrent caller may already have renewed this grant.
+        if let Some(credentials) = self.credentials_cache.get(&key) {
+            if !credentials.expires_soon(minimum_lifetime) {
+                return Ok(credentials);
+            }
+            self.credentials_cache.invalidate(&key);
+        }
+        let credentials = Arc::new(RuntimeCredentials::scoped(sub, app_id, self, mode).await?);
+        if minimum_lifetime > chrono::Duration::seconds(120)
+            && credentials.expires_soon(minimum_lifetime)
+        {
+            bail!(
+                "Scoped execution credentials have insufficient actual lifetime for execution, queue wait and cleanup; increase the provider session duration (STS_SESSION_TTL_SECONDS for S3 STS)"
+            );
+        }
+        self.credentials_cache.insert(key, credentials.clone());
+        Ok(credentials)
     }
 
     #[tracing::instrument(
@@ -1151,7 +1279,7 @@ impl State {
     ) -> flow_like_types::Result<Board> {
         let credentials = self.scoped_credentials(sub, app_id, mode).await?;
         let app_state = Arc::new(credentials.to_state(state.clone()).await?);
-        let storage_root = Path::from("apps").child(app_id.to_string());
+        let storage_root = Path::from("apps").join(app_id.to_string());
         let board = Board::load(storage_root, board_id, app_state, version).await?;
         Ok(board)
     }
@@ -1237,7 +1365,7 @@ impl State {
 
         let cached = self.board_cache.get(&cache_key);
         let store = Board::meta_store(&app_state).await?;
-        let storage_root = Path::from("apps").child(app_id.to_string());
+        let storage_root = Path::from("apps").join(app_id.to_string());
         let read = Board::load_proto_if_changed(
             store,
             &storage_root,
@@ -1249,16 +1377,18 @@ impl State {
 
         let (proto, meta) = match read {
             ConditionalRead::NotModified => {
-                return cached.ok_or_else(|| {
+                let cached = cached.ok_or_else(|| {
                     flow_like_types::anyhow!(
                         "storage reported NotModified for {app_id}/{board_id} without a cached ETag"
                     )
-                });
+                })?;
+                cached.board.ensure_supported_format()?;
+                return Ok(cached);
             }
             ConditionalRead::Fresh(proto, meta) => (proto, meta),
         };
 
-        let board = Board::from_loaded_proto(proto, storage_root, app_state).await;
+        let board = Board::from_loaded_proto(proto, storage_root, app_state).await?;
         let entry = Arc::new(CachedBoard {
             e_tag: meta.e_tag.clone().unwrap_or_default(),
             board: Arc::new(board),
@@ -1332,7 +1462,7 @@ impl State {
         version: Option<(u32, u32, u32)>,
     ) -> flow_like_types::Result<Board> {
         let app_state = self.master_state(state).await?;
-        let storage_root = Path::from("apps").child(app_id.to_string());
+        let storage_root = Path::from("apps").join(app_id.to_string());
         let board = Board::load_template(storage_root, template_id, app_state, version).await?;
         Ok(board)
     }
@@ -1349,7 +1479,7 @@ impl State {
         let credentials = self.scoped_credentials(sub, app_id, mode).await?;
         let app_state = Arc::new(credentials.to_state(state.clone()).await?);
 
-        let storage_root = Path::from("apps").child(app_id.to_string());
+        let storage_root = Path::from("apps").join(app_id.to_string());
 
         let board = Board::load_template(storage_root, template_id, app_state, version).await?;
 
@@ -1862,10 +1992,10 @@ fn decoding_key_for_algorithm(alg: &AlgorithmParameters) -> flow_like_types::Res
 #[cfg(test)]
 mod tests {
     use super::{
-        ACQUIRE_MUTATION_LOCK_SQL, ENSURE_MUTATION_LOCK_SQL, board_mutation_lock_id,
-        board_mutation_lock_key, cached_openid_is_current, course_attempt_lock_id,
-        entra_tenant_from_issuer, flow_ir_draft_store_key, validate_jwk_for_header,
-        validate_jwks_set, validate_openid_claims,
+        board_mutation_lock_id, board_mutation_lock_key, cached_openid_is_current,
+        course_attempt_lock_id, entra_tenant_from_issuer, execution_credential_lifetime,
+        flow_ir_draft_store_key, validate_jwk_for_header, validate_jwks_set,
+        validate_openid_claims,
     };
     use flow_like_types::Value;
     use jsonwebtoken::{
@@ -1896,6 +2026,47 @@ mod tests {
             "e": "AQAB"
         }))
         .expect("valid test JWK")
+    }
+
+    #[cfg(feature = "aws")]
+    #[test]
+    fn cached_forty_minute_grant_cannot_back_a_new_hour_execution() {
+        let required = execution_credential_lifetime("3600", "300", "120", 210).unwrap();
+        let mut grant = crate::credentials::aws_credentials::AwsRuntimeCredentials::new(
+            "meta",
+            "content",
+            "logs",
+            "us-east-1",
+        );
+        grant.expiration = Some(chrono::Utc::now() + chrono::Duration::minutes(40));
+        assert!(crate::credentials::RuntimeCredentials::Aws(grant.clone()).expires_soon(required));
+        grant.expiration = Some(chrono::Utc::now() + chrono::Duration::hours(2));
+        assert!(!crate::credentials::RuntimeCredentials::Aws(grant).expires_soon(required));
+    }
+
+    #[test]
+    fn hour_run_credentials_cover_queue_wait_and_cleanup() {
+        assert_eq!(
+            execution_credential_lifetime("3600", "300", "120", 210)
+                .unwrap()
+                .num_seconds(),
+            4230
+        );
+        assert_eq!(
+            execution_credential_lifetime("30", "10", "120", 210)
+                .unwrap()
+                .num_seconds(),
+            370
+        );
+        for (timeout, queue, margin) in [
+            ("0", "300", "120"),
+            ("3600", "-1", "120"),
+            ("3600", "300", "0"),
+            ("3600", "300", "3601"),
+            ("overflow", "300", "120"),
+        ] {
+            assert!(execution_credential_lifetime(timeout, queue, margin, 210).is_err());
+        }
     }
 
     #[test]
@@ -2276,13 +2447,5 @@ mod tests {
             course_attempt_lock_id("user"),
             course_attempt_lock_id("other")
         );
-    }
-
-    #[test]
-    fn mutation_lock_sql_uses_portable_row_writes() {
-        assert!(ENSURE_MUTATION_LOCK_SQL.contains("ON CONFLICT"));
-        assert!(ACQUIRE_MUTATION_LOCK_SQL.starts_with("UPDATE"));
-        assert!(!ENSURE_MUTATION_LOCK_SQL.contains("pg_advisory"));
-        assert!(!ACQUIRE_MUTATION_LOCK_SQL.contains("pg_advisory"));
     }
 }

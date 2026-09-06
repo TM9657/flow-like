@@ -11,6 +11,7 @@ import {
 	upsertCommentCommand,
 	upsertLayerCommand,
 } from "./command/generic-command";
+import { geometrySchemasCompatible } from "./geometry";
 import { detectFormat } from "./importer/detect";
 import { translateDify } from "./importer/dify-translator";
 import { translateN8n } from "./importer/n8n-translator";
@@ -472,6 +473,18 @@ export function doPinsMatch(
 			`Invalid connection: source and target pins have the same type (${sourcePin.pin_type})`,
 		);
 		return false;
+	}
+
+	if (
+		sourcePin.data_type === IVariableType.Geometry &&
+		targetPin.data_type === IVariableType.Geometry
+	) {
+		if (sourcePin.value_type !== targetPin.value_type) return false;
+		const [output, input] =
+			sourcePin.pin_type === IPinType.Output
+				? [sourcePin, targetPin]
+				: [targetPin, sourcePin];
+		return geometrySchemasCompatible(output.schema, input.schema, refs);
 	}
 
 	// An open-object schema declares that the shape is open, not a contract to match, so it

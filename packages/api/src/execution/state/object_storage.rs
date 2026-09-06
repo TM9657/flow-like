@@ -8,6 +8,7 @@
 
 use super::{postgres::PostgresStateStore, types::*};
 use async_trait::async_trait;
+use flow_like_storage::object_store::ObjectStoreExt;
 use flow_like_storage::{
     files::store::FlowLikeStore,
     object_store::{self, ObjectStore, PutMode, PutOptions, PutPayload, UpdateVersion, path::Path},
@@ -668,7 +669,7 @@ mod stateless_import_tests {
 
     #[test]
     fn stateless_lambda_object_store_constructor_retains_sql_source() {
-        let store = memory_store(Some(Arc::new(DatabaseConnection::Disconnected)));
+        let store = memory_store(Some(Arc::new(DatabaseConnection::default())));
         assert!(store.source_run_store.is_some());
     }
 

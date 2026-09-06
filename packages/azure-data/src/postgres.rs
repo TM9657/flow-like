@@ -1,6 +1,6 @@
 //! Passwordless Azure PostgreSQL connectivity.
 //!
-//! SQLx 0.8 stores one password in `PgConnectOptions`; it does not expose an
+//! SQLx 0.9 stores one password in `PgConnectOptions`; it does not expose an
 //! asynchronous credential callback when the pool opens a new connection.
 //! An Entra access token therefore cannot be refreshed safely inside an
 //! existing SeaORM pool. This module obtains a managed-identity token at
@@ -357,13 +357,25 @@ pub async fn connect_as(
         .application_name(application_name)
         .disable_statement_logging();
 
+    let budget =
+        flow_like_db::pool::PoolConfig::from_env().map_err(PostgresAuthError::Connection)?;
     let pool = PgPoolOptions::new()
-        .max_connections(10)
-        .min_connections(1)
+        .max_connections(budget.max_connections)
+        .min_connections(budget.min_connections)
         .acquire_timeout(Duration::from_secs(8))
         .idle_timeout(Duration::from_secs(5 * 60))
         .max_lifetime(Duration::from_secs(30 * 60))
         .test_before_acquire(true)
+        .after_connect(|connection, _| {
+            Box::pin(async move {
+                sea_orm::sqlx::Executor::execute(
+                    connection,
+                    sea_orm::sqlx::AssertSqlSafe("SET TIME ZONE 'UTC'".to_owned()),
+                )
+                .await
+                .map(|_| ())
+            })
+        })
         .connect_with(pg_options)
         .await
         .map_err(|error| PostgresAuthError::Connection(error.to_string()))?;

@@ -45,6 +45,12 @@ export class EmptyBoardState implements IBoardState {
 	): Promise<IBoardSummary[]> {
 		throw new Error("Method not implemented.");
 	}
+	getBoardSummariesAuthoritative(
+		appId: string,
+		include?: IBoardSummaryInclude[],
+	): Promise<IBoardSummary[]> {
+		throw new Error("Method not implemented.");
+	}
 	getBoardVariables(appId: string): Promise<IBoardVariables[]> {
 		throw new Error("Method not implemented.");
 	}
@@ -56,6 +62,13 @@ export class EmptyBoardState implements IBoardState {
 		boardId: string,
 		version?: [number, number, number],
 		forceFresh?: boolean,
+	): Promise<IBoard> {
+		throw new Error("Method not implemented.");
+	}
+	getBoardAuthoritative(
+		appId: string,
+		boardId: string,
+		version?: [number, number, number],
 	): Promise<IBoard> {
 		throw new Error("Method not implemented.");
 	}
@@ -181,6 +194,15 @@ export class EmptyBoardState implements IBoardState {
 	}
 
 	getFlowScript(
+		appId: string,
+		boardId: string,
+		version?: [number, number, number],
+		anchors?: boolean,
+	): Promise<string> {
+		throw new Error("Method not implemented.");
+	}
+
+	getFlowScriptAuthoritative(
 		appId: string,
 		boardId: string,
 		version?: [number, number, number],

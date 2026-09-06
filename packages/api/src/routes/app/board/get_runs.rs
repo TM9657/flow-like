@@ -66,7 +66,7 @@ async fn hydrate_node_summaries(
         .scoped_credentials(sub, app_id, CredentialsAccess::ReadLogs)
         .await?;
     let logs_db_builder = credentials.into_shared_credentials().to_logs_db_builder()?;
-    let base_path = StoragePath::from("runs").child(app_id).child(board_id);
+    let base_path = StoragePath::from("runs").join(app_id).join(board_id);
     let db = logs_db_builder(base_path).execute().await?;
     let table = db.open_table("runs").execute().await?;
 
@@ -135,14 +135,14 @@ pub async fn get_runs(
     let offset = query.offset.unwrap_or(0);
 
     // Helper to convert timestamp - handles both microseconds (16+ digits) and milliseconds (13 digits)
-    let to_datetime = |ts: u64| -> Option<chrono::NaiveDateTime> {
+    let to_datetime = |ts: u64| -> Option<chrono::DateTime<chrono::FixedOffset>> {
         // If timestamp is >= 10^15, it's in microseconds, convert to millis
         let millis = if ts >= 1_000_000_000_000_000 {
             (ts / 1000) as i64
         } else {
             ts as i64
         };
-        chrono::DateTime::from_timestamp_millis(millis).map(|dt| dt.naive_utc())
+        chrono::DateTime::from_timestamp_millis(millis).map(|dt| dt.fixed_offset())
     };
 
     let mut db_query = execution_run::Entity::find()
@@ -190,12 +190,12 @@ pub async fn get_runs(
             // Convert to microseconds to match local LanceDB format
             let start = run
                 .started_at
-                .map(|dt: chrono::NaiveDateTime| dt.and_utc().timestamp_micros() as u64)
-                .unwrap_or_else(|| run.created_at.and_utc().timestamp_micros() as u64);
+                .map(|dt: chrono::DateTime<chrono::FixedOffset>| dt.timestamp_micros() as u64)
+                .unwrap_or_else(|| run.created_at.timestamp_micros() as u64);
             let end = run
                 .completed_at
-                .map(|dt: chrono::NaiveDateTime| dt.and_utc().timestamp_micros() as u64)
-                .unwrap_or_else(|| run.updated_at.and_utc().timestamp_micros() as u64);
+                .map(|dt: chrono::DateTime<chrono::FixedOffset>| dt.timestamp_micros() as u64)
+                .unwrap_or_else(|| run.updated_at.timestamp_micros() as u64);
 
             LogMeta {
                 app_id: run.app_id,

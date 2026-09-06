@@ -25,6 +25,63 @@ const schema = arrowToLanceSchema({
 });
 
 describe("arrowToLanceSchema", () => {
+	test("recognizes Arrow boolean and string view type names", () => {
+		const fields = arrowToLanceSchema({
+			fields: [
+				{ name: "active", data_type: "Boolean" },
+				{ name: "label", data_type: "Utf8View" },
+			],
+		}).fields;
+		expect(fields.map((field) => field.kind)).toEqual(["boolean", "string"]);
+	});
+
+	test("distinguishes supported GeoArrow points from interleaved points and embeddings", () => {
+		const [interleaved, point, embedding] = arrowToLanceSchema({
+			fields: [
+				{
+					name: "location",
+					data_type: { FixedSizeList: [{ data_type: "Float64" }, 2] },
+					metadata: { "ARROW:extension:name": "geoarrow.point" },
+				},
+				{
+					name: "separated_location",
+					data_type: {
+						Struct: [
+							{ name: "x", data_type: "Float64" },
+							{ name: "y", data_type: "Float64" },
+						],
+					},
+					metadata: { "ARROW:extension:name": "geoarrow.point" },
+				},
+				{
+					name: "embedding",
+					data_type: { FixedSizeList: [{ data_type: "Float64" }, 2] },
+				},
+			],
+		}).fields;
+		expect(interleaved).toMatchObject({
+			kind: "geometry",
+			indexKind: "unsupported-geometry",
+		});
+		expect(point).toMatchObject({ kind: "geometry", indexKind: "geometry" });
+		expect(embedding).toMatchObject({ kind: "vector", dims: 2 });
+		expect(embedding.indexKind).toBeUndefined();
+	});
+
+	test("preserves binary column identity for index selection", () => {
+		for (const data_type of [
+			"Binary",
+			"LargeBinary",
+			"BinaryView",
+			{ FixedSizeBinary: 8 },
+		]) {
+			const [field] = arrowToLanceSchema({
+				fields: [{ name: "payload", data_type }],
+			}).fields;
+			expect(field.indexKind).toBe("binary");
+		}
+	});
+
 	test("maps timestamp and date columns to the date kind with their unit", () => {
 		const byName = new Map(schema.fields.map((f) => [f.name, f]));
 		expect(byName.get("created_at")).toMatchObject({

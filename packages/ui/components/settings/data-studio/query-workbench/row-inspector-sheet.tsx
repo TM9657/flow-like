@@ -13,6 +13,7 @@ import { cn } from "../../../../lib/utils";
 import type { QueryColumn } from "../../../../state/backend-state/query-state";
 import { accountIdFromValue } from "../../../../state/backend-state/user-state";
 import { Button } from "../../../ui/button";
+import { GeometryDetails } from "../../../ui/geometry-cell";
 import { ScrollArea } from "../../../ui/scroll-area";
 import {
 	Sheet,
@@ -133,6 +134,11 @@ export function RowInspectorSheet({
 											>
 												{isNullish(value) ? (
 													"NULL"
+												) : kind === "geometry" ? (
+													<GeometryDetails
+														value={value}
+														metadata={column.metadata}
+													/>
 												) : kind === "temporal" ? (
 													<TemporalValue value={value} />
 												) : (

@@ -73,9 +73,10 @@ use flow_like::flow::copilot::tool_spec::{
     ARCHIVE_LOOKUP_TOOL, INTERNET_SEARCH_TOOL, MEMORY_SEARCH_TOOL, MEMORY_STORE_TOOL,
     OPEN_URL_TOOL, PlatformToolSpec, READ_ONLY_DATABASE_OPERATIONS, READ_WRITE_DATABASE_OPERATIONS,
     cross_board_source_tool_specs, data_studio_database_tool_spec,
-    data_studio_specialist_tool_specs, global_assistant_tool_specs, interact_app_page_tool_spec,
-    missing_required_args, public_web_tool_specs, resolve_tool_approval,
-    runtime_execution_tool_specs, scoped_call_app_chat_spec, scout_specialist_tool_specs,
+    data_studio_specialist_tool_specs, global_assistant_tool_specs, home_specialist_tool_specs,
+    interact_app_page_tool_spec, missing_required_args, public_web_tool_specs,
+    resolve_tool_approval, runtime_execution_tool_specs, scoped_call_app_chat_spec,
+    scout_specialist_tool_specs,
 };
 #[cfg(test)]
 use flow_like::flow::copilot::typed_ir_schema_hint;
@@ -1087,6 +1088,16 @@ pub fn create_research_tools(
 /// approval prompts surface at the top level. Public-web research is orchestrator-only too.
 pub fn create_scout_tools(bridge: FrontendToolBridge) -> Vec<(Tool, ToolHandler)> {
     scout_specialist_tool_specs()
+        .iter()
+        .map(|spec| sdk_tool_from_spec(spec, bridge.clone(), None, None))
+        .collect()
+}
+
+/// Tool set for the nested Home specialist. The shared specs define the complete authority
+/// boundary, including profile context, widget discovery, data-source discovery, validation, and
+/// the approval-gated staged layout update.
+pub fn create_home_tools(bridge: FrontendToolBridge) -> Vec<(Tool, ToolHandler)> {
+    home_specialist_tool_specs()
         .iter()
         .map(|spec| sdk_tool_from_spec(spec, bridge.clone(), None, None))
         .collect()
@@ -4978,12 +4989,13 @@ mod tests {
         for specs in [
             data_studio_specialist_tool_specs(),
             scout_specialist_tool_specs(),
+            home_specialist_tool_specs(),
         ] {
             let names = specs.iter().map(|spec| spec.name).collect::<Vec<_>>();
             for global_only_tool in [INTERNET_SEARCH_TOOL, OPEN_URL_TOOL, ARCHIVE_LOOKUP_TOOL] {
                 assert!(!names.contains(&global_only_tool));
             }
-            // Both nested specialists still identify their target app themselves.
+            // Each app-aware specialist can identify its target app itself.
             assert!(names.contains(&"list_apps"));
             assert!(names.contains(&"describe_app_interface"));
         }
@@ -4995,6 +5007,34 @@ mod tests {
             assert_ne!(tool.name, INTERNET_SEARCH_TOOL);
             assert_ne!(tool.name, OPEN_URL_TOOL);
             assert_ne!(tool.name, ARCHIVE_LOOKUP_TOOL);
+        }
+    }
+
+    #[test]
+    fn home_specialist_specs_are_an_exact_role_boundary() {
+        let names = home_specialist_tool_specs()
+            .iter()
+            .map(|spec| spec.name)
+            .collect::<HashSet<_>>();
+        assert_eq!(
+            names,
+            HashSet::from([
+                "get_home_context",
+                "get_home_widget_catalog",
+                "list_home_data_sources",
+                "validate_home_layout",
+                "apply_home_layout",
+                "list_apps",
+                "describe_app_interface",
+            ])
+        );
+        for foreign_tool in [
+            "emit_ui",
+            "database_tool",
+            "flowpilot_board",
+            INTERNET_SEARCH_TOOL,
+        ] {
+            assert!(!names.contains(foreign_tool));
         }
     }
 

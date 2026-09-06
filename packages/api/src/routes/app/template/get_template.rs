@@ -85,6 +85,7 @@ pub async fn get_template(
     // variable structure as live boards (`Board.variables` +
     // `Layer.variables`). Strip secrets before the response leaves —
     // template viewers don't need the source's secret values.
+
     filter_board_secrets(&mut template);
 
     Ok(Json(template))

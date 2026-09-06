@@ -137,7 +137,7 @@ impl NodeLogic for CreateLocalDatabaseNode {
                 }
             } else if user_scoped {
                 let user_dir = context_cache.get_user_dir(false)?;
-                let user_dir = user_dir.child("db");
+                let user_dir = user_dir.join("db");
                 context
                     .app_state
                     .config
@@ -151,7 +151,7 @@ impl NodeLogic for CreateLocalDatabaseNode {
                 )
             } else {
                 let board_dir = context_cache.get_storage(false)?;
-                let board_dir = board_dir.child("db");
+                let board_dir = board_dir.join("db");
                 context
                     .app_state
                     .config

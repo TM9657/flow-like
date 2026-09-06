@@ -212,7 +212,8 @@
 				"PathBuf",
 				"Generic",
 				"Struct",
-				"Byte"
+				"Byte",
+				"Geometry"
 			]
 		},
 		"ValueType": {
@@ -338,6 +339,13 @@
 				},
 				"updated_at": {
 					"$ref": "#/definitions/SystemTime"
+				},
+				"format_version": {
+					"description": "Minimum document format understood by readers and writers. Missing versions mean 1.",
+					"default": 1,
+					"type": "integer",
+					"format": "uint32",
+					"minimum": 0
 				}
 			}
 		},

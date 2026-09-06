@@ -1931,5 +1931,8 @@
 	"yourEntitynounStaysTitleUntilTheReviewIsComplete": "",
 	"yourMembershipEndsImmediatelyAndTheLocalCopyIsRemovedYouWillNeedANewInviteToReturn": "",
 	"yourProfile": "",
-	"yourSemanticLayer": ""
+	"yourSemanticLayer": "",
+	"geometryWgs84": "",
+	"geometryColumnHint": "",
+	"geometryBackendUpgrade": ""
 }

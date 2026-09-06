@@ -1931,5 +1931,8 @@
 	"yourEntitynounStaysTitleUntilTheReviewIsComplete": "Tu {{entityNoun}} permanece {{title}} hasta que finalice la revisión.",
 	"yourMembershipEndsImmediatelyAndTheLocalCopyIsRemovedYouWillNeedANewInviteToReturn": "",
 	"yourProfile": "Tu perfil",
-	"yourSemanticLayer": "Tu capa semántica"
+	"yourSemanticLayer": "Tu capa semántica",
+	"geometryWgs84": "",
+	"geometryColumnHint": "",
+	"geometryBackendUpgrade": ""
 }

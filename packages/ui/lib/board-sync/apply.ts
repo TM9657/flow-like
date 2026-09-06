@@ -8,6 +8,7 @@
  * a patch, untouched nodes of the patched segment — keep their object identity, which is what lets
  * React memoisation skip them.
  */
+import { boardFormatVersion } from "../board-format";
 import type { IBoard } from "../schema/flow/board";
 import type { INode, IPin } from "../schema/flow/node";
 import type {
@@ -276,6 +277,9 @@ export function applyBoardSync(
 	const meta = response.meta;
 	const board: IBoard = {
 		...base,
+		format_version: boardFormatVersion(
+			meta ? meta.format_version : base.format_version,
+		),
 		...(meta
 			? {
 					id: meta.id,

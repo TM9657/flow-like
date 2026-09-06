@@ -57329,7 +57329,7 @@ export const catalogNodes: CatalogNode[] = [
       {
         "name": "type",
         "friendlyName": "Type",
-        "description": "Index Type to build",
+        "description": "Index type to build. Vector indexes use cosine distance; VECTOR and vector AUTO retain IVF-PQ.",
         "pinType": "Input",
         "dataType": "String",
         "valueType": "Normal",
@@ -57342,7 +57342,19 @@ export const catalogNodes: CatalogNode[] = [
             "LABEL LIST",
             "FULL TEXT",
             "VECTOR",
-            "AUTO"
+            "AUTO",
+            "FM",
+            "NGRAM",
+            "ZONEMAP",
+            "BLOOMFILTER",
+            "RTREE",
+            "IVF_FLAT",
+            "IVF_PQ",
+            "IVF_SQ",
+            "IVF_RQ",
+            "IVF_HNSW_FLAT",
+            "IVF_HNSW_PQ",
+            "IVF_HNSW_SQ"
           ]
         }
       },
@@ -57571,7 +57583,7 @@ export const catalogNodes: CatalogNode[] = [
     "packageName": "data",
     "name": "add_column_local_db",
     "friendlyName": "Add Column",
-    "description": "Adds a column using a typed SQL expression (e.g. 0, '', CAST(NULL AS STRING)). LanceDB rejects bare NULL — wrap it in CAST(... AS <type>). Supported types: int, bigint, float, double, string, binary, boolean, date, timestamp.",
+    "description": "Adds a column using a typed SQL expression (e.g. 0, '', CAST(NULL AS STRING)). Flow-Like requires an explicit type for NULL. Use CAST(NULL AS <type>). Supported types: int, bigint, float, double, string, binary, boolean, date, timestamp.",
     "category": "Data/Database/Schema",
     "categoryPath": [
       "Data",
@@ -57616,7 +57628,7 @@ export const catalogNodes: CatalogNode[] = [
       {
         "name": "sql_expression",
         "friendlyName": "SQL Expression",
-        "description": "Typed SQL expression used to populate existing rows. Examples: 0, '', CAST(NULL AS STRING). Bare NULL is rejected; LanceDB supports int, bigint, float, double, string, binary, boolean, date, timestamp.",
+        "description": "Typed SQL expression used to populate existing rows. Examples: 0, '', CAST(NULL AS STRING). Flow-Like requires an explicit type for NULL. Supported types: int, bigint, float, double, string, binary, boolean, date, timestamp.",
         "pinType": "Input",
         "dataType": "String",
         "valueType": "Normal",

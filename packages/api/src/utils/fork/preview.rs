@@ -1,3 +1,4 @@
+use sea_orm::sea_query::ExprTrait;
 use std::sync::Arc;
 
 use crate::{
@@ -46,7 +47,7 @@ impl RemoteTokenSite {
 /// `forking.max_file_count` on every fork. The byte cap stays the real
 /// resource guard.
 pub fn project_db_prefix(app_prefix: &Path) -> Path {
-    app_prefix.child("storage").child("db")
+    app_prefix.clone().join("storage").join("db")
 }
 
 fn is_under_prefix(location: &Path, prefix: &Path) -> bool {
@@ -152,7 +153,7 @@ pub async fn compute_fork_size_breakdown(
         .map_err(ApiError::internal_error)?
         .as_generic();
 
-    let prefix = Path::from("apps").child(app_id.to_string());
+    let prefix = Path::from("apps").join(app_id.to_string());
     let mut breakdown = ForkSizeBreakdown::default();
 
     bucket_prefix(&meta_store, &prefix, &mut breakdown, classify_meta).await?;
@@ -165,7 +166,7 @@ pub async fn compute_fork_size_breakdown(
     // computes the true total.
     bucket_prefix(&content_store, &prefix, &mut breakdown, classify_content).await?;
 
-    let media_prefix = Path::from("media").child("apps").child(app_id.to_string());
+    let media_prefix = Path::from("media").join("apps").join(app_id.to_string());
     bucket_prefix(&content_store, &media_prefix, &mut breakdown, |_| {
         (ForkCategory::Always, true)
     })
@@ -184,6 +185,16 @@ pub async fn ensure_fork_within_limits(
     policy: &ForkPolicy,
 ) -> Result<(), ApiError> {
     let breakdown = compute_fork_size_breakdown(state, app_id).await?;
+    ensure_breakdown_within_limits(state, &breakdown, policy)
+}
+
+/// [`ensure_fork_within_limits`] for a caller that already holds the
+/// breakdown and needs it again to size the fork.
+pub fn ensure_breakdown_within_limits(
+    state: &AppState,
+    breakdown: &ForkSizeBreakdown,
+    policy: &ForkPolicy,
+) -> Result<(), ApiError> {
     let (selected_size, selected_count) = breakdown.selected(policy);
     let max_size = state.platform_config.forking.max_size_bytes;
     let max_count = state.platform_config.forking.max_file_count;
@@ -302,8 +313,8 @@ pub async fn compute_app_content_size_and_count(
         .map_err(ApiError::internal_error)?
         .as_generic();
 
-    let app_prefix = Path::from("apps").child(app_id.to_string());
-    let media_prefix = Path::from("media").child("apps").child(app_id.to_string());
+    let app_prefix = Path::from("apps").join(app_id.to_string());
+    let media_prefix = Path::from("media").join("apps").join(app_id.to_string());
     let db_prefix = project_db_prefix(&app_prefix);
 
     let (app_bytes, app_count) = sum_prefix(&content_store, &app_prefix, Some(&db_prefix)).await?;

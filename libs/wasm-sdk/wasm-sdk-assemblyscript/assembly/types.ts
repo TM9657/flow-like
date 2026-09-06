@@ -28,6 +28,7 @@ export namespace DataType {
 	export const PathBuf: string = "PathBuf";
 	export const Bytes: string = "Bytes";
 	export const Struct: string = "Struct";
+	export const Geometry: string = "Geometry";
 	export const Generic: string = "Generic";
 }
 

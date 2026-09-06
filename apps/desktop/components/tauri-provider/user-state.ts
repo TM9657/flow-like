@@ -7,6 +7,16 @@ import type {
 	IUserState,
 } from "@flow-like/flow-like-ui";
 import type {
+	IHomeDefault,
+	IHomeDefaults,
+	IHomeLayout,
+} from "@flow-like/flow-like-ui/components/home/types";
+import { parseDateValue } from "@flow-like/flow-like-ui/lib/date";
+import {
+	type MediaUploadResponse,
+	updateAccountWithAvatar,
+} from "@flow-like/flow-like-ui/lib/profile-media-upload";
+import type {
 	INotification,
 	INotificationsOverview,
 	IUserLookup,
@@ -63,9 +73,12 @@ function localToINotification(local: ILocalNotification): INotification {
 function sortNotificationsByCreatedAtDesc(
 	notifications: INotification[],
 ): INotification[] {
+	// Local rows carry an explicit-UTC instant while hub rows may not, so both
+	// sides go through the parser rather than through new Date().
 	return notifications.sort(
 		(a, b) =>
-			new Date(b.created_at).getTime() - new Date(a.created_at).getTime(),
+			(parseDateValue(b.created_at)?.getTime() ?? 0) -
+			(parseDateValue(a.created_at)?.getTime() ?? 0),
 	);
 }
 
@@ -107,6 +120,54 @@ function normalizeProfileShortcut(
 
 export class UserState implements IUserState {
 	constructor(private readonly backend: TauriBackend) {}
+
+	async getHomeDefaults(defaultId?: string): Promise<IHomeDefaults> {
+		const profile = this.backend.profile;
+		if (!profile) throw new Error("Profile context is not available");
+		const query = defaultId
+			? `?default_id=${encodeURIComponent(defaultId)}`
+			: "";
+		return fetcher<IHomeDefaults>(
+			profile,
+			`info/home-defaults${query}`,
+			{ method: "GET" },
+			this.backend.auth,
+		);
+	}
+
+	async saveHomeLayout(
+		layout: IHomeLayout | null,
+		profileId?: string,
+	): Promise<void> {
+		const id = profileId ?? (await this.getProfile()).id;
+		if (!id) throw new Error("Profile ID is required");
+		await invoke("profile_update_home_layout", {
+			profileId: id,
+			layout,
+		});
+		window.dispatchEvent(new CustomEvent("flow-like:profile-sync"));
+	}
+
+	async saveHomeDefault(
+		id: string,
+		layout: IHomeLayout | null,
+		expectedRevision?: string | null,
+	): Promise<IHomeDefault | null> {
+		const profile = this.backend.profile;
+		if (!profile) throw new Error("Profile context is not available");
+		return fetcher<IHomeDefault | null>(
+			profile,
+			`admin/home-defaults/${encodeURIComponent(id)}`,
+			{
+				method: "PUT",
+				body: JSON.stringify({
+					layout,
+					expected_revision: expectedRevision ?? null,
+				}),
+			},
+			this.backend.auth,
+		);
+	}
 
 	private hasRemoteAccessToken(): boolean {
 		return Boolean(
@@ -622,29 +683,15 @@ export class UserState implements IUserState {
 			throw new Error("Profile or auth context not available");
 		}
 
-		if (avatar) {
-			data.avatar_extension = avatar.name.split(".").pop() || "";
-		}
-
-		const response = await fetcher<{ signed_url?: string }>(
-			this.backend.profile,
-			"user/info",
-			{
-				method: "PUT",
-				body: JSON.stringify(data),
-			},
-			this.backend.auth,
+		const profile = this.backend.profile;
+		await updateAccountWithAvatar(data, avatar, (body) =>
+			fetcher<MediaUploadResponse>(
+				profile,
+				"user/info",
+				{ method: "PUT", body: JSON.stringify(body) },
+				this.backend.auth,
+			),
 		);
-
-		if (response.signed_url && avatar) {
-			await fetch(response.signed_url, {
-				method: "PUT",
-				body: avatar,
-				headers: {
-					"Content-Type": avatar.type,
-				},
-			});
-		}
 	}
 
 	async getInfo(): Promise<IUserInfo> {

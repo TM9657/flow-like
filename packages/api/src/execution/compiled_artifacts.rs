@@ -27,6 +27,7 @@ use flow_like::flow::board::Board;
 use flow_like::flow::compiled;
 use flow_like::state::{FlowNodeRegistry, FlowNodeRegistryInner};
 use flow_like_storage::object_store::ObjectStore;
+use flow_like_storage::object_store::ObjectStoreExt;
 use flow_like_storage::{Path, object_store::Error as StoreError};
 use flow_like_types::anyhow;
 use flow_like_types::dispatch::{ETAG_BOUND_LATEST_VERSION_SENTINEL, WasmPackageRef};
@@ -70,7 +71,7 @@ pub async fn ensure_compiled_artifact(
     let registry = state.artifact_registry(wasm_packages).await?;
     let fingerprint = registry.fingerprint();
     let fingerprint_hex = blake3::Hash::from_bytes(fingerprint).to_hex();
-    let storage_root = Path::from("apps").child(app_id.to_string());
+    let storage_root = Path::from("apps").join(app_id.to_string());
     let meta_store = state.meta_bucket.as_generic();
 
     if expected_etag.is_some() {
@@ -186,7 +187,7 @@ pub async fn ensure_compiled_artifact(
             )
         })?;
         let app_state = state.master_state(state).await?;
-        let board = Board::from_loaded_proto(proto, storage_root.clone(), app_state).await;
+        let board = Board::from_loaded_proto(proto, storage_root.clone(), app_state).await?;
         if board.id != board_id {
             return Err(anyhow!(
                 "exact source snapshot for Latest board {board_id} contains board {}",
@@ -280,7 +281,8 @@ async fn rehydrate_with_registry(
         node_registry: registry,
         parent: None,
     }));
-    let board = Board::from_loaded_proto(proto, storage_root.clone(), Arc::new(hydration_state)).await;
+    let board =
+        Board::from_loaded_proto(proto, storage_root.clone(), Arc::new(hydration_state)).await?;
     if board.id != board_id {
         return Err(anyhow!(
             "source for board {board_id} contains board {}",

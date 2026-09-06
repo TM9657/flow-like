@@ -101,7 +101,7 @@ async fn default_state(root: PathBuf) -> Arc<FlowLikeState> {
 async fn main() {
     let root = PathBuf::from(std::env::args().nth(1).expect("pass store root dir"));
     let state = default_state(root).await;
-    let path = Path::from("flow").child(APP_ID);
+    let path = Path::from("flow").join(APP_ID);
 
     let t = Instant::now();
     let board = Board::load(path.clone(), BOARD_ID, state.clone(), None)

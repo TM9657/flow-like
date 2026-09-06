@@ -12,8 +12,10 @@ pub mod ai_act;
 pub mod bit;
 pub mod cache;
 pub mod connections;
+pub mod deletions;
 pub mod forks;
 pub mod governance;
+pub mod home_defaults;
 pub mod logs;
 pub mod models;
 pub mod packages;
@@ -29,6 +31,7 @@ pub mod users;
 
 pub fn routes() -> Router<AppState> {
     Router::new()
+        .route("/home-defaults/{id}", put(home_defaults::save_home_default))
         .route(
             "/connections/graph",
             get(connections::get_global_connection_graph),
@@ -78,7 +81,9 @@ pub fn routes() -> Router<AppState> {
         )
         .route(
             "/publication/apps/{app_id}/board/{board_id}",
-            get(publication::get_board::get_board),
+            get(publication::get_board::get_board).route_layer(axum::middleware::from_fn(
+                super::app::board::capabilities::negotiate_board_format,
+            )),
         )
         .route(
             "/publication/apps/{app_id}/page/{page_id}",
@@ -161,6 +166,14 @@ pub fn routes() -> Router<AppState> {
         .route(
             "/forks/orphans/{app_id}/delete",
             post(forks::delete_orphan_fork),
+        )
+        // Cascade deletion jobs
+        .route("/deletions", get(deletions::list_deletion_jobs))
+        .route("/deletions/run", post(deletions::run_deletion_queue))
+        .route("/deletions/{job_id}", get(deletions::get_deletion_job))
+        .route(
+            "/deletions/{job_id}/retry",
+            post(deletions::retry_deletion_job),
         )
         // Logs / observability
         .route("/logs/errors", get(logs::list_errors::list_errors))

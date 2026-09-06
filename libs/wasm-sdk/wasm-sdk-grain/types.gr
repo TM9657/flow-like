@@ -37,6 +37,7 @@ provide enum DataType {
   TypeDate,
   PathBuf,
   Struct,
+  Geometry,
 }
 
 provide let dataTypeToString = (dt: DataType) => {
@@ -51,6 +52,7 @@ provide let dataTypeToString = (dt: DataType) => {
     TypeDate => "Date",
     PathBuf => "PathBuf",
     Struct => "Struct",
+    Geometry => "Geometry",
   }
 }
 

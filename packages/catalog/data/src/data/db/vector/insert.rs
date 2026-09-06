@@ -7,6 +7,8 @@ use flow_like::flow::{
     variable::VariableType,
 };
 #[cfg(feature = "execute")]
+use flow_like_storage::object_store::ObjectStoreExt;
+#[cfg(feature = "execute")]
 use flow_like_storage::object_store::buffered::BufReader;
 #[cfg(feature = "execute")]
 use flow_like_types::Value;

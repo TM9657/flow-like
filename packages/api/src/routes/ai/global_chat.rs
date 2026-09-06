@@ -51,8 +51,9 @@ use flow_like::copilot::{ChatImage, CopilotScope, UnifiedCopilotResponse};
 use flow_like::flow::copilot::memory::{AssistantMemory, MemoryEntry, MemoryStatus};
 use flow_like::flow::copilot::platform::{PlatformToolBridge, run_internet_search};
 use flow_like::flow::copilot::tool_spec::{
-    INTERNET_SEARCH_TOOL, PlatformToolSpec, ResolvedToolApproval, find_data_studio_tool_spec,
-    find_global_tool_spec, find_scout_tool_spec, missing_required_args, resolve_tool_approval,
+    INTERNET_SEARCH_TOOL, PlatformToolSpec, find_data_studio_tool_spec, find_global_tool_spec,
+    find_home_tool_spec_for_access, find_scout_tool_spec, missing_required_args,
+    resolve_tool_approval,
 };
 use flow_like::flow::copilot::{
     AttachmentManifestEntry, ChatMessage, GlobalDataStudioContext, GlobalOpenBoardContext,
@@ -99,8 +100,6 @@ pub fn routes() -> Router<AppState> {
 const MAX_PROMPT_CHARS: usize = 20_000;
 const MAX_HISTORY_MESSAGES: usize = 32;
 const MAX_HISTORY_MESSAGE_CHARS: usize = 8_000;
-/// Fallback dispatch timeout for a tool with no spec (specs carry their own `timeout_secs`).
-const DEFAULT_TOOL_TIMEOUT_SECS: u64 = 120;
 const MAX_ATTACHMENT_URLS: usize = 8;
 const MAX_ATTACHMENT_BYTES: usize = 512 * 1024 * 1024;
 
@@ -138,7 +137,7 @@ async fn resolve_attachment_images(urls: &[String]) -> Vec<ChatImage> {
                     .content_length()
                     .is_some_and(|len| len > MAX_ATTACHMENT_BYTES as u64)
                 {
-                    tracing::warn!(url, "[global_chat] attachment exceeds size limit, skipped");
+                    tracing::warn!("[global_chat] attachment exceeds size limit, skipped");
                     continue;
                 }
                 match response.bytes().await {
@@ -149,14 +148,18 @@ async fn resolve_attachment_images(urls: &[String]) -> Vec<ChatImage> {
                         });
                     }
                     Ok(_) => {
-                        tracing::warn!(url, "[global_chat] attachment exceeds size limit, skipped")
+                        tracing::warn!("[global_chat] attachment exceeds size limit, skipped")
                     }
                     Err(error) => {
-                        tracing::warn!(%error, url, "[global_chat] attachment read failed")
+                        let error = error.without_url();
+                        tracing::warn!(%error, "[global_chat] attachment read failed")
                     }
                 }
             }
-            Err(error) => tracing::warn!(%error, url, "[global_chat] attachment fetch failed"),
+            Err(error) => {
+                let error = error.without_url();
+                tracing::warn!(%error, "[global_chat] attachment fetch failed");
+            }
         }
     }
     images
@@ -309,11 +312,11 @@ fn profile_model_to_core(model: profile::Model) -> Profile {
         description: model.description,
         icon: model.icon,
         thumbnail: model.thumbnail,
-        interests: model.interests.unwrap_or_default(),
-        tags: model.tags.unwrap_or_default(),
+        interests: model.interests.unwrap_or_default().into(),
+        tags: model.tags.unwrap_or_default().into(),
         hub: model.hub,
         secure: true,
-        hubs: model.hubs.unwrap_or_default(),
+        hubs: model.hubs.unwrap_or_default().into(),
         apps: model
             .apps
             .and_then(|value| serde_json::from_value(value).ok()),
@@ -321,14 +324,16 @@ fn profile_model_to_core(model: profile::Model) -> Profile {
             .shortcuts
             .and_then(|value| serde_json::from_value(value).ok()),
         theme: model.theme,
-        bits: model.bit_ids.unwrap_or_default(),
+        home_layout: model.home_layout,
+        home_default_id: model.home_default_id,
+        bits: model.bit_ids.unwrap_or_default().into(),
         custom_bits: vec![],
         settings: model
             .settings
             .and_then(|value| serde_json::from_value(value).ok())
             .unwrap_or_default(),
-        updated: model.updated_at.to_string(),
-        created: model.created_at.to_string(),
+        updated: model.updated_at.to_rfc3339(),
+        created: model.created_at.to_rfc3339(),
     }
 }
 
@@ -569,6 +574,7 @@ pub(crate) struct ServerPlatformBridge {
     /// Set when this bridge serves a nested specialist rather than the root orchestrator. It picks
     /// the tool specs approval/timeouts are read from.
     specialist: Option<PlatformSpecialist>,
+    read_only: bool,
 }
 
 impl ServerPlatformBridge {
@@ -581,6 +587,7 @@ impl ServerPlatformBridge {
             channel,
             frames,
             specialist: None,
+            read_only: false,
         }
     }
 
@@ -594,14 +601,97 @@ impl ServerPlatformBridge {
             channel,
             frames,
             specialist: Some(specialist),
+            read_only: false,
         }
     }
 
+    pub(crate) fn with_read_only(mut self, read_only: bool) -> Self {
+        self.read_only = read_only;
+        self
+    }
+
     fn tool_spec(&self, tool_name: &str) -> Option<PlatformToolSpec> {
-        match self.specialist {
-            None => find_global_tool_spec(tool_name),
-            Some(PlatformSpecialist::DataStudio) => find_data_studio_tool_spec(tool_name),
-            Some(PlatformSpecialist::Scout) => find_scout_tool_spec(tool_name),
+        server_platform_tool_spec(self.specialist, tool_name, self.read_only)
+    }
+}
+
+fn server_platform_tool_spec(
+    specialist: Option<PlatformSpecialist>,
+    tool_name: &str,
+    read_only: bool,
+) -> Option<PlatformToolSpec> {
+    match specialist {
+        None => find_global_tool_spec(tool_name),
+        Some(PlatformSpecialist::DataStudio) if read_only => None,
+        Some(PlatformSpecialist::DataStudio) => find_data_studio_tool_spec(tool_name),
+        Some(PlatformSpecialist::Scout) => find_scout_tool_spec(tool_name),
+        Some(PlatformSpecialist::Home) => find_home_tool_spec_for_access(tool_name, read_only),
+    }
+}
+
+#[cfg(test)]
+mod specialist_tool_spec_tests {
+    use super::*;
+
+    #[flow_like_types::tokio::test]
+    async fn home_read_only_bridge_rejects_apply_without_emitting_a_request() {
+        let channel = flow_like_types::channel::InProcessChannel::register(
+            "home-read-only-bridge-test",
+            Duration::from_secs(30),
+        )
+        .await;
+        let (frames, mut received) = mpsc::unbounded_channel();
+        let bridge =
+            ServerPlatformBridge::specialist(channel.clone(), frames, PlatformSpecialist::Home)
+                .with_read_only(true);
+        for tool_name in ["apply_home_layout", "database_tool", "unknown_tool"] {
+            let result = flow_like_types::tokio::time::timeout(
+                Duration::from_secs(1),
+                bridge.call(tool_name, json!({})),
+            )
+            .await
+            .expect("unavailable tools must not open a pending request");
+            let result: Value = serde_json::from_str(&result).unwrap();
+            assert_eq!(result["status"], "error");
+            assert_eq!(result["code"], "platform_tool_not_advertised");
+            assert!(matches!(
+                received.try_recv(),
+                Err(mpsc::error::TryRecvError::Empty)
+            ));
+        }
+        for tool_name in ["get_home_context", "validate_home_layout", "list_apps"] {
+            assert!(bridge.tool_spec(tool_name).is_some());
+        }
+        assert!(
+            server_platform_tool_spec(Some(PlatformSpecialist::Home), "apply_home_layout", false)
+                .is_some()
+        );
+        channel.close().await;
+    }
+
+    #[test]
+    fn home_specialist_resolves_only_its_scoped_tools() {
+        for tool_name in [
+            "get_home_context",
+            "get_home_widget_catalog",
+            "list_home_data_sources",
+            "validate_home_layout",
+            "apply_home_layout",
+            "list_apps",
+            "describe_app_interface",
+        ] {
+            assert!(
+                server_platform_tool_spec(Some(PlatformSpecialist::Home), tool_name, false)
+                    .is_some(),
+                "Home bridge cannot resolve {tool_name}"
+            );
+        }
+        for foreign_tool in ["flowpilot_board", "emit_ui", "database_tool"] {
+            assert!(
+                server_platform_tool_spec(Some(PlatformSpecialist::Home), foreign_tool, false)
+                    .is_none(),
+                "Home bridge must reject {foreign_tool}"
+            );
         }
     }
 }
@@ -643,13 +733,20 @@ impl PlatformToolBridge for ServerPlatformBridge {
     }
 
     async fn call(&self, tool_name: &str, arguments: Value) -> String {
-        let spec = self.tool_spec(tool_name);
+        let Some(spec) = self.tool_spec(tool_name) else {
+            return json!({
+                "status": "error",
+                "tool": tool_name,
+                "code": "platform_tool_not_advertised",
+                "retryable": false,
+                "message": "This tool is unavailable in the active FlowPilot surface and was not executed."
+            })
+            .to_string();
+        };
 
         // Reject calls with missing required arguments before any approval dialog or dispatch, so the
         // model retries with complete arguments (same guard as the desktop / SDK backends).
-        if let Some(spec) = &spec
-            && let Some(error) = missing_required_args(spec, &arguments)
-        {
+        if let Some(error) = missing_required_args(&spec, &arguments) {
             return json!({ "status": "error", "error": error }).to_string();
         }
 
@@ -661,10 +758,8 @@ impl PlatformToolBridge for ServerPlatformBridge {
                 .unwrap_or_else(|_| "{\"status\":\"error\"}".to_string());
         }
 
-        let (approval, timeout_secs) = match &spec {
-            Some(spec) => (resolve_tool_approval(spec, &arguments), spec.timeout_secs),
-            None => (ResolvedToolApproval::none(), DEFAULT_TOOL_TIMEOUT_SECS),
-        };
+        let approval = resolve_tool_approval(&spec, &arguments);
+        let timeout_secs = spec.timeout_secs;
 
         // Register BEFORE announcing, so a reply that races the frame always finds its
         // registration. Any instance (or the cloud transport) can then deliver the reply.

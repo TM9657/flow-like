@@ -1,7 +1,7 @@
 #!/usr/bin/env bun
 
 import { type ChildProcess, spawn, spawnSync } from "node:child_process";
-import { randomBytes } from "node:crypto";
+import { randomBytes, timingSafeEqual } from "node:crypto";
 import { mkdir, open, readFile, stat, unlink } from "node:fs/promises";
 import { arch, platform, tmpdir } from "node:os";
 import { dirname, resolve } from "node:path";
@@ -13,7 +13,9 @@ import {
 	type FlowPilotE2ECaseId,
 	type FlowPilotE2ECliEnvelope,
 	type FlowPilotE2EModelKey,
+	type FlowPilotE2ETier,
 	buildCasePrompt,
+	createFlowPilotE2EEvaluationIdentity,
 	flowPilotE2ECaseRunTimeoutMs,
 	flowPilotE2ECliExitCode,
 	flowPilotE2EModel,
@@ -22,6 +24,7 @@ import {
 	normalizeFlowPilotE2ECliEnvelope,
 	resolveFlowPilotE2EModelKey,
 	resolveFlowPilotE2ERunCases,
+	resolveFlowPilotE2ETier,
 } from "../lib/flowpilot-e2e";
 
 const scriptDir = dirname(fileURLToPath(import.meta.url));
@@ -34,10 +37,20 @@ const CASE_OVERHEAD_MS = 5 * 60_000;
 const DEFAULT_STARTUP_TIMEOUT_MS = 5 * 60_000;
 const CALLBACK_BODY_LIMIT = 256 * 1024 * 1024;
 
+export function constantTimeEqual(left: string, right: string): boolean {
+	const leftBytes = Buffer.from(left);
+	const rightBytes = Buffer.from(right);
+	return (
+		leftBytes.length === rightBytes.length &&
+		timingSafeEqual(leftBytes, rightBytes)
+	);
+}
+
 export interface CliOptions {
 	caseIds: FlowPilotE2ECaseId[];
 	suite?: "smoke" | "full";
 	modelKey: FlowPilotE2EModelKey;
+	tier: FlowPilotE2ETier;
 	minChars?: number;
 	repeat: number;
 	concurrency: number;
@@ -76,6 +89,7 @@ Options:
   --case <id>             Select a case; repeat the flag for an ordered subset
   --suite <smoke|full>    Select the three-case smoke suite or all cases (default: smoke)
   --model <${FLOWPILOT_E2E_MODEL_KEYS.join("|")}>    Pin the benchmark model, by alias or model id (default: ${FLOWPILOT_E2E_DEFAULT_MODEL_KEY})
+  --tier <structural|behavioral>  Validation tier (default: structural)
   --min-chars <n>         Override the non-whitespace FlowScript sanity floor
   --repeat <n>            Repeat each selected case, 1-${MAX_REPEAT} (default: 1)
   --concurrency <n>       Cases in flight at once, 1-${MAX_CONCURRENCY} (default: 1; not with --fail-fast)
@@ -122,6 +136,7 @@ export function parseArgs(args: string[]): CliOptions {
 	const options: CliOptions = {
 		caseIds: [],
 		modelKey: FLOWPILOT_E2E_DEFAULT_MODEL_KEY,
+		tier: "structural",
 		repeat: 1,
 		concurrency: 1,
 		failFast: false,
@@ -168,6 +183,10 @@ export function parseArgs(args: string[]): CliOptions {
 			const [value, consumed] = valueAfter(normalizedArgs, index, "--model");
 			index = consumed;
 			options.modelKey = resolveFlowPilotE2EModelKey(value);
+		} else if (arg === "--tier" || arg.startsWith("--tier=")) {
+			const [value, consumed] = valueAfter(normalizedArgs, index, "--tier");
+			index = consumed;
+			options.tier = resolveFlowPilotE2ETier(value);
 		} else if (arg === "--min-chars" || arg.startsWith("--min-chars=")) {
 			const [value, consumed] = valueAfter(
 				normalizedArgs,
@@ -578,7 +597,14 @@ function printDryRun(options: CliOptions): void {
 	);
 	const value = {
 		modelKey: options.modelKey,
+		tier: options.tier,
 		model: flowPilotE2EModel(options.modelKey),
+		evaluationIdentity: createFlowPilotE2EEvaluationIdentity(
+			flowPilotE2EModel(options.modelKey),
+			options.tier,
+			definitions,
+			options.minChars,
+		),
 		repeat: options.repeat,
 		failFast: options.failFast,
 		prompts,
@@ -604,7 +630,7 @@ function printEnvelope(
 		return;
 	}
 	console.log(
-		`${envelope.passed ? "PASS" : "FAIL"} FlowPilot E2E (${envelope.selection.modelKey}): ${envelope.summary.passed}/${envelope.summary.requestedRuns} runs passed in ${Math.round(envelope.durationMs / 1000)}s`,
+		`${envelope.passed ? "PASS" : "FAIL"} FlowPilot E2E (${envelope.selection.modelKey}, ${resolveFlowPilotE2ETier(envelope.selection.tier)}): ${envelope.summary.passed}/${envelope.summary.requestedRuns} runs passed in ${Math.round(envelope.durationMs / 1000)}s`,
 	);
 	if (envelope.error) console.log(`Infrastructure: ${envelope.error}`);
 	for (const artifact of envelope.artifacts) {
@@ -663,6 +689,13 @@ async function run(options: CliOptions): Promise<number> {
 			runId,
 			caseIds: definitions.map((item) => item.id),
 			modelKey: options.modelKey,
+			tier: options.tier,
+			evaluationIdentity: createFlowPilotE2EEvaluationIdentity(
+				flowPilotE2EModel(options.modelKey),
+				options.tier,
+				definitions,
+				options.minChars,
+			),
 			repeat: options.repeat,
 			minFlowScriptNonWhitespaceChars: options.minChars,
 			failFast: options.failFast,
@@ -679,7 +712,7 @@ async function run(options: CliOptions): Promise<number> {
 					"access-control-allow-headers": "content-type",
 					vary: "Origin",
 				};
-				if (url.pathname !== `/${nonce}`)
+				if (!constantTimeEqual(url.pathname, `/${nonce}`))
 					return new Response("Not found", { status: 404 });
 				const origin = request.headers.get("origin");
 				if (origin && origin !== runnerUrl.origin) {
@@ -738,6 +771,7 @@ async function run(options: CliOptions): Promise<number> {
 			definitions.map((item) => item.id).join(","),
 		);
 		runnerUrl.searchParams.set("model", options.modelKey);
+		runnerUrl.searchParams.set("tier", options.tier);
 		runnerUrl.searchParams.set("repeat", String(options.repeat));
 		runnerUrl.searchParams.set("concurrency", String(options.concurrency));
 		if (options.minChars !== undefined) {

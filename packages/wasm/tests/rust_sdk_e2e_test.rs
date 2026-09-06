@@ -108,18 +108,39 @@ async fn test_rust_sdk_get_nodes_returns_template_nodes() {
         .call_get_nodes()
         .await
         .expect("call_get_nodes failed");
-    assert_eq!(nodes.len(), 6, "Template should expose exactly 6 nodes");
-
-    let names: Vec<&str> = nodes.iter().map(|n| n.name.as_str()).collect();
-    assert!(names.contains(&"repeat_text"), "Missing repeat_text node");
-    assert!(names.contains(&"char_count"), "Missing char_count node");
-    assert!(names.contains(&"greeting"), "Missing greeting node");
-    assert!(names.contains(&"file_writer"), "Missing file_writer node");
-    assert!(names.contains(&"file_reader"), "Missing file_reader node");
-    assert!(
-        names.contains(&"weather_agent"),
-        "Missing weather_agent node"
+    let expected_names = [
+        "repeat_text",
+        "char_count",
+        "greeting",
+        "file_writer",
+        "file_reader",
+        "weather_agent",
+        "object_create_buffer",
+        "object_append_buffer",
+        "object_read_buffer",
+        "object_close_buffer",
+        "object_create_cursor",
+        "object_next_item",
+        "object_finish_cursor",
+        "tcp_start_listener",
+        "tcp_accept_connection",
+        "tcp_send_text",
+        "tcp_poll_send",
+        "tcp_close_listener",
+        "tcp_close_connection",
+    ];
+    assert_eq!(
+        nodes.len(),
+        expected_names.len(),
+        "Template should expose all example nodes"
     );
+    let names: Vec<&str> = nodes.iter().map(|n| n.name.as_str()).collect();
+    for expected_name in expected_names {
+        assert!(
+            names.contains(&expected_name),
+            "Missing {expected_name} node"
+        );
+    }
 }
 
 #[tokio::test]

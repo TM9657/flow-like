@@ -18,6 +18,7 @@ import {
 	Copy,
 	FileIcon,
 	Hash,
+	MapPinIcon,
 	MoreHorizontal,
 	ToggleLeft,
 	Type,
@@ -38,6 +39,7 @@ import {
 	DropdownMenuSeparator,
 	DropdownMenuTrigger,
 } from "../../../ui/dropdown-menu";
+import { GeometryCell } from "../../../ui/geometry-cell";
 import { RelativeTime } from "../../../ui/relative-time";
 import { StorageFileCell } from "../../../ui/storage-file-cell";
 import { UserInlineTag } from "../../../ui/user-identity";
@@ -58,9 +60,11 @@ type ResultRow = Record<string, unknown>;
 interface ColumnMeta {
 	kind: ColumnKind;
 	typeName: string;
+	metadata?: Record<string, string>;
 }
 
 const KIND_ICON: Record<ColumnKind, typeof Hash> = {
+	geometry: MapPinIcon,
 	number: Hash,
 	temporal: Calendar,
 	boolean: ToggleLeft,
@@ -73,7 +77,7 @@ const KIND_ICON: Record<ColumnKind, typeof Hash> = {
 function sizeForKind(kind: ColumnKind): number {
 	if (kind === "number" || kind === "boolean") return 130;
 	if (kind === "temporal" || kind === "user") return 190;
-	if (kind === "file") return 240;
+	if (kind === "file" || kind === "geometry") return 240;
 	return 200;
 }
 
@@ -87,18 +91,22 @@ function CellContent({
 	kind,
 	name,
 	appId,
+	metadata,
 }: Readonly<{
 	value: unknown;
 	kind: ColumnKind;
 	name: string;
 	appId?: string;
+	metadata?: Record<string, string>;
 }>) {
 	const { t } = useTranslation("settings");
 	if (isNullish(value)) {
 		return (
-			<span className="select-none italic text-muted-foreground/50">{`NULL`}</span>
+			<span className="select-none italic text-muted-foreground/50">NULL</span>
 		);
 	}
+	if (kind === "geometry")
+		return <GeometryCell value={value} metadata={metadata} />;
 	if (kind === "boolean") {
 		const truthy = value === true || value === "true" || value === 1;
 		return (
@@ -241,6 +249,7 @@ export function QueryResultTable({
 			map.set(column.name, {
 				kind: classifyResultColumn(column, rows, appId),
 				typeName: column.type_name,
+				metadata: column.metadata,
 			});
 		return map;
 	}, [columns, rows, appId]);
@@ -431,6 +440,7 @@ export function QueryResultTable({
 													<CellContent
 														value={value}
 														kind={meta.kind}
+														metadata={meta.metadata}
 														name={cell.column.id}
 														appId={appId}
 													/>

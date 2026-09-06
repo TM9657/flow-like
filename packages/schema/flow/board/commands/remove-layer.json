@@ -485,7 +485,8 @@
 				"PathBuf",
 				"Generic",
 				"Struct",
-				"Byte"
+				"Byte",
+				"Geometry"
 			]
 		},
 		"ValueType": {

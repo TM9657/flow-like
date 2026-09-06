@@ -24,6 +24,8 @@ members = [
     "apps/backend/aws/executor-ecs",
     "apps/backend/azure/api",
     "apps/backend/azure/queue-worker",
+    "packages/aws-data",
+    "packages/db",
     "packages/azure-data",
     "apps/backend/gcp/api",
     "apps/backend/gcp/queue-worker",
@@ -39,6 +41,7 @@ members = [
     "apps/backend/kubernetes/executor",
     "apps/backend/kubernetes/compiler",
     "apps/backend/kubernetes/sink-trigger",
+    "apps/backend/execution-manager",
     "apps/backend/docker-compose/api",
     "apps/backend/docker-compose/runtime",
     "apps/backend/docker-compose/sink-services",
@@ -49,6 +52,7 @@ members = [
     "packages/model-provider",
     "packages/model-provider/protocol",
     "packages/types",
+    "packages/geometry",
     "packages/types/contracts",
     "packages/types/proto",
     "packages/catalog",
@@ -82,12 +86,69 @@ members = [
     "apps/utils/board-decoder",
     "apps/utils/flowscript-render-data",
     "packages/dexie-tauri-adapter/backend",
+    "packages/catalog/embedding",
+    "packages/core/a2ui-schema",
+    "packages/types/data-url",
+    "packages/core/editor-contracts",
+    "packages/catalog/std-runtime",
+    "packages/catalog/data/notion",
+    "packages/catalog/media-video",
+    "packages/catalog/data/databricks",
+    "packages/catalog/data/microsoft",
+    "packages/catalog/std-numbers",
+    "packages/catalog/data/google",
+    "packages/catalog/web-discord",
+    "packages/catalog/web-telegram",
+    "packages/catalog/data/atlassian",
+    "packages/catalog/media-support",
+    "packages/catalog/data/github",
+    "packages/catalog/web-mail",
+    "packages/catalog/std-ui",
+    "packages/catalog/media-image",
+    "packages/catalog/data/support",
+    "packages/catalog/data/linkedin",
+    "packages/catalog/std-support",
+    "packages/catalog/media-audio",
+    "packages/catalog/std-values",
+    "packages/catalog/media-document",
+    "packages/catalog/std-text",
+    "packages/core/runtime",
+    "packages/core/editor",
 ]
 
 [workspace.dependencies]
+flow-like-editor = { path = "packages/core/editor", default-features = false }
+flow-like-runtime = { path = "packages/core/runtime", default-features = false }
+flow-like-catalog-media-document = { path = "packages/catalog/media-document", default-features = false }
+flow-like-catalog-media-audio = { path = "packages/catalog/media-audio", default-features = false }
+flow-like-catalog-media-image = { path = "packages/catalog/media-image", default-features = false }
+flow-like-catalog-web-mail = { path = "packages/catalog/web-mail", default-features = false }
+flow-like-catalog-media-support = { path = "packages/catalog/media-support", default-features = false }
+flow-like-catalog-web-telegram = { path = "packages/catalog/web-telegram", default-features = false }
+flow-like-catalog-web-discord = { path = "packages/catalog/web-discord", default-features = false }
+flow-like-catalog-media-video = { path = "packages/catalog/media-video", default-features = false }
+flow-like-editor-contracts = { path = "packages/core/editor-contracts", default-features = false }
+flow-like-types-data-url = { path = "packages/types/data-url", default-features = false }
+flow-like-catalog-data-linkedin = { path = "packages/catalog/data/linkedin", default-features = false }
+flow-like-catalog-data-databricks = { path = "packages/catalog/data/databricks", default-features = false }
+flow-like-catalog-data-notion = { path = "packages/catalog/data/notion", default-features = false }
+flow-like-catalog-data-atlassian = { path = "packages/catalog/data/atlassian", default-features = false }
+flow-like-catalog-data-microsoft = { path = "packages/catalog/data/microsoft", default-features = false }
+flow-like-catalog-data-google = { path = "packages/catalog/data/google", default-features = false }
+flow-like-catalog-data-github = { path = "packages/catalog/data/github", default-features = false }
+flow-like-catalog-data-support = { path = "packages/catalog/data/support", default-features = false }
+flow-like-catalog-std-support = { path = "packages/catalog/std-support", default-features = false }
+flow-like-catalog-std-runtime = { path = "packages/catalog/std-runtime", default-features = false }
+flow-like-catalog-std-text = { path = "packages/catalog/std-text", default-features = false }
+flow-like-catalog-std-numbers = { path = "packages/catalog/std-numbers", default-features = false }
+flow-like-catalog-std-values = { path = "packages/catalog/std-values", default-features = false }
+flow-like-catalog-std-ui = { path = "packages/catalog/std-ui", default-features = false }
+flow-like-a2ui-schema = { path = "packages/core/a2ui-schema", default-features = false }
+flow-like-catalog-embedding = { path = "packages/catalog/embedding", default-features = false }
 flow-like = { path = "packages/core", default-features = false, features = ["flow-metadata"] }
 flow-like-ast = { path = "packages/ast" }
 flow-like-types = { path = "packages/types", default-features = false }
+flow-like-geometry = { path = "packages/geometry" }
 flow-like-types-contracts = { path = "packages/types/contracts", default-features = false }
 flow-like-types-proto = { path = "packages/types/proto", default-features = false }
 flow-like-api = { path = "packages/api", default-features = false }
@@ -120,6 +181,8 @@ flow-like-compiler = { path = "packages/compiler" }
 flow-like-wasm = { path = "packages/wasm" }
 flow-like-wasm-schema = { path = "packages/wasm/schema", default-features = false }
 flow-like-secrets = { path = "packages/secrets" }
+flow-like-aws-data = { path = "packages/aws-data" }
+flow-like-db = { path = "packages/db" }
 flow-like-azure-data = { path = "packages/azure-data" }
 flow-like-gcp-data = { path = "packages/gcp-data" }
 flow-like-scheduler-tick = { path = "packages/scheduler-tick" }
@@ -136,7 +199,7 @@ icalendar = "0.17.4"
 uuid = { version = "1.19.0", features = ["v4", "serde"] }
 iana-time-zone = "0.1.64"
 axum = {version="0.8.4", features=["http2", "multipart"]}
-sea-orm = { version = "1.1.17", features = ["sqlx-postgres", "runtime-tokio-rustls", "macros", "with-json", "seaography" ] }
+sea-orm = { version = "2.0.2", features = ["sqlx-postgres", "runtime-tokio-rustls", "macros", "with-json"] }
 tower = "0.5.2"
 tracing-subscriber = "0.3.22"
 dotenv = "0.15.0"
@@ -144,17 +207,16 @@ jsonwebtoken = { version = "10.3.0", features = ["rust_crypto"] }
 hyper = {version = "1.5.2", features = ["full", "client"]}
 hyper-util = {version = "0.1.10", features = ["full"]}
 tracing = "0.1.41"
-sentry-tracing = "0.46.2"
-sentry = { version = "0.46.2", default-features = false, features = ["anyhow", "backtrace", "contexts", "debug-images", "panic", "release-health", "reqwest", "rustls", "tokio"] }
-sentry-tower = { version = "0.46.2", features = ["axum", "axum-matched-path"] }
 tower-http = {version="0.6.6", features = ["full"]}
 async-stripe = {version="0.41.0", features = ["runtime-tokio-hyper"]}
 futures-util = "0.3.31"
 moka = { version = "0.12.11", features = ["sync"] }
 bitflags = "2.9.4"
 blake3 = "1.8.2"
+constant_time_eq = "0.4.2"
 lambda_runtime = "0.14.2"
 aws-config = "1.11.0"
+aurora-dsql-sqlx-connector = { version = "0.2.2", features = ["pool", "occ"] }
 aws-sdk-cloudwatch = { version = "1.127.0", default-features = false, features = ["default-https-client", "rt-tokio"] }
 aws-sdk-dynamodb = { version = "1.80.0", default-features = false, features = ["default-https-client", "rt-tokio"] }
 aws-sdk-lambda = { version = "1.120", default-features = false, features = ["default-https-client", "rt-tokio"] }
@@ -205,7 +267,7 @@ thiserror = "2.0.17"
 mimalloc = { version = "0.1.48", default-features = false }
 lettre = { version = "0.11.22", default-features = false, features = ["tokio1-rustls-tls", "builder", "hostname", "pool", "smtp-transport"] }
 reqwest = { version = "0.12.28", default-features = false, features = ["json", "rustls-tls"] }
-markitdown = { git = "https://github.com/Rheosoph/markitdown-rs.git", rev = "2dac5f1", default-features = false, features = ["rustls-tls", "static-liblzma"] }
+markitdown = { git = "https://github.com/Rheosoph/markitdown-rs.git", rev = "1bd98da0de6f90143b25452d74b275da21f2d175", default-features = false, features = ["rustls-tls", "static-liblzma"] }
 kube = { version = "0.98", features = ["runtime", "derive"] }
 k8s-openapi = { version = "0.24", features = ["v1_32"] }
 percent-encoding = "2.3.2"
@@ -219,7 +281,7 @@ sourcemap = "9.3"
 
 rdev = { git = "https://github.com/Rheosoph/rdev", branch = "macos-thread-safety" }
 
-wasmtime = { version = "47.0.3", default-features = false, features = [
+wasmtime = { version = "48.0.1", default-features = false, features = [
     "anyhow",
     "async",
     "component-model",
@@ -234,10 +296,34 @@ wasmtime = { version = "47.0.3", default-features = false, features = [
     "threads",
     "wit-parser",
 ] }
-wasmtime-wasi = "47.0.3"
-wasmtime-wasi-http = "47.0.3"
+wasmtime-wasi = "48.0.1"
+wasmtime-wasi-http = "48.0.1"
 
 [patch.crates-io]
+# Pin the complete Lance workspace to the create-only commit fix. Its crates
+# must share a source because their public types cross crate boundaries.
+lance = { git = "https://github.com/Rheosoph/lance.git", rev = "82a122e817e1cd61af9d3bc20aee9600fae066f9" }
+lance-arrow = { git = "https://github.com/Rheosoph/lance.git", rev = "82a122e817e1cd61af9d3bc20aee9600fae066f9" }
+lance-core = { git = "https://github.com/Rheosoph/lance.git", rev = "82a122e817e1cd61af9d3bc20aee9600fae066f9" }
+lance-datafusion = { git = "https://github.com/Rheosoph/lance.git", rev = "82a122e817e1cd61af9d3bc20aee9600fae066f9" }
+lance-datagen = { git = "https://github.com/Rheosoph/lance.git", rev = "82a122e817e1cd61af9d3bc20aee9600fae066f9" }
+lance-derive = { git = "https://github.com/Rheosoph/lance.git", rev = "82a122e817e1cd61af9d3bc20aee9600fae066f9" }
+lance-encoding = { git = "https://github.com/Rheosoph/lance.git", rev = "82a122e817e1cd61af9d3bc20aee9600fae066f9" }
+lance-file = { git = "https://github.com/Rheosoph/lance.git", rev = "82a122e817e1cd61af9d3bc20aee9600fae066f9" }
+lance-geo = { git = "https://github.com/Rheosoph/lance.git", rev = "82a122e817e1cd61af9d3bc20aee9600fae066f9" }
+lance-index = { git = "https://github.com/Rheosoph/lance.git", rev = "82a122e817e1cd61af9d3bc20aee9600fae066f9" }
+lance-io = { git = "https://github.com/Rheosoph/lance.git", rev = "82a122e817e1cd61af9d3bc20aee9600fae066f9" }
+lance-linalg = { git = "https://github.com/Rheosoph/lance.git", rev = "82a122e817e1cd61af9d3bc20aee9600fae066f9" }
+lance-namespace = { git = "https://github.com/Rheosoph/lance.git", rev = "82a122e817e1cd61af9d3bc20aee9600fae066f9" }
+lance-namespace-impls = { git = "https://github.com/Rheosoph/lance.git", rev = "82a122e817e1cd61af9d3bc20aee9600fae066f9" }
+lance-select = { git = "https://github.com/Rheosoph/lance.git", rev = "82a122e817e1cd61af9d3bc20aee9600fae066f9" }
+lance-tokenizer = { git = "https://github.com/Rheosoph/lance.git", rev = "82a122e817e1cd61af9d3bc20aee9600fae066f9" }
+lance-table = { git = "https://github.com/Rheosoph/lance.git", rev = "82a122e817e1cd61af9d3bc20aee9600fae066f9" }
+lance-testing = { git = "https://github.com/Rheosoph/lance.git", rev = "82a122e817e1cd61af9d3bc20aee9600fae066f9" }
+lance-arrow-scalar = { git = "https://github.com/Rheosoph/lance.git", rev = "82a122e817e1cd61af9d3bc20aee9600fae066f9" }
+lance-arrow-stats = { git = "https://github.com/Rheosoph/lance.git", rev = "82a122e817e1cd61af9d3bc20aee9600fae066f9" }
+lance-bitpacking = { git = "https://github.com/Rheosoph/lance.git", rev = "82a122e817e1cd61af9d3bc20aee9600fae066f9" }
+fsst = { git = "https://github.com/Rheosoph/lance.git", rev = "82a122e817e1cd61af9d3bc20aee9600fae066f9" }
 # Fix Windows CRT mismatch (upstream hardcodes static CRT /MT,
 # conflicting with ort_sys which uses dynamic CRT /MD -> LNK2038).
 esaxx-rs = { git = "https://github.com/Rheosoph/esaxx-rs.git", branch = "main" }

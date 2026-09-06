@@ -9,7 +9,7 @@ use crate::resolve::{fetch_bounded, max_remote_payload_bytes};
 use crate::types::{EventType, ExecutionEvent, ExecutionRequest, ExecutionResult, ExecutionStatus};
 use crate::widgets::{HubAccess, HubWidgetSource};
 use flow_like::credentials::StoreType;
-use flow_like::flow::compiled::{CompiledRunTemplate, TemplateCache, template_from_bytes};
+use flow_like::flow::compiled::{template_from_bytes, CompiledRunTemplate, TemplateCache};
 use flow_like::flow::event::Event;
 use flow_like::flow::execution::rejection::{RejectedRun, RejectionStage};
 use flow_like::flow::execution::{ExecutionEnvironment, InternalRun, RunPayload};
@@ -36,6 +36,12 @@ pub(crate) static PREPARED_REGISTRY: LazyLock<Arc<FlowNodeRegistryInner>> = Lazy
     let catalog_arc = Arc::new(catalog);
     Arc::new(FlowNodeRegistryInner::prepare(&catalog_arc))
 });
+
+/// Prepare only the trusted static catalog. Call after catalog initialization
+/// and before advertising a single-use sandbox as ready. No tenant code loads.
+pub fn prepare_runtime() {
+    LazyLock::force(&PREPARED_REGISTRY);
+}
 
 /// The registry for one request: the shared prepared catalog when the request
 /// brings no WASM overlay, a copy-on-write extension otherwise. The full deep
@@ -137,10 +143,11 @@ pub(crate) fn template_from_fetched(
     registry: &FlowNodeRegistryInner,
     request: &ExecutionRequest,
 ) -> Result<Arc<CompiledRunTemplate>, ExecutorError> {
-    let storage_root = Path::from("apps").child(request.app_id.clone());
-    let template = template_from_bytes(bytes, fingerprint, registry, &storage_root).map_err(|e| {
-        let ours = blake3::Hash::from_bytes(*fingerprint).to_hex();
-        ExecutorError::BoardLoad(format!(
+    let storage_root = Path::from("apps").join(request.app_id.clone());
+    let template =
+        template_from_bytes(bytes, fingerprint, registry, &storage_root).map_err(|e| {
+            let ours = blake3::Hash::from_bytes(*fingerprint).to_hex();
+            ExecutorError::BoardLoad(format!(
             "compiled artifact {} rejected: {e} (API compiled against {}, this executor runs {})",
             request.artifact.path,
             request
@@ -150,7 +157,7 @@ pub(crate) fn template_from_fetched(
                 .unwrap_or(&request.artifact.registry_fingerprint),
             &ours.as_str()[..16]
         ))
-    })?;
+        })?;
     if template.board.id != request.board_id {
         return Err(ExecutorError::BoardLoad(format!(
             "compiled artifact {} is for board {}, expected {}",
@@ -223,6 +230,14 @@ pub(crate) fn validate_executor_request_claims(
     claims: &ExecutorClaims,
     request: &ExecutionRequest,
 ) -> Result<(), ExecutorError> {
+    match (&claims.dispatch_hash, &request.dispatch_hash) {
+        (Some(signed), Some(actual)) if signed == actual => {}
+        _ => {
+            return Err(ExecutorError::InvalidRequest(
+                "executor JWT does not bind the complete dispatch payload".to_string(),
+            ));
+        }
+    }
     if claims.app_id != request.app_id || claims.board_id != request.board_id {
         return Err(ExecutorError::InvalidRequest(
             "executor JWT claims do not match the queued request".to_string(),
@@ -321,10 +336,7 @@ pub(crate) async fn build_flow_state(
     state.execution_environment = ExecutionEnvironment::server_default();
     if let Some(hub) = hub {
         state
-            .register_app_widget_source(Arc::new(HubWidgetSource::new(
-                &hub.callback_url,
-                hub.jwt,
-            )))
+            .register_app_widget_source(Arc::new(HubWidgetSource::new(&hub.callback_url, hub.jwt)))
             .await;
     }
     Ok(state)
@@ -922,8 +934,8 @@ pub async fn execute(
                 );
                 if let Some(db_fn) = db_fn.as_ref() {
                     let base_path = Path::from("runs")
-                        .child(request.app_id.as_str())
-                        .child(request.board_id.as_str());
+                        .join(request.app_id.as_str())
+                        .join(request.board_id.as_str());
                     tracing::info!(path = %base_path, "Opening log database to flush run metadata");
                     match state
                         .with_lance_session(db_fn(base_path.clone()))
@@ -1565,6 +1577,7 @@ mod shadow_claim_binding_tests {
             "app_id": "app-1",
             "board_id": "board-1",
             "shadow": shadow,
+            "dispatch_hash": "test-envelope",
             "callback_url": "https://api.example",
             "typ": "executor",
             "iss": "flow-like",
@@ -1578,7 +1591,7 @@ mod shadow_claim_binding_tests {
     }
 
     fn request(shadow: bool) -> ExecutionRequest {
-        serde_json::from_value(serde_json::json!({
+        let mut request: ExecutionRequest = serde_json::from_value(serde_json::json!({
             "app_id": "app-1",
             "board_id": "board-1",
             "node_id": "node-1",
@@ -1602,7 +1615,23 @@ mod shadow_claim_binding_tests {
                 "registry_fingerprint": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
             }
         }))
-        .expect("request deserializes")
+        .expect("request deserializes");
+        request.dispatch_hash = Some("test-envelope".into());
+        request
+    }
+
+    #[test]
+    fn altered_or_unbound_dispatches_are_rejected_before_artifact_loading() {
+        let signed = claims(Some(false));
+        let mut request = request(false);
+        assert!(validate_executor_request_claims(&signed, &request).is_ok());
+        request.dispatch_hash = Some("changed-envelope".into());
+        assert!(validate_executor_request_claims(&signed, &request).is_err());
+        request.dispatch_hash = None;
+        assert!(validate_executor_request_claims(&signed, &request).is_err());
+        let mut unsigned = signed;
+        unsigned.dispatch_hash = None;
+        assert!(validate_executor_request_claims(&unsigned, &request).is_err());
     }
 
     /// Bytes the API would have persisted: a board holding one real catalog
@@ -1618,10 +1647,8 @@ mod shadow_claim_binding_tests {
             .next()
             .expect("the catalog is not empty");
         node.id = "n1".into();
-        let mut board = Board::new_detached(
-            Some(board_id.to_string()),
-            Path::from("apps").child("app-1"),
-        );
+        let mut board =
+            Board::new_detached(Some(board_id.to_string()), Path::from("apps").join("app-1"));
         board.nodes.insert(node.id.clone(), node);
         let compiled = compile_board_with_catalog(&board, registry.as_ref()).expect("compile");
         encode_artifact(&compiled, fingerprint).expect("encode")
@@ -1633,19 +1660,33 @@ mod shadow_claim_binding_tests {
         let fingerprint = registry.fingerprint();
         let request = request(false);
 
-        let template =
-            template_from_fetched(&artifact_bytes_for("board-1", &fingerprint), &fingerprint, registry.as_ref(), &request)
-                .expect("an artifact for this board and registry is accepted");
+        let template = template_from_fetched(
+            &artifact_bytes_for("board-1", &fingerprint),
+            &fingerprint,
+            registry.as_ref(),
+            &request,
+        )
+        .expect("an artifact for this board and registry is accepted");
         assert_eq!(template.board.id, "board-1");
 
-        let error = template_from_fetched(&artifact_bytes_for("board-9", &fingerprint), &fingerprint, registry.as_ref(), &request)
-            .err()
-            .expect("an artifact for another board is refused");
+        let error = template_from_fetched(
+            &artifact_bytes_for("board-9", &fingerprint),
+            &fingerprint,
+            registry.as_ref(),
+            &request,
+        )
+        .err()
+        .expect("an artifact for another board is refused");
         assert!(error.to_string().contains("board-9"), "{error}");
 
-        let error = template_from_fetched(&artifact_bytes_for("board-1", &[9u8; 32]), &fingerprint, registry.as_ref(), &request)
-            .err()
-            .expect("an artifact for another registry is refused");
+        let error = template_from_fetched(
+            &artifact_bytes_for("board-1", &[9u8; 32]),
+            &fingerprint,
+            registry.as_ref(),
+            &request,
+        )
+        .err()
+        .expect("an artifact for another registry is refused");
         assert!(error.to_string().contains("this executor runs"), "{error}");
     }
 
@@ -1668,7 +1709,10 @@ mod shadow_claim_binding_tests {
 
         request.board_version = None;
         request.artifact.source_etag = None;
-        assert!(artifact_version_key(&request).is_err(), "no identity, no key");
+        assert!(
+            artifact_version_key(&request).is_err(),
+            "no identity, no key"
+        );
     }
 
     /// The in-process isolation is driven by the signed claim, never by the

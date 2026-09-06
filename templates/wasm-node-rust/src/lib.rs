@@ -14,6 +14,10 @@
 
 use flow_like_wasm_sdk::*;
 
+mod package_objects;
+mod resource_cursor;
+mod resource_tcp;
+
 // ── Node 1: Repeat Text ────────────────────────────────────────────────
 
 #[register_node]

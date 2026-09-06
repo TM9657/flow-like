@@ -1,3 +1,4 @@
+use flow_like::flow_like_storage::object_store::ObjectStoreExt;
 use std::{
     io::Cursor,
     time::{Duration, SystemTime},
@@ -23,6 +24,7 @@ use image::ImageReader;
 use serde::Deserialize;
 use serde_json::Value;
 use tauri::AppHandle;
+pub mod flowpilot_builds;
 pub mod fork;
 pub mod graph;
 pub mod saved_queries;
@@ -43,7 +45,7 @@ async fn presign_meta(
         .app_storage_store
         .clone()
         .ok_or_else(|| TauriFunctionError::new("App storage store not found"))?;
-    let prefix = Path::from("apps").child(app_id).child("media");
+    let prefix = Path::from("apps").join(app_id).join("media");
     metadata.presign(prefix, &store).await;
     Ok(())
 }
@@ -417,7 +419,7 @@ pub async fn push_app_media(
         .clone()
         .ok_or(anyhow!("Project store not found"))?;
 
-    let media_path = Path::from("apps").child(app_id.clone()).child("media");
+    let media_path = Path::from("apps").join(app_id.clone()).join("media");
     let item_id = create_id();
     let item_name = format!("{}.{}", item_id, query.extension);
     let mut meta = App::get_meta(
@@ -448,13 +450,13 @@ pub async fn push_app_media(
     meta.updated_at = SystemTime::now();
     if let Some(to_delete) = to_delete {
         let file_name = format!("{}.webp", to_delete);
-        let path = media_path.child(file_name);
+        let path = media_path.clone().join(file_name);
         if let Err(err) = project_store.as_generic().delete(&path).await {
             tracing::error!("Failed to delete existing media at {}: {:?}", path, err);
         }
     }
 
-    let media_path = media_path.child(item_name);
+    let media_path = media_path.join(item_name);
     let upload_url = project_store
         .sign("PUT", &media_path, Duration::from_secs(60 * 60 * 24))
         .await
@@ -482,7 +484,7 @@ pub async fn remove_app_media(
         .clone()
         .ok_or(anyhow!("Project store not found"))?;
 
-    let media_path = Path::from("apps").child(app_id.clone()).child("media");
+    let media_path = Path::from("apps").join(app_id.clone()).join("media");
     let item_name = format!("{}.webp", media_item);
     let mut meta = App::get_meta(
         app_id.clone(),
@@ -508,7 +510,7 @@ pub async fn remove_app_media(
 
     meta.updated_at = SystemTime::now();
 
-    let media_path = media_path.child(item_name);
+    let media_path = media_path.join(item_name);
     if let Err(err) = project_store.as_generic().delete(&media_path).await {
         tracing::error!("Failed to delete media at {}: {:?}", media_path, err);
         return Err(TauriFunctionError::new("Failed to delete media"));
@@ -536,8 +538,8 @@ pub async fn transform_media(
         .clone()
         .ok_or(anyhow!("Project store not found"))?;
 
-    let media_path = Path::from("apps").child(app_id.clone()).child("media");
-    let from_image = media_path.child(media_item.clone());
+    let media_path = Path::from("apps").join(app_id.clone()).join("media");
+    let from_image = media_path.clone().join(media_item.clone());
 
     let extension = from_image
         .extension()
@@ -552,7 +554,7 @@ pub async fn transform_media(
         media_item.trim_end_matches(&format!(".{}", extension))
     );
 
-    let to_image = media_path.child(transformed_name);
+    let to_image = media_path.join(transformed_name);
 
     let image_data = project_store
         .as_generic()
@@ -619,7 +621,7 @@ pub async fn get_app_size(
     app_id: String,
 ) -> Result<u64, TauriFunctionError> {
     let content_store = TauriFlowLikeState::get_project_storage_store(&app_handle).await?;
-    let path = Path::from("apps").child(app_id);
+    let path = Path::from("apps").join(app_id);
 
     let mut locations = content_store
         .list(Some(&path))
@@ -656,7 +658,7 @@ pub async fn delete_app(app_handle: AppHandle, app_id: String) -> Result<(), Tau
     settings.serialize();
     drop(settings);
 
-    let path = Path::from("apps").child(app_id);
+    let path = Path::from("apps").join(app_id);
     let locations = store.list(Some(&path)).map_ok(|m| m.location).boxed();
     store
         .delete_stream(locations)

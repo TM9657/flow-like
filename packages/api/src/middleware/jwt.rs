@@ -1,3 +1,4 @@
+use sea_orm::sea_query::ExprTrait;
 use std::sync::Arc;
 
 use crate::{
@@ -324,7 +325,7 @@ impl AppPermissionResponse {
                 id: self.role.id.clone(),
                 name: self.role.name.clone(),
                 permissions: self.role.permissions,
-                attributes: self.role.attributes.clone().unwrap_or_default(),
+                attributes: self.role.attributes.clone().unwrap_or_default().into(),
                 custom_attributes: std::collections::HashMap::new(),
             },
         )
@@ -471,6 +472,10 @@ impl AppUser {
     // Adds the exact method of access (OpenID, PAT, API Key) to the audit log for better traceability
     pub async fn audit_id(&self) -> Result<String, AuthorizationError> {
         let sub = match self {
+            AppUser::APIKey(key) => key
+                .creator_user_id
+                .clone()
+                .unwrap_or_else(|| format!("app:{}", key.app_id)),
             AppUser::ConnectedApp(app) => app
                 .sub
                 .clone()
@@ -849,7 +854,7 @@ async fn validate_pat_fresh(user: &PATUser, state: &AppState) -> Result<(), ApiE
         )
         .one(&state.db)
         .await?;
-    let now = chrono::Utc::now().naive_utc();
+    let now = chrono::Utc::now().fixed_offset();
     let is_current = current.is_some_and(|pat| pat_is_current(&pat, &user.sub, now));
     if !is_current {
         state.auth_cache.invalidate(&cache_key);
@@ -859,7 +864,11 @@ async fn validate_pat_fresh(user: &PATUser, state: &AppState) -> Result<(), ApiE
     Ok(())
 }
 
-fn pat_is_current(pat: &pat::Model, expected_sub: &str, now: sea_orm::prelude::DateTime) -> bool {
+fn pat_is_current(
+    pat: &pat::Model,
+    expected_sub: &str,
+    now: sea_orm::prelude::DateTimeWithTimeZone,
+) -> bool {
     pat.user_id == expected_sub && pat.valid_until.is_none_or(|valid_until| valid_until >= now)
 }
 
@@ -897,7 +906,7 @@ async fn validate_api_key_fresh(api_key: &ApiKey, state: &AppState) -> Result<()
         &current,
         api_key,
         current_creator_user_id.as_deref(),
-        chrono::Utc::now().naive_utc(),
+        chrono::Utc::now().fixed_offset(),
     ) {
         state.auth_cache.invalidate(&cache_key);
         return Err(ApiError::unauthorized("API key is no longer valid"));
@@ -910,7 +919,7 @@ fn api_key_record_is_current(
     record: &technical_user::Model,
     cached: &ApiKey,
     current_creator_user_id: Option<&str>,
-    now: sea_orm::prelude::DateTime,
+    now: sea_orm::prelude::DateTimeWithTimeZone,
 ) -> bool {
     record.id == cached.key_id
         && record.app_id == cached.app_id
@@ -1368,7 +1377,7 @@ pub async fn jwt_middleware(
 
             if let Some(pat) = db_pat {
                 if let Some(valid_until) = pat.valid_until {
-                    let now = chrono::Utc::now().naive_utc();
+                    let now = chrono::Utc::now().fixed_offset();
                     if valid_until < now {
                         state.auth_cache.insert(cache_key, CachedAuth::Invalid);
                         request
@@ -1477,7 +1486,7 @@ pub async fn jwt_middleware(
             }
 
             if let Some(valid_until) = app.valid_until {
-                let now = chrono::Utc::now().naive_utc();
+                let now = chrono::Utc::now().fixed_offset();
                 if valid_until < now {
                     state.auth_cache.insert(cache_key, CachedAuth::Invalid);
                     request
@@ -1523,6 +1532,18 @@ pub async fn jwt_middleware(
 mod tests {
     use super::*;
     use axum::{http::StatusCode, response::IntoResponse};
+
+    #[flow_like_types::tokio::test]
+    async fn api_key_audit_identity_does_not_require_a_human_creator() {
+        let user = AppUser::APIKey(ApiKey {
+            key_id: "key-1".into(),
+            api_key: "private-token".into(),
+            app_id: "app-1".into(),
+            creator_user_id: None,
+        });
+        assert_eq!(user.audit_id().await.unwrap(), "api_key:app:app-1:key-1");
+        assert!(user.effective_user_id().is_err());
+    }
 
     fn headers(pairs: &[(&str, &str)]) -> HeaderMap {
         let mut headers = HeaderMap::new();
@@ -1708,7 +1729,7 @@ mod tests {
 
         let now = chrono::DateTime::from_timestamp(1_800_000_000, 0)
             .unwrap()
-            .naive_utc();
+            .fixed_offset();
         let record = pat::Model {
             id: "pat-1".into(),
             name: "Page runtime".into(),
@@ -1747,7 +1768,7 @@ mod tests {
 
         let now = chrono::DateTime::from_timestamp(1_800_000_000, 0)
             .unwrap()
-            .naive_utc();
+            .fixed_offset();
         let cached = ApiKey {
             key_id: "key-1".into(),
             api_key: "flk_app-1.key-1.secret".into(),

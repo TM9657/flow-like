@@ -13,6 +13,7 @@ use axum::{
     extract::{Query, State},
 };
 use flow_like::{app::AppCategory, bit::Metadata};
+use sea_orm::sea_query::{Expr, ExprTrait, extension::postgres::PgExpr};
 use sea_orm::{
     ColumnTrait, EntityTrait, JoinType, QueryFilter, QueryOrder, QuerySelect, RelationTrait,
 };
@@ -123,7 +124,11 @@ pub async fn search_templates(
     }
 
     if let Some(tag) = query.tag.clone() {
-        qb = qb.filter(meta::Column::Tags.contains(&tag));
+        qb = qb.filter(
+            meta::Column::Tags
+                .into_expr()
+                .contains(Expr::val(serde_json::json!([tag]))),
+        );
     }
 
     qb = qb.filter(
@@ -171,8 +176,8 @@ pub async fn search_templates(
             Some(meta) => {
                 let mut metadata = Metadata::from(meta.clone());
                 let prefix = flow_like_storage::Path::from("media")
-                    .child("apps")
-                    .child(template_model.app_id.clone());
+                    .join("apps")
+                    .join(template_model.app_id.clone());
                 metadata.presign(prefix, &store).await;
                 Some(metadata)
             }

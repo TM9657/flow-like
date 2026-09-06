@@ -4,6 +4,7 @@
 //! Ignored by default because both need a board fixture under `tmp/`. Run with:
 //!   cargo test -p flow-like-catalog --test apply_roundtrip_timing -- --ignored --nocapture
 
+use flow_like::flow_like_storage::object_store::ObjectStoreExt;
 use flow_like::{
     flow::board::{
         Board,

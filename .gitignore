@@ -9,6 +9,11 @@ pnpm-debug.log*
 lerna-debug.log*
 .venv
 
+# Python bytecode caches
+__pycache__/
+*.pyc
+*.pyo
+
 api.config.json
 # Deployment-specific cloud build configs (BuildKit secret inputs). Note the
 # tracked repo-root flow-like.config.json is the committed public default that
@@ -35,6 +40,7 @@ target
 *.sw?
 tmp
 /.tools/
+/.local-notes/
 .ruff_cache
 /.next/
 /out/
@@ -92,6 +98,10 @@ apps/desktop/src-tauri/apple/FlowLikeMLX/.build/
 .codacy/codacy.config.baseline.json
 .codacy/codacy.config.json
 .tmp-nextrepro
-tools/i18n/__pycache__/translate-local.cpython-311.pyc
 apps/book/INTERVIEWS.md
 reports
+
+# Prepared native diffusion runtimes and pinned source builds
+apps/desktop/src-tauri/runtimes/stablediffusion/
+design-qa.md
+artifacts

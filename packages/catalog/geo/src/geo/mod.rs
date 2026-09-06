@@ -1,6 +1,7 @@
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
+pub mod geometry;
 pub mod h3;
 pub mod map;
 pub mod routing;

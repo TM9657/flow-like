@@ -181,11 +181,7 @@ type ResolutionCache = HashMap<(String, Option<(u32, u32, u32)>), Option<HashSet
 /// Preflight the revision's `(board_id, board_version, node_id)` target. Any
 /// load error is `(false, false)` — a missing board must mark the entry, never
 /// fail the listing.
-async fn target_resolution(
-    app: &App,
-    cache: &mut ResolutionCache,
-    event: &Event,
-) -> (bool, bool) {
+async fn target_resolution(app: &App, cache: &mut ResolutionCache, event: &Event) -> (bool, bool) {
     if event.board_id.is_empty() {
         return (false, false);
     }

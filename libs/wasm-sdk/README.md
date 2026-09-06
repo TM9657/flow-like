@@ -1,6 +1,6 @@
 # Flow-Like WASM SDKs
 
-This directory contains official SDKs for building **WASM nodes** for the [Flow-Like](https://github.com/Rheosoph/flow-like) runtime. Each SDK targets a different language but exposes the same programming model and ABI.
+This directory contains SDKs for building **WASM nodes** for the [Flow-Like](https://github.com/Rheosoph/flow-like) runtime. Each SDK targets a different language. They share the node programming model, with different ABI bindings and host API coverage.
 
 ## What is a WASM Node?
 
@@ -27,7 +27,7 @@ This means you can write custom nodes in virtually any language that compiles to
 |---|---|---|
 | [TypeScript](./wasm-sdk-typescript/) | `@flow-like/wasm-sdk-typescript` on npm | ✅ Published |
 | [AssemblyScript](./wasm-sdk-assemblyscript/) | `@flow-like/wasm-sdk-assemblyscript` on npm | ✅ Published |
-| [Rust](./wasm-sdk-rust/) | `flow-like-wasm-sdk` on crates.io (planned) | 🚧 In progress |
+| [Rust](./wasm-sdk-rust/) | [`flow-like-wasm-sdk`](https://crates.io/crates/flow-like-wasm-sdk) on crates.io | Published: 0.3.7; [0.4.0 in preparation](wasm-sdk-rust/CHANGELOG.md) |
 | [Python](./wasm-sdk-python/) | `flow-like-wasm-sdk` on PyPI (planned) | 🚧 In progress |
 | [Go](./wasm-sdk-go/) | Module import (planned) | 🚧 In progress |
 | [Zig](./wasm-sdk-zig/) | Build dep (planned) | 🚧 In progress |
@@ -72,6 +72,23 @@ Every node run returns an `ExecutionResult` with:
 
 The runtime provides a **Host Bridge** — a set of functions the WASM module can call to interact with the Flow-Like environment. Each SDK wraps these low-level WASM imports into idiomatic high-level APIs.
 
+## Geometry pins
+
+Declare the `Geometry` data type to exchange GeoJSON geometry objects with the host.
+A point value is `{"type":"Point","coordinates":[13.405,52.52]}`. Coordinates are
+finite WGS 84 longitude then latitude, with exactly two numbers per position.
+Feature wrappers and projected coordinates require explicit conversion before the pin.
+
+Omit the schema to accept any geometry, or set the schema string to a frozen subtype
+marker such as `{"$id":"flow:geometry","x-geometry":"Point"}`. Subtypes are Point,
+LineString, Polygon, MultiPoint, MultiLineString, MultiPolygon, and GeometryCollection.
+The host validates geometry inputs and outputs, including subtype constraints. Invalid
+values fail the node invocation. Null represents an unset value and is not a geometry.
+
+`ValueType` still describes the surrounding container. For example, an Array of Point
+geometries differs from one MultiPoint geometry. SDK JSON getters and output methods
+carry geometry values; no new binary ABI or serialized geometry wrapper is required.
+
 ## Single Node vs. Node Package
 
 SDKs support two export modes:
@@ -87,6 +104,57 @@ run(ptr, len) → ExecutionResult JSON
 get_nodes() → PackageNodes JSON (array of NodeDefinitions)
 run(ptr, len) → ExecutionResult JSON (dispatches to correct handler)
 ```
+
+## State between nodes and calls
+
+A run owns its live Wasm state. For packages with reusable `run` exports, the
+runtime retains an instance within the run and its security domain, so guest
+globals and heap objects can survive calls from nodes in that package. Each
+invocation receives fresh execution data and permissions. The package's host
+cache and socket handles are shared within that same runtime scope. A different
+security domain uses a separate instance and resource registry.
+
+When the run completes or is cancelled, its instances, cache and sockets are
+released. A later run always starts with fresh live state. Persist application
+data through storage if needed; stored pointer values and socket handles cannot
+restore a client or connection.
+
+Rust SDK 0.4.0, currently in preparation, provides a typed `resources` registry
+for arbitrary guest objects. It requires the updated runtime's package ownership
+and resource-handle imports.
+One node calls `resources::insert(value)` and outputs the returned string
+handle. Another calls `resources::with::<T, _>` or `with_mut::<T, _>` to access
+the object, while `remove::<T>` returns ownership and `close::<T>` drops it.
+The object stays in guest memory and needs no serialization or `Send`/`Sync`
+implementation. Handles are valid only for the owning package instance in the
+current run and security domain. See the
+[custom buffer example](../../templates/wasm-node-rust/src/package_objects.rs)
+and [Rust API reference](wasm-sdk-rust/README.md#store-arbitrary-objects-within-a-run).
+Other languages can retain objects in package globals using their own registries.
+
+Run teardown reclaims guest memory and host resources without executing guest
+object destructors. Perform graceful client shutdown during a node call before
+the run ends. A retained socket client still needs target-compatible networking
+APIs and grants; the registry does not drive its guest event loop between calls.
+
+Command-style components executed through `wasi:cli/run` still start with fresh
+guest memory on every command. The in-process command path can share the run's
+host cache and sockets. The external CLI fallback is rejected during run-scoped
+execution because its separate process cannot access these resources. Do not
+infer guest-state persistence from the source language alone. It depends on the
+compiled artifact's exports and execution path.
+
+The [Rust template](../../templates/wasm-node-rust/) also stores an iterator and
+WASI TCP listeners and connections through this registry. Cursor nodes advance
+the iterator across calls. TCP nodes accept connections and send queued bytes
+across calls, subject to `NetworkTcp` and the runtime's address policy. These
+examples use guest objects with their own state and cleanup. See the
+[template lifecycle matrix](../../templates/wasm-capability-matrix.md#state-and-resource-lifetime)
+for the supported execution paths.
+
+The Rust SDK also wraps the existing host WebSocket client operations: connect,
+send, receive, and close. Other SDKs can use the shared WIT client interface or
+the corresponding core-module host imports.
 
 ## Memory ABI
 

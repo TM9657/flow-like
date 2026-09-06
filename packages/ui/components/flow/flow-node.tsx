@@ -1570,6 +1570,7 @@ function FlowNode(props: NodeProps<FlowNode>) {
 			)}
 			{editingMenu && props.data.node.name === "events_generic" && (
 				<LayerEditMenu
+					appId={props.data.appId}
 					open={editingMenu}
 					onOpenChange={setEditingMenu}
 					node={props.data.node}

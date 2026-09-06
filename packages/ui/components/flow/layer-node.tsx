@@ -463,6 +463,7 @@ export function LayerNode(props: NodeProps<LayerNode>) {
 			</div>
 
 			<LayerEditMenu
+				appId={props.data.appId}
 				open={editing}
 				layer={props.data.layer}
 				onOpenChange={setEditing}

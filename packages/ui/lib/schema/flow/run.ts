@@ -14,6 +14,8 @@ export interface IRun {
 }
 
 export interface IBoard {
+	/** Minimum document format required to read and write this board. Defaults to 1. */
+	format_version?: number;
 	comments: { [key: string]: IComment };
 	created_at: ISystemTime;
 	description: string;
@@ -131,6 +133,7 @@ export enum IVariableType {
 	PathBuf = "PathBuf",
 	String = "String",
 	Struct = "Struct",
+	Geometry = "Geometry",
 }
 
 export interface IPinOptions {

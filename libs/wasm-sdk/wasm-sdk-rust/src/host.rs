@@ -336,6 +336,12 @@ pub fn random() -> f64 {
     metadata::random()
 }
 
+/// Mint an opaque handle for a guest-owned object in the current package and run.
+/// Returns `None` when the host cannot provide run ownership or random bytes.
+pub fn new_resource_handle() -> Option<String> {
+    metadata::new_resource_handle()
+}
+
 // ============================================================================
 // WebSocket
 // ============================================================================
@@ -356,6 +362,7 @@ pub fn ws_receive(session_id: &str, timeout_ms: u32) -> Option<String> {
     websocket::receive(session_id, timeout_ms)
 }
 
+/// Close a WebSocket connection.
 pub fn ws_close(session_id: &str) -> bool {
     websocket::close(session_id)
 }

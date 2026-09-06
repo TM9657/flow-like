@@ -12,6 +12,7 @@
 //! `object_store`'s metadata-server credential; no key or signed URL is involved.
 
 use crate::gcs_events::GcsEvent;
+use flow_like_storage::object_store::ObjectStoreExt;
 use flow_like_storage::object_store::{
     Attribute, AttributeValue, Attributes, ObjectStore, PutOptions, PutPayload, path::Path,
 };

@@ -1,6 +1,9 @@
 use axum::{Router, routing::get};
 
-use crate::state::{AppState, BoardMutationGuard};
+use crate::{
+    error::ApiError,
+    state::{AppState, BoardMutationGuard},
+};
 
 // Page ids are database-primary-key global, while the canonical files live under boards. Reuse
 // the replica-safe mutation primitive with an impossible real app-id scope so upsert/delete can
@@ -10,7 +13,7 @@ const PAGE_ID_MUTATION_SCOPE: &str = "\0flow-like.page-id-mutation/v1";
 pub(crate) async fn page_id_mutation_guard(
     state: &AppState,
     page_id: &str,
-) -> Result<BoardMutationGuard, sea_orm::DbErr> {
+) -> Result<BoardMutationGuard, ApiError> {
     state
         .board_mutation_guard(PAGE_ID_MUTATION_SCOPE, page_id)
         .await
@@ -30,9 +33,12 @@ pub fn routes() -> Router<AppState> {
         .route("/by-route", get(get_page_by_route::get_page_by_route))
         .route(
             "/{page_id}",
-            get(get_page::get_page)
-                .put(upsert_page::upsert_page)
-                .delete(delete_page::delete_page),
+            axum::routing::put(upsert_page::upsert_page)
+                .delete(delete_page::delete_page)
+                .route_layer(axum::middleware::from_fn(
+                    super::board::capabilities::negotiate_board_format,
+                ))
+                .get(get_page::get_page),
         )
 }
 

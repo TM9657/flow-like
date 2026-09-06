@@ -6,6 +6,7 @@ import {
 	ClockIcon,
 	DownloadCloudIcon,
 	ExternalLinkIcon,
+	PencilIcon,
 	PlusIcon,
 	SparklesIcon,
 	TrashIcon,
@@ -55,6 +56,10 @@ import {
 
 export interface ModelDetailSheetProps {
 	bit: IBit | null;
+	/** Isolates profile and hub queries for embedded collections. */
+	queryScope?: string[];
+	onProfileChange?: () => void | Promise<void>;
+	onEdit?: (bit: IBit) => void;
 	open: boolean;
 	onOpenChange: (open: boolean) => void;
 	webMode?: boolean;
@@ -62,13 +67,16 @@ export interface ModelDetailSheetProps {
 
 export function ModelDetailSheet({
 	bit,
+	queryScope = [],
+	onProfileChange,
+	onEdit,
 	open,
 	onOpenChange,
 	webMode = false,
 }: Readonly<ModelDetailSheetProps>) {
 	const { t } = useTranslation("common");
 	const backend = useBackend();
-	const { hub } = useHub();
+	const { hub } = useHub(queryScope);
 	const download = useDownloadManager((s) => s.download);
 	const onProgress = useDownloadManager((s) => s.onProgress);
 	const isQueued = useDownloadManager((s) => s.isQueued);
@@ -135,6 +143,7 @@ export function ModelDetailSheet({
 		// biome-ignore lint/style/noNonNullAssertion: bit is guaranteed by enabled flag
 		[bit!],
 		!!bit,
+		queryScope,
 	);
 	const bitSize: UseQueryResult<number> = useInvoke(
 		backend.bitState.getBitSize,
@@ -142,21 +151,30 @@ export function ModelDetailSheet({
 		// biome-ignore lint/style/noNonNullAssertion: bit is guaranteed by enabled flag
 		[bit!],
 		!!bit,
+		queryScope,
 	);
 	const currentProfile: UseQueryResult<ISettingsProfile> = useInvoke(
 		backend.userState.getSettingsProfile,
 		backend.userState,
 		[],
+		true,
+		queryScope,
 	);
 	const detailedBit = useInvoke(
 		backend.bitState.getBit,
 		backend.bitState,
 		[bit?.id ?? "", bit?.hub],
 		!!bit && open,
-		[bit?.updated ?? ""],
+		[bit?.updated ?? "", ...queryScope],
 		60_000,
 	);
-	const userInfo = useInvoke(backend.userState.getInfo, backend.userState, []);
+	const userInfo = useInvoke(
+		backend.userState.getInfo,
+		backend.userState,
+		[],
+		true,
+		queryScope,
+	);
 	const displayBit = detailedBit.data ?? bit;
 
 	// The backend-resolved pack size is authoritative: it accounts for artifacts
@@ -260,6 +278,7 @@ export function ModelDetailSheet({
 				await backend.bitState.removeBit(displayBit, profile);
 			}
 			await refetchCurrentProfile();
+			await onProfileChange?.();
 		} catch (error) {
 			console.error("Failed to update profile models:", error);
 			if (handleUpgradeRequiredError(error, "model-tier")) return;
@@ -276,6 +295,8 @@ export function ModelDetailSheet({
 		backend.bitState,
 		refetchCurrentProfile,
 		tierInfo,
+		onProfileChange,
+		t,
 	]);
 
 	if (!displayBit || !displayBit.meta.en) return null;
@@ -314,8 +335,10 @@ export function ModelDetailSheet({
 									<SparklesIcon className="h-4 w-4 text-primary" />
 								)}
 							</SheetTitle>
-							<SheetDescription>
-								<ModalityIcons type={displayBit.type} />
+							<SheetDescription asChild>
+								<div>
+									<ModalityIcons type={displayBit.type} />
+								</div>
 							</SheetDescription>
 						</div>
 					</div>
@@ -444,6 +467,12 @@ export function ModelDetailSheet({
 
 					{/* Actions */}
 					<div className="flex flex-col gap-2 pt-2">
+						{onEdit && bit && (
+							<Button variant="outline" onClick={() => onEdit(bit)}>
+								<PencilIcon className="size-4" />
+								{t("editModel", "Edit model")}
+							</Button>
+						)}
 						{!webMode && !isHosted && (
 							<Button
 								onClick={handleDownload}
@@ -472,7 +501,7 @@ export function ModelDetailSheet({
 							{isInProfile ? (
 								<>
 									<XIcon className="h-4 w-4 mr-2" />
-									{`Remove from Profile`}
+									Remove from Profile
 								</>
 							) : (
 								<>

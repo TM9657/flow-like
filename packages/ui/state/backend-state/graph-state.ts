@@ -120,6 +120,7 @@ export interface SubgraphNode {
 	label: string;
 	caption?: string;
 	props: Record<string, unknown>;
+	property_metadata?: Record<string, Record<string, string>>;
 	/** Only the seedless sampler knows a node's whole-population fan-out. */
 	stats?: SubgraphNodeStats;
 	/** Not sent by the server — resolved client-side from the overlay. */
@@ -132,6 +133,7 @@ export interface SubgraphEdge {
 	target: string;
 	label: string;
 	props: Record<string, unknown>;
+	property_metadata?: Record<string, Record<string, string>>;
 	/** Not sent by the server — resolved client-side from the overlay. */
 	style?: LabelStyle;
 }
@@ -196,6 +198,22 @@ export interface GraphPropertyInfo {
 	name: string;
 	data_type: string;
 	nullable: boolean;
+	metadata?: Record<string, string>;
+}
+
+export interface GraphQueryResult {
+	rows: unknown[];
+	/** Arrow field metadata, keyed by the exact result column name. */
+	property_metadata: Record<string, Record<string, string>>;
+}
+
+/** Older backends return the rows without field metadata. */
+export function normalizeGraphQueryResult(
+	result: GraphQueryResult | unknown[],
+): GraphQueryResult {
+	return Array.isArray(result)
+		? { rows: result, property_metadata: {} }
+		: result;
 }
 
 export interface GraphSchema {
@@ -459,6 +477,12 @@ export interface IGraphState {
 		payload: CypherPayload,
 		userScoped?: boolean,
 	): Promise<unknown[]>;
+	cypherWithMetadata?(
+		appId: string,
+		overlayId: string,
+		payload: CypherPayload,
+		userScoped?: boolean,
+	): Promise<GraphQueryResult>;
 	sql(
 		appId: string,
 		overlayId: string,

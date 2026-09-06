@@ -20,6 +20,7 @@ use flow_like::flow::{
     },
     node::NodePermission,
 };
+use flow_like_storage::object_store::ObjectStoreExt;
 use flow_like_storage::{
     Path,
     object_store::{Error as StoreError, GetOptions, ObjectStore, PutPayload},
@@ -373,7 +374,7 @@ pub async fn ensure_versioned_page_prerun_manifest(
         &requested_page.id,
         &page_revision,
     );
-    let storage_root = Path::from("apps").child(app_id.to_string());
+    let storage_root = Path::from("apps").join(app_id.to_string());
     let path = version_page_manifest_path(
         &storage_root,
         board_id,
@@ -464,7 +465,7 @@ pub async fn ensure_draft_board_snapshot(
         }
     }
 
-    let storage_root = Path::from("apps").child(app_id.to_string());
+    let storage_root = Path::from("apps").join(app_id.to_string());
     let source_path = Board::proto_path(&storage_root, board_id, None);
     let source = meta_store
         .get_opts(
@@ -539,8 +540,10 @@ pub async fn load_exact_prerun_manifest(
                         .master_state(state)
                         .await
                         .map_err(ApiError::internal_error)?;
-                    let storage_root = Path::from("apps").child(app_id.to_string());
-                    Ok(Board::from_loaded_proto(proto, storage_root, app_state).await)
+                    let storage_root = Path::from("apps").join(app_id.to_string());
+                    Board::from_loaded_proto(proto, storage_root, app_state)
+                        .await
+                        .map_err(ApiError::internal_error)
                 },
             )
             .await?
@@ -689,7 +692,7 @@ mod draft_manifest_cache_tests {
     use flow_like::flow::{board::Board, compiled::PrerunManifest};
     use flow_like_storage::{
         Path,
-        object_store::{Error as StoreError, ObjectStore, memory::InMemory},
+        object_store::{Error as StoreError, ObjectStore, ObjectStoreExt, memory::InMemory},
     };
     use flow_like_types::{FromProto, ToProto};
     use std::sync::Arc;
@@ -726,7 +729,7 @@ mod draft_manifest_cache_tests {
 
     #[test]
     fn page_manifest_read_requires_the_exact_board_authority_and_page() {
-        let board = Board::new_detached(Some("board-1".into()), Path::from("apps").child("app-1"));
+        let board = Board::new_detached(Some("board-1".into()), Path::from("apps").join("app-1"));
         let authority = PrerunManifest::from_board(&board);
         let page = Page::new("page-1", "Page", "/");
         let candidate = PrerunManifest::from_board_and_page(&board, &page).unwrap();
@@ -762,7 +765,7 @@ mod draft_manifest_cache_tests {
     async fn fresh_lambda_cache_reads_etag_manifest_from_shared_storage() {
         let store: Arc<dyn ObjectStore> = Arc::new(InMemory::new());
         let mut persisted_board =
-            Board::new_detached(Some("board-1".into()), Path::from("apps").child("app-1"));
+            Board::new_detached(Some("board-1".into()), Path::from("apps").join("app-1"));
         persisted_board.execution_mode = flow_like::flow::board::ExecutionMode::Local;
         let persisted = PrerunManifest::from_board(&persisted_board);
         let path = draft_manifest_path("app-1", "board-1", "etag-1");
@@ -778,7 +781,7 @@ mod draft_manifest_cache_tests {
 
         let rebuilt = PrerunManifest::from_board(&Board::new_detached(
             Some("board-1".into()),
-            Path::from("apps").child("app-1"),
+            Path::from("apps").join("app-1"),
         ));
         assert_eq!(loaded.as_ref(), &persisted);
         assert_ne!(loaded.signature, rebuilt.signature);
@@ -814,7 +817,7 @@ mod draft_manifest_cache_tests {
     async fn swept_etag_manifest_is_rebuilt_from_the_exact_board_snapshot() {
         let store: Arc<dyn ObjectStore> = Arc::new(InMemory::new());
         let mut board =
-            Board::new_detached(Some("board-1".into()), Path::from("apps").child("app-1"));
+            Board::new_detached(Some("board-1".into()), Path::from("apps").join("app-1"));
         board.execution_mode = flow_like::flow::board::ExecutionMode::Local;
         let authority = PrerunManifest::from_board(&board);
         flow_like::utils::compression::compress_to_file(
@@ -872,7 +875,7 @@ mod draft_manifest_cache_tests {
 
     #[test]
     fn exact_board_source_if_match_race_maps_to_a_client_actionable_status() {
-        let path = Path::from("apps").child("app-1").child("board-1.board");
+        let path = Path::from("apps").join("app-1").join("board-1.board");
 
         let stale = exact_board_source_read_error(
             &path,
@@ -901,7 +904,7 @@ mod draft_manifest_cache_tests {
     #[tokio::test]
     async fn board_authority_loader_rejects_a_page_aware_artifact() {
         let store: Arc<dyn ObjectStore> = Arc::new(InMemory::new());
-        let board = Board::new_detached(Some("board-1".into()), Path::from("apps").child("app-1"));
+        let board = Board::new_detached(Some("board-1".into()), Path::from("apps").join("app-1"));
         let manifest =
             PrerunManifest::from_board_and_page(&board, &Page::new("page-1", "Page", "/")).unwrap();
         let path = draft_manifest_path("app-1", "board-1", "etag-1");
@@ -919,7 +922,7 @@ mod draft_manifest_cache_tests {
     #[tokio::test]
     async fn cached_page_manifest_is_republished_after_shared_deletion() {
         let store: Arc<dyn ObjectStore> = Arc::new(InMemory::new());
-        let board = Board::new_detached(Some("board-1".into()), Path::from("apps").child("app-1"));
+        let board = Board::new_detached(Some("board-1".into()), Path::from("apps").join("app-1"));
         let cached =
             PrerunManifest::from_board_and_page(&board, &Page::new("page-1", "Page", "/")).unwrap();
         let path =
@@ -939,7 +942,7 @@ mod draft_manifest_cache_tests {
     #[tokio::test]
     async fn cached_version_page_manifest_is_republished_after_shared_deletion() {
         let store: Arc<dyn ObjectStore> = Arc::new(InMemory::new());
-        let storage_root = Path::from("apps").child("app-1");
+        let storage_root = Path::from("apps").join("app-1");
         let board = Board::new_detached(Some("board-1".into()), storage_root.clone());
         let page = Page::new("page-1", "Page", "/");
         let cached = PrerunManifest::from_board_and_page(&board, &page).unwrap();
@@ -961,9 +964,9 @@ mod draft_manifest_cache_tests {
     #[tokio::test]
     async fn cached_version_manifest_is_republished_after_shared_deletion() {
         let store: Arc<dyn ObjectStore> = Arc::new(InMemory::new());
-        let board = Board::new_detached(Some("board-1".into()), Path::from("apps").child("app-1"));
+        let board = Board::new_detached(Some("board-1".into()), Path::from("apps").join("app-1"));
         let cached = PrerunManifest::from_board(&board);
-        let storage_root = Path::from("apps").child("app-1");
+        let storage_root = Path::from("apps").join("app-1");
         let path = manifest_path(&storage_root, "board-1", (1, 2, 3));
         assert!(persist_prerun_manifest(store.as_ref(), &path, &cached).await);
         store.delete(&path).await.unwrap();
@@ -980,7 +983,7 @@ mod draft_manifest_cache_tests {
     #[tokio::test]
     async fn pinned_pages_publish_to_disjoint_keys_without_changing_callback_authority() {
         let store: Arc<dyn ObjectStore> = Arc::new(InMemory::new());
-        let storage_root = Path::from("apps").child("app-1");
+        let storage_root = Path::from("apps").join("app-1");
         let mut board = Board::new_detached(Some("board-1".into()), storage_root.clone());
         board.page_ids = vec!["page-1".into(), "page-2".into()];
         let authority = PrerunManifest::from_board(&board);
@@ -1038,7 +1041,7 @@ mod draft_manifest_cache_tests {
     #[tokio::test]
     async fn format_scoped_version_manifest_isolated_from_legacy_writers() {
         let store: Arc<dyn ObjectStore> = Arc::new(InMemory::new());
-        let storage_root = Path::from("apps").child("app-1");
+        let storage_root = Path::from("apps").join("app-1");
         let current_path = manifest_path(&storage_root, "board-1", (1, 2, 3));
         let legacy_path = legacy_manifest_path(&storage_root, "board-1", (1, 2, 3));
         assert_ne!(current_path, legacy_path);
@@ -1066,7 +1069,7 @@ mod draft_manifest_cache_tests {
     #[tokio::test]
     async fn version_manifest_reader_reports_legacy_fallback_on_current_miss() {
         let store: Arc<dyn ObjectStore> = Arc::new(InMemory::new());
-        let storage_root = Path::from("apps").child("app-1");
+        let storage_root = Path::from("apps").join("app-1");
         let current_path = manifest_path(&storage_root, "board-1", (1, 2, 3));
         let legacy_path = legacy_manifest_path(&storage_root, "board-1", (1, 2, 3));
         let legacy =
@@ -1087,7 +1090,7 @@ mod draft_manifest_cache_tests {
     #[tokio::test]
     async fn version_board_authority_rejects_page_dependent_bytes() {
         let store: Arc<dyn ObjectStore> = Arc::new(InMemory::new());
-        let storage_root = Path::from("apps").child("app-1");
+        let storage_root = Path::from("apps").join("app-1");
         let board = Board::new_detached(Some("board-1".into()), storage_root.clone());
         let page_manifest =
             PrerunManifest::from_board_and_page(&board, &Page::new("page-1", "Page", "/")).unwrap();
@@ -1116,7 +1119,7 @@ pub async fn load_prerun_manifest(
     board_id: &str,
     version: Option<(u32, u32, u32)>,
 ) -> Result<Arc<PrerunManifest>, ApiError> {
-    let storage_root = Path::from("apps").child(app_id.to_string());
+    let storage_root = Path::from("apps").join(app_id.to_string());
     let meta_store = state.meta_bucket.as_generic();
 
     let Some(version) = version else {

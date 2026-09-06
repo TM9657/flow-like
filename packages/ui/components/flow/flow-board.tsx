@@ -4925,14 +4925,11 @@ export function FlowBoard({
 
 	// The page builder carries its own page switcher, so the tab has to follow the
 	// document rather than the document being pinned to the tab.
-	const changeTabDocument = useCallback(
-		(key: string, doc: IEditorDocument) => {
-			setOpenTabs((old) =>
-				old.map((tab) => (tab.key === key ? { ...tab, doc } : tab)),
-			);
-		},
-		[],
-	);
+	const changeTabDocument = useCallback((key: string, doc: IEditorDocument) => {
+		setOpenTabs((old) =>
+			old.map((tab) => (tab.key === key ? { ...tab, doc } : tab)),
+		);
+	}, []);
 
 	// Where teammates are, for the explorer (per file / per layer) and the
 	// inspector (who has the selected node selected or open in code).
@@ -5010,6 +5007,7 @@ export function FlowBoard({
 		) : shell.sidebar === "variables" ? (
 			board.data && (
 				<VariablesMenu
+					appId={appId}
 					board={board.data}
 					executeCommand={executeCommand}
 					currentLayerId={currentLayer}

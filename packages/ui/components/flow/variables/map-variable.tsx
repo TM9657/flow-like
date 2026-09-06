@@ -3,6 +3,8 @@
 import { useTranslation } from "@flow-like/locales";
 import { FileIcon, KeyIcon, PlusCircleIcon, XIcon } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { normalizeGeometryValue } from "../../../lib/geometry";
+import { IValueType } from "../../../lib/schema/flow/pin";
 import type { IVariable } from "../../../lib/schema/flow/variable";
 import { IVariableType } from "../../../lib/schema/flow/variable";
 import {
@@ -11,6 +13,7 @@ import {
 } from "../../../lib/uint8";
 import { useBackend } from "../../../state/backend-state";
 import { Button, Input, Label, Separator, Switch, Textarea } from "../../ui";
+import { GeometryValueInput } from "./geometry-variable";
 
 type MapEntries = Record<string, unknown>;
 
@@ -33,6 +36,8 @@ function initialValueForType(dataType: IVariableType): {
 			return { value: "", valid: false };
 		case IVariableType.Struct:
 			return { value: {}, valid: true };
+		case IVariableType.Geometry:
+			return { value: null, valid: false };
 		case IVariableType.Generic:
 			return { value: null, valid: true };
 		default:
@@ -69,6 +74,7 @@ function renderValueDisplay(dataType: IVariableType, value: unknown): string {
 			return typeof value === "string"
 				? (value.split("/").pop() ?? value)
 				: String(value);
+		case IVariableType.Geometry:
 		case IVariableType.Struct:
 		case IVariableType.Generic:
 			return JSON.stringify(value);
@@ -189,15 +195,32 @@ function MapValueInput({
 	onChange,
 	disabled,
 	secret,
+	schema,
+	refs,
 }: Readonly<{
 	dataType: IVariableType;
 	value: unknown;
 	onChange: (value: unknown, valid: boolean) => void;
 	disabled?: boolean;
 	secret?: boolean;
+	schema?: string | null;
+	refs?: Record<string, string>;
 }>) {
 	const { t } = useTranslation("flow");
 	switch (dataType) {
+		case IVariableType.Geometry:
+			return (
+				<GeometryValueInput
+					value={value}
+					onChange={onChange}
+					disabled={disabled}
+					schema={schema}
+					refs={refs}
+					secret={secret}
+					allowUnset={false}
+					preview={false}
+				/>
+			);
 		case IVariableType.Boolean:
 			return (
 				<div className="flex items-center gap-2 flex-1">
@@ -329,10 +352,12 @@ export function MapVariable({
 	disabled,
 	variable,
 	onChange,
+	refs,
 }: Readonly<{
 	disabled?: boolean;
 	variable: IVariable;
 	onChange: (variable: IVariable) => void;
+	refs?: Record<string, string>;
 }>) {
 	const { t } = useTranslation("flow");
 	const dataType = variable.data_type;
@@ -343,6 +368,7 @@ export function MapVariable({
 	}, [variable.default_value]);
 
 	const [newKey, setNewKey] = useState("");
+	const [commitError, setCommitError] = useState<string | null>(null);
 	const [{ value: newValue, valid: newValueValid }, setNewEntry] = useState(
 		() => initialValueForType(dataType),
 	);
@@ -366,12 +392,25 @@ export function MapVariable({
 
 	const commit = useCallback(
 		(next: MapEntries) => {
-			onChange({
-				...variable,
-				default_value: convertJsonToUint8Array(next),
-			});
+			try {
+				if (dataType === IVariableType.Geometry)
+					next = normalizeGeometryValue(next, {
+						schema: variable.schema,
+						refs,
+						valueType: IValueType.HashMap,
+					}) as MapEntries;
+				onChange({
+					...variable,
+					default_value: convertJsonToUint8Array(next),
+				});
+				setCommitError(null);
+				return true;
+			} catch (error) {
+				setCommitError(error instanceof Error ? error.message : String(error));
+				return false;
+			}
 		},
-		[onChange, variable],
+		[onChange, variable, refs, dataType],
 	);
 
 	const keyExists = newKey.trim() !== "" && newKey.trim() in entries;
@@ -380,8 +419,7 @@ export function MapVariable({
 		if (disabled) return;
 		const key = newKey.trim();
 		if (!key || !newValueValid) return;
-		commit({ ...entries, [key]: newValue });
-		resetEntry();
+		if (commit({ ...entries, [key]: newValue })) resetEntry();
 	}, [disabled, newKey, newValueValid, newValue, entries, commit, resetEntry]);
 
 	const handleRemove = useCallback(
@@ -397,6 +435,11 @@ export function MapVariable({
 
 	return (
 		<div className="flex flex-col gap-3 w-full min-w-0">
+			{commitError && (
+				<p role="alert" className="text-xs text-destructive">
+					{commitError}
+				</p>
+			)}
 			<div className="flex flex-col gap-2 w-full min-w-0">
 				<div className="flex gap-2 w-full min-w-0 items-start">
 					<div className="relative flex-1 min-w-0">
@@ -417,6 +460,8 @@ export function MapVariable({
 						onChange={(value, valid) => setNewEntry({ value, valid })}
 						disabled={disabled}
 						secret={variable.secret}
+						schema={variable.schema}
+						refs={refs}
 					/>
 					<Button
 						size="icon"

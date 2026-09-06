@@ -11,10 +11,12 @@ use aws_sdk_dynamodb::{
     Client,
     types::{AttributeValue, KeyType, ReturnValue, ScalarAttributeType, WriteRequest},
 };
+use flow_like_storage::object_store::ObjectStoreExt;
 use flow_like_storage::{
     files::store::FlowLikeStore,
     object_store::{ObjectStore, path::Path},
 };
+use flow_like_types::utils::constant_time_eq;
 use futures::{StreamExt, TryStreamExt, stream};
 use sea_orm::DatabaseConnection;
 use std::{collections::HashMap, sync::Arc, time::Duration};
@@ -24,7 +26,6 @@ const EVENTS_TABLE: &str = "ExecutionEvents";
 const APP_INDEX: &str = "AppIdIndex";
 const RUN_INDEX: &str = "RunIdIndex";
 const DEFAULT_TTL_SECS: i64 = 86400;
-const PAYLOAD_SIZE_THRESHOLD: usize = 100 * 1024; // 100KB - offload to object store above this
 const POLLING_PREFIX: &str = "polling";
 const EVENT_WRITE_MAX_ATTEMPTS: usize = 6;
 const EVENT_WRITE_BASE_DELAY_MS: u64 = 25;
@@ -38,15 +39,6 @@ const TERMINAL_LEASE_CONDITION: &str = "#app_id = :app_id AND #status IN (:pendi
 fn event_write_retry_delay(attempt: usize) -> Duration {
     let shift = attempt.min(5) as u32;
     Duration::from_millis(EVENT_WRITE_BASE_DELAY_MS.saturating_mul(1_u64 << shift))
-}
-
-fn canonical_execution_event_id(run_id: &str, sequence: i32) -> String {
-    let digest = blake3::hash(format!("{run_id}:{sequence}").as_bytes());
-    format!("evt-{}", digest.to_hex())
-}
-
-fn has_canonical_identity(event: &CreateEventInput) -> bool {
-    event.id == canonical_execution_event_id(&event.run_id, event.sequence)
 }
 
 pub struct DynamoDbStateStore {
@@ -629,7 +621,7 @@ fn classify_lease_claim(
     }
     if item_optional_string(item, "leaseToken")
         .as_deref()
-        .is_some_and(|token| token != lease_token)
+        .is_some_and(|token| !constant_time_eq(token.as_bytes(), lease_token.as_bytes()))
     {
         match item_optional_number(item, "leaseExpiresAt") {
             Some(expires_at) if expires_at > now => {
@@ -665,7 +657,9 @@ fn active_lease_record(
         return Err(StateStoreError::NotFound);
     }
     let owned = item_optional_string(item, "boundJobId").as_deref() == Some(job_id)
-        && item_optional_string(item, "leaseToken").as_deref() == Some(lease_token)
+        && item_optional_string(item, "leaseToken")
+            .as_deref()
+            .is_some_and(|token| constant_time_eq(token.as_bytes(), lease_token.as_bytes()))
         && item_optional_number(item, "leaseExpiresAt").is_some_and(|expires_at| expires_at > now);
     if owned && !record.status.is_terminal() {
         Ok(record)
@@ -1297,7 +1291,7 @@ impl ExecutionStateStore for DynamoDbStateStore {
         let mut processed_events = Vec::new();
         for event in &events {
             let payload_json = event.payload.to_string();
-            let payload_ref = if payload_json.len() > PAYLOAD_SIZE_THRESHOLD {
+            let payload_ref = if payload_json.len() > PAYLOAD_OFFLOAD_BYTES {
                 // Avoid touching object storage for the ordinary HTTP retry
                 // of an already-accepted canonical event. A simultaneous
                 // first write can still create an unreferenced content-hash
@@ -1542,7 +1536,7 @@ mod tests {
 
     #[test]
     fn stateless_lambda_constructor_retains_source_store_for_cold_import() {
-        let source_db = Arc::new(DatabaseConnection::Disconnected);
+        let source_db = Arc::new(DatabaseConnection::default());
         assert!(postgres_source(Some(source_db)).is_some());
         assert!(postgres_source(None).is_none());
     }

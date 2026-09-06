@@ -32,8 +32,9 @@ class PinType:
     DATE = "Date"
     PATH_BUF = "PathBuf"
     STRUCT = "Struct"
+    GEOMETRY = "Geometry"
 
-    _ALL = {EXEC, STRING, I64, F64, BOOL, GENERIC, BYTES, DATE, PATH_BUF, STRUCT}
+    _ALL = {EXEC, STRING, I64, F64, BOOL, GENERIC, BYTES, DATE, PATH_BUF, STRUCT, GEOMETRY}
 
     @classmethod
     def validate(cls, data_type: str) -> str:

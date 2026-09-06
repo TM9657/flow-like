@@ -20,6 +20,7 @@ import {
 import type React from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { inferTemporalValue } from "../../../lib/date";
+import { isGeometryMetadata } from "../../../lib/geometry-columns";
 import { looksLikeUserColumnName } from "../../../lib/user-display";
 import type {
 	GraphOverlay,
@@ -31,16 +32,19 @@ import { accountIdFromValue } from "../../../state/backend-state/user-state";
 import { Badge } from "../badge";
 import { Button } from "../button";
 import { Checkbox } from "../checkbox";
+import { GeometryCell } from "../geometry-cell";
 import { Popover, PopoverContent, PopoverTrigger } from "../popover";
 import { RelativeTime } from "../relative-time";
 import { ScrollArea } from "../scroll-area";
 import { UserInlineTag } from "../user-identity";
+import { nodeCaptionAccountId } from "./graph-user-caption";
 import { getGraphIcon } from "./icons";
 
 export interface ConnectionInfo {
 	label: string;
 	direction: "outgoing" | "incoming";
 	targetCaption: string;
+	targetAccountId?: string | null;
 	targetId: string;
 }
 
@@ -76,6 +80,7 @@ function objectTypeMatches(
 }
 
 export type ValueKind =
+	| "geometry"
 	| "string"
 	| "number"
 	| "boolean"
@@ -96,8 +101,10 @@ export { inferValueKind, PropertyValue, FieldFilter, CopyButton };
 function inferValueKind(
 	value: unknown,
 	propKey?: string,
+	metadata?: Record<string, string>,
 ): { kind: ValueKind; dims?: number } {
 	if (value === null || value === undefined) return { kind: "unknown" };
+	if (isGeometryMetadata(metadata)) return { kind: "geometry" };
 	if (typeof value === "boolean") return { kind: "boolean" };
 	if (typeof value === "number" || typeof value === "bigint") {
 		if (propKey && inferTemporalValue(propKey, value)) return { kind: "date" };
@@ -218,15 +225,30 @@ function CopyButton({ text }: { text: string }) {
 function PropertyValue({
 	value,
 	propKey,
-}: { value: unknown; propKey: string }) {
+	metadata,
+	compact = false,
+}: {
+	value: unknown;
+	propKey: string;
+	metadata?: Record<string, string>;
+	compact?: boolean;
+}) {
 	const { t } = useTranslation("common");
-	const { kind, dims } = inferValueKind(value, propKey);
+	const { kind, dims } = inferValueKind(value, propKey, metadata);
 	const display =
 		typeof value === "object"
 			? JSON.stringify(value, null, 2)
 			: String(value ?? "—");
 
 	switch (kind) {
+		case "geometry":
+			return (
+				<GeometryCell
+					value={value}
+					metadata={metadata}
+					variant={compact ? "compact" : "card"}
+				/>
+			);
 		case "boolean":
 			return (
 				<div className="group flex items-center justify-between">
@@ -372,7 +394,11 @@ function FieldFilter({
 	);
 }
 
-function PropertyRow({ propKey, value }: { propKey: string; value: unknown }) {
+function PropertyRow({
+	propKey,
+	value,
+	metadata,
+}: { propKey: string; value: unknown; metadata?: Record<string, string> }) {
 	return (
 		<div className="rounded-md bg-muted/50 px-3 py-2">
 			<div className="flex items-center justify-between mb-0.5">
@@ -380,10 +406,10 @@ function PropertyRow({ propKey, value }: { propKey: string; value: unknown }) {
 					{propKey}
 				</p>
 				<span className="text-[9px] text-muted-foreground/60">
-					{inferValueKind(value, propKey).kind}
+					{inferValueKind(value, propKey, metadata).kind}
 				</span>
 			</div>
-			<PropertyValue value={value} propKey={propKey} />
+			<PropertyValue value={value} propKey={propKey} metadata={metadata} />
 		</div>
 	);
 }
@@ -460,6 +486,7 @@ export function GraphNodeInspector({
 		titleValue !== undefined && titleValue !== null && titleValue !== ""
 			? String(titleValue)
 			: (node.caption ?? node.id);
+	const titleAccountId = nodeCaptionAccountId(node, overlay);
 
 	const prominent = objectView?.prominent_properties ?? [];
 	const prominentSet = new Set(prominent);
@@ -486,7 +513,13 @@ export function GraphNodeInspector({
 						<Icon className="h-3.5 w-3.5 text-white" />
 					</div>
 					<div className="min-w-0">
-						<h3 className="font-semibold text-sm truncate">{headerTitle}</h3>
+						<h3 className="font-semibold text-sm truncate">
+							{titleAccountId ? (
+								<UserInlineTag userId={titleAccountId} className="text-sm" />
+							) : (
+								headerTitle
+							)}
+						</h3>
 						<p className="text-xs text-muted-foreground">{node.label}</p>
 					</div>
 				</div>
@@ -627,10 +660,10 @@ export function GraphNodeInspector({
 									size="sm"
 									className="h-7 gap-1.5 text-xs"
 									onClick={() => onFindPath(node)}
-									title={`Find a path from this object to another`}
+									title="Find a path from this object to another"
 								>
 									<Route className="h-3.5 w-3.5" />
-									{`Find path from here`}
+									Find path from here
 								</Button>
 							)}
 						</div>
@@ -684,11 +717,21 @@ export function GraphNodeInspector({
 							</div>
 							<div className="space-y-2">
 								{prominentEntries.map(([key, value]) => (
-									<PropertyRow key={key} propKey={key} value={value} />
+									<PropertyRow
+										key={key}
+										propKey={key}
+										value={value}
+										metadata={node.property_metadata?.[key]}
+									/>
 								))}
 								{!collapsedOthers &&
 									otherEntries.map(([key, value]) => (
-										<PropertyRow key={key} propKey={key} value={value} />
+										<PropertyRow
+											key={key}
+											propKey={key}
+											value={value}
+											metadata={node.property_metadata?.[key]}
+										/>
 									))}
 							</div>
 							{collapsedOthers && otherEntries.length > 0 && (
@@ -745,7 +788,14 @@ export function GraphNodeInspector({
 										<span className="font-medium text-muted-foreground shrink-0">
 											{conn.label}
 										</span>
-										<span className="truncate">{conn.targetCaption}</span>
+										{conn.targetAccountId ? (
+											<UserInlineTag
+												userId={conn.targetAccountId}
+												className="text-xs"
+											/>
+										) : (
+											<span className="truncate">{conn.targetCaption}</span>
+										)}
 									</button>
 								))}
 							</div>

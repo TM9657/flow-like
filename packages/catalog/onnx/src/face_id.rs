@@ -15,6 +15,7 @@ use flow_like::flow::{
     variable::VariableType,
 };
 use flow_like_catalog_core::{BoundingBox, FlowPath, NodeImage};
+use flow_like_storage::object_store::ObjectStoreExt;
 #[cfg(feature = "execute")]
 use flow_like_storage::object_store::PutPayload;
 use flow_like_types::{Result, anyhow, async_trait, json::json};
@@ -1104,7 +1105,7 @@ async fn upload_model_file(
             if !matches!(
                 &multipart_error,
                 flow_like_storage::object_store::Error::NotSupported { .. }
-                    | flow_like_storage::object_store::Error::NotImplemented
+                    | flow_like_storage::object_store::Error::NotImplemented { .. }
             ) {
                 return Err(anyhow!(
                     "Failed to start multipart model cache upload: {multipart_error}"

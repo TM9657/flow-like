@@ -114,6 +114,9 @@ pub async fn invoke_board_async(
             "Invoking requires a caller that is linked to a user account",
         )
     })?;
+    state
+        .master_board_shared(&app_id, &board_id, &state, params.version)
+        .await?;
     let technical_user_id = permission.technical_user_id().map(ToOwned::to_owned);
     let caller_app_chain = match &user {
         AppUser::ConnectedApp(connected) => Some(connected.app_chain.clone()),
@@ -135,7 +138,7 @@ pub async fn invoke_board_async(
     }
 
     let run_id = create_id();
-    let expires_at = chrono::Utc::now().naive_utc() + chrono::Duration::hours(24);
+    let expires_at = chrono::Utc::now().fixed_offset() + chrono::Duration::hours(24);
 
     let input_payload_len = params
         .payload
@@ -201,13 +204,13 @@ pub async fn invoke_board_async(
         expires_at: Set(Some(expires_at)),
         user_id: Set(Some(sub.clone())),
         technical_user_id: Set(technical_user_id.clone()),
-        caller_app_chain: Set(caller_app_chain.clone()),
+        caller_app_chain: Set(caller_app_chain.clone().map(Into::into)),
         trace_id: Set(correlation.trace_id.clone()),
         parent_run_id: Set(parent_run_id.clone()),
         correlation_keys: Set(correlation_keys.clone()),
         app_id: Set(app_id.clone()),
-        created_at: Set(chrono::Utc::now().naive_utc()),
-        updated_at: Set(chrono::Utc::now().naive_utc()),
+        created_at: Set(chrono::Utc::now().fixed_offset()),
+        updated_at: Set(chrono::Utc::now().fixed_offset()),
     };
     let execution_audit = crate::audit::ExecutionAudit {
         run_id: run_id.clone(),
@@ -223,10 +226,12 @@ pub async fn invoke_board_async(
         technical_user_id: technical_user_id.clone(),
     };
 
-    run.insert(&state.db).await.map_err(|e| {
-        tracing::error!(error = %e, "Failed to create run record");
-        ApiError::internal_error(anyhow!("Failed to create run record: {}", e))
-    })?;
+    crate::entity::caller_apps::insert_run_with_caller_apps(&state.db, run)
+        .await
+        .map_err(|e| {
+            tracing::error!(error = %e, "Failed to create run record");
+            ApiError::internal_error(anyhow!("Failed to create run record: {}", e))
+        })?;
     crate::audit::record_execution_start(&state, &user, execution_audit).await;
 
     let poll_token = sign_execution_jwt(ExecutionJwtParams {
@@ -316,10 +321,18 @@ pub async fn invoke_board_async(
         artifact: None,
     };
 
-    let response = state
+    let response = match state
         .dispatcher
         .dispatch_async(request)
-        .await
+        .await {
+                Ok(response) => Ok(response),
+                Err(error) => {
+                    if let Err(audit_error) = crate::audit::record_execution_dispatch_failure(&state, &run_id, "dispatcher").await {
+                        tracing::error!(run_id = %run_id, %audit_error, "Failed to record dispatch failure");
+                    }
+                    Err(error)
+                }
+            }
         .map_err(|e| {
             tracing::error!(error = %e, "Failed to dispatch job to queue");
             ApiError::internal_error(anyhow!("Failed to dispatch job: {}", e))

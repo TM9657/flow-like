@@ -39,7 +39,7 @@ if [[ -z "${DATABASE_URL:-}" ]]; then
     export DATABASE_URL="postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@${POSTGRES_HOST}:${POSTGRES_PORT}/${POSTGRES_DB}"
 fi
 
-log_info "Database URL: ${DATABASE_URL%:*}:****@${DATABASE_URL#*@}"
+log_info "Database connection configured"
 
 # Check for required tools
 check_tools() {
@@ -84,6 +84,20 @@ run_migrations() {
     local schema_path="prisma/schema"
     if [[ -d "prisma-postgres-mirror/schema" ]]; then
         schema_path="prisma-postgres-mirror/schema"
+    fi
+
+    # Column type changes prisma db push emits without the USING clause they
+    # need on an existing database (enum -> TEXT, array -> JSONB). Guarded and
+    # idempotent; a no-op on a fresh database. The runner is TypeScript and
+    # relies on import.meta.main, so without bun it needs Node >= 24.2.
+    log_info "Applying pre-push SQL..."
+    if command -v bun &>/dev/null; then
+        bun prisma/pre-push.ts
+    elif node --input-type=module -e 'process.exit("main" in import.meta ? 0 : 1)' 2>/dev/null; then
+        node prisma/pre-push.ts
+    else
+        log_error "prisma/pre-push.ts needs bun or Node >= 24.2 (type stripping and import.meta.main)"
+        exit 1
     fi
 
     # Push schema to database

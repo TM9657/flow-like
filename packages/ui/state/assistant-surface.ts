@@ -7,6 +7,7 @@ import type {
 	FlowScriptApplyOptions,
 	FlowScriptApplyResultLike,
 } from "../components/flow/flow-copilot/types";
+import type { IHomeLayout } from "../components/home/types";
 import type { ILogMetadata } from "../lib";
 import type { BoardEditReceiptHistoryMode } from "../lib/flowpilot/board-edit-job-delivery";
 import type { FlowIrCommitToken } from "../lib/schema/copilot";
@@ -111,8 +112,69 @@ export interface AssistantDataStudioSurface {
 	overlayName?: string;
 	/** Table currently selected in the explorer, if any. */
 	selectedTable?: string;
+	/** Whether the visible data comes from the signed-in user's private store. */
+	userScoped?: boolean;
 	/** Names of the overlays available in the app, for grounding. */
 	overlayNames?: string[];
+}
+
+export type AssistantHomeLayoutSource =
+	| "personal"
+	| "profile"
+	| "main"
+	| "bundled";
+
+/** Current, synchronous view of the personal Home editor. */
+export interface AssistantHomeSnapshot {
+	profileId: string;
+	profileName: string;
+	profileDescription?: string;
+	profileInterests: string[];
+	profileTags: string[];
+	source: AssistantHomeLayoutSource;
+	/** Layout the user currently sees, including an unsaved draft. */
+	layout: IHomeLayout;
+	/** Layout from which the current manual or FlowPilot editing session began. */
+	baseLayout: IHomeLayout;
+	/** Inherited layout used by Reset to default. */
+	defaultLayout: IHomeLayout;
+	editing: boolean;
+	dirty: boolean;
+	baseFingerprint: string;
+	candidateFingerprint: string;
+}
+
+export interface AssistantHomeStageGuard {
+	expectedProfileId: string;
+	expectedFingerprint: string;
+}
+
+export type AssistantHomeStageResult =
+	| {
+			status: "staged";
+			changed: boolean;
+			profileId: string;
+			baseFingerprint: string;
+			candidateFingerprint: string;
+	  }
+	| {
+			status: "stale" | "error";
+			code: string;
+			message: string;
+			profileId: string;
+			candidateFingerprint: string;
+	  };
+
+/**
+ * Live personal Home editor used by FlowPilot. Staging always goes through this surface so the
+ * generated layout joins the editor's undo, Save, and Cancel flow.
+ */
+export interface AssistantHomeSurface {
+	getSnapshot: () => AssistantHomeSnapshot;
+	stageLayout: (
+		layout: IHomeLayout,
+		guard: AssistantHomeStageGuard,
+	) => AssistantHomeStageResult;
 }
 
 export interface AssistantSurfaceState {
@@ -122,6 +184,8 @@ export interface AssistantSurfaceState {
 	widgetSurface: AssistantWidgetSurface | null;
 	/** Data Studio page currently open, or null when the user is not on one. */
 	dataStudioSurface: AssistantDataStudioSurface | null;
+	/** Personal Home editor currently mounted, or null away from Home. */
+	homeSurface: AssistantHomeSurface | null;
 	/** Monotonic counter bumped each time a surface asks the assistant UI to open. */
 	openAssistantRequested: number;
 	/**
@@ -135,6 +199,8 @@ export interface AssistantSurfaceState {
 	setWidgetSurface: (surface: AssistantWidgetSurface | null) => void;
 	/** Registers the open Data Studio page (null to clear on unmount). */
 	setDataStudioSurface: (surface: AssistantDataStudioSurface | null) => void;
+	/** Registers the personal Home editor (admin default editors never register here). */
+	setHomeSurface: (surface: AssistantHomeSurface | null) => void;
 	/** Asks the host app to open the global assistant (consumers watch openAssistantRequested). */
 	requestOpenAssistant: (prompt?: string) => void;
 	/** Returns the pending prompt once and clears it, so it is only turned into a draft a single time. */
@@ -146,11 +212,13 @@ export const useAssistantSurface = create<AssistantSurfaceState>(
 		boardSurface: null,
 		widgetSurface: null,
 		dataStudioSurface: null,
+		homeSurface: null,
 		openAssistantRequested: 0,
 		pendingAssistantPrompt: null,
 		setBoardSurface: (surface) => set({ boardSurface: surface }),
 		setWidgetSurface: (surface) => set({ widgetSurface: surface }),
 		setDataStudioSurface: (surface) => set({ dataStudioSurface: surface }),
+		setHomeSurface: (surface) => set({ homeSurface: surface }),
 		requestOpenAssistant: (prompt) =>
 			set((state) => ({
 				openAssistantRequested: state.openAssistantRequested + 1,

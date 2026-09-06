@@ -1,6 +1,14 @@
 import type { IProfile, QueryClient } from "@flow-like/flow-like-ui";
-import { apiResponseError } from "@flow-like/flow-like-ui/lib/api-error";
+import {
+	apiErrorDiagnostic,
+	apiResponseError,
+	redactApiPathSecrets,
+} from "@flow-like/flow-like-ui/lib/api-error";
 import { getApiOrigin, getApiUrl } from "@flow-like/flow-like-ui/lib/api-url";
+import {
+	BOARD_FORMAT_HEADER,
+	CURRENT_BOARD_FORMAT_VERSION,
+} from "@flow-like/flow-like-ui/lib/board-format";
 import type { AuthContextProps } from "react-oidc-context";
 
 const PROTECTED_APP_ROUTE_SEGMENTS = new Set([
@@ -12,6 +20,7 @@ const PROTECTED_APP_ROUTE_SEGMENTS = new Set([
 	"data",
 	"db",
 	"events",
+	"flowpilot-builds",
 	"fork",
 	"graph",
 	"invoke",
@@ -68,6 +77,9 @@ function isProtectedAppRoute(path: string, method: string): boolean {
 	const appOrRoute = parts[1];
 	if (appOrRoute === "search" || appOrRoute === "nodes") return false;
 	if (appOrRoute === "new") return true;
+	// `apps/fork/jobs/{job_id}` only ever returns the caller's own job, so the
+	// token has to be on the request rather than renewed after a 401.
+	if (appOrRoute === "fork" && parts[2] === "jobs") return true;
 
 	if (parts.length === 2) return method !== "GET";
 
@@ -100,7 +112,9 @@ export function ensureProtectedAppRouteAuth(
 		requestSilentRenew(auth, "before API request");
 	}
 
-	throw new Error(`Authentication token required for app request: ${path}`);
+	throw new Error(
+		`Authentication token required for app request: ${redactApiPathSecrets(path)}`,
+	);
 }
 
 export function requestSilentRenew(
@@ -108,11 +122,11 @@ export function requestSilentRenew(
 	reason: string,
 ): void {
 	try {
-		void Promise.resolve(auth.startSilentRenew()).catch((error) => {
-			console.warn(`[Auth] Silent renew failed ${reason}:`, error);
+		void Promise.resolve(auth.startSilentRenew()).catch(() => {
+			console.warn(`[Auth] Silent renew failed ${reason}`);
 		});
-	} catch (error) {
-		console.warn(`[Auth] Silent renew failed ${reason}:`, error);
+	} catch {
+		console.warn(`[Auth] Silent renew failed ${reason}`);
 	}
 }
 
@@ -124,6 +138,7 @@ export async function apiFetch<T>(
 	ensureProtectedAppRouteAuth(path, auth, methodOf(options));
 	const headers: HeadersInit = {
 		"Content-Type": "application/json",
+		[BOARD_FORMAT_HEADER]: String(CURRENT_BOARD_FORMAT_VERSION),
 	};
 
 	if (auth?.user?.access_token) {
@@ -144,8 +159,12 @@ export async function apiFetch<T>(
 			requestSilentRenew(auth, "after 401");
 		}
 		const errorText = await response.text();
+		const safePath = redactApiPathSecrets(path);
 		const error = apiResponseError(response, errorText, path);
-		console.error(`API error ${response.status} for ${path}:`, error.toJSON());
+		console.error(
+			`API error ${response.status} for ${safePath}:`,
+			apiErrorDiagnostic(error),
+		);
 		throw error;
 	}
 

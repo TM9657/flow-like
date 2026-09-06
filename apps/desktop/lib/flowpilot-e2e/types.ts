@@ -1,3 +1,4 @@
+import type { AppScenarioRunResult } from "@flow-like/flow-like-ui/lib/app-build/scenarios";
 import type { FlowScriptGenerationRunReceipt } from "@flow-like/flow-like-ui/lib/flowpilot/flowscript-generation-receipt";
 
 export type FlowPilotE2ECaseId =
@@ -15,6 +16,17 @@ export type FlowPilotE2ECaseId =
 	| "ai-adventure";
 
 export type FlowPilotE2EReasoningEffort = "low" | "medium" | "high";
+export type FlowPilotE2ETier = "structural" | "behavioral";
+
+export interface FlowPilotE2EEvaluationIdentity {
+	readonly harnessContractVersion: string;
+	readonly caseSuiteFingerprint: string;
+	readonly cohortKey: string;
+	readonly provider: string;
+	readonly model: string;
+	readonly reasoningEffort: string;
+	readonly tier: FlowPilotE2ETier;
+}
 
 /** Stable benchmark alias for a pinned generation model. */
 export type FlowPilotE2EModelKey = "terra" | "sol";
@@ -234,6 +246,8 @@ export interface FlowPilotAppCreationSnapshot {
 	widgets: readonly FlowPilotWidgetSnapshot[];
 	tables: readonly (string | FlowPilotTableSnapshot)[];
 	events: readonly FlowPilotEventSnapshot[];
+	/** Host-produced scenario results. Omission is expected for the default structural tier. */
+	behavioralScenarioResults?: readonly AppScenarioRunResult[];
 }
 
 export type FlowPilotE2ECheckStatus = "pass" | "fail";
@@ -260,6 +274,18 @@ export interface FlowPilotBoardFlowScriptMetrics extends FlowScriptSizeMetrics {
 	boardName: string;
 }
 
+export interface FlowPilotE2EBehavioralMetrics {
+	scenarios: number;
+	passedScenarios: number;
+	failedScenarios: number;
+	blockedScenarios: number;
+	unknownScenarios: number;
+	startedRuns: number;
+	successfulRuns: number;
+	failedRuns: number;
+	unknownRuns: number;
+}
+
 export interface FlowPilotE2ERunReport {
 	schema: "flowpilot.app-creation-e2e-report/v1";
 	caseId: FlowPilotE2ECaseId;
@@ -268,6 +294,9 @@ export interface FlowPilotE2ERunReport {
 	appName: string;
 	expectedAppName: string;
 	model: FlowPilotE2EModelConfig;
+	evaluationIdentity: FlowPilotE2EEvaluationIdentity;
+	/** Omitted by legacy artifacts; omission means structural. */
+	tier?: FlowPilotE2ETier;
 	passed: boolean;
 	summary: {
 		checks: number;
@@ -286,6 +315,7 @@ export interface FlowPilotE2ERunReport {
 		authored?: FlowScriptSizeMetrics;
 		canonical: readonly FlowPilotBoardFlowScriptMetrics[];
 	};
+	behavioral?: FlowPilotE2EBehavioralMetrics;
 	checks: readonly FlowPilotE2ECheck[];
 	failures: readonly FlowPilotE2ECheck[];
 }
@@ -298,6 +328,8 @@ export interface FlowPilotE2ERunOptions {
 	suite?: "smoke" | "full";
 	/** Benchmark model alias; omission keeps the default pinned model. */
 	modelKey?: FlowPilotE2EModelKey;
+	/** Omission preserves the existing compile/structure-only benchmark. */
+	tier?: FlowPilotE2ETier;
 	minFlowScriptNonWhitespaceChars?: number;
 	repeat?: number;
 	/**
@@ -329,6 +361,8 @@ export interface FlowPilotE2EArtifact {
 	durationMs: number;
 	requestedModelKey: FlowPilotE2EModelKey;
 	requestedModel: FlowPilotE2EModelConfig;
+	/** Omitted by legacy artifacts; omission means structural. */
+	requestedTier?: FlowPilotE2ETier;
 	observedModel?: {
 		provider: string;
 		model: string;
@@ -359,6 +393,9 @@ export interface FlowPilotE2ECliEnvelope {
 	selection: {
 		caseIds: readonly FlowPilotE2ECaseId[];
 		modelKey: FlowPilotE2EModelKey;
+		/** Omitted by legacy callbacks; omission means structural. */
+		tier?: FlowPilotE2ETier;
+		evaluationIdentity?: FlowPilotE2EEvaluationIdentity;
 		repeat: number;
 		minFlowScriptNonWhitespaceChars?: number;
 		failFast: boolean;
@@ -371,6 +408,7 @@ export interface FlowPilotE2ECliEnvelope {
 		passed: number;
 		failed: number;
 		skipped: number;
+		behavioral?: FlowPilotE2EBehavioralMetrics;
 	};
 	/** Infrastructure or runner failure outside a completed case report. */
 	error?: string;

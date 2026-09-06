@@ -11,7 +11,7 @@ use axum::{
 };
 use flow_like::{app::App, bit::Metadata};
 use flow_like_storage::Path as FlowPath;
-use sea_orm::{ColumnTrait, EntityTrait, QueryFilter, QueryOrder, TransactionTrait};
+use sea_orm::{ColumnTrait, EntityTrait, QueryFilter, QueryOrder};
 use serde::{Deserialize, Serialize};
 use utoipa::IntoParams;
 
@@ -116,11 +116,10 @@ pub async fn get_detail(
     }
 
     // Load metadata
-    let txn = state.db.begin().await?;
     let existing_meta = meta::Entity::find()
         .filter(meta::Column::AppId.eq(&app_id))
         .filter(meta::Column::Lang.eq(&language))
-        .one(&txn)
+        .one(&state.db)
         .await?;
 
     let existing_meta = match existing_meta {
@@ -129,17 +128,16 @@ pub async fn get_detail(
             meta::Entity::find()
                 .filter(meta::Column::AppId.eq(&app_id))
                 .filter(meta::Column::Lang.eq("en"))
-                .one(&txn)
+                .one(&state.db)
                 .await?
         }
     };
-    drop(txn);
 
     let metadata = if let Some(meta_model) = existing_meta {
         let mut metadata = Metadata::from(meta_model);
         let master_store = state.master_credentials().await?;
         let store = master_store.to_store(false).await?;
-        let prefix = FlowPath::from("media").child("apps").child(app_id.clone());
+        let prefix = FlowPath::from("media").join("apps").join(app_id.clone());
         metadata.presign(prefix, &store).await;
         Some(metadata)
     } else {

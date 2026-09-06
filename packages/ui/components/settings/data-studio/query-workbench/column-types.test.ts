@@ -52,3 +52,20 @@ describe("classifyResultColumn", () => {
 		expect(classifyResultColumn(column("username"), rows)).toBe("text");
 	});
 });
+
+describe("declared geometry columns", () => {
+	test("uses extension metadata before physical Arrow type classification", () => {
+		for (const type_name of ["Binary", "Struct", "FixedSizeList(Float64)"])
+			expect(
+				classifyColumn({
+					...column("shape", type_name),
+					metadata: { "ARROW:extension:name": "geoarrow.wkb" },
+				}),
+			).toBe("geometry");
+	});
+	test("never infers geometry from objects or arbitrary binary", () => {
+		const rows = [{ shape: { type: "Point", coordinates: [1, 2] } }];
+		expect(classifyResultColumn(column("shape", "Struct"), rows)).toBe("json");
+		expect(classifyResultColumn(column("shape", "Binary"), rows)).toBe("text");
+	});
+});

@@ -18,6 +18,9 @@ pub struct SqlPayload {
     #[serde(default)]
     pub params: flow_like_types::Value,
     pub limit: Option<usize>,
+    /// Return projected Arrow field metadata alongside the rows.
+    #[serde(default)]
+    pub include_metadata: bool,
 }
 
 #[utoipa::path(
@@ -32,7 +35,7 @@ pub struct SqlPayload {
     ),
     request_body = SqlPayload,
     responses(
-        (status = 200, description = "Query results", body = Vec<flow_like_types::Value>),
+        (status = 200, description = "Query results", body = flow_like_types::Value),
         (status = 400, description = "Bad request"),
         (status = 401, description = "Unauthorized"),
         (status = 403, description = "Forbidden")
@@ -53,7 +56,7 @@ pub async fn run_sql(
     Path((app_id, overlay_id)): Path<(String, String)>,
     Query(scope): Query<ScopeParams>,
     Json(payload): Json<SqlPayload>,
-) -> Result<Json<Vec<flow_like_types::Value>>, ApiError> {
+) -> Result<Json<flow_like_types::Value>, ApiError> {
     ensure_any_permission!(
         user,
         &app_id,
@@ -67,12 +70,16 @@ pub async fn run_sql(
     let store = lancegraph::LanceGraphStore::new(connection, overlay, None).await?;
 
     let results = store
-        .sql(
+        .sql_with_metadata(
             &payload.query,
             payload.params,
             Some(payload.limit.unwrap_or(DEFAULT_GRAPH_QUERY_LIMIT)),
         )
         .await?;
 
-    Ok(Json(results))
+    Ok(Json(if payload.include_metadata {
+        serde_json::to_value(results)?
+    } else {
+        serde_json::to_value(results.rows)?
+    }))
 }

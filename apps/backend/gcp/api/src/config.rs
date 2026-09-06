@@ -199,6 +199,7 @@ impl Config {
                 IF_NONE_MATCH,
                 HeaderName::from_static("x-api-key"),
                 HeaderName::from_static("x-flow-like-app-id"),
+                HeaderName::from_static("x-flow-like-board-format"),
                 HeaderName::from_static("x-flow-like-event-authorization"),
                 HeaderName::from_static("x-request-id"),
                 HeaderName::from_static("idempotency-key"),
@@ -231,11 +232,8 @@ impl Config {
 /// Reject every environment setting that could redirect this process's
 /// credentials or its traffic.
 ///
-/// Exposed separately from `Config::from_env` so main can run it before the
-/// first socket is opened: the Sentry transport honours the proxy variables, so
-/// a process that started telemetry first would already have handed its DSN and
-/// its first events to an operator-supplied proxy by the time configuration
-/// parsing rejected it.
+/// Exposed separately from `Config::from_env` so main can reject these settings
+/// before telemetry exporters open their first sockets.
 pub fn reject_forbidden_environment() -> Result<(), ConfigError> {
     ensure_no_forbidden_credential_env()
         .map_err(|error| ConfigError::ForbiddenCredentialSetting(error.to_string()))?;

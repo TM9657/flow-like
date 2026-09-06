@@ -5,7 +5,8 @@ edition = "2024"
 
 [features]
 default = ["all"]
-all = ["cache", "channel", "dispatch", "maintenance"]
+all = ["cache", "channel", "dispatch", "maintenance", "geometry"]
+geometry = ["dep:serde_json", "dep:schemars"]
 cache = ["dep:schemars"]
 channel = ["dep:serde_json", "dep:schemars"]
 dispatch = ["dep:blake3", "dep:serde_json", "channel"]

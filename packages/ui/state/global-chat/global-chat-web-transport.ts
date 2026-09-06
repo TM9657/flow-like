@@ -413,10 +413,24 @@ export async function dispatchSpecialistToolRequest(params: {
 	data: string;
 	onToolRequest: (request: WebToolRequest) => Promise<WebToolResponse>;
 	onToolCancel?: ToolDispatchOptions["onToolCancel"];
+	/** Outer frontend request that owns this specialist stream. */
+	parentRequestId?: string;
+	/** Host-pinned Home profile, independent of tool arguments or server frame contents. */
+	profileId?: string;
 }): Promise<void> {
+	const request = parseToolRequest(params.data);
+	if (
+		params.parentRequestId &&
+		(params.profileId || !parentRequestId(request))
+	) {
+		request.parentRequestId = params.parentRequestId;
+	}
+	if (params.profileId) {
+		request.context = { ...request.context, profileId: params.profileId };
+	}
 	await dispatchToolRequest(
 		{ onToolRequest: params.onToolRequest, onToolCancel: params.onToolCancel },
-		parseToolRequest(params.data),
+		request,
 	);
 }
 

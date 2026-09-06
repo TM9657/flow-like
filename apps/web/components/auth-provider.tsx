@@ -2,6 +2,7 @@
 
 import { LoadingScreen, useBackend } from "@flow-like/flow-like-ui";
 import type { IProfile } from "@flow-like/flow-like-ui";
+import { createAccountTokenProvider } from "@flow-like/flow-like-ui/components/account/account-session";
 import { Amplify } from "aws-amplify";
 import {
 	type AuthTokens,
@@ -37,22 +38,21 @@ const DEFAULT_PROFILE: IProfile = {
 };
 
 export class OIDCTokenProvider implements TokenProvider {
-	constructor(private readonly userManager: UserManager) {}
-	async getTokens(options?: {
-		forceRefresh?: boolean;
-	}): Promise<AuthTokens | null> {
-		const user = await this.userManager.getUser();
-		if (!user?.access_token || !user?.id_token) {
-			return null;
-		}
+	private readonly provider;
 
-		const accessToken = decodeJWT(user.access_token);
-		const idToken = decodeJWT(user.id_token);
+	constructor(userManager: UserManager) {
+		this.provider = createAccountTokenProvider(async () => {
+			const user = await userManager.getUser();
+			return {
+				isAuthenticated: Boolean(user),
+				user,
+				signinSilent: () => userManager.signinSilent(),
+			};
+		}, decodeJWT);
+	}
 
-		return {
-			accessToken: accessToken,
-			idToken: idToken,
-		};
+	getTokens(options?: { forceRefresh?: boolean }): Promise<AuthTokens | null> {
+		return this.provider.getTokens(options);
 	}
 }
 
@@ -285,24 +285,18 @@ function AuthInner({ children }: Readonly<{ children: React.ReactNode }>) {
 							);
 							await auth?.signinRedirect({ url_state: currentRelativeUrl() });
 						}
-					} catch (silentError) {
-						console.warn(
-							"Silent login failed, attempting normal login:",
-							silentError,
-						);
+					} catch {
+						console.warn("Silent login failed, attempting normal login");
 
 						try {
 							await auth?.signinRedirect({ url_state: currentRelativeUrl() });
-						} catch (redirectError) {
-							console.error(
-								"Both silent and redirect login failed:",
-								redirectError,
-							);
+						} catch {
+							console.error("Both silent and redirect login failed");
 						}
 					}
 				}
-			} catch (error) {
-				console.error("Login process failed:", error);
+			} catch {
+				console.error("Login process failed");
 			}
 		})();
 	}, [auth.user?.profile?.sub]);

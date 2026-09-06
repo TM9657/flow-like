@@ -185,8 +185,13 @@ impl LanceGraphStore {
     async fn edge_projection(
         &self,
         edge: &super::EdgeMappingDef,
+        table: &lancedb::Table,
         schema_cache: &mut HashMap<String, Vec<String>>,
-    ) -> Result<(Vec<String>, Vec<String>)> {
+    ) -> Result<(
+        Vec<String>,
+        Vec<String>,
+        HashMap<String, HashMap<String, String>>,
+    )> {
         let excluded = HashSet::from([edge.src_column.clone(), edge.dst_column.clone()]);
         let prop_names = resolve_property_names(
             &self.connection,
@@ -202,7 +207,10 @@ impl LanceGraphStore {
         columns.extend(prop_names.iter().cloned());
         let mut seen_columns = HashSet::new();
         columns.retain(|column| seen_columns.insert(column.clone()));
-        Ok((columns, prop_names))
+        let mut property_metadata =
+            crate::geometry::property_metadata(table.schema().await?.as_ref());
+        property_metadata.retain(|name, _| prop_names.contains(name));
+        Ok((columns, prop_names, property_metadata))
     }
 
     fn edge_endpoints_mapped(&self, edge: &super::EdgeMappingDef) -> bool {
@@ -324,8 +332,8 @@ impl LanceGraphStore {
                         continue;
                     }
                 };
-                let (columns, prop_names) =
-                    match self.edge_projection(edge, &mut schema_cache).await {
+                let (columns, prop_names, property_metadata) =
+                    match self.edge_projection(edge, &table, &mut schema_cache).await {
                         Ok(projection) => projection,
                         Err(error) => {
                             state
@@ -392,6 +400,7 @@ impl LanceGraphStore {
                                     target: dst_full.clone(),
                                     label: edge.label.clone(),
                                     props: Value::Object(props),
+                                    property_metadata: property_metadata.clone(),
                                 });
                             }
                             let (neighbor_full, neighbor_raw) = if filter_is_source {
@@ -484,15 +493,16 @@ impl LanceGraphStore {
                     continue;
                 }
             };
-            let (columns, prop_names) = match self.edge_projection(edge, schema_cache).await {
-                Ok(projection) => projection,
-                Err(error) => {
-                    state
-                        .warnings
-                        .push(format!("Edge mapping '{}': {}", edge.label, error));
-                    continue;
-                }
-            };
+            let (columns, prop_names, property_metadata) =
+                match self.edge_projection(edge, &table, schema_cache).await {
+                    Ok(projection) => projection,
+                    Err(error) => {
+                        state
+                            .warnings
+                            .push(format!("Edge mapping '{}': {}", edge.label, error));
+                        continue;
+                    }
+                };
 
             for chunk in src_ids.chunks(IN_CHUNK_SIZE) {
                 let remaining = edge_limit.saturating_sub(state.edges.len());
@@ -514,7 +524,15 @@ impl LanceGraphStore {
                 };
                 // Only edges whose other end is already on screen are kept — this
                 // pass connects the current result, it never grows it.
-                self.absorb_edge_rows(state, edge, &prop_names, rows, edge_limit, None);
+                self.absorb_edge_rows(
+                    state,
+                    edge,
+                    &prop_names,
+                    &property_metadata,
+                    rows,
+                    edge_limit,
+                    None,
+                );
             }
         }
     }
@@ -530,6 +548,7 @@ impl LanceGraphStore {
         state: &mut ExpansionState,
         edge: &super::EdgeMappingDef,
         prop_names: &[String],
+        property_metadata: &HashMap<String, HashMap<String, String>>,
         rows: Vec<Value>,
         edge_limit: usize,
         node_limit: Option<usize>,
@@ -601,6 +620,7 @@ impl LanceGraphStore {
                 target: dst_full,
                 label: edge.label.clone(),
                 props: Value::Object(props),
+                property_metadata: property_metadata.clone(),
             });
         }
     }
@@ -645,15 +665,16 @@ impl LanceGraphStore {
                     continue;
                 }
             };
-            let (columns, prop_names) = match self.edge_projection(edge, &mut schema_cache).await {
-                Ok(projection) => projection,
-                Err(error) => {
-                    state
-                        .warnings
-                        .push(format!("Edge mapping '{}': {}", edge.label, error));
-                    continue;
-                }
-            };
+            let (columns, prop_names, property_metadata) =
+                match self.edge_projection(edge, &table, &mut schema_cache).await {
+                    Ok(projection) => projection,
+                    Err(error) => {
+                        state
+                            .warnings
+                            .push(format!("Edge mapping '{}': {}", edge.label, error));
+                        continue;
+                    }
+                };
 
             let budget = share
                 .min(edge_limit.saturating_sub(state.edges.len()))
@@ -684,6 +705,7 @@ impl LanceGraphStore {
                 &mut state,
                 edge,
                 &prop_names,
+                &property_metadata,
                 sampled.rows,
                 edge_limit,
                 Some(node_limit),
@@ -1078,6 +1100,9 @@ impl LanceGraphStore {
                             label: label.clone(),
                             caption,
                             props: Value::Object(map),
+                            property_metadata: crate::geometry::property_metadata(
+                                batch.schema().as_ref(),
+                            ),
                             stats: node_stats.remove(full_id),
                         });
                     }
@@ -1195,30 +1220,16 @@ impl LanceGraphStore {
                     continue;
                 }
             };
-            let excluded = HashSet::from([edge.src_column.clone(), edge.dst_column.clone()]);
-            let prop_names = match resolve_property_names(
-                &self.connection,
-                &edge.table,
-                &edge.property_columns,
-                self.overlay.property_projection_mode,
-                &mut schema_cache,
-                &excluded,
-                &[],
-            )
-            .await
-            {
-                Ok(names) => names,
-                Err(error) => {
-                    state
-                        .warnings
-                        .push(format!("Edge mapping '{}': {}", edge.label, error));
-                    continue;
-                }
-            };
-            let mut columns = vec![edge.src_column.clone(), edge.dst_column.clone()];
-            columns.extend(prop_names.iter().cloned());
-            let mut seen_columns = HashSet::new();
-            columns.retain(|column| seen_columns.insert(column.clone()));
+            let (columns, prop_names, property_metadata) =
+                match self.edge_projection(edge, &table, &mut schema_cache).await {
+                    Ok(projection) => projection,
+                    Err(error) => {
+                        state
+                            .warnings
+                            .push(format!("Edge mapping '{}': {}", edge.label, error));
+                        continue;
+                    }
+                };
 
             let remaining = edge_limit.saturating_sub(emitted);
             if remaining == 0 {
@@ -1273,6 +1284,7 @@ impl LanceGraphStore {
                     target: dst_full.clone(),
                     label: edge.label.clone(),
                     props: Value::Object(props),
+                    property_metadata: property_metadata.clone(),
                 };
                 match cross_overlay {
                     None => {
@@ -1478,6 +1490,9 @@ impl LanceGraphStore {
                         label: label.clone(),
                         caption,
                         props: Value::Object(map),
+                        property_metadata: crate::geometry::property_metadata(
+                            batch.schema().as_ref(),
+                        ),
                         stats: None,
                     });
                     if let Some(child_edges) = edges_by_raw.get(&raw_key) {

@@ -26,6 +26,7 @@ const (
 	DataTypeDate    = "Date"
 	DataTypePathBuf = "PathBuf"
 	DataTypeStruct  = "Struct"
+	DataTypeGeometry = "Geometry"
 )
 
 const (

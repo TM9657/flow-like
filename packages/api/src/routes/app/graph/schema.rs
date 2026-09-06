@@ -67,6 +67,7 @@ pub async fn graph_schema(
                         name: p.name,
                         data_type: p.data_type,
                         nullable: p.nullable,
+                        metadata: p.metadata,
                     })
                     .collect(),
             })
@@ -84,6 +85,7 @@ pub async fn graph_schema(
                         name: p.name,
                         data_type: p.data_type,
                         nullable: p.nullable,
+                        metadata: p.metadata,
                     })
                     .collect(),
             })

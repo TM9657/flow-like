@@ -2,7 +2,7 @@
 
 import { useTranslation } from "@flow-like/locales";
 import { ChevronDown, ChevronUp, Eye, EyeOff } from "lucide-react";
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { LabelStyle } from "../../../state/backend-state/graph-state";
 import { Popover, PopoverContent, PopoverTrigger } from "../popover";
 import { GRAPH_ICONS, type IconKey, getGraphIcon } from "./icons";
@@ -30,6 +30,8 @@ export interface GraphLegendProps {
 		type: "node" | "edge",
 		style: LabelStyle,
 	) => void;
+	/** Starts compact when the graph stage cannot safely fit the legend body. */
+	compact?: boolean;
 }
 
 /**
@@ -298,10 +300,17 @@ export function GraphLegend({
 	hidden: hiddenProp,
 	onToggleVisibility,
 	onStyleChange,
+	compact = false,
 }: GraphLegendProps) {
 	const { t } = useTranslation("common");
 	const [internalHidden, setInternalHidden] = useState<Set<string>>(new Set());
-	const [collapsed, setCollapsed] = useState(false);
+	const [collapsed, setCollapsed] = useState(compact);
+	const wasCompact = useRef(compact);
+
+	useEffect(() => {
+		if (compact && !wasCompact.current) setCollapsed(true);
+		wasCompact.current = compact;
+	}, [compact]);
 
 	const isControlled = hiddenProp !== undefined;
 	const hidden = hiddenProp ?? internalHidden;

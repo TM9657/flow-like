@@ -21,14 +21,13 @@ pub async fn ensure_user_exists(state: &AppState, sub: &str) -> Result<(), crate
     let user = user::ActiveModel {
         id: sea_orm::ActiveValue::Set(sub.to_string()),
         tracking_id: sea_orm::ActiveValue::Set(Some(create_id())),
-        created_at: sea_orm::ActiveValue::Set(chrono::Utc::now().naive_utc()),
-        updated_at: sea_orm::ActiveValue::Set(chrono::Utc::now().naive_utc()),
+        created_at: sea_orm::ActiveValue::Set(chrono::Utc::now().fixed_offset()),
+        updated_at: sea_orm::ActiveValue::Set(chrono::Utc::now().fixed_offset()),
         ..Default::default()
     };
 
     let res = user::Entity::insert(user)
         .on_conflict(OnConflict::column(user::Column::Id).do_nothing().to_owned())
-        .do_nothing()
         .exec(&state.db)
         .await;
 
@@ -58,9 +57,9 @@ pub async fn sign_avatar(
     let master_store = state.master_credentials().await?;
     let master_store = master_store.to_store(false).await?;
     let path = flow_like_storage::Path::from("media")
-        .child("users")
-        .child(sub)
-        .child(avatar_file_name(avatar_id));
+        .join("users")
+        .join(sub)
+        .join(avatar_file_name(avatar_id));
     let url = master_store
         .sign("GET", &path, std::time::Duration::from_secs(60 * 5))
         .await?;

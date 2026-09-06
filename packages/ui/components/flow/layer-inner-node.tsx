@@ -189,6 +189,7 @@ export function LayerInnerNode(props: NodeProps<ILayerInnerNode>) {
 			</div>
 
 			<LayerEditMenu
+				appId={props.data.appId}
 				open={editing}
 				layer={props.data.layer}
 				boardRef={props.data.boardRef}

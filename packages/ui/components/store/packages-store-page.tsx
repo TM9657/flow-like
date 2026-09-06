@@ -1,39 +1,37 @@
 "use client";
 
 import { useTranslation } from "@flow-like/locales";
-import { useQuery } from "@tanstack/react-query";
+import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { useDebounce } from "@uidotdev/usehooks";
 import {
-	ChevronRight,
-	KeyRound,
-	Lock,
+	AlertCircle,
+	Loader2,
 	Package,
+	RotateCw,
 	Search,
 	Shield,
-	SlidersHorizontal,
-	Star,
+	X,
 } from "lucide-react";
-import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
+	type ReactNode,
 	Suspense,
 	useCallback,
 	useEffect,
-	useMemo,
 	useRef,
 	useState,
 } from "react";
 import { toast } from "sonner";
 import { useInvoke } from "../../hooks/use-invoke";
-import { hashToGradient, useThemeInfo } from "../../hooks/use-theme-gradient";
 import { getErrorMessage } from "../../lib/error-message";
-import { usePackageCapabilities } from "../../lib/package-capabilities";
-import type { PackageSummary, SearchResults } from "../../lib/schema/wasm";
+import type { SearchResults } from "../../lib/schema/wasm";
 import { useBackend } from "../../state/backend-state";
 import {
 	type GenericFetcher,
 	StorePackageDetail,
 } from "../pages/store/store-package-detail";
+import { Alert, AlertDescription } from "../ui/alert";
+import { Button } from "../ui/button";
 import { Input } from "../ui/input";
 import type { CompileStatus } from "../ui/package-status-badge";
 import {
@@ -44,8 +42,11 @@ import {
 	SelectValue,
 } from "../ui/select";
 import { Skeleton } from "../ui/skeleton";
-import { ExploreHubHeader } from "./explore-hub-header";
+import { ExploreHubLayout } from "./explore-hub-layout";
+import { PackageCard } from "./package-card";
 import { getPackageOverviewHref } from "./package-navigation";
+
+export { PackageCard } from "./package-card";
 
 type SortOption =
 	| "relevance"
@@ -68,226 +69,13 @@ interface PackagesStorePageProps {
 }
 
 const PACKAGE_CARD_SKELETON_KEYS = Array.from(
-	{ length: 9 },
+	{ length: 12 },
 	(_, index) => `package-skeleton-${index}`,
 );
 
-function getPackageInitials(name: string): string {
-	const words = name
-		.replace(/[()]/g, " ")
-		.split(/\s+/)
-		.filter((word) => {
-			const normalized = word.toLowerCase();
-			return normalized !== "custom" && normalized !== "node";
-		});
-	if (words.length === 1) return words[0].slice(0, 2).toUpperCase();
-	const initials = (words.length ? words : [name])
-		.slice(0, 2)
-		.map((word) => word[0]?.toUpperCase() ?? "")
-		.join("");
-
-	return initials || "PK";
-}
-
-function formatCompact(n: number): string {
-	if (n >= 1_000_000)
-		return `${(n / 1_000_000).toFixed(1).replace(/\.0$/, "")}M`;
-	if (n >= 1_000) return `${(n / 1_000).toFixed(1).replace(/\.0$/, "")}k`;
-	return `${n}`;
-}
-
-function prettyCategory(category: string): string {
-	return category
-		.toLowerCase()
-		.split("_")
-		.map((word) => word.charAt(0).toUpperCase() + word.slice(1))
-		.join(" ");
-}
-
-const MAX_VISIBLE_CAPABILITIES = 3;
-
-export function PackageCard({ pkg }: { pkg: PackageSummary }) {
-	const { t } = useTranslation("store");
-	const { primaryHue, isDark } = useThemeInfo();
-	const gradient = useMemo(
-		() => hashToGradient(pkg.id, primaryHue, isDark),
-		[pkg.id, primaryHue, isDark],
-	);
-	const displayName = pkg.metadata?.name ?? pkg.name;
-	const displayDesc = pkg.metadata?.description ?? pkg.description;
-	const icon = pkg.metadata?.icon;
-	const thumbnail = pkg.metadata?.thumbnail;
-	const rated = (pkg.ratingCount ?? 0) > 0;
-	const category = pkg.primaryCategory ?? pkg.secondaryCategory;
-	const capabilities = usePackageCapabilities(pkg.capabilities);
-	const visibleCapabilities = capabilities.slice(0, MAX_VISIBLE_CAPABILITIES);
-	const hiddenCapabilityCount =
-		capabilities.length - visibleCapabilities.length;
-
-	return (
-		<Link
-			href={`/store/packages?id=${pkg.id}`}
-			className="group relative flex h-full w-full flex-col overflow-hidden rounded-xl border border-border/60 bg-card p-2.5 shadow-sm transition-all hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-lg"
-		>
-			<div
-				aria-hidden="true"
-				className="pointer-events-none absolute inset-0 bg-[radial-gradient(var(--border)_0.5px,transparent_0.5px)] bg-size-[7px_7px] opacity-50"
-			/>
-
-			{/* the cover as a framed specimen — never bled behind the copy */}
-			<div className="relative aspect-video w-full shrink-0 overflow-hidden rounded-lg border border-border/60 bg-muted">
-				{thumbnail ? (
-					<img
-						src={thumbnail}
-						alt=""
-						className="absolute inset-0 h-full w-full object-cover"
-					/>
-				) : (
-					<>
-						<div
-							className="absolute inset-0"
-							style={{
-								background: `linear-gradient(${gradient.angle}deg, ${gradient.from}, ${gradient.to})`,
-							}}
-						/>
-						{icon ? (
-							<img
-								src={icon}
-								alt=""
-								aria-hidden="true"
-								className="absolute left-1/2 top-1/2 h-[150%] w-[150%] -translate-x-1/2 -translate-y-1/2 object-contain opacity-40 blur-2xl saturate-150"
-							/>
-						) : (
-							<span className="absolute inset-0 flex items-center justify-center font-mono text-2xl font-bold text-white/50">
-								{getPackageInitials(displayName)}
-							</span>
-						)}
-					</>
-				)}
-				<span className="absolute bottom-1.5 left-1.5 rounded-md border border-white/20 bg-black/50 px-1.5 py-0.5 font-mono text-[10px] leading-none text-white/90 backdrop-blur-sm">
-					{`v${pkg.latestVersion}`}
-				</span>
-			</div>
-
-			<div className="relative mt-2.5 flex items-center gap-2">
-				<div className="h-9 w-9 shrink-0 overflow-hidden rounded-lg border border-border/60 bg-muted">
-					{icon ? (
-						<img src={icon} alt="" className="h-full w-full object-cover" />
-					) : (
-						<div className="flex h-full w-full items-center justify-center font-mono text-[10px] font-semibold text-muted-foreground">
-							{getPackageInitials(displayName)}
-						</div>
-					)}
-				</div>
-				<div className="min-w-0 flex-1">
-					<div className="flex items-center gap-1.5">
-						<h3 className="truncate font-mono text-[13px] font-semibold">
-							{displayName}
-						</h3>
-						{pkg.verified && (
-							<Shield className="h-3.5 w-3.5 shrink-0 text-sky-500 dark:text-sky-400" />
-						)}
-						{pkg.visibility !== "public" && (
-							<span
-								className="shrink-0 rounded-md border border-border/60 p-1 text-muted-foreground"
-								title={pkg.visibility}
-							>
-								{pkg.visibility === "private" ? (
-									<Lock className="h-3 w-3" />
-								) : (
-									<KeyRound className="h-3 w-3" />
-								)}
-							</span>
-						)}
-					</div>
-					{category && (
-						<div className="truncate font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
-							{prettyCategory(category)}
-						</div>
-					)}
-				</div>
-			</div>
-
-			<p className="relative mt-2 line-clamp-2 text-xs leading-relaxed text-muted-foreground">
-				{displayDesc}
-			</p>
-
-			{/* what this package is allowed to do, straight from the manifest */}
-			{pkg.capabilities && (
-				<div className="relative mb-2.5 mt-2.5 flex flex-wrap gap-1">
-					{visibleCapabilities.map((capability) => (
-						<span
-							key={capability.key}
-							title={capability.label}
-							className={
-								capability.severity === "elevated"
-									? "rounded border border-primary/35 bg-primary/10 px-1.5 py-1 font-mono text-[10px] leading-none text-primary"
-									: "rounded border border-border/60 bg-muted/40 px-1.5 py-1 font-mono text-[10px] leading-none text-muted-foreground"
-							}
-						>
-							{capability.key}
-						</span>
-					))}
-					{hiddenCapabilityCount > 0 && (
-						<span
-							title={capabilities.map((c) => c.label).join("\n")}
-							className="rounded border border-border/60 bg-muted/40 px-1.5 py-1 font-mono text-[10px] leading-none text-muted-foreground"
-						>
-							{`+${hiddenCapabilityCount}`}
-						</span>
-					)}
-					{capabilities.length === 0 && (
-						<span className="rounded border border-dashed border-border/60 px-1.5 py-1 font-mono text-[10px] leading-none text-muted-foreground">
-							{t("noPermissionsRequested", "no permissions requested")}
-						</span>
-					)}
-				</div>
-			)}
-
-			<div className="relative mt-auto grid grid-cols-3 divide-x divide-border/60 border-t border-border/60 pt-2.5">
-				<div className="pr-2.5">
-					<div className="font-mono text-[13px] font-semibold tabular-nums">
-						{formatCompact(pkg.downloadCount)}
-					</div>
-					<div className="mt-0.5 font-mono text-[9px] uppercase tracking-wider text-muted-foreground">
-						{t("installs", "Installs")}
-					</div>
-				</div>
-				<div className="px-2.5">
-					<div className="flex items-center gap-1 font-mono text-[13px] font-semibold tabular-nums">
-						{rated ? (
-							<>
-								<Star className="h-3 w-3 fill-yellow-500 text-yellow-500 dark:fill-yellow-400 dark:text-yellow-400" />
-								{(pkg.avgRating ?? 0).toFixed(1)}
-							</>
-						) : (
-							t("new", "New")
-						)}
-					</div>
-					<div className="mt-0.5 font-mono text-[9px] uppercase tracking-wider text-muted-foreground">
-						{t("rating", "Rating")}
-					</div>
-				</div>
-				<div className="pl-2.5">
-					<div
-						className={`font-mono text-[13px] font-semibold ${pkg.price > 0 ? "text-primary" : ""}`}
-					>
-						{pkg.price > 0
-							? `€${(pkg.price / 100).toFixed(2)}`
-							: t("free", "Free")}
-					</div>
-					<div className="mt-0.5 font-mono text-[9px] uppercase tracking-wider text-muted-foreground">
-						{t("price", "Price")}
-					</div>
-				</div>
-			</div>
-		</Link>
-	);
-}
-
 function PackageCardSkeleton() {
 	return (
-		<div className="flex flex-col rounded-xl border border-border/60 bg-card/60 p-2.5">
+		<div className="flex min-h-96 flex-col rounded-xl border border-border/60 bg-card p-2.5">
 			<Skeleton className="aspect-video w-full rounded-lg" />
 			<div className="mt-2.5 flex items-center gap-2">
 				<Skeleton className="h-9 w-9 shrink-0 rounded-lg" />
@@ -296,7 +84,7 @@ function PackageCardSkeleton() {
 					<Skeleton className="h-2.5 w-16 rounded" />
 				</div>
 			</div>
-			<div className="mt-2 space-y-1.5">
+			<div className="mt-2 min-h-9 space-y-1.5">
 				<Skeleton className="h-3 w-full rounded" />
 				<Skeleton className="h-3 w-3/4 rounded" />
 			</div>
@@ -304,7 +92,7 @@ function PackageCardSkeleton() {
 				<Skeleton className="h-5 w-16 rounded" />
 				<Skeleton className="h-5 w-20 rounded" />
 			</div>
-			<div className="grid grid-cols-3 gap-2.5 border-t border-border/60 pt-2.5">
+			<div className="mt-auto grid grid-cols-3 gap-2.5 border-t border-border/60 pt-2.5">
 				<Skeleton className="h-7 rounded" />
 				<Skeleton className="h-7 rounded" />
 				<Skeleton className="h-7 rounded" />
@@ -401,123 +189,18 @@ export function PackageDetailWrapper({
 	);
 }
 
-function categoryLabel(cat: string): string {
-	return cat
-		.split("_")
-		.map((w) => w.charAt(0) + w.slice(1).toLowerCase())
-		.join(" ");
-}
-
-function groupByCategory(
-	packages: PackageSummary[],
-): Map<string, PackageSummary[]> {
-	const groups = new Map<string, PackageSummary[]>();
-	const seen = new Set<string>();
-
-	for (const pkg of packages) {
-		const category = pkg.primaryCategory ?? pkg.secondaryCategory ?? "OTHER";
-		const label = categoryLabel(category);
-		let group = groups.get(label);
-		if (!group) {
-			group = [];
-			groups.set(label, group);
-		}
-		if (!seen.has(pkg.id)) {
-			group.push(pkg);
-			seen.add(pkg.id);
-		}
-	}
-	return groups;
-}
-
-function Swimlane({
-	title,
-	packages,
-}: { title: string; packages: PackageSummary[] }) {
-	const scrollRef = useRef<HTMLDivElement>(null);
-	const [canScrollLeft, setCanScrollLeft] = useState(false);
-	const [canScrollRight, setCanScrollRight] = useState(false);
-
-	const checkScroll = useCallback(() => {
-		const el = scrollRef.current;
-		if (!el) return;
-		setCanScrollLeft(el.scrollLeft > 0);
-		setCanScrollRight(el.scrollLeft + el.clientWidth < el.scrollWidth - 1);
-	}, []);
-
-	useEffect(() => {
-		const el = scrollRef.current;
-		if (!el) return;
-		checkScroll();
-		el.addEventListener("scroll", checkScroll, { passive: true });
-		const ro = new ResizeObserver(checkScroll);
-		ro.observe(el);
-		return () => {
-			el.removeEventListener("scroll", checkScroll);
-			ro.disconnect();
-		};
-	}, [checkScroll]);
-
-	const scroll = (direction: "left" | "right") => {
-		const el = scrollRef.current;
-		if (!el) return;
-		const amount = el.clientWidth * 0.8;
-		el.scrollBy({
-			left: direction === "left" ? -amount : amount,
-			behavior: "smooth",
-		});
-	};
-
-	return (
-		<div className="space-y-2">
-			<div className="flex items-center gap-2">
-				<h3 className="text-sm font-semibold capitalize">{title}</h3>
-				<span className="text-[10px] text-muted-foreground/50 font-mono">
-					{packages.length}
-				</span>
-				<ChevronRight className="h-3.5 w-3.5 text-muted-foreground/30" />
-			</div>
-			<div className="relative group/swimlane">
-				{canScrollLeft && (
-					<button
-						type="button"
-						onClick={() => scroll("left")}
-						className="absolute left-0 top-0 bottom-0 z-10 w-8 flex items-center justify-center bg-linear-to-r from-background/80 to-transparent opacity-100 md:opacity-0 md:group-hover/swimlane:opacity-100 transition-opacity"
-					>
-						<ChevronRight className="h-4 w-4 rotate-180" />
-					</button>
-				)}
-				<div
-					ref={scrollRef}
-					className="flex snap-x snap-mandatory gap-3 overflow-x-auto scrollbar-none pb-1"
-				>
-					{packages.map((pkg) => (
-						<div
-							key={pkg.id}
-							className="flex w-[85vw] max-w-72 shrink-0 snap-start"
-						>
-							<PackageCard pkg={pkg} />
-						</div>
-					))}
-				</div>
-				{canScrollRight && (
-					<button
-						type="button"
-						onClick={() => scroll("right")}
-						className="absolute right-0 top-0 bottom-0 z-10 w-8 flex items-center justify-center bg-linear-to-l from-background/80 to-transparent opacity-100 md:opacity-0 md:group-hover/swimlane:opacity-100 transition-opacity"
-					>
-						<ChevronRight className="h-4 w-4" />
-					</button>
-				)}
-			</div>
-		</div>
-	);
-}
+const PACKAGE_GRID_CLASS_NAME =
+	"grid grid-cols-[repeat(auto-fill,minmax(min(100%,280px),1fr))] gap-4";
 
 export function PackageListContent({
 	fetcher,
 	auth,
-}: { fetcher: GenericFetcher; auth: PackagesStoreAuth }) {
+	navigation,
+}: {
+	fetcher: GenericFetcher;
+	auth: PackagesStoreAuth;
+	navigation?: ReactNode;
+}) {
 	const { t } = useTranslation("store");
 	const backend = useBackend();
 	const profile = useInvoke(
@@ -525,14 +208,13 @@ export function PackageListContent({
 		backend.userState,
 		[],
 	);
-
+	const searchRef = useRef<HTMLInputElement>(null);
 	const [searchQuery, setSearchQuery] = useState("");
 	const [sortBy, setSortBy] = useState<SortOption>("downloads");
 	const [verifiedOnly, setVerifiedOnly] = useState(false);
 	const [offset, setOffset] = useState(0);
 	const limit = 12;
-
-	const debouncedQuery = useDebounce(searchQuery, 300);
+	const debouncedQuery = useDebounce(searchQuery.trim(), 300);
 	const isAuthenticated = !!auth?.user?.access_token;
 
 	const searchResults = useQuery({
@@ -543,6 +225,7 @@ export function PackageListContent({
 			verifiedOnly,
 			offset,
 			isAuthenticated,
+			profile.data?.hub_profile,
 		],
 		queryFn: async () => {
 			if (!profile.data) return null;
@@ -555,7 +238,6 @@ export function PackageListContent({
 			params.set("limit", String(limit));
 			params.set("language", navigator.language?.split("-")[0] ?? "en");
 			params.set("include_own", "true");
-
 			return fetcher<SearchResults>(
 				profile.data.hub_profile,
 				`registry/search?${params.toString()}`,
@@ -564,142 +246,250 @@ export function PackageListContent({
 			);
 		},
 		enabled: !!profile.data,
+		placeholderData: keepPreviousData,
 	});
 
+	const error = profile.error ?? searchResults.error;
+	const isInitialLoading =
+		!error && (profile.isPending || searchResults.isPending);
+	const isBusy =
+		isInitialLoading ||
+		profile.isFetching ||
+		searchResults.isFetching ||
+		searchQuery.trim() !== debouncedQuery;
+	const hasFilters = !!searchQuery || sortBy !== "downloads" || verifiedOnly;
 	const totalPages = Math.ceil((searchResults.data?.totalCount ?? 0) / limit);
 	const currentPage = Math.floor(offset / limit) + 1;
-	const isSearching = !!debouncedQuery;
-
-	const swimlaneGroups = useMemo(() => {
-		if (isSearching || !searchResults.data?.packages.length) return null;
-		return groupByCategory(searchResults.data.packages);
-	}, [isSearching, searchResults.data?.packages]);
+	const clearFilters = () => {
+		setSearchQuery("");
+		setSortBy("downloads");
+		setVerifiedOnly(false);
+		setOffset(0);
+		searchRef.current?.focus();
+	};
 
 	return (
-		<div className="space-y-6 w-full">
-			<div className="flex flex-col sm:flex-row gap-4">
-				<div className="relative flex-1">
-					<Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-					<Input
-						placeholder={t("searchPackages", "Search packages...")}
-						value={searchQuery}
-						onChange={(e) => {
-							setSearchQuery(e.target.value);
-							setOffset(0);
-						}}
-						className="rounded-full bg-muted/30 border-border/20 pl-10"
-					/>
+		<ExploreHubLayout
+			active="packages"
+			subtitle={t(
+				"discoverAndInstallWasmNodePackages",
+				"Discover and install WASM node packages.",
+			)}
+			toolbar={
+				<div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+					<div className="relative min-w-0 flex-1">
+						{isBusy ? (
+							<Loader2
+								aria-hidden="true"
+								className="pointer-events-none absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 animate-spin text-primary"
+							/>
+						) : (
+							<Search
+								aria-hidden="true"
+								className="pointer-events-none absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-muted-foreground"
+							/>
+						)}
+						<Input
+							ref={searchRef}
+							type="search"
+							aria-label={t("searchPackages", "Search packages...")}
+							aria-controls="explore-package-results"
+							placeholder={t("searchPackages", "Search packages...")}
+							value={searchQuery}
+							onChange={(e) => {
+								setSearchQuery(e.target.value);
+								setOffset(0);
+							}}
+							className="h-12 rounded-xl border-border/60 bg-muted/30 pr-12 pl-12 text-sm shadow-none transition-colors focus-visible:bg-background [&::-webkit-search-cancel-button]:appearance-none"
+						/>
+						{searchQuery && (
+							<button
+								type="button"
+								aria-label={t("clearSearch", "Clear search")}
+								onClick={() => {
+									setSearchQuery("");
+									setOffset(0);
+									searchRef.current?.focus();
+								}}
+								className="absolute right-1 top-1/2 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+							>
+								<X aria-hidden="true" className="h-4 w-4" />
+							</button>
+						)}
+					</div>
+					<div className="flex shrink-0 items-center justify-between gap-2 sm:justify-start">
+						<Select
+							value={sortBy}
+							onValueChange={(value) => {
+								setSortBy(value as SortOption);
+								setOffset(0);
+							}}
+						>
+							<SelectTrigger
+								aria-label={t("sortResults", "Sort results")}
+								className="min-h-12 min-w-0 max-w-48 flex-1 gap-2 rounded-xl sm:w-48 sm:flex-none border-border/60 bg-background text-sm"
+							>
+								<SelectValue />
+							</SelectTrigger>
+							<SelectContent>
+								<SelectItem value="downloads">
+									{t("mostDownloads", "Most Downloads")}
+								</SelectItem>
+								<SelectItem value="relevance">
+									{t("relevance", "Relevance")}
+								</SelectItem>
+								<SelectItem value="name">{t("name", "Name")}</SelectItem>
+								<SelectItem value="updated_at">
+									{t("recentlyUpdated", "Recently updated")}
+								</SelectItem>
+								<SelectItem value="created_at">
+									{t("newest", "Newest")}
+								</SelectItem>
+							</SelectContent>
+						</Select>
+						<div className="w-28 shrink-0">
+							<Button
+								variant="ghost"
+								size="sm"
+								disabled={!hasFilters}
+								onClick={clearFilters}
+								className={`h-12 w-full rounded-xl text-muted-foreground ${hasFilters ? "" : "invisible"}`}
+							>
+								<X aria-hidden="true" className="mr-1 h-3.5 w-3.5" />
+								{t("clearFilters", "Clear filters")}
+							</Button>
+						</div>
+					</div>
 				</div>
-
-				<div className="flex gap-2">
-					<Select
-						value={sortBy}
-						onValueChange={(val) => {
-							setSortBy(val as SortOption);
-							setOffset(0);
-						}}
-					>
-						<SelectTrigger className="w-37.5">
-							<SlidersHorizontal className="mr-2 h-4 w-4" />
-							<SelectValue placeholder={t("sortBy", "Sort by")} />
-						</SelectTrigger>
-						<SelectContent>
-							<SelectItem value="downloads">
-								{t("mostDownloads", "Most Downloads")}
-							</SelectItem>
-							<SelectItem value="relevance">
-								{t("relevance", "Relevance")}
-							</SelectItem>
-							<SelectItem value="name">{t("name", "Name")}</SelectItem>
-							<SelectItem value="updated_at">
-								{t("recentlyUpdated", "Recently Updated")}
-							</SelectItem>
-							<SelectItem value="created_at">
-								{t("newest", "Newest")}
-							</SelectItem>
-						</SelectContent>
-					</Select>
-
+			}
+			filters={
+				<div className="flex min-h-10 flex-wrap items-center gap-3">
+					{navigation}
 					<button
 						type="button"
+						aria-pressed={verifiedOnly}
 						onClick={() => {
 							setVerifiedOnly(!verifiedOnly);
 							setOffset(0);
 						}}
-						className={`rounded-full text-sm border gap-2 px-4 py-2 flex items-center transition-colors ${
-							verifiedOnly
-								? "bg-primary text-primary-foreground border-primary"
-								: "bg-transparent text-muted-foreground border-border/30 hover:bg-muted/30"
-						}`}
+						className={`inline-flex min-h-10 shrink-0 items-center gap-2 rounded-xl border px-3 py-2 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${verifiedOnly ? "border-primary/25 bg-primary/10 text-primary" : "border-border/60 bg-background text-muted-foreground hover:bg-muted hover:text-foreground"}`}
 					>
-						<Shield className="h-4 w-4" />
+						<Shield aria-hidden="true" className="h-4 w-4" />
 						{t("verified", "Verified")}
 					</button>
 				</div>
-			</div>
-
-			{searchResults.data && (
-				<p className="text-xs text-muted-foreground/60">
-					{searchResults.data.totalCount.toLocaleString()}{" "}
-					{t("packagesFound", "packages found")}
-				</p>
-			)}
-
-			{searchResults.isLoading ? (
-				<div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-					{PACKAGE_CARD_SKELETON_KEYS.map((key) => (
-						<PackageCardSkeleton key={key} />
-					))}
-				</div>
-			) : searchResults.data?.packages.length === 0 ? (
-				<div className="flex flex-col items-center justify-center py-20 text-center">
-					<Package className="w-12 h-12 text-muted-foreground/30 mb-3" />
-					<h3 className="text-lg font-semibold">
-						{t("noPackagesFound", "No packages found")}
-					</h3>
-					<p className="text-sm text-muted-foreground mt-1">
-						{t(
-							"tryAdjustingYourSearchOrFilters",
-							"Try adjusting your search or filters",
+			}
+		>
+			<section
+				id="explore-package-results"
+				aria-busy={isBusy}
+				className="space-y-5"
+			>
+				<output
+					className="block min-h-5 text-sm text-muted-foreground"
+					aria-live="polite"
+				>
+					{isBusy
+						? t("loadingPackages", "Loading packages…")
+						: error
+							? t("packagesCouldNotBeLoaded", "Packages could not be loaded.")
+							: `${(searchResults.data?.totalCount ?? 0).toLocaleString()} ${t("packagesFound", "packages found")}`}
+				</output>
+				{error && (
+					<Alert variant="destructive" className="rounded-xl">
+						<AlertCircle className="h-4 w-4" />
+						<AlertDescription className="flex flex-wrap items-center justify-between gap-3">
+							{t(
+								"packagesLoadError",
+								"Packages could not be loaded. Please try again.",
+							)}
+							<Button
+								variant="outline"
+								size="sm"
+								disabled={isBusy}
+								onClick={() =>
+									profile.error ? profile.refetch() : searchResults.refetch()
+								}
+							>
+								<RotateCw aria-hidden="true" className="mr-1.5 h-3.5 w-3.5" />
+								{t("retry", "Retry")}
+							</Button>
+						</AlertDescription>
+					</Alert>
+				)}
+				{isInitialLoading ? (
+					<div className={PACKAGE_GRID_CLASS_NAME}>
+						{PACKAGE_CARD_SKELETON_KEYS.map((key) => (
+							<PackageCardSkeleton key={key} />
+						))}
+					</div>
+				) : searchResults.data?.packages.length === 0 ? (
+					<div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-border bg-muted/10 px-6 py-16 text-center">
+						<Package
+							aria-hidden="true"
+							className="mb-3 h-10 w-10 text-muted-foreground"
+						/>
+						<h2 className="text-lg font-semibold">
+							{t("noPackagesFound", "No packages found")}
+						</h2>
+						<p className="mt-2 text-sm text-muted-foreground">
+							{t(
+								"tryAdjustingYourSearchOrFilters",
+								"Try adjusting your search or filters",
+							)}
+						</p>
+						{hasFilters && (
+							<Button
+								variant="outline"
+								onClick={clearFilters}
+								className="mt-5 rounded-xl"
+							>
+								{t("clearFilters", "Clear filters")}
+							</Button>
 						)}
-					</p>
-				</div>
-			) : swimlaneGroups && swimlaneGroups.size > 1 ? (
-				<div className="space-y-6">
-					{Array.from(swimlaneGroups.entries()).map(([category, pkgs]) => (
-						<Swimlane key={category} title={category} packages={pkgs} />
-					))}
-				</div>
-			) : (
-				<div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-					{searchResults.data?.packages.map((pkg) => (
-						<PackageCard key={pkg.id} pkg={pkg} />
-					))}
-				</div>
-			)}
-
-			{totalPages > 1 && (
-				<div className="flex items-center justify-center gap-3">
-					<button
-						type="button"
-						onClick={() => setOffset(Math.max(0, offset - limit))}
-						disabled={offset === 0}
-						className="rounded-full text-sm text-muted-foreground/60 border border-border/30 hover:bg-muted/30 px-5 py-2 transition-colors disabled:opacity-40"
-					>
-						{t("previous", "Previous")}
-					</button>
-					<span className="text-xs text-muted-foreground/60">{`${currentPage} / ${totalPages}`}</span>
-					<button
-						type="button"
-						onClick={() => setOffset(offset + limit)}
-						disabled={currentPage >= totalPages}
-						className="rounded-full text-sm text-muted-foreground/60 border border-border/30 hover:bg-muted/30 px-5 py-2 transition-colors disabled:opacity-40"
-					>
-						{t("next", "Next")}
-					</button>
-				</div>
-			)}
-		</div>
+					</div>
+				) : (
+					<div className={PACKAGE_GRID_CLASS_NAME}>
+						{searchResults.data?.packages.map((pkg) => (
+							<PackageCard
+								key={pkg.id}
+								pkg={pkg}
+								className="min-h-96 [&>p]:min-h-9"
+							/>
+						))}
+					</div>
+				)}
+				{totalPages > 1 && (
+					<div className="flex min-h-11 items-center justify-center gap-3">
+						<Button
+							variant="outline"
+							onClick={() => setOffset(Math.max(0, offset - limit))}
+							disabled={offset === 0 || isBusy}
+							className="min-h-11 rounded-xl"
+						>
+							{t("previous", "Previous")}
+						</Button>
+						<span className="min-w-20 text-center text-sm text-muted-foreground tabular-nums">
+							{isBusy
+								? t("loading", "Loading…")
+								: `${currentPage} / ${totalPages}`}
+						</span>
+						<Button
+							variant="outline"
+							onClick={() => setOffset(offset + limit)}
+							disabled={
+								currentPage >= totalPages ||
+								isBusy ||
+								searchResults.isPlaceholderData
+							}
+							className="min-h-11 rounded-xl"
+						>
+							{t("next", "Next")}
+						</Button>
+					</div>
+				)}
+			</section>
+		</ExploreHubLayout>
 	);
 }
 
@@ -708,7 +498,6 @@ function PageContent({
 	auth,
 	getPackageStatus,
 }: PackagesStorePageProps) {
-	const { t } = useTranslation("store");
 	const searchParams = useSearchParams();
 	const packageId = searchParams.get("id");
 
@@ -724,20 +513,7 @@ function PageContent({
 		);
 	}
 
-	return (
-		<main className="flex-col flex grow max-h-full p-6 overflow-auto min-h-0 w-full">
-			<div className="mx-auto w-full max-w-7xl space-y-8">
-				<ExploreHubHeader
-					active="packages"
-					subtitle={t(
-						"discoverAndInstallWasmNodePackages",
-						"Discover and install WASM node packages.",
-					)}
-				/>
-				<PackageListContent fetcher={fetcher} auth={auth} />
-			</div>
-		</main>
-	);
+	return <PackageListContent fetcher={fetcher} auth={auth} />;
 }
 
 export function PackagesStorePage({

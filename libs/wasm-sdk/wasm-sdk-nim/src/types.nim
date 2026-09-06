@@ -26,6 +26,7 @@ type
     Date = "Date"
     PathBuf = "PathBuf"
     Struct = "Struct"
+    Geometry = "Geometry"
 
 proc dataTypeStr*(dt: DataType): string =
   case dt
@@ -39,6 +40,7 @@ proc dataTypeStr*(dt: DataType): string =
   of Date: "Date"
   of PathBuf: "PathBuf"
   of Struct: "Struct"
+  of Geometry: "Geometry"
 
 type
   ValueType* = enum

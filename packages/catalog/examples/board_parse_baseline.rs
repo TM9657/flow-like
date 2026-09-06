@@ -109,7 +109,7 @@ async fn main() {
         t.elapsed()
     );
 
-    let path = Path::from("flow").child(APP_ID);
+    let path = Path::from("flow").join(APP_ID);
 
     let t = Instant::now();
     let board = Board::load(path.clone(), BOARD_ID, state.clone(), None)

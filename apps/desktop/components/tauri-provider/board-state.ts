@@ -61,6 +61,11 @@ import type {
 } from "@flow-like/flow-like-ui/components/a2ui/types";
 import { ApiResponseError } from "@flow-like/flow-like-ui/lib/api-error";
 import {
+	type BoardFormatCapabilities,
+	CURRENT_BOARD_FORMAT_VERSION,
+	LEGACY_BOARD_FORMAT_VERSION,
+} from "@flow-like/flow-like-ui/lib/board-format";
+import {
 	BoardSyncClient,
 	type IBoardSyncRequest,
 	type IBoardSyncResponse,
@@ -514,6 +519,34 @@ export class BoardState implements IBoardState {
 	}
 
 	constructor(private readonly backend: TauriBackend) {}
+
+	private requireAuthoritativeHostedRead(): void {
+		if (
+			!this.backend.profile ||
+			!this.backend.auth?.isAuthenticated ||
+			!this.backend.auth.user?.access_token
+		) {
+			throw new Error(
+				"Hosted Board read requires an authenticated hub session",
+			);
+		}
+	}
+
+	async getBoardFormat(appId: string): Promise<BoardFormatCapabilities> {
+		const app = await invoke<{ visibility?: IAppVisibility }>("get_app", {
+			appId,
+		});
+		if (app.visibility === IAppVisibility.Offline)
+			return { board_format_version: CURRENT_BOARD_FORMAT_VERSION };
+		if (!this.backend.profile)
+			return { board_format_version: LEGACY_BOARD_FORMAT_VERSION };
+		return fetcher(
+			this.backend.profile,
+			`apps/${appId}/board/capabilities`,
+			undefined,
+			this.backend.auth ?? undefined,
+		);
+	}
 
 	private async remoteBoardDeliveryIdentity(
 		appId: string,
@@ -971,6 +1004,29 @@ export class BoardState implements IBoardState {
 		return Array.from(byId.values());
 	}
 
+	async getBoardSummariesAuthoritative(
+		appId: string,
+		include?: IBoardSummaryInclude[],
+	): Promise<IBoardSummary[]> {
+		const withNodeTypes = include?.includes("node_types") === true;
+		const withMetrics = include?.includes("metrics") === true;
+		if (await this.backend.isLocalOnly(appId)) {
+			return invoke<IBoardSummary[]>("get_app_board_summaries", {
+				appId,
+				withNodeTypes,
+				withMetrics,
+			});
+		}
+		this.requireAuthoritativeHostedRead();
+		const query = include?.length ? `?include=${include.join(",")}` : "";
+		return fetcher<IBoardSummary[]>(
+			this.backend.profile!,
+			`apps/${appId}/board/summaries${query}`,
+			{ method: "GET" },
+			this.backend.auth,
+		);
+	}
+
 	async getBoardVariables(appId: string): Promise<IBoardVariables[]> {
 		const isOffline = await this.backend.isOffline(appId);
 		if (!isOffline && this.backend.profile && this.backend.auth) {
@@ -1282,6 +1338,24 @@ export class BoardState implements IBoardState {
 		this.backend.backgroundTaskHandler(promise);
 
 		return board;
+	}
+
+	async getBoardAuthoritative(
+		appId: string,
+		boardId: string,
+		version?: [number, number, number],
+	): Promise<IBoard> {
+		if (await this.backend.isLocalOnly(appId)) {
+			return invoke<IBoard>("get_board", { appId, boardId, version });
+		}
+		this.requireAuthoritativeHostedRead();
+		const params = version ? `?version=${version.join("_")}` : "";
+		return fetcher<IBoard>(
+			this.backend.profile!,
+			`apps/${appId}/board/${boardId}${params}`,
+			{ method: "GET" },
+			this.backend.auth,
+		);
 	}
 
 	async getRealtimeAccess(
@@ -3389,6 +3463,33 @@ export class BoardState implements IBoardState {
 			);
 			return response.flowscript;
 		}
+	}
+
+	async getFlowScriptAuthoritative(
+		appId: string,
+		boardId: string,
+		version?: [number, number, number],
+		anchors = true,
+	): Promise<string> {
+		if (await this.backend.isLocalOnly(appId)) {
+			return invoke<string>("get_flowscript", {
+				appId,
+				boardId,
+				version,
+				anchors,
+			});
+		}
+		this.requireAuthoritativeHostedRead();
+		const params = new URLSearchParams();
+		if (version) params.set("version", version.join("_"));
+		params.set("anchors", String(anchors));
+		const response = await fetcher<{ flowscript: string }>(
+			this.backend.profile!,
+			`apps/${appId}/board/${boardId}/flowscript?${params}`,
+			{ method: "GET" },
+			this.backend.auth,
+		);
+		return response.flowscript;
 	}
 
 	async getFlowScriptScoped(

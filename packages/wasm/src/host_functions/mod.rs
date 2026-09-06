@@ -16,7 +16,7 @@ pub mod variables;
 pub mod websocket;
 
 use crate::host_functions::storage::StorageFlowPath;
-use crate::limits::WasmCapabilities;
+use crate::limits::{WasmCapabilities, WasmSecurityConfig};
 use flow_like_storage::files::store::FlowLikeStore;
 use flow_like_storage::object_store::path::Path;
 use parking_lot::RwLock;
@@ -25,7 +25,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 pub use linker::register_host_functions;
-pub use websocket::WsConnection;
+pub use websocket::WebSocketResources;
 
 /// Storage context for WASM modules — resolves stores server-side without exposing credentials.
 pub struct StorageContext {
@@ -149,28 +149,28 @@ impl StorageContext {
     }
 
     pub fn get_storage_dir(&self, node: bool) -> Path {
-        let base = self.board_dir.child("storage");
+        let base = self.board_dir.clone().join("storage");
         if node {
-            base.child(self.node_id.clone())
+            base.join(self.node_id.clone())
         } else {
             base
         }
     }
 
     pub fn get_upload_dir(&self) -> Path {
-        self.board_dir.child("upload")
+        self.board_dir.clone().join("upload")
     }
 
     pub fn get_cache_dir(&self, node: bool, user: bool) -> Path {
         let mut base = Path::from("tmp");
         if user {
-            base = base.child("user").child(self.sub.clone());
+            base = base.join("user").join(self.sub.clone());
         } else {
-            base = base.child("global");
+            base = base.join("global");
         }
-        base = base.child("apps").child(self.app_id.clone());
+        base = base.join("apps").join(self.app_id.clone());
         if node {
-            base.child(self.node_id.clone())
+            base.join(self.node_id.clone())
         } else {
             base
         }
@@ -178,11 +178,11 @@ impl StorageContext {
 
     pub fn get_user_dir(&self, node: bool) -> Path {
         let base = Path::from("users")
-            .child(self.sub.clone())
-            .child("apps")
-            .child(self.app_id.clone());
+            .join(self.sub.clone())
+            .join("apps")
+            .join(self.app_id.clone());
         if node {
-            base.child(self.node_id.clone())
+            base.join(self.node_id.clone())
         } else {
             base
         }
@@ -223,7 +223,7 @@ pub(crate) async fn resolve_cached_text_embedding_model(
     let cached = cache.read().await.get(&handle.cache_key).cloned()?;
     let cached = cached
         .as_any()
-        .downcast_ref::<flow_like_catalog_llm::embedding::CachedEmbeddingModelObject>()?;
+        .downcast_ref::<flow_like_catalog_embedding::CachedEmbeddingModelObject>()?;
     cached.text_model.clone()
 }
 
@@ -246,8 +246,8 @@ pub struct HostState {
     pub inputs: RwLock<HashMap<String, Value>>,
     /// Variables (shared with execution context)
     pub variables: RwLock<HashMap<String, Value>>,
-    /// Cache entries
-    pub cache: RwLock<HashMap<String, Value>>,
+    /// Package cache entries, shared only within the owning run.
+    pub cache: Arc<RwLock<HashMap<String, Value>>>,
     /// OAuth tokens (provider_id -> token)
     pub oauth_tokens: RwLock<HashMap<String, OAuthTokenData>>,
     /// Execution metadata
@@ -261,8 +261,14 @@ pub struct HostState {
     /// Usage attribution forwarded to hosted model APIs. Offline app runs keep
     /// the app ID unset while retaining their run ID.
     pub model_usage_context: Option<flow_like::models::llm::ModelUsageContext>,
-    /// Active WebSocket connections (session_id -> connection)
-    pub ws_connections: Arc<tokio::sync::Mutex<HashMap<String, WsConnection>>>,
+    /// Sockets and listeners owned by this package's run.
+    pub websocket: Arc<WebSocketResources>,
+    /// Trusted network policy, configured before guest initialization.
+    pub execution_environment: flow_like::flow::execution::ExecutionEnvironment,
+    pub allowed_hosts: Option<Vec<String>>,
+    pub node_timeout: std::time::Duration,
+    /// Run-owned execution cannot delegate its resources to an external process.
+    pub run_scoped: bool,
     /// In-flight chunked writes (write_id -> buffer)
     pub pending_writes: RwLock<HashMap<String, storage::PendingWrite>>,
 }
@@ -321,21 +327,46 @@ impl HostState {
             result_buffer: RwLock::new(Vec::new()),
             inputs: RwLock::new(HashMap::new()),
             variables: RwLock::new(HashMap::new()),
-            cache: RwLock::new(HashMap::new()),
+            cache: Arc::new(RwLock::new(HashMap::new())),
             oauth_tokens: RwLock::new(HashMap::new()),
             metadata: ExecutionMetadata::default(),
             stream_events: RwLock::new(Vec::new()),
             storage_context: None,
             model_context: None,
             model_usage_context: None,
-            ws_connections: Arc::new(tokio::sync::Mutex::new(HashMap::new())),
+            websocket: Arc::new(WebSocketResources::default()),
+            execution_environment: Default::default(),
+            allowed_hosts: None,
+            node_timeout: crate::limits::DEFAULT_TIMEOUT,
+            run_scoped: false,
             pending_writes: RwLock::new(HashMap::new()),
         }
+    }
+
+    /// Build invocation state from the host's effective security policy.
+    pub fn with_security(security: &WasmSecurityConfig) -> Self {
+        let mut state = Self::new(security.capabilities);
+        state.execution_environment = security.execution_environment;
+        state.metadata.execution_environment = security.execution_environment;
+        state.allowed_hosts = security.allowed_hosts.clone();
+        state.node_timeout = security.limits.timeout;
+        state
     }
 
     /// Check if a capability is granted
     pub fn has_capability(&self, cap: WasmCapabilities) -> bool {
         self.capabilities.has(cap)
+    }
+
+    /// Mint a handle for a guest-owned object without storing the object in the host.
+    /// Standalone invocations have no run owner and cannot create these handles.
+    pub fn new_resource_handle(&self) -> Option<String> {
+        if !self.run_scoped {
+            return None;
+        }
+        let mut bytes = [0; 16];
+        getrandom::fill(&mut bytes).ok()?;
+        Some(format!("obj:{:032x}", u128::from_be_bytes(bytes)))
     }
 
     /// Set input values before execution
@@ -441,5 +472,30 @@ impl HostState {
         *self.error.write() = None;
         self.result_buffer.write().clear();
         self.stream_events.write().clear();
+    }
+}
+
+#[cfg(test)]
+mod resource_handle_tests {
+    use super::*;
+
+    #[test]
+    fn resource_handles_require_run_ownership() {
+        let host = HostState::new(WasmCapabilities::all());
+        assert!(host.new_resource_handle().is_none());
+    }
+
+    #[test]
+    fn resource_handles_are_distinct_without_resource_capabilities() {
+        let mut host = HostState::new(WasmCapabilities::empty());
+        host.run_scoped = true;
+        let mut handles = std::collections::HashSet::new();
+        for _ in 0..128 {
+            let handle = host.new_resource_handle().unwrap();
+            assert_eq!(handle.len(), 36);
+            assert!(handle.starts_with("obj:"));
+            assert!(handle[4..].bytes().all(|byte| byte.is_ascii_hexdigit()));
+            assert!(handles.insert(handle));
+        }
     }
 }

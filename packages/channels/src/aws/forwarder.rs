@@ -11,6 +11,7 @@ use flow_like_types::channel::{CHANNEL_TRANSPORT_AWS_MQTT, ChannelPush};
 use flow_like_types::{Result, anyhow};
 
 use super::policy::{executor_client_id, topic_for, validate_channel_id, validate_topic};
+use super::reply_chunks::reply_payloads;
 use crate::ChannelForwarder;
 
 /// Seconds AWS IoT waits for the waiter's PUBACK before answering 504 (allowed range 1..=15).
@@ -46,18 +47,19 @@ impl ChannelForwarder for AwsIotForwarder {
         let topic = topic_for(&self.topic_prefix, &push.channel_id);
         validate_topic(&topic)?;
         let client_id = executor_client_id(&push.channel_id);
-        let payload = serde_json::to_vec(push)?;
-        self.client
-            .send_direct_message()
-            .client_id(client_id.as_str())
-            .topic(topic)
-            .confirmation(true)
-            .timeout(DIRECT_MESSAGE_TIMEOUT_SECS)
-            .payload(Blob::new(payload))
-            .send()
-            .await
-            .map(drop)
-            .map_err(|error| describe_error(&push.channel_id, &client_id, error))
+        for payload in reply_payloads(push)? {
+            self.client
+                .send_direct_message()
+                .client_id(client_id.as_str())
+                .topic(topic.as_str())
+                .confirmation(true)
+                .timeout(DIRECT_MESSAGE_TIMEOUT_SECS)
+                .payload(Blob::new(payload))
+                .send()
+                .await
+                .map_err(|error| describe_error(&push.channel_id, &client_id, error))?;
+        }
+        Ok(())
     }
 }
 
