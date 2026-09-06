@@ -825,7 +825,7 @@ mod tests {
     mod source_maps {
         use super::*;
         use crate::routes::admin::telemetry::sourcemaps::source_map_reference_path;
-        use flow_like_storage::object_store::{ObjectStore, memory::InMemory};
+        use flow_like_storage::object_store::{ObjectStoreExt, memory::InMemory};
         use std::sync::Arc;
 
         fn row(map: Option<&str>, map_ref: Option<&str>) -> telemetry_source_map::Model {

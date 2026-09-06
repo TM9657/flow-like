@@ -12,6 +12,8 @@ use flow_like::flow::{
     variable::VariableType,
 };
 use flow_like_catalog_core::FlowPath;
+#[cfg(all(feature = "execute", not(feature = "remote")))]
+use flow_like_storage::object_store::ObjectStoreExt;
 use flow_like_types::async_trait;
 #[cfg(all(feature = "execute", not(feature = "remote")))]
 use flow_like_types::json;

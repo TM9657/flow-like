@@ -8,6 +8,8 @@ use flow_like::flow::{
 };
 use flow_like_catalog_core::FlowPath;
 #[cfg(feature = "execute")]
+use flow_like_storage::object_store::ObjectStoreExt;
+#[cfg(feature = "execute")]
 use flow_like_storage::object_store::buffered::BufReader;
 #[cfg(feature = "execute")]
 use flow_like_types::json::to_value;

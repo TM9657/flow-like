@@ -11,6 +11,7 @@ use crate::state::AppState;
 use axum::extract::State;
 use axum::{Extension, Json};
 use flow_like_storage::object_store::Error as ObjectStoreError;
+use flow_like_storage::object_store::ObjectStoreExt;
 use flow_like_storage::object_store::path::Path;
 use flow_like_wasm_schema::runtime::WASMTIME_MAJOR_VERSION;
 use sea_orm::{ActiveModelTrait, ActiveValue::Set, ColumnTrait, EntityTrait, QueryFilter};

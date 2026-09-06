@@ -9,6 +9,7 @@ use crate::{
     permission::role_permission::RolePermissions,
     state::AppState,
 };
+use flow_like_storage::object_store::ObjectStoreExt;
 
 pub mod cleanup;
 pub mod db_schema;

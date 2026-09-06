@@ -5,6 +5,7 @@ use flow_like::flow::{
     pin::{PinOptions, ValueType},
     variable::VariableType,
 };
+use flow_like_storage::object_store::ObjectStoreExt;
 use flow_like_types::{async_trait, json::json};
 use std::ops::Range;
 

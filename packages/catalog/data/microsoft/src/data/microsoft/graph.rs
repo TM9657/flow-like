@@ -7,6 +7,7 @@ use flow_like::flow::{
 };
 use flow_like_catalog_core::FlowPath;
 use flow_like_storage::Path;
+use flow_like_storage::object_store::ObjectStoreExt;
 use flow_like_types::{Value, async_trait, json::json, reqwest};
 
 const SIMPLE_UPLOAD_LIMIT_BYTES: u64 = 4 * 1024 * 1024;

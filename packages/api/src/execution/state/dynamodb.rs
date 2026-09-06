@@ -11,6 +11,7 @@ use aws_sdk_dynamodb::{
     Client,
     types::{AttributeValue, KeyType, ReturnValue, ScalarAttributeType, WriteRequest},
 };
+use flow_like_storage::object_store::ObjectStoreExt;
 use flow_like_storage::{
     files::store::FlowLikeStore,
     object_store::{ObjectStore, path::Path},

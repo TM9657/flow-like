@@ -1395,7 +1395,7 @@ mod tests {
     use super::*;
     use crate::credentials::CredentialsAccess;
     use flow_like_storage::Path;
-    use flow_like_storage::object_store::ObjectStore;
+    use flow_like_storage::object_store::ObjectStoreExt;
     use flow_like_types::json::{from_str, to_string};
     use flow_like_types::tokio;
     use std::sync::Once;

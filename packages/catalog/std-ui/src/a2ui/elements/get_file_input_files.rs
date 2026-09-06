@@ -6,6 +6,7 @@ use flow_like::flow::{
     variable::VariableType,
 };
 use flow_like_catalog_core::FlowPath;
+use flow_like_storage::object_store::ObjectStoreExt;
 use flow_like_storage::{Path, files::store::FlowLikeStore};
 use flow_like_types::{
     Cacheable, Value, async_trait,

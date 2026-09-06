@@ -5,6 +5,7 @@
 
 use aes_gcm::{Aes256Gcm, KeyInit, Nonce, aead::Aead};
 use flow_like_storage::Path as StoragePath;
+use flow_like_storage::object_store::ObjectStoreExt;
 use flow_like_storage::object_store::{ObjectStore, PutPayload};
 use flow_like_types::base64::{Engine, engine::general_purpose::STANDARD as BASE64};
 use std::sync::Arc;

@@ -27,6 +27,7 @@ use axum::{
     http::{HeaderMap, Request, StatusCode, header},
     response::{IntoResponse, Response},
 };
+use flow_like_storage::object_store::ObjectStoreExt;
 use flow_like_storage::{Path as StorePath, files::store::FlowLikeStore, object_store::PutPayload};
 use flow_like_types::dispatch::REQUEST_FILES_STORE_REF;
 use flow_like_types::{

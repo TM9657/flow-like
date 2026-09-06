@@ -298,6 +298,30 @@ wasmtime-wasi = "48.0.1"
 wasmtime-wasi-http = "48.0.1"
 
 [patch.crates-io]
+# Pin the complete Lance workspace to the create-only commit fix. Its crates
+# must share a source because their public types cross crate boundaries.
+lance = { git = "https://github.com/Rheosoph/lance.git", rev = "82a122e817e1cd61af9d3bc20aee9600fae066f9" }
+lance-arrow = { git = "https://github.com/Rheosoph/lance.git", rev = "82a122e817e1cd61af9d3bc20aee9600fae066f9" }
+lance-core = { git = "https://github.com/Rheosoph/lance.git", rev = "82a122e817e1cd61af9d3bc20aee9600fae066f9" }
+lance-datafusion = { git = "https://github.com/Rheosoph/lance.git", rev = "82a122e817e1cd61af9d3bc20aee9600fae066f9" }
+lance-datagen = { git = "https://github.com/Rheosoph/lance.git", rev = "82a122e817e1cd61af9d3bc20aee9600fae066f9" }
+lance-derive = { git = "https://github.com/Rheosoph/lance.git", rev = "82a122e817e1cd61af9d3bc20aee9600fae066f9" }
+lance-encoding = { git = "https://github.com/Rheosoph/lance.git", rev = "82a122e817e1cd61af9d3bc20aee9600fae066f9" }
+lance-file = { git = "https://github.com/Rheosoph/lance.git", rev = "82a122e817e1cd61af9d3bc20aee9600fae066f9" }
+lance-geo = { git = "https://github.com/Rheosoph/lance.git", rev = "82a122e817e1cd61af9d3bc20aee9600fae066f9" }
+lance-index = { git = "https://github.com/Rheosoph/lance.git", rev = "82a122e817e1cd61af9d3bc20aee9600fae066f9" }
+lance-io = { git = "https://github.com/Rheosoph/lance.git", rev = "82a122e817e1cd61af9d3bc20aee9600fae066f9" }
+lance-linalg = { git = "https://github.com/Rheosoph/lance.git", rev = "82a122e817e1cd61af9d3bc20aee9600fae066f9" }
+lance-namespace = { git = "https://github.com/Rheosoph/lance.git", rev = "82a122e817e1cd61af9d3bc20aee9600fae066f9" }
+lance-namespace-impls = { git = "https://github.com/Rheosoph/lance.git", rev = "82a122e817e1cd61af9d3bc20aee9600fae066f9" }
+lance-select = { git = "https://github.com/Rheosoph/lance.git", rev = "82a122e817e1cd61af9d3bc20aee9600fae066f9" }
+lance-tokenizer = { git = "https://github.com/Rheosoph/lance.git", rev = "82a122e817e1cd61af9d3bc20aee9600fae066f9" }
+lance-table = { git = "https://github.com/Rheosoph/lance.git", rev = "82a122e817e1cd61af9d3bc20aee9600fae066f9" }
+lance-testing = { git = "https://github.com/Rheosoph/lance.git", rev = "82a122e817e1cd61af9d3bc20aee9600fae066f9" }
+lance-arrow-scalar = { git = "https://github.com/Rheosoph/lance.git", rev = "82a122e817e1cd61af9d3bc20aee9600fae066f9" }
+lance-arrow-stats = { git = "https://github.com/Rheosoph/lance.git", rev = "82a122e817e1cd61af9d3bc20aee9600fae066f9" }
+lance-bitpacking = { git = "https://github.com/Rheosoph/lance.git", rev = "82a122e817e1cd61af9d3bc20aee9600fae066f9" }
+fsst = { git = "https://github.com/Rheosoph/lance.git", rev = "82a122e817e1cd61af9d3bc20aee9600fae066f9" }
 # Fix Windows CRT mismatch (upstream hardcodes static CRT /MT,
 # conflicting with ort_sys which uses dynamic CRT /MD -> LNK2038).
 esaxx-rs = { git = "https://github.com/Rheosoph/esaxx-rs.git", branch = "main" }

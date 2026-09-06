@@ -391,7 +391,7 @@ pub struct LanceDmlExec {
     table: Table,
     op: LanceDmlOp,
     schema: SchemaRef,
-    properties: PlanProperties,
+    properties: Arc<PlanProperties>,
 }
 
 impl LanceDmlExec {
@@ -401,12 +401,12 @@ impl LanceDmlExec {
             DataType::UInt64,
             false,
         )]));
-        let properties = PlanProperties::new(
+        let properties = Arc::new(PlanProperties::new(
             EquivalenceProperties::new(schema.clone()),
             Partitioning::UnknownPartitioning(1),
             EmissionType::Final,
             Boundedness::Bounded,
-        );
+        ));
         Self {
             table,
             op,
@@ -446,7 +446,7 @@ impl ExecutionPlan for LanceDmlExec {
         self
     }
 
-    fn properties(&self) -> &PlanProperties {
+    fn properties(&self) -> &Arc<PlanProperties> {
         &self.properties
     }
 

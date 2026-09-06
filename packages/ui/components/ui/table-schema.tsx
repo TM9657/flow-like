@@ -1,7 +1,8 @@
 "use client";
 
 import { i18n as i18next, useTranslation } from "@flow-like/locales";
-import { IIndexType } from "../../state/backend-state/db-state";
+import { UNSUPPORTED_GEOARROW_INDEX_HELP } from "../../lib/geoarrow-index";
+import { IIndexType, parseIndexType } from "../../state/backend-state/db-state";
 import { Select } from "./select";
 import {
 	SelectContent,
@@ -130,21 +131,159 @@ export interface IndexTypeOption {
 	value: string;
 	label: string;
 	type: IIndexType;
+	category: "auto" | "scalar" | "vector";
+	columnKinds?: readonly string[];
+	description?: string;
 }
 
 export const INDEX_TYPE_OPTIONS: IndexTypeOption[] = [
-	{ value: "auto", label: "Auto", type: IIndexType.Auto },
-	{ value: "btree", label: "BTree", type: IIndexType.BTree },
-	{ value: "bitmap", label: "Bitmap", type: IIndexType.Bitmap },
-	{ value: "fulltext", label: "Full Text", type: IIndexType.FullText },
-	{ value: "labellist", label: "Label List", type: IIndexType.LabelList },
+	{ value: "auto", label: "Auto", type: IIndexType.Auto, category: "auto" },
+	{
+		value: "btree",
+		label: "BTree",
+		type: IIndexType.BTree,
+		category: "scalar",
+		columnKinds: ["string", "number", "date", "boolean", "binary"],
+	},
+	{
+		value: "bitmap",
+		label: "Bitmap",
+		type: IIndexType.Bitmap,
+		category: "scalar",
+		columnKinds: ["string", "number", "date", "boolean", "binary"],
+	},
+	{
+		value: "fulltext",
+		label: "Full Text",
+		type: IIndexType.FullText,
+		category: "scalar",
+		columnKinds: ["string"],
+	},
+	{
+		value: "labellist",
+		label: "Label List",
+		type: IIndexType.LabelList,
+		category: "scalar",
+		columnKinds: ["array"],
+	},
+	{
+		value: "fm",
+		label: "FM (substring)",
+		type: IIndexType.Fm,
+		category: "scalar",
+		columnKinds: ["string", "binary"],
+	},
+	{
+		value: "ngram",
+		label: "N-gram (substring)",
+		type: IIndexType.NGram,
+		category: "scalar",
+		columnKinds: ["string"],
+		description:
+			"Speeds up text substring filters. Requires a managed Lance table; LanceDB Cloud is not supported.",
+	},
+	{
+		value: "zonemap",
+		label: "Zone Map (ranges)",
+		type: IIndexType.ZoneMap,
+		category: "scalar",
+		columnKinds: ["string", "number", "date"],
+		description:
+			"Skips data blocks outside string, numeric, date, or timestamp ranges. Works best when nearby rows have nearby values. Requires a managed Lance table; LanceDB Cloud is not supported.",
+	},
+	{
+		value: "bloomfilter",
+		label: "Bloom Filter (equality)",
+		type: IIndexType.BloomFilter,
+		category: "scalar",
+		columnKinds: ["string", "number", "date", "binary"],
+		description:
+			"Skips data blocks that cannot contain an equality match. Requires a managed Lance table; LanceDB Cloud is not supported.",
+	},
+	{
+		value: "rtree",
+		label: "R-Tree (GeoArrow)",
+		type: IIndexType.RTree,
+		category: "scalar",
+		columnKinds: ["geometry"],
+		description:
+			"Indexes spatial bounds for GeoArrow WKB/WKT or separate Float64 coordinate fields. Requires a managed Lance table; LanceDB Cloud is not supported.",
+	},
+	{
+		value: "vector",
+		label: "Vector (cosine IVF-PQ)",
+		type: IIndexType.Vector,
+		category: "vector",
+	},
+	{
+		value: "ivfflat",
+		label: "IVF Flat",
+		type: IIndexType.IvfFlat,
+		category: "vector",
+	},
+	{
+		value: "ivfpq",
+		label: "IVF PQ",
+		type: IIndexType.IvfPq,
+		category: "vector",
+	},
+	{
+		value: "ivfsq",
+		label: "IVF SQ",
+		type: IIndexType.IvfSq,
+		category: "vector",
+	},
+	{
+		value: "ivfrq",
+		label: "IVF RQ",
+		type: IIndexType.IvfRq,
+		category: "vector",
+	},
+	{
+		value: "ivfhnswflat",
+		label: "IVF HNSW Flat",
+		type: IIndexType.IvfHnswFlat,
+		category: "vector",
+	},
+	{
+		value: "ivfhnswpq",
+		label: "IVF HNSW PQ",
+		type: IIndexType.IvfHnswPq,
+		category: "vector",
+	},
+	{
+		value: "ivfhnswsq",
+		label: "IVF HNSW SQ",
+		type: IIndexType.IvfHnswSq,
+		category: "vector",
+	},
 ];
 
 export function indexTypeEnum(value: string): IIndexType {
-	return (
-		INDEX_TYPE_OPTIONS.find((option) => option.value === value)?.type ??
-		IIndexType.Auto
-	);
+	return parseIndexType(value);
+}
+
+/** Match the table designer's physical types to the explorer's column kinds. */
+export function getIndexTypeOptions(
+	columnType?: string,
+	category?: "scalar" | "vector",
+): IndexTypeOption[] {
+	let kind = columnType?.toLowerCase();
+	if (/^(u?int\d+|float\d+|double|decimal.*)$/.test(kind ?? ""))
+		kind = "number";
+	if (/^(date\d*|timestamp.*|time\d*)$/.test(kind ?? "")) kind = "date";
+	if (kind === "bool") kind = "boolean";
+	if (kind === "struct") kind = "object";
+	if (kind === "list") kind = "array";
+	return INDEX_TYPE_OPTIONS.filter((option) => {
+		if (option.category === "auto") return true;
+		if (option.type === IIndexType.RTree && kind !== "geometry") return false;
+		if (category && option.category !== category) return false;
+		if (!kind || kind === "unknown") return true;
+		if (option.category === "vector") return kind === "vector";
+		if (kind === "vector") return false;
+		return !option.columnKinds || option.columnKinds.includes(kind);
+	});
 }
 
 // --- Shared validation ------------------------------------------------------
@@ -262,24 +401,53 @@ export function IndexTypeSelect({
 	onChange,
 	disabled,
 	className,
+	category,
+	columnType,
 }: Readonly<{
 	value: string;
 	onChange: (value: string) => void;
 	disabled?: boolean;
 	className?: string;
+	category?: "scalar" | "vector";
+	columnType?: string;
 }>) {
+	const { t } = useTranslation("common");
+	const options = getIndexTypeOptions(columnType, category);
 	return (
 		<Select value={value} onValueChange={onChange} disabled={disabled}>
-			<SelectTrigger className={className}>
+			<SelectTrigger
+				className={className}
+				aria-label={t("indexType", "Index type")}
+			>
 				<SelectValue />
 			</SelectTrigger>
 			<SelectContent>
-				{INDEX_TYPE_OPTIONS.map((option) => (
+				{options.map((option) => (
 					<SelectItem key={option.value} value={option.value}>
 						{option.label}
 					</SelectItem>
 				))}
 			</SelectContent>
 		</Select>
+	);
+}
+
+export function IndexTypeHelp({
+	value,
+	columnType,
+}: Readonly<{ value: string; columnType?: string }>) {
+	if (columnType === "unsupported-geometry") {
+		return (
+			<p className="basis-full text-xs text-muted-foreground">
+				{UNSUPPORTED_GEOARROW_INDEX_HELP}
+			</p>
+		);
+	}
+	const description = INDEX_TYPE_OPTIONS.find(
+		(option) => option.value === value,
+	)?.description;
+	if (!description) return null;
+	return (
+		<p className="basis-full text-xs text-muted-foreground">{description}</p>
 	);
 }

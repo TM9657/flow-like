@@ -30,7 +30,7 @@ use flow_like_storage::{
     Path,
     files::store::FlowLikeStore,
     object_store::{
-        GetOptions, GetResult, ListResult, MultipartUpload, ObjectMeta, ObjectStore,
+        CopyOptions, GetOptions, GetResult, ListResult, MultipartUpload, ObjectMeta, ObjectStore,
         PutMultipartOptions, PutOptions, PutPayload, PutResult, Result as ObjectStoreResult,
         memory::InMemory, path::Path as ObjectPath,
     },
@@ -149,8 +149,11 @@ impl ObjectStore for GatedStore {
         self.inner.get_opts(location, options).await
     }
 
-    async fn delete(&self, location: &ObjectPath) -> ObjectStoreResult<()> {
-        self.inner.delete(location).await
+    fn delete_stream(
+        &self,
+        locations: BoxStream<'static, ObjectStoreResult<ObjectPath>>,
+    ) -> BoxStream<'static, ObjectStoreResult<ObjectPath>> {
+        self.inner.delete_stream(locations)
     }
 
     fn list(
@@ -167,16 +170,13 @@ impl ObjectStore for GatedStore {
         self.inner.list_with_delimiter(prefix).await
     }
 
-    async fn copy(&self, from: &ObjectPath, to: &ObjectPath) -> ObjectStoreResult<()> {
-        self.inner.copy(from, to).await
-    }
-
-    async fn copy_if_not_exists(
+    async fn copy_opts(
         &self,
         from: &ObjectPath,
         to: &ObjectPath,
+        options: CopyOptions,
     ) -> ObjectStoreResult<()> {
-        self.inner.copy_if_not_exists(from, to).await
+        self.inner.copy_opts(from, to, options).await
     }
 }
 

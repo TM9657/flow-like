@@ -10,6 +10,7 @@
 //! in-memory, per-run map of arbitrary Rust objects that is cleared when a run forks.
 
 use flow_like::flow::execution::context::ExecutionContext;
+use flow_like_storage::object_store::ObjectStoreExt;
 use flow_like_storage::{Path, files::store::FlowLikeStore, object_store::ObjectStore};
 use flow_like_types::{
     JsonSchema, Value,

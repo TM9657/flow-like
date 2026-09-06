@@ -1,0 +1,607 @@
+{
+  "surface": "report",
+  "manifest": {
+    "version": 1,
+    "surface": "report",
+    "title": "FlowPilot Robustness Review",
+    "description": "A code-backed review of FlowPilot's current harness, its strongest controls, its principal failure modes, and a phased hardening plan.",
+    "generatedAt": "2026-09-06T06:21:54Z",
+    "charts": [
+      {
+        "id": "risk_priority_chart",
+        "title": "Static robustness priority by control area",
+        "subtitle": "Ordinal implementation order: 5 = P0, 4 = P1, 3 = P2",
+        "showDescription": true,
+        "intent": "comparison",
+        "question": "Which FlowPilot control areas should be implemented first?",
+        "rationale": "Horizontal bars keep the long control-area labels readable and show the ordinal implementation tiers without implying a measured probability.",
+        "type": "horizontalBar",
+        "dataset": "risk_register",
+        "sourceId": "risk_register_sql",
+        "encodings": {
+          "x": {
+            "field": "control_area",
+            "type": "nominal",
+            "label": "Control area"
+          },
+          "y": {
+            "field": "priority_score",
+            "type": "quantitative",
+            "format": "number",
+            "label": "Priority tier"
+          },
+          "tooltip": [
+            {
+              "field": "priority",
+              "type": "text",
+              "label": "Priority"
+            },
+            {
+              "field": "confidence",
+              "type": "text",
+              "label": "Confidence"
+            },
+            {
+              "field": "effort",
+              "type": "text",
+              "label": "Effort"
+            },
+            {
+              "field": "implementation_window",
+              "type": "text",
+              "label": "Window"
+            }
+          ]
+        },
+        "valueFormat": "number",
+        "layout": "full",
+        "maxRows": 12,
+        "emptyState": "No reviewed robustness findings are available."
+      }
+    ],
+    "tables": [
+      {
+        "id": "risk_register_table",
+        "title": "Prioritized robustness backlog",
+        "subtitle": "Current working-tree audit; effort is a relative estimate",
+        "showDescription": true,
+        "dataset": "risk_register",
+        "defaultSort": {
+          "field": "rank",
+          "direction": "asc"
+        },
+        "density": "spacious",
+        "sourceId": "risk_register_sql",
+        "layout": "full",
+        "columns": [
+          {
+            "field": "rank",
+            "label": "Rank",
+            "format": "number"
+          },
+          {
+            "field": "priority",
+            "label": "Priority",
+            "type": "text"
+          },
+          {
+            "field": "control_area",
+            "label": "Control area",
+            "type": "text"
+          },
+          {
+            "field": "confidence",
+            "label": "Confidence",
+            "type": "text"
+          },
+          {
+            "field": "effort",
+            "label": "Effort",
+            "type": "text"
+          },
+          {
+            "field": "implementation_window",
+            "label": "Window",
+            "type": "text"
+          },
+          {
+            "field": "primary_change",
+            "label": "Primary change",
+            "type": "text"
+          },
+          {
+            "field": "verification",
+            "label": "Proof of completion",
+            "type": "text"
+          }
+        ]
+      }
+    ],
+    "sources": [
+      {
+        "id": "risk_register_sql",
+        "label": "Static code-audit risk register",
+        "path": "risk-register.sql",
+        "query": {
+          "engine": "SQLite",
+          "id": "flowpilot-static-risk-register-2026-09-06",
+          "description": "Runnable VALUES query containing the reviewed risk classifications, recommendations, and verification criteria used by the report chart and table.",
+          "executed_at": "2026-09-06T06:21:54Z",
+          "language": "sql",
+          "filters": [
+            "Current working tree on 6 September 2026",
+            "Only findings with a concrete code path and actionable control are included",
+            "No production incidence or probability estimate is asserted"
+          ],
+          "metric_definitions": [
+            "priority_score is an ordinal implementation label: P0 = 5, P1 = 4, and P2 = 3. It is not a probability, frequency, or expected-loss metric.",
+            "confidence describes confidence in static code reachability and interpretation, not exploitability in production.",
+            "effort is a relative engineering estimate: S, M, or L; ranges indicate uncertainty."
+          ],
+          "tables_used": []
+        }
+      },
+      {
+        "id": "verification_record",
+        "label": "FlowPilot audit verification record",
+        "path": "verification.txt"
+      },
+      {
+        "id": "repository_snapshot",
+        "label": "flow-like repository at audited HEAD",
+        "href": "https://github.com/TM9657/flow-like/tree/1a78b2b310b87b0aca14db2485cf3249a67b3fe5"
+      },
+      {
+        "id": "mcp_tasks",
+        "label": "Model Context Protocol task lifecycle",
+        "href": "https://tasks.extensions.modelcontextprotocol.io/specification/2026-07-28/tasks"
+      },
+      {
+        "id": "mcp_tools",
+        "label": "Model Context Protocol tool contract",
+        "href": "https://modelcontextprotocol.io/specification/2026-07-28/server/tools"
+      },
+      {
+        "id": "mcp_json_schema",
+        "label": "Model Context Protocol JSON Schema safety rules",
+        "href": "https://modelcontextprotocol.io/specification/2026-07-28/basic#json-schema-usage"
+      },
+      {
+        "id": "openai_agents_runner",
+        "label": "OpenAI Agents SDK runner lifecycle",
+        "href": "https://openai.github.io/openai-agents-python/running_agents/"
+      },
+      {
+        "id": "openai_agents_hitl",
+        "label": "OpenAI Agents SDK human-in-the-loop approvals",
+        "href": "https://openai.github.io/openai-agents-python/human_in_the_loop/"
+      },
+      {
+        "id": "openai_agents_tracing",
+        "label": "OpenAI Agents SDK tracing",
+        "href": "https://openai.github.io/openai-agents-python/tracing/"
+      },
+      {
+        "id": "openai_agents_models",
+        "label": "OpenAI Agents SDK model configuration",
+        "href": "https://openai.github.io/openai-agents-python/models/"
+      },
+      {
+        "id": "openai_prompt_injection",
+        "label": "OpenAI source-to-sink prompt-injection defenses",
+        "href": "https://openai.com/index/designing-agents-to-resist-prompt-injection/"
+      },
+      {
+        "id": "aws_idempotency",
+        "label": "AWS Builders' Library on retry-safe idempotent APIs",
+        "href": "https://aws.amazon.com/builders-library/making-retries-safe-with-idempotent-APIs/"
+      },
+      {
+        "id": "grpc_cancellation",
+        "label": "gRPC cancellation guidance",
+        "href": "https://grpc.io/docs/guides/cancellation/"
+      },
+      {
+        "id": "grpc_deadlines",
+        "label": "gRPC deadline guidance",
+        "href": "https://grpc.io/docs/guides/deadlines/"
+      },
+      {
+        "id": "anthropic_long_running",
+        "label": "Anthropic long-running agent harness guidance",
+        "href": "https://www.anthropic.com/engineering/effective-harnesses-for-long-running-agents"
+      },
+      {
+        "id": "anthropic_tools",
+        "label": "Anthropic tool design guidance",
+        "href": "https://www.anthropic.com/engineering/writing-tools-for-agents"
+      },
+      {
+        "id": "anthropic_evals",
+        "label": "Anthropic agent evaluation guidance",
+        "href": "https://www.anthropic.com/engineering/demystifying-evals-for-ai-agents"
+      }
+    ],
+    "blocks": [
+      {
+        "id": "title",
+        "type": "markdown",
+        "body": "# FlowPilot Robustness Review",
+        "layout": "full"
+      },
+      {
+        "id": "technical_summary",
+        "type": "markdown",
+        "body": "## Technical summary\n\n**FlowPilot's board-commit kernel is materially stronger than the harness around it.** The compiler-validated FlowScript path, request-bound draft, stale-review rejection, exact commit claim, atomic apply or rollback, and durable receipt already form a credible transaction boundary. Most serious risks enter earlier through attachment retrieval, approval policy, process delegation, cancellation, and loosely typed tool results.\n\n**Five controls should be treated as release-blocking P0 work.** Harden browser attachment retrieval, restore the documented deletion-approval invariant, propagate cancellation and deadlines through every descendant operation, validate complete tool schemas and results, and prove or reduce the Codex delegated-process read boundary. Four findings are high-confidence code paths. The Codex finding is medium-confidence because the launch configuration leaves capability scope unproven; it needs an adversarial canary before anyone calls it an observed escape.\n\n**The durable fix is one provider-neutral run coordinator.** Preserve the current board transaction core and make its properties universal: explicit state transitions, exact approvals, host-derived operation IDs, effect receipts, replayable events, resumable streams, typed outcomes, bounded context, and conformance tests shared by every surface and provider.",
+        "layout": "full"
+      },
+      {
+        "id": "key_findings",
+        "type": "markdown",
+        "body": "## Five boundary controls should lead the hardening program\n\nThe chart ranks implementation order, not measured likelihood or loss. A score of 5 means P0, 4 means P1, and 3 means P2. The five P0 items sit at trust boundaries where untrusted input, model output, cancellation, or delegated code can cross into host capability. The P1 items make runs replayable and effects retry-safe. The P2 convergence work reduces future policy drift once the immediate boundaries are sealed.\n\nThe ordering favors blast-radius reduction and fail-closed behavior. It does not claim that every listed condition is exploitable in a deployed environment.",
+        "layout": "full",
+        "sourceId": "risk_register_sql"
+      },
+      {
+        "id": "risk_chart_block",
+        "type": "chart",
+        "chartId": "risk_priority_chart",
+        "layout": "full",
+        "sourceId": "risk_register_sql"
+      },
+      {
+        "id": "risk_table_intro",
+        "type": "markdown",
+        "body": "The backlog below pairs each finding with one primary change and a testable completion condition. Relative effort is directional. It should be replaced with team estimates after owners inspect the affected host and provider paths.",
+        "layout": "full",
+        "sourceId": "risk_register_sql"
+      },
+      {
+        "id": "risk_table_block",
+        "type": "table",
+        "tableId": "risk_register_table",
+        "layout": "full",
+        "sourceId": "risk_register_sql"
+      },
+      {
+        "id": "current_architecture",
+        "type": "markdown",
+        "body": "## The board transaction core is strong, while lifecycle policy is split\n\nFlowPilot has two main user experiences backed by several runtime harnesses. Direct Bits Board and Frontend work enters UnifiedCopilot and the core Copilot. Browser and desktop Bits Global Chat use PlatformCopilot and its specialists. Desktop GitHub Copilot uses copilot_sdk_chat_internal, while desktop Codex and Claude use external_code_agent_chat_internal. These provider-specific routes do not all pass through the same coordinator.\n\nGlobal platform tools share PlatformToolSpec in tool_spec.rs. Direct FlowScript authoring uses the underlying FlowScript types and implementations in ir_tools.rs plus SDK or MCP adapters, rather than the same global registry.\n\n```text\nProduct surfaces\n  Direct Bits ----------> UnifiedCopilot / Copilot\n  Global Bits ----------> PlatformCopilot / specialists\n  Desktop GitHub -------> copilot_sdk_chat_internal\n  Desktop Codex/Claude -> external_code_agent_chat_internal\n                                   |\n                                   v\n                         host tool / effect bridges\n                              /             \\\n                             v               v\n                  Board / FlowScript      Other platform effects\n                  draft and validate      host-specific approval,\n                  exact review claim      retry, and execution\n                  host recheck\n                  atomic apply\n                  durable receipt\n```\n\n### Controls worth preserving\n\n- FlowScript is compiled and reconciled before a board mutation is prepared.\n- Draft revisions and fingerprints make stale review detectable.\n- Pre-delivery claims release on early failure. Once ownership transfers and the claim is persisted, it remains available for apply, dismissal, stale disposition, or exact redelivery.\n- Desktop board apply rechecks the app, board, catalog, fingerprint, and exact batch, then rolls back on failure and stores a receipt.\n- The platform scheduler separates read and write lanes and prevents conflicting same-wave work on a resource.\n- Public web retrieval already rejects non-public addresses, revalidates redirects, pins resolved addresses, disables proxies and compression, and bounds response size. That implementation is a useful template for attachment retrieval.\n- The workflow state machine has explicit authoring, validation, approval, apply, failure, and cancellation phases plus bounded progress telemetry.\n- Desktop Global Chat checkpoints active work and supports resume, cancel, and steer.\n\n### Where policy diverges\n\nLifecycle ownership is distributed across Rust coordinators, API streaming routes, provider-specific desktop launch code, and React stores or bridges. A safety rule can therefore be true in one route and false in another. The deletion gate and browser resume behavior are current examples. Manual effect lanes and resource keys also mean each new tool creates several opportunities for drift.",
+        "layout": "full",
+        "sourceId": "repository_snapshot"
+      },
+      {
+        "id": "p0_findings",
+        "type": "markdown",
+        "body": "## The P0 gaps sit on input, authority, and termination boundaries\n\n### 1. Browser attachments bypass the hardened fetcher\n\npackages/api/src/routes/ai/global_chat.rs:99-166 accepts up to eight HTTP(S) URLs, allows a very large per-item bound, uses a general reqwest::get, follows default redirects, buffers each response, and infers media type from the URL extension. The route's request validation at :282-300 limits prompt and history but does not enforce equivalent attachment or assembled-context limits. This path does not reuse the private-address and redirect defenses in public_web.rs.\n\n**Change:** accept server-issued object identifiers or an exact allowlisted storage origin. Resolve and reject loopback, private, link-local, metadata, and special-purpose addresses before each connection and after each redirect. Disable implicit redirects, stream to a hard byte budget, verify status and content by magic bytes, and set connect, read-idle, and total deadlines. A reasonable starting policy is 10 MB per file and 20 MB per turn, subject to product requirements.\n\n### 2. Auto mode can waive the documented deletion gate\n\nThe user documentation and UI copy say deletion always asks. Global and direct auto-mode paths can pass destructive approval through or skip the generic approval stop, while the web board state still calls window.confirm. Relevant coordinates include global-tool-bridge.tsx:1819-1909, :4698-4710, :6883-6925, FlowPilot.tsx:3766-3799, and board-state.ts:840-870. This is both a safety gap and a cross-host contract mismatch.\n\n**Change:** define approval policy in the shared tool contract and enforce it again at the host. Destructive operations and high-impact external effects must carry an exact parameter digest, resource version, risk class, approver, expiry, and single-use nonce. These are FlowPilot controls. The [OpenAI Agents SDK approval flow](https://openai.github.io/openai-agents-python/human_in_the_loop/) demonstrates pause, serialization, approve or reject, and resume, but it does not prescribe those binding fields. Encrypt and authorize serialized run state, persist agent and tool-contract versions, and revalidate policy, schema, resource version, and approval binding after resume because checkpoints can contain app context, tool inputs, trace metadata, or secrets.\n\n### 3. Explicit Stop lacks end-to-end cancellation, and disconnect lacks resume\n\nThe browser global-chat route spawns work independently of the SSE client, has no stream-drop guard, and is explicitly non-resumable. The client can abort its fetch before it receives a run frame without necessarily cancelling the server run. In the core loop, cancellation is checked chiefly between rounds, while model streaming, tool futures, retries, and parallel lane joins can wait without a shared end-to-end deadline. The direct copilot API has a similar streaming shape.\n\n**Change:** create one hierarchical cancellation token when the run is accepted and pass it to model I/O, stream producers, tool calls, retry timers, subprocesses, and effect preparation. An explicit user Stop should cancel. A transport loss should detach and preserve a resumable run unless product policy explicitly chooses cancel-on-disconnect. Cancellation is cooperative, so the effect broker also needs a fence checked atomically before dispatch. If an irreversible effect is already in flight, record Applied or Unknown and reconcile it instead of claiming rollback. Set connect, inter-token, per-tool, per-round, and total deadlines. This applies the operational principles in [gRPC cancellation](https://grpc.io/docs/guides/cancellation/) and [deadline](https://grpc.io/docs/guides/deadlines/) guidance without treating SSE loss as an RPC cancellation rule.\n\n### 4. Tool arguments and results are not fully typed at runtime\n\ntool_spec.rs:305-336 checks required top-level fields and a few empty values, rather than evaluating the full declared JSON Schema. The server route uses that partial check, and the browser transport chiefly checks that arguments form an object. Separately, session.rs:1697-1739 can classify non-JSON text as success unless it begins with a narrow error prefix. A message such as Failed to parse input can therefore be interpreted differently across layers.\n\n**Change:** validate every request against its complete schema before approval and again before host dispatch. Put a FlowPilot-specific, versioned envelope such as {status, code, retry_class, output, effect_receipt, resource_version} in structured output and validate it on both sides. MCP requires inputSchema, permits outputSchema for structuredContent, and does not apply that output schema to arbitrary text content ([MCP tools](https://modelcontextprotocol.io/specification/2026-07-28/server/tools)). Honor an explicitly declared JSON Schema dialect; 2020-12 is only the default when $schema is absent. Disable network reference retrieval by default and bound depth, subschema count, and validation time ([MCP JSON Schema usage](https://modelcontextprotocol.io/specification/2026-07-28/basic#json-schema-usage)). Unknown fields, malformed results, and unknown status values should fail closed.\n\n### 5. The Codex delegated-process boundary needs proof and reduction\n\nThe desktop Codex adapter launches in a neutral temporary directory with a read-only sandbox, no approvals, and web search disabled. In contrast with the Claude adapter's explicit built-in tool denial, the inspected Codex path does not clear inherited environment variables or demonstrate that absolute host-file reads and shell-mediated reads are unavailable. A temporary current directory does not by itself establish a read allowlist.\n\n**Change:** prefer an SDK or a custom-tool-only provider mode. Otherwise run the process inside a true OS sandbox with an ephemeral home, a minimal allowlisted environment, no inherited credentials, a read allowlist, disabled network, resource limits, and captured child-process cleanup. Before changing the severity, run a canary that attempts absolute-path reads, environment inspection, network access, and subprocess escape. This report deliberately treats the issue as a configuration inference because public product documentation did not establish the exact effective boundary of these launch arguments.",
+        "layout": "full"
+      },
+      {
+        "id": "p1_findings",
+        "type": "markdown",
+        "body": "## Recovery and retry semantics need one durable model\n\n### Persist an append-only run log\n\nDesktop Global Chat has useful checkpointing, but browser runs, queues, pending approvals, and API drafts still rely partly on page or process memory. Browser persistence writes are best-effort, browser resume is a no-op, and API drafts use an in-process cache. A refresh, replica change, or restart can lose work before the durable commit boundary.\n\nCreate Run, Step, Approval, and Effect records from append-only RunEvent entries. Workers should claim a step with a lease, append progress or completion, and be disposable. Streams should carry an opaque, high-entropy run_id and a monotonic sequence. Every get, resume, stream, approve, and cancel operation must authorize that ID against the tenant and principal, prevent enumeration, and enforce retention and expiry. The [2026-07-28 MCP Tasks extension](https://tasks.extensions.modelcontextprotocol.io/specification/2026-07-28/tasks) supplies a useful versioned lifecycle vocabulary. It is an asynchronous tool-call protocol, not a durable execution engine, and does not itself guarantee crash recovery or exactly-once effects. Pin its version if FlowPilot adopts it.\n\n### Make every effect idempotent at the host\n\nSome mutations have strong exact-claim semantics, while other side effects expose no idempotency key or depend on a model-supplied key. One create-app journal checks before applying and records afterward, which leaves a crash and concurrency window. Mint one operation_id for each accepted logical step, persist it before dispatch, and reuse it unchanged across retries, replay, and deployment upgrades. Store the canonical parameter digest beside the ID and reject reuse with different parameters. Hashing parameters alone can collapse two intentional identical actions, a failure mode called out in the [AWS Builders' Library idempotency guidance](https://aws.amazon.com/builders-library/making-retries-safe-with-idempotent-APIs/). Store Pending, Applied, Failed, or Unknown with a unique constraint. If a third-party destination cannot honor the same key, local ledger atomicity is insufficient; reconcile an Unknown result with the destination before retrying.\n\n### Replace transcript clipping with a structured task ledger\n\nThe direct surface keeps recent messages and clips older content into short bullets. Global Chat forwards all prior messages while the API rejects more than 32 history messages or any individual message above 8,000 characters, so a normal conversation can eventually make its next request invalid. Profile memories record content and hashes but lack provenance, trust class, expiry, supersession, and a review state.\n\nUse one token-aware context assembler for every surface. Persist structured intent, invariants, accepted and rejected decisions, open obligations, resource versions, evidence pointers, and a bounded recent transcript. Treat retrieved text and model-proposed memory as untrusted data. Add origin, tenant, trust, sensitivity, expiry, supersession, and user-confirmed fields. The source-to-sink framing in [OpenAI's prompt-injection design](https://openai.com/index/designing-agents-to-resist-prompt-injection/) is directly applicable: untrusted content should not flow into a privileged tool without an explicit confirmation or deterministic policy check.\n\n### Fail closed on incomplete catalogs and isolate concurrent UI state\n\nA scoped WASM catalog failure logs a warning and falls back to built-ins. Desktop paths can independently fall back when the authoritative catalog lookup returns no result. For any mutation, require the authoritative catalog or emit an explicit partial-capability manifest that disables affected operations. The UI also supports concurrent turns while several pending approval and workspace fields remain singleton state. Nest every transient field under run_id and reject reducer events whose run ownership does not match.\n\n### Move scheduling semantics into the tool contract\n\nResource keys, effect lanes, retry behavior, and some dependency rules are manual string switches. Extend each tool definition with effect class, resource-key derivation, idempotency policy, retry class, approval policy, output limit, and version. Generate provider schemas, host adapters, prompt inventories, and scheduler declarations from that contract. The practical tool-design principle is that tool shape and response boundaries materially determine agent behavior, as described in [Anthropic's tool guidance](https://www.anthropic.com/engineering/writing-tools-for-agents).",
+        "layout": "full"
+      },
+      {
+        "id": "target_architecture",
+        "type": "markdown",
+        "body": "## A single run coordinator should own state, authority, and effects\n\n```text\nSurface adapters\n  direct panel | global chat | browser | desktop\n                         |\n                         v\nProvider-neutral Run Coordinator\n  state machine | budgets | deadlines | cancellation | resume | sequencing\n         |                 |                  |\n         v                 v                  v\nTyped Tool Registry   Context Ledger     Trace and Evaluator\n  schema + policy      intent + facts      run/step/tool/effect spans\n         |\n         v\nHost Effect Broker\n  exact approval -> idempotency ledger -> apply/reconcile -> receipt\n         |\n         v\nFlowScript compiler and board transaction core\n```\n\nThe coordinator should be the only component allowed to advance run state. Provider adapters translate messages and streaming events; they do not own approval, retries, or phase logic. Surface adapters render state and submit user decisions; they do not infer whether an effect is safe. The host effect broker remains the authority for policy, resource versions, idempotency, and receipts.\n\nA useful invariant is: **a run can be stopped, crashed, replayed, inspected, and resumed without losing intent, duplicating an effect, widening authority, or hiding why a transition occurred.** The existing exact board commit path already satisfies much of the effect half of this invariant. The next architecture should generalize it.\n\nRun limits should be explicit inputs. OpenAI's agent runner exposes a bounded turn count and treats exceeding it as an error, which matches FlowPilot's existing round budgets ([runner lifecycle](https://openai.github.io/openai-agents-python/running_agents/)). Long-running harness guidance also emphasizes durable progress artifacts that make the next session productive rather than relying on transcript continuity ([Anthropic](https://www.anthropic.com/engineering/effective-harnesses-for-long-running-agents)).",
+        "layout": "full"
+      },
+      {
+        "id": "scope_evidence",
+        "type": "markdown",
+        "body": "## Scope and evidence\n\nThe review covers the current working tree at `1a78b2b310b87b0aca14db2485cf3249a67b3fe5` on branch `feature/834-support-dsql`, including uncommitted user changes. It traces direct and global orchestration, the shared tool registry, workflow state, browser and desktop streaming, host bridges, board commit application, context and memory, external provider launch, and the existing evaluation harness.\n\nPriority is an implementation-order label. P0 means seal the boundary before expanding autonomy; P1 means establish recovery, retry safety, and consistent state next; P2 means reduce structural drift after the boundary controls exist. Confidence concerns the static code finding. It does not estimate real-world incidence.\n\nTargeted checks produced these results:\n\n- Core workflow-session tests: 14 passed, 0 failed.\n- Desktop guard, web transport, and stream-parser tests: 75 passed, 0 failed.\n- Shared tool-spec tests: 17 passed and 3 failed. One failure concerns event and page identifier guidance. Two exceed reviewed prompt-payload budgets: 15,796 versus 15,500 bytes for model-facing descriptions, and 33,716 versus 33,400 bytes for the eager tool payload.\n\nThe tool-spec result is for the current dirty working tree. It should be rerun on the merge candidate before assigning causality to a specific change.",
+        "layout": "full",
+        "sourceId": "verification_record"
+      },
+      {
+        "id": "methodology",
+        "type": "markdown",
+        "body": "## Method\n\nThe audit followed data and authority from user input to model context, tool selection, approval, host execution, board mutation, receipt, and recovery. For each boundary, it inspected the success path, cancellation path, retry path, stale-state check, output bound, and persistence behavior. Findings were included only when a concrete code path and a practical control could be named.\n\nThe external comparison used primary specifications and engineering guidance. The main reference points were explicit task states and schemas in MCP, bounded loops and resumable approvals in the OpenAI Agents SDK, cancellation and deadline propagation in gRPC, retry-safe idempotency in the AWS Builders' Library, and durable artifacts, tool ergonomics, and multi-trial evaluations in Anthropic's engineering guidance.\n\nThe risk register was then encoded as a runnable SQLite `VALUES` query. Its score is deliberately ordinal. No statistical model, frequency estimate, production incident sample, or causal claim is present.",
+        "layout": "full"
+      },
+      {
+        "id": "limitations",
+        "type": "markdown",
+        "body": "## What this review does not establish\n\nThis is a static architecture and code-path review with targeted unit tests. It did not run a live model provider, inspect production traces, exercise multiple API replicas, load-test the stream routes, attempt an exploit, or execute a destructive operation. A code path can be reachable in source and constrained by deployment controls that were outside this evidence. The reverse is also true: runtime failures may exist outside the inspected paths.\n\nThe working tree contains uncommitted changes. Exact line coordinates and current tool-budget failures must be checked again on a clean merge candidate. The Codex boundary finding is specifically a request for proof: the inspected launch configuration does not demonstrate least-privilege reads or environment isolation, while the review did not attempt an escape.\n\nThe report's priorities are engineering judgment. Product-specific attachment requirements, recovery objectives, latency budgets, storage choices, and provider contracts can change sequencing or effort, though they do not remove the boundary invariants.",
+        "layout": "full",
+        "sourceId": "verification_record"
+      },
+      {
+        "id": "recommended_next_steps",
+        "type": "markdown",
+        "body": "## Recommended next steps\n\n### 0 to 2 weeks: seal the boundaries\n\n1. Replace arbitrary attachment URLs with owned object references and reuse the hardened public-web network policy.\n2. Centralize approval policy and restore exact, unavoidable approval for destructive and high-impact external effects.\n3. Add hierarchical cancellation, disconnect cleanup, bounded channels, and connect, idle, tool, round, and total deadlines.\n4. Enforce full request and result schemas with a versioned `ToolResult` envelope.\n5. Restrict and canary-test the Codex process boundary; clear inherited environment and enforce an OS-level read allowlist.\n6. Fail closed on an incomplete authoritative catalog and fix the three current tool-spec test failures.\n\n### 2 to 6 weeks: make runs recoverable and effects retry-safe\n\n1. Introduce the append-only run-event store and resumable sequence protocol.\n2. Put every side effect behind host-derived operation IDs and a durable idempotency ledger.\n3. Bind approvals to the exact tool, parameters, resource version, risk, expiry, and approver.\n4. Move browser approvals, queues, cursors, and workspace state under `run_id`.\n5. Ship the shared structured context assembler and quarantine durable memory writes.\n\n### 6 to 12 weeks: converge the harness and gate releases\n\n1. Extract the provider-neutral coordinator and reduce provider adapters to transport translation.\n2. Generate schemas, scheduler metadata, and conformance tests from the tool registry.\n3. Add hierarchical tracing with redaction and stable run, step, tool, approval, and effect identifiers. The [OpenAI tracing model](https://openai.github.io/openai-agents-python/tracing/) is a useful reference for this hierarchy.\n4. Build a versioned evaluation suite across outcome quality, trajectory, safety, cancellation, duplicate effects, recovery, latency, cost, and approval burden. Start with 20 to 50 meaningful tasks, run several trials per configuration, and expand from real failures, consistent with [Anthropic's evaluation guidance](https://www.anthropic.com/engineering/demystifying-evals-for-ai-agents).\n5. Pin a tested capability matrix for every provider and require a canary before fallback or upgrade.\n\n### Proposed acceptance gates\n\n- Attachment tests produce zero requests to loopback, private, link-local, metadata, or rebinding destinations, and every body stays within the declared per-file and per-turn budget.\n- A stop request prevents any later side effect and terminates or fences all descendants within a proposed two-second objective.\n- Every tool request and result passes its versioned schema; malformed or unknown values fail before approval or dispatch.\n- Every destructive action pauses on an exact approval in every host and mode.\n- Concurrent duplicates and crash-after-effect retries produce one external effect and one stable receipt.\n- Crash injection after each persisted transition resumes to exactly one terminal state.\n- Long-conversation and memory-poisoning evaluations preserve explicit constraints and tenant isolation.\n- The shared tool-contract test suite and the new harness conformance suite are green on the release candidate.\n\nThe numeric byte and timing objectives in this report are starting proposals. Owners should ratify them against product requirements and production latency before they become service objectives.",
+        "layout": "full"
+      },
+      {
+        "id": "further_questions",
+        "type": "markdown",
+        "body": "## Decisions that will shape the implementation\n\n- What is the intended trust boundary for Codex and Claude: repository reader, custom-tool specialist, or general local agent?\n- Which external effects, beyond deletion, must always require an exact approval regardless of mode?\n- Which durable store should own run events and effect receipts across browser and desktop deployments?\n- What cancellation and recovery objectives can the product commit to, and which tools cannot meet them?\n- Can browser attachments move entirely to authenticated object storage identifiers?\n- Which production failures and near misses should seed the first evaluation set?\n- Should direct and global FlowPilot remain separate user experiences once their lifecycle and policy coordinator is shared?",
+        "layout": "full"
+      }
+    ]
+  },
+  "snapshot": {
+    "version": 1,
+    "generatedAt": "2026-09-06T06:21:54Z",
+    "status": "ready",
+    "datasets": {
+      "risk_register": [
+        {
+          "rank": 1,
+          "risk_id": "FP-R01",
+          "control_area": "Attachment retrieval",
+          "priority": "P0",
+          "priority_score": 5,
+          "confidence": "High",
+          "effort": "M",
+          "implementation_window": "0-2 weeks",
+          "finding": "The browser global-chat route fetches user-supplied HTTP(S) URLs with permissive redirects and buffers each response.",
+          "failure_mode": "An attachment can reach internal services or consume excessive memory.",
+          "primary_change": "Accept owned object identifiers, revalidate every redirect, stream bytes, verify media, and enforce small aggregate limits.",
+          "verification": "SSRF corpus, redirect rebinding tests, oversized and slow-body tests, and memory ceilings."
+        },
+        {
+          "rank": 2,
+          "risk_id": "FP-R02",
+          "control_area": "Destructive approval",
+          "priority": "P0",
+          "priority_score": 5,
+          "confidence": "High",
+          "effort": "S-M",
+          "implementation_window": "0-2 weeks",
+          "finding": "Auto mode can waive destructive approval in some global and direct paths while product copy says deletion always asks.",
+          "failure_mode": "A model or injected instruction can perform a destructive action without an exact user decision.",
+          "primary_change": "Centralize policy and require an exact, expiring approval for destructive and high-impact external effects.",
+          "verification": "Cross-host conformance tests prove every delete path pauses on the same approval state."
+        },
+        {
+          "rank": 3,
+          "risk_id": "FP-R03",
+          "control_area": "Cancellation and deadlines",
+          "priority": "P0",
+          "priority_score": 5,
+          "confidence": "High",
+          "effort": "M-L",
+          "implementation_window": "0-2 weeks",
+          "finding": "Browser streams can outlive clients, model and tool awaits lack a shared deadline, and cancellation is checked mainly between rounds.",
+          "failure_mode": "Disconnected work continues, resources leak, and a stopped run can still reach a side effect.",
+          "primary_change": "Propagate one hierarchical cancellation token and enforce connect, idle, tool, round, and total deadlines.",
+          "verification": "Cancel at every await point and assert descendants stop within the proposed two-second service objective."
+        },
+        {
+          "rank": 4,
+          "risk_id": "FP-R04",
+          "control_area": "Tool contracts",
+          "priority": "P0",
+          "priority_score": 5,
+          "confidence": "High",
+          "effort": "M",
+          "implementation_window": "0-2 weeks",
+          "finding": "Runtime validation checks only required top-level fields and text tool results can be classified as success by wording.",
+          "failure_mode": "Malformed arguments or ambiguous failures can consume context-read reservations or advance workflow observations incorrectly.",
+          "primary_change": "Validate full JSON Schema and require a versioned ToolResult envelope with status, code, retry class, receipt, and resource version.",
+          "verification": "Schema mutation tests and malformed-result tests fail closed before approval or dispatch."
+        },
+        {
+          "rank": 5,
+          "risk_id": "FP-R05",
+          "control_area": "Codex execution boundary",
+          "priority": "P0",
+          "priority_score": 5,
+          "confidence": "Medium",
+          "effort": "M",
+          "implementation_window": "0-2 weeks",
+          "finding": "The desktop Codex adapter uses a read-only sandbox and neutral temporary directory, but leaves inherited environment and built-in read or shell capability unproven.",
+          "failure_mode": "A delegated process may observe host files or credentials outside the intended task scope.",
+          "primary_change": "Prefer an SDK or custom-tool-only adapter, scrub the environment, use an ephemeral home, and enforce an OS-level read allowlist.",
+          "verification": "Adversarial canary tests attempt absolute-path reads, environment access, network access, and subprocess escape."
+        },
+        {
+          "rank": 6,
+          "risk_id": "FP-R06",
+          "control_area": "Effect idempotency",
+          "priority": "P1",
+          "priority_score": 4,
+          "confidence": "High",
+          "effort": "L",
+          "implementation_window": "2-6 weeks",
+          "finding": "Idempotency coverage is uneven, some mutating tools expose no key, and one journal checks before applying and records afterward.",
+          "failure_mode": "Retries, concurrent turns, or crash recovery can duplicate external effects.",
+          "primary_change": "Derive operation IDs at the host and commit every effect through a durable idempotency ledger with Applied, Failed, and Unknown states.",
+          "verification": "Concurrent duplicate and crash-after-effect tests produce one externally visible effect and one stable receipt."
+        },
+        {
+          "rank": 7,
+          "risk_id": "FP-R07",
+          "control_area": "Durable run state",
+          "priority": "P1",
+          "priority_score": 4,
+          "confidence": "High",
+          "effort": "L",
+          "implementation_window": "2-6 weeks",
+          "finding": "Desktop global chat checkpoints runs, but browser runs, queues, approvals, and API drafts rely partly on process or page memory.",
+          "failure_mode": "A refresh, disconnect, restart, or replica change loses progress or strands approval state.",
+          "primary_change": "Persist append-only RunEvent records and derive run and step state; make workers disposable and streams resumable by sequence.",
+          "verification": "Crash injection after every transition resumes to one terminal state without repeating effects."
+        },
+        {
+          "rank": 8,
+          "risk_id": "FP-R08",
+          "control_area": "Context and memory",
+          "priority": "P1",
+          "priority_score": 4,
+          "confidence": "High",
+          "effort": "M",
+          "implementation_window": "2-6 weeks",
+          "finding": "One surface clips history into lossy prose, another rejects long history, and durable memories lack provenance, trust, expiry, and supersession.",
+          "failure_mode": "The agent can forget constraints, become unusable after normal conversation growth, or preserve poisoned facts.",
+          "primary_change": "Use a shared token-aware context assembler plus a structured task ledger and provenance-bearing, quarantined memory.",
+          "verification": "Long-conversation, contradiction, stale-memory, tenant-isolation, and prompt-injection evaluations."
+        },
+        {
+          "rank": 9,
+          "risk_id": "FP-R09",
+          "control_area": "Catalog availability policy",
+          "priority": "P1",
+          "priority_score": 4,
+          "confidence": "High",
+          "effort": "S",
+          "implementation_window": "0-2 weeks",
+          "finding": "A scoped WASM catalog failure logs a warning and falls back to built-ins; desktop paths can also fall back when the authoritative catalog is unavailable.",
+          "failure_mode": "The model can plan or mutate against an incomplete capability view.",
+          "primary_change": "Fail closed for mutation or issue an explicit partial manifest that disables affected operations.",
+          "verification": "Catalog fault tests prove mutation is unavailable until the authoritative manifest is restored."
+        },
+        {
+          "rank": 10,
+          "risk_id": "FP-R10",
+          "control_area": "Evaluation and observability",
+          "priority": "P1",
+          "priority_score": 4,
+          "confidence": "High",
+          "effort": "L",
+          "implementation_window": "6-12 weeks",
+          "finding": "Current scorecards cover structural authoring quality but do not exercise safety, cancellation, duplicate effects, recovery, or provider variance.",
+          "failure_mode": "Regressions in the harness boundary can ship while graph-generation metrics remain green.",
+          "primary_change": "Add hierarchical traces, redaction, outcome and trajectory graders, fault injection, provider canaries, and release gates.",
+          "verification": "A versioned evaluation suite runs multiple trials and blocks releases on safety and reliability regressions."
+        },
+        {
+          "rank": 11,
+          "risk_id": "FP-R11",
+          "control_area": "Per-run UI isolation",
+          "priority": "P1",
+          "priority_score": 4,
+          "confidence": "High",
+          "effort": "M",
+          "implementation_window": "2-6 weeks",
+          "finding": "The UI allows concurrent turns while several approval and workspace fields remain singleton state with owner identifiers.",
+          "failure_mode": "One run can overwrite or consume another run's transient decision state.",
+          "primary_change": "Nest every pending approval, workspace, queue, and stream cursor under run_id and enforce ownership on reducers.",
+          "verification": "Four-run interleaving tests preserve independent prompts, approvals, cancellation, and terminal state."
+        },
+        {
+          "rank": 12,
+          "risk_id": "FP-R12",
+          "control_area": "Harness convergence",
+          "priority": "P2",
+          "priority_score": 3,
+          "confidence": "High",
+          "effort": "L",
+          "implementation_window": "6-12 weeks",
+          "finding": "Direct and global harnesses duplicate lifecycle logic across large provider, host, and UI modules, with manual lane and resource switches.",
+          "failure_mode": "Policy and recovery behavior drift across surfaces and new tools require edits in several control planes.",
+          "primary_change": "Extract one provider-neutral coordinator and generate scheduler metadata, protocol adapters, and conformance tests from the tool contract.",
+          "verification": "All surfaces pass the same lifecycle, policy, protocol, and effect conformance suite."
+        }
+      ]
+    }
+  },
+  "sources": [
+    {
+      "id": "risk_register_sql",
+      "label": "Static code-audit risk register",
+      "path": "risk-register.sql",
+      "query": {
+        "engine": "SQLite",
+        "id": "flowpilot-static-risk-register-2026-09-06",
+        "description": "Runnable VALUES query containing the reviewed risk classifications, recommendations, and verification criteria used by the report chart and table.",
+        "executed_at": "2026-09-06T06:21:54Z",
+        "language": "sql",
+        "filters": [
+          "Current working tree on 6 September 2026",
+          "Only findings with a concrete code path and actionable control are included",
+          "No production incidence or probability estimate is asserted"
+        ],
+        "metric_definitions": [
+          "priority_score is an ordinal implementation label: P0 = 5, P1 = 4, and P2 = 3. It is not a probability, frequency, or expected-loss metric.",
+          "confidence describes confidence in static code reachability and interpretation, not exploitability in production.",
+          "effort is a relative engineering estimate: S, M, or L; ranges indicate uncertainty."
+        ],
+        "tables_used": []
+      }
+    },
+    {
+      "id": "verification_record",
+      "label": "FlowPilot audit verification record",
+      "path": "verification.txt"
+    },
+    {
+      "id": "repository_snapshot",
+      "label": "flow-like repository at audited HEAD",
+      "href": "https://github.com/TM9657/flow-like/tree/1a78b2b310b87b0aca14db2485cf3249a67b3fe5"
+    },
+    {
+      "id": "mcp_tasks",
+      "label": "Model Context Protocol task lifecycle",
+        "href": "https://tasks.extensions.modelcontextprotocol.io/specification/2026-07-28/tasks"
+    },
+    {
+      "id": "mcp_tools",
+      "label": "Model Context Protocol tool contract",
+      "href": "https://modelcontextprotocol.io/specification/2026-07-28/server/tools"
+    },
+    {
+      "id": "mcp_json_schema",
+      "label": "Model Context Protocol JSON Schema safety rules",
+      "href": "https://modelcontextprotocol.io/specification/2026-07-28/basic#json-schema-usage"
+    },
+    {
+      "id": "openai_agents_runner",
+      "label": "OpenAI Agents SDK runner lifecycle",
+      "href": "https://openai.github.io/openai-agents-python/running_agents/"
+    },
+    {
+      "id": "openai_agents_hitl",
+      "label": "OpenAI Agents SDK human-in-the-loop approvals",
+      "href": "https://openai.github.io/openai-agents-python/human_in_the_loop/"
+    },
+    {
+      "id": "openai_agents_tracing",
+      "label": "OpenAI Agents SDK tracing",
+      "href": "https://openai.github.io/openai-agents-python/tracing/"
+    },
+    {
+      "id": "openai_agents_models",
+      "label": "OpenAI Agents SDK model configuration",
+      "href": "https://openai.github.io/openai-agents-python/models/"
+    },
+    {
+      "id": "openai_prompt_injection",
+      "label": "OpenAI source-to-sink prompt-injection defenses",
+      "href": "https://openai.com/index/designing-agents-to-resist-prompt-injection/"
+    },
+    {
+      "id": "aws_idempotency",
+      "label": "AWS Builders' Library on retry-safe idempotent APIs",
+      "href": "https://aws.amazon.com/builders-library/making-retries-safe-with-idempotent-APIs/"
+    },
+    {
+      "id": "grpc_cancellation",
+      "label": "gRPC cancellation guidance",
+      "href": "https://grpc.io/docs/guides/cancellation/"
+    },
+    {
+      "id": "grpc_deadlines",
+      "label": "gRPC deadline guidance",
+      "href": "https://grpc.io/docs/guides/deadlines/"
+    },
+    {
+      "id": "anthropic_long_running",
+      "label": "Anthropic long-running agent harness guidance",
+      "href": "https://www.anthropic.com/engineering/effective-harnesses-for-long-running-agents"
+    },
+    {
+      "id": "anthropic_tools",
+      "label": "Anthropic tool design guidance",
+      "href": "https://www.anthropic.com/engineering/writing-tools-for-agents"
+    },
+    {
+      "id": "anthropic_evals",
+      "label": "Anthropic agent evaluation guidance",
+      "href": "https://www.anthropic.com/engineering/demystifying-evals-for-ai-agents"
+    }
+  ]
+}

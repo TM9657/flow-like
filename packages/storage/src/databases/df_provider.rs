@@ -222,18 +222,18 @@ impl TableProvider for ZeroColumnSafeProvider {
 struct RowCountOnlyExec {
     input: Arc<dyn ExecutionPlan>,
     schema: SchemaRef,
-    properties: PlanProperties,
+    properties: Arc<PlanProperties>,
 }
 
 impl RowCountOnlyExec {
     fn new(input: Arc<dyn ExecutionPlan>) -> Self {
         let schema = Arc::new(ArrowSchema::empty());
-        let properties = PlanProperties::new(
+        let properties = Arc::new(PlanProperties::new(
             EquivalenceProperties::new(schema.clone()),
             Partitioning::UnknownPartitioning(input.output_partitioning().partition_count()),
             input.pipeline_behavior(),
             input.boundedness(),
-        );
+        ));
         Self {
             input,
             schema,
@@ -257,7 +257,7 @@ impl ExecutionPlan for RowCountOnlyExec {
         self
     }
 
-    fn properties(&self) -> &PlanProperties {
+    fn properties(&self) -> &Arc<PlanProperties> {
         &self.properties
     }
 

@@ -1,4 +1,4 @@
-import { IIndexType } from "@flow-like/flow-like-ui";
+import { indexTypeToString } from "@flow-like/flow-like-ui/state/backend-state/db-state";
 import type {
 	IAddColumnPayload,
 	ICreateTableResult,
@@ -6,6 +6,7 @@ import type {
 	IDatabaseState,
 	IDropTableResult,
 	IIndexConfig,
+	IIndexType,
 	IQueryTablePayload,
 	ITableSummary,
 } from "@flow-like/flow-like-ui";
@@ -62,17 +63,6 @@ export class DatabaseState implements IDatabaseState {
 		});
 	}
 
-	private indexTypeToString(indexType: IIndexType): string {
-		const map: Record<IIndexType, string> = {
-			[IIndexType.FullText]: "FullText",
-			[IIndexType.BTree]: "BTree",
-			[IIndexType.Bitmap]: "Bitmap",
-			[IIndexType.LabelList]: "LabelList",
-			[IIndexType.Auto]: "Auto",
-		};
-		return map[indexType] ?? "Auto";
-	}
-
 	async buildIndex(
 		appId: string,
 		tableName: string,
@@ -94,7 +84,7 @@ export class DatabaseState implements IDatabaseState {
 					method: "POST",
 					body: JSON.stringify({
 						column,
-						index_type: this.indexTypeToString(indexType),
+						index_type: indexTypeToString(indexType),
 						optimize: optimize ?? false,
 					}),
 				},
@@ -106,8 +96,8 @@ export class DatabaseState implements IDatabaseState {
 			appId,
 			tableName,
 			column,
-			indexType,
-			_optimize: optimize,
+			indexType: indexTypeToString(indexType),
+			optimize,
 			userScoped: userScoped ?? false,
 		});
 	}

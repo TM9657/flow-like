@@ -9,6 +9,7 @@ use flow_like::flow::execution::{
     DEFAULT_CONTEXT_LOG_SPILL_THRESHOLD, DEFAULT_RUN_LOG_FLUSH_INTERVAL, ExecutionEnvironment,
     ExecutionMode, RunMeta,
 };
+use flow_like::flow_like_storage::object_store::ObjectStoreExt;
 use flow_like::state::{FlowLikeConfig, FlowLikeState};
 use flow_like::utils::http::HTTPClient;
 use flow_like_storage::Path;

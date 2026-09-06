@@ -11,6 +11,7 @@
 //! no key or SAS is involved.
 
 use crate::blob_events::BlobEvent;
+use flow_like_storage::object_store::ObjectStoreExt;
 use flow_like_storage::object_store::{
     Attribute, AttributeValue, Attributes, ObjectStore, PutOptions, PutPayload, path::Path,
 };

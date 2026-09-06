@@ -16,6 +16,7 @@
 //! body-size and error-reporting layers in `lib.rs` (without the JWT
 //! middleware).
 
+use flow_like_storage::object_store::ObjectStoreExt;
 use std::{collections::HashMap, convert::Infallible, str::FromStr, time::Duration};
 
 use axum::{

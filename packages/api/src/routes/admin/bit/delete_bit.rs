@@ -7,6 +7,7 @@ use axum::{
     extract::{Path, State},
 };
 use flow_like::bit::Bit;
+use flow_like_storage::object_store::ObjectStoreExt;
 use sea_orm::EntityTrait;
 
 #[utoipa::path(

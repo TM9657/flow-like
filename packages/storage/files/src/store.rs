@@ -4,7 +4,7 @@ use flow_like_types_contracts::Cacheable;
 use flow_like_types_data_url::pathbuf_to_data_url;
 use futures::StreamExt;
 use local_store::LocalObjectStore;
-use object_store::{ObjectMeta, ObjectStore, path::Path, signer::Signer};
+use object_store::{ObjectMeta, ObjectStore, ObjectStoreExt, path::Path, signer::Signer};
 use reqwest::Url;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};

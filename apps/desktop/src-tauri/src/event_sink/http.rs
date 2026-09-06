@@ -7,6 +7,7 @@ use axum::{
     extract::{Path as AxumPath, State},
     response::IntoResponse,
 };
+use flow_like::flow_like_storage::object_store::ObjectStoreExt;
 use flow_like::flow_like_storage::{
     Path as StorePath, files::store::FlowLikeStore, object_store::PutPayload,
 };

@@ -5,9 +5,10 @@ import {
 	type IDatabaseSchemaField,
 	type IDropTableResult,
 	type IIndexConfig,
-	IIndexType,
+	type IIndexType,
 	type IQueryTablePayload,
 	type ITableSummary,
+	indexTypeToString,
 } from "@flow-like/flow-like-ui/state/backend-state/db-state";
 import {
 	type WebBackendRef,
@@ -34,17 +35,6 @@ export class WebDatabaseState implements IDatabaseState {
 		);
 	}
 
-	private indexTypeToString(indexType: IIndexType): string {
-		const map: Record<IIndexType, string> = {
-			[IIndexType.FullText]: "FullText",
-			[IIndexType.BTree]: "BTree",
-			[IIndexType.Bitmap]: "Bitmap",
-			[IIndexType.LabelList]: "LabelList",
-			[IIndexType.Auto]: "Auto",
-		};
-		return map[indexType] ?? "Auto";
-	}
-
 	private scopeParam(userScoped?: boolean): string {
 		return userScoped ? "scope=user" : "";
 	}
@@ -62,10 +52,10 @@ export class WebDatabaseState implements IDatabaseState {
 		userScoped?: boolean,
 	): Promise<void> {
 		await apiPost(
-			`apps/${appId}/db/${tableName}/index${this.scopeQuery(userScoped)}`,
+			`apps/${appId}/db/${encodeURIComponent(tableName)}/index${this.scopeQuery(userScoped)}`,
 			{
 				column,
-				index_type: this.indexTypeToString(indexType),
+				index_type: indexTypeToString(indexType),
 				optimize: optimize ?? false,
 			},
 			this.backend.auth,

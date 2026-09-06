@@ -4,8 +4,9 @@ use futures::stream::BoxStream;
 use object_store::local::LocalFileSystem;
 use object_store::path::Path;
 use object_store::{
-    GetOptions, GetResult, ListResult, MultipartUpload, ObjectMeta, ObjectStore, PutMode,
-    PutMultipartOptions, PutOptions, PutPayload, PutResult, Result,
+    CopyMode, CopyOptions, GetOptions, GetResult, ListResult, MultipartUpload, ObjectMeta,
+    ObjectStore, ObjectStoreExt, PutMode, PutMultipartOptions, PutOptions, PutPayload, PutResult,
+    RenameOptions, RenameTargetMode, Result,
 };
 use std::fs;
 use std::ops::Range;
@@ -27,9 +28,12 @@ impl std::fmt::Display for LocalObjectStore {
 impl LocalObjectStore {
     pub fn new(prefix: PathBuf) -> Result<Self> {
         if !prefix.exists() {
-            fs::create_dir_all(&prefix)
-                .map(|_| ())
-                .map_err(|_| object_store::Error::NotImplemented)?;
+            fs::create_dir_all(&prefix).map(|_| ()).map_err(|_| {
+                object_store::Error::NotImplemented {
+                    operation: "create_dir_all".to_string(),
+                    implementer: "LocalObjectStore".to_string(),
+                }
+            })?;
         }
 
         let store = LocalFileSystem::new_with_prefix(prefix)?.with_automatic_cleanup(true);
@@ -42,9 +46,12 @@ impl LocalObjectStore {
     /// Create a new LocalObjectStore with explicit Android-safe mode setting
     pub fn new_with_android_safe(prefix: PathBuf, android_safe: bool) -> Result<Self> {
         if !prefix.exists() {
-            fs::create_dir_all(&prefix)
-                .map(|_| ())
-                .map_err(|_| object_store::Error::NotImplemented)?;
+            fs::create_dir_all(&prefix).map(|_| ()).map_err(|_| {
+                object_store::Error::NotImplemented {
+                    operation: "create_dir_all".to_string(),
+                    implementer: "LocalObjectStore".to_string(),
+                }
+            })?;
         }
 
         let store = LocalFileSystem::new_with_prefix(prefix)?.with_automatic_cleanup(true);
@@ -62,18 +69,6 @@ impl LocalObjectStore {
 
 #[async_trait]
 impl ObjectStore for LocalObjectStore {
-    async fn put(&self, location: &Path, payload: PutPayload) -> Result<PutResult> {
-        let path = self.store.path_to_filesystem(location)?;
-        if let Some(parent) = path.parent()
-            && !parent.exists()
-        {
-            fs::create_dir_all(parent)
-                .map(|_| ())
-                .map_err(|_| object_store::Error::NotImplemented)?;
-        }
-        self.store.put(location, payload).await
-    }
-
     async fn put_opts(
         &self,
         location: &Path,
@@ -84,9 +79,12 @@ impl ObjectStore for LocalObjectStore {
         if let Some(parent) = path.parent()
             && !parent.exists()
         {
-            fs::create_dir_all(parent)
-                .map(|_| ())
-                .map_err(|_| object_store::Error::NotImplemented)?;
+            fs::create_dir_all(parent).map(|_| ()).map_err(|_| {
+                object_store::Error::NotImplemented {
+                    operation: "create_dir_all".to_string(),
+                    implementer: "LocalObjectStore".to_string(),
+                }
+            })?;
         }
 
         // LocalFileSystem rejects PutMode::Update with NotImplemented. Emulate the
@@ -149,18 +147,6 @@ impl ObjectStore for LocalObjectStore {
         self.store.put_opts(location, payload, opts).await
     }
 
-    async fn put_multipart(&self, location: &Path) -> Result<Box<dyn MultipartUpload>> {
-        let path = self.store.path_to_filesystem(location)?;
-        if let Some(parent) = path.parent()
-            && !parent.exists()
-        {
-            fs::create_dir_all(parent)
-                .map(|_| ())
-                .map_err(|_| object_store::Error::NotImplemented)?;
-        }
-        self.store.put_multipart(location).await
-    }
-
     async fn put_multipart_opts(
         &self,
         location: &Path,
@@ -170,49 +156,39 @@ impl ObjectStore for LocalObjectStore {
         if let Some(parent) = path.parent()
             && !parent.exists()
         {
-            fs::create_dir_all(parent)
-                .map(|_| ())
-                .map_err(|_| object_store::Error::NotImplemented)?;
+            fs::create_dir_all(parent).map(|_| ()).map_err(|_| {
+                object_store::Error::NotImplemented {
+                    operation: "create_dir_all".to_string(),
+                    implementer: "LocalObjectStore".to_string(),
+                }
+            })?;
         }
         self.store.put_multipart_opts(location, opts).await
     }
 
-    async fn get(&self, location: &Path) -> Result<GetResult> {
-        self.store.get(location).await
-    }
-
     async fn get_opts(&self, location: &Path, opts: GetOptions) -> Result<GetResult> {
+        if opts.head {
+            let path = self.store.path_to_filesystem(location)?;
+            if let Some(parent) = path.parent()
+                && !parent.exists()
+            {
+                fs::create_dir_all(parent).map_err(|_| object_store::Error::NotImplemented {
+                    operation: "create_dir_all".to_string(),
+                    implementer: "LocalObjectStore".to_string(),
+                })?;
+            }
+        }
         self.store.get_opts(location, opts).await
-    }
-
-    async fn get_range(&self, location: &Path, range: Range<u64>) -> Result<bytes::Bytes> {
-        self.store.get_range(location, range).await
     }
 
     async fn get_ranges(&self, location: &Path, ranges: &[Range<u64>]) -> Result<Vec<Bytes>> {
         self.store.get_ranges(location, ranges).await
     }
 
-    async fn head(&self, location: &Path) -> Result<ObjectMeta> {
-        let path = self.store.path_to_filesystem(location)?;
-        if let Some(parent) = path.parent()
-            && !parent.exists()
-        {
-            fs::create_dir_all(parent)
-                .map(|_| ())
-                .map_err(|_| object_store::Error::NotImplemented)?;
-        }
-        self.store.head(location).await
-    }
-
-    async fn delete(&self, location: &Path) -> Result<()> {
-        self.store.delete(location).await
-    }
-
-    fn delete_stream<'a>(
-        &'a self,
-        locations: BoxStream<'a, Result<Path>>,
-    ) -> BoxStream<'a, Result<Path>> {
+    fn delete_stream(
+        &self,
+        locations: BoxStream<'static, Result<Path>>,
+    ) -> BoxStream<'static, Result<Path>> {
         self.store.delete_stream(locations)
     }
 
@@ -232,18 +208,10 @@ impl ObjectStore for LocalObjectStore {
         self.store.list_with_delimiter(prefix).await
     }
 
-    async fn copy(&self, from: &Path, to: &Path) -> Result<()> {
-        self.store.copy(from, to).await
-    }
-
-    async fn rename(&self, from: &Path, to: &Path) -> Result<()> {
-        self.store.rename(from, to).await
-    }
-
-    async fn copy_if_not_exists(&self, from: &Path, to: &Path) -> Result<()> {
+    async fn copy_opts(&self, from: &Path, to: &Path, mut options: CopyOptions) -> Result<()> {
         // On Android, copy_if_not_exists uses hard_link() which fails due to SELinux.
         // Use existence check + copy instead.
-        if self.android_safe {
+        if self.android_safe && options.mode == CopyMode::Create {
             match self.store.head(to).await {
                 Ok(_) => {
                     return Err(object_store::Error::AlreadyExists {
@@ -252,18 +220,18 @@ impl ObjectStore for LocalObjectStore {
                     });
                 }
                 Err(object_store::Error::NotFound { .. }) => {
-                    return self.store.copy(from, to).await;
+                    options.mode = CopyMode::Overwrite;
                 }
                 Err(e) => return Err(e),
             }
         }
-        self.store.copy_if_not_exists(from, to).await
+        self.store.copy_opts(from, to, options).await
     }
 
-    async fn rename_if_not_exists(&self, from: &Path, to: &Path) -> Result<()> {
+    async fn rename_opts(&self, from: &Path, to: &Path, mut options: RenameOptions) -> Result<()> {
         // On Android, rename_if_not_exists uses hard_link() which fails due to SELinux.
         // Use existence check + rename instead.
-        if self.android_safe {
+        if self.android_safe && options.target_mode == RenameTargetMode::Create {
             match self.store.head(to).await {
                 Ok(_) => {
                     return Err(object_store::Error::AlreadyExists {
@@ -272,12 +240,12 @@ impl ObjectStore for LocalObjectStore {
                     });
                 }
                 Err(object_store::Error::NotFound { .. }) => {
-                    return self.store.rename(from, to).await;
+                    options.target_mode = RenameTargetMode::Overwrite;
                 }
                 Err(e) => return Err(e),
             }
         }
-        self.store.rename_if_not_exists(from, to).await
+        self.store.rename_opts(from, to, options).await
     }
 }
 
@@ -299,6 +267,65 @@ mod tests {
         ));
         let store = LocalObjectStore::new(dir.clone()).unwrap();
         (store, dir)
+    }
+
+    #[tokio::test]
+    async fn convenience_operations_preserve_create_only_and_android_behavior() {
+        use futures::{StreamExt, TryStreamExt, stream};
+
+        for android_safe in [false, true] {
+            let (_, dir) = temp_store();
+            let store = LocalObjectStore::new_with_android_safe(dir.clone(), android_safe).unwrap();
+            let source = Path::from("nested/source.txt");
+            let target = Path::from("nested/target.txt");
+            store
+                .put_opts(
+                    &source,
+                    PutPayload::from_static(b"source"),
+                    PutOptions::from(PutMode::Create),
+                )
+                .await
+                .unwrap();
+            store
+                .put(&target, PutPayload::from_static(b"target"))
+                .await
+                .unwrap();
+
+            assert!(matches!(
+                store.copy_if_not_exists(&source, &target).await,
+                Err(object_store::Error::AlreadyExists { .. })
+            ));
+            assert!(matches!(
+                store.rename_if_not_exists(&source, &target).await,
+                Err(object_store::Error::AlreadyExists { .. })
+            ));
+            assert_eq!(
+                store.get(&target).await.unwrap().bytes().await.unwrap(),
+                Bytes::from_static(b"target")
+            );
+            assert_eq!(store.head(&source).await.unwrap().size, 6);
+
+            store.copy(&source, &target).await.unwrap();
+            assert_eq!(
+                store.get_range(&target, 1..4).await.unwrap(),
+                Bytes::from_static(b"our")
+            );
+            store.delete(&target).await.unwrap();
+            store.copy_if_not_exists(&source, &target).await.unwrap();
+            store.delete(&target).await.unwrap();
+            store.rename_if_not_exists(&source, &target).await.unwrap();
+            assert!(matches!(
+                store.head(&source).await,
+                Err(object_store::Error::NotFound { .. })
+            ));
+            let removed: Vec<_> = store
+                .delete_stream(stream::iter([Ok(target.clone())]).boxed())
+                .try_collect()
+                .await
+                .unwrap();
+            assert_eq!(removed, [target]);
+            fs::remove_dir_all(dir).unwrap();
+        }
     }
 
     #[tokio::test]

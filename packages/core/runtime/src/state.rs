@@ -1185,7 +1185,7 @@ impl Default for NotificationEvent {
 
 #[cfg(test)]
 mod tests {
-    use flow_like_storage::object_store::{ObjectStore, PutPayload};
+    use flow_like_storage::object_store::{ObjectStoreExt, PutPayload};
     use flow_like_types::{Bytes, Cacheable, tokio};
 
     use super::*;

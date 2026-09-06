@@ -53,6 +53,7 @@ import {
 import { Switch } from "../../ui/switch";
 import {
 	ColumnTypeSelect,
+	IndexTypeHelp,
 	IndexTypeSelect,
 	NullableSelect,
 	indexTypeEnum,
@@ -450,6 +451,7 @@ function ColumnDesignerRow({
 							onChange({
 								type,
 								...(type === "vector" ? {} : { vectorSize: "" }),
+								indexType: "auto",
 							})
 						}
 					/>
@@ -501,11 +503,16 @@ function ColumnDesignerRow({
 					{t("index", "Index")}
 				</Label>
 				{column.indexed && !isVector && (
-					<IndexTypeSelect
-						value={column.indexType}
-						onChange={(indexType) => onChange({ indexType })}
-						className="h-8 w-36"
-					/>
+					<>
+						<IndexTypeSelect
+							value={column.indexType}
+							onChange={(indexType) => onChange({ indexType })}
+							className="h-8 w-44"
+							category="scalar"
+							columnType={column.type}
+						/>
+						<IndexTypeHelp value={column.indexType} />
+					</>
 				)}
 				{isVector && (
 					<Badge variant="secondary" className="text-[10px]">

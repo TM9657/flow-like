@@ -21,6 +21,7 @@ use flow_like_gcp_data::firestore::{
     Document, EXPIRES_AT_FIELD, FilterOperator, FirestoreClient, FirestoreError, MutationOutcome,
     QueryFilter, QueryOrder, SortDirection, validate_collection_id,
 };
+use flow_like_storage::object_store::ObjectStoreExt;
 use flow_like_storage::{
     files::store::FlowLikeStore,
     object_store::{ObjectStore, path::Path},

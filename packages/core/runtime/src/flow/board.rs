@@ -21,6 +21,7 @@ use crate::{
 use commands::GenericCommand;
 use commands::nodes::update_node::UpdateNodeCommand;
 use dirty::{DirtyIndex, Touched};
+use flow_like_storage::object_store::ObjectStoreExt;
 use flow_like_storage::object_store::{self, ObjectStore, PutResult, UpdateVersion, path::Path};
 use flow_like_types::proto;
 use flow_like_types::{FromProto, ToProto, create_id, sync::Mutex};

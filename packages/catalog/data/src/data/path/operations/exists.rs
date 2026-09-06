@@ -5,6 +5,7 @@ use flow_like::flow::{
     pin::PinOptions,
     variable::VariableType,
 };
+use flow_like_storage::object_store::ObjectStoreExt;
 use flow_like_types::async_trait;
 
 #[crate::register_node]

@@ -6,11 +6,18 @@ use flow_like_types::Cacheable;
 use flow_like_types::async_trait;
 use flow_like_types::{Result, Value, anyhow};
 use futures::TryStreamExt;
+use lance::index::{DatasetIndexExt, DatasetIndexInternalExt};
+use lance_index::metrics::NoOpMetricsCollector;
+use lance_index::scalar::{BuiltinIndexType, ScalarIndexParams};
 use lancedb::index::IndexConfig;
 use lancedb::index::scalar::BTreeIndexBuilder;
 use lancedb::index::scalar::BitmapIndexBuilder;
+use lancedb::index::scalar::FmIndexBuilder;
 use lancedb::index::scalar::LabelListIndexBuilder;
-use lancedb::index::vector::IvfPqIndexBuilder;
+use lancedb::index::vector::{
+    IvfFlatIndexBuilder, IvfHnswFlatIndexBuilder, IvfHnswPqIndexBuilder, IvfHnswSqIndexBuilder,
+    IvfPqIndexBuilder, IvfRqIndexBuilder, IvfSqIndexBuilder,
+};
 use lancedb::query::QueryExecutionOptions;
 use lancedb::table::AddColumnsResult;
 use lancedb::table::AlterColumnsResult;
@@ -53,6 +60,113 @@ impl From<IndexConfig> for IndexConfigDto {
             columns: idx.columns,
         }
     }
+}
+
+/// Include native Lance indexes that LanceDB's index enum cannot represent.
+pub async fn list_table_indices(table: &Table) -> Result<Vec<IndexConfigDto>> {
+    if let Some(wrapper) = table.dataset() {
+        let dataset = wrapper.get().await?;
+        let metadata = dataset.load_indices().await?;
+        let mut indices = std::collections::BTreeMap::new();
+        for index in metadata.iter() {
+            if lance_index::infer_system_index_type(index).is_some()
+                || indices.contains_key(&index.name)
+            {
+                continue;
+            }
+            let Ok(columns) = index
+                .fields
+                .iter()
+                .map(|id| dataset.schema().field_path(*id))
+                .collect::<std::result::Result<Vec<_>, _>>()
+            else {
+                continue;
+            };
+            let Some(column) = columns.first() else {
+                continue;
+            };
+            let declared_type = index.index_details.as_ref().and_then(|details| {
+                lance::index::scalar::IndexDetails(details.clone())
+                    .get_plugin()
+                    .ok()
+                    .and_then(|plugin| exposed_index_type(plugin.name()))
+            });
+            let index_type = if let Some(kind) = declared_type {
+                kind
+            } else {
+                // Read the physical type for vectors and legacy metadata. Avoid
+                // describe_indices(): it requires coverage metadata absent in older
+                // indexes. index_statistics() can also migrate a manifest.
+                let Ok(opened) = dataset
+                    .open_generic_index(column, &index.uuid, &NoOpMetricsCollector)
+                    .await
+                else {
+                    continue;
+                };
+                let statistics = if opened.index_type().is_scalar() {
+                    None
+                } else {
+                    opened.statistics().ok()
+                };
+                let kind = statistics
+                    .as_ref()
+                    .and_then(|s| s.get("index_type"))
+                    .and_then(Value::as_str)
+                    .map(str::to_string)
+                    .unwrap_or_else(|| opened.index_type().to_string());
+                let Some(kind) = exposed_index_type(&kind) else {
+                    continue;
+                };
+                kind
+            };
+            indices.insert(
+                index.name.clone(),
+                IndexConfigDto {
+                    name: index.name.clone(),
+                    index_type,
+                    columns,
+                },
+            );
+        }
+        return Ok(indices.into_values().collect());
+    }
+    Ok(table
+        .list_indices()
+        .await?
+        .into_iter()
+        .map(Into::into)
+        .collect())
+}
+
+fn exposed_index_type(kind: &str) -> Option<String> {
+    kind.parse::<lancedb::index::IndexType>()
+        .map(|kind| kind.to_string())
+        .ok()
+        .or_else(|| native_scalar_index(Some(kind)).map(|kind| kind.as_str().to_ascii_uppercase()))
+}
+
+fn validate_new_columns(transform: &NewColumnTransform) -> Result<()> {
+    use datafusion::sql::parser::DFParser;
+    use datafusion::sql::sqlparser::ast::{Expr, Value as SqlValue};
+
+    if let NewColumnTransform::SqlExpressions(expressions) = transform {
+        for (name, sql) in expressions {
+            // Preserve the node's typed-column contract now that Lance accepts
+            // Null fields. Leave other expression validation to Lance's planner.
+            if let Ok(parsed) = DFParser::parse_sql_into_expr(sql) {
+                let mut expression = &parsed.expr;
+                while let Expr::Nested(inner) = expression {
+                    expression = inner;
+                }
+                if matches!(expression, Expr::Value(value) if value.value == SqlValue::Null) {
+                    return Err(anyhow!(
+                        "Column '{name}' requires a typed expression; use CAST(NULL AS <type>) instead of bare NULL"
+                    ));
+                }
+            }
+        }
+    }
+    Ok(())
 }
 
 #[derive(Clone)]
@@ -124,6 +238,17 @@ impl LanceDBVectorStore {
         self.write_options = Some(options);
     }
 
+    fn creation_write_options(&self) -> WriteOptions {
+        let mut options = self.write_options.clone().unwrap_or_default();
+        // Creation must elect one writer even when later writes use Append.
+        // Preserve credentials, store wrappers and all other write settings.
+        options
+            .lance_write_params
+            .get_or_insert_with(Default::default)
+            .mode = lance::dataset::WriteMode::Create;
+        options
+    }
+
     /// Create an empty table from an explicit schema, without inserting a seed row.
     ///
     /// Returns `true` when this call created the table and `false` when the table already
@@ -151,12 +276,10 @@ impl LanceDBVectorStore {
         }
 
         let requested_schema = Arc::new(schema);
-        let mut builder = self
+        let builder = self
             .connection
-            .create_empty_table(&self.table_name, requested_schema.clone());
-        if let Some(opts) = &self.write_options {
-            builder = builder.write_options(opts.clone());
-        }
+            .create_empty_table(&self.table_name, requested_schema.clone())
+            .write_options(self.creation_write_options());
 
         let (table, created) = match builder.execute().await {
             Ok(table) => (table, true),
@@ -217,6 +340,7 @@ impl LanceDBVectorStore {
             .clone()
             .ok_or_else(|| anyhow!("Table not initialized"))?;
 
+        validate_new_columns(&transform)?;
         let result = table.add_columns(transform, read_columns).await?;
         Ok(result)
     }
@@ -249,8 +373,7 @@ impl LanceDBVectorStore {
             .table
             .clone()
             .ok_or_else(|| anyhow!("Table not initialized"))?;
-        let indices = indices.list_indices().await?;
-        Ok(indices.into_iter().map(IndexConfigDto::from).collect())
+        list_table_indices(&indices).await
     }
 
     pub async fn drop_index(&self, name: &str) -> Result<()> {
@@ -291,16 +414,11 @@ impl LanceDBVectorStore {
     }
 
     pub async fn add_column(&self, name: &str, sql_expression: &str) -> Result<()> {
-        let table = self
-            .table
-            .clone()
-            .ok_or_else(|| anyhow!("Table not initialized"))?;
-
         let transform = NewColumnTransform::SqlExpressions(vec![(
             name.to_string(),
             sql_expression.to_string(),
         )]);
-        table.add_columns(transform, None).await?;
+        self.add_columns(transform, None).await?;
         Ok(())
     }
 
@@ -356,14 +474,22 @@ impl LanceDBVectorStore {
         let items = vec![batch];
 
         if self.table.is_none() {
-            let mut builder = self.connection.create_table(&self.table_name, items);
-            if let Some(opts) = &self.write_options {
-                builder = builder.write_options(opts.clone());
-            }
+            let builder = self
+                .connection
+                .create_table(&self.table_name, items.clone())
+                .write_options(self.creation_write_options());
             match builder.execute().await {
                 Ok(table) => {
                     self.table = Some(table);
                     return Ok(());
+                }
+                Err(lancedb::Error::TableAlreadyExists { .. }) => {
+                    self.table = Some(
+                        self.connection
+                            .open_table(&self.table_name)
+                            .execute()
+                            .await?,
+                    );
                 }
                 Err(err) => {
                     eprintln!(
@@ -466,6 +592,70 @@ fn cosine_vector_index() -> Index {
     Index::IvfPq(IvfPqIndexBuilder::default().distance_type(lancedb::DistanceType::Cosine))
 }
 
+fn normalized_index_selection(selection: Option<&str>) -> String {
+    // Saved nodes use uppercase labels, while HTTP and desktop requests use
+    // enum names. Both spellings must select the same builder and metric.
+    selection
+        .unwrap_or("AUTO")
+        .chars()
+        .filter(|c| !c.is_ascii_whitespace() && *c != '_' && *c != '-')
+        .collect::<String>()
+        .to_ascii_uppercase()
+}
+
+fn native_scalar_index(selection: Option<&str>) -> Option<BuiltinIndexType> {
+    match normalized_index_selection(selection).as_str() {
+        "NGRAM" => Some(BuiltinIndexType::NGram),
+        "ZONEMAP" => Some(BuiltinIndexType::ZoneMap),
+        "BLOOMFILTER" => Some(BuiltinIndexType::BloomFilter),
+        "RTREE" => Some(BuiltinIndexType::RTree),
+        _ => None,
+    }
+}
+
+fn validate_rtree_column(field: &arrow_schema::Field) -> Result<()> {
+    if !field
+        .metadata()
+        .get("ARROW:extension:name")
+        .is_some_and(|name| name.starts_with("geoarrow."))
+    {
+        return Err(anyhow!(
+            "R-Tree requires a column with GeoArrow extension metadata"
+        ));
+    }
+    let empty = arrow_array::new_empty_array(field.data_type());
+    lance_index::scalar::rtree::extract_bounding_boxes(empty.as_ref(), field).map_err(|error| {
+        anyhow!(
+            "Unsupported GeoArrow layout for R-Tree. Use separated Float64 coordinates or GeoArrow WKB/WKT. Lance does not preserve interleaved coordinate field names: {error}"
+        )
+    })?;
+    Ok(())
+}
+
+fn index_for_column(selection: Option<&str>, data_type: &DataType) -> Index {
+    let selection = normalized_index_selection(selection);
+    let cosine = lancedb::DistanceType::Cosine;
+    match selection.as_str() {
+        "FULLTEXT" | "FTS" | "INVERTED" => Index::FTS(FtsIndexBuilder::default()),
+        "BTREE" => Index::BTree(BTreeIndexBuilder::default()),
+        "BITMAP" => Index::Bitmap(BitmapIndexBuilder::default()),
+        "LABELLIST" => Index::LabelList(LabelListIndexBuilder::default()),
+        "FM" => Index::Fm(FmIndexBuilder::default()),
+        "VECTOR" | "IVFPQ" => cosine_vector_index(),
+        "IVFFLAT" => Index::IvfFlat(IvfFlatIndexBuilder::default().distance_type(cosine)),
+        "IVFSQ" => Index::IvfSq(IvfSqIndexBuilder::default().distance_type(cosine)),
+        "IVFRQ" => Index::IvfRq(IvfRqIndexBuilder::default().distance_type(cosine)),
+        "IVFHNSWFLAT" => {
+            Index::IvfHnswFlat(IvfHnswFlatIndexBuilder::default().distance_type(cosine))
+        }
+        "IVFHNSWPQ" => Index::IvfHnswPq(IvfHnswPqIndexBuilder::default().distance_type(cosine)),
+        "IVFHNSWSQ" => Index::IvfHnswSq(IvfHnswSqIndexBuilder::default().distance_type(cosine)),
+        "AUTO" if lancedb::utils::supported_vector_data_type(data_type) => cosine_vector_index(),
+        // Preserve the historical fallback for unrecognized saved selections.
+        _ => Index::Auto,
+    }
+}
+
 fn optimize_actions(keep_versions: bool) -> Vec<lancedb::table::OptimizeAction> {
     let mut actions = vec![
         lancedb::table::OptimizeAction::Compact {
@@ -484,6 +674,109 @@ fn optimize_actions(keep_versions: bool) -> Vec<lancedb::table::OptimizeAction> 
     }
 
     actions
+}
+
+#[derive(Debug, PartialEq)]
+struct CompactionScalarIndex {
+    name: String,
+    column: String,
+    params: ScalarIndexParams,
+}
+
+async fn scalar_indices_for_compaction(table: &Table) -> Result<Vec<CompactionScalarIndex>> {
+    let Some(wrapper) = table.dataset() else {
+        return Ok(Vec::new());
+    };
+    wrapper.ensure_mutable()?;
+    let dataset = wrapper.get().await?;
+    let mut indices = std::collections::BTreeMap::new();
+    for metadata in dataset.load_indices().await?.iter() {
+        if indices.contains_key(&metadata.name) || metadata.fields.len() != 1 {
+            continue;
+        }
+        let column = dataset.schema().field_path(metadata.fields[0])?;
+        let needs_preservation = if let Some(details) = metadata.index_details.clone() {
+            let details = lance::index::scalar::IndexDetails(details);
+            if details.is_vector() {
+                false
+            } else {
+                details.get_plugin().is_ok_and(|plugin| {
+                    matches!(
+                        normalized_index_selection(Some(plugin.name())).as_str(),
+                        "FM" | "ZONEMAP" | "BLOOMFILTER" | "RTREE"
+                    )
+                })
+            }
+        } else {
+            // Imported manifests can omit details. Identify their physical index
+            // without the statistics API, which can migrate legacy manifests.
+            let index = dataset
+                .open_generic_index(&column, &metadata.uuid, &NoOpMetricsCollector)
+                .await?;
+            matches!(
+                index.index_type(),
+                lance_index::IndexType::Fm
+                    | lance_index::IndexType::ZoneMap
+                    | lance_index::IndexType::BloomFilter
+                    | lance_index::IndexType::RTree
+            )
+        };
+        if !needs_preservation {
+            continue;
+        }
+        let index = dataset
+            .open_scalar_index(&column, &metadata.uuid, &NoOpMetricsCollector)
+            .await?;
+        if !index.can_remap() {
+            // Lance drops these indexes when compaction changes row addresses.
+            // Read their saved configuration first, including imported tuning.
+            indices.insert(
+                metadata.name.clone(),
+                CompactionScalarIndex {
+                    name: metadata.name.clone(),
+                    column,
+                    params: index.derive_index_params()?,
+                },
+            );
+        }
+    }
+    Ok(indices.into_values().collect())
+}
+
+async fn restore_compacted_scalar_indices(
+    table: &Table,
+    indices: &[CompactionScalarIndex],
+) -> Result<()> {
+    if indices.is_empty() {
+        return Ok(());
+    }
+    let wrapper = table
+        .dataset()
+        .ok_or_else(|| anyhow!("Native table required to restore compacted indexes"))?;
+    wrapper.ensure_mutable()?;
+    let mut dataset = wrapper.get().await?.as_ref().clone();
+    for index in indices {
+        if dataset
+            .load_indices()
+            .await?
+            .iter()
+            .any(|metadata| metadata.name == index.name)
+        {
+            continue;
+        }
+        dataset
+            .create_index_builder(
+                &[&index.column],
+                lance_index::IndexType::Scalar,
+                &index.params,
+            )
+            .name(index.name.clone())
+            .replace(false)
+            .await?;
+        // Publish each successful commit even if a later rebuild fails.
+        wrapper.update(dataset.clone());
+    }
+    Ok(())
 }
 
 fn split_hybrid_fields(
@@ -683,17 +976,24 @@ impl VectorStore for LanceDBVectorStore {
     }
 
     async fn upsert(&mut self, items: Vec<Value>, id_field: String) -> Result<()> {
-        let items = self.write_batch_reader(items).await?;
-
         if self.table.is_none() {
-            let mut builder = self.connection.create_table(&self.table_name, items);
-            if let Some(opts) = &self.write_options {
-                builder = builder.write_options(opts.clone());
-            }
+            let reader = self.write_batch_reader(items.clone()).await?;
+            let builder = self
+                .connection
+                .create_table(&self.table_name, reader)
+                .write_options(self.creation_write_options());
             match builder.execute().await {
                 Ok(table) => {
                     self.table = Some(table);
                     return Ok(());
+                }
+                Err(lancedb::Error::TableAlreadyExists { .. }) => {
+                    self.table = Some(
+                        self.connection
+                            .open_table(&self.table_name)
+                            .execute()
+                            .await?,
+                    );
                 }
                 Err(err) => {
                     eprintln!(
@@ -705,6 +1005,7 @@ impl VectorStore for LanceDBVectorStore {
             }
         }
 
+        let items = self.write_batch_reader(items).await?;
         let table = self.table.clone().unwrap();
         table
             .merge_insert(&[&id_field])
@@ -717,17 +1018,24 @@ impl VectorStore for LanceDBVectorStore {
     }
 
     async fn insert(&mut self, items: Vec<Value>) -> Result<()> {
-        let items = self.write_batch_reader(items).await?;
-
         if self.table.is_none() {
-            let mut builder = self.connection.create_table(&self.table_name, items);
-            if let Some(opts) = &self.write_options {
-                builder = builder.write_options(opts.clone());
-            }
+            let reader = self.write_batch_reader(items.clone()).await?;
+            let builder = self
+                .connection
+                .create_table(&self.table_name, reader)
+                .write_options(self.creation_write_options());
             match builder.execute().await {
                 Ok(table) => {
                     self.table = Some(table);
                     return Ok(());
+                }
+                Err(lancedb::Error::TableAlreadyExists { .. }) => {
+                    self.table = Some(
+                        self.connection
+                            .open_table(&self.table_name)
+                            .execute()
+                            .await?,
+                    );
                 }
                 Err(err) => {
                     eprintln!(
@@ -739,6 +1047,7 @@ impl VectorStore for LanceDBVectorStore {
             }
         }
 
+        let items = self.write_batch_reader(items).await?;
         let table = self.table.clone().unwrap();
         let mut add = table.add(items);
         if let Some(opts) = &self.write_options {
@@ -760,9 +1069,14 @@ impl VectorStore for LanceDBVectorStore {
 
     async fn optimize(&self, keep_versions: bool) -> Result<()> {
         let table = self.table.clone().ok_or(anyhow!("Table not initialized"))?;
+        let scalar_indices = scalar_indices_for_compaction(&table).await?;
 
         for action in optimize_actions(keep_versions) {
+            let compacting = matches!(&action, lancedb::table::OptimizeAction::Compact { .. });
             table.optimize(action).await?;
+            if compacting {
+                restore_compacted_scalar_indices(&table, &scalar_indices).await?;
+            }
         }
 
         Ok(())
@@ -792,23 +1106,40 @@ impl VectorStore for LanceDBVectorStore {
 
     async fn index(&self, column: &str, index_type: Option<&str>) -> Result<()> {
         let table = self.table.clone().ok_or(anyhow!("Table not initialized"))?;
-        let index_type = index_type.unwrap_or("AUTO");
-        let index_type = match index_type {
-            "FULL TEXT" => Index::FTS(FtsIndexBuilder::default()),
-            "BTREE" => Index::BTree(BTreeIndexBuilder::default()),
-            "BITMAP" => Index::Bitmap(BitmapIndexBuilder::default()),
-            "LABEL LIST" => Index::LabelList(LabelListIndexBuilder::default()),
-            "VECTOR" => cosine_vector_index(),
-            "AUTO" => {
-                let schema = table.schema().await?;
-                let field = schema.field_with_name(column)?;
-                if lancedb::utils::supported_vector_data_type(field.data_type()) {
-                    cosine_vector_index()
-                } else {
-                    Index::Auto
-                }
+        if let Some(kind) = native_scalar_index(index_type) {
+            let wrapper = table.dataset().ok_or_else(|| {
+                anyhow!(
+                    "{} indexes require a native Lance table",
+                    kind.as_str().to_uppercase()
+                )
+            })?;
+            // Use the table's dataset and consistency wrapper so credentials,
+            // object-store overrides and pinned-version protection are retained.
+            wrapper.ensure_mutable()?;
+            let mut dataset = wrapper.get().await?.as_ref().clone();
+            if kind == BuiltinIndexType::RTree {
+                let field = dataset
+                    .schema()
+                    .field_case_insensitive(column)
+                    .ok_or_else(|| anyhow!("Column '{column}' does not exist"))?;
+                validate_rtree_column(&arrow_schema::Field::from(field))?;
             }
-            _ => Index::Auto,
+            let params = ScalarIndexParams::for_builtin(kind);
+            dataset
+                .create_index_builder(&[column], lance_index::IndexType::Scalar, &params)
+                .replace(true)
+                .await?;
+            wrapper.update(dataset);
+            return Ok(());
+        }
+        let index_type = if normalized_index_selection(index_type) == "AUTO" {
+            let schema = table.schema().await?;
+            let field = schema.field_with_name(column)?;
+            index_for_column(index_type, field.data_type())
+        } else {
+            // Explicit builders resolve nested and quoted paths in Lance.
+            // Only AUTO needs the field type to choose a vector algorithm.
+            index_for_column(index_type, &DataType::Null)
         };
 
         table.create_index(&[column], index_type).execute().await?;
@@ -871,6 +1202,52 @@ mod tests {
         name: String,
         #[serde(default)]
         tag: Option<String>,
+    }
+
+    #[test]
+    fn regression_index_names_preserve_defaults_and_transport_spellings() {
+        let vector =
+            DataType::FixedSizeList(Arc::new(Field::new("item", DataType::Float32, true)), 16);
+        for selection in [
+            None,
+            Some("AUTO"),
+            Some("Auto"),
+            Some("VECTOR"),
+            Some("IvfPq"),
+        ] {
+            assert!(matches!(
+                index_for_column(selection, &vector),
+                Index::IvfPq(_)
+            ));
+        }
+        assert!(matches!(
+            index_for_column(None, &DataType::Int64),
+            Index::Auto
+        ));
+        assert!(matches!(
+            index_for_column(Some("old_unknown"), &vector),
+            Index::Auto
+        ));
+        for name in ["FULL TEXT", "FullText", "full_text", "FTS"] {
+            assert!(matches!(
+                index_for_column(Some(name), &DataType::Utf8),
+                Index::FTS(_)
+            ));
+        }
+        for name in ["LABEL LIST", "LabelList", "label_list"] {
+            assert!(matches!(
+                index_for_column(Some(name), &DataType::Utf8),
+                Index::LabelList(_)
+            ));
+        }
+        for (name, kind) in [
+            ("NGram", BuiltinIndexType::NGram),
+            ("ZONE MAP", BuiltinIndexType::ZoneMap),
+            ("bloom_filter", BuiltinIndexType::BloomFilter),
+            ("RTREE", BuiltinIndexType::RTree),
+        ] {
+            assert_eq!(native_scalar_index(Some(name)), Some(kind));
+        }
     }
 
     #[test]
@@ -940,6 +1317,11 @@ mod tests {
                 (pseudo_random & 0xffff) as f32 / u16::MAX as f32
             })
             .collect::<Vec<_>>();
+        let query_vector = values
+            .iter()
+            .take(dimension as usize)
+            .map(|v| *v as f64)
+            .collect::<Vec<_>>();
         let vectors = Arc::new(FixedSizeListArray::try_new(
             item,
             dimension,
@@ -949,7 +1331,17 @@ mod tests {
         db.insert_record_batch(RecordBatch::try_new(schema, vec![ids, vectors])?)
             .await?;
 
-        for selection in ["VECTOR", "AUTO"] {
+        for (selection, expected) in [
+            ("VECTOR", lancedb::index::IndexType::IvfPq),
+            ("AUTO", lancedb::index::IndexType::IvfPq),
+            ("IvfPq", lancedb::index::IndexType::IvfPq),
+            ("IVF_FLAT", lancedb::index::IndexType::IvfFlat),
+            ("IVF_SQ", lancedb::index::IndexType::IvfSq),
+            ("IVF_RQ", lancedb::index::IndexType::IvfRq),
+            ("IVF_HNSW_FLAT", lancedb::index::IndexType::IvfHnswFlat),
+            ("IVF_HNSW_PQ", lancedb::index::IndexType::IvfHnswPq),
+            ("IVF_HNSW_SQ", lancedb::index::IndexType::IvfHnswSq),
+        ] {
             db.index("vector", Some(selection)).await?;
             let table = db.raw().await?;
             let config = table
@@ -958,13 +1350,27 @@ mod tests {
                 .into_iter()
                 .find(|index| index.columns.len() == 1 && index.columns[0] == "vector")
                 .expect("vector index should exist");
-            assert_eq!(config.index_type, lancedb::index::IndexType::IvfPq);
+            assert_eq!(config.index_type, expected, "{selection}");
             let stats = table
                 .index_stats(&config.name)
                 .await?
                 .expect("vector index statistics should exist");
-            assert_eq!(stats.index_type, lancedb::index::IndexType::IvfPq);
+            assert_eq!(stats.index_type, expected, "{selection}");
             assert_eq!(stats.distance_type, Some(lancedb::DistanceType::Cosine));
+            let rows = db
+                .vector_search(
+                    query_vector.clone(),
+                    Some("id < 128"),
+                    Some(vec!["id".into()]),
+                    5,
+                    0,
+                )
+                .await?;
+            assert_eq!(rows.len(), 5, "{selection} filtered vector search");
+            assert!(
+                rows.iter()
+                    .all(|row| row["id"].as_i64().is_some_and(|id| id < 128))
+            );
         }
 
         db.index("id", Some("AUTO")).await?;
@@ -983,6 +1389,363 @@ mod tests {
         assert_eq!(scalar_stats.distance_type, None);
 
         std::fs::remove_dir_all(&test_path)?;
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn regression_native_scalar_indices_survive_queries_reopen_and_maintenance() -> Result<()>
+    {
+        use arrow_array::{StringArray, TimestampMillisecondArray};
+
+        let test_path = format!("./tmp/{}", create_id());
+        std::fs::create_dir_all(&test_path)?;
+        let mut db =
+            LanceDBVectorStore::new(PathBuf::from(&test_path), "scalar_indices".into()).await?;
+        let schema = Arc::new(Schema::new(vec![
+            Field::new("id", DataType::Int64, false),
+            Field::new("text", DataType::Utf8, false),
+            Field::new(
+                "at",
+                DataType::Timestamp(TimeUnit::Millisecond, None),
+                false,
+            ),
+        ]));
+        db.insert_record_batch(RecordBatch::try_new(
+            schema,
+            vec![
+                Arc::new(Int64Array::from_iter_values(0..512)),
+                Arc::new(StringArray::from_iter_values(
+                    (0..512).map(|i| format!("event-{i:04}-record")),
+                )),
+                Arc::new(TimestampMillisecondArray::from_iter_values(
+                    (0..512).map(|i| 1_700_000_000_000 + i * 60_000),
+                )),
+            ],
+        )?)
+        .await?;
+
+        for (column, selection, filter, expected) in [
+            ("text", "NGRAM", "contains(text, '0012')", 1),
+            ("text", "FM", "contains(text, '0012')", 1),
+            ("id", "BLOOMFILTER", "id IN (7, 33, 499)", 3),
+            (
+                "at",
+                "ZONEMAP",
+                "at >= TIMESTAMP '2023-11-14 22:23:20' AND at < TIMESTAMP '2023-11-14 22:33:20'",
+                10,
+            ),
+        ] {
+            let before = db.count(Some(filter.into())).await?;
+            assert_eq!(before, expected, "unindexed {selection}");
+            db.index(column, Some(selection)).await?;
+            assert_eq!(
+                db.count(Some(filter.into())).await?,
+                before,
+                "indexed {selection}"
+            );
+            let ctx = SessionContext::new();
+            ctx.register_table("scalar_indices", db.to_datafusion().await?)?;
+            assert_eq!(
+                ctx.sql(&format!("SELECT id FROM scalar_indices WHERE {filter}"))
+                    .await?
+                    .count()
+                    .await?,
+                before,
+                "DataFusion must preserve {selection} filter results"
+            );
+            let index = db
+                .list_indices()
+                .await?
+                .into_iter()
+                .find(|i| i.columns == [column])
+                .expect("native indexes must be visible to the node and interface");
+            assert_eq!(
+                normalized_index_selection(Some(&index.index_type)),
+                selection
+            );
+            db.optimize(true).await?;
+            let reopened =
+                LanceDBVectorStore::new(PathBuf::from(&test_path), "scalar_indices".into()).await?;
+            assert_eq!(reopened.count(Some(filter.into())).await?, before);
+            assert!(
+                reopened
+                    .list_indices()
+                    .await?
+                    .iter()
+                    .any(|i| i.name == index.name)
+            );
+            reopened.drop_index(&index.name).await?;
+            assert!(
+                !reopened
+                    .list_indices()
+                    .await?
+                    .iter()
+                    .any(|i| i.name == index.name)
+            );
+            db =
+                LanceDBVectorStore::new(PathBuf::from(&test_path), "scalar_indices".into()).await?;
+        }
+
+        let table = db.raw().await?;
+        let version = table.version().await?;
+        table.checkout(version).await?;
+        assert!(
+            db.index("at", Some("ZONEMAP")).await.is_err(),
+            "time travel must stay read-only"
+        );
+        table.checkout_latest().await?;
+        std::fs::remove_dir_all(&test_path)?;
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn regression_rtree_index_retains_geoarrow_metadata() -> Result<()> {
+        use arrow_array::{Float64Array, StructArray};
+
+        let test_path = format!("./tmp/{}", create_id());
+        std::fs::create_dir_all(&test_path)?;
+        let mut db = LanceDBVectorStore::new(PathBuf::from(&test_path), "geometry".into()).await?;
+        let coords = arrow_schema::Fields::from(vec![
+            Field::new("x", DataType::Float64, false),
+            Field::new("y", DataType::Float64, false),
+        ]);
+        let geometry_type = DataType::Struct(coords.clone());
+        let metadata = HashMap::from([
+            ("ARROW:extension:name".into(), "geoarrow.point".into()),
+            ("ARROW:extension:metadata".into(), "{}".into()),
+        ]);
+        let schema = Arc::new(Schema::new(vec![
+            Field::new("point", geometry_type, false).with_metadata(metadata.clone()),
+        ]));
+        let points = StructArray::try_new(
+            coords,
+            vec![
+                Arc::new(Float64Array::from(vec![1.0, 3.0, 5.0])),
+                Arc::new(Float64Array::from(vec![2.0, 4.0, 6.0])),
+            ],
+            None,
+        )?;
+        db.insert_record_batch(RecordBatch::try_new(schema, vec![Arc::new(points)])?)
+            .await?;
+        let spatial_filter =
+            "ST_Intersects(point, ST_GeomFromText('POLYGON ((0 0, 4 0, 4 5, 0 5, 0 0))'))";
+        assert_eq!(db.count(Some(spatial_filter.into())).await?, 2);
+        db.index("point", Some("RTREE")).await?;
+        assert_eq!(db.count(Some(spatial_filter.into())).await?, 2);
+        let plan = db
+            .raw()
+            .await?
+            .query()
+            .only_if(spatial_filter)
+            .explain_plan(false)
+            .await?;
+        assert!(plan.contains("ScalarIndexQuery"), "{plan}");
+        let indices = db.list_indices().await?;
+        assert_eq!(indices.len(), 1);
+        assert_eq!(
+            normalized_index_selection(Some(&indices[0].index_type)),
+            "RTREE"
+        );
+        let reopened =
+            LanceDBVectorStore::new(PathBuf::from(&test_path), "geometry".into()).await?;
+        assert_eq!(reopened.schema().await?.field(0).metadata(), &metadata);
+        assert_eq!(reopened.count(None).await?, 3);
+        assert_eq!(reopened.count(Some(spatial_filter.into())).await?, 2);
+        reopened.drop_index(&indices[0].name).await?;
+        assert!(reopened.list_indices().await?.is_empty());
+        std::fs::remove_dir_all(&test_path)?;
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn regression_rtree_rejects_persisted_interleaved_coordinates() -> Result<()> {
+        use arrow_array::Float64Array;
+
+        let test_path = format!("./tmp/{}", create_id());
+        std::fs::create_dir_all(&test_path)?;
+        let mut db =
+            LanceDBVectorStore::new(PathBuf::from(&test_path), "interleaved".into()).await?;
+        let coords = Arc::new(Field::new("xy", DataType::Float64, false));
+        let schema = Arc::new(Schema::new(vec![
+            Field::new("point", DataType::FixedSizeList(coords.clone(), 2), false).with_metadata(
+                HashMap::from([
+                    ("ARROW:extension:name".into(), "geoarrow.point".into()),
+                    ("ARROW:extension:metadata".into(), "{}".into()),
+                ]),
+            ),
+        ]));
+        let points = FixedSizeListArray::try_new(
+            coords,
+            2,
+            Arc::new(Float64Array::from(vec![1.0, 2.0])),
+            None,
+        )?;
+        db.insert_record_batch(RecordBatch::try_new(schema, vec![Arc::new(points)])?)
+            .await?;
+        let schema = db.schema().await?;
+        let DataType::FixedSizeList(child, _) = schema.field(0).data_type() else {
+            panic!("point must keep its physical list shape");
+        };
+        assert_eq!(child.name(), "item");
+        let error = db.index("point", Some("RTREE")).await.unwrap_err();
+        assert!(error.to_string().contains("separated Float64 coordinates"));
+        assert!(db.list_indices().await?.is_empty());
+        assert_eq!(db.count(None).await?, 1);
+        std::fs::remove_dir_all(&test_path)?;
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn regression_lists_legacy_index_metadata_without_writing() -> Result<()> {
+        use lance::dataset::transaction::{Operation, Transaction};
+        use lance::dataset::write::CommitBuilder;
+
+        let path = PathBuf::from(format!("./tmp/{}", create_id()));
+        let mut db = LanceDBVectorStore::new(path.clone(), "legacy_metadata".into()).await?;
+        db.insert(vec![
+            json!({"a": 1, "b": 2, "c": 3}),
+            json!({"a": 4, "b": 5, "c": 6}),
+        ])
+        .await?;
+        db.index("a", Some("BTREE")).await?;
+        db.index("b", Some("BITMAP")).await?;
+        db.index("c", Some("BTREE")).await?;
+        let expected = serde_json::to_value(db.list_indices().await?)?;
+        let table = db.raw().await?;
+        let wrapper = table.dataset().expect("native table");
+        let dataset = wrapper.get().await?.clone();
+        let original = dataset.load_indices().await?;
+        let mut legacy = original.as_ref().clone();
+        // Older scalar index manifests do not always record type details.
+        for index in &mut legacy {
+            index.index_details = None;
+            index.files = None;
+            index.created_at = None;
+        }
+        let transaction = Transaction::new(
+            dataset.version().version,
+            Operation::CreateIndex {
+                new_indices: legacy,
+                removed_indices: original.as_ref().clone(),
+            },
+            None,
+        );
+        let dataset = CommitBuilder::new(dataset).execute(transaction).await?;
+        wrapper.update(dataset);
+        let version = table.version().await?;
+        table.checkout(version).await?;
+        let persisted = wrapper.get().await?.load_indices().await?;
+        assert_eq!(
+            persisted
+                .iter()
+                .filter(|i| i.index_details.is_none())
+                .count(),
+            3
+        );
+
+        assert_eq!(serde_json::to_value(db.list_indices().await?)?, expected);
+        assert_eq!(table.version().await?, version);
+        let reopened = LanceDBVectorStore::new(path.clone(), "legacy_metadata".into()).await?;
+        assert_eq!(reopened.raw().await?.version().await?, version);
+        assert_eq!(
+            serde_json::to_value(reopened.list_indices().await?)?,
+            expected
+        );
+        assert_eq!(reopened.count(None).await?, 2);
+        std::fs::remove_dir_all(path)?;
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn regression_opens_and_appends_lancedb_0_27_2_tables() -> Result<()> {
+        use arrow_array::{Date32Array, StringArray, TimestampMillisecondArray};
+
+        fn copy_fixture(
+            source: &std::path::Path,
+            destination: &std::path::Path,
+        ) -> std::io::Result<()> {
+            std::fs::create_dir_all(destination)?;
+            for entry in std::fs::read_dir(source)? {
+                let entry = entry?;
+                let target = destination.join(entry.file_name());
+                if entry.file_type()?.is_dir() {
+                    copy_fixture(&entry.path(), &target)?;
+                } else {
+                    std::fs::copy(entry.path(), target)?;
+                }
+            }
+            Ok(())
+        }
+
+        for fixture in ["lancedb-0.27.2", "lancedb-0.27.2-v2.2"] {
+            let source = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+                .join("tests/fixtures")
+                .join(fixture)
+                .join("legacy.lance");
+            let path = PathBuf::from(format!("./tmp/{}", create_id()));
+            copy_fixture(&source, &path.join("legacy.lance"))?;
+            let mut db = LanceDBVectorStore::new(path.clone(), "legacy".into()).await?;
+            let schema = Arc::new(db.schema().await?);
+            assert_eq!(db.count(None).await?, 4);
+            assert_eq!(db.count(Some("id >= 2".into())).await?, 3);
+            assert_eq!(db.list_indices().await?.len(), 3);
+            assert_eq!(
+                db.count(Some("event_date >= DATE '2025-01-02'".into()))
+                    .await?,
+                2
+            );
+            let matches = db
+                .vector_search(vec![1.0, 0.0, 0.0, 0.0], None, None, 1, 0)
+                .await?;
+            assert_eq!(matches[0]["id"], json!(1));
+            assert_eq!(
+                db.sql(
+                    "legacy",
+                    "SELECT id FROM legacy WHERE occurred_at >= TIMESTAMP '2025-01-02T00:00:00Z'"
+                )
+                .await?
+                .count()
+                .await?,
+                2
+            );
+
+            let item = match schema.field_with_name("vector")?.data_type() {
+                DataType::FixedSizeList(item, 4) => item.clone(),
+                other => panic!("legacy vector schema changed: {other:?}"),
+            };
+            db.insert_record_batch(RecordBatch::try_new(
+                schema.clone(),
+                vec![
+                    Arc::new(Int64Array::from(vec![5])),
+                    Arc::new(StringArray::from(vec!["epsilon"])),
+                    Arc::new(Date32Array::from(vec![Some(20_092)])),
+                    Arc::new(
+                        TimestampMillisecondArray::from(vec![Some(1_735_948_800_000)])
+                            .with_timezone("UTC"),
+                    ),
+                    Arc::new(FixedSizeListArray::try_new(
+                        item,
+                        4,
+                        Arc::new(Float32Array::from(vec![0.5; 4])),
+                        None,
+                    )?),
+                ],
+            )?)
+            .await?;
+            db.index("event_date", Some("ZONEMAP")).await?;
+            db.optimize(true).await?;
+            let reopened = LanceDBVectorStore::new(path.clone(), "legacy".into()).await?;
+            assert_eq!(reopened.schema().await?, *schema);
+            assert_eq!(reopened.count(None).await?, 5);
+            assert_eq!(
+                reopened
+                    .count(Some("event_date >= DATE '2025-01-02'".into()))
+                    .await?,
+                3
+            );
+            assert_eq!(reopened.list_indices().await?.len(), 3);
+            std::fs::remove_dir_all(path)?;
+        }
         Ok(())
     }
 
@@ -2225,12 +2988,30 @@ mod tests {
         )
         .await?;
 
-        // LanceDB requires `CAST(NULL AS <type>)`; a bare `NULL` cannot be inferred.
-        let bare_null = db.add_column("flag", "NULL").await;
+        let version = db.raw().await?.version().await?;
+        // Existing nodes require CAST(NULL AS <type>) for a nullable column.
+        for expression in ["NULL", " null ", "((NULL))", "/* default */ NULL"] {
+            let bare_null = db.add_column("flag", expression).await;
+            assert!(
+                bare_null.is_err(),
+                "bare NULL should require an explicit type"
+            );
+        }
+        let bare_null = db
+            .add_columns(
+                NewColumnTransform::SqlExpressions(vec![
+                    ("valid".into(), "0".into()),
+                    ("flag".into(), "NULL".into()),
+                ]),
+                None,
+            )
+            .await;
         assert!(
             bare_null.is_err(),
-            "bare NULL should fail; LanceDB requires CAST(NULL AS <type>)"
+            "bulk additions must reject bare NULL before adding any columns"
         );
+        assert_eq!(db.raw().await?.version().await?, version);
+        assert_eq!(db.schema().await?.fields().len(), 2);
 
         std::fs::remove_dir_all(&test_path).unwrap();
         Ok(())
@@ -2309,3 +3090,313 @@ mod tests {
 
 //     type Filter;
 // }
+
+#[cfg(test)]
+mod scalar_maintenance_tests {
+    use super::*;
+    use arrow_array::{Float64Array, Int64Array, StringArray, StructArray};
+    use arrow_schema::Field;
+    use flow_like_types::{create_id, json::json};
+
+    #[tokio::test]
+    async fn explicit_scalar_index_preserves_nested_column_paths() -> Result<()> {
+        let test_path = PathBuf::from(format!("./tmp/{}", create_id()));
+        std::fs::create_dir_all(&test_path)?;
+        let mut db = LanceDBVectorStore::new(test_path.clone(), "nested".into()).await?;
+        db.insert(vec![
+            json!({"id": 1, "metadata": {"category": 3}}),
+            json!({"id": 2, "metadata": {"category": 7}}),
+            json!({"id": 3, "metadata": {"category": 7}}),
+        ])
+        .await?;
+
+        db.index("metadata.category", Some("BTREE")).await?;
+        let mut rows = db
+            .filter("metadata.category = 7", Some(vec!["id".into()]), 10, 0)
+            .await?;
+        rows.sort_by_key(|row| row["id"].as_i64());
+        assert_eq!(rows, vec![json!({"id": 2}), json!({"id": 3})]);
+        let indices = db.list_indices().await?;
+        assert_eq!(indices.len(), 1);
+        assert_eq!(indices[0].columns, vec!["metadata.category"]);
+        assert_eq!(indices[0].index_type, "BTREE");
+        db.drop_index(&indices[0].name).await?;
+        assert!(db.list_indices().await?.is_empty());
+        std::fs::remove_dir_all(test_path)?;
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn compaction_preserves_scalar_index_names_tuning_and_results() -> Result<()> {
+        let test_path = PathBuf::from(format!("./tmp/{}", create_id()));
+        std::fs::create_dir_all(&test_path)?;
+        let mut db = LanceDBVectorStore::new(test_path.clone(), "maintenance".into()).await?;
+        let coordinates = vec![
+            Arc::new(Field::new("x", DataType::Float64, true)),
+            Arc::new(Field::new("y", DataType::Float64, true)),
+        ];
+        let schema = Arc::new(Schema::new(vec![
+            Field::new("id", DataType::Int64, false),
+            Field::new("text", DataType::Utf8, false),
+            Field::new("zoned", DataType::Int64, false),
+            Field::new("member", DataType::Int64, false),
+            Field::new("point", DataType::Struct(coordinates.clone().into()), true).with_metadata(
+                std::collections::HashMap::from([
+                    ("ARROW:extension:name".into(), "geoarrow.point".into()),
+                    ("ARROW:extension:metadata".into(), "{}".into()),
+                ]),
+            ),
+        ]));
+        for fragment in 0..4 {
+            let ids = (fragment * 32..(fragment + 1) * 32).collect::<Vec<i64>>();
+            let points = StructArray::new(
+                coordinates.clone().into(),
+                vec![
+                    Arc::new(Float64Array::from_iter_values(
+                        ids.iter().map(|id| *id as f64),
+                    )),
+                    Arc::new(Float64Array::from_iter_values(
+                        ids.iter().map(|id| *id as f64),
+                    )),
+                ],
+                Some(ids.iter().map(|id| id % 4 != 0).collect::<Vec<_>>().into()),
+            );
+            db.insert_record_batch(RecordBatch::try_new(
+                schema.clone(),
+                vec![
+                    Arc::new(Int64Array::from(ids.clone())),
+                    Arc::new(StringArray::from_iter_values(
+                        ids.iter()
+                            .map(|id| if id % 2 == 0 { "needle" } else { "haystack" }),
+                    )),
+                    Arc::new(Int64Array::from(ids.clone())),
+                    Arc::new(Int64Array::from_iter_values(ids.iter().map(|id| id % 11))),
+                    Arc::new(points),
+                ],
+            )?)
+            .await?;
+        }
+
+        let table = db.table.as_ref().unwrap().clone();
+        let wrapper = table.dataset().unwrap();
+        let mut dataset = wrapper.get().await?.as_ref().clone();
+        assert!(!dataset.manifest().uses_stable_row_ids());
+        assert_eq!(dataset.get_fragments().len(), 4);
+        for (name, column, params) in [
+            (
+                "imported_fm",
+                "text",
+                ScalarIndexParams::for_builtin(BuiltinIndexType::Fm),
+            ),
+            (
+                "imported_zone",
+                "zoned",
+                ScalarIndexParams::for_builtin(BuiltinIndexType::ZoneMap)
+                    .with_params(&json!({"rows_per_zone": 16})),
+            ),
+            (
+                "imported_bloom",
+                "member",
+                ScalarIndexParams::for_builtin(BuiltinIndexType::BloomFilter)
+                    .with_params(&json!({"number_of_items": 16, "probability": 0.01})),
+            ),
+            (
+                "imported_rtree",
+                "point",
+                ScalarIndexParams::for_builtin(BuiltinIndexType::RTree)
+                    .with_params(&json!({"page_size": 16})),
+            ),
+        ] {
+            dataset
+                .create_index_builder(&[column], lance_index::IndexType::Scalar, &params)
+                .name(name.into())
+                .await?;
+        }
+        wrapper.update(dataset);
+        let expected_indices = scalar_indices_for_compaction(&table).await?;
+        assert_eq!(expected_indices.len(), 4);
+        let filters = [
+            "text LIKE '%needle%'",
+            "zoned >= 32 AND zoned < 96",
+            "member = 5",
+            "point IS NULL",
+        ];
+        let mut expected = Vec::new();
+        for filter in filters {
+            let mut rows = db.filter(filter, Some(vec!["id".into()]), 128, 0).await?;
+            rows.sort_by_key(|row| row["id"].as_i64());
+            assert!(!rows.is_empty(), "filter should select rows: {filter}");
+            expected.push(rows);
+        }
+
+        db.optimize(true).await?;
+        assert_eq!(wrapper.get().await?.get_fragments().len(), 1);
+        assert_eq!(
+            scalar_indices_for_compaction(&table).await?,
+            expected_indices
+        );
+        let reopened = LanceDBVectorStore::new(test_path.clone(), "maintenance".into()).await?;
+        assert_eq!(reopened.list_indices().await?.len(), 4);
+        for (filter, expected) in filters.into_iter().zip(expected) {
+            let mut rows = reopened
+                .filter(filter, Some(vec!["id".into()]), 128, 0)
+                .await?;
+            rows.sort_by_key(|row| row["id"].as_i64());
+            assert_eq!(rows, expected, "filter changed after compaction: {filter}");
+        }
+        std::fs::remove_dir_all(test_path)?;
+        Ok(())
+    }
+}
+
+#[cfg(test)]
+mod creation_concurrency_tests {
+    use super::*;
+    use arrow_array::{Int64Array, StringArray};
+    use arrow_schema::Field;
+    use flow_like_types::{create_id, json::json};
+    use std::sync::atomic::{AtomicBool, Ordering};
+    use tokio::sync::Notify;
+
+    #[derive(Debug)]
+    struct PauseFirstFragment {
+        paused: AtomicBool,
+        ready: Arc<Notify>,
+        resume: Arc<Notify>,
+    }
+
+    #[async_trait]
+    impl lance::dataset::progress::WriteFragmentProgress for PauseFirstFragment {
+        async fn begin(&self, _: &lance::table::format::Fragment) -> lance::Result<()> {
+            if !self.paused.swap(true, Ordering::SeqCst) {
+                self.ready.notify_one();
+                self.resume.notified().await;
+            }
+            Ok(())
+        }
+
+        async fn complete(&self, _: &lance::table::format::Fragment) -> lance::Result<()> {
+            Ok(())
+        }
+    }
+
+    fn batch(ids: Vec<i64>, values: Vec<&str>) -> Result<RecordBatch> {
+        Ok(RecordBatch::try_new(
+            Arc::new(Schema::new(vec![
+                Field::new("id", DataType::Int64, false),
+                Field::new("value", DataType::Utf8, false),
+            ])),
+            vec![
+                Arc::new(Int64Array::from(ids)),
+                Arc::new(StringArray::from(values)),
+            ],
+        )?)
+    }
+
+    #[tokio::test]
+    async fn initial_writes_replay_after_another_creator_wins() -> Result<()> {
+        for operation in ["insert", "record_batch", "upsert"] {
+            let path = PathBuf::from(format!("./tmp/{}", create_id()));
+            std::fs::create_dir_all(&path)?;
+            let mut delayed = LanceDBVectorStore::new(path.clone(), "concurrent".into()).await?;
+            let mut winner = LanceDBVectorStore::new(path.clone(), "concurrent".into()).await?;
+            let ready = Arc::new(Notify::new());
+            let resume = Arc::new(Notify::new());
+            let mut options = crate::lancedb_write_options::default_write_options();
+            options.lance_write_params.as_mut().unwrap().progress = Arc::new(PauseFirstFragment {
+                paused: AtomicBool::new(false),
+                ready: ready.clone(),
+                resume: resume.clone(),
+            });
+            delayed.set_write_options(options);
+            winner.set_write_options(crate::lancedb_write_options::default_write_options());
+            let writing = tokio::spawn(async move {
+                match operation {
+                    "insert" => {
+                        delayed
+                            .insert(vec![json!({"id": 3, "value": "delayed"})])
+                            .await?
+                    }
+                    "record_batch" => {
+                        delayed
+                            .insert_record_batch(batch(vec![3], vec!["delayed"])?)
+                            .await?
+                    }
+                    _ => {
+                        delayed
+                            .upsert(
+                                vec![
+                                    json!({"id": 1, "value": "updated"}),
+                                    json!({"id": 3, "value": "delayed"}),
+                                ],
+                                "id".into(),
+                            )
+                            .await?
+                    }
+                }
+                Ok::<_, flow_like_types::Error>(delayed)
+            });
+            tokio::time::timeout(std::time::Duration::from_secs(10), ready.notified()).await?;
+            winner
+                .insert_record_batch(batch(vec![1, 2], vec!["winner", "winner"])?)
+                .await?;
+            resume.notify_one();
+            let mut delayed = writing.await??;
+            assert!(matches!(
+                delayed
+                    .write_options
+                    .as_ref()
+                    .unwrap()
+                    .lance_write_params
+                    .as_ref()
+                    .unwrap()
+                    .mode,
+                lance::dataset::WriteMode::Append
+            ));
+            delayed
+                .insert(vec![json!({"id": 4, "value": "later"})])
+                .await?;
+            let reopened = LanceDBVectorStore::new(path.clone(), "concurrent".into()).await?;
+            let mut rows = reopened.list(None, 10, 0).await?;
+            rows.sort_by_key(|row| row["id"].as_i64());
+            assert_eq!(
+                rows,
+                vec![
+                    json!({"id": 1, "value": if operation == "upsert" { "updated" } else { "winner" }}),
+                    json!({"id": 2, "value": "winner"}),
+                    json!({"id": 3, "value": "delayed"}),
+                    json!({"id": 4, "value": "later"}),
+                ],
+                "{operation}"
+            );
+            std::fs::remove_dir_all(path)?;
+        }
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn empty_table_creation_with_append_options_preserves_existing_table() -> Result<()> {
+        let path = PathBuf::from(format!("./tmp/{}", create_id()));
+        std::fs::create_dir_all(&path)?;
+        let mut stale = LanceDBVectorStore::new(path.clone(), "concurrent".into()).await?;
+        let mut winner = LanceDBVectorStore::new(path.clone(), "concurrent".into()).await?;
+        stale.set_write_options(crate::lancedb_write_options::default_write_options());
+        winner
+            .insert_record_batch(batch(vec![1], vec!["winner"])?)
+            .await?;
+        let schema = winner.schema().await?;
+        assert!(
+            stale
+                .create_empty_table(schema.clone(), false)
+                .await
+                .is_err()
+        );
+        assert!(!stale.create_empty_table(schema, true).await?);
+        assert_eq!(
+            stale.list(None, 10, 0).await?,
+            vec![json!({"id": 1, "value": "winner"})]
+        );
+        std::fs::remove_dir_all(path)?;
+        Ok(())
+    }
+}

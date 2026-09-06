@@ -6,6 +6,7 @@ use axum::{
     Extension, Json,
     extract::{Path, State},
 };
+use flow_like_storage::object_store::ObjectStoreExt;
 use flow_like_types::anyhow;
 use futures_util::{StreamExt, TryStreamExt};
 use utoipa::ToSchema;

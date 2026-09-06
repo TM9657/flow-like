@@ -10,6 +10,7 @@ use crate::cosmos::{
     CosmosClient, CosmosError, MutationOutcome, QueryParameter, ttl_seconds, validate_container_id,
 };
 use async_trait::async_trait;
+use flow_like_storage::object_store::ObjectStoreExt;
 use flow_like_storage::{
     files::store::FlowLikeStore,
     object_store::{ObjectStore, path::Path},

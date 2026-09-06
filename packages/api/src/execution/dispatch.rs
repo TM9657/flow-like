@@ -3457,7 +3457,9 @@ mod tests {
 
     #[tokio::test]
     async fn the_signed_artifact_travels_in_the_executor_payload() {
-        use flow_like_storage::object_store::{ObjectStore, PutPayload, memory::InMemory};
+        use flow_like_storage::object_store::{
+            ObjectStoreExt, PutPayload, memory::InMemory,
+        };
 
         let ensured = ensured_for_test();
         let store = Arc::new(InMemory::new());

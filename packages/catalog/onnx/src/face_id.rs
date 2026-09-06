@@ -15,6 +15,7 @@ use flow_like::flow::{
     variable::VariableType,
 };
 use flow_like_catalog_core::{BoundingBox, FlowPath, NodeImage};
+use flow_like_storage::object_store::ObjectStoreExt;
 #[cfg(feature = "execute")]
 use flow_like_storage::object_store::PutPayload;
 use flow_like_types::{Result, anyhow, async_trait, json::json};

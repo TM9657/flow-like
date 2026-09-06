@@ -11,6 +11,7 @@ use crate::{
     },
 };
 use flow_like_storage::Path;
+use flow_like_storage::object_store::ObjectStoreExt;
 use flow_like_types::{FromProto, ToProto, create_id, proto, sync::Mutex};
 use futures::{StreamExt, TryStreamExt};
 use schemars::JsonSchema;

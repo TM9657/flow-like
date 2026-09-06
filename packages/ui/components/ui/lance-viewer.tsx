@@ -56,6 +56,7 @@ import * as React from "react";
 import { useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { cn } from "../../lib";
+import { geoArrowIndexKind } from "../../lib/geoarrow-index";
 import {
 	detectEpochUnit,
 	formatAbsoluteDateTime,
@@ -118,6 +119,7 @@ import {
 import {
 	ColumnTypeSelect,
 	EDIT_COLUMN_TYPE_GROUPS,
+	IndexTypeHelp,
 	IndexTypeSelect,
 	buildAddColumnExpression,
 } from "./table-schema";
@@ -143,6 +145,7 @@ export type LanceTemporalUnit =
 export interface LanceField {
 	name: string;
 	kind: LanceFieldKind;
+	indexKind?: "geometry" | "unsupported-geometry" | "binary";
 	dims?: number;
 	items?: LanceFieldKind | LanceField;
 	nullable?: boolean;
@@ -1892,6 +1895,7 @@ const SchemaDialog: React.FC<{
 	const [indexColumn, setIndexColumn] = useState("");
 	const [indexType, setIndexType] = useState("auto");
 	const [processing, setProcessing] = useState(false);
+	const indexField = schema?.fields.find((field) => field.name === indexColumn);
 
 	const loadIndices = useCallback(async () => {
 		if (!onGetIndices) return;
@@ -2099,8 +2103,14 @@ const SchemaDialog: React.FC<{
 							{onBuildIndex && schema && (
 								<div className="space-y-3 border-t pt-4">
 									<Label>{t("createNewIndex", "Create New Index")}</Label>
-									<div className="flex gap-2">
-										<Select value={indexColumn} onValueChange={setIndexColumn}>
+									<div className="flex flex-wrap gap-2">
+										<Select
+											value={indexColumn}
+											onValueChange={(column) => {
+												setIndexColumn(column);
+												setIndexType("auto");
+											}}
+										>
 											<SelectTrigger className="flex-1">
 												<SelectValue
 													placeholder={t("selectColumn", "Select column")}
@@ -2117,14 +2127,28 @@ const SchemaDialog: React.FC<{
 										<IndexTypeSelect
 											value={indexType}
 											onChange={setIndexType}
-											className="w-32"
+											className="w-52"
+											columnType={indexField?.indexKind ?? indexField?.kind}
+											disabled={
+												!indexColumn ||
+												processing ||
+												indexField?.indexKind === "unsupported-geometry"
+											}
 										/>
 										<Button
 											onClick={handleBuildIndex}
-											disabled={!indexColumn || processing}
+											disabled={
+												!indexColumn ||
+												processing ||
+												indexField?.indexKind === "unsupported-geometry"
+											}
 										>
 											{processing ? "Building..." : "Build"}
 										</Button>
+										<IndexTypeHelp
+											value={indexType}
+											columnType={indexField?.indexKind}
+										/>
 									</div>
 								</div>
 							)}
@@ -2339,18 +2363,28 @@ const arrowFieldToLance = (f: any): LanceField => {
 	const name = String(f?.name ?? "");
 	const dt = f?.data_type;
 	const nullable = f?.nullable ?? true;
+	const geometryKind = geoArrowIndexKind(f);
+	if (geometryKind) {
+		return { name, kind: "object", indexKind: geometryKind, nullable };
+	}
 
 	if (typeof dt === "string") {
 		const temporal = arrowPrimitiveTemporalUnit(dt);
 		return {
 			name,
 			kind: arrowPrimitiveToKind(dt),
+			...(["Binary", "LargeBinary", "BinaryView"].includes(dt)
+				? { indexKind: "binary" as const }
+				: {}),
 			nullable,
 			...(temporal ? { temporal } : {}),
 		};
 	}
 
 	if (dt && typeof dt === "object") {
+		if (dt.FixedSizeBinary !== undefined) {
+			return { name, kind: "string", indexKind: "binary", nullable };
+		}
 		if (dt.Timestamp) {
 			const [unit] = dt.Timestamp as [string, string | null];
 			return {
@@ -2420,11 +2454,14 @@ const arrowFieldToLance = (f: any): LanceField => {
 const arrowPrimitiveToKind = (dt: string): LanceFieldKind => {
 	switch (dt) {
 		case "Utf8":
+		case "Utf8View":
 		case "LargeUtf8":
 		case "Binary":
+		case "BinaryView":
 		case "LargeBinary":
 			return "string";
 		case "Bool":
+		case "Boolean":
 			return "boolean";
 		case "Int8":
 		case "Int16":

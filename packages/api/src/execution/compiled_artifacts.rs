@@ -27,6 +27,7 @@ use flow_like::flow::board::Board;
 use flow_like::flow::compiled;
 use flow_like::state::{FlowNodeRegistry, FlowNodeRegistryInner};
 use flow_like_storage::object_store::ObjectStore;
+use flow_like_storage::object_store::ObjectStoreExt;
 use flow_like_storage::{Path, object_store::Error as StoreError};
 use flow_like_types::anyhow;
 use flow_like_types::dispatch::{ETAG_BOUND_LATEST_VERSION_SENTINEL, WasmPackageRef};

@@ -4,8 +4,9 @@ use chrono::{DateTime, Utc};
 use futures::{StreamExt, stream};
 use object_store::path::Path;
 use object_store::{
-    Attributes, GetOptions, GetResult, GetResultPayload, ListResult, MultipartUpload, ObjectMeta,
-    ObjectStore, PutMode, PutMultipartOptions, PutOptions, PutPayload, PutResult, Result,
+    Attributes, CopyMode, CopyOptions, GetOptions, GetResult, GetResultPayload, ListResult,
+    MultipartUpload, ObjectMeta, ObjectStore, ObjectStoreExt, PutMode, PutMultipartOptions,
+    PutOptions, PutPayload, PutResult, RenameOptions, RenameTargetMode, Result,
 };
 use smb2::auth::kerberos::ccache::load_ccache;
 use smb2::client::{Cipher, Connection, Session};
@@ -418,6 +419,39 @@ fn host_without_port(address: &str) -> &str {
         .unwrap_or(address)
 }
 
+impl SmbObjectStore {
+    async fn object_meta(&self, location: &Path) -> Result<ObjectMeta> {
+        let path = object_path(location);
+        let info = self.stat_info(&path).await?;
+        if info.is_directory {
+            return Err(object_store::Error::NotFound {
+                path,
+                source: "SMB path is a directory".into(),
+            });
+        }
+
+        Ok(meta_from_info(location.as_ref(), &info))
+    }
+
+    async fn delete_object(&self, location: &Path) -> Result<()> {
+        let path = object_path(location);
+        let info = self.stat_info(&path).await?;
+        let mut session = self.session.lock().await;
+
+        if info.is_directory {
+            session
+                .delete_directory(&path)
+                .await
+                .map_err(|err| map_smb_error(err, path))
+        } else {
+            session
+                .delete_file(&path)
+                .await
+                .map_err(|err| map_smb_error(err, path))
+        }
+    }
+}
+
 #[async_trait]
 impl ObjectStore for SmbObjectStore {
     async fn put_opts(
@@ -494,7 +528,7 @@ impl ObjectStore for SmbObjectStore {
         }
 
         let path = object_path(location);
-        let meta = self.head(location).await?;
+        let meta = self.object_meta(location).await?;
         options.check_preconditions(&meta)?;
 
         let range = match &options.range {
@@ -542,35 +576,22 @@ impl ObjectStore for SmbObjectStore {
         })
     }
 
-    async fn head(&self, location: &Path) -> Result<ObjectMeta> {
-        let path = object_path(location);
-        let info = self.stat_info(&path).await?;
-        if info.is_directory {
-            return Err(object_store::Error::NotFound {
-                path,
-                source: "SMB path is a directory".into(),
-            });
-        }
-
-        Ok(meta_from_info(location.as_ref(), &info))
-    }
-
-    async fn delete(&self, location: &Path) -> Result<()> {
-        let path = object_path(location);
-        let info = self.stat_info(&path).await?;
-        let mut session = self.session.lock().await;
-
-        if info.is_directory {
-            session
-                .delete_directory(&path)
-                .await
-                .map_err(|err| map_smb_error(err, path))
-        } else {
-            session
-                .delete_file(&path)
-                .await
-                .map_err(|err| map_smb_error(err, path))
-        }
+    fn delete_stream(
+        &self,
+        locations: futures::stream::BoxStream<'static, Result<Path>>,
+    ) -> futures::stream::BoxStream<'static, Result<Path>> {
+        let store = self.clone();
+        locations
+            .map(move |location| {
+                let store = store.clone();
+                async move {
+                    let location = location?;
+                    store.delete_object(&location).await?;
+                    Ok(location)
+                }
+            })
+            .buffered(10)
+            .boxed()
     }
 
     fn list(
@@ -637,64 +658,51 @@ impl ObjectStore for SmbObjectStore {
         })
     }
 
-    async fn copy(&self, from: &Path, to: &Path) -> Result<()> {
+    async fn copy_opts(&self, from: &Path, to: &Path, options: CopyOptions) -> Result<()> {
+        if options.mode == CopyMode::Create {
+            let to_path = object_path(to);
+            match self.stat_info(&to_path).await {
+                Ok(_) => {
+                    return Err(object_store::Error::AlreadyExists {
+                        path: to_path,
+                        source: "SMB path already exists".into(),
+                    });
+                }
+                Err(object_store::Error::NotFound { .. }) => {}
+                Err(err) => return Err(err),
+            }
+        }
+
         let bytes = self.get(from).await?.bytes().await?;
         self.put(to, PutPayload::from_bytes(bytes)).await?;
         Ok(())
     }
 
-    async fn rename(&self, from: &Path, to: &Path) -> Result<()> {
+    async fn rename_opts(&self, from: &Path, to: &Path, options: RenameOptions) -> Result<()> {
         let from_path = object_path(from);
         let to_path = object_path(to);
-        if from_path == to_path {
-            return Ok(());
-        }
-
-        match self.delete(to).await {
-            Ok(_) | Err(object_store::Error::NotFound { .. }) => {}
-            Err(err) => return Err(err),
+        match options.target_mode {
+            RenameTargetMode::Create => match self.stat_info(&to_path).await {
+                Ok(_) => {
+                    return Err(object_store::Error::AlreadyExists {
+                        path: to_path,
+                        source: "SMB path already exists".into(),
+                    });
+                }
+                Err(object_store::Error::NotFound { .. }) => {}
+                Err(err) => return Err(err),
+            },
+            RenameTargetMode::Overwrite => {
+                if from_path == to_path {
+                    return Ok(());
+                }
+                match self.delete_object(to).await {
+                    Ok(_) | Err(object_store::Error::NotFound { .. }) => {}
+                    Err(err) => return Err(err),
+                }
+            }
         }
         self.ensure_parent_directories(&to_path).await?;
-
-        let mut session = self.session.lock().await;
-        session
-            .rename(&from_path, &to_path)
-            .await
-            .map_err(|err| map_smb_error(err, from_path))
-    }
-
-    async fn copy_if_not_exists(&self, from: &Path, to: &Path) -> Result<()> {
-        let to_path = object_path(to);
-        match self.stat_info(&to_path).await {
-            Ok(_) => {
-                return Err(object_store::Error::AlreadyExists {
-                    path: to_path,
-                    source: "SMB path already exists".into(),
-                });
-            }
-            Err(object_store::Error::NotFound { .. }) => {}
-            Err(err) => return Err(err),
-        }
-
-        self.copy(from, to).await
-    }
-
-    async fn rename_if_not_exists(&self, from: &Path, to: &Path) -> Result<()> {
-        let to_path = object_path(to);
-        match self.stat_info(&to_path).await {
-            Ok(_) => {
-                return Err(object_store::Error::AlreadyExists {
-                    path: to_path,
-                    source: "SMB path already exists".into(),
-                });
-            }
-            Err(object_store::Error::NotFound { .. }) => {}
-            Err(err) => return Err(err),
-        }
-
-        self.ensure_parent_directories(&object_path(to)).await?;
-        let from_path = object_path(from);
-        let to_path = object_path(to);
         let mut session = self.session.lock().await;
         session
             .rename(&from_path, &to_path)

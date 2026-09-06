@@ -4,6 +4,62 @@ export enum IIndexType {
 	Bitmap = 2,
 	LabelList = 3,
 	Auto = 4,
+	Vector = 5,
+	Fm = 6,
+	IvfFlat = 7,
+	IvfPq = 8,
+	IvfSq = 9,
+	IvfRq = 10,
+	IvfHnswFlat = 11,
+	IvfHnswPq = 12,
+	IvfHnswSq = 13,
+	NGram = 14,
+	ZoneMap = 15,
+	BloomFilter = 16,
+	RTree = 17,
+}
+
+const INDEX_TYPE_NAMES: Record<IIndexType, string> = {
+	[IIndexType.FullText]: "FullText",
+	[IIndexType.BTree]: "BTree",
+	[IIndexType.Bitmap]: "Bitmap",
+	[IIndexType.LabelList]: "LabelList",
+	[IIndexType.Auto]: "Auto",
+	[IIndexType.Vector]: "Vector",
+	[IIndexType.Fm]: "Fm",
+	[IIndexType.IvfFlat]: "IvfFlat",
+	[IIndexType.IvfPq]: "IvfPq",
+	[IIndexType.IvfSq]: "IvfSq",
+	[IIndexType.IvfRq]: "IvfRq",
+	[IIndexType.IvfHnswFlat]: "IvfHnswFlat",
+	[IIndexType.IvfHnswPq]: "IvfHnswPq",
+	[IIndexType.IvfHnswSq]: "IvfHnswSq",
+	[IIndexType.NGram]: "NGram",
+	[IIndexType.ZoneMap]: "ZoneMap",
+	[IIndexType.BloomFilter]: "BloomFilter",
+	[IIndexType.RTree]: "RTree",
+};
+
+/** Use the same index names for HTTP requests and desktop commands. */
+export function indexTypeToString(indexType: IIndexType): string {
+	return INDEX_TYPE_NAMES[indexType] ?? "Auto";
+}
+
+/** Accept persisted enum values, API names, and node option labels. */
+export function parseIndexType(value: unknown): IIndexType {
+	if (typeof value === "number") {
+		return Object.hasOwn(INDEX_TYPE_NAMES, value) ? value : IIndexType.Auto;
+	}
+	const normalized = String(value ?? "Auto")
+		.replace(/[\s_-]/g, "")
+		.toLowerCase();
+	if (normalized === "fts" || normalized === "inverted") {
+		return IIndexType.FullText;
+	}
+	for (const [type, name] of Object.entries(INDEX_TYPE_NAMES)) {
+		if (name.toLowerCase() === normalized) return Number(type) as IIndexType;
+	}
+	return IIndexType.Auto;
 }
 
 export interface IQueryTableVectorPayload {

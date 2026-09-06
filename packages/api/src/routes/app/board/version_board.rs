@@ -17,6 +17,7 @@ use flow_like::flow::{
     board::{Board, VersionType},
     compiled::{PrerunManifest, manifest_path, version_page_manifest_path},
 };
+use flow_like_storage::object_store::ObjectStoreExt;
 use serde::Deserialize;
 use std::sync::Arc;
 use utoipa::IntoParams;

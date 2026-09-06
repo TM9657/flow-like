@@ -4,6 +4,7 @@ use flow_like::flow::{
     pin::PinOptions,
     variable::VariableType,
 };
+use flow_like::flow_like_storage::object_store::ObjectStoreExt;
 use flow_like_catalog_core::FlowPath;
 use std::time::Duration;
 

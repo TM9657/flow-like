@@ -1,4 +1,5 @@
 use flow_like_storage::Path;
+use flow_like_storage::object_store::ObjectStoreExt;
 use flow_like_storage::object_store::{
     Error as ObjectStoreError, GetOptions, ObjectMeta, ObjectStore, PutMode, PutOptions,
     PutPayload, PutResult, UpdateVersion,

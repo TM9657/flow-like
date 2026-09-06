@@ -45,6 +45,9 @@ jobs:
 
       # Dependency assertions do not compile crates or need desktop libraries.
       # Run every existing assertion before starting the expensive check jobs.
+      - name: Verify Arrow and DataFusion provider alignment
+        run: python3 .github/scripts/check-datafusion-alignment.py
+
       - name: Verify dependency boundaries and product feature composition
         run: >-
           ./tools/check-feature-boundaries.sh

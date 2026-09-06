@@ -4,7 +4,7 @@ use anyhow::{Result, anyhow};
 use base64::{Engine, engine::general_purpose};
 use bytes::Bytes;
 use mime_guess::mime;
-use object_store::{ObjectStore, PutPayload, path::Path};
+use object_store::{ObjectStore, ObjectStoreExt, PutPayload, path::Path};
 use reqwest::Url;
 use std::sync::Arc;
 

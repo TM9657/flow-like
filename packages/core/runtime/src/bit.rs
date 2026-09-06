@@ -10,6 +10,7 @@ use flow_like_model_provider::provider::{
 use flow_like_storage::Path;
 use flow_like_storage::files::store::FlowLikeStore;
 use flow_like_storage::files::store::local_store::LocalObjectStore;
+use flow_like_storage::object_store::ObjectStoreExt;
 use flow_like_types::Value;
 use flow_like_types::intercom::InterComCallback;
 

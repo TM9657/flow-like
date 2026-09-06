@@ -2,6 +2,7 @@ use flow_like::{
     flow::execution::context::{ExecutionContext, ExecutionContextCache},
     utils::hash::hash_string_non_cryptographic,
 };
+use flow_like_storage::object_store::ObjectStoreExt;
 use flow_like_storage::{
     Path,
     files::store::{FlowLikeStore, local_store::LocalObjectStore},

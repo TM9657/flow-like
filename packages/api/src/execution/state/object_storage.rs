@@ -8,6 +8,7 @@
 
 use super::{postgres::PostgresStateStore, types::*};
 use async_trait::async_trait;
+use flow_like_storage::object_store::ObjectStoreExt;
 use flow_like_storage::{
     files::store::FlowLikeStore,
     object_store::{self, ObjectStore, PutMode, PutOptions, PutPayload, UpdateVersion, path::Path},

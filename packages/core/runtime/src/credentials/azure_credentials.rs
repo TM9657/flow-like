@@ -8,13 +8,13 @@ use flow_like_storage::lancedb;
 use flow_like_storage::lancedb::connection::ConnectBuilder;
 use flow_like_storage::object_store;
 use flow_like_storage::object_store::{
-    GetOptions, GetResult, ListResult, MultipartUpload, ObjectMeta, ObjectStore,
-    PutMultipartOptions, PutOptions, PutPayload, PutResult,
+    CopyOptions, GetOptions, GetResult, ListResult, MultipartUpload, ObjectMeta, ObjectStore,
+    ObjectStoreExt, PutMultipartOptions, PutOptions, PutPayload, PutResult,
     azure::{MicrosoftAzure, MicrosoftAzureBuilder},
     path::Path as ObjectPath,
 };
 use flow_like_types::{Result, anyhow, async_trait};
-use futures::stream::BoxStream;
+use futures::{StreamExt, stream::BoxStream};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
@@ -371,9 +371,9 @@ impl SharedCredentialsTrait for AzureSharedCredentials {
 /// (see [`crate::flow::compiled::draft_artifact_dir`]). Paths under the draft
 /// prefix are served by the draft store; everything else keeps the primary
 /// meta store. Writes under the draft prefix are refused locally: only the
-/// API writes drafts — the trust anchor for `entry_authority_revision` — so
-/// this store never even presents its read-only token for one.
-#[derive(Debug)]
+/// API writes drafts that establish `entry_authority_revision`. This store
+/// refuses those writes before presenting its read-only token to Azure.
+#[derive(Clone, Debug)]
 struct DraftScopedAzureMetaStore {
     primary: Arc<MicrosoftAzure>,
     drafts: Arc<MicrosoftAzure>,
@@ -459,11 +459,25 @@ impl ObjectStore for DraftScopedAzureMetaStore {
         self.store_for(location).get_opts(location, options).await
     }
 
-    async fn delete(&self, location: &ObjectPath) -> object_store::Result<()> {
-        if self.in_draft_scope(location) {
-            return Err(self.draft_write_denied(location));
-        }
-        self.primary.delete(location).await
+    fn delete_stream(
+        &self,
+        locations: BoxStream<'static, object_store::Result<ObjectPath>>,
+    ) -> BoxStream<'static, object_store::Result<ObjectPath>> {
+        let store = self.clone();
+        locations
+            .map(move |location| {
+                let store = store.clone();
+                async move {
+                    let location = location?;
+                    if store.in_draft_scope(&location) {
+                        return Err(store.draft_write_denied(&location));
+                    }
+                    store.primary.delete(&location).await?;
+                    Ok(location)
+                }
+            })
+            .buffered(10)
+            .boxed()
     }
 
     fn list(
@@ -490,20 +504,11 @@ impl ObjectStore for DraftScopedAzureMetaStore {
         }
     }
 
-    async fn copy(&self, from: &ObjectPath, to: &ObjectPath) -> object_store::Result<()> {
-        if self.in_draft_scope(to) {
-            return Err(self.draft_write_denied(to));
-        }
-        if self.in_draft_scope(from) {
-            return Err(self.cross_scope_copy(from));
-        }
-        self.primary.copy(from, to).await
-    }
-
-    async fn copy_if_not_exists(
+    async fn copy_opts(
         &self,
         from: &ObjectPath,
         to: &ObjectPath,
+        options: CopyOptions,
     ) -> object_store::Result<()> {
         if self.in_draft_scope(to) {
             return Err(self.draft_write_denied(to));
@@ -511,7 +516,7 @@ impl ObjectStore for DraftScopedAzureMetaStore {
         if self.in_draft_scope(from) {
             return Err(self.cross_scope_copy(from));
         }
-        self.primary.copy_if_not_exists(from, to).await
+        self.primary.copy_opts(from, to, options).await
     }
 }
 
@@ -847,6 +852,44 @@ mod tests {
             matches!(error, object_store::Error::PermissionDenied { .. }),
             "unexpected error: {error}"
         );
+        let primary = ObjectPath::from("apps/test-app/boards/board-1.board");
+        for options in [
+            object_store::CopyOptions::new(),
+            object_store::CopyOptions::new().with_mode(object_store::CopyMode::Create),
+        ] {
+            assert!(matches!(
+                store.copy_opts(&primary, &draft, options.clone()).await,
+                Err(object_store::Error::PermissionDenied { .. })
+            ));
+            assert!(matches!(
+                store.copy_opts(&draft, &primary, options).await,
+                Err(object_store::Error::NotSupported { .. })
+            ));
+        }
+        for options in [
+            object_store::RenameOptions::new(),
+            object_store::RenameOptions::new()
+                .with_target_mode(object_store::RenameTargetMode::Create),
+        ] {
+            assert!(matches!(
+                store.rename_opts(&primary, &draft, options.clone()).await,
+                Err(object_store::Error::PermissionDenied { .. })
+            ));
+            assert!(matches!(
+                store.rename_opts(&draft, &primary, options).await,
+                Err(object_store::Error::NotSupported { .. })
+            ));
+        }
+        let results = store
+            .delete_stream(futures::stream::iter([Ok(draft.clone()), Ok(draft)]).boxed())
+            .collect::<Vec<_>>()
+            .await;
+        assert_eq!(results.len(), 2);
+        assert!(
+            results
+                .iter()
+                .all(|result| matches!(result, Err(object_store::Error::PermissionDenied { .. })))
+        );
     }
 
     #[test]
@@ -879,5 +922,13 @@ mod tests {
             "tmp/apps/app-10/compiled/drafts/board-1/x.flcb"
         )));
         assert!(!store.in_draft_scope(&ObjectPath::from("apps/app-1/boards/board-1.board")));
+        assert!(Arc::ptr_eq(
+            store.store_for(&ObjectPath::from("tmp/apps/app-1/draft.flcb")),
+            &store.drafts
+        ));
+        assert!(Arc::ptr_eq(
+            store.store_for(&ObjectPath::from("tmp/apps/app-10/draft.flcb")),
+            &store.primary
+        ));
     }
 }

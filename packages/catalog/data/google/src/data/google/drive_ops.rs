@@ -7,6 +7,7 @@ use flow_like::flow::{
     variable::VariableType,
 };
 use flow_like_storage::Path;
+use flow_like_storage::object_store::ObjectStoreExt;
 use flow_like_types::{JsonSchema, Value, async_trait, json::json, reqwest};
 use serde::{Deserialize, Serialize};
 

@@ -15,6 +15,7 @@ use crate::flow::board::Board;
 use crate::state::{FlowLikeState, FlowNodeRegistryInner};
 use crate::utils::compression::from_compressed_with_meta;
 use flow_like_storage::Path;
+use flow_like_storage::object_store::ObjectStoreExt;
 use flow_like_storage::object_store::{ObjectMeta, ObjectStore, PutPayload};
 use flow_like_types::{Result, anyhow};
 use std::sync::Arc;
@@ -437,10 +438,11 @@ pub async fn persist_artifact(
 ) -> Result<()> {
     if let Some(prefix) = purge_prefix {
         use futures::{StreamExt, TryStreamExt};
+        let retained_path = artifact_path.clone();
         let stale = meta_store
             .list(Some(&prefix))
             .map_ok(|m| m.location)
-            .try_filter(|location| futures::future::ready(location != artifact_path))
+            .try_filter(move |location| futures::future::ready(location != &retained_path))
             .boxed();
         if let Err(e) = meta_store
             .delete_stream(stale)

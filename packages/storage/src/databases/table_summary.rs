@@ -161,8 +161,7 @@ async fn summarize_one(
         }
     };
 
-    let indexes = table
-        .list_indices()
+    let indexes = crate::databases::vector::lancedb::list_table_indices(&table)
         .await
         .map(|indices| {
             indices

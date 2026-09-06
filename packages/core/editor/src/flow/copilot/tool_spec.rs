@@ -2063,7 +2063,8 @@ pub fn database_tool_schema(operations: &[&str]) -> Value {
             "columns": { "type": "array", "items": { "type": "string" } },
             "index_type": {
                 "type": "string",
-                "enum": ["FullText", "BTree", "Bitmap", "LabelList", "Auto", "full_text", "btree", "bitmap", "label_list", "auto"]
+                "description": "Index algorithm. All vector algorithms use cosine distance. Auto on vector columns and the legacy Vector option retain IVF-PQ behavior. Fm indexes raw substrings; FullText indexes text tokens. NGram, ZoneMap, BloomFilter, and RTree require a native Lance table. ZoneMap prunes ranges, including clustered date and timestamp columns.",
+                "enum": ["FullText", "BTree", "Bitmap", "LabelList", "Auto", "Vector", "Fm", "NGram", "ZoneMap", "BloomFilter", "RTree", "IvfFlat", "IvfPq", "IvfSq", "IvfRq", "IvfHnswFlat", "IvfHnswPq", "IvfHnswSq", "full_text", "btree", "bitmap", "label_list", "auto", "vector", "fm", "ngram", "zonemap", "bloomfilter", "rtree", "ivf_flat", "ivf_pq", "ivf_sq", "ivf_rq", "ivf_hnsw_flat", "ivf_hnsw_pq", "ivf_hnsw_sq"]
             },
             "index_name": { "type": "string" },
             "optimize": { "type": "boolean" },

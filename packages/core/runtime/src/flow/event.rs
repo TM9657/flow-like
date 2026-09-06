@@ -1,3 +1,4 @@
+use flow_like_storage::object_store::ObjectStoreExt;
 use std::{collections::HashMap, time::SystemTime};
 
 use flow_like_storage::{Path, object_store};
@@ -1660,7 +1661,7 @@ mod tests {
     use flow_like_storage::{
         Path,
         files::store::FlowLikeStore,
-        object_store::{self, PutPayload},
+        object_store::{self, ObjectStoreExt, PutPayload},
     };
     use flow_like_types::tokio;
     use serde_json::json;

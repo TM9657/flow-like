@@ -26,7 +26,7 @@ impl NodeLogic for AddColumnLocalDatabaseNode {
         let mut node = Node::new(
             "add_column_local_db",
             "Add Column",
-            "Adds a column using a typed SQL expression (e.g. 0, '', CAST(NULL AS STRING)). LanceDB rejects bare NULL — wrap it in CAST(... AS <type>). Supported types: int, bigint, float, double, string, binary, boolean, date, timestamp.",
+            "Adds a column using a typed SQL expression (e.g. 0, '', CAST(NULL AS STRING)). Flow-Like requires an explicit type for NULL. Use CAST(NULL AS <type>). Supported types: int, bigint, float, double, string, binary, boolean, date, timestamp.",
             "Data/Database/Schema",
         );
         node.set_flowscript_name("db", "addColumn");
@@ -54,7 +54,7 @@ impl NodeLogic for AddColumnLocalDatabaseNode {
         node.add_input_pin(
             "sql_expression",
             "SQL Expression",
-            "Typed SQL expression used to populate existing rows. Examples: 0, '', CAST(NULL AS STRING). Bare NULL is rejected; LanceDB supports int, bigint, float, double, string, binary, boolean, date, timestamp.",
+            "Typed SQL expression used to populate existing rows. Examples: 0, '', CAST(NULL AS STRING). Flow-Like requires an explicit type for NULL. Supported types: int, bigint, float, double, string, binary, boolean, date, timestamp.",
             VariableType::String,
         )
         .set_default_value(Some(json!("CAST(NULL AS STRING)")));

@@ -3,6 +3,7 @@
 use super::App;
 use crate::state::FlowLikeState;
 use argon2::{Algorithm, Argon2, Params, Version};
+use flow_like_storage::object_store::ObjectStoreExt;
 use flow_like_storage::{
     Path, blake3,
     object_store::{ObjectStore, PutPayload},
@@ -991,7 +992,7 @@ mod tests {
     };
     use flow_like_storage::{
         files::store::FlowLikeStore,
-        object_store::{ObjectStore, PutPayload, memory::InMemory, path::Path as ObjectPath},
+        object_store::{PutPayload, memory::InMemory, path::Path as ObjectPath},
     };
     use flow_like_types::tokio;
     use std::{fs::File, io::Read, sync::Arc, time::SystemTime};
