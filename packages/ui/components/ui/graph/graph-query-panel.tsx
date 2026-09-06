@@ -148,7 +148,11 @@ export function GraphQueryPanel({
 			className="flex h-full min-h-0 flex-col overflow-hidden rounded-lg border bg-background"
 			aria-busy={loading || flowPilotBusy || undefined}
 		>
-			<div className="max-h-full shrink-0 space-y-2 overflow-y-auto border-b p-2 sm:p-3">
+			<div
+				className={`shrink-0 space-y-2 overflow-y-auto border-b p-2 sm:p-3 ${
+					results && results.length > 0 ? "max-h-[60%]" : "max-h-full"
+				}`}
+			>
 				<div className="flex items-center justify-between gap-2">
 					<p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
 						{t("ontologyQuery", "Ontology Query")}

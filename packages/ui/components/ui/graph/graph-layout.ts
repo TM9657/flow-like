@@ -43,6 +43,33 @@ export interface ViewportDimensions {
 	height: number;
 }
 
+/** Sigma's axis-aligned graph extent. */
+export interface GraphBoundsBox {
+	x: [number, number];
+	y: [number, number];
+}
+
+export interface ViewportInsets {
+	left?: number;
+	right?: number;
+	top?: number;
+	bottom?: number;
+}
+
+export type ViewportLabelSide = "left" | "right";
+
+export interface ViewportLabelPlacement {
+	side: ViewportLabelSide;
+	/** Width available for the complete label block on the chosen side. */
+	availableWidth: number;
+}
+
+export interface ViewportLabelPlacementOptions {
+	gap?: number;
+	leftInset?: number;
+	rightInset?: number;
+}
+
 export interface CollisionSpaceMapper {
 	/** Converts graph coordinates into the space where radii and gaps are measured. */
 	fromGraph: (position: LayoutPosition) => LayoutPosition;
@@ -240,6 +267,81 @@ export function computeViewportNodeSizeCap(
 		Number.isFinite(nodeCount) && nodeCount > 0 ? nodeCount : 1;
 	const pitch = Math.sqrt((width * height) / safeNodeCount);
 	return Math.max(minSize, (pitch * maxPitchShare) / 2);
+}
+
+function finiteInset(value: number | undefined): number {
+	return typeof value === "number" && Number.isFinite(value)
+		? Math.max(0, value)
+		: 0;
+}
+
+/**
+ * Converts viewport-pixel breathing room into graph coordinates and adds it to
+ * a Sigma bounding box. This lets the camera reserve room for screen-sized
+ * captions without guessing how large a graph-space label should be.
+ */
+export function expandGraphBoundsByViewportInsets(
+	bounds: GraphBoundsBox,
+	insets: ViewportInsets,
+	graphToViewportRatio: number,
+): GraphBoundsBox {
+	const ratio =
+		Number.isFinite(graphToViewportRatio) && graphToViewportRatio > 0
+			? graphToViewportRatio
+			: 1;
+
+	return {
+		x: [
+			bounds.x[0] - finiteInset(insets.left) / ratio,
+			bounds.x[1] + finiteInset(insets.right) / ratio,
+		],
+		y: [
+			bounds.y[0] - finiteInset(insets.top) / ratio,
+			bounds.y[1] + finiteInset(insets.bottom) / ratio,
+		],
+	};
+}
+
+/**
+ * Chooses the side that keeps a screen-sized caption inside the usable stage.
+ * The right inset can reserve space for canvas controls that sit above Sigma.
+ */
+export function computeViewportLabelPlacement(
+	centerX: number,
+	nodeRadius: number,
+	contentWidth: number,
+	viewportWidth: number,
+	options: ViewportLabelPlacementOptions = {},
+): ViewportLabelPlacement {
+	const width = Number.isFinite(viewportWidth)
+		? Math.max(0, viewportWidth)
+		: 0;
+	const x = Number.isFinite(centerX) ? centerX : width / 2;
+	const radius = Number.isFinite(nodeRadius) ? Math.max(0, nodeRadius) : 0;
+	const requestedWidth = Number.isFinite(contentWidth)
+		? Math.max(0, contentWidth)
+		: 0;
+	const gap = finiteInset(options.gap);
+	const leftInset = Math.min(width, finiteInset(options.leftInset));
+	const rightInset = Math.min(
+		Math.max(0, width - leftInset),
+		finiteInset(options.rightInset),
+	);
+	const rightWidth = Math.max(
+		0,
+		width - rightInset - (x + radius + gap),
+	);
+	const leftWidth = Math.max(0, x - radius - gap - leftInset);
+
+	if (requestedWidth <= rightWidth) {
+		return { side: "right", availableWidth: rightWidth };
+	}
+	if (requestedWidth <= leftWidth) {
+		return { side: "left", availableWidth: leftWidth };
+	}
+	return leftWidth > rightWidth
+		? { side: "left", availableWidth: leftWidth }
+		: { side: "right", availableWidth: rightWidth };
 }
 
 export interface RelaxOverlapsOptions {

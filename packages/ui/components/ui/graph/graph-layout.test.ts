@@ -9,8 +9,10 @@ import {
 	applyClusterLayout,
 	computeLabelExtents,
 	computeSeedSpread,
+	computeViewportLabelPlacement,
 	computeViewportNodeSizeCap,
 	createDeterministicPosition,
+	expandGraphBoundsByViewportInsets,
 	getLayoutBounds,
 	packClusterDiscs,
 	packNodesOnGrid,
@@ -173,6 +175,61 @@ describe("computeViewportNodeSizeCap", () => {
 		expect(
 			computeViewportNodeSizeCap(20, { width: Number.NaN, height: 500 }),
 		).toBe(2);
+	});
+});
+
+describe("expandGraphBoundsByViewportInsets", () => {
+	test("converts screen-pixel insets with the live graph-to-viewport ratio", () => {
+		expect(
+			expandGraphBoundsByViewportInsets(
+				{ x: [10, 110], y: [-20, 80] },
+				{ left: 20, right: 60, top: 10, bottom: 30 },
+				2,
+			),
+		).toEqual({ x: [0, 140], y: [-25, 95] });
+	});
+
+	test("ignores invalid or negative insets and falls back from an invalid ratio", () => {
+		expect(
+			expandGraphBoundsByViewportInsets(
+				{ x: [0, 10], y: [20, 30] },
+				{
+					left: -5,
+					right: Number.NaN,
+					top: 2,
+					bottom: 4,
+				},
+				0,
+			),
+		).toEqual({ x: [0, 10], y: [18, 34] });
+	});
+});
+
+describe("computeViewportLabelPlacement", () => {
+	const options = { gap: 6, leftInset: 8, rightInset: 64 };
+
+	test("keeps a caption on the right when it clears the control gutter", () => {
+		expect(
+			computeViewportLabelPlacement(160, 10, 120, 500, options),
+		).toEqual({ side: "right", availableWidth: 160 });
+	});
+
+	test("moves an edge caption to the left before it clips", () => {
+		const placement = computeViewportLabelPlacement(
+			420,
+			10,
+			100,
+			500,
+			options,
+		);
+		expect(placement.side).toBe("left");
+		expect(placement.availableWidth).toBe(396);
+	});
+
+	test("uses the roomier side and reports a bounded width when neither fits", () => {
+		expect(
+			computeViewportLabelPlacement(70, 10, 200, 180, options),
+		).toEqual({ side: "left", availableWidth: 46 });
 	});
 });
 
