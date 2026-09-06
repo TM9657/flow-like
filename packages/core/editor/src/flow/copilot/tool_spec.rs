@@ -2272,7 +2272,12 @@ fn get_home_context_schema() -> Value {
     json!({
         "type": "object",
         "additionalProperties": false,
-        "properties": {}
+        "properties": {
+            "include_comparisons": {
+                "type": "boolean",
+                "description": "Include materially different base/default layouts for an explicit comparison or reset request. Defaults to false to avoid duplicating large layouts."
+            }
+        }
     })
 }
 
@@ -2363,7 +2368,7 @@ pub fn home_specialist_tool_specs() -> Vec<PlatformToolSpec> {
     let mut specs = vec![
         PlatformToolSpec {
             name: "get_home_context",
-            description: r#"Read the CURRENT profile and live personal Home editor state. Returns profile metadata, exact profile id, current visible version 1 layout including any unsaved draft, base/default layouts for comparison, source, concurrency fingerprint, and editor availability. Call this first and edit the current layout. Read-only."#,
+            description: r#"Read the CURRENT profile and live personal Home editor state. Returns profile metadata, exact profile id, one current visible version 1 layout including any unsaved draft, base/default fingerprints, source, concurrency guards, and editor availability. Set `include_comparisons` only when an explicit comparison or reset request needs materially different base/default layouts. Call this first and edit `current_layout`. Read-only."#,
             schema: get_home_context_schema,
             approval: ToolApprovalSpec::None,
             timeout_secs: 120,
@@ -2377,7 +2382,7 @@ pub fn home_specialist_tool_specs() -> Vec<PlatformToolSpec> {
         },
         PlatformToolSpec {
             name: "list_home_data_sources",
-            description: r#"List Home-compatible tables, ontologies, and saved queries for one exact app and scope. Use ids from this result in data-backed widgets. Use `query` for top-level source id/name search or `source_id` for an exact table name, ontology id, or saved-query id before source caps. Use `object_type_query` for ontology labels/tables and `column_query` for table or ontology column names/types before their 80-item caps. `complete: false` or truncation at any level cannot prove absence, so refine the corresponding filter before choosing a fallback. This returns metadata rather than mutating or querying the source. Read-only."#,
+            description: r#"List Home-compatible tables, ontologies, and saved queries for one exact app and scope. A broad call returns bounded source summaries; use ids from those summaries in data-backed widgets. Use `query` for top-level source id/name search or `source_id` for one exact table name, ontology id, or saved-query id and its details. Use `object_type_query` for ontology labels/tables and `column_query` for table or ontology column names/types before their nested caps. Follow `details_omitted` and `detail_hint`; `complete: false` or truncation at any level cannot prove absence, so refine the corresponding filter before choosing a fallback. This returns metadata rather than mutating or querying the source. Read-only."#,
             schema: list_home_data_sources_schema,
             approval: ToolApprovalSpec::None,
             timeout_secs: 120,
@@ -2615,6 +2620,15 @@ mod tests {
             assert_eq!(resolve_tool_effect(&spec, &json!({})), ToolEffect::ReadOnly);
         }
 
+        let context = find_home_tool_spec("get_home_context").unwrap();
+        let context_schema = (context.schema)();
+        assert_eq!(
+            context_schema["properties"]["include_comparisons"]["type"],
+            "boolean"
+        );
+        assert!(context.description.contains("one current visible"));
+        assert!(context.description.contains("edit `current_layout`"));
+
         let sources = find_home_tool_spec("list_home_data_sources").unwrap();
         let sources_schema = (sources.schema)();
         assert_eq!(sources_schema["required"], json!(["app_id"]));
@@ -2636,6 +2650,7 @@ mod tests {
         );
         assert!(sources.description.contains("`object_type_query`"));
         assert!(sources.description.contains("`column_query`"));
+        assert!(sources.description.contains("`details_omitted`"));
         assert!(sources.description.contains("corresponding filter"));
 
         let apps = find_home_tool_spec("list_apps").unwrap();

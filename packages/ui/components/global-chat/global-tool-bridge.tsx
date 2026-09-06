@@ -143,7 +143,7 @@ import {
 	validateComponents,
 } from "../flowpilot/validateComponents";
 import { createDefaultHomeLayout } from "../home/catalog";
-import { resolveHomeLayout } from "../home/home-layout";
+import { normalizeHomeLayout, resolveHomeLayout } from "../home/home-layout";
 import { homeLayoutFingerprint } from "../home/home-layout-json";
 import type {
 	IBuildLaneDetail,
@@ -188,9 +188,13 @@ import { createAppTool } from "./tools/app-provisioning";
 import { upsertAppEvent } from "./tools/event-tools";
 import {
 	getHomeWidgetCatalog,
+	homeLayoutComparisonFields,
 	listHomeDataSources,
+	profileAppInventoryCoverage,
+	publicHomeLayoutValidation,
 	validateHomeLayoutCandidate,
 	validateHomeLayoutReferences,
+	validateUnknownHomeWidgetConfigPreservation,
 	validateUnknownHomeWidgetPreservation,
 	withHomeReferenceIssues,
 } from "./tools/home-tools";
@@ -2096,8 +2100,10 @@ export function GlobalToolBridge() {
 					return new Set(
 						(profile?.hub_profile?.apps ?? []).map((entry) => entry.app_id),
 					);
-				} catch {
-					return new Set<string>();
+				} catch (error) {
+					throw new Error(
+						`The current profile app inventory could not be read: ${error instanceof Error ? error.message : String(error)}`,
+					);
 				}
 			};
 			const readHomeSnapshot = async () => {
@@ -2118,20 +2124,37 @@ export function GlobalToolBridge() {
 						dirty: snapshot.dirty,
 						baseFingerprint: snapshot.baseFingerprint,
 						candidateFingerprint: snapshot.candidateFingerprint,
+						defaultLayoutAvailable: true,
 						surfaceAvailable: true,
 					};
 				}
 				const profile = await backend.userState.getProfile();
 				const bundled = createDefaultHomeLayout();
-				const defaults = await backend.userState
-					.getHomeDefaults(profile.home_default_id ?? undefined)
-					.catch(() => undefined);
-				const inherited = resolveHomeLayout(null, defaults, bundled);
-				const resolved = resolveHomeLayout(
-					profile.home_layout,
-					defaults,
-					bundled,
-				);
+				const personalLayout = normalizeHomeLayout(profile.home_layout);
+				let defaults: Awaited<
+					ReturnType<typeof backend.userState.getHomeDefaults>
+				> | null = null;
+				try {
+					defaults = await backend.userState.getHomeDefaults(
+						profile.home_default_id ?? undefined,
+					);
+				} catch (error) {
+					if (!personalLayout) {
+						throw new Error(
+							`The inherited Home layout could not be read: ${error instanceof Error ? error.message : String(error)}`,
+						);
+					}
+				}
+				const inherited = defaults
+					? resolveHomeLayout(null, defaults, bundled)
+					: undefined;
+				const resolved = personalLayout
+					? { layout: personalLayout, source: "personal" as const }
+					: resolveHomeLayout(
+							profile.home_layout,
+							defaults ?? undefined,
+							bundled,
+						);
 				const fingerprint = homeLayoutFingerprint(resolved.layout);
 				return {
 					profileId: profile.id ?? "",
@@ -2142,11 +2165,12 @@ export function GlobalToolBridge() {
 					source: resolved.source,
 					layout: resolved.layout,
 					baseLayout: resolved.layout,
-					defaultLayout: inherited.layout,
+					defaultLayout: inherited?.layout,
 					editing: false,
 					dirty: false,
 					baseFingerprint: fingerprint,
 					candidateFingerprint: fingerprint,
+					defaultLayoutAvailable: Boolean(inherited),
 					surfaceAvailable: false,
 				};
 			};
@@ -2196,6 +2220,13 @@ export function GlobalToolBridge() {
 							message: "Choose a profile before editing Home.",
 						};
 					}
+					const comparisonFields = homeLayoutComparisonFields(
+						snapshot.layout,
+						snapshot.baseLayout,
+						snapshot.defaultLayout,
+						argBoolean(args, "include_comparisons") ||
+							argBoolean(args, "includeComparisons"),
+					);
 					return {
 						status: "ok",
 						profile_id: snapshot.profileId,
@@ -2207,16 +2238,19 @@ export function GlobalToolBridge() {
 							tags: snapshot.profileTags,
 						},
 						source: snapshot.source,
-						layout: snapshot.layout,
 						current_layout: snapshot.layout,
-						base_layout: snapshot.baseLayout,
-						default_layout: snapshot.defaultLayout,
 						editing: snapshot.editing,
 						dirty: snapshot.dirty,
 						surface_available: snapshot.surfaceAvailable,
 						can_stage: snapshot.surfaceAvailable,
-						base_fingerprint: snapshot.baseFingerprint,
-						candidate_fingerprint: snapshot.candidateFingerprint,
+						...comparisonFields,
+						...(!snapshot.defaultLayoutAvailable
+							? {
+									default_layout_available: false,
+									default_layout_note:
+										"The personal layout is available, but its inherited default could not be read for comparison.",
+								}
+							: {}),
 						fingerprint: snapshot.candidateFingerprint,
 						guards: {
 							expected_profile_id: snapshot.profileId,
@@ -2251,6 +2285,10 @@ export function GlobalToolBridge() {
 						: [];
 					if (validation.layout) {
 						referenceIssues.push(
+							...validateUnknownHomeWidgetConfigPreservation(
+								validation.layout,
+								snapshot.layout,
+							),
 							...validateUnknownHomeWidgetPreservation(
 								validation.layout,
 								snapshot.layout,
@@ -2297,8 +2335,9 @@ export function GlobalToolBridge() {
 						});
 					}
 					const checked = withHomeReferenceIssues(validation, referenceIssues);
+					const publicChecked = publicHomeLayoutValidation(checked);
 					return {
-						...checked,
+						...publicChecked,
 						profile_id: latest.profileId,
 						current_fingerprint: latest.candidateFingerprint,
 						...(checked.valid
@@ -2337,13 +2376,17 @@ export function GlobalToolBridge() {
 						};
 					}
 					const validation = validateHomeLayoutCandidate(args.layout);
-					if (!validation.layout) return validation;
+					if (!validation.layout) return publicHomeLayoutValidation(validation);
 					const initialSnapshot = surface.getSnapshot();
 					const profileAppIds = await getProfileAppIds();
 					const checked = withHomeReferenceIssues(validation, [
 						...(await validateHomeLayoutReferences(backend, validation.layout, {
 							profileAppIds,
 						})),
+						...validateUnknownHomeWidgetConfigPreservation(
+							validation.layout,
+							initialSnapshot.layout,
+						),
 						...validateUnknownHomeWidgetPreservation(
 							validation.layout,
 							initialSnapshot.layout,
@@ -2356,7 +2399,7 @@ export function GlobalToolBridge() {
 							latest.candidateFingerprint !==
 								initialSnapshot.candidateFingerprint;
 						return {
-							...checked,
+							...publicHomeLayoutValidation(checked),
 							...(changedDuringValidation
 								? {
 										issues: [
@@ -2429,6 +2472,10 @@ export function GlobalToolBridge() {
 					// active events and their event_type tell the agent which interfaces it can call.
 					const profileAppIds = await getProfileAppIds();
 					const apps = await backend.appState.getApps();
+					const inventoryCoverage = profileAppInventoryCoverage(
+						profileAppIds,
+						apps.map(([app]) => app.id),
+					);
 					const query = argString(args, "query").toLowerCase();
 					// Sort by display name so the output is stable across calls (getApps returns
 					// object-store order, i.e. app id) and truncation, if any, is deterministic.
@@ -2507,9 +2554,28 @@ export function GlobalToolBridge() {
 					const eventInventoryComplete = detailed.every(
 						(app) => app.events_status === "ok",
 					);
-					const inventoryComplete = !truncated && eventInventoryComplete;
+					const inventoryComplete =
+						!truncated && eventInventoryComplete && inventoryCoverage.complete;
+					const notes: string[] = [];
+					if (!inventoryCoverage.complete) {
+						notes.push(
+							`${inventoryCoverage.missing_count} current-profile app record${inventoryCoverage.missing_count === 1 ? " is" : "s are"} missing from the backend inventory. App absence is unproven until the inventory succeeds.`,
+						);
+					}
+					if (!eventInventoryComplete) {
+						notes.push(
+							"One or more app interface inventories could not be read. Their Events and routes are incomplete.",
+						);
+					}
+					if (truncated) {
+						notes.push(
+							query
+								? `Only the first ${MAX_LISTED_APPS} of ${visible.length} matching profile apps are listed. Refine query before concluding that an app is absent.`
+								: `Only the first ${MAX_LISTED_APPS} of ${visible.length} profile apps are listed, sorted by name. An unlisted app may fall past this cap.`,
+						);
+					}
 					return {
-						status: "ok",
+						status: inventoryComplete ? "ok" : "partial",
 						complete: inventoryComplete,
 						total: visible.length,
 						returned: detailed.length,
@@ -2517,17 +2583,26 @@ export function GlobalToolBridge() {
 							? {
 									query,
 									matched_total: visible.length,
-									profile_total: profileVisible.length,
+								profile_total: profileAppIds.size,
+							}
+							: {}),
+						...(!inventoryCoverage.complete
+							? {
+									missing_profile_app_count:
+										inventoryCoverage.missing_count,
+									missing_profile_app_ids:
+										inventoryCoverage.missing_profile_app_ids,
+									...(inventoryCoverage.missing_ids_truncated
+										? { missing_profile_app_ids_truncated: true }
+										: {}),
 								}
 							: {}),
 						...(truncated
 							? {
 									truncated: true,
-									note: query
-										? `Only the first ${MAX_LISTED_APPS} of ${visible.length} matching profile apps are listed. Refine query before concluding that an app is absent.`
-										: `Only the first ${MAX_LISTED_APPS} of ${visible.length} profile apps are listed (sorted by name). If the user references an app not shown, it may fall past this cap rather than not exist.`,
 								}
 							: {}),
+						...(notes.length ? { note: notes.join(" ") } : {}),
 						apps: detailed,
 					};
 				}

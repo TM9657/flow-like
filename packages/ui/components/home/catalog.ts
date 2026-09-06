@@ -941,7 +941,7 @@ export const HOME_WIDGET_PRESETS: HomeWidgetPreset[] = [
 		"Inspect the distribution of numeric values.",
 		"bar",
 		"histogram",
-		"records",
+		"aggregate",
 	),
 	data(
 		"heatmap",
