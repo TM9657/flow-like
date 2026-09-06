@@ -240,7 +240,7 @@ export const OntologyActionDialog: React.FC<OntologyActionDialogProps> = ({
 							{node ? (
 								<GraphNodeCaption
 									node={node}
-									overlay={overlay}
+									overlay={overlay ?? undefined}
 									fallback={String(targetTitle ?? "Object")}
 								/>
 							) : (

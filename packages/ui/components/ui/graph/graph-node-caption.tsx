@@ -12,6 +12,7 @@ import type {
 	GraphOverlay,
 	SubgraphNode,
 } from "../../../state/backend-state/graph-state";
+import { resolveAccountId } from "../../../state/backend-state/user-state";
 import { UserInlineTag } from "../user-identity";
 import { nodeCaptionAccountId } from "./graph-user-caption";
 
@@ -69,7 +70,12 @@ export function useGraphAccountLabels(
 		combine: (results) =>
 			JSON.stringify(
 				results.map((result, index) =>
-					result.data ? userDisplayName(result.data, ids[index]) : null,
+					result.data
+						? userDisplayName(
+								result.data,
+								resolveAccountId(result.data.id, ids[index]) ?? ids[index],
+							)
+						: null,
 				),
 			),
 	});

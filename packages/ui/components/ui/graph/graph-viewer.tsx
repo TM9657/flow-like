@@ -645,15 +645,13 @@ export function GraphViewer({
 
 		const matches = new Set<string>();
 		for (const node of data.nodes) {
-			const caption = (
-				accountLabels.get(node.id) ??
-				node.caption ??
-				""
-			).toLowerCase();
+			const caption = (node.caption ?? "").toLowerCase();
+			const accountCaption = (accountLabels.get(node.id) ?? "").toLowerCase();
 			const fullId = node.id.toLowerCase();
 			const label = node.label.toLowerCase();
 			if (
 				caption.includes(trimmedQuery) ||
+				accountCaption.includes(trimmedQuery) ||
 				fullId.includes(trimmedQuery) ||
 				label.includes(trimmedQuery)
 			) {
@@ -1364,36 +1362,37 @@ export function GraphViewer({
 												: "relative min-w-56 max-w-sm flex-1"
 										}
 									>
-									<Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground pointer-events-none" />
-									<input
-										type="text"
-										role="combobox"
-										aria-autocomplete="list"
-										aria-controls={searchListId}
-										aria-expanded={showRemoteSearchPanel}
-										value={searchQuery}
-										onChange={(e) => handleSearch(e.target.value)}
-										onFocus={() => setRemoteSearchOpen(true)}
-										placeholder={t(
-											"searchLoadedNodesThenFallbackToFullGraph",
-											"Search loaded nodes, then fallback to full graph...",
+										<Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground pointer-events-none" />
+										<input
+											type="text"
+											role="combobox"
+											aria-autocomplete="list"
+											aria-controls={searchListId}
+											aria-expanded={showRemoteSearchPanel}
+											value={searchQuery}
+											onChange={(e) => handleSearch(e.target.value)}
+											onFocus={() => setRemoteSearchOpen(true)}
+											placeholder={t(
+												"searchLoadedNodesThenFallbackToFullGraph",
+												"Search loaded nodes, then fallback to full graph...",
+											)}
+											className="h-9 w-full rounded-md border bg-transparent pl-8 pr-8 text-sm focus:outline-none focus:ring-1 focus:ring-ring"
+										/>
+										{searchQuery && (
+											<button
+												type="button"
+												className="absolute right-1.5 top-1.5 flex h-6 w-6 items-center justify-center rounded text-muted-foreground hover:bg-accent hover:text-foreground"
+												onClick={clearSearch}
+												aria-label={t("clearSearch", "Clear search")}
+											>
+												<X className="h-4 w-4" />
+											</button>
 										)}
-										className="h-9 w-full rounded-md border bg-transparent pl-8 pr-8 text-sm focus:outline-none focus:ring-1 focus:ring-ring"
-									/>
-									{searchQuery && (
-										<button
-											type="button"
-											className="absolute right-1.5 top-1.5 flex h-6 w-6 items-center justify-center rounded text-muted-foreground hover:bg-accent hover:text-foreground"
-											onClick={clearSearch}
-											aria-label={t("clearSearch", "Clear search")}
-										>
-											<X className="h-4 w-4" />
-										</button>
-									)}
 									</div>
 								</PopoverAnchor>
 								<PopoverContent
 									id={searchListId}
+									// biome-ignore lint/a11y/useSemanticElements: This portaled list is the popup owned by the editable combobox above.
 									role="listbox"
 									align="start"
 									className="w-[var(--radix-popover-trigger-width)] max-w-[calc(100vw-1rem)] overflow-hidden p-0"
@@ -1414,6 +1413,7 @@ export function GraphViewer({
 												<button
 													key={node.id}
 													type="button"
+													// biome-ignore lint/a11y/useSemanticElements: A button keeps each async combobox option keyboard actionable.
 													role="option"
 													aria-selected={false}
 													className="flex w-full flex-col items-start gap-0.5 px-3 py-2 text-left hover:bg-accent"
@@ -1510,58 +1510,62 @@ export function GraphViewer({
 							hiddenLeaves={hiddenLeafCount}
 						/>
 
-						{!shellMode.compactToolbar && <DropdownMenu>
-							<DropdownMenuTrigger asChild>
-								<button
-									type="button"
-									className={`flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded border px-2 py-1 text-xs transition-colors ${
-										layoutMode !== "auto"
-											? "border-primary/40 bg-primary/10 text-foreground"
-											: "text-muted-foreground hover:text-foreground"
-									}`}
-									title={t(
-										"chooseHowTheGraphIsArranged",
-										"Choose how the graph is arranged",
-									)}
-								>
-									<LayoutGrid className="h-3.5 w-3.5" />
-									{LAYOUT_MODE_OPTIONS.find(
-										(option) => option.mode === layoutMode,
-									)?.label ?? "Auto"}
-								</button>
-							</DropdownMenuTrigger>
-							<DropdownMenuContent align="start">
-								{LAYOUT_MODE_OPTIONS.map((option) => (
-									<DropdownMenuItem
-										key={option.mode}
-										className="text-xs"
-										onSelect={() => applyLayoutMode(option.mode)}
-									>
-										<span className="min-w-0 flex-1">{option.label}</span>
-										{option.mode === layoutMode && (
-											<span className="text-primary">•</span>
+						{!shellMode.compactToolbar && (
+							<DropdownMenu>
+								<DropdownMenuTrigger asChild>
+									<button
+										type="button"
+										className={`flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded border px-2 py-1 text-xs transition-colors ${
+											layoutMode !== "auto"
+												? "border-primary/40 bg-primary/10 text-foreground"
+												: "text-muted-foreground hover:text-foreground"
+										}`}
+										title={t(
+											"chooseHowTheGraphIsArranged",
+											"Choose how the graph is arranged",
 										)}
-									</DropdownMenuItem>
-								))}
-							</DropdownMenuContent>
-						</DropdownMenu>}
+									>
+										<LayoutGrid className="h-3.5 w-3.5" />
+										{LAYOUT_MODE_OPTIONS.find(
+											(option) => option.mode === layoutMode,
+										)?.label ?? "Auto"}
+									</button>
+								</DropdownMenuTrigger>
+								<DropdownMenuContent align="start">
+									{LAYOUT_MODE_OPTIONS.map((option) => (
+										<DropdownMenuItem
+											key={option.mode}
+											className="text-xs"
+											onSelect={() => applyLayoutMode(option.mode)}
+										>
+											<span className="min-w-0 flex-1">{option.label}</span>
+											{option.mode === layoutMode && (
+												<span className="text-primary">•</span>
+											)}
+										</DropdownMenuItem>
+									))}
+								</DropdownMenuContent>
+							</DropdownMenu>
+						)}
 
-						{!shellMode.compactToolbar && <button
-							type="button"
-							className={`flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded border px-2 py-1 text-xs transition-colors ${
-								facetsOpen || facetFilters.length > 0
-									? "border-primary/40 bg-primary/10 text-foreground"
-									: "text-muted-foreground hover:text-foreground"
-							}`}
-							onClick={toggleFacets}
-							title={t(
-								"summarizeAndFilterTheLoadedObjects",
-								"Summarize and filter the loaded objects",
-							)}
-						>
-							<BarChart3 className="h-3.5 w-3.5" />
-							{t("facets", "Facets")}
-						</button>}
+						{!shellMode.compactToolbar && (
+							<button
+								type="button"
+								className={`flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded border px-2 py-1 text-xs transition-colors ${
+									facetsOpen || facetFilters.length > 0
+										? "border-primary/40 bg-primary/10 text-foreground"
+										: "text-muted-foreground hover:text-foreground"
+								}`}
+								onClick={toggleFacets}
+								title={t(
+									"summarizeAndFilterTheLoadedObjects",
+									"Summarize and filter the loaded objects",
+								)}
+							>
+								<BarChart3 className="h-3.5 w-3.5" />
+								{t("facets", "Facets")}
+							</button>
+						)}
 
 						{shellMode.compactToolbar && (
 							<DropdownMenu>
@@ -1739,307 +1743,348 @@ export function GraphViewer({
 					</div>
 				)}
 
-				{/* Query panel (collapsible) */}
-				{showQuery && onRunCypher && (
-					<div className="border-b p-2">
-						<GraphQueryPanel
-							onRunCypher={onRunCypher}
-							results={cypherResults ?? null}
-							propertyMetadata={cypherMetadata}
-							loading={cypherLoading}
-							error={cypherError}
-							onAddToCanvas={onMergeSubgraph ? addCypherToCanvas : undefined}
-							addToCanvasCount={cypherSubgraph?.nodes.length ?? 0}
+				<div
+					ref={workspaceRef}
+					className="flex min-h-0 flex-1 flex-col overflow-hidden"
+				>
+					{/* Canvas — zoom/fit/reset controls are rendered inside SigmaContainer */}
+					<div className="relative min-h-[280px] flex-1">
+						<GraphCanvas
+							data={viewData}
+							nodeLabels={accountLabels}
+							loading={loading}
+							selectedNodeId={selectedNode?.id}
+							selectedEdgeKey={selectedEdgeKey}
+							highlightedNodeIds={effectiveHighlight}
+							highlightedEdgeIds={
+								pathHighlight ? (pathEdgeHighlight ?? undefined) : undefined
+							}
+							hiddenLabels={hiddenLabels.size > 0 ? hiddenLabels : undefined}
+							visibleNodeIds={visibleNodeIds}
+							clusters={layoutClusterModel}
+							onNodeClick={handleNodeClick}
+							onNodeShiftClick={handleNodeShiftClick}
+							onNodeDoubleClick={handleNodeDoubleClick}
+							onNodeContextMenu={handleNodeContextMenu}
+							onEdgeClick={handleEdgeClick}
+							onStageClick={handleStageClick}
+							persistKey={persistKey}
+							layoutCommand={layoutCommand}
+							onCanvasApi={setCanvasApi}
+							className="absolute inset-0"
 						/>
-					</div>
-				)}
 
-				{/* Canvas — zoom/fit/reset controls are rendered inside SigmaContainer */}
-				<div className="flex-1 relative min-h-0">
-					<GraphCanvas
-						data={viewData}
-						nodeLabels={accountLabels}
-						loading={loading}
-						selectedNodeId={selectedNode?.id}
-						selectedEdgeKey={selectedEdgeKey}
-						highlightedNodeIds={effectiveHighlight}
-						highlightedEdgeIds={
-							pathHighlight ? (pathEdgeHighlight ?? undefined) : undefined
-						}
-						hiddenLabels={hiddenLabels.size > 0 ? hiddenLabels : undefined}
-						visibleNodeIds={visibleNodeIds}
-						clusters={layoutClusterModel}
-						onNodeClick={handleNodeClick}
-						onNodeShiftClick={handleNodeShiftClick}
-						onNodeDoubleClick={handleNodeDoubleClick}
-						onNodeContextMenu={handleNodeContextMenu}
-						onEdgeClick={handleEdgeClick}
-						onStageClick={handleStageClick}
-						persistKey={persistKey}
-						layoutCommand={layoutCommand}
-						onCanvasApi={setCanvasApi}
-						className="absolute inset-0"
-					/>
+						<GraphContextMenu
+							overlay={overlay}
+							state={contextMenu}
+							node={contextNode}
+							isGroup={
+								contextMenu ? isCollapsedGroupId(contextMenu.nodeId) : false
+							}
+							collapsibleClusterId={contextClusterId}
+							pinned={
+								contextMenu
+									? (canvasApi?.isPinned(contextMenu.nodeId) ?? false)
+									: false
+							}
+							focused={
+								contextMenu !== null && focus?.nodeId === contextMenu.nodeId
+							}
+							choices={contextChoices}
+							onClose={closeContextMenu}
+							onExpandChoice={
+								onExpandNode && contextNode
+									? (choice) => {
+											void onExpandNode(
+												contextNode.id,
+												contextNode.label,
+												getNodeRawId(contextNode, overlay),
+												undefined,
+												1,
+												{
+													edgeLabels: [choice.label],
+													direction: choice.direction,
+													limit: QUICK_EXPANSION_LIMIT,
+												},
+											);
+										}
+									: undefined
+							}
+							onExpandAll={
+								onExpandNode && contextNode
+									? () => {
+											void onExpandNode(
+												contextNode.id,
+												contextNode.label,
+												getNodeRawId(contextNode, overlay),
+												undefined,
+												1,
+												{ limit: QUICK_EXPANSION_LIMIT },
+											);
+										}
+									: undefined
+							}
+							onGuidedExpand={
+								onExpandNode && contextNode
+									? () => setExpansionTarget(contextNode)
+									: undefined
+							}
+							onOpenGroup={
+								contextMenu && isCollapsedGroupId(contextMenu.nodeId)
+									? () => openCollapsedGroup(contextMenu.nodeId)
+									: undefined
+							}
+							onCollapseGroup={
+								contextClusterId
+									? () =>
+											setCollapsedGroups((prev) =>
+												new Set(prev).add(contextClusterId),
+											)
+									: undefined
+							}
+							onToggleFocus={
+								contextMenu
+									? () => focusNodeById(contextMenu.nodeId)
+									: undefined
+							}
+							onHide={
+								contextMenu ? () => hideNode(contextMenu.nodeId) : undefined
+							}
+							onTogglePin={
+								canvasApi && contextMenu
+									? () =>
+											canvasApi.pinNode(
+												contextMenu.nodeId,
+												!canvasApi.isPinned(contextMenu.nodeId),
+											)
+									: undefined
+							}
+							onFindPath={
+								onFindPaths && contextNode
+									? () => handleArmPath(contextNode)
+									: undefined
+							}
+						/>
 
-					<GraphContextMenu
-						overlay={overlay}
-						state={contextMenu}
-						node={contextNode}
-						isGroup={
-							contextMenu ? isCollapsedGroupId(contextMenu.nodeId) : false
-						}
-						collapsibleClusterId={contextClusterId}
-						pinned={
-							contextMenu
-								? (canvasApi?.isPinned(contextMenu.nodeId) ?? false)
-								: false
-						}
-						focused={
-							contextMenu !== null && focus?.nodeId === contextMenu.nodeId
-						}
-						choices={contextChoices}
-						onClose={closeContextMenu}
-						onExpandChoice={
-							onExpandNode && contextNode
-								? (choice) => {
-										void onExpandNode(
-											contextNode.id,
-											contextNode.label,
-											getNodeRawId(contextNode, overlay),
-											undefined,
-											1,
-											{
-												edgeLabels: [choice.label],
-												direction: choice.direction,
-												limit: QUICK_EXPANSION_LIMIT,
-											},
-										);
-									}
-								: undefined
-						}
-						onExpandAll={
-							onExpandNode && contextNode
-								? () => {
-										void onExpandNode(
-											contextNode.id,
-											contextNode.label,
-											getNodeRawId(contextNode, overlay),
-											undefined,
-											1,
-											{ limit: QUICK_EXPANSION_LIMIT },
-										);
-									}
-								: undefined
-						}
-						onGuidedExpand={
-							onExpandNode && contextNode
-								? () => setExpansionTarget(contextNode)
-								: undefined
-						}
-						onOpenGroup={
-							contextMenu && isCollapsedGroupId(contextMenu.nodeId)
-								? () => openCollapsedGroup(contextMenu.nodeId)
-								: undefined
-						}
-						onCollapseGroup={
-							contextClusterId
-								? () =>
-										setCollapsedGroups((prev) =>
-											new Set(prev).add(contextClusterId),
-										)
-								: undefined
-						}
-						onToggleFocus={
-							contextMenu ? () => focusNodeById(contextMenu.nodeId) : undefined
-						}
-						onHide={
-							contextMenu ? () => hideNode(contextMenu.nodeId) : undefined
-						}
-						onTogglePin={
-							canvasApi && contextMenu
-								? () =>
-										canvasApi.pinNode(
-											contextMenu.nodeId,
-											!canvasApi.isPinned(contextMenu.nodeId),
-										)
-								: undefined
-						}
-						onFindPath={
-							onFindPaths && contextNode
-								? () => handleArmPath(contextNode)
-								: undefined
-						}
-					/>
-
-					{/* Focus banner — the only way back out, so it is always on top */}
-					{focus && focusedNodeIds && (
-						<div className="absolute left-1/2 top-3 z-30 -translate-x-1/2">
-							<div className="flex items-center gap-2 rounded-full border border-primary/40 bg-primary/10 px-3 py-1.5 text-xs shadow-sm backdrop-blur-sm">
-								<Crosshair className="h-3.5 w-3.5 text-primary" />
-								<span className="whitespace-nowrap">
-									{focus.mode === "dim"
-										? t("highlightingCountOfTotalObjectsAroundName", {
-												defaultValue_one:
-													"Highlighting {{count}} of {{total}} objects around {{name}}",
-												defaultValue_other:
-													"Highlighting {{count}} of {{total}} objects around {{name}}",
-												count: focusedNodeIds.size,
-												total: nodeCount,
-												name:
-													accountLabels.get(focus.nodeId) ??
-													nodeMap.get(focus.nodeId)?.caption ??
-													focus.nodeId,
-											})
-										: t("showingCountOfTotalObjectsAroundName", {
-												defaultValue_one:
-													"Showing {{count}} of {{total}} objects around {{name}}",
-												defaultValue_other:
-													"Showing {{count}} of {{total}} objects around {{name}}",
-												count: focusedNodeIds.size,
-												total: nodeCount,
-												name:
-													accountLabels.get(focus.nodeId) ??
-													nodeMap.get(focus.nodeId)?.caption ??
-													focus.nodeId,
-											})}
-								</span>
-								<button
-									type="button"
-									className="whitespace-nowrap rounded-full border px-1.5 py-0.5 text-[10px] font-medium hover:bg-accent"
-									onClick={() =>
-										setFocus((prev) =>
-											prev
-												? { ...prev, depth: prev.depth === 1 ? 2 : 1 }
-												: prev,
-										)
-									}
-									title={t(
-										"toggleBetweenOneAndTwoHops",
-										"Toggle between one and two hops",
-									)}
-								>
-									{focus.depth === 1
-										? t("2Hops", "2 hops")
-										: t("1Hop", "1 hop")}
-								</button>
-								<button
-									type="button"
-									className="whitespace-nowrap rounded-full border px-1.5 py-0.5 text-[10px] font-medium hover:bg-accent"
-									onClick={() =>
-										setFocus((prev) =>
-											prev
-												? {
-														...prev,
-														mode: prev.mode === "dim" ? "hide" : "dim",
-													}
-												: prev,
-										)
-									}
-									title={t(
-										"dimKeepsContextHideRemovesIt",
-										"Dim keeps the rest as context; hide removes it",
-									)}
-								>
-									{focus.mode === "dim"
-										? t("hideOthers", "Hide others")
-										: t("dimOthers", "Dim others")}
-								</button>
-								<button
-									type="button"
-									className="text-muted-foreground hover:text-foreground"
-									onClick={() => setFocus(null)}
-									title={t("exitFocus", "Exit focus")}
-								>
-									<X className="h-3.5 w-3.5" />
-								</button>
-							</div>
-						</div>
-					)}
-
-					{/* Path-finding banner + result chip */}
-					{(pathSource || pathOutcome || pathFinding) && (
-						<div className="absolute left-1/2 top-3 z-20 -translate-x-1/2">
-							{pathSource ? (
-								<div className="flex items-center gap-2 rounded-full border bg-background/90 px-3 py-1.5 text-xs shadow-sm backdrop-blur-sm">
-									<Route className="h-3.5 w-3.5 text-primary" />
+						{/* Focus banner — the only way back out, so it is always on top */}
+						{focus && focusedNodeIds && (
+							<div className="absolute left-1/2 top-3 z-30 -translate-x-1/2">
+								<div className="flex items-center gap-2 rounded-full border border-primary/40 bg-primary/10 px-3 py-1.5 text-xs shadow-sm backdrop-blur-sm">
+									<Crosshair className="h-3.5 w-3.5 text-primary" />
 									<span className="whitespace-nowrap">
-										{t("findingPathFrom", "Finding path from")}{" "}
-										<span className="font-medium">
-											<GraphNodeCaption node={pathSource} overlay={overlay} />
-										</span>{" "}
-										{t("selectATargetNode", "— select a target node")}
+										{focus.mode === "dim"
+											? t("highlightingCountOfTotalObjectsAroundName", {
+													defaultValue_one:
+														"Highlighting {{count}} of {{total}} objects around {{name}}",
+													defaultValue_other:
+														"Highlighting {{count}} of {{total}} objects around {{name}}",
+													count: focusedNodeIds.size,
+													total: nodeCount,
+													name:
+														accountLabels.get(focus.nodeId) ??
+														nodeMap.get(focus.nodeId)?.caption ??
+														focus.nodeId,
+												})
+											: t("showingCountOfTotalObjectsAroundName", {
+													defaultValue_one:
+														"Showing {{count}} of {{total}} objects around {{name}}",
+													defaultValue_other:
+														"Showing {{count}} of {{total}} objects around {{name}}",
+													count: focusedNodeIds.size,
+													total: nodeCount,
+													name:
+														accountLabels.get(focus.nodeId) ??
+														nodeMap.get(focus.nodeId)?.caption ??
+														focus.nodeId,
+												})}
 									</span>
+									<button
+										type="button"
+										className="whitespace-nowrap rounded-full border px-1.5 py-0.5 text-[10px] font-medium hover:bg-accent"
+										onClick={() =>
+											setFocus((prev) =>
+												prev
+													? { ...prev, depth: prev.depth === 1 ? 2 : 1 }
+													: prev,
+											)
+										}
+										title={t(
+											"toggleBetweenOneAndTwoHops",
+											"Toggle between one and two hops",
+										)}
+									>
+										{focus.depth === 1
+											? t("2Hops", "2 hops")
+											: t("1Hop", "1 hop")}
+									</button>
+									<button
+										type="button"
+										className="whitespace-nowrap rounded-full border px-1.5 py-0.5 text-[10px] font-medium hover:bg-accent"
+										onClick={() =>
+											setFocus((prev) =>
+												prev
+													? {
+															...prev,
+															mode: prev.mode === "dim" ? "hide" : "dim",
+														}
+													: prev,
+											)
+										}
+										title={t(
+											"dimKeepsContextHideRemovesIt",
+											"Dim keeps the rest as context; hide removes it",
+										)}
+									>
+										{focus.mode === "dim"
+											? t("hideOthers", "Hide others")
+											: t("dimOthers", "Dim others")}
+									</button>
 									<button
 										type="button"
 										className="text-muted-foreground hover:text-foreground"
-										onClick={exitPathMode}
-										title={t("cancelPathFinding", "Cancel path finding")}
+										onClick={() => setFocus(null)}
+										title={t("exitFocus", "Exit focus")}
 									>
 										<X className="h-3.5 w-3.5" />
 									</button>
 								</div>
-							) : pathFinding ? (
-								<div className="flex items-center gap-2 rounded-full border bg-background/90 px-3 py-1.5 text-xs shadow-sm backdrop-blur-sm">
-									<Route className="h-3.5 w-3.5 animate-pulse text-primary" />
-									<span className="whitespace-nowrap">
-										{t("findingPath", "Finding path…")}
-									</span>
-								</div>
-							) : pathOutcome ? (
-								<div
-									className={`flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs shadow-sm backdrop-blur-sm ${
-										pathOutcome.error
-											? "border-destructive/40 bg-destructive/10 text-destructive"
-											: pathOutcome.found
-												? "border-primary/40 bg-primary/10 text-foreground"
-												: "border-amber-500/40 bg-amber-500/10 text-amber-600 dark:text-amber-400"
-									}`}
-								>
-									<Route className="h-3.5 w-3.5" />
-									<span className="whitespace-nowrap">
-										{pathOutcome.error
-											? pathOutcome.error
-											: pathOutcome.found
-												? t(
-														"connectedHopsHopvalval2",
-														"Connected — {{hops}} hop{{val}}{{val2}}",
-														{
-															hops: pathOutcome.hops,
-															val: pathOutcome.hops !== 1 ? "s" : "",
-															val2:
-																pathOutcome.alternatives > 0
-																	? ` (${pathOutcome.alternatives} alternative route${
-																			pathOutcome.alternatives !== 1 ? "s" : ""
-																		})`
-																	: "",
-														},
-													)
-												: t(
-														"noConnectionWithin4Hops",
-														"No connection within 4 hops",
-													)}
-									</span>
-									<button
-										type="button"
-										className="hover:opacity-70"
-										onClick={exitPathMode}
-										title={t("clearPath", "Clear path")}
-									>
-										<X className="h-3.5 w-3.5" />
-									</button>
-								</div>
-							) : null}
-						</div>
-					)}
+							</div>
+						)}
 
-					{/* Floating legend */}
-					{showLegend && (
-						<div className="absolute bottom-3 left-3 z-10">
-							<GraphLegend
-								entries={legendEntries}
-								hidden={hiddenLabels}
-								onToggleVisibility={handleToggleVisibility}
-								onStyleChange={onStyleChange}
+						{/* Path-finding banner + result chip */}
+						{(pathSource || pathOutcome || pathFinding) && (
+							<div className="absolute left-1/2 top-3 z-20 -translate-x-1/2">
+								{pathSource ? (
+									<div className="flex items-center gap-2 rounded-full border bg-background/90 px-3 py-1.5 text-xs shadow-sm backdrop-blur-sm">
+										<Route className="h-3.5 w-3.5 text-primary" />
+										<span className="whitespace-nowrap">
+											{t("findingPathFrom", "Finding path from")}{" "}
+											<span className="font-medium">
+												<GraphNodeCaption node={pathSource} overlay={overlay} />
+											</span>{" "}
+											{t("selectATargetNode", "— select a target node")}
+										</span>
+										<button
+											type="button"
+											className="text-muted-foreground hover:text-foreground"
+											onClick={exitPathMode}
+											title={t("cancelPathFinding", "Cancel path finding")}
+										>
+											<X className="h-3.5 w-3.5" />
+										</button>
+									</div>
+								) : pathFinding ? (
+									<div className="flex items-center gap-2 rounded-full border bg-background/90 px-3 py-1.5 text-xs shadow-sm backdrop-blur-sm">
+										<Route className="h-3.5 w-3.5 animate-pulse text-primary" />
+										<span className="whitespace-nowrap">
+											{t("findingPath", "Finding path…")}
+										</span>
+									</div>
+								) : pathOutcome ? (
+									<div
+										className={`flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs shadow-sm backdrop-blur-sm ${
+											pathOutcome.error
+												? "border-destructive/40 bg-destructive/10 text-destructive"
+												: pathOutcome.found
+													? "border-primary/40 bg-primary/10 text-foreground"
+													: "border-amber-500/40 bg-amber-500/10 text-amber-600 dark:text-amber-400"
+										}`}
+									>
+										<Route className="h-3.5 w-3.5" />
+										<span className="whitespace-nowrap">
+											{pathOutcome.error
+												? pathOutcome.error
+												: pathOutcome.found
+													? t(
+															"connectedHopsHopvalval2",
+															"Connected — {{hops}} hop{{val}}{{val2}}",
+															{
+																hops: pathOutcome.hops,
+																val: pathOutcome.hops !== 1 ? "s" : "",
+																val2:
+																	pathOutcome.alternatives > 0
+																		? ` (${pathOutcome.alternatives} alternative route${
+																				pathOutcome.alternatives !== 1
+																					? "s"
+																					: ""
+																			})`
+																		: "",
+															},
+														)
+													: t(
+															"noConnectionWithin4Hops",
+															"No connection within 4 hops",
+														)}
+										</span>
+										<button
+											type="button"
+											className="hover:opacity-70"
+											onClick={exitPathMode}
+											title={t("clearPath", "Clear path")}
+										>
+											<X className="h-3.5 w-3.5" />
+										</button>
+									</div>
+								) : null}
+							</div>
+						)}
+
+						{/* Floating legend */}
+						{showLegend && (
+							<div
+								className={`absolute z-10 max-w-[calc(100%-4rem)] ${
+									shellMode.compactLegend
+										? "bottom-2 left-2"
+										: "bottom-3 left-3"
+								}`}
+							>
+								<GraphLegend
+									entries={legendEntries}
+									hidden={hiddenLabels}
+									onToggleVisibility={handleToggleVisibility}
+									onStyleChange={onStyleChange}
+									compact={shellMode.compactLegend}
+								/>
+							</div>
+						)}
+					</div>
+
+					{/* A bottom dock preserves graph context while the query is edited. */}
+					{showQuery && onRunCypher && (
+						<div
+							className="relative shrink-0 border-t bg-background p-2 pt-3"
+							style={{ height: effectiveQueryDockHeight }}
+						>
+							{/* biome-ignore lint/a11y/useSemanticElements: The interactive splitter needs pointer and keyboard handlers that an hr cannot provide. */}
+							<div
+								role="separator"
+								aria-label={t("resizeQueryPanel", "Resize query panel")}
+								aria-orientation="horizontal"
+								aria-valuemin={GRAPH_QUERY_DOCK_MIN_HEIGHT}
+								aria-valuemax={maximumQueryDockHeight}
+								aria-valuenow={Math.round(effectiveQueryDockHeight)}
+								tabIndex={0}
+								className="absolute inset-x-0 top-0 z-20 flex h-3 -translate-y-1/2 cursor-row-resize touch-none items-center justify-center outline-none focus-visible:ring-2 focus-visible:ring-ring"
+								onPointerDown={handleQueryResizeStart}
+								onPointerMove={handleQueryResizeMove}
+								onPointerUp={handleQueryResizeEnd}
+								onPointerCancel={handleQueryResizeEnd}
+								onKeyDown={handleQueryResizeKeyDown}
+								onDoubleClick={() =>
+									resizeQueryDock(GRAPH_QUERY_DOCK_DEFAULT_HEIGHT)
+								}
+							>
+								<span className="h-1 w-12 rounded-full bg-border transition-colors hover:bg-muted-foreground" />
+							</div>
+							<GraphQueryPanel
+								onRunCypher={onRunCypher}
+								results={cypherResults ?? null}
+								propertyMetadata={cypherMetadata}
+								loading={cypherLoading}
+								error={cypherError}
+								onAddToCanvas={onMergeSubgraph ? addCypherToCanvas : undefined}
+								addToCanvasCount={cypherSubgraph?.nodes.length ?? 0}
+								onClose={() => setShowQuery(false)}
 							/>
 						</div>
 					)}
@@ -2048,84 +2093,110 @@ export function GraphViewer({
 
 			{/* Facet histogram (right drawer; the inspectors take precedence) */}
 			{facetsOpen && !selectedNode && !selectedEdge && (
-				<GraphHistogramPanel
-					nodes={viewData?.nodes ?? []}
-					onClose={() => {
-						setFacetsOpen(false);
-						setFacetHover(null);
-					}}
-					onHoverValue={setFacetHover}
-					onFilterTo={(title, ids) => addFacetFilter("to", title, ids)}
-					onFilterOut={(title, ids) => addFacetFilter("out", title, ids)}
-				/>
+				<div
+					className={
+						shellMode.overlayInspector
+							? "absolute inset-y-0 right-0 z-50 w-full max-w-72 shadow-xl [&>div]:w-full"
+							: "contents"
+					}
+				>
+					<GraphHistogramPanel
+						nodes={viewData?.nodes ?? []}
+						onClose={() => {
+							setFacetsOpen(false);
+							setFacetHover(null);
+						}}
+						onHoverValue={setFacetHover}
+						onFilterTo={(title, ids) => addFacetFilter("to", title, ids)}
+						onFilterOut={(title, ids) => addFacetFilter("out", title, ids)}
+					/>
+				</div>
 			)}
 
 			{/* Node inspector (right drawer) */}
 			{showInspector && selectedNode && (
-				<GraphNodeInspector
-					node={selectedNode}
-					overlay={overlay}
-					connections={nodeConnections}
-					onClose={() => setSelectedNode(null)}
-					onConnectionClick={handleConnectionClick}
-					onExpand={
-						onExpandNode
-							? (depth: number) =>
-									onExpandNode(
-										selectedNode.id,
-										selectedNode.label,
-										getNodeRawId(selectedNode, overlay),
-										undefined,
-										depth,
-									)
-							: undefined
+				<div
+					className={
+						shellMode.overlayInspector
+							? "absolute inset-y-0 right-0 z-50 w-full max-w-80 shadow-xl [&>div]:w-full"
+							: "contents"
 					}
-					onGuidedExpand={
-						onExpandNode ? () => setExpansionTarget(selectedNode) : undefined
-					}
-					onFocus={handleFocus}
-					focused={focus?.nodeId === selectedNode.id}
-					hasChildren={hasContainmentChildren(selectedNode)}
-					childrenExpanded={expandedChildParents?.has(selectedNode.id) ?? false}
-					onExpandChildren={
-						onExpandChildren
-							? () =>
-									onExpandChildren(
-										selectedNode.id,
-										selectedNode.label,
-										getNodeRawId(selectedNode, overlay),
-									)
-							: undefined
-					}
-					onCollapseChildren={
-						onCollapseChildren
-							? () => onCollapseChildren(selectedNode.id)
-							: undefined
-					}
-					onFindPath={onFindPaths ? handleArmPath : undefined}
-					onRunAction={onRunAction}
-				/>
+				>
+					<GraphNodeInspector
+						node={selectedNode}
+						overlay={overlay}
+						connections={nodeConnections}
+						onClose={() => setSelectedNode(null)}
+						onConnectionClick={handleConnectionClick}
+						onExpand={
+							onExpandNode
+								? (depth: number) =>
+										onExpandNode(
+											selectedNode.id,
+											selectedNode.label,
+											getNodeRawId(selectedNode, overlay),
+											undefined,
+											depth,
+										)
+								: undefined
+						}
+						onGuidedExpand={
+							onExpandNode ? () => setExpansionTarget(selectedNode) : undefined
+						}
+						onFocus={handleFocus}
+						focused={focus?.nodeId === selectedNode.id}
+						hasChildren={hasContainmentChildren(selectedNode)}
+						childrenExpanded={
+							expandedChildParents?.has(selectedNode.id) ?? false
+						}
+						onExpandChildren={
+							onExpandChildren
+								? () =>
+										onExpandChildren(
+											selectedNode.id,
+											selectedNode.label,
+											getNodeRawId(selectedNode, overlay),
+										)
+								: undefined
+						}
+						onCollapseChildren={
+							onCollapseChildren
+								? () => onCollapseChildren(selectedNode.id)
+								: undefined
+						}
+						onFindPath={onFindPaths ? handleArmPath : undefined}
+						onRunAction={onRunAction}
+					/>
+				</div>
 			)}
 
 			{/* Edge inspector (right drawer) */}
 			{showInspector && selectedEdge && (
-				<GraphEdgeInspector
-					edge={selectedEdge}
-					sourceCaption={edgeSourceCaption}
-					targetCaption={edgeTargetCaption}
-					sourceAccountId={nodeCaptionAccountId(
-						nodeMap.get(selectedEdge.source),
-						overlay,
-					)}
-					targetAccountId={nodeCaptionAccountId(
-						nodeMap.get(selectedEdge.target),
-						overlay,
-					)}
-					onClose={() => {
-						setSelectedEdge(null);
-						setSelectedEdgeKey(null);
-					}}
-				/>
+				<div
+					className={
+						shellMode.overlayInspector
+							? "absolute inset-y-0 right-0 z-50 w-full max-w-80 shadow-xl [&>div]:w-full"
+							: "contents"
+					}
+				>
+					<GraphEdgeInspector
+						edge={selectedEdge}
+						sourceCaption={edgeSourceCaption}
+						targetCaption={edgeTargetCaption}
+						sourceAccountId={nodeCaptionAccountId(
+							nodeMap.get(selectedEdge.source),
+							overlay,
+						)}
+						targetAccountId={nodeCaptionAccountId(
+							nodeMap.get(selectedEdge.target),
+							overlay,
+						)}
+						onClose={() => {
+							setSelectedEdge(null);
+							setSelectedEdgeKey(null);
+						}}
+					/>
+				</div>
 			)}
 
 			<GraphExpansionDialog

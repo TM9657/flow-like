@@ -169,9 +169,7 @@ describe("computeViewportNodeSizeCap", () => {
 	});
 
 	test("returns the minimum for an unusable stage", () => {
-		expect(
-			computeViewportNodeSizeCap(20, { width: 0, height: 500 }),
-		).toBe(2);
+		expect(computeViewportNodeSizeCap(20, { width: 0, height: 500 })).toBe(2);
 		expect(
 			computeViewportNodeSizeCap(20, { width: Number.NaN, height: 500 }),
 		).toBe(2);

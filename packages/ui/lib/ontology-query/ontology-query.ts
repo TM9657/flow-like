@@ -13,6 +13,7 @@ export const ONTOLOGY_QUERY_DEFAULT_LIMIT = 200;
 export const ONTOLOGY_QUERY_MAX_LIMIT = 500;
 export const ONTOLOGY_QUERY_MAX_PROMPT_LENGTH = 8_000;
 export const ONTOLOGY_QUERY_MAX_QUERY_LENGTH = 20_000;
+export const ONTOLOGY_QUERY_MAX_SCHEMA_CONTEXT_LENGTH = 60_000;
 
 export type OntologyQueryLanguage = "cypher" | "sql";
 export type OntologyQueryLanguagePreference = OntologyQueryLanguage | "auto";
@@ -327,7 +328,7 @@ function scanQuery(
 		}
 
 		if (
-			(char === "-" && next === "-") ||
+			(language === "sql" && char === "-" && next === "-") ||
 			(language === "cypher" && char === "/" && next === "/")
 		) {
 			const end = source.indexOf("\n", index + 2);
@@ -595,11 +596,12 @@ export function parseOntologyQueryProposal(
 
 	const proposal: OntologyQueryProposal = {
 		language,
-		query: envelope.query.trim().replace(/;\s*$/, ""),
+		query: envelope.query.trim(),
 		params: parseParams(envelope.params),
 		presentation: envelope.presentation,
 	};
 	validateReadOnlyOntologyQuery(proposal.language, proposal.query);
+	proposal.query = proposal.query.replace(/;\s*$/, "");
 	return proposal;
 }
 
@@ -659,12 +661,41 @@ export function buildOntologyQuerySchemaContext(
 		};
 	});
 
-	return {
+	const context: OntologyQuerySchemaContext = {
 		ontologyName: overlay.name.slice(0, 128),
 		nodes,
 		edges,
 		truncated,
 	};
+
+	// The per-field caps prevent one mapping from dominating the prompt. The
+	// serialized cap also protects against a wide ontology with many long names.
+	while (
+		JSON.stringify(context).length > ONTOLOGY_QUERY_MAX_SCHEMA_CONTEXT_LENGTH
+	) {
+		let removedProperties = false;
+		for (const item of [...context.nodes, ...context.edges]) {
+			if (item.properties.length > 4) {
+				item.properties.splice(Math.ceil(item.properties.length / 2));
+				removedProperties = true;
+			}
+		}
+		if (!removedProperties) {
+			if (
+				context.edges.length >= context.nodes.length &&
+				context.edges.length
+			) {
+				context.edges.pop();
+			} else if (context.nodes.length) {
+				context.nodes.pop();
+			} else {
+				break;
+			}
+		}
+		context.truncated = true;
+	}
+
+	return context;
 }
 
 /**
@@ -762,6 +793,7 @@ function emptyReceipt(
 	attempts: number,
 	proposal: OntologyQueryProposal | undefined,
 	error: OntologyQueryError,
+	durationMs = 0,
 ): OntologyQueryReceipt {
 	return {
 		schema: ONTOLOGY_QUERY_RECEIPT_SCHEMA,
@@ -778,7 +810,7 @@ function emptyReceipt(
 		rowCount: 0,
 		truncated: false,
 		effectiveLimit,
-		durationMs: 0,
+		durationMs,
 		attempts,
 		status: "error",
 		error,
@@ -1053,6 +1085,7 @@ export class OntologyQueryController {
 						attempts,
 						proposal,
 						{ stage: "execution", message: errorMessage(error) },
+						Math.max(0, this.now() - executionStartedAt),
 					),
 				};
 			}

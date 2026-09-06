@@ -44,8 +44,5 @@ export function clampGraphQueryDockHeight(
 		: GRAPH_QUERY_DOCK_DEFAULT_HEIGHT;
 	const maximum = Math.max(GRAPH_QUERY_DOCK_MIN_HEIGHT, available);
 
-	return Math.min(
-		Math.max(requested, GRAPH_QUERY_DOCK_MIN_HEIGHT),
-		maximum,
-	);
+	return Math.min(Math.max(requested, GRAPH_QUERY_DOCK_MIN_HEIGHT), maximum);
 }

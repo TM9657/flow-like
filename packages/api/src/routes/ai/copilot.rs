@@ -22,7 +22,7 @@ use flow_like::flow::board::Board;
 use flow_like::flow::copilot::platform::PlatformToolBridge;
 use flow_like::flow::copilot::{
     CatalogProvider, FlowIrDraftStore, NodeMetadata, PinMetadata, PlatformSpecialist,
-    enrich_node_metadata, run_specialist_chat, score_catalog_metadata,
+	enrich_node_metadata, run_ontology_query_chat, run_specialist_chat, score_catalog_metadata,
 };
 use flow_like::flow::node::{Node, NodeLogic};
 use flow_like::flow::pin::{Pin, PinType};
@@ -116,6 +116,10 @@ pub struct CopilotChatRequest {
     /// Ontology/overlay the calling Data Studio page has selected, so the specialist defaults to it.
     #[serde(default)]
     pub overlay_id: Option<String>,
+
+	/// Restrict a Data Studio run to producing one tool-free read-only query proposal.
+	#[serde(default)]
+	pub read_only: bool,
 
     /// Whether to stream the response
     #[serde(default)]
@@ -939,19 +943,34 @@ async fn specialist_chat(
     let (done_tx, mut done_rx) = oneshot::channel::<Result<UnifiedCopilotResponse, String>>();
     let channel_for_task = channel.clone();
     flow_like_types::tokio::spawn(async move {
-        let result = run_specialist_chat(
-            flow_like_state,
-            profile,
-            specialist,
-            context,
-            payload.user_prompt,
-            payload.model_id,
-            token,
-            bridge,
-            Some(on_token),
-        )
-        .await
-        .map(|message| UnifiedCopilotResponse {
+		let query_proposal_only =
+			payload.read_only && matches!(specialist, PlatformSpecialist::DataStudio);
+		let result = if query_proposal_only {
+			run_ontology_query_chat(
+				flow_like_state,
+				profile,
+				payload.user_prompt,
+				payload.model_id,
+				token,
+				bridge,
+				Some(on_token),
+			)
+			.await
+		} else {
+			run_specialist_chat(
+				flow_like_state,
+				profile,
+				specialist,
+				context,
+				payload.user_prompt,
+				payload.model_id,
+				token,
+				bridge,
+				Some(on_token),
+			)
+			.await
+		}
+		.map(|message| UnifiedCopilotResponse {
             message,
             commands: Vec::new(),
             components: Vec::new(),

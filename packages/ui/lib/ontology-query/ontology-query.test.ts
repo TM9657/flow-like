@@ -6,6 +6,7 @@ import type {
 	IGraphState,
 } from "../../state/backend-state/graph-state";
 import {
+	ONTOLOGY_QUERY_MAX_SCHEMA_CONTEXT_LENGTH,
 	ONTOLOGY_QUERY_RECEIPT_SCHEMA,
 	OntologyQueryController,
 	type OntologyQueryProposal,
@@ -108,6 +109,7 @@ describe("ontology query proposal validation", () => {
 	test("rejects mutations, procedures, multiple statements, and unbounded paths", () => {
 		for (const query of [
 			"SELECT * FROM people; DROP TABLE people",
+			"SELECT * FROM people;;",
 			"WITH changed AS (DELETE FROM people RETURNING *) SELECT * FROM changed",
 			"COPY people TO '/tmp/people.csv'",
 		]) {
@@ -116,6 +118,7 @@ describe("ontology query proposal validation", () => {
 
 		for (const query of [
 			"MATCH (person:Person) DELETE person",
+			"MATCH (person)--(other) DELETE other",
 			"MATCH (person:Person) CALL db.labels() RETURN person",
 			"MATCH (a)-[:KNOWS*]->(b) RETURN a, b",
 			"MATCH (a)-[:KNOWS*1..5]->(b) RETURN a, b",
@@ -225,6 +228,39 @@ describe("ontology query schema and graph runtime", () => {
 		expect(
 			JSON.stringify(buildOntologyQuerySchemaContext(overlay, schema)),
 		).not.toContain("sample");
+	});
+
+	test("caps the serialized schema context", () => {
+		const longName = "x".repeat(128);
+		const properties = Array.from({ length: 64 }, (_, index) => ({
+			name: `${longName}${index}`,
+			data_type: `${longName}${index}`,
+			nullable: false,
+		}));
+		const overlay = {
+			name: "Large ontology",
+			nodes: Array.from({ length: 128 }, (_, index) => ({
+				label: `Node${index}${longName}`,
+				table: `table${index}${longName}`,
+				id_column: `id${index}${longName}`,
+			})),
+			edges: [],
+		} as GraphOverlay;
+		const schema = {
+			node_labels: overlay.nodes.map((node) => ({
+				label: node.label,
+				table: node.table,
+				properties,
+			})),
+			edge_labels: [],
+		} as GraphSchema;
+
+		const context = buildOntologyQuerySchemaContext(overlay, schema);
+
+		expect(JSON.stringify(context).length).toBeLessThanOrEqual(
+			ONTOLOGY_QUERY_MAX_SCHEMA_CONTEXT_LENGTH,
+		);
+		expect(context.truncated).toBe(true);
 	});
 
 	test("forwards the immutable scope, bound params, and truncation probe", async () => {

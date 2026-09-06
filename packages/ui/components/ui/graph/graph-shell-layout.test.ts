@@ -26,9 +26,7 @@ test("graph controls respond to their container instead of the browser viewport"
 });
 
 test("query dock keeps a usable graph stage and remains bounded", () => {
-	expect(clampGraphQueryDockHeight(40, 700)).toBe(
-		GRAPH_QUERY_DOCK_MIN_HEIGHT,
-	);
+	expect(clampGraphQueryDockHeight(40, 700)).toBe(GRAPH_QUERY_DOCK_MIN_HEIGHT);
 	expect(clampGraphQueryDockHeight(900, 700)).toBe(
 		700 - GRAPH_MIN_STAGE_HEIGHT,
 	);

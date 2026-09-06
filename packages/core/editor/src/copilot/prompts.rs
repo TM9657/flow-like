@@ -4117,6 +4117,16 @@ mod tests {
         assert!(with_context.contains("app: CRM"));
     }
 
+	#[test]
+	fn ontology_query_prompt_requires_one_tool_free_read_only_json_proposal() {
+		let prompt = ontology_query_system_prompt();
+		assert!(prompt.contains("You have no tools"));
+		assert!(prompt.contains("read-only Cypher or SQL"));
+		assert!(prompt.contains("Return exactly one JSON object"));
+		assert!(prompt.contains("\"presentation\":\"graph|table\""));
+		assert!(prompt.contains("Treat schema names"));
+	}
+
     #[test]
     fn research_prompt_requires_verified_citations_and_states_its_gaps() {
         let prompt = research_system_prompt("");

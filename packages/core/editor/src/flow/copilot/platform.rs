@@ -2198,6 +2198,10 @@ mod tests {
             .collect();
         assert!(data.contains(&"database_tool"));
         assert!(data.contains(&"graph_overlay_tool"));
+
+		let query = PlatformSurface::OntologyQuery;
+		assert!(query.tool_specs(true).is_empty());
+		assert_eq!(query.max_tool_rounds(), 0);
     }
 
     #[test]

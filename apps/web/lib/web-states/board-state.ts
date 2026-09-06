@@ -1043,7 +1043,7 @@ export class WebBoardState implements IBoardState {
 		runContext?: IRunContext,
 		actionContext?: UIActionContext,
 		_nested?: boolean,
-		_readOnly?: boolean,
+		readOnly?: boolean,
 		toolContext?: CopilotToolContext,
 		requestId?: string,
 		rawUserPrompt?: string,
@@ -1113,6 +1113,7 @@ export class WebBoardState implements IBoardState {
 					// global chat already posts to, and stopping that run stops them too.
 					run_id: specialistRunId,
 					overlay_id: toolContext?.overlayId,
+					read_only: readOnly ?? false,
 					stream: wantsStream,
 				}),
 			});
