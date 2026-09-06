@@ -164,7 +164,10 @@ jobs:
 
       - name: Install stable-diffusion.cpp build dependencies (Linux)
         if: inputs.stablediffusion_platform == 'linux-x64'
-        run: sudo apt-get install -y cmake g++ libvulkan-dev glslc spirv-headers
+        shell: bash
+        run: |
+          sudo apt-get install -y cmake g++ libvulkan-dev curl xz-utils
+          bash .github/scripts/prepare-vulkan-sdk.sh
 
       - name: Ensure SPA headers satisfy libspa
         if: runner.os == 'Linux'
