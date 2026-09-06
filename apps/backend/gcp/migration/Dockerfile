@@ -113,6 +113,8 @@ RUN chmod +x /usr/local/bin/make-prisma-mirror.sh /usr/local/bin/make-postgres-p
 
 FROM oven/bun:1.3.8-debian AS runtime
 
+COPY LICENSE /usr/share/licenses/flow-like/LICENSE
+
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
     libssl3 \

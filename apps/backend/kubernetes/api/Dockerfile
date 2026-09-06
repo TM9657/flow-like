@@ -14,8 +14,8 @@ WORKDIR /app
 
 COPY . .
 
-# The API embeds this public hub/OIDC configuration at compile time.
-# A self-hosted build must not inherit the repository's hosted configuration.
+# Runtime FLOW_LIKE_CONFIG_* sources override this public fallback. Keep the
+# self-hosting example as the default; never bake deployment secrets into images.
 ARG FLOW_LIKE_CONFIG=apps/backend/kubernetes/flow-like.config.example.json
 RUN cp "$FLOW_LIKE_CONFIG" /app/flow-like.config.json
 
@@ -39,6 +39,8 @@ RUN --mount=type=cache,target=/cargo-home,id=cargo-home,sharing=shared \
 # Stage 4: Runtime - minimal image for production
 # ============================================================
 FROM debian:bookworm-slim
+
+COPY LICENSE /usr/share/licenses/flow-like/LICENSE
 
 RUN apt-get update && apt-get install -y \
     ca-certificates \

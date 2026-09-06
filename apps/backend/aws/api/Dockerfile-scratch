@@ -1,0 +1,75 @@
+FROM public.ecr.aws/amazonlinux/amazonlinux:2023 AS build
+
+WORKDIR /app
+
+# Install dependencies and Rust
+RUN yum update -y && \
+    yum install -y \
+        clang \
+        git \
+        pkgconf-pkg-config \
+        openssl-devel \
+        unzip \
+        xz && \
+    curl -LO https://github.com/protocolbuffers/protobuf/releases/download/v25.3/protoc-25.3-linux-aarch_64.zip && \
+    unzip protoc-25.3-linux-aarch_64.zip -d /usr/local && \
+    rm protoc-25.3-linux-aarch_64.zip && \
+    curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain 1.97.1 && \
+    source $HOME/.cargo/env && \
+    rustup target add aarch64-unknown-linux-gnu && \
+    yum remove -y xz && \
+    yum clean all
+
+ENV PATH="/root/.cargo/bin:${PATH}"
+
+COPY . .
+
+RUN --mount=type=cache,id=cargo-registry-api-scratch,target=/root/.cargo/registry,sharing=locked \
+    --mount=type=cache,id=cargo-git-api-scratch,target=/root/.cargo/git,sharing=locked \
+    --mount=type=cache,id=cargo-target-api-scratch,target=/app/target,sharing=locked \
+    source $HOME/.cargo/env && \
+    cargo build --release --target=aarch64-unknown-linux-gnu --manifest-path=apps/backend/aws/api/Cargo.toml
+
+RUN --mount=type=cache,id=cargo-target-api-scratch,target=/app/target/,sharing=locked cp target/aarch64-unknown-linux-gnu/release/aws-api /app/aws-api
+RUN strip --strip-all /app/aws-api
+
+#
+# 2) use amazonlinux:2023 as a “lib provider”
+#
+FROM public.ecr.aws/amazonlinux/amazonlinux:2023 AS base
+
+#
+# 3) assemble a tiny scratch image
+#
+FROM scratch AS lambda
+
+COPY LICENSE /usr/share/licenses/flow-like/LICENSE
+# copy your stripped Lambda bootstrap
+COPY --from=build /app/aws-api /bootstrap
+
+# Essential runtime libraries - start with minimal set
+COPY --from=base /lib/ld-linux-aarch64.so.1 /lib/ld-linux-aarch64.so.1
+COPY --from=base /lib64/libc.so.6 /lib64/libc.so.6
+COPY --from=base /lib64/libm.so.6 /lib64/libm.so.6
+COPY --from=base /lib64/libpthread.so.0 /lib64/libpthread.so.0
+COPY --from=base /lib64/libdl.so.2 /lib64/libdl.so.2
+COPY --from=base /lib64/libgcc_s.so.1 /lib64/libgcc_s.so.1
+
+# Add these if your Rust binary uses them
+COPY --from=base /lib64/libssl.so.3 /lib64/libssl.so.3
+COPY --from=base /lib64/libcrypto.so.3 /lib64/libcrypto.so.3
+
+# Add CA certificates for TLS connections
+COPY --from=base /etc/ssl/certs/ca-bundle.crt /etc/ssl/certs/ca-bundle.crt
+COPY --from=base /etc/pki/tls/certs/ca-bundle.crt /etc/pki/tls/certs/ca-bundle.crt
+
+# Common additional libraries that might be needed
+COPY --from=base /lib64/libz.so.1 /lib64/libz.so.1
+COPY --from=base /lib64/librt.so.1 /lib64/librt.so.1
+
+COPY --from=base /lib64/libstdc++.so.6 /lib64/libstdc++.so.6
+
+# ensure loader can find them
+ENV LD_LIBRARY_PATH=/lib64
+
+ENTRYPOINT ["/bootstrap"]

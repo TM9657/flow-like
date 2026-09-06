@@ -1,0 +1,61 @@
+FROM public.ecr.aws/amazonlinux/amazonlinux:2023 AS build
+
+WORKDIR /app
+
+ARG CARGO_BUILD_JOBS
+
+RUN yum update -y && \
+    yum install -y \
+        binutils \
+        clang \
+        cmake \
+        gcc \
+        gcc-c++ \
+        git \
+        make \
+        openssl-devel \
+        pkgconf-pkg-config \
+        unzip \
+        xz && \
+    curl -LO https://github.com/protocolbuffers/protobuf/releases/download/v25.3/protoc-25.3-linux-aarch_64.zip && \
+    unzip protoc-25.3-linux-aarch_64.zip -d /usr/local && \
+    rm protoc-25.3-linux-aarch_64.zip && \
+    curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain 1.97.1 && \
+    yum remove -y xz && \
+    yum clean all
+
+ENV PATH="/root/.cargo/bin:${PATH}"
+
+COPY . .
+
+RUN --mount=type=cache,id=flow-like-rust-1.97.1-amazonlinux2023-arm64-registry,target=/root/.cargo/registry,sharing=locked \
+    --mount=type=cache,id=flow-like-rust-1.97.1-amazonlinux2023-arm64-git,target=/root/.cargo/git,sharing=locked \
+    --mount=type=cache,id=flow-like-rust-1.97.1-amazonlinux2023-arm64-target,target=/app/target,sharing=locked \
+    source "$HOME"/.cargo/env && \
+    if [ -n "${CARGO_BUILD_JOBS:-}" ]; then export CARGO_BUILD_JOBS; fi && \
+    cargo build --locked --release --manifest-path=apps/backend/aws/file-tracker/Cargo.toml 2>&1
+
+RUN --mount=type=cache,id=flow-like-rust-1.97.1-amazonlinux2023-arm64-target,target=/app/target/,sharing=locked cp target/release/file-tracker /app/file-tracker
+
+RUN strip --strip-all /app/file-tracker
+
+ARG CRDB_CA_URL
+RUN if [ -n "$CRDB_CA_URL" ]; then \
+      curl -fsSL "$CRDB_CA_URL" -o /app/db-root.crt; \
+    else \
+      touch /app/db-root.crt; \
+    fi
+
+FROM public.ecr.aws/lambda/provided:al2023-arm64
+
+COPY LICENSE /usr/share/licenses/flow-like/LICENSE
+
+COPY --from=build /app/file-tracker ${LAMBDA_RUNTIME_DIR}/bootstrap
+COPY --from=build /app/db-root.crt /var/runtime/certs/root.crt
+
+RUN chmod +x ${LAMBDA_RUNTIME_DIR}/bootstrap && \
+    test -x ${LAMBDA_RUNTIME_DIR}/bootstrap
+
+ENV RUST_LOG=info
+
+CMD ["bootstrap"]

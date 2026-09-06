@@ -42,6 +42,8 @@ RUN --mount=type=cache,id=flow-like-rust-1.97.1-amazonlinux2023-arm64-home,targe
 # ============================================================
 FROM --platform=linux/arm64 public.ecr.aws/lambda/provided:al2023-arm64
 
+COPY LICENSE /usr/share/licenses/flow-like/LICENSE
+
 COPY --from=builder /tmp/bootstrap ${LAMBDA_RUNTIME_DIR}/bootstrap
 
 RUN chmod 755 ${LAMBDA_RUNTIME_DIR}/bootstrap && \

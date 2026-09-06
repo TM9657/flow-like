@@ -21,6 +21,8 @@ RUN --mount=type=cache,target=/cargo-home,id=cargo-home,sharing=shared \
 
 FROM debian:bookworm-slim AS runtime
 
+COPY LICENSE /usr/share/licenses/flow-like/LICENSE
+
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
     libssl3 \

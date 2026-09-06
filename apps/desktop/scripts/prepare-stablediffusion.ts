@@ -5,6 +5,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import AdmZip from "adm-zip";
 
 export const TAG = "master-841-6b3edaa";
 const COMMIT = "6b3edaaf32cc19e5bb2d819c788bd557eddc8eba";
@@ -46,45 +47,24 @@ export function extractRuntime(
 	destination: string,
 	executable: string,
 ) {
-	const temporary = fs.mkdtempSync(
-		path.join(os.tmpdir(), "flow-like-sd-archive-"),
-	);
 	const names = new Set<string>();
-	try {
-		const archivePath = path.join(temporary, "runtime.zip");
-		const extracted = path.join(temporary, "extracted");
-		fs.writeFileSync(archivePath, archive);
-		fs.mkdirSync(extracted);
-		if (process.platform === "win32")
-			execFileSync("tar", ["-xf", archivePath, "-C", extracted]);
-		else execFileSync("unzip", ["-q", archivePath, "-d", extracted]);
-		const collect = (directory: string) => {
-			for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
-				const source = path.join(directory, entry.name);
-				if (entry.isSymbolicLink())
-					throw new Error(
-						`Runtime archive contains a symbolic link: ${entry.name}`,
-					);
-				if (entry.isDirectory()) {
-					collect(source);
-					continue;
-				}
-				const name = entry.name;
-				if (
-					!entry.isFile() ||
-					(name !== executable &&
-						!/\.(dll|dylib|so(\.\d+)*|txt|metal|metallib)$/i.test(name))
-				)
-					continue;
-				if (names.has(name.toLowerCase()))
-					throw new Error(`Duplicate runtime file in archive: ${name}`);
-				names.add(name.toLowerCase());
-				fs.copyFileSync(source, path.join(destination, name));
-			}
-		};
-		collect(extracted);
-	} finally {
-		fs.rmSync(temporary, { recursive: true, force: true });
+	// Read ZIP entries directly so Git/MSYS tar cannot intercept Windows paths.
+	for (const entry of new AdmZip(archive).getEntries()) {
+		const name = path.posix.basename(entry.entryName.replaceAll("\\", "/"));
+		const fileType = (entry.attr >>> 16) & fs.constants.S_IFMT;
+		if (fileType === fs.constants.S_IFLNK)
+			throw new Error(`Runtime archive contains a symbolic link: ${name}`);
+		if (
+			entry.isDirectory ||
+			(fileType !== 0 && fileType !== fs.constants.S_IFREG) ||
+			(name !== executable &&
+				!/\.(dll|dylib|so(\.\d+)*|txt|metal|metallib)$/i.test(name))
+		)
+			continue;
+		if (names.has(name.toLowerCase()))
+			throw new Error(`Duplicate runtime file in archive: ${name}`);
+		names.add(name.toLowerCase());
+		fs.writeFileSync(path.join(destination, name), entry.getData());
 	}
 	if (!names.has(executable.toLowerCase()))
 		throw new Error(`Release archive does not contain ${executable}`);

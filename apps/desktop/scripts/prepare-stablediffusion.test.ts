@@ -91,6 +91,64 @@ describe("stable-diffusion.cpp runtime archive extraction", () => {
 		).toThrow("Duplicate runtime file in archive: libggml.so");
 	});
 
+	test("extracts ZIP data without archive tools on PATH", () => {
+		const destination = temporaryDirectory();
+		const contents = archive({
+			"release/bin/sd-server.exe": "windows server",
+			"release/bin/ggml.dll": "private DLL",
+		});
+		const previousPath = process.env.PATH;
+		try {
+			process.env.PATH = "";
+			extractRuntime(contents, destination, "sd-server.exe");
+		} finally {
+			if (previousPath === undefined)
+				Reflect.deleteProperty(process.env, "PATH");
+			else process.env.PATH = previousPath;
+		}
+		expect(
+			fs.readFileSync(path.join(destination, "sd-server.exe"), "utf8"),
+		).toBe("windows server");
+		expect(fs.readFileSync(path.join(destination, "ggml.dll"), "utf8")).toBe(
+			"private DLL",
+		);
+	});
+
+	test("rejects symbolic links in ZIP entries", () => {
+		const zip = new AdmZip();
+		const entry = zip.addFile("bin/sd-server", Buffer.from("../../outside"));
+		entry.attr = ((fs.constants.S_IFLNK | 0o777) << 16) >>> 0;
+		expect(() =>
+			extractRuntime(zip.toBuffer(), temporaryDirectory(), "sd-server"),
+		).toThrow("Runtime archive contains a symbolic link: sd-server");
+	});
+
+	test("rejects repeated ZIP entries with the same path", () => {
+		const zip = new AdmZip();
+		zip.addFile("bin/sd-server", Buffer.from("first"));
+		zip.addFile("other/sd-server", Buffer.from("second")).entryName =
+			"bin/sd-server";
+		expect(() =>
+			extractRuntime(zip.toBuffer(), temporaryDirectory(), "sd-server"),
+		).toThrow("Duplicate runtime file in archive: sd-server");
+	});
+
+	test("accepts Windows ZIP paths without UNIX file attributes", () => {
+		const destination = temporaryDirectory();
+		const zip = new AdmZip();
+		const entry = zip.addFile(
+			"bin/sd-server.exe",
+			Buffer.from("windows server"),
+		);
+		entry.entryName = "release\\bin\\sd-server.exe";
+		entry.attr = 0;
+		extractRuntime(zip.toBuffer(), destination, "sd-server.exe");
+		expect(fs.readdirSync(destination)).toEqual(["sd-server.exe"]);
+		expect(
+			fs.readFileSync(path.join(destination, "sd-server.exe"), "utf8"),
+		).toBe("windows server");
+	});
+
 	test("rejects library names that collide on Windows", () => {
 		expect(() =>
 			extractRuntime(

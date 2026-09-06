@@ -12,7 +12,8 @@ secrets, or public ingestion endpoints.
 
 ## Build and promote
 
-Build this directory as the context, scan and sign the result, push it to the
+Build from the `flow-like` repository root so the image includes its license.
+Scan and sign the result, push it to the
 deployment ACR from the private CI runner, then place its immutable ACR digest
 in `otel_collector_image`:
 
@@ -20,8 +21,9 @@ in `otel_collector_image`:
 docker buildx build \
   --platform linux/amd64 \
   --tag "$ACR_LOGIN_SERVER/flowlike/otel-collector:$VERSION" \
+  --file apps/backend/azure/otel-collector/Dockerfile \
   --push \
-  apps/backend/azure/otel-collector
+  .
 ```
 
 The base is pinned to the official multi-architecture 0.148.0 manifest. Update

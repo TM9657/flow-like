@@ -20,8 +20,38 @@ def encoded(value):
     return base64.urlsafe_b64encode(value).decode().rstrip("=")
 
 
-def generate(template, mode, web_origin, api_url, s3_endpoint):
+def unique_json_keys(pairs):
+    result = {}
+    for key, value in pairs:
+        if key in result:
+            raise ValueError("Duplicate JSON key")
+        result[key] = value
+    return result
+
+
+def generate(template, mode, web_origin, api_url, s3_endpoint, runtime_config=None):
     values = {}
+    runtime_config = dict(runtime_config or {})
+    for key, value in runtime_config.items():
+        if value and not value.strip():
+            raise ValueError(f"{key} must not contain only whitespace")
+        if key != "FLOW_LIKE_CONFIG_JSON" and value != value.strip():
+            raise ValueError(f"{key} must not have surrounding whitespace")
+    sources = [key for key in ("FLOW_LIKE_CONFIG_FILE", "FLOW_LIKE_CONFIG_JSON", "FLOW_LIKE_CONFIG_SECRET_REF") if runtime_config.get(key, "")]
+    if len(sources) > 1:
+        raise ValueError("Select only one nonempty API runtime config source")
+    if runtime_config.get("FLOW_LIKE_CONFIG_JSON", ""):
+        try:
+            parsed = json.loads(runtime_config["FLOW_LIKE_CONFIG_JSON"], object_pairs_hook=unique_json_keys)
+            if not isinstance(parsed, dict):
+                raise ValueError()
+        except (ValueError, TypeError):
+            raise ValueError("FLOW_LIKE_CONFIG_JSON must contain a JSON object") from None
+        runtime_config["FLOW_LIKE_CONFIG_JSON"] = json.dumps(parsed, separators=(",", ":"))
+    if any(key in sources for key in ("FLOW_LIKE_CONFIG_JSON", "FLOW_LIKE_CONFIG_SECRET_REF")):
+        runtime_config["FLOW_LIKE_CONFIG_FILE"] = ""
+    # Single-quoted dotenv values preserve dollar signs and JSON quotes as data.
+    values.update({key: "'" + value.replace("'", "\\'") + "'" if value else "" for key, value in runtime_config.items()})
     for key in ["POSTGRES_PASSWORD", "REDIS_API_PASSWORD", "REDIS_RUNTIME_PASSWORD",
                 "REDIS_SIGNALING_PASSWORD", "REDIS_SINK_PASSWORD", "REDIS_METRICS_PASSWORD",
                 "RUSTFS_ROOT_PASSWORD", "AWS_SECRET_ACCESS_KEY", "STS_ISSUER_SECRET_KEY",
@@ -68,7 +98,11 @@ def main():
             parser.error("URLs must be HTTP(S) origins without credentials, query, or path")
     if args.output.exists() or args.output.is_symlink():
         parser.error("Output already exists; refusing to replace deployment secrets")
-    data = generate((ROOT / ".env.example").read_text(), args.mode, args.web_origin.rstrip("/"), args.api_url.rstrip("/"), args.s3_endpoint.rstrip("/"))
+    runtime_config = {key: os.environ[key] for key in ("FLOW_LIKE_RUNTIME_CONFIG_FILE", "FLOW_LIKE_CONFIG_FILE", "FLOW_LIKE_CONFIG_JSON", "FLOW_LIKE_CONFIG_SECRET_REF") if key in os.environ}
+    try:
+        data = generate((ROOT / ".env.example").read_text(), args.mode, args.web_origin.rstrip("/"), args.api_url.rstrip("/"), args.s3_endpoint.rstrip("/"), runtime_config)
+    except ValueError as error:
+        parser.error(str(error))
     fd = os.open(args.output, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
     with os.fdopen(fd, "w") as target:
         target.write(data)

@@ -41,6 +41,7 @@ import {
 import type { ISettingsProfile } from "@flow-like/flow-like-ui/types";
 import { createId } from "@paralleldrive/cuid2";
 import { type IShortcut, appsDB } from "../apps-db";
+import { getPublicApiUrl } from "../public-config";
 import {
 	type WebBackendRef,
 	apiDelete,
@@ -479,8 +480,7 @@ export class WebUserState implements IUserState {
 		}
 
 		// No profiles exist - create a default one using upsert endpoint
-		const hubUrl =
-			process.env.NEXT_PUBLIC_API_URL || "https://api.flow-like.com";
+		const hubUrl = getPublicApiUrl();
 		const newProfileId = createId();
 
 		const newProfileResponse = await apiPost<UpsertProfileResponse>(

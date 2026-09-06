@@ -1,3 +1,5 @@
+#![recursion_limit = "256"]
+
 //! Web catalog nodes and connector APIs.
 
 extern crate flow_like_runtime as flow_like;

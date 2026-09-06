@@ -1,0 +1,261 @@
+name: Backend containers
+
+on:
+  push:
+    branches: [dev, main, alpha]
+    tags: ['v*']
+  pull_request:
+    paths:
+      - '.github/workflows/containers.yml'
+      - '.github/scripts/**'
+      - '.dockerignore'
+      - 'LICENSE'
+      - 'flow-like.config.json'
+      - 'packages/api/**'
+      - 'apps/backend/**/Dockerfile*'
+      - 'apps/backend/docker-compose/web/**'
+      - 'apps/backend/kubernetes/web/**'
+      - 'apps/backend/kubernetes/helm/**'
+      - 'apps/web/**'
+      - 'packages/ui/lib/public-web-config*'
+      - 'packages/ui/lib/api-url*'
+      - 'apps/backend/docker-compose/tests/build-context/**'
+  workflow_dispatch:
+    inputs:
+      cloud:
+        description: Image set to publish (APIs support runtime configuration)
+        type: choice
+        options: [all, aws, gcp, azure, docker-compose, kubernetes, self-hosted]
+        default: all
+
+permissions:
+  contents: read
+
+concurrency:
+  group: backend-containers-${{ github.ref }}-${{ inputs.cloud || 'all' }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  # Build records can expose intermediate source, build arguments, and logs.
+  DOCKER_BUILD_SUMMARY: 'false'
+  DOCKER_BUILD_RECORD_UPLOAD: 'false'
+
+jobs:
+  validate:
+    name: Validate container publication contracts
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.3.0
+        with:
+          persist-credentials: false
+      - name: Test CI helpers
+        run: python3 -m unittest discover -s .github/scripts/tests
+      - name: Test public web runtime configuration
+        run: python3 -B -m unittest discover -s apps/backend/docker-compose/web/tests
+      - uses: oven-sh/setup-bun@3d267786b128fe76c2f16a390aa2448b815359f3 # v2
+        with:
+          bun-version: 1.3.8
+      - name: Test browser configuration and API URL resolution
+        run: bun test packages/ui/lib/public-web-config.test.ts
+      - name: Verify build-context exclusions
+        working-directory: apps/backend/docker-compose/tests/build-context
+        run: go test ./...
+      - name: Reject literal credentials in compiled default config
+        run: |
+          python3 .github/scripts/container_publication.py check-config --path flow-like.config.json
+          python3 .github/scripts/container_publication.py check-config --path apps/backend/docker-compose/flow-like.config.example.json
+          python3 .github/scripts/container_publication.py check-config --path apps/backend/kubernetes/flow-like.config.example.json
+
+  matrix:
+    name: Select release images
+    needs: validate
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      images: ${{ steps.matrix.outputs.images }}
+      owner: ${{ steps.matrix.outputs.owner }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.3.0
+        with:
+          persist-credentials: false
+      - name: Restrict publication to release branches and tags
+        env:
+          SOURCE_REF: ${{ github.ref }}
+        run: |
+          case "$SOURCE_REF" in
+            refs/heads/dev|refs/heads/main|refs/heads/alpha|refs/tags/v*) ;;
+            *) echo 'Publication requires dev, main, alpha, or a v* tag.' >&2; exit 1 ;;
+          esac
+      - name: Generate native-platform matrix
+        id: matrix
+        env:
+          CLOUD: ${{ inputs.cloud || 'all' }}
+          OWNER: ${{ github.repository_owner }}
+        run: |
+          echo "images=$(python3 .github/scripts/container_images.py matrix --cloud "$CLOUD")" >> "$GITHUB_OUTPUT"
+          echo "owner=${OWNER,,}" >> "$GITHUB_OUTPUT"
+
+  build:
+    name: ${{ matrix.id }} (${{ matrix.platform }})
+    needs: matrix
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      fail-fast: false
+      max-parallel: 16
+      matrix: ${{ fromJSON(needs.matrix.outputs.images) }}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 240
+    env:
+      OWNER: ${{ needs.matrix.outputs.owner }}
+      TARGET: ${{ matrix.id }}
+      PLATFORM: ${{ matrix.platform }}
+      IMAGE_REPOSITORY: ghcr.io/${{ needs.matrix.outputs.owner }}/${{ matrix.image_suffix }}
+      TRIVY_IMAGE_SRC: docker
+      TRIVY_IMAGE_CONFIG_SCANNERS: secret
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.3.0
+        with:
+          persist-credentials: false
+      - name: Name this build
+        id: image
+        run: |
+          arch="${PLATFORM#linux/}"
+          tag="sha-${GITHUB_SHA}-${arch}-run-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          echo "ref=${IMAGE_REPOSITORY}:${tag}" >> "$GITHUB_OUTPUT"
+      - uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e # v4.3.0
+        id: buildx
+
+      # Opt in only after budgeting storage and reviewing Cargo Git sources.
+      # Layer cache alone does not preserve RUN --mount=type=cache contents.
+      - name: Restore Cargo cache mounts (optional)
+        if: vars.CONTAINER_CARGO_CACHE == 'true' && !contains(fromJSON('["signaling","migration","otel-collector","db-init","object-store-init","web"]'), matrix.workload)
+        id: cargo-cache
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: ${{ runner.temp }}/container-cargo-cache
+          key: container-cargo-v1-${{ matrix.id }}-${{ hashFiles(matrix.dockerfile, 'Cargo.lock', '.cargo/config.toml') }}-${{ github.sha }}
+          restore-keys: |
+            container-cargo-v1-${{ matrix.id }}-${{ hashFiles(matrix.dockerfile, 'Cargo.lock', '.cargo/config.toml') }}-
+      - name: Restore and later extract BuildKit cache mounts (optional)
+        if: vars.CONTAINER_CARGO_CACHE == 'true' && !contains(fromJSON('["signaling","migration","otel-collector","db-init","object-store-init","web"]'), matrix.workload)
+        uses: reproducible-containers/buildkit-cache-dance@5422eac04292c961a382e0f584ea0f03ad9da723 # v3.4.0
+        with:
+          builder: ${{ steps.buildx.outputs.name }}
+          dockerfile: ${{ matrix.dockerfile }}
+          cache-dir: ${{ runner.temp }}/container-cargo-cache
+          scratch-dir: ${{ runner.temp }}/container-cache-dance
+          skip-extraction: ${{ steps.cargo-cache.outputs.cache-hit }}
+
+      - name: Build once into the local image store
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
+        with:
+          context: ${{ matrix.context }}
+          file: ${{ matrix.dockerfile }}
+          platforms: ${{ matrix.platform }}
+          load: true
+          push: false
+          # Lambda accepts a single-architecture image, not an attestation index.
+          provenance: false
+          sbom: false
+          tags: ${{ steps.image.outputs.ref }}
+          build-args: |
+            CARGO_BUILD_JOBS=2
+            CRDB_CA_URL=
+          labels: |
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.licenses=BUSL-1.1
+          cache-from: type=gha,scope=container-v1-${{ matrix.id }}
+          # Never publish builder/source layers to a GHCR :buildcache package.
+          cache-to: type=gha,scope=container-v1-${{ matrix.id }},mode=max
+      - name: Inspect final filesystem and extract compiled text for scanning
+        env:
+          IMAGE: ${{ steps.image.outputs.ref }}
+        run: |
+          python3 .github/scripts/container_publication.py extract \
+            --image "$IMAGE" --platform "$PLATFORM" \
+            --output-dir "$RUNNER_TEMP/container-binary-strings"
+      - name: Scan image files, environment, and history for secrets
+        uses: aquasecurity/trivy-action@57a97c7e7821a5776cebc9bb87c984fa69cba8f1 # 0.35.0
+        with:
+          version: v0.69.3
+          scan-type: image
+          image-ref: ${{ steps.image.outputs.ref }}
+          scanners: secret
+          exit-code: '1'
+          format: json
+          output: ${{ runner.temp }}/container-image-secrets.json
+          cache: 'false'
+      - name: Scan printable text from compiled binaries for secrets
+        uses: aquasecurity/trivy-action@57a97c7e7821a5776cebc9bb87c984fa69cba8f1 # 0.35.0
+        with:
+          version: v0.69.3
+          scan-type: fs
+          scan-ref: ${{ runner.temp }}/container-binary-strings
+          scanners: secret
+          exit-code: '1'
+          format: json
+          output: ${{ runner.temp }}/container-binary-secrets.json
+          cache: 'false'
+      - name: Authenticate after publication checks pass
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Push the scanned image and record its registry digest
+        env:
+          IMAGE: ${{ steps.image.outputs.ref }}
+        run: |
+          docker push "$IMAGE"
+          docker buildx imagetools inspect "$IMAGE" --raw > "$RUNNER_TEMP/pushed-manifest.json"
+          # Verify the pushed single-image manifest points at the scanned config.
+          config="$(docker image inspect "$IMAGE" --format '{{.Id}}')"
+          jq -e --arg config "$config" \
+            '.config.digest == $config and (has("manifests") | not)' \
+            "$RUNNER_TEMP/pushed-manifest.json"
+          digest="$(docker buildx imagetools inspect "$IMAGE" --format '{{json .Manifest}}' | jq -er .digest)"
+          python3 .github/scripts/container_images.py record \
+            --target "$TARGET" --owner "$OWNER" --source-sha "$GITHUB_SHA" \
+            --digest "$digest" --run-id "$GITHUB_RUN_ID" \
+            --run-attempt "$GITHUB_RUN_ATTEMPT" --output "records/${TARGET}.json"
+      - name: Upload digest record only
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: container-record-${{ github.run_id }}-${{ github.run_attempt }}-${{ matrix.id }}
+          path: records/*.json
+          if-no-files-found: error
+          retention-days: 30
+
+  manifest:
+    name: Assemble complete digest manifest
+    needs: [matrix, build]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.3.0
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          pattern: container-record-${{ github.run_id }}-${{ github.run_attempt }}-*
+          path: records
+      - name: Validate and merge every required digest
+        env:
+          CLOUD: ${{ inputs.cloud || 'all' }}
+          OWNER: ${{ needs.matrix.outputs.owner }}
+        run: |
+          python3 .github/scripts/container_images.py manifest \
+            --cloud "$CLOUD" --owner "$OWNER" --source-sha "$GITHUB_SHA" \
+            --run-id "$GITHUB_RUN_ID" --run-attempt "$GITHUB_RUN_ATTEMPT" \
+            --records-dir records --output container-images.json
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: container-images-${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: container-images.json
+          if-no-files-found: error
+          retention-days: 90

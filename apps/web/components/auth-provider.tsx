@@ -18,6 +18,11 @@ import {
 import { useEffect, useState } from "react";
 import { AuthProvider, useAuth } from "react-oidc-context";
 import { get } from "../lib/api";
+import {
+	type PublicWebConfig,
+	getPublicApiUrl,
+	getPublicWebConfig,
+} from "../lib/public-config";
 import { currentRelativeUrl, saveReturnUrl } from "../lib/return-url";
 import { SignInRequired } from "./sign-in-required";
 import { WebBackend } from "./web-provider";
@@ -29,13 +34,15 @@ const PUBLIC_PATHS = [
 	"/store/explore",
 ];
 
-const DEFAULT_PROFILE: IProfile = {
-	name: "default",
-	bits: [],
-	created: new Date().toISOString(),
-	updated: new Date().toISOString(),
-	hub: process.env.NEXT_PUBLIC_API_URL || "https://api.flow-like.com",
-};
+function defaultProfile(): IProfile {
+	return {
+		name: "default",
+		bits: [],
+		created: new Date().toISOString(),
+		updated: new Date().toISOString(),
+		hub: getPublicApiUrl(),
+	};
+}
 
 export class OIDCTokenProvider implements TokenProvider {
 	private readonly provider;
@@ -63,18 +70,25 @@ export function WebAuthProvider({
 		useState<UserManagerSettings>();
 	const [userManager, setUserManager] = useState<UserManager>();
 	const [loadingProgress, setLoadingProgress] = useState(10);
+	const [configurationError, setConfigurationError] = useState(false);
 
 	useEffect(() => {
 		(async () => {
+			let publicConfig: PublicWebConfig;
+			try {
+				publicConfig = getPublicWebConfig();
+			} catch {
+				setConfigurationError(true);
+				return;
+			}
 			setLoadingProgress(30);
-			const response = await get<any>(DEFAULT_PROFILE, "auth/openid");
+			const response = await get<any>(defaultProfile(), "auth/openid");
 			if (response) {
 				setLoadingProgress(60);
-				if (process.env.NEXT_PUBLIC_REDIRECT_URL)
-					response.redirect_uri = process.env.NEXT_PUBLIC_REDIRECT_URL;
-				if (process.env.NEXT_PUBLIC_REDIRECT_LOGOUT_URL)
-					response.post_logout_redirect_uri =
-						process.env.NEXT_PUBLIC_REDIRECT_LOGOUT_URL;
+				if (publicConfig.redirectUrl)
+					response.redirect_uri = publicConfig.redirectUrl;
+				if (publicConfig.logoutUrl)
+					response.post_logout_redirect_uri = publicConfig.logoutUrl;
 				const store = new WebStorageStateStore({
 					store: localStorage,
 				});
@@ -105,6 +119,14 @@ export function WebAuthProvider({
 			}
 		})();
 	}, []);
+
+	if (configurationError) {
+		return (
+			<p role="alert">
+				Web configuration is unavailable. Contact your administrator.
+			</p>
+		);
+	}
 
 	if (!openIdAuthConfig) {
 		return <LoadingScreen progress={loadingProgress} />;
@@ -254,7 +276,7 @@ function AuthInner({ children }: Readonly<{ children: React.ReactNode }>) {
 			} catch (error) {
 				console.error("Failed to fetch profile:", error);
 				if (backend instanceof WebBackend) {
-					backend.pushProfile(DEFAULT_PROFILE);
+					backend.pushProfile(defaultProfile());
 					setProfileLoaded(true);
 				}
 			}

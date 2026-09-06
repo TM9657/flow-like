@@ -1,4 +1,5 @@
 import type { IProfile } from "../types";
+import { getPublicApiUrl } from "./public-web-config";
 
 /**
  * Resolve the API origin (scheme + host, no trailing slash, no `/api/v1`)
@@ -6,11 +7,19 @@ import type { IProfile } from "../types";
  * to construct a URL served by the backend — API calls, sink triggers,
  * health checks, etc.
  *
- * Precedence: NEXT_PUBLIC_API_URL env override → profile.hub → hardcoded
+ * Container builds require public runtime configuration. Otherwise precedence:
+ * NEXT_PUBLIC_API_URL env override → profile.hub → hardcoded
  * default. `profile.secure` decides the protocol when the value is a bare
  * host (no scheme).
  */
 export function getApiOrigin(profile?: Partial<IProfile> | null): string {
+	if (
+		typeof process !== "undefined" &&
+		typeof process.env !== "undefined" &&
+		process.env.NEXT_PUBLIC_FLOW_LIKE_RUNTIME_CONFIG === "1"
+	) {
+		return getPublicApiUrl();
+	}
 	const envOverride =
 		typeof process !== "undefined" ? process.env?.NEXT_PUBLIC_API_URL : null;
 	let raw =

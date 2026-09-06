@@ -549,7 +549,7 @@ pub(crate) async fn maybe_refresh_oauth_tokens(
         };
 
         match crate::routes::oauth::refresh_oauth_token_for_provider(
-            &state.secrets,
+            state,
             &provider_id,
             &refresh_token,
         )

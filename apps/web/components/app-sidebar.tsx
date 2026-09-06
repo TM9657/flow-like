@@ -88,6 +88,7 @@ import {
 import { useTheme } from "next-themes";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { getPublicApiUrl } from "../lib/public-config";
 import {
 	type ComponentType,
 	useCallback,
@@ -409,13 +410,10 @@ function Profiles() {
 				throw new Error("Sign in to create a profile.");
 			pendingProfileId.current ??= createId();
 			const newProfileId = pendingProfileId.current;
-			const hubUrl =
-				currentProfile.data.hub_profile.hub ||
-				process.env.NEXT_PUBLIC_API_URL ||
-				"https://api.flow-like.com";
+			const hubUrl = currentProfile.data.hub_profile.hub || getPublicApiUrl();
 
 			const response = await fetch(
-				`${process.env.NEXT_PUBLIC_API_URL || "https://api.flow-like.com"}/api/v1/profile/${newProfileId}`,
+				`${getPublicApiUrl()}/api/v1/profile/${newProfileId}`,
 				{
 					method: "POST",
 					headers: {

@@ -18,8 +18,10 @@ RUN --mount=type=cache,target=/cargo-home,id=cargo-home,sharing=shared \
     CARGO_HOME=/cargo-home cargo build --locked --release --package k8s-sink-trigger \
     && cp /app/target/release/k8s-sink-trigger /tmp/k8s-sink-trigger
 
-# Runtime stage - distroless for minimal attack surface
-FROM gcr.io/distroless/static:nonroot
+# The GNU Rust target needs glibc and its loader from the matching Debian runtime.
+FROM gcr.io/distroless/cc-debian12:nonroot@sha256:9dac0a79194e45a7da0158a9c6da57b217585af0786db3845d1f0ec1a0dd182f
+
+COPY LICENSE /usr/share/licenses/flow-like/LICENSE
 
 COPY --from=builder /tmp/k8s-sink-trigger /sink-trigger
 

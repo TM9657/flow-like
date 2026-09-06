@@ -13,30 +13,31 @@ COPY . .
 
 ENV CARGO_BUILD_JOBS=2
 
-# The API embeds reviewed deployment and OAuth-provider metadata at compile time.
-# Supply that input as a BuildKit secret so it never enters the Docker context.
-# BuildKit deliberately excludes secret contents from cache keys, so callers
-# also pass the non-secret SHA-256 digest. Referencing and verifying it here
-# prevents a changed config from reusing a binary compiled with stale metadata.
-# The copy placed at /app/flow-like.config.json (over the tracked public
-# default) is removed in this same RUN so no standalone config file persists in
-# a layer. Its reviewed non-secret contents are intentionally embedded in the
-# compiled API binary; never put client secrets in this input.
+# Shared images embed the reviewed public default. Deployments replace it at
+# startup with FLOW_LIKE_CONFIG_JSON, FLOW_LIKE_CONFIG_FILE, or
+# FLOW_LIKE_CONFIG_SECRET_REF. No deployment config is required to build.
+# Preserve the optional legacy custom default: its verified hash participates
+# in the cache key, and its contents remain visible in the compiled binary.
+# Never provide client secrets as a compile-time input.
 ARG FLOW_LIKE_CONFIG_SHA256
-RUN --mount=type=secret,id=flow_like_config,required=true,target=/tmp/flow-like.gcp.config.json \
+RUN --mount=type=secret,id=flow_like_config,target=/tmp/flow-like.gcp.config.json \
     --mount=type=cache,target=/cargo-home,id=cargo-home,sharing=shared \
     --mount=type=cache,target=/app/target,id=cargo-target-gcp-api,sharing=locked \
-    test -s /tmp/flow-like.gcp.config.json \
-    && test -n "$FLOW_LIKE_CONFIG_SHA256" \
-    && printf '%s  %s\n' "$FLOW_LIKE_CONFIG_SHA256" /tmp/flow-like.gcp.config.json | sha256sum --check --status - \
-    && grep -Eq '"provider"[[:space:]]*:[[:space:]]*"gcp"' /tmp/flow-like.gcp.config.json \
-    && cp /tmp/flow-like.gcp.config.json /app/flow-like.config.json \
+    if [ -e /tmp/flow-like.gcp.config.json ]; then \
+        test -s /tmp/flow-like.gcp.config.json \
+        && test -n "$FLOW_LIKE_CONFIG_SHA256" \
+        && printf '%s  %s\n' "$FLOW_LIKE_CONFIG_SHA256" /tmp/flow-like.gcp.config.json | sha256sum --check --status - \
+        && grep -Eq '"provider"[[:space:]]*:[[:space:]]*"gcp"' /tmp/flow-like.gcp.config.json \
+        && cp /tmp/flow-like.gcp.config.json /app/flow-like.config.json; \
+    else test -z "$FLOW_LIKE_CONFIG_SHA256"; fi \
     && CARGO_HOME=/cargo-home cargo build --locked --release --package gcp-api \
     && strip -s /app/target/release/gcp-api \
     && cp /app/target/release/gcp-api /tmp/gcp-api \
     && rm /app/flow-like.config.json
 
 FROM debian:bookworm-slim AS runtime
+
+COPY LICENSE /usr/share/licenses/flow-like/LICENSE
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \

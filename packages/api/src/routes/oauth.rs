@@ -12,6 +12,7 @@ use flow_like_secrets::{ExposeSecret, SecretRef, SecretStore};
 use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
 
+use crate::runtime_config::OAuthProviderConfig;
 use crate::state::AppState;
 
 // Every handler here skips its `request` argument: the bodies carry live
@@ -21,8 +22,65 @@ use crate::state::AppState;
 // the safe correlation field and stays recorded.
 const OAUTH_REQUEST_TIMEOUT: Duration = Duration::from_secs(30);
 
-/// OAuth configs loaded at build time (without secrets)
-static OAUTH_CONFIG: &str = include_str!(concat!(env!("OUT_DIR"), "/oauth_config.json"));
+#[cfg(test)]
+mod runtime_config_tests {
+    use super::*;
+    use flow_like_secrets::{FileProviderConfig, ProviderConfig, SecretStoreConfig};
+
+    #[tokio::test]
+    async fn proxy_and_sink_provider_resolver_uses_runtime_config_and_keeps_secrets_private() {
+        let directory = tempfile::tempdir().unwrap();
+        std::fs::write(
+            directory.path().join("private-reference-marker"),
+            "private-secret-marker",
+        )
+        .unwrap();
+        let secrets = SecretStore::new(
+            SecretStoreConfig::default()
+                .with_allow_env_override(false)
+                .with_provider(ProviderConfig::File(FileProviderConfig {
+                    root_path: directory.path().into(),
+                    trim_trailing_newline: false,
+                })),
+        )
+        .unwrap();
+        let mut document: serde_json::Value = serde_json::from_str(include_str!(
+            "../../../../apps/backend/kubernetes/flow-like.config.example.json"
+        ))
+        .unwrap();
+        document["oauth_providers"] = serde_json::json!({"runtime-only": {
+            "name":"Runtime provider", "client_id":"runtime-client", "client_secret_env":"private-reference-marker",
+            "auth_url":"https://runtime-provider.example.test/auth", "token_url":"https://runtime-provider.example.test/token",
+            "auth_method":"basic_json", "revoke_url":"https://runtime-provider.example.test/revoke"
+        }});
+        let effective =
+            crate::runtime_config::EffectiveConfig::parse(&document.to_string()).unwrap();
+        let providers = get_oauth_configs(&secrets, &effective.oauth_providers).await;
+        assert_eq!(providers.len(), 1);
+        let provider = &providers["runtime-only"];
+        assert_eq!(provider.client_id.as_deref(), Some("runtime-client"));
+        assert_eq!(
+            provider.token_url,
+            "https://runtime-provider.example.test/token"
+        );
+        assert_eq!(provider.auth_method, AuthMethod::BasicJson);
+        assert!(provider.client_secret.as_deref() == Some("private-secret-marker"));
+        assert!(
+            effective.hub.oauth_providers["runtime-only"]
+                .client_secret
+                .is_none()
+        );
+        let public =
+            crate::public_hub_value(serde_json::to_value(&effective.hub).unwrap()).to_string();
+        assert!(!public.contains("private-secret-marker"));
+        assert!(!public.contains("private-reference-marker"));
+        assert!(
+            get_oauth_configs(&secrets, &HashMap::new())
+                .await
+                .is_empty()
+        );
+    }
+}
 
 /// How the provider expects credentials on token requests
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
@@ -43,20 +101,6 @@ impl AuthMethod {
     }
 }
 
-/// Config as stored in flow-like.config.json (without resolved secrets)
-#[derive(Debug, Clone, Deserialize)]
-struct OAuthProviderConfig {
-    #[serde(default)]
-    client_id: Option<String>,
-    /// Environment variable name containing the client secret
-    client_secret_env: Option<String>,
-    token_url: String,
-    revoke_url: Option<String>,
-    userinfo_url: Option<String>,
-    device_auth_url: Option<String>,
-    auth_method: Option<String>,
-}
-
 /// Resolved config with secrets loaded from env at runtime
 #[derive(Debug, Clone)]
 struct ResolvedOAuthConfig {
@@ -69,10 +113,10 @@ struct ResolvedOAuthConfig {
     auth_method: AuthMethod,
 }
 
-async fn get_oauth_configs(secrets: &SecretStore) -> HashMap<String, ResolvedOAuthConfig> {
-    let raw_configs: HashMap<String, OAuthProviderConfig> =
-        flow_like_types::json::from_str(OAUTH_CONFIG).unwrap_or_default();
-
+async fn get_oauth_configs(
+    secrets: &SecretStore,
+    raw_configs: &HashMap<String, OAuthProviderConfig>,
+) -> HashMap<String, ResolvedOAuthConfig> {
     let mut resolved = HashMap::with_capacity(raw_configs.len());
     for (provider_id, cfg) in raw_configs {
         let client_secret = if let Some(env_name) = &cfg.client_secret_env {
@@ -89,14 +133,14 @@ async fn get_oauth_configs(secrets: &SecretStore) -> HashMap<String, ResolvedOAu
         let auth_method = AuthMethod::from_str_opt(cfg.auth_method.as_deref());
 
         resolved.insert(
-            provider_id,
+            provider_id.clone(),
             ResolvedOAuthConfig {
-                client_id: cfg.client_id,
+                client_id: cfg.client_id.clone(),
                 client_secret,
-                token_url: cfg.token_url,
-                revoke_url: cfg.revoke_url,
-                userinfo_url: cfg.userinfo_url,
-                device_auth_url: cfg.device_auth_url,
+                token_url: cfg.token_url.clone(),
+                revoke_url: cfg.revoke_url.clone(),
+                userinfo_url: cfg.userinfo_url.clone(),
+                device_auth_url: cfg.device_auth_url.clone(),
                 auth_method,
             },
         );
@@ -367,11 +411,11 @@ fn build_oauth_client() -> Result<flow_like_types::reqwest::Client, OAuthProxyEr
 /// scheduled executions. Reuses the same provider config and HTTP logic as
 /// the `POST /oauth/refresh/{provider_id}` endpoint.
 pub async fn refresh_oauth_token_for_provider(
-    secrets: &SecretStore,
+    state: &crate::state::State,
     provider_id: &str,
     refresh_token: &str,
 ) -> Result<TokenResponse, String> {
-    let configs = get_oauth_configs(secrets).await;
+    let configs = get_oauth_configs(&state.secrets, &state.oauth_providers).await;
     let provider_config = configs
         .get(provider_id)
         .ok_or_else(|| format!("OAuth provider '{}' not found in config", provider_id))?;
@@ -472,7 +516,7 @@ pub async fn token_exchange(
     Path(provider_id): Path<String>,
     Json(request): Json<TokenExchangeRequest>,
 ) -> Result<Json<TokenResponse>, OAuthProxyError> {
-    let configs = get_oauth_configs(&state.secrets).await;
+    let configs = get_oauth_configs(&state.secrets, &state.oauth_providers).await;
     let provider_config = require_provider_config(&provider_id, &configs)?;
     let client_id = require_client_id(&provider_id, provider_config)?;
 
@@ -573,7 +617,7 @@ pub async fn token_refresh(
     Path(provider_id): Path<String>,
     Json(request): Json<TokenRefreshRequest>,
 ) -> Result<Json<TokenResponse>, OAuthProxyError> {
-    let configs = get_oauth_configs(&state.secrets).await;
+    let configs = get_oauth_configs(&state.secrets, &state.oauth_providers).await;
     let provider_config = require_provider_config(&provider_id, &configs)?;
     let client_id = require_client_id(&provider_id, provider_config)?;
 
@@ -648,7 +692,7 @@ pub async fn device_start(
     Path(provider_id): Path<String>,
     Json(request): Json<DeviceStartRequest>,
 ) -> Result<Json<DeviceStartResponse>, OAuthProxyError> {
-    let configs = get_oauth_configs(&state.secrets).await;
+    let configs = get_oauth_configs(&state.secrets, &state.oauth_providers).await;
     let provider_config = require_provider_config(&provider_id, &configs)?;
     let device_auth_url = provider_config.device_auth_url.as_ref().ok_or_else(|| {
         OAuthProxyError::new(
@@ -717,7 +761,7 @@ pub async fn device_poll(
     Path(provider_id): Path<String>,
     Json(request): Json<DevicePollRequest>,
 ) -> Result<Response, OAuthProxyError> {
-    let configs = get_oauth_configs(&state.secrets).await;
+    let configs = get_oauth_configs(&state.secrets, &state.oauth_providers).await;
     let provider_config = require_provider_config(&provider_id, &configs)?;
     let client_id = require_client_id(&provider_id, provider_config)?;
 
@@ -760,7 +804,7 @@ pub async fn userinfo(
     Path(provider_id): Path<String>,
     Json(request): Json<UserInfoRequest>,
 ) -> Result<Response, OAuthProxyError> {
-    let configs = get_oauth_configs(&state.secrets).await;
+    let configs = get_oauth_configs(&state.secrets, &state.oauth_providers).await;
     let provider_config = require_provider_config(&provider_id, &configs)?;
     let userinfo_url = provider_config.userinfo_url.as_ref().ok_or_else(|| {
         OAuthProxyError::new(
@@ -809,7 +853,7 @@ pub async fn revoke_token(
     Path(provider_id): Path<String>,
     Json(request): Json<RevokeTokenRequest>,
 ) -> Result<StatusCode, OAuthProxyError> {
-    let configs = get_oauth_configs(&state.secrets).await;
+    let configs = get_oauth_configs(&state.secrets, &state.oauth_providers).await;
     let provider_config = require_provider_config(&provider_id, &configs)?;
     let revoke_url = provider_config.revoke_url.as_ref().ok_or_else(|| {
         OAuthProxyError::new(

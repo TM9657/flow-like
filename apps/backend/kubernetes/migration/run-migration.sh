@@ -24,5 +24,5 @@ case "${DATABASE_PROVIDER:-postgresql}" in
 esac
 
 bun prisma/pre-push.ts
-bunx prisma db push --schema="$schema" --accept-data-loss
+bun --no-install node_modules/prisma/build/index.js db push --schema="$schema" --accept-data-loss
 echo "Database schema applied"

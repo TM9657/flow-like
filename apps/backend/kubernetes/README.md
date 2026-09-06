@@ -37,7 +37,7 @@ export PUBLIC_WEB_URL=https://app.flow-like.example.com
 export S3_PUBLIC_ENDPOINT=https://s3.flow-like.example.com
 cp flow-like.config.example.json ../../../flow-like.kubernetes.config.json
 # Edit that file: OIDC issuer/client/JWKS, domain, web origin and signaling URL.
-export FLOW_LIKE_CONFIG=flow-like.kubernetes.config.json
+export FLOW_LIKE_CONFIG_FILE=../../../flow-like.kubernetes.config.json
 # For production, export DATABASE_URL for the external database as well.
 ./scripts/setup-config.sh
 REGISTRY=registry.example.com/flow-like TAG=release-2026-09 PUSH=true ./scripts/build-images.sh
@@ -50,12 +50,49 @@ files, so an upgrade cannot accidentally replace credentials. Back up the secret
 with the database and storage. Values and credentials from environment variables
 are read as data; the script does not source shell files.
 
-`FLOW_LIKE_CONFIG` is relative to the repository root and is embedded into the API
-binary at build time. Use it for public hub and OIDC settings; keep credentials in
-Secrets. Changing Helm runtime values does not change the embedded hub. Rebuild
-the API after changing that file. The default is the Kubernetes self-hosting
-example, so a build does not inherit the repository's hosted-service configuration.
-Generated secret files are excluded from every root Docker build context.
+Setup reads `FLOW_LIKE_CONFIG_FILE` as a host-side path and stores the JSON in a
+separate `hub-config` Kubernetes Secret in its private output. Generated Helm
+values reference that Secret, which is mounted read-only at
+`/etc/flow-like/flow-like.config.json` in the API. No cluster resources are created
+until you apply the generated files. The old repository-relative `FLOW_LIKE_CONFIG`
+setup input remains supported; `FLOW_LIKE_RUNTIME_CONFIG_FILE` is also accepted.
+With no input, setup uses the Kubernetes self-hosting example. Review its OIDC
+placeholders before deployment. Generated secret files are excluded from every
+root Docker build context.
+
+The [upstream publishing workflow](../CONTAINERS.md#kubernetes-and-docker-compose)
+builds Kubernetes and shared helper images for AMD64 and ARM64. Published API
+images include an example fallback and read your hub/OIDC configuration at startup,
+so use the same prebuilt image across environments. The web image reads public
+URLs at startup: `web.runtimeConfig.apiUrl` defaults to `api.publicUrl`; optional
+`redirectUrl` and `logoutUrl` default to the browser origin's `/callback` and `/`.
+Changing those Helm values rolls out the same prebuilt web image without compiling
+the frontend again. No credentials belong in those public settings.
+
+`api.runtimeConfig` selects at most one API configuration source:
+
+| Value | Runtime source |
+| --- | --- |
+| `existingSecret` | Read-only Secret volume; JSON key defaults to `flow-like.config.json` |
+| `existingConfigMap` | Read-only ConfigMap volume for public settings; uses the same `key` setting |
+| `secretKeyRef.name` and `.key` | Raw JSON in `FLOW_LIKE_CONFIG_JSON`, taken from an existing Secret key |
+| `secretRef` | `FLOW_LIKE_CONFIG_SECRET_REF`, resolved by the API's configured SecretStore |
+
+Create or update those resources through your existing secret-management process.
+Do not put credential-bearing JSON in Helm values or bake it into an image.
+`setup-config.py` accepts `FLOW_LIKE_CONFIG_JSON` as an alternative to a file and
+keeps it in the generated Secret, outside the values file. For
+`FLOW_LIKE_CONFIG_SECRET_REF`, setup writes only the reference; make its target
+available to the API's SecretStore separately. Do not duplicate runtime config
+variables through `api.env` or `api.envFrom`.
+
+The API reads its config once. After changing a mounted Secret/ConfigMap or a
+SecretStore value, restart the API Deployment; an updated external resource does
+not automatically roll out Pods. Changing the source reference in Helm does roll
+out Pods. More than one nonempty runtime source fails startup. Empty source values
+retain the embedded public fallback for existing custom images. For an explicit
+custom fallback build, set repository-relative `FLOW_LIKE_BUILD_CONFIG` when
+running `build-images.sh`; never use a file containing deployment credentials.
 
 The build script builds the API, executor, manager, queue bridge, compiler,
 signaling, migration, RustFS initializer and web images. It writes

@@ -4,6 +4,7 @@ import { i18n as i18next, useTranslation } from "@flow-like/locales";
 import { ExternalLink, Play } from "lucide-react";
 import { useTheme } from "next-themes";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { getApiOrigin } from "../../../lib/api-url";
 import { isTauri } from "../../../lib/platform";
 import { cn } from "../../../lib/utils";
 
@@ -854,8 +855,7 @@ function useOgMetadata(url: string): { data: OgData | null; loading: boolean } {
 					if (cancelled) return;
 					ogData = parseOgFromHtml(html);
 				} else {
-					const apiBase =
-						process.env.NEXT_PUBLIC_API_URL ?? "https://api.flow-like.com";
+					const apiBase = getApiOrigin();
 					const res = await fetch(
 						`${apiBase}/api/v1/og?url=${encodeURIComponent(url)}`,
 						{ signal: controller.signal },
