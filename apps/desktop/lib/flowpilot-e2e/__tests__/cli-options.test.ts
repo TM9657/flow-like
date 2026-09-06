@@ -1,8 +1,19 @@
 import { describe, expect, test } from "vitest";
 
-import { parseArgs } from "../../../scripts/flowpilot-e2e";
+import { constantTimeEqual, parseArgs } from "../../../scripts/flowpilot-e2e";
 
 describe("FlowPilot E2E CLI options", () => {
+	test("compares callback capabilities without throwing on length mismatch", () => {
+		expect(constantTimeEqual("/callback-secret", "/callback-secret")).toBe(
+			true,
+		);
+		expect(constantTimeEqual("/callback-secrex", "/callback-secret")).toBe(
+			false,
+		);
+		expect(() => constantTimeEqual("/short", "/callback-secret")).not.toThrow();
+		expect(constantTimeEqual("/short", "/callback-secret")).toBe(false);
+	});
+
 	test("parses an ordered explicit subset and tight-loop controls", () => {
 		expect(
 			parseArgs([
@@ -32,6 +43,16 @@ describe("FlowPilot E2E CLI options", () => {
 		expect(parseArgs(["--model=gpt-5.6-sol"])).toMatchObject({
 			modelKey: "sol",
 		});
+	});
+
+	test("keeps structural as the default and accepts an explicit behavioral tier", () => {
+		expect(parseArgs([])).toMatchObject({ tier: "structural" });
+		expect(parseArgs(["--tier", "behavioral"])).toMatchObject({
+			tier: "behavioral",
+		});
+		expect(() => parseArgs(["--tier", "smoke"])).toThrow(
+			"Unknown FlowPilot E2E tier",
+		);
 	});
 
 	test("runs cases in parallel only when fail-fast is not requested", () => {

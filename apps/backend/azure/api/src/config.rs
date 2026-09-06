@@ -155,6 +155,7 @@ impl Config {
                 IF_NONE_MATCH,
                 HeaderName::from_static("x-api-key"),
                 HeaderName::from_static("x-flow-like-app-id"),
+                HeaderName::from_static("x-flow-like-board-format"),
                 HeaderName::from_static("x-flow-like-event-authorization"),
                 HeaderName::from_static("x-request-id"),
                 HeaderName::from_static("idempotency-key"),

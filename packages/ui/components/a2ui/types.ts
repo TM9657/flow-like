@@ -1549,10 +1549,21 @@ export interface GeoMapRouteDef {
 
 export interface GeoMapViewport {
 	center: GeoCoordinate;
-	zoom: number;
+	zoom?: number;
 	bearing?: number;
 	pitch?: number;
 }
+
+/** Bound map values accept legacy definitions and native geometry objects. */
+export type GeoMapMarkerInput =
+	| GeoMapMarkerDef
+	| GeoJSON.Point
+	| GeoJSON.MultiPoint
+	| GeoJSON.GeometryCollection;
+export type GeoMapRouteInput =
+	| GeoMapRouteDef
+	| GeoRouteResult
+	| GeoJSON.Geometry;
 
 export interface GeoMapComponent extends ComponentBase {
 	type: "geoMap";

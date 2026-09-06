@@ -111,6 +111,9 @@ pub async fn prerun_board(
     let can_execute_locally = permission.has_permission(RolePermissions::ReadBoards);
     let version = query.version.as_ref().and_then(|v| parse_version(v));
 
+    state
+        .master_board_shared(&app_id, &board_id, &state, version)
+        .await?;
     let manifest = load_prerun_manifest(&state, &app_id, &board_id, version).await?;
 
     Ok(Json(build_response(

@@ -1,0 +1,33 @@
+[package]
+name = "flow-like-catalog-media-audio"
+version = "0.1.0"
+edition = "2024"
+
+[features]
+default = []
+local-ml = ["flow-like-catalog-core/local-ml"]
+execute = ["flow-like-catalog-core/execute"]
+local-tts = ["flow-like-runtime/local-tts"]
+local-tts-metal = ["local-tts", "flow-like-runtime/local-tts-metal"]
+local-tts-cuda = ["local-tts", "flow-like-runtime/local-tts-cuda"]
+local-tts-accelerate = ["local-tts", "flow-like-runtime/local-tts-accelerate"]
+local-stt = ["flow-like-runtime/local-stt"]
+local-stt-metal = ["local-stt", "flow-like-runtime/local-stt-metal"]
+local-stt-cuda = ["local-stt", "flow-like-runtime/local-stt-cuda"]
+local-stt-accelerate = ["local-stt", "flow-like-runtime/local-stt-accelerate"]
+
+[dependencies]
+flow-like-catalog-core.workspace = true
+flow-like-runtime = { workspace = true, features = ["flow-metadata"] }
+flow-like-types.workspace = true
+flow-like-model-provider.workspace = true
+google-cloud-auth.workspace = true
+schemars.workspace = true
+bytes.workspace = true
+serde = { workspace = true, features = ["derive", "rc"] }
+async-trait.workspace = true
+http = "1.4.0"
+flow-like-catalog-media-support.workspace = true
+
+[build-dependencies]
+flow-like-catalog-build-helper.workspace = true

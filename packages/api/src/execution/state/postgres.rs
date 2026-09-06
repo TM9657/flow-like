@@ -11,6 +11,7 @@
 use super::types::*;
 use async_trait::async_trait;
 use chrono::{DateTime, TimeZone, Utc};
+use flow_like_storage::object_store::ObjectStoreExt;
 use flow_like_storage::{
     files::store::FlowLikeStore,
     object_store::{Error as ObjectStoreError, ObjectStore, path::Path},

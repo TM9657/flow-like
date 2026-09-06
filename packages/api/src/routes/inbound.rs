@@ -16,7 +16,8 @@
 //! body-size and error-reporting layers in `lib.rs` (without the JWT
 //! middleware).
 
-use std::{collections::HashMap, convert::Infallible, str::FromStr, sync::Arc, time::Duration};
+use flow_like_storage::object_store::ObjectStoreExt;
+use std::{collections::HashMap, convert::Infallible, str::FromStr, time::Duration};
 
 use axum::{
     Json, Router,
@@ -2321,13 +2322,20 @@ async fn dispatch_event_collect(
         .await
         .map_err(|e| ApiError::internal_error(flow_like_types::anyhow!(e)))?;
 
-    let db = Some(Arc::new(state.db.clone()));
+    crate::audit::record_execution_dispatch(state, &run_id, "inbound").await?;
+
+    let db = Some(crate::audit::ExecutionAuditContext::from(state));
     match state.dispatcher.backend() {
         ExecutionBackend::LambdaStream => {
-            let (_dispatch_response, byte_stream) = state
-                .dispatcher
-                .dispatch_streaming(request)
-                .await
+            let (_dispatch_response, byte_stream) =
+                match state.dispatcher.dispatch_streaming(request).await {
+                    Ok(response) => Ok(response),
+                    Err(error) => {
+                        crate::audit::record_execution_dispatch_failure(state, &run_id, "inbound")
+                            .await?;
+                        Err(error)
+                    }
+                }
                 .map_err(|e| ApiError::internal_error(flow_like_types::anyhow!(e)))?;
             collect_generic_result_bytes(byte_stream, run_id, db, INBOUND_RESULT_TIMEOUT)
                 .await
@@ -2338,10 +2346,15 @@ async fn dispatch_event_collect(
                 })
         }
         _ => {
-            let (_dispatch_response, executor_response) = state
-                .dispatcher
-                .dispatch_http_sse(request)
-                .await
+            let (_dispatch_response, executor_response) =
+                match state.dispatcher.dispatch_http_sse(request).await {
+                    Ok(response) => Ok(response),
+                    Err(error) => {
+                        crate::audit::record_execution_dispatch_failure(state, &run_id, "inbound")
+                            .await?;
+                        Err(error)
+                    }
+                }
                 .map_err(|e| ApiError::internal_error(flow_like_types::anyhow!(e)))?;
             collect_generic_result(executor_response, run_id, db, INBOUND_RESULT_TIMEOUT)
                 .await
@@ -3518,6 +3531,9 @@ fn pin_schema(
         VariableType::Integer | VariableType::Byte => json!({"type": "integer"}),
         VariableType::Float => json!({"type": "number"}),
         VariableType::Boolean => json!({"type": "boolean"}),
+        VariableType::Geometry => flow_like::flow::variable::geometry_kind_from_schema(schema)
+            .map(flow_like_types::geometry::geometry_json_schema)
+            .unwrap_or_else(|_| json!(false)),
         VariableType::Struct | VariableType::Generic => schema
             .and_then(|schema| serde_json::from_str::<Value>(schema).ok())
             .unwrap_or_else(|| json!({"type": "object"})),

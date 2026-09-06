@@ -1,0 +1,16 @@
+[package]
+name = "flow-like-lancedb-legacy-generator"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+arrow-array = "=57.2.0"
+arrow-schema = "=57.2.0"
+lancedb = { version = "=0.27.2", default-features = false }
+lance = { version = "=4.0.0", default-features = false }
+lance-file = { version = "=4.0.0", default-features = false }
+tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
+
+[profile.dev]
+debug = 0
+incremental = false

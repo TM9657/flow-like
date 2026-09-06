@@ -2,6 +2,7 @@
 
 import { i18n as i18next, useTranslation } from "@flow-like/locales";
 import { SigmaContainer, useRegisterEvents, useSigma } from "@react-sigma/core";
+import { applyNodeCaptionLabels } from "./graph-user-caption";
 import "@react-sigma/core/lib/style.css";
 import {
 	DEFAULT_EDGE_CURVATURE,
@@ -29,6 +30,7 @@ import {
 	startTransition,
 	useCallback,
 	useEffect,
+	useLayoutEffect,
 	useMemo,
 	useRef,
 	useState,
@@ -48,14 +50,19 @@ import type { ClusterModel } from "./graph-clusters";
 import {
 	type ConnectivityPartition,
 	DEFAULT_NODE_SIZE,
+	GRAPH_LABEL_LEFT_INSET,
+	GRAPH_LABEL_RIGHT_INSET,
 	type GraphLayoutMode,
 	type LayoutPosition as GraphPosition,
+	type ViewportDimensions,
 	applyClusterLayout,
 	computeLabelExtents,
 	computeSeedSpread,
+	computeViewportNodeSizeCap,
 	createAnchoredPosition,
 	createDeterministicPosition,
 	defaultRelaxIterations,
+	expandGraphBoundsByViewportInsets,
 	getLayoutBounds,
 	packNodesOnGrid,
 	partitionByConnectivity,
@@ -131,6 +138,8 @@ export interface GraphCanvasApi {
 
 export interface GraphCanvasProps {
 	data: SubgraphResult | null;
+	/** Resolved display labels, kept separate from stored node data and layout inputs. */
+	nodeLabels?: ReadonlyMap<string, string>;
 	loading?: boolean;
 	selectedNodeId?: string | null;
 	selectedEdgeKey?: string | null;
@@ -229,6 +238,11 @@ function computeColumnRanges(
 const NODE_SIZE_MIN = 5;
 const NODE_SIZE_MAX = 18;
 
+function toValidNodeSize(value: unknown, fallback: number): number {
+	const numeric = toFiniteNumber(value);
+	return Math.max(NODE_SIZE_MIN, numeric ?? fallback);
+}
+
 function styleToNodeSize(
 	style?: LabelStyle,
 	degree?: number,
@@ -238,15 +252,15 @@ function styleToNodeSize(
 	if (!style?.size) return DEFAULT_NODE_SIZE;
 	const { mode } = style.size;
 	if (mode === "fixed")
-		return Math.max(NODE_SIZE_MIN, style.size.value ?? DEFAULT_NODE_SIZE);
+		return toValidNodeSize(style.size.value, DEFAULT_NODE_SIZE);
 	if (mode === "by-degree" && degree !== undefined) {
-		const min = style.size.min ?? NODE_SIZE_MIN;
-		const max = style.size.max ?? NODE_SIZE_MAX;
+		const min = toValidNodeSize(style.size.min, NODE_SIZE_MIN);
+		const max = Math.max(min, toValidNodeSize(style.size.max, NODE_SIZE_MAX));
 		return Math.min(max, min + degree * 1.2);
 	}
 	if (mode === "by-column" && style.size.column) {
-		const min = style.size.min ?? NODE_SIZE_MIN;
-		const max = style.size.max ?? NODE_SIZE_MAX;
+		const min = toValidNodeSize(style.size.min, NODE_SIZE_MIN);
+		const max = Math.max(min, toValidNodeSize(style.size.max, NODE_SIZE_MAX));
 		const value = toFiniteNumber(props?.[style.size.column]);
 		const range = columnRanges?.get(style.size.column);
 		if (value === undefined || !range || range.max <= range.min) {
@@ -282,11 +296,16 @@ function hubNodeSize(represented: number): number {
 /** Nodes a stage seats comfortably before circles start crowding the edges out. */
 const SIZE_FIT_REFERENCE_NODES = 40;
 const MIN_FIT_SIZE_SCALE = 0.28;
-/** Stage the size ceiling is reckoned against, in CSS pixels. */
-const REFERENCE_STAGE_AREA = 1200 * 700;
 /** How much of the room a node gets its circle may fill, edge to edge. */
 const MAX_NODE_PITCH_SHARE = 0.3;
 const MIN_RENDERED_NODE_SIZE = 2;
+/** Below this height, persistent captions compete with the graph for one row. */
+const MIN_PERSISTENT_LABEL_STAGE_HEIGHT = 280;
+/** Tiny result sets remain readable even in the query-dock stage. */
+const COMPACT_STAGE_LABEL_NODE_LIMIT = 6;
+/** Keeps viewport settling inside the same camera frame after auto-rescale. */
+const VIEWPORT_COLLISION_INSET = 8;
+const LABEL_FIT_PASSES = 4;
 
 /**
  * Shrinks nodes as the sample grows, because `autoRescale` fits the whole layout
@@ -314,9 +333,16 @@ function fitSizeScale(nodeCount: number): number {
  * auto-fit can hold two nodes — is what the reader actually has, so the ceiling
  * is a share of that and the declared size only matters below it.
  */
-function maxNodeSize(nodeCount: number): number {
-	const pitch = Math.sqrt(REFERENCE_STAGE_AREA / Math.max(1, nodeCount));
-	return Math.max(MIN_RENDERED_NODE_SIZE, (pitch * MAX_NODE_PITCH_SHARE) / 2);
+function maxNodeSize(
+	nodeCount: number,
+	stage: ViewportDimensions,
+	stagePadding: number,
+): number {
+	return computeViewportNodeSizeCap(nodeCount, stage, {
+		padding: stagePadding,
+		minSize: MIN_RENDERED_NODE_SIZE,
+		maxPitchShare: MAX_NODE_PITCH_SHARE,
+	});
 }
 
 /**
@@ -610,6 +636,7 @@ interface GraphLoadingOverlayState {
 
 interface GraphBuildOptions {
 	previousPositions: ReadonlyMap<string, GraphPosition>;
+	stageDimensions: ViewportDimensions;
 	anchorNodeId?: string | null;
 	forceLayout?: boolean;
 	clusters?: ClusterModel | null;
@@ -723,6 +750,7 @@ async function buildGraphAsync(
 	isCancelled: () => boolean,
 	{
 		previousPositions,
+		stageDimensions,
 		anchorNodeId,
 		forceLayout = false,
 		clusters,
@@ -936,7 +964,8 @@ async function buildGraphAsync(
 
 	const density = graph.size / Math.max(1, graph.order);
 	const fitScale = fitSizeScale(graph.order);
-	const sizeCeiling = maxNodeSize(graph.order);
+	const stagePadding = isLarge ? 60 : 40;
+	const sizeCeiling = maxNodeSize(graph.order, stageDimensions, stagePadding);
 	const sized = await processInChunks(
 		data.nodes,
 		getNodeChunkSize(nodeCount),
@@ -956,10 +985,12 @@ async function buildGraphAsync(
 				? Math.max(styledSize, hubNodeSize(assignment.represented))
 				: styledSize;
 
-			const scaledSize = Math.max(
+			const baseRenderedSize = Math.max(
 				MIN_RENDERED_NODE_SIZE,
-				Math.min(baseSize * fitScale * (density > 4 ? 0.85 : 1), sizeCeiling),
+				baseSize * fitScale * (density > 4 ? 0.85 : 1),
 			);
+			const scaledSize = Math.min(baseRenderedSize, sizeCeiling);
+			graph.setNodeAttribute(node.id, "baseRenderedSize", baseRenderedSize);
 			graph.setNodeAttribute(node.id, "size", scaledSize);
 		},
 		(fraction) => {
@@ -992,7 +1023,7 @@ async function buildGraphAsync(
 		publish(
 			NODE_PROGRESS_WEIGHT + EDGE_PROGRESS_WEIGHT + SIZE_PROGRESS_WEIGHT,
 			i18next.t("keepingLayoutStable", "Keeping layout stable"),
-			`Reusing the current node positions while adding new connections.`,
+			"Reusing the current node positions while adding new connections.",
 			"ready",
 		);
 		return {
@@ -1137,6 +1168,96 @@ interface HighlightState {
 	/** >1 when a filter shrank the visible set: survivors get the freed room. */
 	visibleBoost: number;
 	visibleSizeCap: number;
+}
+
+function isNodeVisible(
+	nodeId: string,
+	attrs: Record<string, unknown>,
+	highlight: HighlightState,
+): boolean {
+	if (highlight.visibleNodeIds && !highlight.visibleNodeIds.has(nodeId)) {
+		return false;
+	}
+	const nodeLabel = attrs.nodeLabel;
+	return !(
+		typeof nodeLabel === "string" && highlight.hiddenLabels?.has(nodeLabel)
+	);
+}
+
+/** Mirrors the reducer's size changes so viewport collision uses what Sigma draws. */
+function getRenderedNodeSize(
+	nodeId: string,
+	attrs: Record<string, unknown>,
+	highlight: HighlightState,
+): number {
+	const storedSize = attrs.size;
+	let size =
+		typeof storedSize === "number" &&
+		Number.isFinite(storedSize) &&
+		storedSize > 0
+			? storedSize
+			: DEFAULT_NODE_SIZE;
+
+	size *= highlight.visibleBoost;
+
+	if (highlight.highlightedNodeIds && highlight.highlightedNodeIds.size > 0) {
+		if (!highlight.highlightedNodeIds.has(nodeId)) {
+			size *= CONTEXT_DIM_NODE_SCALE;
+		}
+	} else {
+		const activeNode = highlight.selectedNodeId ?? highlight.hoveredNode;
+		if (highlight.neighborSet && activeNode) {
+			if (nodeId === activeNode) size *= 1.3;
+			else if (!highlight.neighborSet.has(nodeId)) {
+				size *= CONTEXT_DIM_NODE_SCALE;
+			}
+		}
+	}
+
+	return Math.max(
+		MIN_RENDERED_NODE_SIZE,
+		Math.min(size, highlight.visibleSizeCap),
+	);
+}
+
+function getVisibleNodeCount(
+	graph: Graph | null,
+	hiddenLabels?: ReadonlySet<string>,
+	visibleNodeIds?: ReadonlySet<string>,
+): number {
+	if (!graph) return 0;
+	if (!hiddenLabels?.size && !visibleNodeIds) return graph.order;
+
+	let count = 0;
+	graph.forEachNode((nodeId, attrs) => {
+		if (visibleNodeIds && !visibleNodeIds.has(nodeId)) return;
+		const nodeLabel = attrs.nodeLabel;
+		if (typeof nodeLabel === "string" && hiddenLabels?.has(nodeLabel)) return;
+		count += 1;
+	});
+	return count;
+}
+
+function updateHighlightSizing(
+	highlight: HighlightState,
+	graphNodeCount: number,
+	visibleNodeCount: number,
+	stage: ViewportDimensions,
+): void {
+	const effectiveNodeCount = Math.max(1, visibleNodeCount || graphNodeCount);
+	highlight.visibleBoost = Math.max(
+		1,
+		Math.min(
+			3,
+			fitSizeScale(effectiveNodeCount) /
+				fitSizeScale(Math.max(1, graphNodeCount)),
+		),
+	);
+	highlight.visibleSizeCap = maxNodeSize(
+		effectiveNodeCount,
+		stage,
+		graphNodeCount >= LARGE_THRESHOLD ? 60 : 40,
+	);
 }
 
 /**
@@ -1472,6 +1593,240 @@ function SigmaRefresher({ refreshKey }: { refreshKey: readonly unknown[] }) {
 			// WebGL context may be lost
 		}
 	}, [sigma, refreshKey]);
+	return null;
+}
+
+function SigmaViewportManager({
+	highlightRef,
+	refreshKey,
+	settleOverlaps,
+	layoutRevision,
+}: {
+	highlightRef: React.MutableRefObject<HighlightState>;
+	refreshKey: readonly unknown[];
+	settleOverlaps: boolean;
+	layoutRevision: number;
+}) {
+	const sigma = useSigma();
+
+	useEffect(() => {
+		void refreshKey;
+		void layoutRevision;
+		const container = sigma.getContainer();
+		let resizeFrame = 0;
+		let settleFrame = 0;
+		let disposed = false;
+
+		const applyViewport = () => {
+			resizeFrame = 0;
+			if (disposed) return;
+
+			const stage = {
+				width: container.clientWidth,
+				height: container.clientHeight,
+			};
+			if (stage.width <= 0 || stage.height <= 0) return;
+
+			let currentGraph: Graph;
+			try {
+				sigma.resize(true);
+				currentGraph = sigma.getGraph();
+				const stagePadding = currentGraph.order >= LARGE_THRESHOLD ? 60 : 40;
+				const baseSizeCap = maxNodeSize(
+					currentGraph.order,
+					stage,
+					stagePadding,
+				);
+				currentGraph.updateEachNodeAttributes(
+					(_nodeId, attrs) => {
+						const storedBaseSize = attrs.baseRenderedSize;
+						const baseSize =
+							typeof storedBaseSize === "number" &&
+							Number.isFinite(storedBaseSize) &&
+							storedBaseSize > 0
+								? storedBaseSize
+								: typeof attrs.size === "number" &&
+										Number.isFinite(attrs.size) &&
+										attrs.size > 0
+									? attrs.size
+									: DEFAULT_NODE_SIZE;
+						const size = Math.max(
+							MIN_RENDERED_NODE_SIZE,
+							Math.min(baseSize, baseSizeCap),
+						);
+						return attrs.size === size ? attrs : { ...attrs, size };
+					},
+					{ attributes: ["size"] },
+				);
+
+				const visibleNodeIds: string[] = [];
+				currentGraph.forEachNode((nodeId, attrs) => {
+					if (isNodeVisible(nodeId, attrs, highlightRef.current)) {
+						visibleNodeIds.push(nodeId);
+					}
+				});
+				const visibleNodeSet = new Set(visibleNodeIds);
+				updateHighlightSizing(
+					highlightRef.current,
+					currentGraph.order,
+					visibleNodeIds.length,
+					stage,
+				);
+				sigma.setCustomBBox(null);
+				sigma.refresh();
+
+				// Sigma fits node centres, while captions stay screen-sized. Extend the
+				// fitted box just enough to keep the captions Sigma chose away from the
+				// right control rail. The renderer still has a side-switch fallback for
+				// labels revealed later by hover or selection.
+				let viewportBounds = sigma.getBBox();
+				const expandBoundsForDisplayedLabels = () => {
+					const displayedLabelIds = [...sigma.getNodeDisplayedLabels()].filter(
+						(nodeId) => visibleNodeSet.has(nodeId),
+					);
+					const labelExtents = computeLabelExtents(
+						currentGraph,
+						displayedLabelIds,
+						{ labelSize: sigma.getSetting("labelSize") },
+					);
+					if (!labelExtents) return false;
+
+					const rightBoundary = Math.max(
+						GRAPH_LABEL_LEFT_INSET,
+						stage.width - GRAPH_LABEL_RIGHT_INSET,
+					);
+					let rightOverflow = 0;
+					for (const nodeId of displayedLabelIds) {
+						const extent = labelExtents.get(nodeId);
+						if (!extent) continue;
+						const attrs = currentGraph.getNodeAttributes(nodeId);
+						const position = sigma.graphToViewport({
+							x: attrs.x as number,
+							y: attrs.y as number,
+						});
+						const radius = getRenderedNodeSize(
+							nodeId,
+							attrs,
+							highlightRef.current,
+						);
+						rightOverflow = Math.max(
+							rightOverflow,
+							position.x + radius + extent - rightBoundary,
+						);
+					}
+					if (rightOverflow <= 1) return false;
+
+					viewportBounds = expandGraphBoundsByViewportInsets(
+						viewportBounds,
+						{
+							right: Math.min(stage.width * 0.35, rightOverflow * 2 + 4),
+						},
+						sigma.getGraphToViewportRatio(),
+					);
+					return true;
+				};
+				for (let pass = 0; pass < LABEL_FIT_PASSES; pass += 1) {
+					sigma.setCustomBBox(viewportBounds);
+					sigma.refresh();
+					if (!expandBoundsForDisplayedLabels()) break;
+				}
+				sigma.setCustomBBox(viewportBounds);
+				sigma.refresh();
+
+				if (!settleOverlaps || visibleNodeIds.length < 2) return;
+
+				// Freeze a slightly roomier normalization before moving screen-sized
+				// circles. Otherwise refresh immediately auto-fits their new extent and
+				// scales much of the separation back out.
+				viewportBounds = expandGraphBoundsByViewportInsets(
+					viewportBounds,
+					{
+						left: VIEWPORT_COLLISION_INSET,
+						right: VIEWPORT_COLLISION_INSET,
+						top: VIEWPORT_COLLISION_INSET,
+						bottom: VIEWPORT_COLLISION_INSET,
+					},
+					sigma.getGraphToViewportRatio(),
+				);
+				sigma.setCustomBBox(viewportBounds);
+				sigma.refresh();
+
+				let remainingPasses = currentGraph.order < 500 ? 2 : 1;
+				const settleInViewport = () => {
+					settleFrame = 0;
+					if (disposed || remainingPasses <= 0) return;
+					remainingPasses -= 1;
+					try {
+						const displayedLabelIds = [
+							...sigma.getNodeDisplayedLabels(),
+						].filter((nodeId) => visibleNodeSet.has(nodeId));
+						relaxOverlaps(currentGraph, visibleNodeIds, {
+							iterations:
+								currentGraph.order >= HUGE_THRESHOLD
+									? 2
+									: currentGraph.order >= LARGE_THRESHOLD
+										? 3
+										: currentGraph.order >= 500
+											? 4
+											: 8,
+							labelExtents: computeLabelExtents(
+								currentGraph,
+								displayedLabelIds,
+								{ labelSize: sigma.getSetting("labelSize") },
+							),
+							coordinateMapper: {
+								fromGraph: (position) => sigma.graphToViewport(position),
+								toGraph: (position) => sigma.viewportToGraph(position),
+							},
+							radiusForNode: (nodeId) =>
+								getRenderedNodeSize(
+									nodeId,
+									currentGraph.getNodeAttributes(nodeId),
+									highlightRef.current,
+								),
+						});
+						sigma.refresh();
+						for (let pass = 0; pass < 2; pass += 1) {
+							if (!expandBoundsForDisplayedLabels()) break;
+							sigma.setCustomBBox(viewportBounds);
+							sigma.refresh();
+						}
+						if (remainingPasses > 0) {
+							settleFrame = window.requestAnimationFrame(settleInViewport);
+						}
+					} catch {
+						// The renderer may be tearing down while a resize frame is queued.
+					}
+				};
+				settleFrame = window.requestAnimationFrame(settleInViewport);
+			} catch {
+				// Sigma rejects invalid dimensions, which the guard above normally avoids.
+			}
+		};
+
+		const scheduleViewportUpdate = () => {
+			if (resizeFrame) window.cancelAnimationFrame(resizeFrame);
+			if (settleFrame) window.cancelAnimationFrame(settleFrame);
+			resizeFrame = window.requestAnimationFrame(applyViewport);
+		};
+
+		const observer =
+			typeof ResizeObserver === "undefined"
+				? null
+				: new ResizeObserver(scheduleViewportUpdate);
+		observer?.observe(container);
+		window.addEventListener("resize", scheduleViewportUpdate);
+		scheduleViewportUpdate();
+
+		return () => {
+			disposed = true;
+			observer?.disconnect();
+			window.removeEventListener("resize", scheduleViewportUpdate);
+			if (resizeFrame) window.cancelAnimationFrame(resizeFrame);
+			if (settleFrame) window.cancelAnimationFrame(settleFrame);
+		};
+	}, [highlightRef, layoutRevision, refreshKey, settleOverlaps, sigma]);
+
 	return null;
 }
 
@@ -1929,6 +2284,7 @@ function SigmaControls({
 
 export function GraphCanvas({
 	data,
+	nodeLabels,
 	loading,
 	selectedNodeId,
 	selectedEdgeKey,
@@ -1960,6 +2316,13 @@ export function GraphCanvas({
 	const [isWorkerLayoutRunning, setIsWorkerLayoutRunning] = useState(false);
 	const [workerStopToken, setWorkerStopToken] = useState(0);
 	const [pinnedCount, setPinnedCount] = useState(0);
+	const [viewportLayoutRevision, setViewportLayoutRevision] = useState(0);
+	const [stageDimensions, setStageDimensions] = useState<ViewportDimensions>({
+		width: 0,
+		height: 0,
+	});
+	const stageRef = useRef<HTMLDivElement | null>(null);
+	const stageDimensionsRef = useRef<ViewportDimensions>(stageDimensions);
 	const preparedDataRef = useRef<SubgraphResult | null>(null);
 	const graphRef = useRef<Graph | null>(graph);
 	const loadingRef = useRef(loading);
@@ -1975,6 +2338,40 @@ export function GraphCanvas({
 	graphRef.current = graph;
 	loadingRef.current = loading;
 	selectedNodeIdRef.current = selectedNodeId ?? null;
+	stageDimensionsRef.current = stageDimensions;
+
+	useLayoutEffect(() => {
+		const stage = stageRef.current;
+		if (!stage) return;
+
+		const measure = () => {
+			const next = {
+				width: stage.clientWidth,
+				height: stage.clientHeight,
+			};
+			stageDimensionsRef.current = next;
+			setStageDimensions((current) =>
+				current.width === next.width && current.height === next.height
+					? current
+					: next,
+			);
+		};
+
+		const observer =
+			typeof ResizeObserver === "undefined"
+				? null
+				: new ResizeObserver(measure);
+		observer?.observe(stage);
+		window.addEventListener("resize", measure);
+		measure();
+
+		return () => {
+			observer?.disconnect();
+			window.removeEventListener("resize", measure);
+		};
+	}, []);
+
+	const stageReady = stageDimensions.width > 0 && stageDimensions.height > 0;
 
 	// Loaded once per storage key; hydrates both positions and pins so a scene a
 	// reader arranged yesterday comes back arranged.
@@ -2000,6 +2397,11 @@ export function GraphCanvas({
 			}
 		}, 1000);
 	}, [persistKey]);
+
+	const handleExplicitLayoutApplied = useCallback(() => {
+		scheduleSceneSave();
+		setViewportLayoutRevision((revision) => revision + 1);
+	}, [scheduleSceneSave]);
 
 	useEffect(
 		() => () => {
@@ -2083,6 +2485,11 @@ export function GraphCanvas({
 				cancelled = true;
 			};
 		}
+		if (!stageReady) {
+			return () => {
+				cancelled = true;
+			};
+		}
 
 		setPreparationState({
 			phase: "building",
@@ -2110,6 +2517,7 @@ export function GraphCanvas({
 				() => cancelled,
 				{
 					previousPositions,
+					stageDimensions: stageDimensionsRef.current,
 					anchorNodeId: selectedNodeIdRef.current,
 					forceLayout,
 					clusters,
@@ -2151,7 +2559,12 @@ export function GraphCanvas({
 		return () => {
 			cancelled = true;
 		};
-	}, [data, layoutRunKey, clusters, storedScene]);
+	}, [data, layoutRunKey, clusters, storedScene, stageReady, t]);
+
+	useEffect(() => {
+		if (!graph || !data) return;
+		applyNodeCaptionLabels(graph, data.nodes, nodeLabels);
+	}, [graph, data, nodeLabels]);
 
 	// Every settled build is a scene worth remembering.
 	useEffect(() => {
@@ -2190,8 +2603,8 @@ export function GraphCanvas({
 					? t("refreshingGraphSnapshot", "Refreshing graph snapshot")
 					: t("loadingGraphSnapshot", "Loading graph snapshot"),
 				detail: graph
-					? `Keeping the current view visible while new graph data arrives.`
-					: `Fetching nodes and connections from the database.`,
+					? "Keeping the current view visible while new graph data arrives."
+					: "Fetching nodes and connections from the database.",
 				progress: graph ? 0.16 : 0.08,
 				nodeCount,
 				edgeCount,
@@ -2249,6 +2662,7 @@ export function GraphCanvas({
 		loading,
 		preparationState,
 		preparedForCurrentData,
+		t,
 	]);
 
 	const isBusy = overlayState !== null;
@@ -2318,7 +2732,7 @@ export function GraphCanvas({
 			edgeCount: nextData.edges.length,
 		});
 		setLayoutRunKey((current) => current + 1);
-	}, [data, isBusy]);
+	}, [data, isBusy, t]);
 
 	const highlightRef = useRef<HighlightState>({
 		hoveredNode: null,
@@ -2344,27 +2758,21 @@ export function GraphCanvas({
 	highlightRef.current.hiddenLabels = hiddenLabels;
 	highlightRef.current.visibleNodeIds = visibleNodeIds;
 
-	// Synced during render, not in an effect: the refresh that reads these runs
-	// from a child effect, which fires before this component's own effects would.
-	// When a filter leaves a fraction of the sample visible, the survivors get
-	// back the pixel size the full sample's fit had taken from them.
-	if (
-		graph &&
-		visibleNodeIds &&
-		visibleNodeIds.size > 0 &&
-		visibleNodeIds.size < graph.order
-	) {
-		highlightRef.current.visibleBoost = Math.max(
-			1,
-			Math.min(
-				3,
-				fitSizeScale(visibleNodeIds.size) / fitSizeScale(graph.order),
-			),
+	const visibleNodeCount = useMemo(
+		() => getVisibleNodeCount(graph, hiddenLabels, visibleNodeIds),
+		[graph, hiddenLabels, visibleNodeIds],
+	);
+
+	// Synced during render because child effects can refresh Sigma before this
+	// component's effects. The cap follows the actual stage and the actual visible
+	// set, including labels hidden from the legend.
+	if (graph && stageReady) {
+		updateHighlightSizing(
+			highlightRef.current,
+			graph.order,
+			visibleNodeCount,
+			stageDimensions,
 		);
-		highlightRef.current.visibleSizeCap = maxNodeSize(visibleNodeIds.size);
-	} else {
-		highlightRef.current.visibleBoost = 1;
-		highlightRef.current.visibleSizeCap = Number.POSITIVE_INFINITY;
 	}
 
 	// Recompute neighbor sets when selectedNodeId changes
@@ -2456,6 +2864,7 @@ export function GraphCanvas({
 			highlightedNodeIds,
 			highlightedEdgeIds,
 			visibleNodeIds,
+			selectedNodeId,
 			selectedEdgeKey,
 			themeTick,
 		],
@@ -2464,9 +2873,14 @@ export function GraphCanvas({
 			highlightedNodeIds,
 			highlightedEdgeIds,
 			visibleNodeIds,
+			selectedNodeId,
 			selectedEdgeKey,
 			themeTick,
 		],
+	);
+	const viewportSizingTrigger = useMemo(
+		() => [hiddenLabels, visibleNodeIds, nodeLabels, graphRevision],
+		[hiddenLabels, visibleNodeIds, nodeLabels, graphRevision],
 	);
 
 	// Stable reducers — read all dynamic state from the ref, and everything about
@@ -2491,12 +2905,9 @@ export function GraphCanvas({
 				return res;
 			}
 
-			if (hl.visibleBoost > 1) {
-				res.size = Math.min(
-					((res.size as number) ?? DEFAULT_NODE_SIZE) * hl.visibleBoost,
-					hl.visibleSizeCap,
-				);
-			}
+			// Apply the viewport ceiling after filter, focus, selection and hub
+			// multipliers. This is the exact size the collision pass also reads.
+			res.size = getRenderedNodeSize(node, attrs, hl);
 
 			// A hand-pinned node wears a contrasting ring, so "why is this one not
 			// moving" always has a visible answer.
@@ -2516,8 +2927,6 @@ export function GraphCanvas({
 				res.image = undefined;
 				res.label = "";
 				res.zIndex = 0;
-				res.size =
-					((res.size as number) ?? DEFAULT_NODE_SIZE) * CONTEXT_DIM_NODE_SCALE;
 			};
 
 			const pullToForeground = (zIndex: number) => {
@@ -2538,7 +2947,6 @@ export function GraphCanvas({
 					pullToForeground(3);
 					res.highlighted = true;
 					res.forceLabel = true;
-					res.size = ((res.size as number) ?? DEFAULT_NODE_SIZE) * 1.3;
 				} else if (hl.neighborSet.has(node)) {
 					pullToForeground(2);
 					// Only the biggest few neighbours get a forced caption; forcing all
@@ -2665,12 +3073,14 @@ export function GraphCanvas({
 		const isHuge = nodeCount >= HUGE_THRESHOLD;
 		const isLarge = nodeCount >= LARGE_THRESHOLD;
 		const isDense = edgeCount / Math.max(1, nodeCount) > 3;
+		const renderPersistentLabels =
+			stageDimensions.height >= MIN_PERSISTENT_LABEL_STAGE_HEIGHT ||
+			nodeCount <= COMPACT_STAGE_LABEL_NODE_LIMIT;
 
 		const defaultNode = getDefaultNodeColor();
 		const defaultEdgeHex = getDefaultEdgeColor();
 
 		return {
-			allowInvalidContainer: true,
 			defaultNodeColor: defaultNode,
 			defaultEdgeColor: hexToRgba(defaultEdgeHex, getBaseEdgeAlpha(nodeCount)),
 			defaultNodeType: isLarge ? "circle" : "bordered-image",
@@ -2683,6 +3093,7 @@ export function GraphCanvas({
 				arrow: EdgeArrowProgram,
 				curvedArrow: EdgeCurvedArrowProgram,
 			},
+			renderLabels: renderPersistentLabels,
 			renderEdgeLabels: !isHuge,
 			enableEdgeEvents: !isHuge,
 			// Text and faint edges are what the eye cannot track mid-pan anyway;
@@ -2721,12 +3132,13 @@ export function GraphCanvas({
 			autoRescale: true,
 			autoCenter: true,
 		};
-	}, [graph, nodeReducer, edgeReducer, themeTick]);
+	}, [graph, nodeReducer, edgeReducer, themeTick, stageDimensions.height]);
 
 	if (!graph && !hasRenderableData && !loading) {
 		return (
 			<div
-				className={`relative flex h-full w-full items-center justify-center text-muted-foreground ${className ?? ""}`}
+				ref={stageRef}
+				className={`relative flex h-full w-full items-center justify-center overflow-hidden text-muted-foreground ${className ?? ""}`}
 			>
 				{t("noGraphDataToDisplay", "No graph data to display")}
 			</div>
@@ -2737,12 +3149,13 @@ export function GraphCanvas({
 
 	return (
 		<div
-			className={`relative h-full w-full ${className ?? ""}`}
+			ref={stageRef}
+			className={`relative h-full w-full overflow-hidden ${className ?? ""}`}
 			onContextMenu={
 				onNodeContextMenu ? (event) => event.preventDefault() : undefined
 			}
 		>
-			{graph ? (
+			{graph && stageReady ? (
 				<SigmaContainer
 					graph={graph}
 					className="absolute inset-0"
@@ -2778,7 +3191,13 @@ export function GraphCanvas({
 					) : null}
 					<SigmaLayoutApplier
 						command={layoutCommand ?? null}
-						onApplied={scheduleSceneSave}
+						onApplied={handleExplicitLayoutApplied}
+					/>
+					<SigmaViewportManager
+						highlightRef={highlightRef}
+						refreshKey={viewportSizingTrigger}
+						settleOverlaps={!isWorkerLayoutRunning}
+						layoutRevision={viewportLayoutRevision}
 					/>
 					<SigmaRefresher refreshKey={sigmaRefreshTrigger} />
 					<SigmaControls

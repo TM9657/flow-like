@@ -1,5 +1,6 @@
 use flow_like_types::JsonSchema;
 use flow_like_types::json::{Deserialize, Serialize};
+use std::collections::HashMap;
 
 pub const DEFAULT_GRAPH_OVERLAY_LIMIT: usize = 100;
 pub const DEFAULT_GRAPH_QUERY_LIMIT: usize = 100;
@@ -183,6 +184,9 @@ pub struct SubgraphNode {
     pub caption: Option<String>,
     pub props: flow_like_types::Value,
     pub style: LabelStyle,
+    /// Arrow field metadata for typed property previews.
+    #[serde(default, skip_serializing_if = "HashMap::is_empty")]
+    pub property_metadata: HashMap<String, HashMap<String, String>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
@@ -193,6 +197,9 @@ pub struct SubgraphEdge {
     pub label: String,
     pub props: flow_like_types::Value,
     pub style: LabelStyle,
+    /// Arrow field metadata for typed property previews.
+    #[serde(default, skip_serializing_if = "HashMap::is_empty")]
+    pub property_metadata: HashMap<String, HashMap<String, String>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
@@ -220,6 +227,8 @@ pub struct GraphPropertyInfo {
     pub name: String,
     pub data_type: String,
     pub nullable: bool,
+    #[serde(default, skip_serializing_if = "HashMap::is_empty")]
+    pub metadata: HashMap<String, String>,
 }
 
 pub const GRAPH_OVERLAYS_TABLE: &str = "__graph_overlays__";

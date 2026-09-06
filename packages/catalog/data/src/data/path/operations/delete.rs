@@ -6,6 +6,7 @@ use flow_like::flow::{
     variable::VariableType,
 };
 use flow_like_storage::Path;
+use flow_like_storage::object_store::ObjectStoreExt;
 use flow_like_types::{async_trait, json::json};
 use futures::{StreamExt, TryStreamExt};
 

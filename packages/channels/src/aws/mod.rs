@@ -21,6 +21,7 @@ mod channel;
 mod forwarder;
 mod policy;
 mod presign;
+mod reply_chunks;
 mod router;
 
 pub use channel::AwsIotChannel;

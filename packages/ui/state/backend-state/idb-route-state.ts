@@ -29,6 +29,13 @@ export class IDBRouteState implements IAppRouteState {
 		return record && record.eventId ? this.toRouteMapping(record) : null;
 	}
 
+	async getRouteByPathAuthoritative(
+		appId: string,
+		path: string,
+	): Promise<IRouteMapping | null> {
+		return this.getRouteByPath(appId, path);
+	}
+
 	async getDefaultRoute(appId: string): Promise<IRouteMapping | null> {
 		const record = await routeStorage.getDefaultRoute(appId);
 		return record && record.eventId ? this.toRouteMapping(record) : null;

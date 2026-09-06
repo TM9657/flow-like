@@ -1,0 +1,9 @@
+[package]
+name = "flow-like-catalog-media-support"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+flow-like-runtime = { workspace = true, features = ["flow-metadata"] }
+flow-like-types.workspace = true
+flow-like-model-provider.workspace = true

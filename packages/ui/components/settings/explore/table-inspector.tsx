@@ -9,19 +9,11 @@ import { useInvoke } from "../../../hooks/use-invoke";
 import { cn } from "../../../lib";
 import { getErrorMessage } from "../../../lib/error-message";
 import { useBackend } from "../../../state/backend-state";
-import { IIndexType } from "../../../state/backend-state/db-state";
+import { parseIndexType } from "../../../state/backend-state/db-state";
 import { Button } from "../../ui/button";
 import LanceDBExplorer from "../../ui/lance-viewer";
 
 export const DEFAULT_TABLE_PAGE_SIZE = 25;
-
-const INDEX_TYPES: Record<string, IIndexType> = {
-	fulltext: IIndexType.FullText,
-	btree: IIndexType.BTree,
-	bitmap: IIndexType.Bitmap,
-	labellist: IIndexType.LabelList,
-	auto: IIndexType.Auto,
-};
 
 export interface TableInspectorProps {
 	appId: string;
@@ -258,7 +250,7 @@ export function TableInspector({
 					appId,
 					table,
 					column,
-					INDEX_TYPES[indexType.toLowerCase()] ?? IIndexType.Auto,
+					parseIndexType(indexType),
 					undefined,
 					userScoped,
 				);

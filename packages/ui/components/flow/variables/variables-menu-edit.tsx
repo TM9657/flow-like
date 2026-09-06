@@ -14,6 +14,7 @@ import { FloatArrayVariable } from "./float-array-variable";
 import { FloatSetVariable } from "./float-set-variable";
 import { FloatVariable } from "./float-variable";
 import { GenericVariable } from "./generic-variable";
+import { GeometryVariable } from "./geometry-variable";
 import { IntegerArrayVariable } from "./integer-array-variable";
 import { IntegerSetVariable } from "./integer-set-variable";
 import { IntegerVariable } from "./integer-variable";
@@ -50,9 +51,21 @@ export function VariablesMenuEdit({
 	if (variable.value_type === IValueType.HashMap) {
 		return (
 			<MapVariable
+				refs={refs}
 				disabled={disabled}
 				variable={intermediateValue}
 				onChange={setIntermediateValue}
+			/>
+		);
+	}
+
+	if (variable.data_type === IVariableType.Geometry) {
+		return (
+			<GeometryVariable
+				disabled={disabled}
+				variable={intermediateValue}
+				onChange={setIntermediateValue}
+				refs={refs}
 			/>
 		);
 	}

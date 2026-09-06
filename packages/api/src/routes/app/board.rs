@@ -1,4 +1,5 @@
 pub mod apply_flowscript;
+pub mod capabilities;
 pub mod delete_board;
 pub mod element_demand;
 pub mod execute_commands;
@@ -56,6 +57,7 @@ pub(crate) fn ensure_connected_app_board_invoke_denied(user: &AppUser) -> Result
 
 pub fn routes() -> Router<AppState> {
     Router::new()
+        .route("/capabilities", get(capabilities::capabilities))
         .route("/", get(get_boards::get_boards))
         .route("/summaries", get(summaries::board_summaries))
         .route("/variables", get(get_board_variables::get_board_variables))
@@ -125,6 +127,9 @@ pub fn routes() -> Router<AppState> {
             post(invoke_board_async::invoke_board_async),
         )
         .route("/{board_id}/workspace", get(workspace::workspace))
+        .route_layer(axum::middleware::from_fn(
+            capabilities::negotiate_board_format,
+        ))
 }
 
 #[cfg(test)]

@@ -474,3 +474,135 @@ fn template_from_bytes_rejects_foreign_or_broken_artifacts() {
         "garbage bytes are an error, not a template"
     );
 }
+
+#[test]
+fn geometry_roundtrips_defaults_subtypes_and_rejects_old_artifact_headers() {
+    use flow_like_types::geometry::{GeometryKind, marker};
+    let point = flow_like_types::json::json!({"type":"Point","coordinates":[13.405,52.52]});
+    let bytes = flow_like_types::json::to_vec(&point).unwrap();
+    let mut input = pin(
+        "geo-input",
+        "point",
+        PinType::Input,
+        VariableType::Geometry,
+        0,
+    );
+    input.schema = Some("point-schema".into());
+    input.default_value = Some(bytes.clone());
+    let mut board = empty_board();
+    board
+        .refs
+        .insert("point-schema".into(), marker(GeometryKind::Point).into());
+    board.nodes.insert(
+        "geo-node".into(),
+        node_with_pins("geo-node", "test-geometry", vec![input]),
+    );
+    let mut variable = Variable::new("point", VariableType::Geometry, ValueType::Normal);
+    variable.schema = Some("point-schema".into());
+    variable.default_value = Some(bytes.clone());
+    let variable_id = variable.id.clone();
+    board.variables.insert(variable_id.clone(), variable);
+    let compiled = compile_board(&board).unwrap();
+    assert_eq!(compiled.pins[0].data_type, 10);
+    let fingerprint = [7u8; 32];
+    let encoded = encode_artifact(&compiled, &fingerprint).unwrap();
+    assert_eq!(
+        peek_header(&encoded).unwrap().format_version,
+        flow_like::flow::compiled::FORMAT_VERSION
+    );
+    assert_eq!(compiled.board_format_version, 2);
+    let decoded = decode_artifact(&encoded, Some(&fingerprint)).unwrap();
+    let restored = reconstruct_board(&decoded, board.board_dir.clone(), None).unwrap();
+    restored.validate_geometry_contracts().unwrap();
+    assert_eq!(restored.format_version, 2);
+    let pin = &restored.nodes["geo-node"].pins["geo-input"];
+    assert_eq!(pin.data_type, VariableType::Geometry);
+    assert_eq!(pin.default_value.as_deref(), Some(bytes.as_slice()));
+    assert_eq!(
+        flow_like::flow::pin::resolve_schema(pin.schema.as_deref().unwrap(), &restored.refs)
+            .unwrap(),
+        marker(GeometryKind::Point)
+    );
+    assert_eq!(
+        restored.variables[&variable_id].data_type,
+        VariableType::Geometry
+    );
+    assert_eq!(
+        restored.variables[&variable_id].default_value.as_deref(),
+        Some(bytes.as_slice())
+    );
+    let mut old_header = encoded;
+    old_header[4..6].copy_from_slice(&1u16.to_le_bytes());
+    assert!(peek_header(&old_header).is_err());
+    assert!(decode_artifact(&old_header, Some(&fingerprint)).is_err());
+}
+
+#[tokio::test]
+async fn cached_geometry_templates_recheck_each_clients_document_format() {
+    use std::sync::Arc;
+
+    use flow_like::{
+        flow::{
+            board::format::{BoardFormatError, with_supported_version},
+            compiled::{CompiledRunTemplate, TemplateCache},
+        },
+        state::{FlowLikeConfig, FlowLikeState},
+        utils::http::HTTPClient,
+    };
+    use flow_like_storage::{files::store::FlowLikeStore, object_store::memory::InMemory};
+
+    let mut config = FlowLikeConfig::new();
+    config.register_app_meta_store(FlowLikeStore::Other(Arc::new(InMemory::new())));
+    let state = Arc::new(FlowLikeState::new(
+        config,
+        HTTPClient::new_without_refetch(),
+    ));
+    let registry = state.node_registry.read().await.node_registry.clone();
+    let mut board = empty_board();
+    let variable = Variable::new("location", VariableType::Geometry, ValueType::Normal);
+    board.variables.insert(variable.id.clone(), variable);
+    let compiled = compile_board(&board).unwrap();
+    let template = Arc::new(
+        CompiledRunTemplate::from_compiled(&compiled, &registry, board.board_dir.clone()).unwrap(),
+    );
+
+    let cache = TemplateCache::default();
+    let key = TemplateCache::cache_key("test", &board.id, "1_0_0", &registry.fingerprint(), "");
+    cache.insert(key.clone(), template.clone());
+    assert!(Arc::ptr_eq(&cache.get(&key).unwrap(), &template));
+
+    with_supported_version(1, async {
+        assert!(cache.get(&key).is_none());
+        let error = cache
+            .resolve(&state, "test", &board.id, Some((1, 0, 0)), None, "")
+            .await
+            .err()
+            .expect("a pinned cache hit must recheck compatibility");
+        assert_eq!(
+            error.downcast_ref::<BoardFormatError>(),
+            Some(&BoardFormatError {
+                required: 2,
+                supported: 1
+            })
+        );
+        let error =
+            CompiledRunTemplate::from_compiled(&compiled, &registry, board.board_dir.clone())
+                .err()
+                .expect("a fresh template must enforce the same requirement");
+        assert_eq!(
+            error.downcast_ref::<BoardFormatError>(),
+            Some(&BoardFormatError {
+                required: 2,
+                supported: 1
+            })
+        );
+    })
+    .await;
+
+    assert!(Arc::ptr_eq(&cache.get(&key).unwrap(), &template));
+    let resolved = cache
+        .resolve(&state, "test", &board.id, Some((1, 0, 0)), None, "")
+        .await
+        .unwrap();
+    assert!(Arc::ptr_eq(&resolved, &template));
+}

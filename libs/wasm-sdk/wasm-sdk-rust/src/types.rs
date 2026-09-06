@@ -67,6 +67,7 @@ pub enum VariableType {
     Generic,
     Struct,
     Byte,
+    Geometry,
 }
 
 /// Pin direction — input or output.
@@ -779,6 +780,7 @@ mod tests {
             "byte" | "bytes" | "binary" => "Byte",
             "exec" | "execution" => "Execution",
             "struct" | "object" | "json" => "Struct",
+            "geometry" => "Geometry",
             _ => "Generic",
         }
     }
@@ -855,6 +857,7 @@ mod tests {
             (VariableType::Generic, "Generic"),
             (VariableType::Struct, "Struct"),
             (VariableType::Byte, "Byte"),
+            (VariableType::Geometry, "Geometry"),
         ];
 
         for (var_type, expected_str) in &types {

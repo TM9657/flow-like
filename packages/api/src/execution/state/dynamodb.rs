@@ -11,10 +11,12 @@ use aws_sdk_dynamodb::{
     Client,
     types::{AttributeValue, KeyType, ReturnValue, ScalarAttributeType, WriteRequest},
 };
+use flow_like_storage::object_store::ObjectStoreExt;
 use flow_like_storage::{
     files::store::FlowLikeStore,
     object_store::{ObjectStore, path::Path},
 };
+use flow_like_types::utils::constant_time_eq;
 use futures::{StreamExt, TryStreamExt, stream};
 use sea_orm::DatabaseConnection;
 use std::{collections::HashMap, sync::Arc, time::Duration};
@@ -619,7 +621,7 @@ fn classify_lease_claim(
     }
     if item_optional_string(item, "leaseToken")
         .as_deref()
-        .is_some_and(|token| token != lease_token)
+        .is_some_and(|token| !constant_time_eq(token.as_bytes(), lease_token.as_bytes()))
     {
         match item_optional_number(item, "leaseExpiresAt") {
             Some(expires_at) if expires_at > now => {
@@ -655,7 +657,9 @@ fn active_lease_record(
         return Err(StateStoreError::NotFound);
     }
     let owned = item_optional_string(item, "boundJobId").as_deref() == Some(job_id)
-        && item_optional_string(item, "leaseToken").as_deref() == Some(lease_token)
+        && item_optional_string(item, "leaseToken")
+            .as_deref()
+            .is_some_and(|token| constant_time_eq(token.as_bytes(), lease_token.as_bytes()))
         && item_optional_number(item, "leaseExpiresAt").is_some_and(|expires_at| expires_at > now);
     if owned && !record.status.is_terminal() {
         Ok(record)

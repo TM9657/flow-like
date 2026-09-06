@@ -89,7 +89,21 @@ export interface IWidgetState {
 		appId: string,
 		language?: string,
 	): Promise<[string, string, IMetadata | undefined][]>;
+	/**
+	 * List widgets from the app's authoritative store. Read failures propagate and this call never
+	 * repairs, caches, pushes, or falls back to another store.
+	 */
+	getWidgetsAuthoritative(
+		appId: string,
+		language?: string,
+	): Promise<[string, string, IMetadata | undefined][]>;
 	getWidget(
+		appId: string,
+		widgetId: string,
+		version?: Version,
+	): Promise<IWidget>;
+	/** Read exactly one authoritative widget revision without cache repair or fallback. */
+	getWidgetAuthoritative(
 		appId: string,
 		widgetId: string,
 		version?: Version,

@@ -11,6 +11,7 @@
 //! cargo test --package flow-like-catalog-data --features execute --test datafusion_integration -- --ignored
 //! ```
 
+use flow_like_storage::object_store::ObjectStoreExt;
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -40,6 +41,399 @@ fn test_data_dir() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .join("tests")
         .join("data")
+}
+
+#[test]
+fn all_enabled_providers_implement_the_session_table_provider_trait() {
+    fn accepts_provider<T: flow_like_storage::datafusion::catalog::TableProvider>() {}
+
+    #[cfg(feature = "postgres")]
+    accepts_provider::<datafusion_table_providers::postgres::write::PostgresTableWriter>();
+    #[cfg(feature = "mysql")]
+    accepts_provider::<datafusion_table_providers::mysql::sql_table::MySQLTable>();
+    #[cfg(feature = "sqlite")]
+    accepts_provider::<datafusion_table_providers::sqlite::write::SqliteTableWriter>();
+    #[cfg(feature = "duckdb")]
+    accepts_provider::<datafusion_table_providers::duckdb::write::DuckDBTableWriter>();
+    #[cfg(feature = "clickhouse")]
+    accepts_provider::<datafusion_table_providers::clickhouse::ClickHouseTable>();
+    #[cfg(feature = "flight")]
+    accepts_provider::<datafusion_table_providers::flight::FlightTable>();
+    #[cfg(feature = "delta")]
+    accepts_provider::<flow_like_storage::deltalake::delta_datafusion::DeltaScanNext>();
+    #[cfg(feature = "iceberg")]
+    accepts_provider::<flow_like_storage::iceberg_datafusion::table::IcebergStaticTableProvider>();
+    #[cfg(feature = "federation")]
+    accepts_provider::<flow_like_storage::datafusion_federation::FederatedTableProviderAdaptor>();
+    accepts_provider::<flow_like_storage::lancedb::table::datafusion::BaseTableAdapter>();
+}
+
+// ODBC exposes its concrete table behind the factory's trait object. Type-check the
+// returned provider against our session's trait without needing an installed driver.
+#[cfg(feature = "odbc")]
+#[allow(dead_code)]
+async fn odbc_factory_uses_the_session_table_provider_trait(
+    factory: &datafusion_table_providers::odbc::ODBCTableFactory<'static>,
+) {
+    let _: Arc<dyn flow_like_storage::datafusion::catalog::TableProvider> = factory
+        .table_provider(
+            flow_like_storage::datafusion::common::TableReference::bare("compatibility"),
+            None,
+        )
+        .await
+        .unwrap();
+}
+
+#[cfg(feature = "sqlite")]
+mod provider_compatibility {
+    use super::*;
+    use datafusion_table_providers::sql::db_connection_pool::{
+        Mode, sqlitepool::SqliteConnectionPoolFactory,
+    };
+    use datafusion_table_providers::sqlite::SqliteTableFactory;
+    use flow_like_storage::arrow_array::Int64Array;
+    use flow_like_storage::datafusion::common::TableReference;
+    use sqlx::Executor;
+
+    #[tokio::test]
+    async fn sqlite_and_lance_share_filters_counts_joins_and_top_k() -> flow_like_types::Result<()>
+    {
+        let directory = tempfile::tempdir()?;
+        let sqlite_path = directory.path().join("provider.db");
+        let sqlite_url = format!("sqlite://{}?mode=rwc", sqlite_path.display());
+        let seed = sqlx::sqlite::SqlitePoolOptions::new()
+            .max_connections(1)
+            .connect(&sqlite_url)
+            .await?;
+        seed.execute("CREATE TABLE scores (id INTEGER NOT NULL, score INTEGER NOT NULL)")
+            .await?;
+        seed.execute("INSERT INTO scores VALUES (1, 10), (2, 40), (3, 20), (4, 30)")
+            .await?;
+        seed.close().await;
+        let pool = SqliteConnectionPoolFactory::new(
+            sqlite_path.to_str().unwrap(),
+            Mode::File,
+            Duration::from_secs(5),
+        )
+        .build()
+        .await
+        .map_err(|error| flow_like_types::anyhow!("{error}"))?;
+        let pool = Arc::new(pool);
+        let factory = SqliteTableFactory::new(pool.clone());
+        let sqlite = factory
+            .table_provider(TableReference::bare("scores"))
+            .await
+            .map_err(|error| flow_like_types::anyhow!("{error}"))?;
+
+        let schema = Arc::new(Schema::new(vec![
+            Field::new("id", DataType::Int64, false),
+            Field::new("label", DataType::Utf8, false),
+        ]));
+        let batch = RecordBatch::try_new(
+            schema.clone(),
+            vec![
+                Arc::new(Int64Array::from(vec![1, 2, 3, 4])),
+                Arc::new(StringArray::from(vec!["one", "two", "three", "four"])),
+            ],
+        )?;
+        let connection =
+            flow_like_storage::lancedb::connect(directory.path().join("lance").to_str().unwrap())
+                .execute()
+                .await?;
+        let table = connection
+            .create_table("labels", vec![batch])
+            .execute()
+            .await?;
+        let adapter = flow_like_storage::lancedb::table::datafusion::BaseTableAdapter::try_new(
+            table.base_table().clone(),
+        )
+        .await?;
+        let lance = flow_like_storage::databases::df_provider::zero_column_safe(Arc::new(adapter));
+        let mut contexts = vec![(SessionContext::new(), sqlite)];
+        #[cfg(feature = "federation")]
+        {
+            use datafusion_table_providers::sql::sql_provider_datafusion::SqlTable;
+            use datafusion_table_providers::sqlite::DynSqliteConnectionPool;
+            let pool: Arc<DynSqliteConnectionPool> = pool;
+            let table = Arc::new(SqlTable::new("sqlite", &pool, "scores").await?);
+            contexts.push((
+                SessionContext::new_with_state(
+                    flow_like_storage::datafusion_federation::default_session_state(),
+                ),
+                Arc::new(table.create_federated_table_provider()?),
+            ));
+        }
+
+        for (ctx, sqlite) in contexts {
+            ctx.register_table("scores", sqlite)?;
+            ctx.register_table("labels", lance.clone())?;
+            let top = ctx
+                .sql("SELECT id FROM scores WHERE score >= 20 ORDER BY score DESC LIMIT 2")
+                .await?
+                .collect()
+                .await?;
+            let ids: Vec<i64> = top
+                .iter()
+                .flat_map(|batch| {
+                    batch
+                        .column(0)
+                        .as_any()
+                        .downcast_ref::<Int64Array>()
+                        .unwrap()
+                        .values()
+                        .to_vec()
+                })
+                .collect();
+            assert_eq!(ids, vec![2, 4]);
+            let joined = ctx.sql("SELECT labels.label FROM labels JOIN scores USING (id) WHERE scores.score >= 20 ORDER BY scores.score DESC LIMIT 2")
+                .await?.collect().await?;
+            let labels: Vec<String> = joined
+                .iter()
+                .flat_map(|batch| {
+                    (0..batch.num_rows())
+                        .map(|row| {
+                            flow_like_storage::arrow::util::display::array_value_to_string(
+                                batch.column(0),
+                                row,
+                            )
+                            .unwrap()
+                        })
+                        .collect::<Vec<_>>()
+                })
+                .collect();
+            assert_eq!(labels, vec!["two", "four"]);
+            let counts = ctx.sql("SELECT (SELECT COUNT(*) FROM scores) AS sqlite_count, (SELECT COUNT(*) FROM labels) AS lance_count")
+                .await?.collect().await?;
+            for column in counts[0].columns() {
+                assert_eq!(
+                    column
+                        .as_any()
+                        .downcast_ref::<Int64Array>()
+                        .unwrap()
+                        .value(0),
+                    4
+                );
+            }
+        }
+        Ok(())
+    }
+}
+
+#[cfg(feature = "duckdb")]
+mod duckdb_provider_compatibility {
+    use super::*;
+    use datafusion_table_providers::duckdb::DuckDBTableFactory;
+    use datafusion_table_providers::sql::db_connection_pool::{
+        DbConnectionPool, duckdbpool::DuckDbConnectionPoolBuilder,
+    };
+    use flow_like_storage::arrow_array::Int64Array;
+    use flow_like_storage::datafusion::common::TableReference;
+
+    #[tokio::test]
+    async fn duckdb_arrow_scan_preserves_top_k_and_row_counts() -> flow_like_types::Result<()> {
+        let pool = Arc::new(
+            DuckDbConnectionPoolBuilder::memory()
+                .build()
+                .map_err(|error| flow_like_types::anyhow!("{error}"))?,
+        );
+        {
+            let connection = pool
+                .connect()
+                .await
+                .map_err(|error| flow_like_types::anyhow!("{error}"))?;
+            let connection = connection
+                .as_sync()
+                .expect("DuckDB exposes synchronous connections");
+            connection
+                .execute("CREATE TABLE scores (id BIGINT, score BIGINT)", &[])
+                .map_err(|error| flow_like_types::anyhow!("{error}"))?;
+            connection
+                .execute(
+                    "INSERT INTO scores VALUES (1, 10), (2, 40), (3, 20), (4, 30)",
+                    &[],
+                )
+                .map_err(|error| flow_like_types::anyhow!("{error}"))?;
+        }
+        let table = DuckDBTableFactory::new(pool)
+            .table_provider(TableReference::bare("scores"))
+            .await
+            .map_err(|error| flow_like_types::anyhow!("{error}"))?;
+        let ctx = SessionContext::new();
+        ctx.register_table("scores", table)?;
+        let batches = ctx
+            .sql("SELECT id FROM scores WHERE score >= 20 ORDER BY score DESC LIMIT 2")
+            .await?
+            .collect()
+            .await?;
+        let ids: Vec<i64> = batches
+            .iter()
+            .flat_map(|batch| {
+                batch
+                    .column(0)
+                    .as_any()
+                    .downcast_ref::<Int64Array>()
+                    .unwrap()
+                    .values()
+                    .to_vec()
+            })
+            .collect();
+        assert_eq!(ids, vec![2, 4]);
+        let batches = ctx
+            .sql("SELECT COUNT(*) FROM scores")
+            .await?
+            .collect()
+            .await?;
+        assert_eq!(
+            batches[0]
+                .column(0)
+                .as_any()
+                .downcast_ref::<Int64Array>()
+                .unwrap()
+                .value(0),
+            4
+        );
+        Ok(())
+    }
+}
+
+#[cfg(feature = "flight")]
+mod flight_provider_compatibility {
+    use super::*;
+
+    #[test]
+    fn flight_empty_projection_retains_rows_and_matches_the_stream_schema() {
+        let input = RecordBatch::try_new(
+            Arc::new(
+                Schema::new(vec![Field::new("id", DataType::Int32, false)]).with_metadata(
+                    std::collections::HashMap::from([("source".to_owned(), "flight".to_owned())]),
+                ),
+            ),
+            vec![Arc::new(Int32Array::from(vec![1, 2, 3]))],
+        )
+        .unwrap();
+        let empty_schema = Arc::new(Schema::empty());
+        let output = datafusion_table_providers::flight::enforce_schema(input, &empty_schema)
+            .expect("Flight batches must honor a zero-column projection");
+        assert_eq!(output.schema(), empty_schema);
+        assert_eq!(output.num_columns(), 0);
+        assert_eq!(output.num_rows(), 3);
+    }
+}
+
+#[cfg(feature = "iceberg")]
+mod iceberg_provider_compatibility {
+    use super::*;
+    use flow_like_storage::arrow_array::Int64Array;
+    use flow_like_storage::iceberg::io::{FileIO, LocalFsStorageFactory};
+    use flow_like_storage::iceberg::memory::{MEMORY_CATALOG_WAREHOUSE, MemoryCatalogBuilder};
+    use flow_like_storage::iceberg::spec::{NestedField, PrimitiveType, Schema, Type};
+    use flow_like_storage::iceberg::table::StaticTable;
+    use flow_like_storage::iceberg::{
+        Catalog, CatalogBuilder, NamespaceIdent, TableCreation, TableIdent,
+    };
+    use flow_like_storage::iceberg_datafusion::IcebergCatalogProvider;
+    use flow_like_storage::iceberg_datafusion::table::IcebergStaticTableProvider;
+    use std::collections::HashMap;
+
+    #[tokio::test]
+    async fn iceberg_metadata_reload_preserves_filters_top_k_and_counts()
+    -> flow_like_types::Result<()> {
+        let directory = tempfile::tempdir()?;
+        let catalog = Arc::new(
+            MemoryCatalogBuilder::default()
+                .with_storage_factory(Arc::new(LocalFsStorageFactory))
+                .load(
+                    "warehouse",
+                    HashMap::from([(
+                        MEMORY_CATALOG_WAREHOUSE.to_owned(),
+                        directory.path().to_string_lossy().into_owned(),
+                    )]),
+                )
+                .await?,
+        );
+        let namespace = NamespaceIdent::new("compatibility".to_owned());
+        catalog.create_namespace(&namespace, HashMap::new()).await?;
+        let schema = Schema::builder()
+            .with_fields(vec![
+                NestedField::required(1, "id", Type::Primitive(PrimitiveType::Long)).into(),
+                NestedField::required(2, "score", Type::Primitive(PrimitiveType::Long)).into(),
+            ])
+            .build()?;
+        catalog
+            .create_table(
+                &namespace,
+                TableCreation::builder()
+                    .name("scores".to_owned())
+                    .location(
+                        directory
+                            .path()
+                            .join("scores")
+                            .to_string_lossy()
+                            .into_owned(),
+                    )
+                    .schema(schema)
+                    .build(),
+            )
+            .await?;
+        let writer = SessionContext::new();
+        writer.register_catalog(
+            "warehouse",
+            Arc::new(IcebergCatalogProvider::try_new(catalog.clone()).await?),
+        );
+        writer
+            .sql("INSERT INTO warehouse.compatibility.scores VALUES (1, 10), (2, 40), (3, 20), (4, 30)")
+            .await?
+            .collect()
+            .await?;
+
+        // Reload persisted metadata through the same static provider used by the nodes.
+        let ident = TableIdent::new(namespace, "scores".to_owned());
+        let committed = catalog.load_table(&ident).await?;
+        let table = StaticTable::from_metadata_file(
+            committed.metadata_location_result()?,
+            ident,
+            FileIO::new_with_fs(),
+        )
+        .await?;
+        let ctx = SessionContext::new();
+        ctx.register_table(
+            "scores",
+            Arc::new(IcebergStaticTableProvider::try_new_from_table(table.into_table()).await?),
+        )?;
+        let batches = ctx
+            .sql("SELECT id FROM scores WHERE score >= 20 ORDER BY score DESC LIMIT 2")
+            .await?
+            .collect()
+            .await?;
+        let ids: Vec<i64> = batches
+            .iter()
+            .flat_map(|batch| {
+                batch
+                    .column(0)
+                    .as_any()
+                    .downcast_ref::<Int64Array>()
+                    .unwrap()
+                    .values()
+                    .to_vec()
+            })
+            .collect();
+        assert_eq!(ids, vec![2, 4]);
+        let counts = ctx
+            .sql("SELECT COUNT(*) FROM scores")
+            .await?
+            .collect()
+            .await?;
+        assert_eq!(
+            counts[0]
+                .column(0)
+                .as_any()
+                .downcast_ref::<Int64Array>()
+                .unwrap()
+                .value(0),
+            4
+        );
+        Ok(())
+    }
 }
 
 fn unique_object_path(prefix: &str, ext: &str) -> ObjectPath {
@@ -2193,7 +2587,6 @@ mod hive_partitioned_tests {
 #[cfg(test)]
 mod s3_minio_store_tests {
     use super::*;
-    use flow_like_storage::object_store::ObjectStore;
     use reqwest::Client;
 
     const MINIO_ENDPOINT: &str = "http://localhost:9002";

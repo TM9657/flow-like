@@ -20,6 +20,7 @@ use flow_like::flow::{
     },
     node::NodePermission,
 };
+use flow_like_storage::object_store::ObjectStoreExt;
 use flow_like_storage::{
     Path,
     object_store::{Error as StoreError, GetOptions, ObjectStore, PutPayload},
@@ -540,7 +541,9 @@ pub async fn load_exact_prerun_manifest(
                         .await
                         .map_err(ApiError::internal_error)?;
                     let storage_root = Path::from("apps").child(app_id.to_string());
-                    Ok(Board::from_loaded_proto(proto, storage_root, app_state).await)
+                    Board::from_loaded_proto(proto, storage_root, app_state)
+                        .await
+                        .map_err(ApiError::internal_error)
                 },
             )
             .await?
@@ -689,7 +692,7 @@ mod draft_manifest_cache_tests {
     use flow_like::flow::{board::Board, compiled::PrerunManifest};
     use flow_like_storage::{
         Path,
-        object_store::{Error as StoreError, ObjectStore, memory::InMemory},
+        object_store::{Error as StoreError, ObjectStore, ObjectStoreExt, memory::InMemory},
     };
     use flow_like_types::{FromProto, ToProto};
     use std::sync::Arc;

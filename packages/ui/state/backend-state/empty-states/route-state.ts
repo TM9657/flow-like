@@ -7,6 +7,12 @@ export class EmptyRouteState implements IAppRouteState {
 	getRouteByPath(_appId: string, _path: string): Promise<IRouteMapping | null> {
 		throw new Error("Method not implemented.");
 	}
+	getRouteByPathAuthoritative(
+		_appId: string,
+		_path: string,
+	): Promise<IRouteMapping | null> {
+		throw new Error("Method not implemented.");
+	}
 	getDefaultRoute(_appId: string): Promise<IRouteMapping | null> {
 		throw new Error("Method not implemented.");
 	}

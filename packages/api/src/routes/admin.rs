@@ -15,6 +15,7 @@ pub mod connections;
 pub mod deletions;
 pub mod forks;
 pub mod governance;
+pub mod home_defaults;
 pub mod logs;
 pub mod models;
 pub mod packages;
@@ -30,6 +31,7 @@ pub mod users;
 
 pub fn routes() -> Router<AppState> {
     Router::new()
+        .route("/home-defaults/{id}", put(home_defaults::save_home_default))
         .route(
             "/connections/graph",
             get(connections::get_global_connection_graph),
@@ -79,7 +81,9 @@ pub fn routes() -> Router<AppState> {
         )
         .route(
             "/publication/apps/{app_id}/board/{board_id}",
-            get(publication::get_board::get_board),
+            get(publication::get_board::get_board).route_layer(axum::middleware::from_fn(
+                super::app::board::capabilities::negotiate_board_format,
+            )),
         )
         .route(
             "/publication/apps/{app_id}/page/{page_id}",

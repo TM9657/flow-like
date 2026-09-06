@@ -48,6 +48,21 @@ export class WebRouteState implements IAppRouteState {
 		}
 	}
 
+	async getRouteByPathAuthoritative(
+		appId: string,
+		path: string,
+	): Promise<IRouteMapping | null> {
+		const route = await apiGet<any>(
+			`apps/${appId}/routes/by-path?path=${encodeURIComponent(path)}`,
+			this.backend.auth,
+		);
+		if (!route) return null;
+		return {
+			path: route.path,
+			eventId: route.eventId ?? route.event_id,
+		};
+	}
+
 	async getDefaultRoute(appId: string): Promise<IRouteMapping | null> {
 		try {
 			const route = await apiGet<any>(

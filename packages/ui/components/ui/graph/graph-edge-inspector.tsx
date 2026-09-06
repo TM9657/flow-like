@@ -6,6 +6,7 @@ import { useCallback, useState } from "react";
 import type { SubgraphEdge } from "../../../state/backend-state/graph-state";
 import { Button } from "../button";
 import { ScrollArea } from "../scroll-area";
+import { UserInlineTag } from "../user-identity";
 import {
 	FieldFilter,
 	PropertyValue,
@@ -17,6 +18,8 @@ export interface GraphEdgeInspectorProps {
 	edge: SubgraphEdge | null;
 	sourceCaption?: string;
 	targetCaption?: string;
+	sourceAccountId?: string | null;
+	targetAccountId?: string | null;
 	onClose: () => void;
 }
 
@@ -24,10 +27,20 @@ export function GraphEdgeInspector({
 	edge,
 	sourceCaption,
 	targetCaption,
+	sourceAccountId,
+	targetAccountId,
 	onClose,
 }: GraphEdgeInspectorProps) {
 	const { t } = useTranslation("common");
 	const [hiddenFields, setHiddenFields] = useState<Set<string>>(new Set());
+	const handleToggleField = useCallback((field: string) => {
+		setHiddenFields((prev) => {
+			const next = new Set(prev);
+			if (next.has(field)) next.delete(field);
+			else next.add(field);
+			return next;
+		});
+	}, []);
 
 	if (!edge) return null;
 
@@ -39,15 +52,6 @@ export function GraphEdgeInspector({
 		: [];
 	const allFields = propEntries.map(([k]) => k);
 	const visibleEntries = propEntries.filter(([k]) => !hiddenFields.has(k));
-
-	const handleToggleField = useCallback((field: string) => {
-		setHiddenFields((prev) => {
-			const next = new Set(prev);
-			if (next.has(field)) next.delete(field);
-			else next.add(field);
-			return next;
-		});
-	}, []);
 
 	return (
 		<div className="w-80 shrink-0 bg-background border-l flex flex-col h-full min-h-0 overflow-hidden animate-in slide-in-from-right-5 duration-200">
@@ -88,11 +92,19 @@ export function GraphEdgeInspector({
 					<div className="rounded-md bg-muted/50 px-3 py-2 space-y-1">
 						<div className="flex items-center gap-2 text-sm">
 							<span className="truncate font-medium">
-								{sourceCaption ?? edge.source}
+								{sourceAccountId ? (
+									<UserInlineTag userId={sourceAccountId} className="text-sm" />
+								) : (
+									(sourceCaption ?? edge.source)
+								)}
 							</span>
 							<ArrowRight className="h-3 w-3 shrink-0 text-muted-foreground" />
 							<span className="truncate font-medium">
-								{targetCaption ?? edge.target}
+								{targetAccountId ? (
+									<UserInlineTag userId={targetAccountId} className="text-sm" />
+								) : (
+									(targetCaption ?? edge.target)
+								)}
 							</span>
 						</div>
 						<div className="flex items-center gap-2 text-[10px] font-mono text-muted-foreground">
@@ -133,10 +145,20 @@ export function GraphEdgeInspector({
 												{key}
 											</p>
 											<span className="text-[9px] text-muted-foreground/60">
-												{inferValueKind(value).kind}
+												{
+													inferValueKind(
+														value,
+														key,
+														edge.property_metadata?.[key],
+													).kind
+												}
 											</span>
 										</div>
-										<PropertyValue value={value} propKey={key} />
+										<PropertyValue
+											value={value}
+											propKey={key}
+											metadata={edge.property_metadata?.[key]}
+										/>
 									</div>
 								))}
 							</div>

@@ -69,7 +69,24 @@ export class EmptyAppState implements IAppState {
 	getApp(appId: string): Promise<IApp> {
 		throw new Error("Method not implemented.");
 	}
+	getAppAuthoritative(appId: string): Promise<IApp> {
+		throw new Error("Method not implemented.");
+	}
 	updateApp(app: IApp): Promise<void> {
+		throw new Error("Method not implemented.");
+	}
+	updateAppAuthoritative(app: IApp): Promise<void> {
+		throw new Error("Method not implemented.");
+	}
+	readAppBuild(appId: string, buildId: string): Promise<unknown | null> {
+		throw new Error("Method not implemented.");
+	}
+	writeAppBuild(
+		appId: string,
+		buildId: string,
+		record: unknown,
+		expectedRevision: number | null,
+	): Promise<void> {
 		throw new Error("Method not implemented.");
 	}
 	getAppMeta(appId: string, language?: string): Promise<IMetadata> {

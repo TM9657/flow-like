@@ -187,8 +187,12 @@ pub fn emit_event_batch_throttled(
             true
         } else {
             entry.trailing_scheduled = true;
-            let delay = min_interval
-                .saturating_sub(entry.last_emit.map(|last| last.elapsed()).unwrap_or_default());
+            let delay = min_interval.saturating_sub(
+                entry
+                    .last_emit
+                    .map(|last| last.elapsed())
+                    .unwrap_or_default(),
+            );
             let app = app.clone();
             let trailing_key = key.clone();
             tauri::async_runtime::spawn(async move {

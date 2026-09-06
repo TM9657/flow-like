@@ -84,6 +84,16 @@ pub fn assignments_to_lance_updates(
     let mut updates = Vec::with_capacity(assignments.len());
     for (column, value) in assignments {
         ensure_column(schema, column)?;
+        if crate::geometry::is_geometry_field(
+            schema
+                .field_with_name(column)
+                .map_err(|error| DataFusionError::Plan(error.to_string()))?,
+        ) {
+            return plan_err(
+                "Geometry columns cannot be updated with SQL expressions; use validated upsert"
+                    .into(),
+            );
+        }
         // DataFusion already drops `SET a = a`; drop any that slip through so
         // lance does not rewrite an untouched column.
         if let Expr::Column(source) = value
@@ -391,7 +401,7 @@ pub struct LanceDmlExec {
     table: Table,
     op: LanceDmlOp,
     schema: SchemaRef,
-    properties: PlanProperties,
+    properties: Arc<PlanProperties>,
 }
 
 impl LanceDmlExec {
@@ -401,12 +411,12 @@ impl LanceDmlExec {
             DataType::UInt64,
             false,
         )]));
-        let properties = PlanProperties::new(
+        let properties = Arc::new(PlanProperties::new(
             EquivalenceProperties::new(schema.clone()),
             Partitioning::UnknownPartitioning(1),
             EmissionType::Final,
             Boundedness::Bounded,
-        );
+        ));
         Self {
             table,
             op,
@@ -446,7 +456,7 @@ impl ExecutionPlan for LanceDmlExec {
         self
     }
 
-    fn properties(&self) -> &PlanProperties {
+    fn properties(&self) -> &Arc<PlanProperties> {
         &self.properties
     }
 

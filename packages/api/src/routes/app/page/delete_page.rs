@@ -82,25 +82,37 @@ pub async fn delete_page(
     }
 
     if let Some(board_id) = board_id {
-        if let Ok(board) = app.open_board(board_id.clone(), None, None).await {
-            page_id_guard.ensure_held()?;
-            let mut board_guard = board.lock().await;
-            if let Err(e) = board_guard.delete_page(&page_id, None).await {
+        match app.open_board(board_id.clone(), None, None).await {
+            Ok(board) => {
+                page_id_guard.ensure_held()?;
+                let mut board_guard = board.lock().await;
+                if let Err(error) = board_guard.delete_page(&page_id, None).await {
+                    if let Some(upgrade) = ApiError::from_board_format_error(&error) {
+                        return Err(upgrade);
+                    }
+                    tracing::warn!(
+                        "delete_page storage cleanup failed for board {}: {error}",
+                        board_id
+                    );
+                }
+                page_id_guard.ensure_held()?;
+                if let Err(error) = board_guard.save(None).await {
+                    if let Some(upgrade) = ApiError::from_board_format_error(&error) {
+                        return Err(upgrade);
+                    }
+                    tracing::warn!("delete_page board save failed for {}: {error}", board_id);
+                }
+            }
+            Err(error) => {
+                if let Some(upgrade) = ApiError::from_board_format_error(&error) {
+                    return Err(upgrade);
+                }
                 tracing::warn!(
-                    "delete_page storage cleanup failed for board {}: {e}",
-                    board_id
+                    "delete_page could not open board {} for page {}; DB row will still be removed: {error}",
+                    board_id,
+                    page_id
                 );
             }
-            page_id_guard.ensure_held()?;
-            if let Err(e) = board_guard.save(None).await {
-                tracing::warn!("delete_page board save failed for {}: {e}", board_id);
-            }
-        } else {
-            tracing::warn!(
-                "delete_page could not open board {} for page {} — DB row will still be removed",
-                board_id,
-                page_id
-            );
         }
     } else {
         tracing::warn!(

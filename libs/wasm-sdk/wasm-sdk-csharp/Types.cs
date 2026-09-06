@@ -21,8 +21,9 @@ public static class PinType
     public const string Date = "Date";
     public const string PathBuf = "PathBuf";
     public const string Struct = "Struct";
+    public const string Geometry = "Geometry";
 
-    private static readonly HashSet<string> All = [Exec, String, I64, F64, Bool, Generic, Bytes, Date, PathBuf, Struct];
+    private static readonly HashSet<string> All = [Exec, String, I64, F64, Bool, Generic, Bytes, Date, PathBuf, Struct, Geometry];
 
     public static string Validate(string dataType)
     {
@@ -63,6 +64,7 @@ public static class DataType
     public const string Date = PinType.Date;
     public const string PathBuf = PinType.PathBuf;
     public const string Struct = PinType.Struct;
+    public const string Geometry = PinType.Geometry;
 
     public static string Validate(string dataType) => PinType.Validate(dataType);
 }

@@ -50,7 +50,7 @@ function onlineBackend() {
 		isOffline: vi.fn().mockResolvedValue(false),
 		isLocalOnly: vi.fn().mockResolvedValue(false),
 		profile: { hub: "hub.example" },
-		auth: { user: { access_token: "token" } },
+		auth: { isAuthenticated: true, user: { access_token: "token" } },
 		backgroundTaskHandler: vi.fn(),
 	};
 }
@@ -65,7 +65,7 @@ function unknownVisibilityBackend() {
 		isOffline: vi.fn().mockResolvedValue(true),
 		isLocalOnly: vi.fn().mockResolvedValue(false),
 		profile: { hub: "hub.example" },
-		auth: { user: { access_token: "token" } },
+		auth: { isAuthenticated: true, user: { access_token: "token" } },
 		backgroundTaskHandler: vi.fn(),
 	};
 }
@@ -387,6 +387,62 @@ describe("versioned page reads", () => {
 		await expect(
 			state.getPage("app-1", "page-1", "board-1", [2, 1, 0]),
 		).rejects.toBe(versionFailure);
+	});
+});
+
+describe("authoritative page reads", () => {
+	beforeEach(() => {
+		mocks.invoke.mockReset();
+		mocks.fetcher.mockReset();
+	});
+
+	test("reads a hosted inventory directly and propagates authority failure", async () => {
+		const failure = new Error("hub unavailable");
+		mocks.fetcher.mockRejectedValueOnce(failure);
+		const state = new PageState(onlineBackend() as never);
+
+		await expect(state.getPagesAuthoritative("app-1", "board-1")).rejects.toBe(
+			failure,
+		);
+		expect(mocks.fetcher).toHaveBeenCalledWith(
+			{ hub: "hub.example" },
+			"apps/app-1/pages?board_id=board-1",
+			{ method: "GET" },
+			expect.objectContaining({ isAuthenticated: true }),
+		);
+		expect(mocks.invoke).not.toHaveBeenCalled();
+	});
+
+	test("reads one exact hosted version without native cache writes or fallback", async () => {
+		const page = { id: "page-1", boardId: "board-1" };
+		mocks.fetcher.mockResolvedValueOnce(page);
+		const state = new PageState(onlineBackend() as never);
+
+		await expect(
+			state.getPageAuthoritative("app-1", "page-1", "board-1", [2, 1, 0]),
+		).resolves.toBe(page);
+		expect(mocks.fetcher.mock.calls[0][1]).toBe(
+			"apps/app-1/pages/page-1?board_id=board-1&version=2_1_0",
+		);
+		expect(mocks.invoke).not.toHaveBeenCalled();
+	});
+
+	test("requires an exact native snapshot for a local-only app", async () => {
+		const failure = new Error("version missing");
+		mocks.invoke.mockRejectedValueOnce(failure);
+		const state = new PageState(offlineBackend() as never);
+
+		await expect(
+			state.getPageAuthoritative("app-1", "page-1", "board-1", [2, 1, 0]),
+		).rejects.toBe(failure);
+		expect(mocks.invoke).toHaveBeenCalledTimes(1);
+		expect(mocks.invoke).toHaveBeenCalledWith("get_page", {
+			appId: "app-1",
+			pageId: "page-1",
+			boardId: "board-1",
+			version: [2, 1, 0],
+		});
+		expect(mocks.fetcher).not.toHaveBeenCalled();
 	});
 });
 

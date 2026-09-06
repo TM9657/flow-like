@@ -35,6 +35,10 @@ A **Date** variable holds an instant in UTC, not a calendar day. See
 [Dates & Times](/reference/dates/) for its wire format, the inputs it parses,
 the formatting placeholders, and how it is stored in tables.
 
+A **Geometry** variable holds a location or shape as GeoJSON. Its pins use orange.
+See [Geometry](/reference/geometry/) for subtypes, coordinate order, conversion
+nodes, and spatial table queries.
+
 ## Variable Settings
 
 ### Exposed

@@ -2,6 +2,9 @@
 
 use std::any::Any;
 
+#[cfg(feature = "geometry")]
+pub mod geometry;
+
 #[cfg(feature = "cache")]
 pub mod cache;
 #[cfg(feature = "channel")]

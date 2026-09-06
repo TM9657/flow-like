@@ -1,6 +1,7 @@
 use flow_like::flow::execution::context::ExecutionContext;
 pub use flow_like::flow::execution::egress::GuardedHttpClient;
 use flow_like_catalog_core::FlowPath;
+use flow_like_storage::object_store::ObjectStoreExt;
 use flow_like_storage::object_store::PutPayload;
 use flow_like_types::{Value, reqwest};
 use futures::StreamExt;

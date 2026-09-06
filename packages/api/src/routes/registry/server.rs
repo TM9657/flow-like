@@ -17,6 +17,7 @@ use crate::entity::{
 };
 use flow_like::a2ui::micro_widget::{PackageWidgetRef, PackageWidgetSource};
 use flow_like_storage::files::store::FlowLikeStore;
+use flow_like_storage::object_store::ObjectStoreExt;
 use flow_like_storage::object_store::PutPayload;
 use flow_like_storage::object_store::path::Path;
 use flow_like_types::create_id;

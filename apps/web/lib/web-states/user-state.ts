@@ -6,7 +6,16 @@ import type {
 	ISettings,
 	IUserState,
 } from "@flow-like/flow-like-ui";
-import { IAppVisibility, isAzureBlobStorageUrl } from "@flow-like/flow-like-ui";
+import { IAppVisibility } from "@flow-like/flow-like-ui";
+import type {
+	IHomeDefault,
+	IHomeDefaults,
+	IHomeLayout,
+} from "@flow-like/flow-like-ui/components/home/types";
+import {
+	type MediaUploadResponse,
+	updateAccountWithAvatar,
+} from "@flow-like/flow-like-ui/lib/profile-media-upload";
 import type {
 	INotification,
 	INotificationsOverview,
@@ -70,6 +79,8 @@ interface ApiProfile {
 	settings?: unknown;
 	apps?: unknown;
 	shortcuts?: unknown;
+	home_layout?: IHomeLayout | null;
+	home_default_id?: string | null;
 	bit_ids?: string[] | null;
 	hub: string;
 	hubs?: string[] | null;
@@ -96,6 +107,8 @@ function transformApiProfile(apiProfile: ApiProfile): IProfile {
 		settings: apiProfile.settings as ISettings | undefined,
 		apps: apiProfile.apps as IProfileApp[] | undefined,
 		shortcuts: apiProfile.shortcuts as IProfileShortcut[] | undefined,
+		home_layout: apiProfile.home_layout,
+		home_default_id: apiProfile.home_default_id,
 		bits: apiProfile.bit_ids ?? [],
 		hub: apiProfile.hub,
 		hubs: apiProfile.hubs ?? undefined,
@@ -130,6 +143,44 @@ function normalizeProfileShortcut(shortcut: IProfileShortcut): IShortcut {
 
 export class WebUserState implements IUserState {
 	constructor(private readonly backend: WebBackendRef) {}
+
+	async getHomeDefaults(defaultId?: string): Promise<IHomeDefaults> {
+		const query = defaultId
+			? `?default_id=${encodeURIComponent(defaultId)}`
+			: "";
+		return apiGet<IHomeDefaults>(
+			`info/home-defaults${query}`,
+			this.backend.auth,
+		);
+	}
+
+	async saveHomeLayout(
+		layout: IHomeLayout | null,
+		profileId?: string,
+	): Promise<void> {
+		const id = profileId ?? (await this.getProfile()).id;
+		if (!id) throw new Error("Profile ID is required");
+		await apiPost(
+			`profile/${encodeURIComponent(id)}`,
+			{ home_layout: layout },
+			this.backend.auth,
+		);
+	}
+
+	async saveHomeDefault(
+		id: string,
+		layout: IHomeLayout | null,
+		expectedRevision?: string | null,
+	): Promise<IHomeDefault | null> {
+		return apiPut<IHomeDefault | null>(
+			`admin/home-defaults/${encodeURIComponent(id)}`,
+			{
+				layout,
+				expected_revision: expectedRevision ?? null,
+			},
+			this.backend.auth,
+		);
+	}
 
 	private hasRemoteAccessToken(): boolean {
 		return Boolean(
@@ -489,32 +540,9 @@ export class WebUserState implements IUserState {
 	}
 
 	async updateUser(data: IUserUpdate, avatar?: File): Promise<void> {
-		if (avatar) {
-			data.avatar_extension = avatar.name.split(".").pop() || "";
-		}
-
-		const response = await apiPut<{ signed_url?: string }>(
-			"user/info",
-			data,
-			this.backend.auth,
+		await updateAccountWithAvatar(data, avatar, (body) =>
+			apiPut<MediaUploadResponse>("user/info", body, this.backend.auth),
 		);
-
-		if (response?.signed_url && avatar) {
-			const headers: HeadersInit = {
-				"Content-Type": avatar.type,
-			};
-
-			// Azure Blob Storage requires x-ms-blob-type header
-			if (isAzureBlobStorageUrl(response.signed_url)) {
-				headers["x-ms-blob-type"] = "BlockBlob";
-			}
-
-			await fetch(response.signed_url, {
-				method: "PUT",
-				body: avatar,
-				headers,
-			});
-		}
 	}
 
 	async updateProfileApp(

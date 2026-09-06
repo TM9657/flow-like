@@ -22,6 +22,7 @@ pub mod connection;
 pub mod data;
 pub mod db;
 pub mod events;
+pub mod flowpilot_builds;
 pub mod fork;
 pub mod graph;
 pub mod groups;
@@ -105,6 +106,7 @@ pub fn routes() -> Router<AppState> {
         .nest("/{app_id}/analytics", analytics::routes())
         .nest("/{app_id}/sales", sales::routes())
         .nest("/{app_id}/events", events::routes())
+        .nest("/{app_id}/flowpilot-builds", flowpilot_builds::routes())
         .nest("/{app_id}/fork", fork::routes())
         .merge(fork::root_routes())
         .nest("/{app_id}/comments", comments::routes())

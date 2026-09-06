@@ -19,6 +19,7 @@ export namespace PinType {
 	export const DATE = "Date";
 	export const PATH_BUF = "PathBuf";
 	export const STRUCT = "Struct";
+	export const GEOMETRY = "Geometry";
 
 	const ALL = new Set([
 		EXEC,
@@ -31,6 +32,7 @@ export namespace PinType {
 		DATE,
 		PATH_BUF,
 		STRUCT,
+		GEOMETRY,
 	]);
 
 	export function validate(dataType: string): string {

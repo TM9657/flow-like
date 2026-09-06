@@ -153,6 +153,14 @@ export interface IPageBootstrap {
 
 export interface IPageState {
 	getPages(appId: string, boardId?: string): Promise<PageListItem[]>;
+	/**
+	 * List pages from the app's authoritative store. Read failures propagate and this call never
+	 * repairs, caches, or falls back to another store.
+	 */
+	getPagesAuthoritative(
+		appId: string,
+		boardId?: string,
+	): Promise<PageListItem[]>;
 	getPageBootstrap(
 		appId: string,
 		route?: string,
@@ -168,6 +176,16 @@ export interface IPageState {
 		boardId?: string,
 		version?: [number, number, number],
 		options?: IGetPageOptions,
+	): Promise<IPage>;
+	/**
+	 * Read exactly the requested page revision from the authoritative store. A missing version or
+	 * unavailable authority fails instead of returning the current page or a cached copy.
+	 */
+	getPageAuthoritative(
+		appId: string,
+		pageId: string,
+		boardId?: string,
+		version?: [number, number, number],
 	): Promise<IPage>;
 	createPage(
 		appId: string,

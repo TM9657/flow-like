@@ -58,20 +58,25 @@ import {
 	type FlowPilotE2ECaseId,
 	type FlowPilotE2ECheck,
 	type FlowPilotE2ECliEnvelope,
+	type FlowPilotE2EEvaluationIdentity,
 	type FlowPilotE2EModelConfig,
 	type FlowPilotE2EModelKey,
 	type FlowPilotE2ERunOptions,
 	type FlowPilotE2ERunReport,
 	type FlowPilotE2ERunnerIssue,
+	type FlowPilotE2ETier,
+	aggregateFlowPilotE2EBehavioralMetrics,
 	appCreationFailureFingerprint,
 	authoredFlowScriptEvidence,
 	buildCasePrompt,
+	createFlowPilotE2EEvaluationIdentity,
 	evaluateAppCreationCase,
 	flowPilotE2EArtifactPassed,
 	flowPilotE2ECaseRunTimeoutMs,
 	flowPilotE2EModel,
 	resolveFlowPilotE2EModelKey,
 	resolveFlowPilotE2ERunCases,
+	resolveFlowPilotE2ETier,
 } from "../../../lib/flowpilot-e2e";
 
 const START_TIMEOUT_MS = 60_000;
@@ -842,8 +847,18 @@ export default function FlowPilotE2EPage() {
 			pinnedModelKey: FlowPilotE2EModelKey,
 			minimum?: number,
 			requestedConcurrency = 1,
+			requestedTier: FlowPilotE2ETier = "structural",
+			requestedEvaluationIdentity?: FlowPilotE2EEvaluationIdentity,
 		): Promise<FlowPilotE2EArtifact[]> => {
 			const pinnedModel = flowPilotE2EModel(pinnedModelKey);
+			const evaluationIdentity =
+				requestedEvaluationIdentity ??
+				createFlowPilotE2EEvaluationIdentity(
+					pinnedModel,
+					requestedTier,
+					caseDefinitions,
+					minimum,
+				);
 			const concurrency = Math.max(
 				1,
 				Math.min(requestedConcurrency, MAX_PARALLEL_CASES),
@@ -1161,6 +1176,8 @@ export default function FlowPilotE2EPage() {
 								built.caseDefinition,
 								snapshot,
 								pinnedModel,
+								requestedTier,
+								evaluationIdentity,
 							),
 							issues,
 						);
@@ -1189,6 +1206,7 @@ export default function FlowPilotE2EPage() {
 						durationMs: Date.now() - startedAt,
 						requestedModelKey: pinnedModelKey,
 						requestedModel: pinnedModel,
+						requestedTier,
 						observedModel,
 						caseId: caseDefinition.id,
 						expectedAppName: built.expectedAppName,
@@ -1266,7 +1284,14 @@ export default function FlowPilotE2EPage() {
 			const definitions = resolveFlowPilotE2ERunCases(options);
 			const repeat = validatedRepeat(options.repeat);
 			const requestedModelKey = options.modelKey ?? modelKey;
+			const requestedTier = resolveFlowPilotE2ETier(options.tier);
 			const requestedConcurrency = validatedConcurrency(options.concurrency);
+			const evaluationIdentity = createFlowPilotE2EEvaluationIdentity(
+				flowPilotE2EModel(requestedModelKey),
+				requestedTier,
+				definitions,
+				options.minFlowScriptNonWhitespaceChars,
+			);
 			const artifacts: FlowPilotE2EArtifact[] = [];
 			// Fail-fast only means something while later cases are still unstarted, so it keeps the
 			// sequential path; everything else hands the whole ordered job list to one pooled run.
@@ -1277,6 +1302,8 @@ export default function FlowPilotE2EPage() {
 						requestedModelKey,
 						options.minFlowScriptNonWhitespaceChars,
 						requestedConcurrency,
+						requestedTier,
+						evaluationIdentity,
 					);
 				} catch (error) {
 					throw new FlowPilotE2EPartialRunError(errorMessage(error), artifacts);
@@ -1289,12 +1316,17 @@ export default function FlowPilotE2EPage() {
 							[caseDefinition],
 							requestedModelKey,
 							options.minFlowScriptNonWhitespaceChars,
+							1,
+							requestedTier,
+							evaluationIdentity,
 						);
 						artifacts.push(...completed);
 						if (
 							options.failFast &&
 							(completed.length !== 1 ||
-								completed.some((item) => !flowPilotE2EArtifactPassed(item)))
+								completed.some(
+									(item) => !flowPilotE2EArtifactPassed(item, requestedTier),
+								))
 						) {
 							return artifacts;
 						}
@@ -1363,6 +1395,8 @@ export default function FlowPilotE2EPage() {
 			let caseIds: FlowPilotE2ECaseId[] = [];
 			let requestedModelKey: FlowPilotE2EModelKey =
 				FLOWPILOT_E2E_DEFAULT_MODEL_KEY;
+			let requestedTier: FlowPilotE2ETier = "structural";
+			let evaluationIdentity: FlowPilotE2EEvaluationIdentity | undefined;
 			let repeat = 1;
 			let minimum: number | undefined;
 			let failFast = false;
@@ -1393,11 +1427,18 @@ export default function FlowPilotE2EPage() {
 				repeat = parseCliRepeat(params.get("repeat"));
 				failFast = params.get("failFast") === "1";
 				requestedModelKey = resolveFlowPilotE2EModelKey(params.get("model"));
+				requestedTier = resolveFlowPilotE2ETier(params.get("tier"));
 				const requestedConcurrency = parseCliConcurrency(
 					params.get("concurrency"),
 				);
 				const definitions = resolveFlowPilotE2ERunCases(options);
 				caseIds = definitions.map((caseDefinition) => caseDefinition.id);
+				evaluationIdentity = createFlowPilotE2EEvaluationIdentity(
+					flowPilotE2EModel(requestedModelKey),
+					requestedTier,
+					definitions,
+					minimum,
+				);
 				setSelected(new Set(caseIds));
 				setModelKey(requestedModelKey);
 				setConcurrency(requestedConcurrency);
@@ -1405,6 +1446,7 @@ export default function FlowPilotE2EPage() {
 				artifacts = await runRequestedCases({
 					caseIds,
 					modelKey: requestedModelKey,
+					tier: requestedTier,
 					minFlowScriptNonWhitespaceChars: minimum,
 					repeat,
 					concurrency: requestedConcurrency,
@@ -1418,7 +1460,9 @@ export default function FlowPilotE2EPage() {
 				console.error("FlowPilot E2E CLI run failed", error);
 			}
 
-			const passedRuns = artifacts.filter(flowPilotE2EArtifactPassed).length;
+			const passedRuns = artifacts.filter((artifact) =>
+				flowPilotE2EArtifactPassed(artifact, requestedTier),
+			).length;
 			const requestedRuns = caseIds.length * repeat;
 			const completedAtMs = Date.now();
 			const envelope: FlowPilotE2ECliEnvelope = {
@@ -1430,6 +1474,8 @@ export default function FlowPilotE2EPage() {
 				selection: {
 					caseIds,
 					modelKey: requestedModelKey,
+					tier: requestedTier,
+					...(evaluationIdentity ? { evaluationIdentity } : {}),
 					repeat,
 					minFlowScriptNonWhitespaceChars: minimum,
 					failFast,
@@ -1446,6 +1492,11 @@ export default function FlowPilotE2EPage() {
 					passed: passedRuns,
 					failed: artifacts.length - passedRuns,
 					skipped: Math.max(0, requestedRuns - artifacts.length),
+					...(requestedTier === "behavioral"
+						? {
+								behavioral: aggregateFlowPilotE2EBehavioralMetrics(artifacts),
+							}
+						: {}),
 				},
 				error: failure,
 			};
@@ -1489,6 +1540,7 @@ export default function FlowPilotE2EPage() {
 			const requestedModelKey = resolveFlowPilotE2EModelKey(
 				params.get("model"),
 			);
+			const requestedTier = resolveFlowPilotE2ETier(params.get("tier"));
 			const requestedConcurrency = parseCliConcurrency(
 				params.get("concurrency"),
 			);
@@ -1499,6 +1551,7 @@ export default function FlowPilotE2EPage() {
 				void runRequestedCases({
 					caseIds: definitions.map((item) => item.id),
 					modelKey: requestedModelKey,
+					tier: requestedTier,
 					minFlowScriptNonWhitespaceChars: minimum,
 					repeat: parseCliRepeat(params.get("repeat")),
 					concurrency: requestedConcurrency,

@@ -5,6 +5,7 @@ import type {
 	GraphAnalyticsResult,
 	GraphOverlay,
 	GraphPathsResult,
+	GraphQueryResult,
 	GraphSchema,
 	GraphSearchPayload,
 	IGraphState,
@@ -26,7 +27,10 @@ import type {
 	UpsertGraphElementsResult,
 	ValidationResult,
 } from "@flow-like/flow-like-ui";
-import { applyOntologyActionStreamEvent } from "@flow-like/flow-like-ui";
+import {
+	applyOntologyActionStreamEvent,
+	normalizeGraphQueryResult,
+} from "@flow-like/flow-like-ui";
 import { WebApiState } from "./api-state";
 import {
 	type WebBackendRef,
@@ -234,6 +238,20 @@ export class WebGraphState implements IGraphState {
 			payload,
 			this.backend.auth,
 		);
+	}
+
+	async cypherWithMetadata(
+		appId: string,
+		overlayId: string,
+		payload: CypherPayload,
+		userScoped?: boolean,
+	): Promise<GraphQueryResult> {
+		const result = await apiPost<GraphQueryResult | unknown[]>(
+			`apps/${appId}/graph/${overlayId}/cypher${scopeQuery(userScoped)}`,
+			{ ...payload, include_metadata: true },
+			this.backend.auth,
+		);
+		return normalizeGraphQueryResult(result);
 	}
 
 	async sql(

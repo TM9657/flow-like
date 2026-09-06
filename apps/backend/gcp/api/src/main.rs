@@ -32,11 +32,9 @@ const REQUIRED_SECRETS: &[(&str, usize)] = &[
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    // Ordered before telemetry on purpose: the exporters open sockets, and the
-    // Sentry transport honours proxy environment variables. See
-    // `config::reject_forbidden_environment`.
+    // Validate the environment before telemetry exporters open sockets.
     config::reject_forbidden_environment()?;
-    let _sentry_guard = metrics_endpoint::init_telemetry();
+    metrics_endpoint::init_telemetry();
 
     let config = config::Config::from_env()?;
     let postgres_config = postgres::IamPostgresConfig::from_env()?;
@@ -80,7 +78,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     validate_security_prerequisites(&state).await?;
 
-    let _run_sweeper = spawn_run_sweeper(Arc::new(state.db.clone()), RunSweeperConfig::from_env());
+    let _run_sweeper = spawn_run_sweeper(
+        flow_like_api::audit::ExecutionAuditContext::from(&state),
+        RunSweeperConfig::from_env(),
+    );
     let _regression_suites = spawn_regression_suites_worker(state.clone());
     let _deletion_worker = flow_like_api::deletion::spawn_deletion_worker(
         state.clone(),
@@ -319,13 +320,7 @@ mod metrics_endpoint {
         timeout: Duration,
     }
 
-    pub fn init_telemetry() -> Option<sentry::ClientInitGuard> {
-        // Sentry is bound before the subscriber is installed because
-        // `sentry_tracing::layer()` forwards to whichever client is bound when
-        // an event is recorded; a layer installed ahead of the client silently
-        // drops everything that happens during startup — precisely the events
-        // worth having.
-        let sentry_guard = init_sentry();
+    pub fn init_telemetry() {
         let format_layer = tracing_subscriber::fmt::layer();
         let env_filter = flow_like_api::warn_env_filter();
         let (otlp, timeout_warning) = init_tracing();
@@ -333,13 +328,11 @@ mod metrics_endpoint {
             .as_ref()
             .map(|otlp| (otlp.endpoint.clone(), otlp.endpoint_var, otlp.timeout));
         let otel_layer = otlp.map(|otlp| tracing_opentelemetry::layer().with_tracer(otlp.tracer));
-        let sentry_layer = sentry_guard.is_some().then(sentry_tracing::layer);
 
         tracing_subscriber::registry()
             .with(format_layer)
             .with(env_filter)
             .with(otel_layer)
-            .with(sentry_layer)
             .init();
 
         if let Some(warning) = timeout_warning {
@@ -353,23 +346,6 @@ mod metrics_endpoint {
         }
 
         init_metrics();
-        sentry_guard
-    }
-
-    fn init_sentry() -> Option<sentry::ClientInitGuard> {
-        let endpoint = std::env::var("SENTRY_ENDPOINT").ok()?;
-        if endpoint.trim().is_empty() {
-            return None;
-        }
-
-        Some(sentry::init((
-            endpoint,
-            sentry::ClientOptions {
-                release: sentry::release_name!(),
-                traces_sample_rate: 0.3,
-                ..Default::default()
-            },
-        )))
     }
 
     fn init_tracing() -> (Option<EnabledTracing>, Option<String>) {

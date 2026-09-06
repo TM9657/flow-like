@@ -29,6 +29,7 @@
 //! non-fatal — collected into the response so the UI can show
 //! "12 files copied, 1 failed".
 
+use flow_like::flow_like_storage::object_store::ObjectStoreExt;
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 

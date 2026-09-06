@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { doPinsMatch, parseBoard } from "./flow-board-utils";
+import { GEOMETRY_KINDS, geometryMarker } from "./geometry";
 import type {
 	IBoard,
 	ILayer,
@@ -8,8 +9,8 @@ import type {
 } from "./schema/flow/board";
 import { ILayerCacheScope, ILayerType } from "./schema/flow/board";
 import type { INode } from "./schema/flow/node";
-import type { IPin } from "./schema/flow/pin";
 import { IVariableType } from "./schema/flow/node";
+import type { IPin } from "./schema/flow/pin";
 import { IPinType, IValueType } from "./schema/flow/pin";
 import { convertJsonToUint8Array, parseUint8ArrayToJson } from "./uint8";
 
@@ -379,7 +380,8 @@ describe("boardContentVersion on rendered nodes", () => {
  */
 const OPEN_SCHEMA = '{"type":"object","additionalProperties":true}';
 const USER_SCHEMA = '{"type":"object","properties":{"sub":{"type":"string"}}}';
-const OTHER_SCHEMA = '{"type":"object","properties":{"count":{"type":"number"}}}';
+const OTHER_SCHEMA =
+	'{"type":"object","properties":{"count":{"type":"number"}}}';
 
 const structPin = (name: string, overrides: Partial<IPin> = {}): IPin =>
 	({
@@ -562,6 +564,69 @@ describe("doPinsMatch treats an open-object schema as no schema", () => {
 					pin_type: IPinType.Input,
 					schema: OPEN_SCHEMA,
 				}),
+				{},
+			),
+		).toBe(false);
+	});
+});
+
+describe("Geometry pin compatibility", () => {
+	test("directional subtype rules survive reversed drag, refs, all containers, and enforcement flags", () => {
+		for (const value_type of Object.values(IValueType)) {
+			for (const source of [null, ...GEOMETRY_KINDS]) {
+				for (const target of [null, ...GEOMETRY_KINDS]) {
+					for (const enforce_schema of [undefined, true, false]) {
+						const output = structPin("geometry_out", {
+							data_type: IVariableType.Geometry,
+							value_type,
+							schema: source ? "output_ref" : null,
+							options: { enforce_schema },
+						});
+						const input = structPin("geometry_in", {
+							pin_type: IPinType.Input,
+							data_type: IVariableType.Geometry,
+							value_type,
+							schema: target ? "input_ref" : null,
+							options: { enforce_schema },
+						});
+						const refs = {
+							output_ref: geometryMarker(source) ?? "",
+							input_ref: geometryMarker(target) ?? "",
+						};
+						const allowed = target === null || source === target;
+						expect(doPinsMatch(output, input, refs)).toBe(allowed);
+						expect(doPinsMatch(input, output, refs)).toBe(allowed);
+					}
+				}
+			}
+		}
+	});
+	test("does not adopt Struct schemas or coerce containers", () => {
+		const output = structPin("geometry_out", {
+			data_type: IVariableType.Geometry,
+		});
+		expect(
+			doPinsMatch(
+				output,
+				structPin("struct_in", { pin_type: IPinType.Input }),
+				{},
+			),
+		).toBe(false);
+		expect(
+			doPinsMatch(
+				output,
+				structPin("geo_in", {
+					pin_type: IPinType.Input,
+					data_type: IVariableType.Geometry,
+					value_type: IValueType.Array,
+				}),
+				{},
+			),
+		).toBe(false);
+		expect(
+			doPinsMatch(
+				{ ...output, schema: '{"type":"object"}' },
+				{ ...output, pin_type: IPinType.Input },
 				{},
 			),
 		).toBe(false);

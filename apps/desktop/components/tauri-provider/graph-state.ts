@@ -5,6 +5,7 @@ import type {
 	GraphAnalyticsResult,
 	GraphOverlay,
 	GraphPathsResult,
+	GraphQueryResult,
 	GraphSchema,
 	GraphSearchPayload,
 	IGraphState,
@@ -26,7 +27,10 @@ import type {
 	UpsertGraphElementsResult,
 	ValidationResult,
 } from "@flow-like/flow-like-ui";
-import { applyOntologyActionStreamEvent } from "@flow-like/flow-like-ui";
+import {
+	applyOntologyActionStreamEvent,
+	normalizeGraphQueryResult,
+} from "@flow-like/flow-like-ui";
 import { invoke } from "@tauri-apps/api/core";
 import { fetcher } from "../../lib/api";
 import type { TauriBackend } from "../tauri-provider";
@@ -449,6 +453,32 @@ export class GraphState implements IGraphState {
 			payload,
 			userScoped: userScoped ?? false,
 		});
+	}
+
+	async cypherWithMetadata(
+		appId: string,
+		overlayId: string,
+		payload: CypherPayload,
+		userScoped?: boolean,
+	): Promise<GraphQueryResult> {
+		const isOffline = await this.backend.isOffline(appId);
+		const result = isOffline
+			? await invoke<GraphQueryResult | unknown[]>("graph_cypher", {
+					appId,
+					overlayId,
+					payload: { ...payload, includeMetadata: true },
+					userScoped: userScoped ?? false,
+				})
+			: await fetcher<GraphQueryResult | unknown[]>(
+					this.requireProfile(),
+					`apps/${appId}/graph/${overlayId}/cypher${scopeQuery(userScoped)}`,
+					{
+						method: "POST",
+						body: JSON.stringify({ ...payload, include_metadata: true }),
+					},
+					this.backend.auth,
+				);
+		return normalizeGraphQueryResult(result);
 	}
 
 	async sql(

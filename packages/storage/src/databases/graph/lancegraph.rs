@@ -4,8 +4,8 @@ mod validation;
 pub use validation::{MappingValidation, ValidationReport, validate_overlay_definition};
 
 use super::{
-    GraphAnalyticsResult, GraphLabelInfo, GraphPathsResult, GraphPropertyInfo, GraphSchemaResult,
-    GraphStore, SubgraphEdge, SubgraphNode, SubgraphResult, TraversalDirection,
+    GraphAnalyticsResult, GraphLabelInfo, GraphPathsResult, GraphPropertyInfo, GraphQueryResult,
+    GraphSchemaResult, GraphStore, SubgraphEdge, SubgraphNode, SubgraphResult, TraversalDirection,
 };
 use crate::arrow_utils::record_batch_to_value;
 use crate::databases::df_provider::zero_column_safe;
@@ -472,19 +472,13 @@ impl LanceGraphStore {
             .await
             .map_err(|e| anyhow!("Semaphore acquire failed: {}", e))?;
 
-        let parsed =
-            CypherQuery::new(query).map_err(|e| anyhow!("Failed to parse Cypher query: {}", e))?;
+        let parsed = parse_cypher_for_execution(query)?;
         preflight_cypher(parsed.ast(), &self.safety)?;
-        let limited_query = if parsed.ast().limit.is_some() {
-            query.trim().to_string()
-        } else {
-            append_limit_clause(query, limit)
-        };
+        let limited_query = enforce_cypher_limit(query, parsed.ast(), limit)?;
         let limited_query =
             expand_relationship_return_items(&limited_query, parsed.ast(), &self.graph_config)
                 .unwrap_or(limited_query);
-        let cypher = CypherQuery::new(&limited_query)
-            .map_err(|e| anyhow!("Failed to parse Cypher query: {}", e))?
+        let cypher = parse_cypher_for_execution(&limited_query)?
             .with_config(self.graph_config.clone())
             .with_parameters(params);
 
@@ -511,6 +505,15 @@ impl LanceGraphStore {
 #[async_trait]
 impl GraphStore for LanceGraphStore {
     async fn cypher(&self, query: &str, params: Value, limit: Option<usize>) -> Result<Vec<Value>> {
+        Ok(self.cypher_with_metadata(query, params, limit).await?.rows)
+    }
+
+    async fn cypher_with_metadata(
+        &self,
+        query: &str,
+        params: Value,
+        limit: Option<usize>,
+    ) -> Result<GraphQueryResult> {
         let limit = self.enforce_limit(limit);
         let params_map: HashMap<String, serde_json::Value> = match params {
             Value::Object(map) => map.into_iter().collect(),
@@ -522,10 +525,22 @@ impl GraphStore for LanceGraphStore {
             .execute_cypher_with_safety(query, params_map, limit)
             .await?;
 
-        record_batch_to_value(&batch)
+        Ok(GraphQueryResult {
+            rows: record_batch_to_value(&batch)?,
+            property_metadata: crate::geometry::property_metadata(batch.schema().as_ref()),
+        })
     }
 
     async fn sql(&self, query: &str, params: Value, limit: Option<usize>) -> Result<Vec<Value>> {
+        Ok(self.sql_with_metadata(query, params, limit).await?.rows)
+    }
+
+    async fn sql_with_metadata(
+        &self,
+        query: &str,
+        params: Value,
+        limit: Option<usize>,
+    ) -> Result<GraphQueryResult> {
         let limit = self.enforce_limit(limit);
         let _permit = self
             .semaphore
@@ -543,6 +558,7 @@ impl GraphStore for LanceGraphStore {
             .map_err(|_| anyhow!("SQL planning timed out after {}ms", self.safety.timeout_ms))??
             .with_param_values(param_values)?
             .limit(0, Some(limit))?;
+        let property_metadata = crate::geometry::property_metadata(df.schema().as_arrow());
         let batches = tokio::time::timeout(timeout, df.collect())
             .await
             .map_err(|_| anyhow!("SQL query timed out after {}ms", self.safety.timeout_ms))??;
@@ -557,7 +573,10 @@ impl GraphStore for LanceGraphStore {
             }
         }
 
-        Ok(results)
+        Ok(GraphQueryResult {
+            rows: results,
+            property_metadata,
+        })
     }
 
     async fn neighbors(
@@ -701,7 +720,11 @@ impl GraphStore for LanceGraphStore {
 
             for batch in &batches {
                 let rows = record_batch_to_value(batch)?;
-                for result_node in self.rows_to_nodes(&node.label, rows)? {
+                for result_node in self.rows_to_nodes(
+                    &node.label,
+                    rows,
+                    crate::geometry::property_metadata(batch.schema().as_ref()),
+                )? {
                     if seen_node_ids.insert(result_node.id.clone()) {
                         matches.push(result_node);
                     }
@@ -738,6 +761,7 @@ impl GraphStore for LanceGraphStore {
                     name: f.name().clone(),
                     data_type: format!("{:?}", f.data_type()),
                     nullable: f.is_nullable(),
+                    metadata: f.metadata().clone(),
                 })
                 .collect();
 
@@ -768,6 +792,7 @@ impl GraphStore for LanceGraphStore {
                     name: f.name().clone(),
                     data_type: format!("{:?}", f.data_type()),
                     nullable: f.is_nullable(),
+                    metadata: f.metadata().clone(),
                 })
                 .collect();
 
@@ -877,6 +902,7 @@ impl LanceGraphStore {
 
     async fn build_cypher_context(&self) -> Result<SessionContext> {
         let ctx = SessionContext::new();
+        crate::geometry::register_geo_functions(&ctx);
         let mut adapters: HashMap<String, Arc<dyn TableProvider>> = HashMap::new();
         let mut registered_labels = HashSet::new();
 
@@ -912,6 +938,7 @@ impl LanceGraphStore {
 
     async fn build_query_context(&self, include_edges: bool) -> Result<SessionContext> {
         let ctx = SessionContext::new();
+        crate::geometry::register_geo_functions(&ctx);
         let mut adapters: HashMap<String, Arc<dyn TableProvider>> = HashMap::new();
         let mut registered_tables = HashSet::new();
 
@@ -938,7 +965,12 @@ impl LanceGraphStore {
         Ok(ctx)
     }
 
-    fn rows_to_nodes(&self, label: &str, rows: Vec<Value>) -> Result<Vec<SubgraphNode>> {
+    fn rows_to_nodes(
+        &self,
+        label: &str,
+        rows: Vec<Value>,
+        property_metadata: HashMap<String, HashMap<String, String>>,
+    ) -> Result<Vec<SubgraphNode>> {
         let id_col = self.find_id_column_for_label(label)?;
         let display_col = self.find_display_column_for_label(label);
         let mut nodes = Vec::new();
@@ -972,6 +1004,7 @@ impl LanceGraphStore {
                 label: label.to_string(),
                 caption,
                 props: Value::Object(map),
+                property_metadata: property_metadata.clone(),
                 stats: None,
             });
         }
@@ -985,7 +1018,16 @@ impl LanceGraphStore {
         limit: usize,
     ) -> Result<Vec<SubgraphNode>> {
         let rows = self.sample(label, limit).await?;
-        self.rows_to_nodes(label, rows)
+        let node = resolve_object_mapping(&self.overlay, label)
+            .ok_or_else(|| anyhow!("Unknown node label: {label}"))?;
+        let table = self.connection.open_table(&node.table).execute().await?;
+        let mut metadata = crate::geometry::property_metadata(table.schema().await?.as_ref());
+        metadata.retain(|name, _| {
+            rows.first()
+                .and_then(Value::as_object)
+                .is_some_and(|props| props.contains_key(name))
+        });
+        self.rows_to_nodes(label, rows, metadata)
     }
 }
 
@@ -1002,6 +1044,131 @@ fn append_limit_clause(query: &str, limit: usize) -> String {
     let trimmed = query.trim();
     let trimmed = trimmed.strip_suffix(';').unwrap_or(trimmed).trim_end();
     format!("{trimmed} LIMIT {limit}")
+}
+
+/// lance-graph currently parses LIMIT as an `i64` with an internal unwrap.
+/// Reject an out-of-range literal before entering that parser so an untrusted
+/// query becomes a normal validation error instead of unwinding the process.
+fn parse_cypher_for_execution(query: &str) -> Result<CypherQuery> {
+    for (literal_start, literal_end) in top_level_limit_literal_spans(query) {
+        if query[literal_start..literal_end].parse::<i64>().is_err() {
+            return Err(anyhow!(
+                "Cypher LIMIT literal is outside the supported signed 64-bit range"
+            ));
+        }
+    }
+
+    CypherQuery::new(query).map_err(|error| anyhow!("Failed to parse Cypher query: {}", error))
+}
+
+fn top_level_limit_literal_spans(query: &str) -> Vec<(usize, usize)> {
+    let bytes = query.as_bytes();
+    let mut depth = 0usize;
+    let mut cursor = 0usize;
+    let mut limit_literals = Vec::new();
+
+    while cursor < bytes.len() {
+        match bytes[cursor] {
+            b'\'' | b'"' | b'`' => {
+                cursor = skip_quoted(bytes, cursor);
+                continue;
+            }
+            b'(' | b'[' | b'{' => {
+                depth += 1;
+                cursor += 1;
+                continue;
+            }
+            b')' | b']' | b'}' => {
+                depth = depth.saturating_sub(1);
+                cursor += 1;
+                continue;
+            }
+            _ if depth > 0 || !is_word_byte(bytes[cursor]) => {
+                cursor += 1;
+                continue;
+            }
+            _ => {}
+        }
+
+        let word_start = cursor;
+        while cursor < bytes.len() && is_word_byte(bytes[cursor]) {
+            cursor += 1;
+        }
+        if !query[word_start..cursor].eq_ignore_ascii_case("limit") {
+            continue;
+        }
+
+        let whitespace_start = cursor;
+        let mut number_start = cursor;
+        while number_start < bytes.len() {
+            let Some(character) = query
+                .get(number_start..)
+                .and_then(|remaining| remaining.chars().next())
+            else {
+                break;
+            };
+            if !character.is_whitespace() {
+                break;
+            }
+            number_start += character.len_utf8();
+        }
+        if number_start == whitespace_start {
+            continue;
+        }
+        let mut number_end = number_start;
+        if number_end < bytes.len() && bytes[number_end] == b'-' {
+            number_end += 1;
+        }
+        let digits_start = number_end;
+        while number_end < bytes.len() && bytes[number_end].is_ascii_digit() {
+            number_end += 1;
+        }
+        if number_end > digits_start {
+            limit_literals.push((number_start, number_end));
+        }
+    }
+
+    limit_literals
+}
+
+/// Applies the host row cap to the query text before lance-graph plans or
+/// materializes it. Slicing the returned batch is too late for an explicit
+/// `LIMIT` because the engine has already executed that larger request.
+fn enforce_cypher_limit(
+    query: &str,
+    ast: &lance_graph::ast::CypherQuery,
+    limit: usize,
+) -> Result<String> {
+    let parsed_limits = ast
+        .with_clause
+        .as_ref()
+        .and_then(|with_clause| with_clause.limit)
+        .into_iter()
+        .chain(ast.limit)
+        .collect::<Vec<_>>();
+
+    let limit_literals = top_level_limit_literal_spans(query);
+
+    if limit_literals.len() != parsed_limits.len() {
+        return Err(anyhow!(
+            "Failed to locate every parsed Cypher LIMIT clause for safety clamping"
+        ));
+    }
+
+    let mut limited_query = query.to_string();
+    for ((number_start, number_end), parsed_limit) in
+        limit_literals.into_iter().zip(parsed_limits).rev()
+    {
+        if parsed_limit > limit as u64 {
+            limited_query.replace_range(number_start..number_end, &limit.to_string());
+        }
+    }
+
+    if ast.limit.is_some() {
+        Ok(limited_query.trim().to_string())
+    } else {
+        Ok(append_limit_clause(&limited_query, limit))
+    }
 }
 
 /// Trailing clauses that end the RETURN item list.
@@ -1390,16 +1557,17 @@ fn dedupe_and_limit_subgraph(
     }
 }
 
-fn include_default_property(data_type: &arrow::datatypes::DataType) -> bool {
-    !matches!(
-        data_type,
-        arrow::datatypes::DataType::FixedSizeList(_, _)
-            | arrow::datatypes::DataType::List(_)
-            | arrow::datatypes::DataType::LargeList(_)
-            | arrow::datatypes::DataType::Binary
-            | arrow::datatypes::DataType::LargeBinary
-            | arrow::datatypes::DataType::FixedSizeBinary(_)
-    )
+fn include_default_property(field: &arrow::datatypes::Field) -> bool {
+    crate::geometry::is_geometry_field(field)
+        || !matches!(
+            field.data_type(),
+            arrow::datatypes::DataType::FixedSizeList(_, _)
+                | arrow::datatypes::DataType::List(_)
+                | arrow::datatypes::DataType::LargeList(_)
+                | arrow::datatypes::DataType::Binary
+                | arrow::datatypes::DataType::LargeBinary
+                | arrow::datatypes::DataType::FixedSizeBinary(_)
+        )
 }
 
 async fn resolve_property_names(
@@ -1444,7 +1612,7 @@ async fn resolve_property_names(
         let columns = schema
             .fields()
             .iter()
-            .filter(|field| include_default_property(field.data_type()))
+            .filter(|field| include_default_property(field))
             .map(|field| field.name().clone())
             .collect::<Vec<_>>();
 
@@ -1956,7 +2124,7 @@ async fn freeze_property_columns(
     for field in schema.fields() {
         if excluded.contains(field.name())
             || (explicit && !configured_names.contains(field.name().as_str()))
-            || (!explicit && !include_default_property(field.data_type()))
+            || (!explicit && !include_default_property(field))
         {
             continue;
         }
@@ -2731,6 +2899,102 @@ mod tests {
     }
 
     #[test]
+    fn cypher_limit_is_added_when_the_query_has_none() {
+        let query = "MATCH (n:Person) RETURN n";
+        assert_eq!(
+            enforce_cypher_limit(query, parse(query).ast(), 501).unwrap(),
+            "MATCH (n:Person) RETURN n LIMIT 501"
+        );
+    }
+
+    #[test]
+    fn cypher_limit_preserves_a_smaller_explicit_limit() {
+        let query = "MATCH (n:Person) RETURN n LIMIT 10";
+        assert_eq!(
+            enforce_cypher_limit(query, parse(query).ast(), 501).unwrap(),
+            query
+        );
+    }
+
+    #[test]
+    fn cypher_limit_clamps_an_explicit_limit_before_execution() {
+        let query = "MATCH (n:Person) RETURN n.name ORDER BY n.name LIMIT 50000";
+        assert_eq!(
+            enforce_cypher_limit(query, parse(query).ast(), 501).unwrap(),
+            "MATCH (n:Person) RETURN n.name ORDER BY n.name LIMIT 501"
+        );
+    }
+
+    #[test]
+    fn cypher_limit_clamp_ignores_limit_words_in_values_and_properties() {
+        let query =
+            "MATCH (n:Person) WHERE n.note = 'limit 9999' RETURN n.limit LIMIT 50000 SKIP 2";
+        assert_eq!(
+            enforce_cypher_limit(query, parse(query).ast(), 501).unwrap(),
+            "MATCH (n:Person) WHERE n.note = 'limit 9999' RETURN n.limit LIMIT 501 SKIP 2"
+        );
+    }
+
+    #[test]
+    fn cypher_limit_clamps_negative_values_cast_by_the_parser() {
+        let query = "MATCH (n:Person) RETURN n LIMIT -1";
+        assert_eq!(
+            enforce_cypher_limit(query, parse(query).ast(), 501).unwrap(),
+            "MATCH (n:Person) RETURN n LIMIT 501"
+        );
+    }
+
+    #[test]
+    fn cypher_limit_rejects_out_of_range_literals_without_panicking() {
+        for literal in [
+            "9223372036854775808",
+            "18446744073709551616",
+            "-9223372036854775809",
+        ] {
+            let query = format!("MATCH (n:Person) RETURN n LIMIT {literal}");
+            let outcome = std::panic::catch_unwind(|| parse_cypher_for_execution(&query));
+            assert!(
+                outcome.is_ok(),
+                "out-of-range LIMIT must not reach the parser"
+            );
+            let error = outcome
+                .unwrap()
+                .expect_err("out-of-range LIMIT must be rejected");
+            assert!(
+                error
+                    .to_string()
+                    .contains("outside the supported signed 64-bit range"),
+                "unexpected validation error: {error}"
+            );
+        }
+    }
+
+    #[test]
+    fn cypher_limit_range_check_ignores_quoted_text() {
+        let query =
+            "MATCH (n:Person) WHERE n.note = 'LIMIT 18446744073709551616' RETURN n LIMIT 10";
+        parse_cypher_for_execution(query).expect("quoted LIMIT-like text must keep normal parsing");
+    }
+
+    #[test]
+    fn cypher_limit_clamps_intermediate_and_final_limits_independently() {
+        let query = "MATCH (n:Person) WITH n LIMIT 50000 RETURN n LIMIT 10";
+        assert_eq!(
+            enforce_cypher_limit(query, parse(query).ast(), 501).unwrap(),
+            "MATCH (n:Person) WITH n LIMIT 501 RETURN n LIMIT 10"
+        );
+    }
+
+    #[test]
+    fn cypher_limit_adds_a_final_cap_after_a_smaller_intermediate_limit() {
+        let query = "MATCH (n:Person) WITH n LIMIT 10 RETURN n";
+        assert_eq!(
+            enforce_cypher_limit(query, parse(query).ast(), 501).unwrap(),
+            "MATCH (n:Person) WITH n LIMIT 10 RETURN n LIMIT 501"
+        );
+    }
+
+    #[test]
     fn preflight_rejects_unbounded_variable_length_paths() {
         let query = parse("MATCH (a:Person)-[r:KNOWS*]->(b:Person) RETURN a, b");
         assert!(preflight_cypher(query.ast(), &safety()).is_err());
@@ -2942,6 +3206,7 @@ mod tests {
                 label: "Person".to_string(),
                 caption: None,
                 props: Value::Null,
+                property_metadata: HashMap::new(),
                 stats: None,
             })
             .collect::<Vec<_>>();
@@ -2952,6 +3217,7 @@ mod tests {
                 target: "Person:1".to_string(),
                 label: "KNOWS".to_string(),
                 props: Value::Null,
+                property_metadata: HashMap::new(),
             },
             SubgraphEdge {
                 id: "Person:0-KNOWS->Person:2".to_string(),
@@ -2959,6 +3225,7 @@ mod tests {
                 target: "Person:2".to_string(),
                 label: "KNOWS".to_string(),
                 props: Value::Null,
+                property_metadata: HashMap::new(),
             },
         ];
         let result = dedupe_and_limit_subgraph(nodes, edges, 2, Vec::new());
@@ -3541,7 +3808,13 @@ mod tests {
     }
 
     async fn relationship_fixture() -> Result<(LanceGraphStore, String)> {
-        use arrow::array::{RecordBatch, StringArray};
+        relationship_fixture_with_geometry(false).await
+    }
+
+    async fn relationship_fixture_with_geometry(
+        include_geometry: bool,
+    ) -> Result<(LanceGraphStore, String)> {
+        use arrow::array::{ArrayRef, BinaryArray, RecordBatch, StringArray};
         use arrow::datatypes::{DataType, Field, Schema};
         use lancedb::connect;
 
@@ -3549,39 +3822,60 @@ mod tests {
         std::fs::create_dir_all(&test_path).unwrap();
         let connection = connect(&test_path).execute().await?;
 
-        let node_schema = Arc::new(Schema::new(vec![
+        let mut node_fields = vec![
             Field::new("id", DataType::Utf8, false),
             Field::new("name", DataType::Utf8, true),
-        ]));
+        ];
+        let mut node_columns: Vec<ArrayRef> = vec![
+            Arc::new(StringArray::from(vec!["1", "2"])),
+            Arc::new(StringArray::from(vec!["Ada", "Grace"])),
+        ];
+        let mut edge_fields = vec![
+            Field::new("source", DataType::Utf8, false),
+            Field::new("target", DataType::Utf8, false),
+            Field::new("since", DataType::Utf8, true),
+        ];
+        let mut edge_columns: Vec<ArrayRef> = vec![
+            Arc::new(StringArray::from(vec!["1"])),
+            Arc::new(StringArray::from(vec!["2"])),
+            Arc::new(StringArray::from(vec!["2020"])),
+        ];
+        if include_geometry {
+            let point = flow_like_geometry::to_wkb(&serde_json::json!({
+                "type": "Point", "coordinates": [13.405, 52.52]
+            }))?;
+            node_fields.push(crate::geometry::geometry_field("location", true));
+            node_columns.push(Arc::new(BinaryArray::from(vec![
+                Some(point.as_slice()),
+                Some(point.as_slice()),
+            ])));
+            node_fields.push(Field::new("opaque", DataType::Binary, true));
+            node_columns.push(Arc::new(BinaryArray::from(vec![
+                Some(point.as_slice()),
+                Some(point.as_slice()),
+            ])));
+            let route = flow_like_geometry::to_wkb(&serde_json::json!({
+                "type": "LineString", "coordinates": [[13.405, 52.52], [2.35, 48.85]]
+            }))?;
+            edge_fields.push(crate::geometry::geometry_field("route", true));
+            edge_columns.push(Arc::new(BinaryArray::from(vec![Some(route.as_slice())])));
+        }
         connection
             .create_table(
                 "people",
                 vec![RecordBatch::try_new(
-                    node_schema,
-                    vec![
-                        Arc::new(StringArray::from(vec!["1", "2"])),
-                        Arc::new(StringArray::from(vec!["Ada", "Grace"])),
-                    ],
+                    Arc::new(Schema::new(node_fields)),
+                    node_columns,
                 )?],
             )
             .execute()
             .await?;
-
-        let edge_schema = Arc::new(Schema::new(vec![
-            Field::new("source", DataType::Utf8, false),
-            Field::new("target", DataType::Utf8, false),
-            Field::new("since", DataType::Utf8, true),
-        ]));
         connection
             .create_table(
                 "links",
                 vec![RecordBatch::try_new(
-                    edge_schema,
-                    vec![
-                        Arc::new(StringArray::from(vec!["1"])),
-                        Arc::new(StringArray::from(vec!["2"])),
-                        Arc::new(StringArray::from(vec!["2020"])),
-                    ],
+                    Arc::new(Schema::new(edge_fields)),
+                    edge_columns,
                 )?],
             )
             .execute()
@@ -3610,6 +3904,172 @@ mod tests {
 
         let store = LanceGraphStore::new(connection, overlay, Some(safety())).await?;
         Ok((store, test_path))
+    }
+
+    #[tokio::test]
+    async fn geometry_graph_uncovered_nodes_limit_metadata_to_projected_properties() -> Result<()> {
+        let (mut store, test_path) = relationship_fixture_with_geometry(true).await?;
+        store.overlay.edges.clear();
+        store.overlay.nodes[0].property_columns = vec![PropertyColumnDef {
+            name: "name".into(),
+            data_type: "Utf8".into(),
+            nullable: true,
+        }];
+
+        let sampled = store.subgraph(Vec::new(), 1, Some(10)).await?;
+        assert_eq!(sampled.nodes.len(), 2);
+        assert!(sampled.edges.is_empty());
+        for node in &sampled.nodes {
+            assert!(node.props.get("name").is_some());
+            assert!(node.props.get("location").is_none());
+            assert!(node.property_metadata.is_empty());
+        }
+
+        store.overlay.property_projection_mode = PropertyProjectionMode::Frozen;
+        store.overlay.nodes[0].property_columns.clear();
+        let frozen = store.subgraph(Vec::new(), 1, Some(10)).await?;
+        assert_eq!(frozen.nodes.len(), 2);
+        for node in &frozen.nodes {
+            assert!(node.props.get("location").is_none());
+            assert!(node.property_metadata.is_empty());
+        }
+
+        store.overlay.nodes[0].property_columns = vec![PropertyColumnDef {
+            name: "location".into(),
+            data_type: "Binary".into(),
+            nullable: true,
+        }];
+        let geometry = store.subgraph(Vec::new(), 1, Some(10)).await?;
+        assert_eq!(geometry.nodes.len(), 2);
+        for node in &geometry.nodes {
+            assert_eq!(node.props["location"]["type"], "Point");
+            assert_eq!(node.property_metadata.len(), 1);
+            assert_eq!(
+                node.property_metadata["location"][crate::geometry::EXTENSION_NAME],
+                "geoarrow.wkb"
+            );
+        }
+        std::fs::remove_dir_all(test_path).ok();
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn geometry_graph_queries_preserve_projected_values_and_metadata() -> Result<()> {
+        let (store, test_path) = relationship_fixture_with_geometry(true).await?;
+        let query = "MATCH (n:Person)-[r:KNOWS]->(m:Person) RETURN n, r, m";
+        let result = store
+            .cypher_with_metadata(query, Value::Null, Some(10))
+            .await?;
+        assert_eq!(result.rows.len(), 1);
+        assert_eq!(result.rows[0]["n.location"]["type"], "Point");
+        assert_eq!(result.rows[0]["r.route"]["type"], "LineString");
+        assert!(result.rows[0].get("n.opaque").is_none());
+        for name in ["n.location", "m.location", "r.route"] {
+            assert_eq!(
+                result.property_metadata[name][crate::geometry::EXTENSION_NAME],
+                "geoarrow.wkb"
+            );
+            assert_eq!(
+                result.property_metadata[name][crate::geometry::EXTENSION_METADATA],
+                crate::geometry::WGS84_METADATA
+            );
+        }
+        assert_eq!(
+            store.cypher(query, Value::Null, Some(10)).await?,
+            result.rows
+        );
+
+        let sql = store
+            .sql_with_metadata(
+                "SELECT location AS position FROM people LIMIT 1",
+                Value::Null,
+                Some(10),
+            )
+            .await?;
+        assert_eq!(sql.rows[0]["position"]["type"], "Point");
+        assert_eq!(
+            sql.property_metadata["position"][crate::geometry::EXTENSION_NAME],
+            "geoarrow.wkb"
+        );
+        let empty = store
+            .sql_with_metadata(
+                "SELECT location AS position FROM people WHERE id = 'missing'",
+                Value::Null,
+                Some(10),
+            )
+            .await?;
+        assert!(empty.rows.is_empty());
+        assert_eq!(empty.property_metadata, sql.property_metadata);
+
+        let schema = store.schema().await?;
+        for (label, column) in [
+            (&schema.node_labels[0], "location"),
+            (&schema.edge_labels[0], "route"),
+        ] {
+            let property = label
+                .properties
+                .iter()
+                .find(|property| property.name == column)
+                .unwrap();
+            assert_eq!(
+                property.metadata[crate::geometry::EXTENSION_NAME],
+                "geoarrow.wkb"
+            );
+        }
+        std::fs::remove_dir_all(test_path).ok();
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn geometry_graph_subgraphs_preserve_node_and_edge_metadata() -> Result<()> {
+        let (mut store, test_path) = relationship_fixture_with_geometry(true).await?;
+        store.overlay.edges[0].containment = true;
+        let sampled = store.subgraph(Vec::new(), 1, Some(10)).await?;
+        let expanded = store
+            .neighbors(
+                "Person",
+                Value::String("1".into()),
+                1,
+                TraversalDirection::Both,
+                Some(10),
+                None,
+            )
+            .await?;
+        let children = store
+            .overlay_children("Person", Value::String("1".into()), Some(10))
+            .await?;
+        let paths = store
+            .shortest_paths(
+                ("Person".into(), Value::String("1".into())),
+                ("Person".into(), Value::String("2".into())),
+                2,
+                Some(10),
+            )
+            .await?;
+        for (nodes, edges) in [
+            (&sampled.nodes, &sampled.edges),
+            (&expanded.nodes, &expanded.edges),
+            (&children.nodes, &children.edges),
+            (&paths.nodes, &paths.edges),
+        ] {
+            assert_eq!(nodes.len(), 2);
+            assert_eq!(edges.len(), 1);
+            for node in nodes {
+                assert_eq!(node.props["location"]["type"], "Point");
+                assert_eq!(
+                    node.property_metadata["location"][crate::geometry::EXTENSION_NAME],
+                    "geoarrow.wkb"
+                );
+                assert!(node.props.get("opaque").is_none());
+            }
+            assert_eq!(edges[0].props["route"]["type"], "LineString");
+            assert_eq!(
+                edges[0].property_metadata["route"][crate::geometry::EXTENSION_NAME],
+                "geoarrow.wkb"
+            );
+        }
+        std::fs::remove_dir_all(test_path).ok();
+        Ok(())
     }
 
     // The canonical Cypher shape, and the one the query panel suggests. Without

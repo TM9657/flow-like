@@ -3,17 +3,18 @@ use crate::host_functions::HostState;
 use crate::limits::{WasmCapabilities, WasmSecurityConfig};
 use crate::llm_message::sdk_message_content;
 use crate::wasi::{isolated_wasi_ctx_builder, IsolatedWasiCtxBuilder};
-use futures::StreamExt;
+use flow_like_storage::object_store::ObjectStoreExt;
 use serde_json::Value;
+use std::future::Future;
 use std::pin::Pin;
 use std::sync::Arc;
 use wasmtime::component::Linker;
 use wasmtime_wasi::{WasiCtx, WasiCtxView, WasiView};
-use wasmtime_wasi_http::p2::{WasiHttpCtxView, WasiHttpView};
-use wasmtime_wasi_http::WasiHttpCtx;
+use wasmtime_wasi_http::{WasiHttpCtx, WasiHttpCtxView, WasiHttpView};
 
 pub struct ComponentStoreData {
     pub host_state: HostState,
+    pub limits: wasmtime::StoreLimits,
     pub wasi_ctx: WasiCtx,
     pub http_ctx: WasiHttpCtx,
     pub resource_table: wasmtime::component::ResourceTable,
@@ -46,37 +47,58 @@ struct EgressHttpHooks {
     environment: flow_like::flow::execution::ExecutionEnvironment,
 }
 
-impl wasmtime_wasi_http::p2::WasiHttpHooks for EgressHttpHooks {
+impl wasmtime_wasi_http::WasiHttpHooks for EgressHttpHooks {
     fn send_request(
         &mut self,
-        request: hyper::Request<wasmtime_wasi_http::p2::body::HyperOutgoingBody>,
-        config: wasmtime_wasi_http::p2::types::OutgoingRequestConfig,
-    ) -> wasmtime_wasi_http::p2::HttpResult<wasmtime_wasi_http::p2::types::HostFutureIncomingResponse>
-    {
-        use wasmtime_wasi_http::p2::bindings::http::types::ErrorCode;
+        request: hyper::Request<wasmtime_wasi_http::WasiBody>,
+        options: Option<wasmtime_wasi_http::RequestOptions>,
+        response_complete: Box<dyn Future<Output = Result<(), wasmtime_wasi_http::Error>> + Send>,
+    ) -> Box<
+        dyn Future<
+                Output = Result<
+                    (
+                        hyper::Response<wasmtime_wasi_http::WasiBody>,
+                        Box<dyn Future<Output = Result<(), wasmtime_wasi_http::Error>> + Send>,
+                    ),
+                    wasmtime_wasi_http::Error,
+                >,
+            > + Send,
+    > {
+        use wasmtime_wasi_http::Error;
 
         let environment = self.environment;
-        let handle = wasmtime_wasi::runtime::spawn(async move {
+        Box::new(async move {
             let Some(authority) = request.uri().authority().cloned() else {
-                return Ok(Err(ErrorCode::HttpRequestUriInvalid));
+                return Err(Error::HttpRequestUriInvalid);
             };
             let host = authority
                 .host()
                 .trim_matches(|c| c == '[' || c == ']')
                 .to_string();
-            let port = authority
-                .port_u16()
-                .unwrap_or(if config.use_tls { 443 } else { 80 });
+            let port =
+                authority
+                    .port_u16()
+                    .unwrap_or(if request.uri().scheme_str() == Some("https") {
+                        443
+                    } else {
+                        80
+                    });
             if let Err(e) =
                 flow_like::flow::execution::egress::resolve_socket_addrs(environment, &host, port)
                     .await
             {
                 tracing::warn!("WASI HTTP request to {} refused: {}", authority, e);
-                return Ok(Err(ErrorCode::HttpRequestDenied));
+                return Err(Error::HttpRequestDenied);
             }
-            Ok(wasmtime_wasi_http::p2::default_send_request_handler(request, config).await)
-        });
-        Ok(wasmtime_wasi_http::p2::types::HostFutureIncomingResponse::pending(handle))
+            // Keep Wasmtime's request/response I/O futures attached to its
+            // resource table so dropping the run also closes HTTP connections.
+            Box::into_pin(wasmtime_wasi_http::default_hooks().send_request(
+                request,
+                options,
+                response_complete,
+            ))
+            .await
+        })
     }
 }
 
@@ -110,9 +132,8 @@ pub(super) fn configure_guest_network(
         });
     }
 
-    // Wasmtime enables TCP and UDP protocol use by default (while denying all
-    // addresses). Once an address policy is opened above, absent protocols
-    // must therefore be disabled explicitly to preserve capability precision.
+    // Wasmtime 48 denies socket creation by default. Grant each protocol
+    // explicitly while keeping the address policy above in force.
     builder
         .allow_ip_name_lookup(security.allow_wasi_network || caps.intersects(WasmCapabilities::DNS))
         .allow_tcp(security.allow_wasi_network || caps.intersects(WasmCapabilities::TCP))
@@ -134,7 +155,7 @@ impl ComponentStoreData {
         }
 
         Self::with_host_state(
-            HostState::new(security.capabilities),
+            HostState::with_security(security),
             builder.build(),
             security,
         )
@@ -149,6 +170,7 @@ impl ComponentStoreData {
     ) -> Self {
         Self {
             host_state,
+            limits: crate::limits::store_limits(&security.limits),
             wasi_ctx,
             http_ctx: WasiHttpCtx::new(),
             resource_table: wasmtime::component::ResourceTable::new(),
@@ -385,6 +407,14 @@ fn register_metadata(linker: &mut Linker<ComponentStoreData>) -> WasmResult<()> 
     let mut meta = linker
         .instance("flow-like:node/metadata@0.1.0")
         .map_err(map_err)?;
+
+    meta.func_wrap(
+        "new-resource-handle",
+        |store: wasmtime::StoreContextMut<'_, ComponentStoreData>, ()| {
+            Ok((store.data().host_state.new_resource_handle(),))
+        },
+    )
+    .map_err(map_err)?;
 
     meta.func_wrap(
         "get-node-id",
@@ -1062,7 +1092,7 @@ fn register_models(linker: &mut Linker<ComponentStoreData>) -> WasmResult<()> {
                     let bit: flow_like::bit::Bit = match serde_json::from_str(&bit_json) {
                         Ok(b) => b,
                         Err(e) => {
-                            println!("llm-prompt: failed to parse bit JSON: {e}");
+                            println!("llm-prompt: failed to parse bit JSON");
                             let err = serde_json::json!({"error": format!("Failed to parse model descriptor: {e}")}).to_string();
                             return Ok((Some(err),));
                         }
@@ -1098,13 +1128,13 @@ fn register_models(linker: &mut Linker<ComponentStoreData>) -> WasmResult<()> {
                         additional_params: Option<Value>,
                     }
 
-                    let (raw_messages, raw_tools, req_temperature, req_max_tokens, req_tool_choice, req_output_schema, req_additional_params) =
+                    let (raw_messages, raw_tools, req_temperature, req_max_tokens, req_tool_choice, req_output_schema, _req_additional_params) =
                         match serde_json::from_str::<LlmPromptRequest>(&messages_json) {
                             Ok(req) => (req.messages, req.tools, req.temperature, req.max_tokens, req.tool_choice, req.output_schema, req.additional_params),
                             Err(_) => match serde_json::from_str::<Vec<Value>>(&messages_json) {
                                 Ok(msgs) => (msgs, None, None, None, None, None, None),
                                 Err(e) => {
-                                    println!("llm-prompt: failed to parse messages JSON: {e}");
+                                    println!("llm-prompt: failed to parse messages JSON");
                                     let err = serde_json::json!({"error": format!("Failed to parse messages: {e}")}).to_string();
                                     return Ok((Some(err),));
                                 }
@@ -1115,19 +1145,6 @@ fn register_models(linker: &mut Linker<ComponentStoreData>) -> WasmResult<()> {
                         raw_messages.len(),
                         raw_tools.as_ref().map(|t| t.len()).unwrap_or(0)
                     );
-                    if let Some(ref tools) = raw_tools {
-                        for (i, t) in tools.iter().enumerate() {
-                            println!("llm-prompt: raw tool[{i}]: {}", t);
-                        }
-                    }
-                    for (i, m) in raw_messages.iter().enumerate() {
-                        let role = m.get("role").and_then(|r| r.as_str()).unwrap_or("?");
-                        let content_preview = m.get("content")
-                            .and_then(|c| c.as_str())
-                            .map(|s| if s.len() > 200 { format!("{}...", &s[..200]) } else { s.to_string() })
-                            .unwrap_or_else(|| "<non-string>".to_string());
-                        println!("llm-prompt: msg[{i}] role={role} content={content_preview}");
-                    }
 
                     // Convert WASM SDK messages → native HistoryMessage
                     let mut history_messages = Vec::with_capacity(raw_messages.len());
@@ -1217,9 +1234,6 @@ fn register_models(linker: &mut Linker<ComponentStoreData>) -> WasmResult<()> {
                             }),
                         ));
                     }
-                    if let Some(ref params) = req_additional_params {
-                        println!("llm-prompt: additional_params: {params}");
-                    }
 
                     // Convert tool definitions if present
                     if let Some(tools) = raw_tools {
@@ -1234,8 +1248,7 @@ fn register_models(linker: &mut Linker<ComponentStoreData>) -> WasmResult<()> {
                             };
                             let desc = t.get("description").and_then(|d| d.as_str()).map(String::from);
                             let params = t.get("parameters").cloned().unwrap_or_default();
-                            println!("llm-prompt: tool[{i}] '{name}' params: {params}");
-                            match serde_json::from_value::<flow_like_model_provider::history::HistoryFunctionParameters>(params.clone()) {
+                            match serde_json::from_value::<flow_like_model_provider::history::HistoryFunctionParameters>(params) {
                                 Ok(parsed) => {
                                     native_tools.push(flow_like_model_provider::history::Tool {
                                         tool_type: flow_like_model_provider::history::ToolType::Function,
@@ -1246,8 +1259,8 @@ fn register_models(linker: &mut Linker<ComponentStoreData>) -> WasmResult<()> {
                                         },
                                     });
                                 }
-                                Err(e) => {
-                                    println!("llm-prompt: tool[{i}] '{name}' parameter deserialization FAILED: {e} — raw: {params}");
+                                Err(_) => {
+                                    println!("llm-prompt: tool[{i}] parameter deserialization failed");
                                 }
                             }
                         }
@@ -1270,20 +1283,12 @@ fn register_models(linker: &mut Linker<ComponentStoreData>) -> WasmResult<()> {
                         {
                             Ok(m) => m,
                             Err(e) => {
-                                println!("llm-prompt: failed to build model: {e}");
+                                println!("llm-prompt: failed to build model");
                                 let err = serde_json::json!({"error": format!("Failed to build model: {e}")}).to_string();
                                 return Ok((Some(err),));
                             }
                         }
                     };
-
-                    // Log the full History before invoking
-                    if let Ok(history_json) = serde_json::to_string(&history) {
-                        println!("llm-prompt: History to invoke (len={}): {}",
-                            history_json.len(),
-                            if history_json.len() > 2000 { format!("{}...", &history_json[..2000]) } else { history_json }
-                        );
-                    }
 
                     let stream_events = do_stream.then(|| {
                         Arc::new(parking_lot::RwLock::new(Vec::<crate::host_functions::StreamEvent>::new()))
@@ -1311,7 +1316,7 @@ fn register_models(linker: &mut Linker<ComponentStoreData>) -> WasmResult<()> {
                     let response = match model.invoke(&history, callback).await {
                         Ok(r) => r,
                         Err(e) => {
-                            println!("llm-prompt: model invoke failed: {e}");
+                            println!("llm-prompt: model invoke failed");
                             let err = serde_json::json!({"error": format!("Model invocation failed: {e}")}).to_string();
                             return Ok((Some(err),));
                         }
@@ -1795,8 +1800,8 @@ fn register_http(linker: &mut Linker<ComponentStoreData>) -> WasmResult<()> {
 
                 let mut req = match client.request(method_str, &url) {
                     Ok(req) => req,
-                    Err(e) => {
-                        tracing::warn!("WASM HTTP request to {} refused: {}", url, e);
+                    Err(_) => {
+                        tracing::warn!("WASM HTTP request refused by egress policy");
                         return Ok((None,));
                     }
                 };
@@ -1816,7 +1821,7 @@ fn register_http(linker: &mut Linker<ComponentStoreData>) -> WasmResult<()> {
                 let resp = match req.send().await {
                     Ok(r) => r,
                     Err(e) => {
-                        tracing::warn!("WASM HTTP request to {} failed: {}", url, e);
+                        tracing::warn!("WASM HTTP request failed: {}", e.without_url());
                         return Ok((None,));
                     }
                 };
@@ -1870,204 +1875,81 @@ fn register_websocket(linker: &mut Linker<ComponentStoreData>) -> WasmResult<()>
         .instance("flow-like:node/websocket@0.1.0")
         .map_err(map_err)?;
 
-    // connect(url, headers_json) -> Option<session_id>
     ws.func_wrap_async(
         "connect",
         |store: wasmtime::StoreContextMut<'_, ComponentStoreData>,
          (url, headers_json): (String, String)| {
             Box::new(async move {
-                if !store
-                    .data()
-                    .host_state
-                    .has_capability(WasmCapabilities::WEBSOCKET)
-                {
+                let host = &store.data().host_state;
+                if !host.has_capability(WasmCapabilities::WEBSOCKET) {
                     return Ok((None::<String>,));
                 }
-
-                // Resolve and connect through the egress policy so the socket
-                // goes to a vetted address; the request keeps the hostname
-                // for Host / SNI.
-                let environment = store.data().environment;
-                let request = match tokio_tungstenite::tungstenite::client::IntoClientRequest::into_client_request(url.as_str()) {
-                    Ok(request) => request,
-                    Err(_) => return Ok((None,)),
-                };
-                let uri = request.uri().clone();
-                let Some(host) = uri.host().map(str::to_string) else {
-                    return Ok((None,));
-                };
-                let port = uri.port_u16().unwrap_or(match uri.scheme_str() {
-                    Some("wss") => 443,
-                    _ => 80,
-                });
-                let addrs = match flow_like::flow::execution::egress::resolve_socket_addrs(
-                    environment,
-                    &host,
-                    port,
-                )
-                .await
-                {
-                    Ok(addrs) => addrs,
-                    Err(e) => {
-                        tracing::warn!("WASM WebSocket connect to {} refused: {}", url, e);
-                        return Ok((None,));
-                    }
-                };
-                let tcp = match tokio::net::TcpStream::connect(addrs.as_slice()).await {
-                    Ok(tcp) => tcp,
-                    Err(_) => return Ok((None,)),
-                };
-                let connect_result =
-                    tokio_tungstenite::client_async_tls_with_config(request, tcp, None, None).await;
-                let (ws_stream, _response) = match connect_result {
-                    Ok(r) => r,
-                    Err(_) => return Ok((None,)),
-                };
-
-                let (sink, stream) = futures::StreamExt::split(ws_stream);
-                let session_id = format!("ws_{}", rand_float().to_bits());
-
-                let conn = crate::host_functions::WsConnection { sink, stream };
-                store
-                    .data()
-                    .host_state
-                    .ws_connections
-                    .lock()
-                    .await
-                    .insert(session_id.clone(), conn);
-
-                let _ = headers_json; // reserved for future header injection
-                Ok((Some(session_id),))
+                Ok((host
+                    .websocket
+                    .connect(
+                        store.data().environment,
+                        host.allowed_hosts.as_deref(),
+                        &url,
+                        &headers_json,
+                    )
+                    .await,))
             })
         },
     )
     .map_err(map_err)?;
 
-    // send(session_id, message, is_binary) -> bool
     ws.func_wrap_async(
         "send",
         |store: wasmtime::StoreContextMut<'_, ComponentStoreData>,
-         (session_id, message, is_binary): (String, Vec<u8>, bool)| {
+         (reference, message, is_binary): (String, Vec<u8>, bool)| {
             Box::new(async move {
-                if !store
-                    .data()
-                    .host_state
-                    .has_capability(WasmCapabilities::WEBSOCKET)
-                {
+                let host = &store.data().host_state;
+                if !host.has_capability(WasmCapabilities::WEBSOCKET) {
                     return Ok((false,));
                 }
-
-                let connections = store.data().host_state.ws_connections.clone();
-                let mut guard = connections.lock().await;
-                let conn = match guard.get_mut(&session_id) {
-                    Some(c) => c,
-                    None => return Ok((false,)),
-                };
-
-                let msg = if is_binary {
-                    tokio_tungstenite::tungstenite::Message::Binary(message.into())
-                } else {
-                    let text = String::from_utf8(message).unwrap_or_default();
-                    tokio_tungstenite::tungstenite::Message::Text(text.into())
-                };
-
-                let sent = futures::SinkExt::send(&mut conn.sink, msg).await.is_ok();
-                Ok((sent,))
+                Ok((host.websocket.send(&reference, message, is_binary).await,))
             })
         },
     )
     .map_err(map_err)?;
 
-    // receive(session_id, timeout_ms) -> Option<json_string>
-    // Returns JSON: { "type": "text"|"binary"|"close", "data": "..." }
     ws.func_wrap_async(
         "receive",
         |store: wasmtime::StoreContextMut<'_, ComponentStoreData>,
-         (session_id, timeout_ms): (String, u32)| {
+         (reference, timeout_ms): (String, u32)| {
             Box::new(async move {
-                if !store
-                    .data()
-                    .host_state
-                    .has_capability(WasmCapabilities::WEBSOCKET)
-                {
+                let host = &store.data().host_state;
+                if !host.has_capability(WasmCapabilities::WEBSOCKET) {
                     return Ok((None::<String>,));
                 }
-
-                let connections = store.data().host_state.ws_connections.clone();
-                let mut guard = connections.lock().await;
-                let conn = match guard.get_mut(&session_id) {
-                    Some(c) => c,
-                    None => return Ok((None,)),
-                };
-
-                let timeout = std::time::Duration::from_millis(timeout_ms as u64);
-                let msg = tokio::time::timeout(timeout, conn.stream.next()).await;
-
-                let msg = match msg {
-                    Ok(Some(Ok(m))) => m,
-                    _ => return Ok((None,)),
-                };
-
-                let result = match msg {
-                    tokio_tungstenite::tungstenite::Message::Text(t) => {
-                        serde_json::json!({ "type": "text", "data": t.to_string() })
-                    }
-                    tokio_tungstenite::tungstenite::Message::Binary(b) => {
-                        let encoded = base64::Engine::encode(
-                            &base64::engine::general_purpose::STANDARD,
-                            &b,
-                        );
-                        serde_json::json!({ "type": "binary", "data": encoded })
-                    }
-                    tokio_tungstenite::tungstenite::Message::Close(frame) => {
-                        let reason = frame
-                            .map(|f| f.reason.to_string())
-                            .unwrap_or_default();
-                        serde_json::json!({ "type": "close", "data": reason })
-                    }
-                    tokio_tungstenite::tungstenite::Message::Ping(d) => {
-                        serde_json::json!({ "type": "ping", "data": String::from_utf8_lossy(&d).to_string() })
-                    }
-                    tokio_tungstenite::tungstenite::Message::Pong(d) => {
-                        serde_json::json!({ "type": "pong", "data": String::from_utf8_lossy(&d).to_string() })
-                    }
-                    _ => return Ok((None,)),
-                };
-                Ok((Some(result.to_string()),))
+                Ok((host
+                    .websocket
+                    .receive(&reference, websocket_timeout(host, timeout_ms))
+                    .await,))
             })
         },
     )
     .map_err(map_err)?;
 
-    // close(session_id) -> bool
     ws.func_wrap_async(
         "close",
-        |store: wasmtime::StoreContextMut<'_, ComponentStoreData>, (session_id,): (String,)| {
+        |store: wasmtime::StoreContextMut<'_, ComponentStoreData>, (reference,): (String,)| {
             Box::new(async move {
-                if !store
-                    .data()
-                    .host_state
-                    .has_capability(WasmCapabilities::WEBSOCKET)
-                {
+                let host = &store.data().host_state;
+                if !host.has_capability(WasmCapabilities::WEBSOCKET) {
                     return Ok((false,));
                 }
-
-                let connections = store.data().host_state.ws_connections.clone();
-                let mut guard = connections.lock().await;
-                let conn = match guard.remove(&session_id) {
-                    Some(c) => c,
-                    None => return Ok((false,)),
-                };
-
-                let mut sink = conn.sink;
-                let _ = futures::SinkExt::close(&mut sink).await;
-                Ok((true,))
+                Ok((host.websocket.close(&reference).await,))
             })
         },
     )
     .map_err(map_err)?;
 
     Ok(())
+}
+
+fn websocket_timeout(host: &HostState, requested_ms: u32) -> u32 {
+    requested_ms.min(host.node_timeout.as_millis().min(u32::MAX as u128) as u32)
 }
 
 fn map_err(e: impl std::fmt::Display) -> WasmError {
@@ -2093,6 +1975,409 @@ mod tests {
     use super::*;
     use wasmtime_wasi::cli::WasiCliView;
     use wasmtime_wasi::p2::bindings::cli::environment::Host;
+
+    #[tokio::test]
+    async fn wasi_socket_creation_requires_the_matching_protocol_grant() {
+        use wasmtime_wasi::p2::bindings::sockets::{
+            instance_network, ip_name_lookup,
+            network::{ErrorCode, IpAddress, IpAddressFamily},
+            tcp_create_socket, udp_create_socket,
+        };
+        use wasmtime_wasi::sockets::WasiSocketsView;
+
+        for (caps, tcp_allowed, udp_allowed, dns_allowed) in [
+            (WasmCapabilities::empty(), false, false, false),
+            (WasmCapabilities::HTTP_ALL, false, false, false),
+            (WasmCapabilities::WEBSOCKET, false, false, false),
+            (WasmCapabilities::DNS, false, false, true),
+            (WasmCapabilities::TCP, true, false, false),
+            (WasmCapabilities::UDP, false, true, false),
+            (
+                WasmCapabilities::TCP | WasmCapabilities::UDP,
+                true,
+                true,
+                false,
+            ),
+            (
+                WasmCapabilities::TCP | WasmCapabilities::UDP | WasmCapabilities::DNS,
+                true,
+                true,
+                true,
+            ),
+        ] {
+            let security = WasmSecurityConfig::restrictive().with_capabilities(caps);
+            let mut data = ComponentStoreData::new(&security);
+            let mut sockets = data.sockets();
+            let tcp =
+                tcp_create_socket::Host::create_tcp_socket(&mut sockets, IpAddressFamily::Ipv4);
+            if tcp_allowed {
+                assert!(tcp.is_ok(), "TCP should be allowed for {caps:?}: {tcp:?}");
+            } else {
+                assert_eq!(
+                    tcp.unwrap_err().downcast().unwrap(),
+                    ErrorCode::AccessDenied
+                );
+            }
+            let udp =
+                udp_create_socket::Host::create_udp_socket(&mut sockets, IpAddressFamily::Ipv4)
+                    .await;
+            if udp_allowed {
+                assert!(udp.is_ok(), "UDP should be allowed for {caps:?}: {udp:?}");
+            } else {
+                assert_eq!(
+                    udp.unwrap_err().downcast().unwrap(),
+                    ErrorCode::AccessDenied
+                );
+            }
+            let network = instance_network::Host::instance_network(&mut sockets).unwrap();
+            let resolved =
+                ip_name_lookup::Host::resolve_addresses(&mut sockets, network, "192.0.2.1".into());
+            if dns_allowed {
+                let resolved = resolved.expect("DNS grant should permit numeric address lookup");
+                assert!(matches!(
+                    ip_name_lookup::HostResolveAddressStream::resolve_next_address(
+                        &mut sockets,
+                        resolved,
+                    )
+                    .unwrap(),
+                    Some(IpAddress::Ipv4((192, 0, 2, 1)))
+                ));
+            } else {
+                assert_eq!(
+                    resolved.unwrap_err().downcast().unwrap(),
+                    ErrorCode::PermanentResolverFailure,
+                );
+            }
+        }
+
+        let mut security = WasmSecurityConfig::restrictive();
+        security.allow_wasi_network = true;
+        let mut data = ComponentStoreData::new(&security);
+        let mut sockets = data.sockets();
+        tcp_create_socket::Host::create_tcp_socket(&mut sockets, IpAddressFamily::Ipv4)
+            .expect("the explicit WASI network override should grant TCP");
+        udp_create_socket::Host::create_udp_socket(&mut sockets, IpAddressFamily::Ipv4)
+            .await
+            .expect("the explicit WASI network override should grant UDP");
+        let network = instance_network::Host::instance_network(&mut sockets).unwrap();
+        let resolved =
+            ip_name_lookup::Host::resolve_addresses(&mut sockets, network, "192.0.2.1".into())
+                .expect("the explicit WASI network override should grant DNS");
+        assert!(matches!(
+            ip_name_lookup::HostResolveAddressStream::resolve_next_address(&mut sockets, resolved)
+                .unwrap(),
+            Some(IpAddress::Ipv4((192, 0, 2, 1)))
+        ));
+    }
+
+    #[tokio::test]
+    async fn wasi_tcp_bind_preserves_allowlists_and_server_egress_policy() {
+        use wasmtime::component::Resource;
+        use wasmtime_wasi::p2::bindings::sockets::{
+            instance_network,
+            network::{ErrorCode, IpAddressFamily, IpSocketAddress, Ipv4SocketAddress},
+            tcp, tcp_create_socket,
+        };
+        use wasmtime_wasi::sockets::WasiSocketsView;
+
+        let local = WasmSecurityConfig::default().with_capabilities(WasmCapabilities::TCP);
+        let mut server = local.clone();
+        server.execution_environment = flow_like::flow::execution::ExecutionEnvironment::Server;
+        for (security, allowed) in [
+            (local.clone(), true),
+            (
+                local.clone().with_allowed_hosts(vec!["127.0.0.1".into()]),
+                true,
+            ),
+            (local.with_allowed_hosts(vec!["192.0.2.1".into()]), false),
+            (server, false),
+        ] {
+            let mut data = ComponentStoreData::new(&security);
+            let mut sockets = data.sockets();
+            let socket =
+                tcp_create_socket::Host::create_tcp_socket(&mut sockets, IpAddressFamily::Ipv4)
+                    .unwrap();
+            let network = instance_network::Host::instance_network(&mut sockets).unwrap();
+            let result = tcp::HostTcpSocket::start_bind(
+                &mut sockets,
+                Resource::new_borrow(socket.rep()),
+                network,
+                IpSocketAddress::Ipv4(Ipv4SocketAddress {
+                    port: 0,
+                    address: (127, 0, 0, 1),
+                }),
+            )
+            .await;
+            if allowed {
+                result.expect("authorized local TCP bind should succeed");
+                tcp::HostTcpSocket::finish_bind(&mut sockets, socket).unwrap();
+            } else {
+                assert_eq!(
+                    result.unwrap_err().downcast().unwrap(),
+                    ErrorCode::AccessDenied
+                );
+            }
+        }
+    }
+
+    fn wasi_http_start_get(
+        data: &mut ComponentStoreData,
+        authority: String,
+    ) -> wasmtime::component::Resource<wasmtime_wasi_http::p2::types::HostFutureIncomingResponse>
+    {
+        use wasmtime::component::Resource;
+        use wasmtime_wasi_http::p2::bindings::http::{outgoing_handler, types};
+
+        let mut http = data.http();
+        let fields = types::HostFields::new(&mut http).unwrap();
+        let request = types::HostOutgoingRequest::new(&mut http, fields).unwrap();
+        types::HostOutgoingRequest::set_scheme(
+            &mut http,
+            Resource::new_borrow(request.rep()),
+            Some(types::Scheme::Http),
+        )
+        .unwrap()
+        .unwrap();
+        types::HostOutgoingRequest::set_authority(
+            &mut http,
+            Resource::new_borrow(request.rep()),
+            Some(authority),
+        )
+        .unwrap()
+        .unwrap();
+        types::HostOutgoingRequest::set_path_with_query(
+            &mut http,
+            Resource::new_borrow(request.rep()),
+            Some("/probe".into()),
+        )
+        .unwrap()
+        .unwrap();
+        outgoing_handler::Host::handle(&mut http, request, None).unwrap()
+    }
+
+    async fn wasi_http_wait_response(
+        data: &mut ComponentStoreData,
+        pending: wasmtime::component::Resource<
+            wasmtime_wasi_http::p2::types::HostFutureIncomingResponse,
+        >,
+    ) -> Result<
+        wasmtime::component::Resource<wasmtime_wasi_http::p2::types::HostIncomingResponse>,
+        wasmtime_wasi_http::p2::bindings::http::types::ErrorCode,
+    > {
+        use wasmtime_wasi::p2::Pollable;
+        use wasmtime_wasi_http::p2::bindings::http::types;
+
+        let mut http = data.http();
+        tokio::time::timeout(
+            std::time::Duration::from_secs(5),
+            http.table.get_mut(&pending).unwrap().ready(),
+        )
+        .await
+        .expect("HTTP probe should finish");
+        types::HostFutureIncomingResponse::get(&mut http, pending)
+            .unwrap()
+            .unwrap()
+            .unwrap()
+    }
+
+    async fn wasi_http_get(
+        data: &mut ComponentStoreData,
+        authority: String,
+    ) -> Result<u16, wasmtime_wasi_http::p2::bindings::http::types::ErrorCode> {
+        use wasmtime_wasi_http::p2::bindings::http::types;
+
+        let pending = wasi_http_start_get(data, authority);
+        let response = wasi_http_wait_response(data, pending).await?;
+        Ok(types::HostIncomingResponse::status(&mut data.http(), response).unwrap())
+    }
+
+    #[tokio::test]
+    async fn dropping_component_store_closes_pending_http_and_open_response_bodies() {
+        use tokio::io::{AsyncReadExt, AsyncWriteExt};
+        use wasmtime_wasi_http::p2::bindings::http::types;
+
+        for send_headers in [false, true] {
+            let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+            let address = listener.local_addr().unwrap();
+            let (request_received, received) = tokio::sync::oneshot::channel();
+            let server = tokio::spawn(async move {
+                let (mut stream, _) = listener.accept().await.unwrap();
+                let mut request = Vec::new();
+                let mut buffer = [0; 1024];
+                while !request.windows(4).any(|bytes| bytes == b"\r\n\r\n") {
+                    let read = stream.read(&mut buffer).await.unwrap();
+                    assert!(read > 0, "HTTP request ended before its headers");
+                    request.extend_from_slice(&buffer[..read]);
+                    assert!(request.len() < 8192);
+                }
+                if send_headers {
+                    stream
+                        .write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 1024\r\n\r\nprefix")
+                        .await
+                        .unwrap();
+                }
+                request_received.send(()).unwrap();
+                stream.read(&mut buffer).await
+            });
+            let security =
+                WasmSecurityConfig::default().with_capabilities(WasmCapabilities::HTTP_ALL);
+            let mut data = ComponentStoreData::new(&security);
+            let pending = wasi_http_start_get(&mut data, address.to_string());
+            tokio::time::timeout(std::time::Duration::from_secs(3), received)
+                .await
+                .expect("HTTP request should reach the local server")
+                .unwrap();
+            if send_headers {
+                let response = tokio::time::timeout(
+                    std::time::Duration::from_secs(3),
+                    wasi_http_wait_response(&mut data, pending),
+                )
+                .await
+                .expect("HTTP response headers should arrive")
+                .unwrap();
+                let mut http = data.http();
+                let body = types::HostIncomingResponse::consume(&mut http, response)
+                    .unwrap()
+                    .unwrap();
+                types::HostIncomingBody::stream(&mut http, body)
+                    .unwrap()
+                    .unwrap();
+            }
+            drop(data);
+            let closed = tokio::time::timeout(std::time::Duration::from_secs(3), server)
+                .await
+                .expect("dropping the store should close its HTTP connection")
+                .unwrap();
+            assert!(
+                matches!(closed, Ok(0))
+                    || matches!(closed, Err(ref error) if matches!(
+                        error.kind(),
+                        std::io::ErrorKind::ConnectionReset | std::io::ErrorKind::ConnectionAborted
+                    )),
+                "HTTP connection remained active after store drop (headers sent: {send_headers}): {closed:?}",
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn wasi_http_sends_authorized_requests_with_the_host_header() {
+        use tokio::io::{AsyncReadExt, AsyncWriteExt};
+
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let server = tokio::spawn(async move {
+            let (mut stream, _) = listener.accept().await.unwrap();
+            let mut request = Vec::new();
+            let mut buffer = [0; 1024];
+            while !request.windows(4).any(|bytes| bytes == b"\r\n\r\n") {
+                let read = stream.read(&mut buffer).await.unwrap();
+                assert!(read > 0, "HTTP request ended before its headers");
+                request.extend_from_slice(&buffer[..read]);
+                assert!(request.len() < 8192);
+            }
+            stream
+                .write_all(b"HTTP/1.1 204 No Content\r\nConnection: close\r\n\r\n")
+                .await
+                .unwrap();
+            String::from_utf8(request).unwrap()
+        });
+        let security = WasmSecurityConfig::default().with_capabilities(WasmCapabilities::HTTP_ALL);
+        assert!(allows_standard_wasi_http(&security));
+        let mut data = ComponentStoreData::new(&security);
+        assert_eq!(
+            wasi_http_get(&mut data, address.to_string()).await.unwrap(),
+            204
+        );
+        let request = server.await.unwrap().to_ascii_lowercase();
+        assert!(request.starts_with("get /probe http/1.1\r\n"));
+        assert!(request.contains(&format!("\r\nhost: {address}\r\n")));
+    }
+
+    #[tokio::test]
+    async fn wasi_http_denies_server_loopback_even_with_permissive_guest_metadata() {
+        use wasmtime_wasi_http::p2::bindings::http::types::ErrorCode;
+
+        let mut security =
+            WasmSecurityConfig::default().with_capabilities(WasmCapabilities::HTTP_ALL);
+        security.execution_environment = flow_like::flow::execution::ExecutionEnvironment::Server;
+        let mut data = ComponentStoreData::new(&security);
+        data.host_state.metadata = Default::default();
+        assert!(matches!(
+            wasi_http_get(&mut data, "127.0.0.1:1".into())
+                .await
+                .unwrap_err(),
+            ErrorCode::HttpRequestDenied
+        ));
+    }
+
+    #[tokio::test]
+    async fn component_resource_handle_import_checks_scope_and_returns_optional_strings() {
+        let engine = wasmtime::Engine::default();
+        let component = wasmtime::component::Component::new(
+            &engine,
+            wat::parse_str(
+                r#"(component
+                    (type $metadata (instance
+                        (export "new-resource-handle" (func (result (option string))))))
+                    (import "flow-like:node/metadata@0.1.0" (instance $meta (type $metadata)))
+                    (alias export $meta "new-resource-handle" (func $new))
+                    (core module $memory
+                        (memory (export "memory") 1)
+                        (global $next (mut i32) (i32.const 64))
+                        (func (export "realloc") (param i32 i32 i32 i32) (result i32)
+                            (local $ptr i32)
+                            global.get $next
+                            local.tee $ptr
+                            local.get 3
+                            i32.add
+                            global.set $next
+                            local.get $ptr))
+                    (core instance $memory (instantiate $memory))
+                    (alias core export $memory "memory" (core memory $mem))
+                    (alias core export $memory "realloc" (core func $realloc))
+                    (core func $lower (canon lower (func $new)
+                        (memory $mem) (realloc $realloc)))
+                    (core module $guest
+                        (import "host" "new" (func $new (param i32)))
+                        (func (export "new") (result i32)
+                            (call $new (i32.const 0))
+                            i32.const 0))
+                    (core instance $guest (instantiate $guest
+                        (with "host" (instance (export "new" (func $lower))))))
+                    (alias core export $guest "new" (core func $guest-new))
+                    (func (export "new-resource-handle") (result (option string))
+                        (canon lift (core func $guest-new) (memory $mem))))"#,
+            )
+            .unwrap(),
+        )
+        .unwrap();
+        let mut linker = Linker::new(&engine);
+        register_metadata(&mut linker).unwrap();
+        let mut store = wasmtime::Store::new(
+            &engine,
+            ComponentStoreData::new(&WasmSecurityConfig::restrictive()),
+        );
+        let instance = linker
+            .instantiate_async(&mut store, &component)
+            .await
+            .unwrap();
+        let new_handle = instance
+            .get_typed_func::<(), (Option<String>,)>(&mut store, "new-resource-handle")
+            .unwrap();
+        assert_eq!(
+            new_handle.call_async(&mut store, ()).await.unwrap(),
+            (None,)
+        );
+
+        store.data_mut().host_state.run_scoped = true;
+        let (first,) = new_handle.call_async(&mut store, ()).await.unwrap();
+        let (second,) = new_handle.call_async(&mut store, ()).await.unwrap();
+        let first = first.unwrap();
+        let second = second.unwrap();
+        assert_eq!(first.len(), 36);
+        assert!(first.starts_with("obj:"));
+        assert_ne!(first, second);
+    }
 
     fn guest_environment(security: &WasmSecurityConfig) -> Vec<(String, String)> {
         let mut data = ComponentStoreData::new(security);

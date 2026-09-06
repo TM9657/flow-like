@@ -21,27 +21,107 @@ fn build_store_url(store_ref: &str, path: &str) -> String {
     format!("flowlike://{}/{}", store_ref, path.trim_start_matches('/'))
 }
 
+#[cfg(any(feature = "delta", test))]
+fn checked_delta_version(version: i64) -> flow_like_types::Result<u64> {
+    u64::try_from(version).map_err(|_| {
+        flow_like_types::anyhow!(
+            "Delta version must be zero or greater, received {}",
+            version
+        )
+    })
+}
+
 #[cfg(feature = "delta")]
-fn delta_table_provider(
+async fn delta_table_provider(
     table: &flow_like_storage::deltalake::DeltaTable,
 ) -> flow_like_types::Result<
     std::sync::Arc<dyn flow_like_storage::datafusion::datasource::TableProvider>,
 > {
-    use flow_like_storage::deltalake::delta_datafusion::{
-        DeltaScanConfigBuilder, DeltaTableProvider,
-    };
-
     let snapshot = table
         .snapshot()
         .map_err(|e| flow_like_types::anyhow!("Failed to get Delta snapshot: {}", e))?;
-    let scan_config = DeltaScanConfigBuilder::new()
-        .build(snapshot.snapshot())
-        .map_err(|e| flow_like_types::anyhow!("Failed to build Delta scan config: {}", e))?;
+    // Reuse the loaded snapshot so time-travel registrations keep their selected version.
+    table
+        .table_provider()
+        .with_eager_snapshot(snapshot.snapshot().clone())
+        .await
+        .map_err(|e| flow_like_types::anyhow!("Failed to create Delta provider: {}", e))
+}
 
-    Ok(std::sync::Arc::new(
-        DeltaTableProvider::try_new(snapshot.snapshot().clone(), table.log_store(), scan_config)
-            .map_err(|e| flow_like_types::anyhow!("Failed to create Delta provider: {}", e))?,
-    ))
+#[cfg(all(test, feature = "delta"))]
+mod delta_provider_compatibility {
+    use super::delta_table_provider;
+    use flow_like_storage::arrow_array::{Int64Array, RecordBatch};
+    use flow_like_storage::arrow_schema::{DataType, Field, Schema};
+    use flow_like_storage::datafusion::prelude::SessionContext;
+    use flow_like_storage::deltalake::DeltaTable;
+    use std::sync::Arc;
+
+    #[tokio::test]
+    async fn loaded_delta_snapshot_keeps_its_version_in_datafusion() -> flow_like_types::Result<()>
+    {
+        let schema = Arc::new(Schema::new(vec![Field::new("id", DataType::Int64, false)]));
+        let batch = |ids: Vec<i64>| {
+            RecordBatch::try_new(schema.clone(), vec![Arc::new(Int64Array::from(ids))])
+        };
+        let first = DeltaTable::new_in_memory()
+            .write(vec![batch(vec![1, 2])?])
+            .await?;
+        let historical_version = first.version().expect("write committed a version");
+        let mut latest = first.clone().write(vec![batch(vec![3])?]).await?;
+        let ctx = SessionContext::new();
+        latest.update_datafusion_session(&ctx.state())?;
+        ctx.register_table("latest", delta_table_provider(&latest).await?)?;
+
+        latest.load_version(historical_version).await?;
+        ctx.register_table("historical", delta_table_provider(&latest).await?)?;
+        let batches = ctx
+            .sql("SELECT (SELECT COUNT(*) FROM historical) AS old_count, (SELECT COUNT(*) FROM latest) AS new_count")
+            .await?
+            .collect()
+            .await?;
+        let result = &batches[0];
+        assert_eq!(result.num_rows(), 1);
+        assert_eq!(
+            result
+                .column(0)
+                .as_any()
+                .downcast_ref::<Int64Array>()
+                .unwrap()
+                .value(0),
+            2
+        );
+        assert_eq!(
+            result
+                .column(1)
+                .as_any()
+                .downcast_ref::<Int64Array>()
+                .unwrap()
+                .value(0),
+            3
+        );
+        for (name, expected) in [("historical", vec![2]), ("latest", vec![2, 3])] {
+            let batches = ctx
+                .sql(&format!("SELECT id FROM {name} WHERE id >= 2 ORDER BY id"))
+                .await?
+                .collect()
+                .await?;
+            let ids: Vec<i64> = batches
+                .iter()
+                .flat_map(|batch| {
+                    batch
+                        .column(0)
+                        .as_any()
+                        .downcast_ref::<Int64Array>()
+                        .unwrap()
+                        .values()
+                        .to_vec()
+                })
+                .collect();
+            assert_eq!(ids, expected, "{name} must scan its registered snapshot");
+        }
+        Ok(())
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
@@ -203,7 +283,7 @@ impl NodeLogic for RegisterDeltaTableNode {
                 DeltaTableBuilder::from_url(url.clone())?.with_storage_backend(object_store, url);
 
             if version >= 0 {
-                builder = builder.with_version(version);
+                builder = builder.with_version(checked_delta_version(version)?);
             }
 
             let delta_table = builder
@@ -212,7 +292,7 @@ impl NodeLogic for RegisterDeltaTableNode {
                 .map_err(|e| flow_like_types::anyhow!("Failed to open Delta table: {}", e))?;
 
             let actual_version = delta_table.version().unwrap_or(0);
-            let table_provider = delta_table_provider(&delta_table)?;
+            let table_provider = delta_table_provider(&delta_table).await?;
 
             cached_session
                 .ctx
@@ -372,7 +452,7 @@ impl NodeLogic for DeltaTimeTravelNode {
             let builder = match travel_mode.to_lowercase().as_str() {
                 "version" => DeltaTableBuilder::from_url(url.clone())?
                     .with_storage_backend(object_store, url)
-                    .with_version(version),
+                    .with_version(checked_delta_version(version)?),
                 "timestamp" => {
                     let dt = chrono::DateTime::parse_from_rfc3339(&timestamp)
                         .map_err(|e| flow_like_types::anyhow!("Invalid timestamp format: {}", e))?;
@@ -394,7 +474,7 @@ impl NodeLogic for DeltaTimeTravelNode {
                 .map_err(|e| flow_like_types::anyhow!("Failed to load Delta table: {}", e))?;
 
             let loaded_version = delta_table.version().unwrap_or(0);
-            let table_provider = delta_table_provider(&delta_table)?;
+            let table_provider = delta_table_provider(&delta_table).await?;
             cached_session
                 .ctx
                 .register_table(&table_name, table_provider)?;
@@ -2060,4 +2140,11 @@ mod tests {
             );
         }
     }
+}
+#[test]
+fn delta_version_conversion_rejects_negative_time_travel() {
+    assert_eq!(checked_delta_version(0).unwrap(), 0);
+    assert_eq!(checked_delta_version(i64::MAX).unwrap(), i64::MAX as u64);
+    assert!(checked_delta_version(-1).is_err());
+    assert!(checked_delta_version(i64::MIN).is_err());
 }

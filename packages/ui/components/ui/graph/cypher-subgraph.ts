@@ -17,6 +17,7 @@ import type {
 export function subgraphFromCypherRows(
 	rows: readonly unknown[],
 	overlay: GraphOverlay,
+	propertyMetadata: Record<string, Record<string, string>> = {},
 ): SubgraphResult | null {
 	if (rows.length === 0) return null;
 
@@ -106,6 +107,13 @@ export function subgraphFromCypherRows(
 
 	const nodeById = new Map<string, SubgraphNode>();
 	const edgeById = new Map<string, SubgraphEdge>();
+	const metadataFor = (variable: string, props: Record<string, unknown>) => {
+		const entries = Object.keys(props).flatMap((column) => {
+			const metadata = propertyMetadata[`${variable}.${column}`];
+			return metadata ? [[column, metadata]] : [];
+		});
+		return entries.length > 0 ? Object.fromEntries(entries) : undefined;
+	};
 
 	const ensureStubNode = (label: string, rawId: unknown) => {
 		if (rawId === null || rawId === undefined || label.length === 0)
@@ -152,7 +160,13 @@ export function subgraphFromCypherRows(
 				// the stub an edge endpoint created.
 				const existing = nodeById.get(id);
 				if (!existing || Object.keys(existing.props).length === 0) {
-					nodeById.set(id, { id, label: binding.label, caption, props });
+					nodeById.set(id, {
+						id,
+						label: binding.label,
+						caption,
+						props,
+						property_metadata: metadataFor(binding.variable, props),
+					});
 				}
 				continue;
 			}
@@ -177,6 +191,7 @@ export function subgraphFromCypherRows(
 				target,
 				label: binding.label,
 				props,
+				property_metadata: metadataFor(binding.variable, props),
 			});
 		}
 	}

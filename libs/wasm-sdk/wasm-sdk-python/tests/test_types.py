@@ -21,6 +21,7 @@ from flow_like_wasm_sdk.types import (
 class TestPinType:
     def test_validate_valid(self) -> None:
         assert PinType.validate("String") == "String"
+        assert PinType.validate(PinType.GEOMETRY) == "Geometry"
 
     def test_validate_invalid(self) -> None:
         with pytest.raises(ValueError, match="Invalid pin data type"):

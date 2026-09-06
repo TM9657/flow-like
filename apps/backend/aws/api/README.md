@@ -9,7 +9,9 @@ Database, one of two modes:
 
 - **Aurora DSQL** (selected by `DSQL_CLUSTER_ENDPOINT`; contract in
   `packages/aws-data/src/dsql.rs`):
-  - `DSQL_CLUSTER_ENDPOINT`: `<id>.dsql.<region>.on.aws`
+  - `DSQL_CLUSTER_ENDPOINT`: public `<id>.dsql.<region>.on.aws` or
+    PrivateLink `<id>.dsql-<service-id>.<region>.on.aws`; use the private
+    endpoint when the cluster blocks public access
   - `DSQL_REGION`: optional, must match the endpoint
   - `DSQL_USER`: database role, default `admin`; production uses
     `flow_like_api`, which the migration job creates and binds to this
@@ -26,7 +28,7 @@ Database, one of two modes:
   `SECRET_PREFIX` (or the environment).
 
 Other settings: `SECRET_PREFIX` (SSM prefix for secrets), `CDN_BUCKET_NAME`,
-`CDN_BUCKET_ENDPOINT`, `CDN_BUCKET_ACCESS_KEY_ID`, `SENTRY_ENDPOINT`.
+`CDN_BUCKET_ENDPOINT`, `CDN_BUCKET_ACCESS_KEY_ID`.
 
 See `apps/docs/src/content/docs/self-hosting/aws/database.md` for the full
 DSQL setup, IAM policies and the migration workflow.

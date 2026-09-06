@@ -35,12 +35,35 @@ export class WebWidgetState implements IWidgetState {
 		}
 	}
 
+	async getWidgetsAuthoritative(
+		appId: string,
+		language?: string,
+	): Promise<[string, string, IMetadata | undefined][]> {
+		const params = language ? `?language=${language}` : "";
+		return apiGet<[string, string, IMetadata | undefined][]>(
+			`apps/${appId}/widgets${params}`,
+			this.backend.auth,
+		);
+	}
+
 	async getWidget(
 		appId: string,
 		widgetId: string,
 		version?: Version,
 	): Promise<IWidget> {
 		// The handler parses MAJOR_MINOR_PATCH; dots fail to parse as u32.
+		const params = version ? `?version=${version.join("_")}` : "";
+		return apiGet<IWidget>(
+			`apps/${appId}/widgets/${widgetId}${params}`,
+			this.backend.auth,
+		);
+	}
+
+	async getWidgetAuthoritative(
+		appId: string,
+		widgetId: string,
+		version?: Version,
+	): Promise<IWidget> {
 		const params = version ? `?version=${version.join("_")}` : "";
 		return apiGet<IWidget>(
 			`apps/${appId}/widgets/${widgetId}${params}`,

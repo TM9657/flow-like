@@ -213,6 +213,36 @@ export class WidgetState implements IWidgetState {
 		}
 	}
 
+	async getWidgetsAuthoritative(
+		appId: string,
+		language?: string,
+	): Promise<[string, string, IMetadata | undefined][]> {
+		if (await this.backend.isLocalOnly(appId)) {
+			const widgets = await invoke<IWidget[]>("get_widgets", { appId });
+			return widgets.map((widget) => [
+				appId,
+				widget.id,
+				withWidgetName(undefined, widget),
+			]);
+		}
+		if (
+			!this.backend.profile ||
+			!this.backend.auth?.isAuthenticated ||
+			!this.backend.auth.user?.access_token
+		) {
+			throw new Error(
+				"Hosted Widget inventory requires an authenticated hub session",
+			);
+		}
+		const params = language ? `?language=${language}` : "";
+		return fetcher<[string, string, IMetadata | undefined][]>(
+			this.backend.profile,
+			`apps/${appId}/widgets${params}`,
+			{ method: "GET" },
+			this.backend.auth,
+		);
+	}
+
 	async getWidget(
 		appId: string,
 		widgetId: string,
@@ -286,6 +316,36 @@ export class WidgetState implements IWidgetState {
 			}
 			throw e;
 		}
+	}
+
+	async getWidgetAuthoritative(
+		appId: string,
+		widgetId: string,
+		version?: Version,
+	): Promise<IWidget> {
+		if (await this.backend.isLocalOnly(appId)) {
+			return invoke<IWidget>("get_widget", {
+				appId,
+				widgetId,
+				version,
+			});
+		}
+		if (
+			!this.backend.profile ||
+			!this.backend.auth?.isAuthenticated ||
+			!this.backend.auth.user?.access_token
+		) {
+			throw new Error(
+				"Hosted Widget read requires an authenticated hub session",
+			);
+		}
+		const params = version ? `?version=${version.join("_")}` : "";
+		return fetcher<IWidget>(
+			this.backend.profile,
+			`apps/${appId}/widgets/${widgetId}${params}`,
+			{ method: "GET" },
+			this.backend.auth,
+		);
 	}
 
 	async createWidget(

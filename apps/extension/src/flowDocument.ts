@@ -668,6 +668,13 @@ export function classOfAnnotation(typeText: string): string | undefined {
 	if (/^Set\s*</.test(text)) {
 		return "set";
 	}
+	if (
+		/^geometry(?:\s*<\s*(?:Point|LineString|Polygon|MultiPoint|MultiLineString|MultiPolygon|GeometryCollection)\s*>)?$/.test(
+			text,
+		)
+	) {
+		return "geometry";
+	}
 	switch (text) {
 		case "string":
 			return "string";

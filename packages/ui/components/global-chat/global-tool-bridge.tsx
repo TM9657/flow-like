@@ -8,20 +8,19 @@ import { useAuth } from "react-oidc-context";
 import { useFrontendRuntimeToolExecutor } from "../../hooks/use-frontend-runtime-tool-executor";
 import {
 	IAppVisibility,
-	type IEvent,
-	IEventExecutionMode,
 	IExecutionStage,
 	ILogLevel,
-	type IMetadata,
 	type IPage,
 	IRole,
 	Response,
-	nowSystemTime,
 	useAssistantSurface,
 	useBackend,
 	useQueryClient,
 } from "../../index";
 import { addAppToProfile } from "../../lib/add-app-to-profile";
+import { createInteractiveScenarioAdapter } from "../../lib/app-build/interactive-scenario-adapter";
+import { executeAppBuildTool } from "../../lib/app-build/tool-controller";
+import { generateAppBuildWidget } from "../../lib/app-build/widget-generator";
 import {
 	captureInlineAppPageSnapshots,
 	isAppPageSnapshotSourceCurrent,
@@ -55,10 +54,7 @@ import {
 } from "../../lib/interact-app-page";
 import type { IChannelHandle } from "../../lib/schema/channel";
 import type { BoardEditJob, FlowIrCommitToken } from "../../lib/schema/copilot";
-import {
-	convertJsonToUint8Array,
-	parseUint8ArrayToJson,
-} from "../../lib/uint8";
+import { parseUint8ArrayToJson } from "../../lib/uint8";
 import type {
 	IApplyFlowIrCommitResponse,
 	IBoardState,
@@ -146,6 +142,9 @@ import {
 	validateCanvasSettings,
 	validateComponents,
 } from "../flowpilot/validateComponents";
+import { createDefaultHomeLayout } from "../home/catalog";
+import { normalizeHomeLayout, resolveHomeLayout } from "../home/home-layout";
+import { homeLayoutFingerprint } from "../home/home-layout-json";
 import type {
 	IBuildLaneDetail,
 	IChatUsageStat,
@@ -160,11 +159,6 @@ import {
 	consumerToolForEventKind,
 	resolveOpenAppPageRequest,
 } from "./app-event-interface";
-import {
-	pageEventPersistenceReset,
-	resolveAppEventTarget,
-	resolveAppEventType,
-} from "./app-event-target";
 import {
 	type DetachedPageLookup,
 	assertDetachedWriteSafe,
@@ -190,6 +184,25 @@ import {
 	scoutSearchApps,
 	scoutSearchTemplates,
 } from "./scout-tools";
+import { createAppTool } from "./tools/app-provisioning";
+import { upsertAppEvent } from "./tools/event-tools";
+import {
+	getHomeWidgetCatalog,
+	homeLayoutComparisonFields,
+	listHomeDataSources,
+	profileAppInventoryCoverage,
+	publicHomeLayoutValidation,
+	validateHomeLayoutCandidate,
+	validateHomeLayoutReferences,
+	validateUnknownHomeWidgetConfigPreservation,
+	validateUnknownHomeWidgetPreservation,
+	withHomeReferenceIssues,
+} from "./tools/home-tools";
+import {
+	HomeProfileRunError,
+	HomeProfileRuns,
+	assertHomeProfileRun,
+} from "./tools/home/profile-run";
 import {
 	type RunnableWorkflowEventEntry,
 	WORKFLOW_EVENT_ENTRY_NODE_NAMES,
@@ -280,6 +293,8 @@ export interface FrontendToolRequest {
 	parentRequestId?: string;
 	/** Nested tools inherit their parent request so cancellation/diagnostics remain one tree. */
 	context?: {
+		profileId?: string;
+		profile_id?: string;
 		appId?: string;
 		app_id?: string;
 		boardId?: string;
@@ -1381,6 +1396,18 @@ export function GlobalToolBridge() {
 	// Crash-durable record of artifacts created per conversation. A retried creating tool (after a
 	// crash, reload, or lost tool response) is answered with the recorded ids instead of a duplicate.
 	const createdArtifactJournalRef = useRef(new CreatedArtifactJournal());
+	/** Successful Home stages keyed by the owning flowpilot_home request. */
+	const homeProfileRunsRef = useRef(new HomeProfileRuns());
+	const homeStageReceiptsByParentRef = useRef<
+		Map<
+			string,
+			{
+				profileId: string;
+				candidateFingerprint: string;
+				changed: boolean;
+			}
+		>
+	>(new Map());
 	const boardRecoveryScopeByRequestRef = useRef<
 		Map<
 			string,
@@ -2069,6 +2096,24 @@ export function GlobalToolBridge() {
 		[recordRequestDebug, setToolPrompt],
 	);
 
+	const assertHomeProfile = useCallback(
+		async (request: FrontendToolRequest, surfaceProfileId?: string) => {
+			const homeScope = {
+				parentRequestId: parentRequestId(request),
+				profileId: request.context?.profileId ?? request.context?.profile_id,
+			};
+			await assertHomeProfileRun(
+				homeProfileRunsRef.current,
+				homeScope,
+				async () => (await backend.userState.getProfile()).id ?? undefined,
+				() =>
+					useAssistantSurface.getState().homeSurface?.getSnapshot().profileId,
+				surfaceProfileId,
+			);
+		},
+		[backend.userState],
+	);
+
 	const runTool = useCallback(
 		async (request: FrontendToolRequest, scope: RunScope): Promise<unknown> => {
 			assertRequestActive(request, "tool execution");
@@ -2078,12 +2123,86 @@ export function GlobalToolBridge() {
 			const getProfileAppIds = async (): Promise<Set<string>> => {
 				try {
 					const profile = await backend.userState.getSettingsProfile();
+					await assertHomeProfile(request, profile?.hub_profile?.id ?? "");
 					return new Set(
 						(profile?.hub_profile?.apps ?? []).map((entry) => entry.app_id),
 					);
-				} catch {
-					return new Set<string>();
+				} catch (error) {
+					if (error instanceof HomeProfileRunError) throw error;
+					throw new Error(
+						`The current profile app inventory could not be read: ${error instanceof Error ? error.message : String(error)}`,
+					);
 				}
+			};
+			const readHomeSnapshot = async () => {
+				const liveSurface = useAssistantSurface.getState().homeSurface;
+				if (liveSurface) {
+					const snapshot = liveSurface.getSnapshot();
+					await assertHomeProfile(request, snapshot.profileId);
+					return {
+						profileId: snapshot.profileId,
+						profileName: snapshot.profileName,
+						profileDescription: snapshot.profileDescription,
+						profileInterests: snapshot.profileInterests,
+						profileTags: snapshot.profileTags,
+						source: snapshot.source,
+						layout: snapshot.layout,
+						baseLayout: snapshot.baseLayout,
+						defaultLayout: snapshot.defaultLayout,
+						editing: snapshot.editing,
+						dirty: snapshot.dirty,
+						baseFingerprint: snapshot.baseFingerprint,
+						candidateFingerprint: snapshot.candidateFingerprint,
+						defaultLayoutAvailable: true,
+						surfaceAvailable: true,
+					};
+				}
+				const profile = await backend.userState.getProfile();
+				await assertHomeProfile(request, profile.id ?? "");
+				const bundled = createDefaultHomeLayout();
+				const personalLayout = normalizeHomeLayout(profile.home_layout);
+				let defaults: Awaited<
+					ReturnType<typeof backend.userState.getHomeDefaults>
+				> | null = null;
+				try {
+					defaults = await backend.userState.getHomeDefaults(
+						profile.home_default_id ?? undefined,
+					);
+				} catch (error) {
+					if (!personalLayout) {
+						throw new Error(
+							`The inherited Home layout could not be read: ${error instanceof Error ? error.message : String(error)}`,
+						);
+					}
+				}
+				const inherited = defaults
+					? resolveHomeLayout(null, defaults, bundled)
+					: undefined;
+				const resolved = personalLayout
+					? { layout: personalLayout, source: "personal" as const }
+					: resolveHomeLayout(
+							profile.home_layout,
+							defaults ?? undefined,
+							bundled,
+						);
+				const fingerprint = homeLayoutFingerprint(resolved.layout);
+				return {
+					profileId: profile.id ?? "",
+					profileName: profile.name,
+					profileDescription: profile.description ?? undefined,
+					profileInterests: profile.interests ?? [],
+					profileTags: profile.tags ?? [],
+					source: resolved.source,
+					layout: resolved.layout,
+					baseLayout: resolved.layout,
+					defaultLayout: inherited?.layout,
+					editing: false,
+					dirty: false,
+					baseFingerprint: fingerprint,
+					candidateFingerprint: fingerprint,
+					defaultLayoutAvailable: Boolean(inherited),
+					surfaceAvailable: false,
+				};
 			};
 			switch (request.toolName) {
 				case "read_flowscript_source": {
@@ -2122,15 +2241,300 @@ export function GlobalToolBridge() {
 				case "graph_element_tool":
 				case "ontology_action_tool":
 					return executeRuntimeTool(request.toolName, args);
+				case "get_home_context": {
+					const snapshot = await readHomeSnapshot();
+					if (!snapshot.profileId) {
+						return {
+							status: "error",
+							code: "home_profile_unavailable",
+							message: "Choose a profile before editing Home.",
+						};
+					}
+					const comparisonFields = homeLayoutComparisonFields(
+						snapshot.layout,
+						snapshot.baseLayout,
+						snapshot.defaultLayout,
+						argBoolean(args, "include_comparisons") ||
+							argBoolean(args, "includeComparisons"),
+					);
+					return {
+						status: "ok",
+						profile_id: snapshot.profileId,
+						profile: {
+							id: snapshot.profileId,
+							name: snapshot.profileName,
+							description: snapshot.profileDescription,
+							interests: snapshot.profileInterests,
+							tags: snapshot.profileTags,
+						},
+						source: snapshot.source,
+						current_layout: snapshot.layout,
+						editing: snapshot.editing,
+						dirty: snapshot.dirty,
+						surface_available: snapshot.surfaceAvailable,
+						can_stage: snapshot.surfaceAvailable,
+						...comparisonFields,
+						...(!snapshot.defaultLayoutAvailable
+							? {
+									default_layout_available: false,
+									default_layout_note:
+										"The personal layout is available, but its inherited default could not be read for comparison.",
+								}
+							: {}),
+						fingerprint: snapshot.candidateFingerprint,
+						guards: {
+							expected_profile_id: snapshot.profileId,
+							expected_fingerprint: snapshot.candidateFingerprint,
+						},
+						...(!snapshot.surfaceAvailable
+							? {
+									note: "Open the Home page before apply_home_layout so the result can be staged for review.",
+									route: "/",
+								}
+							: {}),
+					};
+				}
+				case "get_home_widget_catalog":
+					return getHomeWidgetCatalog(args);
+				case "list_home_data_sources": {
+					const profileAppIds = await getProfileAppIds();
+					return listHomeDataSources(backend, args, async (appId) =>
+						profileAppIds.has(appId),
+					);
+				}
+				case "validate_home_layout": {
+					const snapshot = await readHomeSnapshot();
+					const validation = validateHomeLayoutCandidate(
+						args.layout,
+						snapshot.layout,
+					);
+					const profileAppIds = validation.layout
+						? await getProfileAppIds()
+						: new Set<string>();
+					const referenceIssues = validation.layout
+						? await validateHomeLayoutReferences(backend, validation.layout, {
+								profileAppIds,
+							})
+						: [];
+					if (validation.layout) {
+						referenceIssues.push(
+							...validateUnknownHomeWidgetConfigPreservation(
+								validation.layout,
+								snapshot.layout,
+							),
+							...validateUnknownHomeWidgetPreservation(
+								validation.layout,
+								snapshot.layout,
+							),
+						);
+					}
+					const expectedProfileId =
+						argString(args, "expected_profile_id") ||
+						argString(args, "expectedProfileId");
+					const expectedFingerprint =
+						argString(args, "expected_fingerprint") ||
+						argString(args, "expectedFingerprint");
+					if (expectedProfileId && expectedProfileId !== snapshot.profileId) {
+						referenceIssues.push({
+							severity: "error",
+							code: "home_profile_changed",
+							path: "$.expected_profile_id",
+							message: `The active profile changed to '${snapshot.profileId}'.`,
+						});
+					}
+					if (
+						expectedFingerprint &&
+						expectedFingerprint !== snapshot.candidateFingerprint
+					) {
+						referenceIssues.push({
+							severity: "error",
+							code: "home_layout_changed",
+							path: "$.expected_fingerprint",
+							message:
+								"The visible Home draft changed. Merge the user's latest layout before applying.",
+						});
+					}
+					const latest = await readHomeSnapshot();
+					if (
+						latest.profileId !== snapshot.profileId ||
+						latest.candidateFingerprint !== snapshot.candidateFingerprint
+					) {
+						referenceIssues.push({
+							severity: "error",
+							code: "home_layout_changed_during_validation",
+							path: "$",
+							message:
+								"The visible Home draft changed while references were being checked. Validate the candidate again against the latest context.",
+						});
+					}
+					const checked = withHomeReferenceIssues(validation, referenceIssues);
+					const publicChecked = publicHomeLayoutValidation(checked);
+					return {
+						...publicChecked,
+						profile_id: latest.profileId,
+						current_fingerprint: latest.candidateFingerprint,
+						...(checked.valid
+							? {
+									guards: {
+										expected_profile_id: latest.profileId,
+										expected_fingerprint: latest.candidateFingerprint,
+									},
+								}
+							: {}),
+					};
+				}
+				case "apply_home_layout": {
+					const expectedProfileId =
+						argString(args, "expected_profile_id") ||
+						argString(args, "expectedProfileId");
+					const expectedFingerprint =
+						argString(args, "expected_fingerprint") ||
+						argString(args, "expectedFingerprint");
+					if (!expectedProfileId || !expectedFingerprint) {
+						return {
+							status: "error",
+							code: "home_apply_guard_required",
+							message:
+								"apply_home_layout requires expected_profile_id and expected_fingerprint from the latest Home context or validation result.",
+						};
+					}
+					homeProfileRunsRef.current.assertCurrent(
+						{
+							parentRequestId: parentRequestId(request),
+							profileId:
+								request.context?.profileId ?? request.context?.profile_id,
+						},
+						expectedProfileId,
+					);
+					const surface = useAssistantSurface.getState().homeSurface;
+					if (!surface) {
+						return {
+							status: "error",
+							code: "home_surface_unavailable",
+							message:
+								"Open the personal Home page before applying a generated layout. No layout was saved.",
+							route: "/",
+						};
+					}
+					const initialSnapshot = surface.getSnapshot();
+					await assertHomeProfile(request, initialSnapshot.profileId);
+					const validation = validateHomeLayoutCandidate(
+						args.layout,
+						initialSnapshot.layout,
+					);
+					if (!validation.layout) return publicHomeLayoutValidation(validation);
+					const profileAppIds = await getProfileAppIds();
+					const checked = withHomeReferenceIssues(validation, [
+						...(await validateHomeLayoutReferences(backend, validation.layout, {
+							profileAppIds,
+						})),
+						...validateUnknownHomeWidgetConfigPreservation(
+							validation.layout,
+							initialSnapshot.layout,
+						),
+						...validateUnknownHomeWidgetPreservation(
+							validation.layout,
+							initialSnapshot.layout,
+						),
+					]);
+					if (!checked.valid) {
+						const latest = surface.getSnapshot();
+						const changedDuringValidation =
+							latest.profileId !== initialSnapshot.profileId ||
+							latest.candidateFingerprint !==
+								initialSnapshot.candidateFingerprint;
+						return {
+							...publicHomeLayoutValidation(checked),
+							...(changedDuringValidation
+								? {
+										issues: [
+											...checked.issues,
+											{
+												severity: "error" as const,
+												code: "home_layout_changed_during_validation",
+												path: "$",
+												message:
+													"The visible Home draft changed while references were being checked. Read Home context and validate the candidate again.",
+											},
+										],
+									}
+								: {}),
+							profile_id: latest.profileId,
+							current_fingerprint: latest.candidateFingerprint,
+						};
+					}
+					await assertHomeProfile(request, surface.getSnapshot().profileId);
+					assertRequestActive(request, "Home layout staging");
+					const latestSurface = useAssistantSurface.getState().homeSurface;
+					if (latestSurface !== surface) {
+						return {
+							status: "stale",
+							code: "home_surface_changed",
+							message:
+								"The visible Home editor changed while references were being checked. Read Home context again.",
+						};
+					}
+					const staged = latestSurface.stageLayout(validation.layout, {
+						expectedProfileId,
+						expectedFingerprint,
+					});
+					const parentId = parentRequestId(request);
+					if (staged.status === "staged" && parentId) {
+						homeStageReceiptsByParentRef.current.set(parentId, {
+							profileId: staged.profileId,
+							candidateFingerprint: staged.candidateFingerprint,
+							changed: staged.changed,
+						});
+						while (homeStageReceiptsByParentRef.current.size > 256) {
+							const oldest = homeStageReceiptsByParentRef.current
+								.keys()
+								.next().value;
+							if (typeof oldest !== "string") break;
+							homeStageReceiptsByParentRef.current.delete(oldest);
+						}
+					}
+					return {
+						...staged,
+						profile_id: staged.profileId,
+						base_fingerprint:
+							"baseFingerprint" in staged ? staged.baseFingerprint : undefined,
+						candidate_fingerprint: staged.candidateFingerprint,
+						fingerprint: staged.candidateFingerprint,
+						...(staged.status === "staged"
+							? {
+									guards: {
+										expected_profile_id: staged.profileId,
+										expected_fingerprint: staged.candidateFingerprint,
+									},
+									note: staged.changed
+										? "The layout is staged in the visible Home editor. The user must choose Save to persist it or Cancel to discard it."
+										: "The proposed layout already matches the visible Home layout.",
+								}
+							: {}),
+					};
+				}
 				case "list_apps": {
 					// Selection is driven by app + EVENT metadata only (no board loading): each app's
 					// active events and their event_type tell the agent which interfaces it can call.
 					const profileAppIds = await getProfileAppIds();
 					const apps = await backend.appState.getApps();
+					const inventoryCoverage = profileAppInventoryCoverage(
+						profileAppIds,
+						apps.map(([app]) => app.id),
+					);
+					const query = argString(args, "query").toLowerCase();
 					// Sort by display name so the output is stable across calls (getApps returns
 					// object-store order, i.e. app id) and truncation, if any, is deterministic.
-					const visible = apps
-						.filter(([app]) => profileAppIds.has(app.id))
+					const profileVisible = apps.filter(([app]) =>
+						profileAppIds.has(app.id),
+					);
+					const visible = profileVisible
+						.filter(([app, meta]) => {
+							if (!query) return true;
+							return [app.id, meta?.name, meta?.description]
+								.filter((value): value is string => typeof value === "string")
+								.some((value) => value.toLowerCase().includes(query));
+						})
 						.sort(([, a], [, b]) =>
 							(a?.name ?? "").localeCompare(b?.name ?? ""),
 						);
@@ -2196,18 +2600,54 @@ export function GlobalToolBridge() {
 					const eventInventoryComplete = detailed.every(
 						(app) => app.events_status === "ok",
 					);
-					const inventoryComplete = !truncated && eventInventoryComplete;
+					const inventoryComplete =
+						!truncated && eventInventoryComplete && inventoryCoverage.complete;
+					const notes: string[] = [];
+					if (!inventoryCoverage.complete) {
+						notes.push(
+							`${inventoryCoverage.missing_count} current-profile app record${inventoryCoverage.missing_count === 1 ? " is" : "s are"} missing from the backend inventory. App absence is unproven until the inventory succeeds.`,
+						);
+					}
+					if (!eventInventoryComplete) {
+						notes.push(
+							"One or more app interface inventories could not be read. Their Events and routes are incomplete.",
+						);
+					}
+					if (truncated) {
+						notes.push(
+							query
+								? `Only the first ${MAX_LISTED_APPS} of ${visible.length} matching profile apps are listed. Refine query before concluding that an app is absent.`
+								: `Only the first ${MAX_LISTED_APPS} of ${visible.length} profile apps are listed, sorted by name. An unlisted app may fall past this cap.`,
+						);
+					}
 					return {
-						status: "ok",
+						status: inventoryComplete ? "ok" : "partial",
 						complete: inventoryComplete,
 						total: visible.length,
 						returned: detailed.length,
+						...(query
+							? {
+									query,
+									matched_total: visible.length,
+									profile_total: profileAppIds.size,
+								}
+							: {}),
+						...(!inventoryCoverage.complete
+							? {
+									missing_profile_app_count: inventoryCoverage.missing_count,
+									missing_profile_app_ids:
+										inventoryCoverage.missing_profile_app_ids,
+									...(inventoryCoverage.missing_ids_truncated
+										? { missing_profile_app_ids_truncated: true }
+										: {}),
+								}
+							: {}),
 						...(truncated
 							? {
 									truncated: true,
-									note: `Only the first ${MAX_LISTED_APPS} of ${visible.length} profile apps are listed (sorted by name). If the user references an app not shown, it may fall past this cap rather than not exist.`,
 								}
 							: {}),
+						...(notes.length ? { note: notes.join(" ") } : {}),
 						apps: detailed,
 					};
 				}
@@ -2882,389 +3322,136 @@ export function GlobalToolBridge() {
 						logs: compactLogEvents(logs),
 					};
 				}
-				case "create_app": {
-					const name = argString(args, "name").trim();
-					if (!name)
-						return {
-							status: "error",
-							message: `create_app requires a \`name\`. Derive a short name from the request (e.g. "Weather App") and call create_app once with it — do not call it again with empty arguments.`,
-						};
-					const description = argString(args, "description");
-					const idempotencyKey =
-						argString(args, "idempotency_key") ||
-						argString(args, "idempotencyKey");
-					const creationConversationId = conversationScopeId(request);
-					const creationIdentity = creationConversationId
-						? {
-								conversationId: creationConversationId,
-								toolName: "create_app",
-								instruction: `${name}\n${description}`,
-								...(idempotencyKey ? { idempotencyKey } : {}),
-							}
-						: undefined;
-					const journaled = creationIdentity
-						? createdArtifactJournalRef.current.find(creationIdentity)
-						: undefined;
-					if (journaled?.artifacts.appId) {
-						const existingAppId = journaled.artifacts.appId;
-						const ownerMessageId = ownerMessageIdForRequest(request);
-						if (ownerMessageId) {
-							createdAppTargetsByOwnerRef.current.set(
-								ownerMessageId,
-								existingAppId,
-							);
-						}
-						scope.referenceApp(existingAppId);
-						return {
-							status: "ok",
-							app_id: existingAppId,
-							name,
-							already_created: true,
-							note: "An app for this exact request was already created earlier in this conversation; its app_id is returned instead of creating a duplicate. Continue building on this app_id. Only if the user truly wants a second, separate app, call create_app again with a distinct `idempotency_key`.",
-						};
-					}
-					const meta: IMetadata = {
-						name,
-						description,
-						tags: [],
-						use_case: "",
-						created_at: nowSystemTime(),
-						updated_at: nowSystemTime(),
-						preview_media: [],
-					};
-					// Default to a cloud app when signed in (mirrors the library's create dialog),
-					// let the model force local via online:false, but never attempt online without
-					// auth — createApp's remote PUT would fail without a token.
-					const authenticated = Boolean(authRef.current?.isAuthenticated);
-					const online =
-						(argBool(args, "online") ?? authenticated) && authenticated;
-					let app: Awaited<ReturnType<typeof backend.appState.createApp>>;
-					try {
-						app = await backend.appState.createApp(meta, [], online);
-					} catch (error) {
-						console.error(
-							"[global-tool-bridge] create_app: creation failed",
-							error,
-						);
-						if (handleUpgradeRequiredError(error, "project-limit")) {
-							return {
-								status: "error",
-								message: `The user's plan does not allow creating another online project; an upgrade dialog was shown to them. Either wait for the user to upgrade, or offer to create the app locally instead (online:false).`,
-							};
-						}
-						return {
-							status: "error",
-							message: `create_app failed: ${error instanceof Error ? error.message : String(error)}`,
-						};
-					}
-					// Associate the app with the current profile so it surfaces in list_apps
-					// (which is profile-scoped) and the user's library, matching the other
-					// create-app entry points.
-					try {
-						const profile = await backend.userState.getSettingsProfile();
-						if (profile) {
-							await backend.userState.updateProfileApp(
-								profile,
-								{ app_id: app.id, favorite: false, pinned: false },
-								"Upsert",
-							);
-						}
-					} catch (error) {
-						console.error(
-							"[global-tool-bridge] create_app: profile registration failed",
-							error,
-						);
-					}
-					queryClient.invalidateQueries({ queryKey: ["getApps"] });
-					queryClient.invalidateQueries({ queryKey: ["getSettingsProfile"] });
-					const ownerMessageId = ownerMessageIdForRequest(request);
-					if (ownerMessageId) {
-						createdAppTargetsByOwnerRef.current.set(ownerMessageId, app.id);
-						while (createdAppTargetsByOwnerRef.current.size > 128) {
-							const oldest = createdAppTargetsByOwnerRef.current
-								.keys()
-								.next().value;
-							if (typeof oldest !== "string") break;
-							createdAppTargetsByOwnerRef.current.delete(oldest);
-						}
-					}
-					scope.referenceApp(app.id);
-					if (creationIdentity) {
-						createdArtifactJournalRef.current.record(
-							creationIdentity,
-							{ appId: app.id },
-							request.requestId,
-						);
-					}
-					return { status: "ok", app_id: app.id, name, online };
-				}
-				case "upsert_event": {
-					const appId = argString(args, "app_id") || argString(args, "appId");
-					if (!appId)
-						return {
-							status: "error",
-							message: "upsert_event requires an app_id.",
-						};
-					const name = argString(args, "name").trim();
-					if (!name)
-						return {
-							status: "error",
-							message: "upsert_event requires a name.",
-						};
-					const eventId =
-						argString(args, "event_id") || argString(args, "eventId");
-					let existingEvent: IEvent | undefined;
-					if (eventId) {
-						try {
-							existingEvent = await backend.eventState.getEvent(appId, eventId);
-						} catch (error) {
-							return {
-								status: "error",
-								message: `Cannot update event '${eventId}': ${error instanceof Error ? error.message : String(error)}`,
-							};
-						}
-					}
-
-					const target = resolveAppEventTarget({
-						requestedPageId:
-							argString(args, "page_id") || argString(args, "pageId"),
-						requestedBoardId:
-							argString(args, "board_id") || argString(args, "boardId"),
-						requestedNodeId:
-							argString(args, "node_id") || argString(args, "nodeId"),
-						existingPageId: existingEvent?.default_page_id,
-						existingBoardId: existingEvent?.board_id,
-						existingNodeId: existingEvent?.node_id,
-					});
-					if (!target.ok) {
-						return {
-							status: "error",
-							message: target.message,
-						};
-					}
-					const { pageId, boardId: eventBoardId, nodeId: eventNodeId } = target;
-					// A page Event may retain its owning board as metadata, but never a workflow
-					// entry node. Clearing a stale node also repairs previously misclassified page
-					// Events the next time FlowPilot updates them.
-
-					let entryNodeName: string | undefined;
-					let entryConfig: (typeof EVENT_CONFIG)[string] | undefined;
-					let boardExecutionMode: string | undefined;
-					if (eventBoardId && eventNodeId) {
-						let eventBoard: Awaited<
-							ReturnType<typeof backend.boardState.getBoard>
-						>;
-						try {
-							eventBoard = await backend.boardState.getBoard(
-								appId,
-								eventBoardId,
-								undefined,
-								true,
-							);
-						} catch (error) {
-							return {
-								status: "error",
-								message: `Failed to load the Event's board: ${error instanceof Error ? error.message : String(error)}`,
-							};
-						}
-						const entryNode = eventBoard?.nodes?.[eventNodeId];
-						entryNodeName = entryNode?.name;
-						boardExecutionMode = eventBoard?.execution_mode;
-						entryConfig = entryNodeName
-							? EVENT_CONFIG[entryNodeName]
+				case "app_build": {
+					const operation = argString(args, "operation");
+					const appId = argString(args, "app_id");
+					const inspection = [
+						"schema",
+						"capabilities",
+						"recipe",
+						"status",
+					].includes(operation);
+					if (!["schema", "capabilities", "recipe"].includes(operation)) {
+						const owner = ownerMessageIdForRequest(request);
+						const created = owner
+							? createdAppTargetsByOwnerRef.current.get(owner)
 							: undefined;
-						if (!entryNodeName || !entryConfig) {
-							return {
-								status: "error",
-								message: `Node '${eventNodeId}' is not a supported Event entry. Use flowpilot_board to create eventsSimple(), eventsGeneric(payload: Struct, fieldName: string, ...), or eventsChat(...), then pass the returned event_nodes id.`,
-							};
-						}
-						if (!isRunnableWorkflowEventEntry(eventBoard, eventNodeId)) {
-							return {
-								status: "error",
-								message: `Node '${eventNodeId}' is an empty or unconnected Event entry. Build and connect the board logic first, then use the exact runnable event_nodes id returned by flowpilot_board. No Event was registered.`,
-							};
+						if (!(await getProfileAppIds()).has(appId) && created !== appId) {
+							throw new Error(
+								"App build target is not visible in the current profile.",
+							);
 						}
 					}
-
-					const requestedEventType = argString(args, "event_type").trim();
-					const eventType = resolveAppEventType({
-						pageId,
-						requestedEventType,
-						existingEventType: existingEvent?.event_type,
-						supportedWorkflowEventTypes: entryConfig?.eventTypes,
-						defaultWorkflowEventType: entryConfig?.defaultEventType,
-					});
-					if (entryConfig && !entryConfig.eventTypes.includes(eventType)) {
-						return {
-							status: "error",
-							message: `Event type '${eventType}' is incompatible with ${entryNodeName}. Supported types: ${entryConfig.eventTypes.join(", ")}. Cron setup requires an events_simple entry.`,
-						};
-					}
-
-					const requestedExecutionMode =
-						argString(args, "execution_mode") ||
-						argString(args, "executionMode");
-					let executionMode =
-						requestedExecutionMode.toLowerCase() === "remote"
-							? IEventExecutionMode.Remote
-							: requestedExecutionMode.toLowerCase() === "local"
-								? IEventExecutionMode.Local
-								: (existingEvent?.execution_mode ?? IEventExecutionMode.Local);
-					// Core enforces a concrete board mode on its Events. Resolve it here too so
-					// sink_execution and the persisted Event cannot contradict one another.
-					if (boardExecutionMode === "Local")
-						executionMode = IEventExecutionMode.Local;
-					if (boardExecutionMode === "Remote")
-						executionMode = IEventExecutionMode.Remote;
-
-					const existingConfig = pageId
-						? undefined
-						: parseUint8ArrayToJson(existingEvent?.config);
-					const defaultConfig = entryConfig?.configs[eventType] ?? {};
-					const keepExistingConfig =
-						existingEvent?.event_type === eventType &&
-						existingConfig &&
-						typeof existingConfig === "object";
-					let eventConfig: Record<string, unknown> = pageId
-						? {}
-						: {
-								...(keepExistingConfig
-									? (existingConfig as Record<string, unknown>)
-									: (defaultConfig as Record<string, unknown>)),
-								...(argObject(args, "config") ?? {}),
-							};
-					if (!pageId && eventType === "cron") {
-						const expression =
-							argString(args, "cron_expression") ||
-							argString(args, "cronExpression") ||
-							(typeof eventConfig.expression === "string"
-								? eventConfig.expression.trim()
-								: "");
-						const scheduledFor =
-							argObject(args, "scheduled_for") ||
-							argObject(args, "scheduledFor") ||
-							(eventConfig.scheduled_for &&
-							typeof eventConfig.scheduled_for === "object"
-								? (eventConfig.scheduled_for as Record<string, unknown>)
-								: undefined);
-						if (!expression && !scheduledFor) {
-							return {
-								status: "error",
-								message:
-									"A cron Event requires cron_expression for a recurring schedule OR scheduled_for {date, time} for a one-time run.",
-							};
-						}
-						if (
-							scheduledFor &&
-							(typeof scheduledFor.date !== "string" ||
-								typeof scheduledFor.time !== "string")
-						) {
-							return {
-								status: "error",
-								message:
-									"scheduled_for requires string fields date (YYYY-MM-DD) and time (HH:mm).",
-							};
-						}
-						const timezone =
-							argString(args, "timezone") ||
-							(typeof eventConfig.timezone === "string"
-								? eventConfig.timezone
-								: "UTC");
-						eventConfig = {
-							...eventConfig,
-							sink_type: "cron",
-							timezone,
-							last_fired: null,
-							sink_execution:
-								executionMode === IEventExecutionMode.Remote
-									? "REMOTE"
-									: "LOCAL",
-						};
-						if (expression) {
-							eventConfig.expression = expression;
-							eventConfig.scheduled_for = undefined;
-						} else {
-							eventConfig.scheduled_for = scheduledFor;
-							eventConfig.expression = undefined;
-						}
-					}
-
-					const now = nowSystemTime();
-					const pagePersistenceReset = pageEventPersistenceReset(pageId);
-					const event: IEvent = {
-						...(existingEvent ?? {}),
-						id: eventId || createId(),
-						name,
-						description:
-							argString(args, "description") ||
-							existingEvent?.description ||
-							"",
-						board_id: eventBoardId,
-						node_id: pagePersistenceReset?.nodeId ?? eventNodeId,
-						config:
-							pagePersistenceReset?.config ??
-							convertJsonToUint8Array(eventConfig) ??
-							[],
-						inputs: pagePersistenceReset?.inputs ?? existingEvent?.inputs,
-						canary: pagePersistenceReset ? null : existingEvent?.canary,
-						board_version:
-							target.kind === "page" && !target.preserveExistingPageMetadata
-								? undefined
-								: existingEvent?.board_version,
-						active: argBool(args, "active") ?? existingEvent?.active ?? true,
-						event_type: eventType,
-						event_version: existingEvent?.event_version ?? [0, 0, 0],
-						priority: existingEvent?.priority ?? 0,
-						variables: existingEvent?.variables ?? {},
-						created_at: existingEvent?.created_at ?? now,
-						updated_at: now,
-						execution_mode: executionMode,
-						...(pageId ? { default_page_id: pageId } : {}),
-					};
-					let savedEvent: IEvent;
-					try {
-						savedEvent = await backend.eventState.upsertEvent(appId, event);
-					} catch (error) {
-						return {
-							status: "error",
-							message: `Failed to upsert event: ${error instanceof Error ? error.message : String(error)}`,
-						};
-					}
-					// Optional URL route mapping (path -> eventId) so the event is reachable.
-					const rawRoute = argString(args, "route");
-					let routePath: string | undefined;
-					if (rawRoute) {
-						routePath = rawRoute.startsWith("/") ? rawRoute : `/${rawRoute}`;
-						try {
-							await backend.routeState.setRoute(
+					const signal =
+						requestExecutionLeasesRef.current.get(request)?.controller.signal;
+					const assertActive = () => assertRequestActive(request, "app build");
+					const delegate = async (
+						toolName: string,
+						arguments_: Record<string, unknown>,
+					) => {
+						assertActive();
+						const response = await executeRef.current({
+							requestId: `${request.requestId}:build:${createId()}`,
+							toolName,
+							arguments: arguments_,
+							parentRequestId: request.requestId,
+							deadlineAtMs: requestDeadline(request),
+							context: {
+								...request.context,
 								appId,
-								routePath,
-								savedEvent.id,
+								parentRequestId: request.requestId,
+								runId: scope.runId,
+								conversationId: conversationScopeId(request),
+								sourceUserPrompt: sourceUserPrompt(request),
+							},
+						});
+						assertActive();
+						if (!response.approved || response.error)
+							throw new Error(
+								response.error || "Build operation was declined.",
 							);
-						} catch (error) {
-							console.error(
-								"[global-tool-bridge] upsert_event: setRoute failed",
-								error,
-							);
-						}
-					}
-					scope.referenceApp(appId);
-					return {
-						status: "ok",
-						event_id: savedEvent.id,
-						event_type: savedEvent.event_type,
-						...(entryNodeName ? { entry_node_type: entryNodeName } : {}),
-						execution_mode: savedEvent.execution_mode,
-						...(pageId ? { page_id: pageId } : {}),
-						...(routePath ? { route: routePath } : {}),
-						note: pageId
-							? "Page event upserted (bound to the page)."
-							: eventType === "cron"
-								? "Cron setup attached to the Simple Event entry."
-								: "Compatible Event setup attached to the workflow entry.",
+						return response.result;
 					};
+					const selection = scope.turnSelection();
+					const release = inspection
+						? undefined
+						: await boardEditCoordinator.acquire(`app-build:${appId}`, {
+								signal,
+								deadlineAtMs: requestDeadline(request),
+							});
+					try {
+						return await executeAppBuildTool(args, {
+							backend,
+							signal,
+							originalRequest: sourceUserPrompt(request),
+							operationOwnerId: request.requestId,
+							deadlineAtMs: requestDeadline(request),
+							dispatch: {
+								assertActive,
+								delegate,
+								referenceApp: scope.referenceApp,
+								generateWidget: (instruction, widgetId) =>
+									generateAppBuildWidget(backend.boardState, instruction, {
+										appId,
+										requestId: `${request.requestId}:widget:${widgetId}:agent`,
+										parentRequestId: request.requestId,
+										conversationId: conversationScopeId(request),
+										runId: scope.runId,
+										sourceUserPrompt: sourceUserPrompt(request),
+										modelId: flowPilotModelIdForProvider(
+											normalizeAIProvider(selection.provider),
+											selection.selectedModelId,
+										),
+										reasoningEffort: selection.reasoningEffort || undefined,
+										signal,
+										assertActive,
+									}),
+							},
+							scenarios: createInteractiveScenarioAdapter(
+								appId,
+								delegate,
+								assertActive,
+							),
+						});
+					} finally {
+						release?.();
+					}
 				}
+				case "create_app":
+					return createAppTool(backend, args, {
+						authenticated: Boolean(authRef.current?.isAuthenticated),
+						conversationId: conversationScopeId(request),
+						requestId: request.requestId,
+						journal: createdArtifactJournalRef.current,
+						assertActive: () =>
+							assertRequestActive(request, "app provisioning"),
+						referenceApp: scope.referenceApp,
+						handleUpgrade: (error) =>
+							handleUpgradeRequiredError(error, "project-limit"),
+						invalidate: () => {
+							queryClient.invalidateQueries({ queryKey: ["getApps"] });
+							queryClient.invalidateQueries({
+								queryKey: ["getSettingsProfile"],
+							});
+						},
+						rememberTarget: (appId) => {
+							const owner = ownerMessageIdForRequest(request);
+							if (owner) createdAppTargetsByOwnerRef.current.set(owner, appId);
+							while (createdAppTargetsByOwnerRef.current.size > 128) {
+								const oldest = createdAppTargetsByOwnerRef.current
+									.keys()
+									.next().value;
+								if (typeof oldest !== "string") break;
+								createdAppTargetsByOwnerRef.current.delete(oldest);
+							}
+						},
+					});
+				case "upsert_event":
+					return upsertAppEvent(backend, args, {
+						assertActive: () =>
+							assertRequestActive(request, "Event provisioning"),
+						referenceApp: scope.referenceApp,
+					});
 				case "delete_event": {
 					const appId = argString(args, "app_id") || argString(args, "appId");
 					const eventId =
@@ -3424,6 +3611,219 @@ export function GlobalToolBridge() {
 						};
 					} finally {
 						releasePageLifecycle();
+					}
+				}
+				case "flowpilot_home": {
+					const instruction = argString(args, "instruction");
+					if (!instruction) {
+						return {
+							status: "error",
+							message: "flowpilot_home requires an instruction.",
+						};
+					}
+					const initialHome = await readHomeSnapshot();
+					if (!initialHome.profileId) {
+						return {
+							status: "error",
+							code: "home_profile_unavailable",
+							message: "Choose a profile before editing Home.",
+						};
+					}
+					const activeProfile = await backend.userState.getProfile();
+					if (activeProfile.id !== initialHome.profileId) {
+						throw new HomeProfileRunError(
+							"home_profile_changed",
+							initialHome.profileId,
+						);
+					}
+					homeStageReceiptsByParentRef.current.delete(request.requestId);
+					const consumeHomeStageOutcome = () => {
+						const receipt = homeStageReceiptsByParentRef.current.get(
+							request.requestId,
+						);
+						homeStageReceiptsByParentRef.current.delete(request.requestId);
+						const latestSurface = useAssistantSurface.getState().homeSurface;
+						const latest = latestSurface?.getSnapshot();
+						const currentMatches = Boolean(
+							receipt &&
+								receipt.profileId === initialHome.profileId &&
+								latest?.profileId === receipt.profileId &&
+								latest.candidateFingerprint === receipt.candidateFingerprint,
+						);
+						const staged = Boolean(
+							receipt?.changed &&
+								currentMatches &&
+								latest?.editing &&
+								latest.dirty,
+						);
+						const alreadyCurrent = Boolean(
+							receipt && !receipt.changed && currentMatches,
+						);
+						return {
+							staged,
+							changed: receipt?.changed ?? false,
+							apply_observed: Boolean(receipt),
+							apply_status: staged
+								? "staged"
+								: alreadyCurrent
+									? "already_current"
+									: receipt
+										? "no_longer_staged"
+										: "not_applied",
+							fingerprint:
+								(latest?.profileId === initialHome.profileId
+									? latest.candidateFingerprint
+									: undefined) ??
+								receipt?.candidateFingerprint ??
+								initialHome.candidateFingerprint,
+						};
+					};
+
+					const turnSelection = scope.turnSelection();
+					const owningUserPrompt = sourceUserPrompt(request);
+					const owningConversationId = conversationScopeId(request);
+					const rawSpecialistPrompt = composeDelegatedRawUserPrompt(
+						owningUserPrompt,
+						instruction,
+					);
+					const modelId = flowPilotModelIdForProvider(
+						normalizeAIProvider(turnSelection.provider),
+						turnSelection.selectedModelId,
+					);
+					const nestedRunRequestId = `${request.requestId}:agent`;
+					const {
+						pushSubRunChunk,
+						flushSubRunStream,
+						subAcc,
+						publishSubSteps,
+						failProgressSteps,
+					} = createSubRunStream({
+						requestId: nestedRunRequestId,
+						parentRequestId: request.requestId,
+						scope,
+						recordDebugEvent: (event) => recordNestedDebug(request, event),
+					});
+					const consumeSubRunEvents = (
+						events: ReturnType<typeof pushSubRunChunk>,
+					) => {
+						let stepsChanged = false;
+						for (const event of events) {
+							if (event.type === "usage_stat") {
+								const stat = readUsageStat(event.data);
+								if (stat) scope.addSubUsageStats([stat]);
+								continue;
+							}
+							if (event.type === "text") continue;
+							applyStreamEvent(subAcc, event);
+							stepsChanged = true;
+						}
+						if (stepsChanged) publishSubSteps();
+					};
+					const onToken = (chunk: string) =>
+						consumeSubRunEvents(pushSubRunChunk(chunk));
+					let subRunFlushed = false;
+					const flushSubRun = () => {
+						if (subRunFlushed) return;
+						subRunFlushed = true;
+						consumeSubRunEvents(flushSubRunStream());
+					};
+
+					recordNestedDebug(
+						request,
+						nestedAgentRunEvent({
+							requestId: nestedRunRequestId,
+							parentRequestId: request.requestId,
+							toolName: "flowpilot_home",
+							stage: "started",
+							input: {
+								scope: "Home",
+								provider: normalizeAIProvider(turnSelection.provider),
+								model_id: modelId,
+								reasoning_effort: turnSelection.reasoningEffort || undefined,
+								profile_id: initialHome.profileId,
+								instruction,
+							},
+							summary: "Delegated Home layout specialist started.",
+						}),
+					);
+
+					homeProfileRunsRef.current.begin(
+						request.requestId,
+						initialHome.profileId,
+					);
+					const homeRunRequest: FrontendToolRequest = {
+						...request,
+						parentRequestId: request.requestId,
+						context: { ...request.context, profileId: initialHome.profileId },
+					};
+					try {
+						await assertHomeProfile(homeRunRequest);
+						const response = await backend.boardState.copilot_chat(
+							"Home",
+							null,
+							undefined,
+							[],
+							null,
+							null,
+							[],
+							instruction,
+							[],
+							undefined,
+							onToken,
+							modelId,
+							turnSelection.reasoningEffort || undefined,
+							undefined,
+							undefined,
+							undefined,
+							true,
+							false,
+							{
+								profileId: initialHome.profileId,
+								parentRequestId: request.requestId,
+								conversationId: owningConversationId,
+								runId: scope.runId,
+								sourceUserPrompt: owningUserPrompt,
+							},
+							nestedRunRequestId,
+							rawSpecialistPrompt,
+							undefined,
+						);
+						await assertHomeProfile(homeRunRequest);
+						flushSubRun();
+						const stageOutcome = consumeHomeStageOutcome();
+						return settleNestedSpecialist(request, {
+							nestedRunRequestId,
+							toolName: "flowpilot_home",
+							result: {
+								status: "ok",
+								profile_id: initialHome.profileId,
+								...stageOutcome,
+								response: response.message,
+							},
+							summary: "Delegated Home layout specialist finished.",
+						});
+					} catch (error) {
+						const stageOutcome = consumeHomeStageOutcome();
+						failProgressSteps();
+						flushSubRun();
+						return settleNestedSpecialist(request, {
+							nestedRunRequestId,
+							toolName: "flowpilot_home",
+							result: {
+								status: "error",
+								profile_id: initialHome.profileId,
+								...stageOutcome,
+								message: error instanceof Error ? error.message : String(error),
+								...(error instanceof HomeProfileRunError
+									? { ...error.result, staged: false }
+									: {}),
+							},
+							error,
+							summary: "Delegated Home layout specialist failed.",
+							failureKind: "subagent_dispatch",
+						});
+					} finally {
+						homeProfileRunsRef.current.finish(request.requestId);
 					}
 				}
 				case "data_studio_agent": {
@@ -6800,6 +7200,7 @@ Completion contract: build complete helper logic first and add the Event entry l
 			recordNestedDebug,
 			settleNestedSpecialist,
 			recordSettledGenerationReceipt,
+			assertHomeProfile,
 			assertRequestActive,
 			isRequestExpired,
 			markRequestExpired,
@@ -6814,6 +7215,7 @@ Completion contract: build complete helper logic first and add the Event entry l
 		): Promise<FrontendToolResponse> => {
 			try {
 				assertRequestActive(request, "approval handling");
+				await assertHomeProfile(request);
 				if (request.toolName === "ask_user") {
 					// An empty form would show a card with nothing to answer, so tell the model how
 					// to fix its call instead of trapping the user in an unanswerable prompt.
@@ -6921,10 +7323,19 @@ Completion contract: build complete helper logic first and add the Event entry l
 				}
 
 				assertRequestActive(request, "tool mutation");
+				await assertHomeProfile(request);
 				const result = await runTool(request, scope);
+				await assertHomeProfile(request);
 				assertRequestActive(request, "tool completion");
 				return { requestId: request.requestId, approved: true, result };
 			} catch (error) {
+				if (error instanceof HomeProfileRunError) {
+					return {
+						requestId: request.requestId,
+						approved: true,
+						result: error.result,
+					};
+				}
 				// approved:true + error => the bridge reports status:"error" (not a user denial).
 				return {
 					requestId: request.requestId,
@@ -6933,7 +7344,13 @@ Completion contract: build complete helper logic first and add the Event entry l
 				};
 			}
 		},
-		[assertRequestActive, openDialog, ownerMessageIdForRequest, runTool],
+		[
+			assertHomeProfile,
+			assertRequestActive,
+			openDialog,
+			ownerMessageIdForRequest,
+			runTool,
+		],
 	);
 
 	const executeWithDiagnostics = useCallback(
@@ -7120,6 +7537,7 @@ Completion contract: build complete helper logic first and add the Event entry l
 			const resultTimedOut = ["timeout", "timed_out"].includes(resultStatus);
 			const resultFailed = [
 				"error",
+				"stale",
 				"failed",
 				"failure",
 				"validation_error",

@@ -8,6 +8,8 @@ export type CopilotScope =
 	| "Frontend"
 	| "Both"
 	| "DataStudio"
+	/** Personal Home layout authoring through the mounted Home editor. */
+	| "Home"
 	/** Read-only prior-art research; returns a foundation plan, mutates nothing. */
 	| "Scout"
 	/** Read-only public-web research; holds the only search/page-read tools. */
@@ -61,6 +63,8 @@ export interface UIActionContext {
 
 /** Frontend-owned scope injected into runtime tools used by a nested board/UI specialist. */
 export interface CopilotToolContext {
+	/** Host-pinned profile for a delegated personal Home run. */
+	profileId?: string;
 	/**
 	 * Optional to match the Rust `FrontendToolContext.app_id`. A delegated run can
 	 * legitimately have no app in scope — the Scout starts by searching across

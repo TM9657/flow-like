@@ -25,11 +25,13 @@ describe("PinType", () => {
 		expect(PinType.DATE).toBe("Date");
 		expect(PinType.PATH_BUF).toBe("PathBuf");
 		expect(PinType.STRUCT).toBe("Struct");
+		expect(PinType.GEOMETRY).toBe("Geometry");
 	});
 
 	it("validates known types", () => {
 		expect(PinType.validate("String")).toBe("String");
 		expect(PinType.validate("I64")).toBe("I64");
+		expect(PinType.validate("Geometry")).toBe("Geometry");
 	});
 
 	it("rejects unknown types", () => {

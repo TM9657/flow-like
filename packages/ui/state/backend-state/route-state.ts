@@ -12,6 +12,11 @@ export interface IAppRouteState {
 	getRoutes(appId: string, force?: boolean): Promise<IRouteMapping[]>;
 	/** Get the route mapping for a specific path */
 	getRouteByPath(appId: string, path: string): Promise<IRouteMapping | null>;
+	/** Read one route from the authoritative store without cache repair or fallback. */
+	getRouteByPathAuthoritative(
+		appId: string,
+		path: string,
+	): Promise<IRouteMapping | null>;
 	/** Get the default route (path = "/") */
 	getDefaultRoute(appId: string): Promise<IRouteMapping | null>;
 	/** Set a route mapping (path -> eventId) */

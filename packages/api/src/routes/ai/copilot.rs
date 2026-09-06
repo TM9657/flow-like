@@ -22,7 +22,8 @@ use flow_like::flow::board::Board;
 use flow_like::flow::copilot::platform::PlatformToolBridge;
 use flow_like::flow::copilot::{
     CatalogProvider, FlowIrDraftStore, NodeMetadata, PinMetadata, PlatformSpecialist,
-    enrich_node_metadata, run_specialist_chat, score_catalog_metadata,
+    enrich_node_metadata, run_ontology_query_chat, run_specialist_chat_with_access,
+    score_catalog_metadata,
 };
 use flow_like::flow::node::{Node, NodeLogic};
 use flow_like::flow::pin::{Pin, PinType};
@@ -30,6 +31,7 @@ use flow_like::flow::variable::VariableType;
 use flow_like::models::llm::ModelUsageContext;
 use flow_like::profile::Profile;
 use flow_like::state::FlowLikeState;
+use flow_like_types::channel::Channel;
 use flow_like_types::tokio::sync::{mpsc, oneshot};
 use serde::Deserialize;
 use std::{convert::Infallible, sync::Arc, time::Duration};
@@ -37,14 +39,22 @@ use std::{convert::Infallible, sync::Arc, time::Duration};
 use super::global_chat::{GlobalChatFrame, ServerPlatformBridge};
 
 pub fn routes() -> Router<AppState> {
-    Router::new().route("/chat", post(copilot_chat))
+    Router::new()
+        .route("/chat", post(copilot_chat))
+        .route_layer(axum::middleware::from_fn(
+            crate::routes::app::board::capabilities::negotiate_board_format,
+        ))
 }
 
 /// Request payload for the unified copilot endpoint
 #[derive(Deserialize)]
 pub struct CopilotChatRequest {
-    /// The scope of operation: "Board", "Frontend", or "Both"
+    /// The copilot surface to run.
     pub scope: CopilotScope,
+
+    /// Selected profile, pinned by the launching host and authorized against the signed-in user.
+    #[serde(default, alias = "profileId")]
+    pub profile_id: Option<String>,
 
     /// App owning `board`. Required whenever board context is supplied so the server can authorize
     /// and canonically reload it before retaining a compiled FlowScript review. Also the app that
@@ -113,12 +123,22 @@ pub struct CopilotChatRequest {
     #[serde(default)]
     pub overlay_id: Option<String>,
 
+    /// Restrict a Data Studio run to producing one tool-free read-only query proposal.
+    #[serde(default)]
+    pub read_only: bool,
+
     /// Whether to stream the response
     #[serde(default)]
     pub stream: bool,
 }
 
 const MAX_PROMPT_CHARS: usize = 20_000;
+const ONTOLOGY_QUERY_CANCEL_POLL_INTERVAL: Duration = Duration::from_millis(250);
+// The embedded ontology planner carries a bounded schema in `user_prompt`. Its frontend schema
+// budget is 60,000 serialized characters, so this route needs enough headroom for the question,
+// language preference, and repair context around that schema. This larger limit applies only to
+// the tool-free Data Studio query mode.
+const MAX_ONTOLOGY_QUERY_PROMPT_CHARS: usize = 70_000;
 const MAX_HISTORY_MESSAGES: usize = 32;
 const MAX_HISTORY_MESSAGE_CHARS: usize = 4_000;
 const MAX_REQUEST_IMAGES: usize = 4;
@@ -130,10 +150,35 @@ const MAX_SELECTED_ID_CHARS: usize = 256;
 const MAX_CONVERSATION_ID_CHARS: usize = 256;
 const ALLOWED_IMAGE_MEDIA_TYPES: &[&str] = &["image/png", "image/jpeg", "image/webp", "image/gif"];
 
+fn user_prompt_char_limit(scope: &CopilotScope, read_only: bool) -> usize {
+    if read_only && matches!(scope, CopilotScope::DataStudio) {
+        MAX_ONTOLOGY_QUERY_PROMPT_CHARS
+    } else {
+        MAX_PROMPT_CHARS
+    }
+}
+
+async fn wait_for_channel_cancellation(channel: Arc<dyn Channel>, poll_interval: Duration) {
+    loop {
+        if channel.is_cancelled().await {
+            return;
+        }
+        flow_like_types::tokio::time::sleep(poll_interval).await;
+    }
+}
+
 fn validate_copilot_payload(payload: &CopilotChatRequest) -> Result<(), ApiError> {
-    if payload.user_prompt.chars().count() > MAX_PROMPT_CHARS {
+    if payload.profile_id.as_deref().is_some_and(|id| {
+        id.is_empty() || id.trim() != id || id.chars().count() > MAX_CONVERSATION_ID_CHARS
+    }) {
+        return Err(ApiError::bad_request(
+            "Profile id must be a nonempty identifier of at most 256 characters.",
+        ));
+    }
+    let max_user_prompt_chars = user_prompt_char_limit(&payload.scope, payload.read_only);
+    if payload.user_prompt.chars().count() > max_user_prompt_chars {
         return Err(ApiError::bad_request(format!(
-            "Prompt is too large. Maximum is {MAX_PROMPT_CHARS} characters."
+            "Prompt is too large. Maximum is {max_user_prompt_chars} characters."
         )));
     }
     if payload
@@ -512,7 +557,7 @@ async fn build_unified_copilot(
     let flow_like_state = master_flow_like_state(state).await?;
 
     let catalog_provider: Option<Arc<dyn CatalogProvider>> = match scope {
-        CopilotScope::Frontend => None,
+        CopilotScope::Frontend | CopilotScope::Home => None,
         _ => {
             // Package nodes are a per-app pin, so an unscoped request legitimately resolves to the
             // builtin catalog. A lookup failure must not, however, silently downgrade a scoped one.
@@ -660,14 +705,11 @@ pub async fn copilot_chat(
 
     let token = user_access_token(&user);
 
-    // Data Studio and Scout are tool-loop specialists — the UnifiedCopilot has no copilot for them.
+    // Data Studio, Scout and Home are tool-loop specialists. UnifiedCopilot has no copilot for
+    // these scopes.
     // They run the shared platform loop instead, with their tools round-tripped to the browser over
     // this response's own SSE stream.
-    if let Some(specialist) = match payload.scope {
-        CopilotScope::DataStudio => Some(PlatformSpecialist::DataStudio),
-        CopilotScope::Scout => Some(PlatformSpecialist::Scout),
-        _ => None,
-    } {
+    if let Some(specialist) = platform_specialist_for_scope(payload.scope) {
         return specialist_chat(state, sub, specialist, payload, token).await;
     }
 
@@ -685,7 +727,11 @@ pub async fn copilot_chat(
     // resolves against their own Bits instead of the server default. With a hosted Bit + the user's
     // token, the model call loops through this server's metered `/chat/completions`, so tier
     // enforcement + usage tracking apply. Falls back to `None` only when the user has no profile.
-    let profile = match super::global_chat::load_user_profile_access(&state, &sub, None).await? {
+    let profile = match ensure_requested_profile(
+        payload.profile_id.as_deref(),
+        super::global_chat::load_user_profile_access(&state, &sub, payload.profile_id.as_deref())
+            .await?,
+    )? {
         Some((profile, access)) => {
             if let Some(rejection) = access.rejection(payload.model_id.as_deref()) {
                 return Err(rejection);
@@ -695,7 +741,7 @@ pub async fn copilot_chat(
         None => None,
     };
     let flow_ir_draft_store = payload.board.as_ref().and_then(|board| {
-        (!matches!(payload.scope, CopilotScope::Frontend)).then(|| {
+        (!matches!(payload.scope, CopilotScope::Frontend | CopilotScope::Home)).then(|| {
             let app_id = retained_app_id
                 .as_deref()
                 .expect("board context was authorized with an app id");
@@ -771,43 +817,47 @@ pub async fn copilot_chat(
     let delivery_sub = sub.clone();
     let delivery_app_id = retained_app_id.clone();
     let delivery_store = flow_ir_draft_store.clone();
-    flow_like_types::tokio::spawn(async move {
-        let result = copilot
-            .chat_with_raw_user_prompt(
-                payload.scope,
-                payload.board.as_ref(),
-                &payload.selected_node_ids,
-                payload.current_surface.as_ref(),
-                payload.current_canvas_settings.as_ref(),
-                &payload.selected_component_ids,
-                payload.user_prompt,
-                payload.raw_user_prompt,
-                payload.request_images,
-                payload.history,
-                payload.model_id,
-                token,
-                context,
-                on_token,
-            )
-            .await
-            .map_err(|e| e.to_string());
-        let result = match result {
-            Ok(response) => persist_response_flow_ir_claim(
-                &delivery_state,
-                &delivery_sub,
-                delivery_app_id.as_deref(),
-                delivery_store.as_ref(),
-                &response,
-            )
-            .await
-            .map(|()| response)
-            .map_err(|error| error.to_string()),
-            Err(error) => Err(error),
-        };
+    let board_format = flow_like::flow::board::format::supported_version();
+    flow_like_types::tokio::spawn(flow_like::flow::board::format::with_supported_version(
+        board_format,
+        async move {
+            let result = copilot
+                .chat_with_raw_user_prompt(
+                    payload.scope,
+                    payload.board.as_ref(),
+                    &payload.selected_node_ids,
+                    payload.current_surface.as_ref(),
+                    payload.current_canvas_settings.as_ref(),
+                    &payload.selected_component_ids,
+                    payload.user_prompt,
+                    payload.raw_user_prompt,
+                    payload.request_images,
+                    payload.history,
+                    payload.model_id,
+                    token,
+                    context,
+                    on_token,
+                )
+                .await
+                .map_err(|e| e.to_string());
+            let result = match result {
+                Ok(response) => persist_response_flow_ir_claim(
+                    &delivery_state,
+                    &delivery_sub,
+                    delivery_app_id.as_deref(),
+                    delivery_store.as_ref(),
+                    &response,
+                )
+                .await
+                .map(|()| response)
+                .map_err(|error| error.to_string()),
+                Err(error) => Err(error),
+            };
 
-        let _ = done_tx.send(result);
-        // If the receiver is already dropped, ignore.
-    });
+            let _ = done_tx.send(result);
+            // If the receiver is already dropped, ignore.
+        },
+    ));
 
     let stream = async_stream::stream! {
         let mut token_stream_open = true;
@@ -851,6 +901,16 @@ pub async fn copilot_chat(
     Ok(<Sse<_> as axum::response::IntoResponse>::into_response(sse))
 }
 
+/// Map scopes served by the browser platform loop to their specialist roles.
+fn platform_specialist_for_scope(scope: CopilotScope) -> Option<PlatformSpecialist> {
+    match scope {
+        CopilotScope::DataStudio => Some(PlatformSpecialist::DataStudio),
+        CopilotScope::Scout => Some(PlatformSpecialist::Scout),
+        CopilotScope::Home => Some(PlatformSpecialist::Home),
+        _ => None,
+    }
+}
+
 /// The ids the host already knows, handed to a specialist so it defaults to the app and overlay the
 /// user is looking at instead of asking for them.
 fn specialist_host_context(app_id: Option<&str>, overlay_id: Option<&str>) -> String {
@@ -875,7 +935,19 @@ fn specialist_host_context(app_id: Option<&str>, overlay_id: Option<&str>) -> St
     lines.join("\n")
 }
 
-/// Run one nested specialist (`data_studio_agent` / `project_scout`) for the browser.
+fn ensure_requested_profile<T>(
+    profile_id: Option<&str>,
+    profile: Option<T>,
+) -> Result<Option<T>, ApiError> {
+    if profile_id.is_some() && profile.is_none() {
+        return Err(ApiError::not_found(
+            "The requested profile is not available to this user.",
+        ));
+    }
+    Ok(profile)
+}
+
+/// Run one nested Data Studio, Scout, or Home specialist for the browser.
 ///
 /// Every specialist tool executes in the browser, so this is meaningful only as a stream: the SSE
 /// response opens with a `run` frame (`{ runId, channel }`) and carries `tool_request` frames
@@ -892,7 +964,7 @@ async fn specialist_chat(
 ) -> Result<axum::response::Response, ApiError> {
     if !payload.stream {
         return Err(ApiError::bad_request(
-            "The Data Studio and Scout specialists execute their tools in the browser, so they are available only on the streaming endpoint.",
+            "The Data Studio, Scout, and Home specialists execute their tools in the browser, so they are available only on the streaming endpoint.",
         ));
     }
     // Same requirement as the orchestrator turn: a hosted Bit bills its model calls against the
@@ -904,7 +976,11 @@ async fn specialist_chat(
     }
 
     let flow_like_state = master_flow_like_state(&state).await?;
-    let profile = match super::global_chat::load_user_profile_access(&state, &sub, None).await? {
+    let profile = match ensure_requested_profile(
+        payload.profile_id.as_deref(),
+        super::global_chat::load_user_profile_access(&state, &sub, payload.profile_id.as_deref())
+            .await?,
+    )? {
         Some((profile, access)) => {
             if let Some(rejection) = access.rejection(payload.model_id.as_deref()) {
                 return Err(rejection);
@@ -917,11 +993,10 @@ async fn specialist_chat(
     let run_id = super::global_chat::next_run_id();
     let channel = super::global_chat::build_chat_channel(&state, &run_id, &sub).await?;
     let (frames_tx, mut frames_rx) = mpsc::unbounded_channel::<GlobalChatFrame>();
-    let bridge: Arc<dyn PlatformToolBridge> = Arc::new(ServerPlatformBridge::specialist(
-        channel.clone(),
-        frames_tx.clone(),
-        specialist,
-    ));
+    let bridge: Arc<dyn PlatformToolBridge> = Arc::new(
+        ServerPlatformBridge::specialist(channel.clone(), frames_tx.clone(), specialist)
+            .with_read_only(payload.read_only),
+    );
     let on_token = move |chunk: String| {
         let _ = frames_tx.send(GlobalChatFrame::Token(chunk));
     };
@@ -931,18 +1006,40 @@ async fn specialist_chat(
     let (done_tx, mut done_rx) = oneshot::channel::<Result<UnifiedCopilotResponse, String>>();
     let channel_for_task = channel.clone();
     flow_like_types::tokio::spawn(async move {
-        let result = run_specialist_chat(
-            flow_like_state,
-            profile,
-            specialist,
-            context,
-            payload.user_prompt,
-            payload.model_id,
-            token,
-            bridge,
-            Some(on_token),
-        )
-        .await
+        let query_proposal_only =
+            payload.read_only && matches!(specialist, PlatformSpecialist::DataStudio);
+        let result = if query_proposal_only {
+            let cancellation_channel = channel_for_task.clone();
+            flow_like_types::tokio::select! {
+                result = run_ontology_query_chat(
+                    flow_like_state,
+                    profile,
+                    payload.user_prompt,
+                    payload.model_id,
+                    token,
+                    bridge,
+                    Some(on_token),
+                ) => result,
+                _ = wait_for_channel_cancellation(
+                    cancellation_channel,
+                    ONTOLOGY_QUERY_CANCEL_POLL_INTERVAL,
+                ) => Err(flow_like_types::anyhow!("Run cancelled")),
+            }
+        } else {
+            run_specialist_chat_with_access(
+                flow_like_state,
+                profile,
+                specialist,
+                payload.read_only,
+                context,
+                payload.user_prompt,
+                payload.model_id,
+                token,
+                bridge,
+                Some(on_token),
+            )
+            .await
+        }
         .map(|message| UnifiedCopilotResponse {
             message,
             commands: Vec::new(),
@@ -1025,9 +1122,121 @@ async fn specialist_chat(
 
 #[cfg(test)]
 mod tests {
+    use super::MAX_ONTOLOGY_QUERY_PROMPT_CHARS;
+    use super::MAX_PROMPT_CHARS;
+    use super::platform_specialist_for_scope;
     use super::request_identity_prompt_for;
     use super::resolve_copilot_app_id;
     use super::specialist_host_context;
+    use super::user_prompt_char_limit;
+    use super::wait_for_channel_cancellation;
+    use super::{CopilotChatRequest, ensure_requested_profile, validate_copilot_payload};
+    use flow_like::copilot::CopilotScope;
+    use flow_like::flow::copilot::PlatformSpecialist;
+    use flow_like_types::channel::{
+        Channel, ChannelPush, ChannelPushKind, InProcessChannel, InProcessPushResult,
+    };
+    use std::sync::Arc;
+    use std::time::Duration;
+
+    #[test]
+    fn explicit_copilot_profile_never_falls_back_to_another_profile() {
+        assert!(ensure_requested_profile::<()>(Some("missing-or-foreign-profile"), None).is_err());
+        assert_eq!(
+            ensure_requested_profile(Some("selected"), Some("selected")).unwrap(),
+            Some("selected")
+        );
+        assert_eq!(ensure_requested_profile::<()>(None, None).unwrap(), None);
+    }
+
+    #[test]
+    fn home_request_accepts_a_pinned_profile_and_rejects_invalid_identifiers() {
+        for field in ["profile_id", "profileId"] {
+            let payload: CopilotChatRequest = serde_json::from_value(serde_json::json!({
+                "scope": "Home", "user_prompt": "Adjust my Home", field: "profile-a",
+            }))
+            .unwrap();
+            assert_eq!(payload.profile_id.as_deref(), Some("profile-a"));
+            assert!(validate_copilot_payload(&payload).is_ok());
+        }
+        for profile_id in [String::new(), " profile-a ".to_string(), "a".repeat(257)] {
+            let payload: CopilotChatRequest = serde_json::from_value(serde_json::json!({
+                "scope": "Home", "user_prompt": "Adjust my Home", "profile_id": profile_id,
+            }))
+            .unwrap();
+            assert!(validate_copilot_payload(&payload).is_err());
+        }
+    }
+
+    #[test]
+    fn browser_routes_only_tool_loop_scopes_to_platform_specialists() {
+        assert_eq!(
+            platform_specialist_for_scope(CopilotScope::Home),
+            Some(PlatformSpecialist::Home)
+        );
+        assert_eq!(
+            platform_specialist_for_scope(CopilotScope::DataStudio),
+            Some(PlatformSpecialist::DataStudio)
+        );
+        assert_eq!(
+            platform_specialist_for_scope(CopilotScope::Scout),
+            Some(PlatformSpecialist::Scout)
+        );
+        for scope in [
+            CopilotScope::Board,
+            CopilotScope::Frontend,
+            CopilotScope::Both,
+            CopilotScope::Research,
+        ] {
+            assert_eq!(platform_specialist_for_scope(scope), None);
+        }
+    }
+
+    #[test]
+    fn ontology_query_prompt_budget_has_room_for_the_bounded_schema() {
+        assert!(MAX_ONTOLOGY_QUERY_PROMPT_CHARS >= 60_000);
+        assert!(MAX_ONTOLOGY_QUERY_PROMPT_CHARS > MAX_PROMPT_CHARS);
+        assert_eq!(
+            user_prompt_char_limit(&CopilotScope::DataStudio, true),
+            MAX_ONTOLOGY_QUERY_PROMPT_CHARS
+        );
+        assert_eq!(
+            user_prompt_char_limit(&CopilotScope::DataStudio, false),
+            MAX_PROMPT_CHARS
+        );
+        assert_eq!(
+            user_prompt_char_limit(&CopilotScope::Board, true),
+            MAX_PROMPT_CHARS
+        );
+    }
+
+    #[tokio::test]
+    async fn ontology_query_cancellation_watcher_observes_channel_cancel() {
+        let channel_id = format!("ontology-query-{}", flow_like_types::create_id());
+        let channel = InProcessChannel::register(&channel_id, Duration::from_secs(30)).await;
+        let observed_channel: Arc<dyn Channel> = channel.clone();
+        let watcher = tokio::spawn(wait_for_channel_cancellation(
+            observed_channel,
+            Duration::from_millis(1),
+        ));
+
+        assert_eq!(
+            channel
+                .push(ChannelPush {
+                    channel_id,
+                    request_id: None,
+                    kind: ChannelPushKind::Cancel,
+                    value: serde_json::Value::Null,
+                })
+                .await,
+            InProcessPushResult::Delivered
+        );
+        tokio::time::timeout(Duration::from_millis(100), watcher)
+            .await
+            .expect("cancellation watcher should finish")
+            .expect("cancellation watcher task should not panic");
+        channel.close().await;
+    }
 
     #[test]
     fn specialist_host_context_names_only_the_ids_it_was_given() {

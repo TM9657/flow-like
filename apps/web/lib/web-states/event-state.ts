@@ -181,10 +181,26 @@ export class WebEventState implements IEventState {
 		);
 	}
 
+	async getEventAuthoritative(
+		appId: string,
+		eventId: string,
+		version?: [number, number, number],
+	): Promise<IEvent> {
+		const params = version ? `?version=${version.join("_")}` : "";
+		return apiGet<IEvent>(
+			`apps/${appId}/events/${eventId}${params}`,
+			this.backend.auth,
+		);
+	}
+
 	// Errors propagate: returning [] here makes a failed fetch look like an app
 	// with no events, which callers cannot distinguish from the real thing.
 	async getEvents(appId: string, _force?: boolean): Promise<IEvent[]> {
 		return await apiGet<IEvent[]>(`apps/${appId}/events`, this.backend.auth);
+	}
+
+	async getEventsAuthoritative(appId: string): Promise<IEvent[]> {
+		return apiGet<IEvent[]>(`apps/${appId}/events`, this.backend.auth);
 	}
 
 	async getEventVersions(
@@ -619,12 +635,10 @@ export class WebEventState implements IEventState {
 								executionFinished = true;
 								finishAllProgressToasts(false);
 							}
-						} catch (error) {
-							console.warn(
-								"[SSE] Dropping unparseable event frame:",
-								error,
-								eventData.slice(0, 200),
-							);
+						} catch {
+							console.warn("[SSE] Dropping unparseable event frame", {
+								bytes: eventData.length,
+							});
 						}
 					}
 					if (executionFinished) break;

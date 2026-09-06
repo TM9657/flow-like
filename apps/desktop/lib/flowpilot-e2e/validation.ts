@@ -3,7 +3,9 @@ import {
 	isSuccessfulFlowScriptCommitReceipt,
 } from "@flow-like/flow-like-ui/lib/flowpilot/flowscript-generation-receipt";
 
+import { evaluateFlowPilotBehavioralEvidence } from "./behavioral-validation";
 import { FLOWPILOT_E2E_DEFAULT_MODEL } from "./cases";
+import { createFlowPilotE2EEvaluationIdentity } from "./evaluation-identity";
 import { findExactSuccessfulCompilerPair } from "./receipt-evidence";
 import type {
 	FlowPilotAppCreationSnapshot,
@@ -11,8 +13,10 @@ import type {
 	FlowPilotE2ECaseDefinition,
 	FlowPilotE2ECheck,
 	FlowPilotE2EEntityKind,
+	FlowPilotE2EEvaluationIdentity,
 	FlowPilotE2EModelConfig,
 	FlowPilotE2ERunReport,
+	FlowPilotE2ETier,
 	FlowPilotEventSnapshot,
 	FlowPilotPageSnapshot,
 	FlowPilotTableSnapshot,
@@ -553,6 +557,12 @@ export function evaluateAppCreationCase(
 	snapshot: FlowPilotAppCreationSnapshot,
 	/** The pinned benchmark model this run requested; every model check is relative to it. */
 	expectedModel: FlowPilotE2EModelConfig = FLOWPILOT_E2E_DEFAULT_MODEL,
+	tier: FlowPilotE2ETier = "structural",
+	evaluationIdentity: FlowPilotE2EEvaluationIdentity = createFlowPilotE2EEvaluationIdentity(
+		expectedModel,
+		tier,
+		[caseDefinition],
+	),
 ): FlowPilotE2ERunReport {
 	const requirements = caseDefinition.requirements;
 	const expectedName = expectedAppName(caseDefinition);
@@ -1253,6 +1263,12 @@ export function evaluateAppCreationCase(
 		checks.push(...integrityChecks(snapshot, boards, pages, widgets));
 	}
 
+	const behavioral =
+		tier === "behavioral"
+			? evaluateFlowPilotBehavioralEvidence(snapshot)
+			: undefined;
+	if (behavioral) checks.push(...behavioral.checks);
+
 	const failures = checks.filter((result) => result.status === "fail");
 	return {
 		schema: "flowpilot.app-creation-e2e-report/v1",
@@ -1262,6 +1278,8 @@ export function evaluateAppCreationCase(
 		appName: snapshot.appName,
 		expectedAppName: expectedName,
 		model: snapshot.model ?? expectedModel,
+		evaluationIdentity,
+		tier,
 		passed: failures.length === 0,
 		summary: {
 			checks: checks.length,
@@ -1280,6 +1298,7 @@ export function evaluateAppCreationCase(
 			authored: authored ? flowScriptSizeMetrics(authored) : undefined,
 			canonical: canonicalMetrics,
 		},
+		...(behavioral ? { behavioral: behavioral.metrics } : {}),
 		checks,
 		failures,
 	};

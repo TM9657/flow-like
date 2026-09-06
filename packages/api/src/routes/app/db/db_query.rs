@@ -94,6 +94,7 @@ pub async fn query_table(
         flow_like_storage::databases::sql_guard::validate_readonly_sql(&sql)
             .map_err(|error| ApiError::bad_request(format!("Invalid query SQL: {error}")))?;
         let context = SessionContext::new();
+        flow_like_storage::geometry::register_geo_functions(&context);
         let fusion = db.to_datafusion().await?;
         context.register_table(table, fusion)?;
         let param_values =

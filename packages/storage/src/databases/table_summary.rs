@@ -33,6 +33,7 @@ pub enum ColumnFamily {
     Vector,
     Struct,
     Binary,
+    Geo,
     Other,
 }
 
@@ -161,8 +162,7 @@ async fn summarize_one(
         }
     };
 
-    let indexes = table
-        .list_indices()
+    let indexes = crate::databases::vector::lancedb::list_table_indices(&table)
         .await
         .map(|indices| {
             indices
@@ -203,7 +203,11 @@ async fn summarize_one(
 }
 
 fn summarize_field(field: &std::sync::Arc<arrow_schema::Field>) -> ColumnSummary {
-    let (family, vector_size) = classify(field.data_type());
+    let (family, vector_size) = if crate::geometry::is_geometry_field(field) {
+        (ColumnFamily::Geo, None)
+    } else {
+        classify(field.data_type())
+    };
     ColumnSummary {
         name: field.name().clone(),
         data_type: format!("{}", field.data_type()),

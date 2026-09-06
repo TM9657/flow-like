@@ -1,4 +1,5 @@
-@import "tailwindcss";
+/* Keep theme tokens available to classes created after the application build. */
+@import "tailwindcss" theme(static);
 @source "./components/**/*.{ts,tsx}";
 @source "./hooks/**/*.{ts,tsx}";
 @source "./lib/**/*.{ts,tsx}";
@@ -148,6 +149,7 @@
 	--pin-float: oklch(79.2% 0.209 151.711);
 	--pin-boolean: oklch(51.4% 0.222 16.935);
 	--pin-struct: oklch(55.8% 0.288 302.321);
+	--pin-geometry: oklch(0.7049 0.1867 47.6);
 	--pin-byte: oklch(43.2% 0.095 166.913);
 	--pin-generic: oklch(55.4% 0.046 257.417);
 	--pin-date: oklch(82.8% 0.189 84.429);
@@ -247,6 +249,7 @@
 	--pin-float: oklch(79.2% 0.209 151.711);
 	--pin-boolean: oklch(51.4% 0.222 16.935);
 	--pin-struct: oklch(55.8% 0.288 302.321);
+	--pin-geometry: #f97316;
 	--pin-byte: oklch(43.2% 0.095 166.913);
 	--pin-generic: oklch(55.4% 0.046 257.417);
 	--pin-date: oklch(82.8% 0.189 84.429);
@@ -665,7 +668,7 @@
 	}
 }
 
-@theme inline {
+@theme inline static {
 	--color-background: var(--background);
 	--color-foreground: var(--foreground);
 	--color-card: var(--card);
@@ -724,6 +727,7 @@
 	--pin-float: var(--pin-float);
 	--pin-boolean: var(--pin-boolean);
 	--pin-struct: var(--pin-struct);
+	--pin-geometry: var(--pin-geometry);
 	--pin-byte: var(--pin-byte);
 	--pin-generic: var(--pin-generic);
 	--pin-date: var(--pin-date);
@@ -1839,6 +1843,8 @@ html[data-engine="webkit"] [class*="backdrop-blur"] {
 	--tok-boolean-ink: oklch(0.99 0 0);
 	--tok-struct: var(--pin-struct);
 	--tok-struct-ink: oklch(0.99 0 0);
+	--tok-geometry: var(--pin-geometry);
+	--tok-geometry-ink: oklch(0.18 0.008 285);
 	--tok-byte: var(--pin-byte);
 	--tok-byte-ink: oklch(0.99 0 0);
 	--tok-generic: var(--pin-generic);
@@ -1865,6 +1871,7 @@ html[data-engine="webkit"] [class*="backdrop-blur"] {
 	--tok-string-ink: oklch(0.16 0.012 268);
 	--tok-integer-ink: oklch(0.16 0.012 268);
 	--tok-float-ink: oklch(0.16 0.012 268);
+	--tok-geometry-ink: oklch(0.16 0.012 268);
 	--tok-date-ink: oklch(0.16 0.012 268);
 	--tok-function: oklch(0.7 0.175 43.26);
 	--tok-function-ink: oklch(0.16 0.012 268);

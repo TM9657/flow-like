@@ -28,6 +28,8 @@
 //! let app = executor_router(state);
 //! ```
 
+extern crate flow_like_runtime as flow_like;
+
 pub mod channel;
 pub mod config;
 pub mod error;
@@ -42,7 +44,7 @@ pub mod widgets;
 
 pub use config::ExecutorConfig;
 pub use error::ExecutorError;
-pub use execute::{execute, report_queue_failure};
+pub use execute::{execute, prepare_runtime, report_queue_failure};
 pub use flow_like_types::OAuthTokenInput;
 pub use resolve::{
     fetch_bounded, resolve_payload, resolve_payload_from_str, ResolveError,

@@ -21,13 +21,16 @@ RUN sed -i '/apps\/desktop\/src-tauri/d' Cargo.toml && \
     sed -i '/apps\/backend\/docker-compose\/runtime/d' Cargo.toml
 
 # Limit build parallelism to reduce memory pressure during lance compilation
-ENV CARGO_BUILD_JOBS=2
+ARG CARGO_BUILD_JOBS=2
+ENV CARGO_BUILD_JOBS=${CARGO_BUILD_JOBS}
 
 # Use BuildKit cache mounts for faster rebuilds
 RUN --mount=type=cache,target=/cargo-home,id=cargo-home,sharing=shared \
     --mount=type=cache,target=/app/target,id=cargo-target-k8s-executor,sharing=locked \
-    CARGO_HOME=/cargo-home cargo build --locked --release --package k8s-executor && \
-    cp /app/target/release/k8s-executor /tmp/k8s-executor
+    CARGO_HOME=/cargo-home cargo build --locked --release --package k8s-executor \
+      --package flow-like-execution-manager --bin k8s-executor --bin execution-slot && \
+    cp /app/target/release/k8s-executor /tmp/k8s-executor && \
+    cp /app/target/release/execution-slot /tmp/execution-slot
 
 # ============================================================
 # Stage 4: Runtime - minimal for sandboxed execution
@@ -43,6 +46,7 @@ RUN apt-get update && apt-get install -y \
 WORKDIR /app
 
 COPY --from=builder /tmp/k8s-executor /app/executor
+COPY --from=builder /tmp/execution-slot /app/execution-slot
 
 RUN chown -R executor:executor /app
 

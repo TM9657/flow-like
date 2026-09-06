@@ -195,6 +195,36 @@ export function decodeJwtExpiryMs(token: string): number | null {
 	}
 }
 
+/** Chooses the negotiated board format room. Signaling verifies the signed claim. */
+export function realtimeRoomForAccess(
+	appId: string,
+	boardId: string,
+	token: string,
+): string {
+	let version: unknown;
+	try {
+		const payload = JSON.parse(
+			atob(token.split(".")[1].replace(/-/g, "+").replace(/_/g, "/")),
+		) as { board_format_version?: unknown };
+		version =
+			payload.board_format_version === undefined
+				? 1
+				: payload.board_format_version;
+	} catch {
+		throw new Error("Realtime token has an invalid board format version");
+	}
+	if (
+		typeof version !== "number" ||
+		!Number.isInteger(version) ||
+		version < 1 ||
+		version > 0xffff_ffff
+	) {
+		throw new Error("Realtime token has an invalid board format version");
+	}
+	const room = `${appId}:${boardId}`;
+	return version === 1 ? room : `${room}:format-v${version}`;
+}
+
 export type AuthenticatedSignaling = {
 	signaling: string[];
 	rotate: (nextToken: string) => void;

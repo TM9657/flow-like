@@ -1,4 +1,5 @@
 use flow_like::flow::board::Board;
+use flow_like_storage::object_store::ObjectStoreExt;
 use flow_like_storage::object_store::{Error as ObjectStoreError, path::Path};
 use flow_like_types::anyhow;
 use sea_orm::EntityTrait;

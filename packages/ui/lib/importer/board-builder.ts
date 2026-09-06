@@ -193,6 +193,7 @@ export function createVariable(opts: {
 	name: string;
 	description?: string;
 	dataType: IVariableType;
+	schema?: string | null;
 	valueType?: IValueType;
 	defaultValue?: unknown;
 	secret?: boolean;
@@ -214,7 +215,7 @@ export function createVariable(opts: {
 		editable: opts.editable ?? true,
 		category: null,
 		hash: null,
-		schema: null,
+		schema: opts.schema ?? null,
 	};
 }
 

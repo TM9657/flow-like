@@ -17,6 +17,7 @@ use flow_like::flow::{
     board::{Board, VersionType},
     compiled::{PrerunManifest, manifest_path, version_page_manifest_path},
 };
+use flow_like_storage::object_store::ObjectStoreExt;
 use serde::Deserialize;
 use std::sync::Arc;
 use utoipa::IntoParams;
@@ -60,6 +61,7 @@ pub async fn version_board(
     let mut board = state
         .master_board(&sub, &app_id, &board_id, &state, None)
         .await?;
+
     mutation_guard.ensure_held()?;
     let (version, published) = board
         .create_version_returning_published(params.version_type.unwrap_or(VersionType::Patch), None)

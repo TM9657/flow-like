@@ -1,4 +1,4 @@
-import { IIndexType } from "@flow-like/flow-like-ui";
+import { indexTypeToString } from "@flow-like/flow-like-ui/state/backend-state/db-state";
 import type {
 	IAddColumnPayload,
 	ICreateTableResult,
@@ -6,6 +6,7 @@ import type {
 	IDatabaseState,
 	IDropTableResult,
 	IIndexConfig,
+	IIndexType,
 	IQueryTablePayload,
 	ITableSummary,
 } from "@flow-like/flow-like-ui";
@@ -62,17 +63,6 @@ export class DatabaseState implements IDatabaseState {
 		});
 	}
 
-	private indexTypeToString(indexType: IIndexType): string {
-		const map: Record<IIndexType, string> = {
-			[IIndexType.FullText]: "FullText",
-			[IIndexType.BTree]: "BTree",
-			[IIndexType.Bitmap]: "Bitmap",
-			[IIndexType.LabelList]: "LabelList",
-			[IIndexType.Auto]: "Auto",
-		};
-		return map[indexType] ?? "Auto";
-	}
-
 	async buildIndex(
 		appId: string,
 		tableName: string,
@@ -94,7 +84,7 @@ export class DatabaseState implements IDatabaseState {
 					method: "POST",
 					body: JSON.stringify({
 						column,
-						index_type: this.indexTypeToString(indexType),
+						index_type: indexTypeToString(indexType),
 						optimize: optimize ?? false,
 					}),
 				},
@@ -106,8 +96,8 @@ export class DatabaseState implements IDatabaseState {
 			appId,
 			tableName,
 			column,
-			indexType,
-			_optimize: optimize,
+			indexType: indexTypeToString(indexType),
+			optimize,
 			userScoped: userScoped ?? false,
 		});
 	}
@@ -273,6 +263,38 @@ export class DatabaseState implements IDatabaseState {
 		});
 	}
 
+	async getSchemaAuthoritative(
+		appId: string,
+		tableName: string,
+		userScoped?: boolean,
+	): Promise<any> {
+		if (await this.backend.isLocalOnly(appId)) {
+			return invoke<any>("db_schema", {
+				appId,
+				tableName,
+				userScoped: userScoped ?? false,
+			});
+		}
+		if (
+			!this.backend.profile ||
+			!this.backend.auth?.isAuthenticated ||
+			!this.backend.auth.user?.access_token
+		) {
+			throw new Error(
+				"Hosted database schema reads require an authenticated hub session",
+			);
+		}
+		return fetcher(
+			this.backend.profile,
+			appendScope(
+				`apps/${appId}/db/${parseTableName(tableName)}/schema`,
+				userScoped,
+			),
+			{ method: "GET" },
+			this.backend.auth,
+		);
+	}
+
 	async getIndices(
 		appId: string,
 		tableName: string,
@@ -347,6 +369,27 @@ export class DatabaseState implements IDatabaseState {
 		}
 
 		return await invoke("db_table_names", { appId });
+	}
+
+	async listTablesAuthoritative(appId: string): Promise<string[]> {
+		if (await this.backend.isLocalOnly(appId)) {
+			return invoke<string[]>("db_table_names", { appId });
+		}
+		if (
+			!this.backend.profile ||
+			!this.backend.auth?.isAuthenticated ||
+			!this.backend.auth.user?.access_token
+		) {
+			throw new Error(
+				"Hosted database inventory requires an authenticated hub session",
+			);
+		}
+		return fetcher<string[]>(
+			this.backend.profile,
+			`apps/${appId}/db`,
+			{ method: "GET" },
+			this.backend.auth,
+		);
 	}
 
 	async listTablesUser(appId: string): Promise<string[]> {

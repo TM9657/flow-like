@@ -15,6 +15,7 @@ public enum DataType: Sendable {
     case date
     case pathBuf
     case `struct`
+    case geometry
 
     public var rawValue: Swift.String {
         switch self {
@@ -28,6 +29,7 @@ public enum DataType: Sendable {
         case .date: return "Date"
         case .pathBuf: return "PathBuf"
         case .struct: return "Struct"
+        case .geometry: return "Geometry"
         }
     }
 }

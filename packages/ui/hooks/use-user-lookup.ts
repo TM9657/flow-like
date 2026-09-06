@@ -1,6 +1,6 @@
 "use client";
 
-import { useQuery } from "@tanstack/react-query";
+import { queryOptions, useQuery } from "@tanstack/react-query";
 import { useMemo } from "react";
 import {
 	userAvatarUrl,
@@ -130,6 +130,19 @@ function batcherFor(source: LookupSource): UserLookupBatcher {
 /** Accounts change rarely; a table paging back and forth should not re-ask. */
 const USER_LOOKUP_STALE_TIME = 5 * 60 * 1000;
 
+/** Shared by individual account tags and views that resolve several labels at once. */
+export function userLookupQueryOptions(
+	source: LookupSource,
+	userId?: string | null,
+) {
+	return queryOptions<UserLookupResult, Error>({
+		queryKey: ["lookupUserBatched", userId ?? null],
+		queryFn: () => batcherFor(source).load(userId as string),
+		enabled: Boolean(userId),
+		staleTime: USER_LOOKUP_STALE_TIME,
+	});
+}
+
 /**
  * Resolves one account, coalescing concurrent callers into a single request.
  *
@@ -141,12 +154,7 @@ export function useUserLookup(userId?: string | null) {
 	const backend = useBackend();
 	const source = backend.userState;
 
-	return useQuery<UserLookupResult, Error>({
-		queryKey: ["lookupUserBatched", userId ?? null],
-		queryFn: () => batcherFor(source).load(userId as string),
-		enabled: Boolean(userId),
-		staleTime: USER_LOOKUP_STALE_TIME,
-	});
+	return useQuery(userLookupQueryOptions(source, userId));
 }
 
 export interface UserIdentity {

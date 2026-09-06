@@ -11,9 +11,15 @@ export function formatAppCreationReport(
 	const status = report.passed ? "PASS" : "FAIL";
 	const lines = [
 		`${status} ${report.caseId}: ${report.appName} (${report.appId || "no app id"})`,
-		`model=${report.model.provider}/${report.model.model} reasoning=${report.model.reasoningEffort}`,
+		`model=${report.model.provider}/${report.model.model} reasoning=${report.model.reasoningEffort} tier=${report.tier ?? "structural"}`,
+		`harness=${report.evaluationIdentity.harnessContractVersion} cohort=${report.evaluationIdentity.cohortKey} fixtures=${report.evaluationIdentity.caseSuiteFingerprint}`,
 		`checks=${report.summary.passed}/${report.summary.checks} nodes=${report.inventory.totalNodes} pages=${report.inventory.pages} widgets=${report.inventory.widgets} tables=${report.inventory.tables} events=${report.inventory.events}`,
 	];
+	if (report.behavioral) {
+		lines.push(
+			`behavioral=${report.behavioral.passedScenarios}/${report.behavioral.scenarios} scenarios runs=${report.behavioral.successfulRuns}/${report.behavioral.startedRuns} succeeded failed=${report.behavioral.failedRuns} unknown=${report.behavioral.unknownRuns}`,
+		);
+	}
 
 	if (report.flowScript.authored) {
 		lines.push(

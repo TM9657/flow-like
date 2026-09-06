@@ -24,7 +24,6 @@ const DEFAULT_TASK_TIMEOUT_SECS: u64 = 3600; // 1 hour
 /// Exit code 0 = all succeeded, non-zero = at least one failure.
 #[tokio::main]
 async fn main() -> std::process::ExitCode {
-    let sentry_endpoint = std::env::var("SENTRY_ENDPOINT").unwrap_or_default();
     let env_filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| {
         EnvFilter::new("info")
             .add_directive("hyper=warn".parse().unwrap())
@@ -32,26 +31,9 @@ async fn main() -> std::process::ExitCode {
             .add_directive("tokio=warn".parse().unwrap())
     });
 
-    let _sentry_guard = if sentry_endpoint.is_empty() {
-        tracing_subscriber::registry()
-            .with(tracing_subscriber::fmt::layer().with_filter(env_filter))
-            .init();
-        None
-    } else {
-        let guard = sentry::init((
-            sentry_endpoint,
-            sentry::ClientOptions {
-                release: sentry::release_name!(),
-                traces_sample_rate: 0.3,
-                ..Default::default()
-            },
-        ));
-        tracing_subscriber::registry()
-            .with(tracing_subscriber::fmt::layer().with_filter(env_filter))
-            .with(sentry_tracing::layer())
-            .init();
-        Some(guard)
-    };
+    tracing_subscriber::registry()
+        .with(tracing_subscriber::fmt::layer().with_filter(env_filter))
+        .init();
 
     tracing::info!("Starting Flow-Like ECS Compiler Task");
 
@@ -161,14 +143,14 @@ async fn resolve_compilation_jobs(json: &str) -> Result<Vec<CompilationJob>, Str
                     tokio::time::timeout(Duration::from_secs(30), reqwest::get(&remote_url))
                         .await
                         .map_err(|_| "Remote job fetch timed out".to_string())?
-                        .map_err(|e| format!("Failed to fetch remote job: {e}"))?;
+                        .map_err(|e| format!("Failed to fetch remote job: {}", e.without_url()))?;
                 if !response.status().is_success() {
                     return Err(format!("HTTP {} from job URL", response.status()));
                 }
                 let body = response
                     .text()
                     .await
-                    .map_err(|e| format!("Failed to read response: {e}"))?;
+                    .map_err(|e| format!("Failed to read response: {}", e.without_url()))?;
                 return parse_inline_jobs(&body);
             }
             CompilationJobRef::Inline(job) => return Ok(vec![job]),

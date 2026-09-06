@@ -1,4 +1,5 @@
 import type { IChannelClientDescriptor, IChannelPush } from "../schema/channel";
+import { awsReplyPayloads } from "./aws-reply-chunks";
 import { sha256Hex, signAwsRequest } from "./aws-sigv4";
 import {
 	type ChannelPushOptions,
@@ -46,7 +47,20 @@ export async function pushAwsMqtt(
 		);
 	}
 	const url = directMessageUrl(descriptor);
-	const body = JSON.stringify(push);
+	// Prepare every frame before sending, so size errors cannot leave a partial reply.
+	for (const body of awsReplyPayloads(push)) {
+		await sendPayload(descriptor, push.channel_id, url, body, options);
+	}
+}
+
+async function sendPayload(
+	descriptor: AwsMqttChannelDescriptor,
+	channelId: string,
+	url: string,
+	body: string,
+	options: ChannelPushOptions,
+): Promise<void> {
+	const { credentials } = descriptor;
 	const signed = await signAwsRequest(
 		{
 			method: "POST",
@@ -79,27 +93,27 @@ export async function pushAwsMqtt(
 		} catch (error) {
 			if (timeout.timedOut()) {
 				throw new Error(
-					`AWS IoT direct message for channel '${push.channel_id}' timed out after ${AWS_PUSH_TIMEOUT_MS} ms.`,
+					`AWS IoT direct message for channel '${channelId}' timed out after ${AWS_PUSH_TIMEOUT_MS} ms.`,
 				);
 			}
 			if (timeout.signal.aborted) {
 				throw new Error(
-					`AWS IoT direct message for channel '${push.channel_id}' was aborted.`,
+					`AWS IoT direct message for channel '${channelId}' was aborted.`,
 				);
 			}
 			throw new Error(
-				`AWS IoT direct message for channel '${push.channel_id}' failed: ${errorMessage(error)}`,
+				`AWS IoT direct message for channel '${channelId}' failed: ${errorMessage(error)}`,
 			);
 		}
 		if (response.status === 404) {
 			throw new Error(
-				`The run behind channel '${push.channel_id}' is no longer listening (AWS IoT client '${descriptor.target_client_id}' is not connected).`,
+				`The run behind channel '${channelId}' is no longer listening (AWS IoT client '${descriptor.target_client_id}' is not connected).`,
 			);
 		}
 		if (!response.ok) {
 			const excerpt = await readBodyExcerpt(response);
 			throw new Error(
-				`AWS IoT direct message for channel '${push.channel_id}' failed (${response.status}): ${excerpt || response.statusText}`,
+				`AWS IoT direct message for channel '${channelId}' failed (${response.status}): ${excerpt || response.statusText}`,
 			);
 		}
 	} finally {

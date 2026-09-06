@@ -9,6 +9,7 @@ use crate::{
     permission::role_permission::RolePermissions,
     state::AppState,
 };
+use flow_like_storage::object_store::ObjectStoreExt;
 
 pub mod cleanup;
 pub mod db_schema;
@@ -468,7 +469,7 @@ pub async fn compute_offline_fork_bundle(
         };
         overlay_board_page_ids_from_rows(&mut board_proto, src_board_id, &page_rows);
         let dst_board_id = maps.translate_board(src_board_id);
-        let mut remapped = remap_board(board_proto, &mut maps);
+        let mut remapped = remap_board(board_proto, &mut maps)?;
         remapped.id = dst_board_id.clone();
         remapped_boards.push((src_board_id.clone(), dst_board_id, remapped));
         shipped_boards.insert(src_board_id.clone());
@@ -755,7 +756,7 @@ pub async fn compute_offline_fork_bundle(
                 continue;
             }
         };
-        let mut remapped = remap_board(board_proto, &mut maps);
+        let mut remapped = remap_board(board_proto, &mut maps)?;
         // remap_board allocates a fresh board.id; force it back to
         // the destination live-board id so the archive stays
         // addressable.
@@ -868,7 +869,7 @@ pub async fn compute_offline_fork_bundle(
                     continue;
                 }
             };
-        let mut remapped = remap_board(board_proto, &mut maps);
+        let mut remapped = remap_board(board_proto, &mut maps)?;
         remapped.id = new_template_id.clone();
         let bytes = encode_proto(&remapped).await?;
         blobs.push(MetaBlob {
@@ -1827,7 +1828,7 @@ pub(crate) async fn materialize_meta(
         };
         overlay_board_page_ids_from_rows(&mut board_proto, src_board_id, &src_page_rows);
         let new_board_id = maps.translate_board(src_board_id);
-        let mut remapped = remap_board(board_proto, &mut maps);
+        let mut remapped = remap_board(board_proto, &mut maps)?;
         remapped.id = new_board_id.clone();
         new_board_protos.push((src_board_id.clone(), new_board_id, remapped));
         shipped_boards.insert(src_board_id.clone());
@@ -2053,7 +2054,7 @@ pub(crate) async fn materialize_meta(
                 continue;
             }
         };
-        let mut remapped = remap_board(board_proto, &mut maps);
+        let mut remapped = remap_board(board_proto, &mut maps)?;
         // remap_board allocates a fresh board.id; force it back to the
         // destination live-board id so the archive stays addressable.
         remapped.id = dst_board_id.clone();
@@ -2726,7 +2727,9 @@ pub async fn sync_uploaded_metadata_media_to_db(
 
 // ---- helpers ----------------------------------------------------------
 
-fn remap_board(mut board: proto::Board, maps: &mut ForkIdMap) -> proto::Board {
+fn remap_board(mut board: proto::Board, maps: &mut ForkIdMap) -> Result<proto::Board, ApiError> {
+    flow_like::flow::board::Board::validate_proto_types(&board)?;
+    board.format_version = flow_like::flow::board::Board::required_proto_format_version(&board);
     // Host receipts belong to the source board's persistence boundary and must never be copied
     // into a fork where their identities and replay claims are invalid.
     board.internal_refs.clear();
@@ -2802,7 +2805,7 @@ fn remap_board(mut board: proto::Board, maps: &mut ForkIdMap) -> proto::Board {
         .collect();
 
     strip_board_secrets(&mut board);
-    board
+    Ok(board)
 }
 
 /// Clears `default_value` on every variable marked `secret = true`, both at
@@ -3857,7 +3860,7 @@ async fn fork_templates(
         // template; since the template body is otherwise self-contained,
         // this keeps internal references consistent without colliding
         // with live-board ids.
-        let mut remapped = remap_board(board_proto, maps);
+        let mut remapped = remap_board(board_proto, maps)?;
         // remap_board rewrote board.id to a fresh id; force it back to
         // the chosen template id for path consistency.
         remapped.id = new_template_id.clone();
@@ -4623,6 +4626,83 @@ mod tests {
         assert_eq!(decoded["label"], "src_page is not a ref here");
     }
 
+    fn geometry_fork_board(format_version: u32) -> proto::Board {
+        let variable = proto::Variable {
+            id: "location".into(),
+            name: "location".into(),
+            data_type: proto::VariableType::Geometry as i32,
+            schema: Some(
+                flow_like_types::geometry::marker(flow_like_types::geometry::GeometryKind::Point)
+                    .into(),
+            ),
+            default_value: serde_json::to_vec(&serde_json::json!({
+                "type": "Point", "coordinates": [13.405, 52.52]
+            }))
+            .unwrap(),
+            ..Default::default()
+        };
+        proto::Board {
+            id: "source".into(),
+            format_version,
+            variables: HashMap::from([(variable.id.clone(), variable)]),
+            version_major: 1,
+            version_minor: 2,
+            version_patch: 3,
+            ..Default::default()
+        }
+    }
+
+    #[test]
+    fn remap_board_rejects_future_formats_before_mutating_maps() {
+        let mut maps = ForkIdMap::default();
+        maps.boards.insert("kept".into(), "destination".into());
+        let before = serde_json::to_value(&maps).unwrap();
+        let error = remap_board(geometry_fork_board(99), &mut maps).unwrap_err();
+        assert_eq!(error.public_code(), "BOARD_FORMAT_UPGRADE_REQUIRED");
+        assert_eq!(error.status(), axum::http::StatusCode::UPGRADE_REQUIRED);
+        assert_eq!(serde_json::to_value(&maps).unwrap(), before);
+    }
+
+    #[tokio::test]
+    async fn remap_board_rejects_geometry_for_legacy_clients_before_mutating_maps() {
+        flow_like::flow::board::format::with_supported_version(1, async {
+            for declared in [0, 1, 2] {
+                let mut maps = ForkIdMap::default();
+                maps.pages.insert("kept".into(), "destination".into());
+                let before = serde_json::to_value(&maps).unwrap();
+                let error = remap_board(geometry_fork_board(declared), &mut maps).unwrap_err();
+                assert_eq!(error.public_code(), "BOARD_FORMAT_UPGRADE_REQUIRED");
+                assert_eq!(serde_json::to_value(&maps).unwrap(), before);
+            }
+        })
+        .await;
+    }
+
+    #[tokio::test]
+    async fn remap_board_preserves_geometry_and_publication_metadata_for_current_clients() {
+        flow_like::flow::board::format::with_supported_version(2, async {
+            for declared in [0, 2] {
+                let mut maps = ForkIdMap::default();
+                let source = geometry_fork_board(declared);
+                let expected_variable = source.variables["location"].clone();
+                let remapped = remap_board(source, &mut maps).unwrap();
+                assert_eq!(remapped.format_version, 2);
+                assert_eq!(
+                    (
+                        remapped.version_major,
+                        remapped.version_minor,
+                        remapped.version_patch
+                    ),
+                    (1, 2, 3),
+                );
+                assert_eq!(remapped.variables["location"], expected_variable);
+                assert_ne!(remapped.id, "source");
+                assert_eq!(maps.boards["source"], remapped.id);
+            }
+        })
+        .await;
+    }
+
     #[test]
     fn remapped_boards_keep_element_refs_pointing_at_the_forked_page() {
         let mut maps = ForkIdMap::default();
@@ -4651,7 +4731,7 @@ mod tests {
             ..Default::default()
         };
 
-        let remapped = remap_board(board, &mut maps);
+        let remapped = remap_board(board, &mut maps).expect("remap compatible board");
 
         assert_eq!(remapped.page_ids, vec!["dst_page".to_string()]);
         let pin = remapped

@@ -38,6 +38,7 @@ import {
 	useMemo,
 	useState,
 } from "react";
+import { useBoardFormat } from "../../hooks/use-board-format";
 import {
 	type IPin,
 	type IPinOptions,
@@ -45,6 +46,7 @@ import {
 	IVariableType,
 	describeCacheLifetime,
 } from "../../lib";
+import { GEOMETRY_BOARD_FORMAT_VERSION } from "../../lib/board-format";
 import {
 	type IBoard,
 	type ILayer,
@@ -83,6 +85,7 @@ import {
 	Textarea,
 } from "../ui";
 import { typeToColor } from "./utils";
+import { GeometrySubtypeSelect } from "./variables/geometry-variable";
 import { ValueTypeIcon } from "./variables/variables-menu";
 
 export type PinEdit = {
@@ -412,6 +415,7 @@ export function usePinEditor(
 }
 
 interface LayerEditMenuProps {
+	appId?: string;
 	open: boolean;
 	onOpenChange: (open: boolean) => void;
 	layer?: ILayer;
@@ -422,6 +426,7 @@ interface LayerEditMenuProps {
 }
 
 export const LayerEditMenu: React.FC<LayerEditMenuProps> = ({
+	appId,
 	open,
 	onOpenChange,
 	layer,
@@ -431,6 +436,8 @@ export const LayerEditMenu: React.FC<LayerEditMenuProps> = ({
 	mode = "layer",
 }) => {
 	const { t } = useTranslation("flow");
+	const geometryEnabled =
+		useBoardFormat(appId) >= GEOMETRY_BOARD_FORMAT_VERSION;
 	const entity = layer ?? node;
 	const isNodeMode =
 		mode === "node" || (node !== undefined && layer === undefined);
@@ -619,6 +626,7 @@ export const LayerEditMenu: React.FC<LayerEditMenuProps> = ({
 							</Button>
 						</div>
 						<PinList
+							geometryEnabled={geometryEnabled}
 							items={inputs}
 							onEdit={editPin}
 							onMoveUp={(id) => movePin(id, "up")}
@@ -640,6 +648,7 @@ export const LayerEditMenu: React.FC<LayerEditMenuProps> = ({
 							</Button>
 						</div>
 						<PinList
+							geometryEnabled={geometryEnabled}
 							items={outputs}
 							onEdit={editPin}
 							onMoveUp={(id) => movePin(id, "up")}
@@ -804,6 +813,7 @@ const fromCSVStrings = (s: string): string[] =>
 		.filter((x) => x.length > 0);
 
 interface PinListProps {
+	geometryEnabled?: boolean;
 	items: PinEdit[];
 	onEdit: (id: string, patch: Partial<PinEdit>) => void;
 	onMoveUp: (id: string) => void;
@@ -872,10 +882,11 @@ const PinValueTypeDropdown: React.FC<{
 };
 
 const PinDataTypeSelectInline: React.FC<{
+	geometryEnabled?: boolean;
 	value: IVariableType;
 	onChange: (dt: IVariableType) => void;
 	className?: string;
-}> = ({ value, onChange, className }) => {
+}> = ({ value, onChange, className, geometryEnabled }) => {
 	const { t } = useTranslation("flow");
 	return (
 		<Select
@@ -913,6 +924,9 @@ const PinDataTypeSelectInline: React.FC<{
 				<SelectItem value={IVariableType.String}>
 					{selectPreviewElement(IVariableType.String)}
 				</SelectItem>
+				<SelectItem value={IVariableType.Geometry} disabled={!geometryEnabled}>
+					{selectPreviewElement(IVariableType.Geometry)}
+				</SelectItem>
 				<SelectItem value={IVariableType.Struct}>
 					{selectPreviewElement(IVariableType.Struct)}
 				</SelectItem>
@@ -922,6 +936,7 @@ const PinDataTypeSelectInline: React.FC<{
 };
 
 export const PinList: React.FC<PinListProps> = ({
+	geometryEnabled = false,
 	items,
 	onEdit,
 	onMoveUp,
@@ -965,6 +980,7 @@ export const PinList: React.FC<PinListProps> = ({
 					<SortableContext items={ids} strategy={verticalListSortingStrategy}>
 						{items.map((pin, idx) => (
 							<SortablePinRow
+								geometryEnabled={geometryEnabled}
 								key={pin.id}
 								pin={pin}
 								idx={idx}
@@ -984,6 +1000,7 @@ export const PinList: React.FC<PinListProps> = ({
 };
 
 const SortablePinRow: React.FC<{
+	geometryEnabled?: boolean;
 	pin: PinEdit;
 	idx: number;
 	total: number;
@@ -993,6 +1010,7 @@ const SortablePinRow: React.FC<{
 	onRemove: (id: string) => void;
 	isGenericEvent?: boolean;
 }> = ({
+	geometryEnabled,
 	pin,
 	idx,
 	total,
@@ -1115,8 +1133,11 @@ const SortablePinRow: React.FC<{
 					<span className="ml-2 text-[10px] text-muted-foreground">{`(${pin.id})`}</span>
 				</div>{" "}
 				<PinDataTypeSelectInline
+					geometryEnabled={geometryEnabled}
 					value={pin.data_type}
-					onChange={(dt) => onEdit(pin.id, { data_type: dt })}
+					onChange={(dt) =>
+						onEdit(pin.id, { data_type: dt, schema: null, default_value: null })
+					}
 					className="hidden sm:flex"
 				/>
 				<Button
@@ -1250,15 +1271,22 @@ const PinOptionsButton: React.FC<PinOptionsButtonProps> = ({
 					<div className="grid grid-cols-1 md:grid-cols-6 gap-3">
 						<div className="space-y-1.5 md:col-span-6">
 							<Label className="text-xs">{t("schema", "Schema")}</Label>
-							<Input
-								className="h-8"
-								value={localSchema}
-								onChange={(e) => setLocalSchema(e.target.value)}
-								placeholder={t(
-									"egMyschemaidentifier",
-									"e.g. my.schema.Identifier",
-								)}
-							/>
+							{pin.data_type === IVariableType.Geometry ? (
+								<GeometrySubtypeSelect
+									schema={localSchema || null}
+									onChange={(schema) => setLocalSchema(schema ?? "")}
+								/>
+							) : (
+								<Input
+									className="h-8"
+									value={localSchema}
+									onChange={(e) => setLocalSchema(e.target.value)}
+									placeholder={t(
+										"egMyschemaidentifier",
+										"e.g. my.schema.Identifier",
+									)}
+								/>
+							)}
 						</div>
 
 						<div className="flex items-center gap-2 md:col-span-3">

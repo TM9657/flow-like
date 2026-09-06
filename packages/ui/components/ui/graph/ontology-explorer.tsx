@@ -5,11 +5,24 @@ import { createId } from "@paralleldrive/cuid2";
 import type React from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
+import {
+	ONTOLOGY_QUERY_MAX_LIMIT,
+	OntologyQueryController,
+	type OntologyQueryLanguagePreference,
+	type OntologyQueryProposal,
+	type OntologyQueryReceipt,
+	type OntologyQueryStatusEvent,
+	createFlowPilotOntologyQueryTextCompletion,
+	createGraphStateOntologyQueryRuntime,
+	createTextCompletionOntologyQueryGenerator,
+	normalizeReadOnlyOntologyQuery,
+} from "../../../lib/ontology-query";
 import { useBackend } from "../../../state/backend-state";
 import type {
 	GraphAnalyticsResult,
 	GraphOverlay,
 	GraphPathsResult,
+	GraphQueryResult,
 	InvokeOntologyActionPayload,
 	LabelStyle,
 	OntologyActionDefinition,
@@ -18,6 +31,7 @@ import type {
 	SubgraphNode,
 	SubgraphResult,
 } from "../../../state/backend-state/graph-state";
+import { useGlobalChatStore } from "../../../state/global-chat/global-chat-store";
 import { Button } from "../button";
 import type { ExpansionOptions } from "./graph-expansion-dialog";
 import { GraphViewer, getNodeRawId } from "./graph-viewer";
@@ -57,6 +71,8 @@ function isConflictError(err: unknown): boolean {
 export interface OntologyExplorerProps {
 	appId: string;
 	overlayId: string;
+	/** Read and query the per-user ontology store instead of the shared app store. */
+	userScoped?: boolean;
 	/** Overrides the overlay's stored default node limit for the first load. */
 	limit?: number;
 	className?: string;
@@ -92,6 +108,7 @@ export interface OntologyExplorerProps {
 export const OntologyExplorer: React.FC<OntologyExplorerProps> = ({
 	appId,
 	overlayId,
+	userScoped = false,
 	limit: limitOverride,
 	className,
 	allowExpand = true,
@@ -111,14 +128,29 @@ export const OntologyExplorer: React.FC<OntologyExplorerProps> = ({
 }) => {
 	const { t } = useTranslation("common");
 	const backend = useBackend();
+	const ontologyQueryTargetKey = useMemo(
+		() => JSON.stringify([appId, overlayId, userScoped]),
+		[appId, overlayId, userScoped],
+	);
 	const [overlay, setOverlay] = useState<GraphOverlay | null>(null);
 	const [data, setData] = useState<SubgraphResult | null>(null);
 	const [analytics, setAnalytics] = useState<GraphAnalyticsResult | null>(null);
 	const [loading, setLoading] = useState(true);
 	const [error, setError] = useState<string | null>(null);
-	const [cypherResults, setCypherResults] = useState<unknown[] | null>(null);
+	const [cypherResult, setCypherResult] = useState<GraphQueryResult | null>(
+		null,
+	);
 	const [cypherLoading, setCypherLoading] = useState(false);
 	const [cypherError, setCypherError] = useState<string | null>(null);
+	const [flowPilotQueryStatus, setFlowPilotQueryStatus] =
+		useState<OntologyQueryStatusEvent | null>(null);
+	const [flowPilotQueryProposal, setFlowPilotQueryProposal] =
+		useState<OntologyQueryProposal | null>(null);
+	const [flowPilotQueryReceipt, setFlowPilotQueryReceipt] =
+		useState<OntologyQueryReceipt | null>(null);
+	const [queryUiTargetKey, setQueryUiTargetKey] = useState(
+		ontologyQueryTargetKey,
+	);
 	const [nodeLimit, setNodeLimit] = useState(
 		limitOverride ?? GRAPH_DEFAULT_LIMIT,
 	);
@@ -137,6 +169,42 @@ export const OntologyExplorer: React.FC<OntologyExplorerProps> = ({
 	const styleRevertRef = useRef<Map<string, LabelStyle>>(new Map());
 	const initialLoadRequestRef = useRef(0);
 	const overlayRequestRef = useRef(0);
+	const queryUiRequestRef = useRef(0);
+	const flowPilotProvider = useGlobalChatStore((state) => state.provider);
+	const flowPilotModelId = useGlobalChatStore((state) => state.selectedModelId);
+	const flowPilotReasoningEffort = useGlobalChatStore(
+		(state) => state.reasoningEffort,
+	);
+	const ontologyQueryTarget = useMemo(
+		() => ({
+			appId,
+			overlayId,
+			userScoped,
+			surfaceInstanceId: createId(),
+		}),
+		[appId, overlayId, userScoped],
+	);
+	const ontologyQueryController = useMemo(() => {
+		const complete = createFlowPilotOntologyQueryTextCompletion({
+			boardState: backend.boardState,
+			target: ontologyQueryTarget,
+			provider: flowPilotProvider,
+			modelId: flowPilotModelId || undefined,
+			reasoningEffort: flowPilotReasoningEffort || undefined,
+		});
+		return new OntologyQueryController({
+			target: ontologyQueryTarget,
+			generator: createTextCompletionOntologyQueryGenerator(complete),
+			runtime: createGraphStateOntologyQueryRuntime(backend.graphState),
+		});
+	}, [
+		backend.boardState,
+		backend.graphState,
+		flowPilotModelId,
+		flowPilotProvider,
+		flowPilotReasoningEffort,
+		ontologyQueryTarget,
+	]);
 
 	useEffect(() => {
 		overlayRef.current = overlay;
@@ -145,6 +213,19 @@ export const OntologyExplorer: React.FC<OntologyExplorerProps> = ({
 	useEffect(() => {
 		dataRef.current = data;
 	}, [data]);
+
+	useEffect(() => {
+		queryUiRequestRef.current += 1;
+		setCypherResult(null);
+		setCypherLoading(false);
+		setCypherError(null);
+		setFlowPilotQueryStatus(null);
+		setFlowPilotQueryProposal(null);
+		setFlowPilotQueryReceipt(null);
+		setQueryUiTargetKey(ontologyQueryTargetKey);
+	}, [ontologyQueryTargetKey]);
+
+	const queryUiMatchesTarget = queryUiTargetKey === ontologyQueryTargetKey;
 
 	const expandedChildParents = useMemo(
 		() => new Set(expandedChildren.keys()),
@@ -158,6 +239,16 @@ export const OntologyExplorer: React.FC<OntologyExplorerProps> = ({
 			timers.clear();
 		};
 	}, []);
+
+	useEffect(() => {
+		queryUiRequestRef.current += 1;
+		setCypherLoading(false);
+		setFlowPilotQueryStatus(null);
+		return () => {
+			queryUiRequestRef.current += 1;
+			ontologyQueryController.cancel();
+		};
+	}, [ontologyQueryController]);
 
 	// Consumers routinely pass inline callbacks. Holding them in refs keeps the
 	// loader identity stable, otherwise every parent render would refetch.
@@ -184,11 +275,16 @@ export const OntologyExplorer: React.FC<OntologyExplorerProps> = ({
 					GRAPH_VIEW_LIMIT_MAX,
 				);
 
-				const result = await backend.graphState.subgraph(appId, overlayId, {
-					seeds: [],
-					depth: 1,
-					limit: graphLimit,
-				});
+				const result = await backend.graphState.subgraph(
+					appId,
+					overlayId,
+					{
+						seeds: [],
+						depth: 1,
+						limit: graphLimit,
+					},
+					userScoped,
+				);
 				if (initialLoadRequestRef.current !== requestId) return;
 				setData(enrichSubgraphWithStyles(result, currentOverlay));
 
@@ -196,7 +292,7 @@ export const OntologyExplorer: React.FC<OntologyExplorerProps> = ({
 				// a small pool of connection permits, and the whole-population counts
 				// are a caption on the view rather than a prerequisite for drawing it.
 				void backend.graphState
-					.analytics(appId, overlayId, GRAPH_ANALYTICS_EDGE_LIMIT)
+					.analytics(appId, overlayId, GRAPH_ANALYTICS_EDGE_LIMIT, userScoped)
 					.then((result) => {
 						if (initialLoadRequestRef.current === requestId) {
 							setAnalytics(result);
@@ -215,7 +311,7 @@ export const OntologyExplorer: React.FC<OntologyExplorerProps> = ({
 				}
 			}
 		},
-		[backend.graphState, appId, overlayId, reportError],
+		[backend.graphState, appId, overlayId, reportError, userScoped],
 	);
 
 	const loadOverlay = useCallback(async () => {
@@ -226,6 +322,7 @@ export const OntologyExplorer: React.FC<OntologyExplorerProps> = ({
 			const currentOverlay = await backend.graphState.getOverlay(
 				appId,
 				overlayId,
+				userScoped,
 			);
 			if (overlayRequestRef.current !== requestId) return;
 			setOverlay(currentOverlay);
@@ -248,6 +345,7 @@ export const OntologyExplorer: React.FC<OntologyExplorerProps> = ({
 		limitOverride,
 		loadInitialData,
 		reportError,
+		userScoped,
 	]);
 
 	useEffect(() => {
@@ -262,23 +360,156 @@ export const OntologyExplorer: React.FC<OntologyExplorerProps> = ({
 		void loadOverlay();
 	}, [loadOverlay]);
 
-	const handleRunCypher = useCallback(
-		async (query: string) => {
+	const handleRunQuery = useCallback(
+		async (proposal: OntologyQueryProposal) => {
+			ontologyQueryController.cancel();
+			const uiRequest = ++queryUiRequestRef.current;
+			let normalizedProposal = proposal;
+			setQueryUiTargetKey(ontologyQueryTargetKey);
 			setCypherLoading(true);
 			setCypherError(null);
+			setCypherResult(null);
+			setFlowPilotQueryStatus(null);
+			setFlowPilotQueryReceipt(null);
 			try {
-				const results = await backend.graphState.cypher(appId, overlayId, {
-					query,
-				});
-				setCypherResults(results);
+				normalizedProposal = {
+					...proposal,
+					query: normalizeReadOnlyOntologyQuery(
+						proposal.language,
+						proposal.query,
+					),
+				};
+				setFlowPilotQueryProposal(normalizedProposal);
+				const limit = Math.min(nodeLimit, ONTOLOGY_QUERY_MAX_LIMIT);
+				const result: GraphQueryResult =
+					normalizedProposal.language === "cypher"
+						? backend.graphState.cypherWithMetadata
+							? await backend.graphState.cypherWithMetadata(
+									appId,
+									overlayId,
+									{
+										query: normalizedProposal.query,
+										params: normalizedProposal.params,
+										limit,
+									},
+									userScoped,
+								)
+							: {
+									rows: await backend.graphState.cypher(
+										appId,
+										overlayId,
+										{
+											query: normalizedProposal.query,
+											params: normalizedProposal.params,
+											limit,
+										},
+										userScoped,
+									),
+									property_metadata: {},
+								}
+						: {
+								rows: await backend.graphState.sql(
+									appId,
+									overlayId,
+									{
+										query: normalizedProposal.query,
+										params: normalizedProposal.params,
+										limit,
+									},
+									userScoped,
+								),
+								property_metadata: {},
+							};
+				if (queryUiRequestRef.current !== uiRequest) return;
+				setCypherResult(result);
 			} catch (err) {
+				if (queryUiRequestRef.current !== uiRequest) return;
 				setCypherError(extractGraphErrorMessage(err));
 			} finally {
-				setCypherLoading(false);
+				if (queryUiRequestRef.current === uiRequest) {
+					setCypherLoading(false);
+				}
 			}
 		},
-		[backend.graphState, appId, overlayId],
+		[
+			appId,
+			backend.graphState,
+			nodeLimit,
+			ontologyQueryController,
+			ontologyQueryTargetKey,
+			overlayId,
+			userScoped,
+		],
 	);
+
+	const handleRunCypher = useCallback(
+		(query: string) =>
+			handleRunQuery({
+				language: "cypher",
+				query,
+				params: {},
+				presentation: "graph",
+			}),
+		[handleRunQuery],
+	);
+
+	const handleAskFlowPilot = useCallback(
+		async (
+			prompt: string,
+			language: OntologyQueryLanguagePreference = "auto",
+		) => {
+			const uiRequest = ++queryUiRequestRef.current;
+			setQueryUiTargetKey(ontologyQueryTargetKey);
+			setCypherLoading(true);
+			setCypherError(null);
+			setCypherResult(null);
+			setFlowPilotQueryStatus(null);
+			setFlowPilotQueryProposal(null);
+			setFlowPilotQueryReceipt(null);
+
+			const result = await ontologyQueryController.run({
+				prompt,
+				language,
+				limit: Math.min(nodeLimit, ONTOLOGY_QUERY_MAX_LIMIT),
+				onStatus: (status) => {
+					if (queryUiRequestRef.current !== uiRequest) return;
+					setFlowPilotQueryStatus(status);
+					if (status.proposal) setFlowPilotQueryProposal(status.proposal);
+				},
+			});
+
+			if (queryUiRequestRef.current !== uiRequest) return result;
+			setCypherLoading(false);
+			setFlowPilotQueryStatus(null);
+			if (result.status === "success") {
+				setFlowPilotQueryReceipt(result.receipt);
+				setFlowPilotQueryProposal({
+					language: result.receipt.language ?? "cypher",
+					query: result.receipt.query,
+					params: result.receipt.params,
+					presentation: result.receipt.presentation,
+				});
+				setCypherResult({
+					rows: result.receipt.rows,
+					property_metadata: result.receipt.propertyMetadata,
+				});
+			} else if (result.status === "error") {
+				setFlowPilotQueryReceipt(result.receipt);
+				setCypherError(
+					result.receipt.error?.message ?? "FlowPilot could not run the query.",
+				);
+			}
+			return result;
+		},
+		[ontologyQueryController, nodeLimit, ontologyQueryTargetKey],
+	);
+
+	const handleCancelFlowPilotQuery = useCallback(() => {
+		queryUiRequestRef.current += 1;
+		ontologyQueryController.cancel();
+		setCypherLoading(false);
+		setFlowPilotQueryStatus(null);
+	}, [ontologyQueryController]);
 
 	const handleExpandNode = useCallback(
 		async (
@@ -313,17 +544,22 @@ export const OntologyExplorer: React.FC<OntologyExplorerProps> = ({
 					Math.max(1, depth ?? 1),
 					GRAPH_MAX_EXPANSION_DEPTH,
 				);
-				const result = await backend.graphState.neighbors(appId, overlayId, {
-					label,
-					node_id: resolvedId,
-					depth: resolvedDepth,
-					direction: options?.direction ?? "both",
-					limit: Math.min(
-						options?.limit ?? GRAPH_NODE_EXPANSION_LIMIT,
-						GRAPH_NODE_EXPANSION_LIMIT,
-					),
-					edge_labels: options?.edgeLabels,
-				});
+				const result = await backend.graphState.neighbors(
+					appId,
+					overlayId,
+					{
+						label,
+						node_id: resolvedId,
+						depth: resolvedDepth,
+						direction: options?.direction ?? "both",
+						limit: Math.min(
+							options?.limit ?? GRAPH_NODE_EXPANSION_LIMIT,
+							GRAPH_NODE_EXPANSION_LIMIT,
+						),
+						edge_labels: options?.edgeLabels,
+					},
+					userScoped,
+				);
 				const enriched = enrichSubgraphWithStyles(result, overlay);
 				// Which of these are actually new decides what a double-click can
 				// undo later — dataRef still holds the pre-merge snapshot here.
@@ -348,7 +584,7 @@ export const OntologyExplorer: React.FC<OntologyExplorerProps> = ({
 				setLoading(false);
 			}
 		},
-		[backend.graphState, appId, overlayId, overlay, t],
+		[backend.graphState, appId, overlayId, overlay, t, userScoped],
 	);
 
 	/** Undo channel for reversible expansions and per-object hiding. */
@@ -386,11 +622,16 @@ export const OntologyExplorer: React.FC<OntologyExplorerProps> = ({
 				const resolvedId =
 					rawId ??
 					(nodeId.startsWith(prefix) ? nodeId.slice(prefix.length) : nodeId);
-				const result = await backend.graphState.children(appId, overlayId, {
-					label,
-					node_id: resolvedId,
-					limit: GRAPH_NODE_EXPANSION_LIMIT,
-				});
+				const result = await backend.graphState.children(
+					appId,
+					overlayId,
+					{
+						label,
+						node_id: resolvedId,
+						limit: GRAPH_NODE_EXPANSION_LIMIT,
+					},
+					userScoped,
+				);
 
 				const existingIds = new Set(
 					(dataRef.current?.nodes ?? []).map((node) => node.id),
@@ -424,7 +665,7 @@ export const OntologyExplorer: React.FC<OntologyExplorerProps> = ({
 				setLoading(false);
 			}
 		},
-		[backend.graphState, appId, overlayId, overlay, t],
+		[backend.graphState, appId, overlayId, overlay, t, userScoped],
 	);
 
 	const handleCollapseChildren = useCallback(
@@ -447,11 +688,16 @@ export const OntologyExplorer: React.FC<OntologyExplorerProps> = ({
 
 	const handleSearchNodes = useCallback(
 		async (query: string) =>
-			backend.graphState.searchNodes(appId, overlayId, {
-				query,
-				limit: GRAPH_SEARCH_MATCH_LIMIT,
-			}),
-		[backend.graphState, appId, overlayId],
+			backend.graphState.searchNodes(
+				appId,
+				overlayId,
+				{
+					query,
+					limit: GRAPH_SEARCH_MATCH_LIMIT,
+				},
+				userScoped,
+			),
+		[backend.graphState, appId, overlayId, userScoped],
 	);
 
 	const handleLimitChange = useCallback(
@@ -471,11 +717,16 @@ export const OntologyExplorer: React.FC<OntologyExplorerProps> = ({
 			if (!current) return;
 			const revertKey = `${type}:${label}`;
 			try {
-				const saved = await backend.graphState.updateOverlay(appId, overlayId, {
-					expected_updated_at: current.updated_at,
-					nodes: current.nodes,
-					edges: current.edges,
-				});
+				const saved = await backend.graphState.updateOverlay(
+					appId,
+					overlayId,
+					{
+						expected_updated_at: current.updated_at,
+						nodes: current.nodes,
+						edges: current.edges,
+					},
+					userScoped,
+				);
 				styleRevertRef.current.delete(revertKey);
 				overlayRef.current = saved;
 				setOverlay(saved);
@@ -502,7 +753,11 @@ export const OntologyExplorer: React.FC<OntologyExplorerProps> = ({
 				toast.error(`Failed to save style: ${extractGraphErrorMessage(err)}`);
 				if (isConflictError(err)) {
 					try {
-						const fresh = await backend.graphState.getOverlay(appId, overlayId);
+						const fresh = await backend.graphState.getOverlay(
+							appId,
+							overlayId,
+							userScoped,
+						);
 						overlayRef.current = fresh;
 						setOverlay(fresh);
 						setData((prev) =>
@@ -514,7 +769,7 @@ export const OntologyExplorer: React.FC<OntologyExplorerProps> = ({
 				}
 			}
 		},
-		[backend.graphState, appId, overlayId],
+		[backend.graphState, appId, overlayId, userScoped],
 	);
 
 	const handleStyleChange = useCallback(
@@ -556,13 +811,18 @@ export const OntologyExplorer: React.FC<OntologyExplorerProps> = ({
 				throw new Error("The overlay is still loading.");
 			}
 			try {
-				const result = await backend.graphState.paths(appId, overlayId, {
-					from_label: from.label,
-					from_id: getNodeRawId(from, current),
-					to_label: to.label,
-					to_id: getNodeRawId(to, current),
-					max_depth: 4,
-				});
+				const result = await backend.graphState.paths(
+					appId,
+					overlayId,
+					{
+						from_label: from.label,
+						from_id: getNodeRawId(from, current),
+						to_label: to.label,
+						to_id: getNodeRawId(to, current),
+						max_depth: 4,
+					},
+					userScoped,
+				);
 				if (result.nodes.length > 0 || result.edges.length > 0) {
 					setData((prev) =>
 						mergeSubgraphData(
@@ -585,7 +845,7 @@ export const OntologyExplorer: React.FC<OntologyExplorerProps> = ({
 				throw err;
 			}
 		},
-		[backend.graphState, appId, overlayId],
+		[backend.graphState, appId, overlayId, userScoped],
 	);
 
 	const handleRunAction = useCallback(
@@ -703,6 +963,7 @@ export const OntologyExplorer: React.FC<OntologyExplorerProps> = ({
 				</div>
 			)}
 			<GraphViewer
+				key={ontologyQueryTargetKey}
 				overlay={overlay}
 				data={data}
 				loading={loading}
@@ -713,9 +974,22 @@ export const OntologyExplorer: React.FC<OntologyExplorerProps> = ({
 				onNodeSelect={onNodeSelect}
 				onEdgeSelect={onEdgeSelect}
 				onRunCypher={allowCypher ? handleRunCypher : undefined}
-				cypherResults={cypherResults}
-				cypherLoading={cypherLoading}
-				cypherError={cypherError}
+				onRunQuery={allowCypher ? handleRunQuery : undefined}
+				onAskFlowPilot={allowCypher ? handleAskFlowPilot : undefined}
+				onCancelFlowPilot={allowCypher ? handleCancelFlowPilotQuery : undefined}
+				flowPilotStatus={queryUiMatchesTarget ? flowPilotQueryStatus : null}
+				generatedQueryProposal={
+					queryUiMatchesTarget ? flowPilotQueryProposal : null
+				}
+				queryReceipt={queryUiMatchesTarget ? flowPilotQueryReceipt : null}
+				cypherResults={
+					queryUiMatchesTarget ? (cypherResult?.rows ?? null) : null
+				}
+				cypherMetadata={
+					queryUiMatchesTarget ? cypherResult?.property_metadata : undefined
+				}
+				cypherLoading={queryUiMatchesTarget ? cypherLoading : false}
+				cypherError={queryUiMatchesTarget ? cypherError : null}
 				onExpandNode={allowExpand ? handleExpandNode : undefined}
 				onExpandChildren={allowExpand ? handleExpandChildren : undefined}
 				onCollapseChildren={allowExpand ? handleCollapseChildren : undefined}

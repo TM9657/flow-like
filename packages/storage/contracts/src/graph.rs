@@ -3,6 +3,7 @@ use async_trait::async_trait;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use std::collections::HashMap;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum TraversalDirection {
@@ -37,6 +38,9 @@ pub struct SubgraphNode {
     /// the field, so a subgraph routed through that type loses the stats.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub stats: Option<SubgraphNodeStats>,
+    /// Arrow field metadata for typed property previews.
+    #[serde(default, skip_serializing_if = "HashMap::is_empty")]
+    pub property_metadata: HashMap<String, HashMap<String, String>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
@@ -46,6 +50,9 @@ pub struct SubgraphEdge {
     pub target: String,
     pub label: String,
     pub props: Value,
+    /// Arrow field metadata for typed property previews.
+    #[serde(default, skip_serializing_if = "HashMap::is_empty")]
+    pub property_metadata: HashMap<String, HashMap<String, String>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
@@ -131,6 +138,16 @@ pub struct GraphPropertyInfo {
     pub name: String,
     pub data_type: String,
     pub nullable: bool,
+    #[serde(default, skip_serializing_if = "HashMap::is_empty")]
+    pub metadata: HashMap<String, String>,
+}
+
+/// Query rows with Arrow metadata keyed by the exact projected column name.
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+pub struct GraphQueryResult {
+    pub rows: Vec<Value>,
+    #[serde(default)]
+    pub property_metadata: HashMap<String, HashMap<String, String>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
@@ -142,6 +159,30 @@ pub struct GraphSchemaResult {
 #[async_trait]
 pub trait GraphStore: Send + Sync {
     async fn cypher(&self, query: &str, params: Value, limit: Option<usize>) -> Result<Vec<Value>>;
+
+    async fn cypher_with_metadata(
+        &self,
+        query: &str,
+        params: Value,
+        limit: Option<usize>,
+    ) -> Result<GraphQueryResult> {
+        Ok(GraphQueryResult {
+            rows: self.cypher(query, params, limit).await?,
+            property_metadata: HashMap::new(),
+        })
+    }
+
+    async fn sql_with_metadata(
+        &self,
+        query: &str,
+        params: Value,
+        limit: Option<usize>,
+    ) -> Result<GraphQueryResult> {
+        Ok(GraphQueryResult {
+            rows: self.sql(query, params, limit).await?,
+            property_metadata: HashMap::new(),
+        })
+    }
 
     /// A single read-only SQL statement. `params` is a JSON object keyed by placeholder
     /// name without the `$`; it is bound by the planner, so a caller never has to build a

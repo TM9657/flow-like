@@ -27,7 +27,10 @@ const desktopOrigins = [
 	"https://tauri.localhost",
 ];
 
-async function fixture(allowedOrigins = origin) {
+async function fixture(
+	allowedOrigins = origin,
+	board_format_version?: unknown,
+) {
 	const { privateKey, publicKey } = await generateKeyPair("ES256");
 	const publicKeyPem = await exportSPKI(publicKey);
 	const config = parseRealtimeAuthConfig({
@@ -44,6 +47,7 @@ async function fixture(allowedOrigins = origin) {
 		scope: "realtime.read",
 		app_id: "app_123",
 		board_id: "board_456",
+		board_format_version,
 	})
 		.setProtectedHeader({ alg: "ES256", kid: keyId })
 		.setIssuer(issuer)
@@ -70,6 +74,38 @@ describe("realtime signaling authentication", () => {
 		expect(authorization.subject).toBe("user_789");
 		expect(authorization.insecureLocalDev).toBeFalse();
 		expect(authorization.expiresAtMs).toBeGreaterThan(Date.now());
+	});
+
+	test("isolates clients using their signed negotiated board format", async () => {
+		for (const version of [1, 2, 3]) {
+			const { config, token } = await fixture(origin, version);
+			const authenticate = await createRealtimeAuthenticator(config);
+			const authorization = await authenticate(
+				origin,
+				`${REALTIME_PROTOCOL}, ${REALTIME_TOKEN_PROTOCOL_PREFIX}${token}`,
+			);
+			expect(authorization.allowedTopic).toBe(
+				version === 1
+					? "app_123:board_456"
+					: `app_123:board_456:format-v${version}`,
+			);
+		}
+	});
+
+	test("rejects invalid signed board format claims instead of joining a legacy room", async () => {
+		for (const version of [null, "2", 0, -1, 1.5, 0x1_0000_0000, []]) {
+			const { config, token } = await fixture(origin, version);
+			const authenticate = await createRealtimeAuthenticator(config);
+			await expect(
+				authenticate(
+					origin,
+					`${REALTIME_PROTOCOL}, ${REALTIME_TOKEN_PROTOCOL_PREFIX}${token}`,
+				),
+			).rejects.toThrow("Realtime authorization failed");
+			expect(() =>
+				deriveRealtimeTopic("app_123", "board_456", version),
+			).toThrow();
+		}
 	});
 
 	test("rejects the same token from an unlisted browser origin", async () => {

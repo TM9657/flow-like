@@ -27,6 +27,8 @@ import {
 	TabsList,
 	TabsTrigger,
 } from "../../../components/ui";
+import { useBoardFormat } from "../../../hooks/use-board-format";
+import { GEOMETRY_BOARD_FORMAT_VERSION } from "../../../lib/board-format";
 import type { IVariable } from "../../../lib/schema/flow/board";
 import { IVariableType } from "../../../lib/schema/flow/node";
 import { IValueType } from "../../../lib/schema/flow/pin";
@@ -42,6 +44,7 @@ import {
 import { OverlayWindow } from "../overlay-window";
 import { TOKEN_GLYPH, tokenColor, tokenInk } from "../token-board/model";
 import { typeToColor } from "../utils";
+import { GeometrySubtypeSelect } from "./geometry-variable";
 import { VariablesMenuEdit } from "./variables-menu-edit";
 
 const DATA_TYPES = [
@@ -53,6 +56,7 @@ const DATA_TYPES = [
 	IVariableType.PathBuf,
 	IVariableType.String,
 	IVariableType.Struct,
+	IVariableType.Geometry,
 	IVariableType.Byte,
 ];
 
@@ -68,8 +72,8 @@ export function defaultValueFromType(
 	variableType: IVariableType,
 ) {
 	if (valueType === IValueType.Array) return [];
-	if (valueType === IValueType.HashSet) return new Set();
-	if (valueType === IValueType.HashMap) return new Map();
+	if (valueType === IValueType.HashSet) return [];
+	if (valueType === IValueType.HashMap) return {};
 	switch (variableType) {
 		case IVariableType.Boolean:
 			return false;
@@ -91,6 +95,7 @@ export function defaultValueFromType(
 }
 
 export interface IVariableOverlayProps {
+	appId?: string;
 	open: boolean;
 	onOpenChange: (open: boolean) => void;
 	variable: IVariable;
@@ -114,6 +119,7 @@ export interface IVariableOverlayProps {
  * the graph while you edit it.
  */
 export function VariableOverlay({
+	appId,
 	open,
 	onOpenChange,
 	variable,
@@ -125,6 +131,8 @@ export function VariableOverlay({
 	onDelete,
 }: Readonly<IVariableOverlayProps>): JSX.Element {
 	const { t } = useTranslation("flow");
+	const geometryEnabled =
+		useBoardFormat(appId) >= GEOMETRY_BOARD_FORMAT_VERSION;
 	const [draft, setDraft] = useState<IVariable>(variable);
 	const [folder, setFolder] = useState<string>(ROOT_FOLDER);
 	const [customFolder, setCustomFolder] = useState("");
@@ -161,6 +169,12 @@ export function VariableOverlay({
 	}, []);
 
 	const applyChanges = useCallback(async () => {
+		if (
+			draft.data_type === IVariableType.Geometry &&
+			variable.data_type !== IVariableType.Geometry &&
+			!geometryEnabled
+		)
+			return;
 		setSaving(true);
 		try {
 			const name = draft.name.trim();
@@ -184,6 +198,8 @@ export function VariableOverlay({
 		onOpenChange,
 		scope,
 		variable.name,
+		variable.data_type,
+		geometryEnabled,
 	]);
 
 	const containerLabel = (valueType: IValueType) => {
@@ -353,7 +369,7 @@ export function VariableOverlay({
 						) : (
 							<>
 								<VariablesMenuEdit
-									key={`${draft.value_type}-${draft.data_type}-${draft.secret}`}
+									key={`${draft.value_type}-${draft.data_type}-${draft.secret}-${draft.schema ?? ""}`}
 									disabled={!editable}
 									variable={draft}
 									refs={refs}
@@ -389,6 +405,7 @@ export function VariableOverlay({
 									onValueChange={(value) =>
 										patch({
 											data_type: value as IVariableType,
+											schema: null,
 											default_value: convertJsonToUint8Array(
 												defaultValueFromType(
 													draft.value_type,
@@ -405,7 +422,13 @@ export function VariableOverlay({
 										<SelectGroup>
 											<SelectLabel>{t("dataType", "Data Type")}</SelectLabel>
 											{DATA_TYPES.map((type) => (
-												<SelectItem key={type} value={type}>
+												<SelectItem
+													key={type}
+													value={type}
+													disabled={
+														type === IVariableType.Geometry && !geometryEnabled
+													}
+												>
 													<div className="flex items-center gap-2">
 														<div
 															className="size-2 rounded-full"
@@ -448,6 +471,22 @@ export function VariableOverlay({
 									</SelectContent>
 								</Select>
 							</div>
+							{!geometryEnabled && (
+								<p className="text-xs text-muted-foreground">
+									{t(
+										"geometryBackendUpgrade",
+										"Update the backend to a version that supports Geometry, then reopen this editor.",
+									)}
+								</p>
+							)}
+							{draft.data_type === IVariableType.Geometry && (
+								<GeometrySubtypeSelect
+									schema={draft.schema}
+									refs={refs}
+									disabled={!editable}
+									onChange={(schema) => patch({ schema, default_value: null })}
+								/>
+							)}
 							<small className="block text-[0.8rem] text-muted-foreground">
 								{t(
 									"changingEitherResetsTheDefaultValueToTheNewTypesEmptyValue",

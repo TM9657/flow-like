@@ -33,6 +33,7 @@ export enum IVariableType {
 	PathBuf = "PathBuf",
 	String = "String",
 	Struct = "Struct",
+	Geometry = "Geometry",
 }
 
 export interface IPinOptions {

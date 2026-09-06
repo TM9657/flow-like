@@ -263,6 +263,18 @@ export class EventState implements IEventState {
 
 	constructor(private readonly backend: TauriBackend) {}
 
+	private requireAuthoritativeHostedRead(): void {
+		if (
+			!this.backend.profile ||
+			!this.backend.auth?.isAuthenticated ||
+			!this.backend.auth.user?.access_token
+		) {
+			throw new Error(
+				"Hosted Event read requires an authenticated hub session",
+			);
+		}
+	}
+
 	private async ensureRpaApprovalForEvent(
 		appId: string,
 		event: IEvent,
@@ -421,6 +433,25 @@ export class EventState implements IEventState {
 			throw error;
 		}
 	}
+
+	async getEventAuthoritative(
+		appId: string,
+		eventId: string,
+		version?: [number, number, number],
+	): Promise<IEvent> {
+		if (await this.backend.isLocalOnly(appId)) {
+			return invoke<IEvent>("get_event", { appId, eventId, version });
+		}
+		this.requireAuthoritativeHostedRead();
+		const params = version ? `?version=${version.join("_")}` : "";
+		return fetcher<IEvent>(
+			this.backend.profile!,
+			`apps/${appId}/events/${eventId}${params}`,
+			{ method: "GET" },
+			this.backend.auth,
+		);
+	}
+
 	async getEvents(appId: string, force?: boolean): Promise<IEvent[]> {
 		const events = await invoke<IEvent[]>("get_events", {
 			appId: appId,
@@ -561,6 +592,19 @@ export class EventState implements IEventState {
 
 		this.backend.backgroundTaskHandler(promise);
 		return events;
+	}
+
+	async getEventsAuthoritative(appId: string): Promise<IEvent[]> {
+		if (await this.backend.isLocalOnly(appId)) {
+			return invoke<IEvent[]>("get_events", { appId });
+		}
+		this.requireAuthoritativeHostedRead();
+		return fetcher<IEvent[]>(
+			this.backend.profile!,
+			`apps/${appId}/events`,
+			{ method: "GET" },
+			this.backend.auth,
+		);
 	}
 	async getEventVersions(
 		appId: string,

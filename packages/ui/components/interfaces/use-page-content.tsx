@@ -23,7 +23,11 @@ import {
 	isPageContractDriftFor,
 	subscribeToPageContractDrift,
 } from "../../lib/page-contract-drift";
-import { normalizeRoutePath, routePathsEqual } from "../../lib/route-path";
+import {
+	deriveRouteMappings,
+	isUsableRuntimeEvent,
+	resolveRouteMapping,
+} from "../../lib/runtime-route";
 import { normalizeBoardVersion } from "../../lib/schema/flow/board-version";
 import type { IEvent } from "../../lib/schema/flow/event";
 import { useSetQueryParams } from "../../lib/set-query-params";
@@ -54,6 +58,13 @@ import type {
 } from "./interfaces";
 import { NoDefaultInterface } from "./no-default";
 import { PageInterface } from "./page-interface";
+
+export {
+	type IRouteResolution,
+	deriveRouteMappings,
+	isUsableRuntimeEvent,
+	resolveRouteMapping,
+} from "../../lib/runtime-route";
 
 /**
  * A page read can fail for reasons that resolve themselves: the payload still has to
@@ -260,84 +271,6 @@ export function resolveStoreRedirect(state: IStoreRedirectState): {
 		: true;
 
 	return { pending: false, redirect: hasNoAccess || catalogUnavailable };
-}
-
-export interface IRouteResolution {
-	readonly mapping: IRouteMapping | null;
-	/**
-	 * A route other than "/" was asked for and nothing matched it. The caller still
-	 * receives the default mapping to render, but a miss is a misconfigured link or
-	 * a route list this device has not synced. This is not a normal navigation.
-	 */
-	readonly missed: boolean;
-}
-
-/**
- * Pick the route mapping for a requested path.
- *
- * Paths are compared in canonical form so a route stored as `/config/` still answers
- * a link for `/config`; an unmatched path falls back to the app's default route,
- * which is what makes an unresolvable link look like an ordinary page load. The
- * fallback is reported through `missed` so callers can say so out loud.
- */
-export function resolveRouteMapping(
-	availableRoutes: readonly IRouteMapping[],
-	routePath: string | null | undefined,
-): IRouteResolution {
-	const defaultRoute =
-		availableRoutes.find((route) => routePathsEqual(route.path, "/")) ?? null;
-	const requested = normalizeRoutePath(routePath);
-
-	if (requested === "/") return { mapping: defaultRoute, missed: false };
-
-	const matched =
-		availableRoutes.find((route) => routePathsEqual(route.path, requested)) ??
-		null;
-
-	return matched
-		? { mapping: matched, missed: false }
-		: { mapping: defaultRoute, missed: true };
-}
-
-/**
- * Build the runtime route index from the event catalog.
- *
- * Routes are stored on the event row, so asking the route endpoint after the event catalog has
- * arrived only repeats the same read. Keep the first event for a canonical path when malformed or
- * legacy data contains duplicates. Explicit routes win over the synthesized "/" mapping for a
- * default event whose route field is missing, matching the route endpoint's persisted rows.
- */
-export function deriveRouteMappings(
-	events: readonly IEvent[] | null | undefined,
-): IRouteMapping[] {
-	const mappings = new Map<string, IRouteMapping>();
-	const add = (path: string, eventId: string) => {
-		const key = normalizeRoutePath(path);
-		if (!mappings.has(key)) mappings.set(key, { path, eventId });
-	};
-
-	for (const event of events ?? []) {
-		const path = event.route?.trim();
-		if (path) add(path, event.id);
-	}
-
-	for (const event of events ?? []) {
-		if (!event.is_default || event.route?.trim()) continue;
-		add("/", event.id);
-	}
-
-	return [...mappings.values()];
-}
-
-/** An inactive Event is configuration data, never a runnable interface target. */
-export function isUsableRuntimeEvent(
-	event: IEvent | null | undefined,
-	usableEventTypes: { has(value: string): boolean },
-): boolean {
-	return Boolean(
-		event?.active &&
-			(event.default_page_id || usableEventTypes.has(event.event_type)),
-	);
 }
 
 /**

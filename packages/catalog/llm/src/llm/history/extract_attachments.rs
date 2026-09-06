@@ -1,3 +1,4 @@
+use flow_like_storage::object_store::ObjectStoreExt;
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
@@ -8,7 +9,7 @@ use flow_like::flow::{
     variable::VariableType,
 };
 use flow_like_catalog_core::FlowPath;
-use flow_like_catalog_data::events::chat_event::Attachment;
+use flow_like_catalog_data_support::events::chat_event::Attachment;
 use flow_like_model_provider::history::{Content, History, MessageContent};
 use flow_like_storage::Path;
 use flow_like_storage::files::store::FlowLikeStore;
@@ -240,7 +241,7 @@ impl NodeLogic for ExtractAttachments {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use flow_like_catalog_data::events::chat_event::ComplexAttachment;
+    use flow_like_catalog_data_support::events::chat_event::ComplexAttachment;
     use flow_like_model_provider::history::{
         ContentType, HistoryMessage, ImageUrl, MessageContent, Role,
     };

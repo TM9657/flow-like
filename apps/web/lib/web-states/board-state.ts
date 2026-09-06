@@ -38,12 +38,18 @@ import type {
 	SurfaceComponent,
 } from "@flow-like/flow-like-ui/components/a2ui/types";
 import { apiResponseError } from "@flow-like/flow-like-ui/lib/api-error";
+import type { BoardFormatCapabilities } from "@flow-like/flow-like-ui/lib/board-format";
 import {
 	BoardSyncClient,
 	type IBoardSyncRequest,
 	type IBoardSyncResponse,
 } from "@flow-like/flow-like-ui/lib/board-sync";
+import {
+	cancelChannel,
+	isChannelHandle,
+} from "@flow-like/flow-like-ui/lib/channel";
 import type { FlowScriptApplyOrigin } from "@flow-like/flow-like-ui/lib/flowscript-apply-failure";
+import type { IChannelHandle } from "@flow-like/flow-like-ui/lib/schema/channel";
 import type {
 	ChatImage,
 	CopilotScope,
@@ -83,6 +89,34 @@ function toolRequestIdOf(data: string): string | undefined {
 		return undefined;
 	}
 }
+
+function copilotRunChannelOf(data: string): IChannelHandle {
+	let parsed: unknown;
+	try {
+		parsed = JSON.parse(data);
+	} catch {
+		throw new Error("Malformed Copilot run frame: payload is not valid JSON.");
+	}
+	const channel = (parsed as { channel?: unknown } | null)?.channel;
+	if (!isChannelHandle(channel)) {
+		throw new Error("Malformed Copilot run frame: channel is missing.");
+	}
+	return channel;
+}
+
+interface CopilotRequestControl {
+	abortController: AbortController;
+	runChannel?: IChannelHandle;
+	cancelRequested: boolean;
+	cancelDelivery?: Promise<void>;
+	cancelCompletion?: Promise<void>;
+	resolveCancellation?: () => void;
+	cancelGraceTimer?: ReturnType<typeof setTimeout>;
+}
+
+// The API sends the cancellation channel in the first SSE frame. A canceled request stays muted
+// for this short grace period so an immediate Stop can still reach the server.
+const COPILOT_RUN_CHANNEL_GRACE_MS = 1_000;
 
 // Hub configuration cache
 let hubCache: IHub | undefined;
@@ -164,11 +198,63 @@ function normalizeExecuteCommandsWire(wire: ExecuteCommandsWire): {
 }
 
 export class WebBoardState implements IBoardState {
-	private readonly copilotAbortControllers = new Map<string, AbortController>();
+	private readonly copilotRequestControls = new Map<
+		string,
+		CopilotRequestControl
+	>();
 	private readonly appIdByBoardId = new Map<string, string>();
 	private readonly boardSync = new BoardSyncClient();
 
 	constructor(private readonly backend: WebBackendRef) {}
+
+	private settleCopilotCancellation(control: CopilotRequestControl): void {
+		if (control.cancelGraceTimer) {
+			clearTimeout(control.cancelGraceTimer);
+			control.cancelGraceTimer = undefined;
+		}
+		const resolve = control.resolveCancellation;
+		control.resolveCancellation = undefined;
+		resolve?.();
+	}
+
+	private finishCopilotCancellation(control: CopilotRequestControl): void {
+		if (!control.runChannel) {
+			control.cancelGraceTimer ??= setTimeout(() => {
+				control.abortController.abort();
+				this.settleCopilotCancellation(control);
+			}, COPILOT_RUN_CHANNEL_GRACE_MS);
+			return;
+		}
+
+		if (control.cancelGraceTimer) {
+			clearTimeout(control.cancelGraceTimer);
+			control.cancelGraceTimer = undefined;
+		}
+		control.cancelDelivery ??= cancelChannel(control.runChannel).catch(
+			(error) => {
+				console.warn("Failed to deliver Copilot cancellation:", error);
+			},
+		);
+		control.abortController.abort();
+		void control.cancelDelivery.then(() =>
+			this.settleCopilotCancellation(control),
+		);
+	}
+
+	private beginCopilotCancellation(
+		control: CopilotRequestControl,
+	): Promise<void> {
+		control.cancelRequested = true;
+		control.cancelCompletion ??= new Promise<void>((resolve) => {
+			control.resolveCancellation = resolve;
+		});
+		this.finishCopilotCancellation(control);
+		return control.cancelCompletion;
+	}
+
+	async getBoardFormat(appId: string): Promise<BoardFormatCapabilities> {
+		return apiGet(`apps/${appId}/board/capabilities`, this.backend.auth);
+	}
 
 	async getBoards(appId: string): Promise<IBoard[]> {
 		try {
@@ -198,6 +284,17 @@ export class WebBoardState implements IBoardState {
 			this.appIdByBoardId.set(summary.id, appId);
 		}
 		return summaries;
+	}
+
+	async getBoardSummariesAuthoritative(
+		appId: string,
+		include?: IBoardSummaryInclude[],
+	): Promise<IBoardSummary[]> {
+		const query = include?.length ? `?include=${include.join(",")}` : "";
+		return apiGet<IBoardSummary[]>(
+			`apps/${appId}/board/summaries${query}`,
+			this.backend.auth,
+		);
 	}
 
 	async getBoardVariables(appId: string): Promise<IBoardVariables[]> {
@@ -245,6 +342,18 @@ export class WebBoardState implements IBoardState {
 		await this.presignMediaComments(appId, boardId, board);
 
 		return board;
+	}
+
+	async getBoardAuthoritative(
+		appId: string,
+		boardId: string,
+		version?: [number, number, number],
+	): Promise<IBoard> {
+		const params = version ? `?version=${version.join("_")}` : "";
+		return apiGet<IBoard>(
+			`apps/${appId}/board/${boardId}${params}`,
+			this.backend.auth,
+		);
 	}
 
 	private async presignMediaComments(
@@ -886,6 +995,22 @@ export class WebBoardState implements IBoardState {
 		return response.flowscript;
 	}
 
+	async getFlowScriptAuthoritative(
+		appId: string,
+		boardId: string,
+		version?: [number, number, number],
+		anchors = true,
+	): Promise<string> {
+		const params = new URLSearchParams();
+		if (version) params.set("version", version.join("_"));
+		params.set("anchors", String(anchors));
+		const response = await apiGet<{ flowscript: string }>(
+			`apps/${appId}/board/${boardId}/flowscript?${params}`,
+			this.backend.auth,
+		);
+		return response.flowscript;
+	}
+
 	async getFlowScriptScoped(
 		appId: string,
 		boardId: string,
@@ -999,7 +1124,7 @@ export class WebBoardState implements IBoardState {
 		runContext?: IRunContext,
 		actionContext?: UIActionContext,
 		_nested?: boolean,
-		_readOnly?: boolean,
+		readOnly?: boolean,
 		toolContext?: CopilotToolContext,
 		requestId?: string,
 		rawUserPrompt?: string,
@@ -1036,17 +1161,25 @@ export class WebBoardState implements IBoardState {
 
 		const wantsStream = Boolean(onToken);
 		const abortController = new AbortController();
-		if (requestId) {
-			this.copilotAbortControllers.get(requestId)?.abort();
-			this.copilotAbortControllers.set(requestId, abortController);
+		const requestControl: CopilotRequestControl | undefined = requestId
+			? { abortController, cancelRequested: false }
+			: undefined;
+		if (requestId && requestControl) {
+			const previous = this.copilotRequestControls.get(requestId);
+			if (previous) {
+				void this.beginCopilotCancellation(previous);
+			}
+			this.copilotRequestControls.set(requestId, requestControl);
 		}
 		try {
+			const profileId = toolContext?.profileId ?? this.backend.profile?.id;
 			const response = await fetch(url, {
 				method: "POST",
 				headers,
 				signal: abortController.signal,
 				body: JSON.stringify({
 					scope,
+					profile_id: profileId,
 					board,
 					selected_node_ids: selectedNodeIds,
 					current_surface: currentSurface,
@@ -1069,6 +1202,7 @@ export class WebBoardState implements IBoardState {
 					// global chat already posts to, and stopping that run stops them too.
 					run_id: specialistRunId,
 					overlay_id: toolContext?.overlayId,
+					read_only: readOnly ?? false,
 					stream: wantsStream,
 				}),
 			});
@@ -1112,6 +1246,21 @@ export class WebBoardState implements IBoardState {
 					const data = dataLines.join("\n");
 					if (!data) return;
 
+					if (eventName === "run") {
+						if (!requestControl) return;
+						try {
+							requestControl.runChannel = copilotRunChannelOf(data);
+							if (requestControl.cancelRequested) {
+								this.finishCopilotCancellation(requestControl);
+							}
+						} catch (error) {
+							streamError =
+								error instanceof Error ? error : new Error(String(error));
+						}
+						return;
+					}
+					if (requestControl?.cancelRequested) return;
+
 					if (eventName === "token" || eventName === "message") {
 						onToken(data);
 						return;
@@ -1127,6 +1276,8 @@ export class WebBoardState implements IBoardState {
 						const dispatch = dispatchSpecialistToolRequest({
 							data,
 							onToolRequest: runGlobalChatTool,
+							parentRequestId: toolContext?.parentRequestId,
+							profileId: toolContext?.profileId,
 						}).catch((error) => {
 							// The specialist is blocked on this request; failing the stream beats
 							// leaving it to time out with no explanation.
@@ -1198,20 +1349,24 @@ export class WebBoardState implements IBoardState {
 
 			return response.json();
 		} finally {
+			if (requestControl?.cancelRequested && !requestControl.cancelDelivery) {
+				this.settleCopilotCancellation(requestControl);
+			}
 			if (
 				requestId &&
-				this.copilotAbortControllers.get(requestId) === abortController
+				this.copilotRequestControls.get(requestId) === requestControl
 			) {
-				this.copilotAbortControllers.delete(requestId);
+				this.copilotRequestControls.delete(requestId);
 			}
 		}
 	}
 
 	async cancelCopilotChat(requestId: string): Promise<void> {
-		const controller = this.copilotAbortControllers.get(requestId);
-		controller?.abort();
-		if (this.copilotAbortControllers.get(requestId) === controller) {
-			this.copilotAbortControllers.delete(requestId);
+		const control = this.copilotRequestControls.get(requestId);
+		if (!control) return;
+		await this.beginCopilotCancellation(control);
+		if (this.copilotRequestControls.get(requestId) === control) {
+			this.copilotRequestControls.delete(requestId);
 		}
 	}
 

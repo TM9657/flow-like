@@ -1,5 +1,10 @@
 import type { Settings } from "sigma/settings";
 import type { NodeDisplayData, PartialButFor } from "sigma/types";
+import {
+	GRAPH_LABEL_LEFT_INSET,
+	GRAPH_LABEL_RIGHT_INSET,
+	computeViewportLabelPlacement,
+} from "./graph-layout";
 import { getGraphTheme } from "./theme-colors";
 
 type NodeData = PartialButFor<
@@ -15,6 +20,7 @@ type NodeData = PartialButFor<
 const BADGE_GAP = 6;
 const BADGE_PADDING_X = 5;
 const BADGE_HEIGHT = 15;
+const LABEL_GAP = 6;
 
 /** Shortest a caption is ever cut; below this a truncation hides more than it helps. */
 const TRUNCATE_MIN_CHARS = 16;
@@ -43,6 +49,50 @@ export function truncateLabel(label: string, renderedSize: number): string {
 	const budget = labelCharBudget(renderedSize);
 	if (label.length <= budget) return label;
 	return `${label.slice(0, budget - 1).trimEnd()}${ELLIPSIS}`;
+}
+
+function canvasCssWidth(context: CanvasRenderingContext2D): number {
+	if (context.canvas.clientWidth > 0) return context.canvas.clientWidth;
+	const pixelRatio =
+		typeof window !== "undefined" && window.devicePixelRatio > 0
+			? window.devicePixelRatio
+			: 1;
+	return context.canvas.width / pixelRatio;
+}
+
+/** Last-resort truncation for a caption whose preferred side is too narrow. */
+function fitTextToWidth(
+	context: CanvasRenderingContext2D,
+	label: string,
+	maxWidth: number,
+): string {
+	if (!label || maxWidth <= 0) return "";
+	if (context.measureText(label).width <= maxWidth) return label;
+	if (context.measureText(ELLIPSIS).width > maxWidth) return "";
+
+	let low = 0;
+	let high = label.length;
+	while (low < high) {
+		const middle = Math.ceil((low + high) / 2);
+		const candidate = `${label.slice(0, middle).trimEnd()}${ELLIPSIS}`;
+		if (context.measureText(candidate).width <= maxWidth) low = middle;
+		else high = middle - 1;
+	}
+	return low > 0 ? `${label.slice(0, low).trimEnd()}${ELLIPSIS}` : ELLIPSIS;
+}
+
+function measureBadgeWidth(
+	context: CanvasRenderingContext2D,
+	badge: string | undefined,
+	size: number,
+	font: string,
+): number {
+	if (!badge) return 0;
+	const previousFont = context.font;
+	context.font = `600 ${size - 1}px ${font}`;
+	const width = context.measureText(badge).width + BADGE_PADDING_X * 2;
+	context.font = previousFont;
+	return width;
 }
 
 /**
@@ -102,6 +152,7 @@ function drawBadge(
 	const [fgR, fgG, fgB] = theme.fgRgb;
 
 	context.font = `600 ${size - 1}px ${font}`;
+	context.textAlign = "left";
 	const badgeWidth = context.measureText(badge).width + BADGE_PADDING_X * 2;
 
 	tracePill(context, x, y - BADGE_HEIGHT / 2, badgeWidth, BADGE_HEIGHT);
@@ -126,29 +177,63 @@ export function drawNodeLabel(
 	const font = settings.labelFont;
 	const weight = settings.labelWeight;
 	const alpha = labelAlpha(data, settings);
-	const label = truncateLabel(data.label, data.size);
-
-	const x = data.x + data.size + 6;
+	const preferredLabel = truncateLabel(data.label, data.size);
 	const y = data.y;
 
 	context.font = `${weight} ${size}px ${font}`;
-	context.textAlign = "left";
 	context.textBaseline = "middle";
+	const badgeWidth = measureBadgeWidth(context, data.badge, size, font);
+	const preferredTextWidth = context.measureText(preferredLabel).width;
+	const placement = computeViewportLabelPlacement(
+		data.x,
+		data.size,
+		preferredTextWidth + (data.badge ? BADGE_GAP + badgeWidth : 0),
+		canvasCssWidth(context),
+		{
+			gap: LABEL_GAP,
+			leftInset: GRAPH_LABEL_LEFT_INSET,
+			rightInset: GRAPH_LABEL_RIGHT_INSET,
+		},
+	);
+	const badge =
+		data.badge && badgeWidth + BADGE_GAP < placement.availableWidth
+			? data.badge
+			: undefined;
+	const label = fitTextToWidth(
+		context,
+		preferredLabel,
+		Math.max(
+			0,
+			placement.availableWidth - (badge ? BADGE_GAP + badgeWidth : 0),
+		),
+	);
+	if (!label && !badge) return;
+
+	const x =
+		placement.side === "right"
+			? data.x + data.size + LABEL_GAP
+			: data.x - data.size - LABEL_GAP;
+	context.textAlign = placement.side === "right" ? "left" : "right";
 
 	const [bgR, bgG, bgB] = theme.bgRgb;
-	context.strokeStyle = `rgba(${bgR},${bgG},${bgB},${0.85 * alpha})`;
-	context.lineWidth = 3;
-	context.lineJoin = "round";
-	context.strokeText(label, x, y);
+	if (label) {
+		context.strokeStyle = `rgba(${bgR},${bgG},${bgB},${0.85 * alpha})`;
+		context.lineWidth = 3;
+		context.lineJoin = "round";
+		context.strokeText(label, x, y);
 
-	context.fillStyle = `rgba(${fgR},${fgG},${fgB},${alpha})`;
-	context.fillText(label, x, y);
+		context.fillStyle = `rgba(${fgR},${fgG},${fgB},${alpha})`;
+		context.fillText(label, x, y);
+	}
 
-	if (!data.badge) return;
+	if (!badge) return;
+	const textWidth = label ? context.measureText(label).width : 0;
 	drawBadge(
 		context,
-		data.badge,
-		x + context.measureText(label).width + BADGE_GAP,
+		badge,
+		placement.side === "right"
+			? x + textWidth + (label ? BADGE_GAP : 0)
+			: x - textWidth - (label ? BADGE_GAP : 0) - badgeWidth,
 		y,
 		size,
 		font,
@@ -157,9 +242,8 @@ export function drawNodeLabel(
 }
 
 /**
- * Hover and selection render on the layer above the labels, so this is where
- * the full, untruncated caption belongs: a card behind it keeps it readable
- * over whatever the canvas has underneath.
+ * Hover and selection render on the layer above the labels. A card keeps the
+ * caption readable, with a final width trim only when neither side can hold it.
  */
 export function drawNodeHover(
 	context: CanvasRenderingContext2D,
@@ -187,31 +271,68 @@ export function drawNodeHover(
 	context.textAlign = "left";
 	context.textBaseline = "middle";
 
-	const textX = x + size + 6;
-	const textWidth = context.measureText(data.label).width;
-	const cardHeight = fontSize + HOVER_PADDING_Y * 2;
-
-	tracePill(
-		context,
-		textX - HOVER_PADDING_X,
-		y - cardHeight / 2,
-		textWidth + HOVER_PADDING_X * 2,
-		cardHeight,
+	const badgeWidth = measureBadgeWidth(context, data.badge, fontSize, font);
+	const preferredTextWidth = context.measureText(data.label).width;
+	const placement = computeViewportLabelPlacement(
+		x,
+		size,
+		preferredTextWidth +
+			HOVER_PADDING_X * 2 +
+			(data.badge ? BADGE_GAP + badgeWidth : 0),
+		canvasCssWidth(context),
+		{
+			gap: LABEL_GAP,
+			leftInset: GRAPH_LABEL_LEFT_INSET,
+			rightInset: GRAPH_LABEL_RIGHT_INSET,
+		},
 	);
-	context.fillStyle = `rgba(${bgR},${bgG},${bgB},0.92)`;
-	context.fill();
-	context.strokeStyle = `rgba(${fgR},${fgG},${fgB},0.16)`;
-	context.lineWidth = 1;
-	context.stroke();
+	const badge =
+		data.badge &&
+		badgeWidth + BADGE_GAP + HOVER_PADDING_X * 2 < placement.availableWidth
+			? data.badge
+			: undefined;
+	const label = fitTextToWidth(
+		context,
+		data.label,
+		Math.max(
+			0,
+			placement.availableWidth -
+				HOVER_PADDING_X * 2 -
+				(badge ? BADGE_GAP + badgeWidth : 0),
+		),
+	);
+	if (!label && !badge) return;
 
-	context.fillStyle = `rgb(${fgR},${fgG},${fgB})`;
-	context.fillText(data.label, textX, y);
+	const textX =
+		placement.side === "right" ? x + size + LABEL_GAP : x - size - LABEL_GAP;
+	const textWidth = label ? context.measureText(label).width : 0;
+	const cardHeight = fontSize + HOVER_PADDING_Y * 2;
+	const cardLeft =
+		placement.side === "right"
+			? textX - HOVER_PADDING_X
+			: textX - textWidth - HOVER_PADDING_X;
+	const cardWidth = textWidth + HOVER_PADDING_X * 2;
 
-	if (!data.badge) return;
+	if (label) {
+		tracePill(context, cardLeft, y - cardHeight / 2, cardWidth, cardHeight);
+		context.fillStyle = `rgba(${bgR},${bgG},${bgB},0.92)`;
+		context.fill();
+		context.strokeStyle = `rgba(${fgR},${fgG},${fgB},0.16)`;
+		context.lineWidth = 1;
+		context.stroke();
+
+		context.textAlign = placement.side === "right" ? "left" : "right";
+		context.fillStyle = `rgb(${fgR},${fgG},${fgB})`;
+		context.fillText(label, textX, y);
+	}
+
+	if (!badge) return;
 	drawBadge(
 		context,
-		data.badge,
-		textX + textWidth + BADGE_GAP + HOVER_PADDING_X,
+		badge,
+		placement.side === "right"
+			? cardLeft + cardWidth + BADGE_GAP
+			: cardLeft - BADGE_GAP - badgeWidth,
 		y,
 		fontSize,
 		font,

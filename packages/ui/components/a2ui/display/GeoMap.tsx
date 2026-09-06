@@ -17,12 +17,17 @@ import { useComponentEventTrigger } from "../ActionHandler";
 import type { ComponentProps } from "../ComponentRegistry";
 import { useData } from "../DataContext";
 import { resolveInlineStyle, resolveStyle } from "../StyleResolver";
+import {
+	geoMapViewportValue,
+	mapEventCoordinate,
+	normalizeGeoMapMarkers,
+	normalizeGeoMapRoutes,
+} from "../geoConversions";
 import type {
 	BoundValue,
 	GeoCoordinate,
 	GeoMapComponent,
 	GeoMapMarkerDef,
-	GeoMapRouteDef,
 	GeoMapViewport,
 } from "../types";
 
@@ -65,6 +70,7 @@ function MarkerDot({ color }: { color?: string }) {
 }
 
 export function A2UIGeoMap({
+	elementRef,
 	component,
 	style,
 	componentId,
@@ -73,9 +79,26 @@ export function A2UIGeoMap({
 }: ComponentProps<GeoMapComponent>) {
 	const { t } = useTranslation("common");
 	const triggerEvent = useComponentEventTrigger(componentId);
-	const viewport = useResolved<GeoMapViewport>(component.viewport);
-	const markers = useResolved<GeoMapMarkerDef[]>(component.markers);
-	const routes = useResolved<GeoMapRouteDef[]>(component.routes);
+	const rawViewport = useResolved<unknown>(component.viewport);
+	const rawMarkers = useResolved<unknown>(component.markers);
+	const rawRoutes = useResolved<unknown>(component.routes);
+	const { viewport, markers, routes, geometryError } = useMemo(() => {
+		try {
+			return {
+				viewport: geoMapViewportValue(rawViewport),
+				markers: normalizeGeoMapMarkers(rawMarkers),
+				routes: normalizeGeoMapRoutes(rawRoutes),
+				geometryError: undefined,
+			};
+		} catch (error) {
+			return {
+				viewport: undefined,
+				markers: [],
+				routes: [],
+				geometryError: error instanceof Error ? error.message : String(error),
+			};
+		}
+	}, [rawViewport, rawMarkers, rawRoutes]);
 	const showControls = useResolved<boolean>(component.showControls) ?? true;
 	const showZoom = useResolved<boolean>(component.showZoom) ?? true;
 	const showCompass = useResolved<boolean>(component.showCompass) ?? false;
@@ -149,7 +172,7 @@ export function A2UIGeoMap({
 			// not user interactions.
 			if (programmaticMoveRef.current) return;
 			const context = {
-				center: { latitude: vp.center[1], longitude: vp.center[0] },
+				center: mapEventCoordinate(vp.center[0], vp.center[1]),
 				zoom: vp.zoom,
 				bearing: vp.bearing,
 				pitch: vp.pitch,
@@ -204,13 +227,13 @@ export function A2UIGeoMap({
 				timestamp: Date.now(),
 				context: {
 					markerId,
-					coordinate: { latitude: lngLat.lat, longitude: lngLat.lng },
+					coordinate: mapEventCoordinate(lngLat.lng, lngLat.lat),
 				},
 			});
 			void triggerEvent("markerDragEnd", component, {
 				event: "markerDragEnd",
 				markerId,
-				coordinate: { latitude: lngLat.lat, longitude: lngLat.lng },
+				coordinate: mapEventCoordinate(lngLat.lng, lngLat.lat),
 			});
 		},
 		[component, componentId, onAction, surfaceId, triggerEvent],
@@ -276,10 +299,22 @@ export function A2UIGeoMap({
 				| "bottom-right")
 		: "bottom-right";
 
+	if (geometryError)
+		return (
+			<div
+				ref={elementRef}
+				role="alert"
+				className="p-3 text-sm text-destructive"
+			>
+				{geometryError}
+			</div>
+		);
+
 	// The map needs explicit dimensions to render.
 	// We use a fixed height as default that can be overridden via style.
 	return (
 		<div
+			ref={elementRef}
 			className={cn("relative w-full", resolveStyle(style))}
 			style={{
 				height: "300px",

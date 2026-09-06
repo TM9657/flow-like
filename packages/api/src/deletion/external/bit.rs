@@ -1,3 +1,4 @@
+use flow_like_storage::object_store::ObjectStoreExt;
 use flow_like_storage::object_store::path::Path;
 use sea_orm::EntityTrait;
 

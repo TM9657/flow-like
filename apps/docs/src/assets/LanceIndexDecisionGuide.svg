@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="720" height="1070" viewBox="0 0 720 1070" overflow="hidden" role="img" aria-labelledby="lance-index-title lance-index-desc">
   <title id="lance-index-title">Flow-Like Lance index decision guide</title>
-  <desc id="lance-index-desc">Start with the repeated query. Similar-vector queries use a flat scan for small or exact workloads and a tuned approximate-nearest-neighbor index at scale. Token and phrase search uses Full Text, while raw substring search uses the FM-index. Scalar point and range filters use BTree when values are mostly distinct and Bitmap when few values are distinct. List membership uses Label List. Zone Map, Bloom Filter, and RTree need lower-level Lance integration.</desc>
+  <desc id="lance-index-desc">Start with the repeated query. Similar-vector queries use a flat scan for small or exact workloads and a tuned approximate-nearest-neighbor index at scale. Token and phrase search uses Full Text, while raw substring search uses the FM-index. Scalar point and range filters use BTree when values are mostly distinct and Bitmap when few values are distinct. List membership uses Label List. Zone Map, Bloom Filter, and RTree are available on native Lance tables.</desc>
   <defs>
     <linearGradient id="lance-index-bg" x1="0" y1="0" x2="1" y2="1">
       <stop stop-color="#101216"/>
@@ -56,7 +56,7 @@
     <circle cx="150" cy="322" r="5" fill="#ff7656"/>
     <text x="164" y="327" class="branch" fill="#ff9b82">SIMILAR VECTORS</text>
     <rect x="516" y="308" width="150" height="28" rx="14" fill="#ff7656" opacity=".11"/>
-    <text x="526" y="327" class="tag" fill="#ff9b82">ANN TUNING UPDATE</text>
+    <text x="526" y="327" class="tag" fill="#ff9b82">SELECT ALGORITHM</text>
     <text x="132" y="374" class="choice">Scan or tuned ANN</text>
     <line x1="132" y1="391" x2="666" y2="391" stroke="#343a45"/>
     <text x="132" y="419" class="signal">Small or exact workload</text>
@@ -72,7 +72,7 @@
     <circle cx="150" cy="502" r="5" fill="#a78bfa"/>
     <text x="164" y="507" class="branch" fill="#c4b5fd">SEARCH TEXT</text>
     <rect x="516" y="488" width="150" height="28" rx="14" fill="#a78bfa" opacity=".12"/>
-    <text x="530" y="507" class="tag" fill="#c4b5fd">FM NEEDS UPDATE</text>
+    <text x="530" y="507" class="tag" fill="#c4b5fd">FM AVAILABLE</text>
     <text x="132" y="554" class="choice">Meaning of a match</text>
     <line x1="132" y1="571" x2="666" y2="571" stroke="#3b374a"/>
     <text x="132" y="599" class="signal">Words, phrases, BM25 rank</text>
@@ -102,7 +102,7 @@
     <circle cx="150" cy="862" r="5" fill="#a78bfa"/>
     <text x="164" y="867" class="branch" fill="#c4b5fd">LIST OR PRUNE</text>
     <rect x="492" y="848" width="174" height="28" rx="14" fill="#a78bfa" opacity=".12"/>
-    <text x="506" y="867" class="tag" fill="#c4b5fd">PRUNING: LANCE API</text>
+    <text x="506" y="867" class="tag" fill="#c4b5fd">NATIVE LANCE TABLE</text>
     <text x="132" y="914" class="choice">Membership or skipping</text>
     <line x1="132" y1="931" x2="666" y2="931" stroke="#3b374a"/>
     <text x="132" y="959" class="signal">Any or all labels in a list</text>

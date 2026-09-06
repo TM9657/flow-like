@@ -227,6 +227,7 @@ impl Writer<'_> {
             decorators.push(format!("@category({})", quote_string(category)));
         }
         if let Some(schema) = &var.schema
+            && !geometry_schema_is_type_annotation(var, schema)
             && self.schema_type_name(schema).is_none()
             && normalize_object_schema(schema).is_some()
         {
@@ -788,6 +789,14 @@ impl Writer<'_> {
     }
 }
 
+fn geometry_schema_is_type_annotation(var: &VarDecl, schema: &str) -> bool {
+    matches!(var.ty.base.as_str(), "geometry" | "Geometry")
+        && flow_like_types_contracts::geometry::kind_from_schema(schema)
+            .ok()
+            .flatten()
+            .is_some_and(|kind| var.ty.geometry_kind == Some(kind))
+}
+
 /// Collect the `@decorator` lines for a variable's non-keyword settings. Kept as a free
 /// function so the surface-syntax mapping lives in one place and mirrors the parser.
 pub fn var_decorators_of(var: &VarDecl) -> Vec<String> {
@@ -799,6 +808,7 @@ pub fn var_decorators_of(var: &VarDecl) -> Vec<String> {
         decorators.push(format!("@category({})", quote_string(category)));
     }
     if let Some(schema) = &var.schema
+        && !geometry_schema_is_type_annotation(var, schema)
         && normalize_object_schema(schema).is_some()
     {
         decorators.push(format!("@schema({})", quote_string(schema)));
@@ -817,17 +827,28 @@ pub fn var_decorators_of(var: &VarDecl) -> Vec<String> {
 
 /// Render a `TypeRef` as TS-flavoured type text (`string`, `int[]`, `Map<string, T>`).
 pub fn render_type_ref(ty: &TypeRef) -> String {
+    let base = if matches!(ty.base.as_str(), "geometry" | "Geometry") {
+        match ty.geometry_kind {
+            Some(kind) => format!("geometry<{}>", kind.as_str()),
+            None => "geometry".to_string(),
+        }
+    } else {
+        ty.base.clone()
+    };
     match ty.container {
-        Container::Normal => ty.base.clone(),
-        Container::Array => format!("{}[]", ty.base),
-        Container::Map => format!("Map<string, {}>", ty.base),
-        Container::Set => format!("Set<{}>", ty.base),
+        Container::Normal => base,
+        Container::Array => format!("{base}[]"),
+        Container::Map => format!("Map<string, {base}>"),
+        Container::Set => format!("Set<{base}>"),
     }
 }
 
 pub fn render_interface_type(ty: &InterfaceType) -> String {
     match ty {
         InterfaceType::Named(name) => name.clone(),
+        InterfaceType::Geometry(kind) => {
+            render_type_ref(&TypeRef::geometry(*kind, Container::Normal))
+        }
         InterfaceType::Array(inner) => {
             let inner_text = render_interface_type(inner);
             // `A | B[]` parses as `A | (B[])`; group union elements explicitly.

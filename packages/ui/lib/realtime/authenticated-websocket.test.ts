@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import {
 	decodeJwtExpiryMs,
 	prepareAuthenticatedSignaling,
+	realtimeRoomForAccess,
 	scopedSignalingUrl,
 } from "./authenticated-websocket";
 
@@ -93,5 +94,37 @@ describe("realtime token rotation", () => {
 		// A fully released scope accepts a fresh credential again.
 		const third = await prepareAuthenticatedSignaling([endpoint], room, tokenA);
 		third.dispose();
+	});
+});
+
+describe("realtime board format rooms", () => {
+	test("keeps legacy backends usable and isolates negotiated formats", () => {
+		expect(realtimeRoomForAccess("app", "board", fakeJwt({}))).toBe(
+			"app:board",
+		);
+		for (const version of [1, 2, 3, 0xffff_ffff]) {
+			expect(
+				realtimeRoomForAccess(
+					"app",
+					"board",
+					fakeJwt({ board_format_version: version }),
+				),
+			).toBe(version === 1 ? "app:board" : `app:board:format-v${version}`);
+		}
+	});
+
+	test("refuses malformed claims instead of silently downgrading a room", () => {
+		for (const version of [null, "2", 0, -1, 1.5, 0x1_0000_0000, []]) {
+			expect(() =>
+				realtimeRoomForAccess(
+					"app",
+					"board",
+					fakeJwt({ board_format_version: version }),
+				),
+			).toThrow("invalid board format version");
+		}
+		expect(() => realtimeRoomForAccess("app", "board", "invalid")).toThrow(
+			"invalid board format version",
+		);
 	});
 });

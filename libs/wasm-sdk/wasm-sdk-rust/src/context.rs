@@ -449,7 +449,7 @@ impl Context {
     // WebSocket
     // ========================================================================
 
-    /// Open a WebSocket connection. Returns a session ID on success.
+    /// Open a WebSocket connection owned by this package and run.
     pub fn ws_connect(&self, url: &str, headers: &Value) -> Option<String> {
         let headers_json = serde_json::to_string(headers).ok()?;
         crate::host::ws_connect(url, &headers_json)
@@ -470,7 +470,7 @@ impl Context {
         crate::host::ws_receive(session_id, timeout_ms)
     }
 
-    /// Close a WebSocket session.
+    /// Close a WebSocket connection.
     pub fn ws_close(&self, session_id: &str) -> bool {
         crate::host::ws_close(session_id)
     }

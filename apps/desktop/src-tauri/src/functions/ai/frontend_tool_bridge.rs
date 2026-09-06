@@ -179,6 +179,9 @@ impl std::fmt::Debug for FrontendToolBridge {
 #[derive(Debug, Clone, Default, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct FrontendToolContext {
+    /// Profile selected by the owning Home run. Model-authored arguments cannot replace it.
+    #[serde(default)]
+    pub profile_id: Option<String>,
     pub app_id: Option<String>,
     pub board_id: Option<String>,
     /// The overlay/ontology the current Data Studio page has selected. Injected into
@@ -734,17 +737,7 @@ impl FrontendToolBridge {
         // The source prompt is request ownership, not debug metadata. Forward it only to the
         // in-process frontend handler; `trace.context` intentionally keeps identifiers alone so
         // lifecycle reports never persist user text.
-        let mut request_context = safe_request_context(&trace.context);
-        if let Some(source_user_prompt) = self
-            .context
-            .as_ref()
-            .and_then(|context| context.source_user_prompt.clone())
-            .filter(|prompt| !prompt.trim().is_empty())
-        {
-            request_context
-                .get_or_insert_with(FrontendToolContext::default)
-                .source_user_prompt = Some(source_user_prompt);
-        }
+        let request_context = request_context_with_ownership(&trace.context, self.context.as_ref());
         let request = FrontendToolRequest {
             request_id: request_id.clone(),
             tool_name: tool_name.clone(),
@@ -1121,6 +1114,7 @@ fn safe_request_context(context: &FrontendToolSafeContext) -> Option<FrontendToo
         || context.parent_request_id.is_some()
         || context.run_id.is_some())
     .then(|| FrontendToolContext {
+        profile_id: None,
         app_id: context.app_id.clone(),
         board_id: context.board_id.clone(),
         overlay_id: None,
@@ -1130,6 +1124,27 @@ fn safe_request_context(context: &FrontendToolSafeContext) -> Option<FrontendToo
         source_user_prompt: None,
         board_context_manifest: None,
     })
+}
+
+fn request_context_with_ownership(
+    safe_context: &FrontendToolSafeContext,
+    owner_context: Option<&FrontendToolContext>,
+) -> Option<FrontendToolContext> {
+    let mut request_context = safe_request_context(safe_context);
+    if let Some(profile_id) = owner_context.and_then(|context| context.profile_id.clone()) {
+        request_context
+            .get_or_insert_with(FrontendToolContext::default)
+            .profile_id = Some(profile_id);
+    }
+    if let Some(source_user_prompt) = owner_context
+        .and_then(|context| context.source_user_prompt.clone())
+        .filter(|prompt| !prompt.trim().is_empty())
+    {
+        request_context
+            .get_or_insert_with(FrontendToolContext::default)
+            .source_user_prompt = Some(source_user_prompt);
+    }
+    request_context
 }
 
 fn attach_failure_correlation(
@@ -1712,6 +1727,29 @@ mod tests {
     }
 
     #[test]
+    fn home_profile_context_survives_frontend_dispatch_without_entering_debug_metadata() {
+        let context: FrontendToolContext = serde_json::from_value(json!({
+            "profileId": "profile-owner",
+            "sourceUserPrompt": "Review my Home layout"
+        }))
+        .unwrap();
+        let trace = test_trace("get_home_context");
+        let emitted = request_context_with_ownership(&trace.context, Some(&context)).unwrap();
+        let serialized = serde_json::to_value(emitted).unwrap();
+        assert_eq!(serialized["profileId"], "profile-owner");
+        assert_eq!(serialized["sourceUserPrompt"], "Review my Home layout");
+        assert!(
+            !serde_json::to_string(&trace.context)
+                .unwrap()
+                .contains("profile-owner")
+        );
+
+        let legacy: FrontendToolContext =
+            serde_json::from_value(json!({"appId": "legacy"})).unwrap();
+        assert!(legacy.profile_id.is_none());
+    }
+
+    #[test]
     fn board_tool_context_overrides_model_supplied_scope() {
         let mut arguments = json!({
             "app_id": "wrong-app",
@@ -1719,6 +1757,7 @@ mod tests {
             "operation": "list_tables"
         });
         let context = FrontendToolContext {
+            profile_id: None,
             app_id: Some("scoped-app".to_string()),
             board_id: Some("scoped-board".to_string()),
             overlay_id: None,
@@ -1862,6 +1901,7 @@ mod tests {
             "access_token": "super-secret-token",
         });
         let context = FrontendToolContext {
+            profile_id: None,
             app_id: Some("app-safe".to_string()),
             board_id: Some("board-safe".to_string()),
             overlay_id: None,

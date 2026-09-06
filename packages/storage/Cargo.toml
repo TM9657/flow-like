@@ -8,17 +8,25 @@ anyhow = { version = "1", optional = true }
 flow-like-storage-files = { workspace = true, optional = true }
 flow-like-storage-contracts = { workspace = true, features = ["all"], optional = true }
 flow-like-types = { workspace = true, optional = true }
-object_store = { version = "0.12.4", features = ["gcp", "aws", "azure", "serde", "serde_json", "cloud"], optional = true }
+flow-like-geometry = { workspace = true, optional = true }
+geodatafusion = { version = "=0.4.0", optional = true }
+geoarrow-array = { version = "=0.8.0", optional = true }
+object_store = { version = "=0.13.2", features = ["gcp", "aws", "azure", "serde", "serde_json", "cloud"], optional = true }
 chrono = { workspace = true, optional = true }
 # fp16kernels are not supported on Windows (lance skips compiling the C kernels for MSVC)
-lancedb = { version = "=0.27.2", features = ["remote", "aws", "azure", "gcs"], optional = true }
-lance-io = { version = "=4.0.0", optional = true }
-lance = { version = "=4.0.0", default-features = false, optional = true }
-lance-file = { version = "=4.0.0", optional = true }
-arrow-array = { version = "=57.2.0", optional = true }
-arrow-schema = { version = "=57.2.0", features = ["serde"], optional = true }
-arrow = { version = "=57.2.0", optional = true }
-serde_arrow = { version = "0.13.7", features = ["arrow-57"], optional = true }
+# 0.31 is the newest LanceDB release on DataFusion 53, shared by the Delta,
+# Iceberg and federated providers. Upgrade this group together.
+# LanceDB 0.31 declares futures = "0" but requires 0.3 APIs. Cargo.lock selects
+# futures 0.3.32 for this dependency; check-datafusion-alignment.py guards that edge.
+lancedb = { version = "=0.31.0", features = ["remote", "aws", "azure", "gcs"], optional = true }
+lance-io = { version = "=8.0.0", optional = true }
+lance = { version = "=8.0.0", default-features = false, features = ["geo"], optional = true }
+lance-index = { version = "=8.0.0", features = ["geo"], optional = true }
+lance-file = { version = "=8.0.0", optional = true }
+arrow-array = { version = "=58.4.0", optional = true }
+arrow-schema = { version = "=58.4.0", features = ["serde"], optional = true }
+arrow = { version = "=58.4.0", optional = true }
+serde_arrow = { version = "0.14.2", features = ["arrow-58"], optional = true }
 blake3 = { workspace = true, features = ["rayon"], optional = true }
 futures = { workspace = true, optional = true }
 async-trait = { workspace = true, optional = true }
@@ -27,29 +35,28 @@ schemars = { workspace = true, optional = true }
 sqlparser = { workspace = true, optional = true }
 # `sql` is required for `ctx.sql` and `DFParser`. Placeholder discovery uses the direct,
 # lightweight `sqlparser` dependency above and therefore does not activate DataFusion.
-datafusion = { version = "=52.5.0", default-features = false, features = ["sql", "recursive_protection", "regex_expressions", "string_expressions", "unicode_expressions", "array_expressions", "nested_expressions", "math_expressions", "datetime_expressions", "parquet"], optional = true }
+datafusion = { version = "=53.1.0", default-features = false, features = ["sql", "recursive_protection", "regex_expressions", "string_expressions", "unicode_expressions", "array_expressions", "nested_expressions", "math_expressions", "datetime_expressions", "parquet"], optional = true }
 num_cpus = { version = "1.16", optional = true }
 
 # Graph query engine
-# Pinned to a commit so upstream rebases cannot change behavior underneath us.
-lance-graph = { git = "https://github.com/Rheosoph/lance-graph", rev = "f7e96af88a0a991a2604e09567be55d7b1867eac", default-features = false, optional = true }
+# The graph fork preserves our graph behavior while sharing DataFusion 53.
+lance-graph = { git = "https://github.com/Rheosoph/lance-graph.git", rev = "076e876d1605ee923fc056c0f8ce45c4481d3097", default-features = false, optional = true }
 serde_json = { version = "1", optional = true }
 tokio = { version = "1", features = ["time", "sync"], optional = true }
 petgraph = { version = "0.8", optional = true }
 tracing = { workspace = true, optional = true }
 
-# Data lake formats - Delta Lake 0.31.x aligns with Arrow 57 and DataFusion 52.
-deltalake = { version = "=0.31.1", optional = true, default-features = false, features = ["datafusion", "rustls"] }
+# Data lake formats share Arrow 58 and DataFusion 53 with LanceDB.
+deltalake = { version = "=0.32.4", optional = true, default-features = false, features = ["datafusion", "rustls"] }
 
 # Federation support for query push-down to remote databases
-datafusion-federation = { version = "=0.4.14", optional = true }
+datafusion-federation = { version = "=0.5.3", optional = true }
 
-# Iceberg 0.9.x aligns with Arrow 57 and DataFusion 52.
-iceberg = { version = "=0.9.0", optional = true }
-iceberg-datafusion = { version = "=0.9.0", optional = true }
+iceberg = { version = "=0.10.1", optional = true }
+iceberg-datafusion = { version = "=0.10.1", optional = true }
 
 [target.'cfg(all(any(target_os = "macos", target_os = "linux"), any(target_arch = "x86_64", target_arch = "aarch64")))'.dependencies]
-lancedb = { version = "=0.27.2", features = ["fp16kernels"], optional = true }
+lancedb = { version = "=0.31.0", features = ["fp16kernels"], optional = true }
 
 [dev-dependencies]
 # `tokio` is only a regular dependency under `graph`, but the parameter-binding tests
@@ -74,6 +81,9 @@ database-runtime = [
     "files",
     "query-parser",
     "dep:flow-like-types",
+    "dep:flow-like-geometry",
+    "dep:geodatafusion",
+    "dep:geoarrow-array",
     "dep:object_store",
     "dep:chrono",
     "dep:blake3",
@@ -84,6 +94,7 @@ database-runtime = [
     "dep:lancedb",
     "dep:lance-io",
     "dep:lance",
+    "dep:lance-index",
     "dep:lance-file",
     "dep:arrow-array",
     "dep:arrow-schema",

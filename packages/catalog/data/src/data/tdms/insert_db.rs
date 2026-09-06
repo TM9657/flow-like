@@ -14,6 +14,8 @@ use flow_like_storage::arrow_array::{
 };
 #[cfg(feature = "execute")]
 use flow_like_storage::arrow_schema::{DataType, Field, Schema};
+#[cfg(feature = "execute")]
+use flow_like_storage::object_store::ObjectStoreExt;
 use flow_like_types::{async_trait, json::json};
 #[cfg(feature = "execute")]
 use futures::StreamExt;

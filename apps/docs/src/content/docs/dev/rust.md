@@ -44,7 +44,9 @@ Key Rust crates in the workspace include:
 
 | Path | Crate | Responsibility |
 |------|-------|----------------|
-| `packages/core/` | `flow-like` | Core workflow library |
+| `packages/core/` | `flow-like` | Public runtime and editor compatibility API |
+| `packages/core/runtime/` | `flow-like-runtime` | Boards, execution, and host services |
+| `packages/core/editor/` | `flow-like-editor` | FlowScript editing and copilot services |
 | `packages/types/` | `flow-like-types` | Shared domain types |
 | `packages/storage/` | `flow-like-storage` | Storage abstraction |
 | `packages/model-provider/` | `flow-like-model-provider` | AI and ML providers |
@@ -59,9 +61,12 @@ Dependency-light boundaries live below their owning package so the top-level
 | Path | Crate | Boundary |
 |------|-------|----------|
 | `packages/core/contracts/` | `flow-like-core-contracts` | Serde-only core/copilot contracts |
+| `packages/core/a2ui-schema/` | `flow-like-a2ui-schema` | A2UI schemas and protobuf conversions |
+| `packages/core/editor-contracts/` | `flow-like-editor-contracts` | Editing commands, metadata, and layer cache settings |
 | `packages/core/dev-check/` | `flow-like-dev-check` | Internal lightweight target for bare Cargo commands |
 | `packages/types/contracts/` | `flow-like-types-contracts` | Cache, dispatch, and maintenance wire types |
 | `packages/types/proto/` | `flow-like-types-proto` | Protobuf schemas and generated types |
+| `packages/types/data-url/` | `flow-like-types-data-url` | Byte, file, and HTTP data URL helpers |
 | `packages/storage/contracts/` | `flow-like-storage-contracts` | Graph and vector storage traits |
 | `packages/storage/files/` | `flow-like-storage-files` | Object/file stores without the database engine |
 | `packages/model-provider/protocol/` | `flow-like-model-protocol` | Model message/response protocol |
@@ -71,11 +76,23 @@ Dependency-light boundaries live below their owning package so the top-level
 The workspace also contains supporting crates. Treat the root `Cargo.toml`
 member list as the authoritative inventory.
 
-Internal crate locations are declared once in the root
-`[workspace.dependencies]` table. Member manifests use `workspace = true`
-instead of `../..` dependency paths, so moving a nested boundary only requires
-updating the workspace manifest. A `path` under `[lib]` names that crate's own
-source target and is not an inter-crate dependency.
+Internal dependencies inherit their locations from the root
+`[workspace.dependencies]` table through `workspace = true`. Runtime consumers
+use the canonical `flow-like-runtime` dependency and select the features they
+need:
+
+```toml
+[dependencies]
+flow-like-runtime = { workspace = true, features = ["flow-metadata"] }
+```
+
+Crates that retain `flow_like::...` imports declare
+`extern crate flow_like_runtime as flow_like;` at their Rust crate root. The
+source alias preserves those imports; Cargo dependency declarations and feature
+forwarding use `flow-like-runtime`. The workspace dependency named `flow-like`
+continues to provide the public runtime and editor facade. Declare inter-crate
+dependency paths in the root workspace manifest. A `path` under `[lib]` names
+that crate's own source target and is not an inter-crate dependency.
 
 ### Key Dependencies
 
@@ -178,7 +195,11 @@ it lets the public `flow-like` default remain backward compatible.
 # Shared engine work
 cargo check-core
 cargo check-core-runtime
+cargo check-runtime
+cargo check-editor
 cargo test-core
+cargo test-runtime
+cargo test-editor
 cargo clippy-core
 
 # File/query storage or the complete database runtime
@@ -207,13 +228,36 @@ cargo test-all
 cargo clippy-all
 ```
 
-Workspace crates inherit a lightweight `flow-like` surface (`flow`) and storage
+Workspace crates inherit a lightweight `flow-like` surface (`flow-metadata`) and storage
 surface (`files,query-parser`) from the root manifest. API/desktop products opt
 into `app-runtime`, while executor products select `flow-runtime,model` and
 catalog execution bundles turn on the database implementation transitively.
 The Cargo aliases hide those details in normal use. This keeps ordinary
 metadata/editor work off the Arrow, Lance, and DataFusion compile path without
 making developers maintain long feature lists.
+
+`flow-like-runtime` owns execution, board models, and host services.
+`flow-like-editor` adds FlowScript reconciliation and copilot services. The public
+`flow-like` crate combines both through re-exports. Catalog implementations use
+the runtime directly, so editor compilation can proceed alongside node compilation.
+
+Catalog implementations compile in domain crates. The standard catalog combines
+UI, values, numbers, text, and runtime nodes; data integrations, web connectors,
+and media processors have their own crates. The existing catalog facades keep
+their public module paths and node order, so application imports do not change.
+When editing one domain, check its implementation directly:
+
+```bash
+cargo check -p flow-like-catalog-std-text --features execute
+cargo check -p flow-like-catalog-data-github --features execute
+cargo check -p flow-like-catalog-media-document --features execute
+```
+
+Shared cache, query-session, and embedding types live below the node collections.
+Keep a shared helper there when another domain needs it. Depending on an entire
+catalog to obtain one helper makes that catalog a prerequisite for compilation.
+See [the catalog crate guide](https://github.com/Rheosoph/flow-like/blob/dev/packages/catalog/README.md)
+for the boundaries and registration requirements.
 
 Feature boundaries are checked independently so feature unification from an
 unrelated workspace member cannot hide a missing declaration:
@@ -233,12 +277,25 @@ Cargo HTML timing reports; it never runs `cargo clean` or deletes an older run.
 # Compare lightweight and runtime core explicitly
 ./tools/compile-times.sh core core-runtime
 
+# Include code generation and linking, then measure a std node edit in desktop
+./tools/compile-times.sh --command build desktop-std-string
+
+# Match CI's profile without enabling Rust incremental compilation
+./tools/compile-times.sh --command build --profile ci --incremental 0 backend-executor
+
 # Measure the cost of opting a headless server into local ONNX inference
 ./tools/compile-times.sh catalog-server catalog-server-local-ml
 
 # Every listed scenario; allow several gigabytes per fresh scenario
 ./tools/compile-times.sh --all-scenarios
 ```
+
+The runner defaults to `cargo check`. Select `--command build` to include code
+generation and linking. Incremental compilation follows the selected profile
+unless `--incremental 0` or `--incremental 1` overrides it; the runner clears any
+ambient `CARGO_INCREMENTAL` value. The incremental phase touches a source file
+and restores its timestamp. Use a representative code edit separately when
+measuring how much compiler work an implementation change invalidates.
 
 When Clang and LLD are installed on Linux, or when using Rust's LLD linker on
 Windows, opt into the faster linker configuration without changing the shared

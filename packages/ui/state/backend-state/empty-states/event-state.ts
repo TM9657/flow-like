@@ -20,6 +20,16 @@ export class EmptyEventState implements IEventState {
 	getEvents(appId: string, _force?: boolean): Promise<IEvent[]> {
 		throw new Error("Method not implemented.");
 	}
+	getEventAuthoritative(
+		appId: string,
+		eventId: string,
+		version?: [number, number, number],
+	): Promise<IEvent> {
+		throw new Error("Method not implemented.");
+	}
+	getEventsAuthoritative(appId: string): Promise<IEvent[]> {
+		throw new Error("Method not implemented.");
+	}
 	getEventVersions(
 		appId: string,
 		eventId: string,

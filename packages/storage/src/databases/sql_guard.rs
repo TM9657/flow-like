@@ -93,8 +93,8 @@ pub fn validate_lance_dml_sql(query: &str) -> Result<()> {
         return Ok(());
     };
     match inner.as_ref() {
-        Statement::Update { from, .. } => {
-            if from.is_some() {
+        Statement::Update(update) => {
+            if update.from.is_some() {
                 return Err(anyhow!(
                     "UPDATE … FROM another table is not supported on Lance tables; the joined \
                      condition would not reach the table and the wrong rows could be updated"

@@ -10,6 +10,7 @@ import {
 } from "./apply";
 import { BoardSyncClient } from "./client";
 import type {
+	IBoardMeta,
 	IBoardSyncManifest,
 	IBoardSyncRequest,
 	IBoardSyncResponse,
@@ -28,7 +29,7 @@ const manifest = (
 	...rest,
 });
 
-const meta = (updated = 1): IBoardSyncResponse["meta"] => ({
+const meta = (updated = 1): IBoardMeta => ({
 	id: "b",
 	name: "Board",
 	description: "",
@@ -130,6 +131,31 @@ describe("nodeSegment", () => {
 });
 
 describe("applyBoardSync", () => {
+	test("keeps board format requirements through full sync and partial updates", () => {
+		const legacy = applyBoardSync(undefined, fullResponse(), undefined).board;
+		expect(legacy.format_version).toBe(1);
+
+		const upgraded = applyBoardSync(
+			legacy,
+			{
+				meta: { ...meta(), format_version: 2 },
+				manifest_delta: { meta: "m2" },
+			},
+			undefined,
+		).board;
+		expect(upgraded.format_version).toBe(2);
+
+		const partial = applyBoardSync(
+			upgraded,
+			{ variables: {}, manifest_delta: { variables: "v2" } },
+			undefined,
+		).board;
+		expect(partial.format_version).toBe(2);
+		expect(
+			applyBoardSync(partial, { manifest_delta: {} }, undefined).board,
+		).toBe(partial);
+	});
+
 	test("assembles a full board from a full response", () => {
 		const { board, changed } = applyBoardSync(
 			undefined,

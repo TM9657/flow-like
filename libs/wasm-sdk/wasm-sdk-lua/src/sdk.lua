@@ -24,6 +24,7 @@ M.DataType = {
     Date    = "Date",
     PathBuf = "PathBuf",
     Struct  = "Struct",
+    Geometry = "Geometry",
 }
 
 M.ValueType = {

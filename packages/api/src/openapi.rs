@@ -97,6 +97,7 @@ impl Modify for SecurityAddon {
         (name = "user", description = "User management and preferences"),
         (name = "profile", description = "User profiles"),
         (name = "apps", description = "Application management"),
+        (name = "flowpilot-builds", description = "Durable FlowPilot app-build checkpoints"),
         (name = "boards", description = "Board/workflow management"),
         (name = "pages", description = "Page management"),
         (name = "routes", description = "Route mapping management"),
@@ -186,6 +187,8 @@ impl Modify for SecurityAddon {
         crate::routes::app::internal::change_visibility::change_visibility,
         crate::routes::app::internal::change_forking::change_forking,
         crate::routes::app::internal::change_forking::get_forking,
+        crate::routes::app::flowpilot_builds::read_app_build,
+        crate::routes::app::flowpilot_builds::write_app_build,
         crate::routes::app::fork::preview::get_fork_preview,
         crate::routes::app::fork::begin_offline::begin_offline_fork,
         crate::routes::app::fork::begin_online::begin_online_fork,
@@ -491,6 +494,7 @@ impl Modify for SecurityAddon {
         crate::routes::execution::progress::push_events,
         crate::routes::execution::progress::poll_status,
         crate::routes::execution::progress::get_run_status,
+        crate::routes::execution::cancel::cancel_run,
         crate::routes::execution::public_key::get_execution_jwks,
         // Channel routes
         crate::routes::channel::register_message,
@@ -664,6 +668,7 @@ impl Modify for SecurityAddon {
         crate::routes::app::cache::WriteCacheResponse,
         crate::routes::app::cache::DeleteCacheResponse,
         crate::routes::app::cache::DeleteNamespaceResponse,
+        crate::routes::app::flowpilot_builds::WriteAppBuildRequest,
         crate::routes::admin::cache::SweepCacheResponse,
         // Backing service status schemas
         crate::routes::admin::resources::AdminResourcesResponse,

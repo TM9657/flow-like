@@ -33,9 +33,12 @@ pub fn routes() -> Router<AppState> {
         .route("/by-route", get(get_page_by_route::get_page_by_route))
         .route(
             "/{page_id}",
-            get(get_page::get_page)
-                .put(upsert_page::upsert_page)
-                .delete(delete_page::delete_page),
+            axum::routing::put(upsert_page::upsert_page)
+                .delete(delete_page::delete_page)
+                .route_layer(axum::middleware::from_fn(
+                    super::board::capabilities::negotiate_board_format,
+                ))
+                .get(get_page::get_page),
         )
 }
 

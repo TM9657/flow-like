@@ -48,12 +48,19 @@ pub async fn get_board_variables(
     let mut result = Vec::with_capacity(app.boards.len());
     for board_id in app.boards.iter() {
         // Cached per revision; the second call for an unchanged board costs one conditional GET.
-        let Ok(cached) = state
+        let cached = match state
             .master_board_shared(&app_id, board_id, &state, None)
             .await
-        else {
-            continue;
+        {
+            Ok(cached) => cached,
+            Err(error) => {
+                if let Some(error) = ApiError::from_board_format_error(&error) {
+                    return Err(error);
+                }
+                continue;
+            }
         };
+
         let (variables, refs) = cached.board.public_variables();
         result.push(BoardVariables {
             board_id: cached.board.id.clone(),

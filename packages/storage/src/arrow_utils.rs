@@ -62,6 +62,7 @@ pub fn value_to_record_batch_with_fields(
     };
 
     normalize_temporal_values(&mut records, &fields)?;
+    normalize_geometry_values(&mut records, &fields)?;
 
     // Build a record batch. Schema inference above deliberately sees the raw
     // values so new tables keep their traced column types; only the write is
@@ -377,9 +378,221 @@ pub(crate) fn value_to_batch_reader_with_utc_timestamp_inference(
     Ok(reader)
 }
 
+/// Normalize only explicitly declared geometry fields. Ordinary JSON objects retain their type.
+fn normalize_geometry_values(records: &mut [Value], fields: &[FieldRef]) -> Result<()> {
+    for field in fields {
+        crate::geometry::validate_geometry_field(field)?;
+    }
+    for field in fields
+        .iter()
+        .filter(|field| crate::geometry::is_geometry_field(field))
+    {
+        crate::geometry::validate_crs(field)?;
+        if field.data_type() != &DataType::Binary {
+            return Err(anyhow!(
+                "JSON writes require WKB Binary geometry storage for '{}'",
+                field.name()
+            ));
+        }
+        for (row, record) in records.iter_mut().enumerate() {
+            let Some(value) = record
+                .as_object_mut()
+                .and_then(|record| record.get_mut(field.name()))
+            else {
+                continue;
+            };
+            if !value.is_null() {
+                let bytes = flow_like_geometry::to_wkb(value).map_err(|error| {
+                    anyhow!("Geometry column '{}', row {row}: {error}", field.name())
+                })?;
+                *value = Value::Array(bytes.into_iter().map(Value::from).collect());
+            }
+        }
+    }
+    Ok(())
+}
+
+/// JSON's data model with lossless byte-array support for Arrow Binary columns.
+struct ByteSafeValue(Value);
+impl<'de> Deserialize<'de> for ByteSafeValue {
+    fn deserialize<D: flow_like_types::serde::Deserializer<'de>>(
+        deserializer: D,
+    ) -> std::result::Result<Self, D::Error> {
+        use flow_like_types::serde::de::{MapAccess, SeqAccess, Visitor};
+        struct JsonVisitor;
+        impl<'de> Visitor<'de> for JsonVisitor {
+            type Value = ByteSafeValue;
+            fn expecting(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+                f.write_str("a JSON value or byte array")
+            }
+            fn visit_unit<E>(self) -> std::result::Result<Self::Value, E> {
+                Ok(ByteSafeValue(Value::Null))
+            }
+            fn visit_none<E>(self) -> std::result::Result<Self::Value, E> {
+                Ok(ByteSafeValue(Value::Null))
+            }
+            fn visit_some<D: flow_like_types::serde::Deserializer<'de>>(
+                self,
+                d: D,
+            ) -> std::result::Result<Self::Value, D::Error> {
+                ByteSafeValue::deserialize(d)
+            }
+            fn visit_bool<E>(self, v: bool) -> std::result::Result<Self::Value, E> {
+                Ok(ByteSafeValue(v.into()))
+            }
+            fn visit_i64<E>(self, v: i64) -> std::result::Result<Self::Value, E> {
+                Ok(ByteSafeValue(v.into()))
+            }
+            fn visit_u64<E>(self, v: u64) -> std::result::Result<Self::Value, E> {
+                Ok(ByteSafeValue(v.into()))
+            }
+            fn visit_f64<E>(self, v: f64) -> std::result::Result<Self::Value, E> {
+                Ok(ByteSafeValue(Value::from(v)))
+            }
+            fn visit_str<E>(self, v: &str) -> std::result::Result<Self::Value, E> {
+                Ok(ByteSafeValue(v.into()))
+            }
+            fn visit_string<E>(self, v: String) -> std::result::Result<Self::Value, E> {
+                Ok(ByteSafeValue(v.into()))
+            }
+            fn visit_bytes<E>(self, bytes: &[u8]) -> std::result::Result<Self::Value, E> {
+                Ok(ByteSafeValue(Value::Array(
+                    bytes.iter().copied().map(Value::from).collect(),
+                )))
+            }
+            fn visit_byte_buf<E: flow_like_types::serde::de::Error>(
+                self,
+                bytes: Vec<u8>,
+            ) -> std::result::Result<Self::Value, E> {
+                self.visit_bytes(&bytes)
+            }
+            fn visit_seq<A: SeqAccess<'de>>(
+                self,
+                mut seq: A,
+            ) -> std::result::Result<Self::Value, A::Error> {
+                let mut values = Vec::new();
+                while let Some(ByteSafeValue(value)) = seq.next_element()? {
+                    values.push(value);
+                }
+                Ok(ByteSafeValue(Value::Array(values)))
+            }
+            fn visit_map<A: MapAccess<'de>>(
+                self,
+                mut map: A,
+            ) -> std::result::Result<Self::Value, A::Error> {
+                let mut values = flow_like_types::json::Map::new();
+                while let Some((key, ByteSafeValue(value))) = map.next_entry()? {
+                    values.insert(key, value);
+                }
+                Ok(ByteSafeValue(Value::Object(values)))
+            }
+        }
+        deserializer.deserialize_any(JsonVisitor)
+    }
+}
+
+fn column_to_values(
+    array: &std::sync::Arc<dyn arrow_array::Array>,
+    field: &FieldRef,
+) -> Result<Vec<Value>> {
+    use arrow_array::{Array, FixedSizeListArray, LargeListArray, ListArray, StructArray};
+    if crate::geometry::is_geometry_field(field) {
+        return crate::geometry::decode_column(array.as_ref(), field);
+    }
+    if crate::geometry::contains_geometry_field(field) {
+        match field.data_type() {
+            DataType::Struct(fields) => {
+                let values = array
+                    .as_any()
+                    .downcast_ref::<StructArray>()
+                    .ok_or_else(|| anyhow!("Invalid Struct layout"))?;
+                return (0..array.len())
+                    .map(|row| {
+                        if array.is_null(row) {
+                            return Ok(Value::Null);
+                        }
+                        let mut object = serde_json::Map::new();
+                        for (field, column) in fields.iter().zip(values.columns()) {
+                            let value = column_to_values(&column.slice(row, 1), field)?.remove(0);
+                            object.insert(field.name().clone(), value);
+                        }
+                        Ok(Value::Object(object))
+                    })
+                    .collect();
+            }
+            DataType::List(child)
+            | DataType::LargeList(child)
+            | DataType::FixedSizeList(child, _) => {
+                return (0..array.len())
+                    .map(|row| {
+                        if array.is_null(row) {
+                            return Ok(Value::Null);
+                        }
+                        let values = if let Some(list) = array.as_any().downcast_ref::<ListArray>()
+                        {
+                            list.value(row)
+                        } else if let Some(list) = array.as_any().downcast_ref::<LargeListArray>() {
+                            list.value(row)
+                        } else if let Some(list) =
+                            array.as_any().downcast_ref::<FixedSizeListArray>()
+                        {
+                            list.value(row)
+                        } else {
+                            return Err(anyhow!("Invalid geometry list layout"));
+                        };
+                        Ok(Value::Array(column_to_values(&values, child)?))
+                    })
+                    .collect();
+            }
+            _ => {
+                return Err(anyhow!(
+                    "Unsupported nested geometry layout in '{}'",
+                    field.name()
+                ));
+            }
+        }
+    }
+    let batch = RecordBatch::try_new(
+        Arc::new(arrow_schema::Schema::new(vec![field.clone()])),
+        vec![array.clone()],
+    )?;
+    let rows: Vec<ByteSafeValue> = serde_arrow::from_record_batch(&batch)?;
+    rows.into_iter()
+        .map(|ByteSafeValue(mut row)| {
+            row.as_object_mut()
+                .and_then(|row| row.remove(field.name()))
+                .ok_or_else(|| anyhow!("Missing decoded column '{}'", field.name()))
+        })
+        .collect()
+}
+
 pub fn record_batch_to_value(record_batch: &RecordBatch) -> Result<Vec<Value>> {
-    let items = serde_arrow::from_record_batch(record_batch)?;
-    Ok(items)
+    let mut rows = vec![flow_like_types::json::Map::new(); record_batch.num_rows()];
+    let mut names = std::collections::HashSet::new();
+    for (field, column) in record_batch
+        .schema()
+        .fields()
+        .iter()
+        .zip(record_batch.columns())
+    {
+        if !names.insert(field.name()) {
+            return Err(anyhow!(
+                "Duplicate result column '{}'; use distinct SQL aliases",
+                field.name()
+            ));
+        }
+        let values = column_to_values(column, field)?;
+        if values.len() != rows.len() {
+            return Err(anyhow!(
+                "Decoded row count differs for column '{}'",
+                field.name()
+            ));
+        }
+        for (row, value) in rows.iter_mut().zip(values) {
+            row.insert(field.name().clone(), value);
+        }
+    }
+    Ok(rows.into_iter().map(Value::Object).collect())
 }
 
 #[cfg(test)]
@@ -387,6 +600,23 @@ mod tests {
     use super::*;
     use arrow_array::{Date32Array, TimestampMillisecondArray, UInt64Array};
     use flow_like_types::json::{Deserialize, json, to_value};
+
+    #[test]
+    fn binary_and_geometry_preserve_all_rows() -> Result<()> {
+        let point = json!({"type":"Point","coordinates":[13.405,52.52]});
+        let fields = vec![
+            Arc::new(Field::new("bytes", DataType::Binary, true)),
+            Arc::new(crate::geometry::geometry_field("location", true)),
+        ];
+        let rows = vec![
+            json!({"bytes":[0,255,17],"location":point}),
+            json!({"bytes":[],"location":null}),
+            json!({"bytes":null,"location":point}),
+        ];
+        let batch = value_to_record_batch_with_fields(rows.clone(), Some(fields))?;
+        assert_eq!(record_batch_to_value(&batch)?, rows);
+        Ok(())
+    }
 
     #[derive(Serialize, Deserialize, PartialEq, Clone, Debug)]
     struct TestStruct {

@@ -86,6 +86,14 @@ fn pin_to_schema_property(pin: &Pin, refs: &HashMap<String, String>) -> Value {
         VariableType::Byte => {
             json!({ "type": "integer", "minimum": 0, "maximum": 255 })
         }
+        VariableType::Geometry => pin
+            .schema
+            .as_deref()
+            .map(|schema| flow_like::flow::pin::resolve_schema(schema, refs))
+            .transpose()
+            .and_then(flow_like::flow::variable::geometry_kind_from_schema)
+            .map(flow_like_types::geometry::geometry_json_schema)
+            .unwrap_or_else(|_| json!(false)),
         VariableType::Struct | VariableType::Generic => {
             parse_pin_schema(pin).unwrap_or_else(|| json!({ "type": "object" }))
         }
@@ -493,6 +501,16 @@ fn coerce_value_by_schema(value: &Value, schema: &Value) -> flow_like_types::Res
 }
 
 fn coerce_value_for_pin(pin: &Pin, value: &Value) -> flow_like_types::Result<Value> {
+    if pin.data_type == VariableType::Geometry {
+        let value = coerce_json_string(value)?;
+        flow_like::flow::variable::validate_typed_value(
+            &pin.data_type,
+            &pin.value_type,
+            pin.schema.as_deref(),
+            &value,
+        )?;
+        return Ok(value);
+    }
     let typed = match pin.data_type {
         VariableType::String | VariableType::PathBuf => coerce_to_string(value)?,
         VariableType::Integer => coerce_to_integer(value)?,
@@ -511,6 +529,11 @@ fn coerce_value_for_pin(pin: &Pin, value: &Value) -> flow_like_types::Result<Val
                 ));
             }
             json!(number as u8)
+        }
+        VariableType::Geometry => {
+            let value = coerce_json_string(value)?;
+            let kind = flow_like::flow::variable::geometry_kind_from_schema(pin.schema.as_deref())?;
+            flow_like_types::geometry::canonicalize_geometry(&value, kind)?
         }
         VariableType::Struct | VariableType::Generic => {
             if let Some(schema) = parse_pin_schema(pin) {
@@ -641,12 +664,25 @@ async fn execute_callback_function(
 
     for pin in callback_pin_metadata {
         if let Some(value) = response_obj.get(&pin.name) {
+            let mut pin = pin;
+            if pin.data_type == VariableType::Geometry {
+                let board = context.get_board().await?;
+                pin.schema = pin
+                    .schema
+                    .as_deref()
+                    .map(|schema| {
+                        flow_like::flow::pin::resolve_schema(schema, &board.refs)
+                            .map(str::to_string)
+                    })
+                    .transpose()?;
+            }
             let coerced = coerce_value_for_pin(&pin, value)?;
             if let Some(internal_pin) = callback_function
                 .pins
                 .iter()
                 .find(|internal_pin| internal_pin.name.as_ref() == pin.name)
             {
+                internal_pin.validate_value(&coerced)?;
                 internal_pin.set_value(coerced).await;
             }
         }

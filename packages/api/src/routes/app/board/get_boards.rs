@@ -34,12 +34,18 @@ pub async fn get_boards(
 
     let app = state.master_app(&sub, &app_id, &state).await?;
     for board_id in app.boards.iter() {
-        let board = app.open_board(board_id.clone(), Some(false), None).await;
-        if let Ok(board) = board {
-            let mut board = board.lock().await.clone();
-            filter_board_secrets(&mut board);
-            boards.push(board);
-        }
+        let board = match app.open_board(board_id.clone(), Some(false), None).await {
+            Ok(board) => board,
+            Err(error) => {
+                if let Some(error) = ApiError::from_board_format_error(&error) {
+                    return Err(error);
+                }
+                continue;
+            }
+        };
+        let mut board = board.lock().await.clone();
+        filter_board_secrets(&mut board);
+        boards.push(board);
     }
 
     Ok(Json(boards))

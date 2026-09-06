@@ -1,4 +1,5 @@
 use flow_like::flow_like_storage::files::store::FlowLikeStore;
+use flow_like::flow_like_storage::object_store::ObjectStoreExt;
 use flow_like::flow_like_storage::object_store::{ObjectStore, PutPayload, path::Path};
 use image::{DynamicImage, ImageFormat};
 use std::io::Cursor;
