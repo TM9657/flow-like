@@ -1,0 +1,51 @@
+FROM rust:1.97.1-bookworm AS build
+ARG CRDB_CA_URL
+
+WORKDIR /app
+
+RUN apt-get update && apt-get install -y \
+    libclang-dev \
+    libgtk-3-dev \
+    libjavascriptcoregtk-4.1-dev \
+    libsoup-3.0-dev \
+    pkg-config \
+    protobuf-compiler \
+    webkit2gtk-4.1 \
+    xz-utils && \
+    apt-get remove -y xz-utils && \
+    rm -rf /var/lib/apt/lists/*
+
+RUN rustup target add aarch64-unknown-linux-gnu
+
+RUN if [ -n "$CRDB_CA_URL" ]; then \
+      curl -fsSL "$CRDB_CA_URL" -o /app/db-root.crt; \
+    else \
+      touch /app/db-root.crt; \
+    fi
+
+COPY . .
+
+RUN --mount=type=cache,id=cargo-target-api-distroless,target=/app/target/,sharing=locked \
+    --mount=type=cache,id=cargo-git-api-distroless,target=/usr/local/cargo/git/db,sharing=locked \
+    --mount=type=cache,id=cargo-registry-api-distroless,target=/usr/local/cargo/registry/,sharing=locked \
+    cargo build --release --target=aarch64-unknown-linux-gnu --manifest-path=apps/backend/aws/api/Cargo.toml
+
+RUN --mount=type=cache,id=cargo-target-api-distroless,target=/app/target/,sharing=locked cp target/aarch64-unknown-linux-gnu/release/aws-api /app/aws-api
+RUN strip --strip-all /app/aws-api
+
+FROM gcr.io/distroless/cc-debian12:latest-arm64
+
+COPY LICENSE /usr/share/licenses/flow-like/LICENSE
+
+WORKDIR /app
+
+# Copy only the compiled binary
+COPY --from=build /app/aws-api /app/api
+COPY --from=build /app/db-root.crt /var/runtime/certs/root.crt
+
+# Set a non-root user
+USER 1000:1000
+
+EXPOSE 3000
+
+CMD ["./api"]

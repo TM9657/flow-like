@@ -47,6 +47,18 @@ api:
   publicUrl: ""
   # Keys: SINK_TOKEN_ENCRYPTION_KEY, SINK_SECRET, MAINTENANCE_TOKEN.
   existingSecret: ""
+  # Choose at most one source. Empty values retain the public embedded fallback.
+  # setup-config.py generates an existingSecret reference for the hub JSON.
+  runtimeConfig:
+    existingSecret: ""
+    existingConfigMap: ""
+    key: flow-like.config.json
+    # Alternative: inject raw JSON from a Kubernetes Secret key.
+    secretKeyRef:
+      name: ""
+      key: FLOW_LIKE_CONFIG_JSON
+    # Alternative: resolve a reference through the API's configured SecretStore.
+    secretRef: ""
   terminationGracePeriodSeconds: 120
   env: []
   envFrom: []
@@ -55,6 +67,13 @@ api:
 web:
   enabled: true
   replicaCount: 1
+  # Public browser settings, applied at container startup, never secrets.
+  # apiUrl defaults to api.publicUrl. A missing API URL fails startup.
+  # Empty redirects use the browser origin with /callback and / respectively.
+  runtimeConfig:
+    apiUrl: ""
+    redirectUrl: ""
+    logoutUrl: ""
   image:
     repository: k3d-flow-like.localhost:5000/flow-like-k8s-web
     tag: latest

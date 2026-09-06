@@ -5,7 +5,9 @@
 # against PostgreSQL or CockroachDB in the Kubernetes cluster.
 # =============================================================================
 
-FROM oven/bun:1.2-debian
+FROM oven/bun:1.3.8-debian
+
+COPY LICENSE /usr/share/licenses/flow-like/LICENSE
 
 # Install necessary tools
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -14,10 +16,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     && rm -rf /var/lib/apt/lists/*
 
-# Install prisma globally
-RUN bun add -g prisma@latest
-
 WORKDIR /workspace
+
+# Share the reviewed Prisma, pg, and dotenv versions with Compose migrations.
+COPY apps/backend/docker-compose/db-init/package.json apps/backend/docker-compose/db-init/bun.lock ./
+RUN bun install --frozen-lockfile --production
 
 # Copy the prisma schema from packages/api, plus the guarded, idempotent SQL
 # that must run before `db push` on an existing database (column type changes
@@ -26,11 +29,6 @@ COPY packages/api/prisma/schema ./prisma/schema
 COPY packages/api/prisma/pre-push.ts ./prisma/pre-push.ts
 COPY packages/api/prisma/pre-push ./prisma/pre-push
 COPY packages/api/scripts/make-prisma-mirror.sh /usr/local/bin/make-prisma-mirror.sh
-COPY packages/api/package.json ./package.json
-
-# Install dependencies for prisma (including prisma which has the config module)
-# and for prisma/pre-push.ts (pg, dotenv)
-RUN bun install --production && bun add prisma @prisma/client pg dotenv
 RUN chmod +x /usr/local/bin/make-prisma-mirror.sh
 
 # Create a minimal prisma.config.ts for migrations
@@ -50,6 +48,8 @@ COPY apps/backend/kubernetes/migration/wait-for-migration.ts /usr/local/bin/wait
 
 RUN chmod +x /usr/local/bin/run-migration.sh
 RUN bash -n /usr/local/bin/run-migration.sh \
-    && bun -e 'await import("/usr/local/bin/wait-for-migration.ts")'
+    && bun -e 'await import("/usr/local/bin/wait-for-migration.ts")' \
+    && node_modules/@prisma/engines/schema-engine-* --version \
+    && DATABASE_URL=postgresql://build:build@127.0.0.1/build bun --no-install node_modules/prisma/build/index.js validate --schema=prisma/schema
 
 CMD ["/usr/local/bin/run-migration.sh"]

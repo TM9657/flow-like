@@ -38,6 +38,8 @@
 
 FROM oven/bun:1.3.8-alpine
 
+COPY LICENSE /usr/share/licenses/flow-like/LICENSE
+
 # openssl provides libssl3/libcrypto3, which the schema engine links against and
 # which @prisma/get-platform inspects to pick the linux-musl-openssl-3.0.x
 # engine - hence before `bun install`. ca-certificates is what makes

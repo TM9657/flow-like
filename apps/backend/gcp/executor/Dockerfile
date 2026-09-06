@@ -21,6 +21,8 @@ RUN --mount=type=cache,target=/cargo-home,id=cargo-home,sharing=shared \
 
 FROM debian:bookworm-slim AS runtime
 
+COPY LICENSE /usr/share/licenses/flow-like/LICENSE
+
 # ca-certificates because every byte this process moves — presigned object
 # URLs, the callback to the API, remote model endpoints — travels over TLS to a
 # host the request names, not one baked into the image.

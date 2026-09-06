@@ -29,6 +29,16 @@ toolchain match exactly. Native jobs install the small, separately locked
 `release-tools` package into runner temporary storage. Keep its Tauri CLI version
 aligned with the root `bun.lock` when upgrading the desktop CLI.
 
+## Backend container releases
+
+[`containers.yml`](workflows/containers.yml) builds cloud and self-hosted images
+in a native ARM64/AMD64 matrix with up to 16 parallel jobs, checks for publication risks before pushing to GHCR, and
+uploads a complete digest manifest. PRs validate helpers and build-context rules
+without publishing. See [container publishing](../apps/backend/CONTAINERS.md)
+for triggers, required permissions, runtime API configuration, and cache sizing.
+Cargo mount persistence is opt-in because these caches share the repository
+storage limit with desktop builds.
+
 ## Cache capacity
 
 The September 3, 2026 release produced about 18.3 GiB of Rust caches. The following

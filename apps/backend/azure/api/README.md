@@ -5,38 +5,74 @@ not accept a PostgreSQL password or `DATABASE_URL`.
 
 ## Secure image build
 
-The API embeds reviewed, non-secret identity and OAuth-provider metadata at
-compile time; JWKS are fetched through the bounded runtime cache. Pass the
-Azure configuration contents through a BuildKit secret, and pass only its
-non-secret SHA-256 digest as a build argument so a metadata change invalidates
-the cached compile layer. A local `flow-like.azure.config.json` is gitignored
-and dockerignored, so it stays out of version control and the build context. The tracked repo-root
-`flow-like.config.json` is the committed public default that builds require; it
-does enter the context, the builder overwrites it with the secret for the
-duration of the build `RUN`, and the same `RUN` removes the standalone copy.
-The reviewed non-secret contents are intentionally embedded in `/app/api`, so
-this input must never contain client secrets:
+The shared image needs no installation configuration, cloud credentials, or
+build secrets. Build from the `flow-like` repository root:
+
+```sh
+docker buildx build \
+  --platform linux/amd64 \
+  --load --tag flow-like-azure-api:local \
+  -f apps/backend/azure/api/Dockerfile \
+  .
+```
+
+The image embeds the committed public `flow-like.config.json` as a fallback.
+Supply the complete Azure installation configuration at runtime, including
+`provider: "azure"` and your Entra/OAuth settings. The public fallback is not an
+Azure deployment configuration. JWKS remain fetched through the bounded
+runtime cache.
+
+### Runtime configuration
+
+Set exactly one nonempty API environment variable:
+
+- `FLOW_LIKE_CONFIG_JSON`: the complete JSON document, optionally injected from
+  a Container Apps secret.
+- `FLOW_LIKE_CONFIG_FILE`: the path to a readable, read-only mounted JSON file.
+- `FLOW_LIKE_CONFIG_SECRET_REF`: a Key Vault key or qualified reference, such
+  as `secret://azure-key-vault/HUB-CONFIG`, resolved with this API's existing
+  provider configuration and managed-identity permissions.
+
+The selected document replaces the whole fallback and is loaded once at
+startup. Invalid or conflicting sources stop startup; changing the document
+requires a new revision or restart. The managed identity must already have
+permission to read any referenced configuration secret. Keep OAuth client
+secrets in separate secret-store entries referenced by `client_secret_env`;
+literal OAuth client secrets are rejected. See the shared
+[runtime API configuration contract](../../CONTAINERS.md#runtime-api-configuration)
+for source handling and public metadata boundaries.
+
+[`entra-external-id.fragment.example.json`](entra-external-id.fragment.example.json)
+documents an Azure-specific fragment, not a complete Hub configuration. Replace
+every example tenant/application/URL, validate the discovery document, issuer,
+audience and JWKS, and merge the fragment into the organization's complete
+reviewed feature/tier configuration. Supply that full document through one of
+the runtime sources above. The fragment alone fails schema validation.
+
+### Optional custom compiled fallback
+
+Legacy deployments can still compile a reviewed, non-secret default. Pass the
+complete file as a BuildKit secret and its SHA-256 digest as a build argument.
+The digest is verified and participates in the compile-layer cache key. Keep
+the file outside the build context and version control:
 
 ```sh
 CONFIG_PATH=/secure/path/flow-like.azure.config.json
 CONFIG_SHA256="$(openssl dgst -sha256 "$CONFIG_PATH" | awk '{print $NF}')"
 docker buildx build \
+  --platform linux/amd64 \
   --secret id=flow_like_config,src="$CONFIG_PATH" \
   --build-arg FLOW_LIKE_CONFIG_SHA256="$CONFIG_SHA256" \
   -f apps/backend/azure/api/Dockerfile \
   .
 ```
 
-The Dockerfile verifies the digest and rejects a config whose provider is not `azure`. Keep the source
-under the protected CI workspace, record its digest in release evidence, and do
-not include client secrets in it.
-
-[`entra-external-id.fragment.example.json`](entra-external-id.fragment.example.json)
-documents the Azure-specific fragment, not a complete Hub configuration. It is
-deliberately not deployment-ready: replace every example tenant/application/URL,
-validate the discovery document, issuer, audience and JWKS, and merge the
-fragment into the organization's complete reviewed feature/tier configuration
-before using that full file as the BuildKit secret.
+The Dockerfile requires a matching digest and checks for an `azure` provider
+declaration when this optional input is supplied. Record the digest in release
+evidence. The builder temporarily replaces the public default, compiles it into
+`/app/api`, then removes the standalone copy. A BuildKit secret does not make
+those embedded contents private: never include client secrets. Runtime
+configuration can still replace this custom fallback without rebuilding.
 
 ## Required database environment
 

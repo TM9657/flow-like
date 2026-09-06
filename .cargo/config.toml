@@ -1,7 +1,6 @@
 [net]
-# Use the git CLI (with its credential helper) to fetch private git
-# dependencies such as any-speech-to-text. Cargo's built-in libgit2
-# fetcher cannot authenticate against the private Rheosoph repos.
+# Use the Git CLI consistently for Git dependencies. The repositories currently
+# pinned in Cargo.lock are public; container CI does not need a Git credential.
 git-fetch-with-cli = true
 
 [registries.crates-io]

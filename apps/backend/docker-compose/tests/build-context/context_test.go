@@ -44,7 +44,14 @@ func contextMatcher(t *testing.T) (string, *patternmatcher.PatternMatcher) {
 func TestRequiredWorkspaceInputsRemainInContext(t *testing.T) {
 	root, matcher := contextMatcher(t)
 	paths := []string{
-		"Cargo.toml", "Cargo.lock", ".cargo/config.toml", "package.json", "bun.lock",
+		"Cargo.toml", "Cargo.lock", ".cargo/config.toml", "package.json", "bun.lock", "LICENSE",
+		"flow-like.config.json", "assets/mcp-inspector.html",
+		"apps/backend/aws/api/Dockerfile", "apps/backend/aws/api/Cargo.toml",
+		"apps/backend/aws/executor/Dockerfile", "apps/backend/aws/executor/Cargo.toml",
+		"apps/backend/aws/executor-ecs/Dockerfile", "apps/backend/aws/executor-ecs/Cargo.toml",
+		"apps/backend/aws/compiler-ecs/Dockerfile", "apps/backend/aws/compiler-ecs/Cargo.toml",
+		"apps/backend/aws/file-tracker/Dockerfile", "apps/backend/aws/file-tracker/Cargo.toml",
+		"apps/backend/aws/media-transformer/Dockerfile", "apps/backend/aws/media-transformer/Cargo.toml",
 		"packages/api/Cargo.toml", "packages/api/src/lib.rs",
 		"packages/secrets/Cargo.toml", "packages/secrets/src/lib.rs",
 		"packages/compiler/Cargo.toml", "packages/compiler/src/lib.rs",
@@ -99,6 +106,8 @@ func TestSyntheticDeploymentSecretsAreExcluded(t *testing.T) {
 	// Evaluate synthetic paths without opening any operator credential file.
 	for _, path := range []string{
 		".env", "real.env", "apps/backend/docker-compose/real.env",
+		"flow-like.azure.config.json", "flow-like.gcp.config.json",
+		"apps/backend/flow-like.azure.config.json", "apps/backend/flow-like.gcp.config.json",
 		"apps/backend/docker-compose/.env", "packages/api/.env.local",
 		"secrets/backend.key", "apps/backend/docker-compose/secrets/issuer.key",
 		"apps/backend/docker-compose/.secrets/backend.key", "keys/backend.pem",
@@ -107,6 +116,15 @@ func TestSyntheticDeploymentSecretsAreExcluded(t *testing.T) {
 		"apps/backend/kubernetes/.generated/secrets.yaml",
 		"apps/backend/kubernetes/.generated/nested/backend.key",
 		"apps/backend/kubernetes/helm/values-secrets.yaml",
+		".git/config", "nested/.git", "nested/.git/config",
+		".git-credentials", "nested/.git-credentials", ".netrc", "nested/.netrc",
+		".npmrc", "nested/.npmrc", ".cargo/credentials", "nested/.cargo/credentials.toml",
+		".aws/credentials", "nested/.aws/config", ".azure/accessTokens.json",
+		"nested/.azure/azureProfile.json", ".config/gcloud/application_default_credentials.json",
+		"nested/.config/gcloud/credentials.db", ".ssh/id_ed25519", "nested/.ssh/config",
+		".kube/config", "nested/.kube/config",
+		"signing.key", "nested/signing.key", "nested/client.p12", "client.pfx",
+		"terraform.tfstate", "nested/terraform.tfstate.backup",
 	} {
 		t.Run(path, func(t *testing.T) {
 			excluded, err := matcher.MatchesOrParentMatches(path)
@@ -115,6 +133,30 @@ func TestSyntheticDeploymentSecretsAreExcluded(t *testing.T) {
 			}
 			if !excluded {
 				t.Fatalf("credential path %s enters the Docker build context", path)
+			}
+		})
+	}
+}
+
+func TestLocalBuildOutputsAreExcluded(t *testing.T) {
+	_, matcher := contextMatcher(t)
+	for _, path := range []string{
+		"target/release/aws-api", "node_modules/package/index.js",
+		"apps/web/.next/cache/build.pack", "apps/web/tsconfig.tsbuildinfo",
+		"libs/wasm-sdk/wasm-sdk-kotlin/build/classes/example.class",
+		"libs/wasm-sdk/wasm-sdk-moonbit/_build/example.wasm",
+		"apps/desktop/src-tauri/gen/apple/Assets.car",
+		"apps/desktop/src-tauri/binaries/linux/x64/libggml-vulkan.so",
+		"apps/desktop/src-tauri/binaries/win/x64/ggml-vulkan.dll",
+		"assets/example-large-model.bin", "assets/nested/example.bin",
+	} {
+		t.Run(path, func(t *testing.T) {
+			excluded, err := matcher.MatchesOrParentMatches(path)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !excluded {
+				t.Fatalf("local build output %s enters the Docker build context", path)
 			}
 		})
 	}

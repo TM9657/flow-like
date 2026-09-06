@@ -29,7 +29,7 @@ From this directory:
 
 ```bash
 python3 scripts/setup-env.py
-# Review .env and the public URLs in flow-like.config.example.json.
+# Review .env and the hub/OIDC settings in flow-like.config.example.json.
 python3 scripts/prepare-images.py
 python3 scripts/preflight.py
 python3 scripts/up.py --build
@@ -50,7 +50,42 @@ Default published listeners bind to loopback:
 
 PostgreSQL, Redis, compiler, runtime/manager, RustFS administration, and metrics have no published ports. Use an operator-managed TLS reverse proxy for public hosting. Explicitly configure its trusted addresses in `proxy/nginx.conf` before accepting forwarded client headers. The supplied proxy overwrites client-provided forwarding headers. Access logs omit queries and headers; S3 access logging and nginx request-context error logs are disabled because they can contain presigned credentials. Use API metrics and sanitized status logs to investigate failures.
 
-Set `PUBLIC_API_URL`, the `NEXT_PUBLIC_*` URLs, `CORS_ALLOWED_ORIGINS`, and `REALTIME_ALLOWED_ORIGINS` to the exact browser origins. Rebuild the web image after changing its public URLs. Update the signaling URL in the hub configuration. Add desktop origins to both `CORS_ALLOWED_ORIGINS` and `REALTIME_ALLOWED_ORIGINS` when needed: `tauri://localhost,http://tauri.localhost,https://tauri.localhost`.
+Set `PUBLIC_API_URL`, the `NEXT_PUBLIC_*` URLs, `CORS_ALLOWED_ORIGINS`, and `REALTIME_ALLOWED_ORIGINS` to the exact browser origins. Compose passes the web URLs into the container at startup, so recreate the web service after changing them; the image does not need rebuilding. Update the signaling URL in the hub configuration. Add desktop origins to both `CORS_ALLOWED_ORIGINS` and `REALTIME_ALLOWED_ORIGINS` when needed: `tauri://localhost,http://tauri.localhost,https://tauri.localhost`.
+
+The [upstream publishing workflow](../CONTAINERS.md#kubernetes-and-docker-compose)
+also builds these images for AMD64 and ARM64. Select digest references through the
+existing `*_IMAGE` variables. API releases are explicitly example-config variants;
+the API reads your deployment's mounted config at startup, so the same image can
+serve your configured OIDC hub. The shared web image reads only public runtime
+URLs and can also be reused across installations.
+
+## API hub configuration at startup
+
+`FLOW_LIKE_RUNTIME_CONFIG_FILE` names the host-side JSON file shared by API and
+sink-services. Compose and Swarm mount it at `/app/flow-like.config.json`; the API
+selects it through `FLOW_LIKE_CONFIG_FILE`. Edit the hub, OIDC and signaling
+settings in that file, then recreate the API. Configuration is read once at
+startup; changing the file does not hot-reload running processes or rebuild images.
+Keep files containing credentials private and outside image build contexts.
+
+Alternatively, provide raw JSON through `FLOW_LIKE_CONFIG_JSON` or a reference
+through `FLOW_LIKE_CONFIG_SECRET_REF`, resolved by the API's configured SecretStore.
+Set `FLOW_LIKE_CONFIG_FILE=` explicitly when selecting either alternative. The
+unset-only Compose default preserves this empty value. More than one nonempty
+source fails preflight and API startup. `setup-env.py` makes this source switch
+automatically when JSON or a reference is supplied in its environment. Avoid
+printing rendered Compose configuration because environment-based JSON may contain
+private settings. A reference also requires the corresponding SecretStore value
+to be available inside the API container.
+
+Sink-services still reads the shared file's `supported_sinks`. Keep that setting
+aligned with the API when using JSON or a SecretStore reference. The default file
+mode gives both services the same source.
+
+If all three runtime sources are empty, the API uses its embedded public fallback.
+`FLOW_LIKE_CONFIG` remains an optional local-build fallback input, relative to the
+repository root. Deployment credentials must never be put into that build input or
+published with an image.
 
 ## Storage endpoints and credentials
 

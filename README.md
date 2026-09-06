@@ -165,7 +165,8 @@ cp flow-like.config.example.json flow-like.config.json
 
 ../../../tools/gen-execution-keys.sh --export
 # Add the generated keys, OIDC settings, public URLs, and storage configuration to .env.
-# Point FLOW_LIKE_CONFIG and FLOW_LIKE_RUNTIME_CONFIG_FILE at flow-like.config.json.
+# Point FLOW_LIKE_RUNTIME_CONFIG_FILE at ./flow-like.config.json.
+# The API and sink services read this mounted file at startup.
 
 docker compose config --quiet
 docker compose up -d --build

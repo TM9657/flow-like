@@ -46,6 +46,16 @@ def validate(values, config):
     if mode not in {"per_run", "trusted_shared"}:
         errors.append("EXECUTION_ISOLATION_MODE must be per_run or trusted_shared")
     api = services.get("api", {}).get("environment", {})
+    runtime_sources = ("FLOW_LIKE_CONFIG_FILE", "FLOW_LIKE_CONFIG_JSON", "FLOW_LIKE_CONFIG_SECRET_REF")
+    for key in runtime_sources:
+        value = str(api.get(key, ""))
+        if value and not value.strip():
+            errors.append(f"{key} must not contain only whitespace")
+        elif key != "FLOW_LIKE_CONFIG_JSON" and value != value.strip():
+            errors.append(f"{key} must not have surrounding whitespace")
+    sources = [key for key in runtime_sources if api.get(key, "")]
+    if len(sources) > 1:
+        errors.append("Select one API runtime config source; set FLOW_LIKE_CONFIG_FILE= when using JSON or SECRET_REF")
     if api.get("COMPILATION_BACKEND") != "http":
         errors.append("This stack only implements COMPILATION_BACKEND=http")
     for key in ["MAX_CONCURRENT_EXECUTIONS", "QUEUE_WORKER_CONCURRENCY", "EXECUTION_TIMEOUT_SECONDS", "COMPILER_MAX_PARALLEL_TARGETS", "COMPILER_MAX_CONCURRENT_JOBS"]:

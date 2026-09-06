@@ -30,6 +30,13 @@ spec:
         - name: web
           image: "{{ .Values.global.imageRegistry }}{{ .Values.web.image.repository }}:{{ .Values.web.image.tag }}"
           imagePullPolicy: {{ .Values.web.image.pullPolicy }}
+          env:
+            - name: FLOW_LIKE_WEB_API_URL
+              value: {{ default .Values.api.publicUrl .Values.web.runtimeConfig.apiUrl | quote }}
+            - name: FLOW_LIKE_WEB_REDIRECT_URL
+              value: {{ .Values.web.runtimeConfig.redirectUrl | quote }}
+            - name: FLOW_LIKE_WEB_LOGOUT_URL
+              value: {{ .Values.web.runtimeConfig.logoutUrl | quote }}
           ports:
             - name: http
               containerPort: 3001

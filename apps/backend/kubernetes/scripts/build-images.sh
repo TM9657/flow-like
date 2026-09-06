@@ -15,20 +15,17 @@ for component in ${COMPONENTS:-api executor execution-manager runtime compiler s
   case "$component" in
     api|executor|execution-manager|migration|web) dockerfile="$BACKEND_DIR/$component/Dockerfile" ;;
     runtime|compiler|signaling) dockerfile="$BACKEND_DIR/../docker-compose/$component/Dockerfile" ;;
-    object-store-init) context="$BACKEND_DIR/../docker-compose/object-store"; dockerfile="$context/Dockerfile" ;;
+    object-store-init) dockerfile="$BACKEND_DIR/../docker-compose/object-store/Dockerfile" ;;
     *) echo "Unknown component: $component" >&2; exit 1 ;;
   esac
   repository="$REGISTRY/flow-like-k8s-$component"
   reference="$repository:$TAG"
   extra=()
-  if [[ "$component" == api ]]; then
-    extra+=(--build-arg "FLOW_LIKE_CONFIG=${FLOW_LIKE_CONFIG:-apps/backend/kubernetes/flow-like.config.example.json}")
+  if [[ "$component" == api && -n "${FLOW_LIKE_BUILD_CONFIG:-}" ]]; then
+    # Explicit compatibility fallback only. Setup config is mounted at runtime.
+    extra+=(--build-arg "FLOW_LIKE_CONFIG=$FLOW_LIKE_BUILD_CONFIG")
   fi
-  if [[ "$component" == web ]]; then
-    extra+=(--build-arg "NEXT_PUBLIC_API_URL=${PUBLIC_API_URL:-http://localhost:8080}")
-    extra+=(--build-arg "NEXT_PUBLIC_REDIRECT_URL=${PUBLIC_WEB_URL:-http://localhost:3001}/callback")
-    extra+=(--build-arg "NEXT_PUBLIC_REDIRECT_LOGOUT_URL=${PUBLIC_WEB_URL:-http://localhost:3001}/")
-  fi
+  # Web deployment URLs come from Helm runtime settings, not build arguments.
   docker build -f "$dockerfile" -t "$reference" ${extra[@]+"${extra[@]}"} "$context"
   digest=""
   if [[ "$PUSH" == true ]]; then

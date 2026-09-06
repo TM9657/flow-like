@@ -1,6 +1,8 @@
 # syntax=docker/dockerfile:1.7
 FROM oven/bun:1.3.8-alpine
 
+COPY LICENSE /usr/share/licenses/flow-like/LICENSE
+
 WORKDIR /app
 
 COPY apps/backend/signaling/package.json apps/backend/signaling/bun.lock ./

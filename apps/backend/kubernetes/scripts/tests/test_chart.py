@@ -75,6 +75,51 @@ class ChartTest(unittest.TestCase):
         self.assertEqual(queue["REDIS_EXECUTION_QUEUE"]["value"], api["REDIS_EXECUTION_QUEUE"]["value"])
         self.assertFalse(any(x["metadata"]["name"] == "flow-like-executor-pool" for x in self.docs))
 
+    def test_generated_hub_config_is_secret_mounted_read_only_at_runtime(self):
+        env = self.env("api")
+        self.assertEqual(env["FLOW_LIKE_CONFIG_FILE"]["value"], "/etc/flow-like/flow-like.config.json")
+        self.assertNotIn("FLOW_LIKE_CONFIG_JSON", env)
+        self.assertNotIn("FLOW_LIKE_CONFIG_SECRET_REF", env)
+        pod = self.resource("Deployment", "api")["spec"]["template"]["spec"]
+        mount = next(x for x in pod["containers"][0]["volumeMounts"] if x["name"] == "api-runtime-config")
+        self.assertEqual(mount["mountPath"], "/etc/flow-like")
+        self.assertTrue(mount["readOnly"])
+        volume = next(x for x in pod["volumes"] if x["name"] == "api-runtime-config")
+        self.assertEqual(volume["secret"]["secretName"], "flow-like-hub-config")
+        self.assertEqual(volume["secret"]["defaultMode"], 0o440)
+        self.assertEqual(volume["secret"]["items"], [{"key": "flow-like.config.json", "path": "flow-like.config.json"}])
+        secret = next(x for x in self.secrets["items"] if x["metadata"]["name"] == "flow-like-hub-config")
+        self.assertIsInstance(json.loads(secret["stringData"]["flow-like.config.json"]), dict)
+        self.assertNotIn("stringData", json.dumps(self.values))
+
+    def test_api_configmap_and_secret_key_env_sources(self):
+        docs = self.render("--set-string", "api.runtimeConfig.existingSecret=,api.runtimeConfig.existingConfigMap=public-hub,api.runtimeConfig.key=hub.json")
+        pod = self.resource("Deployment", "api", docs)["spec"]["template"]["spec"]
+        volume = next(x for x in pod["volumes"] if x["name"] == "api-runtime-config")
+        self.assertEqual(volume["configMap"]["name"], "public-hub")
+        self.assertEqual(volume["configMap"]["items"][0]["key"], "hub.json")
+        docs = self.render("--set-string", "api.runtimeConfig.existingSecret=,api.runtimeConfig.secretKeyRef.name=private-hub,api.runtimeConfig.secretKeyRef.key=json")
+        env = self.env("api", docs)
+        self.assertEqual(env["FLOW_LIKE_CONFIG_JSON"]["valueFrom"]["secretKeyRef"], {"name": "private-hub", "key": "json"})
+        self.assertNotIn("FLOW_LIKE_CONFIG_FILE", env)
+        pod = self.resource("Deployment", "api", docs)["spec"]["template"]["spec"]
+        self.assertNotIn("api-runtime-config", [x["name"] for x in pod["volumes"]])
+
+    def test_api_secret_store_reference_and_embedded_fallback(self):
+        docs = self.render("--set-string", "api.runtimeConfig.existingSecret=,api.runtimeConfig.secretRef=hub_config")
+        env = self.env("api", docs)
+        self.assertEqual(env["FLOW_LIKE_CONFIG_SECRET_REF"]["value"], "hub_config")
+        self.assertNotIn("FLOW_LIKE_CONFIG_FILE", env)
+        docs = self.render("--set-string", "api.runtimeConfig.existingSecret=")
+        self.assertFalse(any(key.startswith("FLOW_LIKE_CONFIG_") for key in self.env("api", docs)))
+
+    def test_api_conflicting_sources_and_duplicate_env_fail_render(self):
+        for settings in ("api.runtimeConfig.existingConfigMap=hub", "api.runtimeConfig.secretKeyRef.name=hub", "api.runtimeConfig.secretRef=hub"):
+            error = self.render("--set-string", settings, valid=False)
+            self.assertIn("api.runtimeConfig must select at most one", error)
+        error = self.render("--set-string", "api.env[0].name=FLOW_LIKE_CONFIG_JSON,api.env[0].value=example", valid=False)
+        self.assertIn("Use api.runtimeConfig", error)
+
     def test_hour_long_deadline_allowances_match_between_components(self):
         api = self.env("api")
         bridge = self.env("queue-bridge")
@@ -111,6 +156,26 @@ class ChartTest(unittest.TestCase):
         self.assertEqual(env["S3_STS_PROVIDER"]["value"], "rustfs")
         self.assertNotEqual(env["STS_ENDPOINT_URL"]["value"], env["S3_PUBLIC_ENDPOINT"]["value"])
         self.assertEqual(env["STS_SESSION_TTL_SECONDS"]["value"], "7200")
+
+    def test_web_runtime_config_is_public_and_keeps_read_only_filesystem(self):
+        env = self.env("web")
+        self.assertEqual(set(env), {"FLOW_LIKE_WEB_API_URL", "FLOW_LIKE_WEB_REDIRECT_URL", "FLOW_LIKE_WEB_LOGOUT_URL"})
+        self.assertEqual(env["FLOW_LIKE_WEB_API_URL"]["value"], self.values["api"]["publicUrl"])
+        self.assertEqual(env["FLOW_LIKE_WEB_REDIRECT_URL"]["value"], "")
+        self.assertEqual(env["FLOW_LIKE_WEB_LOGOUT_URL"]["value"], "")
+        pod = self.resource("Deployment", "web")["spec"]["template"]["spec"]
+        container = pod["containers"][0]
+        self.assertNotIn("envFrom", container)
+        self.assertTrue(container["securityContext"]["readOnlyRootFilesystem"])
+        self.assertEqual(container["securityContext"]["runAsUser"], 1000)
+        self.assertIn("/tmp", [mount["mountPath"] for mount in container["volumeMounts"]])
+
+    def test_web_runtime_config_supports_explicit_domain_overrides(self):
+        docs = self.render("--set-string", "web.runtimeConfig.apiUrl=https://other-api.example.test,web.runtimeConfig.redirectUrl=https://web.example.test/callback,web.runtimeConfig.logoutUrl=https://web.example.test/")
+        env = self.env("web", docs)
+        self.assertEqual(env["FLOW_LIKE_WEB_API_URL"]["value"], "https://other-api.example.test")
+        self.assertEqual(env["FLOW_LIKE_WEB_REDIRECT_URL"]["value"], "https://web.example.test/callback")
+        self.assertEqual(env["FLOW_LIKE_WEB_LOGOUT_URL"]["value"], "https://web.example.test/")
 
     def test_only_migration_init_mounts_api_token(self):
         pod = self.resource("Deployment", "api")["spec"]["template"]["spec"]

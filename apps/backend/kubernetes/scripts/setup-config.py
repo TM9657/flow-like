@@ -11,6 +11,56 @@ import subprocess
 import tempfile
 import urllib.parse
 
+BASE = Path(__file__).resolve().parents[1]
+
+
+def unique_json_keys(pairs):
+    result = {}
+    for key, value in pairs:
+        if key in result:
+            raise ValueError("Duplicate JSON key")
+        result[key] = value
+    return result
+
+
+def runtime_config():
+    """Read deployment config without logging its contents or provider details."""
+    selected = {key: os.environ.get(key, "") for key in ("FLOW_LIKE_CONFIG_JSON", "FLOW_LIKE_CONFIG_FILE", "FLOW_LIKE_CONFIG_SECRET_REF")}
+    inputs = {**selected, **{key: os.environ.get(key, "") for key in ("FLOW_LIKE_RUNTIME_CONFIG_FILE", "FLOW_LIKE_CONFIG")}}
+    for key, value in inputs.items():
+        if value and not value.strip():
+            raise ValueError(f"{key} must not contain only whitespace")
+        if key != "FLOW_LIKE_CONFIG_JSON" and value != value.strip():
+            raise ValueError(f"{key} must not have surrounding whitespace")
+    sources = [key for key, value in selected.items() if value]
+    if len(sources) > 1:
+        raise ValueError("Select only one nonempty API runtime config source")
+    if sources == ["FLOW_LIKE_CONFIG_SECRET_REF"]:
+        return None, selected[sources[0]]
+    if sources == ["FLOW_LIKE_CONFIG_JSON"]:
+        text = selected[sources[0]]
+    else:
+        if sources:
+            path = Path(selected["FLOW_LIKE_CONFIG_FILE"])
+        elif os.environ.get("FLOW_LIKE_RUNTIME_CONFIG_FILE"):
+            path = Path(os.environ["FLOW_LIKE_RUNTIME_CONFIG_FILE"])
+        elif os.environ.get("FLOW_LIKE_CONFIG"):
+            # Compatibility with the previous repository-relative setup input.
+            path = BASE.parents[2] / os.environ["FLOW_LIKE_CONFIG"]
+        else:
+            path = BASE / "flow-like.config.example.json"
+        try:
+            text = path.read_text(encoding="utf-8")
+        except (OSError, UnicodeError):
+            raise ValueError("API runtime config file cannot be read as UTF-8") from None
+    try:
+        parsed = json.loads(text, object_pairs_hook=unique_json_keys)
+        if not isinstance(parsed, dict):
+            raise ValueError()
+    except (ValueError, TypeError):
+        raise ValueError("API runtime config must contain a JSON object") from None
+    return json.dumps(parsed, separators=(",", ":")), None
+
 
 def required(name):
     value = os.environ.get(name, "")
@@ -60,6 +110,11 @@ def generate(namespace, release):
     bundled = os.environ.get("RUSTFS_ENABLED", "true").lower() == "true"
     public_s3 = origin(os.environ.get("S3_PUBLIC_ENDPOINT", f"http://{release}-object-gateway.{namespace}.svc.cluster.local:9000") if bundled else required("S3_PUBLIC_ENDPOINT"), "S3_PUBLIC_ENDPOINT")
     values = {"fullnameOverride": release, "jwt": {"existingSecret": jwt}, "api": {"existingSecret": system, "publicUrl": api, "corsAllowedOrigins": [web, "tauri://localhost", "http://tauri.localhost", "https://tauri.localhost"]}, "execution": {"existingSecret": execution}, "storage": {"provider": "s3", "s3": {"publicEndpoint": public_s3}}}
+    hub_json, hub_ref = runtime_config()
+    if hub_ref is not None:
+        values["api"]["runtimeConfig"] = {"secretRef": hub_ref}
+    else:
+        values["api"]["runtimeConfig"] = {"existingSecret": secret("hub-config", {"flow-like.config.json": hub_json})}
     values["rustfs"] = {"enabled": bundled}
     storage = {}
     for key in ["AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY", "STS_ISSUER_ACCESS_KEY", "STS_ISSUER_SECRET_KEY"]:

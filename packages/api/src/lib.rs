@@ -42,6 +42,7 @@ pub mod permission;
 pub mod publication;
 pub mod push_notifications;
 pub mod realtime_ice;
+mod runtime_config;
 pub mod state;
 pub mod storage_config;
 pub mod storage_identity;
