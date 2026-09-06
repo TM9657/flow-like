@@ -72,6 +72,17 @@ Runtime role (API and file tracker Lambdas) - connect as a non-admin role only:
       "Effect": "Allow",
       "Action": "dsql:DbConnect",
       "Resource": "arn:aws:dsql:<region>:<account>:cluster/<cluster-id>"
+    },
+    {
+      "Effect": "Allow",
+      "Action": "kms:Decrypt",
+      "Resource": "arn:aws:kms:<region>:<account>:key/<key-id>",
+      "Condition": {
+        "StringEquals": {
+          "kms:ViaService": "dsql.<region>.amazonaws.com",
+          "kms:EncryptionContext:aws:dsql:ClusterId": "<cluster-id>"
+        }
+      }
     }
   ]
 }
@@ -91,6 +102,13 @@ Migration task role - admin access, used only by the migration job:
   ]
 }
 ```
+
+The `kms:Decrypt` statement is required when the cluster uses a customer-managed
+key. Add it to the migration identity's policy too, and repeat it for each
+regional cluster/key pair the identity needs. Missing this permission produces
+`unable to accept connection, access denied`; CloudTrail shows the underlying
+KMS denial. The cluster key's service policy does not replace the caller's IAM
+permission. See the [AWS DSQL KMS policy example](https://docs.aws.amazon.com/aws-managed-policy/latest/reference/AmazonAuroraDSQLFullAccess.html).
 
 Keep `dsql:DbConnectAdmin` off the runtime role. The `admin` database role
 owns `public`; the Lambdas need only the grants below.
