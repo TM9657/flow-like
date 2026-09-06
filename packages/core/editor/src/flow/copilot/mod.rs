@@ -3,9 +3,9 @@
 //! This module provides the Copilot struct which enables natural language
 //! interaction with flow graphs, supporting both explanation and modification.
 
-pub mod assistant;
-mod app_build_tool_spec;
 mod app_build_prompt;
+mod app_build_tool_spec;
+pub mod assistant;
 mod context;
 mod declarations;
 pub mod evaluation;

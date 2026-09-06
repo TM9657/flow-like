@@ -125,7 +125,15 @@ test("asks FlowPilot with the natural-language prompt and selected language", as
 	});
 
 	const ask = buttonWithText(container, "Ask FlowPilot");
-	if (!ask) throw new Error("Ask FlowPilot button was not rendered");
+	if (!ask) {
+		throw new Error(
+			`Ask FlowPilot button was not rendered: ${JSON.stringify(
+				[...container.querySelectorAll("button")].map(
+					(button) => button.textContent,
+				),
+			)}`,
+		);
+	}
 	expect(ask.disabled).toBe(false);
 	await act(async () => ask.click());
 

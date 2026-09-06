@@ -51,8 +51,8 @@ pub struct GlobalDataStudioContext {
     pub overlay_name: Option<String>,
     #[serde(default)]
     pub selected_table: Option<String>,
-	#[serde(default)]
-	pub user_scoped: bool,
+    #[serde(default)]
+    pub user_scoped: bool,
     #[serde(default)]
     pub overlay_names: Vec<String>,
 }
@@ -304,9 +304,9 @@ pub fn data_studio_section(context: &GlobalDataStudioContext) -> String {
     {
         lines.push(format!("- Selected table: {table}"));
     }
-	if context.user_scoped {
-		lines.push("- Storage scope: current user's private data".to_string());
-	}
+    if context.user_scoped {
+        lines.push("- Storage scope: current user's private data".to_string());
+    }
     let overlays: Vec<&str> = context
         .overlay_names
         .iter()
@@ -656,7 +656,7 @@ mod tests {
             overlay_id: Some("crm".to_string()),
             overlay_name: Some("CRM".to_string()),
             selected_table: Some("customers".to_string()),
-			user_scoped: false,
+            user_scoped: false,
             overlay_names: vec!["CRM".to_string()],
         });
 
