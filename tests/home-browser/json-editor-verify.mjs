@@ -129,6 +129,9 @@ try {
 		0,
 	);
 	await page.getByRole("button", { name: "Close JSON editor" }).click();
+	await page
+		.getByRole("button", { name: "Discard JSON edits", exact: true })
+		.click();
 	await page.getByRole("button", { name: "Edit JSON", exact: true }).click();
 	await page.locator(".monaco-editor").waitFor();
 

@@ -108,6 +108,7 @@ import {
 	homeInsertionIndex,
 	insertHomeWidget,
 } from "./home-drag";
+import { type HomeDraftSession, HomeDraftStore } from "./home-editor-drafts";
 import { HomeJsonEditor } from "./home-json-editor";
 import {
 	HOME_GRID_GAP,
@@ -147,10 +148,12 @@ const CATEGORIES: { id: HomeWidgetCategory | "all"; name: string }[] = [
 ];
 
 // Drafts stay in this browser session when a profile or route changes.
-const homeDrafts = new Map<string, { layout: IHomeLayout; reset: boolean }>();
+const homeDrafts = new HomeDraftStore();
 
 export interface HomeEditorProps {
 	draftKey?: string;
+	draftRevision?: string | null;
+	saveBlocked?: string;
 	profileId?: string;
 	profileName?: string;
 	profileDescription?: string;
@@ -165,11 +168,16 @@ export interface HomeEditorProps {
 	admin?: boolean;
 	disabled?: boolean;
 	toolbar?: ReactNode;
-	onEditingChange?: (editing: boolean) => void;
+	onEditingChange?: (
+		editing: boolean,
+		session?: { baseRevision: string | null | undefined },
+	) => void;
 }
 
 export function HomeEditor({
 	draftKey,
+	draftRevision,
+	saveBlocked,
 	profileId,
 	profileName = "",
 	profileDescription,
@@ -191,7 +199,7 @@ export function HomeEditor({
 	);
 	const [editing, setEditing] = useState(false);
 	const [hasDraft, setHasDraft] = useState(() =>
-		Boolean(draftKey && homeDrafts.has(draftKey)),
+		Boolean(homeDrafts.get(draftKey)),
 	);
 	const [draft, setDraft] = useState(layout);
 	const [runtimeLayout, setRuntimeLayout] = useState(layout);
@@ -224,6 +232,9 @@ export function HomeEditor({
 	const runtimeLayoutRef = useRef(runtimeLayout);
 	const baseLayoutRef = useRef(structuredClone(layout));
 	const baseFingerprintRef = useRef(homeLayoutFingerprint(layout));
+	const baseRevisionRef = useRef(draftRevision);
+	const draftRevisionRef = useRef(draftRevision);
+	const draftSessionRef = useRef<HomeDraftSession | null>(null);
 	const defaultLayoutRef = useRef(defaultLayout);
 	const profileMetadataRef = useRef({
 		profileId,
@@ -242,6 +253,7 @@ export function HomeEditor({
 	draftRef.current = draft;
 	runtimeLayoutRef.current = runtimeLayout;
 	defaultLayoutRef.current = defaultLayout;
+	draftRevisionRef.current = draftRevision;
 	profileMetadataRef.current = {
 		profileId,
 		profileName,
@@ -352,7 +364,7 @@ export function HomeEditor({
 	);
 
 	useEffect(() => {
-		if (!editing) setHasDraft(Boolean(draftKey && homeDrafts.has(draftKey)));
+		if (!editing) setHasDraft(Boolean(homeDrafts.get(draftKey)));
 	}, [draftKey, editing]);
 	useEffect(() => {
 		if (!editing) {
@@ -370,8 +382,12 @@ export function HomeEditor({
 		editingChangeRef.current = onEditingChange;
 	}, [onEditingChange]);
 	useEffect(() => {
-		editingChangeRef.current?.(editing);
+		editingChangeRef.current?.(
+			editing,
+			editing ? { baseRevision: baseRevisionRef.current } : undefined,
+		);
 	}, [editing]);
+	useEffect(() => () => homeDrafts.releaseEmpty(draftSessionRef.current), []);
 	useEffect(() => {
 		if (!editing || !dirty) return;
 		const protect = (event: BeforeUnloadEvent) => {
@@ -383,10 +399,15 @@ export function HomeEditor({
 	}, [editing, dirty]);
 
 	useEffect(() => {
-		if (!draftKey || !editing || !dirty) return;
-		homeDrafts.set(draftKey, { layout: draft, reset: resetPending });
+		if (!editing || !dirty) return;
+		homeDrafts.set(draftSessionRef.current, {
+			layout: draft,
+			reset: resetPending,
+			baseLayout: baseLayoutRef.current,
+			baseRevision: baseRevisionRef.current,
+		});
 		setHasDraft(true);
-	}, [draftKey, editing, dirty, draft, resetPending]);
+	}, [editing, dirty, draft, resetPending]);
 
 	const change = useCallback(
 		(next: IHomeLayout | ((value: IHomeLayout) => IHomeLayout)) => {
@@ -464,8 +485,10 @@ export function HomeEditor({
 		setDirty(true);
 		dirtyRef.current = true;
 	}, [future, draft, resetPending, saving]);
-	const finishEditing = useCallback(() => {
-		if (draftKey) homeDrafts.delete(draftKey);
+	const finishEditing = useCallback((session = draftSessionRef.current) => {
+		homeDrafts.discard(session);
+		if (session !== draftSessionRef.current) return;
+		draftSessionRef.current = null;
 		setHasDraft(false);
 		setEditing(false);
 		editingRef.current = false;
@@ -486,14 +509,18 @@ export function HomeEditor({
 			runtimeLayoutRef.current,
 		);
 		setPreview("desktop");
-	}, [draftKey]);
+	}, []);
 	const save = useCallback(async () => {
 		if (
 			dragRef.current ||
 			editorRef.current?.querySelector("[data-home-resizing]")
 		)
 			return;
-		if (saving) return;
+		if (saving || disabled || !editingRef.current) return;
+		if (saveBlocked) {
+			toast.error(saveBlocked);
+			return;
+		}
 		if (homeLayoutByteLength(draft) > MAX_HOME_LAYOUT_BYTES) {
 			toast.error(
 				"This layout is too large. Shorten its content before saving.",
@@ -502,6 +529,7 @@ export function HomeEditor({
 		}
 		setSaving(true);
 		savingRef.current = true;
+		const session = draftSessionRef.current;
 		try {
 			if (resetPending) await onReset();
 			else await onSave(draft);
@@ -510,7 +538,7 @@ export function HomeEditor({
 			);
 			setRuntimeLayout(persisted);
 			runtimeLayoutRef.current = persisted;
-			finishEditing();
+			finishEditing(session);
 			toast.success(
 				admin
 					? "Default home published"
@@ -528,7 +556,17 @@ export function HomeEditor({
 			setSaving(false);
 			savingRef.current = false;
 		}
-	}, [saving, draft, resetPending, onReset, onSave, finishEditing, admin]);
+	}, [
+		saving,
+		disabled,
+		saveBlocked,
+		draft,
+		resetPending,
+		onReset,
+		onSave,
+		finishEditing,
+		admin,
+	]);
 	useEffect(() => {
 		if (!editing) return;
 		const keyboard = (event: KeyboardEvent) => {
@@ -581,11 +619,16 @@ export function HomeEditor({
 		}
 	};
 	const begin = () => {
-		const restored = draftKey ? homeDrafts.get(draftKey) : undefined;
-		const base = structuredClone(runtimeLayoutRef.current);
+		if (disabled || runtimeSavingRef.current) return;
+		const restored = homeDrafts.get(draftKey);
+		draftSessionRef.current = homeDrafts.claim(draftKey);
+		const base = structuredClone(
+			restored?.baseLayout ?? runtimeLayoutRef.current,
+		);
 		const initial = structuredClone(restored?.layout ?? base);
 		baseLayoutRef.current = base;
 		baseFingerprintRef.current = homeLayoutFingerprint(base);
+		baseRevisionRef.current = restored ? restored.baseRevision : draftRevision;
 		setDraft(initial);
 		draftRef.current = initial;
 		setResetPending(restored?.reset ?? false);
@@ -712,6 +755,8 @@ export function HomeEditor({
 			}
 
 			if (!editingRef.current) {
+				draftSessionRef.current = homeDrafts.claim(draftKey);
+				baseRevisionRef.current = draftRevisionRef.current;
 				baseLayoutRef.current = structuredClone(current);
 				baseFingerprintRef.current = currentFingerprint;
 				setPast([{ layout: structuredClone(current), reset: false }]);
@@ -746,7 +791,7 @@ export function HomeEditor({
 				candidateFingerprint: nextFingerprint,
 			};
 		},
-		[admin],
+		[admin, draftKey],
 	);
 	useEffect(() => {
 		if (admin || !profileId) return;
@@ -1096,7 +1141,8 @@ export function HomeEditor({
 							<Button
 								size="sm"
 								onClick={() => void save()}
-								disabled={saving || disabled}
+								disabled={saving || disabled || !!saveBlocked}
+								title={saveBlocked}
 							>
 								{saving ? (
 									<Loader2 className="h-4 w-4 animate-spin" />

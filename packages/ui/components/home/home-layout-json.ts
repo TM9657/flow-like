@@ -5,65 +5,38 @@ import {
 	homeLayoutByteLength,
 	normalizeHomeLayout,
 } from "./home-layout";
+import {
+	type FormattedHomeLayoutJsonResult,
+	formatJsonDocument,
+	parseJsonDocument,
+} from "./home-layout-json-document";
 import type { IHomeLayout } from "./types";
+
+export type { FormattedHomeLayoutJsonResult } from "./home-layout-json-document";
 
 export type HomeLayoutJsonResult =
 	| { ok: true; layout: IHomeLayout }
 	| { ok: false; error: string };
 
-export type FormattedHomeLayoutJsonResult =
-	| { ok: true; json: string }
-	| { ok: false; error: string };
-
-type JsonDocumentResult =
-	| { ok: true; value: unknown }
-	| { ok: false; error: string };
-
 const textEncoder = new TextEncoder();
 
 export function serializeHomeLayout(layout: IHomeLayout) {
-	return JSON.stringify(layout, null, 2);
+	const result = trySerializeHomeLayout(layout);
+	if (!result.ok) throw new Error(result.error);
+	return result.json;
 }
 
-function parseJsonDocument(source: string): JsonDocumentResult {
-	let value: unknown;
-	try {
-		value = JSON.parse(source);
-	} catch (error) {
-		return {
-			ok: false,
-			error: `Invalid JSON: ${
-				error instanceof Error ? error.message : "Check the document syntax."
-			}`,
-		};
-	}
-
-	const pending = [value];
-	while (pending.length) {
-		const current = pending.pop();
-		if (typeof current === "number" && !Number.isFinite(current)) {
-			return {
-				ok: false,
-				error:
-					"JSON numbers must be finite. Replace values such as 1e400 with a finite number.",
-			};
-		}
-		if (Array.isArray(current)) pending.push(...current);
-		else if (current && typeof current === "object") {
-			pending.push(...Object.values(current));
-		}
-	}
-
-	return { ok: true, value };
+export function trySerializeHomeLayout(
+	layout: IHomeLayout,
+): FormattedHomeLayoutJsonResult {
+	return formatJsonDocument(layout);
 }
 
 export function formatHomeLayoutJson(
 	source: string,
 ): FormattedHomeLayoutJsonResult {
 	const document = parseJsonDocument(source);
-	return document.ok
-		? { ok: true, json: JSON.stringify(document.value, null, 2) }
-		: document;
+	return document.ok ? formatJsonDocument(document.value) : document;
 }
 
 function textLimitError(
@@ -173,23 +146,27 @@ export function parseHomeLayoutJson(source: string): HomeLayoutJsonResult {
 	const document = parseJsonDocument(source);
 	if (!document.ok) return document;
 
-	const layout = normalizeHomeLayout(document.value);
-	if (!layout) {
-		return {
-			ok: false,
-			error: `Expected a version 1 home layout with a widgets array and no more than ${MAX_HOME_WIDGETS} widgets. Each widget needs a non-empty, unique id and type.`,
-		};
+	try {
+		const layout = normalizeHomeLayout(document.value);
+		if (!layout) {
+			return {
+				ok: false,
+				error: `Expected a version 1 home layout with a widgets array and no more than ${MAX_HOME_WIDGETS} widgets. Each widget needs a non-empty, unique id and type.`,
+			};
+		}
+
+		if (homeLayoutByteLength(layout) > MAX_HOME_LAYOUT_BYTES) {
+			return {
+				ok: false,
+				error: "This layout exceeds the 128 KiB save limit.",
+			};
+		}
+
+		const validationError = persistenceError(layout);
+		if (validationError) return { ok: false, error: validationError };
+
+		return { ok: true, layout };
+	} catch {
+		return { ok: false, error: "Could not validate this Home layout JSON." };
 	}
-
-	if (homeLayoutByteLength(layout) > MAX_HOME_LAYOUT_BYTES) {
-		return {
-			ok: false,
-			error: "This layout exceeds the 128 KiB save limit.",
-		};
-	}
-
-	const validationError = persistenceError(layout);
-	if (validationError) return { ok: false, error: validationError };
-
-	return { ok: true, layout };
 }

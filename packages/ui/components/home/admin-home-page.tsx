@@ -64,9 +64,11 @@ function AdminHomePageContent() {
 	);
 	const [editing, setEditing] = useState(false);
 	const [conflictKey, setConflictKey] = useState<string | null>(null);
-	const editSession = useRef<{ key: string; revision: string | null } | null>(
-		null,
-	);
+	const editSession = useRef<{
+		key: string;
+		revision: string | null | undefined;
+		conflicted?: boolean;
+	} | null>(null);
 	const bundled = useMemo(createDefaultHomeLayout, []);
 	const templates = useQuery({
 		queryKey: ["home-default-templates", origin, viewer, profile.data?.id],
@@ -97,36 +99,68 @@ function AdminHomePageContent() {
 		revision: selected?.revision ?? null,
 	});
 	selection.current = { key: editorKey, revision: selected?.revision ?? null };
-	const onEditingChange = useCallback((active: boolean) => {
-		if (active) {
-			if (editSession.current?.key !== selection.current.key) {
-				editSession.current = { ...selection.current };
+	const onEditingChange = useCallback(
+		(
+			active: boolean,
+			session?: { baseRevision: string | null | undefined },
+		) => {
+			if (active) {
+				if (editSession.current?.key !== selection.current.key) {
+					editSession.current = {
+						key: selection.current.key,
+						revision: session
+							? session.baseRevision
+							: selection.current.revision,
+					};
+				}
+			} else {
+				editSession.current = null;
+				setConflictKey(null);
 			}
-		} else {
-			editSession.current = null;
-			setConflictKey(null);
-		}
-		setEditing(active);
-	}, []);
+			setEditing(active);
+		},
+		[],
+	);
 	const inherited =
 		defaultId === "main"
 			? bundled
 			: (normalizeHomeLayout(defaults.data?.main?.layout) ?? bundled);
 	const layout = normalizeHomeLayout(selected?.layout) ?? inherited;
+	const conflicted =
+		conflictKey === editorKey ||
+		(editing &&
+			editSession.current?.key === editorKey &&
+			(editSession.current.conflicted ||
+				editSession.current.revision !== (selected?.revision ?? null)));
+	const saveBlocked = conflicted
+		? "The published default changed. Copy your draft JSON before discarding it, then review the latest layout before applying your changes again."
+		: undefined;
 	const save = async (value: IHomeLayout | null) => {
-		if (!allowed || !profileId || editSession.current?.key !== editorKey) {
+		const session = editSession.current;
+		if (!allowed || !profileId || !session || session.key !== editorKey) {
 			throw new Error("Start editing this default before publishing changes.");
+		}
+		if (
+			session.conflicted ||
+			session.revision === undefined ||
+			session.revision !== selection.current.revision
+		) {
+			throw new Error(
+				"The published default changed. Copy your draft JSON, then discard it and review the latest layout before publishing.",
+			);
 		}
 		let saved: IHomeDefault | null;
 		try {
 			saved = await backend.userState.saveHomeDefault(
 				defaultId,
 				value,
-				editSession.current.revision,
+				session.revision,
 			);
 		} catch (error) {
 			if (error instanceof ApiResponseError && error.status === 409) {
-				setConflictKey(editorKey);
+				session.conflicted = true;
+				if (editSession.current === session) setConflictKey(editorKey);
+				void defaults.refetch();
 				throw new Error(
 					"Another administrator published a newer default. Your draft is still open; review the recovery guidance above the editor.",
 				);
@@ -178,20 +212,21 @@ function AdminHomePageContent() {
 					Publish a shared starting point. Personal layouts stay personal.
 				</span>
 			</div>
-			{conflictKey === editorKey && (
+			{conflicted && (
 				<div
 					role="alert"
 					className="shrink-0 border-b border-amber-500/30 bg-amber-500/10 px-5 py-3 text-sm"
 				>
-					<p className="font-medium">A newer default has been published</p>
+					<p className="font-medium">The published default has changed</p>
 					<p className="mt-1 text-xs leading-relaxed text-muted-foreground">
 						Your draft is still open and has not replaced the published layout.
-						Choose Cancel to discard this draft, then Edit default to review the
-						latest layout before making your changes again.
+						Use Edit JSON and Copy to keep your changes. Then choose Cancel to
+						discard this draft and Edit default to review the latest layout
+						before applying your changes again.
 					</p>
 				</div>
 			)}
-			{defaults.isError ? (
+			{defaults.isError && !editing ? (
 				<div className="flex flex-1 flex-col items-center justify-center gap-3 p-8">
 					<p className="text-sm text-muted-foreground">
 						The published default could not be loaded.
@@ -209,11 +244,12 @@ function AdminHomePageContent() {
 						"home-default",
 						origin,
 						viewer,
+						profileId,
 						defaultId,
-						editSession.current?.key === editorKey
-							? editSession.current.revision
-							: (selected?.revision ?? null),
 					])}
+					draftRevision={selected?.revision ?? null}
+					saveBlocked={saveBlocked}
+					disabled={!editing && defaults.isFetching}
 					admin
 					layout={layout}
 					defaultLayout={inherited}

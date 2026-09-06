@@ -106,6 +106,7 @@ const counters = {
 (window as any).homeQa = {
 	counters,
 	getSaved: () => (window as any).homeQa.saved,
+	editingEvents: [],
 };
 const component = (id: string, value: any) => ({
 	id,
@@ -280,7 +281,13 @@ function Harness() {
 		return restored ?? defaultLayout;
 	});
 	const [editorKey, setEditorKey] = useState(0);
+	const [revision, setRevision] = useState<string | null | undefined>(
+		() => new URLSearchParams(location.search).get("revision") ?? undefined,
+	);
+	const admin = new URLSearchParams(location.search).has("admin");
 	(window as any).homeQa.remount = () => setEditorKey((key) => key + 1);
+	(window as any).homeQa.setRevision = setRevision;
+	(window as any).homeQa.replacePublishedLayout = setLayout;
 	return (
 		<div style={{ height: "100vh", display: "flex", flexDirection: "column" }}>
 			<div className="shrink-0 border-b bg-card px-5 py-2 text-[11px] text-muted-foreground">
@@ -288,10 +295,17 @@ function Harness() {
 			</div>
 			<HomeEditor
 				key={editorKey}
-				draftKey="fixture-profile-home"
+				draftKey={admin ? "fixture-admin-home" : "fixture-profile-home"}
+				draftRevision={revision}
+				admin={admin}
 				layout={layout}
 				defaultLayout={defaultLayout}
 				sourceLabel="Fixture profile"
+				onEditingChange={(editing, session) => {
+					const event = { editorKey, editing, ...session };
+					(window as any).homeQa.editing = event;
+					(window as any).homeQa.editingEvents.push(event);
+				}}
 				onReset={async () => {
 					counters.resets++;
 					if (persistent) sessionStorage.removeItem("home-editor-qa-layout");
