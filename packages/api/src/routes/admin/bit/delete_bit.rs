@@ -42,7 +42,7 @@ pub async fn delete_bit(
         let bit: Bit = bit.into();
         if !bit.hash.is_empty() {
             let path =
-                flow_like_storage::object_store::path::Path::from("bits").child(bit.hash.clone());
+                flow_like_storage::object_store::path::Path::from("bits").join(bit.hash.clone());
             cdn_bucket.as_generic().delete(&path).await?;
         }
         bits.push(bit);

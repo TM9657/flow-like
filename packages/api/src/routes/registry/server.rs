@@ -195,13 +195,13 @@ pub async fn unpack_widget_bundle_to_assets(
     .await??;
 
     let base = Path::from(WIDGET_ASSETS_PATH)
-        .child(package_id)
-        .child(version);
+        .join(package_id)
+        .join(version);
     let mut uploaded = 0usize;
     for (rel, data) in entries {
         let mut object_path = base.clone();
         for segment in rel.split('/') {
-            object_path = object_path.child(segment);
+            object_path = object_path.join(segment);
         }
         store
             .as_generic()
@@ -521,16 +521,16 @@ impl ServerRegistry {
     /// Get storage path for a WASM package version
     fn wasm_path(package_id: &str, version: &str) -> Path {
         Path::from(WASM_PACKAGES_PATH)
-            .child(package_id)
-            .child(version)
-            .child("node.wasm")
+            .join(package_id)
+            .join(version)
+            .join("node.wasm")
     }
 
     /// Get storage path for a widget bundle version
     fn widget_bundle_path(package_id: &str, version: &str) -> Path {
         Path::from(WIDGET_BUNDLES_PATH)
-            .child(package_id)
-            .child(format!("{}.flwb", version))
+            .join(package_id)
+            .join(format!("{}.flwb", version))
     }
 
     async fn resolve_wasm_path(
@@ -682,11 +682,11 @@ impl ServerRegistry {
     ) -> flow_like_types::Result<(String, String)> {
         let target_platform = normalize_target_platform_key(target_platform);
         let base = Path::from(WASM_COMPILED_PATH)
-            .child(package_id)
-            .child(version);
+            .join(package_id)
+            .join(version);
 
-        let cwasm_path = base.child(format!("{}.cwasm", target_platform));
-        let checksum_path = base.child(format!("{}.cwasm.b3", target_platform));
+        let cwasm_path = base.clone().join(format!("{}.cwasm", target_platform));
+        let checksum_path = base.join(format!("{}.cwasm.b3", target_platform));
 
         let cwasm_url = self
             .meta_bucket
@@ -755,10 +755,10 @@ impl ServerRegistry {
         entry_path: &str,
     ) -> flow_like_types::Result<Option<Vec<u8>>> {
         let mut path = Path::from(WIDGET_ASSETS_PATH)
-            .child(package_id)
-            .child(version);
+            .join(package_id)
+            .join(version);
         for segment in entry_path.split('/').filter(|s| !s.is_empty()) {
-            path = path.child(segment);
+            path = path.join(segment);
         }
         match self.content_bucket.as_generic().get(&path).await {
             Ok(data) => Ok(Some(data.bytes().await?.to_vec())),
@@ -2918,10 +2918,10 @@ mod tests {
             "widgets/kpi-card/contract.json",
         ] {
             let mut path = Path::from(WIDGET_ASSETS_PATH)
-                .child("com.example.w")
-                .child("1.0.0");
+                .join("com.example.w")
+                .join("1.0.0");
             for segment in entry.split('/') {
-                path = path.child(segment);
+                path = path.join(segment);
             }
             let object = store.as_generic().get(&path).await;
             assert!(object.is_ok(), "missing unpacked asset: {}", entry);

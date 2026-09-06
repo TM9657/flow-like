@@ -1388,9 +1388,10 @@ impl Board {
 
         let board_version_path = self
             .board_dir
-            .child("versions")
-            .child(self.id.clone())
-            .child(format!("{}_{}_{}.board", version.0, version.1, version.2));
+            .clone()
+            .join("versions")
+            .join(self.id.clone())
+            .join(format!("{}_{}_{}.board", version.0, version.1, version.2));
 
         match store.head(&board_version_path).await {
             Ok(_) => {
@@ -1851,7 +1852,7 @@ impl Board {
         // object. `open_board` may return a process-local cached board, so an
         // unconditional save here could otherwise overwrite another process's
         // edit made after the immutable snapshot was prepared.
-        let floating_path = self.board_dir.child(format!("{}.board", self.id));
+        let floating_path = self.board_dir.clone().join(format!("{}.board", self.id));
         let (floating_proto, floating_meta): (proto::Board, _) =
             match from_compressed_with_meta(store.clone(), floating_path.clone()).await {
                 Ok(loaded) => loaded,
@@ -2020,8 +2021,8 @@ impl Board {
         let versions_dir = self
             .board_dir
             .clone()
-            .child("versions")
-            .child(self.id.clone());
+            .join("versions")
+            .join(self.id.clone());
 
         let store = match store {
             Some(store) => store,
@@ -2085,10 +2086,11 @@ impl Board {
     pub fn proto_path(board_dir: &Path, id: &str, version: Option<(u32, u32, u32)>) -> Path {
         match version {
             Some((maj, min, pat)) => board_dir
-                .child("versions")
-                .child(id.to_string())
-                .child(format!("{}_{}_{}.board", maj, min, pat)),
-            None => board_dir.child(format!("{}.board", id)),
+                .clone()
+                .join("versions")
+                .join(id.to_string())
+                .join(format!("{}_{}_{}.board", maj, min, pat)),
+            None => board_dir.clone().join(format!("{}.board", id)),
         }
     }
 
@@ -2232,7 +2234,7 @@ impl Board {
     ) -> flow_like_types::Result<PutResult> {
         self.ensure_supported_format()?;
         self.validate_geometry_contracts()?;
-        let to = self.board_dir.child(format!("{}.board", self.id));
+        let to = self.board_dir.clone().join(format!("{}.board", self.id));
         let store = match store {
             Some(store) => store,
             None => {
@@ -2257,7 +2259,7 @@ impl Board {
     /// already the template id, so the pages it is copying from can only be addressed by the id of
     /// the board they came from.
     fn board_pages_dir(&self, board_id: &str) -> Path {
-        self.board_dir.child(format!("_{}", board_id))
+        self.board_dir.clone().join(format!("_{}", board_id))
     }
 
     fn pages_dir(&self) -> Path {
@@ -2265,39 +2267,41 @@ impl Board {
     }
 
     fn page_path(&self, page_id: &str) -> Path {
-        self.pages_dir().child(format!("{}.page", page_id))
+        self.pages_dir().join(format!("{}.page", page_id))
     }
 
     fn versioned_pages_dir(&self, version: (u32, u32, u32)) -> Path {
         self.board_dir
-            .child("versions")
-            .child(self.id.clone())
-            .child(format!("{}_{}_{}", version.0, version.1, version.2))
+            .clone()
+            .join("versions")
+            .join(self.id.clone())
+            .join(format!("{}_{}_{}", version.0, version.1, version.2))
     }
 
     fn versioned_page_path(&self, version: (u32, u32, u32), page_id: &str) -> Path {
         self.versioned_pages_dir(version)
-            .child(format!("{}.page", page_id))
+            .join(format!("{}.page", page_id))
     }
 
     /// `apps/{app_id}/_template_{template_id}` — where a template's page payloads live. Taken as
     /// a free-standing path so callers that never open the template board (`App::delete_template`,
     /// the fork's storage sweep) still get the layout from one place.
     pub fn template_pages_dir(board_dir: &Path, template_id: &str) -> Path {
-        board_dir.child(format!("_template_{}", template_id))
+        board_dir.clone().join(format!("_template_{}", template_id))
     }
 
     fn template_page_path(&self, template_id: &str, page_id: &str) -> Path {
-        Self::template_pages_dir(&self.board_dir, template_id).child(format!("{}.page", page_id))
+        Self::template_pages_dir(&self.board_dir, template_id).join(format!("{}.page", page_id))
     }
 
     /// Root of a template's version archive. Keyed on the **template** id, never the board the
     /// template was cut from: listing, versioned reads and template deletion all look here.
     pub fn versioned_template_dir(board_dir: &Path, template_id: &str) -> Path {
         board_dir
-            .child("templates")
-            .child("versions")
-            .child(template_id)
+            .clone()
+            .join("templates")
+            .join("versions")
+            .join(template_id)
     }
 
     fn versioned_template_path(
@@ -2305,7 +2309,7 @@ impl Board {
         template_id: &str,
         version: (u32, u32, u32),
     ) -> Path {
-        Self::versioned_template_dir(board_dir, template_id).child(format!(
+        Self::versioned_template_dir(board_dir, template_id).join(format!(
             "{}_{}_{}.template",
             version.0, version.1, version.2
         ))
@@ -2313,7 +2317,7 @@ impl Board {
 
     fn versioned_template_pages_dir(&self, template_id: &str, version: (u32, u32, u32)) -> Path {
         Self::versioned_template_dir(&self.board_dir, template_id)
-            .child(format!("{}_{}_{}", version.0, version.1, version.2))
+            .join(format!("{}_{}_{}", version.0, version.1, version.2))
     }
 
     fn versioned_template_page_path(
@@ -2323,7 +2327,7 @@ impl Board {
         page_id: &str,
     ) -> Path {
         self.versioned_template_pages_dir(template_id, version)
-            .child(format!("{}.page", page_id))
+            .join(format!("{}.page", page_id))
     }
 
     async fn get_store(
@@ -2412,7 +2416,7 @@ impl Board {
         match from_compressed::<proto::Page>(store.clone(), canonical.clone()).await {
             Ok(p) => Ok(p.into()),
             Err(canonical_err) => {
-                let legacy = self.board_dir.child(format!("{}.page", page_id));
+                let legacy = self.board_dir.clone().join(format!("{}.page", page_id));
                 match from_compressed_json::<Page>(store.clone(), legacy.clone()).await {
                     Ok(page) => {
                         let proto: proto::Page = page.clone().into();
@@ -2481,7 +2485,7 @@ impl Board {
         let _ = store.delete(&self.page_path(page_id)).await;
         // Also evict any legacy app-level copy so a subsequent load
         // can't resurrect the page through the fallback reader.
-        let legacy = self.board_dir.child(format!("{}.page", page_id));
+        let legacy = self.board_dir.clone().join(format!("{}.page", page_id));
         let _ = store.delete(&legacy).await;
         self.page_ids.retain(|id| id != page_id);
         self.mark_changed();
@@ -2575,7 +2579,7 @@ impl Board {
         dst_dir: &Path,
     ) -> flow_like_types::Result<()> {
         for page_id in page_ids {
-            let src_path = src_dir.child(format!("{}.page", page_id));
+            let src_path = src_dir.clone().join(format!("{}.page", page_id));
             let page_proto: proto::Page =
                 match from_compressed(store.clone(), src_path.clone()).await {
                     Ok(page) => page,
@@ -2589,7 +2593,7 @@ impl Board {
                         continue;
                     }
                 };
-            let dst_path = dst_dir.child(format!("{}.page", page_id));
+            let dst_path = dst_dir.clone().join(format!("{}.page", page_id));
             compress_to_file(store.clone(), dst_path, &page_proto).await?;
         }
         Ok(())
@@ -2609,7 +2613,7 @@ impl Board {
     ) -> flow_like_types::Result<()> {
         self.ensure_supported_format()?;
         self.validate_geometry_contracts()?;
-        let to = self.board_dir.child(format!("{}.template", self.id));
+        let to = self.board_dir.clone().join(format!("{}.template", self.id));
         let store = self.get_store(store).await?;
 
         let mut template = self.clone();
@@ -2732,7 +2736,7 @@ impl Board {
         let board_dir = path.clone();
         let path = match version {
             Some(version) => Self::versioned_template_path(&board_dir, template_id, version),
-            None => path.child(format!("{}.template", template_id)),
+            None => path.join(format!("{}.template", template_id)),
         };
 
         let board: flow_like_types::proto::Board = from_compressed(store, path).await?;

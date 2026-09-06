@@ -290,14 +290,14 @@ impl App {
     }
 
     pub async fn load(id: String, app_state: Arc<FlowLikeState>) -> flow_like_types::Result<Self> {
-        let storage_root = Path::from("apps").child(id.clone());
+        let storage_root = Path::from("apps").join(id.clone());
 
         let store = FlowLikeState::project_meta_store(&app_state)
             .await?
             .as_generic();
 
         let app: flow_like_types::proto::App =
-            from_compressed(store, storage_root.child("manifest.app")).await?;
+            from_compressed(store, storage_root.join("manifest.app")).await?;
         let mut app = App::from_proto(app);
         app.app_state = Some(app_state.clone());
 
@@ -327,9 +327,9 @@ impl App {
             .await?
             .as_generic();
 
-        let mut metadata_path = Path::from("apps").child(id).child("metadata");
+        let mut metadata_path = Path::from("apps").join(id).join("metadata");
         if let Some(template_id) = template_id {
-            metadata_path = metadata_path.child("templates").child(template_id);
+            metadata_path = metadata_path.join("templates").join(template_id);
         }
         let languages = [
             language.unwrap_or_else(|| "en".to_string()),
@@ -341,7 +341,7 @@ impl App {
             .iter()
             .take_while(|&l| l != &languages[1] || l == &languages[0])
         {
-            let meta_path = metadata_path.child(format!("{}.meta", lang));
+            let meta_path = metadata_path.clone().join(format!("{}.meta", lang));
 
             if let Ok(metadata) = from_compressed::<proto::Metadata>(store.clone(), meta_path).await
             {
@@ -367,13 +367,13 @@ impl App {
             .as_generic();
 
         let language = language.unwrap_or_else(|| "en".to_string());
-        let mut meta_path = Path::from("apps").child(id).child("metadata");
+        let mut meta_path = Path::from("apps").join(id).join("metadata");
 
         if let Some(template_id) = template_id {
-            meta_path = meta_path.child("templates").child(template_id);
+            meta_path = meta_path.join("templates").join(template_id);
         }
 
-        let meta_path = meta_path.child(format!("{}.meta", language));
+        let meta_path = meta_path.join(format!("{}.meta", language));
 
         let proto_metadata = metadata.to_proto();
         compress_to_file(store, meta_path, &proto_metadata).await?;
@@ -386,7 +386,7 @@ impl App {
         id: Option<String>,
         template: Option<Board>,
     ) -> flow_like_types::Result<CreatedBoard> {
-        let storage_root = Path::from("apps").child(self.id.clone());
+        let storage_root = Path::from("apps").join(self.id.clone());
         let state = self
             .app_state
             .clone()
@@ -493,7 +493,7 @@ impl App {
         register: Option<bool>,
         version: Option<(u32, u32, u32)>,
     ) -> flow_like_types::Result<Arc<Mutex<Board>>> {
-        let storage_root = Path::from("apps").child(self.id.clone());
+        let storage_root = Path::from("apps").join(self.id.clone());
         if let Some(app_state) = &self.app_state {
             let board = app_state.get_board(&board_id, version);
 
@@ -531,7 +531,7 @@ impl App {
         board_id: String,
         version: Option<(u32, u32, u32)>,
     ) -> flow_like_types::Result<Arc<Mutex<Board>>> {
-        let storage_root = Path::from("apps").child(self.id.clone());
+        let storage_root = Path::from("apps").join(self.id.clone());
         let state = self
             .app_state
             .clone()
@@ -543,8 +543,8 @@ impl App {
     pub async fn delete_board(&mut self, board_id: &str) -> flow_like_types::Result<()> {
         self.boards.retain(|b| b != board_id);
         let board_dir = Path::from("apps")
-            .child(self.id.clone())
-            .child(format!("{}.board", board_id));
+            .join(self.id.clone())
+            .join(format!("{}.board", board_id));
 
         let state = self
             .app_state
@@ -561,9 +561,9 @@ impl App {
 
         // Remove all versions of the board
         let versions_path = Path::from("apps")
-            .child(self.id.clone())
-            .child("versions")
-            .child(board_id);
+            .join(self.id.clone())
+            .join("versions")
+            .join(board_id);
         let locations = store
             .list(Some(&versions_path))
             .map_ok(|m| m.location)
@@ -576,9 +576,9 @@ impl App {
 
         // Compiled artifacts are derived from the versions removed above.
         let compiled_path = Path::from("apps")
-            .child(self.id.clone())
-            .child("compiled")
-            .child(board_id);
+            .join(self.id.clone())
+            .join("compiled")
+            .join(board_id);
         let compiled_locations = store
             .list(Some(&compiled_path))
             .map_ok(|m| m.location)
@@ -704,7 +704,7 @@ impl App {
         let mut data = data;
         data.app_state = Some(app_state.clone());
         data.id = template_id.clone();
-        data.board_dir = Path::from("apps").child(self.id.clone());
+        data.board_dir = Path::from("apps").join(self.id.clone());
 
         // Record-only: this is a template fetched from the hub being cached locally, so its page
         // ids have no payloads on this store to copy from.
@@ -722,7 +722,7 @@ impl App {
         template_id: &str,
         version: Option<(u32, u32, u32)>,
     ) -> flow_like_types::Result<Board> {
-        let storage_root = Path::from("apps").child(self.id.clone());
+        let storage_root = Path::from("apps").join(self.id.clone());
 
         let state = self
             .app_state
@@ -738,7 +738,7 @@ impl App {
         &self,
         template_id: &str,
     ) -> flow_like_types::Result<Vec<(u32, u32, u32)>> {
-        let storage_root = Path::from("apps").child(self.id.clone());
+        let storage_root = Path::from("apps").join(self.id.clone());
 
         let state = self
             .app_state
@@ -755,7 +755,7 @@ impl App {
         template_id: String,
         version: Option<(u32, u32, u32)>,
     ) -> flow_like_types::Result<Board> {
-        let storage_root = Path::from("apps").child(self.id.clone());
+        let storage_root = Path::from("apps").join(self.id.clone());
 
         let state = self
             .app_state
@@ -778,8 +778,8 @@ impl App {
 
     pub async fn delete_template(&mut self, template_id: &str) -> flow_like_types::Result<()> {
         let template_dir = Path::from("apps")
-            .child(self.id.clone())
-            .child(format!("{}.template", template_id));
+            .join(self.id.clone())
+            .join(format!("{}.template", template_id));
 
         let state = self
             .app_state
@@ -792,10 +792,10 @@ impl App {
 
         // Remove all versions of the board
         let versions_path = Path::from("apps")
-            .child(self.id.clone())
-            .child("templates")
-            .child("versions")
-            .child(template_id);
+            .join(self.id.clone())
+            .join("templates")
+            .join("versions")
+            .join(template_id);
         let locations = store
             .list(Some(&versions_path))
             .map_ok(|m| m.location)
@@ -809,7 +809,7 @@ impl App {
         // The template's own page payloads sit next to the board files, outside the version tree
         // the sweep above walks, so they would otherwise outlive the template forever.
         let pages_path =
-            Board::template_pages_dir(&Path::from("apps").child(self.id.clone()), template_id);
+            Board::template_pages_dir(&Path::from("apps").join(self.id.clone()), template_id);
         let page_locations = store.list(Some(&pages_path)).map_ok(|m| m.location).boxed();
         // A template that never had pages has no directory at all, which a
         // filesystem store reports as an error rather than an empty listing.
@@ -838,11 +838,11 @@ impl App {
             .as_generic();
 
         let meta_path = Path::from("apps")
-            .child(self.id.clone())
-            .child("metadata")
-            .child("templates")
-            .child(template_id)
-            .child(format!("{}.meta", language));
+            .join(self.id.clone())
+            .join("metadata")
+            .join("templates")
+            .join(template_id)
+            .join(format!("{}.meta", language));
 
         let proto_metadata = meta.to_proto();
         compress_to_file(store, meta_path, &proto_metadata).await?;
@@ -860,21 +860,21 @@ impl App {
 
         let language = language.unwrap_or_else(|| "en".to_string());
         let meta_path = Path::from("apps")
-            .child(self.id.clone())
-            .child("metadata")
-            .child("templates")
-            .child(template_id)
-            .child(format!("{}.meta", language));
+            .join(self.id.clone())
+            .join("metadata")
+            .join("templates")
+            .join(template_id)
+            .join(format!("{}.meta", language));
 
         let metadata = from_compressed::<proto::Metadata>(store.clone(), meta_path).await;
         if let Err(e) = metadata {
             eprintln!("Failed to get template metadata: {}", e);
             let meta_path = Path::from("apps")
-                .child(self.id.clone())
-                .child("metadata")
-                .child("templates")
-                .child(template_id)
-                .child("en.meta");
+                .join(self.id.clone())
+                .join("metadata")
+                .join("templates")
+                .join(template_id)
+                .join("en.meta");
             let metadata = from_compressed::<proto::Metadata>(store, meta_path).await;
             if let Err(e) = metadata {
                 eprintln!("Failed to get template metadata in English: {}", e);
@@ -918,15 +918,15 @@ impl App {
 
         let widget_path = if let Some(v) = version {
             Path::from("apps")
-                .child(self.id.clone())
-                .child("widgets")
-                .child("versions")
-                .child(widget_id.as_str())
-                .child(format!("{}-{}-{}.widget", v.0, v.1, v.2))
+                .join(self.id.clone())
+                .join("widgets")
+                .join("versions")
+                .join(widget_id.as_str())
+                .join(format!("{}-{}-{}.widget", v.0, v.1, v.2))
         } else {
             Path::from("apps")
-                .child(self.id.clone())
-                .child(format!("{}.widget", widget_id))
+                .join(self.id.clone())
+                .join(format!("{}.widget", widget_id))
         };
 
         let widget: crate::a2ui::widget::Widget = from_compressed_json(store, widget_path).await?;
@@ -947,8 +947,8 @@ impl App {
             .as_generic();
 
         let widget_path = Path::from("apps")
-            .child(self.id.clone())
-            .child(format!("{}.widget", widget.id));
+            .join(self.id.clone())
+            .join(format!("{}.widget", widget.id));
 
         compress_to_file_json(store, widget_path, widget).await?;
 
@@ -986,11 +986,11 @@ impl App {
         };
 
         let meta_path = Path::from("apps")
-            .child(self.id.clone())
-            .child("metadata")
-            .child("widgets")
-            .child(widget_id)
-            .child("en.meta");
+            .join(self.id.clone())
+            .join("metadata")
+            .join("widgets")
+            .join(widget_id)
+            .join("en.meta");
 
         store.as_generic().head(&meta_path).await.is_ok()
     }
@@ -1006,16 +1006,16 @@ impl App {
             .as_generic();
 
         let widget_path = Path::from("apps")
-            .child(self.id.clone())
-            .child(format!("{}.widget", widget_id));
+            .join(self.id.clone())
+            .join(format!("{}.widget", widget_id));
         store.delete(&widget_path).await?;
 
         // Delete all versions
         let versions_path = Path::from("apps")
-            .child(self.id.clone())
-            .child("widgets")
-            .child("versions")
-            .child(widget_id);
+            .join(self.id.clone())
+            .join("widgets")
+            .join("versions")
+            .join(widget_id);
         let locations = store
             .list(Some(&versions_path))
             .map_ok(|m| m.location)
@@ -1032,10 +1032,10 @@ impl App {
             .await?
             .as_generic();
         let meta_path = Path::from("apps")
-            .child(self.id.clone())
-            .child("metadata")
-            .child("widgets")
-            .child(widget_id);
+            .join(self.id.clone())
+            .join("metadata")
+            .join("widgets")
+            .join(widget_id);
         let meta_locations = meta_store
             .list(Some(&meta_path))
             .map_ok(|m| m.location)
@@ -1086,11 +1086,11 @@ impl App {
         ))?;
 
         let version_path = Path::from("apps")
-            .child(self.id.clone())
-            .child("widgets")
-            .child("versions")
-            .child(widget_id.to_string())
-            .child(format!("{}-{}-{}.widget", version.0, version.1, version.2));
+            .join(self.id.clone())
+            .join("widgets")
+            .join("versions")
+            .join(widget_id.to_string())
+            .join(format!("{}-{}-{}.widget", version.0, version.1, version.2));
         compress_to_file_json(store, version_path, &widget).await?;
 
         self.save_widget(&widget).await?;
@@ -1112,10 +1112,10 @@ impl App {
             .as_generic();
 
         let versions_path = Path::from("apps")
-            .child(self.id.clone())
-            .child("widgets")
-            .child("versions")
-            .child(widget_id);
+            .join(self.id.clone())
+            .join("widgets")
+            .join("versions")
+            .join(widget_id);
 
         let mut versions = Vec::new();
         let mut stream = store.list(Some(&versions_path));
@@ -1154,11 +1154,11 @@ impl App {
             .as_generic();
 
         let meta_path = Path::from("apps")
-            .child(self.id.clone())
-            .child("metadata")
-            .child("widgets")
-            .child(widget_id)
-            .child(format!("{}.meta", language));
+            .join(self.id.clone())
+            .join("metadata")
+            .join("widgets")
+            .join(widget_id)
+            .join(format!("{}.meta", language));
 
         let proto_metadata = meta.to_proto();
         compress_to_file(store, meta_path, &proto_metadata).await?;
@@ -1177,21 +1177,21 @@ impl App {
 
         let language = language.unwrap_or_else(|| "en".to_string());
         let meta_path = Path::from("apps")
-            .child(self.id.clone())
-            .child("metadata")
-            .child("widgets")
-            .child(widget_id)
-            .child(format!("{}.meta", language));
+            .join(self.id.clone())
+            .join("metadata")
+            .join("widgets")
+            .join(widget_id)
+            .join(format!("{}.meta", language));
 
         let metadata = from_compressed::<proto::Metadata>(store.clone(), meta_path).await;
         if let Err(e) = metadata {
             eprintln!("Failed to get widget metadata: {}", e);
             let meta_path = Path::from("apps")
-                .child(self.id.clone())
-                .child("metadata")
-                .child("widgets")
-                .child(widget_id)
-                .child("en.meta");
+                .join(self.id.clone())
+                .join("metadata")
+                .join("widgets")
+                .join(widget_id)
+                .join("en.meta");
             let metadata = from_compressed::<proto::Metadata>(store, meta_path).await;
             if let Err(e) = metadata {
                 eprintln!("Failed to get widget metadata in English: {}", e);
@@ -1232,11 +1232,11 @@ impl App {
             .as_generic();
 
         let meta_path = Path::from("apps")
-            .child(self.id.clone())
-            .child("metadata")
-            .child("pages")
-            .child(page_id)
-            .child(format!("{}.meta", language));
+            .join(self.id.clone())
+            .join("metadata")
+            .join("pages")
+            .join(page_id)
+            .join(format!("{}.meta", language));
 
         let proto_metadata = meta.to_proto();
         compress_to_file(store, meta_path, &proto_metadata).await?;
@@ -1255,21 +1255,21 @@ impl App {
 
         let language = language.unwrap_or_else(|| "en".to_string());
         let meta_path = Path::from("apps")
-            .child(self.id.clone())
-            .child("metadata")
-            .child("pages")
-            .child(page_id)
-            .child(format!("{}.meta", language));
+            .join(self.id.clone())
+            .join("metadata")
+            .join("pages")
+            .join(page_id)
+            .join(format!("{}.meta", language));
 
         let metadata = from_compressed::<proto::Metadata>(store.clone(), meta_path).await;
         if let Err(e) = metadata {
             eprintln!("Failed to get page metadata: {}", e);
             let meta_path = Path::from("apps")
-                .child(self.id.clone())
-                .child("metadata")
-                .child("pages")
-                .child(page_id)
-                .child("en.meta");
+                .join(self.id.clone())
+                .join("metadata")
+                .join("pages")
+                .join(page_id)
+                .join("en.meta");
             let metadata = from_compressed::<proto::Metadata>(store, meta_path).await;
             if let Err(e) = metadata {
                 eprintln!("Failed to get page metadata in English: {}", e);
@@ -1316,8 +1316,8 @@ impl App {
             .as_generic();
 
         let manifest_path = Path::from("apps")
-            .child(self.id.clone())
-            .child("manifest.app");
+            .join(self.id.clone())
+            .join("manifest.app");
 
         let mut proto_app = self.to_proto();
         let mut seen = std::collections::HashSet::with_capacity(self.boards.len());
@@ -1491,7 +1491,7 @@ mod tests {
             .await
             .expect("template should instantiate");
         let board = Board::load(
-            Path::from("apps").child(app.id.clone()),
+            Path::from("apps").join(app.id.clone()),
             &created.board_id,
             state,
             None,
@@ -1548,7 +1548,7 @@ mod tests {
             .await
             .expect("board payload should instantiate");
         let board = Board::load(
-            Path::from("apps").child(app.id.clone()),
+            Path::from("apps").join(app.id.clone()),
             &created.board_id,
             state,
             None,
@@ -1575,7 +1575,7 @@ mod tests {
             .await
             .expect("detached template should instantiate");
         let board = Board::load(
-            Path::from("apps").child(app.id.clone()),
+            Path::from("apps").join(app.id.clone()),
             &created.board_id,
             state,
             None,

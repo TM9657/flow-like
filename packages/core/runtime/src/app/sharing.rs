@@ -332,7 +332,7 @@ impl App {
             .await?
             .as_generic();
 
-        let base = Path::from("apps").child(self.id.clone());
+        let base = Path::from("apps").join(self.id.clone());
         let meta_files = collect_store_files(meta.clone(), &base).await?;
         let storage_files = collect_store_files(storage.clone(), &base).await?;
 
@@ -613,7 +613,7 @@ impl App {
                 if seg.is_empty() {
                     continue;
                 }
-                p = p.child(seg);
+                p = p.join(seg);
             }
             p
         }
@@ -799,7 +799,7 @@ impl App {
         let storage = FlowLikeState::project_storage_store(&app_state)
             .await?
             .as_generic();
-        let base = Path::from("apps").child(manifest.app_id.clone());
+        let base = Path::from("apps").join(manifest.app_id.clone());
 
         #[derive(Default)]
         struct Plan {
@@ -1046,7 +1046,7 @@ mod tests {
     }
 
     async fn seed_sample_objects(meta: &Arc<InMemory>, storage: &Arc<InMemory>, app_id: &str) {
-        let meta_path = ObjectPath::from("apps").child(app_id).child("config.meta");
+        let meta_path = ObjectPath::from("apps").join(app_id).join("config.meta");
         meta.put(
             &meta_path,
             PutPayload::from_bytes(Bytes::from_static(b"meta config")),
@@ -1054,7 +1054,7 @@ mod tests {
         .await
         .expect("seed meta");
 
-        let storage_path = ObjectPath::from("apps").child(app_id).child("data.bin");
+        let storage_path = ObjectPath::from("apps").join(app_id).join("data.bin");
         storage
             .put(
                 &storage_path,
@@ -1358,7 +1358,7 @@ mod tests {
                 .expect("import plain");
             assert_eq!(imported.id, app_id);
 
-            let manifest_path = ObjectPath::from("apps").child(app_id).child("manifest.app");
+            let manifest_path = ObjectPath::from("apps").join(app_id).join("manifest.app");
             let manifest_bytes = import_meta
                 .get(&manifest_path)
                 .await
@@ -1368,7 +1368,7 @@ mod tests {
                 .expect("manifest bytes");
             assert!(!manifest_bytes.is_empty(), "manifest should not be empty");
 
-            let config_path = ObjectPath::from("apps").child(app_id).child("config.meta");
+            let config_path = ObjectPath::from("apps").join(app_id).join("config.meta");
             let config_bytes = import_meta
                 .get(&config_path)
                 .await
@@ -1378,7 +1378,7 @@ mod tests {
                 .expect("config bytes");
             assert_eq!(config_bytes, Bytes::from_static(b"meta config"));
 
-            let storage_path = ObjectPath::from("apps").child(app_id).child("data.bin");
+            let storage_path = ObjectPath::from("apps").join(app_id).join("data.bin");
             let blob_bytes = import_storage
                 .get(&storage_path)
                 .await
@@ -1423,7 +1423,7 @@ mod tests {
             .expect("import enc");
             assert_eq!(imported.id, app_id);
 
-            let manifest_path = ObjectPath::from("apps").child(app_id).child("manifest.app");
+            let manifest_path = ObjectPath::from("apps").join(app_id).join("manifest.app");
             let manifest_bytes = import_meta
                 .get(&manifest_path)
                 .await
@@ -1433,7 +1433,7 @@ mod tests {
                 .expect("manifest bytes");
             assert!(!manifest_bytes.is_empty(), "manifest should not be empty");
 
-            let config_path = ObjectPath::from("apps").child(app_id).child("config.meta");
+            let config_path = ObjectPath::from("apps").join(app_id).join("config.meta");
             let config_bytes = import_meta
                 .get(&config_path)
                 .await
@@ -1443,7 +1443,7 @@ mod tests {
                 .expect("config bytes");
             assert_eq!(config_bytes, Bytes::from_static(b"meta config"));
 
-            let storage_path = ObjectPath::from("apps").child(app_id).child("data.bin");
+            let storage_path = ObjectPath::from("apps").join(app_id).join("data.bin");
             let blob_bytes = import_storage
                 .get(&storage_path)
                 .await

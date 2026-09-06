@@ -107,10 +107,10 @@ pub struct UpdateCourseAssetBody {
 
 pub fn course_asset_storage_path(course_id: &str, file_name: &str) -> FlowPath {
     FlowPath::from("media")
-        .child("courses")
-        .child(course_id)
-        .child("assets")
-        .child(file_name)
+        .join("courses")
+        .join(course_id)
+        .join("assets")
+        .join(file_name)
 }
 
 fn normalize_extension(extension: &str) -> Result<String, ApiError> {

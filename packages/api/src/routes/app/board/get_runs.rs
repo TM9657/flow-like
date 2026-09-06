@@ -66,7 +66,7 @@ async fn hydrate_node_summaries(
         .scoped_credentials(sub, app_id, CredentialsAccess::ReadLogs)
         .await?;
     let logs_db_builder = credentials.into_shared_credentials().to_logs_db_builder()?;
-    let base_path = StoragePath::from("runs").child(app_id).child(board_id);
+    let base_path = StoragePath::from("runs").join(app_id).join(board_id);
     let db = logs_db_builder(base_path).execute().await?;
     let table = db.open_table("runs").execute().await?;
 

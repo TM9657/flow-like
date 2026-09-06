@@ -59,7 +59,7 @@ async fn default_state() -> Arc<FlowLikeState> {
 }
 
 async fn open_board(id: &str, state: Arc<FlowLikeState>) -> Board {
-    let path = Path::from("flow").child(APP_ID);
+    let path = Path::from("flow").join(APP_ID);
     Board::load(path, id, state, None).await.unwrap()
 }
 

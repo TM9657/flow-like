@@ -75,8 +75,8 @@ pub async fn get_widgets(
         {
             let mut metadata = Metadata::from(meta.clone());
             let prefix = flow_like_storage::Path::from("media")
-                .child("apps")
-                .child(widget_model.app_id.clone());
+                .join("apps")
+                .join(widget_model.app_id.clone());
             metadata.presign(prefix, &store).await;
             widgets.push((app_id.clone(), widget_model.id.clone(), metadata));
         }

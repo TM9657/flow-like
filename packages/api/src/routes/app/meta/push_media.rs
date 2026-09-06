@@ -109,13 +109,13 @@ pub async fn push_media(
     let master_store = master_store.to_store(false).await?;
 
     if let Some(replaced) = replaced {
-        let path = media_prefix.child(format!("{}.webp", replaced));
+        let path = media_prefix.clone().join(format!("{}.webp", replaced));
         if let Err(err) = master_store.as_generic().delete(&path).await {
             tracing::error!("Failed to delete replaced media at {}: {:?}", path, err);
         }
     }
 
-    let path = media_prefix.child(item_name.clone());
+    let path = media_prefix.join(item_name.clone());
     let signed_url = master_store
         .sign("PUT", &path, Duration::from_secs(60 * 60 * 24))
         .await

@@ -264,7 +264,7 @@ impl RejectedRun {
 
 /// Board-level log database path used by every run artifact.
 pub fn runs_base_path(app_id: &str, board_id: &str) -> Path {
-    Path::from("runs").child(app_id).child(board_id)
+    Path::from("runs").join(app_id).join(board_id)
 }
 
 /// Convenience for callers that hold a log-database builder rather than an

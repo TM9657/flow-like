@@ -462,8 +462,8 @@ async fn execute_inner(
                 };
                 if let Some(db_fn) = db_fn.as_ref() {
                     let base_path = Path::from("runs")
-                        .child(request.app_id.as_str())
-                        .child(request.board_id.as_str());
+                        .join(request.app_id.as_str())
+                        .join(request.board_id.as_str());
                     match state
                         .with_lance_session(db_fn(base_path.clone()))
                         .execute()

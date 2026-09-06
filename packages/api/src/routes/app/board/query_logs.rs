@@ -71,8 +71,8 @@ pub async fn query_logs(
     })?;
 
     let base_path = StoragePath::from("runs")
-        .child(app_id.as_str())
-        .child(board_id.as_str());
+        .join(app_id.as_str())
+        .join(board_id.as_str());
 
     let db = logs_db_builder(base_path.clone())
         .execute()

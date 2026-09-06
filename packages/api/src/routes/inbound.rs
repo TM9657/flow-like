@@ -1306,7 +1306,7 @@ fn app_scoped_content_path(
         relative = rest.to_string();
     }
 
-    let mut path = flow_like_storage::Path::from("apps").child(app_id);
+    let mut path = flow_like_storage::Path::from("apps").join(app_id);
     if !relative.is_empty() {
         path = append_object_path_segments(path, relative.as_str());
     }
@@ -1325,7 +1325,7 @@ fn append_object_path_segments(
     value: &str,
 ) -> flow_like_storage::Path {
     for segment in value.split('/').filter(|segment| !segment.is_empty()) {
-        path = path.child(segment);
+        path = path.join(segment);
     }
     path
 }

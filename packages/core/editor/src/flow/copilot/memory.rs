@@ -93,10 +93,10 @@ impl AssistantMemory {
     ) -> Result<LanceDBVectorStore> {
         let dir = match owner.map(str::trim).filter(|owner| !owner.is_empty()) {
             Some(owner) => Path::from("users")
-                .child(owner)
-                .child("assistant-memory")
-                .child(profile_id),
-            None => Path::from("assistant-memory").child(profile_id),
+                .join(owner)
+                .join("assistant-memory")
+                .join(profile_id),
+            None => Path::from("assistant-memory").join(profile_id),
         };
         let builder = {
             let config = state.config.read().await;

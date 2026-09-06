@@ -154,7 +154,7 @@ async fn process_download_bit(
     };
 
     let store_path =
-        Path::from(bit.hash.clone()).child(bit.file_name.clone().ok_or(anyhow!("No file name"))?);
+        Path::from(bit.hash.clone()).join(bit.file_name.clone().ok_or(anyhow!("No file name"))?);
     let path_name = file_store.path_to_filesystem(&store_path)?;
     let temp_extension = path_name
         .extension()

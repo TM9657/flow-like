@@ -87,8 +87,8 @@ pub async fn get_templates(
         {
             let mut metadata = Metadata::from(meta.clone());
             let prefix = flow_like_storage::Path::from("media")
-                .child("apps")
-                .child(template_model.app_id.clone());
+                .join("apps")
+                .join(template_model.app_id.clone());
             metadata.presign(prefix, &store).await;
             templates.push((app_id.clone(), template_model.id.clone(), metadata));
         }

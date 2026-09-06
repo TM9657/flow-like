@@ -449,8 +449,8 @@ pub(crate) async fn presign_media_under(
                     ..Default::default()
                 };
                 let prefix = FlowPath::from("media")
-                    .child(segment.to_string())
-                    .child(entity_id.clone());
+                    .join(segment.to_string())
+                    .join(entity_id.clone());
                 metadata.presign(prefix, store).await;
                 (entity_id.clone(), (metadata.icon, metadata.thumbnail))
             }

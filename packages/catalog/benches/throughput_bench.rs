@@ -130,7 +130,7 @@ fn construct_profile() -> Profile {
 }
 
 async fn open_board(id: &str, state: Arc<FlowLikeState>) -> Board {
-    let path = Path::from("flow").child(&*app_id());
+    let path = Path::from("flow").join(&*app_id());
     let mut board = Board::load(path, id, state, None)
         .await
         .expect("load board");

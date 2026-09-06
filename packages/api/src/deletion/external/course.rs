@@ -14,6 +14,6 @@ pub async fn delete_media(
 ) -> Result<Flow, ApiError> {
     let credentials = state.master_credentials().await?;
     let content = credentials.to_store(false).await?.as_generic();
-    let prefix = Path::from("media").child("courses").child(course_id);
+    let prefix = Path::from("media").join("courses").join(course_id);
     delete_prefix(&content, &prefix, "course media", pass).await
 }

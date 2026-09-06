@@ -408,7 +408,7 @@ async fn download_and_hash(
     let store = state.cdn_bucket.clone();
 
     let old_location = flow_like_storage::object_store::path::Path::from("bits")
-        .child(bit.hash.clone().unwrap_or(bit.id.clone()));
+        .join(bit.hash.clone().unwrap_or(bit.id.clone()));
     let _delete = store.as_generic().delete(&old_location).await;
 
     let url = match bit.download_link {
@@ -466,7 +466,7 @@ async fn download_and_hash(
             .await;
     }
 
-    let path = flow_like_storage::object_store::path::Path::from("bits").child(e_tag.clone());
+    let path = flow_like_storage::object_store::path::Path::from("bits").join(e_tag.clone());
 
     // For ranged downloads
     const CHUNK_SIZE: usize = 50 * 1024 * 1024; // 50MB chunks

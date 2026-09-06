@@ -143,7 +143,7 @@ pub(crate) fn template_from_fetched(
     registry: &FlowNodeRegistryInner,
     request: &ExecutionRequest,
 ) -> Result<Arc<CompiledRunTemplate>, ExecutorError> {
-    let storage_root = Path::from("apps").child(request.app_id.clone());
+    let storage_root = Path::from("apps").join(request.app_id.clone());
     let template =
         template_from_bytes(bytes, fingerprint, registry, &storage_root).map_err(|e| {
             let ours = blake3::Hash::from_bytes(*fingerprint).to_hex();
@@ -934,8 +934,8 @@ pub async fn execute(
                 );
                 if let Some(db_fn) = db_fn.as_ref() {
                     let base_path = Path::from("runs")
-                        .child(request.app_id.as_str())
-                        .child(request.board_id.as_str());
+                        .join(request.app_id.as_str())
+                        .join(request.board_id.as_str());
                     tracing::info!(path = %base_path, "Opening log database to flush run metadata");
                     match state
                         .with_lance_session(db_fn(base_path.clone()))
@@ -1647,10 +1647,8 @@ mod shadow_claim_binding_tests {
             .next()
             .expect("the catalog is not empty");
         node.id = "n1".into();
-        let mut board = Board::new_detached(
-            Some(board_id.to_string()),
-            Path::from("apps").child("app-1"),
-        );
+        let mut board =
+            Board::new_detached(Some(board_id.to_string()), Path::from("apps").join("app-1"));
         board.nodes.insert(node.id.clone(), node);
         let compiled = compile_board_with_catalog(&board, registry.as_ref()).expect("compile");
         encode_artifact(&compiled, fingerprint).expect("encode")

@@ -43,7 +43,7 @@ fn connect(from: &mut Pin, to: &mut Pin) {
 fn empty_board() -> Board {
     Board::new_detached(
         Some("test-board".to_string()),
-        Path::from("apps").child("test"),
+        Path::from("apps").join("test"),
     )
 }
 
@@ -346,7 +346,7 @@ fn catalog_interning_roundtrips_and_keeps_user_edits() {
     let bytes = encode_artifact(&compiled, &[3u8; 32]).expect("encode");
     let decoded = decode_artifact(&bytes, None).expect("decode");
     let view =
-        reconstruct_board(&decoded, Path::from("apps").child("t"), Some(&registry)).expect("view");
+        reconstruct_board(&decoded, Path::from("apps").join("t"), Some(&registry)).expect("view");
     let restored = &view.nodes["n_demo"];
     assert_eq!(restored.friendly_name, "My renamed demo");
     assert_eq!(restored.description, placed.description);
@@ -360,7 +360,7 @@ fn catalog_interning_roundtrips_and_keeps_user_edits() {
     // Without the catalog, interned fields must fail loudly, not silently
     // reconstruct empty.
     assert!(
-        reconstruct_board(&decoded, Path::from("apps").child("t"), None).is_err(),
+        reconstruct_board(&decoded, Path::from("apps").join("t"), None).is_err(),
         "interned artifact without catalog must be rejected"
     );
 }
@@ -419,7 +419,7 @@ fn reconstructed_view_preserves_execution_fields() {
         .insert("ref_a".to_string(), "{\"type\":\"object\"}".to_string());
 
     let compiled = compile_board(&board).expect("compile");
-    let view = reconstruct_board(&compiled, Path::from("apps").child("app-x"), None).expect("view");
+    let view = reconstruct_board(&compiled, Path::from("apps").join("app-x"), None).expect("view");
 
     assert_eq!(view.id, board.id);
     assert_eq!(view.nodes.len(), 2);
@@ -456,7 +456,7 @@ fn template_from_bytes_rejects_foreign_or_broken_artifacts() {
         .insert("n".into(), node_with_pins("n", "lonely", vec![]));
     let compiled = compile_board(&board).expect("compile");
     let registry = FlowNodeRegistryInner::new(0);
-    let root = Path::from("apps").child("test");
+    let root = Path::from("apps").join("test");
 
     let compiled_with = [1u8; 32];
     let bytes = encode_artifact(&compiled, &compiled_with).expect("encode");

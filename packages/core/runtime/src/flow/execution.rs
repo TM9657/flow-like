@@ -598,8 +598,8 @@ impl Run {
         };
 
         let base_path = Path::from("runs")
-            .child(self.app_id.clone())
-            .child(self.board.id.clone());
+            .join(self.app_id.clone())
+            .join(self.board.id.clone());
         tracing::debug!(path = %base_path, finalize, traces = self.traces.len(), "Preparing log flush");
 
         // 1) pre‑count total logs, reserve once, and find highest level in one pass

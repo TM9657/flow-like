@@ -306,7 +306,7 @@ impl EventBusEvent {
                 let db_fn = db_fn
                     .as_ref()
                     .ok_or_else(|| flow_like_types::anyhow!("No log database configured"))?;
-                let base_path = Path::from("runs").child(app_id).child(board_id);
+                let base_path = Path::from("runs").join(app_id).join(board_id);
                 let db = execution_state
                     .with_lance_session(db_fn(base_path.clone()))
                     .execute()

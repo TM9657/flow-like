@@ -83,8 +83,8 @@ pub async fn get_apps(
         {
             let mut metadata = Metadata::from(meta.clone());
             let prefix = flow_like_storage::Path::from("media")
-                .child("apps")
-                .child(app_model.id.clone());
+                .join("apps")
+                .join(app_model.id.clone());
             metadata.presign(prefix, &store).await;
             Some(metadata)
         } else {

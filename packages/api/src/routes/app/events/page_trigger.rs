@@ -889,7 +889,7 @@ mod tests {
     fn empty_page_execution() -> PrerunPageExecution {
         let board = Board::new_detached(
             Some("board-1".into()),
-            flow_like_storage::Path::from("apps").child("app-1"),
+            flow_like_storage::Path::from("apps").join("app-1"),
         );
         let page = flow_like::a2ui::Page::new("page-1", "Page", "/");
         PrerunPageExecution::from_page(&board, &page).unwrap()
@@ -1075,7 +1075,7 @@ mod tests {
     fn contract_with_revision(target: &ResolvedTarget, revision: &str) -> ResolvedPageContract {
         let board = Board::new_detached(
             Some(target.board_id.clone()),
-            flow_like_storage::Path::from("apps").child("app-1"),
+            flow_like_storage::Path::from("apps").join("app-1"),
         );
         let page_id = target.default_page_id.as_deref().unwrap();
         let page = flow_like::a2ui::Page::new(page_id, "Page", "/");

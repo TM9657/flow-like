@@ -101,7 +101,7 @@ pub async fn temporary_bit(bit: Bit, store: &Arc<FlowLikeStore>) -> flow_like_ty
         None => return Ok(bit),
     };
 
-    let path = flow_like_storage::object_store::path::Path::from("bits").child(name.to_string());
+    let path = flow_like_storage::object_store::path::Path::from("bits").join(name.to_string());
     let url = store
         .sign("GET", &path, Duration::from_secs(60 * 60 * 24))
         .await?;

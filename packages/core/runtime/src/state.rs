@@ -871,8 +871,8 @@ impl FlowLikeState {
             .as_ref()
             .ok_or_else(|| anyhow!("No log database configured"))?;
         let base_path = Path::from("runs")
-            .child(meta.app_id.clone())
-            .child(meta.board_id.clone());
+            .join(meta.app_id.clone())
+            .join(meta.board_id.clone());
         let db = db_fn(base_path.clone()).execute().await?;
 
         let db = db.open_table(meta.run_id.clone()).execute().await?;
@@ -1193,7 +1193,7 @@ mod tests {
 
     #[test]
     fn object_store_path_serialization() {
-        let path = Path::from("test").child("path").child("one");
+        let path = Path::from("test").join("path").join("one");
         let event = PathBuf::from("random").join(path.to_string());
         assert_eq!(path.to_string(), "test/path/one".to_string());
         assert_eq!(event.to_str().unwrap(), "random/test/path/one");
