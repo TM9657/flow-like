@@ -1,5 +1,175 @@
-use super::*;
-use flow_like::flow::copilot::{FORCED_INCREMENTAL_SEGMENT_THRESHOLD, MAX_BOARD_SCOPE_SEGMENTS};
+use super::agent_surface::{
+    append_flowscript_recovery_context, append_typed_ir_recovery_context,
+    pending_flowscript_redelivery_response,
+};
+use super::backend_commands::copilot_sdk_list_models;
+use super::backend_types::{
+    FlowPilotAgentBackendKind, FlowPilotAgentCapabilitySet, FlowPilotAgentTransportKind,
+    FlowPilotChatBackend, FlowPilotModelSelection, ReasoningEffortOption,
+};
+use super::backends::FlowPilotBackendStartOptions;
+use super::board_commits::{
+    ApplyFlowIrCommitResult, FLOW_IR_APPLIED_RECEIPTS, board_edit_job_matches_terminal_delivery,
+    compact_durable_apply_receipt, exact_board_command_batch_matches, flow_ir_ack_race_diagnostic,
+    flow_ir_applied_receipt_key, replay_flow_ir_applied_receipt, retain_flow_ir_applied_receipt,
+    typed_commit_destructive_review_items, validate_board_edit_delivery_bounds,
+};
+use super::board_jobs::{
+    BOARD_EDIT_JOB_MAX_ENTRIES, BOARD_EDIT_JOB_MAX_REMOTE_COMMAND_BYTES,
+    BOARD_EDIT_JOB_SCHEMA_VERSION, BOARD_EDIT_JOB_TTL, BoardEditJob, BoardEditJobDeliveryLease,
+    BoardEditJobPhase, BoardEditJobRecord, BoardEditJobReview, PersistedBoardEditJobEntry,
+    PersistedBoardEditJobRecord, another_board_edit_job_reserves_mutation, board_command_review,
+    board_edit_job_record_from_persisted, board_mutation_is_reserved, flow_ir_commit_identity,
+    prune_board_edit_jobs,
+};
+use super::chat::{home_profile_scope_error, resolve_copilot_app_id, specialist_host_context};
+use super::cli_auth::{claude_auth_probe_from_success, external_agent_auth_output_is_signed_out};
+use super::cli_resolution::{
+    CliResolution, CliResolutionSource, augmented_path, claude_ide_extension_binaries,
+    codex_binary_name, codex_ide_extension_candidate_dirs, codex_target, extra_bin_dirs,
+    find_codex_packaged_cli_under_root, find_copilot_cli_path, find_executable_in_path,
+};
+use super::client_pool::{
+    COPILOT_START_OPTIONS, NESTED_COPILOT_POOL, NESTED_COPILOT_POOL_SIZE, NESTED_COPILOT_RUN_GATES,
+    NestedCopilotPool, acquire_nested_copilot_run_permit, checkout_nested_copilot_client,
+    checkout_nested_copilot_client_from, nested_copilot_run_gate, nested_copilot_run_gate_key,
+    nested_copilot_start_options, quarantine_nested_copilot_client,
+};
+use super::external_continuation::{
+    build_external_agent_prompt, build_external_agent_prompt_body,
+    build_external_workflow_continuation_prompt, external_agent_role_appendix,
+    external_workflow_incomplete_error, nested_wall_clock_exhausted,
+    nested_wall_clock_incomplete_error,
+};
+use super::external_invocation::ExternalAgentInvocation;
+use super::external_stream::{
+    ExternalAgentStreamState, claude_agent_message_delta, claude_agent_tool_events,
+    codex_agent_message_delta, external_agent_error_text,
+    external_agent_flowscript_workspace_event, external_agent_mcp_connect_failure,
+    external_agent_process_event, external_agent_result_text, external_result_details,
+    flowpilot_stream_tag,
+};
+use super::global_chat::{
+    GLOBAL_CHAT_RUN_MAX_BUFFER_BYTES, GLOBAL_CHAT_RUN_MAX_CHUNKS, GlobalChatRunBuffer,
+};
+use super::mcp::{
+    McpToolActivityState, McpToolCompletion, flowpilot_mcp_server_config,
+    flowpilot_mcp_server_instructions, flowpilot_tool_result_is_error,
+    flowpilot_tool_result_to_mcp, is_recoverable_platform_mutation,
+    record_recoverable_platform_mutation, register_mcp_active_handler,
+};
+use super::mcp_progress::{
+    DELEGATED_RUN_PROGRESS_FRESHNESS, LATEST_DELEGATED_RUN_TOOL_PROGRESS, McpToolCancellationGuard,
+    delegated_run_heartbeat_message, is_delegated_agent_tool, mcp_progress_heartbeat_notification,
+    record_delegated_run_tool_progress,
+};
+use super::model_catalog::{
+    codex_models_with_configured_default, parse_claude_model_catalog, parse_codex_model_catalog,
+};
+use super::platform_bridge::{
+    FrontendPlatformToolSet, frontend_platform_tool_spec, global_orchestrator_tool_scope_error,
+};
+use super::provider_errors::{
+    ExternalAgentExitKind, ExternalAgentFailureCategory, actionable_external_agent_failure,
+    can_resume_external_workflow_after_failure, classify_external_agent_failure,
+    classify_external_agent_user_failure,
+};
+use super::runtime::{
+    ACTIVE_COPILOT_RUNS, MCP_TOOL_PROGRESS_HEARTBEAT_INTERVAL, SDK_CONTROL_RPC_TIMEOUT,
+    SDK_EVENT_INACTIVITY_TIMEOUT, SdkToolActivityRegistry, cancel_copilot_chat,
+    register_copilot_run, sdk_tool_handler_watchdog_timeout,
+};
+use super::stream_events::{
+    append_bounded_text, correlate_stream_frame, correlated_stream_payload,
+    direct_sdk_tool_result_stream_status, flowscript_response_workspace_envelope,
+    flowscript_workspace_result_payload, preview_tool_arguments, preview_tool_result,
+    render_recovered_mutation_message, request_identity_prompt_for,
+};
+use super::telemetry::{
+    AGENT_ERROR_CLASSES, AGENT_STAGE_AUTH, AGENT_STAGE_MODELS, AGENT_STAGE_RUN, AGENT_STAGE_SPAWN,
+    AGENT_STAGE_STOP, agent_backend_error_props, agent_backend_lifecycle_props, backend_label,
+    classify_agent_error,
+};
+use super::tool_policy::{
+    is_flowpilot_read_only_tool, is_read_only_workflow_request, is_workflow_edit_request,
+    specialist_tool_policy,
+};
+use super::workflow_declarations::{
+    declaration_queries_are_related, declaration_repair_query_is_bounded,
+    declaration_repair_query_keys, diagnostic_declaration_repair_hints, retain_declaration_result,
+};
+use super::workflow_diagnostics::{
+    workflow_result_diagnostics, workflow_result_requires_repair,
+    workflow_result_structured_diagnostics,
+};
+use super::workflow_observation::{
+    workflow_tool_abort, workflow_tool_abort_with_args, workflow_tool_record,
+};
+use super::workflow_preflight::{
+    workflow_candidate_preflight, workflow_tool_preflight, workflow_tool_preflight_with_args,
+};
+use super::workflow_reporting::{
+    collect_unimplemented_stubs, workflow_run_summary_payload, workflow_run_summary_scope_plan,
+};
+use super::workflow_results::{
+    annotate_modular_fallback_result, flowscript_source_fingerprint,
+    suppress_unchanged_flowscript_source_echo,
+};
+use super::workflow_sdk::{
+    IdleContinuationBudget, InitialSourceCheckpointPhase, guard_sdk_workflow_tools,
+    is_flowscript_draft_operation_tool, is_order_sensitive_workflow_tool, is_workflow_commit_tool,
+    is_workflow_loop_tool, prepare_sdk_idle_continuation_budget, scope_sdk_tool_handlers,
+    typed_ir_operation_budget, workflow_database_setup_preflight,
+    workflow_initial_source_checkpoint_phase, workflow_predraft_context_preflight,
+    workflow_predraft_context_preflight_with_lease, workflow_state_has_retained_candidate,
+};
+use super::workflow_state::{
+    EXTERNAL_CONTINUATION_CHECK_HEADROOM, EXTERNAL_CONTINUATION_OPERATION_HEADROOM,
+    EXTERNAL_EXTENSION_CHECK_GRANT, EXTERNAL_EXTENSION_COMMIT_GRANT,
+    EXTERNAL_EXTENSION_CONTINUATION_GRANT, EXTERNAL_EXTENSION_OPERATION_GRANT,
+    EXTERNAL_SEGMENT_CHECK_ALLOWANCE, EXTERNAL_SEGMENT_OPERATION_ALLOWANCE,
+    EXTERNAL_SEGMENT_WALL_CLOCK_ALLOWANCE, EXTERNAL_TIME_EXTENSION_SLICE,
+    MAX_EXTERNAL_EARNED_WALL_CLOCK, MAX_EXTERNAL_FLOWSCRIPT_COMMIT_ATTEMPTS,
+    MAX_EXTERNAL_FLOWSCRIPT_OPERATION_ATTEMPTS, MAX_EXTERNAL_PREDRAFT_CONTEXT_READS,
+    MAX_EXTERNAL_SEGMENTED_FLOWSCRIPT_OPERATION_ATTEMPTS, MAX_EXTERNAL_SEGMENTED_WALL_CLOCK_BUDGET,
+    MAX_EXTERNAL_SEGMENTED_WORKFLOW_EDIT_ATTEMPTS, MAX_EXTERNAL_TYPED_IR_OPERATION_BUDGET,
+    MAX_EXTERNAL_TYPED_IR_STALLED_ATTEMPTS, MAX_EXTERNAL_WORKFLOW_CONTINUATIONS,
+    MAX_EXTERNAL_WORKFLOW_EDIT_ATTEMPTS, MAX_EXTERNAL_WORKFLOW_STALLED_EDIT_ATTEMPTS,
+    MAX_INITIAL_DECLARATION_ATTEMPTS, MAX_REPAIR_DECLARATION_ATTEMPTS_PER_KEY,
+    MAX_RETAINED_STRUCTURED_DIAGNOSTIC_BYTES, MAX_RETAINED_STRUCTURED_DIAGNOSTICS,
+    MIN_EXTERNAL_TYPED_IR_OPERATION_BUDGET, NESTED_RUN_WALL_CLOCK_BUDGET, TimeExtensionDecision,
+    WorkflowMutationPath, WorkflowToolLoopSnapshot, WorkflowToolLoopState, submitted_flowscript,
+};
+use crate::functions::ai::{
+    copilot_sdk_tools::retained_flow_ir_draft_store_for_board,
+    frontend_tool_bridge::FrontendToolContext,
+};
+use copilot_sdk::{Client, LogLevel};
+use flow_like::{
+    app::App,
+    copilot::{ChatImage, CopilotScope, FlowIrCommitToken},
+    flow::{
+        board::{Board, commands::GenericCommand},
+        copilot::{
+            BoardCommand, BoardContextManifest, BoardScopePlan,
+            FORCED_INCREMENTAL_SEGMENT_THRESHOLD, FlowScriptPendingDelivery,
+            MAX_BOARD_SCOPE_SEGMENTS, ManifestAudit, ManifestAugmentations, ManifestSource,
+            PlanBoardScopeArgs, ScopeStrategy, accept_scope_plan,
+            default_flowscript_module_templates, flowscript_workspace_envelope,
+            profile_flowscript_candidate,
+            tool_spec::{MAX_DELEGATED_RUN_DISPATCH_SECS, RESEARCH_AGENT_TOOL},
+        },
+        variable::VariableType,
+    },
+};
+use flow_like_types::{channel::Channel as _, tokio_util::sync::CancellationToken};
+use std::{
+    collections::{BTreeMap, HashMap, HashSet},
+    path::{Path, PathBuf},
+    sync::{Arc, Mutex as StdMutex},
+    time::{Duration, Instant},
+};
+use tokio::sync::{Mutex, Semaphore};
 
 mod backend_telemetry;
 mod board_edit_jobs;
