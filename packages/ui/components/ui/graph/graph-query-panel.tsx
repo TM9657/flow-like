@@ -68,7 +68,7 @@ export function GraphQueryPanel({
 	const [query, setQuery] = useState("");
 	const [params, setParams] = useState<Record<string, unknown>>({});
 	const [activeTab, setActiveTab] = useState("table");
-	const flowPilotBusy = flowPilotStatus !== null;
+	const flowPilotBusy = flowPilotStatus != null;
 
 	useEffect(() => {
 		if (!generatedProposal) return;
@@ -148,7 +148,7 @@ export function GraphQueryPanel({
 			className="flex h-full min-h-0 flex-col overflow-hidden rounded-lg border bg-background"
 			aria-busy={loading || flowPilotBusy || undefined}
 		>
-			<div className="shrink-0 space-y-2 border-b p-2 sm:p-3">
+			<div className="max-h-full shrink-0 space-y-2 overflow-y-auto border-b p-2 sm:p-3">
 				<div className="flex items-center justify-between gap-2">
 					<p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
 						{t("ontologyQuery", "Ontology Query")}
@@ -271,6 +271,7 @@ export function GraphQueryPanel({
 						value={query}
 						onChange={(event) => setQuery(event.target.value)}
 						onKeyDown={handleKeyDown}
+						wrap="off"
 						placeholder="MATCH (n:Person)-[r]->(m) RETURN n, r, m LIMIT 100"
 						className="h-10 min-h-10 max-h-20 w-full resize-y rounded-md border bg-muted/50 px-3 py-2 font-mono text-sm focus:outline-none focus:ring-2 focus:ring-ring"
 						spellCheck={false}

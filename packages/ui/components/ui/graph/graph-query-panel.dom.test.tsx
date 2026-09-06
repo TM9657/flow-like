@@ -92,8 +92,8 @@ function setSelectValue(
 }
 
 function buttonWithText(container: HTMLElement, label: string) {
-	return [...container.querySelectorAll("button")].find(
-		(button) => button.textContent?.includes(label),
+	return [...container.querySelectorAll("button")].find((button) =>
+		button.textContent?.includes(label),
 	);
 }
 
@@ -105,7 +105,7 @@ test("asks FlowPilot with the natural-language prompt and selected language", as
 	await render(
 		<GraphQueryPanel
 			onRunCypher={() => {}}
-			onAskFlowPilot={(prompt, language) => {
+			onAskFlowPilot={async (prompt, language) => {
 				calls.push([prompt, language]);
 			}}
 			results={null}
@@ -125,15 +125,7 @@ test("asks FlowPilot with the natural-language prompt and selected language", as
 	});
 
 	const ask = buttonWithText(container, "Ask FlowPilot");
-	if (!ask) {
-		throw new Error(
-			`Ask FlowPilot button was not rendered: ${JSON.stringify(
-				[...container.querySelectorAll("button")].map(
-					(button) => button.textContent,
-				),
-			)}`,
-		);
-	}
+	if (!ask) throw new Error("Ask FlowPilot button was not rendered");
 	expect(ask.disabled).toBe(false);
 	await act(async () => ask.click());
 
@@ -189,7 +181,7 @@ test("shows FlowPilot progress and lets the user cancel the active request", asy
 	await render(
 		<GraphQueryPanel
 			onRunCypher={() => {}}
-			onAskFlowPilot={() => {}}
+			onAskFlowPilot={async () => {}}
 			onCancelFlowPilot={() => {
 				cancellations += 1;
 			}}

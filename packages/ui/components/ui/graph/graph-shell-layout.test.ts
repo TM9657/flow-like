@@ -32,7 +32,7 @@ test("query dock keeps a usable graph stage and remains bounded", () => {
 	expect(clampGraphQueryDockHeight(900, 700)).toBe(
 		700 - GRAPH_MIN_STAGE_HEIGHT,
 	);
-	expect(getGraphStageMinHeight(390)).toBe(246);
+	expect(getGraphStageMinHeight(390)).toBe(222);
 	expect(clampGraphQueryDockHeight(900, 390)).toBe(GRAPH_QUERY_DOCK_MIN_HEIGHT);
 	expect(getGraphStageMinHeight(300)).toBe(GRAPH_COMPACT_MIN_STAGE_HEIGHT);
 	expect(clampGraphQueryDockHeight(Number.NaN, 700)).toBe(

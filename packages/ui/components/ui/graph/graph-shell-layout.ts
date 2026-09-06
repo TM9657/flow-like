@@ -1,6 +1,7 @@
 export const GRAPH_MIN_STAGE_HEIGHT = 280;
 export const GRAPH_COMPACT_MIN_STAGE_HEIGHT = 220;
-export const GRAPH_QUERY_DOCK_MIN_HEIGHT = 144;
+/** Fits the title, natural-language row, and editable generated-query row. */
+export const GRAPH_QUERY_DOCK_MIN_HEIGHT = 168;
 export const GRAPH_QUERY_DOCK_DEFAULT_HEIGHT = 240;
 
 const COMPACT_TOOLBAR_WIDTH = 1100;

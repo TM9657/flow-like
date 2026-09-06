@@ -1383,7 +1383,7 @@ export function GraphViewer({
 			{/* Main graph area */}
 			<div className="flex-1 flex flex-col min-w-0 min-h-0">
 				{/* Toolbar */}
-				{showToolbar && (
+				{showToolbar && !(showQuery && shellMode.compactToolbar) && (
 					<div
 						data-testid="graph-toolbar"
 						className="relative z-40 flex min-w-0 flex-wrap items-center gap-2 border-b bg-background p-2"
@@ -1788,7 +1788,7 @@ export function GraphViewer({
 					ref={workspaceRef}
 					className="flex min-h-0 flex-1 flex-col overflow-hidden"
 				>
-					{/* Canvas — zoom/fit/reset controls are rendered inside SigmaContainer */}
+				{/* Canvas. Zoom, fit, and reset controls render inside SigmaContainer. */}
 					<div
 						data-testid="graph-stage"
 						className="relative flex-1"
@@ -1915,7 +1915,7 @@ export function GraphViewer({
 							}
 						/>
 
-						{/* Focus banner — the only way back out, so it is always on top */}
+						{/* The focus banner is the only exit, so it always stays on top. */}
 						{focus && focusedNodeIds && (
 							<div className="absolute left-1/2 top-3 z-30 -translate-x-1/2">
 								<div className="flex items-center gap-2 rounded-full border border-primary/40 bg-primary/10 px-3 py-1.5 text-xs shadow-sm backdrop-blur-sm">
@@ -2011,7 +2011,7 @@ export function GraphViewer({
 											<span className="font-medium">
 												<GraphNodeCaption node={pathSource} overlay={overlay} />
 											</span>{" "}
-											{t("selectATargetNode", "— select a target node")}
+											{t("selectATargetNode", "Select a target node")}
 										</span>
 										<button
 											type="button"
@@ -2046,7 +2046,7 @@ export function GraphViewer({
 												: pathOutcome.found
 													? t(
 															"connectedHopsHopvalval2",
-															"Connected — {{hops}} hop{{val}}{{val2}}",
+															"Connected: {{hops}} hop{{val}}{{val2}}",
 															{
 																hops: pathOutcome.hops,
 																val: pathOutcome.hops !== 1 ? "s" : "",

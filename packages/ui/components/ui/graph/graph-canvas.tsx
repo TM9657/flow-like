@@ -296,9 +296,6 @@ const MIN_FIT_SIZE_SCALE = 0.28;
 /** How much of the room a node gets its circle may fill, edge to edge. */
 const MAX_NODE_PITCH_SHARE = 0.3;
 const MIN_RENDERED_NODE_SIZE = 2;
-/** Below this the renderer has too little room to produce a useful graph. */
-const MIN_GRAPH_STAGE_WIDTH = 280;
-const MIN_GRAPH_STAGE_HEIGHT = 280;
 
 /**
  * Shrinks nodes as the sample grows, because `autoRescale` fits the whole layout
@@ -3039,10 +3036,6 @@ export function GraphCanvas({
 			<div
 				ref={stageRef}
 				className={`relative flex h-full w-full items-center justify-center overflow-hidden text-muted-foreground ${className ?? ""}`}
-				style={{
-					minWidth: MIN_GRAPH_STAGE_WIDTH,
-					minHeight: MIN_GRAPH_STAGE_HEIGHT,
-				}}
 			>
 				{t("noGraphDataToDisplay", "No graph data to display")}
 			</div>
@@ -3055,10 +3048,6 @@ export function GraphCanvas({
 		<div
 			ref={stageRef}
 			className={`relative h-full w-full overflow-hidden ${className ?? ""}`}
-			style={{
-				minWidth: MIN_GRAPH_STAGE_WIDTH,
-				minHeight: MIN_GRAPH_STAGE_HEIGHT,
-			}}
 			onContextMenu={
 				onNodeContextMenu ? (event) => event.preventDefault() : undefined
 			}
