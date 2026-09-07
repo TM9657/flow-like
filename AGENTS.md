@@ -8,6 +8,26 @@ syntax.
 The goal is useful writing with a recognizable human point of view. Do not optimize for an AI
 detector. Detection is unreliable and can penalize non-native writers. Edit for the reader.
 
+## Documentation placement
+
+Implementation work should not leave a trail of explanatory Markdown beside the code.
+
+- Do not create new `README.md`, design notes, implementation summaries, audit reports, QA
+  reports, migration notes, or similar Markdown files inside source, component, service,
+  package, script, test, fixture, or asset directories unless the user explicitly requests
+  a document there. Nearby READMEs are not a reason to add another one.
+- Keep task plans, progress logs, validation results, and handoff summaries in the conversation
+  or PR description. Do not save them as repository files unless the user asks for that artifact.
+- Put lasting product and developer documentation in the existing documentation site or another
+  established documentation area. Update a relevant page instead of creating a parallel guide.
+- Update an existing README only when changed behavior makes its instructions inaccurate or
+  incomplete. Keep it focused on its readers; do not append a history of the task.
+- Use short comments beside the relevant code when a constraint or decision needs an explanation.
+  Do not add a Markdown companion for each module or feature.
+- Keep actual documentation content, books, tutorials, templates, and required generated or
+  third-party files in their designated locations. This rule targets unsolicited explanatory
+  files added during implementation, not the repository's documentation products.
+
 ## Start with the reader
 
 Before drafting, identify the primary reader and what the text should help that reader decide,

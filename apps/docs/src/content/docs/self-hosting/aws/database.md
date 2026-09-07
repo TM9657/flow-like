@@ -37,6 +37,7 @@ before. All three components share the same validation
 | `DSQL_RUNTIME_ROLE_ARN` | n/a | optional, the Lambdas' IAM role ARN; unset skips the grant step with a warning |
 | `DSQL_RUNTIME_DB_ROLE` | n/a | optional, default `flow_like_api` |
 | `DSQL_MIGRATIONS_DIR` | n/a | optional, default `prisma/migrations-dsql` (what the image ships) |
+| `DSQL_SCHEMA_DIR` | n/a | optional, default `prisma/schema`; a checkout requires the generated PostgreSQL mirror |
 | `DSQL_JOB_WAIT_TIMEOUT_SECS` | n/a | optional, default `7200` (60–86400), budget per wait on `sys.jobs` |
 
 Public endpoints have the form `<id>.dsql.<region>.on.aws`; PrivateLink
@@ -209,11 +210,56 @@ runtime role and finishes with `prisma migrate status` against
 a row with `logs` set - a failed statement or a failed job - needs a human.
 The job does not use `prisma migrate deploy`: Prisma sends a migration file as
 one batch, which PostgreSQL runs in one implicit transaction and DSQL rejects.
-Details and recovery steps are in `apps/backend/aws/migration/README.md`.
+See [migration recovery](#migration-recovery) if the run fails.
 
 Run the job before deploying a Lambda revision that needs the new schema;
 sessions opened before a schema change see one `OC001` conflict on their next
 statement, which the API's transaction retry absorbs.
+
+When the API and file tracker use separate IAM roles, run the migration job
+once with each `DSQL_RUNTIME_ROLE_ARN` and the same `DSQL_RUNTIME_DB_ROLE`.
+Later runs retain the applied migration history and grant the additional role.
+
+### Migration recovery
+
+| Exit code | Meaning and next step |
+| --- | --- |
+| `0` | Migrations, async jobs, grants, and the final status check succeeded, or the schema was already up to date |
+| `1` | Inspect the log for a token, statement, async job, catalog, grant, status-check, or wait-timeout failure |
+| `2` | Correct the rejected environment setting before retrying |
+| `3` | Another migration holds the lease; wait for that run to finish or for its lease to expire |
+
+A `_prisma_migrations` row with `applied_steps_count = 1`, no `logs`, and no
+`finished_at` is resumable. Every statement committed, but its asynchronous
+jobs were not confirmed. Re-run the job: it waits for `sys.jobs`, verifies that
+`pg_index` contains no invalid indexes and `pg_constraint` contains no unvalidated
+foreign keys, then finishes the row. Async jobs continue after a wait timeout.
+
+A row with `logs` and no `finished_at` blocks later migrations. Read the error
+and repair the schema. Earlier statements remain committed because DSQL DDL is
+not transactional. For a failed unique index, repair duplicate data and rebuild
+the failed index before resolving the migration. Use
+`prisma migrate resolve --applied <name>` only after completing the migration
+by hand. `--rolled-back <name>` makes the runner apply the whole file again;
+first account for every statement that already committed. Preserve the
+checksums of published migrations rather than casually editing their history.
+
+Run resolution commands with `PRISMA_SCHEMA_DISABLE_ADVISORY_LOCK=1`, the DSQL
+Prisma configuration, and a short-lived admin-token `DATABASE_URL` using
+`sslmode=require&sslaccept=strict`. These are settings for the manual Prisma
+process. The migration runner itself rejects `DATABASE_URL` in its environment.
+
+From a checkout, prefer `mise run db:dsql:migrate`. A raw runner invocation
+needs both `DSQL_MIGRATIONS_DIR` and `DSQL_SCHEMA_DIR` pointed at the checkout's
+committed migrations and generated mirror. The tracked schema still declares
+`cockroachdb`. Omitting the mirror path can let all statements succeed and then
+fail only the final status check. The
+[migration runner](https://github.com/Rheosoph/flow-like/blob/main/apps/backend/aws/migration/migrate.ts)
+is the reference for lease, checksum, and recovery handling.
+
+For local runner checks, run `bun install`, `bun test`, `bunx tsc --noEmit`,
+and `bunx biome check .` from `apps/backend/aws/migration`. These checks do not
+apply a migration to a cluster.
 
 ## Developer workflow: generating a migration
 

@@ -1,11 +1,16 @@
-# Documentation screenshot CLI
+---
+title: Capture documentation screenshots
+description: Capture application states and rendered FlowScript workflows with repository tools
+---
 
-This CLI opens real Flow-Like routes in Chromium, performs a small,
-declarative interaction plan, and writes deterministic, documentation-ready
-screenshots. It is intended for agents such as Codex and Claude Code as well as
-local use.
+Capture application screens with `docs:screenshot`, or render a FlowScript
+workflow with `workflow:screenshot`. Both commands use the desktop frontend
+and write images suitable for the documentation site or FlowBook.
 
-Run commands from the repository root.
+Install the [repository toolchain and dependencies](/dev/build/) first.
+The screenshot runner uses Puppeteer and its Chromium browser; workflow
+captures also compile a Rust helper. Run commands from the repository root.
+See [documentation assets](/dev/documentation-assets/) for publication conventions.
 
 ## Capture the onboarding example
 
@@ -22,7 +27,7 @@ bun run docs:screenshot -- \
 The three lossless WebP files are written below
 `tmp/doc-screenshots/onboarding`.
 
-Plan paths have two deliberately different bases:
+Plan paths use these bases:
 
 - `tauriFixture` and `httpFixture` are resolved relative to the plan file. This
   keeps a plan and its fixtures portable when the command is launched from
@@ -106,7 +111,7 @@ The supported steps are:
 | `capture` | `name`, optional `mode`, `selector`, `index`, `padding`, `output`, `format`, `quality`, `hideSelectors` | Writes a named `viewport`, `fullPage`, or `element` screenshot. Element mode requires a selector and scrolls the target into view before measuring it. |
 
 One complete working example is in
-[`examples/onboarding.plan.json`](examples/onboarding.plan.json). Prefer a plan
+[`examples/onboarding.plan.json`](https://github.com/Rheosoph/flow-like/blob/dev/apps/desktop/lib/doc-screenshot/examples/onboarding.plan.json). Prefer a plan
 when documentation needs multiple states: it is easier to review and rerun
 than a sequence of shell commands.
 
@@ -180,7 +185,7 @@ headers, URL, and a response resource ID. A `204 No Content` response avoids a
 body-read command and is useful for deterministic background requests.
 
 See
-[`fixtures/onboarding.tauri.json`](fixtures/onboarding.tauri.json) for realistic
+[`fixtures/onboarding.tauri.json`](https://github.com/Rheosoph/flow-like/blob/dev/apps/desktop/lib/doc-screenshot/fixtures/onboarding.tauri.json) for realistic
 profile, bit, download, event, updater, notification, registry, tray, and HTTP
 responses.
 
@@ -245,17 +250,16 @@ be reserved for exploratory captures. Cross-origin requests that trigger CORS
 preflight need an exact `OPTIONS` route as well as the application request.
 
 The reference plan uses
-[`fixtures/docs-reference.http.json`](fixtures/docs-reference.http.json) to
+[`fixtures/docs-reference.http.json`](https://github.com/Rheosoph/flow-like/blob/dev/apps/desktop/lib/doc-screenshot/fixtures/docs-reference.http.json) to
 provide the OpenID configuration required by
 `/debug/markdown`. The route is public, including when opened without the
 plan's `capture=docs` marker, but the app's OpenID fetch remains mandatory: a
 missing, mismatched, or invalid fixture response still fails instead of
 falling back to an unauthenticated render.
 
-## JSON output and safety
+## Results and fixture boundaries
 
-Pass `--json` for a `flow-like.doc-screenshot-result/v1` result suitable for
-another agent or a CI job. It reports scenario and step status, final URL,
+Pass `--json` for a `flow-like.doc-screenshot-result/v1` result for scripts or CI. It reports scenario and step status, final URL,
 output files, dimensions, byte counts, SHA-256 hashes, timings, and bounded
 page error counts. Exit code `0` means every scenario passed, `1` means a
 scenario, action, or capture failed, and `2` means the CLI, server, browser, or
@@ -276,3 +280,89 @@ Do not place passwords, access tokens, private headers, or other secrets in a
 plan, query string, fixture, selector, or filename. These inputs can appear in
 logs and result metadata, and the rendered page itself becomes part of the
 screenshot. Use synthetic fixture data for documentation captures.
+
+## Render a workflow
+
+`workflow:screenshot` turns a catalog-valid FlowScript document into a rendered
+Studio workflow. Use it for FlowBook illustrations and workflow reference images.
+
+Run it from the repository root:
+
+```sh
+bun run workflow:screenshot -- \
+  apps/book/examples/incident-triage/triage.flow \
+  --output apps/book/src/assets/workflows/incident-triage.webp \
+  --layout balanced \
+  --theme light
+```
+
+The pipeline uses the production pieces in their normal order:
+
+1. The Rust helper applies the source to an empty Board through
+   `apply_flowscript_to_board` and the complete built-in catalog. Parse or reconcile
+   diagnostics stop the command before a browser starts.
+2. The resulting Board is formatted with the same `computeFlowLayoutDetailed` engine used
+   by Studio. Root and nested/function-layer canvases are all laid out.
+3. An ephemeral offline app and Board are exposed to the desktop frontend through the
+   documentation Tauri fixture bridge. No real profile, app, or Board is created or changed.
+4. The existing documentation screenshot runner opens `/flow` in Chromium and writes a
+   lossless WebP/PNG (or JPEG) at the requested viewport and DPR.
+
+### Focus one node or layer
+
+`--focus-node` accepts an exact reconciled ID, a node/layer identity anchor such as
+`//@n:abc123` or `//@l:function123`, a unique catalog node name, a friendly name, or a
+layer name. The normal `/flow?...&node=<id>` navigation opens the owning layer and frames
+the target with Studio's focus behavior.
+
+Generated ids are easiest to discover with:
+
+```sh
+bun run workflow:screenshot -- path/to/workflow.flow --list-nodes
+```
+
+Then render the detail:
+
+```sh
+bun run workflow:screenshot -- path/to/workflow.flow \
+  --focus-node normalize \
+  --output tmp/workflow-screenshots/normalize.webp
+```
+
+An ambiguous selector fails and prints the matching ids instead of silently choosing one.
+When a document contains only function declarations, the renderer automatically opens the first
+function by stable name/id order so the root's intentionally hidden function layers cannot produce
+an empty capture.
+
+### Show generic error handling
+
+`--handle-errors` adds the same `On Error` Execution output and `Error` String output as
+Studio's Handle Errors toggle. It accepts the same node ids, node anchors, catalog names, and
+friendly names as `--focus-node`; layers and pure nodes are rejected. The adjusted node is focused
+automatically unless `--focus-node` explicitly selects another target.
+
+```sh
+bun run workflow:screenshot -- path/to/workflow.flow \
+  --handle-errors "API Call" \
+  --output tmp/workflow-screenshots/api-error.webp
+```
+
+The outputs are added only to the ephemeral reconciled Board used for rendering. The FlowScript
+source and any real Flow-Like profile remain unchanged.
+
+### Layout and image controls
+
+- `--layout compact|balanced|expanded` selects Studio's layout style. `balanced` is the
+  default for book-friendly spacing.
+- `--viewport 1624x1060`, `--dpr 2`, and `--theme light|dark` control the deterministic
+  browser surface.
+- `.webp` and `.png` are lossless. `.jpg`/`.jpeg` can use `--quality`.
+- `--frontend-url http://127.0.0.1:3000` reuses an already running desktop frontend.
+- `--json` returns the screenshot hash, dimensions, resolved focus id, and nested capture
+  result on stdout. Progress and server logs stay on stderr.
+
+The default output is `tmp/workflow-screenshots/<input-name>.webp`.
+
+For repeated captures after building the helper once, set
+`FLOW_LIKE_FLOWSCRIPT_RENDER_DATA_BIN=target/debug/flowscript-render-data` to bypass Cargo's
+workspace lock and invoke that exact binary directly.

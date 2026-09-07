@@ -80,6 +80,22 @@ mise run build:desktop
 Tauri writes binaries and installers below `target/release/`; the precise
 bundle directory and extension depend on the platform.
 
+### Maintain desktop release tooling
+
+The frontend release job installs the full workspace and exports its assets
+for the native targets. Native jobs install the smaller package set in
+`.github/release-tools` into the runner's temporary directory.
+
+Keep its Tauri CLI and dotenv CLI versions aligned with the versions resolved
+in the root `bun.lock`. Update the release-tools lockfile in a temporary
+directory outside the repository so Bun does not discover the monorepo
+workspace. Commit that directory's `package.json` and `bun.lock` together.
+
+The [native release workflow](https://github.com/Rheosoph/flow-like/blob/dev/.github/workflows/release-native.yml)
+runs `apps/desktop/scripts/sync-version.ts` explicitly. It does not install the
+desktop workspace, so it cannot rely on the desktop postinstall script to
+synchronize versions.
+
 ## Other useful tasks
 
 ```bash

@@ -53,6 +53,11 @@ The default runner requests 1 GiB of memory, has a one-CPU limit and a 256 MiB
 memory-backed temporary volume. Include the separate gateway and gVisor overhead
 in node sizing.
 
+Each gateway requests 32 MiB and is limited to 128 MiB. Set kubelet
+`podPidsLimit` on execution nodes to bound process creation; the chart relies on
+that node setting for its portable PID limit. Pin
+`executionManager.image.digest` and `executionManager.sandbox.image`.
+
 Configured concurrency is approximately manager replicas multiplied by the active
 limit. Sustainable throughput also depends on run duration and preparation rate:
 100 executions per second with a 60-second average duration require about 6,000
@@ -61,6 +66,11 @@ concurrent executions. Adding replicas cannot compensate for exhausted nodes.
 When no clean slot is available, immediate requests are refused without starting
 a run. Queue delivery can wait within its age budget. Monitor available warm slots
 and preparation failures as well as active execution counts.
+
+An unavailable slot returns HTTP 429 with `X-Execution-Admitted: false` before
+streaming headers are sent. Queue bridges may retry that explicitly unstarted
+work within its original queue-age budget. Accepted work retains its deadline
+and admission slot if the requesting client disconnects.
 
 ## Latency and long runs
 
@@ -93,6 +103,18 @@ execution and supervisor allowances. A lost claim reply is not retried. Retain
 Redis data across upgrades; restoring a snapshot can remove claims for work that
 already ran. External side effects still require application-level idempotency.
 
+Claims use `exec:claims:v1:<namespace>:<release>:<sha256-run-id>` and contain only
+a slot identifier. The manager checks Redis before becoming ready and uses
+two-second connection/command timeouts. TLS validates the certificate chain and
+hostname; connection-URL query overrides that could weaken these checks are
+rejected. See [Security](/self-hosting/kubernetes/security/#object-store-and-service-credentials)
+for a dedicated Redis ACL.
+
+Budget Redis for retained claims as well as queues: 1,000 executions per second
+creates at least 86.4 million claim keys over 24 hours. Bundled Redis fsyncs AOF
+every second, so a crash can lose recent claims. Reconcile accepted work before
+resuming dispatch after Redis data loss or restoration.
+
 The `exec:jobs:v3` queue retains accepted delivery until trusted terminal
 confirmation. Ambiguous delivery and expired queue items are quarantined for
 reconciliation. Do not replay them solely because the client lost its connection.
@@ -110,6 +132,23 @@ kubectl port-forward service/flow-like-execution-manager 9000:9000 -n flow-like
 Manager `/ready` reports supervisor availability. Inspect `/metrics` to establish
 whether warm capacity is actually available. Runtime dispatch and cancellation
 endpoints require the manager token and should remain private.
+
+`executor_warm_slots` reports the ready reserve; metrics also show active jobs,
+admission capacity, slot preparation/retirement and assignment durations. Measure
+queue-to-first-node p50/p95/p99, completion throughput and slot replacement rate
+on the actual cluster, including cancellation and hour-long executions. Raising
+the reserve or preparation concurrency also increases Kubernetes API, CNI and
+node load.
+
+For local protocol and controller tests, run from the repository root:
+
+```sh
+cargo test --locked -p flow-like-execution-manager
+```
+
+The suite uses fake APIs, Redis wire fixtures and harmless child processes for
+admission, cancellation, replay, transport and cleanup. It does not replace live
+gVisor, Cilium, storage or load qualification.
 
 ## Trusted local workflows
 

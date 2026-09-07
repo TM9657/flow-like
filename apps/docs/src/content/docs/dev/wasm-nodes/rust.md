@@ -36,8 +36,12 @@ rustup target add wasm32-wasip2
 cargo build --release --target wasm32-wasip2
 ```
 
-The template depends on the published `flow-like-wasm-sdk` crate and configures
-the library as `cdylib`.
+The template configures the library as `cdylib`. Its checked-in dependency
+currently includes a relative path to `libs/wasm-sdk/wasm-sdk-rust` alongside
+version `0.4.0`, so copying the directory alone still requires changing that
+dependency. Use the published crate after confirming that the required version
+is available, or keep the SDK at the path expected by the manifest. The SDK
+release procedure below includes the check for a standalone template.
 
 ## Define a node
 
@@ -204,6 +208,92 @@ mise run test:wasm:rust:e2e
 
 There is no checked-in `flow-like publish` CLI and no supported
 `~/.flow-like/nodes` copy-install workflow.
+
+## Release the Rust SDK
+
+SDK maintainers publish `flow-like-wasm-sdk` to crates.io before changing the
+template to use a new registry version. Run these commands from the Flow-Like
+repository root with its pinned Rust toolchain. The SDK does not depend on
+Wasmtime, so the runtime's Rust minimum is a separate requirement.
+
+The examples below use the current SDK version, `0.4.0`. Read the SDK manifest
+before a later release and substitute its version in registry checks and the
+template dependency. The macros crate remains at `0.3.7`; publish it separately
+only when its own version changes.
+
+### Verify the package
+
+Install the component target, then test with and without the optional Rig
+agent library:
+
+```bash
+rustup target add wasm32-wasip2
+cargo test --manifest-path libs/wasm-sdk/wasm-sdk-rust/Cargo.toml --locked --target host-tuple
+cargo test --manifest-path libs/wasm-sdk/wasm-sdk-rust/Cargo.toml --locked --all-features --target host-tuple
+cargo package --manifest-path libs/wasm-sdk/wasm-sdk-rust/Cargo.toml --locked --allow-dirty --list
+mise run publish:wasm:rust:dry-run
+```
+
+Review the [SDK changelog](https://github.com/Rheosoph/flow-like/blob/dev/libs/wasm-sdk/wasm-sdk-rust/CHANGELOG.md)
+and package listing. The archive must include `src/resources.rs` and
+`wit/flow-like-node.wit`. Cargo includes the WIT symlink's content in the
+archive, so consumers do not need a separate WIT checkout.
+
+The dry-run task builds the packaged source for the native host and
+`wasm32-wasip2`, with all SDK features and locked dependencies, without
+uploading. It uses `--allow-dirty` to validate changes before commit. Commit
+the release files before using the publication task, which rejects dirty
+package contents.
+
+### Publish and confirm the version
+
+Use a crates.io account allowed to publish `flow-like-wasm-sdk`. If Cargo is
+not authenticated, run this in your own terminal and enter the token at its
+prompt:
+
+```bash
+cargo login --registry crates-io
+mise run publish:wasm:rust
+cargo info flow-like-wasm-sdk@0.4.0 --registry crates-io
+```
+
+The SDK task uploads only the SDK. A published version cannot be overwritten.
+If Cargo reports an index timeout after upload, check the registry version
+before trying another upload. Update the SDK index in `libs/wasm-sdk/README.md`
+once the version is available. Use `mise run publish:wasm:rust:macros` only for
+a changed macros crate.
+
+To publish reviewed but uncommitted package changes deliberately, Cargo
+accepts the explicit override:
+
+```bash
+cargo publish --manifest-path libs/wasm-sdk/wasm-sdk-rust/Cargo.toml --locked --all-features --registry crates-io --allow-dirty
+```
+
+### Verify the standalone template
+
+After confirming publication, replace the dependency and its local path
+comments in `templates/wasm-node-rust/Cargo.toml` with:
+
+```toml
+flow-like-wasm-sdk = { version = "0.4.0", features = ["rig"] }
+```
+
+Keep `rig` enabled because the template includes agent examples. Remove any
+template instructions requiring a sibling SDK checkout and replace
+repository-relative SDK links with public links. Regenerate its lockfile and
+test the published dependency:
+
+```bash
+cargo update --manifest-path templates/wasm-node-rust/Cargo.toml -p flow-like-wasm-sdk --precise 0.4.0
+cargo test --manifest-path templates/wasm-node-rust/Cargo.toml --locked --target host-tuple
+cargo build --manifest-path templates/wasm-node-rust/Cargo.toml --locked --release --target wasm32-wasip2
+```
+
+The SDK's template lockfile entry must have a registry source and checksum.
+Copy the template outside this repository, repeat its tests and component
+build, and confirm that it needs no sibling SDK directory. Commit the template
+manifest, lockfile, and documentation changes together.
 
 ## Related
 

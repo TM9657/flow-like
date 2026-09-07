@@ -1,10 +1,18 @@
-# Per-execution isolation
+---
+title: Execution manager
+description: Configure and operate single-use Compose sandboxes, dispatch and recovery
+---
 
 The execution manager accepts authenticated dispatches and assigns each workflow to a pristine, prewarmed gVisor container. Each container executes once and is destroyed. A separate gateway container holds that run's HTTP egress policy. The runner has no external network interface, Redis connection, database key, manager token, or Docker socket.
 
-The manager and gateway are native Rust binaries from the shared [execution-manager crate](../../execution-manager/README.md). Tokio handles concurrent network I/O; a dedicated SQLite thread keeps registry writes away from async workers. The gateway drops privileges before starting its worker threads. Python is used only by deployment and storage-bootstrap tools.
+The manager and gateway are Rust binaries from the shared
+[execution-manager crate](https://github.com/Rheosoph/flow-like/tree/dev/apps/backend/execution-manager).
+The gateway drops privileges before starting its worker threads. The manager
+keeps durable ownership in a SQLite database shared by its replicas.
 
-This implementation needs qualification on a Linux execution host before serving untrusted tenants. The local tests cover the launch contract, deadlines, cleanup, HTTP policy, and a real Unix-socket proxy. They do not establish gVisor compatibility with every catalog node or storage SDK operation.
+Complete the live qualification below on the Linux execution host before
+serving untrusted tenants. Local protocol tests do not establish compatibility
+with every catalog node or storage SDK operation.
 
 ## Host prerequisites
 
@@ -27,9 +35,15 @@ Restart the daemon after changing its runtime configuration. The manager checks 
 
 The `--host-uds=open` flag permits connecting to the one Unix socket in the mounted run volume. No host directories or engine sockets are mounted into the runner. gVisor documents its [network isolation](https://gvisor.dev/docs/user_guide/networking/), [Unix-socket flags](https://github.com/google/gvisor/blob/master/runsc/config/config.go), and [shared filesystem mount behavior](https://gvisor.dev/docs/user_guide/filesystem/). Keep the mounted socket directory in shared mode, which is gVisor's default for bind mounts.
 
-The runner image must contain `/app/runtime` and `/usr/bin/timeout`. The gateway image is built from this directory's Dockerfile. Pin both images using either a repository digest (`registry/image@sha256:...`) or the immutable local image ID (`sha256:...`). The manager never pulls an image during a request and accepts no image, command, mount, network, or resource options from a dispatch.
+The runner image must contain `/app/runtime` and `/usr/bin/timeout`. The gateway image uses
+`apps/backend/docker-compose/execution-manager/Dockerfile`. Pin both images using either a repository digest (`registry/image@sha256:...`) or the immutable local image ID (`sha256:...`). The manager never pulls an image during a request and accepts no image, command, mount, network, or resource options from a dispatch.
 
 ## Configuration contract
+
+Defaults below are the standalone manager's defaults. The Compose deployment
+overrides some capacity and resource values; see
+[Configuration](/self-hosting/docker-compose/configuration/#execution-mode-and-capacity)
+for those deployment defaults.
 
 | Variable | Meaning |
 | --- | --- |

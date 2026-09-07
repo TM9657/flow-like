@@ -1,12 +1,14 @@
-# University management CLI
+---
+title: Author University courses
+description: Create and verify University courses with JSON plans, media assets, and assessment challenges
+---
 
-This repository-local Bun CLI lets Codex, Claude Code, and developers author
-Flow-Like University courses without using the admin UI. It follows the same
-agent-facing conventions as the documentation screenshot tool: versioned JSON
-contracts, clean JSON on stdout, diagnostics on stderr, and deterministic exit
-codes.
+Use a versioned JSON plan to author a University course, upload its media,
+and verify the saved lessons before publication. The repository CLI can also
+inspect courses and upload individual assets.
 
-Run commands from the repository root.
+Install the [repository dependencies](/dev/build/) and run commands from the
+repository root. `--json` reserves stdout for results; diagnostics go to stderr.
 
 ## Set up access
 
@@ -51,7 +53,7 @@ for verification. A plan with `isPublished: true` is published only after that
 verification passes. A failed run is left as a draft.
 
 Apply does not delete remote modules, lessons, challenges, or app references
-that are absent from the plan. This avoids destructive pruning during an agent
+that are absent from the plan. This avoids destructive pruning during a
 retry; verification reports unexpected structural children and prevents
 publication until an author removes them deliberately. A same-named asset is reused only when its metadata matches; set the
 asset's `replace` field to `true` to force replacement. Without `replace`, the
@@ -59,7 +61,7 @@ API exposes no checksum, so matching metadata cannot prove byte equality.
 
 ## Add screenshots and files
 
-The screenshot tool's JSON result contains an absolute `path` for every
+The [screenshot tool](/dev/documentation-screenshots/)'s JSON result contains an absolute `path` for every
 artifact. Pass that path directly to the University CLI:
 
 ```sh
@@ -164,10 +166,10 @@ lesson reference:
       "id": "lesson-welcome.ref.open-boards",
       "kind": "NAVIGATE",
       "appAlias": "starter",
-		"label": "Open the starter board",
+      "label": "Open the starter board",
       "target": {
-		"subpath": "flow",
-		"params": { "id": "source-board-id" }
+      "subpath": "flow",
+      "params": { "id": "source-board-id" }
       }
     }
   ]
@@ -303,18 +305,16 @@ can submit them. The backend cannot resolve an unopened course-app alias.
 All API replacement bodies are fully populated so omitted options cannot
 silently reset existing values.
 
-Apply never prunes undeclared remote children. When renaming or changing a
-generated ID, verification identifies stale modules, lessons, challenges, and
-references and leaves the course as a draft; remove that content deliberately
-in the admin UI, then rerun the plan. Application references have no persisted position in
-the current API, so do not rely on array order to select a default action.
+When changing an ID, remove its obsolete remote entity in the admin UI before
+rerunning the plan. Application references have no persisted position in the
+current API, so do not rely on array order to select a default action.
 
-Flow-Like currently models an end-of-course test as a lesson with challenges,
-not as a separate exam entity. Mark such a lesson with `finalAssessment: true`.
-The validator then requires it to be the last lesson by module and lesson
-position, non-optional, and to contain at least one challenge.
+An end-of-course test is a lesson with `finalAssessment: true` and at least
+one challenge. It must be the last lesson by module and lesson position and
+must be required (`isOptional: false`). A course can contain at most one final
+assessment, and publication requires one.
 
-See [`examples/course.plan.json`](examples/course.plan.json) for a complete
+See [`examples/course.plan.json`](https://github.com/Rheosoph/flow-like/blob/dev/apps/desktop/lib/university/examples/course.plan.json) for a complete
 course with an asset, Markdown file, modules, lessons, and a final assessment.
 
 ## Other commands
@@ -337,7 +337,8 @@ bun run university -- \
 ```
 
 Use `--api-url` to override `FLOW_LIKE_BASE_URL`, `--language` with list or
-inspect, and `--timeout-ms` to set a bounded whole-command timeout.
+inspect, and `--timeout-ms` to set the whole-command timeout (120,000 ms by
+default, at most 300,000 ms).
 
 ## Machine-readable behavior
 

@@ -33,7 +33,8 @@ proxy enforces callback paths against that private origin.
 For public hosting, terminate TLS at a maintained reverse proxy and configure
 its trusted addresses in `proxy/nginx.conf` before accepting forwarded client
 headers. The supplied proxy overwrites client-provided forwarding headers.
-Rebuild `web` after changing `NEXT_PUBLIC_*` values.
+Recreate `web` after changing `NEXT_PUBLIC_*` values. Compose maps them to the
+web image's public runtime URL settings; an image rebuild is unnecessary.
 
 API CORS origins cannot contain wildcards, credentials, paths or query strings.
 Add desktop origins to both origin lists when required:
@@ -41,10 +42,30 @@ Add desktop origins to both origin lists when required:
 
 ## Hub configuration and identity
 
-`FLOW_LIKE_CONFIG` selects the JSON embedded in the API build.
-`FLOW_LIKE_RUNTIME_CONFIG_FILE` selects the file mounted into sink services.
-Keep both on the same maintained configuration. Replace the example's OIDC
-authority, client settings, public domains, legal links and signaling URL.
+`FLOW_LIKE_RUNTIME_CONFIG_FILE` selects the host-side JSON file mounted into the
+API and sink services at `/app/flow-like.config.json`. The API selects that mount
+through `FLOW_LIKE_CONFIG_FILE`. Replace the example's OIDC authority, client
+settings, public domains, legal links and signaling URL. The API reads the whole
+document once at startup. Recreate the affected services after changing the file.
+
+Alternatively, supply `FLOW_LIKE_CONFIG_JSON` or
+`FLOW_LIKE_CONFIG_SECRET_REF` through the API's configured SecretStore, and set
+`FLOW_LIKE_CONFIG_FILE=` explicitly. The Compose default preserves this empty
+value. More than one nonempty source fails preflight and API startup.
+`setup-env.py` selects this alternate source automatically when JSON or a
+reference is supplied in its environment. A secret reference requires its value
+to be available inside the API container.
+
+Sink services still reads `supported_sinks` from the mounted file. Keep that
+setting aligned with the API when selecting JSON or a SecretStore reference.
+Do not print rendered Compose configuration containing environment-based JSON.
+See the [runtime API contract](/self-hosting/containers/#runtime-api-configuration)
+for document limits, secret references and failure behavior.
+
+If all three runtime sources are empty, the API uses its compiled public
+fallback. `FLOW_LIKE_CONFIG` remains an optional repository-relative local-build
+fallback input. Never put deployment credentials in it or publish them in an
+image.
 
 The `signaling` service exchanges collaboration offers, answers and ICE
 candidates. The hub's optional `realtime.ice` setting can configure Cloudflare
@@ -65,6 +86,9 @@ Set those two secrets in `.env`. The API resolves them through its secret
 store and supplies temporary ICE configuration to clients. Restart the API
 after changing the hub configuration or rotating the long-lived TURN key.
 Leaving `realtime.ice` null provides no managed TURN relay.
+
+See [Realtime signaling](/self-hosting/signaling/) for replica fanout, upgrade
+compatibility and proxy-header requirements.
 
 ## Execution mode and capacity
 
@@ -154,6 +178,11 @@ to `COMPOSE_FILE`, set `DATASTORE_MODE=external` and supply
 `SIGNALING_REDIS_URL`, `SINK_REDIS_URL` and `METRICS_REDIS_URL`.
 Apply reviewed schema changes explicitly with `docker compose run --rm db-init`.
 The overlay removes automatic initialization; it does not move existing data.
+
+Percent-encode credentials in connection URLs. The schema updater uses guarded
+Prisma `db push`; versioned PostgreSQL release migrations and automatic schema
+rollback are not implemented. Review each change and verify restore before
+rolling API instances onto the new schema.
 
 ## Compiler, event services and model providers
 

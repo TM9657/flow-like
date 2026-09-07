@@ -25,11 +25,11 @@ export PUBLIC_WEB_URL=http://localhost:3001
 export S3_PUBLIC_ENDPOINT=https://s3.dev.example.com
 
 cp flow-like.config.example.json ../../../flow-like.kubernetes.config.json
-export FLOW_LIKE_CONFIG=flow-like.kubernetes.config.json
+export FLOW_LIKE_CONFIG_FILE=../../../flow-like.kubernetes.config.json
 ```
 
-Edit the JSON for the development OIDC provider and public hub settings. The API
-embeds it at build time.
+Edit the JSON for the development OIDC provider and public hub settings. Setup
+puts it in a generated Secret for the API to load at startup.
 
 Replace the S3 example with an origin reachable from both the browser and the
 cluster. Configure that origin to reach the bucket-only object gateway with
@@ -58,7 +58,9 @@ The helper no longer relies on an external object store, a local image registry
 or an implicit `.env` file.
 
 Existing generated files are preserved. Change non-secret settings in the values
-file and rebuild images when public hub or web build settings change.
+file and apply the updated chart. Update the Hub config Secret and restart API
+Pods after changing its document. Web runtime URL changes roll out through Helm;
+they do not require rebuilding images.
 
 ## Access and inspect
 

@@ -103,3 +103,8 @@ For an explicitly trusted shared-worker installation, `RUNTIME_REPLICAS`
 controls reused workers instead of execution managers. The legacy Swarm file
 also supports trusted shared execution with external storage only. Neither is
 a substitute for per-execution isolation.
+
+Swarm lacks the Compose migration-completion gate. Its API starts at zero
+replicas until `SWARM_API_REPLICAS_AFTER_MIGRATION` is set after a successful
+schema update. Local-volume placement and Swarm-specific recovery still require
+qualification; using this file does not make the bundled data highly available.

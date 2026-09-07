@@ -16,7 +16,7 @@ if [[ "${K3D_EXECUTION_MODE:-}" != trusted_shared ]]; then
   echo 'For tenant isolation, install runsc and an enforcing CNI on Linux execution nodes, then use setup-config.sh and deploy.sh.' >&2
   exit 1
 fi
-: "${S3_PUBLIC_ENDPOINT:?Set an S3 gateway origin reachable from both your browser and cluster; see README.md}"
+: "${S3_PUBLIC_ENDPOINT:?Set an S3 gateway origin reachable from both your browser and cluster; see https://docs.flow-like.com/self-hosting/kubernetes/local-development/}"
 for command in docker k3d kubectl helm python3 openssl; do
   command -v "$command" >/dev/null || { echo "Required command missing: $command" >&2; exit 1; }
 done

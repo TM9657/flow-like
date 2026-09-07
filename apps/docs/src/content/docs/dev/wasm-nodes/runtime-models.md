@@ -40,12 +40,15 @@ Rust value. The numeric ABI is separate from the WIT package version.
 ### Networking
 
 The component linker provides WASI Preview 2 and WASI HTTP interfaces.
-Flow-Like host functions check their corresponding capabilities. In the current
-Component Model linker, any network capability also enables the WASI networking
-context, so do not assume strict per-protocol isolation between direct WASI
-socket categories. Package manifest host restrictions are not merged into the
-installed node's execution configuration; enforce destination restrictions at
-the executor or network-policy layer.
+Flow-Like host functions check their corresponding capabilities. The
+[component linker](https://github.com/Rheosoph/flow-like/blob/dev/packages/wasm/src/component/linker.rs)
+enables TCP, UDP, and DNS lookup separately when their capabilities are granted;
+the explicit `allow_wasi_network` override enables all three. Socket address
+checks also apply the execution configuration's host allowlist and block
+server-side destinations covered by the execution environment's egress policy.
+Package manifest host restrictions are not merged into the installed node's
+execution configuration; enforce destination restrictions at the executor or
+network-policy layer.
 
 An enabled network category is not blanket filesystem or process access.
 
@@ -116,6 +119,43 @@ Both formats:
 - produce the same node definitions, outputs, execution-pin activations, and error shape.
 
 The ABI layer differs; the permission boundary and Flow-Like workflow model do not.
+
+### Upgrade the runtime and precompiled artifacts
+
+Build the API, compilation workers, and executors with the same Wasmtime major
+version. The workspace currently pins Wasmtime `48.0.1`; use the repository's
+[host Rust toolchain](/dev/build/) for those components. A worker rejects jobs
+whose target key names another Wasmtime version, so a version 48 worker cannot
+publish artifacts under a `wt47` key.
+
+Precompiled `.cwasm` artifacts from Wasmtime 47 cannot run on Wasmtime 48.
+Registry and local cache platform keys derive their version from the workspace
+dependency. Current keys include `linux-x86_64-wt48` and `ios-pulley64-wt48`.
+Source `.wasm` packages retain their node ABI and do not need to be rebuilt for
+this runtime upgrade.
+
+When deploying the upgrade:
+
+1. Coordinate the API, compiler, and executor rollout. If `EXECUTOR_PLATFORM`
+   is configured outside the repository, change its suffix to `wt48` while
+   retaining the executor's operating system and architecture.
+2. Request Linux artifacts for active packages with
+   `POST /admin/packages/ensure-wasm-artifacts`. Use the registry's package
+   recompilation operation for other required targets.
+3. Wait for the required targets to finish compiling before routing runs to
+   upgraded executors. The API requires the current target's artifacts before
+   dispatching a package.
+
+Local caches discard incompatible artifacts and compile source Wasm again when
+compilation is enabled. Executors can fall back to verified source Wasm when a
+downloaded artifact cannot be deserialized. Deployments with compilation
+disabled need matching `wt48` artifacts in advance.
+
+Wasmtime 48 denies TCP and UDP socket creation by default. The protocol grants
+described above enable permitted sockets; the HTTP host interfaces retain
+their separate capability checks. Upstream details are in the
+[48.0.0 release notes](https://github.com/bytecodealliance/wasmtime/releases/tag/v48.0.0)
+and [48.0.1 fixes](https://github.com/bytecodealliance/wasmtime/releases/tag/v48.0.1).
 
 ## Migration outline
 
