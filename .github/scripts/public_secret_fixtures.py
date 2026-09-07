@@ -18,7 +18,7 @@ import tempfile
 FIXTURE_FILE = Path(__file__).with_suffix(".json")
 CHUNK_SIZE = 64 * 1024
 
-# Rust places these literals from packages/core/editor/src/flow/copilot/stream.rs
+# Older builds placed these literals from packages/core/editor/src/flow/copilot/stream.rs
 # next to each other in the AWS API binary: redact_private_key_blocks (END),
 # redact_known_secret_tokens (xoxp-), and redact_inline_secret_values (markers).
 # Trivy mistakes the prefix plus the following markers for a Slack token.

@@ -162,6 +162,105 @@ class ConfigTests(unittest.TestCase):
                     publication.check_config(path)
 
 
+class SecretReportTests(unittest.TestCase):
+    def summarize(self, value, compiled_text=False):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "report.json"
+            path.write_text(json.dumps(value))
+            return publication.report_secrets(path, compiled_text)
+
+    def test_report_contains_only_safe_metadata_and_groups_identical_findings(self):
+        secret = {
+            "RuleID": "private-key", "Severity": "HIGH", "StartLine": 12, "EndLine": 30,
+            "Match": "secret-match", "Code": {"Lines": [{"Content": "secret-code"}]},
+            "Title": "secret-title", "AdditionalMetadata": "secret-metadata",
+        }
+        report = {
+            "ArtifactName": "secret-image-name", "Metadata": {"Env": ["PASSWORD=secret-env"]},
+            "Results": [{"Target": "/secret-parent-path/000002.txt", "Secrets": [secret, secret]}],
+        }
+        self.assertEqual(self.summarize(report, compiled_text=True), {
+            "secret_findings": 2,
+            "findings": [{
+                "rule_id": "private-key", "severity": "HIGH", "scan_file": "000002.txt",
+                "start_line": 12, "end_line": 30, "count": 2,
+            }],
+        })
+        self.assertEqual(self.summarize(report), {
+            "secret_findings": 2,
+            "findings": [{"rule_id": "private-key", "severity": "HIGH", "count": 2}],
+        })
+
+    def test_source_paths_and_unvalidated_metadata_are_not_printed(self):
+        for target in ("/app/private-source.rs", "000001.txt\nsecret-path", "secret-000001.txt"):
+            with self.subTest(target=target):
+                self.assertEqual(self.summarize({"Results": [{
+                    "Target": target,
+                    "Secrets": [{
+                        "RuleID": "::warning::secret-rule", "Severity": "secret-severity",
+                        "StartLine": "secret-line", "EndLine": "secret-line",
+                        "Match": "secret-match",
+                    }],
+                }]}, compiled_text=True), {
+                    "secret_findings": 1,
+                    "findings": [{"rule_id": "UNKNOWN", "severity": "UNKNOWN", "count": 1}],
+                })
+
+    def test_generated_files_retain_separate_findings_and_only_valid_line_numbers(self):
+        for start, end in ((True, 2), (1, False), (0, 1), (2, 1), (1, "2"), (1.0, 2), (1, None)):
+            with self.subTest(start=start, end=end):
+                summary = self.summarize({"Results": [
+                    {"Target": "000001.txt", "Secrets": [{"RuleID": "private-key", "Severity": "HIGH", "StartLine": start, "EndLine": end}]},
+                    {"Target": "000002.txt", "Secrets": [{"RuleID": "private-key", "Severity": "HIGH", "StartLine": 8, "EndLine": 9}]},
+                ]}, compiled_text=True)
+                self.assertEqual(summary["secret_findings"], 2)
+                self.assertEqual(summary["findings"][0], {
+                    "rule_id": "private-key", "severity": "HIGH", "scan_file": "000001.txt", "count": 1,
+                })
+                self.assertEqual(summary["findings"][1], {
+                    "rule_id": "private-key", "severity": "HIGH", "scan_file": "000002.txt",
+                    "start_line": 8, "end_line": 9, "count": 1,
+                })
+
+    def test_empty_scan_results_have_zero_findings(self):
+        for report in ({}, {"Results": None}, {"Results": []}, {"Results": [{"Secrets": None}]}):
+            with self.subTest(report=report):
+                self.assertEqual(self.summarize(report), {"secret_findings": 0, "findings": []})
+
+    def test_invalid_report_structure_is_rejected_without_echoing_contents(self):
+        for report in (
+            "secret-value", {"Results": "secret-value"}, {"Results": {}},
+            {"Results": ["secret-value"]}, {"Results": [{"Secrets": {}}]},
+            {"Results": [{"Secrets": ["secret-value"]}]},
+        ):
+            with self.subTest(report=report), self.assertRaisesRegex(publication.PublicationError, "invalid structure") as error:
+                self.summarize(report)
+            self.assertNotIn("secret-value", str(error.exception))
+
+    def test_report_cli_emits_only_summary_and_safe_parse_errors(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "report.json"
+            path.write_text(json.dumps({"Results": [{"Secrets": [{
+                "RuleID": "private-key", "Severity": "HIGH", "Match": "secret-value",
+            }]}]}))
+            stdout = io.StringIO()
+            with contextlib.redirect_stdout(stdout):
+                self.assertEqual(publication.main(["report-secrets", "--path", str(path)]), 0)
+            self.assertEqual(json.loads(stdout.getvalue()), {
+                "secret_findings": 1,
+                "findings": [{"rule_id": "private-key", "severity": "HIGH", "count": 1}],
+            })
+            for content in ("secret-value", None):
+                if content is None:
+                    path.unlink()
+                else:
+                    path.write_text(content)
+                stderr = io.StringIO()
+                with contextlib.redirect_stderr(stderr):
+                    self.assertEqual(publication.main(["report-secrets", "--path", str(path)]), 1)
+                self.assertEqual(stderr.getvalue(), "container publication: secret scan report is unavailable or invalid\n")
+
+
 class DockerTests(unittest.TestCase):
     def test_architecture_mismatch_prevents_container_creation(self):
         with patch.object(publication, "docker", return_value="linux/amd64") as docker:

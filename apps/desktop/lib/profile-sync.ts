@@ -118,8 +118,14 @@ export function mergeRemoteProfileMetadata(
 		interests: remote.interests ?? [],
 		tags: remote.tags ?? [],
 		theme: remote.theme ?? null,
-		home_layout: remote.home_layout ?? null,
-		home_default_id: remote.home_default_id ?? null,
+		// Hubs without Home support omit these keys. Only an explicit null is a
+		// reset; otherwise the locally saved Home must survive the pull.
+		...(Object.hasOwn(remote, "home_layout")
+			? { home_layout: remote.home_layout ?? null }
+			: {}),
+		...(Object.hasOwn(remote, "home_default_id")
+			? { home_default_id: remote.home_default_id ?? null }
+			: {}),
 		bits: remote.bit_ids ?? [],
 		apps: remote.apps ?? [],
 		hub: remote.hub,

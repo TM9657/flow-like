@@ -67,9 +67,39 @@ jobs:
           python3 .github/scripts/container_publication.py check-config --path apps/backend/docker-compose/flow-like.config.example.json
           python3 .github/scripts/container_publication.py check-config --path apps/backend/kubernetes/flow-like.config.example.json
 
+  native-deps:
+    name: Native dependencies (${{ matrix.recipe.name }}, ${{ matrix.platform }})
+    needs: validate
+    strategy:
+      fail-fast: false
+      matrix:
+        recipe:
+          - name: Compose runtime
+            dockerfile: apps/backend/docker-compose/runtime/Dockerfile
+          - name: Kubernetes executor
+            dockerfile: apps/backend/kubernetes/executor/Dockerfile
+        platform: [linux/amd64, linux/arm64]
+        include:
+          - platform: linux/amd64
+            runner: ubuntu-24.04
+          - platform: linux/arm64
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.3.0
+        with:
+          persist-credentials: false
+      - uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e # v4.3.0
+      - name: Compile and run native dependency checks
+        env:
+          DOCKERFILE: ${{ matrix.recipe.dockerfile }}
+          PLATFORM: ${{ matrix.platform }}
+        run: bash .github/scripts/check-container-native-deps.sh "$DOCKERFILE" "$PLATFORM"
+
   matrix:
     name: Select release images
-    needs: validate
+    needs: native-deps
     if: github.event_name != 'pull_request'
     runs-on: ubuntu-24.04
     timeout-minutes: 5
@@ -180,6 +210,7 @@ jobs:
             --image "$IMAGE" --platform "$PLATFORM" \
             --output-dir "$RUNNER_TEMP/container-binary-strings"
       - name: Scan image files, environment, and history for secrets
+        id: image-secrets
         uses: aquasecurity/trivy-action@57a97c7e7821a5776cebc9bb87c984fa69cba8f1 # 0.35.0
         with:
           version: v0.69.3
@@ -190,7 +221,13 @@ jobs:
           format: json
           output: ${{ runner.temp }}/container-image-secrets.json
           cache: 'false'
+      - name: Summarize failed image secret scan
+        if: failure() && steps.image-secrets.outcome == 'failure'
+        run: |
+          python3 .github/scripts/container_publication.py report-secrets \
+            --path "$RUNNER_TEMP/container-image-secrets.json"
       - name: Scan printable text from compiled binaries for secrets
+        id: binary-secrets
         uses: aquasecurity/trivy-action@57a97c7e7821a5776cebc9bb87c984fa69cba8f1 # 0.35.0
         with:
           version: v0.69.3
@@ -201,6 +238,11 @@ jobs:
           format: json
           output: ${{ runner.temp }}/container-binary-secrets.json
           cache: 'false'
+      - name: Summarize failed compiled-text secret scan
+        if: failure() && steps.binary-secrets.outcome == 'failure'
+        run: |
+          python3 .github/scripts/container_publication.py report-secrets \
+            --path "$RUNNER_TEMP/container-binary-secrets.json" --compiled-text
       - name: Authenticate after publication checks pass
         uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
         with:

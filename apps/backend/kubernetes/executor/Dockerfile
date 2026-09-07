@@ -2,14 +2,34 @@
 # ============================================================
 # Stage 1: Builder
 # ============================================================
-FROM rust:1.97.1-bookworm AS builder
+FROM rust:1.97.1-bookworm AS build-deps
 
+# Automation execution links the Linux capture and input libraries.
 RUN apt-get update && apt-get install -y \
     pkg-config \
     libssl-dev \
     protobuf-compiler \
+    libclang-dev \
+    libwayland-dev \
+    libpipewire-0.3-dev \
+    libegl-dev \
+    libgbm-dev \
+    libxcb-randr0-dev \
+    libxcb-render0-dev \
+    libx11-dev \
+    libxi-dev \
+    libxtst-dev \
+    libinput-dev \
+    libudev-dev \
+    libxkbcommon-dev \
     && rm -rf /var/lib/apt/lists/*
 
+# The prebuilt ONNX archive uses glibc/GCC symbols newer than Bookworm provides.
+COPY .github/scripts/ort-glibc-compat.c /tmp/ort-glibc-compat.c
+RUN cc -c -O2 -fPIC /tmp/ort-glibc-compat.c -o /tmp/ort-glibc-compat.o
+ENV RUSTFLAGS="-Clink-arg=/tmp/ort-glibc-compat.o"
+
+FROM build-deps AS builder
 WORKDIR /app
 
 COPY . .
@@ -29,15 +49,30 @@ RUN --mount=type=cache,target=/cargo-home,id=cargo-home,sharing=shared \
 # ============================================================
 # Stage 4: Runtime - minimal for sandboxed execution
 # ============================================================
-FROM debian:bookworm-slim
-
-COPY LICENSE /usr/share/licenses/flow-like/LICENSE
+FROM debian:bookworm-slim AS runtime-deps
 
 RUN apt-get update && apt-get install -y \
     ca-certificates \
     libssl3 \
+    libstdc++6 \
+    libwayland-client0 \
+    libwayland-server0 \
+    libpipewire-0.3-0 \
+    libegl1 \
+    libgbm1 \
+    libxcb-randr0 \
+    libxcb-render0 \
+    libx11-6 \
+    libxi6 \
+    libxtst6 \
+    libinput10 \
+    libudev1 \
+    libxkbcommon0 \
     && rm -rf /var/lib/apt/lists/* \
     && useradd -r -u 1000 executor
+
+FROM runtime-deps AS runtime
+COPY LICENSE /usr/share/licenses/flow-like/LICENSE
 
 WORKDIR /app
 
