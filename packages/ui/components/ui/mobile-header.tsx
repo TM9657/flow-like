@@ -139,7 +139,8 @@ export function useMobileHeader(
 
 export const MobileHeader: React.FC<{
 	showSidebarTrigger?: boolean;
-}> = ({ showSidebarTrigger = true }) => {
+	embedded?: boolean;
+}> = ({ showSidebarTrigger = true, embedded = false }) => {
 	const { t } = useTranslation("common");
 	const ctx = useContext(MobileHeaderContext);
 	const active = ctx?.active ?? null;
@@ -154,6 +155,8 @@ export const MobileHeader: React.FC<{
 	const shouldHide = !showSidebarTrigger && !hasAdditionalContent;
 
 	useEffect(() => {
+		// Widget toolbars must not change the surrounding page's header offset.
+		if (embedded) return;
 		if (shouldHide) {
 			document.documentElement.style.setProperty(
 				"--mobile-header-height",
@@ -175,7 +178,7 @@ export const MobileHeader: React.FC<{
 		const ro = new ResizeObserver(setVar);
 		ro.observe(el);
 		return () => ro.disconnect();
-	}, [shouldHide]);
+	}, [embedded, shouldHide]);
 
 	const left = useMemo(() => {
 		if (!active?.left) return null;
@@ -198,8 +201,21 @@ export const MobileHeader: React.FC<{
 	if (shouldHide) return null;
 
 	return (
-		<div ref={ref} className="md:hidden sticky top-0 z-40 px-2 pt-2 pb-1">
-			<div className="rounded-xl bg-card/80 shadow-2xl flex items-center justify-between gap-2 p-2">
+		<div
+			ref={ref}
+			className={
+				embedded
+					? "shrink-0 border-b border-border/60 px-3 py-2 md:hidden"
+					: "md:hidden sticky top-0 z-40 px-2 pt-2 pb-1"
+			}
+		>
+			<div
+				className={
+					embedded
+						? "flex min-w-0 items-center justify-between gap-2 overflow-x-auto"
+						: "rounded-xl bg-card/80 shadow-2xl flex items-center justify-between gap-2 p-2"
+				}
+			>
 				<div className="flex items-center gap-2 min-w-0">
 					{showSidebarTrigger && (
 						<SidebarTrigger

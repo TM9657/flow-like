@@ -84,6 +84,9 @@ import {
 	DropdownMenu,
 	DropdownMenuContent,
 	DropdownMenuItem,
+	DropdownMenuLabel,
+	DropdownMenuRadioGroup,
+	DropdownMenuRadioItem,
 	DropdownMenuSeparator,
 	DropdownMenuTrigger,
 } from "../ui/dropdown-menu";
@@ -147,7 +150,7 @@ const CATEGORIES: { id: HomeWidgetCategory | "all"; name: string }[] = [
 	{ id: "assistant", name: "FlowPilot" },
 ];
 
-// Drafts stay in this browser session when a profile or route changes.
+// Drafts survive reloads and profile changes in this browser tab.
 const homeDrafts = new HomeDraftStore();
 
 export interface HomeEditorProps {
@@ -216,6 +219,10 @@ export function HomeEditor({
 	const [saving, setSaving] = useState(false);
 	const [confirm, setConfirm] = useState<"reset" | "discard" | null>(null);
 	const [jsonOpen, setJsonOpen] = useState(false);
+	const layoutOptionsRef = useRef<HTMLButtonElement>(null);
+	const controlsRef = useRef<HTMLDivElement>(null);
+	const [controlsNear, setControlsNear] = useState(false);
+	const [optionsOpen, setOptionsOpen] = useState(false);
 	const [preview, setPreview] = useState<"desktop" | "tablet" | "phone">(
 		"desktop",
 	);
@@ -982,6 +989,9 @@ export function HomeEditor({
 		if (!editingRef.current) begin();
 		requestOpenAssistant();
 	};
+	const floatingControls = !admin && !editing;
+	const controlsRevealed =
+		controlsNear || optionsOpen || hasDraft || runtimeSaving;
 
 	return (
 		<div
@@ -989,66 +999,63 @@ export function HomeEditor({
 			className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-background"
 			data-home-editor
 			data-editing={editing}
+			onPointerMove={(event) => {
+				if (!floatingControls || event.pointerType === "touch") return;
+				const bounds = controlsRef.current?.getBoundingClientRect();
+				if (!bounds) return;
+				setControlsNear(
+					event.clientX >= bounds.left - 100 &&
+						event.clientX <= bounds.right + 100 &&
+						event.clientY >= bounds.top - 100 &&
+						event.clientY <= bounds.bottom + 100,
+				);
+			}}
+			onPointerLeave={() => setControlsNear(false)}
 		>
-			<div className="sticky top-0 z-20 flex min-h-16 shrink-0 flex-wrap items-center justify-between gap-3 border-b border-border/50 bg-background/95 px-4 py-3 backdrop-blur-xl sm:px-7">
-				<div className="flex min-w-0 flex-wrap items-center gap-3">
-					<span className="text-base font-semibold tracking-tight">
-						{admin ? "Default home" : "Home"}
-					</span>
-					<span
-						className={cn(
-							"rounded-full border px-2.5 py-1 text-[11px] font-medium",
-							editing
-								? "border-primary/25 bg-primary/10 text-primary"
-								: "border-border/60 text-muted-foreground",
-						)}
-					>
-						{editing
-							? dirty
-								? "Unsaved changes"
-								: "Editing layout"
-							: runtimeSaving
-								? "Saving…"
-								: sourceLabel}
-					</span>
-					{toolbar}
-				</div>
+			<div
+				ref={controlsRef}
+				data-home-controls
+				data-floating={floatingControls}
+				data-revealed={controlsRevealed}
+				className={cn(
+					"z-20 flex items-center gap-1.5",
+					floatingControls
+						? "absolute right-4 top-3 rounded-xl border border-border/50 bg-background/90 p-1 shadow-sm backdrop-blur-xl transition-opacity duration-200 motion-reduce:transition-none sm:right-7"
+						: "sticky top-0 min-h-14 shrink-0 flex-wrap justify-between gap-x-4 gap-y-2 border-b border-border/40 bg-background/95 px-4 py-2.5 backdrop-blur-xl sm:px-7",
+					floatingControls &&
+						!controlsRevealed &&
+						"[@media(hover:hover)_and_(pointer:fine)]:pointer-events-none [@media(hover:hover)_and_(pointer:fine)]:opacity-0 focus-within:!pointer-events-auto focus-within:!opacity-100",
+				)}
+			>
+				{!floatingControls && (
+					<div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1">
+						<span className="text-sm font-semibold tracking-tight">
+							{admin ? "Default home" : editing ? "Customize" : "Home"}
+						</span>
+						<span
+							className={cn(
+								"text-xs",
+								editing && dirty
+									? "text-amber-600 dark:text-amber-400"
+									: "text-muted-foreground",
+							)}
+						>
+							{editing
+								? dirty
+									? "Unsaved changes"
+									: "Editing layout"
+								: runtimeSaving
+									? "Saving…"
+									: hasDraft
+										? "Draft available"
+										: sourceLabel}
+						</span>
+						{toolbar}
+					</div>
+				)}
 				<div className="flex flex-wrap items-center gap-1.5">
 					{editing ? (
 						<>
-							<div className="mr-1 hidden items-center rounded-lg border border-border/60 p-0.5 sm:flex">
-								{(
-									[
-										{ id: "desktop", icon: Monitor },
-										{ id: "tablet", icon: Tablet },
-										{ id: "phone", icon: Smartphone },
-									] as const
-								).map(({ id, icon: Icon }) => (
-									<Button
-										key={id}
-										size="icon"
-										variant={preview === id ? "secondary" : "ghost"}
-										className="h-7 w-8"
-										aria-label={`Preview ${id} layout`}
-										aria-pressed={preview === id}
-										onClick={() => setPreview(id)}
-									>
-										<Icon className="h-3.5 w-3.5" />
-									</Button>
-								))}
-							</div>
-							{!admin && (
-								<Button
-									variant="outline"
-									size="sm"
-									onClick={editWithFlowPilot}
-									disabled={saving}
-									aria-label="Edit with FlowPilot"
-								>
-									<Sparkles className="h-4 w-4" />
-									<span className="hidden md:inline">FlowPilot</span>
-								</Button>
-							)}
 							<Button
 								variant="ghost"
 								size="icon"
@@ -1072,21 +1079,8 @@ export function HomeEditor({
 							<Button
 								variant="outline"
 								size="sm"
-								onClick={() => {
-									setPanel(null);
-									setJsonOpen(true);
-								}}
-								disabled={saving}
-								aria-haspopup="dialog"
-								aria-label="Edit JSON"
-							>
-								<Code2 className="h-4 w-4" />
-								<span className="hidden md:inline">Edit JSON</span>
-							</Button>
-							<Button
-								variant="outline"
-								size="sm"
 								onClick={() => setPanel(panel === "catalog" ? null : "catalog")}
+								aria-label="Add widget"
 								disabled={saving}
 							>
 								<Plus className="h-4 w-4" />
@@ -1095,6 +1089,7 @@ export function HomeEditor({
 							<DropdownMenu>
 								<DropdownMenuTrigger asChild>
 									<Button
+										ref={layoutOptionsRef}
 										variant="ghost"
 										size="icon"
 										className="h-8 w-8"
@@ -1103,7 +1098,59 @@ export function HomeEditor({
 										<MoreHorizontal className="h-4 w-4" />
 									</Button>
 								</DropdownMenuTrigger>
-								<DropdownMenuContent align="end">
+								<DropdownMenuContent
+									align="end"
+									className="w-56"
+									onCloseAutoFocus={(event) => {
+										if (jsonOpenRef.current) event.preventDefault();
+									}}
+								>
+									{!admin && (
+										<DropdownMenuItem
+											onSelect={editWithFlowPilot}
+											disabled={saving}
+										>
+											<Sparkles className="h-4 w-4" />
+											Edit with FlowPilot
+										</DropdownMenuItem>
+									)}
+									<DropdownMenuItem
+										onSelect={() => {
+											setPanel(null);
+											setJsonOpen(true);
+										}}
+										disabled={saving}
+									>
+										<Code2 className="h-4 w-4" />
+										Edit JSON
+									</DropdownMenuItem>
+									<DropdownMenuSeparator />
+									<DropdownMenuLabel>Preview size</DropdownMenuLabel>
+									<DropdownMenuRadioGroup
+										value={preview}
+										onValueChange={(value) =>
+											setPreview(value as typeof preview)
+										}
+									>
+										{(
+											[
+												{ id: "desktop", label: "Desktop", icon: Monitor },
+												{ id: "tablet", label: "Tablet", icon: Tablet },
+												{ id: "phone", label: "Phone", icon: Smartphone },
+											] as const
+										).map(({ id, label, icon: Icon }) => (
+											<DropdownMenuRadioItem
+												key={id}
+												value={id}
+												disabled={saving}
+												aria-label={`Preview ${id} layout`}
+											>
+												<Icon className="h-4 w-4" />
+												{label}
+											</DropdownMenuRadioItem>
+										))}
+									</DropdownMenuRadioGroup>
+									<DropdownMenuSeparator />
 									<DropdownMenuItem
 										disabled={saving}
 										onSelect={() => {
@@ -1154,30 +1201,64 @@ export function HomeEditor({
 						</>
 					) : (
 						<>
-							{!admin && (
-								<Button
-									variant="outline"
-									size="sm"
-									onClick={editWithFlowPilot}
-									disabled={disabled || runtimeSaving}
-								>
-									<Sparkles className="h-3.5 w-3.5" />
-									Edit with FlowPilot
-								</Button>
-							)}
 							<Button
-								variant="outline"
+								variant={floatingControls ? "ghost" : "outline"}
 								size="sm"
+								className={
+									floatingControls
+										? "max-sm:h-10 max-sm:w-10 max-sm:p-0"
+										: undefined
+								}
+								aria-label={
+									runtimeSaving
+										? "Saving layout"
+										: hasDraft
+											? "Resume editing"
+											: admin
+												? "Edit default"
+												: "Customize"
+								}
 								onClick={begin}
 								disabled={disabled || runtimeSaving}
 							>
-								<Pencil className="h-3.5 w-3.5" />
-								{hasDraft
-									? "Resume editing"
-									: admin
-										? "Edit default"
-										: "Customize"}
+								{runtimeSaving ? (
+									<Loader2 className="h-3.5 w-3.5 animate-spin" />
+								) : (
+									<Pencil className="h-3.5 w-3.5" />
+								)}
+								<span
+									className={floatingControls ? "max-sm:sr-only" : undefined}
+								>
+									{runtimeSaving
+										? "Saving…"
+										: hasDraft
+											? "Resume editing"
+											: admin
+												? "Edit default"
+												: "Customize"}
+								</span>
 							</Button>
+							{!admin && (
+								<DropdownMenu open={optionsOpen} onOpenChange={setOptionsOpen}>
+									<DropdownMenuTrigger asChild>
+										<Button
+											variant="ghost"
+											size="icon"
+											className="h-8 w-8 max-sm:h-10 max-sm:w-10"
+											aria-label="Layout options"
+											disabled={disabled || runtimeSaving}
+										>
+											<MoreHorizontal className="h-4 w-4" />
+										</Button>
+									</DropdownMenuTrigger>
+									<DropdownMenuContent align="end">
+										<DropdownMenuItem onSelect={editWithFlowPilot}>
+											<Sparkles className="h-4 w-4" />
+											Edit with FlowPilot
+										</DropdownMenuItem>
+									</DropdownMenuContent>
+								</DropdownMenu>
+							)}
 						</>
 					)}
 				</div>
@@ -1371,6 +1452,7 @@ export function HomeEditor({
 					layout={draft}
 					onApply={applyJson}
 					onClose={() => setJsonOpen(false)}
+					onRestoreFocus={() => layoutOptionsRef.current?.focus()}
 				/>
 			)}
 		</div>

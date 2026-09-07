@@ -1,7 +1,25 @@
 "use client";
 
-import { type RefObject, useEffect, useRef } from "react";
+import { type RefObject, useCallback, useEffect, useRef } from "react";
 import { observeRuntimeTailwind } from "./runtime-tailwind";
+
+/** Observe portalled content when its DOM node mounts, including delayed opens. */
+export function useRuntimeTailwindRef(
+	onElement?: (element: HTMLElement | null) => void,
+) {
+	return useCallback(
+		(root: HTMLElement | null) => {
+			onElement?.(root);
+			if (!root) return;
+			const disconnect = observeRuntimeTailwind(root);
+			return () => {
+				disconnect();
+				onElement?.(null);
+			};
+		},
+		[onElement],
+	);
+}
 
 export function useRuntimeTailwindStyles(
 	rootRef: RefObject<HTMLElement | null>,

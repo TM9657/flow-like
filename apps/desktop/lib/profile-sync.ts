@@ -1,5 +1,5 @@
-import type { IHomeLayout } from "@flow-like/flow-like-ui/components/home/types";
 import type { IProfile } from "@flow-like/flow-like-ui";
+import type { IHomeLayout } from "@flow-like/flow-like-ui/components/home/types";
 
 export type OnlineProfile = {
 	id: string;
@@ -69,6 +69,43 @@ export const getDefaultApiBase = () => {
 	const full = baseUrl.startsWith("http") ? baseUrl : `https://${baseUrl}`;
 	return full.endsWith("/") ? full.slice(0, -1) : full;
 };
+
+export function createProfileSyncQueue(minIntervalMs = 60_000) {
+	type Sync = () => Promise<void>;
+	let active: Promise<void> | undefined;
+	let pending: Sync | undefined;
+	let lastStarted = Number.NEGATIVE_INFINITY;
+
+	return {
+		request(sync: Sync, force = false): Promise<void> {
+			if (active) {
+				if (force) pending = sync;
+				return active;
+			}
+			if (!force && Date.now() - lastStarted < minIntervalMs) {
+				return Promise.resolve();
+			}
+			// Start in a microtask so reentrant requests see the active promise.
+			active = Promise.resolve().then(async () => {
+				try {
+					let next: Sync | undefined = sync;
+					while (next) {
+						lastStarted = Date.now();
+						await next();
+						next = pending;
+						pending = undefined;
+					}
+				} finally {
+					active = undefined;
+				}
+			});
+			return active;
+		},
+		cancel(sync: Sync) {
+			if (pending === sync) pending = undefined;
+		},
+	};
+}
 
 export function mergeRemoteProfileMetadata(
 	local: { hub_profile: IProfile; updated: string },

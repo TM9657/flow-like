@@ -1,6 +1,7 @@
 "use client";
 
 import { Fragment } from "react";
+import { useRuntimeTailwindRef } from "../../../lib/use-runtime-tailwind";
 import { cn } from "../../../lib/utils";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "../../ui/sheet";
 import { useComponentEventTrigger } from "../ActionHandler";
@@ -37,6 +38,7 @@ export function A2UIDrawer({
 	onAction,
 	renderChild,
 }: ComponentProps<DrawerComponent>) {
+	const contentRef = useRuntimeTailwindRef(elementRef);
 	const triggerEvent = useComponentEventTrigger(componentId);
 	const open = useResolved<boolean>(component.open);
 	const title = useResolved<string>(component.title);
@@ -66,7 +68,7 @@ export function A2UIDrawer({
 	return (
 		<Sheet open={open ?? false} onOpenChange={handleOpenChange}>
 			<SheetContent
-				ref={elementRef}
+				ref={contentRef}
 				side={resolvedSide}
 				className={cn(resolveStyle(style))}
 				style={resolveInlineStyle(style)}

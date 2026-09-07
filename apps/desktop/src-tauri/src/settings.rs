@@ -1,7 +1,10 @@
+mod store;
+
 use crate::profile::UserProfile;
 use flow_like::{state::FlowLikeConfig, utils::cache::get_cache_dir};
 use serde::{Deserialize, Serialize};
 use std::{collections::HashMap, path::PathBuf, sync::Arc, time::SystemTime};
+use store::write_settings_atomically;
 use tauri::AppHandle;
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -372,14 +375,18 @@ impl Settings {
     }
 
     pub fn serialize(&mut self) {
+        if let Err(error) = self.try_serialize() {
+            tracing::error!(%error, "Could not save settings");
+        }
+    }
+
+    pub fn try_serialize(&self) -> anyhow::Result<()> {
         let dir = settings_store_path();
         if let Some(parent) = dir.parent() {
-            let _ = std::fs::create_dir_all(parent);
+            std::fs::create_dir_all(parent)?;
         }
-        let settings = serde_json::to_vec(&self);
-        if let Ok(settings) = settings {
-            let _res = std::fs::write(dir, settings);
-        }
+        write_settings_atomically(&dir, &serde_json::to_vec(self)?)?;
+        Ok(())
     }
 }
 

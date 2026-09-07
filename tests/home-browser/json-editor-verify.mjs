@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { chromium } from "playwright-core";
+import { customizeHome } from "./customize-home.mjs";
 
 const origin = process.argv[2] ?? "http://127.0.0.1:4318";
 const allowedHost = new URL(origin).hostname;
@@ -82,8 +83,11 @@ try {
 	await page
 		.getByRole("button", { name: "Customize", exact: true })
 		.waitFor({ timeout: 60_000 });
-	await page.getByRole("button", { name: "Customize", exact: true }).click();
-	await page.getByRole("button", { name: "Edit JSON", exact: true }).click();
+	await customizeHome(page);
+	await page
+		.getByRole("button", { name: "Layout options", exact: true })
+		.click();
+	await page.getByRole("menuitem", { name: "Edit JSON", exact: true }).click();
 	await page.getByRole("dialog").waitFor();
 	await page.getByRole("button", { name: "Copy", exact: true }).click();
 	await page.getByRole("button", { name: "Copied", exact: true }).waitFor();
@@ -132,7 +136,10 @@ try {
 	await page
 		.getByRole("button", { name: "Discard JSON edits", exact: true })
 		.click();
-	await page.getByRole("button", { name: "Edit JSON", exact: true }).click();
+	await page
+		.getByRole("button", { name: "Layout options", exact: true })
+		.click();
+	await page.getByRole("menuitem", { name: "Edit JSON", exact: true }).click();
 	await page.locator(".monaco-editor").waitFor();
 
 	await replaceEditorValue(JSON.stringify(imported));
@@ -162,11 +169,14 @@ try {
 		imported,
 	);
 
-	await page.getByRole("button", { name: "Customize", exact: true }).click();
+	await customizeHome(page);
 	await page.getByRole("button", { name: "Layout options" }).click();
 	await page.getByRole("menuitem", { name: "Reset to default" }).click();
 	await page.getByRole("button", { name: "Reset draft", exact: true }).click();
-	await page.getByRole("button", { name: "Edit JSON", exact: true }).click();
+	await page
+		.getByRole("button", { name: "Layout options", exact: true })
+		.click();
+	await page.getByRole("menuitem", { name: "Edit JSON", exact: true }).click();
 	await page.locator(".monaco-editor").waitFor();
 	await page
 		.getByRole("button", { name: "Apply changes", exact: true })
@@ -196,14 +206,15 @@ try {
 	await mobilePage
 		.getByRole("button", { name: "Customize", exact: true })
 		.waitFor({ timeout: 60_000 });
-	await mobilePage
-		.getByRole("button", { name: "Customize", exact: true })
-		.click();
+	await customizeHome(mobilePage);
 	await mobilePage
 		.getByRole("button", { name: "Close widget panel", exact: true })
 		.click();
 	await mobilePage
-		.getByRole("button", { name: "Edit JSON", exact: true })
+		.getByRole("button", { name: "Layout options", exact: true })
+		.click();
+	await mobilePage
+		.getByRole("menuitem", { name: "Edit JSON", exact: true })
 		.click();
 	await mobilePage.locator(".monaco-editor").waitFor({ timeout: 60_000 });
 	const mobileDialog = mobilePage.getByRole("dialog", {

@@ -61,6 +61,7 @@ import { scheduleIDBCleanup } from "../lib/idb-maintenance";
 import { isIOSDevice } from "../lib/platform";
 import {
 	type OnlineProfile,
+	createProfileSyncQueue,
 	mergeRemoteProfileMetadata,
 	toLocalProfile,
 } from "../lib/profile-sync";
@@ -877,9 +878,7 @@ export function ProfileSyncer({
 	const accessToken = auth.accessToken;
 	const hubUrl = profile.data?.hub;
 
-	const syncingRef = useRef(false);
-	const lastSyncAtRef = useRef<number>(0);
-	const MIN_SYNC_INTERVAL_MS = 60_000;
+	const syncQueueRef = useRef(createProfileSyncQueue());
 
 	useEffect(() => {
 		if (profile.data && backend instanceof TauriBackend) {
@@ -899,6 +898,7 @@ export function ProfileSyncer({
 			});
 			return;
 		}
+		let disposed = false;
 
 		const isHttpPath = (path?: string | null): boolean => {
 			if (!path) return false;
@@ -1113,18 +1113,7 @@ export function ProfileSyncer({
 		};
 
 		const syncProfiles = async () => {
-			if (syncingRef.current) {
-				console.log("[ProfileSync] Already syncing, skipping");
-				return;
-			}
-			const now = Date.now();
-			if (now - lastSyncAtRef.current < MIN_SYNC_INTERVAL_MS) {
-				console.log("[ProfileSync] Cooldown active, skipping");
-				return;
-			}
-			syncingRef.current = true;
-			lastSyncAtRef.current = now;
-
+			if (disposed) return;
 			try {
 				console.log("[ProfileSync] Starting profile sync...");
 
@@ -1330,6 +1319,12 @@ export function ProfileSyncer({
 						updatedAt,
 					};
 				});
+				const uploadedRevisions = new Map(
+					Object.values(rawProfiles).map(({ hub_profile }) => [
+						hub_profile.id,
+						hub_profile.updated ?? "",
+					]),
+				);
 
 				if (profilesToSync.length === 0) {
 					console.log("[ProfileSync] No profiles to sync after filtering");
@@ -1485,6 +1480,11 @@ export function ProfileSyncer({
 						serverId: server_id,
 					});
 					if (local_id !== server_id) {
+						uploadedRevisions.set(
+							server_id,
+							uploadedRevisions.get(local_id) ?? "",
+						);
+						uploadedRevisions.delete(local_id);
 						const images = profilesWithLocalImages.get(local_id);
 						const extensions = profileLocalImageExts.get(local_id);
 						if (images) profilesWithLocalImages.set(server_id, images);
@@ -1708,6 +1708,7 @@ export function ProfileSyncer({
 						>("get_profiles_raw");
 
 					for (const onlineProfile of onlineProfiles) {
+						if (disposed) return;
 						const localProfile = latestLocal?.[onlineProfile.id];
 
 						if (!localProfile) {
@@ -1728,6 +1729,10 @@ export function ProfileSyncer({
 								);
 							}
 						} else {
+							const expectedUpdated =
+								uploadedRevisions.get(onlineProfile.id) ??
+								localProfile.hub_profile.updated ??
+								"";
 							// Merge: update existing local profile if server is newer
 							const serverTime =
 								parseDateValue(onlineProfile.updated_at)?.getTime() ?? 0;
@@ -1770,9 +1775,20 @@ export function ProfileSyncer({
 								}
 
 								try {
-									await invoke("upsert_profile", {
-										profile: localProfile,
-									});
+									const applied = await invoke<boolean>(
+										"merge_synced_profile",
+										{
+											profile: localProfile,
+											expectedUpdated,
+											remoteUpdated: onlineProfile.updated_at,
+										},
+									);
+									if (!applied) {
+										if (!disposed) {
+											void syncQueueRef.current.request(syncProfiles, true);
+										}
+										continue;
+									}
 								} catch (error) {
 									console.error(
 										"[ProfileSync] Failed to merge profile:",
@@ -1799,10 +1815,24 @@ export function ProfileSyncer({
 									localProfile.hub_profile.thumbnail = onlineProfile.thumbnail;
 									needsUpdate = true;
 								}
-								if (needsUpdate) {
-									await invoke("upsert_profile", {
-										profile: localProfile,
-									});
+								if (
+									needsUpdate ||
+									localProfile.hub_profile.updated !== expectedUpdated
+								) {
+									const applied = await invoke<boolean>(
+										"merge_synced_profile",
+										{
+											profile: localProfile,
+											expectedUpdated,
+											remoteUpdated: onlineProfile.updated_at,
+										},
+									);
+									if (!applied) {
+										if (!disposed) {
+											void syncQueueRef.current.request(syncProfiles, true);
+										}
+										continue;
+									}
 								}
 							}
 						}
@@ -1848,34 +1878,46 @@ export function ProfileSyncer({
 						}
 					}
 
+					await backend.queryClient?.invalidateQueries({
+						predicate: ({ queryKey }) =>
+							[
+								"getProfile",
+								"getProfiles",
+								"getSettingsProfile",
+								"getAllSettingsProfiles",
+							].includes(String(queryKey[0])),
+					});
 					console.log("[ProfileSync] Profile sync complete");
 				} catch (error) {
 					console.warn("Failed to pull remote profiles:", error);
 				}
 			} catch (error) {
 				console.error("[ProfileSync] Failed to sync profiles:", error);
-			} finally {
-				console.log("[ProfileSync] Sync finished, releasing lock");
-				syncingRef.current = false;
 			}
 		};
 
-		syncProfiles();
+		const syncQueue = syncQueueRef.current;
+		void syncQueue.request(syncProfiles, true);
 
 		const interval = setInterval(() => {
-			if (syncingRef.current) return;
-			syncProfiles();
-		}, 5 * 60_000);
+			void syncQueue.request(syncProfiles);
+		}, 60_000);
 		const requestSync = () => {
-			lastSyncAtRef.current = 0;
-			void syncProfiles();
+			void syncQueue.request(syncProfiles, true);
+		};
+		const syncOnFocus = () => {
+			void syncQueue.request(syncProfiles);
 		};
 		window.addEventListener("flow-like:profile-sync", requestSync);
 		window.addEventListener("online", requestSync);
+		window.addEventListener("focus", syncOnFocus);
 		return () => {
+			disposed = true;
 			clearInterval(interval);
+			syncQueue.cancel(syncProfiles);
 			window.removeEventListener("flow-like:profile-sync", requestSync);
 			window.removeEventListener("online", requestSync);
+			window.removeEventListener("focus", syncOnFocus);
 		};
 	}, [backend, isAuthenticated, accessToken, hubUrl]);
 

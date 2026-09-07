@@ -261,9 +261,15 @@ export function HomeGreeting({ widget }: HomeContentProps) {
 				)}
 			</div>
 			{hour >= 18 || hour < 6 ? (
-				<Moon className="size-6 shrink-0 text-[var(--home-surface-accent)] opacity-60" />
+				<Moon
+					aria-hidden
+					className="hidden size-6 shrink-0 text-[var(--home-surface-accent)] opacity-60 sm:block"
+				/>
 			) : (
-				<Sun className="size-6 shrink-0 text-[var(--home-surface-accent)] opacity-60" />
+				<Sun
+					aria-hidden
+					className="hidden size-6 shrink-0 text-[var(--home-surface-accent)] opacity-60 sm:block"
+				/>
 			)}
 		</div>
 	);

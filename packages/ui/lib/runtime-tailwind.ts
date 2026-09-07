@@ -1,8 +1,12 @@
+import postcss, { type Root, type Rule } from "postcss";
+
 type TailwindCompiler = Awaited<
 	ReturnType<typeof import("tailwindcss")["compile"]>
 >;
 
 const RUNTIME_STYLE_ATTRIBUTE = "data-a2ui-runtime-tailwind";
+const RUNTIME_ROOT_ATTRIBUTE = "data-a2ui-runtime-tailwind-root";
+const RUNTIME_SCOPE = `:where([${RUNTIME_ROOT_ATTRIBUTE}], [${RUNTIME_ROOT_ATTRIBUTE}] *)`;
 const THEME_VARIABLE =
 	/^--(?:color|font|text|tracking|leading|spacing|breakpoint|container|radius|shadow|inset-shadow|drop-shadow|blur|perspective|aspect|ease|animate|default)(?:-|$)/;
 
@@ -57,6 +61,28 @@ interface DocumentRuntime {
 }
 
 const runtimes = new WeakMap<Document, DocumentRuntime>();
+const rootUsers = new WeakMap<HTMLElement, number>();
+
+export function scopeRuntimeTailwind(css: string): string {
+	const stylesheet = postcss.parse(css);
+	stylesheet.walkRules((rule) => {
+		let parent: Rule["parent"] | Root["parent"] = rule.parent;
+		while (parent) {
+			// Variants inherit their utility's scope. Keyframes are animation steps.
+			if (
+				parent.type === "rule" ||
+				(parent.type === "atrule" && /keyframes$/i.test(parent.name))
+			) {
+				return;
+			}
+			parent = parent.parent;
+		}
+		rule.selectors = rule.selectors.map(
+			(selector) => `${RUNTIME_SCOPE}${selector === "*" ? "" : selector}`,
+		);
+	});
+	return stylesheet.toString();
+}
 
 function getRuntime(doc: Document): DocumentRuntime {
 	let runtime = runtimes.get(doc);
@@ -87,7 +113,10 @@ function scheduleCompilation(doc: Document, runtime: DocumentRuntime): void {
 			}
 			const compiler = await runtime.compiler;
 			if (runtime.users === 0) return;
-			const css = compiler.build(Array.from(runtime.candidates));
+			// A global .hidden emitted here would override the host sidebar's md:flex.
+			const css = scopeRuntimeTailwind(
+				compiler.build(Array.from(runtime.candidates)),
+			);
 			if (runtime.style.textContent !== css) runtime.style.textContent = css;
 			if (!runtime.style.isConnected) doc.head.appendChild(runtime.style);
 		} catch (error) {
@@ -125,6 +154,7 @@ function waitForTheme(doc: Document, runtime: DocumentRuntime): void {
 /**
  * Compile classes that arrive through saved pages, widget parameters, or live updates.
  * Each document owns its stylesheet so iframe media queries use the preview viewport.
+ * Utilities apply only to observed roots, including their portaled content.
  */
 export function observeRuntimeTailwind(root: HTMLElement): () => void {
 	const doc = root.ownerDocument;
@@ -132,6 +162,8 @@ export function observeRuntimeTailwind(root: HTMLElement): () => void {
 	if (!Observer) return () => {};
 	const runtime = getRuntime(doc);
 	runtime.users += 1;
+	rootUsers.set(root, (rootUsers.get(root) ?? 0) + 1);
+	root.setAttribute(RUNTIME_ROOT_ATTRIBUTE, "");
 
 	const collect = (element: Element) => {
 		let changed = false;
@@ -174,6 +206,13 @@ export function observeRuntimeTailwind(root: HTMLElement): () => void {
 	scheduleCompilation(doc, runtime);
 	return () => {
 		observer.disconnect();
+		const remaining = (rootUsers.get(root) ?? 1) - 1;
+		if (remaining === 0) {
+			rootUsers.delete(root);
+			root.removeAttribute(RUNTIME_ROOT_ATTRIBUTE);
+		} else {
+			rootUsers.set(root, remaining);
+		}
 		runtime.users -= 1;
 		if (runtime.users === 0) {
 			runtime.stopWaitingForTheme?.();

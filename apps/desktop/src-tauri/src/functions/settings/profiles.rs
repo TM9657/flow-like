@@ -57,10 +57,6 @@ fn decode_asset_proxy_path(path: &str) -> Option<String> {
     Some(decoded_path)
 }
 
-fn now_iso() -> String {
-    chrono::Utc::now().to_rfc3339()
-}
-
 #[instrument(skip_all)]
 #[tauri::command(async)]
 pub async fn get_profiles(
@@ -306,6 +302,33 @@ pub async fn upsert_profile(
     Ok(profile.clone())
 }
 
+#[instrument(skip_all)]
+#[tauri::command(async)]
+pub async fn merge_synced_profile(
+    app_handle: AppHandle,
+    mut profile: UserProfile,
+    expected_updated: String,
+    remote_updated: String,
+) -> Result<bool, TauriFunctionError> {
+    if let Some(icon) = profile
+        .hub_profile
+        .icon
+        .as_deref()
+        .and_then(decode_asset_proxy_path)
+    {
+        profile.hub_profile.icon = Some(icon);
+    }
+    let settings = TauriSettingsState::construct(&app_handle).await?;
+    let mut settings = settings.lock().await;
+    let existing = settings
+        .profiles
+        .get_mut(&profile.hub_profile.id)
+        .ok_or_else(|| TauriFunctionError::new("This profile no longer exists."))?;
+    let applied = existing.merge_synced(profile, &expected_updated, &remote_updated);
+    settings.try_serialize()?;
+    Ok(applied)
+}
+
 fn apply_profile_settings(
     existing: &mut UserProfile,
     changes: UserProfile,
@@ -321,7 +344,6 @@ fn apply_profile_settings(
             "The context size must fit within a 32-bit unsigned integer.",
         ));
     }
-    let now = now_iso();
     existing.hub_profile.name = name.to_string();
     existing.hub_profile.description = changes.hub_profile.description;
     existing.hub_profile.interests = changes.hub_profile.interests;
@@ -329,8 +351,7 @@ fn apply_profile_settings(
     existing.hub_profile.theme = changes.hub_profile.theme;
     existing.hub_profile.settings = changes.hub_profile.settings;
     existing.execution_settings = changes.execution_settings;
-    existing.hub_profile.updated = now.clone();
-    existing.updated = now;
+    existing.advance_revision(None);
     Ok(())
 }
 
@@ -431,9 +452,7 @@ pub async fn add_bit(
         .get_mut(&profile.hub_profile.id)
         .ok_or(anyhow::anyhow!("Profile not found"))?;
     profile.hub_profile.add_bit(&bit).await;
-    let now = now_iso();
-    profile.hub_profile.updated = now.clone();
-    profile.updated = now;
+    profile.advance_revision(None);
     settings.serialize();
     Ok(())
 }
@@ -452,9 +471,7 @@ pub async fn remove_bit(
         .get_mut(&profile.hub_profile.id)
         .ok_or(anyhow::anyhow!("Profile not found"))?;
     profile.hub_profile.remove_bit(&bit);
-    let now = now_iso();
-    profile.hub_profile.updated = now.clone();
-    profile.updated = now;
+    profile.advance_revision(None);
     settings.serialize();
     Ok(())
 }
@@ -512,7 +529,6 @@ pub async fn remove_custom_bit(
 
     settings.custom_bits.retain(|bit| bit.id != bit_id);
 
-    let now = now_iso();
     for profile in settings.profiles.values_mut() {
         let before = profile.hub_profile.bits.len();
         profile.hub_profile.bits.retain(|reference| {
@@ -526,8 +542,7 @@ pub async fn remove_custom_bit(
             .custom_bits
             .retain(|existing| existing.0.id != bit_id);
         if profile.hub_profile.bits.len() != before {
-            profile.hub_profile.updated = now.clone();
-            profile.updated = now.clone();
+            profile.advance_revision(None);
         }
     }
 
@@ -634,9 +649,7 @@ pub async fn change_profile_image(
 
     println!("Setting icon to {}", icon);
     profile.hub_profile.icon = Some(icon);
-    let now = now_iso();
-    profile.hub_profile.updated = now.clone();
-    profile.updated = now;
+    profile.advance_revision(None);
     settings.serialize();
 
     if let Some(icon) = icon_to_delete {
@@ -713,9 +726,7 @@ pub async fn profile_update_app(
         }
     }
 
-    let now = now_iso();
-    profile.hub_profile.updated = now.clone();
-    profile.updated = now;
+    profile.advance_revision(None);
     settings.serialize();
     Ok(())
 }
@@ -735,9 +746,7 @@ pub async fn profile_update_shortcuts(
         .ok_or(anyhow::anyhow!("Profile not found"))?;
 
     profile.hub_profile.shortcuts = Some(shortcuts);
-    let now = now_iso();
-    profile.hub_profile.updated = now.clone();
-    profile.updated = now;
+    profile.advance_revision(None);
     settings.serialize();
     Ok(())
 }
@@ -748,7 +757,7 @@ pub async fn profile_update_home_layout(
     app_handle: AppHandle,
     profile_id: String,
     layout: Option<flow_like_types::Value>,
-) -> Result<(), TauriFunctionError> {
+) -> Result<Profile, TauriFunctionError> {
     if let Some(layout) = &layout {
         flow_like::profile::validate_home_layout(layout)
             .map_err(|message| TauriFunctionError::new(&message))?;
@@ -760,11 +769,19 @@ pub async fn profile_update_home_layout(
         .get_mut(&profile_id)
         .ok_or(anyhow::anyhow!("Profile not found"))?;
     profile.hub_profile.home_layout = layout;
-    let now = now_iso();
-    profile.hub_profile.updated = now.clone();
-    profile.updated = now;
-    settings.serialize();
-    Ok(())
+    profile.advance_revision(None);
+    let updated = profile.clone();
+    settings.try_serialize()?;
+    let mut saved = updated.hub_profile.clone();
+    saved.custom_bits = settings.profile_custom_bits(&updated);
+    if let Some(icon) = saved.icon.clone()
+        && !icon.starts_with("http://")
+        && !icon.starts_with("https://")
+        && let Ok(icon) = presign_icon(&icon)
+    {
+        saved.icon = Some(icon);
+    }
+    Ok(saved)
 }
 
 /// Read a profile icon file and return its bytes
