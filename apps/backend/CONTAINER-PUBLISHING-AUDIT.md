@@ -101,6 +101,16 @@ Unknown, modified, truncated, or differently encoded keys remain in scan input.
 No library, image path, or secret detection rule is excluded, and image contents
 are never changed by this scanner-input treatment.
 
+The AWS API binary also places public literals from the Copilot secret-redaction
+code next to each other. Trivy interprets the Slack prefix followed by credential
+field names as a token. The supplemental scan inserts a line break at that source
+literal boundary only when the complete reviewed sequence matches, including its
+surrounding private-key marker and field names. All original bytes remain in the
+scan input. Changed or partial sequences receive no normalization. The source is
+[`stream.rs`](../../packages/core/editor/src/flow/copilot/stream.rs), in
+`redact_private_key_blocks`, `redact_known_secret_tokens`, and
+`redact_inline_secret_values`.
+
 Trivy JSON reports and extracted strings may themselves contain matched secrets.
 They stay in temporary runner storage and are not uploaded as artifacts. On a
 failure, reproduce the scan in a trusted environment and handle reports as

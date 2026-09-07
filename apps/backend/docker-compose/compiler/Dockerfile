@@ -8,11 +8,6 @@ RUN apt-get update && apt-get install -y \
 WORKDIR /app
 COPY . .
 
-RUN sed -i '/apps\/desktop\/src-tauri/d' Cargo.toml && \
-    sed -i '/apps\/backend\/local\/api/d' Cargo.toml && \
-    sed -i '/apps\/backend\/kubernetes\/api/d' Cargo.toml && \
-    sed -i '/apps\/backend\/kubernetes\/executor/d' Cargo.toml
-
 ARG CARGO_BUILD_JOBS=2
 ENV CARGO_BUILD_JOBS=${CARGO_BUILD_JOBS}
 

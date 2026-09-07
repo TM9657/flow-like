@@ -1,8 +1,9 @@
-"""Remove only complete, content-reviewed public self-test PEMs from scanner input.
+"""Prepare reviewed public PEMs and adjacent source literals for secret scanning.
 
-Every other byte remains eligible for the supplemental ELF secret scan. This is
-not a file, library, path, or secret-rule exclusion. The metadata records hashes,
-not private-key material. Images and the ordinary image scan are unchanged.
+Only fingerprinted self-test PEMs are removed. A known public literal sequence
+gets a line break so adjacent Rust strings cannot form a spurious token. Every
+other byte remains eligible for the supplemental ELF secret scan. Images and
+the ordinary image scan are unchanged.
 """
 
 from functools import lru_cache
@@ -16,6 +17,19 @@ import tempfile
 
 FIXTURE_FILE = Path(__file__).with_suffix(".json")
 CHUNK_SIZE = 64 * 1024
+
+# Rust places these literals from packages/core/editor/src/flow/copilot/stream.rs
+# next to each other in the AWS API binary: redact_private_key_blocks (END),
+# redact_known_secret_tokens (xoxp-), and redact_inline_secret_values (markers).
+# Trivy mistakes the prefix plus the following markers for a Slack token.
+# Match the full reviewed context and preserve every byte, adding only a LF at
+# the source-literal boundary. Other token prefixes and contents stay untouched.
+COPILOT_LITERAL_RUN = (
+    b"-----END " b"xoxp-" b"clientsecret" b"client_secret" b"client-secret"
+)
+COPILOT_LITERAL_SCAN_TEXT = (
+    b"-----END " b"xoxp-\n" b"clientsecret" b"client_secret" b"client-secret"
+)
 
 
 @lru_cache(maxsize=1)
@@ -39,18 +53,19 @@ def fixture_fingerprints():
 
 
 def redact_public_fixtures(path: Path) -> int:
-    """Replace exact known PEM blocks in a private strings file; return count.
+    """Normalize exact reviewed fixtures in a private strings file; return count.
 
     The fingerprint excludes the LF after END. Internal LF bytes are literal:
     CRLF, whitespace changes, truncated blocks, and new keys are not exempted.
-    Keep only one chunk and a maximum-size PEM overlap in memory.
+    The public source-literal sequence only gains a separator. Keep one chunk
+    and a maximum-size fixture overlap in memory.
     """
     fingerprints = fixture_fingerprints()
-    maximum_length = max(length for _, length in fingerprints)
+    maximum_length = max(len(COPILOT_LITERAL_RUN), *(length for _, length in fingerprints))
     pattern = re.compile(
         rb"-----BEGIN (?P<label>(?:RSA |DSA |EC )?PRIVATE KEY)-----"
         rb"[A-Za-z0-9+/=\n]{1," + str(maximum_length).encode("ascii") + rb"}"
-        rb"-----END (?P=label)-----"
+        rb"-----END (?P=label)-----|" + re.escape(COPILOT_LITERAL_RUN)
     )
     path = Path(path)
     temporary_path = None
@@ -72,7 +87,12 @@ def redact_public_fixtures(path: Path) -> int:
                         break
                     block = match.group()
                     digest = hashlib.sha256(block).hexdigest()
-                    if (digest, len(block)) in fingerprints:
+                    if block == COPILOT_LITERAL_RUN:
+                        destination.write(pending[position:match.start()])
+                        destination.write(COPILOT_LITERAL_SCAN_TEXT)
+                        position = match.end()
+                        redacted += 1
+                    elif (digest, len(block)) in fingerprints:
                         destination.write(pending[position:match.start()])
                         destination.write(b"[reviewed public GnuTLS self-test key sha256=" + digest.encode("ascii") + b"]")
                         position = match.end()

@@ -1,4 +1,4 @@
-"""Exercise content-bound exceptions with artificial, non-secret PEM bodies."""
+"""Check reviewed fixture handling and preservation of unknown scan content."""
 
 import hashlib
 import importlib.util
@@ -28,6 +28,34 @@ class FixtureTests(unittest.TestCase):
             self.assertEqual(stat.S_IMODE(path.stat().st_mode), 0o600)
             self.assertEqual(list(Path(directory).iterdir()), [path])
             return path.read_bytes(), count
+
+    def test_public_literals_gain_only_a_separator_and_preserve_other_tokens(self):
+        before = b"xoxb-" + b"syntheticTokenBeforeFixture"
+        after = b"xoxp-" + b"syntheticTokenAfterFixture"
+        literal_run = b"-----END " + b"xoxp-" + b"clientsecretclient_secretclient-secret"
+        separated = b"-----END " + b"xoxp-\n" + b"clientsecretclient_secretclient-secret"
+        content = before + literal_run + after
+        output, count = self.redact(content)
+        self.assertEqual(count, 1)
+        self.assertEqual(output, before + separated + after)
+        self.assertEqual(output.replace(b"\n", b""), content)
+        self.assertEqual(self.redact(output), (output, 0))
+
+    def test_public_literals_and_pems_survive_every_chunk_boundary(self):
+        content = b"padding" + fixtures.COPILOT_LITERAL_RUN + PEM + fixtures.COPILOT_LITERAL_RUN + b"tail"
+        expected, count = self.redact(content)
+        self.assertEqual(count, 3)
+        for chunk_size in range(1, len(content) + 2):
+            with self.subTest(chunk_size=chunk_size):
+                self.assertEqual(self.redact(content, chunk_size=chunk_size), (expected, 3))
+
+    def test_changed_or_partial_public_literals_are_not_normalized(self):
+        literal_run = fixtures.COPILOT_LITERAL_RUN
+        variants = [literal_run[1:], literal_run[:-1], literal_run.replace(b"xoxp-", b"xoxb-")]
+        variants.extend(literal_run[:i] + b"?" + literal_run[i + 1:] for i in range(len(literal_run)))
+        for content in variants:
+            with self.subTest(content=content):
+                self.assertEqual(self.redact(content, chunk_size=7), (content, 0))
 
     def test_only_complete_exact_reviewed_content_is_replaced(self):
         unknown = PEM.replace(b"QUJD", b"REVG", 1)

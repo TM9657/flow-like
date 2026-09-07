@@ -14,12 +14,6 @@ WORKDIR /app
 
 COPY . .
 
-# Remove packages that require edition 2024 or other backends
-RUN sed -i '/apps\/desktop\/src-tauri/d' Cargo.toml && \
-    sed -i '/apps\/backend\/local\/api/d' Cargo.toml && \
-    sed -i '/apps\/backend\/docker-compose\/api/d' Cargo.toml && \
-    sed -i '/apps\/backend\/docker-compose\/runtime/d' Cargo.toml
-
 # Limit build parallelism to reduce memory pressure during lance compilation
 ARG CARGO_BUILD_JOBS=2
 ENV CARGO_BUILD_JOBS=${CARGO_BUILD_JOBS}
