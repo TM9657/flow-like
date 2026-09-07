@@ -447,17 +447,11 @@ fn redact_basic_tokens(text: &str) -> String {
 }
 
 fn redact_known_secret_tokens(text: &str) -> String {
-    const PREFIXES: &[&str] = &[
-        "sk-",
-        "ghp_",
-        "github_pat_",
-        "xoxb-",
-        "xoxp-",
-        "AKIA",
-        "AIza",
-    ];
+    // Keep separators in the binary so scanners cannot combine a token prefix
+    // with an unrelated string that the linker places immediately after it.
+    const PREFIXES: &str = "sk- ghp_ github_pat_ xoxb- xoxp- AKIA AIza ";
     let mut redacted = text.to_string();
-    for prefix in PREFIXES {
+    for prefix in PREFIXES.split_ascii_whitespace() {
         let mut result = String::with_capacity(redacted.len());
         let mut cursor = 0usize;
         while let Some(relative) = redacted[cursor..].find(prefix) {
@@ -1314,6 +1308,31 @@ mod tests {
         assert_eq!(payload["status"], "submitted");
         assert_eq!(payload["tool_call_id"], "internal-full");
         assert!(payload["source"].as_str().unwrap().contains("logInfo"));
+    }
+
+    #[test]
+    fn known_secret_tokens_preserve_boundaries_and_redact_every_prefix() {
+        for prefix in [
+            "sk-",
+            "ghp_",
+            "github_pat_",
+            "xoxb-",
+            "xoxp-",
+            "AKIA",
+            "AIza",
+        ] {
+            let token = format!("{prefix}synthetic-token");
+            for delimiter in [" ", ",", ";", "\"", "'", ")", "}", "]"] {
+                let input = format!("before ({token}{delimiter}after");
+                assert_eq!(
+                    redact_known_secret_tokens(&input),
+                    format!("before (<redacted>{delimiter}after"),
+                );
+            }
+            assert_eq!(redact_known_secret_tokens(&token), "<redacted>");
+            let word = format!("word{token}");
+            assert_eq!(redact_known_secret_tokens(&word), word);
+        }
     }
 
     #[test]

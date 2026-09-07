@@ -228,6 +228,59 @@ def check_config(path):
     visit(config)
 
 
+def report_secrets(path, compiled_text=False):
+    """Summarize scanner metadata without exposing matches or source paths."""
+    try:
+        report = json.loads(Path(path).read_text(encoding="utf-8"))
+    except (OSError, UnicodeError, json.JSONDecodeError) as error:
+        raise PublicationError("secret scan report is unavailable or invalid") from error
+    if not isinstance(report, dict):
+        raise PublicationError("secret scan report has an invalid structure")
+    results = report.get("Results", [])
+    if results is None:
+        results = []
+    if not isinstance(results, list):
+        raise PublicationError("secret scan report has an invalid structure")
+
+    groups = {}
+    for result in results:
+        if not isinstance(result, dict):
+            raise PublicationError("secret scan report has an invalid structure")
+        secrets = result.get("Secrets", [])
+        if secrets is None:
+            secrets = []
+        if not isinstance(secrets, list):
+            raise PublicationError("secret scan report has an invalid structure")
+        scan_file = None
+        target = result.get("Target")
+        if compiled_text and isinstance(target, str):
+            # Only inspect_archive's numeric output names may appear in logs.
+            match = re.fullmatch(r"(?:.*/)?([0-9]{6}\.txt)", target)
+            if match:
+                scan_file = match[1]
+        for secret in secrets:
+            if not isinstance(secret, dict):
+                raise PublicationError("secret scan report has an invalid structure")
+            rule = secret.get("RuleID")
+            if not isinstance(rule, str) or not re.fullmatch(r"[a-z0-9][a-z0-9-]{0,79}", rule):
+                rule = "UNKNOWN"
+            severity = secret.get("Severity")
+            if not isinstance(severity, str) or severity not in {"UNKNOWN", "LOW", "MEDIUM", "HIGH", "CRITICAL"}:
+                severity = "UNKNOWN"
+            entry = {"rule_id": rule, "severity": severity}
+            if scan_file is not None:
+                entry["scan_file"] = scan_file
+                start, end = secret.get("StartLine"), secret.get("EndLine")
+                if type(start) is int and type(end) is int and 0 < start <= end:
+                    entry.update(start_line=start, end_line=end)
+            key = tuple(entry.items())
+            if key not in groups:
+                groups[key] = {**entry, "count": 0}
+            groups[key]["count"] += 1
+    findings = list(groups.values())
+    return {"secret_findings": sum(entry["count"] for entry in findings), "findings": findings}
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     commands = parser.add_subparsers(dest="command", required=True)
@@ -237,10 +290,15 @@ def main(argv=None):
     extract.add_argument("--output-dir", type=Path, required=True)
     config = commands.add_parser("check-config", help="reject literal credential fields in the embedded API config")
     config.add_argument("--path", type=Path, required=True)
+    report = commands.add_parser("report-secrets", help="summarize secret scan metadata without matched content")
+    report.add_argument("--path", type=Path, required=True)
+    report.add_argument("--compiled-text", action="store_true", help="include generated scan file IDs and line numbers")
     args = parser.parse_args(argv)
     try:
         if args.command == "extract":
             print(json.dumps(extract_image(args.image, args.platform, args.output_dir), sort_keys=True))
+        elif args.command == "report-secrets":
+            print(json.dumps(report_secrets(args.path, args.compiled_text), sort_keys=True))
         else:
             check_config(args.path)
             print("Configuration credential-field check passed.")
