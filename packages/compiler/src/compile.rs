@@ -1,12 +1,13 @@
 use crate::config::CompilerConfig;
 use crate::error::CompilerError;
 use crate::jwt::{verify_jwt_async, CompilerClaims};
+use crate::metadata::extract_nodes;
 use flow_like_types_contracts::dispatch::{
     compilation_job_payload_hash, CompilationJob, CompilationResult, CompilationStatus,
     CompilationStorageProvider,
 };
 use flow_like_wasm::aot_cache::WASMTIME_MAJOR_VERSION;
-use flow_like_wasm::{WasmConfig, WasmEngine, WasmSecurityConfig};
+use flow_like_wasm::{WasmConfig, WasmEngine};
 use reqwest::{Client, Url};
 use std::collections::{HashMap, HashSet};
 use std::net::IpAddr;
@@ -814,32 +815,6 @@ async fn compile_inner(
 
     info!(count = compiled_platforms.len(), "All targets compiled");
     Ok((compiled_platforms, nodes))
-}
-
-/// Instantiate the WASM module with the host engine to extract node definitions,
-/// returning them as `PackageNodeEntry` values ready for storage.
-async fn extract_nodes(
-    wasm_bytes: &[u8],
-) -> Result<Vec<flow_like_wasm::manifest::PackageNodeEntry>, CompilerError> {
-    let engine = WasmEngine::new(WasmConfig::default().without_cache())
-        .map_err(|e| CompilerError::Compilation(format!("Host engine creation failed: {e}")))?;
-    let loaded = engine.load_auto(wasm_bytes).await.map_err(|e| {
-        CompilerError::Compilation(format!("Failed to load WASM for node extraction: {e}"))
-    })?;
-    let security = WasmSecurityConfig::restrictive().for_metadata();
-    let mut instance = loaded.instantiate(&engine, security).await.map_err(|e| {
-        CompilerError::Compilation(format!(
-            "Failed to instantiate WASM for node extraction: {e}"
-        ))
-    })?;
-    let defs = instance
-        .call_get_nodes()
-        .await
-        .map_err(|e| CompilerError::Compilation(format!("Failed to call get_nodes: {e}")))?;
-    Ok(defs
-        .iter()
-        .map(flow_like_wasm::definition_to_package_entry)
-        .collect())
 }
 
 async fn send_callback(

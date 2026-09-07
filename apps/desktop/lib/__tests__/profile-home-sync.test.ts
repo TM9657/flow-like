@@ -1,5 +1,10 @@
-import { describe, expect, it } from "vitest";
-import { type OnlineProfile, toLocalProfile } from "../profile-sync";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import {
+	type OnlineProfile,
+	createProfileSyncQueue,
+	mergeRemoteProfileMetadata,
+	toLocalProfile,
+} from "../profile-sync";
 
 const profile: OnlineProfile = {
 	id: "personal",
@@ -46,5 +51,76 @@ describe("profile home synchronization", () => {
 		const local = toLocalProfile(profile);
 		expect(local.hub_profile.home_layout).toBeNull();
 		expect(local.hub_profile.home_default_id).toBeNull();
+	});
+
+	it("pulls another device's layout and later reset without losing default lineage", () => {
+		const local = toLocalProfile(profile);
+		const remote = {
+			...profile,
+			home_layout: { version: 1 as const, widgets: [] },
+			home_default_id: "team-default",
+		};
+		mergeRemoteProfileMetadata(local, remote);
+		expect(local.hub_profile.home_layout).toEqual(remote.home_layout);
+		mergeRemoteProfileMetadata(local, { ...remote, home_layout: null });
+		expect(local.hub_profile.home_layout).toBeNull();
+		expect(local.hub_profile.home_default_id).toBe("team-default");
+	});
+});
+
+describe("profile sync queue", () => {
+	afterEach(() => vi.useRealTimers());
+
+	it("sends edits saved during an active sync in a follow-up without overlapping requests", async () => {
+		const queue = createProfileSyncQueue();
+		let release!: () => void;
+		const firstRequest = new Promise<void>((resolve) => {
+			release = resolve;
+		});
+		const sync = vi
+			.fn()
+			.mockReturnValueOnce(firstRequest)
+			.mockResolvedValue(undefined);
+		const active = queue.request(sync);
+		await Promise.resolve();
+		expect(sync).toHaveBeenCalledTimes(1);
+		queue.request(sync, true);
+		queue.request(sync, true);
+		expect(sync).toHaveBeenCalledTimes(1);
+		release();
+		await active;
+		expect(sync).toHaveBeenCalledTimes(2);
+	});
+
+	it("throttles background refreshes while saving bypasses the cooldown", async () => {
+		vi.useFakeTimers();
+		const queue = createProfileSyncQueue(60_000);
+		const sync = vi.fn().mockResolvedValue(undefined);
+		await queue.request(sync);
+		await queue.request(sync);
+		expect(sync).toHaveBeenCalledTimes(1);
+		await queue.request(sync, true);
+		expect(sync).toHaveBeenCalledTimes(2);
+		vi.advanceTimersByTime(60_000);
+		await queue.request(sync);
+		expect(sync).toHaveBeenCalledTimes(3);
+	});
+
+	it("cancels a queued request when its profile sync context is removed", async () => {
+		const queue = createProfileSyncQueue();
+		let release!: () => void;
+		const sync = vi.fn(
+			() =>
+				new Promise<void>((resolve) => {
+					release = resolve;
+				}),
+		);
+		const active = queue.request(sync);
+		await Promise.resolve();
+		queue.request(sync, true);
+		queue.cancel(sync);
+		release();
+		await active;
+		expect(sync).toHaveBeenCalledTimes(1);
 	});
 });

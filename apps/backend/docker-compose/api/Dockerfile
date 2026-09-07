@@ -19,12 +19,6 @@ COPY . .
 ARG FLOW_LIKE_CONFIG=apps/backend/docker-compose/flow-like.config.example.json
 RUN cp "$FLOW_LIKE_CONFIG" /app/flow-like.config.json
 
-# Remove packages that require edition 2024
-RUN sed -i '/apps\/desktop\/src-tauri/d' Cargo.toml && \
-    sed -i '/apps\/backend\/local\/api/d' Cargo.toml && \
-    sed -i '/apps\/backend\/kubernetes\/api/d' Cargo.toml && \
-    sed -i '/apps\/backend\/kubernetes\/executor/d' Cargo.toml
-
 # Limit build parallelism to reduce memory pressure during lance compilation
 ARG CARGO_BUILD_JOBS=2
 ENV CARGO_BUILD_JOBS=${CARGO_BUILD_JOBS}

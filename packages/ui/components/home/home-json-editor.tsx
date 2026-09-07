@@ -31,12 +31,14 @@ interface HomeJsonEditorProps {
 	layout: IHomeLayout;
 	onApply: (layout: IHomeLayout) => void;
 	onClose: () => void;
+	onRestoreFocus?: () => void;
 }
 
 export function HomeJsonEditor({
 	layout,
 	onApply,
 	onClose,
+	onRestoreFocus,
 }: HomeJsonEditorProps) {
 	const [initial] = useState(() => trySerializeHomeLayout(layout));
 	const [json, setJson] = useState(initial.ok ? initial.json : "");
@@ -117,6 +119,11 @@ export function HomeJsonEditor({
 			>
 				<DialogContent
 					showCloseButton={false}
+					onCloseAutoFocus={(event) => {
+						if (!onRestoreFocus) return;
+						event.preventDefault();
+						onRestoreFocus();
+					}}
 					className="min-w-0 max-w-none gap-0 overflow-hidden p-0 sm:max-w-none"
 					style={{
 						width: "calc(100vw - 2rem)",

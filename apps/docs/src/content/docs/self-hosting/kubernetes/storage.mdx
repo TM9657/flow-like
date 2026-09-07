@@ -180,6 +180,12 @@ STS, sibling-prefix and copy-source denial, missing session tokens, administrati
 routes and presigned URLs, then removes its unique temporary prefixes. It does
 not test expiry, failover or application throughput.
 
+The shared [storage verification contract](/self-hosting/docker-compose/storage/#verify-prefix-authorization)
+lists the complete probes and additional expiry, long-run and IAM-restore
+qualification. Repeat it when changing the exact store version, policy, public
+endpoint or issuer identity. Killing a sandbox does not instantly revoke
+credentials it has exported; session expiry remains part of storage isolation.
+
 Preserve the PVC and IAM credentials on upgrade. Investigate initializer drift
 errors before changing users or policies. Restore storage data and credentials
 consistently with the database and retained execution state.

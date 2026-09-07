@@ -125,6 +125,7 @@ pub struct ReadBarcodeOptions {
     #[serde(default)]
     pub validation: BarcodeValidationOptions,
     #[serde(default)]
+    #[schemars(default = "schema_default_preprocessing")]
     pub preprocessing: BarcodePreprocessingOptions,
 }
 
@@ -181,7 +182,10 @@ pub struct BarcodePreprocessingOptions {
     #[schemars(schema_with = "max_decode_attempts_schema")]
     pub max_decode_attempts: usize,
     #[serde(default = "default_decode_threads")]
-    #[schemars(schema_with = "decode_threads_schema")]
+    #[schemars(
+        schema_with = "decode_threads_schema",
+        default = "schema_default_decode_threads"
+    )]
     pub decode_threads: usize,
 }
 
@@ -510,6 +514,19 @@ fn default_decode_threads() -> usize {
     std::thread::available_parallelism()
         .map(|threads| threads.get().min(4))
         .unwrap_or(4)
+}
+
+// Schema defaults must remain identical across API and executor CPU allocations.
+// Runtime defaults still adapt to the CPUs available to the process.
+fn schema_default_decode_threads() -> usize {
+    4
+}
+
+fn schema_default_preprocessing() -> BarcodePreprocessingOptions {
+    BarcodePreprocessingOptions {
+        decode_threads: schema_default_decode_threads(),
+        ..BarcodePreprocessingOptions::default()
+    }
 }
 
 fn hash_luma(luma: &[u8]) -> u64 {
@@ -1751,6 +1768,67 @@ mod tests {
     };
     use rxing::{EncodeHints, MultiFormatWriter, Writer};
 
+    fn resolve_schema<'a>(
+        root: &'a flow_like_types::Value,
+        schema: &'a flow_like_types::Value,
+    ) -> &'a flow_like_types::Value {
+        match schema.get("$ref").and_then(|value| value.as_str()) {
+            Some(reference) => root
+                .pointer(reference.strip_prefix('#').expect("local schema reference"))
+                .expect("referenced schema definition"),
+            None => schema,
+        }
+    }
+
+    #[test]
+    fn barcode_schema_thread_defaults_are_independent_of_cpu_allocation() {
+        let schema = flow_like_types::json::to_value(schemars::schema_for!(ReadBarcodeOptions))
+            .expect("schema should serialize");
+        let preprocessing = schema
+            .pointer("/properties/preprocessing")
+            .expect("preprocessing schema");
+        assert_eq!(
+            preprocessing.pointer("/default/decode_threads"),
+            Some(&json!(4))
+        );
+        let definition = resolve_schema(&schema, preprocessing);
+        assert_eq!(
+            definition.pointer("/properties/decode_threads/default"),
+            Some(&json!(4))
+        );
+        let standalone =
+            flow_like_types::json::to_value(schemars::schema_for!(BarcodePreprocessingOptions))
+                .expect("preprocessing schema should serialize");
+        assert_eq!(
+            standalone.pointer("/properties/decode_threads/default"),
+            Some(&json!(4))
+        );
+    }
+
+    #[test]
+    fn barcode_runtime_thread_defaults_still_follow_cpu_allocation() {
+        let expected = std::thread::available_parallelism()
+            .map(|threads| threads.get().min(4))
+            .unwrap_or(4);
+        assert_eq!(
+            BarcodePreprocessingOptions::default().decode_threads,
+            expected
+        );
+        assert_eq!(
+            ReadBarcodeOptions::default().preprocessing.decode_threads,
+            expected
+        );
+        for input in [json!({}), json!({"preprocessing": {}})] {
+            let options: ReadBarcodeOptions = flow_like_types::json::from_value(input).unwrap();
+            assert_eq!(options.preprocessing.decode_threads, expected);
+        }
+        let explicit: ReadBarcodeOptions = flow_like_types::json::from_value(json!({
+            "preprocessing": {"decode_threads": 7}
+        }))
+        .unwrap();
+        assert_eq!(explicit.preprocessing.decode_threads, 7);
+    }
+
     fn barcode_image(
         text: &str,
         format: BarcodeFormat,
@@ -1862,8 +1940,15 @@ mod tests {
                 .is_some_and(|formats| formats.contains(&json!("CODE_128")))
         );
 
-        let polarity_schema = schema
-            .pointer("/properties/preprocessing/properties/polarity")
+        let preprocessing_schema = resolve_schema(
+            &schema,
+            schema
+                .pointer("/properties/preprocessing")
+                .expect("preprocessing schema should exist"),
+        );
+
+        let polarity_schema = preprocessing_schema
+            .pointer("/properties/polarity")
             .expect("polarity schema should exist");
         assert_eq!(polarity_schema.get("default"), Some(&json!("Auto")));
         assert_eq!(
@@ -1871,20 +1956,20 @@ mod tests {
             Some(&json!(["Auto", "DarkOnLight", "LightOnDark"]))
         );
 
-        let rotations_schema = schema
-            .pointer("/properties/preprocessing/properties/rotations/items/enum")
+        let rotations_schema = preprocessing_schema
+            .pointer("/properties/rotations/items/enum")
             .expect("rotations enum should exist");
         assert_eq!(rotations_schema, &json!([0, 90, 180, 270]));
 
-        let max_attempts_schema = schema
-            .pointer("/properties/preprocessing/properties/max_decode_attempts")
+        let max_attempts_schema = preprocessing_schema
+            .pointer("/properties/max_decode_attempts")
             .expect("max_decode_attempts schema should exist");
         assert_eq!(max_attempts_schema.get("default"), Some(&json!(24)));
         assert_eq!(max_attempts_schema.get("minimum"), Some(&json!(1)));
         assert_eq!(max_attempts_schema.get("maximum"), Some(&json!(256)));
 
-        let decode_threads_schema = schema
-            .pointer("/properties/preprocessing/properties/decode_threads")
+        let decode_threads_schema = preprocessing_schema
+            .pointer("/properties/decode_threads")
             .expect("decode_threads schema should exist");
         assert_eq!(decode_threads_schema.get("default"), Some(&json!(4)));
         assert_eq!(decode_threads_schema.get("minimum"), Some(&json!(1)));

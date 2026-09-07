@@ -289,7 +289,10 @@ pub async fn import_app_from_file(
 
     let path = normalize_import_path(path)?;
 
-    let mut profile = TauriSettingsState::current_profile(&app_handle).await?;
+    let profile_id = TauriSettingsState::current_profile(&app_handle)
+        .await?
+        .hub_profile
+        .id;
     let settings = TauriSettingsState::construct(&app_handle).await?;
 
     let app = App::import_archive(flow_like_state, path, password)
@@ -298,15 +301,19 @@ pub async fn import_app_from_file(
 
     println!("Imported app: {:?}", app.id);
 
+    // Import can take a while. Apply membership to the latest stored profile so
+    // edits made during the import, including Home saves, remain intact.
+    let mut settings = settings.lock().await;
+    let profile = settings
+        .profiles
+        .get_mut(&profile_id)
+        .ok_or_else(|| TauriFunctionError::new("Profile not found"))?;
     let apps = profile.hub_profile.apps.get_or_insert_with(Vec::new);
 
     if !apps.iter().any(|a| a.app_id == app.id) {
         apps.push(ProfileApp::new(app.id.clone()));
-        let mut settings_guard = settings.lock().await;
-        settings_guard
-            .profiles
-            .insert(profile.hub_profile.id.clone(), profile.clone());
-        settings_guard.serialize();
+        profile.advance_revision(None);
+        settings.try_serialize()?;
     }
 
     Ok(app)

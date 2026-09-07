@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { writeFile } from "node:fs/promises";
 import { chromium } from "playwright-core";
+import { customizeHome } from "./customize-home.mjs";
 
 const browser = await chromium.launch({
 	executablePath:
@@ -342,7 +343,7 @@ try {
 		.selectOption("returning");
 	await page.setViewportSize({ width: 1480, height: 1050 });
 	await top();
-	await page.getByRole("button", { name: "Customize", exact: true }).click();
+	await customizeHome(page);
 	await page
 		.getByRole("button", { name: "Close widget panel", exact: true })
 		.last()
@@ -397,7 +398,7 @@ try {
 	report.passed.push(
 		"The greeting name and section heading text remain editable and persist through the real editor save callback",
 	);
-	await page.getByRole("button", { name: "Customize", exact: true }).click();
+	await customizeHome(page);
 	await page
 		.getByRole("button", { name: "Close widget panel", exact: true })
 		.last()

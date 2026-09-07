@@ -36,4 +36,4 @@ and does not drive its guest event loop between calls.
 
 The SDK archive includes its WIT definitions, so consumers need no Flow-Like
 checkout. After publication, the Rust template can use the registry dependency
-shown in the [publishing guide](RELEASING.md#switch-the-template-after-publication).
+shown in the [publishing guide](https://docs.flow-like.com/dev/wasm-nodes/rust/#verify-the-standalone-template).

@@ -20,8 +20,9 @@
 # decide whether they are intended, back up first if they are, then perform the
 # destructive step by hand from the management-subnet host as the migration
 # identity (psql over verify-ca with a `gcloud sql generate-login-token` token,
-# see docs/gcp/deployment-runbook.md) - or ship an additive schema first and the
-# removal in a later, reviewed run. Do not add the flag to this image.
+# see https://docs.flow-like.com/self-hosting/gcp/deployment/#schema-deployment-and-recovery),
+# or ship an additive schema first and the removal in a later, reviewed run.
+# Do not add the flag to this image.
 #
 # Authentication: no password exists anywhere in the GCP installation (D4). The
 # entrypoint mints a metadata-server token carrying only the SQL login scope,
@@ -29,7 +30,8 @@
 # turn (packages/api/prisma/pre-push.ts, then prisma db push); it refuses to
 # start if DATABASE_URL, PGPASSWORD, a key file, a metadata override or a proxy
 # variable is present. Env contract and validation mirror
-# flow_like_gcp_data::postgres, see migrate.ts and README.md.
+# flow_like_gcp_data::postgres; see migrate.ts and
+# https://docs.flow-like.com/self-hosting/gcp/deployment/#schema-deployment-and-recovery.
 #
 # Transport: Cloud SQL refuses cleartext (ENCRYPTED_ONLY) and the job always
 # sends `sslmode=require`. Prisma's engine cannot verify a certificate chain

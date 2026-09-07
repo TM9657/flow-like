@@ -143,9 +143,9 @@ def inspect_archive(stream, output_dir):
                     outputs.append(output)
                     with os.fdopen(descriptor, "wb") as destination:
                         counts["printable_bytes"] += printable_strings(source, destination, prefix)
-                    # Remove only exact, independently verified public crypto
-                    # self-test keys from scan text, never from the image itself.
-                    # Unknown or modified keys retain their complete scan coverage.
+                    # Normalize reviewed public fixtures in scan text only:
+                    # exact self-test PEMs and adjacent Copilot source literals.
+                    # Unknown or modified fixtures retain their scan coverage.
                     counts["public_fixture_blocks"] += _FIXTURES.redact_public_fixtures(output)
         if not license_found:
             raise PublicationError("container is missing its nonempty Flow-Like LICENSE file")

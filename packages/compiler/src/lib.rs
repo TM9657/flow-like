@@ -21,11 +21,13 @@ pub mod compile;
 pub mod config;
 pub mod error;
 pub mod jwt;
+mod metadata;
 pub mod router;
 
 pub use compile::compile;
 pub use config::CompilerConfig;
 pub use error::CompilerError;
+pub use metadata::extract_nodes;
 pub use flow_like_types_contracts::dispatch::{
     CompilationJob, CompilationResult, CompilationStatus,
 };

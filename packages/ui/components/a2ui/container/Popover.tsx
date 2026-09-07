@@ -1,6 +1,7 @@
 "use client";
 
 import { Fragment } from "react";
+import { useRuntimeTailwindRef } from "../../../lib/use-runtime-tailwind";
 import { cn } from "../../../lib/utils";
 import {
 	PopoverContent,
@@ -41,6 +42,7 @@ export function A2UIPopover({
 	onAction,
 	renderChild,
 }: ComponentProps<PopoverComponent>) {
+	const contentRef = useRuntimeTailwindRef();
 	const triggerEvent = useComponentEventTrigger(componentId);
 	const open = useResolved<boolean>(component.open);
 	const side = useResolved<string>(component.side);
@@ -79,7 +81,7 @@ export function A2UIPopover({
 					))}
 				</span>
 			</PopoverTrigger>
-			<PopoverContent side={resolvedSide}>
+			<PopoverContent ref={contentRef} side={resolvedSide}>
 				{renderChild(component.contentComponentId)}
 			</PopoverContent>
 		</ShadPopover>

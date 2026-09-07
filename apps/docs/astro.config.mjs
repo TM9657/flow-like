@@ -113,6 +113,7 @@ export default defineConfig({
 						{ label: "Login & Accounts", slug: "start/login" },
 						{ label: "AI Models", slug: "start/models" },
 						{ label: "Profiles", slug: "start/profiles" },
+						{ label: "Customize your Home", slug: "start/home" },
 						{ label: "Get Support", slug: "start/support" },
 					],
 				},
@@ -380,6 +381,27 @@ export default defineConfig({
 							slug: "self-hosting/execution-backends",
 						},
 						{ label: "Desktop Client", slug: "self-hosting/desktop-client" },
+						{ label: "Container Releases", slug: "self-hosting/containers" },
+						{ label: "Signaling", slug: "self-hosting/signaling" },
+						{
+							label: "Local Backend Development",
+							slug: "self-hosting/local-development",
+						},
+						{
+							label: "AWS",
+							collapsed: true,
+							items: [{ autogenerate: { directory: "self-hosting/aws" } }],
+						},
+						{
+							label: "Azure",
+							collapsed: true,
+							items: [{ autogenerate: { directory: "self-hosting/azure" } }],
+						},
+						{
+							label: "GCP",
+							collapsed: true,
+							items: [{ autogenerate: { directory: "self-hosting/gcp" } }],
+						},
 						{
 							label: "Docker Compose",
 							collapsed: true,
@@ -483,6 +505,26 @@ export default defineConfig({
 						{ label: "Storage Providers", slug: "dev/storage-providers" },
 						{ label: "Customization", slug: "dev/customizing" },
 						{ label: "Translations", slug: "dev/translations" },
+						{
+							label: "Platform Administration",
+							slug: "dev/platform-administration",
+						},
+						{
+							label: "Contributor Tools",
+							collapsed: true,
+							items: [
+								{ label: "Site Content", slug: "dev/documentation-assets" },
+								{
+									label: "Documentation Screenshots",
+									slug: "dev/documentation-screenshots",
+								},
+								{ label: "University Courses", slug: "dev/university-courses" },
+								{
+									label: "FlowPilot Development",
+									slug: "dev/flowpilot-development",
+								},
+							],
+						},
 					],
 				},
 				// ===== ENTERPRISE =====

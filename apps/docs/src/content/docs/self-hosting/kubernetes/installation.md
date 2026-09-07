@@ -24,12 +24,13 @@ export PUBLIC_WEB_URL=https://app.flow-like.example.com
 export S3_PUBLIC_ENDPOINT=https://s3.flow-like.example.com
 
 cp flow-like.config.example.json ../../../flow-like.kubernetes.config.json
-export FLOW_LIKE_CONFIG=flow-like.kubernetes.config.json
+export FLOW_LIKE_CONFIG_FILE=../../../flow-like.kubernetes.config.json
 ```
 
 Edit that JSON file for your OIDC issuer, client, JWKS URL, hub domain, web origin
-and signaling URL. `FLOW_LIKE_CONFIG` is relative to the repository root and is
-embedded in the API binary. Rebuild the API when those settings change.
+and signaling URL. Setup reads this host-side file into a generated Kubernetes
+Secret. The API loads it at startup. Update the Secret and restart the API after
+configuration changes; its image can stay the same.
 
 The object-store endpoint must serve the configured buckets and be reachable from
 both browsers and Pods. Configure its ingress and DNS before running workflows.
@@ -49,7 +50,7 @@ Setup writes:
 
 | File | Contents |
 | --- | --- |
-| `.generated/secrets.yaml` | ES256 keypair, API secrets, manager token, Redis credentials and separate RustFS root/API/STS identities |
+| `.generated/secrets.yaml` | Hub config, ES256 keypair, API secrets, manager token, Redis credentials and separate RustFS root/API/STS identities |
 | `.generated/values-generated.yaml` | Matching Secret references and deployment settings |
 
 Both files are created with mode `0600`. Setup does not change the cluster and
@@ -72,6 +73,12 @@ requires the pushed manager and executor digests.
 To rebuild selected components, set `COMPONENTS`, for example
 `COMPONENTS="api execution-manager"`. Partial builds preserve other entries in
 the image values file. Generated Secrets are excluded from Docker build contexts.
+
+The upstream [container releases](/self-hosting/containers/) supply these images
+for AMD64 and ARM64. Configure release images through matching Helm repository,
+tag and digest values. Prebuilt API images read the installation's runtime config,
+and the web image reads public URLs at startup. Keep the digest requirements and
+node architecture aligned when replacing local builds with published images.
 
 ## Review the deployment values
 
@@ -150,6 +157,12 @@ Allow active runs to drain when replacing managers. Helm's derived termination
 grace includes the workflow and supervisor budgets. Review database schema changes
 and back up persistent services before upgrade; a Helm rollback does not undo
 database or object-store changes.
+
+When replacing older Python supervisors, rebuild and pin the manager/gateway
+image together with the executor image containing `/app/execution-slot`. Retain
+Redis claims, cancellation markers and signing keys. The Rust supervisor preserves
+the dispatch and ownership formats; clearing them can permit replay. Reconcile
+uncertain work before reopening dispatch.
 
 ## Common failures
 

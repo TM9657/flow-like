@@ -5,6 +5,7 @@ import { compile } from "tailwindcss";
 import {
 	observeRuntimeTailwind,
 	runtimeTailwindTheme,
+	scopeRuntimeTailwind,
 } from "./runtime-tailwind";
 
 const theme: Array<[string, string]> = [
@@ -66,6 +67,36 @@ afterEach(() => {
 });
 
 describe("runtime Tailwind", () => {
+	test("scopes late utility rules without changing their specificity or variants", async () => {
+		const compiler = await compile(runtimeTailwindTheme(theme));
+		const css = scopeRuntimeTailwind(
+			compiler.build(["hidden", "md:flex", "[&>span]:p-7.5"]),
+		);
+		const scope =
+			":where([data-a2ui-runtime-tailwind-root], [data-a2ui-runtime-tailwind-root] *)";
+		expect(css).toContain(`${scope}.hidden {`);
+		expect(css).toContain(`${scope}.md\\:flex {`);
+		expect(css).toContain("@media (width >= 48rem)");
+		expect(css).toContain("&>span {");
+		expect(css).not.toContain(`${scope}&`);
+	});
+
+	test("scopes property fallbacks while preserving registrations and animation steps", () => {
+		const css = scopeRuntimeTailwind(`
+@property --tw-opacity { syntax: "<number>"; inherits: false; initial-value: 1; }
+@layer properties { @supports (display: grid) { *, ::before, ::after, ::backdrop { --tw-opacity: 1; } } }
+@layer utilities { @keyframes fade { from { opacity: 0; } 50%, 100% { opacity: 1; } } }
+`);
+		const scope =
+			":where([data-a2ui-runtime-tailwind-root], [data-a2ui-runtime-tailwind-root] *)";
+		expect(css).toContain(
+			`${scope}, ${scope}::before, ${scope}::after, ${scope}::backdrop`,
+		);
+		expect(css).toContain('@property --tw-opacity { syntax: "<number>";');
+		expect(css).toContain("from { opacity: 0; }");
+		expect(css).toContain("50%, 100% { opacity: 1; }");
+	});
+
 	test("compiles arbitrary values, responsive variants, and uncommon theme colors", async () => {
 		const compiler = await compile(runtimeTailwindTheme(theme));
 		const css = compiler.build([
@@ -139,6 +170,16 @@ describe("runtime Tailwind", () => {
 		expect(sheet?.isConnected).toBe(true);
 		await Promise.resolve();
 		expect(sheet?.isConnected).toBe(true);
+	});
+
+	test("keeps a shared root scoped until its last observer disconnects", () => {
+		const { root } = documentWithRoot("hidden");
+		const detach = observeRuntimeTailwind(root);
+		expect(root.hasAttribute("data-a2ui-runtime-tailwind-root")).toBe(true);
+		detach();
+		expect(root.hasAttribute("data-a2ui-runtime-tailwind-root")).toBe(true);
+		cleanups.pop()?.();
+		expect(root.hasAttribute("data-a2ui-runtime-tailwind-root")).toBe(false);
 	});
 
 	test("keeps styles in each owner document and shares a sheet between surface roots", async () => {

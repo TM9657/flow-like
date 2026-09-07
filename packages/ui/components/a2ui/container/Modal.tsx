@@ -1,6 +1,7 @@
 "use client";
 
 import { Fragment } from "react";
+import { useRuntimeTailwindRef } from "../../../lib/use-runtime-tailwind";
 import { cn } from "../../../lib/utils";
 import {
 	Dialog,
@@ -36,6 +37,7 @@ export function A2UIModal({
 	onAction,
 	renderChild,
 }: ComponentProps<ModalComponent>) {
+	const contentRef = useRuntimeTailwindRef(elementRef);
 	const triggerEvent = useComponentEventTrigger(componentId);
 	const open = useResolved<boolean>(component.open);
 	const title = useResolved<string>(component.title);
@@ -64,7 +66,7 @@ export function A2UIModal({
 	return (
 		<Dialog open={open ?? false} onOpenChange={handleOpenChange}>
 			<DialogContent
-				ref={elementRef}
+				ref={contentRef}
 				className={cn(resolveStyle(style))}
 				style={resolveInlineStyle(style)}
 			>

@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { chromium } from "playwright-core";
+import { customizeHome } from "./customize-home.mjs";
 
 const origin = process.argv[2] ?? "http://127.0.0.1:4318";
 const allowedHost = new URL(origin).hostname;
@@ -54,7 +55,12 @@ async function verify(admin, releaseBeforeEdit) {
 			.getByText(title, { exact: true })
 			.first();
 	const applyJson = async (layout) => {
-		await page.getByRole("button", { name: "Edit JSON", exact: true }).click();
+		await page
+			.getByRole("button", { name: "Layout options", exact: true })
+			.click();
+		await page
+			.getByRole("menuitem", { name: "Edit JSON", exact: true })
+			.click();
 		await dialog.waitFor();
 		await page.waitForFunction(
 			() => globalThis.monaco?.editor.getEditors().length > 0,
@@ -92,9 +98,7 @@ async function verify(admin, releaseBeforeEdit) {
 			.waitFor();
 	};
 	const resume = async () => {
-		await page
-			.getByRole("button", { name: "Resume editing", exact: true })
-			.click();
+		await customizeHome(page, "Resume editing");
 		await page.waitForFunction(() => window.homeQa.editing?.editing === true);
 		assert.equal(
 			await page.evaluate(() => window.homeQa.editing.baseRevision),
@@ -116,9 +120,7 @@ async function verify(admin, releaseBeforeEdit) {
 		await page.goto(`${origin}/?revision=r1${admin ? "&admin=1" : ""}`, {
 			waitUntil: "domcontentloaded",
 		});
-		await page
-			.getByRole("button", { name: editLabel, exact: true })
-			.click({ timeout: 60_000 });
+		await customizeHome(page, editLabel, { timeout: 60_000 });
 		await applyJson(initial);
 		await page.evaluate(() => {
 			window.homeQa.holdSave = true;
@@ -166,7 +168,7 @@ async function verify(admin, releaseBeforeEdit) {
 			.click();
 		await page.getByRole("button", { name: editLabel, exact: true }).waitFor();
 		await page.evaluate(() => window.homeQa.setRevision("r3"));
-		await page.getByRole("button", { name: editLabel, exact: true }).click();
+		await customizeHome(page, editLabel);
 		await page.waitForFunction(() => window.homeQa.editing?.editing === true);
 		assert.equal(
 			await page.evaluate(() => window.homeQa.editing.baseRevision),

@@ -18,3 +18,7 @@ For example, keep separate work and personal Profiles, or create one Profile
 for lightweight local models and another for provider-backed reasoning models.
 Changing the Profile changes the active configuration; it does not move or
 duplicate your Apps.
+
+Each Profile can also have a personal Home layout. See
+[Customize your Home](/start/home/) for arranging widgets and choosing between
+personal, published, and bundled defaults.

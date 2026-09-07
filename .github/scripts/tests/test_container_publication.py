@@ -65,6 +65,20 @@ class ArchiveTests(unittest.TestCase):
                 self.assertEqual(publication.printable_strings(io.BytesIO(source), output, chunk_size=chunk_size), len(expected))
                 self.assertEqual(output.getvalue(), expected)
 
+    def test_adjacent_public_literals_are_separated_in_elf_scan_input(self):
+        literal_run = b"-----END " + b"xoxp-" + b"clientsecretclient_secretclient-secret"
+        unknown_token = b"xoxb-" + b"syntheticTokenMustRemainScannable"
+        with tempfile.TemporaryDirectory() as directory:
+            output = Path(directory) / "strings"
+            result = publication.inspect_archive(archive([
+                ("var/runtime/bootstrap", b"\x7fELF\x00" + literal_run + b"\x00" + unknown_token),
+            ]), output)
+            self.assertEqual(result["public_fixture_blocks"], 1)
+            self.assertEqual(
+                (output / "000001.txt").read_bytes(),
+                b"-----END " + b"xoxp-\n" + b"clientsecretclient_secretclient-secret\n" + unknown_token + b"\n",
+            )
+
     def test_credential_paths_fail_without_printing_names_or_contents(self):
         for name in (
             "root/.aws/config", "root/.azure/accessTokens.json", "root/.ssh/config",

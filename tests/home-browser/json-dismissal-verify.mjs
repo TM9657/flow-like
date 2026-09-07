@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { chromium } from "playwright-core";
+import { customizeHome } from "./customize-home.mjs";
 
 const origin = process.argv[2] ?? "http://127.0.0.1:4318";
 const allowedHost = new URL(origin).hostname;
@@ -30,6 +31,11 @@ async function verify(viewport) {
 		name: "Discard unapplied JSON changes?",
 	});
 	const close = page.getByRole("button", { name: "Close JSON editor" });
+	const waitForFocus = (label) =>
+		page.waitForFunction(
+			(name) => document.activeElement?.getAttribute("aria-label") === name,
+			label,
+		);
 	const editorValue = () =>
 		page.evaluate(() =>
 			globalThis.monaco.editor.getEditors().at(-1).getValue(),
@@ -50,8 +56,19 @@ async function verify(viewport) {
 			return event.defaultPrevented;
 		});
 	const open = async () => {
-		await page.getByRole("button", { name: "Edit JSON", exact: true }).click();
+		await page
+			.getByRole("button", { name: "Layout options", exact: true })
+			.click();
+		await page
+			.getByRole("menuitem", { name: "Edit JSON", exact: true })
+			.click();
 		await dialog.waitFor();
+		await page.getByRole("menu").waitFor({ state: "hidden" });
+		await page.waitForFunction(() =>
+			document
+				.querySelector('[role="dialog"]')
+				?.contains(document.activeElement),
+		);
 		await page.waitForFunction(
 			() => globalThis.monaco?.editor.getEditors().length > 0,
 			undefined,
@@ -64,9 +81,7 @@ async function verify(viewport) {
 
 	try {
 		await page.goto(origin, { waitUntil: "domcontentloaded" });
-		await page
-			.getByRole("button", { name: "Customize", exact: true })
-			.click({ timeout: 60_000 });
+		await customizeHome(page, "Customize", { timeout: 60_000 });
 		await page
 			.getByRole("button", { name: "Close widget panel", exact: true })
 			.click();
@@ -89,10 +104,7 @@ async function verify(viewport) {
 		await confirmation.waitFor({ state: "hidden" });
 		assert.equal(await editorValue(), edited);
 		assert.equal(await unloadProtected(), true);
-		assert.equal(
-			await close.evaluate((element) => element === document.activeElement),
-			true,
-		);
+		await waitForFocus("Close JSON editor");
 
 		await close.focus();
 		await page.keyboard.press("Escape");
@@ -100,6 +112,7 @@ async function verify(viewport) {
 		await page.keyboard.press("Escape");
 		await confirmation.waitFor({ state: "hidden" });
 		await dialog.waitFor();
+		await waitForFocus("Close JSON editor");
 		assert.equal(await editorValue(), edited);
 
 		await page.mouse.click(5, 5);
@@ -108,6 +121,7 @@ async function verify(viewport) {
 			.getByRole("button", { name: "Discard JSON edits", exact: true })
 			.click();
 		await dialog.waitFor({ state: "hidden" });
+		await waitForFocus("Layout options");
 		assert.equal(await unloadProtected(), false);
 		assert.equal(
 			await page.evaluate(() => window.homeQa.counters.saveAttempts),
@@ -125,6 +139,7 @@ async function verify(viewport) {
 		assert.equal(await unloadProtected(), false);
 		await close.click();
 		await dialog.waitFor({ state: "hidden" });
+		await waitForFocus("Layout options");
 		assert.equal(await confirmation.count(), 0);
 
 		await open();
@@ -135,6 +150,7 @@ async function verify(viewport) {
 		await page.getByRole("button", { name: "Applied", exact: true }).waitFor();
 		await close.click();
 		await dialog.waitFor({ state: "hidden" });
+		await waitForFocus("Layout options");
 		assert.equal(await confirmation.count(), 0);
 		assert.equal(
 			await page.getByText("Unsaved changes", { exact: true }).count(),

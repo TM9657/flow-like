@@ -67,9 +67,10 @@ The S3 origin must resolve and be reachable from both browsers and Pods; presign
 URLs are bound to that exact host and path.
 
 Prepare an ingress controller and certificates for public HTTPS endpoints.
-Configure the API's public hub and OIDC settings in the JSON file selected by
-`FLOW_LIKE_CONFIG` before building the API. Those settings are embedded at build
-time, while credentials belong in Kubernetes Secrets.
+Configure the API's hub and OIDC settings in the host-side JSON file selected by
+`FLOW_LIKE_CONFIG_FILE` before running setup. Setup stores it in a Kubernetes
+Secret that the API reads at startup. Keep credentials in managed Secrets and
+use secret references for OAuth client secrets.
 
 Optional features may require Metrics Server for HPAs, Prometheus Operator CRDs
 for ServiceMonitor resources, and additional network rules for external database,

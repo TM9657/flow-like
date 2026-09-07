@@ -5,8 +5,9 @@ sidebar:
   order: 20
 ---
 
-Helm values configure workloads and runtime environment variables. The API's
-public hub and OIDC configuration is selected separately at image build time.
+Helm values configure workloads and select the API's complete runtime hub/OIDC
+document. Installation-specific API and web settings can change without rebuilding
+the images.
 
 | Source | Purpose |
 | --- | --- |
@@ -15,12 +16,53 @@ public hub and OIDC configuration is selected separately at image build time.
 | `.generated/values-generated.yaml` | Setup-generated endpoint settings and Secret references |
 | `.generated/values-images.yaml` | Build-generated image references and required digests |
 | `.generated/secrets.yaml` | Private credentials, applied separately |
-| `FLOW_LIKE_CONFIG` | Repository-relative JSON embedded in the API image |
+| `FLOW_LIKE_CONFIG_FILE` | Host-side JSON file read by setup into a generated Kubernetes Secret |
 
-Paths above are relative to `apps/backend/kubernetes/`, except the path supplied
-to `FLOW_LIKE_CONFIG`. Setup reads exported environment variables as data; it
-does not source a `.env` file. Changing Helm values does not rebuild the embedded
-hub configuration.
+Paths above are relative to `apps/backend/kubernetes/`. Setup reads exported
+environment variables as data; it does not source a `.env` file.
+
+## Runtime API and web configuration
+
+`setup-config.sh` stores the selected JSON in a separate `hub-config` Secret
+inside its private output and points generated Helm values at it. The API mounts
+the Secret read-only at `/etc/flow-like/flow-like.config.json`. Setup also accepts
+`FLOW_LIKE_RUNTIME_CONFIG_FILE`, the older repository-relative
+`FLOW_LIKE_CONFIG`, or raw `FLOW_LIKE_CONFIG_JSON`. With no input it uses the
+self-hosting example; replace its OIDC placeholders before deployment.
+
+Select at most one source under `api.runtimeConfig`:
+
+| Value | Source |
+| --- | --- |
+| `existingSecret` | Read-only Secret volume |
+| `existingConfigMap` | Read-only ConfigMap volume for public settings |
+| `secretKeyRef.name` and `.key` | JSON from an existing Secret key in `FLOW_LIKE_CONFIG_JSON` |
+| `secretRef` | Reference resolved by the API's configured SecretStore |
+
+Volume sources use `api.runtimeConfig.key`, which defaults to
+`flow-like.config.json`. Create and maintain external Secrets/ConfigMaps through
+the installation's normal configuration process. Do not put credential-bearing
+JSON in values files or duplicate `FLOW_LIKE_CONFIG_*` through `api.env` or
+`api.envFrom`. Setup accepts `FLOW_LIKE_CONFIG_SECRET_REF` and stores only the
+reference; its target must be available to the API separately.
+
+The API reads the whole document once. After changing an external Secret,
+ConfigMap or SecretStore value, restart the API Deployment. Updating the resource
+alone does not roll out Pods. Changing the selected reference through Helm does.
+Empty source values leave the embedded fallback available; conflicting nonempty
+sources stop startup. See the [runtime API contract](/self-hosting/containers/#runtime-api-configuration)
+for validation, limits and secret handling.
+
+For an explicit custom fallback build, `build-images.sh` accepts the
+repository-relative `FLOW_LIKE_BUILD_CONFIG`. Use only public settings because
+the document is embedded in the executable.
+
+The web image reads `web.runtimeConfig.apiUrl`, falling back to `api.publicUrl`,
+and optional `redirectUrl`/`logoutUrl` at container startup. Omitted redirect and
+logout settings use the browser origin with `/callback` and `/`. Helm changes
+roll out the same web image. Supply public HTTP(S) URLs without credentials,
+queries or fragments. See [Runtime web configuration](/self-hosting/containers/#runtime-web-configuration)
+for the separate static-metadata and third-party OAuth relay limits.
 
 ## Execution capacity
 
@@ -119,7 +161,8 @@ endpoints.
 
 For multiple signaling replicas, set `signaling.fanoutMode=redis`, exact browser
 origins in `signaling.allowedOrigins`, and the deployment's WSS endpoint in the
-embedded hub configuration.
+runtime hub configuration. See [Realtime signaling](/self-hosting/signaling/)
+for authentication, fanout and client/server rollout compatibility.
 
 ## Review effective configuration
 

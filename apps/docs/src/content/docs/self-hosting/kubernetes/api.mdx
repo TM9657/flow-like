@@ -54,8 +54,10 @@ explicit `trusted_shared` mode.
 
 The chart injects database and Redis URLs, object-storage settings, execution
 signing keys, manager configuration and service ports. Credentials are selected
-through Secret references. The API's public hub and OIDC settings are embedded
-from `FLOW_LIKE_CONFIG` when its image is built.
+through Secret references. `api.runtimeConfig` selects the complete hub/OIDC JSON
+loaded at startup from a mounted Secret/ConfigMap, a Secret key or a configured
+SecretStore reference. Restart API Pods after updating an external config source.
+With no runtime source the API uses its embedded fallback.
 
 `api.corsAllowedOrigins` must name the actual browser origins. Model-provider
 Secrets configure the API's hosted-model proxy; they do not enter isolated

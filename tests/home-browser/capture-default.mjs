@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { writeFile } from "node:fs/promises";
 import { chromium } from "playwright-core";
 
+const origin = process.argv[2] ?? "http://127.0.0.1:4318";
 const prefix = process.env.HOME_CAPTURE_PREFIX || "/private/tmp/home-default";
 const widths = (process.env.HOME_CAPTURE_WIDTHS || "1480,390")
 	.split(",")
@@ -36,7 +37,7 @@ await page.route("**/*", (route) => {
 });
 
 try {
-	await page.goto("http://127.0.0.1:4318/default-fixture", {
+	await page.goto(`${origin}/default-fixture`, {
 		waitUntil: "domcontentloaded",
 	});
 	await page

@@ -66,7 +66,7 @@ Server and output:
   --help                  Show this help
 
 Plans support goto, click, drag, fill, type, press, select, check, hover, scroll,
-waitFor, delay, and capture steps. See apps/desktop/lib/doc-screenshot/README.md.`;
+waitFor, delay, and capture steps. See https://docs.flow-like.com/dev/documentation-screenshots/.`;
 }
 
 function validatedLoopbackUrl(value: string): URL {

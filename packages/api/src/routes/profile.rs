@@ -13,6 +13,10 @@ pub mod delete_profile;
 pub mod get_profile_bits;
 pub mod get_profiles;
 pub(crate) mod media;
+mod persistence;
+pub(crate) use persistence::update_profile_revision;
+mod revision;
+pub(crate) use revision::next_profile_revision;
 pub mod sync_profiles;
 pub mod upsert_profile;
 

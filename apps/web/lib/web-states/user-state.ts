@@ -6,7 +6,6 @@ import type {
 	ISettings,
 	IUserState,
 } from "@flow-like/flow-like-ui";
-import { IAppVisibility } from "@flow-like/flow-like-ui";
 import type {
 	IHomeDefault,
 	IHomeDefaults,
@@ -16,6 +15,8 @@ import {
 	type MediaUploadResponse,
 	updateAccountWithAvatar,
 } from "@flow-like/flow-like-ui/lib/profile-media-upload";
+import { IAppVisibility } from "@flow-like/flow-like-ui/lib/schema/app/app";
+import { stableStringify } from "@flow-like/flow-like-ui/lib/stable-stringify";
 import type {
 	INotification,
 	INotificationsOverview,
@@ -158,14 +159,30 @@ export class WebUserState implements IUserState {
 	async saveHomeLayout(
 		layout: IHomeLayout | null,
 		profileId?: string,
-	): Promise<void> {
+	): Promise<IProfile> {
 		const id = profileId ?? (await this.getProfile()).id;
 		if (!id) throw new Error("Profile ID is required");
-		await apiPost(
+		const response = await apiPost<UpsertProfileResponse>(
 			`profile/${encodeURIComponent(id)}`,
 			{ home_layout: layout },
 			this.backend.auth,
 		);
+		// Older hubs accept unknown fields without saving them. A 200 response
+		// can only complete the save when its stored profile confirms the layout.
+		if (!response?.profile || !Object.hasOwn(response.profile, "home_layout")) {
+			throw new Error(
+				"This server does not support saving home layouts yet. Your changes are kept as a draft.",
+			);
+		}
+		if (
+			response.profile.id !== id ||
+			stableStringify(response.profile.home_layout) !== stableStringify(layout)
+		) {
+			throw new Error(
+				"The server did not confirm your home layout. Your changes are kept as a draft. Please try saving again.",
+			);
+		}
+		return this.prepareProfile(response.profile);
 	}
 
 	async saveHomeDefault(

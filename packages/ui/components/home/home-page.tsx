@@ -4,8 +4,8 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { CloudOff, RefreshCw } from "lucide-react";
 import { useMemo, useState } from "react";
 import { useAuth } from "react-oidc-context";
-import { useInvoke } from "../../hooks/use-invoke";
 import { getApiOrigin } from "../../lib/api-url";
+import type { IProfile } from "../../lib/schema/profile/profile";
 import { useBackend, useBackendReady } from "../../state/backend-state";
 import {
 	useRequestFabBubble,
@@ -64,6 +64,14 @@ export function readCachedHomeDefaults(key: string): IHomeDefaults | undefined {
 	return undefined;
 }
 
+function keepNewerProfile(current: IProfile | undefined, incoming: IProfile) {
+	return current &&
+		current.id === incoming.id &&
+		Date.parse(current.updated) > Date.parse(incoming.updated)
+		? current
+		: incoming;
+}
+
 export function HomePage() {
 	const backend = useBackend();
 	const auth = useAuth();
@@ -73,14 +81,29 @@ export function HomePage() {
 	const origin = getApiOrigin(backend.profile);
 	const ready = useBackendReady();
 	const queryClient = useQueryClient();
-	const profile = useInvoke(
-		backend.userState.getProfile,
-		backend.userState,
-		[],
-		ready,
-		[origin, viewer, backend.profile?.id, auth?.isAuthenticated],
-	);
 	const [editing, setEditing] = useState(false);
+	const profileQueryKey = [
+		backend.userState.getProfile.name || "getProfile",
+		origin,
+		viewer,
+		backend.profile?.id ?? null,
+		auth?.isAuthenticated ?? null,
+	];
+	const profile = useQuery({
+		queryKey: profileQueryKey,
+		queryFn: async () => {
+			const incoming = await backend.userState.getProfile();
+			return keepNewerProfile(
+				queryClient.getQueryData<IProfile>(profileQueryKey),
+				incoming,
+			);
+		},
+		enabled: ready,
+		staleTime: 30_000,
+		refetchInterval: editing ? false : 60_000,
+		refetchOnWindowFocus: !editing,
+		refetchOnReconnect: !editing,
+	});
 	const bundled = useMemo(createDefaultHomeLayout, []);
 	const defaultId = profile.data?.home_default_id;
 	const profileId = profile.data?.id ?? "";
@@ -104,6 +127,7 @@ export function HomePage() {
 		staleTime: 30_000,
 		refetchInterval: editing ? false : 60_000,
 		refetchOnWindowFocus: !editing,
+		refetchOnReconnect: !editing,
 		retry: 1,
 	});
 	const inherited = resolveHomeLayout(null, defaults.data, bundled);
@@ -120,11 +144,20 @@ export function HomePage() {
 	const save = async (layout: IHomeLayout | null) => {
 		const id = profile.data?.id;
 		if (!id) throw new Error("Choose a profile before saving your home.");
-		await backend.userState.saveHomeLayout(layout, id);
-		await queryClient.invalidateQueries({
-			queryKey: [backend.userState.getProfile.name],
+		const saved = await backend.userState.saveHomeLayout(layout, id);
+		await queryClient.cancelQueries({ queryKey: profileQueryKey, exact: true });
+		// Use the persisted profile and its revision, so a stale read cannot undo it.
+		queryClient.setQueryData<IProfile>(profileQueryKey, (current) =>
+			keepNewerProfile(current, saved),
+		);
+		const savedQuery = queryClient.getQueryCache().find({
+			queryKey: profileQueryKey,
+			exact: true,
 		});
-		await profile.refetch();
+		await queryClient.invalidateQueries({
+			queryKey: [backend.userState.getProfile.name || "getProfile"],
+			predicate: (query) => query !== savedQuery,
+		});
 	};
 	if (!ready || profile.isLoading) return <HomeLoading />;
 	return (
@@ -133,7 +166,9 @@ export function HomePage() {
 				<div className="flex flex-wrap items-center justify-between gap-3 border-b border-border/50 bg-muted/40 px-5 py-3 text-xs text-muted-foreground">
 					<span className="flex items-center gap-2">
 						<CloudOff className="h-4 w-4" />
-						Your profile could not be loaded. Showing the default home.
+						{profile.data
+							? "Your profile could not be refreshed. Showing the last available home."
+							: "Your profile could not be loaded. Showing the default home."}
 					</span>
 					<Button
 						size="sm"

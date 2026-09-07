@@ -138,14 +138,20 @@ export class UserState implements IUserState {
 	async saveHomeLayout(
 		layout: IHomeLayout | null,
 		profileId?: string,
-	): Promise<void> {
+	): Promise<IProfile> {
 		const id = profileId ?? (await this.getProfile()).id;
 		if (!id) throw new Error("Profile ID is required");
-		await invoke("profile_update_home_layout", {
+		const saved = await invoke<IProfile>("profile_update_home_layout", {
 			profileId: id,
 			layout,
 		});
+		if (!saved || saved.id !== id) {
+			throw new Error(
+				"The desktop app could not confirm the saved Home layout. Restart or update the app, then try again. Your draft has been kept.",
+			);
+		}
 		window.dispatchEvent(new CustomEvent("flow-like:profile-sync"));
+		return saved;
 	}
 
 	async saveHomeDefault(

@@ -20,7 +20,7 @@ use axum::{
 };
 use flow_like::profile::{ProfileApp, ProfileShortcut, Settings};
 use flow_like_types::{Value, create_id};
-use sea_orm::{ActiveModelTrait, ActiveValue::Set, ColumnTrait, EntityTrait, QueryFilter};
+use sea_orm::{ActiveModelTrait, ActiveValue::Set, ColumnTrait, QueryFilter};
 use serde::{Deserialize, Serialize};
 use serde_json::to_value;
 use utoipa::ToSchema;
@@ -250,17 +250,17 @@ pub async fn upsert_profile(
                 (None, None)
             };
 
-        active_model.updated_at = Set(chrono::Utc::now().fixed_offset());
+        active_model.updated_at = Set(super::next_profile_revision(
+            chrono::Utc::now().fixed_offset(),
+            Some(found_profile.updated_at),
+            None,
+        ));
 
         let updated_profile = if profile_body.icon_upload_id.is_some()
             || profile_body.thumbnail_upload_id.is_some()
         {
             let intended = active_model.clone();
-            let mut update = profile::Entity::update_many()
-                .set(active_model)
-                .filter(profile::Column::Id.eq(&profile_id))
-                .filter(profile::Column::UserId.eq(&sub))
-                .filter(profile::Column::DeletedAt.is_null());
+            let mut update = super::update_profile_revision(&found_profile, active_model);
             if profile_body.icon_upload_id.is_some() {
                 update = update.filter(match &found_profile.icon {
                     Some(icon) => profile::Column::Icon.eq(icon),
@@ -293,7 +293,21 @@ pub async fn upsert_profile(
             }
             latest
         } else {
-            active_model.update(&state.db).await?
+            let result = super::update_profile_revision(&found_profile, active_model)
+                .exec(&state.db)
+                .await?;
+            if result.rows_affected != 1 {
+                return Err(ApiError::conflict(
+                    "The profile changed while saving. Please try again",
+                ));
+            }
+            let latest = find_profile_for_user(&state.db, &sub, &profile_id)
+                .await?
+                .ok_or(ApiError::NOT_FOUND)?;
+            if latest.deleted_at.is_some() {
+                return Err(ApiError::gone("Profile has been deleted"));
+            }
+            latest
         };
         if let Some(upload_id) = &profile_body.icon_upload_id {
             cleanup_upload(&state, &sub, upload_id, found_profile.icon.as_deref()).await;

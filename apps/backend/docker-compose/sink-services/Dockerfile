@@ -13,12 +13,6 @@ WORKDIR /app
 
 COPY . .
 
-# Remove packages that require edition 2024 or have heavy dependencies
-RUN sed -i '/apps\/desktop\/src-tauri/d' Cargo.toml && \
-    sed -i '/apps\/backend\/local\/api/d' Cargo.toml && \
-    sed -i '/apps\/backend\/kubernetes\/api/d' Cargo.toml && \
-    sed -i '/apps\/backend\/kubernetes\/executor/d' Cargo.toml
-
 ARG CARGO_BUILD_JOBS=2
 ENV CARGO_BUILD_JOBS=${CARGO_BUILD_JOBS}
 

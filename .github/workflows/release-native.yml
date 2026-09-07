@@ -181,14 +181,37 @@ jobs:
         shell: bash
         run: bash .github/scripts/prepare-ort-glibc-compat.sh
 
-      - name: Configure bounded macOS codesign retries
+      - name: Configure macOS signing and notarization recovery
         if: runner.os == 'macOS'
         shell: bash
         run: |
+          python3 -m unittest discover -s .github/scripts/tests -p test_notarytool.py
           codesign_bin="$RUNNER_TEMP/flow-like-codesign-bin"
           mkdir -p "$codesign_bin"
           install -m 0755 "$GITHUB_WORKSPACE/.github/scripts/codesign-with-timeout.sh" "$codesign_bin/codesign"
+          install -m 0755 "$GITHUB_WORKSPACE/.github/scripts/notarytool.py" "$codesign_bin/xcrun"
           echo "$codesign_bin" >> "$GITHUB_PATH"
+
+      - name: Validate Apple notarization credentials
+        if: runner.os == 'macOS'
+        timeout-minutes: 3
+        shell: bash
+        env:
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          set -euo pipefail
+          if [ -z "$APPLE_ID" ] || [ -z "$APPLE_PASSWORD" ] || [[ ! "$APPLE_TEAM_ID" =~ ^[A-Z0-9]{10}$ ]]; then
+            echo "::error::Notarization requires APPLE_ID, an app-specific APPLE_PASSWORD, and a 10-character APPLE_TEAM_ID."
+            exit 1
+          fi
+          /usr/bin/xcodebuild -version
+          xcrun notarytool --version
+          xcrun notarytool history \
+            --apple-id "$APPLE_ID" \
+            --password "$APPLE_PASSWORD" \
+            --team-id "$APPLE_TEAM_ID" \
+            --output-format json > /dev/null
+          echo "Apple notarization credentials and service access verified."
 
       - name: Validate Apple Developer Certificate
         if: runner.os == 'macOS'

@@ -1,7 +1,9 @@
 import assert from "node:assert/strict";
 import { writeFile } from "node:fs/promises";
 import { chromium } from "playwright-core";
+import { customizeHome } from "./customize-home.mjs";
 
+const origin = process.argv[2] ?? "http://127.0.0.1:4318";
 const browser = await chromium.launch({
 	executablePath:
 		process.env.CHROME_EXECUTABLE_PATH ||
@@ -69,12 +71,12 @@ const overflow = async (width) => {
 	);
 };
 try {
-	await page.goto("http://127.0.0.1:4318/", { waitUntil: "domcontentloaded" });
+	await page.goto(`${origin}/`, { waitUntil: "domcontentloaded" });
 	await page
 		.getByRole("button", { name: "Customize", exact: true })
 		.waitFor({ timeout: 60_000 });
 	console.log("Loaded home editor");
-	await page.getByRole("button", { name: "Customize", exact: true }).click();
+	await customizeHome(page);
 	await page
 		.getByRole("button", { name: "Add Embed an app", exact: true })
 		.click();
@@ -163,7 +165,7 @@ try {
 			.getAttribute("href"),
 		hrefB,
 	);
-	assert.equal(page.url(), "http://127.0.0.1:4318/");
+	assert.equal(page.url(), `${origin}/`);
 	assert.equal(
 		new URL(
 			await embeds
@@ -183,7 +185,7 @@ try {
 		fullPage: true,
 	});
 
-	await page.getByRole("button", { name: "Customize", exact: true }).click();
+	await customizeHome(page);
 	await closePanel();
 	await top();
 	await page.evaluate(
@@ -268,7 +270,7 @@ try {
 	report.passed.push(
 		"Reset draft is undoable and cancel preserves saved home without writing reset",
 	);
-	await page.getByRole("button", { name: "Customize", exact: true }).click();
+	await customizeHome(page);
 	await closePanel();
 	await page
 		.getByRole("button", { name: "Configure Report A", exact: true })
@@ -287,10 +289,9 @@ try {
 		await page.getByLabel("Title", { exact: true }).inputValue(),
 		"Report A revised",
 	);
-	await page.evaluate(() => window.homeQa.remount());
-	await page
-		.getByRole("button", { name: "Resume editing", exact: true })
-		.click();
+	page.once("dialog", (dialog) => dialog.accept());
+	await page.reload({ waitUntil: "domcontentloaded" });
+	await customizeHome(page, "Resume editing");
 	await closePanel();
 	await page
 		.getByRole("button", { name: "Configure Report A revised", exact: true })
@@ -315,7 +316,7 @@ try {
 		"period=month&team=A%26B",
 	);
 	report.passed.push(
-		"Failed save retains changes, remount restores profile draft, retry saves it",
+		"Failed save retains changes, reload restores profile draft, retry saves it",
 	);
 	console.log(
 		"Keyboard, history, reset, discard, save failure, and draft restore passed",
@@ -342,7 +343,7 @@ try {
 		(await firstApp.boundingBox()).height >= 64,
 		"Mobile app cards keep readable row height",
 	);
-	await page.getByRole("button", { name: "Customize", exact: true }).click();
+	await customizeHome(page);
 	await page
 		.getByRole("dialog", { name: "Widget catalog", exact: true })
 		.waitFor();
@@ -381,7 +382,7 @@ try {
 	);
 	await page.getByRole("button", { name: "Cancel", exact: true }).click();
 	await page.setViewportSize({ width: 1480, height: 1050 });
-	await page.getByRole("button", { name: "Customize", exact: true }).click();
+	await customizeHome(page);
 	await closePanel();
 	await page.getByRole("button", { name: "Layout options" }).click();
 	await page.getByRole("menuitem", { name: "Reset to default" }).click();
@@ -394,7 +395,7 @@ try {
 	await page.waitForFunction(
 		() => !document.querySelector('[data-sonner-toast][data-visible="true"]'),
 	);
-	await page.getByRole("button", { name: "Customize", exact: true }).click();
+	await customizeHome(page);
 	await page
 		.getByRole("textbox", { name: "Search widgets", exact: true })
 		.fill("Milestone");
@@ -402,12 +403,14 @@ try {
 		name: "Drag Milestone to home",
 		exact: true,
 	});
+	await widgets().first().scrollIntoViewIfNeeded();
 	const from = await dragHandle.boundingBox();
 	const into = await widgets().first().boundingBox();
 	await page.mouse.move(from.x + from.width / 2, from.y + from.height / 2);
 	await page.mouse.down();
 	await page.mouse.move(from.x - 30, from.y, { steps: 5 });
-	await page.mouse.move(into.x + into.width / 2, into.y + into.height / 2, {
+	// Keep the pointer inside the narrower widget after its insertion shifts the greeting.
+	await page.mouse.move(into.x + 80, into.y + into.height / 2, {
 		steps: 15,
 	});
 	await page.locator('[data-home-placeholder="active"]').waitFor();

@@ -74,9 +74,10 @@ Manager and compiler ports are internal. Host port 9000 belongs to the object
 data gateway by default.
 
 For login or browser CORS failures, compare the hub's OIDC and signaling settings
-with `PUBLIC_API_URL`, `NEXT_PUBLIC_*` and both allowed-origin lists. Rebuild
-web/API images when their embedded configuration changes. Add the required
-desktop origins explicitly.
+with `PUBLIC_API_URL`, `NEXT_PUBLIC_*` and both allowed-origin lists. Recreate
+API and web containers after changing runtime configuration. If using a custom
+compiled fallback, rebuild that image after changing its fallback. Add the
+required desktop origins explicitly.
 
 ## Executions are rejected or stop early
 
@@ -142,3 +143,25 @@ reopening traffic.
 `docker compose down` retains named volumes. `down --volumes` deletes bundled
 application, object-store, replay and monitoring state. It is a removal command,
 not a recovery procedure.
+
+## Check deployment changes locally
+
+From `apps/backend/docker-compose/`, run the configuration tests without starting
+services:
+
+```sh
+python3 -m unittest discover -s scripts -p 'test_*.py' -v
+python3 scripts/preflight.py --config-only
+```
+
+The suite renders Compose graphs, checks secret/network boundaries and external
+overlays, and rejects incompatible execution settings. For Redis Lua and ACL
+checks, set `REDIS_SERVER_BIN` to a Redis 7 executable and run
+`python3 tests/test_redis_acl.py -v`; it creates its own temporary loopback server.
+`go -C tests/build-context test ./...` checks required source and excluded
+deployment-secret paths with Docker's ignore-pattern matcher.
+
+These tests do not run gVisor isolation, the live storage contract or a restore
+on the target host. Use the [execution qualification](/self-hosting/docker-compose/execution-manager/#verification)
+and [storage probes](/self-hosting/docker-compose/storage/#verify-prefix-authorization)
+before admitting tenants to changed images.

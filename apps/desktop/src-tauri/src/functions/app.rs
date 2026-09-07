@@ -134,22 +134,20 @@ pub async fn create_app(
     let new_app = App::new(id, metadata, bits, flow_like_state).await?;
     new_app.save().await?;
 
-    let mut profile = TauriSettingsState::current_profile(&app_handle).await?;
     let settings = TauriSettingsState::construct(&app_handle).await?;
     let mut settings = settings.lock().await;
-
-    if profile.hub_profile.apps.is_none() {
-        profile.hub_profile.apps = Some(vec![]);
-    }
-
-    if let Some(apps) = &mut profile.hub_profile.apps {
-        apps.push(ProfileApp::new(new_app.id.clone()));
-    }
-
-    settings
+    let profile_id = settings.get_current_profile()?.hub_profile.id;
+    let profile = settings
         .profiles
-        .insert(profile.hub_profile.id.clone(), profile.clone());
-    settings.serialize();
+        .get_mut(&profile_id)
+        .ok_or_else(|| TauriFunctionError::new("Profile not found"))?;
+
+    let apps = profile.hub_profile.apps.get_or_insert_with(Vec::new);
+    if !apps.iter().any(|app| app.app_id == new_app.id) {
+        apps.push(ProfileApp::new(new_app.id.clone()));
+        profile.advance_revision(None);
+        settings.try_serialize()?;
+    }
 
     Ok(new_app.clone())
 }

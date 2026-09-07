@@ -36,7 +36,7 @@ export class EmptyUserState implements IUserState {
 	saveHomeLayout(
 		layout: IHomeLayout | null,
 		profileId?: string,
-	): Promise<void> {
+	): Promise<IProfile> {
 		throw new Error("Home layouts are unavailable.");
 	}
 	saveHomeDefault(

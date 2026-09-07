@@ -1,7 +1,7 @@
 import type {
-	IHomeLayout,
 	IHomeDefault,
 	IHomeDefaults,
+	IHomeLayout,
 } from "../../components/home/types";
 import type { IProfile, IProfileApp, IProfileShortcut } from "../../lib";
 import { looksLikeAccountId } from "../../lib/user-display";
@@ -282,7 +282,10 @@ export interface IUserTemplateInfo {
 
 export interface IUserState {
 	getHomeDefaults(defaultId?: string): Promise<IHomeDefaults>;
-	saveHomeLayout(layout: IHomeLayout | null, profileId?: string): Promise<void>;
+	saveHomeLayout(
+		layout: IHomeLayout | null,
+		profileId?: string,
+	): Promise<IProfile>;
 	saveHomeDefault(
 		id: string,
 		layout: IHomeLayout | null,

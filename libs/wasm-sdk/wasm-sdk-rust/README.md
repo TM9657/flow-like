@@ -5,7 +5,7 @@ using the Component Model (`wasm32-wasip2`). A package can export multiple nodes
 and retain objects between their calls within one run.
 
 The examples below target **0.4.0**. See the [release notes](CHANGELOG.md) for
-migration details and the [publishing guide](RELEASING.md) for the release
+migration details and the [publishing guide](https://docs.flow-like.com/dev/wasm-nodes/rust/#release-the-rust-sdk) for the release
 procedure.
 
 ## Setup

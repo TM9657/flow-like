@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { writeFile } from "node:fs/promises";
 import { chromium } from "playwright-core";
+import { customizeHome } from "./customize-home.mjs";
 
 const browser = await chromium.launch({
 	executablePath:
@@ -40,7 +41,7 @@ const closePanel = async () => {
 	if (await close.count()) await close.last().click();
 };
 const edit = async () => {
-	await page.getByRole("button", { name: "Customize", exact: true }).click();
+	await customizeHome(page);
 	await closePanel();
 };
 const configure = async (type) => {

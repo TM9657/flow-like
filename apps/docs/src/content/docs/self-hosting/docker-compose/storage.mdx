@@ -40,10 +40,39 @@ Setup generates three independent identities:
 - `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY` identify the API storage user.
 - `STS_ISSUER_ACCESS_KEY` and `STS_ISSUER_SECRET_KEY` identify the restricted issuer.
 
+The API and issuer are regular IAM users because RustFS service accounts cannot
+issue STS sessions. Both users are denied administration; the API user is also
+denied `AssumeRole`. Bootstrap uses the pinned release's native
+`/rustfs/admin/v3` API with S3 SigV4.
+
+Storage secrets support `_FILE` inputs. Unreadable or empty files fail, and
+readers remove only trailing line endings. The API requires exactly one of a
+value and its `_FILE` setting. Bootstrap and standalone storage readers give the
+file precedence, but configure only one form when sharing settings with the API.
+
+The library accepts `STS_SESSION_TTL_SECONDS` from 900 to 43,200 seconds and
+defaults to 3,600; Compose and Helm request 7,200 for hour-long runs plus margins.
+The API uses the expiration actually returned by STS. RustFS rejects AWS SSE-KMS
+and S3 Express settings and omits AWS KMS policy clauses. Static API credentials
+do not require a fabricated session token.
+
 Runners receive temporary credentials in their signed dispatch payloads. Session
 policies limit access to the required buckets and app, user, temporary or run-log
 prefixes. Killing a runner ends its processes; it does not instantly revoke
 credentials that were copied elsewhere. Provider expiration remains relevant.
+
+## Initialization and drift
+
+Bootstrap requires distinct bucket names and exact, comma-separated browser
+origins in `S3_CORS_ALLOWED_ORIGINS`; wildcard origins fail. Existing bucket
+policies stop initialization for review. CORS and lifecycle rules expire
+incomplete multipart uploads after one day and content under `tmp/` after two.
+
+Existing IAM policies must match the expected definitions. Users must have only
+their expected policy and no group membership. Bootstrap verifies existing user
+passwords without replacing them. Changing a configured secret therefore needs
+an explicit IAM rotation or a new identity. Preserve the working identities and
+investigate drift before changing existing policies.
 
 ## Keep the signing origin reachable
 
@@ -58,6 +87,13 @@ needed. A client on another machine cannot use the operator's loopback address.
 The data gateway forwards only configured bucket paths. Root listing, STS and
 administration routes are denied. The private RustFS endpoint remains separate;
 do not publish it in place of the data gateway.
+
+`S3_INTERNAL_ENDPOINT` serves API LanceDB access; `AWS_ENDPOINT` remains a
+legacy fallback. `META_BUCKET_ENDPOINT`, `CONTENT_BUCKET_ENDPOINT` and
+`LOGS_BUCKET_ENDPOINT` override exported per-bucket endpoints. Shared credentials
+carry the region, path-style and explicit HTTP settings. HTTPS certificate
+verification remains enabled. Install private CAs in each caller's trust store;
+CA files are not carried in the credentials.
 
 ### Public TLS storage
 
@@ -97,13 +133,35 @@ checks permitted reads/writes, denied sibling prefixes and other buckets,
 list-prefix restrictions, copy-source authorization, multipart initiation and
 abort, missing/invalid session tokens, STS/admin denial and presigned GET/PUT.
 
+The probes also check confusable prefixes, empty-prefix listing, explicit deny,
+nested STS issuance and API-user STS denial. A valid result must include both
+successful authorized operations and rejected unauthorized operations. Repeat
+the suite when changing the store digest, policies, public endpoint or issuer
+identity. Kubernetes runs the same contract through
+`helm test <release> -n <namespace> --logs`.
+
 Complete additional tests for actual expiration, multipart completion and copy,
 application operations, restored IAM state and host failure. A passing smoke
 test does not cover those paths.
 
+Include an hour-long workflow that can read and write near its deadline and
+operations that fail after real session expiry. Recheck old credentials after
+restore and rotation, and retain the store digest and probe results with the
+deployment release.
+
 Back up both object data and RustFS IAM metadata. Restore them together with
 matching deployment identities on a clean host, then rerun authorization checks.
 Do not treat the named `object_store_data` volume as an off-host backup.
+
+To check bootstrap logic without starting a store, run from the repository root:
+
+```sh
+python3 -m venv /tmp/flow-like-store-tests
+/tmp/flow-like-store-tests/bin/pip install -r apps/backend/docker-compose/object-store/requirements.txt
+PYTHONDONTWRITEBYTECODE=1 /tmp/flow-like-store-tests/bin/python -m unittest discover -s apps/backend/docker-compose/object-store -p 'test_*.py'
+```
+
+These offline tests do not validate a deployed storage provider.
 
 ## Retain or adopt external S3/STS
 

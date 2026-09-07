@@ -47,16 +47,18 @@ Review capacity, allowed integrations and URLs in `.env`. Keep
 execution.
 
 Create a maintained hub configuration from the example and replace its OIDC,
-domain, signaling and legal-link placeholders. Point both selectors to it:
+domain, signaling and legal-link placeholders. Select the host-side file:
 
 ```dotenv
-FLOW_LIKE_CONFIG=apps/backend/docker-compose/flow-like.config.json
 FLOW_LIKE_RUNTIME_CONFIG_FILE=./flow-like.config.json
 ```
 
-The API embeds `FLOW_LIKE_CONFIG` during its build. Sink services read the
-runtime file. The web's `NEXT_PUBLIC_*` settings are also build arguments.
-Rebuild the affected images when these values change.
+Compose mounts that file into the API and sink services at startup. Recreate the
+API and sink services after editing it. The web container also reads its public
+URLs at startup, so recreate `web` after changing `NEXT_PUBLIC_*`. These changes
+do not require rebuilding images. See
+[Configuration](/self-hosting/docker-compose/configuration/#hub-configuration-and-identity)
+for alternate config sources.
 
 ## 3. Build and pin execution images
 
@@ -73,6 +75,11 @@ execution.
 Local image IDs belong to this daemon. When moving hosts, build and pin again,
 or distribute images through a registry and use their `repository@sha256:...`
 digests.
+
+The [container release workflow](/self-hosting/containers/) also publishes AMD64
+and ARM64 images. Select the correct platform and configure the `*_IMAGE`
+variables with release digests. `prepare-images.py` still builds and pins local
+execution images; it does not resolve a release manifest for you.
 
 ## 4. Validate and start
 
@@ -149,6 +156,11 @@ python3 scripts/up.py --build
 Preserve the manager's SQLite state volume across this cutover. It retains
 assignment and cancellation records used to reject replay. Verify schema,
 storage and representative runs before restoring traffic.
+
+When replacing the older Python supervisor images, rebuild and pin both the
+runner and Rust manager/gateway images. The Rust supervisor retains the HTTP
+dispatch and ownership-record formats. Preserve signing keys, retained Redis
+deliveries and SQLite claims; clearing them can bypass replay protection.
 
 ## Stop without deleting data
 

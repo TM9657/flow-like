@@ -17,7 +17,53 @@
 
 use flow_like::flow::execution::context::ExecutionContext;
 use flow_like::flow::node::{Node, NodeLogic};
-use flow_like_types::{anyhow, async_trait};
+use flow_like::state::FlowNodeRegistryInner;
+use flow_like_types::{Result, anyhow, async_trait};
+use std::{collections::BTreeMap, sync::Arc};
+
+/// Include the complete normalized definitions: defaults, options and permissions
+/// affect compilation even when they do not change the registry fingerprint.
+fn artifact_registry_cache_key(package_revision: &str, nodes: &[Node]) -> Result<String> {
+    // Match registry insertion: if packages reuse a name, the last node wins.
+    let effective_nodes: BTreeMap<_, _> = nodes
+        .iter()
+        .map(|node| (node.name.as_str(), node))
+        .collect();
+    let mut hasher = blake3::Hasher::new();
+    hasher.update(b"flow-like.artifact-registry-metadata/v1\0");
+    for node in effective_nodes.values() {
+        let mut value = serde_json::to_value(node)?;
+        value.sort_all_objects();
+        let definition = serde_json::to_vec(&value)?;
+        hasher.update(&(definition.len() as u64).to_le_bytes());
+        hasher.update(&definition);
+    }
+    Ok(format!("{package_revision}:{}", hasher.finalize().to_hex()))
+}
+
+/// Reuse an overlay only when the currently loaded package metadata matches it.
+/// A metadata repair can change a definition without changing its package version
+/// or binary, so callers must load the definitions before consulting this cache.
+pub(crate) fn cached_artifact_registry(
+    base: &Arc<FlowNodeRegistryInner>,
+    cache: &moka::sync::Cache<String, Arc<FlowNodeRegistryInner>>,
+    package_revision: &str,
+    nodes: Vec<Node>,
+) -> Result<Arc<FlowNodeRegistryInner>> {
+    let key = artifact_registry_cache_key(package_revision, &nodes)?;
+    if let Some(registry) = cache.get(&key) {
+        return Ok(registry);
+    }
+
+    let mut overlay = (**base).clone();
+    for node in nodes {
+        let logic = WasmNodeStub::new(node.clone());
+        overlay.insert(node, Arc::new(logic));
+    }
+    let overlay = Arc::new(overlay);
+    cache.insert(key, overlay.clone());
+    Ok(overlay)
+}
 
 pub struct WasmNodeStub {
     node: Node,
@@ -46,9 +92,10 @@ impl NodeLogic for WasmNodeStub {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use flow_like::flow::node::NodeWasm;
-    use flow_like::state::FlowNodeRegistryInner;
-    use std::sync::Arc;
+    use flow_like::flow::node::{NodePermission, NodeWasm};
+    use flow_like::flow::pin::PinOptions;
+    use flow_like::flow::variable::VariableType;
+    use std::collections::HashMap;
 
     fn wasm_node(name: &str) -> Node {
         let mut node = Node::new(name, name, "a package node", "Package");
@@ -57,6 +104,176 @@ mod tests {
             permissions: Vec::new(),
         });
         node
+    }
+
+    fn node_with_metadata(name: &str) -> Node {
+        let mut node = wasm_node(name);
+        node.add_input_pin("input", "Input", "Input value", VariableType::String)
+            .set_default_value(Some(serde_json::json!("original")));
+        node.add_output_pin("output", "Output", "Output value", VariableType::String);
+        node.required_oauth_scopes = Some(HashMap::from([
+            ("provider_a".into(), vec!["read".into()]),
+            ("provider_b".into(), vec!["write".into()]),
+        ]));
+        node.ensure_flowscript_names();
+        node
+    }
+
+    fn package_revision() -> String {
+        let packages = HashMap::from([(
+            "com.example.pkg".into(),
+            flow_like_types::dispatch::WasmPackageRef {
+                version: "1.0.0".into(),
+                wasm_hash: "same-wasm-binary".into(),
+                wasm_url: String::new(),
+                cwasm_url: String::new(),
+                cwasm_checksum: "same-compiled-binary".into(),
+            },
+        )]);
+        flow_like_types::dispatch::wasm_package_set_revision(Some(&packages))
+    }
+
+    #[test]
+    fn metadata_cache_ignores_node_and_object_key_order() {
+        fn reverse_objects(value: &mut serde_json::Value) {
+            match value {
+                serde_json::Value::Object(object) => {
+                    let entries: Vec<_> = std::mem::take(object).into_iter().collect();
+                    for (key, mut value) in entries.into_iter().rev() {
+                        reverse_objects(&mut value);
+                        object.insert(key, value);
+                    }
+                }
+                serde_json::Value::Array(values) => {
+                    values.iter_mut().for_each(reverse_objects);
+                }
+                _ => {}
+            }
+        }
+
+        let nodes = vec![node_with_metadata("first"), node_with_metadata("second")];
+        let mut reordered_json = serde_json::to_value(&nodes).unwrap();
+        reverse_objects(&mut reordered_json);
+        let mut reordered: Vec<Node> = serde_json::from_value(reordered_json).unwrap();
+        reordered.reverse();
+        let revision = package_revision();
+        assert_eq!(
+            artifact_registry_cache_key(&revision, &nodes).unwrap(),
+            artifact_registry_cache_key(&revision, &reordered).unwrap()
+        );
+
+        let base = Arc::new(FlowNodeRegistryInner::new(0));
+        let cache = moka::sync::Cache::new(16);
+        let first = cached_artifact_registry(&base, &cache, &revision, nodes).unwrap();
+        let second = cached_artifact_registry(&base, &cache, &revision, reordered).unwrap();
+        assert!(Arc::ptr_eq(&first, &second));
+    }
+
+    #[test]
+    fn metadata_repairs_replace_cached_definitions_without_a_package_change() {
+        let base = Arc::new(FlowNodeRegistryInner::new(0));
+        let cache = moka::sync::Cache::new(16);
+        let revision = package_revision();
+        let original = node_with_metadata("pkg_node");
+        let cached =
+            cached_artifact_registry(&base, &cache, &revision, vec![original.clone()]).unwrap();
+
+        let changes: [(&str, fn(&mut Node)); 5] = [
+            ("pin description", |node| {
+                node.pins.values_mut().next().unwrap().description = "Repaired pin".into();
+            }),
+            ("pin schema", |node| {
+                node.pins.values_mut().next().unwrap().schema =
+                    Some(r#"{"type":"string","minLength":1}"#.into());
+            }),
+            ("pin default", |node| {
+                node.pins
+                    .values_mut()
+                    .next()
+                    .unwrap()
+                    .set_default_value(Some(serde_json::json!("repaired")));
+            }),
+            ("pin options", |node| {
+                let mut options = PinOptions::new();
+                options.sensitive = Some(true);
+                node.pins.values_mut().next().unwrap().options = Some(options);
+            }),
+            ("permissions", |node| {
+                node.wasm
+                    .as_mut()
+                    .unwrap()
+                    .permissions
+                    .push(NodePermission::NetworkHttp);
+            }),
+        ];
+        for (field, change) in changes {
+            let mut repaired = original.clone();
+            change(&mut repaired);
+            let updated =
+                cached_artifact_registry(&base, &cache, &revision, vec![repaired.clone()]).unwrap();
+            assert!(
+                !Arc::ptr_eq(&cached, &updated),
+                "stale cache hit for {field}"
+            );
+            assert_eq!(
+                serde_json::to_value(updated.get_node(&repaired.name).unwrap()).unwrap(),
+                serde_json::to_value(&repaired).unwrap(),
+                "registry must contain the repaired {field}"
+            );
+            assert_eq!(
+                serde_json::to_value(updated.instantiate(&repaired).unwrap().get_node()).unwrap(),
+                serde_json::to_value(&repaired).unwrap(),
+                "compile stub must contain the repaired {field}"
+            );
+            if matches!(field, "pin default" | "pin options" | "permissions") {
+                assert_eq!(cached.fingerprint(), updated.fingerprint());
+            } else {
+                assert_ne!(cached.fingerprint(), updated.fingerprint());
+            }
+        }
+    }
+
+    #[test]
+    fn metadata_cache_preserves_package_revision_identity() {
+        let base = Arc::new(FlowNodeRegistryInner::new(0));
+        let cache = moka::sync::Cache::new(16);
+        let node = node_with_metadata("pkg_node");
+        let first = cached_artifact_registry(&base, &cache, "original-package", vec![node.clone()])
+            .unwrap();
+        let second =
+            cached_artifact_registry(&base, &cache, "updated-package", vec![node]).unwrap();
+        assert!(!Arc::ptr_eq(&first, &second));
+    }
+
+    #[test]
+    fn metadata_cache_tracks_the_winner_when_packages_reuse_a_node_name() {
+        let base = Arc::new(FlowNodeRegistryInner::new(0));
+        let cache = moka::sync::Cache::new(16);
+        let revision = package_revision();
+        let first = node_with_metadata("shared_node");
+        let mut second = first.clone();
+        second.wasm.as_mut().unwrap().package_id = "com.example.other".into();
+        second.description = "Definition from the other package".into();
+        let first_order = cached_artifact_registry(
+            &base,
+            &cache,
+            &revision,
+            vec![first.clone(), second.clone()],
+        )
+        .unwrap();
+        let reversed = cached_artifact_registry(
+            &base,
+            &cache,
+            &revision,
+            vec![second.clone(), first.clone()],
+        )
+        .unwrap();
+        assert!(!Arc::ptr_eq(&first_order, &reversed));
+        assert_eq!(
+            first_order.get_node("shared_node").unwrap().wasm,
+            second.wasm
+        );
+        assert_eq!(reversed.get_node("shared_node").unwrap().wasm, first.wasm);
     }
 
     /// The whole security argument rests on this: the crate that compiles

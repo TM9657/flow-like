@@ -8,6 +8,7 @@ use axum::Json;
 use axum::extract::State;
 use axum::http::StatusCode;
 use flow_like_types::dispatch::{CompilationResult, CompilationStatus};
+use sea_orm::sea_query::Expr;
 use sea_orm::{
     ActiveModelTrait, ActiveValue::Set, ColumnTrait, DatabaseConnection, EntityTrait, QueryFilter,
 };
@@ -189,6 +190,27 @@ pub async fn handle_compilation_callback(
                 "Failed to promote version to parent package"
             );
         }
+    } else if compiled_ok
+        && let (Some(pkg), Some(nodes)) = (&package, &nodes)
+        && pkg.version == result.version
+    {
+        // Recheck the current version in the update so a concurrent approval
+        // cannot receive node definitions from an older version.
+        wasm_package::Entity::update_many()
+            .col_expr(wasm_package::Column::Nodes, Expr::value(nodes.clone()))
+            .filter(wasm_package::Column::Id.eq(&result.package_id))
+            .filter(wasm_package::Column::Version.eq(&result.version))
+            .exec(db.as_ref())
+            .await
+            .map_err(|e| {
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(CallbackResponse {
+                        ok: false,
+                        error: Some(format!("Failed to update current package nodes: {e}")),
+                    }),
+                )
+            })?;
     }
 
     tracing::info!(

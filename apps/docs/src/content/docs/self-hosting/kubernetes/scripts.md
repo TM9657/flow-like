@@ -42,6 +42,13 @@ Bundled RustFS is the default. External storage requires
 `RUSTFS_ENABLED=false` and its endpoint and credential variables. See
 [Storage](/self-hosting/kubernetes/storage/#external-s3-compatible-storage).
 
+Supply `FLOW_LIKE_CONFIG_FILE` for the host-side Hub JSON or
+`FLOW_LIKE_CONFIG_JSON` for raw JSON. Setup keeps that document in a separate
+generated Secret, outside values files. `FLOW_LIKE_CONFIG_SECRET_REF` stores a
+reference instead; make its value available to the API's SecretStore separately.
+See [runtime configuration](/self-hosting/kubernetes/configuration/#runtime-api-and-web-configuration)
+for compatibility inputs and restart requirements.
+
 ## build-images.sh
 
 ```bash
@@ -58,9 +65,11 @@ image entries are retained. The manager and executor must be pushed to produce
 the immutable digests required by isolated execution. Rebuild them together when
 changing the assignment protocol.
 
-`FLOW_LIKE_CONFIG` selects the repository-relative public hub/OIDC JSON embedded
-in the API. `PUBLIC_API_URL` and `PUBLIC_WEB_URL` supply the web image's public
-URLs. Generated secret files are excluded from root build contexts.
+`FLOW_LIKE_BUILD_CONFIG` optionally selects a repository-relative public JSON
+fallback to embed in the API. Runtime API settings belong in the setup-generated
+Secret; public web URLs belong in Helm runtime configuration. Neither requires
+installation-specific images. Generated secret files are excluded from root
+build contexts.
 
 ## deploy.sh
 
@@ -106,6 +115,21 @@ and the cluster.
 `./scripts/dev.sh delete` deletes the local cluster and its workloads.
 See [Local Development](/self-hosting/kubernetes/local-development/) for access,
 configuration and persistence boundaries.
+
+## Validate chart changes locally
+
+Run the chart and helper tests from `apps/backend/kubernetes/` without a cluster:
+
+```sh
+python3 -m venv /tmp/flow-like-chart-tests
+/tmp/flow-like-chart-tests/bin/pip install PyYAML==6.0.2
+/tmp/flow-like-chart-tests/bin/python -m unittest discover -s scripts/tests -v
+```
+
+These tests validate rendered configuration and helper behavior. Use the live
+storage test, isolation probes and recovery procedure in
+[Installation](/self-hosting/kubernetes/installation/#verify-the-installation)
+for deployment qualification.
 
 ## Database schema helper
 

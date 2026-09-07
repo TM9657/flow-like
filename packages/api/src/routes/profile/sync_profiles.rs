@@ -240,8 +240,21 @@ pub async fn sync_profiles(
                         (None, None)
                     };
 
-                active_model.updated_at = Set(chrono::Utc::now().fixed_offset());
-                active_model.update(&state.db).await?;
+                active_model.updated_at = Set(super::next_profile_revision(
+                    chrono::Utc::now().fixed_offset(),
+                    Some(existing.updated_at),
+                    profile_req.updated_at.as_deref(),
+                ));
+                // A save may commit while sync prepares uploads. Only replace
+                // the revision that was checked above, then let the client pull
+                // the newer profile when another request has changed it.
+                let result = super::update_profile_revision(&existing, active_model)
+                    .exec(&state.db)
+                    .await?;
+                if result.rows_affected != 1 {
+                    skipped.push(profile_req.id.clone());
+                    continue;
+                }
 
                 updated.push(UpdatedProfile {
                     id: profile_req.id.clone(),
@@ -402,7 +415,11 @@ pub async fn sync_profiles(
                         .or(Some(vec![default_hub.clone()]))
                         .map(Into::into)),
                     created_at: Set(now),
-                    updated_at: Set(now),
+                    updated_at: Set(super::next_profile_revision(
+                        now,
+                        None,
+                        profile_req.updated_at.as_deref(),
+                    )),
                     ..Default::default()
                 };
 
