@@ -27,3 +27,4 @@ percent-encoding = "2"
 
 [dev-dependencies]
 tokio = { version = "1", features = ["full", "test-util"] }
+wat = "1"

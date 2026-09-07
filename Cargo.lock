@@ -8983,6 +8983,7 @@ dependencies = [
  "serde_json",
  "tokio",
  "tracing",
+ "wat",
 ]
 
 [[package]]

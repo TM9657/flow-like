@@ -423,7 +423,7 @@ pub struct State {
     /// because lifecycle cleanup can remove an artifact before this entry.
     pub compiled_artifact_cache: moka::sync::Cache<String, ()>,
     /// Registries compiled artifacts are fingerprinted against, one per
-    /// resolved WASM package set (`wasm_package_set_revision`): the built-in
+    /// resolved WASM package set and current node metadata: the built-in
     /// catalog extended with the packages' manifest `Node`s. See
     /// [`State::artifact_registry`].
     pub artifact_registries: moka::sync::Cache<String, Arc<FlowNodeRegistryInner>>,
@@ -472,41 +472,72 @@ impl State {
     ///
     /// The built-in catalog alone when the run brings no WASM packages;
     /// otherwise the catalog extended with the `Node` definitions of exactly
-    /// the resolved packages — the same set the executor overlays from the
+    /// the resolved packages, the same set the executor overlays from the
     /// loaded modules, so both sides compute one fingerprint and the artifact
     /// the API writes is the one the executor accepts. Built from the node
     /// definitions the compiler workload reported at upload time
     /// (`wasm_package_version.nodes`): no module bytes are read here, and the
     /// stand-in logic refuses to run, so user WASM never executes in this
     /// process.
+    ///
+    /// Read the definitions on every call before reusing an overlay. Metadata
+    /// repairs can change them while the package version and binary stay the same.
     pub async fn artifact_registry(
         &self,
         wasm_packages: Option<&HashMap<String, WasmPackageRef>>,
     ) -> Result<Arc<FlowNodeRegistryInner>> {
+        let diagnostics = std::env::var("FLOW_REGISTRY_DIAGNOSTICS").as_deref() == Ok("1");
+        if diagnostics {
+            tracing::warn!(
+                native_registry_fingerprint = %blake3::Hash::from_bytes(self.registry.fingerprint()).to_hex(),
+                native_node_count = self.registry.registry.len(),
+                "Compiled artifact registry diagnostics: native catalog"
+            );
+        }
         let Some(packages) = wasm_packages.filter(|packages| !packages.is_empty()) else {
             return Ok(self.registry.clone());
         };
-        let key = flow_like_types::dispatch::wasm_package_set_revision(Some(packages));
-        if let Some(registry) = self.artifact_registries.get(&key) {
-            return Ok(registry);
-        }
-
         let pins: Vec<(String, String)> = packages
             .iter()
             .map(|(package_id, package)| (package_id.clone(), package.version.clone()))
             .collect();
+        if diagnostics {
+            let mut diagnostic_pins = pins.clone();
+            diagnostic_pins.sort();
+            tracing::warn!(
+                packages = ?diagnostic_pins,
+                "Compiled artifact registry diagnostics: resolved package versions"
+            );
+        }
         let nodes = crate::routes::app::wasm_catalog::wasm_nodes_for_pins(&self.db, &pins)
             .await
             .map_err(|e| anyhow!("failed to load WASM node manifests for compilation: {e}"))?;
-
-        let mut overlay = (*self.registry).clone();
-        for node in nodes {
-            let logic = crate::execution::wasm_node_stubs::WasmNodeStub::new(node.clone());
-            overlay.insert(node, Arc::new(logic));
+        if diagnostics {
+            for node in &nodes {
+                tracing::warn!(
+                    node_name = %node.name,
+                    node_version = ?node.version,
+                    semantic_hash = %format_args!("{:016x}", node.semantic_hash()),
+                    "Compiled artifact registry diagnostics: WASM node"
+                );
+            }
         }
-        let overlay = Arc::new(overlay);
-        self.artifact_registries.insert(key, overlay.clone());
-        Ok(overlay)
+
+        let package_revision = flow_like_types::dispatch::wasm_package_set_revision(Some(packages));
+        let registry = crate::execution::wasm_node_stubs::cached_artifact_registry(
+            &self.registry,
+            &self.artifact_registries,
+            &package_revision,
+            nodes,
+        )?;
+        if diagnostics {
+            tracing::warn!(
+                registry_fingerprint = %blake3::Hash::from_bytes(registry.fingerprint()).to_hex(),
+                node_count = registry.registry.len(),
+                "Compiled artifact registry diagnostics: resulting catalog"
+            );
+        }
+        Ok(registry)
     }
 
     /// Run `body` in a transaction and retry it on a lost commit race.
