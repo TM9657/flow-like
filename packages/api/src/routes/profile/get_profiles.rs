@@ -30,6 +30,9 @@ pub struct ProfileResponse {
     #[schema(value_type = Option<Object>)]
     pub shortcuts: Option<serde_json::Value>,
     #[schema(value_type = Option<Object>)]
+    pub home_layout: Option<serde_json::Value>,
+    pub home_default_id: Option<String>,
+    #[schema(value_type = Option<Object>)]
     pub settings: Option<serde_json::Value>,
     pub hub: String,
     pub hubs: Option<Vec<String>>,
@@ -114,6 +117,8 @@ pub async fn get_profiles(
             bit_ids: p.bit_ids.map(Into::into),
             apps: p.apps,
             shortcuts: p.shortcuts,
+            home_layout: p.home_layout,
+            home_default_id: p.home_default_id,
             settings: p.settings,
             hub: p.hub,
             hubs: p.hubs.map(Into::into),

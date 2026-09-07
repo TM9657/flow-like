@@ -66,6 +66,22 @@ describe("profile home synchronization", () => {
 		expect(local.hub_profile.home_layout).toBeNull();
 		expect(local.hub_profile.home_default_id).toBe("team-default");
 	});
+
+	it("keeps a locally saved layout when the hub response omits the home fields", () => {
+		const home_layout = { version: 1 as const, widgets: [] };
+		const local = toLocalProfile({
+			...profile,
+			home_layout,
+			home_default_id: "template",
+		});
+		mergeRemoteProfileMetadata(local, {
+			...profile,
+			updated_at: "2026-09-05T10:02:00Z",
+		});
+		expect(local.hub_profile.home_layout).toEqual(home_layout);
+		expect(local.hub_profile.home_default_id).toBe("template");
+		expect(local.hub_profile.updated).toBe("2026-09-05T10:02:00Z");
+	});
 });
 
 describe("profile sync queue", () => {

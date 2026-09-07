@@ -790,16 +790,12 @@ fn cancelled_direct_sdk_handler_never_starts() {
 #[test]
 fn panicking_direct_sdk_handler_returns_an_error_and_releases_its_activity_lease() {
     let activity = Arc::new(SdkToolActivityRegistry::default());
+    let last_sdk_event_at = tokio::time::Instant::now();
     let observed_activity = activity.clone();
     let handler: copilot_sdk::ToolHandler = Arc::new(move |_name, _args| {
-        assert_eq!(
-            observed_activity
-                .state
-                .lock()
-                .expect("activity state")
-                .active_deadlines
-                .len(),
-            1,
+        assert!(
+            observed_activity.inactivity_deadline(last_sdk_event_at)
+                >= last_sdk_event_at + sdk_tool_handler_watchdog_timeout("ask_user"),
             "the host-side lease must exist before the SDK publishes its tool event"
         );
         panic!("simulated handler panic");
@@ -820,13 +816,9 @@ fn panicking_direct_sdk_handler_returns_an_error_and_releases_its_activity_lease
             .unwrap_or(&result.text_result_for_llm)
             .contains("simulated handler panic")
     );
-    assert!(
-        activity
-            .state
-            .lock()
-            .expect("activity state")
-            .active_deadlines
-            .is_empty(),
+    assert_eq!(
+        activity.inactivity_deadline(last_sdk_event_at),
+        last_sdk_event_at + SDK_EVENT_INACTIVITY_TIMEOUT,
         "panic unwinding must not leave the SDK watchdog extended"
     );
 }
