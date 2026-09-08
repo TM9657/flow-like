@@ -411,7 +411,7 @@ const OPEN_OBJECT_SCHEMA_KEYS = new Set(["type", "additionalProperties"]);
  *
  * `{"type":"object","additionalProperties":true}` declares that a pin's shape is open, so it can
  * never contradict a concrete schema and must never be the basis for rejecting a peer pin. The
- * `includes` guard keeps the drag hot path from parsing multi-KB real schemas.
+ * `includes` guard skips schemas without an `additionalProperties` keyword.
  */
 export function isOpenObjectSchema(schema: string): boolean {
 	if (!schema.includes("additionalProperties")) return false;
@@ -428,6 +428,27 @@ export function isOpenObjectSchema(schema: string): boolean {
 	} catch {
 		return false;
 	}
+}
+
+const pinSchemaCache = new WeakMap<
+	IPin,
+	{ schema: string; concreteSchema: string | undefined }
+>();
+
+function resolvePinSchema(
+	pin: IPin,
+	refs: Record<string, string>,
+): string | undefined {
+	if (!pin.schema) return undefined;
+	const schema = refs[pin.schema] ?? pin.schema;
+	const cached = pinSchemaCache.get(pin);
+	if (cached?.schema === schema) return cached.concreteSchema;
+
+	// Catalog filtering compares the dragged pin with thousands of candidate pins.
+	// Classify its schema once, checking the resolved value so ref edits invalidate it.
+	const concreteSchema = isOpenObjectSchema(schema) ? undefined : schema;
+	pinSchemaCache.set(pin, { schema, concreteSchema });
+	return concreteSchema;
 }
 
 export function doPinsMatch(
@@ -489,14 +510,8 @@ export function doPinsMatch(
 
 	// An open-object schema declares that the shape is open, not a contract to match, so it
 	// resolves to "no schema" for every comparison below.
-	const resolveSchema = (pin: IPin) => {
-		if (!pin.schema) return undefined;
-		const resolved = refs[pin.schema] ?? pin.schema;
-		return isOpenObjectSchema(resolved) ? undefined : resolved;
-	};
-
-	const schemaSource = resolveSchema(sourcePin);
-	const schemaTarget = resolveSchema(targetPin);
+	const schemaSource = resolvePinSchema(sourcePin, refs);
+	const schemaTarget = resolvePinSchema(targetPin, refs);
 
 	if (schemaSource && schemaTarget) {
 		if (

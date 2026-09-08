@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, spyOn, test } from "bun:test";
 import { doPinsMatch, parseBoard } from "./flow-board-utils";
 import { GEOMETRY_KINDS, geometryMarker } from "./geometry";
 import type {
@@ -567,6 +567,87 @@ describe("doPinsMatch treats an open-object schema as no schema", () => {
 				{},
 			),
 		).toBe(false);
+	});
+});
+
+describe("doPinsMatch schema classification cache", () => {
+	test("parses a dragged large schema once while scanning fresh candidate pins", () => {
+		const schema = JSON.stringify({
+			type: "object",
+			properties: Object.fromEntries(
+				Array.from({ length: 256 }, (_, index) => [
+					`component_${index}`,
+					{
+						type: "object",
+						properties: {
+							metadata: { type: "object", additionalProperties: true },
+						},
+					},
+				]),
+			),
+		});
+		const output = structPin("element", { schema: "element_ref" });
+		const refs = { element_ref: schema };
+		const originalParse = JSON.parse;
+		const parseSpy = spyOn(JSON, "parse").mockImplementation(originalParse);
+
+		try {
+			for (let index = 0; index < 128; index++) {
+				const input = structPin(`candidate_${index}`, {
+					pin_type: IPinType.Input,
+					schema: OTHER_SCHEMA,
+				});
+				expect(doPinsMatch(output, input, refs)).toBe(false);
+			}
+			expect(
+				parseSpy.mock.calls.filter(([value]) => value === schema),
+			).toHaveLength(1);
+		} finally {
+			parseSpy.mockRestore();
+		}
+	});
+
+	test("reclassifies a pin when its inline schema changes", () => {
+		const output = structPin("element", { schema: OPEN_SCHEMA });
+		const input = structPin("body", {
+			pin_type: IPinType.Input,
+			schema: OTHER_SCHEMA,
+		});
+
+		expect(doPinsMatch(output, input, {})).toBe(true);
+		output.schema = USER_SCHEMA;
+		expect(doPinsMatch(output, input, {})).toBe(false);
+		output.schema = OPEN_SCHEMA;
+		expect(doPinsMatch(output, input, {})).toBe(true);
+	});
+
+	test("reclassifies a pin when its reference changes in place", () => {
+		const output = structPin("element", { schema: "element_ref" });
+		const input = structPin("body", {
+			pin_type: IPinType.Input,
+			schema: OTHER_SCHEMA,
+		});
+		const refs = { element_ref: OPEN_SCHEMA };
+
+		expect(doPinsMatch(output, input, refs)).toBe(true);
+		refs.element_ref = USER_SCHEMA;
+		expect(doPinsMatch(output, input, refs)).toBe(false);
+		refs.element_ref = OPEN_SCHEMA;
+		expect(doPinsMatch(output, input, refs)).toBe(true);
+	});
+
+	test("reclassifies a pin when a new refs map uses the same key", () => {
+		const output = structPin("element", { schema: "element_ref" });
+		const input = structPin("body", {
+			pin_type: IPinType.Input,
+			schema: OTHER_SCHEMA,
+		});
+		const openRefs = { element_ref: OPEN_SCHEMA };
+		const concreteRefs = { element_ref: USER_SCHEMA };
+
+		expect(doPinsMatch(output, input, openRefs)).toBe(true);
+		expect(doPinsMatch(output, input, concreteRefs)).toBe(false);
+		expect(doPinsMatch(output, input, openRefs)).toBe(true);
 	});
 });
 
