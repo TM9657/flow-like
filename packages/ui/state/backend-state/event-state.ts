@@ -487,6 +487,14 @@ export interface IEventState {
 		pageTrigger?: PageTrigger,
 	): Promise<ILogMetadata | undefined>;
 
+	/** Call a hosted MCP operation and return its protocol result. */
+	invokeMcp?(
+		appId: string,
+		eventId: string,
+		method: string,
+		params?: Record<string, unknown>,
+	): Promise<Record<string, unknown>>;
+
 	cancelExecution(runId: string): Promise<void>;
 
 	isEventSinkActive(eventId: string): Promise<boolean>;

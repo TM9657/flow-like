@@ -1826,20 +1826,13 @@ fn mcp_tool_metadata(
     };
     let name = sanitize_mcp_identifier(name_source);
     let description = resolved_mcp_description(&node.description, board_refs);
-    let has_non_payload_data_pin = node.pins.values().any(|pin| {
-        pin.pin_type == PinType::Output
-            && pin.data_type != VariableType::Execution
-            && pin.name != "payload"
-            && pin.name != "_client"
-    });
-
     let mut properties = serde_json::Map::new();
     let mut used_argument_names = std::collections::HashSet::new();
     for pin in node.pins.values() {
         if pin.pin_type != PinType::Output || pin.data_type == VariableType::Execution {
             continue;
         }
-        if pin.name == "_client" || (pin.name == "payload" && has_non_payload_data_pin) {
+        if pin.name == "_client" || pin.name == "payload" {
             continue;
         }
         let argument_name = unique_mcp_tool_argument_name(pin, &used_argument_names);
@@ -2283,6 +2276,41 @@ mod tests {
     use serde_json::json;
 
     use super::{build_rest_openapi_spec, is_completed_run_status, rest_file_routes};
+
+    #[test]
+    fn mcp_tool_schema_excludes_framework_pins_with_or_without_arguments() {
+        let mut node = super::Node::new("list_notes", "List Notes", "List notes", "Tests");
+        node.add_output_pin(
+            "exec_out",
+            "Exec",
+            "Execute",
+            super::VariableType::Execution,
+        );
+        node.add_output_pin(
+            "payload",
+            "Payload",
+            "Request payload",
+            super::VariableType::Struct,
+        );
+        node.add_output_pin("_client", "Client", "Client", super::VariableType::Struct);
+        let refs = super::HashMap::new();
+
+        let (_, _, schema) = super::mcp_tool_metadata(&node, &refs);
+        assert_eq!(schema["type"], json!("object"));
+        assert_eq!(schema["properties"], json!({}));
+
+        node.add_output_pin(
+            "note_limit",
+            "Limit",
+            "Maximum notes",
+            super::VariableType::Integer,
+        );
+        let (_, _, schema) = super::mcp_tool_metadata(&node, &refs);
+        assert_eq!(
+            schema["properties"],
+            json!({"limit": {"type": "integer", "description": "Maximum notes"}})
+        );
+    }
 
     #[test]
     fn completed_run_status_is_case_insensitive() {

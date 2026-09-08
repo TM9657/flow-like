@@ -876,13 +876,6 @@ async fn tool_metadata(
     };
     let name = super::http_runtime::sanitize_identifier(name_source);
     let description = resolved_mcp_description(&node_guard.description, board_refs);
-    let has_non_payload_data_pin = node_guard.pins.values().any(|pin| {
-        pin.pin_type == PinType::Output
-            && pin.data_type != VariableType::Execution
-            && pin.name != "payload"
-            && pin.name != "_client"
-    });
-
     let mut properties = json::Map::new();
     let mut argument_aliases = HashMap::new();
     let mut used_argument_names = HashSet::new();
@@ -890,10 +883,7 @@ async fn tool_metadata(
         if pin.pin_type != PinType::Output || pin.data_type == VariableType::Execution {
             continue;
         }
-        if pin.name == "_client" {
-            continue;
-        }
-        if pin.name == "payload" && has_non_payload_data_pin {
+        if pin.name == "_client" || pin.name == "payload" {
             continue;
         }
         let argument_name = unique_tool_argument_name(pin, &used_argument_names);
@@ -2320,6 +2310,30 @@ mod tests {
         }
     }
 
+    struct McpPayloadLogic;
+
+    #[async_trait]
+    impl NodeLogic for McpPayloadLogic {
+        fn get_node(&self) -> Node {
+            let mut node = Node::new("list_notes", "List Notes", "List notes", "Tests");
+            node.add_output_pin("exec_out", "Exec", "Execute", VariableType::Execution);
+            node.add_output_pin(
+                "payload",
+                "Payload",
+                "Request payload",
+                VariableType::Struct,
+            );
+            node.add_output_pin("_client", "Client", "Client", VariableType::Struct);
+            node
+        }
+
+        async fn run(&self, context: &mut ExecutionContext) -> flow_like_types::Result<()> {
+            let payload: Value = context.evaluate_pin("payload").await?;
+            context.set_result(payload);
+            Ok(())
+        }
+    }
+
     fn mcp_handler() -> Arc<InternalNode> {
         let mut node = Node::new(
             "test_mcp_handler",
@@ -2334,6 +2348,12 @@ mod tests {
             VariableType::String,
         );
         node.add_output_pin("_client", "Client", "Client", VariableType::Struct);
+        node.add_output_pin(
+            "payload",
+            "Payload",
+            "Request payload",
+            VariableType::Struct,
+        );
         internal_node_with_logic(node, Arc::new(McpEchoLogic))
     }
 
@@ -2413,6 +2433,41 @@ mod tests {
                 .get("_client")
                 .is_none()
         );
+        assert!(
+            response["result"]["tools"][0]["inputSchema"]["properties"]
+                .get("payload")
+                .is_none()
+        );
+    }
+
+    #[tokio::test]
+    async fn mcp_tool_without_arguments_hides_framework_pins_and_receives_payload() {
+        let handler =
+            internal_node_with_logic(McpPayloadLogic.get_node(), Arc::new(McpPayloadLogic));
+        let parent = internal_node(McpServerNode::new().get_node());
+        let context = test_context(parent, vec![handler.clone()]).await;
+        let tools = build_tool_contexts(&context, &[handler.node_id().to_string()]).await;
+        let tool = tools.get("list_notes").expect("registered tool");
+
+        assert_eq!(tool.schema["type"], json!("object"));
+        assert_eq!(tool.schema["properties"], json!({}));
+        assert!(tool.argument_aliases.is_empty());
+
+        let response = tool_call_response(
+            Some(json!(1)),
+            json!({"name": "list_notes"}),
+            &tools,
+            "parent",
+            &json!({"protocol": "mcp"}),
+        )
+        .await;
+
+        assert_eq!(response["result"]["isError"], json!(false));
+        let payload: Value = flow_like_types::json::from_str(
+            response["result"]["content"][0]["text"].as_str().unwrap(),
+        )
+        .unwrap();
+        assert_eq!(payload, json!({"_client": {"protocol": "mcp"}}));
     }
 
     #[tokio::test]

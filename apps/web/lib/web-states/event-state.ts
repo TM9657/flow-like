@@ -657,6 +657,19 @@ export class WebEventState implements IEventState {
 		}
 	}
 
+	async invokeMcp(
+		appId: string,
+		eventId: string,
+		method: string,
+		params?: Record<string, unknown>,
+	): Promise<Record<string, unknown>> {
+		return apiPost<Record<string, unknown>>(
+			`apps/${appId}/events/${eventId}/mcp-operation`,
+			{ method, params: params ?? {}, profile_id: this.backend.profile?.id },
+			this.backend.auth,
+		);
+	}
+
 	async cancelExecution(runId: string): Promise<void> {
 		await apiPost(`runs/${runId}/cancel`, undefined, this.backend.auth);
 	}

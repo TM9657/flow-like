@@ -160,6 +160,11 @@ import {
 	resolveOpenAppPageRequest,
 } from "./app-event-interface";
 import {
+	callMcpAppTool,
+	describeMcpAppInterface,
+	isMcpAppEvent,
+} from "./app-mcp-interface";
+import {
 	type DetachedPageLookup,
 	assertDetachedWriteSafe,
 	findPersistedPage,
@@ -2703,8 +2708,25 @@ export function GlobalToolBridge() {
 					}
 					const kind = classifyAppEventInterface(event);
 					const consumerTool = consumerToolForEventKind(kind);
+					let mcp:
+						| Awaited<ReturnType<typeof describeMcpAppInterface>>
+						| undefined;
+					let interfaceError: string | undefined;
+					if (isMcpAppEvent(event.event_type)) {
+						try {
+							mcp = await describeMcpAppInterface(
+								backend.eventState,
+								appId,
+								eventId,
+							);
+						} catch (error) {
+							interfaceError = getErrorMessage(error);
+						}
+					}
 					return {
-						status: "ok",
+						status: interfaceError ? "partial" : "ok",
+						...(interfaceError ? { interface_error: interfaceError } : {}),
+						...(mcp ? { mcp } : {}),
 						event: {
 							id: event.id,
 							name: event.name,
@@ -3289,6 +3311,16 @@ export function GlobalToolBridge() {
 							status: "error",
 							message: `Event '${eventId}' is a chat interface — use call_app_chat instead.`,
 						};
+					if (isMcpAppEvent(event.event_type)) {
+						scope.referenceApp(appId);
+						return callMcpAppTool(backend.eventState, appId, eventId, args);
+					}
+					if (args.mcp_tool !== undefined) {
+						return {
+							status: "error",
+							message: `Event '${eventId}' is not an MCP interface. Read describe_app_interface again before calling it.`,
+						};
+					}
 
 					const payload =
 						args.payload && typeof args.payload === "object"

@@ -1335,6 +1335,36 @@ export class EventState implements IEventState {
 		return undefined;
 	}
 
+	async invokeMcp(
+		appId: string,
+		eventId: string,
+		method: string,
+		params?: Record<string, unknown>,
+	): Promise<Record<string, unknown>> {
+		if (
+			!this.backend.profile ||
+			!this.backend.auth?.isAuthenticated ||
+			!this.backend.auth.user?.access_token
+		) {
+			throw new Error(
+				"Hosted MCP operations require an authenticated hub session",
+			);
+		}
+		return fetcher<Record<string, unknown>>(
+			this.backend.profile,
+			`apps/${appId}/events/${eventId}/mcp-operation`,
+			{
+				method: "POST",
+				body: JSON.stringify({
+					method,
+					params: params ?? {},
+					profile_id: this.backend.profile.id,
+				}),
+			},
+			this.backend.auth,
+		);
+	}
+
 	async cancelExecution(runId: string): Promise<void> {
 		await invoke("cancel_execution", {
 			runId: runId,

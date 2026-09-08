@@ -92,6 +92,46 @@ pub(crate) struct ProxyCallerContext {
     /// registration-authenticated caller is not a Flow-Like principal, and
     /// inventing one would make permission gates pass for the public internet.
     pub user_context: Option<UserExecutionContext>,
+    /// Set only by the member operation endpoint after app permission checks.
+    pub member: Option<MemberExecutionIdentity>,
+}
+
+#[derive(Clone)]
+pub(crate) struct MemberExecutionIdentity {
+    pub user_id: String,
+    pub technical_user_id: Option<String>,
+    pub profile_id: Option<String>,
+    pub token: Option<String>,
+}
+
+impl ProxyCallerContext {
+    fn uses_sink_credentials(&self) -> bool {
+        self.member.is_none()
+    }
+
+    fn dispatch_trigger(&self) -> DispatchTrigger {
+        if self.member.is_some() {
+            DispatchTrigger::User
+        } else {
+            DispatchTrigger::System
+        }
+    }
+
+    fn execution_identity(
+        &self,
+        sink_user_id: Option<String>,
+        fallback_subject: String,
+    ) -> (Option<String>, String, Option<String>) {
+        if let Some(member) = &self.member {
+            return (
+                Some(member.user_id.clone()),
+                member.user_id.clone(),
+                member.technical_user_id.clone(),
+            );
+        }
+        let subject = sink_user_id.clone().unwrap_or(fallback_subject);
+        (sink_user_id, subject, None)
+    }
 }
 
 const INBOUND_RESULT_TIMEOUT: Duration = Duration::from_secs(120);
@@ -993,6 +1033,72 @@ fn normalize_inbound_path(path: &str) -> String {
     } else {
         format!("/{path}")
     }
+}
+
+/// Use the published stable MCP contract for a caller authorized to execute this app.
+/// The HTTP MCP surfaces keep their separate exposure and registration-auth policies.
+pub(crate) async fn dispatch_member_mcp_operation(
+    state: &AppState,
+    event_row: &event::Model,
+    method: &str,
+    params: Value,
+    member: MemberExecutionIdentity,
+    user_context: UserExecutionContext,
+) -> Result<Value, ApiError> {
+    if !event_row.active || event_row.event_type != "mcp" {
+        return Err(ApiError::not_found("MCP event not found or inactive"));
+    }
+    let core_event = db_model_to_event(event_row.clone()).map_err(ApiError::internal_error)?;
+    let served = stable_serving(state, event_row, &core_event)
+        .await?
+        .ok_or_else(|| ApiError::not_found("MCP event has no completed setup"))?;
+    let registration = event_remote_registration::Entity::find()
+        .filter(event_remote_registration::Column::AppId.eq(&event_row.app_id))
+        .filter(event_remote_registration::Column::EventId.eq(&event_row.id))
+        .filter(event_remote_registration::Column::EventVersion.eq(&served.version))
+        .filter(event_remote_registration::Column::Variant.eq(STABLE_VARIANT))
+        .filter(event_remote_registration::Column::Kind.eq("mcp_raw"))
+        .one(&state.db)
+        .await?
+        .ok_or_else(|| ApiError::not_found("No MCP registration found"))?;
+    let config = registration.extras_json.unwrap_or_else(|| json!({}));
+    let client = json!({
+        "protocol": "mcp",
+        "proxy": {"via": "app_member", "sub": member.user_id},
+    });
+    let caller = ProxyCallerContext {
+        member: Some(member),
+        user_context: Some(user_context),
+        ..Default::default()
+    };
+    let response = dispatch_mcp_json_rpc(
+        state,
+        event_row,
+        &served.target,
+        &config,
+        &json!({"jsonrpc": "2.0", "id": 1, "method": method, "params": params}),
+        &client,
+        &caller,
+    )
+    .await?;
+    member_mcp_result(response)
+}
+
+fn member_mcp_result(response: Option<Value>) -> Result<Value, ApiError> {
+    let response =
+        response.ok_or_else(|| ApiError::internal("MCP operation returned no result"))?;
+    if let Some(error) = response.get("error") {
+        let message = error
+            .get("message")
+            .and_then(Value::as_str)
+            .unwrap_or("MCP operation failed");
+        return Err(ApiError::bad_request(message));
+    }
+    response
+        .get("result")
+        .filter(|result| result.is_object())
+        .cloned()
+        .ok_or_else(|| ApiError::internal("MCP operation returned an invalid result"))
 }
 
 fn inbound_base_path(slug_or_id: &str) -> String {
@@ -2159,20 +2265,28 @@ async fn dispatch_event_collect(
         return Err(ApiError::not_found("event sink is inactive"));
     }
 
-    let token = sink
+    let token = caller
+        .member
         .as_ref()
-        .and_then(|sink| sink.pat_encrypted.as_ref())
-        .and_then(|encrypted| decrypt_token(encrypted, &state.encryption_key));
-    let actor_user_id = if let Some(sink) = sink.as_ref() {
+        .and_then(|member| member.token.clone())
+        .or_else(|| {
+            sink.as_ref()
+                .filter(|_| caller.uses_sink_credentials())
+                .and_then(|sink| sink.pat_encrypted.as_ref())
+                .and_then(|encrypted| decrypt_token(encrypted, &state.encryption_key))
+        });
+    let sink_user_id = if let Some(sink) = sink.as_ref().filter(|_| caller.uses_sink_credentials())
+    {
         resolve_sink_pat_user_id(state, sink, token.as_deref()).await?
     } else {
         None
     };
-    let executor_subject = actor_user_id.clone().unwrap_or_else(|| {
+    let (actor_user_id, executor_subject, technical_user_id) = caller.execution_identity(
+        sink_user_id,
         sink.as_ref()
             .map(|sink| format!("sink:{}", sink.id))
-            .unwrap_or_else(|| format!("inbound:{}", event_row.id))
-    });
+            .unwrap_or_else(|| format!("inbound:{}", event_row.id)),
+    );
 
     let credentials = state
         .scoped_credentials(
@@ -2187,6 +2301,7 @@ async fn dispatch_event_collect(
 
     let oauth_tokens: Option<std::collections::HashMap<String, serde_json::Value>> = sink
         .as_ref()
+        .filter(|_| caller.uses_sink_credentials())
         .and_then(|sink| sink.oauth_tokens_encrypted.as_ref())
         .and_then(|encrypted| decrypt_token(encrypted, &state.encryption_key))
         .and_then(|json| serde_json::from_str(&json).ok());
@@ -2222,7 +2337,7 @@ async fn dispatch_event_collect(
         std::env::var("API_BASE_URL").unwrap_or_else(|_| "http://localhost:8080".to_string());
     let executor_jwt = sign_execution_jwt(ExecutionJwtParams {
         user_id: executor_subject.clone(),
-        technical_user_id: None,
+        technical_user_id: technical_user_id.clone(),
         run_id: run_id.clone(),
         app_id: event_row.app_id.clone(),
         board_id: board_id.clone(),
@@ -2266,11 +2381,19 @@ async fn dispatch_event_collect(
         stream_state: false,
         execution_mode: Some(flow_like::flow::execution::ExecutionMode::Event),
         runtime_variables: None,
-        // Present only for app-connection proxy calls. `user_id` above stays the
-        // sink/inbound subject on purpose: it scopes the storage credentials,
-        // and the passed-through user is frequently not a member of this app.
+        // Proxy callers keep the connection's role; member operations carry
+        // the same identity and app role as direct event invocation.
         user_context: caller.user_context.clone(),
-        profile: {
+        profile: if let Some(member) = &caller.member {
+            crate::execution::fetch_profile_for_dispatch(
+                state,
+                &member.user_id,
+                member.profile_id.as_deref(),
+                &event_row.app_id,
+                true,
+            )
+            .await
+        } else {
             let mut profile = sink.as_ref().and_then(|sink| sink.profile_json.clone());
             if let Some(profile_json) = profile.as_mut() {
                 crate::execution::hydrate_profile_custom_bit_secrets(state, profile_json).await;
@@ -2279,8 +2402,7 @@ async fn dispatch_event_collect(
         },
         wasm_packages,
         channel: None,
-        // An external REST/MCP caller, not a Flow-Like client.
-        trigger: DispatchTrigger::System,
+        trigger: caller.dispatch_trigger(),
         shadow: false,
         artifact: None,
     };
@@ -2309,7 +2431,7 @@ async fn dispatch_event_collect(
         completed_at: Set(None),
         expires_at: Set(Some(now + chrono::Duration::hours(24))),
         user_id: Set(actor_user_id),
-        technical_user_id: Set(None),
+        technical_user_id: Set(technical_user_id),
         caller_app_chain: Set(caller.app_chain.clone().map(Into::into)),
         trace_id: Set(correlation.trace_id.clone()),
         parent_run_id: Set(parent_run_id.clone()),
@@ -3385,13 +3507,6 @@ fn tool_metadata(
     };
     let name = sanitize_identifier(name_source);
     let description = resolved_mcp_description(&node.description, board_refs);
-    let has_non_payload_data_pin = node.pins.values().any(|pin| {
-        pin.pin_type == PinType::Output
-            && pin.data_type != VariableType::Execution
-            && pin.name != "payload"
-            && pin.name != "_client"
-    });
-
     let mut properties = serde_json::Map::new();
     let mut argument_aliases = HashMap::new();
     let mut used_argument_names = std::collections::HashSet::new();
@@ -3399,7 +3514,7 @@ fn tool_metadata(
         if pin.pin_type != PinType::Output || pin.data_type == VariableType::Execution {
             continue;
         }
-        if pin.name == "_client" || (pin.name == "payload" && has_non_payload_data_pin) {
+        if pin.name == "_client" || pin.name == "payload" {
             continue;
         }
         let argument_name = unique_tool_argument_name(pin, &used_argument_names);
@@ -4018,6 +4133,115 @@ mod tests {
         parse_query_single, registration_auth_headers, rest_args_from_body_and_query,
         with_inbound_openapi_server,
     };
+
+    #[test]
+    fn member_mcp_operations_preserve_results_and_surface_protocol_errors() {
+        let result = json!({"content": [{"type": "text", "text": "[]"}], "isError": false});
+        assert_eq!(
+            super::member_mcp_result(Some(json!({"jsonrpc": "2.0", "id": 1, "result": result})))
+                .unwrap(),
+            result
+        );
+        let failure = json!({"content": [{"type": "text", "text": "failed"}], "isError": true});
+        assert_eq!(
+            super::member_mcp_result(Some(json!({"result": failure}))).unwrap(),
+            failure
+        );
+        let error = super::member_mcp_result(Some(json!({"error": {
+            "code": -32602, "message": "Unknown tool: private_function"
+        }})))
+        .unwrap_err();
+        assert_eq!(error.status(), axum::http::StatusCode::BAD_REQUEST);
+        assert_eq!(
+            error.public_message(),
+            Some("Unknown tool: private_function")
+        );
+        assert!(super::member_mcp_result(None).is_err());
+    }
+
+    #[test]
+    fn member_mcp_dispatch_uses_member_identity_and_never_sink_credentials() {
+        let caller = ProxyCallerContext {
+            member: Some(super::MemberExecutionIdentity {
+                user_id: "member".to_string(),
+                technical_user_id: Some("api-key".to_string()),
+                profile_id: Some("selected-profile".to_string()),
+                token: None,
+            }),
+            ..Default::default()
+        };
+        assert!(!caller.uses_sink_credentials());
+        assert!(matches!(
+            caller.dispatch_trigger(),
+            super::DispatchTrigger::User
+        ));
+        assert_eq!(
+            caller.execution_identity(Some("sink-owner".to_string()), "sink:id".to_string()),
+            (
+                Some("member".to_string()),
+                "member".to_string(),
+                Some("api-key".to_string())
+            )
+        );
+
+        let external = ProxyCallerContext::default();
+        assert!(external.uses_sink_credentials());
+        assert!(matches!(
+            external.dispatch_trigger(),
+            super::DispatchTrigger::System
+        ));
+        assert_eq!(
+            external.execution_identity(Some("sink-owner".to_string()), "sink:id".to_string()),
+            (
+                Some("sink-owner".to_string()),
+                "sink-owner".to_string(),
+                None
+            )
+        );
+        assert_eq!(
+            external.execution_identity(None, "inbound:event".to_string()),
+            (None, "inbound:event".to_string(), None)
+        );
+    }
+
+    #[test]
+    fn mcp_tool_schema_excludes_framework_pins_with_or_without_arguments() {
+        let mut node = super::Node::new("list_notes", "List Notes", "List notes", "Tests");
+        node.add_output_pin(
+            "exec_out",
+            "Exec",
+            "Execute",
+            super::VariableType::Execution,
+        );
+        node.add_output_pin(
+            "payload",
+            "Payload",
+            "Request payload",
+            super::VariableType::Struct,
+        );
+        node.add_output_pin("_client", "Client", "Client", super::VariableType::Struct);
+        let refs = super::HashMap::new();
+
+        let (_, _, schema, aliases) = super::tool_metadata(&node, &refs);
+        assert_eq!(schema["type"], json!("object"));
+        assert_eq!(schema["properties"], json!({}));
+        assert!(aliases.is_empty());
+
+        node.add_output_pin(
+            "note_limit",
+            "Limit",
+            "Maximum notes",
+            super::VariableType::Integer,
+        );
+        let (_, _, schema, aliases) = super::tool_metadata(&node, &refs);
+        assert_eq!(
+            schema["properties"],
+            json!({"limit": {"type": "integer", "description": "Maximum notes"}})
+        );
+        assert_eq!(aliases.get("limit").map(String::as_str), Some("note_limit"));
+        assert!(!aliases.contains_key("payload"));
+        assert!(!aliases.contains_key("_client"));
+    }
 
     #[test]
     fn inbound_base_path_encodes_the_route_key() {

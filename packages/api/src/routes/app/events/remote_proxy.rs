@@ -47,6 +47,7 @@ fn proxy_caller(user: &AppUser, permission: &AppPermissionResponse) -> ProxyCall
             parent_run_id: app.run_id.clone(),
             correlation: app.correlation.clone(),
             user_context: Some(permission.to_user_context()),
+            ..Default::default()
         },
         _ => ProxyCallerContext::default(),
     }
