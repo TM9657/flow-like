@@ -8,9 +8,9 @@ use crate::{
 };
 use axum::{
     Extension, Json, Router,
-    extract::State,
+    extract::{DefaultBodyLimit, State},
     response::sse::{Event, KeepAlive, Sse},
-    routing::post,
+    routing::{MethodRouter, post},
 };
 use base64::{Engine, engine::general_purpose::STANDARD};
 use flow_like::a2ui::SurfaceComponent;
@@ -39,8 +39,13 @@ use std::{convert::Infallible, sync::Arc, time::Duration};
 use super::global_chat::{GlobalChatFrame, ServerPlatformBridge};
 
 pub fn routes() -> Router<AppState> {
+    chat_routes(post(copilot_chat))
+}
+
+fn chat_routes<S: Clone + Send + Sync + 'static>(chat: MethodRouter<S>) -> Router<S> {
     Router::new()
-        .route("/chat", post(copilot_chat))
+        .route("/chat", chat)
+        .layer(DefaultBodyLimit::max(MAX_COPILOT_BODY_BYTES))
         .route_layer(axum::middleware::from_fn(
             crate::routes::app::board::capabilities::negotiate_board_format,
         ))
@@ -145,6 +150,9 @@ const MAX_REQUEST_IMAGES: usize = 4;
 const MAX_TOTAL_IMAGES: usize = 8;
 const MAX_IMAGE_BASE64_CHARS: usize = 7_000_000;
 const MAX_IMAGE_BYTES: usize = 5 * 1024 * 1024;
+// Images travel as base64 alongside board, UI, and history context. The JSON extractor's
+// default 2 MiB cap would reject permitted attachments before payload validation runs.
+const MAX_COPILOT_BODY_BYTES: usize = MAX_TOTAL_IMAGES * MAX_IMAGE_BASE64_CHARS + 16 * 1024 * 1024;
 const MAX_SELECTED_IDS: usize = 200;
 const MAX_SELECTED_ID_CHARS: usize = 256;
 const MAX_CONVERSATION_ID_CHARS: usize = 256;
@@ -1130,7 +1138,17 @@ mod tests {
     use super::specialist_host_context;
     use super::user_prompt_char_limit;
     use super::wait_for_channel_cancellation;
-    use super::{CopilotChatRequest, ensure_requested_profile, validate_copilot_payload};
+    use super::{
+        CopilotChatRequest, MAX_COPILOT_BODY_BYTES, MAX_IMAGE_BYTES, MAX_REQUEST_IMAGES,
+        MAX_TOTAL_IMAGES, chat_routes, ensure_requested_profile, validate_copilot_payload,
+    };
+    use axum::{
+        Json, Router,
+        body::{Body, Bytes},
+        http::{Request, StatusCode},
+        routing::post,
+    };
+    use base64::{Engine, engine::general_purpose::STANDARD};
     use flow_like::copilot::CopilotScope;
     use flow_like::flow::copilot::PlatformSpecialist;
     use flow_like_types::channel::{
@@ -1138,6 +1156,88 @@ mod tests {
     };
     use std::sync::Arc;
     use std::time::Duration;
+    use tower::ServiceExt;
+
+    async fn validate_chat_body(
+        Json(payload): Json<CopilotChatRequest>,
+    ) -> Result<StatusCode, crate::error::ApiError> {
+        validate_copilot_payload(&payload)?;
+        Ok(StatusCode::NO_CONTENT)
+    }
+
+    fn chat_request(body: impl Into<Body>) -> Request<Body> {
+        Request::builder()
+            .method("POST")
+            .uri("/chat")
+            .header("content-type", "application/json")
+            .body(body.into())
+            .unwrap()
+    }
+
+    #[tokio::test]
+    async fn copilot_body_limit_accepts_the_permitted_image_envelope() {
+        let image = serde_json::json!({
+            "media_type": "image/png",
+            "data": STANDARD.encode(vec![0_u8; MAX_IMAGE_BYTES]),
+        });
+        let body = serde_json::to_vec(&serde_json::json!({
+            "scope": "Frontend",
+            "user_prompt": "Use these references",
+            "request_images": vec![image.clone(); MAX_REQUEST_IMAGES],
+            "history": [{
+                "role": "User",
+                "content": "Earlier references",
+                "images": vec![image; MAX_TOTAL_IMAGES - MAX_REQUEST_IMAGES],
+            }],
+        }))
+        .unwrap();
+        assert!(body.len() > 2 * 1024 * 1024);
+
+        let before = Router::new()
+            .route("/chat", post(validate_chat_body))
+            .oneshot(chat_request(body.clone()))
+            .await
+            .unwrap();
+        assert_eq!(before.status(), StatusCode::PAYLOAD_TOO_LARGE);
+
+        let after = chat_routes(post(validate_chat_body))
+            .oneshot(chat_request(body))
+            .await
+            .unwrap();
+        assert_eq!(after.status(), StatusCode::NO_CONTENT);
+    }
+
+    #[tokio::test]
+    async fn copilot_body_limit_preserves_individual_image_validation() {
+        let body = serde_json::to_vec(&serde_json::json!({
+            "scope": "Frontend",
+            "user_prompt": "Use this reference",
+            "request_images": [{
+                "media_type": "image/png",
+                "data": STANDARD.encode(vec![0_u8; MAX_IMAGE_BYTES + 1]),
+            }],
+        }))
+        .unwrap();
+        let response = chat_routes(post(validate_chat_body))
+            .oneshot(chat_request(body))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    }
+
+    #[tokio::test]
+    async fn copilot_body_limit_rejects_oversized_streamed_requests() {
+        let chunk = Bytes::from(vec![b' '; 1024 * 1024]);
+        let chunks = MAX_COPILOT_BODY_BYTES / chunk.len() + 1;
+        let body = Body::from_stream(futures::stream::iter(
+            (0..chunks).map(move |_| Ok::<_, std::convert::Infallible>(chunk.clone())),
+        ));
+        let response = chat_routes(post(validate_chat_body))
+            .oneshot(chat_request(body))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::PAYLOAD_TOO_LARGE);
+    }
 
     #[test]
     fn explicit_copilot_profile_never_falls_back_to_another_profile() {

@@ -3979,6 +3979,8 @@ export function GlobalToolBridge() {
 							{
 								appId,
 								overlayId,
+								profileId:
+									request.context?.profileId ?? request.context?.profile_id,
 								parentRequestId: request.requestId,
 								conversationId: owningConversationId,
 								runId: scope.runId,
@@ -4147,6 +4149,8 @@ export function GlobalToolBridge() {
 							// survives the read-only filter.
 							true /* readOnly */,
 							{
+								profileId:
+									request.context?.profileId ?? request.context?.profile_id,
 								parentRequestId: request.requestId,
 								conversationId: owningConversationId,
 								// Use a sealed child authorization view. It is fresh even when a local
@@ -4320,6 +4324,8 @@ export function GlobalToolBridge() {
 							true /* readOnly */,
 							{
 								appId: scoutAppId || undefined,
+								profileId:
+									request.context?.profileId ?? request.context?.profile_id,
 								parentRequestId: request.requestId,
 								conversationId: owningConversationId,
 								runId: scope.runId,
@@ -5009,6 +5015,8 @@ Completion contract: build complete helper logic first and add the Event entry l
 								{
 									appId,
 									boardId,
+									profileId:
+										request.context?.profileId ?? request.context?.profile_id,
 									parentRequestId: request.requestId,
 									conversationId: owningConversationId,
 									runId: scope.runId,
@@ -6405,6 +6413,8 @@ Completion contract: build complete helper logic first and add the Event entry l
 							{
 								appId,
 								boardId,
+								profileId:
+									request.context?.profileId ?? request.context?.profile_id,
 								parentRequestId: request.requestId,
 								conversationId: owningConversationId,
 								runId: scope.runId,

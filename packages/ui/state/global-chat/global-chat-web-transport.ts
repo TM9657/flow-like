@@ -41,6 +41,45 @@ export type WebToolResponse = FrontendToolResponse;
 
 const DEFAULT_TOOL_RESULT_DELIVERY_TIMEOUT_MS = 30_000;
 const DEFAULT_TOOL_EXECUTION_TIMEOUT_MS = 10 * 60_000;
+// Keep outgoing text history within the `/ai/global-chat` request limits.
+const MAX_HISTORY_MESSAGES = 32;
+const MAX_HISTORY_MESSAGE_CHARS = 8_000;
+const HISTORY_CLIP_MARKER = "\n[Middle of earlier message omitted]\n";
+
+interface GlobalChatHistoryMessage {
+	role: string;
+	content: string;
+}
+
+function budgetHistory(history: readonly GlobalChatHistoryMessage[]) {
+	let recent = history.slice(-MAX_HISTORY_MESSAGES);
+	if (history.length > MAX_HISTORY_MESSAGES) {
+		const originalRequest = history.findIndex(
+			(message) => message.role.toLowerCase() === "user",
+		);
+		if (
+			originalRequest >= 0 &&
+			originalRequest < history.length - recent.length
+		) {
+			// Retain the original goal alongside the freshest turns.
+			recent = [
+				history[originalRequest],
+				...history.slice(-(MAX_HISTORY_MESSAGES - 1)),
+			];
+		}
+	}
+	return recent.map((message) => {
+		// Rust validates Unicode scalar values; UTF-16 slicing would split some characters.
+		const characters = Array.from(message.content);
+		if (characters.length <= MAX_HISTORY_MESSAGE_CHARS) return message;
+		const budget = MAX_HISTORY_MESSAGE_CHARS - HISTORY_CLIP_MARKER.length;
+		const head = Math.ceil(budget / 2);
+		return {
+			...message,
+			content: `${characters.slice(0, head).join("")}${HISTORY_CLIP_MARKER}${characters.slice(-(budget - head)).join("")}`,
+		};
+	});
+}
 
 export interface ToolDispatchOptions {
 	/**
@@ -70,8 +109,12 @@ export interface WebGlobalChatOptions extends ToolDispatchOptions {
 	baseUrl: string;
 	/** The user's access token (OpenID). Required — hosted Bit models are billed against it. */
 	token?: string;
+	/** Active profile captured when the user sent this turn, also used by delegated tools. */
+	profileId?: string;
 	/** POST body for `/ai/global-chat` (userPrompt, history, modelId, embeddingModelId, …). */
-	body: Record<string, unknown>;
+	body: Record<string, unknown> & {
+		history?: readonly GlobalChatHistoryMessage[];
+	};
 	/**
 	 * The run id the FRONTEND minted (the assistant message id). The server mints its own and hands
 	 * it back in the `run` frame; only this transport sees both. It uses the client id to register
@@ -441,7 +484,7 @@ export async function dispatchSpecialistToolRequest(params: {
  */
 export function webGlobalChatStart(options: WebGlobalChatOptions) {
 	return async (onChunk: (chunk: string) => void): Promise<unknown> => {
-		const { baseUrl, token, body } = options;
+		const { baseUrl, token, body, profileId } = options;
 		const authHeaders: Record<string, string> = token
 			? { authorization: `Bearer ${token}` }
 			: {};
@@ -491,7 +534,11 @@ export function webGlobalChatStart(options: WebGlobalChatOptions) {
 					accept: "text/event-stream",
 					...authHeaders,
 				},
-				body: JSON.stringify(body),
+				body: JSON.stringify({
+					...body,
+					...(profileId ? { profile_id: profileId } : {}),
+					...(body.history ? { history: budgetHistory(body.history) } : {}),
+				}),
 				signal: streamAbort.signal,
 			});
 
@@ -623,13 +670,17 @@ export function webGlobalChatStart(options: WebGlobalChatOptions) {
 						}
 						seenToolRequestIds.add(request.requestId);
 						// The server knows only its own run id, so stamp ours on the way through:
-						// the bridge routes every store write this tool performs by it.
-						if (options.clientRunId) {
+						// the bridge routes every store write this tool performs by it. Keep tools
+						// on the launching profile if the active profile changes during the run.
+						if (options.clientRunId || profileId) {
 							request = {
 								...request,
 								context: {
 									...request.context,
-									runId: options.clientRunId,
+									...(options.clientRunId
+										? { runId: options.clientRunId }
+										: {}),
+									...(profileId ? { profileId } : {}),
 								},
 							};
 						}

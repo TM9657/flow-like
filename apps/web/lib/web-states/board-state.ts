@@ -609,6 +609,7 @@ export class WebBoardState implements IBoardState {
 
 		const headers: Record<string, string> = {
 			"Content-Type": "application/json",
+			[BOARD_FORMAT_HEADER]: String(CURRENT_BOARD_FORMAT_VERSION),
 		};
 		if (this.backend.auth?.user?.access_token) {
 			headers["Authorization"] =
@@ -638,7 +639,8 @@ export class WebBoardState implements IBoardState {
 			});
 
 			if (!response.ok) {
-				throw new Error(`Execution failed: ${response.status}`);
+				const body = await response.text().catch(() => "");
+				throw apiResponseError(response, body, url);
 			}
 
 			let foundRunId = false;
@@ -708,7 +710,8 @@ export class WebBoardState implements IBoardState {
 							// Forward event to callback as array (consistent with local execution)
 							if (cb) cb([event]);
 
-							// Check for terminal events
+							// Completion can share a network chunk with trailing output or usage.
+							// Keep delivering the rest of the decoded batch.
 							if (
 								eventName === "done" ||
 								eventName === "completed" ||
@@ -716,12 +719,9 @@ export class WebBoardState implements IBoardState {
 							) {
 								executionFinished = true;
 								finishAllProgressToasts(true);
-								break;
-							}
-							if (event.event_type === "error") {
+							} else if (event.event_type === "error") {
 								executionFinished = true;
 								finishAllProgressToasts(false);
-								break;
 							}
 						} catch {
 							// Ignore parse errors

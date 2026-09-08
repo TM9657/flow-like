@@ -542,6 +542,7 @@ export function GlobalChatBody({ variant = "page" }: GlobalChatBodyProps) {
 				selectedModelId: state.selectedModelId,
 				reasoningEffort: state.reasoningEffort,
 			});
+			const launchingProfileId = settingsProfileRef.current?.hub_profile.id;
 
 			// Any file type is accepted: files become local tmp files (Tauri) or presigned tmp
 			// uploads — only URLs travel through IPC and land in IndexedDB, no blobs. FlowPilot
@@ -766,6 +767,7 @@ export function GlobalChatBody({ variant = "page" }: GlobalChatBodyProps) {
 					: webGlobalChatStart({
 							baseUrl: getApiOrigin(),
 							token: authUser?.access_token ?? undefined,
+							profileId: launchingProfileId,
 							// The server mints its own run id; the transport needs ours to tag tool
 							// requests and to register this run's cancel/steer control.
 							clientRunId: responseMessage.id,
