@@ -9,6 +9,7 @@ pub mod get_event_versions;
 pub mod get_events;
 pub mod invoke_event;
 pub mod invoke_event_async;
+pub mod mcp_operation;
 pub mod page_trigger;
 pub mod prerun_event;
 pub mod registrations;
@@ -153,6 +154,10 @@ pub fn routes() -> Router<AppState> {
         .route("/{event_id}/rest", any(remote_proxy::proxy_rest_root))
         .route("/{event_id}/rest/{*path}", any(remote_proxy::proxy_rest))
         .route("/{event_id}/mcp", any(remote_proxy::proxy_mcp))
+        .route(
+            "/{event_id}/mcp-operation",
+            post(mcp_operation::invoke_mcp_operation),
+        )
         .route("/{event_id}/mcp/{*path}", any(remote_proxy::proxy_mcp_path))
         .route("/{event_id}/alias", get(alias::list_aliases))
         .route(

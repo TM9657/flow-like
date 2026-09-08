@@ -308,6 +308,7 @@ struct OpenIdValidationSettings {
     jwks_url: String,
     tenant_id: Option<uuid::Uuid>,
     leeway: u64,
+    require_access_token_use: bool,
 }
 
 /// Statement pinning a pooled Postgres session to UTC.
@@ -1166,6 +1167,43 @@ impl State {
 
     pub(crate) async fn validate_token(&self, token: &str) -> Result<ValidatedOpenIdToken> {
         let settings = self.openid_validation_settings()?;
+        let claims = self.decode_openid_token(token, &settings).await?;
+        let expires_at = validate_openid_claims(
+            &claims,
+            &settings.issuer,
+            &settings.client_ids,
+            &settings.audience,
+            settings.tenant_id,
+            chrono::Utc::now().timestamp(),
+            settings.leeway,
+        )?;
+
+        Ok(ValidatedOpenIdToken { claims, expires_at })
+    }
+
+    pub(crate) async fn validate_mcp_token(
+        &self,
+        token: &str,
+        audience: &str,
+    ) -> Result<ValidatedOpenIdToken> {
+        exact_nonempty_str("MCP audience", audience)?;
+        let settings = self.openid_validation_settings()?;
+        let claims = self.decode_openid_token(token, &settings).await?;
+        let expires_at = validate_mcp_openid_claims(
+            &claims,
+            &settings,
+            audience,
+            chrono::Utc::now().timestamp(),
+        )?;
+
+        Ok(ValidatedOpenIdToken { claims, expires_at })
+    }
+
+    async fn decode_openid_token(
+        &self,
+        token: &str,
+        settings: &OpenIdValidationSettings,
+    ) -> Result<HashMap<String, Value>> {
         let header = jsonwebtoken::decode_header(token)?;
         ensure_allowed_oidc_algorithm(header.alg)?;
         let kid = header
@@ -1188,21 +1226,7 @@ impl State {
         validation.set_issuer(&[&settings.issuer]);
         validation.set_required_spec_claims(&["exp", "iss", "sub"]);
 
-        let decoded = decode::<HashMap<String, Value>>(token, &decoding_key, &validation)?;
-        let expires_at = validate_openid_claims(
-            &decoded.claims,
-            &settings.issuer,
-            &settings.client_ids,
-            &settings.audience,
-            settings.tenant_id,
-            chrono::Utc::now().timestamp(),
-            settings.leeway,
-        )?;
-
-        Ok(ValidatedOpenIdToken {
-            claims: decoded.claims,
-            expires_at,
-        })
+        Ok(decode::<HashMap<String, Value>>(token, &decoding_key, &validation)?.claims)
     }
 
     #[tracing::instrument(
@@ -1663,6 +1687,7 @@ fn openid_validation_settings_for_hub(
         audience: audience.to_string(),
         jwks_url: jwks_url.to_string(),
         leeway: overrides.leeway_seconds,
+        require_access_token_use: config.cognito.is_some(),
     })
 }
 
@@ -1980,6 +2005,41 @@ fn validate_openid_claims(
     Ok(expires_at)
 }
 
+fn validate_mcp_openid_claims(
+    claims: &HashMap<String, Value>,
+    settings: &OpenIdValidationSettings,
+    audience: &str,
+    now: i64,
+) -> Result<i64> {
+    exact_nonempty_str("MCP audience", audience)?;
+    // Resource-bound access tokens must identify both this MCP endpoint and
+    // an OAuth client trusted by the deployment.
+    if !claims.contains_key("aud") {
+        bail!("MCP access token has no audience");
+    }
+    if !["client_id", "azp", "appid"]
+        .iter()
+        .any(|claim| claims.contains_key(*claim))
+    {
+        bail!("MCP access token has no OAuth client identifier");
+    }
+    match claims.get("token_use") {
+        Some(Value::String(purpose)) if purpose == "access" => {}
+        None if !settings.require_access_token_use => {}
+        _ => bail!("MCP requires an access token"),
+    }
+
+    validate_openid_claims(
+        claims,
+        &settings.issuer,
+        &settings.client_ids,
+        audience,
+        settings.tenant_id,
+        now,
+        settings.leeway,
+    )
+}
+
 pub(crate) fn cached_openid_is_current(exp: i64, now: i64) -> bool {
     exp > now
 }
@@ -1997,10 +2057,10 @@ fn decoding_key_for_algorithm(alg: &AlgorithmParameters) -> flow_like_types::Res
 #[cfg(test)]
 mod tests {
     use super::{
-        board_mutation_lock_id, board_mutation_lock_key, cached_openid_is_current,
-        course_attempt_lock_id, entra_tenant_from_issuer, execution_credential_lifetime,
-        flow_ir_draft_store_key, validate_jwk_for_header, validate_jwks_set,
-        validate_openid_claims,
+        OpenIdValidationSettings, board_mutation_lock_id, board_mutation_lock_key,
+        cached_openid_is_current, course_attempt_lock_id, entra_tenant_from_issuer,
+        execution_credential_lifetime, flow_ir_draft_store_key, validate_jwk_for_header,
+        validate_jwks_set, validate_mcp_openid_claims, validate_openid_claims,
     };
     use flow_like_types::Value;
     use jsonwebtoken::{
@@ -2024,6 +2084,8 @@ mod tests {
         document["authentication"]["openid"]["additional_client_ids"] =
             serde_json::json!(["second-runtime-client"]);
         document["authentication"]["openid"]["leeway_seconds"] = serde_json::json!(3);
+        document["authentication"]["openid"]["cognito"] =
+            serde_json::json!({"user_pool_id": "eu-west-1_example"});
         let config = crate::runtime_config::EffectiveConfig::parse(&document.to_string()).unwrap();
         let settings =
             super::openid_validation_settings_for_hub(&config.hub, &config.openid).unwrap();
@@ -2038,6 +2100,7 @@ mod tests {
             client_ids(&["runtime-client", "second-runtime-client"])
         );
         assert_eq!(settings.leeway, 3);
+        assert!(settings.require_access_token_use);
 
         document["authentication"]["openid"]
             .as_object_mut()
@@ -2047,11 +2110,16 @@ mod tests {
             .as_object_mut()
             .unwrap()
             .remove("leeway_seconds");
+        document["authentication"]["openid"]
+            .as_object_mut()
+            .unwrap()
+            .remove("cognito");
         let config = crate::runtime_config::EffectiveConfig::parse(&document.to_string()).unwrap();
         let settings =
             super::openid_validation_settings_for_hub(&config.hub, &config.openid).unwrap();
         assert_eq!(settings.client_ids, client_ids(&["runtime-client"]));
         assert_eq!(settings.leeway, 60);
+        assert!(!settings.require_access_token_use);
 
         document["authentication"]["openid"]["additional_client_ids"] =
             serde_json::json!([" private-invalid-client-marker "]);
@@ -2408,6 +2476,128 @@ mod tests {
             )
             .is_err()
         );
+    }
+
+    const MCP_AUDIENCE: &str = "https://api.example.test/m/server";
+
+    fn mcp_openid_settings() -> OpenIdValidationSettings {
+        OpenIdValidationSettings {
+            issuer: "https://cognito-idp.eu-west-1.amazonaws.com/eu-west-1_example".into(),
+            client_ids: client_ids(&["platform-client", "claude-client"]),
+            audience: "platform-client".into(),
+            jwks_url: "https://cognito-idp.eu-west-1.amazonaws.com/eu-west-1_example/.well-known/jwks.json".into(),
+            tenant_id: None,
+            leeway: 0,
+            require_access_token_use: true,
+        }
+    }
+
+    fn mcp_access_claims() -> HashMap<String, Value> {
+        claims(&[
+            ("iss", Value::String(mcp_openid_settings().issuer)),
+            ("sub", Value::String("cognito-user".into())),
+            ("aud", Value::String(MCP_AUDIENCE.into())),
+            ("client_id", Value::String("claude-client".into())),
+            ("token_use", Value::String("access".into())),
+            ("exp", Value::from(2_000_i64)),
+        ])
+    }
+
+    #[test]
+    fn mcp_accepts_resource_bound_cognito_access_from_additional_client() {
+        let settings = mcp_openid_settings();
+        let claims = mcp_access_claims();
+        assert_eq!(
+            validate_mcp_openid_claims(&claims, &settings, MCP_AUDIENCE, 1_000).unwrap(),
+            2_000
+        );
+        assert_eq!(
+            claims.get("sub").and_then(Value::as_str),
+            Some("cognito-user")
+        );
+        // Accepting the resource audience here must not extend platform login validation.
+        assert!(
+            validate_openid_claims(
+                &claims,
+                &settings.issuer,
+                &settings.client_ids,
+                &settings.audience,
+                settings.tenant_id,
+                1_000,
+                settings.leeway,
+            )
+            .is_err()
+        );
+    }
+
+    #[test]
+    fn mcp_rejects_wrong_issuer_resource_client_subject_and_token_purpose() {
+        let settings = mcp_openid_settings();
+        for (claim, value) in [
+            (
+                "iss",
+                Value::String("https://untrusted.example/pool".into()),
+            ),
+            ("aud", Value::String("platform-client".into())),
+            (
+                "aud",
+                Value::String("https://api.example.test/m/other".into()),
+            ),
+            ("aud", serde_json::json!([MCP_AUDIENCE, 123])),
+            ("client_id", Value::String("untrusted-client".into())),
+            ("client_id", Value::Null),
+            ("sub", Value::String(String::new())),
+            ("sub", Value::from(123)),
+            ("token_use", Value::String("id".into())),
+            ("token_use", Value::Null),
+            ("exp", Value::from(1_000_i64)),
+            ("nbf", Value::from(1_001_i64)),
+        ] {
+            let mut claims = mcp_access_claims();
+            claims.insert(claim.into(), value.clone());
+            assert!(
+                validate_mcp_openid_claims(&claims, &settings, MCP_AUDIENCE, 1_000).is_err(),
+                "accepted invalid {claim}: {value}",
+            );
+        }
+        for claim in ["iss", "aud", "client_id", "sub", "token_use", "exp"] {
+            let mut claims = mcp_access_claims();
+            claims.remove(claim);
+            assert!(
+                validate_mcp_openid_claims(&claims, &settings, MCP_AUDIENCE, 1_000).is_err(),
+                "accepted missing {claim}",
+            );
+        }
+    }
+
+    #[test]
+    fn mcp_accepts_oidc_authorized_party_and_rejects_conflicting_client_claims() {
+        let mut settings = mcp_openid_settings();
+        settings.require_access_token_use = false;
+        for client_claim in ["client_id", "azp", "appid"] {
+            let mut claims = mcp_access_claims();
+            claims.remove("token_use");
+            claims.remove("client_id");
+            claims.insert(client_claim.into(), Value::String("claude-client".into()));
+            assert!(validate_mcp_openid_claims(&claims, &settings, MCP_AUDIENCE, 1_000).is_ok());
+            for conflicting_claim in ["client_id", "azp", "appid"] {
+                let mut conflicting = claims.clone();
+                conflicting.insert(
+                    conflicting_claim.into(),
+                    Value::String("untrusted-client".into()),
+                );
+                assert!(
+                    validate_mcp_openid_claims(&conflicting, &settings, MCP_AUDIENCE, 1_000)
+                        .is_err()
+                );
+            }
+            claims.insert("token_use".into(), Value::String("id".into()));
+            assert!(validate_mcp_openid_claims(&claims, &settings, MCP_AUDIENCE, 1_000).is_err());
+        }
+        let claims = mcp_access_claims();
+        for audience in ["", " https://api.example.test/m/server"] {
+            assert!(validate_mcp_openid_claims(&claims, &settings, audience, 1_000).is_err());
+        }
     }
 
     #[test]

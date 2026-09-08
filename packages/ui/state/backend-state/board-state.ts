@@ -194,7 +194,10 @@ export interface IBoardState {
 	// [AppId, BoardId, BoardName]
 	getOpenBoards(): Promise<[string, string, string][]>;
 	getBoardSettings(): Promise<IConnectionMode>;
-	ensureAppPackagesInstalledForExecution?(appId: string): Promise<void>;
+	ensureAppPackagesInstalledForExecution?(
+		appId: string,
+		board?: IBoard,
+	): Promise<void>;
 
 	/** Undelivered local edits for one board. Absent on backends without an offline queue. */
 	getBoardSyncStatus?(

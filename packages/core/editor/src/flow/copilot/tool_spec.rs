@@ -499,6 +499,10 @@ fn ontology_action_message(args: &Value) -> String {
 
 fn call_app_event_message(args: &Value) -> String {
     let app_id = spec_arg_str(args, "app_id", "appId");
+    let mcp_tool = spec_arg_str(args, "mcp_tool", "mcpTool");
+    if !mcp_tool.is_empty() {
+        return format!("FlowPilot wants to call MCP tool '{mcp_tool}' in app '{app_id}'.");
+    }
     if app_id.is_empty() {
         "FlowPilot wants to execute an app event.".to_string()
     } else {
@@ -995,7 +999,9 @@ public-web fallback from a partial result."#,
             name: "describe_app_interface",
             description: r#"Read the full, user-readable configuration of one app event/interface (chat, MCP, REST,
 simple chat, …). Use after `list_apps` to understand HOW to call an interface: its inputs, routes,
-tools, or chat settings. Read-only."#,
+tools, or chat settings. MCP interfaces include `mcp.tools` with each registered tool's name and
+inputSchema, plus invocation instructions. The MCP server entry's inputs are not tool arguments.
+Read-only."#,
             schema: || {
                 json!({
                     "type": "object",
@@ -1058,6 +1064,9 @@ outputs and bounded logs.
 
 Use `list_apps` to find the app + event, and `describe_app_interface` to learn the expected payload
 shape first. For "chat" interfaces use `call_app_chat`; for "page" interfaces use `open_app_page`.
+For MCP interfaces, set `mcp_tool` to an exact name from `mcp.tools` and `payload` to that tool's
+arguments. Omit payload or pass {} for a tool with no arguments. The runtime fills the internal
+payload pin automatically; do not wrap arguments in a payload pin or JSON-RPC envelope.
 Executing an app event is side-effecting, so it asks for approval unless the user selected "don't ask
 again this session"."#,
             schema: || {
@@ -1066,7 +1075,8 @@ again this session"."#,
                     "properties": {
                         "app_id": { "type": "string", "description": "Id of the app whose event to execute (from list_apps)." },
                         "event_id": { "type": "string", "description": "Id of the event to execute (from list_apps)." },
-                        "payload": { "type": "object", "description": "JSON payload passed to the event (shape from describe_app_interface). Optional." }
+                        "payload": { "type": "object", "description": "Event input, or MCP tool arguments matching its inputSchema. Optional; defaults to {}." },
+                        "mcp_tool": { "type": "string", "description": "Required for MCP events: exact registered tool name from describe_app_interface mcp.tools. Pass its arguments in payload." }
                     },
                     "required": ["app_id", "event_id"]
                 })

@@ -47,6 +47,97 @@ function localBackend() {
 	};
 }
 
+describe("local execution widget preparation", () => {
+	test("waits for widget hydration even when there are no packages to install", async () => {
+		const hydration = Promise.withResolvers<void>();
+		const syncWidgetsForExecution = vi.fn(() => hydration.promise);
+		const backend = {
+			...hostedBackend(),
+			widgetState: { syncWidgetsForExecution },
+			isOffline: vi.fn().mockResolvedValue(false),
+			appState: {},
+		};
+		const state = new BoardState(backend as never);
+		let prepared = false;
+		const preparation = state
+			.ensureAppPackagesInstalledForExecution("app-1", {
+				nodes: { widget: { name: "a2ui_instantiate_widget" } },
+				layers: {},
+			} as never)
+			.then(() => {
+				prepared = true;
+			});
+
+		await Promise.resolve();
+		expect(syncWidgetsForExecution).toHaveBeenCalledWith("app-1");
+		expect(prepared).toBe(false);
+		hydration.resolve();
+		await preparation;
+		expect(prepared).toBe(true);
+	});
+
+	test("rejects local execution preparation when widget hydration fails", async () => {
+		const failure = new Error("Widget cache could not be written");
+		const backend = {
+			...hostedBackend(),
+			widgetState: {
+				syncWidgetsForExecution: vi.fn().mockRejectedValue(failure),
+			},
+			isOffline: vi.fn().mockResolvedValue(false),
+			appState: {},
+		};
+		const state = new BoardState(backend as never);
+
+		await expect(
+			state.ensureAppPackagesInstalledForExecution("app-1", {
+				nodes: { widget: { name: "a2ui_instantiate_widget" } },
+				layers: {},
+			} as never),
+		).rejects.toBe(failure);
+	});
+
+	test("does not require widget access for unrelated boards or package-only callers", async () => {
+		const syncWidgetsForExecution = vi
+			.fn()
+			.mockRejectedValue(new Error("ReadWidgets denied"));
+		const backend = {
+			...hostedBackend(),
+			widgetState: { syncWidgetsForExecution },
+			isOffline: vi.fn().mockResolvedValue(false),
+			appState: {},
+		};
+		const state = new BoardState(backend as never);
+
+		await state.ensureAppPackagesInstalledForExecution("app-1", {
+			nodes: { log: { name: "log_info" } },
+			layers: {},
+		} as never);
+		await state.ensureAppPackagesInstalledForExecution("app-1");
+		expect(syncWidgetsForExecution).not.toHaveBeenCalled();
+	});
+
+	test("hydrates widgets used inside a board layer", async () => {
+		const syncWidgetsForExecution = vi.fn().mockResolvedValue(undefined);
+		const backend = {
+			...hostedBackend(),
+			widgetState: { syncWidgetsForExecution },
+			isOffline: vi.fn().mockResolvedValue(false),
+			appState: {},
+		};
+		const state = new BoardState(backend as never);
+
+		await state.ensureAppPackagesInstalledForExecution("app-1", {
+			nodes: {},
+			layers: {
+				function: {
+					nodes: { widget: { name: "a2ui_instantiate_widget" } },
+				},
+			},
+		} as never);
+		expect(syncWidgetsForExecution).toHaveBeenCalledWith("app-1");
+	});
+});
+
 describe("authoritative Board and Event reads", () => {
 	beforeEach(() => {
 		vi.clearAllMocks();

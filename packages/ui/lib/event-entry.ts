@@ -28,6 +28,27 @@ function plural(n: number, one: string, many: string): string {
 	return `${n} ${n === 1 ? one : many}`;
 }
 
+/** Read a configured local date and time; the runner owns timezone and firing state. */
+export function getCronScheduledTime(
+	config: Record<string, unknown>,
+): string | null {
+	const scheduled = config.scheduled_for;
+	if (!scheduled || typeof scheduled !== "object") return null;
+	const { date, time } = scheduled as { date?: unknown; time?: unknown };
+	if (
+		typeof date !== "string" ||
+		typeof time !== "string" ||
+		!/^\d{4}-\d{2}-\d{2}$/.test(date) ||
+		!/^\d{2}:\d{2}$/.test(time)
+	)
+		return null;
+	const timestamp = `${date}T${time}:00.000Z`;
+	const parsed = new Date(timestamp);
+	if (Number.isNaN(parsed.getTime()) || parsed.toISOString() !== timestamp)
+		return null;
+	return `${date} ${time}`;
+}
+
 export function describeEventEntry(
 	event: IEvent,
 	config: Record<string, unknown>,
@@ -40,12 +61,12 @@ export function describeEventEntry(
 			return { text, title: text };
 		}
 		case "cron": {
-			const expression = str(config.expression);
-			if (!expression) return { text: "No schedule", muted: true };
+			const schedule = str(config.expression) || getCronScheduledTime(config);
+			if (!schedule) return { text: "No schedule", muted: true };
 			const timezone = str(config.timezone);
 			return {
-				text: timezone ? `${expression} · ${timezone}` : expression,
-				title: timezone ? `${expression} (${timezone})` : expression,
+				text: timezone ? `${schedule} · ${timezone}` : schedule,
+				title: timezone ? `${schedule} (${timezone})` : schedule,
 			};
 		}
 		case "deeplink": {

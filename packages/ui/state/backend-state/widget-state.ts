@@ -85,6 +85,8 @@ export interface IWidget {
 }
 
 export interface IWidgetState {
+	/** Refresh hosted widget files before a native workflow reads local storage. */
+	syncWidgetsForExecution?(appId: string): Promise<void>;
 	getWidgets(
 		appId: string,
 		language?: string,

@@ -16,6 +16,11 @@ export interface IOAuthCheckResult {
 	missingProviders: IOAuthProvider[];
 }
 
+export interface IEventSinkStatusContext {
+	appId: string;
+	event: IEvent;
+}
+
 export interface IEventRegistration {
 	id: string;
 	event_id: string;
@@ -487,9 +492,21 @@ export interface IEventState {
 		pageTrigger?: PageTrigger,
 	): Promise<ILogMetadata | undefined>;
 
+	/** Call a hosted MCP operation and return its protocol result. */
+	invokeMcp?(
+		appId: string,
+		eventId: string,
+		method: string,
+		params?: Record<string, unknown>,
+	): Promise<Record<string, unknown>>;
+
 	cancelExecution(runId: string): Promise<void>;
 
-	isEventSinkActive(eventId: string): Promise<boolean>;
+	/** Read the event's trigger status. Failed status reads reject. */
+	isEventSinkActive(
+		eventId: string,
+		context?: IEventSinkStatusContext,
+	): Promise<boolean>;
 
 	/**
 	 * List persisted REST/MCP registrations for an event (populated by remote

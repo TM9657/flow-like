@@ -1067,6 +1067,7 @@ fn prepare_registrations(
                 }
             }
             "mcp" => {
+                validate_mcp_authentication_for_setup(&env.config)?;
                 let auth_id = prepare_auth_from_value(
                     state,
                     app_id,
@@ -1313,7 +1314,9 @@ async fn persist_registrations_in(
             )));
         }
     }
-    let stable_setup_version = locked_row.and_then(|row| row.last_setup_version);
+    let stable_setup_version = locked_row
+        .as_ref()
+        .and_then(|row| row.last_setup_version.clone());
     // The version whose rows this variant serves until this txn commits. A
     // variant row without a serving pointer (no successful setup yet) serves
     // nothing.
@@ -1377,6 +1380,11 @@ async fn persist_registrations_in(
             .await?;
         }
     } else {
+        if variant == STABLE_VARIANT
+            && let Some(row) = locked_row.as_ref().filter(|row| row.event_type == "mcp")
+        {
+            enforce_live_mcp_auth_mode_parity(row, event_version, txn).await?;
+        }
         // Advance the serving pointer atomically with the rows it names.
         // A failed replacement rolls back both registrations and this pointer.
         write_event_setup_row(
@@ -1411,6 +1419,68 @@ async fn persist_registrations_in(
     }
 
     Ok((reg_count, auth_count, live_setup_version))
+}
+
+fn validate_mcp_authentication_for_setup(config: &Value) -> flow_like_types::Result<()> {
+    let flow_like_auth = match config.get("flow_like_auth") {
+        None => false,
+        Some(Value::Bool(enabled)) => *enabled,
+        Some(_) => {
+            return Err(flow_like_types::anyhow!(
+                "MCP flow_like_auth must be a boolean"
+            ));
+        }
+    };
+    if !flow_like_auth {
+        return Ok(());
+    }
+
+    let auth = &config["auth"];
+    if auth
+        .get("type")
+        .and_then(Value::as_str)
+        .map(canonical_rest_auth_type)
+        != Some("oauth_bearer")
+    {
+        return Err(flow_like_types::anyhow!(
+            "Flow-Like Authentication requires OAuth bearer authentication"
+        ));
+    }
+    if auth
+        .get("issuer")
+        .and_then(Value::as_str)
+        .is_none_or(|issuer| issuer.trim().is_empty())
+    {
+        return Err(flow_like_types::anyhow!(
+            "Flow-Like Authentication requires an explicit OAuth issuer"
+        ));
+    }
+    let audience = auth
+        .get("audience")
+        .and_then(Value::as_str)
+        .filter(|audience| !audience.trim().is_empty())
+        .ok_or_else(|| {
+            flow_like_types::anyhow!("Flow-Like Authentication requires an explicit OAuth audience")
+        })?;
+    let audience_url = reqwest::Url::parse(audience).map_err(|_| {
+        flow_like_types::anyhow!(
+            "Flow-Like Authentication audience must be the absolute HTTPS URL of the public MCP server"
+        )
+    })?;
+    if !audience.starts_with("https://")
+        || audience.chars().any(char::is_whitespace)
+        || audience_url.scheme() != "https"
+        || audience_url.host_str().is_none()
+        || !audience_url.username().is_empty()
+        || audience_url.password().is_some()
+        || audience_url.query().is_some()
+        || audience_url.fragment().is_some()
+    {
+        return Err(flow_like_types::anyhow!(
+            "Flow-Like Authentication audience must be an absolute HTTPS URL without credentials, a query, or a fragment"
+        ));
+    }
+    Ok(())
 }
 
 /// Persist-phase failure split: a stable-parity refusal is the caller's
@@ -1471,6 +1541,103 @@ struct InboundSurface {
     mcp_tool_names: BTreeSet<String>,
 }
 
+fn inbound_registration_auth_type(kind: &str, extras: Option<&Value>, auth_type: String) -> String {
+    if kind == "mcp_raw"
+        && extras
+            .and_then(|config| config.get("flow_like_auth"))
+            .and_then(Value::as_bool)
+            == Some(true)
+    {
+        // Member execution and sink execution have different authority even
+        // when both registrations accept OAuth bearer credentials.
+        format!("{auth_type}+flow_like_auth")
+    } else {
+        auth_type
+    }
+}
+
+async fn load_mcp_auth_mode<C: ConnectionTrait>(
+    app_id: &str,
+    event_id: &str,
+    event_version: &str,
+    variant: &str,
+    txn: &C,
+) -> Result<Option<bool>, PersistError> {
+    Ok(event_remote_registration::Entity::find()
+        .filter(event_remote_registration::Column::AppId.eq(app_id))
+        .filter(event_remote_registration::Column::EventId.eq(event_id))
+        .filter(event_remote_registration::Column::EventVersion.eq(event_version))
+        .filter(event_remote_registration::Column::Variant.eq(variant))
+        .filter(event_remote_registration::Column::Kind.eq("mcp_raw"))
+        .one(txn)
+        .await?
+        .map(|registration| {
+            registration
+                .extras_json
+                .as_ref()
+                .and_then(|config| config.get("flow_like_auth"))
+                .and_then(Value::as_bool)
+                .unwrap_or(false)
+        }))
+}
+
+fn validate_live_mcp_auth_mode(
+    stable_mode: bool,
+    variant_name: &str,
+    variant_mode: &EventVariantMode,
+    authentication_mode: Option<bool>,
+) -> Result<(), PersistError> {
+    if matches!(variant_mode, EventVariantMode::Live { .. })
+        && authentication_mode.is_some_and(|mode| mode != stable_mode)
+    {
+        return Err(PersistError::Parity(format!(
+            "stable MCP setup would change Flow-Like Authentication while live variant '{variant_name}' uses the opposite mode; remove the live variant before changing the authentication mode"
+        )));
+    }
+    Ok(())
+}
+
+async fn enforce_live_mcp_auth_mode_parity<C: ConnectionTrait>(
+    row: &event::Model,
+    event_version: &str,
+    txn: &C,
+) -> Result<(), PersistError> {
+    let core_event = super::db::db_model_to_event(row.clone())?;
+    let live_variants: Vec<EventVariant> = core_event
+        .variant_set()
+        .into_iter()
+        .filter(|variant| matches!(variant.mode, EventVariantMode::Live { .. }))
+        .collect();
+    if live_variants.is_empty() {
+        return Ok(());
+    }
+    let Some(stable_mode) =
+        load_mcp_auth_mode(&row.app_id, &row.id, event_version, STABLE_VARIANT, txn).await?
+    else {
+        return Ok(());
+    };
+    // Zero-weight Live variants remain reachable through an explicit pin.
+    // A variant without a serving pointer falls back to stable instead.
+    for variant in live_variants {
+        let Some(setup) = find_event_setup(txn, &row.app_id, &row.id, &variant.name)
+            .await?
+            .filter(|setup| !setup.event_version.is_empty() && !setup.board_id.is_empty())
+        else {
+            continue;
+        };
+        let variant_auth_mode = load_mcp_auth_mode(
+            &row.app_id,
+            &row.id,
+            &setup.event_version,
+            &variant.name,
+            txn,
+        )
+        .await?;
+        validate_live_mcp_auth_mode(stable_mode, &variant.name, &variant.mode, variant_auth_mode)?;
+    }
+    Ok(())
+}
+
 async fn load_inbound_surface<C: ConnectionTrait>(
     app_id: &str,
     event_id: &str,
@@ -1518,6 +1685,11 @@ async fn load_inbound_surface<C: ConnectionTrait>(
                     .unwrap_or_else(|| "untyped".to_string())
             })
             .unwrap_or_else(|| "none".to_string());
+        let resolved = inbound_registration_auth_type(
+            &registration.kind,
+            registration.extras_json.as_ref(),
+            resolved,
+        );
         if registration.kind == "mcp_tool" {
             mcp_tool_names.insert(registration.path.clone());
         }
@@ -1554,6 +1726,14 @@ async fn enforce_stable_parity<C: ConnectionTrait>(
         load_inbound_surface(app_id, event_id, stable_version, STABLE_VARIANT, txn).await?;
     let candidate = load_inbound_surface(app_id, event_id, event_version, variant, txn).await?;
 
+    validate_inbound_surface_parity(&stable, &candidate, variant)
+}
+
+fn validate_inbound_surface_parity(
+    stable: &InboundSurface,
+    candidate: &InboundSurface,
+    variant: &str,
+) -> Result<(), PersistError> {
     for (key, candidate_types) in &candidate.auth_types {
         let Some(stable_types) = stable.auth_types.get(key) else {
             continue;
@@ -1826,20 +2006,13 @@ fn mcp_tool_metadata(
     };
     let name = sanitize_mcp_identifier(name_source);
     let description = resolved_mcp_description(&node.description, board_refs);
-    let has_non_payload_data_pin = node.pins.values().any(|pin| {
-        pin.pin_type == PinType::Output
-            && pin.data_type != VariableType::Execution
-            && pin.name != "payload"
-            && pin.name != "_client"
-    });
-
     let mut properties = serde_json::Map::new();
     let mut used_argument_names = std::collections::HashSet::new();
     for pin in node.pins.values() {
         if pin.pin_type != PinType::Output || pin.data_type == VariableType::Execution {
             continue;
         }
-        if pin.name == "_client" || (pin.name == "payload" && has_non_payload_data_pin) {
+        if pin.name == "_client" || pin.name == "payload" {
             continue;
         }
         let argument_name = unique_mcp_tool_argument_name(pin, &used_argument_names);
@@ -2283,6 +2456,191 @@ mod tests {
     use serde_json::json;
 
     use super::{build_rest_openapi_spec, is_completed_run_status, rest_file_routes};
+
+    fn mcp_member_auth_config() -> serde_json::Value {
+        json!({
+            "flow_like_auth": true,
+            "auth": {
+                "type": "oauth_bearer",
+                "issuer": "https://issuer.example/pool",
+                "audience": "https://api.example/m/notes"
+            }
+        })
+    }
+
+    #[test]
+    fn mcp_setup_requires_oauth_and_explicit_identity_settings_for_member_execution() {
+        let valid = mcp_member_auth_config();
+        assert!(super::validate_mcp_authentication_for_setup(&valid).is_ok());
+        let mut legacy = valid.clone();
+        legacy["auth"]["type"] = json!("o_auth_bearer");
+        assert!(super::validate_mcp_authentication_for_setup(&legacy).is_ok());
+
+        for auth in [
+            json!(null),
+            json!({"type": "none"}),
+            json!({"type": "bearer_token"}),
+        ] {
+            let mut config = valid.clone();
+            config["auth"] = auth;
+            assert!(super::validate_mcp_authentication_for_setup(&config).is_err());
+        }
+        for field in ["issuer", "audience"] {
+            for value in [json!(null), json!(""), json!("   "), json!(42)] {
+                let mut config = valid.clone();
+                config["auth"][field] = value;
+                assert!(super::validate_mcp_authentication_for_setup(&config).is_err());
+            }
+            let mut config = valid.clone();
+            config["auth"].as_object_mut().unwrap().remove(field);
+            assert!(super::validate_mcp_authentication_for_setup(&config).is_err());
+        }
+        for value in [json!(null), json!("true"), json!(1)] {
+            let mut config = valid.clone();
+            config["flow_like_auth"] = value;
+            assert!(super::validate_mcp_authentication_for_setup(&config).is_err());
+        }
+
+        for config in [
+            json!({}),
+            json!({"flow_like_auth": false, "auth": {"type": "none"}}),
+        ] {
+            assert!(super::validate_mcp_authentication_for_setup(&config).is_ok());
+        }
+    }
+
+    #[test]
+    fn mcp_setup_rejects_ambiguous_or_unsafe_resource_audiences() {
+        for audience in [
+            "/m/notes",
+            "http://api.example/m/notes",
+            "https:api.example/m/notes",
+            "https://user@api.example/m/notes",
+            "https://user:secret@api.example/m/notes",
+            "https://api.example/m/notes?access=other",
+            "https://api.example/m/notes#fragment",
+            " https://api.example/m/notes",
+            "https://api.example/m/notes ",
+            "https://api.exam\nple/m/notes",
+        ] {
+            let mut config = mcp_member_auth_config();
+            config["auth"]["audience"] = json!(audience);
+            assert!(
+                super::validate_mcp_authentication_for_setup(&config).is_err(),
+                "accepted audience {audience:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn mcp_variant_parity_rejects_switching_between_sink_and_member_execution() {
+        let surface = |enabled: bool| super::InboundSurface {
+            auth_types: super::HashMap::from([(
+                ("mcp_raw".to_string(), "/".to_string()),
+                super::BTreeSet::from([super::inbound_registration_auth_type(
+                    "mcp_raw",
+                    Some(&json!({"flow_like_auth": enabled})),
+                    "oauth_bearer".to_string(),
+                )]),
+            )]),
+            mcp_tool_names: super::BTreeSet::from(["list_notes".to_string()]),
+        };
+        for (stable_mode, candidate_mode) in [(false, true), (true, false)] {
+            assert!(matches!(
+                super::validate_inbound_surface_parity(
+                    &surface(stable_mode),
+                    &surface(candidate_mode),
+                    "canary"
+                ),
+                Err(super::PersistError::Parity(_))
+            ));
+        }
+        for mode in [false, true] {
+            assert!(
+                super::validate_inbound_surface_parity(&surface(mode), &surface(mode), "canary")
+                    .is_ok()
+            );
+        }
+        assert_eq!(
+            super::inbound_registration_auth_type("mcp_raw", None, "oauth_bearer".to_string()),
+            "oauth_bearer"
+        );
+    }
+
+    #[test]
+    fn mcp_stable_setup_cannot_leave_live_variants_with_opposite_execution_identity() {
+        for stable_mode in [false, true] {
+            for weight in [0.0, 0.5, 1.0] {
+                let variant_mode = super::EventVariantMode::Live { weight };
+                assert!(matches!(
+                    super::validate_live_mcp_auth_mode(
+                        stable_mode,
+                        "canary",
+                        &variant_mode,
+                        Some(!stable_mode),
+                    ),
+                    Err(super::PersistError::Parity(_))
+                ));
+                assert!(
+                    super::validate_live_mcp_auth_mode(
+                        stable_mode,
+                        "canary",
+                        &variant_mode,
+                        Some(stable_mode),
+                    )
+                    .is_ok()
+                );
+                assert!(
+                    super::validate_live_mcp_auth_mode(stable_mode, "canary", &variant_mode, None)
+                        .is_ok()
+                );
+            }
+            assert!(
+                super::validate_live_mcp_auth_mode(
+                    stable_mode,
+                    "shadow",
+                    &super::EventVariantMode::Shadow { sample_rate: 1.0 },
+                    Some(!stable_mode),
+                )
+                .is_ok()
+            );
+        }
+    }
+
+    #[test]
+    fn mcp_tool_schema_excludes_framework_pins_with_or_without_arguments() {
+        let mut node = super::Node::new("list_notes", "List Notes", "List notes", "Tests");
+        node.add_output_pin(
+            "exec_out",
+            "Exec",
+            "Execute",
+            super::VariableType::Execution,
+        );
+        node.add_output_pin(
+            "payload",
+            "Payload",
+            "Request payload",
+            super::VariableType::Struct,
+        );
+        node.add_output_pin("_client", "Client", "Client", super::VariableType::Struct);
+        let refs = super::HashMap::new();
+
+        let (_, _, schema) = super::mcp_tool_metadata(&node, &refs);
+        assert_eq!(schema["type"], json!("object"));
+        assert_eq!(schema["properties"], json!({}));
+
+        node.add_output_pin(
+            "note_limit",
+            "Limit",
+            "Maximum notes",
+            super::VariableType::Integer,
+        );
+        let (_, _, schema) = super::mcp_tool_metadata(&node, &refs);
+        assert_eq!(
+            schema["properties"],
+            json!({"limit": {"type": "integer", "description": "Maximum notes"}})
+        );
+    }
 
     #[test]
     fn completed_run_status_is_case_insensitive() {

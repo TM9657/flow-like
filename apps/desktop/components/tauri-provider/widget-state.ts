@@ -1,5 +1,4 @@
 import {
-	IAppVisibility,
 	type IMetadata,
 	type IWidget,
 	type IWidgetState,
@@ -10,7 +9,7 @@ import {
 } from "@flow-like/flow-like-ui";
 import { invoke } from "@tauri-apps/api/core";
 import { fetcher } from "../../lib/api";
-import { appsDB } from "../../lib/apps-db";
+import { isMissingResourceError } from "../../lib/api-error";
 import { withWidgetName } from "../../lib/widget-metadata";
 import type { TauriBackend } from "../tauri-provider";
 
@@ -27,23 +26,30 @@ export class WidgetState implements IWidgetState {
 
 	private async canFetchRemoteWidget(appId: string): Promise<boolean> {
 		if (!this.hasRemote()) return false;
+		// Unknown visibility must allow the read that populates a fresh device.
+		return !(await this.backend.isLocalOnly(appId));
+	}
 
-		const cachedVisibility = await appsDB.visibility.get(appId);
-		if (cachedVisibility) {
-			return cachedVisibility.visibility !== IAppVisibility.Offline;
+	private async requiresRemoteWrite(appId: string): Promise<boolean> {
+		if (await this.backend.isLocalOnly(appId)) return false;
+		if (!this.hasRemote()) {
+			throw new Error(
+				"Updating a hosted widget requires an authenticated hub session",
+			);
 		}
+		return true;
+	}
 
-		try {
-			const app = await invoke<{ visibility?: IAppVisibility }>("get_app", {
-				appId,
-			});
-			const visibility = app.visibility ?? IAppVisibility.Offline;
-			await appsDB.visibility.put({ appId, visibility });
-			return visibility !== IAppVisibility.Offline;
-		} catch {
-			// The widget can come from a remote app that has not been cached locally.
-			return true;
-		}
+	async syncWidgetsForExecution(appId: string): Promise<void> {
+		if (await this.backend.isLocalOnly(appId)) return;
+		// Do not let fallback reads turn a failed sync into a run with old files.
+		const inventory = await this.getWidgetsAuthoritative(appId);
+		const widgets = await Promise.all(
+			inventory.map(([, widgetId]) =>
+				this.getWidgetAuthoritative(appId, widgetId),
+			),
+		);
+		await invoke("cache_widgets", { appId, widgets });
 	}
 
 	private async pushWidgetRemote(
@@ -71,7 +77,7 @@ export class WidgetState implements IWidgetState {
 		if (!this.backend.profile) {
 			throw new Error("Profile not set. Cannot fetch remote widget.");
 		}
-		const versionQuery = version ? `?version=${version.join(".")}` : "";
+		const versionQuery = version ? `?version=${version.join("_")}` : "";
 		return fetcher<IWidget>(
 			this.backend.profile,
 			`apps/${appId}/widgets/${widgetId}${versionQuery}`,
@@ -106,111 +112,31 @@ export class WidgetState implements IWidgetState {
 		appId: string,
 		language?: string,
 	): Promise<[string, string, IMetadata | undefined][]> {
-		const localWidgets = await invoke<IWidget[]>("get_widgets", { appId });
-
-		const isOffline = await this.backend.isOffline(appId);
 		const profile = this.backend.profile;
-		if (isOffline || !profile || !this.hasRemote()) {
-			return await this.buildListResult(appId, localWidgets, language);
+		if (profile && (await this.canFetchRemoteWidget(appId))) {
+			try {
+				const params = language
+					? `?language=${encodeURIComponent(language)}`
+					: "";
+				// A local cache entry absent from this inventory may have been deleted
+				// on another device. Reading the inventory must never upload it again.
+				return await fetcher<[string, string, IMetadata | undefined][]>(
+					profile,
+					`apps/${appId}/widgets${params}`,
+					{ method: "GET" },
+					this.getRemoteAuth(),
+				);
+			} catch (error) {
+				if (isMissingResourceError(error)) throw error;
+				console.warn(
+					"[WidgetState] Falling back to local widgets list, remote fetch failed:",
+					error,
+				);
+			}
 		}
 
-		try {
-			const params = language ? `?language=${language}` : "";
-			const remoteList = await fetcher<
-				[string, string, IMetadata | undefined][]
-			>(
-				profile,
-				`apps/${appId}/widgets${params}`,
-				{ method: "GET" },
-				this.getRemoteAuth(),
-			);
-
-			const remoteIds = new Set(remoteList.map(([, id]) => id));
-
-			const localOnly = localWidgets.filter((w) => !remoteIds.has(w.id));
-			const localOnlyMeta = await Promise.all(
-				localOnly.map(async (w) => {
-					try {
-						return await invoke<IMetadata>("get_widget_meta", {
-							appId,
-							widgetId: w.id,
-							language,
-						});
-					} catch {
-						return undefined;
-					}
-				}),
-			);
-
-			const localById = new Map(localWidgets.map((w) => [w.id, w]));
-
-			const result: [string, string, IMetadata | undefined][] = [];
-			for (const [, widgetId, metadata] of remoteList) {
-				result.push([
-					appId,
-					widgetId,
-					withWidgetName(metadata, localById.get(widgetId)),
-				]);
-			}
-			for (let i = 0; i < localOnly.length; i++) {
-				result.push([
-					appId,
-					localOnly[i].id,
-					withWidgetName(localOnlyMeta[i], localOnly[i]),
-				]);
-			}
-
-			const syncTask = (async () => {
-				for (const [, widgetId, metadata] of remoteList) {
-					if (metadata) {
-						try {
-							await invoke("push_widget_meta", {
-								appId,
-								widgetId,
-								metadata,
-								language,
-							});
-						} catch (e) {
-							console.warn(
-								"[WidgetState] Failed to persist remote widget metadata locally:",
-								widgetId,
-								e,
-							);
-						}
-					}
-					try {
-						const remoteWidget = await this.fetchRemoteWidget(appId, widgetId);
-						await invoke("update_widget", { appId, widget: remoteWidget });
-					} catch (e) {
-						console.warn(
-							"[WidgetState] Failed to pull remote widget:",
-							widgetId,
-							e,
-						);
-					}
-				}
-				for (const local of localOnly) {
-					try {
-						await this.pushWidgetRemote(appId, local);
-					} catch (e) {
-						console.warn(
-							"[WidgetState] Failed to push local widget to remote:",
-							local.id,
-							e,
-						);
-					}
-				}
-			})();
-			this.backend.backgroundTaskHandler(syncTask);
-
-			return result;
-		} catch (e) {
-			console.warn(
-				"[WidgetState] Falling back to local widgets list, remote fetch failed:",
-				e,
-			);
-			return await this.buildListResult(appId, localWidgets, language);
-		}
+		const localWidgets = await invoke<IWidget[]>("get_widgets", { appId });
+		return this.buildListResult(appId, localWidgets, language);
 	}
 
 	async getWidgetsAuthoritative(
@@ -270,42 +196,25 @@ export class WidgetState implements IWidgetState {
 
 		try {
 			const remote = await this.fetchRemoteWidget(appId, widgetId, version);
-			if (local && !version) {
-				const localUpdatedAt = Date.parse(local.updatedAt);
-				const remoteUpdatedAt = Date.parse(remote.updatedAt);
-				const localIsNewer =
-					(Number.isFinite(localUpdatedAt) &&
-						(!Number.isFinite(remoteUpdatedAt) ||
-							localUpdatedAt > remoteUpdatedAt)) ||
-					(localUpdatedAt === remoteUpdatedAt &&
-						local.components.length > remote.components.length);
-				if (localIsNewer) {
-					// Never replace a newer populated local definition with an older/empty
-					// remote copy left by an interrupted two-phase create.
-					try {
-						await this.pushWidgetRemote(appId, local);
-					} catch (pushError) {
-						console.warn(
-							"[WidgetState] Failed to repair stale remote widget:",
-							widgetId,
-							pushError,
-						);
-					}
-					return local;
-				}
+			if (version && remote.version?.join("_") !== version.join("_")) {
+				throw new Error(`Widget version mismatch: ${widgetId}`);
 			}
-			if (!version) {
-				try {
-					await invoke("update_widget", { appId, widget: remote });
-				} catch (e) {
-					console.warn(
-						"[WidgetState] Failed to cache remote widget locally:",
-						e,
-					);
-				}
+			// Hosted reads follow the server even if a device clock makes its cache
+			// look newer. Only explicit edits may write back to the server.
+			try {
+				await invoke(version ? "cache_widget_version" : "update_widget", {
+					appId,
+					widget: remote,
+				});
+			} catch (error) {
+				console.warn(
+					"[WidgetState] Failed to cache remote widget locally:",
+					error,
+				);
 			}
 			return remote;
 		} catch (e) {
+			if (isMissingResourceError(e)) throw e;
 			if (local) {
 				console.warn(
 					"[WidgetState] Falling back to local widget, remote fetch failed:",
@@ -354,6 +263,7 @@ export class WidgetState implements IWidgetState {
 		name: string,
 		description?: string,
 	): Promise<IWidget> {
+		const writeRemote = await this.requiresRemoteWrite(appId);
 		const widget = await invoke<IWidget>("create_widget", {
 			appId,
 			widgetId,
@@ -361,8 +271,7 @@ export class WidgetState implements IWidgetState {
 			description,
 		});
 
-		const isOffline = await this.backend.isOffline(appId);
-		if (!isOffline && this.hasRemote()) {
+		if (writeRemote) {
 			try {
 				await this.pushWidgetRemote(appId, widget);
 			} catch (e) {
@@ -375,10 +284,7 @@ export class WidgetState implements IWidgetState {
 
 	async updateWidget(appId: string, widget: IWidget): Promise<void> {
 		const normalizedWidget = normalizeWidgetForPersistence(widget);
-		await invoke("update_widget", { appId, widget: normalizedWidget });
-
-		const isOffline = await this.backend.isOffline(appId);
-		if (!isOffline && this.hasRemote()) {
+		if (await this.requiresRemoteWrite(appId)) {
 			try {
 				await this.pushWidgetRemote(appId, normalizedWidget);
 			} catch (e) {
@@ -389,6 +295,7 @@ export class WidgetState implements IWidgetState {
 				throw e;
 			}
 		}
+		await invoke("update_widget", { appId, widget: normalizedWidget });
 	}
 
 	async renameWidget(
@@ -401,20 +308,23 @@ export class WidgetState implements IWidgetState {
 	}
 
 	async deleteWidget(appId: string, widgetId: string): Promise<void> {
-		await invoke("delete_widget", { appId, widgetId });
-
-		const isOffline = await this.backend.isOffline(appId);
-		if (!isOffline && this.backend.profile && this.hasRemote()) {
-			try {
-				await fetcher(
-					this.backend.profile,
-					`apps/${appId}/widgets/${widgetId}`,
-					{ method: "DELETE" },
-					this.getRemoteAuth(),
-				);
-			} catch (e) {
-				console.warn("[WidgetState] Failed to delete widget on remote:", e);
-			}
+		const writeRemote = await this.requiresRemoteWrite(appId);
+		if (writeRemote && this.backend.profile) {
+			await fetcher(
+				this.backend.profile,
+				`apps/${appId}/widgets/${widgetId}`,
+				{ method: "DELETE" },
+				this.getRemoteAuth(),
+			);
+		}
+		try {
+			await invoke("delete_widget", { appId, widgetId });
+		} catch (error) {
+			if (!writeRemote) throw error;
+			console.warn(
+				"[WidgetState] Failed to remove deleted widget from cache:",
+				error,
+			);
 		}
 	}
 
@@ -423,28 +333,57 @@ export class WidgetState implements IWidgetState {
 		widgetId: string,
 		versionType: VersionType,
 	): Promise<Version> {
-		const version = await invoke<Version>("create_widget_version", {
-			appId,
-			widgetId,
-			versionType,
-		});
+		if (await this.backend.isLocalOnly(appId)) {
+			return invoke<Version>("create_widget_version", {
+				appId,
+				widgetId,
+				versionType,
+			});
+		}
+		const profile = this.backend.profile;
+		if (!profile || !this.hasRemote()) {
+			throw new Error(
+				"Publishing a hosted widget requires an authenticated hub session",
+			);
+		}
 
-		const isOffline = await this.backend.isOffline(appId);
-		if (!isOffline && this.hasRemote()) {
-			try {
-				const widget = await invoke<IWidget>("get_widget", {
-					appId,
-					widgetId,
-				});
-				await this.pushWidgetRemote(appId, widget);
-			} catch (e) {
-				console.warn("[WidgetState] Failed to push version bump to remote:", e);
-			}
+		// Publishing locally and PUTting the working copy never creates a server
+		// snapshot. The hub must allocate and persist the shared version itself.
+		const version = await fetcher<Version>(
+			profile,
+			`apps/${appId}/widgets/${widgetId}/versions`,
+			{ method: "POST", body: JSON.stringify({ version_type: versionType }) },
+			this.getRemoteAuth(),
+		);
+		try {
+			await this.getWidget(appId, widgetId, version);
+			await this.getWidget(appId, widgetId);
+		} catch (error) {
+			// The publish already succeeded. Cache refresh failure must not invite
+			// the caller to retry publication and allocate another version.
+			console.warn("[WidgetState] Failed to cache published widget:", error);
 		}
 		return version;
 	}
 
 	async getWidgetVersions(appId: string, widgetId: string): Promise<Version[]> {
+		const profile = this.backend.profile;
+		if (profile && (await this.canFetchRemoteWidget(appId))) {
+			try {
+				return await fetcher<Version[]>(
+					profile,
+					`apps/${appId}/widgets/${widgetId}/versions`,
+					{ method: "GET" },
+					this.getRemoteAuth(),
+				);
+			} catch (error) {
+				if (isMissingResourceError(error)) throw error;
+				console.warn(
+					"[WidgetState] Falling back to local widget versions:",
+					error,
+				);
+			}
+		}
 		return invoke<Version[]>("get_widget_versions", { appId, widgetId });
 	}
 
@@ -461,6 +400,22 @@ export class WidgetState implements IWidgetState {
 		widgetId: string,
 		language?: string,
 	): Promise<IMetadata> {
+		if (this.backend.profile && (await this.canFetchRemoteWidget(appId))) {
+			try {
+				return await fetcher<IMetadata>(
+					this.backend.profile,
+					`apps/${appId}/meta?language=${encodeURIComponent(language ?? "en")}&widget_id=${encodeURIComponent(widgetId)}`,
+					{ method: "GET" },
+					this.getRemoteAuth(),
+				);
+			} catch (error) {
+				if (isMissingResourceError(error)) throw error;
+				console.warn(
+					"[WidgetState] Falling back to cached widget metadata:",
+					error,
+				);
+			}
+		}
 		return invoke<IMetadata>("get_widget_meta", { appId, widgetId, language });
 	}
 
@@ -470,6 +425,14 @@ export class WidgetState implements IWidgetState {
 		metadata: IMetadata,
 		language?: string,
 	): Promise<void> {
+		if ((await this.requiresRemoteWrite(appId)) && this.backend.profile) {
+			await fetcher(
+				this.backend.profile,
+				`apps/${appId}/meta?language=${encodeURIComponent(language ?? "en")}&widget_id=${encodeURIComponent(widgetId)}`,
+				{ method: "PUT", body: JSON.stringify(metadata) },
+				this.getRemoteAuth(),
+			);
+		}
 		return invoke("push_widget_meta", { appId, widgetId, metadata, language });
 	}
 }

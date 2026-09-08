@@ -89,6 +89,7 @@ import { TeamState } from "./tauri-provider/team-state";
 import { TemplateState } from "./tauri-provider/template-state";
 import { UsageState } from "./tauri-provider/usage-state";
 import { UserState } from "./tauri-provider/user-state";
+import { subscribeWidgetQueryRefresh } from "./tauri-provider/widget-query-refresh";
 import { WidgetState } from "./tauri-provider/widget-state";
 
 interface IBoardLineage {
@@ -222,6 +223,34 @@ export class TauriBackend implements IBackendState {
 		this.refreshRemoteCatalogQueries();
 	}
 
+	async refreshWidgetQueries() {
+		if (
+			!this.queryClient ||
+			!this.profile ||
+			!this.auth ||
+			this.auth.isLoading
+		) {
+			return;
+		}
+
+		const queryClient = this.queryClient;
+		await Promise.all(
+			[
+				this.widgetState.getWidgets.name || "backendFn",
+				this.widgetState.getWidget.name || "backendFn",
+			].map(async (name) => {
+				const queryKey = [name];
+				// Invalidation alone reuses an unfinished first read, which may have
+				// already chosen local storage before the session became available.
+				await queryClient.cancelQueries({ queryKey });
+				await queryClient.invalidateQueries({
+					queryKey,
+					refetchType: "active",
+				});
+			}),
+		);
+	}
+
 	private refreshRemoteCatalogQueries() {
 		if (
 			!this.queryClient ||
@@ -233,20 +262,22 @@ export class TauriBackend implements IBackendState {
 		}
 
 		// /use can mount while native auth/profile bootstrap is still in progress.
-		// Its local-only result is otherwise cached under the force-refresh key and
-		// remains fresh after the backend becomes capable of remote synchronization.
+		// Local routes, events, and widgets can otherwise remain cached after the
+		// backend becomes capable of remote synchronization.
+		const queryClient = this.queryClient;
 		void Promise.all([
-			this.queryClient.invalidateQueries({
+			queryClient.invalidateQueries({
 				queryKey: [this.routeState.getRoutes.name || "backendFn"],
 				refetchType: "active",
 			}),
-			this.queryClient.invalidateQueries({
+			queryClient.invalidateQueries({
 				queryKey: [this.eventState.getEvents.name || "backendFn"],
 				refetchType: "active",
 			}),
+			this.refreshWidgetQueries(),
 		]).catch((error) => {
 			console.warn(
-				"[CatalogSync] Failed to refresh routes/events after auth bootstrap:",
+				"[CatalogSync] Failed to refresh routes/events/widgets after auth bootstrap:",
 				error,
 			);
 		});
@@ -771,6 +802,13 @@ export function TauriProvider({
 			backend.pushQueryClient(queryClient);
 		}
 	}, [backend, queryClient]);
+
+	// The shared query client disables focus/reconnect refetching. Refresh widgets
+	// explicitly, even when profile synchronization returns unchanged metadata.
+	useEffect(() => {
+		if (!(backend instanceof TauriBackend)) return;
+		return subscribeWidgetQueryRefresh(() => backend.refreshWidgetQueries());
+	}, [backend]);
 
 	// Registry changes can also change dynamic pins on already-open boards.
 	// Native refreshes those cached boards before emitting this event; invalidate
@@ -1757,6 +1795,7 @@ export function ProfileSyncer({
 									localProfile,
 									onlineProfile,
 									failedMediaProfiles.has(onlineProfile.id),
+									offlineAppIds,
 								);
 
 								if (

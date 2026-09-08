@@ -13,7 +13,7 @@ export type OnlineProfile = {
 	home_layout?: IHomeLayout | null;
 	home_default_id?: string | null;
 	bit_ids?: string[];
-	apps?: any;
+	apps?: IProfile["apps"];
 	shortcuts?: Array<{
 		id: string;
 		profileId: string;
@@ -111,7 +111,13 @@ export function mergeRemoteProfileMetadata(
 	local: { hub_profile: IProfile; updated: string },
 	remote: OnlineProfile,
 	preserveMediaRevision = false,
+	offlineAppIds: ReadonlySet<string> = new Set(),
 ) {
+	// Offline app membership and preferences live only on this device. The hub
+	// receives online apps, so its response cannot replace the whole local list.
+	const localOfflineApps = (local.hub_profile.apps ?? []).filter((app) =>
+		offlineAppIds.has(app.app_id),
+	);
 	Object.assign(local.hub_profile, {
 		name: remote.name,
 		description: remote.description ?? null,
@@ -127,7 +133,10 @@ export function mergeRemoteProfileMetadata(
 			? { home_default_id: remote.home_default_id ?? null }
 			: {}),
 		bits: remote.bit_ids ?? [],
-		apps: remote.apps ?? [],
+		apps: [
+			...(remote.apps ?? []).filter((app) => !offlineAppIds.has(app.app_id)),
+			...localOfflineApps,
+		],
 		hub: remote.hub,
 		hubs: remote.hubs ?? [],
 		settings: remote.settings ?? local.hub_profile.settings,

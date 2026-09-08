@@ -1218,6 +1218,8 @@ pub fn run() {
             functions::a2ui::widget::get_widget,
             functions::a2ui::widget::create_widget,
             functions::a2ui::widget::update_widget,
+            functions::a2ui::widget::cache_widget_version,
+            functions::a2ui::widget::cache_widgets,
             functions::a2ui::widget::delete_widget,
             functions::a2ui::widget::create_widget_version,
             functions::a2ui::widget::get_widget_versions,

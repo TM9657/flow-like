@@ -68,6 +68,8 @@ pub struct McpServerConfig {
     #[serde(default)]
     pub auth: RestAuthConfig,
     #[serde(default)]
+    pub flow_like_auth: bool,
+    #[serde(default)]
     pub function_refs: Vec<String>,
     #[serde(default)]
     pub resources: Vec<McpResourceRegistration>,
@@ -86,10 +88,44 @@ impl Default for McpServerConfig {
             max_body_bytes: default_max_body_bytes(),
             tls: Default::default(),
             auth: Default::default(),
+            flow_like_auth: false,
             function_refs: Vec::new(),
             resources: Vec::new(),
             prompts: Vec::new(),
         }
+    }
+}
+
+impl McpServerConfig {
+    fn validate_authentication(&self, hosted: bool) -> flow_like_types::Result<()> {
+        if !self.flow_like_auth {
+            return Ok(());
+        }
+        let RestAuthConfig::OAuthBearer {
+            issuer, audience, ..
+        } = &self.auth
+        else {
+            return Err(flow_like_types::anyhow!(
+                "Flow-Like Authentication requires OAuth bearer authentication"
+            ));
+        };
+        if issuer
+            .as_deref()
+            .is_none_or(|value| value.trim().is_empty())
+            || audience
+                .as_deref()
+                .is_none_or(|value| value.trim().is_empty())
+        {
+            return Err(flow_like_types::anyhow!(
+                "Flow-Like Authentication requires an explicit OAuth issuer and audience. Set the audience to the public MCP server URL"
+            ));
+        }
+        if !hosted {
+            return Err(flow_like_types::anyhow!(
+                "Flow-Like Authentication requires a hosted public MCP server; local servers cannot verify Flow-Like membership and permissions"
+            ));
+        }
+        Ok(())
     }
 }
 
@@ -301,6 +337,7 @@ impl NodeLogic for RegisterMcpAuthNode {
         );
         node.set_flowscript_name("mcp", "registerAuth");
         node.set_receiver("config_in");
+        node.set_version(1);
         node.add_icon("/flow/icons/web.svg");
         node.add_input_pin(
             "config_in",
@@ -313,6 +350,13 @@ impl NodeLogic for RegisterMcpAuthNode {
         node.add_input_pin("auth", "Auth", "Auth config", NodeVariableType::Struct)
             .set_schema::<RestAuthConfig>()
             .set_options(PinOptions::new().set_enforce_schema(true).build());
+        node.add_input_pin(
+            "flow_like_auth",
+            "Flow-Like Authentication",
+            "Hosted public OAuth servers only: resolve the verified caller to a Flow-Like account and enforce app permissions. Requires a trusted platform issuer and an allowed OAuth client.",
+            NodeVariableType::Boolean,
+        )
+        .set_default_value(Some(flow_like_types::json::json!(false)));
         node.add_output_pin(
             "config_out",
             "Config",
@@ -328,6 +372,12 @@ impl NodeLogic for RegisterMcpAuthNode {
         let mut config: McpServerConfig = context.evaluate_pin("config_in").await?;
         let auth: RestAuthConfig = context.evaluate_pin("auth").await?;
         config.auth = auth;
+        config.flow_like_auth = if context.get_pin_by_name("flow_like_auth").await.is_ok() {
+            context.evaluate_pin("flow_like_auth").await?
+        } else {
+            false
+        };
+        config.validate_authentication(true)?;
         context
             .set_pin_value("config_out", flow_like_types::json::json!(config))
             .await?;
@@ -595,6 +645,15 @@ impl NodeLogic for McpServerNode {
 
         #[cfg(not(all(feature = "local", feature = "remote")))]
         let config: McpServerConfig = context.evaluate_pin("config").await?;
+
+        #[cfg(not(all(feature = "local", feature = "remote")))]
+        if let Err(err) = config.validate_authentication(cfg!(feature = "remote")) {
+            context.log_message(
+                &format!("MCP server authentication configuration failed: {}", err),
+                LogLevel::Error,
+            );
+            return Ok(());
+        }
 
         // Remote build: don't bind a socket. Emit the composed config so the
         // setup-collector on the API side can persist the registration, then
@@ -876,13 +935,6 @@ async fn tool_metadata(
     };
     let name = super::http_runtime::sanitize_identifier(name_source);
     let description = resolved_mcp_description(&node_guard.description, board_refs);
-    let has_non_payload_data_pin = node_guard.pins.values().any(|pin| {
-        pin.pin_type == PinType::Output
-            && pin.data_type != VariableType::Execution
-            && pin.name != "payload"
-            && pin.name != "_client"
-    });
-
     let mut properties = json::Map::new();
     let mut argument_aliases = HashMap::new();
     let mut used_argument_names = HashSet::new();
@@ -890,10 +942,7 @@ async fn tool_metadata(
         if pin.pin_type != PinType::Output || pin.data_type == VariableType::Execution {
             continue;
         }
-        if pin.name == "_client" {
-            continue;
-        }
-        if pin.name == "payload" && has_non_payload_data_pin {
+        if pin.name == "_client" || pin.name == "payload" {
             continue;
         }
         let argument_name = unique_tool_argument_name(pin, &used_argument_names);
@@ -2292,6 +2341,90 @@ async fn trigger_connected_exec(context: &mut ExecutionContext, pin_name: &str, 
     }
 }
 
+#[cfg(test)]
+mod authentication_config_tests {
+    use super::*;
+    use flow_like_types::json::{from_value, json, to_value};
+
+    fn hosted_oauth_config() -> McpServerConfig {
+        from_value(json!({
+            "host": "127.0.0.1",
+            "port": 0,
+            "flow_like_auth": true,
+            "auth": {
+                "type": "oauth_bearer",
+                "issuer": "https://issuer.example.com/pool",
+                "audience": "https://api.example.com/m/example"
+            }
+        }))
+        .unwrap()
+    }
+
+    #[test]
+    fn legacy_mcp_configs_keep_existing_execution_identity() {
+        let config: McpServerConfig = from_value(json!({
+            "host": "127.0.0.1",
+            "port": 0,
+            "auth": {"type": "bearer_token", "token": "test-token"}
+        }))
+        .unwrap();
+
+        assert!(!config.flow_like_auth);
+        assert!(config.validate_authentication(true).is_ok());
+        assert!(config.validate_authentication(false).is_ok());
+        assert!(!McpServerConfig::default().flow_like_auth);
+    }
+
+    #[test]
+    fn flow_like_auth_survives_remote_config_serialization() {
+        let config = hosted_oauth_config();
+        let serialized = to_value(&config).unwrap();
+        assert_eq!(serialized["flow_like_auth"], json!(true));
+        let restored: McpServerConfig = from_value(serialized).unwrap();
+        assert!(restored.flow_like_auth);
+        assert!(restored.validate_authentication(true).is_ok());
+    }
+
+    #[test]
+    fn flow_like_auth_requires_oauth() {
+        for auth in [
+            json!({"type": "none"}),
+            json!({"type": "api_key", "header": "x-api-key", "key": "test-key"}),
+            json!({"type": "bearer_token", "token": "test-token"}),
+            json!({"type": "basic_auth", "username": "test-user", "password": "test-password"}),
+            json!({"type": "hmac_sha256", "secret": "test-secret"}),
+        ] {
+            let mut config = hosted_oauth_config();
+            config.auth = from_value(auth).unwrap();
+            assert!(config.validate_authentication(true).is_err());
+        }
+    }
+
+    #[test]
+    fn flow_like_auth_requires_explicit_issuer_and_audience() {
+        for field in ["issuer", "audience"] {
+            for value in [json!(null), json!(""), json!("  ")] {
+                let mut config = to_value(hosted_oauth_config()).unwrap();
+                config["auth"][field] = value;
+                let config: McpServerConfig = from_value(config).unwrap();
+                assert!(config.validate_authentication(true).is_err());
+            }
+        }
+    }
+
+    #[test]
+    fn flow_like_auth_fails_for_standalone_servers() {
+        let error = hosted_oauth_config()
+            .validate_authentication(false)
+            .unwrap_err();
+        assert!(
+            error
+                .to_string()
+                .contains("requires a hosted public MCP server")
+        );
+    }
+}
+
 #[cfg(all(test, feature = "execute", not(feature = "remote")))]
 mod tests {
     use super::*;
@@ -2320,6 +2453,30 @@ mod tests {
         }
     }
 
+    struct McpPayloadLogic;
+
+    #[async_trait]
+    impl NodeLogic for McpPayloadLogic {
+        fn get_node(&self) -> Node {
+            let mut node = Node::new("list_notes", "List Notes", "List notes", "Tests");
+            node.add_output_pin("exec_out", "Exec", "Execute", VariableType::Execution);
+            node.add_output_pin(
+                "payload",
+                "Payload",
+                "Request payload",
+                VariableType::Struct,
+            );
+            node.add_output_pin("_client", "Client", "Client", VariableType::Struct);
+            node
+        }
+
+        async fn run(&self, context: &mut ExecutionContext) -> flow_like_types::Result<()> {
+            let payload: Value = context.evaluate_pin("payload").await?;
+            context.set_result(payload);
+            Ok(())
+        }
+    }
+
     fn mcp_handler() -> Arc<InternalNode> {
         let mut node = Node::new(
             "test_mcp_handler",
@@ -2334,6 +2491,12 @@ mod tests {
             VariableType::String,
         );
         node.add_output_pin("_client", "Client", "Client", VariableType::Struct);
+        node.add_output_pin(
+            "payload",
+            "Payload",
+            "Request payload",
+            VariableType::Struct,
+        );
         internal_node_with_logic(node, Arc::new(McpEchoLogic))
     }
 
@@ -2413,6 +2576,41 @@ mod tests {
                 .get("_client")
                 .is_none()
         );
+        assert!(
+            response["result"]["tools"][0]["inputSchema"]["properties"]
+                .get("payload")
+                .is_none()
+        );
+    }
+
+    #[tokio::test]
+    async fn mcp_tool_without_arguments_hides_framework_pins_and_receives_payload() {
+        let handler =
+            internal_node_with_logic(McpPayloadLogic.get_node(), Arc::new(McpPayloadLogic));
+        let parent = internal_node(McpServerNode::new().get_node());
+        let context = test_context(parent, vec![handler.clone()]).await;
+        let tools = build_tool_contexts(&context, &[handler.node_id().to_string()]).await;
+        let tool = tools.get("list_notes").expect("registered tool");
+
+        assert_eq!(tool.schema["type"], json!("object"));
+        assert_eq!(tool.schema["properties"], json!({}));
+        assert!(tool.argument_aliases.is_empty());
+
+        let response = tool_call_response(
+            Some(json!(1)),
+            json!({"name": "list_notes"}),
+            &tools,
+            "parent",
+            &json!({"protocol": "mcp"}),
+        )
+        .await;
+
+        assert_eq!(response["result"]["isError"], json!(false));
+        let payload: Value = flow_like_types::json::from_str(
+            response["result"]["content"][0]["text"].as_str().unwrap(),
+        )
+        .unwrap();
+        assert_eq!(payload, json!({"_client": {"protocol": "mcp"}}));
     }
 
     #[tokio::test]

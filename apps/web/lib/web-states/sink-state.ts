@@ -1,4 +1,5 @@
 import type { IEventRegistration, ISinkState } from "@flow-like/flow-like-ui";
+import { isMissingResourceError } from "@flow-like/flow-like-ui/lib/api-error";
 import { type WebBackendRef, apiDelete, apiGet } from "./api-utils";
 
 export class WebSinkState implements ISinkState {
@@ -15,12 +16,13 @@ export class WebSinkState implements ISinkState {
 	async isEventSinkActive(eventId: string): Promise<boolean> {
 		try {
 			const result = await apiGet<{ active: boolean }>(
-				`sinks/${eventId}/status`,
+				`sink/${eventId}`,
 				this.backend.auth,
 			);
-			return result?.active ?? false;
-		} catch {
-			return false;
+			return result.active;
+		} catch (error) {
+			if (isMissingResourceError(error)) return false;
+			throw error;
 		}
 	}
 }

@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo } from "react";
+import { getCronScheduledTime } from "../../../lib/event-entry";
 import type { EventSectionId } from "../../../lib/event-sections";
 import {
 	getEventSections,
@@ -116,7 +117,11 @@ export function computeEventIssues({
 		}
 	}
 
-	if (event.event_type === "cron" && missing(config?.expression)) {
+	if (
+		event.event_type === "cron" &&
+		missing(config?.expression) &&
+		!getCronScheduledTime(config)
+	) {
 		issues.push({
 			id: "cron-expression",
 			severity: "blocking",

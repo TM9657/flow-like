@@ -92,6 +92,30 @@ pub async fn update_widget(
 }
 
 #[tauri::command(async)]
+pub async fn cache_widget_version(
+    handler: AppHandle,
+    app_id: String,
+    widget: Widget,
+) -> Result<(), TauriFunctionError> {
+    let flow_like_state = TauriFlowLikeState::construct(&handler).await?;
+    let app = App::load(app_id, flow_like_state).await?;
+    app.cache_widget_version(&widget).await?;
+    Ok(())
+}
+
+#[tauri::command(async)]
+pub async fn cache_widgets(
+    handler: AppHandle,
+    app_id: String,
+    widgets: Vec<Widget>,
+) -> Result<(), TauriFunctionError> {
+    let flow_like_state = TauriFlowLikeState::construct(&handler).await?;
+    let mut app = App::load(app_id, flow_like_state).await?;
+    app.cache_widgets(&widgets).await?;
+    Ok(())
+}
+
+#[tauri::command(async)]
 pub async fn delete_widget(
     handler: AppHandle,
     app_id: String,
