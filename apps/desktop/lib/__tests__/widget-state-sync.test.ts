@@ -63,8 +63,15 @@ describe("native widget synchronization", () => {
 			name: "Stale cache",
 			updatedAt: "2099-01-01T00:00:00Z",
 			components: [
-				{ id: "root", component: { type: "text", content: "Old" } },
-			] as IWidget["components"],
+				{
+					id: "root",
+					component: {
+						id: "root",
+						type: "text",
+						content: { literalString: "Old" },
+					},
+				},
+			],
 		});
 		const remote = widget();
 		mocks.invoke.mockResolvedValue(local);
