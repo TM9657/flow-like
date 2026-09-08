@@ -22,3 +22,64 @@ import { NodeReference } from "../../../../../components/node-docs/NodeReference
 import { nodesBySlug } from "../../../../../generated/catalog-nodes";
 
 <NodeReference node={nodesBySlug["nodes/web/mcp/mcp-register-auth"]} />
+
+## Run public MCP tools as the signed-in user
+
+Enable **Flow-Like Authentication** (`flow_like_auth`) when a hosted public MCP server should run tools as the caller's Flow-Like account. The server verifies the OAuth access token, resolves its subject (`sub`) to an existing account, and checks that the account can execute events in the app. Execution receives that user's identity, app role, and credentials.
+
+The input defaults to `false`, preserving existing servers' execution identity. OAuth authentication still exposes verified caller claims through `_client` when this option is disabled. The MCP access token is specific to the MCP resource and is not passed into execution as a general Flow-Like API bearer token.
+
+This option requires a hosted public endpoint at `/m/{slug}`. Local and standalone MCP servers reject it because they cannot verify platform membership and permissions. Other authentication types, such as static bearer tokens and API keys, cannot enable it.
+
+## Configure the identity provider
+
+Before enabling the option, the platform operator must configure the OAuth provider as a trusted Flow-Like OpenID provider and allow the client's ID. Add a separate MCP client to the platform's `authentication.openid.additional_client_ids`; its normal Flow-Like login client is also accepted.
+
+Connect an [OIDC Discovery Auth node](/nodes/web/auth/oidc-discovery-auth/) to **Auth** and set:
+
+| Setting | Value |
+| --- | --- |
+| Issuer | The exact issuer configured for the platform's OpenID provider |
+| Audience | The canonical HTTPS platform domain followed by `/m/{slug}`, such as `https://api.example.com/m/my-tools` |
+| Required Scopes | The OAuth scopes required to use these tools |
+
+The node derives the discovery URL from the issuer. The issuer and audience must be explicit. The API checks the audience against `https://{hub.domain}/m/{slug}`, using the domain configured for the platform. Use this URL in the connector without a trailing slash, query, or fragment.
+
+A server cannot use an unrelated issuer's matching `sub` to acquire a Flow-Like account. The access token must contain the configured audience and scopes, and its client must be allowed by the platform. The signed-in account must already exist in Flow-Like and have permission to execute events in the app.
+
+## Use Cognito with Claude
+
+Create a dedicated app client in the same Cognito user pool used for Flow-Like sign-in. Configure authorization code flow with S256 PKCE and register `https://claude.ai/api/mcp/auth_callback` as the callback URL for hosted Claude clients. Add the client ID to Flow-Like's allowed clients, then supply the client ID and optional secret when adding the custom connector in Claude. See [Claude connector authentication](https://claude.com/docs/connectors/building/authentication).
+
+Configure the Cognito client with the scopes required by the MCP server. The OAuth request must include `resource` equal to the public MCP URL so Cognito puts that URL in the access token's `aud` claim. Flow-Like checks Cognito's `token_use` is `access` and validates `client_id` against the allowed clients. See [Cognito resource binding](https://docs.aws.amazon.com/cognito/latest/developerguide/cognito-user-pools-define-resource-servers.html).
+
+Enter the same public MCP URL in Claude as the configured audience. The server's unauthenticated `401` response points Claude to its OAuth protected resource metadata. Complete the provider's sign-in flow using the existing Flow-Like account. Verify a tool call reports that account through Get Executing User and that an account without app execution permission is denied.
+
+## Use Microsoft Entra ID with Claude
+
+For a platform that uses Cognito, connect a Microsoft Entra ID workforce tenant to the existing user pool as an upstream OIDC provider. Users sign in with Microsoft, and Cognito issues the access token that Claude sends to Flow-Like. The MCP server continues to validate the Cognito issuer, audience, client ID, and user-pool subject. This follows [Cognito's OIDC federation model](https://docs.aws.amazon.com/cognito/latest/developerguide/cognito-user-pools-oidc-flow.html).
+
+### Connect Entra ID to the Cognito user pool
+
+1. In **Microsoft Entra admin center > App registrations**, create a single-tenant application for Cognito federation. Add a **Web** redirect URI of `https://<cognito-login-domain>/oauth2/idpresponse`, using the pool's managed login domain or custom domain, such as `https://auth.example.com/oauth2/idpresponse`. Record the application client ID and directory tenant ID. Create a client secret and retain its **Value** for Cognito. See [Microsoft's app registration guide](https://learn.microsoft.com/en-us/entra/identity-platform/quickstart-register-app).
+2. In the existing Cognito user pool, add an **OpenID Connect** identity provider named, for example, `EntraID`. Enter the Entra client ID and secret. Use `https://login.microsoftonline.com/<tenant-id>/v2.0` as the issuer, replacing `<tenant-id>` with the directory's tenant UUID. Choose discovery through the issuer, request method **GET**, and authorized scopes `openid profile email`. See [Cognito's OIDC provider setup](https://docs.aws.amazon.com/cognito/latest/developerguide/cognito-user-pools-oidc-idp.html).
+3. Map every required Cognito profile attribute to an Entra claim, including `email` if the pool requires it. Mapped attributes must be mutable and writable by both Cognito app clients. Confirm representative users actually receive the required claims; Entra does not guarantee an email claim for every account. See [Cognito attribute mapping](https://docs.aws.amazon.com/cognito/latest/developerguide/cognito-user-pools-specifying-attribute-mapping.html) and [Microsoft's identity claims](https://learn.microsoft.com/en-us/entra/identity-platform/id-token-claims-reference).
+4. Enable `EntraID` in the managed login configuration of both the normal Flow-Like app client and the dedicated Claude app client. Keep Claude's callback, `https://claude.ai/api/mcp/auth_callback`, on the **Cognito Claude client**. The Entra registration redirects to Cognito's `/oauth2/idpresponse`. See [Cognito's app-client provider configuration](https://docs.aws.amazon.com/cognito/latest/developerguide/cognito-user-pools-oidc-idp.html).
+5. If users already have Flow-Like accounts, have an administrator link their trusted Entra identities to the corresponding existing Cognito profiles with `AdminLinkProviderForUser` before their first federated sign-in. Without a link, Cognito creates a separate profile and subject. An email match alone must not authorize an account link. See [Cognito account linking](https://docs.aws.amazon.com/cognito/latest/developerguide/cognito-user-pools-identity-federation-consolidate-users.html).
+6. Complete [Use Cognito with Claude](#use-cognito-with-claude), using the **Cognito Claude client ID** in Claude and in `authentication.openid.additional_client_ids`. Keep the MCP issuer set to Cognito. For new users, complete Flow-Like sign-in and grant app execution permission before testing the connector.
+
+Test Microsoft sign-in from both Flow-Like and Claude. Get Executing User must report the same Flow-Like user ID in both paths. Also verify that removing the user's app execution permission denies subsequent MCP tool calls.
+
+### Direct Entra access tokens require additional support
+
+The current **Flow-Like Authentication** option cannot use standard Entra v2 access tokens directly. These differences require changes to the MCP integration:
+
+| Concern | Entra behavior | Current Flow-Like requirement |
+| --- | --- | --- |
+| Audience | A v2 access token's `aud` is the API's application ID GUID. | The audience must equal the canonical public MCP URL. |
+| Scopes | OAuth requests use a fully qualified custom scope, such as `https://api.example.com/m/my-tools/access_as_user`; the token's `scp` contains `access_as_user`. | The same required scope strings are advertised to Claude and checked against the token. |
+| Account identity | `sub` is pairwise and can differ between the login application and API. The same tenant's user can be correlated across applications using `tid` and `oid`. | Member lookup uses the verified `sub` directly, without an Entra identity mapping. |
+
+The audience and subject rules are documented in [Microsoft's access-token claims reference](https://learn.microsoft.com/en-us/entra/identity-platform/access-token-claims-reference); scope naming is covered in [Microsoft's scopes guide](https://learn.microsoft.com/en-us/entra/identity-platform/scopes-oidc). Direct support needs a configured mapping from the MCP resource URL to the API audience, separate requested and validated scope names, and an account mapping that also agrees with normal Flow-Like sign-in.
+
+Claude also requires its requested MCP resource URL to be registered as the Entra API's **Application ID URI**. That registration alone does not resolve the differences above. See [Claude's Entra troubleshooting guidance](https://claude.com/docs/connectors/building/troubleshooting).

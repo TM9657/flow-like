@@ -61,6 +61,8 @@ use crate::{
         resolve_wasm_packages, sign_execution_jwt,
         variant::{self, ResolvedTarget, STABLE_VARIANT, SplitKey, dispatch_event_json},
     },
+    middleware::jwt::{AppUser, OpenIDUser},
+    permission::role_permission::RolePermissions,
     routes::{
         app::events::{
             db::{db_model_to_event, decrypt_token},
@@ -75,9 +77,9 @@ use crate::{
 
 /// Identity of the run that reached this event through the app-connection
 /// proxy. Threaded into the dispatched run so cross-app REST/MCP hops stay
-/// part of the caller's process case (chain, parent run, correlation) instead
-/// of showing up as unrelated root runs. Public inbound traffic uses
-/// `ProxyCallerContext::default()` — those runs are genuine roots.
+/// part of the caller's process case (chain, parent run, correlation).
+/// Public MCP can also carry a member identity after platform OAuth and app
+/// permission checks. Other public inbound traffic has no user context.
 #[derive(Clone, Default)]
 pub(crate) struct ProxyCallerContext {
     pub app_chain: Option<Vec<String>>,
@@ -88,11 +90,10 @@ pub(crate) struct ProxyCallerContext {
     /// resolves this to authorize the call, so handing it to the run costs
     /// nothing and is the only way a flow can see who reached it.
     ///
-    /// Stays `None` for public inbound traffic — an anonymous or
-    /// registration-authenticated caller is not a Flow-Like principal, and
-    /// inventing one would make permission gates pass for the public internet.
+    /// Public OAuth only supplies this when Flow-Like authentication is enabled
+    /// and the platform has verified the token and the user's app permissions.
     pub user_context: Option<UserExecutionContext>,
-    /// Set only by the member operation endpoint after app permission checks.
+    /// Set by member operations or public MCP platform OAuth after app checks.
     pub member: Option<MemberExecutionIdentity>,
 }
 
@@ -929,10 +930,15 @@ pub(crate) async fn dispatch_mcp_for_event(
         .await
         .map_err(|e| ApiError::internal_error(flow_like_types::anyhow!(e)))?
         .ok_or_else(|| ApiError::not_found("no MCP registration found"))?;
-    let config = registration
+    let mut config = registration
         .extras_json
         .clone()
         .unwrap_or_else(|| json!({}));
+    if !config.is_object() {
+        return Err(ApiError::internal(
+            "MCP registration config must be an object",
+        ));
+    }
 
     let endpoint_path = if is_public_surface {
         format!("/m/{}", urlencoding::encode(slug_or_id))
@@ -943,7 +949,32 @@ pub(crate) async fn dispatch_mcp_for_event(
             urlencoding::encode(&event_row.id)
         )
     };
-    let resource_url = mcp_resource_url(&registration_headers, &endpoint_path);
+    // Read the authoritative auth row before discovery as well as execution.
+    // Both must describe the same served variant and trust policy.
+    let auth = if let Some(auth_id) = &registration.auth_id {
+        Some(
+            EventRemoteAuth::find_by_id(auth_id)
+                .filter(event_remote_auth::Column::AppId.eq(&event_row.app_id))
+                .filter(event_remote_auth::Column::EventId.eq(&event_row.id))
+                .filter(event_remote_auth::Column::EventVersion.eq(&served.version))
+                .filter(event_remote_auth::Column::Variant.eq(served.name.as_str()))
+                .one(&state.db)
+                .await?
+                .ok_or_else(|| ApiError::internal("MCP registration auth is missing"))?,
+        )
+    } else {
+        None
+    };
+    config["auth"] = auth
+        .as_ref()
+        .map(|auth| auth.config_json.clone())
+        .unwrap_or(Value::Null);
+    let flow_like_auth = mcp_flow_like_auth_enabled(&config, is_public_surface)?;
+    let resource_url = if flow_like_auth {
+        trusted_mcp_resource_url(&state.platform_config, &config["auth"], &endpoint_path)?
+    } else {
+        mcp_resource_url(&registration_headers, &endpoint_path)
+    };
 
     if normalized == MCP_WELL_KNOWN_OAUTH_PATH && method == axum::http::Method::GET {
         return Ok(mcp_oauth_metadata_response(
@@ -961,30 +992,51 @@ pub(crate) async fn dispatch_mcp_for_event(
             .into_response());
     }
 
-    // The auth row must come from the served variant's bucket — a caller is
-    // never verified against another variant's credential material.
-    let auth_claims = if let Some(auth_id) = &registration.auth_id {
-        let auth = EventRemoteAuth::find_by_id(auth_id)
-            .filter(event_remote_auth::Column::Variant.eq(served.name.as_str()))
-            .one(&state.db)
+    let auth_result = if flow_like_auth {
+        verify_mcp_platform_oauth(state, &config["auth"], &registration_headers, &resource_url)
             .await
-            .map_err(|e| ApiError::internal_error(flow_like_types::anyhow!(e)))?
-            .ok_or_else(|| {
-                ApiError::internal_error(flow_like_types::anyhow!("dangling auth_id"))
-            })?;
+            .map(Some)
+    } else if let Some(auth) = &auth {
         verify_inbound_auth(
             state,
-            &auth,
+            auth,
             &registration_headers,
             method,
             &normalized,
             body,
         )
-        .await?
+        .await
+    } else {
+        Ok(None)
+    };
+    let auth_claims = match auth_result {
+        Ok(claims) => claims,
+        Err(error) => {
+            return Ok(mcp_auth_error_response(
+                error,
+                &registration_headers,
+                &config["auth"],
+                &resource_url,
+            ));
+        }
+    };
+    let member_caller = if flow_like_auth {
+        Some(
+            mcp_member_caller(
+                state,
+                &event_row.app_id,
+                auth_claims
+                    .as_ref()
+                    .ok_or_else(|| ApiError::unauthorized("Missing OAuth identity"))?,
+            )
+            .await?,
+        )
     } else {
         None
     };
+    let caller = member_caller.as_ref().unwrap_or(caller);
     let client = client_metadata("mcp", &registration_headers, auth_claims, injected_auth);
+    let session_scope = mcp_session_scope(&event_row.id, &client, caller);
 
     if method == axum::http::Method::POST {
         mcp_handle_post(
@@ -997,17 +1049,20 @@ pub(crate) async fn dispatch_mcp_for_event(
             body,
             client,
             caller,
+            &session_scope,
         )
         .await
     } else if method == axum::http::Method::DELETE {
-        Ok(mcp_handle_delete(raw_query, &registration_headers).await)
+        Ok(mcp_handle_delete(raw_query, &registration_headers, &session_scope).await)
     } else if method == axum::http::Method::GET {
         Ok(mcp_handle_get(
-            event_row,
+            &event_row.id,
             &served.name,
             &endpoint_path,
+            &resource_url,
             raw_query,
             &registration_headers,
+            &session_scope,
         )
         .await)
     } else {
@@ -1033,6 +1088,182 @@ fn normalize_inbound_path(path: &str) -> String {
     } else {
         format!("/{path}")
     }
+}
+
+fn mcp_flow_like_auth_enabled(config: &Value, is_public_surface: bool) -> Result<bool, ApiError> {
+    let enabled = match config.get("flow_like_auth") {
+        None | Some(Value::Bool(false)) => false,
+        Some(Value::Bool(true)) => true,
+        _ => return Err(ApiError::internal("MCP flow_like_auth must be a boolean")),
+    };
+    if enabled && !is_oauth_auth(&config["auth"]) {
+        return Err(ApiError::internal(
+            "Flow-Like MCP authentication requires OAuth",
+        ));
+    }
+    // Connected apps retain their connection role and registration auth.
+    Ok(enabled && is_public_surface)
+}
+
+fn is_oauth_auth(auth: &Value) -> bool {
+    auth.get("type")
+        .and_then(Value::as_str)
+        .is_some_and(|kind| canonical_auth_kind(kind) == "oauth_bearer")
+}
+
+fn trusted_mcp_resource_url(
+    hub: &flow_like::hub::Hub,
+    auth: &Value,
+    endpoint_path: &str,
+) -> Result<String, ApiError> {
+    let openid = hub
+        .authentication
+        .as_ref()
+        .filter(|auth| auth.variant.eq_ignore_ascii_case("openid"))
+        .and_then(|auth| auth.openid.as_ref())
+        .ok_or_else(|| ApiError::internal("Platform OpenID authentication is not configured"))?;
+    let issuer = openid
+        .issuer
+        .as_deref()
+        .or(openid.authority.as_deref())
+        .ok_or_else(|| ApiError::internal("Platform OpenID issuer is not configured"))?;
+    if !hub.secure {
+        return Err(ApiError::internal(
+            "Public MCP OAuth requires an HTTPS platform domain",
+        ));
+    }
+    let mut resource = reqwest::Url::parse(&format!("https://{}", hub.domain))
+        .map_err(|_| ApiError::internal("Invalid platform domain for MCP OAuth"))?;
+    if hub.domain.chars().any(char::is_whitespace)
+        || resource.host_str().is_none()
+        || resource.path() != "/"
+        || resource.query().is_some()
+        || resource.fragment().is_some()
+        || !resource.username().is_empty()
+        || resource.password().is_some()
+    {
+        return Err(ApiError::internal("Invalid platform domain for MCP OAuth"));
+    }
+    resource.set_path(endpoint_path);
+    validate_mcp_resource_config(auth, issuer, resource.as_str())?;
+    Ok(resource.into())
+}
+
+fn validate_mcp_resource_config(
+    auth: &Value,
+    issuer: &str,
+    resource: &str,
+) -> Result<(), ApiError> {
+    if auth.get("issuer").and_then(Value::as_str) != Some(issuer) {
+        return Err(ApiError::internal(
+            "MCP OAuth issuer must match the platform OpenID issuer",
+        ));
+    }
+    let audience = auth
+        .get("audience")
+        .and_then(Value::as_str)
+        .and_then(|value| reqwest::Url::parse(value).ok())
+        .ok_or_else(|| {
+            ApiError::internal("Flow-Like MCP OAuth requires an explicit resource audience")
+        })?;
+    if audience.as_str() != resource {
+        return Err(ApiError::internal(
+            "MCP OAuth audience must match the public MCP URL on the platform domain",
+        ));
+    }
+    Ok(())
+}
+
+async fn verify_mcp_platform_oauth(
+    state: &AppState,
+    auth: &Value,
+    headers: &HeaderMap,
+    resource: &str,
+) -> Result<Value, ApiError> {
+    let token = crate::middleware::jwt::viewer_authorization(headers)
+        .and_then(|value| value.strip_prefix("Bearer "))
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .ok_or_else(|| ApiError::unauthorized("Missing OAuth bearer token"))?;
+    let validated = state
+        .validate_mcp_token(token, resource)
+        .await
+        .map_err(|_| ApiError::unauthorized("Invalid MCP access token"))?;
+    let claims = json!(validated.claims);
+    verify_oauth_scopes(auth, &claims)?;
+    Ok(claims)
+}
+
+async fn mcp_member_caller(
+    state: &AppState,
+    app_id: &str,
+    claims: &Value,
+) -> Result<ProxyCallerContext, ApiError> {
+    let sub = claims
+        .get("sub")
+        .and_then(Value::as_str)
+        .filter(|sub| !sub.is_empty())
+        .ok_or_else(|| ApiError::unauthorized("Missing OAuth subject"))?;
+    let user = AppUser::OpenID(OpenIDUser {
+        sub: sub.to_string(),
+        // The bearer is restricted to the MCP resource. It is never forwarded
+        // as a general platform API token or an upstream service credential.
+        access_token: String::new(),
+    });
+    let permission = user.app_permission_fresh(app_id, state).await?;
+    if !permission.has_permission(RolePermissions::ExecuteEvents) {
+        return Err(ApiError::FORBIDDEN);
+    }
+    Ok(ProxyCallerContext {
+        user_context: Some(permission.to_user_context()),
+        member: Some(MemberExecutionIdentity {
+            user_id: sub.to_string(),
+            technical_user_id: None,
+            profile_id: None,
+            token: None,
+        }),
+        ..Default::default()
+    })
+}
+
+fn mcp_auth_error_response(
+    error: ApiError,
+    headers: &HeaderMap,
+    auth: &Value,
+    resource: &str,
+) -> Response {
+    let status = error.status();
+    let mut response = error.into_response();
+    if is_oauth_auth(auth) && matches!(status, StatusCode::UNAUTHORIZED | StatusCode::FORBIDDEN) {
+        let quote = |value: &str| value.replace('\\', "\\\\").replace('"', "\\\"");
+        let metadata = format!(
+            "{}{MCP_WELL_KNOWN_OAUTH_PATH}",
+            resource.trim_end_matches('/')
+        );
+        let mut challenge = format!("Bearer resource_metadata=\"{}\"", quote(&metadata));
+        if status == StatusCode::FORBIDDEN {
+            challenge.push_str(", error=\"insufficient_scope\"");
+        } else if crate::middleware::jwt::viewer_authorization(headers).is_some() {
+            challenge.push_str(", error=\"invalid_token\"");
+        }
+        if let Some(scopes) = auth.get("required_scopes").and_then(Value::as_array) {
+            let scopes = scopes
+                .iter()
+                .filter_map(Value::as_str)
+                .collect::<Vec<_>>()
+                .join(" ");
+            if !scopes.is_empty() {
+                challenge.push_str(&format!(", scope=\"{}\"", quote(&scopes)));
+            }
+        }
+        if let Ok(value) = axum::http::HeaderValue::from_str(&challenge) {
+            response
+                .headers_mut()
+                .insert(axum::http::header::WWW_AUTHENTICATE, value);
+        }
+    }
+    apply_mcp_cors(response.headers_mut(), headers);
+    response
 }
 
 /// Use the published stable MCP contract for a caller authorized to execute this app.
@@ -1923,30 +2154,7 @@ async fn verify_oauth_bearer(
             }
         };
 
-        // Scope check.
-        if let Some(required) = cfg.get("required_scopes").and_then(|v| v.as_array()) {
-            let claim_scopes: Vec<String> = data
-                .claims
-                .get("scope")
-                .and_then(|v| v.as_str())
-                .map(|s| s.split_whitespace().map(String::from).collect())
-                .or_else(|| {
-                    data.claims.get("scp").and_then(|v| v.as_array()).map(|a| {
-                        a.iter()
-                            .filter_map(|s| s.as_str().map(String::from))
-                            .collect()
-                    })
-                })
-                .unwrap_or_default();
-            for needed in required {
-                let needed_str = needed.as_str().unwrap_or("");
-                if !claim_scopes.iter().any(|s| s == needed_str) {
-                    return Err(ApiError::forbidden(format!(
-                        "missing required scope: {needed_str}"
-                    )));
-                }
-            }
-        }
+        verify_oauth_scopes(cfg, &data.claims)?;
 
         return Ok(data.claims);
     }
@@ -1954,6 +2162,38 @@ async fn verify_oauth_bearer(
     Err(ApiError::unauthorized(last_error.unwrap_or_else(|| {
         "no usable jwk matched token algorithm".to_string()
     })))
+}
+
+fn verify_oauth_scopes(cfg: &Value, claims: &Value) -> Result<(), ApiError> {
+    if let Some(required) = cfg.get("required_scopes").and_then(|v| v.as_array()) {
+        let claim_scopes: Vec<String> = claims
+            .get("scope")
+            .and_then(|v| v.as_str())
+            .map(|s| s.split_whitespace().map(String::from).collect())
+            .or_else(|| {
+                claims
+                    .get("scp")
+                    .and_then(Value::as_str)
+                    .map(|s| s.split_whitespace().map(String::from).collect())
+            })
+            .or_else(|| {
+                claims.get("scp").and_then(|v| v.as_array()).map(|a| {
+                    a.iter()
+                        .filter_map(|s| s.as_str().map(String::from))
+                        .collect()
+                })
+            })
+            .unwrap_or_default();
+        for needed in required {
+            let needed_str = needed.as_str().unwrap_or("");
+            if !claim_scopes.iter().any(|s| s == needed_str) {
+                return Err(ApiError::forbidden(format!(
+                    "missing required scope: {needed_str}"
+                )));
+            }
+        }
+    }
+    Ok(())
 }
 
 fn candidate_jwks<'a>(jwks: &'a JwkSet, kid: Option<&str>) -> Vec<&'a Jwk> {
@@ -2620,6 +2860,7 @@ fn client_metadata(
         if let Some(value) = claims
             .get("client_id")
             .or_else(|| claims.get("azp"))
+            .or_else(|| claims.get("appid"))
             .cloned()
         {
             client.insert("client_id".to_string(), value);
@@ -2697,6 +2938,27 @@ struct InboundMcpSession {
 static MCP_SESSIONS: std::sync::LazyLock<
     flow_like_types::tokio::sync::Mutex<HashMap<String, InboundMcpSession>>,
 > = std::sync::LazyLock::new(|| flow_like_types::tokio::sync::Mutex::new(HashMap::new()));
+
+fn mcp_session_scope(event_id: &str, client: &Value, caller: &ProxyCallerContext) -> String {
+    // Namespace every storage key, including anonymous sessions. A client-supplied
+    // session id can never address another event's or another user's SSE channel.
+    // Only verified claims and authorized caller identity reach this function.
+    let identity = json!([
+        event_id,
+        client.get("issuer"),
+        client.get("sub"),
+        client.get("client_id"),
+        caller.member.as_ref().map(|member| member.user_id.as_str()),
+        client.get("proxy"),
+    ]);
+    blake3::hash(identity.to_string().as_bytes())
+        .to_hex()
+        .to_string()
+}
+
+fn mcp_session_key(scope: &str, session_id: &str) -> String {
+    format!("{scope}:{session_id}")
+}
 
 #[derive(Clone, Debug)]
 struct McpToolEntry {
@@ -2897,6 +3159,7 @@ async fn mcp_handle_post(
     body: &Bytes,
     client: Value,
     caller: &ProxyCallerContext,
+    session_scope: &str,
 ) -> Result<Response, ApiError> {
     let payload: Value = serde_json::from_slice(body).map_err(|_| {
         ApiError::bad_request("MCP POST body must be a valid JSON-RPC object or array")
@@ -2932,7 +3195,8 @@ async fn mcp_handle_post(
             .and_then(|v| v.to_str().ok())
             .map(str::to_string);
         let mut sessions = MCP_SESSIONS.lock().await;
-        if let Some(session) = sessions.get(session_id) {
+        let session_key = mcp_session_key(session_scope, session_id);
+        if let Some(session) = sessions.get(&session_key) {
             if session.event_id != event_row.id {
                 return Ok(mcp_json_response(
                     StatusCode::NOT_FOUND,
@@ -2981,7 +3245,7 @@ async fn mcp_handle_post(
                 event_id = %event_row.id,
                 "MCP session not found locally; recreated session for stateless request"
             );
-            sessions.insert(session_id.clone(), session);
+            sessions.insert(session_key, session);
         }
     }
 
@@ -2989,9 +3253,14 @@ async fn mcp_handle_post(
     for item in &items {
         let method_name = item.get("method").and_then(|v| v.as_str()).unwrap_or("");
         if method_name == "initialize" {
-            let (response, session_id) =
-                handle_mcp_initialize(event_row, &served.name, item, assigned_session_id.clone())
-                    .await;
+            let (response, session_id) = handle_mcp_initialize(
+                &event_row.id,
+                &served.name,
+                item,
+                assigned_session_id.clone(),
+                session_scope,
+            )
+            .await;
             assigned_session_id = Some(session_id);
             if let Some(response) = response {
                 responses.push(response);
@@ -3001,7 +3270,10 @@ async fn mcp_handle_post(
 
         if method_name == "notifications/initialized" {
             if let Some(session_id) = assigned_session_id.as_ref()
-                && let Some(session) = MCP_SESSIONS.lock().await.get_mut(session_id)
+                && let Some(session) = MCP_SESSIONS
+                    .lock()
+                    .await
+                    .get_mut(&mcp_session_key(session_scope, session_id))
             {
                 session.initialized = true;
             }
@@ -3035,7 +3307,7 @@ async fn mcp_handle_post(
         let tx = {
             let sessions = MCP_SESSIONS.lock().await;
             sessions
-                .get(session_id)
+                .get(&mcp_session_key(session_scope, session_id))
                 .map(|session| session.sse_tx.clone())
         };
         if let Some(tx) = tx {
@@ -3080,10 +3352,11 @@ async fn mcp_handle_post(
 }
 
 async fn handle_mcp_initialize(
-    event_row: &event::Model,
+    event_id: &str,
     served_variant: &str,
     payload: &Value,
     existing_session_id: Option<String>,
+    session_scope: &str,
 ) -> (Option<Value>, String) {
     let id = payload.get("id").cloned();
     let requested = payload
@@ -3092,22 +3365,23 @@ async fn handle_mcp_initialize(
         .and_then(|v| v.as_str());
     let protocol_version = negotiate_mcp_protocol_version(requested);
     let session_id = existing_session_id.unwrap_or_else(|| mint_mcp_session_id(served_variant));
+    let session_key = mcp_session_key(session_scope, &session_id);
     let mut sessions = MCP_SESSIONS.lock().await;
     let sse_tx = sessions
-        .get(&session_id)
+        .get(&session_key)
         .map(|session| session.sse_tx.clone())
         .unwrap_or_else(|| {
             let (tx, _rx) = flow_like_types::tokio::sync::broadcast::channel::<String>(64);
             tx
         });
     let session = InboundMcpSession {
-        event_id: event_row.id.clone(),
+        event_id: event_id.to_string(),
         protocol_version: protocol_version.clone(),
         initialized: false,
         created_at: std::time::Instant::now(),
         sse_tx,
     };
-    sessions.insert(session_id.clone(), session);
+    sessions.insert(session_key, session);
     let result = json!({
         "protocolVersion": protocol_version,
         "capabilities": {
@@ -3129,7 +3403,7 @@ async fn handle_mcp_initialize(
     (response, session_id)
 }
 
-async fn mcp_handle_delete(raw_query: &str, headers: &HeaderMap) -> Response {
+async fn mcp_handle_delete(raw_query: &str, headers: &HeaderMap, session_scope: &str) -> Response {
     let Some(session_id) = mcp_session_id(raw_query, headers) else {
         return mcp_text_response(
             StatusCode::BAD_REQUEST,
@@ -3137,7 +3411,11 @@ async fn mcp_handle_delete(raw_query: &str, headers: &HeaderMap) -> Response {
             headers,
         );
     };
-    let removed = MCP_SESSIONS.lock().await.remove(&session_id).is_some();
+    let removed = MCP_SESSIONS
+        .lock()
+        .await
+        .remove(&mcp_session_key(session_scope, &session_id))
+        .is_some();
     if removed {
         mcp_empty_response(StatusCode::NO_CONTENT, None, headers)
     } else {
@@ -3146,11 +3424,13 @@ async fn mcp_handle_delete(raw_query: &str, headers: &HeaderMap) -> Response {
 }
 
 async fn mcp_handle_get(
-    event_row: &event::Model,
+    event_id: &str,
     served_variant: &str,
     endpoint_path: &str,
+    resource_url: &str,
     raw_query: &str,
     headers: &HeaderMap,
+    session_scope: &str,
 ) -> Response {
     let accept = headers
         .get(axum::http::header::ACCEPT)
@@ -3174,38 +3454,29 @@ async fn mcp_handle_get(
     let (session_id, mut rx, legacy_endpoint) = {
         let mut sessions = MCP_SESSIONS.lock().await;
         if let Some(session_id) = supplied_session_id {
-            if let Some(session) = sessions.get(&session_id) {
-                if session.event_id != event_row.id {
+            let session_key = mcp_session_key(session_scope, &session_id);
+            if let Some(session) = sessions.get(&session_key) {
+                if session.event_id != event_id {
                     return mcp_text_response(StatusCode::NOT_FOUND, "Session not found", headers);
                 }
                 (session_id, session.sse_tx.subscribe(), None)
             } else {
-                let (session, rx) = new_mcp_session(
-                    &event_row.id,
-                    mcp_protocol_version_from_headers(headers),
-                    true,
-                );
+                let (session, rx) =
+                    new_mcp_session(event_id, mcp_protocol_version_from_headers(headers), true);
                 tracing::warn!(
                     session_id = %session_id,
-                    event_id = %event_row.id,
+                    event_id,
                     "MCP SSE session not found locally; recreated session"
                 );
-                sessions.insert(session_id.clone(), session);
+                sessions.insert(session_key, session);
                 (session_id, rx, None)
             }
         } else {
             let session_id = mint_mcp_session_id(served_variant);
-            let (session, rx) = new_mcp_session(
-                &event_row.id,
-                MCP_DEFAULT_PROTOCOL_VERSION.to_string(),
-                false,
-            );
-            sessions.insert(session_id.clone(), session);
-            let endpoint = format!(
-                "{}?sessionId={}",
-                mcp_resource_url(headers, endpoint_path),
-                session_id
-            );
+            let (session, rx) =
+                new_mcp_session(event_id, MCP_DEFAULT_PROTOCOL_VERSION.to_string(), false);
+            sessions.insert(mcp_session_key(session_scope, &session_id), session);
+            let endpoint = format!("{resource_url}?sessionId={session_id}");
             (session_id, rx, Some(endpoint))
         }
     };
@@ -4133,6 +4404,306 @@ mod tests {
         parse_query_single, registration_auth_headers, rest_args_from_body_and_query,
         with_inbound_openapi_server,
     };
+
+    #[test]
+    fn mcp_platform_identity_is_opt_in_and_public_only() {
+        assert!(!super::mcp_flow_like_auth_enabled(&json!({}), true).unwrap());
+        let config = json!({"flow_like_auth": true, "auth": {"type": "oauth_bearer"}});
+        assert!(super::mcp_flow_like_auth_enabled(&config, true).unwrap());
+        assert!(!super::mcp_flow_like_auth_enabled(&config, false).unwrap());
+        for config in [
+            json!({"flow_like_auth": true}),
+            json!({"flow_like_auth": true, "auth": {"type": "bearer_token"}}),
+            json!({"flow_like_auth": "true", "auth": {"type": "oauth_bearer"}}),
+        ] {
+            assert!(super::mcp_flow_like_auth_enabled(&config, true).is_err());
+        }
+    }
+
+    #[test]
+    fn mcp_resource_binding_rejects_other_issuers_hosts_and_paths() {
+        let issuer = "https://cognito.example/pool";
+        let resource = "https://api.example.com/m/tools";
+        let valid = json!({"issuer": issuer, "audience": resource});
+        assert!(super::validate_mcp_resource_config(&valid, issuer, resource).is_ok());
+        for invalid in [
+            json!({"issuer": "https://untrusted.example", "audience": resource}),
+            json!({"issuer": issuer}),
+            json!({"issuer": issuer, "audience": "web-client-id"}),
+            json!({"issuer": issuer, "audience": "https://other.example/m/tools"}),
+            json!({"issuer": issuer, "audience": "https://api.example.com/m/other"}),
+            json!({"issuer": issuer, "audience": "https://api.example.com/m/tools/"}),
+            json!({"issuer": issuer, "audience": "https://api.example.com/m/tools?token=x"}),
+        ] {
+            assert!(super::validate_mcp_resource_config(&invalid, issuer, resource).is_err());
+        }
+    }
+
+    #[test]
+    fn mcp_trusted_resource_uses_only_the_configured_platform_origin() {
+        let mut hub: flow_like::hub::Hub = serde_json::from_str(include_str!(
+            "../../../../apps/backend/kubernetes/flow-like.config.example.json"
+        ))
+        .unwrap();
+        hub.domain = "api.example.com".into();
+        hub.secure = true;
+        hub.authentication.as_mut().unwrap().variant = "openid".into();
+        hub.authentication
+            .as_mut()
+            .unwrap()
+            .openid
+            .as_mut()
+            .unwrap()
+            .issuer = Some("https://issuer.example/pool".into());
+        let auth = json!({"issuer": "https://issuer.example/pool", "audience": "https://api.example.com/m/tools"});
+        assert_eq!(
+            super::trusted_mcp_resource_url(&hub, &auth, "/m/tools").unwrap(),
+            "https://api.example.com/m/tools"
+        );
+        hub.secure = false;
+        assert!(super::trusted_mcp_resource_url(&hub, &auth, "/m/tools").is_err());
+        hub.secure = true;
+        for domain in [
+            "user:password@api.example.com",
+            "api.example.com/path",
+            "api.example.com?query",
+            "api.example.com#fragment",
+            "api.example.com\n",
+        ] {
+            hub.domain = domain.into();
+            assert!(super::trusted_mcp_resource_url(&hub, &auth, "/m/tools").is_err());
+        }
+    }
+
+    #[tokio::test]
+    async fn mcp_legacy_sse_advertises_trusted_resource_instead_of_request_host() {
+        use futures_util::StreamExt;
+        let event_id = uuid::Uuid::new_v4().to_string();
+        let scope = super::mcp_session_scope(&event_id, &json!({}), &ProxyCallerContext::default());
+        let mut headers = axum::http::HeaderMap::new();
+        headers.insert("host", "untrusted.example".parse().unwrap());
+        headers.insert("x-forwarded-proto", "http".parse().unwrap());
+        headers.insert("accept", "text/event-stream".parse().unwrap());
+        let response = super::mcp_handle_get(
+            &event_id,
+            "stable",
+            "/m/tools",
+            "https://api.example.com/m/tools",
+            "",
+            &headers,
+            &scope,
+        )
+        .await;
+        headers.insert(
+            "mcp-session-id",
+            response.headers()["mcp-session-id"].clone(),
+        );
+        let mut stream = response.into_body().into_data_stream();
+        let first = tokio::time::timeout(std::time::Duration::from_secs(1), stream.next())
+            .await
+            .unwrap()
+            .unwrap()
+            .unwrap();
+        let first = std::str::from_utf8(&first).unwrap();
+        assert!(first.contains("https://api.example.com/m/tools?sessionId="));
+        assert!(!first.contains("untrusted.example"));
+        assert_eq!(
+            super::mcp_handle_delete("", &headers, &scope)
+                .await
+                .status(),
+            axum::http::StatusCode::NO_CONTENT
+        );
+    }
+
+    #[test]
+    fn mcp_session_identity_includes_each_supported_oauth_client_claim() {
+        let headers = axum::http::HeaderMap::new();
+        let caller = ProxyCallerContext::default();
+        let client = |key: &str, id: &str| {
+            let mut claims = json!({"iss": "https://issuer/pool", "sub": "alice"});
+            claims[key] = json!(id);
+            client_metadata("mcp", &headers, Some(claims), None)
+        };
+        let expected = super::mcp_session_scope("event", &client("client_id", "claude"), &caller);
+        for claim in ["client_id", "azp", "appid"] {
+            assert_eq!(
+                super::mcp_session_scope("event", &client(claim, "claude"), &caller),
+                expected
+            );
+            assert_ne!(
+                super::mcp_session_scope("event", &client(claim, "other"), &caller),
+                expected
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn mcp_oauth_discovery_challenge_points_to_public_metadata() {
+        let headers = axum::http::HeaderMap::new();
+        let resource = "https://api.example.com/m/tools";
+        let auth = json!({
+            "type": "oauth_bearer", "issuer": "https://cognito.example/pool",
+            "required_scopes": ["mcp/invoke"]
+        });
+        let response = super::mcp_auth_error_response(
+            super::ApiError::unauthorized("Missing OAuth bearer token"),
+            &headers,
+            &auth,
+            resource,
+        );
+        assert_eq!(response.status(), axum::http::StatusCode::UNAUTHORIZED);
+        assert_eq!(
+            response.headers()["www-authenticate"],
+            "Bearer resource_metadata=\"https://api.example.com/m/tools/.well-known/oauth-protected-resource\", scope=\"mcp/invoke\""
+        );
+        assert!(
+            response.headers()["access-control-expose-headers"]
+                .to_str()
+                .unwrap()
+                .contains("WWW-Authenticate")
+        );
+        let metadata =
+            super::mcp_oauth_metadata_response(&headers, &json!({"auth": auth}), resource);
+        let bytes = axum::body::to_bytes(metadata.into_body(), 8192)
+            .await
+            .unwrap();
+        let document: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        assert_eq!(document["resource"], resource);
+        assert_eq!(
+            document["authorization_servers"],
+            json!(["https://cognito.example/pool"])
+        );
+        assert_eq!(document["scopes_supported"], json!(["mcp/invoke"]));
+    }
+
+    #[test]
+    fn mcp_oauth_rejects_missing_scopes_and_distinguishes_token_errors() {
+        let auth = json!({"type": "oauth_bearer", "required_scopes": ["mcp/invoke"]});
+        assert!(super::verify_oauth_scopes(&auth, &json!({"scope": "openid mcp/invoke"})).is_ok());
+        assert!(super::verify_oauth_scopes(&auth, &json!({"scp": ["mcp/invoke"]})).is_ok());
+        assert!(super::verify_oauth_scopes(&auth, &json!({"scp": "openid mcp/invoke"})).is_ok());
+        assert!(
+            super::verify_oauth_scopes(&auth, &json!({"permissions": ["mcp/invoke"]})).is_err()
+        );
+        let error = super::verify_oauth_scopes(&auth, &json!({"scope": "openid"})).unwrap_err();
+        let mut headers = axum::http::HeaderMap::new();
+        headers.insert("authorization", "Bearer expired".parse().unwrap());
+        let response =
+            super::mcp_auth_error_response(error, &headers, &auth, "https://api.example/m/tools");
+        assert_eq!(response.status(), axum::http::StatusCode::FORBIDDEN);
+        assert!(
+            response.headers()["www-authenticate"]
+                .to_str()
+                .unwrap()
+                .contains("error=\"insufficient_scope\"")
+        );
+        let response = super::mcp_auth_error_response(
+            super::ApiError::UNAUTHORIZED,
+            &headers,
+            &auth,
+            "https://api.example/m/tools",
+        );
+        assert!(
+            response.headers()["www-authenticate"]
+                .to_str()
+                .unwrap()
+                .contains("error=\"invalid_token\"")
+        );
+        let response = super::mcp_auth_error_response(
+            super::ApiError::UNAUTHORIZED,
+            &headers,
+            &json!({"type": "api_key"}),
+            "https://api.example/m/tools",
+        );
+        assert!(!response.headers().contains_key("www-authenticate"));
+    }
+
+    #[tokio::test]
+    async fn mcp_sessions_isolate_users_clients_and_events_even_with_the_same_id() {
+        let event_id = uuid::Uuid::new_v4().to_string();
+        let caller = ProxyCallerContext::default();
+        let identity =
+            json!({"issuer": "https://issuer/pool", "sub": "alice", "client_id": "claude"});
+        let alice = super::mcp_session_scope(&event_id, &identity, &caller);
+        let bob = super::mcp_session_scope(
+            &event_id,
+            &json!({"issuer": "https://issuer/pool", "sub": "bob", "client_id": "claude"}),
+            &caller,
+        );
+        let other_client = super::mcp_session_scope(
+            &event_id,
+            &json!({"issuer": "https://issuer/pool", "sub": "alice", "client_id": "other"}),
+            &caller,
+        );
+        let anonymous = super::mcp_session_scope(&event_id, &json!({}), &caller);
+        let other_event = super::mcp_session_scope("other-event", &identity, &caller);
+        for scope in [&bob, &other_client, &anonymous, &other_event] {
+            assert_ne!(scope, &alice);
+        }
+        let session_id = "stable~same-client-supplied-session";
+        let key = super::mcp_session_key(&alice, session_id);
+        let (session, mut rx) = super::new_mcp_session(&event_id, "2025-06-18".into(), true);
+        super::MCP_SESSIONS
+            .lock()
+            .await
+            .insert(key.clone(), session);
+        let mut headers = axum::http::HeaderMap::new();
+        headers.insert("mcp-session-id", session_id.parse().unwrap());
+        for scope in [&bob, &other_client, &anonymous, &other_event] {
+            assert_eq!(
+                super::mcp_handle_delete("", &headers, scope).await.status(),
+                axum::http::StatusCode::NOT_FOUND
+            );
+        }
+        // Initialize and GET under another identity cannot reuse Alice's stream.
+        let (_, bob_id) = super::handle_mcp_initialize(
+            &event_id,
+            "stable",
+            &json!({
+                "jsonrpc": "2.0", "id": 1, "method": "initialize",
+                "params": {"protocolVersion": "2025-06-18"}
+            }),
+            Some(session_id.into()),
+            &bob,
+        )
+        .await;
+        assert_eq!(bob_id, session_id);
+        headers.insert("accept", "text/event-stream".parse().unwrap());
+        let bob_stream = super::mcp_handle_get(
+            &event_id,
+            "stable",
+            "/m/tools",
+            "https://api.example/m/tools",
+            "",
+            &headers,
+            &bob,
+        )
+        .await;
+        let bob_key = super::mcp_session_key(&bob, session_id);
+        super::MCP_SESSIONS
+            .lock()
+            .await
+            .get(&bob_key)
+            .unwrap()
+            .sse_tx
+            .send("bob-only".into())
+            .unwrap();
+        assert!(matches!(
+            rx.try_recv(),
+            Err(flow_like_types::tokio::sync::broadcast::error::TryRecvError::Empty)
+        ));
+        assert_eq!(
+            super::mcp_handle_delete("", &headers, &alice)
+                .await
+                .status(),
+            axum::http::StatusCode::NO_CONTENT
+        );
+        assert_eq!(
+            super::mcp_handle_delete("", &headers, &bob).await.status(),
+            axum::http::StatusCode::NO_CONTENT
+        );
+        drop(bob_stream);
+    }
 
     #[test]
     fn member_mcp_operations_preserve_results_and_surface_protocol_errors() {
