@@ -140,7 +140,7 @@
 		"rehype-react": "^8.0.0",
 		"remark-parse": "^11.0.0",
 		"remark-rehype": "^11.1.1",
-		"shadcn-ui": "latest",
+		"shadcn-ui": "0.9.5",
 		"sigma": "^3.0.2",
 		"sonner": "^1.7.1",
 		"tailwind-merge": "^3.3.1",

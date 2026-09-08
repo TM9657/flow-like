@@ -14,7 +14,8 @@ cat >> "$check_recipe" <<'DOCKERFILE'
 
 FROM build-deps AS native-deps-check-build
 COPY .github/scripts/tests/container-native-deps.c /tmp/native-deps-check.c
-RUN libraries="wayland-client wayland-server libpipewire-0.3 egl gbm xcb-randr xcb-render x11 xi xtst libinput libudev xkbcommon" \
+RUN libraries="wayland-client wayland-server libpipewire-0.3 egl gbm xcb-randr xcb-render x11 xi xtst libinput libudev xkbcommon OpenCL" \
+    && pkg-config --exists $libraries \
     && cc -O2 /tmp/native-deps-check.c /tmp/ort-glibc-compat.o -o /tmp/native-deps-check \
        $(pkg-config --cflags --libs $libraries) -ldl -Wl,--no-as-needed -lstdc++ \
     && clang_library=$(find /usr/lib -name libclang.so.1 -print -quit) \
