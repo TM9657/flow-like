@@ -79,6 +79,47 @@ describe("event fixture sanity", () => {
 	});
 });
 
+describe("cron schedule detection", () => {
+	const hasMissingSchedule = (config: Record<string, unknown>) =>
+		computeEventIssues({
+			event: event({ event_type: "cron" }),
+			config,
+		}).some((issue) => issue.id === "cron-expression");
+
+	test("accepts a recurring schedule", () => {
+		expect(hasMissingSchedule({ expression: "0 9 * * *" })).toBe(false);
+	});
+
+	test("accepts a one-time schedule without a cron expression", () => {
+		expect(
+			hasMissingSchedule({
+				expression: null,
+				scheduled_for: { date: "2028-02-29", time: "09:30" },
+			}),
+		).toBe(false);
+	});
+
+	test("keeps a saved past schedule configured", () => {
+		expect(
+			hasMissingSchedule({
+				scheduled_for: { date: "2020-01-01", time: "09:30" },
+			}),
+		).toBe(false);
+	});
+
+	test.each([
+		undefined,
+		{},
+		{ date: "2028-02-29" },
+		{ date: "", time: "09:30" },
+		{ date: "2027-02-29", time: "09:30" },
+		{ date: "2028-02-29", time: "24:00" },
+		{ date: "2028-02-29", time: "09:60" },
+	])("still flags a missing or invalid one-time schedule: %j", (scheduled) => {
+		expect(hasMissingSchedule({ scheduled_for: scheduled })).toBe(true);
+	});
+});
+
 describe("runtime variable coverage", () => {
 	const variable = (overrides: Partial<IVariable> = {}): IVariable =>
 		({

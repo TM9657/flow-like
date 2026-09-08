@@ -769,7 +769,21 @@ export class BoardState implements IBoardState {
 		}
 	}
 
-	async ensureAppPackagesInstalledForExecution(appId: string): Promise<void> {
+	async ensureAppPackagesInstalledForExecution(
+		appId: string,
+		board?: IBoard,
+	): Promise<void> {
+		const usesWidgets =
+			board &&
+			[
+				...Object.values(board.nodes),
+				...Object.values(board.layers).flatMap((layer) =>
+					Object.values(layer.nodes),
+				),
+			].some((node) => node.name === "a2ui_instantiate_widget");
+		if (usesWidgets) {
+			await this.backend.widgetState.syncWidgetsForExecution?.(appId);
+		}
 		const remotePackages = await this.syncRemoteAppPackages(appId);
 		await this.ensureRemoteAppPackagesInstalled(remotePackages, {
 			forceReload: true,
@@ -1686,7 +1700,7 @@ export class BoardState implements IBoardState {
 			);
 		}
 
-		await this.ensureAppPackagesInstalledForExecution(appId);
+		await this.ensureAppPackagesInstalledForExecution(appId, board);
 		const { requires_local_execution } =
 			extractOAuthRequirementsFromBoard(board);
 

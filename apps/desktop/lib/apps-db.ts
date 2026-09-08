@@ -36,4 +36,16 @@ appsDB.version(3).stores({
 	shortcuts: "id, profileId, appId, order",
 });
 
+appsDB
+	.version(4)
+	.stores({
+		visibility: "appId",
+		shortcuts: "id, profileId, appId, order",
+	})
+	.upgrade(async (transaction) => {
+		// Older widget reads cached unknown app visibility as Offline. Rebuild
+		// this cache from app manifests so those devices can fetch widgets again.
+		await transaction.table("visibility").clear();
+	});
+
 export { appsDB };

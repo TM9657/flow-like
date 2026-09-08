@@ -3,6 +3,7 @@
 import { useTranslation } from "@flow-like/locales";
 import { createContext, useCallback, useContext, useMemo } from "react";
 import { useInvoke } from "../../../hooks/use-invoke";
+import { isMissingResourceError } from "../../../lib/api-error";
 import { useBackend } from "../../../state/backend-state";
 import {
 	type ComponentProps,
@@ -350,8 +351,10 @@ export function A2UIWidgetInstance({
 	const widgetDef = useMemo(() => {
 		if (fromRefs) return fromRefs;
 		if (inlineWidgetDef) return inlineWidgetDef;
+		// Query errors retain old data, but a confirmed deletion invalidates that definition.
+		if (isMissingResourceError(fetched.error)) return undefined;
 		return fetched.data;
-	}, [fromRefs, inlineWidgetDef, fetched.data]);
+	}, [fromRefs, inlineWidgetDef, fetched.data, fetched.error]);
 
 	// Apply this instance's parameter values onto the widget's components, so the same widget
 	// definition can render differently per instance (e.g. a stat card with a per-instance title).

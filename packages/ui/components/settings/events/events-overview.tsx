@@ -1,6 +1,7 @@
 "use client";
 
 import { useTranslation } from "@flow-like/locales";
+import { useQueries, useQueryClient } from "@tanstack/react-query";
 import {
 	AlertTriangleIcon,
 	ClipboardListIcon,
@@ -67,6 +68,7 @@ import {
 import { Input } from "../../ui/input";
 import { useProjectRuns } from "../dashboard/use-project-runs";
 import type { SurfaceRunHealth } from "../dashboard/use-project-runs";
+import { type EventStatus, getEventStatus } from "./event-status";
 import { computeEventIssues } from "./use-event-issues";
 import type { IEventIssue } from "./use-event-issues";
 import { useSinkActivation } from "./use-sink-activation";
@@ -92,15 +94,8 @@ const TYPE_ICONS: Record<string, ComponentType<{ className?: string }>> = {
 	"file-text": FileTextIcon,
 };
 
-/**
- * The three questions this page is opened to answer. `attention` deliberately
- * outranks the others: an event with a blocking issue is not "paused", it is
- * broken, and grouping it with the things you switched off on purpose is how it
- * stays broken.
- */
-type StatusFilter = "all" | "live" | "paused" | "attention";
-
-type EventStatus = "live" | "paused" | "attention";
+/** Blocking setup issues take precedence over activation state. */
+type StatusFilter = "all" | EventStatus;
 
 /**
  * The two things an event can be, from the point of view of the person using
@@ -117,7 +112,8 @@ interface EventRowModel {
 	topIssue: IEventIssue | null;
 	blocking: boolean;
 	requiresSink: boolean;
-	sinkActive: boolean;
+	sinkActive?: boolean;
+	sinkStatusLoading: boolean;
 	routePath?: string;
 	isRouted: boolean;
 	entry: ReturnType<typeof describeEventEntry>;
@@ -177,12 +173,10 @@ export function EventsOverview({
 	const { t } = useTranslation("settings");
 	const backend = useBackend();
 	const invalidate = useInvalidateInvoke();
+	const queryClient = useQueryClient();
 	const [search, setSearch] = useState("");
 	const [status, setStatus] = useState<StatusFilter>("all");
 	const [typeFilter, setTypeFilter] = useState<Set<string>>(new Set());
-	const [sinkStatuses, setSinkStatuses] = useState<Map<string, boolean>>(
-		new Map(),
-	);
 	const [nodeNames, setNodeNames] = useState<Map<string, string>>(new Map());
 
 	const uiEventTypeSet = useMemo(
@@ -249,35 +243,39 @@ export function EventsOverview({
 		};
 	}, [appId, backend.boardState, boardIdsKey, events]);
 
-	const sinkEventIdsKey = useMemo(
+	const sinkEvents = useMemo(
 		() =>
-			events
-				.filter((event) =>
-					eventRequiresSink(eventMapping, event, nodeNames.get(event.id)),
-				)
-				.map((event) => event.id)
-				.join(","),
+			events.filter((event) =>
+				eventRequiresSink(eventMapping, event, nodeNames.get(event.id)),
+			),
 		[events, eventMapping, nodeNames],
 	);
 
-	const refreshSinkStatuses = useCallback(async () => {
-		const ids = sinkEventIdsKey ? sinkEventIdsKey.split(",") : [];
-		const statuses = new Map<string, boolean>();
-		for (const id of ids) {
-			if (!id) continue;
-			try {
-				statuses.set(id, await backend.eventState.isEventSinkActive(id));
-			} catch (error) {
-				console.error(`Failed to read sink status for event ${id}:`, error);
-				statuses.set(id, false);
-			}
-		}
-		setSinkStatuses(statuses);
-	}, [backend.eventState, sinkEventIdsKey]);
-
-	useEffect(() => {
-		refreshSinkStatuses();
-	}, [refreshSinkStatuses]);
+	const sinkQueries = useQueries({
+		queries: sinkEvents.map((event) => ({
+			queryKey: [
+				"eventSinkStatus",
+				appId,
+				event.id,
+				{
+					active: event.active,
+					event_type: event.event_type,
+					execution_mode: event.execution_mode,
+					config: event.config,
+					event_version: event.event_version,
+				},
+			],
+			queryFn: () =>
+				backend.eventState.isEventSinkActive(event.id, { appId, event }),
+			enabled: !!appId && event.active,
+			retry: false,
+			staleTime: 0,
+			refetchInterval: 30_000,
+		})),
+	});
+	const sinkStatuses = new Map(
+		sinkEvents.map((event, index) => [event.id, sinkQueries[index]]),
+	);
 
 	const { requestToggle, pendingId, dialogProps } = useSinkActivation({
 		appId,
@@ -288,7 +286,9 @@ export function EventsOverview({
 		onRefreshToken,
 		onChanged: async () => {
 			await invalidate(backend.eventState.getEvents, [appId]);
-			await refreshSinkStatuses();
+			await queryClient.invalidateQueries({
+				queryKey: ["eventSinkStatus", appId],
+			});
 		},
 	});
 
@@ -306,18 +306,21 @@ export function EventsOverview({
 			);
 			const issues = computeEventIssues({ event, config, requiresSink });
 			const blockingIssue = issues.find((i) => i.severity === "blocking");
-			const sinkActive = sinkStatuses.get(event.id) ?? false;
+			const sinkQuery = sinkStatuses.get(event.id);
+			const sinkActive = !event.active
+				? false
+				: sinkQuery?.isError
+					? undefined
+					: sinkQuery?.data;
 			const isRouted =
 				uiEventTypeSet.has(event.event_type) || !!event.default_page_id;
 
-			const notRunning = requiresSink && !sinkActive;
-			const status: EventStatus = blockingIssue
-				? "attention"
-				: !event.active
-					? "paused"
-					: notRunning
-						? "attention"
-						: "live";
+			const status = getEventStatus({
+				active: event.active,
+				blocking: !!blockingIssue,
+				requiresSink,
+				sinkActive,
+			});
 
 			return {
 				event,
@@ -327,6 +330,7 @@ export function EventsOverview({
 				blocking: !!blockingIssue,
 				requiresSink,
 				sinkActive,
+				sinkStatusLoading: sinkQuery?.isPending ?? true,
 				routePath: routeByEventId.get(event.id),
 				isRouted,
 				entry: isRouted ? null : describeEventEntry(event, config),
@@ -345,7 +349,13 @@ export function EventsOverview({
 	]);
 
 	const statusCounts = useMemo(() => {
-		const counts = { all: rows.length, live: 0, paused: 0, attention: 0 };
+		const counts = {
+			all: rows.length,
+			live: 0,
+			paused: 0,
+			attention: 0,
+			unknown: 0,
+		};
 		for (const row of rows) counts[row.status] += 1;
 		return counts;
 	}, [rows]);
@@ -565,6 +575,11 @@ function StatusFilterBar({
 			label: t("needsSetup", "Needs setup"),
 			dot: "bg-destructive",
 		},
+		{
+			key: "unknown",
+			label: t("statusUnknown", "Unknown"),
+			dot: "bg-muted-foreground/50",
+		},
 	];
 
 	return (
@@ -758,12 +773,14 @@ const STRIPE: Record<EventStatus, string> = {
 	attention: "bg-destructive",
 	live: "bg-emerald-500/60",
 	paused: "bg-transparent",
+	unknown: "bg-muted-foreground/30",
 };
 
 const DOT: Record<EventStatus, string> = {
 	attention: "bg-destructive",
 	live: "bg-emerald-500",
 	paused: "bg-muted-foreground/50",
+	unknown: "bg-muted-foreground/50",
 };
 
 function EventRow({
@@ -833,9 +850,16 @@ function EventRow({
 					<span className="shrink-0 rounded bg-secondary px-1.5 py-0.5 text-[11px] font-medium text-secondary-foreground">
 						{formatEventTypeLabel(event.event_type)}
 					</span>
-					{row.requiresSink && !row.sinkActive && (
+					{row.requiresSink && row.sinkActive === false && (
 						<span className="shrink-0 rounded bg-amber-500/15 px-1.5 py-0.5 text-[11px] font-medium text-amber-700 dark:text-amber-400">
 							{t("notRunning", "Not running")}
+						</span>
+					)}
+					{row.requiresSink && row.sinkActive === undefined && (
+						<span className="shrink-0 rounded bg-muted px-1.5 py-0.5 text-[11px] font-medium text-muted-foreground">
+							{row.sinkStatusLoading
+								? t("checkingSinkStatus", "Checking status…")
+								: t("sinkStatusUnavailable", "Status unavailable")}
 						</span>
 					)}
 					{row.requiresSink && row.sinkActive && (

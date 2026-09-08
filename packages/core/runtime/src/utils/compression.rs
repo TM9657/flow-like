@@ -110,6 +110,30 @@ where
     Ok(())
 }
 
+/// Write a compressed JSON snapshot only when its version does not exist.
+pub async fn compress_to_file_json_create<T>(
+    store: Arc<dyn ObjectStore>,
+    file_path: Path,
+    input: &T,
+) -> flow_like_types::Result<()>
+where
+    T: Serialize,
+{
+    let data = flow_like_types::json::to_vec(input)?;
+    let compressed = compress_prepend_size(&data);
+    store
+        .put_opts(
+            &file_path,
+            PutPayload::from(compressed),
+            PutOptions {
+                mode: PutMode::Create,
+                ..Default::default()
+            },
+        )
+        .await?;
+    Ok(())
+}
+
 /// Read from a compressed file and deserialize it into a Serde Deserializable Struct
 #[instrument(name = "from_compressed", skip(store, file_path), level = "debug")]
 pub async fn from_compressed<T>(
@@ -197,4 +221,29 @@ where
 
     let data: T = flow_like_types::json::from_slice(&data)?;
     Ok(data)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use flow_like_storage::object_store::memory::InMemory;
+
+    #[tokio::test]
+    async fn json_snapshot_creation_cannot_replace_an_existing_version() {
+        let store = Arc::new(InMemory::new());
+        let path = Path::from("widgets/versions/example/1-0-0.widget");
+        let first = serde_json::json!({ "name": "Published content" });
+        let replacement = serde_json::json!({ "name": "Racing content" });
+
+        compress_to_file_json_create(store.clone(), path.clone(), &first)
+            .await
+            .unwrap();
+        assert!(
+            compress_to_file_json_create(store.clone(), path.clone(), &replacement)
+                .await
+                .is_err()
+        );
+        let saved: serde_json::Value = from_compressed_json(store, path).await.unwrap();
+        assert_eq!(saved, first);
+    }
 }

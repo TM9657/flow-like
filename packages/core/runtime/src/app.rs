@@ -7,7 +7,8 @@ use crate::{
     },
     state::FlowLikeState,
     utils::compression::{
-        compress_to_file, compress_to_file_json, from_compressed, from_compressed_json,
+        compress_to_file, compress_to_file_json, compress_to_file_json_create, from_compressed,
+        from_compressed_json,
     },
 };
 use flow_like_storage::Path;
@@ -976,6 +977,46 @@ impl App {
         Ok(())
     }
 
+    /// Cache an authoritative remote snapshot without replacing the working copy.
+    pub async fn cache_widget_version(
+        &self,
+        widget: &crate::a2ui::widget::Widget,
+    ) -> flow_like_types::Result<()> {
+        let version = widget.version.ok_or(flow_like_types::anyhow!(
+            "A widget snapshot must have a version"
+        ))?;
+        let state = self
+            .app_state
+            .clone()
+            .ok_or(flow_like_types::anyhow!("App state not found"))?;
+        let store = FlowLikeState::project_meta_store(&state)
+            .await?
+            .as_generic();
+        let version_path = Path::from("apps")
+            .join(self.id.clone())
+            .join("widgets")
+            .join("versions")
+            .join(widget.id.as_str())
+            .join(format!("{}-{}-{}.widget", version.0, version.1, version.2));
+        compress_to_file_json(store, version_path, widget).await
+    }
+
+    /// Cache a hosted app's complete widget inventory before local execution.
+    pub async fn cache_widgets(
+        &mut self,
+        widgets: &[crate::a2ui::widget::Widget],
+    ) -> flow_like_types::Result<()> {
+        // Keep the same manifest instance while saving definitions so new IDs
+        // cannot overwrite each other through concurrent read-modify-writes.
+        for widget in widgets {
+            self.save_widget(widget).await?;
+        }
+        self.widget_ids = widgets.iter().map(|widget| widget.id.clone()).collect();
+        // An empty inventory also replaces the manifest, excluding widgets
+        // deleted on another device from local runtime resolution.
+        self.save().await
+    }
+
     /// Quiet existence check for a widget's metadata sidecar.
     async fn has_widget_meta(&self, widget_id: &str) -> bool {
         let Some(state) = self.app_state.clone() else {
@@ -1059,13 +1100,11 @@ impl App {
 
     /// Publish an immutable snapshot of a widget and advance its working copy.
     ///
-    /// The snapshot is what `open_widget(id, Some(version))` reads back and what
-    /// `get_widget_versions` lists, so bumping the working copy alone leaves the
-    /// version history permanently empty. It is written before the working copy
-    /// is advanced: an interrupted publish then leaves an unreferenced snapshot
-    /// that the next attempt rewrites, rather than a version number no snapshot
-    /// backs. The dash separator is the one `open_widget` reads and
-    /// `get_widget_versions` parses — boards use underscores.
+    /// Allocate above the working copy and all published versions so restoring
+    /// an old draft cannot reuse a snapshot that another device already cached.
+    /// Conditional creation also prevents concurrent publishers from replacing
+    /// each other's snapshot. An interrupted publish reserves its version; the
+    /// next attempt advances to a fresh one.
     pub async fn create_widget_version(
         &mut self,
         widget_id: &str,
@@ -1080,6 +1119,11 @@ impl App {
             .as_generic();
 
         let mut widget = self.open_widget(widget_id.to_string(), None).await?;
+        if let Some(latest) = self.get_widget_versions(widget_id).await?.first()
+            && Some(*latest) > widget.version
+        {
+            widget.version = Some(*latest);
+        }
         widget.bump_version(version_type);
         let version = widget.version.ok_or(flow_like_types::anyhow!(
             "Widget version missing after bump"
@@ -1091,7 +1135,7 @@ impl App {
             .join("versions")
             .join(widget_id.to_string())
             .join(format!("{}-{}-{}.widget", version.0, version.1, version.2));
-        compress_to_file_json(store, version_path, &widget).await?;
+        compress_to_file_json_create(store, version_path, &widget).await?;
 
         self.save_widget(&widget).await?;
 
@@ -1453,6 +1497,154 @@ mod tests {
             Some(second),
             "publishing must advance the working copy"
         );
+    }
+
+    #[tokio::test]
+    async fn publishing_an_old_widget_draft_preserves_existing_snapshots() {
+        use crate::a2ui::widget::{VersionType, Widget};
+
+        let store = FlowLikeStore::Other(Arc::new(object_store::memory::InMemory::new()));
+        let state = Arc::new(crate::state::FlowLikeState::new(
+            FlowLikeConfig::with_default_store(store),
+            HTTPClient::new_without_refetch(),
+        ));
+        let mut app = super::App::new(
+            Some("widget-restored-draft".to_string()),
+            Metadata::default(),
+            Vec::new(),
+            state,
+        )
+        .await
+        .unwrap();
+
+        app.save_widget(&Widget::new("widget-1", "First content", "root"))
+            .await
+            .unwrap();
+        let first = app
+            .create_widget_version("widget-1", VersionType::Patch)
+            .await
+            .unwrap();
+        let old_draft = app
+            .open_widget("widget-1".into(), Some(first))
+            .await
+            .unwrap();
+        let mut draft = old_draft.clone();
+        draft.name = "Second content".into();
+        app.save_widget(&draft).await.unwrap();
+        let second = app
+            .create_widget_version("widget-1", VersionType::Patch)
+            .await
+            .unwrap();
+
+        app.save_widget(&old_draft).await.unwrap();
+        let third = app
+            .create_widget_version("widget-1", VersionType::Patch)
+            .await
+            .unwrap();
+
+        assert_eq!(third, (0, 0, 4));
+        assert_eq!(
+            app.open_widget("widget-1".into(), Some(second))
+                .await
+                .unwrap()
+                .name,
+            "Second content"
+        );
+        assert_eq!(
+            app.open_widget("widget-1".into(), Some(third))
+                .await
+                .unwrap()
+                .name,
+            "First content"
+        );
+    }
+
+    #[tokio::test]
+    async fn caching_a_widget_snapshot_preserves_the_working_copy() {
+        use crate::a2ui::widget::Widget;
+
+        let store = FlowLikeStore::Other(Arc::new(object_store::memory::InMemory::new()));
+        let state = Arc::new(crate::state::FlowLikeState::new(
+            FlowLikeConfig::with_default_store(store),
+            HTTPClient::new_without_refetch(),
+        ));
+        let mut app = super::App::new(
+            Some("widget-snapshot-cache".to_string()),
+            Metadata::default(),
+            Vec::new(),
+            state,
+        )
+        .await
+        .unwrap();
+        let mut current = Widget::new("widget-1", "Current content", "root");
+        current.version = Some((2, 0, 0));
+        app.save_widget(&current).await.unwrap();
+        let mut snapshot = current.clone();
+        snapshot.version = Some((1, 0, 0));
+        snapshot.name = "Pinned content".into();
+        app.cache_widget_version(&snapshot).await.unwrap();
+
+        let cached = app
+            .open_widget("widget-1".into(), Some((1, 0, 0)))
+            .await
+            .unwrap();
+        assert_eq!(cached.name, "Pinned content");
+        assert_eq!(cached.updated_at, snapshot.updated_at);
+        let working = app.open_widget("widget-1".into(), None).await.unwrap();
+        assert_eq!(working.name, "Current content");
+        assert_eq!(working.version, Some((2, 0, 0)));
+
+        snapshot.version = None;
+        assert!(app.cache_widget_version(&snapshot).await.is_err());
+    }
+
+    #[tokio::test]
+    async fn caching_widgets_replaces_the_complete_runtime_inventory() {
+        use crate::a2ui::widget::Widget;
+
+        let store = FlowLikeStore::Other(Arc::new(object_store::memory::InMemory::new()));
+        let state = Arc::new(crate::state::FlowLikeState::new(
+            FlowLikeConfig::with_default_store(store),
+            HTTPClient::new_without_refetch(),
+        ));
+        let mut app = super::App::new(
+            Some("widget-inventory-cache".to_string()),
+            Metadata::default(),
+            Vec::new(),
+            state.clone(),
+        )
+        .await
+        .unwrap();
+        app.save_widget(&Widget::new("deleted", "Old widget", "root"))
+            .await
+            .unwrap();
+        app.save_widget(&Widget::new("updated", "Stale content", "root"))
+            .await
+            .unwrap();
+
+        let widgets = vec![
+            Widget::new("updated", "Current content", "root"),
+            Widget::new("added-1", "Added one", "root"),
+            Widget::new("added-2", "Added two", "root"),
+        ];
+        app.cache_widgets(&widgets).await.unwrap();
+
+        let mut reloaded = super::App::load(app.id.clone(), state.clone())
+            .await
+            .unwrap();
+        assert_eq!(reloaded.widget_ids, vec!["updated", "added-1", "added-2"]);
+        let cached = reloaded.get_widgets().await.unwrap();
+        assert_eq!(cached.len(), widgets.len());
+        for (cached, remote) in cached.iter().zip(&widgets) {
+            assert_eq!(cached.id, remote.id);
+            assert_eq!(cached.name, remote.name);
+            assert_eq!(cached.updated_at, remote.updated_at);
+        }
+
+        reloaded.cache_widgets(&[]).await.unwrap();
+        let empty = super::App::load(app.id, state).await.unwrap();
+        assert!(empty.widget_ids.is_empty());
+        assert!(empty.get_widgets().await.unwrap().is_empty());
     }
 
     #[tokio::test]

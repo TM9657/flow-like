@@ -34,6 +34,7 @@ import type {
 	IEventCorpusResult,
 	IEventRunsResult,
 	IEventSetupInfo,
+	IEventSinkStatusContext,
 	IEventTimeline,
 	IEventTimelineRun,
 	IEventVariantSharePatch,
@@ -674,15 +675,27 @@ export class WebEventState implements IEventState {
 		await apiPost(`runs/${runId}/cancel`, undefined, this.backend.auth);
 	}
 
-	async isEventSinkActive(eventId: string): Promise<boolean> {
+	async isEventSinkActive(
+		eventId: string,
+		context?: IEventSinkStatusContext,
+	): Promise<boolean> {
+		if (context) {
+			if (!context.event.active) return false;
+			// Hosted endpoints use the event's enabled flag. Their setup
+			// registrations are separate from worker sink registrations.
+			if (["rest", "mcp"].includes(context.event.event_type)) {
+				return context.event.active;
+			}
+		}
 		try {
 			const result = await apiGet<{ active: boolean }>(
-				`sinks/${eventId}/status`,
+				`sink/${eventId}`,
 				this.backend.auth,
 			);
-			return result?.active ?? false;
-		} catch {
-			return false;
+			return result.active;
+		} catch (error) {
+			if (isMissingResourceError(error)) return false;
+			throw error;
 		}
 	}
 

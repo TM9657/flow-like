@@ -518,6 +518,14 @@ export function A2UIMicroWidget({
 			}
 		>
 			<MicroWidgetFrame
+				// A synced revision needs a new handshake and must recover from the old frame's error.
+				key={JSON.stringify([
+					microComponent.instanceId,
+					microComponent.packageId,
+					microComponent.widgetId,
+					microComponent.packageVersion,
+					microComponent.bundleHash,
+				])}
 				elementRef={elementRef}
 				component={microComponent}
 				componentId={componentId}

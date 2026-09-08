@@ -16,6 +16,11 @@ export interface IOAuthCheckResult {
 	missingProviders: IOAuthProvider[];
 }
 
+export interface IEventSinkStatusContext {
+	appId: string;
+	event: IEvent;
+}
+
 export interface IEventRegistration {
 	id: string;
 	event_id: string;
@@ -497,7 +502,11 @@ export interface IEventState {
 
 	cancelExecution(runId: string): Promise<void>;
 
-	isEventSinkActive(eventId: string): Promise<boolean>;
+	/** Read the event's trigger status. Failed status reads reject. */
+	isEventSinkActive(
+		eventId: string,
+		context?: IEventSinkStatusContext,
+	): Promise<boolean>;
 
 	/**
 	 * List persisted REST/MCP registrations for an event (populated by remote

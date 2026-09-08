@@ -31,6 +31,7 @@ import type {
 	IEventAlias,
 	IEventCorpusResult,
 	IEventRunsResult,
+	IEventSinkStatusContext,
 	IEventTimeline,
 	IEventTimelineRun,
 	IListRegistrationsResponse,
@@ -1116,6 +1117,7 @@ export class EventState implements IEventState {
 
 		await this.backend.boardState.ensureAppPackagesInstalledForExecution?.(
 			appId,
+			board,
 		);
 		await this.ensureRpaApprovalForEvent(appId, event, board, "execution");
 		const hub = await getHubConfig(this.backend.profile);
@@ -1371,10 +1373,66 @@ export class EventState implements IEventState {
 		});
 	}
 
-	async isEventSinkActive(eventId: string): Promise<boolean> {
-		return await invoke<boolean>("is_event_sink_active", {
-			eventId: eventId,
-		});
+	async isEventSinkActive(
+		eventId: string,
+		context?: IEventSinkStatusContext,
+	): Promise<boolean> {
+		const readLocal = () =>
+			invoke<boolean>("is_event_sink_active", { eventId });
+		if (!context) return readLocal();
+
+		const { event, appId } = context;
+		if (!event.active) return false;
+		// REST/MCP endpoints use the event's enabled flag and separate setup
+		// registrations. They do not register a local worker sink.
+		if (["rest", "mcp"].includes(event.event_type)) return event.active;
+
+		let target: string | undefined;
+		if (
+			["cron", "api", "http"].includes(event.event_type) &&
+			event.config.length
+		) {
+			const config = JSON.parse(
+				new TextDecoder().decode(new Uint8Array(event.config)),
+			) as { sink_execution?: string };
+			target = config.sink_execution?.toUpperCase();
+		}
+		// Trigger location is independent of the workflow's execution_mode.
+		// The native sink manager treats an unset target as local.
+		if (target !== "REMOTE" && target !== "HYBRID") return readLocal();
+		if (target === "HYBRID" && (await this.backend.isLocalOnly(appId))) {
+			return readLocal();
+		}
+
+		const readRemote = async (): Promise<boolean> => {
+			if (!this.backend.profile || !this.backend.auth) {
+				throw new Error("Remote sink status requires an online profile");
+			}
+			try {
+				const result = await fetcher<{ active: boolean }>(
+					this.backend.profile,
+					`sink/${eventId}`,
+					{ method: "GET" },
+					this.backend.auth,
+				);
+				return result.active;
+			} catch (error) {
+				if (isMissingResourceError(error)) return false;
+				throw error;
+			}
+		};
+		if (target === "REMOTE") return readRemote();
+
+		const results = await Promise.allSettled([readLocal(), readRemote()]);
+		if (
+			results.some((result) => result.status === "fulfilled" && result.value)
+		) {
+			return true;
+		}
+		for (const result of results) {
+			if (result.status === "rejected") throw result.reason;
+		}
+		return false;
 	}
 
 	async listEventRegistrations(
