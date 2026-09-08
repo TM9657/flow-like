@@ -1,3 +1,8 @@
+// lance's Linux-only io_uring reader caches file handles in a `moka::future::Cache`,
+// which pushes the auto-trait proof for this crate's axum handler futures past rustc's
+// default 128-step budget.
+#![recursion_limit = "256"]
+
 //! Flow-Like Executor
 //!
 //! Environment-agnostic execution runtime that works across:

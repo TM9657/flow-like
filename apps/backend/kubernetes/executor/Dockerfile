@@ -5,6 +5,8 @@
 FROM rust:1.97.1-bookworm AS build-deps
 
 # Automation execution links the Linux capture and input libraries.
+# ocl-icd-opencl-dev provides libOpenCL.so: rustautogui's `dev` feature implies
+# `opencl`, and cl-sys emits an unconditional -lOpenCL on Linux.
 RUN apt-get update && apt-get install -y \
     pkg-config \
     libssl-dev \
@@ -22,6 +24,7 @@ RUN apt-get update && apt-get install -y \
     libinput-dev \
     libudev-dev \
     libxkbcommon-dev \
+    ocl-icd-opencl-dev \
     && rm -rf /var/lib/apt/lists/*
 
 # The prebuilt ONNX archive uses glibc/GCC symbols newer than Bookworm provides.
@@ -68,6 +71,7 @@ RUN apt-get update && apt-get install -y \
     libinput10 \
     libudev1 \
     libxkbcommon0 \
+    ocl-icd-libopencl1 \
     && rm -rf /var/lib/apt/lists/* \
     && useradd -r -u 1000 executor
 

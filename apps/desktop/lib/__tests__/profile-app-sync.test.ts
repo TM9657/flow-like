@@ -1,4 +1,4 @@
-import type { IProfileApp } from "@flow-like/flow-like-ui/types";
+import type { IProfileApp } from "@flow-like/flow-like-ui";
 import { describe, expect, it } from "vitest";
 import {
 	type OnlineProfile,

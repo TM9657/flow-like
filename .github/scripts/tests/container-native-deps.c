@@ -1,4 +1,6 @@
 #define _GNU_SOURCE
+#define CL_TARGET_OPENCL_VERSION 300
+#include <CL/cl.h>
 #include <EGL/egl.h>
 #include <X11/Xlib.h>
 #include <X11/extensions/XInput2.h>
@@ -33,6 +35,7 @@ static void *volatile symbols[] = {
     (void *)libinput_path_create_context,
     (void *)udev_new,
     (void *)xkb_context_new,
+    (void *)clGetPlatformIDs,
     (void *)__cxa_call_terminate,
 };
 
