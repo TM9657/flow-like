@@ -38,7 +38,11 @@ import type {
 	SurfaceComponent,
 } from "@flow-like/flow-like-ui/components/a2ui/types";
 import { apiResponseError } from "@flow-like/flow-like-ui/lib/api-error";
-import type { BoardFormatCapabilities } from "@flow-like/flow-like-ui/lib/board-format";
+import {
+	BOARD_FORMAT_HEADER,
+	type BoardFormatCapabilities,
+	CURRENT_BOARD_FORMAT_VERSION,
+} from "@flow-like/flow-like-ui/lib/board-format";
 import {
 	BoardSyncClient,
 	type IBoardSyncRequest,
@@ -1150,6 +1154,7 @@ export class WebBoardState implements IBoardState {
 
 		const headers: Record<string, string> = {
 			"Content-Type": "application/json",
+			[BOARD_FORMAT_HEADER]: String(CURRENT_BOARD_FORMAT_VERSION),
 		};
 		if (onToken) {
 			headers.Accept = "text/event-stream";

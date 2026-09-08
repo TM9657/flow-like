@@ -1,6 +1,11 @@
+import {
+	BOARD_FORMAT_HEADER,
+	CURRENT_BOARD_FORMAT_VERSION,
+} from "@flow-like/flow-like-ui/lib/board-format";
 import type { IChannelHandle } from "@flow-like/flow-like-ui/lib/schema/channel";
 import type { CopilotToolContext } from "@flow-like/flow-like-ui/lib/schema/copilot";
-import { beforeEach, describe, expect, test, vi } from "vitest";
+import type { IBoard } from "@flow-like/flow-like-ui/lib/schema/flow/board";
+import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
 	cancelChannel: vi.fn<(handle: unknown) => Promise<void>>(async () => {}),
@@ -135,6 +140,85 @@ function startChat(
 		requestId,
 	);
 }
+
+describe("WebBoardState Copilot board format", () => {
+	afterEach(() => {
+		vi.unstubAllGlobals();
+	});
+
+	test.each([false, true])(
+		"negotiates current board access with a selected model Bit (stream=%s)",
+		async (streaming) => {
+			const board = {
+				id: "board-geometry",
+				format_version: 2,
+				nodes: {},
+			} as IBoard;
+			const result = { message: "Board loaded" };
+			const stream = copilotStream(channel("run-board-format"));
+			stream.finish(result);
+			const fetchMock = vi.fn(async (_url: string, init?: RequestInit) => {
+				const headers = new Headers(init?.headers);
+				// The API defaults missing format headers to 1 before reloading the board.
+				const supported = Number(headers.get(BOARD_FORMAT_HEADER) ?? 1);
+				if (supported < (board.format_version ?? 1)) {
+					return Response.json(
+						{ error: { code: "BOARD_FORMAT_UPGRADE_REQUIRED" } },
+						{ status: 426 },
+					);
+				}
+				return streaming ? stream.response : Response.json(result);
+			});
+			vi.stubGlobal("fetch", fetchMock);
+			const state = new WebBoardState({
+				auth: { user: { access_token: "client-token" } },
+				profile: { id: "selected-profile" },
+			} as never);
+
+			await expect(
+				state.copilot_chat(
+					"Board",
+					board,
+					undefined,
+					[],
+					null,
+					null,
+					[],
+					"Explain this board",
+					[],
+					undefined,
+					streaming ? () => undefined : undefined,
+					"selected-model-bit",
+					undefined,
+					undefined,
+					undefined,
+					undefined,
+					undefined,
+					undefined,
+					{ appId: "app-1", boardId: board.id },
+				),
+			).resolves.toEqual(result);
+
+			const [url, init] = fetchMock.mock.calls[0];
+			expect(url).toBe("https://api.example.test/api/v1/ai/copilot/chat");
+			const headers = new Headers(init?.headers);
+			expect(headers.get(BOARD_FORMAT_HEADER)).toBe(
+				String(CURRENT_BOARD_FORMAT_VERSION),
+			);
+			expect(headers.get("Authorization")).toBe("Bearer client-token");
+			expect(headers.get("Accept")).toBe(
+				streaming ? "text/event-stream" : null,
+			);
+			expect(JSON.parse(init?.body as string)).toMatchObject({
+				board,
+				app_id: "app-1",
+				profile_id: "selected-profile",
+				model_id: "selected-model-bit",
+				stream: streaming,
+			});
+		},
+	);
+});
 
 describe("WebBoardState Copilot cancellation", () => {
 	beforeEach(() => {
