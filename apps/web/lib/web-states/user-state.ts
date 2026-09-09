@@ -20,6 +20,7 @@ import { stableStringify } from "@flow-like/flow-like-ui/lib/stable-stringify";
 import type {
 	INotification,
 	INotificationsOverview,
+	IProjectContactsPage,
 	IUserLookup,
 } from "@flow-like/flow-like-ui/state/backend-state/types";
 import {
@@ -274,15 +275,27 @@ export class WebUserState implements IUserState {
 	 * lookup as an empty directory, which is indistinguishable from "nobody
 	 * matched" and hides outages from whoever is trying to invite someone.
 	 */
-	async searchUsers(query: string): Promise<IUserLookup[]> {
+	async searchUsers(query: string, appId?: string): Promise<IUserLookup[]> {
 		const trimmed = query.trim();
 		if (!trimmed) return [];
 
 		return (
 			(await apiGet<IUserLookup[]>(
-				`user/search/${encodeURIComponent(trimmed)}`,
+				`user/search/${encodeURIComponent(trimmed)}?${new URLSearchParams({ limit: "25", ...(appId ? { app_id: appId } : {}) })}`,
 				this.backend.auth,
 			)) ?? []
+		);
+	}
+
+	async getProjectContacts(
+		appId: string,
+		after?: string,
+	): Promise<IProjectContactsPage> {
+		const params = new URLSearchParams({ app_id: appId, limit: "500" });
+		if (after) params.set("after", after);
+		return apiGet<IProjectContactsPage>(
+			`user/contacts?${params}`,
+			this.backend.auth,
 		);
 	}
 

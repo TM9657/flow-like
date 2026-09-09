@@ -69,6 +69,7 @@ pub async fn sign_avatar(
 pub mod billing;
 pub mod bits;
 pub mod bootstrap;
+pub mod contacts;
 pub mod get_invites;
 pub mod groups;
 pub mod identity;
@@ -105,6 +106,7 @@ pub fn routes() -> Router<AppState> {
         .route("/pricing", get(get_pricing))
         .route("/subscribe", post(create_subscription_checkout))
         .route("/lookup", post(lookup::user_batch_lookup))
+        .route("/contacts", get(contacts::user_contacts))
         .route("/lookup/{sub}", get(lookup::user_lookup))
         .route("/search/{query}", get(lookup::user_search))
         .route("/invites", get(get_invites::get_invites))

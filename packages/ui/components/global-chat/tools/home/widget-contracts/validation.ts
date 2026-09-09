@@ -1,5 +1,6 @@
 import { safeHomeHref } from "../../../../home/home-content/config";
 import { normalizeHomeDataConfig } from "../../../../home/home-data-query";
+import { isHomeStorageImagePath } from "../../../../home/home-image-config";
 import { HOME_WIDGET_CONFIG_CONTRACTS } from "./definitions";
 import { APP_EMBED_RESERVED_QUERY_KEYS } from "./options";
 import type {
@@ -268,6 +269,17 @@ function validateField(
 					"Use a relative path or an http or https image URL.",
 				);
 		}
+		if (
+			contract.string_format === "storage-image-path" &&
+			value.trim() &&
+			!isHomeStorageImagePath(value)
+		)
+			pushIssue(
+				issues,
+				"home_widget_config_storage_image_path_invalid",
+				path,
+				"Use an app-relative file path without a URL scheme, leading slash, or parent-directory segments.",
+			);
 	}
 	if (typeof value === "number") {
 		if (contract.integer && !Number.isInteger(value))
@@ -407,6 +419,7 @@ function validateObject(
 	}
 	for (const [key, field] of Object.entries(contract.fields)) {
 		if (value[key] === undefined) continue;
+		if (!conditionMatches(field.when, value, contract)) continue;
 		validateField(value[key], field, `${path}.${key}`, issues);
 	}
 	if (contract.unique_by) {

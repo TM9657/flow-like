@@ -1,9 +1,4 @@
 import type {
-	IHomeLayout,
-	IHomeDefault,
-	IHomeDefaults,
-} from "../../../components/home/types";
-import type {
 	IProfile,
 	IProfileApp,
 	IProfileShortcut,
@@ -13,6 +8,7 @@ import type {
 import type {
 	INotification,
 	INotificationsOverview,
+	IProjectContactsPage,
 	IUserLookup,
 } from "@flow-like/flow-like-ui/state/backend-state/types";
 import type {
@@ -28,6 +24,11 @@ import type {
 	IUserUpdate,
 	IUserWidgetInfo,
 } from "@flow-like/flow-like-ui/state/backend-state/user-state";
+import type {
+	IHomeDefault,
+	IHomeDefaults,
+	IHomeLayout,
+} from "../../../components/home/types";
 
 export class EmptyUserState implements IUserState {
 	getHomeDefaults(defaultId?: string): Promise<IHomeDefaults> {
@@ -52,8 +53,14 @@ export class EmptyUserState implements IUserState {
 	lookupUsers(userIds: string[]): Promise<IUserLookup[]> {
 		throw new Error("Method not implemented.");
 	}
-	searchUsers(query: string): Promise<IUserLookup[]> {
+	searchUsers(query: string, appId?: string): Promise<IUserLookup[]> {
 		throw new Error("Method not implemented.");
+	}
+	getProjectContacts(
+		appId: string,
+		after?: string,
+	): Promise<IProjectContactsPage> {
+		return Promise.resolve({ users: [], next_cursor: null });
 	}
 	getNotifications(): Promise<INotificationsOverview> {
 		throw new Error("Method not implemented.");

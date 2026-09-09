@@ -37,6 +37,39 @@ type ReferenceBackend = Pick<
 const profileOptions = { profileAppIds: new Set(["app"]) };
 
 describe("Home runtime reference parity", () => {
+	test("validates the selected image app only for storage sources", async () => {
+		const backend = {} as ReferenceBackend;
+		const config = {
+			mode: "image",
+			imageSource: "storage",
+			imageAppId: "missing-app",
+			imagePath: "media/banner.png",
+		};
+		expect(
+			await validateHomeLayoutReferences(
+				backend,
+				layout(widget("information", config)),
+				profileOptions,
+			),
+		).toMatchObject([
+			{
+				code: "home_app_not_in_profile",
+				path: "$.widgets[0].config.imageAppId",
+			},
+		]);
+		for (const changes of [
+			{ imageAppId: "app" },
+			{ imageSource: "url", imageUrl: "/logo.png" },
+		])
+			expect(
+				await validateHomeLayoutReferences(
+					backend,
+					layout(widget("information", { ...config, ...changes })),
+					profileOptions,
+				),
+			).toEqual([]);
+	});
+
 	const event = (id: string, overrides: Partial<IEvent> = {}) =>
 		({
 			id,

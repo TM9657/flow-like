@@ -19,6 +19,7 @@ import {
 import type {
 	INotification,
 	INotificationsOverview,
+	IProjectContactsPage,
 	IUserLookup,
 } from "@flow-like/flow-like-ui/state/backend-state/types";
 import {
@@ -329,7 +330,7 @@ export class UserState implements IUserState {
 	 * lookup as an empty directory, which is indistinguishable from "nobody
 	 * matched" and hides outages from whoever is trying to invite someone.
 	 */
-	async searchUsers(query: string): Promise<IUserLookup[]> {
+	async searchUsers(query: string, appId?: string): Promise<IUserLookup[]> {
 		const trimmed = query.trim();
 		if (!trimmed || !this.backend.profile || !this.backend.auth) {
 			return [];
@@ -337,7 +338,7 @@ export class UserState implements IUserState {
 
 		const result = await fetcher<IUserLookup[]>(
 			this.backend.profile,
-			`user/search/${encodeURIComponent(trimmed)}`,
+			`user/search/${encodeURIComponent(trimmed)}?${new URLSearchParams({ limit: "25", ...(appId ? { app_id: appId } : {}) })}`,
 			{
 				method: "GET",
 			},
@@ -345,6 +346,22 @@ export class UserState implements IUserState {
 		);
 
 		return result ?? [];
+	}
+	async getProjectContacts(
+		appId: string,
+		after?: string,
+	): Promise<IProjectContactsPage> {
+		if (!this.backend.profile || !this.backend.auth) {
+			return { users: [], next_cursor: null };
+		}
+		const params = new URLSearchParams({ app_id: appId, limit: "500" });
+		if (after) params.set("after", after);
+		return fetcher<IProjectContactsPage>(
+			this.backend.profile,
+			`user/contacts?${params}`,
+			{ method: "GET" },
+			this.backend.auth,
+		);
 	}
 	async getNotifications(): Promise<INotificationsOverview> {
 		// Get local notifications first (works offline)

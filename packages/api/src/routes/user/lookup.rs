@@ -1,12 +1,17 @@
 use crate::{
+    ensure_permission,
     entity::{membership, sea_orm_active_enums::UserStatus, user},
     error::ApiError,
     middleware::jwt::AppUser,
     permission::role_permission::RolePermissions,
     routes::user::{
+        contacts::invitation_candidates,
         identity::{
-            RankableUser, SearchTerm, escape_like_pattern, humanize_email_local_part,
-            is_idp_handle, sanitize_display_name, score_candidate,
+            EXACT_MATCH_BONUS, MAX_SEARCH_LEN, PREFIX_MATCH_BONUS, RankableUser,
+            SUBSTRING_MATCH_BONUS, SearchTerm, TOKEN_MATCH_PENALTY, WEIGHT_EMAIL, WEIGHT_ID,
+            WEIGHT_NAME, WEIGHT_PREFERRED_USERNAME, WEIGHT_USERNAME, WORD_PREFIX_MATCH_BONUS,
+            escape_like_pattern, humanize_email_local_part, is_exact_identifier_match,
+            is_idp_handle, normalize_search_query, sanitize_display_name, score_candidate,
         },
         sign_avatar,
     },
@@ -19,8 +24,8 @@ use axum::{
 use flow_like::hub::Lookup;
 use flow_like_types::Value;
 use sea_orm::{
-    ColumnTrait, Condition, EntityTrait, QueryFilter, QuerySelect, QueryTrait,
-    sea_query::{Expr, LikeExpr},
+    ColumnTrait, Condition, EntityTrait, QueryFilter, QueryOrder, QuerySelect, QueryTrait,
+    sea_query::{Alias, Expr, ExprTrait, Func, Order, SimpleExpr, extension::postgres::PgBinOper},
 };
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
@@ -37,6 +42,9 @@ pub struct UserLookupResponse {
     additional_information: Option<Value>,
     description: Option<String>,
     created_at: Option<chrono::DateTime<chrono::FixedOffset>>,
+    /// An exact identifier match, even when lookup settings hide that identifier.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    exact_match: Option<bool>,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize, ToSchema)]
@@ -92,6 +100,7 @@ impl UserLookupResponse {
                 .then_some(user.description)
                 .flatten(),
             created_at: lookup_config.created_at.then_some(user.created_at),
+            exact_match: None,
         }
     }
 }
@@ -277,26 +286,41 @@ async fn executor_search_scope(
 
 const DEFAULT_SEARCH_LIMIT: u64 = 10;
 const MAX_SEARCH_LIMIT: u64 = 25;
-/// Ranking only sees what the database returns, so the candidate pool is wider
-/// than the response — otherwise an arbitrary unordered slice decides the winners.
-const CANDIDATE_POOL_FACTOR: u64 = 8;
-const MAX_CANDIDATE_POOL: u64 = 200;
 
 #[derive(Debug, Deserialize, IntoParams)]
 pub struct UserSearchQuery {
     #[serde(default)]
     pub limit: Option<u64>,
+    /// Exclude people who cannot be invited to this project. Requires Admin.
+    #[serde(default)]
+    pub app_id: Option<String>,
 }
 
 /// `ILIKE` with no wildcards is exactly case-insensitive equality.
 fn ilike_eq(column: user::Column, value: &str) -> sea_orm::sea_query::SimpleExpr {
     use sea_orm::sea_query::extension::postgres::PgExpr;
-    Expr::col(column).ilike(LikeExpr::new(escape_like_pattern(value)).escape('\\'))
+    Expr::col(column).ilike(escape_like_pattern(value))
 }
 
 fn ilike_contains(column: user::Column, pattern: &str) -> sea_orm::sea_query::SimpleExpr {
     use sea_orm::sea_query::extension::postgres::PgExpr;
-    Expr::col(column).ilike(LikeExpr::new(pattern).escape('\\'))
+    // PostgreSQL uses backslash as the default LIKE escape. A plain bound string
+    // also avoids SeaQuery wrapping `pattern ESCAPE ...` in invalid parentheses.
+    Expr::col(column).ilike(pattern)
+}
+
+fn exact_identity_condition(value: &str) -> Condition {
+    Condition::any()
+        .add(ilike_eq(user::Column::Id, value))
+        .add(ilike_eq(user::Column::Email, value))
+        .add(ilike_eq(user::Column::Username, value))
+        .add(ilike_eq(user::Column::PreferredUsername, value))
+}
+
+fn exact_identity_score(value: &str) -> SimpleExpr {
+    Expr::case(exact_identity_condition(value), 1)
+        .finally(0)
+        .into()
 }
 
 /// The columns a human search term can legitimately land in. `username` is the
@@ -326,6 +350,83 @@ fn search_condition(term: &SearchTerm) -> Condition {
         })
 }
 
+fn word_prefix_pattern(value: &str) -> String {
+    let mut escaped = String::from("(^|[^[:alnum:]])");
+    for ch in value.chars() {
+        if matches!(
+            ch,
+            '\\' | '.' | '^' | '$' | '*' | '+' | '?' | '(' | ')' | '[' | ']' | '{' | '}' | '|'
+        ) {
+            escaped.push('\\');
+        }
+        escaped.push(ch);
+    }
+    escaped
+}
+
+fn best_field_score(needle: &str) -> SimpleExpr {
+    let escaped = escape_like_pattern(needle);
+    let prefix = format!("{escaped}%");
+    let substring = format!("%{escaped}%");
+    let word_prefix = word_prefix_pattern(needle);
+    let fields = [
+        (user::Column::Name, WEIGHT_NAME),
+        (user::Column::PreferredUsername, WEIGHT_PREFERRED_USERNAME),
+        (user::Column::Email, WEIGHT_EMAIL),
+        (user::Column::Id, WEIGHT_ID),
+        (user::Column::Username, WEIGHT_USERNAME),
+    ];
+
+    Func::cust(Alias::new("GREATEST"))
+        .args(fields.map(|(column, weight)| -> SimpleExpr {
+            Expr::case(ilike_eq(column, needle), EXACT_MATCH_BONUS + weight)
+                .case(ilike_contains(column, &prefix), PREFIX_MATCH_BONUS + weight)
+                .case(
+                    Expr::col(column).binary(PgBinOper::RegexCaseInsensitive, word_prefix.clone()),
+                    WORD_PREFIX_MATCH_BONUS + weight,
+                )
+                .case(
+                    ilike_contains(column, &substring),
+                    SUBSTRING_MATCH_BONUS + weight,
+                )
+                .finally(0)
+                .into()
+        }))
+        .into()
+}
+
+/// Mirrors `score_candidate` before LIMIT. Fetching a wider unordered pool still
+/// loses exact names and strong prefixes once enough weaker rows match.
+fn candidate_score(term: &SearchTerm) -> SimpleExpr {
+    let phrase = best_field_score(&term.lower);
+    let best = if term.tokens.is_empty() {
+        phrase
+    } else {
+        let weakest: SimpleExpr = Func::cust(Alias::new("LEAST"))
+            .args(term.tokens.iter().map(|token| best_field_score(token)))
+            .into();
+        Func::cust(Alias::new("GREATEST"))
+            .args([phrase, weakest.sub(TOKEN_MATCH_PENALTY)])
+            .into()
+    };
+
+    best.add(Expr::case(user::Column::Name.is_not_null(), 6).finally(0))
+        .add(Expr::case(user::Column::PreferredUsername.is_not_null(), 4).finally(0))
+        .add(Expr::case(user::Column::Avatar.is_not_null(), 2).finally(0))
+}
+
+fn ranked_candidates(
+    query: sea_orm::Select<user::Entity>,
+    term: &SearchTerm,
+    limit: u64,
+) -> sea_orm::Select<user::Entity> {
+    query
+        .order_by(exact_identity_score(&term.lower), Order::Desc)
+        .order_by(candidate_score(term), Order::Desc)
+        .order_by_asc(user::Column::Id)
+        .limit(limit)
+}
+
 #[utoipa::path(
     get,
     path = "/user/search/{query}",
@@ -349,58 +450,71 @@ pub async fn user_search(
     Path(query): Path<String>,
     Query(params): Query<UserSearchQuery>,
 ) -> Result<Json<Vec<UserLookupResponse>>, ApiError> {
-    user.executor_scoped_sub()?;
+    let caller_id = user.executor_scoped_sub()?;
     let lookup_config = state.platform_config.lookup.clone();
     let limit = params
         .limit
         .unwrap_or(DEFAULT_SEARCH_LIMIT)
         .clamp(1, MAX_SEARCH_LIMIT);
 
-    let trimmed = query.trim();
-    if trimmed.is_empty() {
+    let invitation_scope = if let Some(app_id) = params.app_id.as_deref() {
+        ensure_permission!(user, app_id, &state, RolePermissions::Admin);
+        Some(invitation_candidates(app_id, &caller_id))
+    } else {
+        None
+    };
+
+    let normalized = normalize_search_query(&query);
+    let trimmed = normalized.as_str();
+    if trimmed.is_empty() || trimmed.chars().count() > MAX_SEARCH_LEN {
         return Ok(Json(Vec::new()));
     }
 
     let scope = executor_search_scope(&state, &user).await?;
-    let scoped = |query: sea_orm::Select<user::Entity>| match &scope {
-        Some(constraint) => query.filter(constraint.clone()),
-        None => query,
+    let scoped = |mut query: sea_orm::Select<user::Entity>| {
+        if let Some(constraint) = &scope {
+            query = query.filter(constraint.clone());
+        }
+        if let Some(constraint) = &invitation_scope {
+            query = query.filter(constraint.clone());
+        }
+        query.filter(user::Column::Status.ne(UserStatus::Banned))
     };
+
+    // A one-character term only gets exact lookup, never a directory-wide scan.
+    let term = SearchTerm::parse(trimmed);
 
     // Pasting an id or a full email address should resolve even when it is shorter
     // than the substring-search floor.
-    let exact_matches = scoped(
-        user::Entity::find()
-            .filter(
-                Condition::any()
-                    .add(user::Column::Id.eq(trimmed))
-                    .add(ilike_eq(user::Column::Email, trimmed))
-                    .add(ilike_eq(user::Column::Username, trimmed))
-                    .add(ilike_eq(user::Column::PreferredUsername, trimmed)),
-            )
-            .filter(user::Column::Status.ne(UserStatus::Banned)),
-    )
-    .limit(MAX_SEARCH_LIMIT)
-    .all(&state.db)
-    .await?;
+    let exact_query = scoped(
+        user::Entity::find().filter(
+            Condition::any()
+                .add(exact_identity_condition(trimmed))
+                .add(ilike_eq(user::Column::Name, trimmed)),
+        ),
+    );
+    let exact_query = match &term {
+        Some(term) => ranked_candidates(exact_query, term, limit),
+        None => exact_query
+            .order_by(exact_identity_score(trimmed), Order::Desc)
+            .order_by_asc(user::Column::Id)
+            .limit(limit),
+    };
+    let exact_matches = exact_query.all(&state.db).await?;
 
     // Pasting an id or address that already resolved needs no substring scan; typing
     // a name still gets one, so near-matches keep showing up alongside an exact hit.
     let resolved_identifier =
         !exact_matches.is_empty() && (trimmed.contains('@') || is_idp_handle(trimmed));
 
-    // A one-character term matches most of the table, so it is not worth scanning for.
-    let term = SearchTerm::parse(trimmed);
     let fuzzy_matches = match &term {
         Some(_) if resolved_identifier => Vec::new(),
         Some(term) => {
-            let pool = (limit * CANDIDATE_POOL_FACTOR).min(MAX_CANDIDATE_POOL);
-            scoped(
-                user::Entity::find()
-                    .filter(search_condition(term))
-                    .filter(user::Column::Status.ne(UserStatus::Banned)),
+            ranked_candidates(
+                scoped(user::Entity::find().filter(search_condition(term))),
+                term,
+                limit,
             )
-            .limit(pool)
             .all(&state.db)
             .await?
         }
@@ -424,18 +538,17 @@ pub async fn user_search(
         let mut ranked = candidates
             .into_iter()
             .map(|candidate| {
-                let score = score_candidate(
-                    &RankableUser {
-                        id: &candidate.id,
-                        name: candidate.name.as_deref(),
-                        preferred_username: candidate.preferred_username.as_deref(),
-                        username: candidate.username.as_deref(),
-                        email: candidate.email.as_deref(),
-                        has_avatar: candidate.avatar.is_some(),
-                    },
-                    term,
-                );
-                (score, candidate)
+                let rankable = RankableUser {
+                    id: &candidate.id,
+                    name: candidate.name.as_deref(),
+                    preferred_username: candidate.preferred_username.as_deref(),
+                    username: candidate.username.as_deref(),
+                    email: candidate.email.as_deref(),
+                    has_avatar: candidate.avatar.is_some(),
+                };
+                let score = score_candidate(&rankable, term);
+                let exact_identifier = is_exact_identifier_match(&rankable, &term.lower);
+                ((exact_identifier, score), candidate)
             })
             .collect::<Vec<_>>();
 
@@ -456,11 +569,26 @@ pub async fn user_search(
 
     // Each response signs an avatar URL against the object store; serially that is
     // one round trip per result.
-    let responses = futures::future::join_all(
-        candidates
-            .into_iter()
-            .map(|candidate| UserLookupResponse::parse(candidate, lookup_config.clone(), &state)),
-    )
+    let normalized_lower = trimmed.to_lowercase();
+    let responses = futures::future::join_all(candidates.into_iter().map(|candidate| {
+        let exact_match = is_exact_identifier_match(
+            &RankableUser {
+                id: &candidate.id,
+                email: candidate.email.as_deref(),
+                username: candidate.username.as_deref(),
+                preferred_username: candidate.preferred_username.as_deref(),
+                ..Default::default()
+            },
+            &normalized_lower,
+        );
+        let lookup_config = lookup_config.clone();
+        let state = &state;
+        async move {
+            let mut response = UserLookupResponse::parse(candidate, lookup_config, state).await;
+            response.exact_match = Some(exact_match);
+            response
+        }
+    }))
     .await;
 
     Ok(Json(responses))
@@ -524,5 +652,177 @@ mod tests {
     fn tokenizing_does_not_lose_like_escaping() {
         let term = SearchTerm::parse("100% off").unwrap();
         assert_eq!(term.token_patterns(), [r"%100\%%", "%off%"]);
+    }
+
+    #[test]
+    fn ranking_precedes_the_limit_with_a_stable_tie_breaker() {
+        let term = SearchTerm::parse("Felix Schultz").unwrap();
+        let sql = ranked_candidates(
+            user::Entity::find().filter(search_condition(&term)),
+            &term,
+            10,
+        )
+        .build(DbBackend::Postgres)
+        .to_string();
+
+        assert!(sql.contains("ORDER BY (CASE WHEN"));
+        assert!(sql.contains("GREATEST("));
+        assert!(sql.contains("LEAST("));
+        assert!(sql.find("ORDER BY") < sql.find("LIMIT"));
+        assert!(sql.ends_with(r#"DESC, "User"."id" ASC LIMIT 10"#));
+    }
+
+    #[test]
+    fn regex_ranking_treats_punctuation_as_literal_text() {
+        assert_eq!(
+            word_prefix_pattern("a+b.c[0]"),
+            r"(^|[^[:alnum:]])a\+b\.c\[0\]"
+        );
+        assert_eq!(word_prefix_pattern(r"a\b$"), r"(^|[^[:alnum:]])a\\b\$");
+    }
+
+    #[test]
+    fn invitation_exclusions_are_inside_the_ranked_query() {
+        let term = SearchTerm::parse("felix").unwrap();
+        let sql = ranked_candidates(
+            user::Entity::find()
+                .filter(search_condition(&term))
+                .filter(invitation_candidates("target", "caller"))
+                .filter(user::Column::Status.ne(UserStatus::Banned)),
+            &term,
+            10,
+        )
+        .build(DbBackend::Postgres)
+        .to_string();
+
+        assert_eq!(sql.matches("NOT IN (SELECT").count(), 2);
+        assert!(sql.contains(r#""User"."id" <> 'caller'"#));
+        assert!(sql.contains(r#""User"."status" <> 'BANNED'"#));
+        assert!(sql.find("Invitation") < sql.find("ORDER BY"));
+    }
+
+    #[tokio::test]
+    #[ignore = "requires FLOW_LIKE_USER_SEARCH_TEST_DATABASE_URL pointing to an empty disposable PostgreSQL database"]
+    async fn database_ranking_keeps_late_exact_matches_and_excludes_existing_invitees() {
+        use sea_orm::{ConnectionTrait, Database, TransactionTrait};
+
+        let url = std::env::var("FLOW_LIKE_USER_SEARCH_TEST_DATABASE_URL").unwrap();
+        let db = Database::connect(url).await.unwrap();
+        let txn = db.begin().await.unwrap();
+        txn.execute_unprepared(
+            r#"
+            CREATE TABLE public."User" (
+                id text PRIMARY KEY, name text, email text, username text,
+                "preferredUsername" text, avatar text, status text NOT NULL
+            );
+            CREATE TABLE public."Membership" ("userId" text NOT NULL, "appId" text NOT NULL);
+            CREATE TABLE public."Invitation" ("userId" text NOT NULL, "appId" text NOT NULL);
+            INSERT INTO public."User" (id, name, status)
+                SELECT 'noise-' || n, 'Unfelixlike ' || n, 'Active' FROM generate_series(1, 2000) n;
+            INSERT INTO public."User" (id, name, status) VALUES
+                ('exact', 'Felix', 'Active'),
+                ('prefix', 'Felix Schultz', 'Active'),
+                ('word', 'Dr. Felix Schultz', 'Active'),
+                ('member', 'Felix', 'Active'),
+                ('invitee', 'Felix', 'Active'),
+                ('caller', 'Felix', 'Active'),
+                ('banned', 'Felix', 'BANNED');
+            INSERT INTO public."Membership" VALUES ('member', 'target');
+            INSERT INTO public."Invitation" VALUES ('invitee', 'target');
+            INSERT INTO public."User" (id, name, status)
+                SELECT 'same-name-' || n, 'person-key', 'Active' FROM generate_series(1, 50) n;
+            INSERT INTO public."User" (id, name, status) VALUES
+                ('person-key', 'New Person', 'Active'),
+                ('literal', 'A+B.[100%]', 'Active'),
+                ('wildcard-noise', 'AB.100000', 'Active');
+        "#,
+        )
+        .await
+        .unwrap();
+
+        let term = SearchTerm::parse("felix").unwrap();
+        let ids = ranked_candidates(
+            user::Entity::find()
+                .filter(search_condition(&term))
+                .filter(invitation_candidates("target", "caller"))
+                .filter(user::Column::Status.ne(UserStatus::Banned)),
+            &term,
+            3,
+        )
+        .select_only()
+        .column(user::Column::Id)
+        .into_tuple::<String>()
+        .all(&txn)
+        .await
+        .unwrap();
+        assert_eq!(ids, ["exact", "prefix", "word"]);
+
+        let identifier = SearchTerm::parse("person-key").unwrap();
+        let ids = ranked_candidates(
+            user::Entity::find().filter(
+                Condition::any()
+                    .add(exact_identity_condition(&identifier.raw))
+                    .add(ilike_eq(user::Column::Name, &identifier.raw)),
+            ),
+            &identifier,
+            1,
+        )
+        .select_only()
+        .column(user::Column::Id)
+        .into_tuple::<String>()
+        .all(&txn)
+        .await
+        .unwrap();
+        assert_eq!(ids, ["person-key"]);
+
+        let literal = SearchTerm::parse("A+B.[100%]").unwrap();
+        let ids = ranked_candidates(
+            user::Entity::find().filter(search_condition(&literal)),
+            &literal,
+            10,
+        )
+        .select_only()
+        .column(user::Column::Id)
+        .into_tuple::<String>()
+        .all(&txn)
+        .await
+        .unwrap();
+        assert_eq!(ids, ["literal"]);
+
+        // Database and merge ranking must agree before each query is capped.
+        for query in [
+            "felix",
+            "Felix Schultz",
+            "Schultz Felix",
+            "@Felix",
+            "Felix.",
+        ] {
+            let term = SearchTerm::parse(query).unwrap();
+            let scores = user::Entity::find()
+                .filter(search_condition(&term))
+                .filter(user::Column::Id.is_in(["exact", "prefix", "word"]))
+                .select_only()
+                .column(user::Column::Id)
+                .column(user::Column::Name)
+                .expr(candidate_score(&term))
+                .into_tuple::<(String, String, i32)>()
+                .all(&txn)
+                .await
+                .unwrap();
+            assert!(!scores.is_empty());
+            for (id, name, database_score) in scores {
+                let candidate = RankableUser {
+                    id: &id,
+                    name: Some(&name),
+                    ..Default::default()
+                };
+                assert_eq!(
+                    database_score,
+                    score_candidate(&candidate, &term),
+                    "{query}: {name}"
+                );
+            }
+        }
+        txn.rollback().await.unwrap();
     }
 }
