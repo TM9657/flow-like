@@ -10,6 +10,9 @@ use crate::{
     state::{TauriFlowLikeState, TauriSettingsState},
 };
 
+const MAX_TEMPLATE_METADATA_RESULTS: usize = 1_000;
+const MAX_TEMPLATE_METADATA_APPS: usize = 100;
+
 #[tauri::command(async)]
 pub async fn get_template(
     handler: AppHandle,
@@ -50,8 +53,56 @@ pub async fn get_templates(
     handler: AppHandle,
     app_id: Option<String>,
     language: Option<String>,
+    metadata_only: Option<bool>,
+    limit: Option<usize>,
 ) -> Result<Vec<(String, String, Option<Metadata>)>, TauriFunctionError> {
     let flow_like_state = TauriFlowLikeState::construct(&handler).await?;
+
+    if metadata_only.unwrap_or(false) {
+        let limit = limit
+            .unwrap_or(MAX_TEMPLATE_METADATA_RESULTS)
+            .min(MAX_TEMPLATE_METADATA_RESULTS);
+        let explicit_app = app_id.is_some();
+        let app_ids = if let Some(app_id) = app_id.as_ref() {
+            vec![app_id.clone()]
+        } else {
+            TauriSettingsState::current_profile(&handler)
+                .await?
+                .hub_profile
+                .apps
+                .unwrap_or_default()
+                .into_iter()
+                .take(MAX_TEMPLATE_METADATA_APPS)
+                .map(|app| app.app_id)
+                .collect()
+        };
+        let mut loaded_templates = Vec::with_capacity(limit);
+        for app_id in app_ids {
+            let app = match App::load(app_id.clone(), flow_like_state.clone()).await {
+                Ok(app) => app,
+                Err(error) if explicit_app => return Err(error.into()),
+                Err(_) => {
+                    tracing::warn!(
+                        "Failed to load template metadata inventory for app {}",
+                        app_id
+                    );
+                    continue;
+                }
+            };
+            // Scout needs identifiers and metadata. Board payloads are fetched only after selection.
+            for template_id in app.templates.iter().take(limit - loaded_templates.len()) {
+                let metadata = app
+                    .get_template_meta(template_id, language.clone())
+                    .await
+                    .ok();
+                loaded_templates.push((app.id.clone(), template_id.clone(), metadata));
+            }
+            if loaded_templates.len() == limit {
+                break;
+            }
+        }
+        return Ok(loaded_templates);
+    }
 
     if let Some(app_id) = app_id
         && let Ok(app) = App::load(app_id.clone(), flow_like_state.clone()).await

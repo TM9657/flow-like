@@ -36,8 +36,10 @@ mod client_pool;
 mod external_chat;
 mod external_continuation;
 mod external_invocation;
+mod external_phase;
 mod external_process;
 mod external_stream;
+mod external_usage;
 mod global_chat;
 mod mcp;
 mod mcp_progress;
@@ -49,6 +51,11 @@ mod sdk_chat;
 mod stream_events;
 mod telemetry;
 mod tool_policy;
+pub(super) mod workflow_benchmark;
+#[cfg(all(debug_assertions, desktop))]
+mod workflow_benchmark_cli;
+#[cfg(all(debug_assertions, desktop))]
+pub(crate) use workflow_benchmark_cli::run_workflow_benchmark_cli;
 mod workflow_declarations;
 mod workflow_diagnostics;
 mod workflow_observation;
@@ -57,6 +64,15 @@ mod workflow_reporting;
 mod workflow_results;
 mod workflow_sdk;
 mod workflow_state;
+
+pub use workflow_benchmark::{
+    __cmd__flowpilot_run_workflow_benchmark, __cmd__flowpilot_workflow_benchmark_cases,
+    __cmd__flowpilot_workflow_benchmark_scorecards,
+    __tauri_command_name_flowpilot_run_workflow_benchmark,
+    __tauri_command_name_flowpilot_workflow_benchmark_cases,
+    __tauri_command_name_flowpilot_workflow_benchmark_scorecards, flowpilot_run_workflow_benchmark,
+    flowpilot_workflow_benchmark_cases, flowpilot_workflow_benchmark_scorecards,
+};
 
 pub use backend_commands::{
     __cmd__copilot_sdk_create_agent_session, __cmd__copilot_sdk_get_auth_status,

@@ -652,6 +652,7 @@ impl Run {
                 .as_micros()
                 .try_into()
                 .map_err(|_| anyhow!("end timestamp overflowed u64"))?;
+            // Replay records contain event input only, never runtime variable overrides.
             let payload =
                 to_vec(&self.payload.payload.clone().unwrap_or(Value::Null)).unwrap_or_default();
             let visited_nodes = self
@@ -1301,6 +1302,9 @@ impl InternalRun {
                         var.validate_value(&value)?;
                     }
                 }
+                // Overrides supply values without weakening the board's privacy flags.
+                var.secret |= tv.variable.secret;
+                var.runtime_configured |= tv.variable.runtime_configured;
                 var.value = Arc::new(Mutex::new(value));
                 map.insert(tv.variable.id.clone(), var);
             }
@@ -2535,6 +2539,193 @@ mod tests {
             Some(false),
         )
         .into_callback()
+    }
+
+    mod runtime_variable_privacy {
+        use super::*;
+        use std::collections::HashMap;
+
+        async fn run_with_overrides(
+            secret: bool,
+            runtime_configured: bool,
+            override_on_event: bool,
+        ) -> (Arc<FlowLikeState>, InternalRun) {
+            let state = state_with_noop_node().await;
+            let mut board = Board::new_detached(Some("privacy".to_string()), Path::default());
+            let node = NoopLogic.get_node();
+            let node_id = node.id.clone();
+            board.nodes.insert(node_id.clone(), node);
+            let mut variable = variable_with_default("configured", Value::Null);
+            variable.secret = secret;
+            variable.runtime_configured = runtime_configured;
+            variable.exposed = true;
+            board.variables.insert(variable.id.clone(), variable);
+            // Caller and Event metadata must not be able to clear the board's flags.
+            let override_variable = variable_with_default(
+                "configured",
+                flow_like_types::json::json!("private-runtime-value"),
+            );
+            let overrides = HashMap::from([("configured".to_string(), override_variable)]);
+            let event = override_on_event.then(|| Event {
+                id: "event".to_string(),
+                name: "Privacy".to_string(),
+                description: String::new(),
+                board_id: board.id.clone(),
+                board_version: None,
+                node_id: node_id.clone(),
+                variables: overrides.clone(),
+                config: Vec::new(),
+                active: true,
+                canary: None,
+                variants: Vec::new(),
+                priority: 0,
+                event_type: "quick_action".to_string(),
+                notes: None,
+                event_version: (0, 0, 0),
+                created_at: SystemTime::UNIX_EPOCH,
+                updated_at: SystemTime::UNIX_EPOCH,
+                default_page_id: None,
+                inputs: Vec::new(),
+                route: None,
+                is_default: false,
+                execution_mode: Default::default(),
+                exposure: Default::default(),
+                correlation_mappings: None,
+            });
+            let payload = RunPayload {
+                id: node_id,
+                payload: Some(flow_like_types::json::json!({"input": "ordinary-event-value"})),
+                runtime_variables: (!override_on_event).then_some(overrides),
+                filter_secrets: Some(false),
+            };
+            let run = InternalRun::new(
+                "test-app",
+                Arc::new(board),
+                event,
+                &state,
+                &Profile::default(),
+                &payload,
+                false,
+                test_intercom_callback(),
+                None,
+                None,
+                HashMap::new(),
+            )
+            .await
+            .expect("build privacy test run");
+            (state, run)
+        }
+
+        async fn context_for_run(
+            state: &Arc<FlowLikeState>,
+            run: &InternalRun,
+        ) -> ExecutionContext {
+            let node = run.nodes.values().next().expect("test node");
+            ExecutionContext::with_meta(
+                run.nodes.clone(),
+                &Arc::downgrade(&run.run),
+                &run.meta,
+                state,
+                node,
+                &run.variables,
+                &run.cache,
+                LogLevel::Debug,
+                run.board.stage.clone(),
+                run.profile.clone(),
+                run.callback.clone(),
+                run.completion_callbacks.clone(),
+                None,
+                None,
+                run.oauth_tokens.clone(),
+                Some(run.channel.clone()),
+            )
+            .await
+        }
+
+        #[tokio::test]
+        async fn overrides_preserve_board_privacy_flags_and_omit_sensitive_snapshots() {
+            for (secret, runtime_configured) in [(true, false), (false, true), (true, true)] {
+                for override_on_event in [false, true] {
+                    let (state, run) =
+                        run_with_overrides(secret, runtime_configured, override_on_event).await;
+                    let context = context_for_run(&state, &run).await;
+                    let variable = context.get_variable("configured").await.unwrap();
+                    assert_eq!(variable.secret, secret);
+                    assert_eq!(variable.runtime_configured, runtime_configured);
+                    let (value, sensitive) =
+                        context.get_variable_value_ref("configured").await.unwrap();
+                    assert!(sensitive);
+                    assert_eq!(
+                        *value.lock().await,
+                        flow_like_types::json::json!("private-runtime-value")
+                    );
+                    assert!(context.trace.variables.as_ref().unwrap().is_empty());
+                }
+            }
+        }
+
+        #[tokio::test]
+        async fn local_variable_reads_apply_the_same_privacy_flags() {
+            let (state, run) = run_with_overrides(false, false, true).await;
+            let mut context = context_for_run(&state, &run).await;
+            let (_, sensitive) = context.get_variable_value_ref("configured").await.unwrap();
+            assert!(!sensitive);
+            assert_eq!(context.trace.variables.as_ref().unwrap().len(), 1);
+
+            for (secret, runtime_configured) in
+                [(false, false), (true, false), (false, true), (true, true)]
+            {
+                let mut variable = variable_with_default("configured", Value::Null);
+                variable.secret = secret;
+                variable.runtime_configured = runtime_configured;
+                variable.value = Arc::new(Mutex::new(flow_like_types::json::json!("local-value")));
+                context.local_variables = Some(Arc::new(Mutex::new(AHashMap::from_iter([(
+                    variable.id.clone(),
+                    variable,
+                )]))));
+                let (value, sensitive) =
+                    context.get_variable_value_ref("configured").await.unwrap();
+                assert_eq!(sensitive, secret || runtime_configured);
+                assert_eq!(
+                    *value.lock().await,
+                    flow_like_types::json::json!("local-value")
+                );
+            }
+        }
+
+        #[cfg(feature = "flow-runtime")]
+        #[tokio::test]
+        async fn recorded_run_payload_excludes_all_runtime_variables() {
+            let (_, run) = run_with_overrides(true, true, false).await;
+            let mut run = run.run.lock().await;
+            let mut payload = run.payload.as_ref().clone();
+            payload.runtime_variables.as_mut().unwrap().insert(
+                "nonsecret".to_string(),
+                variable_with_default(
+                    "nonsecret",
+                    flow_like_types::json::json!("private-nonsecret-value"),
+                ),
+            );
+            run.payload = Arc::new(payload);
+            run.log_db = Some(Arc::new(|_| {
+                flow_like_storage::lancedb::connect("memory://")
+            }));
+
+            let prepared = run.prepare_flush(true).unwrap().unwrap();
+            let meta = prepared.meta.expect("final run metadata");
+            let recorded: Value = flow_like_types::json::from_slice(&meta.payload).unwrap();
+            assert_eq!(
+                recorded,
+                flow_like_types::json::json!({"input": "ordinary-event-value"})
+            );
+            let stored = StoredLogMeta::from(&meta);
+            let serialized = flow_like_types::json::to_string(&stored).unwrap();
+            assert!(!serialized.contains("runtime_variables"));
+            assert_eq!(
+                stored.payload,
+                flow_like_types::json::to_vec(&recorded).unwrap()
+            );
+        }
     }
 
     mod resource_lifecycle {

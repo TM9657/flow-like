@@ -37,6 +37,12 @@ use std::sync::{Arc, LazyLock};
 
 pub use flow_like_catalog_core::NodeLogic;
 
+#[cfg(feature = "draft-testing")]
+pub mod draft_test;
+
+#[cfg(all(test, feature = "draft-testing"))]
+mod benchmark_case_tests;
+
 // Re-export core types and utilities
 #[cfg(any(feature = "portable-execute", feature = "compat"))]
 pub use flow_like_catalog_core::CachedDB;

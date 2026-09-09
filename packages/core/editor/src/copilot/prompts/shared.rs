@@ -374,6 +374,19 @@ genuinely overlap: shared helper functions, the same tables, dashboards over the
 /// Board-test convention shared by board prompts: `test`-prefixed simple events assert with
 /// `test::assert`, and `run_board_tests` executes them post-apply for a structured verdict.
 pub const TESTING_GUIDANCE: &str = r#"
+## ISOLATED DRAFT OUTPUT CHECKS
+For a small deterministic Generic Event transformation, call `test_flowscript` before commit with
+the retained `draft_id`, exact `expected_revision`, named `entry`, fixture `payload`, and
+`expected_output` derived from the requested behavior. It checks and executes that draft in fresh
+memory using a restricted built-in catalog, then compares its single returned JSON value exactly.
+Repair a mismatch with `patch_flowscript` and test the new revision with the same expectation.
+The first runner supports only JSON transformations and control flow. It rejects variables,
+macros, recursion, loops, caches, WASM, UI, storage, network, and other unsupported nodes. Ordinary
+acyclic local helpers share the test's execution limits; calls must target a static local function.
+A blocked test does not establish behavior. Preserve the requested program and report the limit;
+do not remove required functions or add a test-only Event to make it eligible. No live app is
+changed, and a passing receipt proves only that input/output case at that exact revision.
+
 ## BOARD TESTS (test EVENTS + test::assert)
 A board test is a normal simple event whose name starts with `test`
 (`eventsSimple testEmptyCart() { … }`). Cover each critical behavior of a non-trivial board with
@@ -385,7 +398,7 @@ run as an error. Give every assert a stable, unique `label`.
   the 100-node layer guideline.
 - Tests run against live app state (storage/DB): create scratch rows instead of mutating real data.
 - `run_board_tests` executes every `test*` event on the PERSISTED board and returns a per-test
-  verdict (assertion counts plus error logs). Like all runtime verification it runs in a later
+  verdict (assertion counts plus error logs). This live runtime verification runs in a later
   turn after the edit is applied, never against a merely queued draft. When it reports failures,
   fix the board, re-commit, and run it again.
 "#;

@@ -120,6 +120,7 @@ pub(crate) struct DeclarationSemanticEvidence {
     pub strong_matched_token_count: usize,
     pub coverage_basis_points: u16,
     pub strong_coverage_basis_points: u16,
+    pub relies_on_pin_evidence: bool,
     pub missing_strong_anchors: Vec<String>,
     pub reason_codes: Vec<String>,
 }
@@ -145,6 +146,7 @@ pub(crate) fn declaration_semantic_evidence(
     description: &str,
     category: Option<&str>,
     capability_tags: &[String],
+    matched_pin_tokens: &[String],
 ) -> DeclarationSemanticEvidence {
     let flat = to_camel_case(node_type);
     let exact_symbol = symbol_tokens(query).any(|token| {
@@ -163,11 +165,22 @@ pub(crate) fn declaration_semantic_evidence(
     ))
     .into_iter()
     .collect::<HashSet<_>>();
-    let all_tokens = strong_tokens
+    let node_tokens = strong_tokens
         .iter()
         .cloned()
         .chain(semantic_tokens(description))
         .chain(semantic_tokens(category.unwrap_or_default()))
+        .collect::<HashSet<_>>();
+    let all_tokens = node_tokens
+        .iter()
+        .cloned()
+        // Pin contracts explain data a node accepts or returns. They contribute recall,
+        // but an incidental operation in a pin description cannot satisfy a strong anchor.
+        .chain(
+            matched_pin_tokens
+                .iter()
+                .flat_map(|token| semantic_tokens(token)),
+        )
         .collect::<HashSet<_>>();
 
     let matched_token_count = query_tokens
@@ -191,8 +204,20 @@ pub(crate) fn declaration_semantic_evidence(
     let denominator = query_tokens.len().max(1);
     let coverage_basis_points = ((matched_token_count * 10_000) / denominator) as u16;
     let strong_coverage_basis_points = ((strong_matched_token_count * 10_000) / denominator) as u16;
+    let node_matched_token_count = query_tokens
+        .iter()
+        .filter(|token| node_tokens.contains(*token))
+        .count();
+    let relies_on_pin_evidence =
+        node_matched_token_count * 10_000 / denominator < 6_000 && coverage_basis_points >= 6_000;
 
     let mut reason_codes = Vec::new();
+    for token in matched_pin_tokens {
+        reason_codes.push(format!("pin_field_match:{token}"));
+    }
+    if relies_on_pin_evidence {
+        reason_codes.push("pin_contract_required_for_coverage".to_string());
+    }
     if exact_symbol {
         reason_codes.push("exact_function_symbol".to_string());
     }
@@ -220,6 +245,7 @@ pub(crate) fn declaration_semantic_evidence(
         strong_matched_token_count,
         coverage_basis_points,
         strong_coverage_basis_points,
+        relies_on_pin_evidence,
         missing_strong_anchors,
         reason_codes,
     }
@@ -1931,6 +1957,7 @@ declare function utilsHashMd5({ input: string }): string;
             "Generates integer values for comparison tests.",
             Some("utils/faker"),
             &tags,
+            &[],
         );
 
         assert!(!evidence.accepts());
@@ -1956,6 +1983,7 @@ declare function utilsHashMd5({ input: string }): string;
                 "Hybrid Search Local DB",
                 "Runs hybrid vector and full text search.",
                 Some("data/search"),
+                &[],
                 &[],
             );
 

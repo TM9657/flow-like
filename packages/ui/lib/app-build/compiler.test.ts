@@ -1,12 +1,148 @@
 import { describe, expect, it } from "vitest";
 
 import { compileAppSpec, validateAppSpec } from "./compiler";
-import { appBuildContractGuide, MAX_APP_SPEC_BYTES } from "./contract";
+import {
+	MAX_APP_SPEC_BYTES,
+	appBuildContractGuide,
+	eventResourceSchema,
+	pageResourceSchema,
+} from "./contract";
 import { exampleAppSpec } from "./test-fixtures";
 
 describe("AppSpec compiler", () => {
 	it("ships a valid, behaviorally testable contract example", () => {
 		expect(validateAppSpec(appBuildContractGuide().example).ok).toBe(true);
+	});
+
+	it.each([
+		"loadInvoices",
+		"01J-NODE:Entry",
+		"Load invoices",
+		"  Exact name  ",
+	])(
+		"preserves exact lifecycle and Event selector %j through compilation",
+		(selector) => {
+			const spec = exampleAppSpec();
+			const compiled = compileAppSpec(
+				{
+					...spec,
+					resources: [
+						...spec.resources.map((resource) =>
+							resource.kind === "event"
+								? {
+										...resource,
+										config: { ...resource.config, entry_node: selector },
+									}
+								: resource,
+						),
+						{
+							key: "issue_page",
+							kind: "page",
+							depends_on: ["issue_flow"],
+							requirement_ids: ["capture_issue"],
+							config: {
+								name: "Issues",
+								route: "/issues",
+								board: "issue_flow",
+								instruction: "Render the issue form.",
+								on_load_entry: selector,
+								on_unload_entry: selector,
+								on_interval_entry: selector,
+								interval_seconds: 60,
+							},
+						},
+						{
+							key: "issue_page_event",
+							kind: "event",
+							depends_on: ["issue_page"],
+							requirement_ids: ["capture_issue"],
+							config: {
+								name: "Issue page",
+								event_type: "page",
+								page: "issue_page",
+								route: "/issues",
+							},
+						},
+					],
+				},
+				{ app_id: "app", build_id: "build" },
+			);
+			expect(
+				compiled.resources.find((resource) => resource.key === "submit_issue")
+					?.config,
+			).toMatchObject({ entry_node: selector });
+			expect(
+				compiled.resources.find((resource) => resource.kind === "page")?.config,
+			).toMatchObject({
+				on_load_entry: selector,
+				on_unload_entry: selector,
+				on_interval_entry: selector,
+			});
+		},
+	);
+
+	it.each(["", " \t\n", "x".repeat(129)])(
+		"rejects invalid entry selector %j for every handoff",
+		(selector) => {
+			const spec = exampleAppSpec();
+			const event = spec.resources.find(
+				(resource) => resource.kind === "event",
+			);
+			if (!event) throw new Error("Expected the fixture's workflow Event.");
+			expect(
+				eventResourceSchema.safeParse({
+					...event,
+					config: { ...event.config, entry_node: selector },
+				}).success,
+			).toBe(false);
+			for (const field of [
+				"on_load_entry",
+				"on_unload_entry",
+				"on_interval_entry",
+			]) {
+				expect(
+					pageResourceSchema.safeParse({
+						key: "issue_page",
+						kind: "page",
+						depends_on: ["issue_flow"],
+						requirement_ids: ["capture_issue"],
+						config: {
+							name: "Issues",
+							route: "/issues",
+							board: "issue_flow",
+							instruction: "Render the issue form.",
+							[field]: selector,
+							...(field === "on_interval_entry"
+								? { interval_seconds: 60 }
+								: {}),
+						},
+					}).success,
+				).toBe(false);
+			}
+		},
+	);
+
+	it("keeps logical resource references strict while accepting workflow names", () => {
+		const spec = exampleAppSpec();
+		const event = spec.resources.find((resource) => resource.kind === "event");
+		if (!event) throw new Error("Expected the fixture's workflow Event.");
+		expect(
+			eventResourceSchema.safeParse({
+				...event,
+				config: {
+					...event.config,
+					board: "issueFlow",
+					entry_node: "loadInvoices",
+				},
+			}).success,
+		).toBe(false);
+		expect(
+			eventResourceSchema.safeParse({
+				...event,
+				key: "Submit Issue",
+				config: { ...event.config, entry_node: "loadInvoices" },
+			}).success,
+		).toBe(false);
 	});
 
 	it("canonicalizes ordering while keeping stable host reservations", () => {

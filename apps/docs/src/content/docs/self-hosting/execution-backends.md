@@ -34,6 +34,13 @@ streaming dispatcher, while queue backends are normally selected for
 asynchronous endpoints. Compose and Helm configure `EXECUTOR_URL` to reach the
 manager and supply its private authentication token to trusted callers.
 
+Requests containing runtime variables require direct HTTP or Lambda streaming
+dispatch. The dispatcher rejects them for queues, asynchronous Lambda invocation,
+and the legacy Kubernetes Job backend before publishing or staging the request.
+This prevents per-run configuration from entering server-side transport storage.
+Use a direct execution endpoint for these runs; the dispatcher does not switch
+backends or discard their values automatically.
+
 ## Per-execution isolation
 
 1. A manager prepares a runner and an external gateway before requests arrive.

@@ -96,6 +96,11 @@ pub(super) async fn copilot_sdk_chat_internal(
         None => None,
     };
     let authoritative_board = live_board_snapshot.as_ref().or(board);
+    let public_user_prompt = tool_context
+        .as_ref()
+        .and_then(|context| context.source_user_prompt.as_deref())
+        .filter(|prompt| !prompt.trim().is_empty())
+        .unwrap_or(&raw_user_prompt);
     let mut surface = build_flowpilot_agent_surface(
         scope,
         authoritative_board,
@@ -103,8 +108,12 @@ pub(super) async fn copilot_sdk_chat_internal(
         selected_node_ids,
         current_surface,
         current_canvas_settings,
+        current_images
+            .as_ref()
+            .is_some_and(|images| !images.is_empty()),
         &history,
         &raw_user_prompt,
+        public_user_prompt,
         &request_identity_prompt,
         host_context_guidance.as_deref(),
         global.as_deref(),
@@ -162,6 +171,7 @@ pub(super) async fn copilot_sdk_chat_internal(
                 .clone(),
         );
     }
+    super::workflow_benchmark::observe_tools(board, &mut tools);
     let sdk_tool_activity = Arc::new(SdkToolActivityRegistry::default());
     let mut sdk_tool_activity_rx = sdk_tool_activity.subscribe();
     tools = scope_sdk_tool_handlers(
@@ -571,6 +581,12 @@ pub(super) async fn copilot_sdk_chat_internal(
                     }
                 }
                 SessionEventData::AssistantUsage(data) => {
+                    super::workflow_benchmark::observe_usage(
+                        board,
+                        data.input_tokens,
+                        data.output_tokens,
+                        None,
+                    );
                     let input = data.input_tokens.unwrap_or(0.0).max(0.0).round() as u64;
                     let output = data.output_tokens.unwrap_or(0.0).max(0.0).round() as u64;
                     if input > 0 || output > 0 {
@@ -988,11 +1004,15 @@ pub(super) async fn copilot_sdk_chat_internal(
                         run_summary.record_continuation();
                         run_summary.record_phase();
                         full_response.clear();
+                        let workflow_snapshot = workflow_state
+                            .as_ref()
+                            .and_then(|state| state.lock().ok().map(|state| state.snapshot()));
                         let prompt = workflow_edit_continuation_prompt(
                             &raw_user_prompt,
                             extracted_flowscript_workspace.as_deref(),
                             workflow_idle_continuations,
                             last_validation_errors.as_ref(),
+                            workflow_snapshot.as_ref(),
                         );
                         let continuation_send = session.send(MessageOptions {
                             prompt,

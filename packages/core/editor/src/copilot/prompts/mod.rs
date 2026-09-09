@@ -15,11 +15,15 @@ mod shared;
 
 pub use board::{
     A2UI_STATE_GUIDANCE, BOARD_ORGANIZATION_GUIDANCE, BOARD_SPECIALIST_BOUNDARY,
-    DASHBOARD_A2UI_GUIDANCE, DATABASE_WORKFLOW_GUIDANCE, DYNAMIC_PIN_GUIDANCE,
-    EVENT_ENTRY_GUIDANCE, EXECUTION_FLOW_GUIDANCE, EXPLANATION_WORKFLOW_GUIDANCE,
-    FLOW_PATH_ACCESSOR_GUIDANCE, FLOWSCRIPT_DOMAIN_EXAMPLES, FLOWSCRIPT_FEW_SHOT_EXAMPLES,
-    FUNCTION_CACHE_GUIDANCE, NUMBERS_CONVERSIONS_GUIDANCE, board_sdk_flowscript_system_prompt,
-    board_sdk_system_prompt, board_system_prompt, flowscript_board_context,
+    BoardPromptEligibility, BoardPromptMode, BoardPromptProfile, DASHBOARD_A2UI_GUIDANCE,
+    DATABASE_WORKFLOW_GUIDANCE, DYNAMIC_PIN_GUIDANCE, EVENT_ENTRY_GUIDANCE,
+    EXECUTION_FLOW_GUIDANCE, EXPLANATION_WORKFLOW_GUIDANCE, FLOW_PATH_ACCESSOR_GUIDANCE,
+    FLOWSCRIPT_DOMAIN_EXAMPLES, FLOWSCRIPT_FEW_SHOT_EXAMPLES, FUNCTION_CACHE_GUIDANCE,
+    NUMBERS_CONVERSIONS_GUIDANCE, board_sdk_flowscript_system_prompt,
+    board_sdk_flowscript_system_prompt_with_options,
+    board_sdk_flowscript_system_prompt_with_profile, board_sdk_system_prompt, board_system_prompt,
+    board_system_prompt_with_mode, flowscript_board_context, flowscript_board_context_with_options,
+    flowscript_board_context_with_profile, select_ordinary_board_prompt_profile,
 };
 pub use data_studio::{
     DATA_STUDIO_TARGETING_GUIDANCE, DATA_STUDIO_TOOL_GUIDANCE, DATA_STUDIO_TRANSPARENCY_GUIDANCE,

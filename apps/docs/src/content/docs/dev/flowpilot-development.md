@@ -98,9 +98,139 @@ a stable failure fingerprint for grouping regressions; and the assistant debug t
 The focused Vitest suite tests case construction and artifact evaluation without
 invoking a model.
 
+## Isolated FlowScript draft tests
+
+`test_flowscript` checks a retained source revision, applies its exact compiler commands to a
+disposable board, and executes it through the normal workflow runtime. Supply `draft_id`,
+`expected_revision`, a named Generic Event `entry`, a fixture `payload`, and `expected_output`.
+The host requires one successful Generic Event result and compares it with the expectation using
+JSON equality. After a mismatch, patch the retained source and test the new revision with the
+same expectation. Testing never queues or applies a live edit.
+
+The runner covers small deterministic JSON transformations with a restricted catalog of
+trusted built-in implementations and fresh memory stores. It rejects unsupported nodes anywhere
+on the board, variables, macros, caches, and WASM. Ordinary local helper functions can call other
+local helpers and share the same invocation, value, and error limits. Calls must name a static
+function on this board; recursion and reference-based dispatch are rejected. Computed scalar,
+object, and array returns are covered. Literal-only and identity passthrough helpers currently
+lower to unsupported variable or reroute nodes. It has no live credentials,
+external dispatch, UI, storage, or network nodes. Preparation and execution run in process with a
+cooperative three-second deadline and fixed node, value, output, and invocation limits.
+A blocked result means that this runner cannot verify the draft; preserve the requested
+workflow and report that limitation.
+
+The catalog includes the compiler's supported binary arithmetic, comparison, boolean and string
+operators, plus ternary selection. Integer overflow, invalid exponents, division by zero and
+nonfinite float results fail before native execution can panic or turn a numeric result into
+JSON `null`. Concatenation checks the combined input size before allocating its result. Format
+string expansion remains outside the restricted catalog.
+
+Receipts identify the source revision and board/catalog fingerprints. A pass covers only the
+supplied input/output case. It does not certify UI wiring, app Events, persistence, or other inputs,
+and it does not unlock staged app-build promotion. Live integration tests still run after Apply.
+
+The shared workflow session retains test evidence separately from compiler diagnostics. It fixes
+the first expectation for each entry and input, then carries bounded input, expected output,
+actual output, and runtime errors into desktop repair continuations. Changing an expectation
+cannot clear a recorded failure. Editing the source makes earlier results historical until the
+new revision is tested; late receipts from an older revision cannot replace current evidence.
+Blocked checks remain unverified. This feedback supports repairs without adding a commit gate,
+and model-authored expectations still need to reflect the user's request.
+
+## Workflow behavior benchmark
+
+Open **Developer tools → Workflow benchmark** in the desktop app, select a configured agent
+backend, and enter an explicit model ID. Choose cases and repetitions, then start the run.
+Each case uses the ordinary board authoring tools on a disposable board with a five-minute
+generation deadline. The suite has 16 tasks and 64 fixed input/output checks covering JSON
+transformations, helper functions, and repairs that preserve existing entries.
+
+For unattended runs, the development desktop binary also has a headless entry point. It uses
+the ordinary backend and authoring tools without starting the main application, loading its
+settings or projects, opening a window, or requiring a frontend server. An existing desktop
+instance can stay open. Create a JSON configuration with an explicit installed backend, model,
+reasoning setting (a string or `null`), case selection, repetition count, and a new absolute
+output path:
+
+```json
+{
+  "backend": "codex",
+  "model_id": "YOUR_CONFIGURED_MODEL_ID",
+  "reasoning_effort": null,
+  "prompt_profiles": ["legacy", "focused"],
+  "case_ids": ["profile-card", "normalize-pair-helper", "repair-casing"],
+  "repeats": 1,
+  "output": "/tmp/workflow-baseline.json"
+}
+```
+
+Save it as `/tmp/workflow-benchmark.json`, then run from the repository root:
+
+```sh
+RUSTC_WRAPPER= cargo run -p flow-like-desktop --bin flow-like-desktop --no-default-features -- --flowpilot-workflow-benchmark /tmp/workflow-benchmark.json
+```
+
+The CLI rejects an existing output file before starting a model. It checkpoints completed runs
+and writes final host scorecards. Exit status `0` means all requested cases passed, `1` means a
+case did not pass, including generation deadlines, and `2` means CLI setup, execution, or report
+collection failed.
+Each report retains the last authored source and dispatched tool timings so a failure can be
+investigated without reconstructing it from a source hash. Tool traces are capped at 256 calls;
+the report marks truncation explicitly.
+
+`prompt_profiles` accepts `legacy`, `focused`, or both. Omitting it selects `legacy`. With both
+profiles, the CLI runs each case as a pair and reverses profile order across adjacent cases and
+repetitions. Each profile has its own cohort and scorecards. The focused profile keeps the
+FlowScript lifecycle and engine rules, uses a shorter core reference, and selects domain guidance
+from the public request and existing source. Unclear requests retain every domain. Tools, runtime
+limits, and host grading checks are the same for both profiles.
+
+Ordinary desktop SDK and external-agent board sessions select the focused profile only for
+explicit Generic Event transformations of JSON or primitive input values. The current board
+must pass the isolated runner's static checks. Integration requests, ambiguous wording,
+attachments, conversation history, retained recovery and additional host context keep the full
+profile. A benchmark's explicit profile overrides this routing so control runs stay comparable.
+Authoring prompts describe the tools exposed by the authoring filter. Read-only and combined
+sessions retain their own tool guidance.
+
+Transport traces distinguish MCP initialization, tool listing, requests, preflight results, and
+handler dispatch. Preflight can accept a scope plan without dispatching a handler, so use the
+recorded status to distinguish these results from refusals. SDK traces start at the workflow
+guard. Counts continue after the 512-event trace limit. External process snapshots record the
+exact prompt bytes supplied by FlowPilot,
+stdin delivery, the latest protocol event kind, process exit, and cancellation. These byte counts
+exclude instructions added by the CLI or provider and are not token counts. A dropped process
+future retains its latest snapshot without guessing why it stopped. Snapshots contain fixed
+metadata rather than model text, payloads, credentials, or stderr contents; at most 16 phases are
+retained, with truncation marked explicitly.
+
+The model receives the task and, for repairs, the existing workflow. Reference implementations
+and grading inputs stay in the host. Once generation ends, the host resolves the returned commit
+claim against the retained source revision and executes its command batch in the restricted
+runner. It also checks required helper calls and existing entry identities. Grading results never
+enter a repair continuation. A model-authored `test_flowscript` expectation is separate from
+these fixed checks.
+
+Export the JSON reports to retain model and reasoning settings, fixture and catalog hashes,
+source revisions, command fingerprints, elapsed time, and check results. Source attempts count
+accepted retained revisions, including invalid source; repeated reads, checks, and tests do not
+count as repairs. The scorecard attributes a pass to the final committed revision. It cannot
+establish whether an earlier uncommitted revision would have passed the hidden checks.
+
+GitHub Copilot token totals come from raw provider usage events. Codex totals come from structured
+CLI completion events before assistant text is processed. Missing counts, incomplete generations,
+and ambiguous CLI phases remain unknown; Claude Code usage is still unknown. Keep comparisons within
+an identical cohort. The build identity
+covers workspace Rust sources and manifests, the dependency lockfile, target, features, and build
+flags. Prompt and tool fingerprints identify the stable authoring recipes; each report records
+the observed tool schema hash separately when setup reaches that stage. Setup failures remain
+in their planned cohort's denominator. External CLI versions, provider-side model updates, and remote configuration still need to
+be recorded alongside a baseline. This benchmark measures isolated workflow behavior. It does
+not certify whole-app integration or enable staged app-build promotion.
+
 ## Staged app-build preview
 
-FlowPilot can keep an app contract and its build progress outside a model conversation. This is an opt-in preview for developers testing app construction. The interactive host cannot yet isolate native workflow side effects, so it cannot certify runtime behavior or promote a build. Ordinary app requests continue through the existing build playbook.
+FlowPilot can keep an app contract and its build progress outside a model conversation. This is an opt-in preview for developers testing app construction. The staged app-build adapter cannot yet isolate workflows with external effects, so it cannot certify runtime behavior or promote a build. Ordinary app requests continue through the existing build playbook.
 
 ### System model
 
@@ -178,6 +308,11 @@ Run the deterministic suites without invoking a model or creating live apps:
 bunx --no-install vitest run packages/ui/lib/app-build packages/ui/components/global-chat/tools --maxWorkers=4
 RUSTC_WRAPPER= cargo test -p flow-like-runtime --no-default-features --features app app_build::tests --lib
 RUSTC_WRAPPER= cargo test -p flow-like-editor tool_spec::tests --lib
+RUSTC_WRAPPER= cargo test -p flow-like-editor draft_test --lib
+RUSTC_WRAPPER= cargo test -p flow-like-catalog --no-default-features --features draft-testing --lib draft_test::tests
+RUSTC_WRAPPER= cargo test -p flow-like-catalog --no-default-features --features draft-testing --lib benchmark_case_tests
+RUSTC_WRAPPER= cargo test -p flow-like-editor --lib behavioral_
+RUSTC_WRAPPER= cargo test -p flow-like-desktop --bin flow-like-desktop --no-default-features workflow_benchmark
 ```
 
 Run application typechecks and API/desktop checks separately. A filtered

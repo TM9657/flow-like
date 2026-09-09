@@ -39,6 +39,8 @@ import { parseUint8ArrayToJson } from "../../lib/uint8";
 import { captureWidgetSnapshots } from "../../lib/widget-snapshot";
 import { useBackend } from "../../state/backend-state";
 import { useExecutionEngine } from "../../state/execution-engine-context";
+import { getFrontendStateStore } from "../a2ui/frontend-state";
+import { buildWorkflowFrontendContext } from "../a2ui/workflow-payload";
 import {
 	AlertDialog,
 	AlertDialogAction,
@@ -1406,6 +1408,11 @@ export const ChatInterfaceMemoized = memo(function ChatInterface({
 					localStateRef,
 					globalStateRef,
 				);
+				// The chat event owns its state; embedded widgets use their surface IDs.
+				const frontendContext = await buildWorkflowFrontendContext(
+					appId,
+					event.id,
+				);
 
 				// Start execution first to reset the stream state
 				const executionPromise = executionEngine.executeEvent(streamId, {
@@ -1413,10 +1420,17 @@ export const ChatInterfaceMemoized = memo(function ChatInterface({
 					eventId: event.id,
 					payload: {
 						id: event.node_id,
-						payload: payload,
+						payload: { ...payload, ...frontendContext },
 					},
 					streamState: false,
 					onExecutionStart: (execution_id: string) => {},
+					onLiveEvents: (events) => {
+						for (const item of events) {
+							if (item.event_type === "a2ui") {
+								getFrontendStateStore(appId).handleMessage(item.payload);
+							}
+						}
+					},
 					path: `${pathname}?id=${appId}&eventId=${event.id}&sessionId=${sessionIdParameter}`,
 					title: event.name || "Chat",
 					interfaceType: "chat",
@@ -1759,6 +1773,13 @@ export const ChatInterfaceMemoized = memo(function ChatInterface({
 						);
 					}
 					handleNavigationEvents(events);
+					if (!onA2UIEvents) {
+						for (const item of events) {
+							if (item.event_type === "a2ui") {
+								getFrontendStateStore(actionAppId).handleMessage(item.payload);
+							}
+						}
+					}
 					onA2UIEvents?.(events);
 
 					const processed = processChatEvents(events, {

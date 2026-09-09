@@ -1754,11 +1754,9 @@ Works for any publicly visible app plus every app the user is a member of. For a
         },
         PlatformToolSpec {
             name: "inspect_app",
-            description: r#"Your main evidence-gathering tool: a structured digest of ONE app the user is a MEMBER of. Read-only.
+            description: r#"Read a bounded digest of an app the user belongs to: board entry IDs, counts and node-type samples; events with routes, exposure and execution mode; table columns; overlays; widgets/pages; and non-secret variables. Use `sections` or `board_id` to narrow the read.
 
-Returns a summary — not a dump — of: boards with a FlowScript outline (entry events, function signatures, node counts per board), app-level events (type, route, exposure, execution mode; secrets stripped), database tables with column names and types, graph overlays/ontologies, widgets and pages, and non-secret variables. Use `sections` to fetch only what you need.
-
-This is how you judge whether an app is a good foundation and which specific boards/events/tables are worth reusing. If the user is NOT a member of the app, this returns `{ inaccessible: true, reason }` rather than failing — that is an expected outcome for a public store app, and it means you must recommend `acquire` or `fork` instead of a fragment splice."#,
+Board summaries exclude function signatures and implementations. They identify reuse candidates without establishing how a helper works. Non-member apps return `{ inaccessible: true, reason }`; recommend acquire or fork before inspecting their contents."#,
             schema: || {
                 json!({
                     "type": "object",
@@ -1779,9 +1777,9 @@ This is how you judge whether an app is a good foundation and which specific boa
         },
         PlatformToolSpec {
             name: "search_templates",
-            description: r#"Search TEMPLATES — saved board snapshots that seed a new board with nodes, variables and pages. Read-only.
+            description: r#"Search saved board templates in public apps and observed owned metadata. Read-only. Current APIs cannot certify full corpus coverage. Check errors and per-source warnings before concluding none exist; `observed_exhausted` only exhausts the returned window or inventory.
 
-Covers templates in publicly visible apps as well as the user's own. Returns template metadata plus the owning app's name, price and `allow_forking`. Set `forkable_only` to skip templates whose app the user could never take. Follow up with `get_template_preview` on the promising ones — search gives you names, the preview gives you shape."#,
+Continue with each source's `next_offset`. `forkable_only` filters the owning app's forking flag. Use `get_template_preview` for shape."#,
             schema: || {
                 json!({
                     "type": "object",
@@ -1790,7 +1788,9 @@ Covers templates in publicly visible apps as well as the user's own. Returns tem
                         "category": { "type": "string", "description": "Restrict to one owning-app category." },
                         "tag": { "type": "string", "description": "Restrict to templates carrying this tag." },
                         "forkable_only": { "type": "boolean", "description": "Only templates whose owning app allows forking." },
-                        "limit": { "type": "integer", "description": "Maximum results (max 100, default 25)." }
+                        "limit": { "type": "integer", "minimum": 1, "maximum": 100, "description": "Maximum combined results (default 25)." },
+                        "public_offset": { "type": "integer", "minimum": 0, "description": "Public API result offset (default 0). Preserve both returned next_offset values when paging." },
+                        "owned_offset": { "type": "integer", "minimum": 0, "description": "Owned inventory offset (default 0). Preserve both returned next_offset values and check coverage warnings." }
                     },
                     "required": ["query"]
                 })

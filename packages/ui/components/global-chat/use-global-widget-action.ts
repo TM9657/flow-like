@@ -7,6 +7,7 @@ import {
 	makeGlobalChatMessage,
 	persistGlobalChatMessage,
 } from "../../state/global-chat/global-chat-stream";
+import { getFrontendStateStore } from "../a2ui/frontend-state";
 import type { IAttachment } from "../interfaces/chat-default/chat-db";
 import type { RunWidgetAction } from "../interfaces/chat-default/chat-widget-execution";
 import { processChatEvents } from "../interfaces/chat-default/event-processor";
@@ -40,6 +41,13 @@ export function useGlobalChatRunWidgetAction(): RunWidgetAction {
 				false,
 				undefined,
 				(events) => {
+					if (!onA2UIEvents) {
+						for (const item of events) {
+							if (item.event_type === "a2ui") {
+								getFrontendStateStore(appId).handleMessage(item.payload);
+							}
+						}
+					}
 					onA2UIEvents?.(events);
 
 					const processed = processChatEvents(events, {

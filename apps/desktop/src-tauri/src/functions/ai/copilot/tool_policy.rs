@@ -271,6 +271,7 @@ pub(super) fn specialist_tool_policy(
                 "write_flowscript",
                 "patch_flowscript",
                 "check_flowscript",
+                "test_flowscript",
                 "commit_flowscript",
             ]);
         }

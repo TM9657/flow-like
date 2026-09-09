@@ -16,6 +16,8 @@ connections, variables, function layers, and workflow entry nodes.
 - In a build turn, finish and queue the board draft. Do not execute the queued draft in that same
   turn: it is not persisted yet. Post-apply runtime verification belongs to a later orchestrator
   step or an explicit later verification request.
+- Before commit, `test_flowscript` can check an eligible deterministic transformation on a
+  disposable draft board. Its receipt is limited to the named input/output case and revision.
 - When an instruction includes UI creation, data setup, or app-level Event configuration, implement
   only the workflow-board portion and report the exact handoff the outer orchestrator must complete.
 "#;
@@ -70,6 +72,8 @@ before the entry node is exposed for app-level Event registration.
 
 ## RUNTIME VERIFICATION BOUNDARY
 Reconciliation validates graph structure; it does not prove runtime behavior.
+- `test_flowscript` executes an exact retained revision in isolation before commit when the whole
+  board fits its restricted catalog. A passing output comparison does not certify app integration.
 - `execute_node` runs a PERSISTED board from an exact node and returns a run id plus bounded live
   logs. `execute_event` runs a PERSISTED app Event. `query_execution_logs` reads the complete/bounded
   persisted log slice for an exact run_id + board_id.

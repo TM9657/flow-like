@@ -3859,6 +3859,7 @@ pub fn get_tool_description(name: &str, arguments: &serde_json::Value) -> String
         "write_flowscript" => "Writing and previewing a retained FlowScript draft...".to_string(),
         "patch_flowscript" => "Patching the retained FlowScript source...".to_string(),
         "check_flowscript" => "Checking FlowScript and retaining its exact changes...".to_string(),
+        "test_flowscript" => "Testing the retained FlowScript result in isolation...".to_string(),
         "commit_flowscript" => "Queueing the exact checked FlowScript changes...".to_string(),
         "plan_flow_ir" => {
             "Checking required workflow capabilities and module budgets...".to_string()

@@ -236,6 +236,7 @@ fn specialist_capabilities_follow_exact_tool_policy() {
         "write_flowscript",
         "patch_flowscript",
         "check_flowscript",
+        "test_flowscript",
         "commit_flowscript",
         "database_tool",
         "storage_tool",
@@ -508,6 +509,7 @@ fn board_explain_policy_is_an_exact_read_only_allowlist() {
         "write_flowscript",
         "patch_flowscript",
         "check_flowscript",
+        "test_flowscript",
         "commit_flowscript",
         "emit_ui",
         "graph_overlay_tool",
@@ -570,6 +572,7 @@ fn external_frontend_prompt_has_no_workflow_lifecycle() {
         "write_flowscript",
         "patch_flowscript",
         "check_flowscript",
+        "test_flowscript",
         "commit_flowscript",
     ] {
         assert!(!prompt.contains(lifecycle_tool));
@@ -691,4 +694,8 @@ fn source_lifecycle_classification_keeps_commit_boundary_explicit() {
     assert!(!is_workflow_commit_tool("check_flowscript"));
     assert!(is_workflow_commit_tool("commit_flowscript"));
     assert!(is_workflow_commit_tool("edit_flowscript"));
+    assert!(is_workflow_loop_tool("test_flowscript"));
+    assert!(is_order_sensitive_workflow_tool("test_flowscript"));
+    assert!(!is_flowscript_draft_operation_tool("test_flowscript"));
+    assert!(!is_workflow_commit_tool("test_flowscript"));
 }

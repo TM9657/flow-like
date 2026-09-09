@@ -86,6 +86,7 @@ import {
 import { registerGlobalChatToolExecutor } from "../../state/global-chat/global-chat-tool-registry";
 import { handleUpgradeRequiredError } from "../../state/upgrade-dialog-state";
 import { foldA2UIServerMessage } from "../a2ui/fold-surfaces";
+import { getFrontendStateStore } from "../a2ui/frontend-state";
 import { findLivePage } from "../a2ui/live-page-registry";
 import type {
 	A2UIServerMessage,
@@ -93,6 +94,7 @@ import type {
 	Surface,
 	SurfaceComponent,
 } from "../a2ui/types";
+import { buildWorkflowFrontendContext } from "../a2ui/workflow-payload";
 import {
 	BoardEditRecoveryStore,
 	BoardZeroProgressRetryGuard,
@@ -7062,6 +7064,7 @@ Completion contract: build complete helper logic first and add the Event entry l
 							actions: [],
 							tools: [],
 							attachments: forwardedAttachments,
+							...(await buildWorkflowFrontendContext(appId, chatEvent.id)),
 						},
 					};
 
@@ -7145,6 +7148,11 @@ Completion contract: build complete helper logic first and add the Event entry l
 								syncSubSteps();
 								for (const event of batch) {
 									if (event?.event_type === "a2ui" && event.payload) {
+										if (
+											getFrontendStateStore(appId).handleMessage(event.payload)
+										) {
+											continue;
+										}
 										pushedSurfaces = foldA2UIServerMessage(
 											pushedSurfaces,
 											event.payload as A2UIServerMessage,

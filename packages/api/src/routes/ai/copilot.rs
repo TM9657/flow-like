@@ -18,10 +18,11 @@ use flow_like::copilot::{
     ChatImage, CopilotScope, RunContext, UIActionContext, UnifiedChatMessage,
     UnifiedCopilotResponse,
 };
+use flow_like::flow::ast::apply_board_commands_to_board;
 use flow_like::flow::board::Board;
 use flow_like::flow::copilot::platform::PlatformToolBridge;
 use flow_like::flow::copilot::{
-    CatalogProvider, FlowIrDraftStore, NodeMetadata, PinMetadata, PlatformSpecialist,
+    BoardCommand, CatalogProvider, FlowIrDraftStore, NodeMetadata, PinMetadata, PlatformSpecialist,
     enrich_node_metadata, run_ontology_query_chat, run_specialist_chat_with_access,
     score_catalog_metadata,
 };
@@ -421,6 +422,38 @@ fn node_to_metadata(node: flow_like::flow::node::Node) -> NodeMetadata {
 
 #[flow_like_types::async_trait]
 impl CatalogProvider for ServerCatalogProvider {
+    async fn test_draft_board(
+        &self,
+        board: Board,
+        commands: Vec<BoardCommand>,
+        entry: String,
+        payload: Option<serde_json::Value>,
+    ) -> Result<serde_json::Value, String> {
+        let result = flow_like_catalog::draft_test::prepare_and_test_draft_board(
+            board,
+            &entry,
+            payload,
+            |mut board, state| async move {
+                let catalog = state
+                    .node_registry
+                    .read()
+                    .await
+                    .get_nodes()
+                    .map_err(|error| error.to_string())?;
+                let applied =
+                    apply_board_commands_to_board(&mut board, commands, &catalog, state, None)
+                        .await
+                        .map_err(|error| error.to_string())?;
+                if !applied.diagnostics.is_empty() {
+                    return Err(applied.diagnostics.join("\n"));
+                }
+                Ok(board)
+            },
+        )
+        .await?;
+        serde_json::to_value(result).map_err(|error| error.to_string())
+    }
+
     async fn search(&self, query: &str) -> Vec<NodeMetadata> {
         let mut scored_matches: Vec<(i32, NodeMetadata)> = Vec::new();
 

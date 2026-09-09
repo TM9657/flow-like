@@ -606,6 +606,12 @@ export default function DeveloperPage() {
 						"Create, inspect, test, and publish local WASM node projects.",
 					)}
 				</p>
+				<Link
+					href="/developer/flowpilot-workflows"
+					className="inline-block text-sm text-primary underline-offset-4 hover:underline"
+				>
+					{t("workflowBehaviorBenchmarks", "Workflow behavior benchmarks")}
+				</Link>
 			</div>
 
 			<div className="flex items-center gap-3">
@@ -738,7 +744,7 @@ export default function DeveloperPage() {
 				<EmptyState
 					icons={[Code2, Sparkles, Package]}
 					title={t("noNodeProjectsYet", "No node projects yet")}
-					description={`Create a new node project from a template, or add an existing one from disk.`}
+					description="Create a new node project from a template, or add an existing one from disk."
 					action={[
 						{
 							label: "New Project",

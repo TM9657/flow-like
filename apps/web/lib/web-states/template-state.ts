@@ -7,6 +7,10 @@ import type {
 	ITemplateState,
 	IVersionType,
 } from "@flow-like/flow-like-ui";
+import {
+	type TemplateReadOptions,
+	readTemplateMetadataSnapshot,
+} from "@flow-like/flow-like-ui/state/backend-state/template-read";
 import { type WebBackendRef, apiDelete, apiGet, apiPut } from "./api-utils";
 
 export class WebTemplateState implements ITemplateState {
@@ -15,9 +19,36 @@ export class WebTemplateState implements ITemplateState {
 	async getTemplates(
 		appId?: string,
 		language?: string,
+		options?: TemplateReadOptions,
 	): Promise<[string, string, IMetadata | undefined][]> {
 		const params = new URLSearchParams();
 		if (language) params.set("language", language);
+		if (options?.readOnly) {
+			params.set("limit", "100");
+			params.set("offset", "0");
+			return readTemplateMetadataSnapshot(
+				[
+					{
+						label: "Owned remote template metadata",
+						read: () =>
+							apiGet<[string, string, IMetadata | undefined][]>(
+								appId
+									? `apps/${appId}/templates?${params}`
+									: `user/templates?${params}`,
+								this.backend.auth,
+							),
+					},
+				],
+				options,
+				{
+					complete: !!appId,
+					scope: appId ? "app_template_metadata" : "owned_remote_metadata",
+					warning: appId
+						? undefined
+						: "Remote metadata covers the first 100 memberships. The API does not report membership exhaustion.",
+				},
+			);
+		}
 
 		try {
 			const endpoint = appId
@@ -27,13 +58,15 @@ export class WebTemplateState implements ITemplateState {
 				endpoint,
 				this.backend.auth,
 			);
-		} catch {
+		} catch (error) {
+			if (options?.strict) throw error;
 			return [];
 		}
 	}
 
 	async searchTemplates(
 		query: ITemplateSearchQuery,
+		options?: TemplateReadOptions,
 	): Promise<ITemplateSearchHit[]> {
 		const params = new URLSearchParams();
 		params.set("query", query.query);
@@ -49,7 +82,8 @@ export class WebTemplateState implements ITemplateState {
 				`apps/templates/search?${params}`,
 				this.backend.auth,
 			);
-		} catch {
+		} catch (error) {
+			if (options?.strict) throw error;
 			return [];
 		}
 	}

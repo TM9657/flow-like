@@ -1183,6 +1183,9 @@ pub fn run() {
             functions::flow::template::get_template_meta,
             functions::flow::template::push_template_meta,
             functions::ai::copilot::copilot_chat,
+            functions::ai::copilot::flowpilot_workflow_benchmark_cases,
+            functions::ai::copilot::flowpilot_workflow_benchmark_scorecards,
+            functions::ai::copilot::flowpilot_run_workflow_benchmark,
             functions::ai::copilot::cancel_copilot_chat,
             functions::ai::copilot::flowpilot_flow_ir_commit_disposition,
             functions::ai::copilot::flowpilot_create_board_edit_job,
@@ -1320,13 +1323,17 @@ pub fn run() {
         }
     }
 
-    let context: tauri::Context<_> = std::thread::spawn(|| tauri::generate_context!())
+    let context = std::thread::spawn(crate::application_context)
         .join()
         .expect("context thread");
 
     builder
         .run(context)
         .expect("error while running tauri application");
+}
+
+pub(crate) fn application_context() -> tauri::Context<tauri::Wry> {
+    tauri::generate_context!()
 }
 
 fn handle_instance(app: &AppHandle, args: Vec<String>, _cwd: String) {

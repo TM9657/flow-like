@@ -8,6 +8,11 @@ import {
 	type IVersionType,
 	injectDataFunction,
 } from "@flow-like/flow-like-ui";
+import {
+	MAX_OWNED_TEMPLATE_METADATA,
+	type TemplateReadOptions,
+	readTemplateMetadataSnapshot,
+} from "@flow-like/flow-like-ui/state/backend-state/template-read";
 import { invoke } from "@tauri-apps/api/core";
 import { isEqual } from "lodash-es";
 import { fetcher } from "../../lib/api";
@@ -22,8 +27,13 @@ export class TemplateState implements ITemplateState {
 	 */
 	async searchTemplates(
 		query: ITemplateSearchQuery,
+		options?: TemplateReadOptions,
 	): Promise<ITemplateSearchHit[]> {
-		if (!this.backend.profile) return [];
+		if (!this.backend.profile) {
+			if (options?.strict)
+				throw new Error("Profile not set. Cannot search public templates.");
+			return [];
+		}
 
 		const params = new URLSearchParams();
 		params.set("query", query.query);
@@ -40,7 +50,8 @@ export class TemplateState implements ITemplateState {
 				`apps/templates/search?${params}`,
 				{ method: "GET" },
 			);
-		} catch {
+		} catch (error) {
+			if (options?.strict) throw error;
 			return [];
 		}
 	}
@@ -61,7 +72,56 @@ export class TemplateState implements ITemplateState {
 	async getTemplates(
 		appId?: string,
 		language?: string,
+		options?: TemplateReadOptions,
 	): Promise<[string, string, IMetadata | undefined][]> {
+		if (options?.readOnly) {
+			const profile = this.backend.profile;
+			const remote =
+				profile && (!appId || !(await this.backend.isOffline(appId)));
+			const params = new URLSearchParams({ limit: "100", offset: "0" });
+			if (language) params.set("language", language);
+			return readTemplateMetadataSnapshot(
+				[
+					{
+						label: "Local template metadata",
+						read: () =>
+							invoke("get_templates", {
+								appId,
+								language,
+								metadataOnly: true,
+								limit: MAX_OWNED_TEMPLATE_METADATA,
+							}),
+					},
+					...(profile && remote
+						? [
+								{
+									label: "Owned remote template metadata",
+									read: () =>
+										fetcher<[string, string, IMetadata | undefined][]>(
+											profile,
+											appId
+												? `apps/${appId}/templates?${params}`
+												: `user/templates?${params}`,
+											{ method: "GET" },
+											this.backend.auth,
+										),
+								},
+							]
+						: []),
+				],
+				options,
+				{
+					complete: false,
+					scope: remote
+						? "local_cache_and_owned_remote_metadata"
+						: "local_cached_template_metadata",
+					warning:
+						remote && !appId
+							? "Remote metadata covers the first 100 memberships without exhaustion metadata. Local metadata covers at most 100 profile apps and 1000 template IDs and may omit unavailable records."
+							: "Local metadata covers at most 100 profile apps and 1000 template IDs and may omit unavailable records, so it cannot certify exhaustive coverage.",
+				},
+			);
+		}
 		const templates = await invoke<[string, string, IMetadata | undefined][]>(
 			"get_templates",
 			{

@@ -6,8 +6,12 @@
 mod app_build_prompt;
 mod app_build_tool_spec;
 pub mod assistant;
+pub mod behavioral_evaluation;
+pub mod behavioral_state;
+pub mod benchmark_cases;
 mod context;
 mod declarations;
+mod draft_test;
 pub mod evaluation;
 mod executability;
 pub mod ir;
@@ -33,10 +37,14 @@ pub use assistant::{
     run_ontology_query_chat, run_platform_chat, run_specialist_chat,
     run_specialist_chat_with_access,
 };
+pub use behavioral_evaluation::*;
+pub use behavioral_state::*;
+pub use benchmark_cases::workflow_benchmark_cases;
 pub use context::{
     BoardLayoutContext, EdgeContext, GraphContext, LayerCacheContext, LayerContext, NodeContext,
     NodeLayoutContext, PinContext, VariableContext, prepare_context, prepare_layout_context,
 };
+pub use draft_test::TestFlowScriptTool;
 pub use evaluation::{
     FLOWPILOT_GENERATION_EVALUATION_VERSION, FlowPilotDurationMetric, FlowPilotEvaluationRunStatus,
     FlowPilotGenerationAttemptRecord, FlowPilotGenerationRunRecord, FlowPilotGenerationScorecard,
@@ -59,12 +67,12 @@ pub use ir_tools::{
     FlowIrDraftRecoveryStatus, FlowIrDraftRequestMismatch, FlowIrDraftResponse, FlowIrDraftStore,
     FlowIrEditableDraftContext, FlowIrRequestIdentity, FlowIrRetainedDraftSnapshot,
     FlowIrToolError, FlowScriptDraftRecovery, FlowScriptDraftResponse,
-    FlowScriptEditableDraftContext, FlowScriptPendingDelivery, MAX_BOARD_SCOPE_SEGMENTS,
-    NEW_BOARD_REF_PREFIX, PatchFlowScriptArgs, PlanBoardScopeArgs, PlanFlowIrTool, PlannedSegment,
-    ScopePlanRejection, ScopeStrategy, UpdateFlowIrDraftArgs, UpdateFlowIrDraftTool,
-    UpsertFlowIrModuleArgs, UpsertFlowIrModuleTool, ValidateFlowIrDraftArgs,
-    ValidateFlowIrDraftTool, WriteFlowScriptArgs, accept_scope_plan, board_fingerprint,
-    render_typed_ir_parse_error, typed_ir_schema_hint,
+    FlowScriptEditableDraftContext, FlowScriptPendingDelivery, FlowScriptTestSnapshot,
+    MAX_BOARD_SCOPE_SEGMENTS, NEW_BOARD_REF_PREFIX, PatchFlowScriptArgs, PlanBoardScopeArgs,
+    PlanFlowIrTool, PlannedSegment, ScopePlanRejection, ScopeStrategy, TestFlowScriptArgs,
+    UpdateFlowIrDraftArgs, UpdateFlowIrDraftTool, UpsertFlowIrModuleArgs, UpsertFlowIrModuleTool,
+    ValidateFlowIrDraftArgs, ValidateFlowIrDraftTool, WriteFlowScriptArgs, accept_scope_plan,
+    board_fingerprint, render_typed_ir_parse_error, typed_ir_schema_hint,
 };
 pub use manifest::{
     BOARD_CONTEXT_MANIFEST_VERSION, BoardContextManifest, FlowScriptModuleTemplate, ManifestAudit,
@@ -358,7 +366,7 @@ pub fn workflow_runtime_verification_deferred_payload() -> serde_json::Value {
         // external CLIs treat retryable:true as "retry this exact call".
         "retryable": false,
         "next_action": "finish_board_edit_then_run_in_a_later_turn",
-        "message": "Runtime verification cannot run inside this board-mutation session because compiled commands are not persisted until the user accepts the review. Complete and apply the edit, then execute the persisted node/Event and inspect its logs in a later turn."
+        "message": "Live runtime verification cannot run inside this board-mutation session because compiled commands are not persisted until the user accepts the review. For an eligible deterministic transformation, test_flowscript can test the retained revision in isolation before commit. Complete and apply the edit before executing the persisted node/Event in a later turn."
     })
 }
 
@@ -382,9 +390,8 @@ impl CopilotToolSurface {
             | "catalog_search"
             | "search_by_pin"
             | "filter_category" => self.read_only || workflow_authoring_tool_allowed(tool_name),
-            "write_flowscript" | "patch_flowscript" | "check_flowscript" | "commit_flowscript" => {
-                !self.read_only
-            }
+            "write_flowscript" | "patch_flowscript" | "check_flowscript" | "test_flowscript"
+            | "commit_flowscript" => !self.read_only,
             "emit_commands" => !self.read_only && workflow_authoring_tool_allowed(tool_name),
             _ => false,
         }
@@ -876,6 +883,7 @@ impl Copilot {
             node_count,
             !self.templates.is_empty(),
             run_context.is_some(),
+            self.read_only,
         );
         if self.read_only {
             system_prompt.push_str(
@@ -883,7 +891,7 @@ impl Copilot {
             );
         } else {
             system_prompt.push_str(
-                "\n\n## HOST MODE: FLOWSCRIPT AUTHORING\nUse the current FlowScript plus one focused get_declarations batch, call plan_board_scope exactly once unless the host already retained an accepted plan, then write its active segment, patch as needed, and commit the retained source directly once it has zero diagnostics (check_flowscript only when growing a staged draft). Broad graph/catalog discovery and direct command emission are not available in this authoring run; do not request catalog_search, graph inspection tools, search_by_pin, filter_category, find_connectable_nodes, or emit_commands. Runtime execution and log verification are deferred until the user has accepted and persisted this review; perform them in a later turn against the applied board.",
+                "\n\n## HOST MODE: FLOWSCRIPT AUTHORING\nUse the current FlowScript plus one focused get_declarations batch, call plan_board_scope exactly once unless the host already retained an accepted plan, then write its active segment, patch as needed, and commit the retained source once it has zero diagnostics (check_flowscript only when growing a staged draft). For a small deterministic Generic Event transformation, first use test_flowscript with a fixture payload and expected_output derived from the request; repair and retest a mismatch. A blocked test identifies an unsupported draft, not a pass; retain the requested scope and report the limit. Broad graph/catalog discovery and direct command emission are not available in this authoring run; do not request catalog_search, graph inspection tools, search_by_pin, filter_category, find_connectable_nodes, or emit_commands. Live runtime execution and log verification are deferred until the user has accepted and persisted this review; perform them in a later turn against the applied board.",
             );
         }
         if let Some(manifest_prompt) = workflow_manifest
@@ -974,6 +982,14 @@ impl Copilot {
                         .expect("FlowScript source tools always have a host request binding"),
                 })
                 .tool(CheckFlowScriptTool {
+                    board: board_for_tools.clone(),
+                    provider: self.catalog_provider.clone(),
+                    store: flow_ir_drafts.clone(),
+                    acceptance_binding: acceptance_binding
+                        .clone()
+                        .expect("FlowScript source tools always have a host request binding"),
+                })
+                .tool(TestFlowScriptTool {
                     board: board_for_tools.clone(),
                     provider: self.catalog_provider.clone(),
                     store: flow_ir_drafts.clone(),
@@ -2222,13 +2238,19 @@ impl Copilot {
         node_count: usize,
         has_templates: bool,
         has_run_context: bool,
+        read_only: bool,
     ) -> String {
-        crate::copilot::prompts::board_system_prompt(
+        crate::copilot::prompts::board_system_prompt_with_mode(
             context_json,
             flowscript,
             node_count,
             has_templates,
             has_run_context,
+            if read_only {
+                crate::copilot::prompts::BoardPromptMode::General
+            } else {
+                crate::copilot::prompts::BoardPromptMode::Authoring
+            },
         )
     }
 
@@ -2357,6 +2379,23 @@ impl Copilot {
                     Err(error) => format!("Failed to parse FlowScript check: {error}"),
                 }
             }
+            "test_flowscript" => match serde_json::from_value::<TestFlowScriptArgs>(arguments) {
+                Ok(args) => {
+                    let Some(binding) = acceptance_binding else {
+                        return render_missing_direct_request_binding();
+                    };
+                    TestFlowScriptTool {
+                        board: Arc::new(board.clone()),
+                        provider: self.catalog_provider.clone(),
+                        store: flow_ir_drafts.clone(),
+                        acceptance_binding: binding.clone(),
+                    }
+                    .run(args)
+                    .await
+                    .unwrap_or_else(|error| format!("Failed to test FlowScript: {error}"))
+                }
+                Err(error) => format!("Failed to parse FlowScript test: {error}"),
+            },
             "commit_flowscript" => {
                 match serde_json::from_value::<ir_tools::CommitFlowScriptArgs>(arguments) {
                     Ok(args) => {
@@ -3401,8 +3440,8 @@ impl TypedIrOperationLedger {
     }
 }
 
-const FLOWSCRIPT_FORCE_INSTRUCTION: &str = "You have enough context. Continue the retained FlowScript source lifecycle now. If no source draft exists, reuse or obtain one usable declaration batch, call plan_board_scope exactly once unless the host already retained an accepted plan, then call write_flowscript immediately with one fresh draft_id for its active segment; do not chase omitted or unmatched declaration queries before this recoverable checkpoint. If diagnostics exist, patch that exact revision in place and use only diagnostic-directed declaration lookups. If the retained revision has no diagnostics, call commit_flowscript at that exact revision directly — commit validates inline; check_flowscript is only for growing a staged draft further. Preserve all requested helpers, variables, Events, and //@n anchors across repairs. Do not submit TODOs, stubs, plan comments, a test-only Event, hand-authored command JSON, or requests for unavailable direct-command tools.";
-const FLOWSCRIPT_FORCE_ESCALATION: &str = "STOP analyzing and take the next FlowScript lifecycle action now: after usable declarations, call plan_board_scope exactly once unless an accepted plan is already retained; then write its active segment, patch the retained diagnostic at its exact revision, or commit a zero-diagnostic revision directly. Never restart from the live board after a failed draft, reduce the requested program to a smoke test, switch to JSON IR, or answer with only text.";
+const FLOWSCRIPT_FORCE_INSTRUCTION: &str = "You have enough context. Continue the retained FlowScript source lifecycle now. If no source draft exists, reuse or obtain one usable declaration batch, call plan_board_scope exactly once unless the host already retained an accepted plan, then call write_flowscript immediately with one fresh draft_id for its active segment; do not chase omitted or unmatched declaration queries before this recoverable checkpoint. If diagnostics exist, patch that exact revision in place and use only diagnostic-directed declaration lookups. If the retained revision has no diagnostics, use test_flowscript for an eligible deterministic Generic Event transformation before committing that exact revision. Repair and retest mismatches without weakening the expected result; report blocked tests as unverified. Commit validates inline; check_flowscript is only for growing a staged draft further. Preserve all requested helpers, variables, Events, and //@n anchors across repairs. Do not submit TODOs, stubs, plan comments, a test-only Event, hand-authored command JSON, or requests for unavailable direct-command tools.";
+const FLOWSCRIPT_FORCE_ESCALATION: &str = "STOP analyzing and take the next FlowScript lifecycle action now: after usable declarations, call plan_board_scope exactly once unless an accepted plan is already retained; then write its active segment, patch the retained diagnostic at its exact revision, test an eligible zero-diagnostic transformation with test_flowscript, or commit its exact revision. Never restart from the live board after a failed draft, reduce the requested program to a smoke test, switch to JSON IR, or answer with only text.";
 const TYPED_IR_FORCE_INSTRUCTION: &str = "Continue the active typed Flow IR path now. If plan_flow_ir returned selection_required, copy one semantically compatible candidate.node_type into exact_node_type for every required capability and resubmit the complete plan; only begin_flow_ir_draft after feasible is true. Otherwise repair the capability request from its structured feedback. After the draft exists, add or repair complete modules with update_flow_ir_draft and upsert_flow_ir_module at the exact latest revision, then validate_flow_ir_draft. Preserve every expected module and requested capability. Do not switch mutation representations or answer with only text.";
 const TYPED_IR_FORCE_ESCALATION: &str = "STOP analyzing and continue the typed Flow IR path. If the latest plan contains selection_required, resubmit the complete plan now with one compatible candidate.node_type copied into exact_node_type for every required capability. Otherwise use the exact latest revision and call the next typed draft operation now: begin the feasible planned draft, update its retained header, upsert a complete expected module, or validate it. Preserve full requested scope and do not switch mutation representations.";
 const TYPED_IR_REPAIR_INSTRUCTION: &str = "Repair the retained typed Flow IR at its exact current revision. Follow each structured diagnostic JSON-pointer path; use update_flow_ir_draft for header/expected-module repairs and upsert_flow_ir_module for the named module, then call validate_flow_ir_draft again. Keep all requested capabilities and expected modules. Do not switch mutation representations or replace the draft with a smaller smoke test.";
@@ -3421,6 +3460,7 @@ fn workflow_tool_requires_order(tool_name: &str) -> bool {
             | "write_flowscript"
             | "patch_flowscript"
             | "check_flowscript"
+            | "test_flowscript"
             | "commit_flowscript"
             | "edit_flowscript"
             | "emit_commands"
@@ -3921,6 +3961,7 @@ mod runtime_bridge_tests {
             "write_flowscript",
             "patch_flowscript",
             "check_flowscript",
+            "test_flowscript",
             "commit_flowscript",
         ] {
             assert!(
@@ -3943,6 +3984,18 @@ mod runtime_bridge_tests {
                 "authoring must hide broad/direct tool {tool_name}"
             );
         }
+    }
+
+    #[test]
+    fn draft_test_is_ordered_without_claiming_a_mutation_or_live_execution() {
+        assert!(workflow_tool_requires_order("test_flowscript"));
+        assert_eq!(workflow_mutation_path("test_flowscript"), None);
+        assert!(!workflow_authoring_defers_runtime_tool("test_flowscript"));
+        assert!(!CopilotToolSurface::for_mode(true).exposes("test_flowscript"));
+        assert!(!workflow_tool_counts_as_progress(
+            "test_flowscript",
+            r#"{"status":"success","passed":true}"#
+        ));
     }
 
     #[test]
@@ -3974,6 +4027,23 @@ mod runtime_bridge_tests {
                 "expected {tool_name} to be hidden"
             );
         }
+    }
+
+    #[test]
+    fn direct_prompt_mode_follows_the_read_only_tool_surface() {
+        let authoring = Copilot::build_system_prompt("{}", "", 30, false, false, false);
+        for hidden in WORKFLOW_AUTHORING_HIDDEN_TOOLS {
+            assert!(
+                !authoring.contains(hidden),
+                "authoring prompt advertises {hidden}"
+            );
+        }
+        assert!(authoring.contains("test_flowscript"));
+        let read_only = Copilot::build_system_prompt("{}", "", 30, false, false, true);
+        assert_eq!(
+            read_only,
+            crate::copilot::prompts::board_system_prompt("{}", "", 30, false, false),
+        );
     }
 
     #[test]

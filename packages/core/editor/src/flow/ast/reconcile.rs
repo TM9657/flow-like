@@ -7632,12 +7632,18 @@ impl<'a> StructuralPlanner<'a> {
             Expr::Field { base, .. } | Expr::Member { base, .. } => {
                 self.expr_contains_impure_call(ast, base, seen)
             }
-            Expr::Object(fields) => fields
-                .iter()
-                .any(|field| self.expr_contains_impure_call(ast, &field.value, seen)),
-            Expr::Array(items) => items
-                .iter()
-                .any(|item| self.expr_contains_impure_call(ast, item, seen)),
+            Expr::Object(_) => {
+                // Computed fields lower to struct_set calls. Their execution chain must run
+                // before a caller reads the completed object, even when each field is pure.
+                literal_expr_to_value(expr).is_none()
+            }
+            Expr::Array(items) => {
+                // A computed singleton uses array_push, which needs an execution chain.
+                (items.len() == 1 && literal_expr_to_value(expr).is_none())
+                    || items
+                        .iter()
+                        .any(|item| self.expr_contains_impure_call(ast, item, seen))
+            }
             Expr::Index { base, index } => {
                 self.expr_contains_impure_call(ast, base, seen)
                     || self.expr_contains_impure_call(ast, index, seen)
@@ -13080,15 +13086,30 @@ impl<'a> StructuralPlanner<'a> {
         self.resolve_expr(&built, target_layer)
     }
 
-    /// Lower `[a, b, …]` whose elements are not all constant into a real `construct_array`
-    /// node, one `element` argument per item. `construct_array` is pure and mints one further
-    /// `element` pin per connected pin, so it composes in expression position without needing
-    /// an execution chain — unlike `array::push`, which is impure.
+    /// Lower computed arrays to catalog nodes. Construct Array requires two element inputs;
+    /// a singleton instead pushes its value into an empty array and joins the execution chain.
     fn lower_array_literal(
         &mut self,
         items: &[Expr],
         target_layer: Option<String>,
     ) -> Option<SymbolValue> {
+        if let [item] = items {
+            let mut push = Call::placeholder();
+            push.node_type = "array_push".to_string();
+            push.display = "push".to_string();
+            push.args = vec![
+                Arg {
+                    name: "array_in".to_string(),
+                    value: Expr::Literal(Literal::Json("[]".to_string())),
+                },
+                Arg {
+                    name: "value".to_string(),
+                    value: item.clone(),
+                },
+            ];
+            return self.resolve_expr(&Expr::Call(push), target_layer);
+        }
+
         let mut call = Call::placeholder();
         if items.is_empty() {
             call.node_type = "make_array".to_string();
@@ -22470,6 +22491,112 @@ eventsSimple() {
             BoardCommand::CreateLayer { pins: Some(pins), .. }
                 if pins.iter().all(|pin| pin.data_type != "Execution")
         ));
+    }
+
+    #[test]
+    fn computed_object_function_returns_get_a_complete_execution_chain() {
+        for body in [
+            "return { label: value, kind: \"profile\" }",
+            "const row = { label: value, kind: \"profile\" }\n    return row",
+            "return { profile: { label: value, kind: \"profile\" } }",
+        ] {
+            let source =
+                format!("function payload(value: string): (row: Struct) {{\n    {body}\n}}\n");
+            let result =
+                reconcile_text_with_catalog(&empty_board(), &source, &struct_accumulator_catalog());
+            assert!(
+                result.diagnostics.is_empty(),
+                "{source}: {:?}",
+                result.diagnostics
+            );
+            let layer = result
+                .commands
+                .iter()
+                .find_map(|command| match command {
+                    BoardCommand::CreateLayer {
+                        ref_id,
+                        pins: Some(pins),
+                        ..
+                    } if pins
+                        .iter()
+                        .any(|pin| pin.name == "exec_in" && pin.pin_type == "Input")
+                        && pins
+                            .iter()
+                            .any(|pin| pin.name == "exec_out" && pin.pin_type == "Output") =>
+                    {
+                        ref_id.as_deref()
+                    }
+                    _ => None,
+                })
+                .expect("computed object function requires execution boundaries");
+            let setters: Vec<_> = result
+                .commands
+                .iter()
+                .filter_map(|command| match command {
+                    BoardCommand::AddNode {
+                        node_type,
+                        ref_id,
+                        target_layer,
+                        ..
+                    } if node_type == "struct_set" && target_layer.as_deref() == Some(layer) => {
+                        ref_id.as_deref()
+                    }
+                    _ => None,
+                })
+                .collect();
+            assert!(setters.len() >= 2, "{source}: {:?}", result.commands);
+            let mut cursor = layer;
+            for _ in 0..setters.len() {
+                let next = result
+                    .commands
+                    .iter()
+                    .find_map(|command| match command {
+                        BoardCommand::ConnectPins {
+                            from_node,
+                            from_pin,
+                            to_node,
+                            to_pin,
+                            ..
+                        } if from_node == cursor
+                            && from_pin
+                                == if cursor == layer {
+                                    "exec_in"
+                                } else {
+                                    "exec_out"
+                                }
+                            && to_pin == "exec_in" =>
+                        {
+                            Some(to_node.as_str())
+                        }
+                        _ => None,
+                    })
+                    .expect("every object setter must join the function execution chain");
+                assert!(setters.contains(&next), "{source}: {next}");
+                cursor = next;
+            }
+            assert!(
+                result.commands.iter().any(|command| matches!(command,
+                    BoardCommand::ConnectPins { from_node, from_pin, to_node, to_pin, .. }
+                        if from_node == cursor && from_pin == "exec_out"
+                            && to_node == layer && to_pin == "exec_out"
+                )),
+                "object construction must finish before returning: {source}"
+            );
+        }
+    }
+
+    #[test]
+    fn constant_object_function_returns_stay_free_of_execution_pins() {
+        let result = reconcile_text_with_catalog(
+            &empty_board(),
+            "function payload(): (row: Struct) { return { label: \"fixed\", version: 1 } }",
+            &struct_accumulator_catalog(),
+        );
+        assert!(result.diagnostics.is_empty(), "{:?}", result.diagnostics);
+        assert!(result.commands.iter().any(|command| matches!(command,
+            BoardCommand::CreateLayer { pins: Some(pins), .. }
+                if pins.iter().all(|pin| pin.data_type != "Execution")
+        )));
     }
 
     #[test]
