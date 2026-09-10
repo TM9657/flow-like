@@ -806,8 +806,9 @@ export class WebBoardState implements IBoardState {
 		appId: string,
 		boardId: string,
 		commands: IGenericCommand[],
+		_options?: IBoardMutationOptions,
 	): Promise<void> {
-		await apiPost(
+		await apiPatch(
 			`apps/${appId}/board/${boardId}/undo`,
 			{ commands },
 			this.backend.auth,
@@ -818,8 +819,9 @@ export class WebBoardState implements IBoardState {
 		appId: string,
 		boardId: string,
 		commands: IGenericCommand[],
+		_options?: IBoardMutationOptions,
 	): Promise<void> {
-		await apiPost(
+		await apiPatch(
 			`apps/${appId}/board/${boardId}/redo`,
 			{ commands },
 			this.backend.auth,

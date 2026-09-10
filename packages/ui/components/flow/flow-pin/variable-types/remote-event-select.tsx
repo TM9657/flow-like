@@ -210,7 +210,7 @@ export function RemoteEventSelect({
 					boardId,
 					command,
 				);
-				await pushCommand(result, false);
+				await pushCommand(result);
 			} catch {
 				toast.error("Failed to save remote event selection");
 			} finally {

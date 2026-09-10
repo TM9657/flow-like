@@ -276,15 +276,21 @@ export interface IBoardState {
 		limit?: number,
 	): Promise<ILog[]>;
 
+	/**
+	 * Replay the inverse of a recorded batch. A backend that can hand back the resulting board
+	 * (the desktop's local sync tail) reports it through `options.onBoard`, sparing the refetch.
+	 */
 	undoBoard(
 		appId: string,
 		boardId: string,
 		commands: IGenericCommand[],
+		options?: IBoardMutationOptions,
 	): Promise<void>;
 	redoBoard(
 		appId: string,
 		boardId: string,
 		commands: IGenericCommand[],
+		options?: IBoardMutationOptions,
 	): Promise<void>;
 
 	upsertBoard(

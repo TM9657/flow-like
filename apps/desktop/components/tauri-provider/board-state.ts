@@ -265,7 +265,18 @@ async function getHubConfig(profile?: { hub?: string }): Promise<
 	return hubCachePromise;
 }
 
-function dispatchRemoteBoardApplied(appId: string, boardId: string) {
+/**
+ * `sync`: the remote board was merged in (a peer's edit, or our own undo returning from the hub);
+ * recorded undo history still describes this board. `reset`: the board was replaced wholesale and
+ * local edits were discarded, so that history must go.
+ */
+type RemoteBoardAppliedReason = "sync" | "reset";
+
+function dispatchRemoteBoardApplied(
+	appId: string,
+	boardId: string,
+	reason: RemoteBoardAppliedReason,
+) {
 	if (typeof window === "undefined") {
 		return;
 	}
@@ -275,6 +286,7 @@ function dispatchRemoteBoardApplied(appId: string, boardId: string) {
 			detail: {
 				appId,
 				boardId,
+				reason,
 			},
 		}),
 	);
@@ -1158,7 +1170,7 @@ export class BoardState implements IBoardState {
 		}
 
 		await this.recordAppliedRemoteLineage(appId, boardId, remoteData);
-		dispatchRemoteBoardApplied(appId, boardId);
+		dispatchRemoteBoardApplied(appId, boardId, "reset");
 
 		return materialized;
 	}
@@ -1247,7 +1259,7 @@ export class BoardState implements IBoardState {
 							boardData: merged,
 						});
 						await this.recordAppliedRemoteLineage(appId, boardId, remoteData);
-						dispatchRemoteBoardApplied(appId, boardId);
+						dispatchRemoteBoardApplied(appId, boardId, "sync");
 
 						if (this.backend.queryClient) {
 							const queryKey = [
@@ -1333,7 +1345,7 @@ export class BoardState implements IBoardState {
 						boardData: merged,
 					});
 					await this.recordAppliedRemoteLineage(appId, boardId, remoteData);
-					dispatchRemoteBoardApplied(appId, boardId);
+					dispatchRemoteBoardApplied(appId, boardId, "sync");
 					return merged;
 				}
 
@@ -2106,16 +2118,76 @@ export class BoardState implements IBoardState {
 		return runs;
 	}
 
-	async undoBoard(appId: string, boardId: string, commands: IGenericCommand[]) {
+	/**
+	 * Replay a recorded batch backwards (`undo_board`) or forwards (`redo_board`) on the local
+	 * board, riding the same sync tail as `executeCommands` so the caller gets the resulting
+	 * board without a second IPC round trip.
+	 */
+	private async replayLocalHistory(
+		command: "undo_board" | "redo_board",
+		appId: string,
+		boardId: string,
+		commands: IGenericCommand[],
+		options?: IBoardMutationOptions,
+	): Promise<void> {
+		const sync = this.localBoardSync.syncRequest(appId, boardId, undefined);
+		const result = await invoke<{ sync?: IBoardSyncResponse | null }>(command, {
+			appId,
+			boardId,
+			commands,
+			sync,
+		});
+		if (!sync || !result.sync || !options?.onBoard) return;
+		const board = this.localBoardSync.ingest(
+			appId,
+			boardId,
+			undefined,
+			sync,
+			result.sync,
+		);
+		if (!board) return;
+		await this.presignMediaComments(appId, boardId, board, true);
+		options.onBoard(board);
+	}
+
+	/**
+	 * Online, the hub replays the batch and the local copy follows through a fresh fetch — the
+	 * merged board is what the caller sees, so the undo is visible without waiting for the next
+	 * background sync.
+	 */
+	private async settleRemoteHistoryReplay(
+		appId: string,
+		boardId: string,
+		options?: IBoardMutationOptions,
+	): Promise<void> {
+		if (!options?.onBoard) return;
+		try {
+			options.onBoard(await this.getBoard(appId, boardId, undefined, true));
+		} catch (error) {
+			console.warn(
+				"[BoardState] Board refresh after remote undo/redo failed; the next sync will catch up:",
+				error,
+			);
+		}
+	}
+
+	async undoBoard(
+		appId: string,
+		boardId: string,
+		commands: IGenericCommand[],
+		options?: IBoardMutationOptions,
+	) {
 		return await this.sequenceBoardMutation(appId, boardId, async () => {
 			const isOffline = await this.backend.isOffline(appId);
 
 			if (isOffline) {
-				await invoke("undo_board", {
-					appId: appId,
-					boardId: boardId,
-					commands: commands,
-				});
+				await this.replayLocalHistory(
+					"undo_board",
+					appId,
+					boardId,
+					commands,
+					options,
+				);
 				return;
 			}
 
@@ -2157,18 +2229,26 @@ export class BoardState implements IBoardState {
 				},
 				this.backend.auth,
 			);
+			await this.settleRemoteHistoryReplay(appId, boardId, options);
 		});
 	}
-	async redoBoard(appId: string, boardId: string, commands: IGenericCommand[]) {
+	async redoBoard(
+		appId: string,
+		boardId: string,
+		commands: IGenericCommand[],
+		options?: IBoardMutationOptions,
+	) {
 		return await this.sequenceBoardMutation(appId, boardId, async () => {
 			const isOffline = await this.backend.isOffline(appId);
 
 			if (isOffline) {
-				await invoke("redo_board", {
-					appId: appId,
-					boardId: boardId,
-					commands: commands,
-				});
+				await this.replayLocalHistory(
+					"redo_board",
+					appId,
+					boardId,
+					commands,
+					options,
+				);
 				return;
 			}
 
@@ -2210,6 +2290,7 @@ export class BoardState implements IBoardState {
 				},
 				this.backend.auth,
 			);
+			await this.settleRemoteHistoryReplay(appId, boardId, options);
 		});
 	}
 
@@ -2931,7 +3012,7 @@ export class BoardState implements IBoardState {
 			void this.backend.queryClient?.invalidateQueries({
 				queryKey: [this.getBoards.name || "backendFn", appId],
 			});
-			dispatchRemoteBoardApplied(appId, boardId);
+			dispatchRemoteBoardApplied(appId, boardId, "reset");
 			dispatchBoardSyncChanged(appId, boardId);
 
 			console.warn("Reset board from the server copy:", {

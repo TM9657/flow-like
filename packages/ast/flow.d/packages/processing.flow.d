@@ -42,10 +42,15 @@ declare namespace ai {
          * @param pagesPerBatch (optional) — Number of PDF pages to process in parallel (higher = faster but uses more memory).
          * @param temperature (optional) — LLM temperature (0.0 = deterministic, 1.0 = creative). Lower is better for extraction.
          * @param maxTokens (optional) — Maximum output tokens per LLM call. Leave at 0 for model default. Set lower for unreliable models.
+         * @param promptPreset (optional) — Prompt contract of the selected model. Document-parsing models only answer to their own trained prompt: • Default — general vision models (GPT-4o, Claude, Gemini, Qwen-VL) • Unlimited-OCR — baidu/Unlimited-OCR, self-hosted via vLLM • DeepSeek-OCR — deepseek-ai/DeepSeek-OCR and -OCR-2 • olmOCR — allenai/olmOCR-2, emits YAML front matter • Nanonets-OCR — nanonets/Nanonets-OCR-s and -OCR2 • dots.ocr — plain text extraction; use Page Prompt for its JSON layout mode • Granite-Docling — IBM Granite-Docling and SmolDocling, emits DocTags • PaddleOCR-VL — PaddlePaddle/PaddleOCR-VL  Every preset except Default forces full-page OCR and one image per request. Recommended temperature is 0.0 for all of them except olmOCR (0.1).
+         * @param pagePrompt (optional) — Prompt for converting a rendered document page to text. Overrides the preset. Leave empty to use the preset or the built-in default.
+         * @param imagePrompt (optional) — Prompt for describing a standalone or embedded image. Overrides the preset. Leave empty to use the preset or the built-in default.
+         * @param batchPrompt (optional) — Prompt used when Images Per Message is greater than 1. Leave empty to use the built-in default. Ignored by every preset except Default.
+         * @param forceOcr (optional) — Run every PDF page through the model instead of only pages whose extracted text looks poor. Presets other than Default turn this on regardless.
          * @returns pages — Extracted document pages with AI-generated descriptions and images.
          * @impure has side effects / drives control flow
          */
-        function extractDocumentAi({ file: Struct, model: Struct, extractImages?: bool, imagesPerMessage?: int, pagesPerBatch?: int, temperature?: float, maxTokens?: int }): Struct[];
+        function extractDocumentAi({ file: Struct, model: Struct, extractImages?: bool, imagesPerMessage?: int, pagesPerBatch?: int, temperature?: float, maxTokens?: int, promptPreset?: string, pagePrompt?: string, imagePrompt?: string, batchPrompt?: string, forceOcr?: bool }): Struct[];
 
         /**
          * Extracts text and content from multiple documents in parallel.
@@ -67,10 +72,15 @@ declare namespace ai {
          * @param pagesPerBatch (optional) — Number of PDF pages to process in parallel (higher = faster but uses more memory).
          * @param temperature (optional) — LLM temperature (0.0 = deterministic, 1.0 = creative). Lower is better for extraction.
          * @param maxTokens (optional) — Maximum output tokens per LLM call. Leave at 0 for model default. Set lower for unreliable models.
+         * @param promptPreset (optional) — Prompt contract of the selected model. Document-parsing models only answer to their own trained prompt: • Default — general vision models (GPT-4o, Claude, Gemini, Qwen-VL) • Unlimited-OCR — baidu/Unlimited-OCR, self-hosted via vLLM • DeepSeek-OCR — deepseek-ai/DeepSeek-OCR and -OCR-2 • olmOCR — allenai/olmOCR-2, emits YAML front matter • Nanonets-OCR — nanonets/Nanonets-OCR-s and -OCR2 • dots.ocr — plain text extraction; use Page Prompt for its JSON layout mode • Granite-Docling — IBM Granite-Docling and SmolDocling, emits DocTags • PaddleOCR-VL — PaddlePaddle/PaddleOCR-VL  Every preset except Default forces full-page OCR and one image per request. Recommended temperature is 0.0 for all of them except olmOCR (0.1).
+         * @param pagePrompt (optional) — Prompt for converting a rendered document page to text. Overrides the preset. Leave empty to use the preset or the built-in default.
+         * @param imagePrompt (optional) — Prompt for describing a standalone or embedded image. Overrides the preset. Leave empty to use the preset or the built-in default.
+         * @param batchPrompt (optional) — Prompt used when Images Per Message is greater than 1. Leave empty to use the built-in default. Ignored by every preset except Default.
+         * @param forceOcr (optional) — Run every PDF page through the model instead of only pages whose extracted text looks poor. Presets other than Default turn this on regardless.
          * @returns results — Array of extracted document pages with AI descriptions for each file.
          * @impure has side effects / drives control flow
          */
-        function extractDocumentsAi({ files: Struct[], model: Struct, extractImages?: bool, imagesPerMessage?: int, pagesPerBatch?: int, temperature?: float, maxTokens?: int }): Struct[];
+        function extractDocumentsAi({ files: Struct[], model: Struct, extractImages?: bool, imagesPerMessage?: int, pagesPerBatch?: int, temperature?: float, maxTokens?: int, promptPreset?: string, pagePrompt?: string, imagePrompt?: string, batchPrompt?: string, forceOcr?: bool }): Struct[];
 
         /**
          * Extracts keywords from text using an LLM. The AI understands context and semantics, providing high-quality keyword extraction for complex or domain-specific content.

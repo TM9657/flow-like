@@ -1,13 +1,10 @@
 import type { UseQueryResult } from "@tanstack/react-query";
 import { useQueryClient } from "@tanstack/react-query";
-import { Redo2Icon, Undo2Icon, XIcon } from "lucide-react";
+import { XIcon } from "lucide-react";
 import { type RefObject, useCallback, useEffect } from "react";
-import { boardFingerprint } from "../lib/flow-history-stacks";
-import { toastError, toastSuccess } from "../lib/messages";
-import type { IGenericCommand } from "../lib/schema";
+import { toastError } from "../lib/messages";
 import type { IBoard } from "../lib/schema/flow/board";
 import type { INode } from "../lib/schema/flow/node";
-import { useBackend } from "../state/backend-state";
 
 interface UseKeyboardShortcutsProps {
 	board: UseQueryResult<IBoard>;
@@ -21,17 +18,9 @@ interface UseKeyboardShortcutsProps {
 		node: INode,
 		position?: { x: number; y: number },
 	) => Promise<void>;
-	undo: (currentStamp?: string) => Promise<IGenericCommand[] | null>;
-	redo: (currentStamp?: string) => Promise<IGenericCommand[] | null>;
-	rollbackUndo: (commands: IGenericCommand[]) => Promise<void>;
-	rollbackRedo: (commands: IGenericCommand[]) => Promise<void>;
-	stampHistory: (stamp?: string) => Promise<void>;
-	/**
-	 * Advisory hook fired with the batch about to be undone/redone BEFORE it
-	 * executes — the board surfaces a toast when the batch touches statements
-	 * a peer is editing (FlowScript claims). Never blocks the operation.
-	 */
-	onHistoryBatch?: (commands: IGenericCommand[]) => void;
+	/** Complete undo/redo operations (see `useHistoryNavigation`); they own their own toasts. */
+	undo: () => Promise<boolean>;
+	redo: () => Promise<boolean>;
 }
 
 export function useKeyboardShortcuts({
@@ -45,12 +34,7 @@ export function useKeyboardShortcuts({
 	placeNode,
 	undo,
 	redo,
-	rollbackUndo,
-	rollbackRedo,
-	stampHistory,
-	onHistoryBatch,
 }: UseKeyboardShortcutsProps) {
-	const backend = useBackend();
 	const queryClient = useQueryClient();
 
 	// Helper to invalidate and refetch board data
@@ -111,25 +95,7 @@ export function useKeyboardShortcuts({
 			) {
 				event.preventDefault();
 				event.stopPropagation();
-				if (typeof version !== "undefined") {
-					toastError("Cannot change old version", <XIcon />);
-					return;
-				}
-				const stack = await undo(boardFingerprint(board.data));
-				if (stack) {
-					onHistoryBatch?.(stack);
-					try {
-						await backend.boardState.undoBoard(appId, boardId, stack);
-						const refreshed = await invalidateBoard();
-						await stampHistory(boardFingerprint(refreshed));
-						toastSuccess("Undo", <Undo2Icon className="w-4 h-4" />);
-					} catch (error) {
-						console.error("Undo failed:", error);
-						await rollbackUndo(stack);
-						toastError("Undo failed", <XIcon />);
-						await invalidateBoard();
-					}
-				}
+				await undo();
 				return;
 			}
 
@@ -141,25 +107,7 @@ export function useKeyboardShortcuts({
 			) {
 				event.preventDefault();
 				event.stopPropagation();
-				if (typeof version !== "undefined") {
-					toastError("Cannot change old version", <XIcon />);
-					return;
-				}
-				const stack = await redo(boardFingerprint(board.data));
-				if (stack) {
-					onHistoryBatch?.(stack);
-					try {
-						await backend.boardState.redoBoard(appId, boardId, stack);
-						const refreshed = await invalidateBoard();
-						await stampHistory(boardFingerprint(refreshed));
-						toastSuccess("Redo", <Redo2Icon className="w-4 h-4" />);
-					} catch (error) {
-						console.error("Redo failed:", error);
-						await rollbackRedo(stack);
-						toastError("Redo failed", <XIcon />);
-						await invalidateBoard();
-					}
-				}
+				await redo();
 				return;
 			}
 
@@ -243,21 +191,13 @@ export function useKeyboardShortcuts({
 			}
 		},
 		[
-			boardId,
-			board,
-			backend,
 			version,
 			catalog,
 			placeNodeShortcut,
 			undo,
 			redo,
-			rollbackUndo,
-			rollbackRedo,
-			stampHistory,
-			appId,
 			invalidateBoard,
 			onDeleteSelection,
-			onHistoryBatch,
 		],
 	);
 

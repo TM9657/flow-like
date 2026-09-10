@@ -143,7 +143,7 @@ export function FlowNodeEditMenu({
 				boardId,
 				command,
 			);
-			await pushCommand(result, false);
+			await pushCommand(result);
 			await invalidate(backend.boardState.getBoard, [appId, boardId]);
 		},
 		[appId, boardId, invalidate, pushCommand],

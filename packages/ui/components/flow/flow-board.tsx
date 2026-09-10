@@ -299,7 +299,11 @@ import { FlowDataEdge } from "./flow-data-edge";
 import { FlowDragGhostsLayer } from "./flow-drag-ghosts";
 import { FlowEditorTabs, boardTabLabel } from "./flow-editor-tabs";
 import { FlowExecutionEdge } from "./flow-execution-edge";
-import { useUndoRedo } from "./flow-history";
+import {
+	useHistoryNavigation,
+	useRetainBoardHistory,
+	useUndoRedo,
+} from "./flow-history";
 import { FlowLayerIndicators } from "./flow-layer-indicators";
 import { PinEditModal } from "./flow-pin/edit-modal";
 import { FlowPingsLayer } from "./flow-pings";
@@ -319,8 +323,6 @@ import { LayerInnerNode } from "./layer-inner-node";
 import { LayerNode } from "./layer-node";
 import { RuntimeVariablesPrompt } from "./runtime-variables-prompt";
 import { WasmSandboxWarningDialog } from "./wasm-sandbox-warning-dialog";
-
-const REMOTE_BOARD_APPLIED_EVENT = "flow:remote-board-applied";
 
 /**
  * A catalog node with one pin default filled in, as a copy.
@@ -558,17 +560,9 @@ export function FlowBoard({
 	// Without an in-interface FlowPilot button the floating bubble is this board's only way into the
 	// assistant, so ask for it exactly when we drop our own.
 	useRequestFabBubble(externalAssistant);
-	const {
-		pushCommand,
-		pushCommands,
-		pushCommandsOnce,
-		redo,
-		undo,
-		rollbackUndo,
-		rollbackRedo,
-		clearHistory,
-		stampHistory,
-	} = useUndoRedo(appId, boardId);
+	const { pushCommand, pushCommands, pushCommandsOnce, withHistoryLock } =
+		useUndoRedo(appId, boardId);
+	useRetainBoardHistory(appId, boardId);
 	const router = useRouter();
 	const backend = useBackend();
 	const selected = useRef(new Set<string>());
@@ -1344,7 +1338,7 @@ export function FlowBoard({
 		pushCommand,
 		pushCommands,
 		pushCommandsOnce,
-		stampHistory,
+		withHistoryLock,
 	});
 
 	// Realtime collaboration
@@ -3132,6 +3126,14 @@ export function FlowBoard({
 		[awareness, sub, peerUsers, t],
 	);
 
+	const { undo, redo } = useHistoryNavigation({
+		appId,
+		boardId,
+		board,
+		version,
+		onHistoryBatch: warnOnHistoryClaimCollision,
+	});
+
 	useKeyboardShortcuts({
 		board,
 		catalog,
@@ -3143,36 +3145,7 @@ export function FlowBoard({
 		placeNode,
 		undo,
 		redo,
-		rollbackUndo,
-		rollbackRedo,
-		stampHistory,
-		onHistoryBatch: warnOnHistoryClaimCollision,
 	});
-
-	useEffect(() => {
-		const handleRemoteBoardApplied = async (event: Event): Promise<void> => {
-			const detail = (event as CustomEvent<{ appId: string; boardId: string }>)
-				.detail;
-
-			if (!detail || detail.appId !== appId || detail.boardId !== boardId) {
-				return;
-			}
-
-			await clearHistory();
-		};
-
-		window.addEventListener(
-			REMOTE_BOARD_APPLIED_EVENT,
-			handleRemoteBoardApplied as EventListener,
-		);
-
-		return () => {
-			window.removeEventListener(
-				REMOTE_BOARD_APPLIED_EVENT,
-				handleRemoteBoardApplied as EventListener,
-			);
-		};
-	}, [appId, boardId, clearHistory]);
 
 	const handleDrop = useCallback(
 		async (event: any) => {
@@ -3636,7 +3609,6 @@ export function FlowBoard({
 			if (selectedMovableIds.length === 0) return;
 			await executeCommand(
 				moveToLayerCommand({ ids: selectedMovableIds, target }),
-				false,
 			);
 		},
 		[executeCommand, selectedMovableIds],
@@ -5599,7 +5571,7 @@ export function FlowBoard({
 								}}
 								onCreateVariable={async (variable) => {
 									const command = upsertVariableCommand({ variable });
-									await executeCommand(command, false);
+									await executeCommand(command);
 									setDroppedPin(undefined);
 								}}
 							>

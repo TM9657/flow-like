@@ -1,6 +1,7 @@
 use flow_like::{
     bit::Bit,
     flow::{
+        board::Board,
         execution::context::ExecutionContext,
         node::{Node, NodeLogic, NodeScores},
         pin::PinOptions,
@@ -63,6 +64,267 @@ pub fn pages_to_markdown(pages: &[DocumentPage]) -> String {
     }
 
     md
+}
+
+/// Prompt contract of a document-parsing vision model.
+///
+/// The prompt strings are each model's documented prompt reproduced byte for byte,
+/// including upstream whitespace and typos — these models are trained on the exact
+/// string and drift silently degrades or empties their output.
+#[cfg_attr(not(feature = "execute"), allow(dead_code))]
+struct PromptPreset {
+    name: &'static str,
+    /// Prompt for a rendered document page. Empty = keep the library default.
+    page: &'static str,
+    /// Prompt for a standalone or embedded image. Empty = keep the library default.
+    image: &'static str,
+    /// The model reads rendered pages only. Forces full-page VLM OCR and one image
+    /// per request, because it has no useful answer for a text layer or an image batch.
+    page_reader: bool,
+}
+
+const PRESET_OLM_OCR: &str = "Attached is one page of a document that you must process. Just return the plain text representation of this document as if you were reading it naturally. Convert equations to LateX and tables to HTML.\nIf there are any figures or charts, label them with the following markdown syntax ![Alt text describing the contents of the figure](page_startx_starty_width_height.png)\nReturn your output as markdown, with a front matter section on top specifying values for the primary_language, is_rotation_valid, rotation_correction, is_table, and is_diagram parameters.";
+
+const PRESET_NANONETS: &str = "Extract the text from the above document as if you were reading it naturally. Return the tables in html format. Return the equations in LaTeX representation. If there is an image in the document and image caption is not present, add a small description of the image inside the <img></img> tag; otherwise, add the image caption inside <img></img>. Watermarks should be wrapped in brackets. Ex: <watermark>OFFICIAL COPY</watermark>. Page numbers should be wrapped in brackets. Ex: <page_number>14</page_number> or <page_number>9/22</page_number>. Prefer using ☐ and ☑ for check boxes.";
+
+const PROMPT_PRESETS: &[PromptPreset] = &[
+    PromptPreset {
+        name: "Default",
+        page: "",
+        image: "",
+        page_reader: false,
+    },
+    PromptPreset {
+        name: "Unlimited-OCR",
+        page: "<image>document parsing.",
+        image: "<image>document parsing.",
+        page_reader: true,
+    },
+    PromptPreset {
+        name: "DeepSeek-OCR",
+        page: "<image>\n<|grounding|>Convert the document to markdown. ",
+        image: "<image>\n<|grounding|>OCR this image.",
+        page_reader: true,
+    },
+    PromptPreset {
+        name: "olmOCR",
+        page: PRESET_OLM_OCR,
+        image: PRESET_OLM_OCR,
+        page_reader: true,
+    },
+    PromptPreset {
+        name: "Nanonets-OCR",
+        page: PRESET_NANONETS,
+        image: PRESET_NANONETS,
+        page_reader: true,
+    },
+    PromptPreset {
+        name: "dots.ocr",
+        page: "Extract the text content from this image.",
+        image: "Extract the text content from this image.",
+        page_reader: true,
+    },
+    PromptPreset {
+        name: "Granite-Docling",
+        page: "Convert this page to docling.",
+        image: "Convert this page to docling.",
+        page_reader: true,
+    },
+    PromptPreset {
+        name: "PaddleOCR-VL",
+        page: "OCR:",
+        image: "OCR:",
+        page_reader: true,
+    },
+];
+
+fn preset_names() -> Vec<String> {
+    PROMPT_PRESETS.iter().map(|p| p.name.to_string()).collect()
+}
+
+const PROMPT_PRESET_DESCRIPTION: &str = "Prompt contract of the selected model. Document-parsing models only answer to their own trained prompt:\n\
+     • Default — general vision models (GPT-4o, Claude, Gemini, Qwen-VL)\n\
+     • Unlimited-OCR — baidu/Unlimited-OCR, self-hosted via vLLM\n\
+     • DeepSeek-OCR — deepseek-ai/DeepSeek-OCR and -OCR-2\n\
+     • olmOCR — allenai/olmOCR-2, emits YAML front matter\n\
+     • Nanonets-OCR — nanonets/Nanonets-OCR-s and -OCR2\n\
+     • dots.ocr — plain text extraction; use Page Prompt for its JSON layout mode\n\
+     • Granite-Docling — IBM Granite-Docling and SmolDocling, emits DocTags\n\
+     • PaddleOCR-VL — PaddlePaddle/PaddleOCR-VL\n\n\
+     Every preset except Default forces full-page OCR and one image per request. Recommended temperature is 0.0 for all of them except olmOCR (0.1).";
+
+#[cfg(feature = "execute")]
+fn resolve_preset(name: &str) -> flow_like_types::Result<&'static PromptPreset> {
+    PROMPT_PRESETS
+        .iter()
+        .find(|preset| preset.name == name)
+        .ok_or_else(|| {
+            flow_like_types::anyhow!(
+                "Unknown prompt preset `{}`, expected one of: {}",
+                name,
+                preset_names().join(", ")
+            )
+        })
+}
+
+/// Pin literal wins over the preset; an empty result means "keep the library default".
+#[cfg(feature = "execute")]
+fn resolve_prompt(explicit: &str, preset: &str) -> Option<String> {
+    let chosen = if explicit.trim().is_empty() {
+        preset
+    } else {
+        explicit
+    };
+    (!chosen.is_empty()).then(|| chosen.to_string())
+}
+
+/// markitdown sends the image in its own message behind a fixed instruction, so a prompt
+/// that positions the image itself cannot be honoured yet.
+#[cfg(feature = "execute")]
+fn warn_on_unplaceable_image_tag(context: &mut ExecutionContext, prompts: [Option<&String>; 2]) {
+    let carries_tag = prompts
+        .iter()
+        .flatten()
+        .any(|prompt| prompt.contains("<image>"));
+
+    if carries_tag {
+        context.log_message(
+            "This prompt carries an <image> placeholder, but the converter sends the image in its own message behind a fixed instruction. The model will likely return empty output until markitdown supports single-message prompts.",
+            flow_like::flow::execution::LogLevel::Warn,
+        );
+    }
+}
+
+#[cfg(feature = "execute")]
+/// Reads the shared prompt pins and folds them into an [`LlmConfig`].
+async fn apply_prompt_pins(
+    context: &mut ExecutionContext,
+    mut config: LlmConfig,
+) -> flow_like_types::Result<(LlmConfig, bool)> {
+    let preset_name: String = context.evaluate_pin("prompt_preset").await?;
+    let page_prompt: String = context.evaluate_pin("page_prompt").await?;
+    let image_prompt: String = context.evaluate_pin("image_prompt").await?;
+    let batch_prompt: String = context.evaluate_pin("batch_prompt").await?;
+    let force_ocr: bool = context.evaluate_pin("force_ocr").await?;
+
+    let preset = resolve_preset(&preset_name)?;
+
+    let page = resolve_prompt(&page_prompt, preset.page);
+    let image = resolve_prompt(&image_prompt, preset.image);
+
+    warn_on_unplaceable_image_tag(context, [page.as_ref(), image.as_ref()]);
+
+    if let Some(page) = page {
+        config = config.with_page_prompt(page);
+    }
+    if let Some(image) = image {
+        config = config.with_image_prompt(image);
+    }
+    if !batch_prompt.trim().is_empty() {
+        config = config.with_batch_prompt(batch_prompt);
+    }
+    if preset.page_reader {
+        config = config.with_images_per_message(1);
+        context.log_message(
+            &format!(
+                "Preset `{}` reads one rendered page per request; forcing full-page OCR and Images Per Message = 1.",
+                preset.name
+            ),
+            flow_like::flow::execution::LogLevel::Debug,
+        );
+    }
+
+    Ok((config, force_ocr || preset.page_reader))
+}
+
+fn add_prompt_pins(node: &mut Node) {
+    node.add_input_pin(
+        "prompt_preset",
+        "Prompt Preset",
+        PROMPT_PRESET_DESCRIPTION,
+        VariableType::String,
+    )
+    .set_options(PinOptions::new().set_valid_values(preset_names()).build())
+    .set_default_value(Some(json!("Default")));
+
+    node.add_input_pin(
+        "page_prompt",
+        "Page Prompt",
+        "Prompt for converting a rendered document page to text. Overrides the preset. Leave empty to use the preset or the built-in default.",
+        VariableType::String,
+    )
+    .set_default_value(Some(json!("")));
+
+    node.add_input_pin(
+        "image_prompt",
+        "Image Prompt",
+        "Prompt for describing a standalone or embedded image. Overrides the preset. Leave empty to use the preset or the built-in default.",
+        VariableType::String,
+    )
+    .set_default_value(Some(json!("")));
+
+    node.add_input_pin(
+        "batch_prompt",
+        "Batch Image Prompt",
+        "Prompt used when Images Per Message is greater than 1. Leave empty to use the built-in default. Ignored by every preset except Default.",
+        VariableType::String,
+    )
+    .set_default_value(Some(json!("")));
+
+    node.add_input_pin(
+        "force_ocr",
+        "Force OCR",
+        "Run every PDF page through the model instead of only pages whose extracted text looks poor. Presets other than Default turn this on regardless.",
+        VariableType::Boolean,
+    )
+    .set_default_value(Some(json!(false)));
+}
+
+fn pin_literal(node: &Node, name: &str) -> String {
+    node.get_pin_by_name(name)
+        .and_then(|pin| pin.default_value.as_ref())
+        .and_then(|bytes| flow_like_types::json::from_slice::<flow_like_types::Value>(bytes).ok())
+        .and_then(|value| value.as_str().map(ToOwned::to_owned))
+        .unwrap_or_default()
+}
+
+/// A literal belongs to the presets only while it is still byte-identical to one of them.
+/// The `Default` row contributes the empty string, so an untouched pin counts as preset-owned.
+fn is_preset_authored(current: &str, field: fn(&PromptPreset) -> &'static str) -> bool {
+    PROMPT_PRESETS.iter().any(|preset| field(preset) == current)
+}
+
+fn sync_prompt_pin(
+    node: &mut Node,
+    pin_name: &str,
+    target: &str,
+    field: fn(&PromptPreset) -> &'static str,
+) {
+    let current = pin_literal(node, pin_name);
+    if current == target || !is_preset_authored(&current, field) {
+        return;
+    }
+
+    if let Some(pin) = node.get_pin_mut_by_name(pin_name) {
+        pin.set_default_value(Some(json!(target)));
+    }
+}
+
+/// Materialises the selected preset into the prompt pins so the prompt is visible and
+/// editable on the node.
+///
+/// This runs on every board parse, so it writes only when the literal actually differs,
+/// and it never overwrites a prompt the user typed — switching back to `Default` clears a
+/// preset's prompt but leaves a hand-written one untouched.
+fn apply_preset_to_pins(node: &mut Node) {
+    let selected = pin_literal(node, "prompt_preset");
+    let Some(preset) = PROMPT_PRESETS.iter().find(|preset| preset.name == selected) else {
+        return;
+    };
+
+    let (page, image) = (preset.page, preset.image);
+    sync_prompt_pin(node, "page_prompt", page, |preset| preset.page);
+    sync_prompt_pin(node, "image_prompt", image, |preset| preset.image);
 }
 
 #[cfg(feature = "execute")]
@@ -310,7 +572,7 @@ impl NodeLogic for ExtractDocumentAiNode {
         );
         node.set_flowscript_name("ai.processing", "extractDocumentAi");
         node.add_icon("/flow/icons/bot-invoke.svg");
-        node.set_version(2);
+        node.set_version(3);
 
         node.set_scores(
             NodeScores::new()
@@ -388,6 +650,8 @@ impl NodeLogic for ExtractDocumentAiNode {
         )
         .set_default_value(Some(json!(0)));
 
+        add_prompt_pins(&mut node);
+
         node.add_output_pin(
             "exec_out",
             "Output",
@@ -456,6 +720,8 @@ impl NodeLogic for ExtractDocumentAiNode {
                 None
             });
 
+        let (llm_config, force_ocr) = apply_prompt_pins(context, llm_config).await?;
+
         let llm_client = create_llm_client_with_config(completion_handle, llm_config);
 
         let md = MarkItDown::new();
@@ -464,6 +730,7 @@ impl NodeLogic for ExtractDocumentAiNode {
             .with_extension(&extension)
             .with_image_context_path(file.path)
             .with_images(extract_images)
+            .with_force_llm_ocr(force_ocr)
             .with_llm(llm_client);
         options.url = Some(file_path_clone);
 
@@ -482,6 +749,10 @@ impl NodeLogic for ExtractDocumentAiNode {
         Err(flow_like_types::anyhow!(
             "Processing requires the 'execute' feature"
         ))
+    }
+
+    async fn on_update(&self, node: &mut Node, _board: &Board) {
+        apply_preset_to_pins(node);
     }
 }
 
@@ -634,7 +905,7 @@ impl NodeLogic for ExtractDocumentsAiNode {
         );
         node.set_flowscript_name("ai.processing", "extractDocumentsAi");
         node.add_icon("/flow/icons/bot-invoke.svg");
-        node.set_version(2);
+        node.set_version(3);
 
         node.set_scores(
             NodeScores::new()
@@ -713,6 +984,8 @@ impl NodeLogic for ExtractDocumentsAiNode {
         )
         .set_default_value(Some(json!(4096)));
 
+        add_prompt_pins(&mut node);
+
         node.add_output_pin(
             "exec_out",
             "Output",
@@ -772,6 +1045,8 @@ impl NodeLogic for ExtractDocumentsAiNode {
                 None
             });
 
+        let (llm_config, force_ocr) = apply_prompt_pins(context, llm_config).await?;
+
         let llm_client = create_llm_client_with_config(completion_handle, llm_config);
 
         let md = MarkItDown::new();
@@ -791,6 +1066,7 @@ impl NodeLogic for ExtractDocumentsAiNode {
                 .with_extension(&extension)
                 .with_images(extract_images)
                 .with_image_context_path(file.path.clone())
+                .with_force_llm_ocr(force_ocr)
                 .with_llm(llm_client.clone());
 
             let result = safe_convert_bytes(&md, bytes, Some(options)).await?;
@@ -813,6 +1089,10 @@ impl NodeLogic for ExtractDocumentsAiNode {
         Err(flow_like_types::anyhow!(
             "Processing requires the 'execute' feature"
         ))
+    }
+
+    async fn on_update(&self, node: &mut Node, _board: &Board) {
+        apply_preset_to_pins(node);
     }
 }
 
@@ -1881,4 +2161,89 @@ fn parse_merge_groups(response: &str, max_idx: usize) -> Vec<Vec<usize>> {
     }
 
     (0..max_idx).map(|i| vec![i]).collect()
+}
+
+#[cfg(test)]
+mod prompt_preset_tests {
+    use super::*;
+
+    fn node_with(preset: &str, page_prompt: &str) -> Node {
+        let mut node = Node::new("test", "Test", "Test", "Test");
+        add_prompt_pins(&mut node);
+        node.get_pin_mut_by_name("prompt_preset")
+            .unwrap()
+            .set_default_value(Some(json!(preset)));
+        node.get_pin_mut_by_name("page_prompt")
+            .unwrap()
+            .set_default_value(Some(json!(page_prompt)));
+        node
+    }
+
+    fn unlimited_ocr_page() -> &'static str {
+        PROMPT_PRESETS
+            .iter()
+            .find(|preset| preset.name == "Unlimited-OCR")
+            .unwrap()
+            .page
+    }
+
+    #[test]
+    fn preset_fills_an_untouched_prompt_pin() {
+        let mut node = node_with("Unlimited-OCR", "");
+        apply_preset_to_pins(&mut node);
+        assert_eq!(pin_literal(&node, "page_prompt"), unlimited_ocr_page());
+    }
+
+    #[test]
+    fn reapplying_the_same_preset_is_a_no_op() {
+        let mut node = node_with("Unlimited-OCR", unlimited_ocr_page());
+        let before = node.get_pin_by_name("page_prompt").unwrap().id.clone();
+        apply_preset_to_pins(&mut node);
+        assert_eq!(pin_literal(&node, "page_prompt"), unlimited_ocr_page());
+        assert_eq!(node.get_pin_by_name("page_prompt").unwrap().id, before);
+    }
+
+    #[test]
+    fn switching_presets_replaces_the_previous_preset_prompt() {
+        let mut node = node_with("DeepSeek-OCR", unlimited_ocr_page());
+        apply_preset_to_pins(&mut node);
+        assert!(pin_literal(&node, "page_prompt").contains("<|grounding|>"));
+    }
+
+    #[test]
+    fn default_clears_a_preset_prompt() {
+        let mut node = node_with("Default", unlimited_ocr_page());
+        apply_preset_to_pins(&mut node);
+        assert_eq!(pin_literal(&node, "page_prompt"), "");
+    }
+
+    #[test]
+    fn a_hand_written_prompt_survives_every_preset_change() {
+        let custom = "Transcribe only the invoice line items.";
+
+        let mut node = node_with("Default", custom);
+        apply_preset_to_pins(&mut node);
+        assert_eq!(pin_literal(&node, "page_prompt"), custom);
+
+        let mut node = node_with("Unlimited-OCR", custom);
+        apply_preset_to_pins(&mut node);
+        assert_eq!(pin_literal(&node, "page_prompt"), custom);
+    }
+
+    #[test]
+    fn an_unknown_preset_leaves_the_prompt_pins_alone() {
+        let mut node = node_with("Not-A-Preset", unlimited_ocr_page());
+        apply_preset_to_pins(&mut node);
+        assert_eq!(pin_literal(&node, "page_prompt"), unlimited_ocr_page());
+    }
+
+    #[test]
+    fn preset_names_are_unique_and_default_is_first() {
+        let names = preset_names();
+        let mut sorted = names.clone();
+        sorted.sort();
+        sorted.dedup();
+        assert_eq!(sorted.len(), names.len(), "duplicate preset name");
+        assert_eq!(names.first().map(String::as_str), Some("Default"));
+    }
 }

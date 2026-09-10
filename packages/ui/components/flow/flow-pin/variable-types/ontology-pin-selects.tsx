@@ -170,7 +170,7 @@ function useOntologyPinPersist(
 					boardId,
 					command,
 				);
-				await pushCommand(result, false);
+				await pushCommand(result);
 			} catch {
 				toast.error("Failed to save ontology selection");
 			} finally {
