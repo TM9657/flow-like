@@ -215,6 +215,8 @@ export interface BoardEditJob {
 	token: FlowIrCommitToken;
 	approval: BoardEditJobApproval;
 	review: BoardEditJobReview;
+	/** Compact native post-apply evidence retained after command receipt delivery. */
+	persistedBoardFingerprint?: string;
 	result?: {
 		status: "applied" | "stale" | "error";
 		code?: string;
@@ -225,6 +227,7 @@ export interface BoardEditJob {
 		board_commands: BoardCommand[];
 		diagnostics: string[];
 		final_board_node_count?: number;
+		persisted_board_fingerprint?: string;
 	};
 	error?: string;
 }

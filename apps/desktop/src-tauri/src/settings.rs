@@ -233,10 +233,17 @@ pub struct Settings {
 
     #[serde(skip)]
     config: Option<Arc<FlowLikeConfig>>,
+    #[serde(skip)]
+    persistence_path: Option<PathBuf>,
 }
 
 impl Settings {
     pub fn new() -> Self {
+        #[cfg(debug_assertions)]
+        if let Some(root) = crate::e2e_isolation::data_root() {
+            return Self::isolated_for_root(root);
+        }
+
         // Prefer new stable settings path; fallback to legacy cache path for one-time backward compatibility.
         let new_settings_path = settings_store_path();
         let legacy_settings_path = legacy_settings_store_path();
@@ -297,7 +304,53 @@ impl Settings {
             created: SystemTime::now(),
             updated: SystemTime::now(),
             config: None,
+            persistence_path: None,
         }
+    }
+
+    #[cfg(debug_assertions)]
+    fn isolated_for_root(root: PathBuf) -> Self {
+        let profile = UserProfile::new(flow_like::profile::Profile {
+            id: "flowpilot-e2e-local".into(),
+            name: "FlowPilot E2E".into(),
+            ..Default::default()
+        });
+        let settings = Self {
+            loaded: false,
+            dev_mode: true,
+            default_hub: resolve_default_hub(),
+            current_profile: profile.hub_profile.id.clone(),
+            bit_dir: root.join("bits"),
+            project_dir: root.join("projects"),
+            logs_dir: root.join("logs"),
+            temporary_dir: root.join("tmp"),
+            user_dir: root.join("user"),
+            log_retention: LogRetentionSettings::default(),
+            telemetry: TelemetrySettings {
+                enabled: Some(false),
+                crash_reports: Some(false),
+                anon_id: None,
+            },
+            profiles: HashMap::from([(profile.hub_profile.id.clone(), profile)]),
+            custom_bits: Vec::new(),
+            created: SystemTime::now(),
+            updated: SystemTime::now(),
+            config: None,
+            persistence_path: Some(root.join("cache/flow-like/global-settings.json")),
+        };
+        for directory in [
+            &settings.bit_dir,
+            &settings.project_dir,
+            &settings.logs_dir,
+            &settings.temporary_dir,
+            &settings.user_dir,
+        ] {
+            ensure_dir(directory).expect("Could not create isolated E2E storage");
+        }
+        settings
+            .try_serialize()
+            .expect("Could not save isolated E2E settings");
+        settings
     }
 
     pub fn set_config(&mut self, config: &FlowLikeConfig) {
@@ -381,7 +434,10 @@ impl Settings {
     }
 
     pub fn try_serialize(&self) -> anyhow::Result<()> {
-        let dir = settings_store_path();
+        let dir = self
+            .persistence_path
+            .clone()
+            .unwrap_or_else(settings_store_path);
         if let Some(parent) = dir.parent() {
             std::fs::create_dir_all(parent)?;
         }
@@ -418,6 +474,10 @@ impl Settings {
 
 // Compute the path to persist global settings. On mobile, prefer data_dir for durability.
 pub(crate) fn settings_store_path() -> PathBuf {
+    #[cfg(debug_assertions)]
+    if let Some(root) = crate::e2e_isolation::data_root() {
+        return root.join("cache/flow-like/global-settings.json");
+    }
     #[cfg(any(target_os = "ios", target_os = "android"))]
     {
         return mobile_storage_root().join("global-settings.json");
@@ -438,6 +498,10 @@ pub(crate) fn legacy_settings_store_path() -> PathBuf {
 /// current container root always wins over the persisted value, so early
 /// startup paths derive the same directory the loaded settings will use.
 pub(crate) fn resolve_project_dir(persisted: Option<PathBuf>) -> Option<PathBuf> {
+    #[cfg(debug_assertions)]
+    if let Some(root) = crate::e2e_isolation::data_root() {
+        return Some(root.join("projects"));
+    }
     #[cfg(any(target_os = "ios", target_os = "android"))]
     {
         let _ = persisted;
@@ -446,5 +510,50 @@ pub(crate) fn resolve_project_dir(persisted: Option<PathBuf>) -> Option<PathBuf>
     #[cfg(not(any(target_os = "ios", target_os = "android")))]
     {
         persisted
+    }
+}
+
+#[cfg(all(test, debug_assertions))]
+mod e2e_isolation_tests {
+    use super::*;
+
+    #[test]
+    fn e2e_isolation_settings_use_only_fresh_local_storage_and_profile() {
+        let root = std::env::temp_dir().join(format!(
+            "flow-like-flowpilot-e2e-settings-{}",
+            uuid::Uuid::new_v4()
+        ));
+        {
+            let settings = Settings::isolated_for_root(root.clone());
+            for path in [
+                &settings.bit_dir,
+                &settings.project_dir,
+                &settings.logs_dir,
+                &settings.temporary_dir,
+                &settings.user_dir,
+                settings.persistence_path.as_ref().unwrap(),
+            ] {
+                assert!(path.starts_with(&root));
+                assert!(path.exists());
+            }
+            assert_eq!(settings.profiles.len(), 1);
+            let profile = settings.profiles.get(&settings.current_profile).unwrap();
+            assert_eq!(profile.hub_profile.id, "flowpilot-e2e-local");
+            assert_eq!(profile.hub_profile.apps, Some(Vec::new()));
+            assert!(profile.hub_profile.bits.is_empty());
+            assert!(settings.custom_bits.is_empty());
+            assert!(!settings.telemetry.usage_enabled());
+            assert!(!settings.telemetry.crash_reports_enabled());
+        }
+        let persisted: serde_json::Value = serde_json::from_slice(
+            &std::fs::read(root.join("cache/flow-like/global-settings.json")).unwrap(),
+        )
+        .unwrap();
+        assert_eq!(persisted["current_profile"], "flowpilot-e2e-local");
+        assert_eq!(
+            persisted["project_dir"],
+            root.join("projects").to_str().unwrap()
+        );
+        std::fs::remove_dir_all(root).unwrap();
     }
 }

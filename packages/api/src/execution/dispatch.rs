@@ -237,8 +237,6 @@ pub struct DispatchConfig {
     pub lambda_region: Option<String>,
     /// Kubernetes namespace (for KubernetesJob backend)
     pub k8s_namespace: String,
-    /// Kubernetes executor image
-    pub k8s_executor_image: String,
     /// SQS queue URL (for Sqs backend)
     pub sqs_queue_url: Option<String>,
     /// Storage account hosting the work queues (for AzureQueue backend)
@@ -279,8 +277,6 @@ impl DispatchConfig {
                 .or_else(|_| std::env::var("AWS_DEFAULT_REGION"))
                 .ok(),
             k8s_namespace: std::env::var("K8S_NAMESPACE").unwrap_or_else(|_| "default".into()),
-            k8s_executor_image: std::env::var("K8S_EXECUTOR_IMAGE")
-                .unwrap_or_else(|_| "flow-like-executor:latest".into()),
             sqs_queue_url: std::env::var("SQS_EXECUTION_QUEUE_URL").ok(),
             queue_account_name: std::env::var("AZURE_QUEUE_STORAGE_ACCOUNT_NAME").ok(),
             queue_name: std::env::var("AZURE_QUEUE_EXECUTION").ok(),

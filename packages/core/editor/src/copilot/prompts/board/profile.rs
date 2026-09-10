@@ -504,10 +504,9 @@ pub(super) fn focused_examples(domains: PromptDomains) -> String {
 
 pub(crate) const FOCUSED_CORE_EXAMPLES: &str = r##"
 ## FOCUSED FLOWSCRIPT REFERENCE
-Domain guidance is selected from the public request and current source. An omitted example does
-not mean a capability is unavailable. Before adding a catalog call, retrieve its exact declaration
-and read the returned usage notes. Ground newly introduced database, storage and UI identifiers
-with the existing read-only tools when the manifest does not supply them.
+Examples follow the request and source; other capabilities remain available. Read exact catalog
+declarations and usage notes. Ground database/storage/UI IDs with read-only tools unless supplied
+by the manifest.
 
 - Catalog calls use `namespace::alias({ exactPin: value })`. `::` selects a namespace; `.` reads a
   value field or invokes a declared method. A declaration with `this:` supports a receiver method;
@@ -521,12 +520,14 @@ with the existing read-only tools when the manifest does not supply them.
 - Author calls inside Event or `function` bodies. Top-level variables have literal defaults and
   cannot invoke nodes. Local `const`/`let` aliases accept expressions, calls, objects and arrays.
   Use `{ field: value }`, never `{ field = value }`. Preserve existing anchors and module wrappers.
-- Every helper declaration starts with `function`. Declare a named return signature for every
-  returned value and keep declarations and calls in the same full document. A single helper output
-  is the returned value itself. Calls bind arguments by the helper's exact parameter names.
+- Helpers start with `function` and declare named output pins. Keep declarations and calls in one
+  document; bind exact parameter names. One output is the value itself. A helper's only `return`
+  must be its trailing top-level statement. Assign a literal-initialized `let` in branches or loops,
+  then return it after the control block. Nested, early and multiple function returns are rejected.
+  This restriction does not change Event-handler returns.
 - Arithmetic, comparisons, boolean operators and template literals are compiler-supported
   expressions. Computed objects and arrays lower to native struct/array calls. Never invoke an LLM
-  for arithmetic. A literal alias creates no runtime behavior by itself.
+  for arithmetic. Literal aliases do not run nodes.
 - Plain `if (condition) { ... } else { ... }` and `for (const item of items) { ... }` are supported.
   Use `let` for reassignment across branches or loops; a `const` cannot be reassigned. Preserve both
   decision outcomes and explicit success/error ordering. Multi-output execution arms must use the
@@ -534,8 +535,8 @@ with the existing read-only tools when the manifest does not supply them.
 - `return` in an Event emits exactly one value. Generic Event parameters define payload fields.
   Use `eventsSimple` for schedule-compatible entry nodes; app Event records/sinks are configured
   separately. Helpers are reusable logic called from Events, not independently registered Events.
-- In an impure helper, close all control arms and finish on a plain single-continuation statement
-  before returning its value, so the function's outgoing execution pin is connected.
+- Impure helpers must close control arms and end on a single-continuation statement before
+  returning, so the outgoing execution pin is connected. Helpers without outputs need no return.
 
 ### Repeated helper calls keep their own arguments
 Retrieve integer multiplication declarations before adapting this shape.

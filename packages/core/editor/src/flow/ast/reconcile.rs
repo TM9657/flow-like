@@ -1344,6 +1344,7 @@ fn reconcile_inner(
     // same foreign id are still ambiguous, even though that id does not exist on this board.
     let raw_submitted = FlatDocument::new(new, opts.base_module());
     let mut preflight_diagnostics = duplicate_ast_declaration_diagnostics(&raw_submitted);
+    preflight_diagnostics.extend(unsupported_function_return_diagnostics(&raw_submitted));
     let duplicate_anchors = duplicate_ast_anchors(new);
     preflight_diagnostics.extend(duplicate_anchors.into_iter().map(|anchor| {
         format!(
@@ -1950,6 +1951,71 @@ fn lowered_event_names(ast: &BoardAst) -> HashMap<String, String> {
         walk_module(module, &mut out);
     }
     out
+}
+
+/// Function returns bind shared layer outputs; they do not end a branch or loop.
+/// Reject source that requires return control flow before deriving any board mutation.
+fn unsupported_function_return_diagnostics(doc: &FlatDocument) -> Vec<String> {
+    fn collect_returns(block: &Block, nested: bool, count: &mut usize, nested_return: &mut bool) {
+        for stmt in &block.stmts {
+            match stmt {
+                Stmt::Return { .. } => {
+                    *count += 1;
+                    *nested_return |= nested;
+                }
+                Stmt::Branch { arms, .. } => {
+                    for arm in arms {
+                        collect_returns(&arm.body, true, count, nested_return);
+                    }
+                }
+                Stmt::Loop { body, .. } => collect_returns(body, true, count, nested_return),
+                // Nested handlers are independent event entries with their own result nodes.
+                Stmt::Handler(_)
+                | Stmt::Let { .. }
+                | Stmt::Destructure { .. }
+                | Stmt::Call { .. }
+                | Stmt::Assign { .. }
+                | Stmt::FieldAssign { .. }
+                | Stmt::LocalAlias { .. }
+                | Stmt::Local(_)
+                | Stmt::Comment(_) => {}
+            }
+        }
+    }
+
+    let mut diagnostics = Vec::new();
+    for (function, scope) in doc.ast.functions.iter().zip(&doc.function_scopes) {
+        let mut count = 0;
+        let mut nested_return = false;
+        collect_returns(&function.body, false, &mut count, &mut nested_return);
+        if count == 0 {
+            continue;
+        }
+        let trailing_return = matches!(
+            function
+                .body
+                .stmts
+                .iter()
+                .rev()
+                .find(|stmt| { !matches!(stmt, Stmt::Comment(_) | Stmt::Handler(_)) }),
+            Some(Stmt::Return { .. })
+        );
+        if count != 1 || nested_return || !trailing_return {
+            let reason = if nested_return {
+                "a return inside a branch or loop"
+            } else if count > 1 {
+                "multiple return statements"
+            } else {
+                "a return followed by another body statement"
+            };
+            diagnostics.push(format!(
+                "function `{}` {} has unsupported return control flow: {reason}. Function returns currently bind shared output pins and do not terminate execution. Assign output variables inside branches, then use one trailing top-level `return`; no commands were derived",
+                function.name,
+                scope.label()
+            ));
+        }
+    }
+    diagnostics
 }
 
 fn duplicate_ast_declaration_diagnostics(doc: &FlatDocument) -> Vec<String> {
@@ -10043,14 +10109,14 @@ impl<'a> StructuralPlanner<'a> {
             // other wholesale.
             let mut meta = node_to_metadata(node);
             self.merge_catalog_required_inputs(&mut meta);
-            let planned_function_target = self
-                .resolve_call_target(call)
-                .ok()
-                .and_then(|resolved| match resolved.target {
+            let resolved = self.resolve_call_target(call).ok();
+            let planned_function_target = resolved
+                .as_ref()
+                .and_then(|resolved| match &resolved.target {
                     CallTarget::Function(key) => Some(key),
                     CallTarget::Catalog(_) => None,
                 })
-                .and_then(|key| self.planned_functions.get(&key))
+                .and_then(|key| self.planned_functions.get(key))
                 .map(|planned| planned.entity.node_ref());
             let expected_node_type = if planned_function_target.is_some() {
                 CALL_FUNCTION_NODE_TYPE
@@ -10116,6 +10182,11 @@ impl<'a> StructuralPlanner<'a> {
                     return None;
                 }
             };
+            // An anchor preserves the node identity, but its written name still relies on
+            // namespace imports. Record successful resolution just as the new-node path does.
+            if let Some(resolved) = &resolved {
+                self.note_resolution(resolved);
+            }
             let input_sources =
                 self.plan_call_arguments(&call, &entity, &meta, target_layer, false);
             self.check_required_inputs_after_planning(&call, &entity, &meta);
@@ -18494,6 +18565,175 @@ const apiKey: string = "ordinary-default"   //@v:var_api
     }
 
     #[test]
+    fn intake_early_return_repair_is_rejected_before_anchor_or_command_changes() {
+        // Exact candidate from the third frozen intake build's second repair.
+        let source = r#"use json::*
+use ui::*
+
+function routeRecord(summary: string): (queue: string, responseMinutes: int) {   //@l:t12qk27hy0qzc38jl93a4lp2
+    if ((summary.contains({ substring: "outage", ignoreCase: true }) || summary.contains({ substring: "service interruption", ignoreCase: true })) || summary.contains({ substring: "cannot log in", ignoreCase: true })) {
+        return "cobalt-response", 17
+    }
+    if ((summary.contains({ substring: "refund", ignoreCase: true }) || summary.contains({ substring: "charged twice", ignoreCase: true })) || summary.contains({ substring: "billing", ignoreCase: true })) {
+        return "amber-review", 731
+    }
+    return "general-desk", 2880
+}
+
+eventsGeneric submitTicket(payload: Struct) {   //@n:t1k4mvicb3a96aqjxd3nx00s
+    const summary = stringify({ value: getElementValue({ elementRef: getElement({ elementRef: "fp_page_f2ce831ef911b3ad76b41810/summary_input" }).element }).value, pretty: true })
+    const { queue: queue2, responseMinutes: responseMinutes2 } = routeRecord({ summary: summary })   //@n:zh05coqlx217677c47h2o5vw
+    const database = db::open({ name: "intake_tickets", userScoped: false, batchSize: 1000 })   //@n:rmlvsoe18i1j4roup23heam4
+    let row = struct::set({ structIn: {}, field: "summary", value: summary }).structOut   //@n:wbterr8s7c81c02l7af0o6lk
+    row.queue = queue2   //@n:n2jui3ynj3jtqt9v8sp3sfpd
+    row.response_minutes = responseMinutes2   //@n:jbg7o3w3b0t10yte9ux43xo7
+    database.insertOne(row)   //@n:r9tpc8cyycu9q65l2dpcwc3y
+    setElementText({ elementRef: getElement({ elementRef: "fp_page_f2ce831ef911b3ad76b41810/queue_result" }).element, text: queue2 })   //@n:g2vbm2d2bamw0gumshz1bjo0
+}
+"#;
+        let ast = flow_like_ast::parse(source).expect("the authored early-return repair parses");
+        let board = empty_board();
+        for result in [
+            reconcile(&board, &ast),
+            reconcile_with_catalog_mode(&board, &ast, &[], ReconcileMode::Replace),
+            reconcile_with_catalog_mode(&board, &ast, &[], ReconcileMode::Additive),
+        ] {
+            assert!(result.commands.is_empty(), "{:?}", result.commands);
+            assert!(
+                result.corrections.is_empty(),
+                "foreign anchors must not be normalized before rejection"
+            );
+            assert_eq!(result.diagnostics.len(), 1, "{:?}", result.diagnostics);
+            let diagnostic = &result.diagnostics[0];
+            assert!(
+                diagnostic.contains("function `routeRecord`"),
+                "{diagnostic}"
+            );
+            assert!(
+                diagnostic.contains("unsupported return control flow"),
+                "{diagnostic}"
+            );
+            assert!(
+                diagnostic.contains("Assign output variables inside branches"),
+                "{diagnostic}"
+            );
+            assert!(
+                diagnostic.contains("one trailing top-level `return`"),
+                "{diagnostic}"
+            );
+        }
+    }
+
+    #[test]
+    fn function_return_preflight_rejects_nested_multiple_and_nonterminal_returns_atomically() {
+        for body in [
+            "if (flag) { return 1 }",
+            "if (flag) { return 1 } else { return 1 }",
+            "for (const item of []) { return 1 }\nreturn 0",
+            "while (flag) { if (flag) { return 1 } }\nreturn 0",
+            "if (flag) { for (const item of []) { return 1 } }\nreturn 0",
+            "return 1\nreturn 2",
+            "return 1\nlogInfo({ message: \"must not run\" })",
+        ] {
+            let source = format!(
+                "const unrelated: string = \"must not be created\"\nfunction pick(flag: bool): (result: int) {{\n{body}\n}}\n"
+            );
+            let ast = flow_like_ast::parse(&source).expect("valid return syntax");
+            let result = reconcile_with_catalog(&empty_board(), &ast, &[]);
+            assert!(
+                result.commands.is_empty(),
+                "partial commands for {body}: {:?}",
+                result.commands
+            );
+            assert_eq!(
+                result.diagnostics.len(),
+                1,
+                "{body}: {:?}",
+                result.diagnostics
+            );
+            assert!(
+                result.diagnostics[0].contains("unsupported return control flow"),
+                "{body}: {:?}",
+                result.diagnostics
+            );
+        }
+    }
+
+    #[test]
+    fn function_return_preflight_preserves_one_trailing_return_roundtrip() {
+        let board = board_with_materialized_literal_return();
+        for replacement in [
+            "return \"final\"\n    // The output is complete.",
+            "{ { return \"final\"; } }",
+        ] {
+            let source = anchored_text(&board).replace("return \"final\"", replacement);
+            assert!(source.contains(replacement));
+            let result = reconcile_text_with_catalog(&board, &source, &[]);
+            assert!(result.diagnostics.is_empty(), "{:?}", result.diagnostics);
+            assert!(result.commands.is_empty(), "{:?}", result.commands);
+        }
+    }
+
+    #[test]
+    fn function_return_preflight_keeps_module_and_handler_scopes_independent() {
+        let ast = flow_like_ast::parse(
+            r#"module outer {
+    function helper(value: string): (result: string) {
+        if (true) {
+            const branchValue = readValue()
+        }
+        return branchValue
+        receive(value: string) {
+            if (true) { return value } else { return "other" }
+        }
+    }
+    module inner {
+        function helper(): (result: string) {
+            return "inner"
+        }
+        function listener() {
+            for (const item of []) {
+                receive(value: string) {
+                    while (true) { return value }
+                }
+            }
+        }
+        eventsGeneric moduleEvent(value: string) {
+            if (true) { return value }
+            return "fallback"
+        }
+        detached {
+            if (true) { return "detached" }
+        }
+    }
+}
+"#,
+        )
+        .expect("nested module and independent event handlers parse");
+        assert!(
+            unsupported_function_return_diagnostics(&FlatDocument::new(&ast, None)).is_empty(),
+            "branch-local values and independent handler returns do not change the function return shape"
+        );
+
+        let invalid = flow_like_ast::parse(
+            r#"module outer {
+    function helper(): (result: string) { return "outer" }
+    module inner {
+        function helper(): (result: string) {
+            if (true) { return "inner" }
+        }
+    }
+}
+"#,
+        )
+        .expect("nested module return parses");
+        let result = reconcile_with_catalog(&empty_board(), &invalid, &[]);
+        assert!(result.commands.is_empty(), "{:?}", result.commands);
+        assert_eq!(result.diagnostics.len(), 1, "{:?}", result.diagnostics);
+        assert!(result.diagnostics[0].contains("function `helper` in module `outer::inner`"));
+    }
+
+    #[test]
     fn duplicate_raw_anchors_fail_closed_before_deriving_commands() {
         let board = empty_board();
         let mut ast =
@@ -23633,28 +23873,7 @@ function constantFlag(): (flag: bool) {
     }
 
     #[test]
-    fn branch_arm_literal_returns_share_one_materialized_variable() {
-        let catalog = vec![
-            catalog_meta(
-                "variable_get",
-                "Get Variable",
-                vec![pin_meta("var_ref", "String", PinType::Input)],
-                vec![pin_meta("value_ref", "Generic", PinType::Output)],
-            ),
-            catalog_meta(
-                "control_branch",
-                "Branch",
-                vec![
-                    pin_meta("exec_in", "Execution", PinType::Input),
-                    pin_meta("condition", "Boolean", PinType::Input),
-                ],
-                vec![
-                    pin_meta("true", "Execution", PinType::Output),
-                    pin_meta("false", "Execution", PinType::Output),
-                ],
-            ),
-        ];
-
+    fn conditional_function_returns_fail_closed_instead_of_sharing_a_literal() {
         let result = reconcile_text_with_catalog(
             &empty_board(),
             r#"function pickTag(): (tag: string) {
@@ -23665,42 +23884,13 @@ function constantFlag(): (flag: bool) {
     }
 }
 "#,
-            &catalog,
+            &[],
         );
 
-        assert!(result.diagnostics.is_empty(), "{:?}", result.diagnostics);
-        let created_variables = result
-            .commands
-            .iter()
-            .filter(|command| matches!(command, BoardCommand::CreateVariable { .. }))
-            .count();
-        assert_eq!(
-            created_variables, 1,
-            "both arms must share one materialized variable: {:?}",
-            result.commands
-        );
-        let getters = result
-            .commands
-            .iter()
-            .filter(|command| {
-                matches!(
-                    command,
-                    BoardCommand::AddNode { node_type, .. } if node_type == "variable_get"
-                )
-            })
-            .count();
-        assert_eq!(getters, 1, "{:?}", result.commands);
-        let return_edges = result
-            .commands
-            .iter()
-            .filter(|command| {
-                matches!(
-                    command,
-                    BoardCommand::ConnectPins { to_pin, .. } if to_pin == "tag"
-                )
-            })
-            .count();
-        assert_eq!(return_edges, 1, "{:?}", result.commands);
+        assert!(result.commands.is_empty(), "{:?}", result.commands);
+        assert_eq!(result.diagnostics.len(), 1, "{:?}", result.diagnostics);
+        assert!(result.diagnostics[0].contains("function `pickTag`"));
+        assert!(result.diagnostics[0].contains("unsupported return control flow"));
     }
 
     #[tokio::test]

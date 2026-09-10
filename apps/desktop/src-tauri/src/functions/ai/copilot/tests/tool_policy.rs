@@ -161,6 +161,8 @@ fn board_runtime_bridge_uses_scoped_specs_before_context_injection() {
         "execute_node",
         "query_execution_logs",
         "read_flowscript_source",
+        "search_workspace",
+        "read_symbol",
     ] {
         assert!(
             frontend_platform_tool_spec(FrontendPlatformToolSet::BoardRuntime, name).is_some(),
@@ -232,6 +234,8 @@ fn specialist_capabilities_follow_exact_tool_policy() {
         specialist_tool_policy(CopilotScope::Board, true, true)
     );
     for board_tool in [
+        "search_workspace",
+        "read_symbol",
         "get_current_flowscript",
         "write_flowscript",
         "patch_flowscript",
@@ -370,6 +374,33 @@ fn bits_specialists_advertise_exactly_the_agent_backend_tool_policy() {
                 "{scope:?} must be allowed to call its own tool {name}"
             );
         }
+    }
+}
+
+#[test]
+fn workspace_source_tools_stay_out_of_ui_home_and_public_research() {
+    for scope in [
+        CopilotScope::Board,
+        CopilotScope::Both,
+        CopilotScope::Scout,
+        CopilotScope::DataStudio,
+    ] {
+        let allowed = specialist_tool_policy(scope, true, true);
+        assert!(allowed.contains("search_workspace"));
+        assert!(allowed.contains("read_symbol"));
+    }
+    for scope in [
+        CopilotScope::Frontend,
+        CopilotScope::Home,
+        CopilotScope::Research,
+    ] {
+        let allowed = specialist_tool_policy(scope, true, true);
+        assert!(!allowed.contains("search_workspace"));
+        assert!(!allowed.contains("read_symbol"));
+    }
+    for name in ["search_workspace", "read_symbol"] {
+        assert!(is_flowpilot_read_only_tool(name));
+        assert!(frontend_platform_tool_spec(FrontendPlatformToolSet::Global, name).is_none());
     }
 }
 

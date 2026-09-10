@@ -997,6 +997,22 @@ fn apply_tool_context(
     let Value::Object(arguments) = arguments else {
         return;
     };
+    // Source identity is carried by the search hit. Ambient authoring context must never retarget
+    // it or force a workspace search onto the current board, hiding reusable sibling helpers.
+    if tool_name == "read_symbol" {
+        return;
+    }
+    if tool_name == "search_workspace" {
+        if let Some(app_id) = context
+            .app_id
+            .as_deref()
+            .map(str::trim)
+            .filter(|id| !id.is_empty())
+        {
+            fill_default_arg(arguments, "app_id", app_id);
+        }
+        return;
+    }
     let data_studio = is_data_studio_tool(tool_name);
     let cross_board_source = is_cross_board_source_tool(tool_name);
     // A resolved board specialist owns one exact app/board and its runtime calls must not escape
@@ -1889,6 +1905,30 @@ mod tests {
             defaulted.get("board_id").and_then(Value::as_str),
             Some("current-board")
         );
+    }
+
+    #[test]
+    fn workspace_context_keeps_explicit_sources_and_searches_sibling_boards() {
+        let context = FrontendToolContext {
+            app_id: Some("current-app".to_string()),
+            board_id: Some("current-board".to_string()),
+            ..Default::default()
+        };
+        let mut search = json!({"query": "retry invoice"});
+        apply_tool_context("search_workspace", &mut search, Some(&context));
+        assert_eq!(search["app_id"], "current-app");
+        assert!(search.get("board_id").is_none());
+
+        let mut explicit =
+            json!({"query": "retry invoice", "app_id": "source-app", "board_id": "source-board"});
+        apply_tool_context("search_workspace", &mut explicit, Some(&context));
+        assert_eq!(explicit["app_id"], "source-app");
+        assert_eq!(explicit["board_id"], "source-board");
+
+        let hit = json!({"resource_id": "resource:source-app:helper", "revision": "source-revision", "offset": 512});
+        let mut read = hit.clone();
+        apply_tool_context("read_symbol", &mut read, Some(&context));
+        assert_eq!(read, hit);
     }
 
     #[test]

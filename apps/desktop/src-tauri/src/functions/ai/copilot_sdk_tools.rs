@@ -76,7 +76,7 @@ use flow_like::flow::copilot::tool_spec::{
     data_studio_specialist_tool_specs, global_assistant_tool_specs, home_specialist_tool_specs,
     interact_app_page_tool_spec, missing_required_args, public_web_tool_specs,
     resolve_tool_approval, runtime_execution_tool_specs, scoped_call_app_chat_spec,
-    scout_specialist_tool_specs,
+    scout_specialist_tool_specs, workspace_research_tool_specs,
 };
 #[cfg(test)]
 use flow_like::flow::copilot::typed_ir_schema_hint;
@@ -804,6 +804,11 @@ pub fn create_board_support_tools(bridge: FrontendToolBridge) -> Vec<(Tool, Tool
     // out of the orchestrator's context.
     tools.extend(
         cross_board_source_tool_specs()
+            .iter()
+            .map(|spec| sdk_tool_from_spec(spec, bridge.clone(), None, None)),
+    );
+    tools.extend(
+        workspace_research_tool_specs()
             .iter()
             .map(|spec| sdk_tool_from_spec(spec, bridge.clone(), None, None)),
     );
@@ -3398,10 +3403,12 @@ fn create_emit_ui_tool(
 ) -> (Tool, ToolHandler) {
     let tool = Tool::new("emit_ui")
         .description(
-            r#"Output A2UI components to render in the interface. This is NOT file editing - it generates JSON that renders directly in the app.
+            r#"Validate and stage A2UI components for the host to apply to the interface.
 
-emit_ui validates before rendering: an invalid component tree renders nothing and the errors are
-returned — fix them and call emit_ui again.
+emit_ui does not persist a page. In a delegated flowpilot_widget run the host saves the target page
+after you return; an open builder receives a pending review. A saved-page inspection during this
+run cannot verify the emitted tree. After a successful emission, return your summary and let the
+host report the persistence outcome. Invalid trees are rejected; fix the errors and call emit_ui again.
 
 OUTPUT FORMAT:
 {
@@ -3507,7 +3514,7 @@ EXAMPLE - Simple card:
                 "errors": validation_errors,
                 "rootComponentId": root_id,
                 "message": format!(
-                    "Nothing was rendered — {} validation error(s). Fix these and call emit_ui again with the full corrected tree:\n- {}",
+                    "No UI tree was staged. {} validation error(s). Fix these and call emit_ui again with the full corrected tree:\n- {}",
                     validation_errors.len(),
                     error_list
                 )
@@ -3534,17 +3541,21 @@ EXAMPLE - Simple card:
                 }
                 json!({
                     "status": "rendered",
+                    "delivery_status": "staged",
+                    "persisted": false,
                     "rootComponentId": root_id,
                     "component_count": component_count,
-                    "message": format!("Rendered {component_count} UI component(s) successfully.")
+                    "message": format!("Validated and staged {component_count} UI component(s). Return your summary so the host can apply them; the host will report whether the page was persisted or staged for review.")
                 })
             }
             None => json!({
                 "status": "rendered",
+                "delivery_status": "staged",
+                "persisted": false,
                 "rootComponentId": root_id,
                 "canvasSettings": canvas,
                 "components": validated_components,
-                "message": "UI components have been rendered successfully"
+                "message": "Validated UI output is ready for the host to apply. Page persistence is reported by the host after this run returns."
             }),
         };
 

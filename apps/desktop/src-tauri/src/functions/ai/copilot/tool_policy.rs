@@ -300,6 +300,8 @@ pub(super) fn specialist_tool_policy(
             // Lets a board specialist pull the FlowScript a Scout plan pointed it at, instead of
             // that fragment travelling through the orchestrator's context as inlined text.
             "read_flowscript_source",
+            "search_workspace",
+            "read_symbol",
         ]);
     }
 
@@ -326,6 +328,8 @@ pub(super) fn specialist_tool_policy(
             "ontology_action_tool",
             "list_apps",
             "describe_app_interface",
+            "search_workspace",
+            "read_symbol",
         ]);
     }
 
@@ -351,6 +355,8 @@ pub(super) fn specialist_tool_policy(
             "search_templates",
             "get_template_preview",
             "fork_preview",
+            "search_workspace",
+            "read_symbol",
             "list_apps",
             "describe_app_interface",
         ]);
@@ -385,6 +391,8 @@ pub(super) fn is_flowpilot_read_only_tool(tool_name: &str) -> bool {
             | "ui_inspect"
             | "query_execution_logs"
             | "read_flowscript_source"
+            | "search_workspace"
+            | "read_symbol"
             // The whole Scout tool set is read-only, so explain mode keeps all of it.
             | "search_apps"
             | "get_app_detail"

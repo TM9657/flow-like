@@ -104,10 +104,12 @@ pub use backend_types::{
 };
 pub use board_commits::{
     __cmd__flowpilot_apply_flow_ir_commit, __cmd__flowpilot_flow_ir_commit_disposition,
+    __cmd__flowpilot_read_flow_ir_commit_board,
     __tauri_command_name_flowpilot_apply_flow_ir_commit,
-    __tauri_command_name_flowpilot_flow_ir_commit_disposition, ApplyFlowIrCommitResult,
+    __tauri_command_name_flowpilot_flow_ir_commit_disposition,
+    __tauri_command_name_flowpilot_read_flow_ir_commit_board, ApplyFlowIrCommitResult,
     FlowIrCommitDisposition, FlowIrCommitDispositionResult, flowpilot_apply_flow_ir_commit,
-    flowpilot_flow_ir_commit_disposition,
+    flowpilot_flow_ir_commit_disposition, flowpilot_read_flow_ir_commit_board,
 };
 pub(crate) use board_jobs::ensure_board_mutation_not_reserved_by_flowpilot;
 pub use board_jobs::{

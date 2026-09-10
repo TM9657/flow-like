@@ -1,0 +1,432 @@
+[
+	{
+		"id": "holdout-http-retryable",
+		"query": "Which response codes should the release registry retry after a rate limit or server failure?",
+		"category": "natural-language",
+		"targets": [
+			{
+				"source_path": "tests/ast/handwritten/t2-rest-retry.flow",
+				"symbol": "retryPolicy"
+			}
+		],
+		"reason": "The helper marks 429, 408 and status codes at least 500 as retryable and returns the corresponding reason."
+	},
+	{
+		"id": "holdout-poll-backoff",
+		"query": "Poll deployment status with exponential backoff, then validate the returned JSON and keep nonempty artifacts",
+		"category": "multi-step",
+		"targets": [
+			{
+				"source_path": "tests/ast/handwritten/t2-rest-retry.flow",
+				"symbol": "pollDeploymentStatus"
+			}
+		],
+		"reason": "This event doubles backoff after retryable responses or transport failures, parses successful text against a derived schema and filters artifacts to positive size_bytes."
+	},
+	{
+		"id": "holdout-h3-parent",
+		"query": "Convert a stop coordinate into an H3 cell and its coarser service fence parent",
+		"category": "natural-language",
+		"targets": [
+			{
+				"source_path": "tests/ast/handwritten/t2-geo-fencing.flow",
+				"symbol": "indexStop"
+			}
+		],
+		"reason": "The helper calls latlngToCell at stopRes and cellToParent at fenceRes, returning both cells."
+	},
+	{
+		"id": "holdout-courier-bike-loop",
+		"query": "Find the courier shift workflow that checks stops against a service area and computes a closed bike trip",
+		"category": "multi-step",
+		"targets": [
+			{
+				"source_path": "tests/ast/handwritten/t2-geo-fencing.flow",
+				"symbol": "recomputeServiceArea"
+			}
+		],
+		"reason": "The event builds a gridDisk fence, checks each stop cell, requests Bike routes and finishes with osrmTrip configured as a roundtrip."
+	},
+	{
+		"id": "holdout-comment-participants",
+		"query": "Summarize GitHub comments while ignoring the bot and deduplicating participant handles",
+		"category": "natural-language",
+		"targets": [
+			{
+				"source_path": "tests/ast/handwritten/t3-github-triage.flow",
+				"symbol": "digestThread"
+			}
+		],
+		"reason": "The helper skips ignoreLogin, truncates comment bodies, extracts mentions and returns unique participant handles."
+	},
+	{
+		"id": "holdout-security-routing",
+		"query": "remote code execution token leak area/security",
+		"category": "body-only",
+		"targets": [
+			{
+				"source_path": "tests/ast/handwritten/t3-github-triage.flow",
+				"symbol": "routeIssue"
+			}
+		],
+		"reason": "These threat phrases and the area/security label appear together in the issue routing body, not in the function signature."
+	},
+	{
+		"id": "holdout-top-class-confidence",
+		"query": "Find the highest scoring prediction and calculate its lead over the runner up",
+		"category": "natural-language",
+		"targets": [
+			{
+				"source_path": "tests/ast/handwritten/t3-onnx-inference.flow",
+				"symbol": "topPrediction"
+			}
+		],
+		"reason": "The helper finds the maximum score and associated prediction, sorts scores and subtracts the second score to obtain the margin."
+	},
+	{
+		"id": "holdout-onnx-typo",
+		"query": "embdeFrame",
+		"category": "typo",
+		"targets": [
+			{
+				"source_path": "tests/ast/handwritten/t3-onnx-inference.flow",
+				"symbol": "embedFrame"
+			}
+		],
+		"reason": "The query transposes two letters in the helper that extracts and normalizes image feature vectors."
+	},
+	{
+		"id": "holdout-hybrid-passages",
+		"query": "Retrieve knowledge passages using text and embedding similarity, rerank them and include the source in the context",
+		"category": "multi-step",
+		"targets": [
+			{
+				"source_path": "tests/ast/handwritten/t4-knowledge-qa.flow",
+				"symbol": "retrieveContext"
+			}
+		],
+		"reason": "The helper embeds the query, calls hybridSearch over vector and text with rerank enabled, then formats ranked source and passage pairs."
+	},
+	{
+		"id": "holdout-nested-office",
+		"query": "ingest::office::extract",
+		"category": "qualified-identifier",
+		"targets": [
+			{
+				"source_path": "tests/ast/handwritten/t4-knowledge-qa.flow",
+				"symbol": "ingest::office::extract"
+			}
+		],
+		"reason": "This exact nested helper extracts PPTX slide text or Word text; PDF and web extract helpers in the same module are distractors."
+	},
+	{
+		"id": "holdout-referral-ocr-threshold",
+		"query": "born-digital OCR 400",
+		"category": "body-only",
+		"targets": [
+			{
+				"source_path": "tests/ast/handwritten/t4-referral-intake.flow",
+				"symbol": "readPacket"
+			}
+		],
+		"reason": "The referral attachment reader invokes OCR when extracted PDF text is shorter than 400 characters and logs that born-digital text was too thin."
+	},
+	{
+		"id": "holdout-chase-business-days",
+		"query": "Build a referral chase ticket with missing fields and the next follow-up two business days away",
+		"category": "natural-language",
+		"targets": [
+			{
+				"source_path": "tests/ast/handwritten/t4-referral-intake.flow",
+				"symbol": "chase::ticketFor"
+			}
+		],
+		"reason": "The helper adds two business days, records referral and sender identifiers, blockers, attempts and state, and formats next_touch_at."
+	},
+	{
+		"id": "holdout-referral-ui-permission",
+		"query": "Check referral approval permission before handling approve or deficiency override actions from a widget",
+		"category": "multi-step",
+		"targets": [
+			{
+				"source_path": "tests/ast/handwritten/t4-referral-intake.flow",
+				"symbol": "reviewReferral"
+			}
+		],
+		"reason": "The Widget action event checks referral.approve and the referral identifier before dispatching approveOrder or overrideDeficiency."
+	},
+	{
+		"id": "holdout-contract-chain-fields",
+		"query": "prev_hash chain_hash canonical sha256",
+		"category": "body-only",
+		"targets": [
+			{
+				"source_path": "tests/ast/handwritten/t4-contract-exceptions.flow",
+				"symbol": "sealRecord"
+			}
+		],
+		"reason": "The helper hashes previousHash joined to canonical JSON and writes prev_hash and chain_hash fields onto the record."
+	},
+	{
+		"id": "holdout-policy-exact",
+		"query": "policy::riskScore",
+		"category": "qualified-identifier",
+		"targets": [
+			{
+				"source_path": "tests/ast/handwritten/t4-contract-exceptions.flow",
+				"symbol": "policy::riskScore"
+			}
+		],
+		"reason": "This nested helper blends severity weight, days-left urgency and rule weight; other risk and scoring functions are distractors."
+	},
+	{
+		"id": "holdout-lineage-impact",
+		"query": "List downstream datasets affected by a warehouse table, following outgoing lineage edges to a requested depth",
+		"category": "natural-language",
+		"targets": [
+			{
+				"source_path": "tests/ast/handwritten/t4-warehouse-reliability.flow",
+				"symbol": "lineage::blastRadius"
+			}
+		],
+		"reason": "The helper queries outgoing Dataset neighbors at the requested depth, extracts their names and returns their count."
+	},
+	{
+		"id": "holdout-null-rate-drift",
+		"query": "Compare observed null rates with a baseline and identify the worst column",
+		"category": "natural-language",
+		"targets": [
+			{
+				"source_path": "tests/ast/handwritten/t4-warehouse-reliability.flow",
+				"symbol": "profiling::driftScore"
+			}
+		],
+		"reason": "The helper calculates the normalized absolute gap between mean observed null rate and the baseline, then finds the column with the largest null rate."
+	},
+	{
+		"id": "holdout-confluence-orphans",
+		"query": "Flag mirrored Confluence pages when their Jira issue disappears from the synchronization query",
+		"category": "natural-language",
+		"targets": [
+			{
+				"source_path": "tests/ast/handwritten/t3-jira-confluence.flow",
+				"symbol": "flagOrphans"
+			}
+		],
+		"reason": "The helper finds tracked keys absent from liveKeys, adds jira-sync-orphan to their pages and removes the cached body entry."
+	},
+	{
+		"id": "holdout-relative-label",
+		"query": "humanize isPast ago",
+		"category": "body-only",
+		"targets": [
+			{
+				"source_path": "tests/ast/handwritten/t1-datetime-window.flow",
+				"symbol": "checkpointLabel"
+			}
+		],
+		"reason": "The helper uses humanize and isPast to format a time followed by either an ago or an in relative label."
+	},
+	{
+		"id": "holdout-dearmor-exact",
+		"query": "dearmor",
+		"category": "identifier",
+		"targets": [
+			{
+				"source_path": "tests/ast/handwritten/t1-hash-encode.flow",
+				"symbol": "dearmor"
+			}
+		],
+		"reason": "The exact helper decodes Base64 to bytes and converts them to text with lossy disabled, returning UTF-8 validity."
+	},
+	{
+		"id": "holdout-doc-exposed-default",
+		"query": "What value does an exposed variable use when the Event supplies no override?",
+		"category": "documentation",
+		"targets": [
+			{
+				"source_path": "apps/docs/src/content/docs/studio/variables.md",
+				"section_id": "exposed"
+			}
+		],
+		"reason": "This section states that an exposed variable accepts compatible external values and otherwise uses the configured default."
+	},
+	{
+		"id": "holdout-doc-first-run",
+		"query": "What happens on the first interactive run if a required runtime variable has not been saved?",
+		"category": "documentation",
+		"targets": [
+			{
+				"source_path": "apps/docs/src/content/docs/apps/runtime-variables.md",
+				"section_id": "configure-a-value"
+			}
+		],
+		"reason": "The First run note describes opening Configure Runtime Variables and continuing the pending run after saving."
+	},
+	{
+		"id": "holdout-doc-replay-runtime",
+		"query": "Does replay restore recorded runtime variable values or resolve the current configuration again?",
+		"category": "documentation",
+		"targets": [
+			{
+				"source_path": "apps/docs/src/content/docs/apps/runtime-variables.md",
+				"section_id": "where-values-go"
+			}
+		],
+		"reason": "This section says supplied runtime values are omitted from saved replay inputs and replay resolves configuration again."
+	},
+	{
+		"id": "holdout-doc-table-sources",
+		"query": "Where can I inspect the rows, schema and indexes of a personal relational table?",
+		"category": "documentation",
+		"targets": [
+			{
+				"source_path": "apps/docs/src/content/docs/apps/data-studio.md",
+				"section_id": "native-tables"
+			}
+		],
+		"reason": "The Native tables section describes project and personal tables in Sources and opening them to inspect rows, schema and indexes."
+	},
+	{
+		"id": "holdout-doc-surface-patch",
+		"query": "Which A2UI messages replace surface components or update their data without recreating the surface?",
+		"category": "documentation",
+		"targets": [
+			{
+				"source_path": "apps/docs/src/content/docs/dev/a2ui/overview.md",
+				"section_id": "surface-messages"
+			}
+		],
+		"reason": "The table defines surfaceUpdate for adding or replacing components and dataModelUpdate for adding or replacing data entries."
+	},
+	{
+		"id": "holdout-doc-widget-dispatch",
+		"query": "What action name and context field must a Widget component use to execute its declared action?",
+		"category": "documentation",
+		"targets": [
+			{
+				"source_path": "apps/docs/src/content/docs/dev/a2ui/overview.md",
+				"section_id": "actions-and-workflow-updates"
+			}
+		],
+		"reason": "The action contract requires the literal widget_event name and context.actionId; arbitrary action labels do not execute a workflow."
+	},
+	{
+		"id": "holdout-doc-page-hooks",
+		"query": "Why is the Page load event picker empty even though the connected Flow has other Event nodes?",
+		"category": "documentation",
+		"targets": [
+			{
+				"source_path": "apps/docs/src/content/docs/dev/a2ui/pages.md",
+				"section_id": "behavior"
+			}
+		],
+		"reason": "The Behavior section states that lifecycle settings list only events_simple nodes from the connected board."
+	},
+	{
+		"id": "holdout-doc-holy-grail",
+		"query": "Which Page layout provides a header, columns and footer?",
+		"category": "documentation",
+		"targets": [
+			{
+				"source_path": "apps/docs/src/content/docs/dev/a2ui/pages.md",
+				"section_id": "layout"
+			}
+		],
+		"reason": "The layout table maps that arrangement to HolyGrail, alongside Freeform, Stack, Grid and Sidebar distractors."
+	},
+	{
+		"id": "holdout-doc-route-cleanup",
+		"query": "How should custom tooling avoid route conflicts and clean up routes when deleting an Event?",
+		"category": "documentation",
+		"targets": [
+			{
+				"source_path": "apps/docs/src/content/docs/dev/a2ui/routes.md",
+				"section_id": "error-and-conflict-handling"
+			}
+		],
+		"reason": "The section directs custom tooling to check whether a path already exists before reassignment and to call deleteRouteByEvent during Event deletion."
+	},
+	{
+		"id": "holdout-doc-widget-bindings",
+		"query": "Why does inserting a Widget into a Page leave its action bindings empty?",
+		"category": "documentation",
+		"targets": [
+			{
+				"source_path": "apps/docs/src/content/docs/dev/a2ui/widgets.md",
+				"section_id": "insert-a-widget-into-a-page"
+			}
+		],
+		"reason": "The insertion procedure initializes empty instance values and bindings; the current editor boundary explains that the dedicated WidgetInstanceInspector is not mounted."
+	},
+	{
+		"id": "holdout-absent-oauth-refresh",
+		"query": "Renew an expired Microsoft Graph OAuth refresh token before retrying the request",
+		"category": "absent",
+		"targets": [],
+		"reason": "The corpus includes Microsoft Graph provider setup and HTTP retry examples, but no refresh-token exchange or renewal implementation."
+	},
+	{
+		"id": "holdout-absent-live-geofence",
+		"query": "Trigger an H3 geofence crossing alert from live GPS positions received over a websocket",
+		"category": "absent",
+		"targets": [],
+		"reason": "The corpus computes a static courier service-area fence and uses websockets for other purposes, but does not subscribe to GPS positions or detect live boundary crossings."
+	},
+	{
+		"id": "holdout-absent-transaction-rollback",
+		"query": "Roll back a database transaction when updating an invoice fails",
+		"category": "absent",
+		"targets": [],
+		"reason": "The corpus persists records and handles invoices, but contains no database transaction begin, commit and rollback implementation."
+	},
+	{
+		"id": "holdout-absent-webauthn",
+		"query": "Create WebAuthn passkey challenges and validate browser registration responses",
+		"category": "absent",
+		"targets": [],
+		"reason": "The corpus has no WebAuthn or passkey registration implementation; other challenge, browser and validation language does not establish this capability."
+	},
+	{
+		"id": "holdout-absent-kafka-offsets",
+		"query": "Commit Kafka consumer offsets after exactly-once message processing",
+		"category": "absent",
+		"targets": [],
+		"reason": "The corpus has no Kafka consumer or offset commit implementation; other message-processing examples do not satisfy the query."
+	},
+	{
+		"id": "holdout-absent-tenant-rls",
+		"query": "Apply PostgreSQL row-level security policies for tenant isolation",
+		"category": "absent",
+		"targets": [],
+		"reason": "The corpus reads PostgreSQL sources and handles tenant identifiers, but contains no row-level security policy creation or enforcement implementation."
+	},
+	{
+		"id": "holdout-absent-multipart-resume",
+		"query": "Resume a multipart S3 upload from saved part ETags",
+		"category": "absent",
+		"targets": [],
+		"reason": "The corpus includes file and storage operations, but no multipart upload state, part ETags or resume procedure."
+	},
+	{
+		"id": "holdout-absent-pdf-passwords",
+		"query": "Encrypt PDF attachments with recipient-specific passwords before email delivery",
+		"category": "absent",
+		"targets": [],
+		"reason": "The corpus generates and extracts PDFs and sends email, but has no PDF password encryption and recipient-specific password delivery workflow."
+	},
+	{
+		"id": "holdout-absent-calendar-booking",
+		"query": "Schedule recurring calendar meetings with attendee timezone conflict checks",
+		"category": "absent",
+		"targets": [],
+		"reason": "The corpus reads calendar meetings and manipulates dates, but does not create recurring meetings or check attendee availability conflicts."
+	},
+	{
+		"id": "holdout-absent-appstore-receipts",
+		"query": "Verify an Apple App Store subscription receipt and extend account access",
+		"category": "absent",
+		"targets": [],
+		"reason": "The corpus contains no Apple App Store receipt verification or subscription entitlement implementation; unrelated receipt variables are distractors."
+	}
+]

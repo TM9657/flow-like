@@ -2,8 +2,12 @@ import { createId } from "@paralleldrive/cuid2";
 import type { IBackendState } from "../../state/backend-state";
 import type { AppBuildHostAdapter } from "./engine-types";
 import {
-	materializeAppBuildResource,
+	appBuildFoundationForPlan,
+	provisionAppBuildFoundation,
+} from "./resource-foundation";
+import {
 	type AppBuildDispatch,
+	materializeAppBuildResource,
 } from "./resource-materializer";
 import { readAppBuildResource } from "./resource-readback";
 import { promoteAppBuildResources } from "./staging";
@@ -13,6 +17,24 @@ export function createAppBuildHostAdapter(
 	backend: IBackendState,
 	dispatch: AppBuildDispatch,
 ): AppBuildHostAdapter {
+	let preparing: { fingerprint: string; promise: Promise<unknown> } | undefined;
+	const prepare = (plan: Parameters<typeof appBuildFoundationForPlan>[0]) => {
+		const fingerprint = `${plan.app_id}:${plan.build_id}:${plan.spec_fingerprint}`;
+		if (preparing?.fingerprint === fingerprint) return preparing.promise;
+		const promise = provisionAppBuildFoundation(
+			backend,
+			appBuildFoundationForPlan(plan),
+			dispatch,
+		);
+		const current = { fingerprint, promise };
+		preparing = current;
+		void promise
+			.finally(() => {
+				if (preparing === current) preparing = undefined;
+			})
+			.catch(() => undefined);
+		return promise;
+	};
 	return {
 		async inspectResource({ build, plan, resource, signal }) {
 			dispatch.assertActive();
@@ -40,13 +62,14 @@ export function createAppBuildHostAdapter(
 					);
 				if (
 					receipt &&
+					observed.fingerprint &&
 					observed.fingerprint === receipt.observed_fingerprint &&
 					!observed.issues.length
 				) {
 					return {
 						...binding,
 						status: "matches",
-						observed_fingerprint: observed.fingerprint!,
+						observed_fingerprint: observed.fingerprint,
 					};
 				}
 				return {
@@ -81,6 +104,10 @@ export function createAppBuildHostAdapter(
 						"Build resources may only be applied in an inactive staging app.",
 					);
 				const prior = build.resources[resource.key];
+				// Setup completes before any specialist sees the shared resource contract.
+				await prepare(plan);
+				dispatch.assertActive();
+				signal?.throwIfAborted();
 				const diagnostics = [
 					prior.last_error,
 					prior.last_inspection?.message,

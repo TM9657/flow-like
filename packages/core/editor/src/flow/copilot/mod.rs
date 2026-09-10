@@ -107,11 +107,12 @@ pub use tools::{
     GetCurrentFlowScriptTool, GetDeclarationsArgs, GetDeclarationsTool, GetNodeDetailsArgs,
     GetNodeDetailsTool, GetUnconfiguredNodesTool, ListBoardNodesTool, ModelFacingEmitCommandsTool,
     PatchFlowScriptTool, PlanBoardScopeTool, QueryExecutionLogsArgs, QueryExecutionLogsTool,
-    QueryLogsArgs, QueryLogsTool, RunBoardTestsArgs, RunBoardTestsTool, SearchArgs,
-    SearchByPinArgs, SearchByPinTool, SearchTemplatesArgs, SearchTemplatesTool, StorageContextTool,
-    ThinkingArgs, UiInspectContextTool, WriteFlowScriptTool, board_has_no_nodes,
-    build_find_connectable_nodes_output, build_list_board_nodes_output, build_node_details_output,
-    build_unconfigured_nodes_output, declaration_queries, detect_flowscript_candidate_regression,
+    QueryLogsArgs, QueryLogsTool, ReadSymbolTool, RunBoardTestsArgs, RunBoardTestsTool, SearchArgs,
+    SearchByPinArgs, SearchByPinTool, SearchTemplatesArgs, SearchTemplatesTool,
+    SearchWorkspaceTool, StorageContextTool, ThinkingArgs, UiInspectContextTool,
+    WriteFlowScriptTool, board_has_no_nodes, build_find_connectable_nodes_output,
+    build_list_board_nodes_output, build_node_details_output, build_unconfigured_nodes_output,
+    declaration_queries, detect_flowscript_candidate_regression,
     flowscript_has_executable_node_call, flowscript_missing_function_helpers,
     flowscript_workspace_envelope, get_tool_description, is_blocking_flowscript_diagnostic,
     profile_flowscript_candidate, render_edit_flowscript_result,
@@ -1059,6 +1060,12 @@ impl Copilot {
                     bridge: bridge.clone(),
                 })
                 .tool(UiInspectContextTool {
+                    bridge: bridge.clone(),
+                })
+                .tool(SearchWorkspaceTool {
+                    bridge: bridge.clone(),
+                })
+                .tool(ReadSymbolTool {
                     bridge: bridge.clone(),
                 });
             if !self.read_only {
@@ -2615,7 +2622,8 @@ impl Copilot {
                     "[]".to_string()
                 }
             }
-            "database_tool" | "storage_tool" | "ui_inspect" => {
+            "database_tool" | "storage_tool" | "ui_inspect" | "search_workspace"
+            | "read_symbol" => {
                 execute_workflow_context_bridge_tool(self.runtime_bridge.as_ref(), name, arguments)
                     .await
             }
@@ -4176,6 +4184,44 @@ mod runtime_bridge_tests {
             board.app_state = None;
             board
         }
+    }
+
+    #[tokio::test]
+    async fn local_workspace_dispatch_preserves_exact_references_and_requires_revision() {
+        let concrete = Arc::new(RecordingRuntimeBridge::default());
+        let bridge: Arc<dyn platform::PlatformToolBridge> = concrete.clone();
+        for (name, arguments) in [
+            (
+                "search_workspace",
+                json!({"query": "retry invoice", "app_id": "source-app"}),
+            ),
+            (
+                "read_symbol",
+                json!({"resource_id": "source-helper", "revision": "revision-1", "offset": 100}),
+            ),
+        ] {
+            let result =
+                execute_workflow_context_bridge_tool(Some(&bridge), name, arguments.clone()).await;
+            assert_eq!(
+                serde_json::from_str::<serde_json::Value>(&result).unwrap()["status"],
+                "ok"
+            );
+            assert_eq!(
+                concrete.calls.lock().unwrap().last().unwrap(),
+                &(name.to_string(), arguments)
+            );
+        }
+        let invalid = execute_workflow_context_bridge_tool(
+            Some(&bridge),
+            "read_symbol",
+            json!({"resource_id": "source-helper"}),
+        )
+        .await;
+        assert_eq!(
+            serde_json::from_str::<serde_json::Value>(&invalid).unwrap()["status"],
+            "error"
+        );
+        assert_eq!(concrete.calls.lock().unwrap().len(), 2);
     }
 
     #[tokio::test]

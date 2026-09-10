@@ -14,12 +14,24 @@ the images.
 | `helm/values.yaml` | Chart defaults |
 | `helm/values-production.yaml` | Example operator overrides |
 | `.generated/values-generated.yaml` | Setup-generated endpoint settings and Secret references |
-| `.generated/values-images.yaml` | Build-generated image references and required digests |
+| `.generated/values-images.yaml` | Image digests resolved from the published packages or recorded by a local build |
 | `.generated/secrets.yaml` | Private credentials, applied separately |
 | `FLOW_LIKE_CONFIG_FILE` | Host-side JSON file read by setup into a generated Kubernetes Secret |
 
 Paths above are relative to `apps/backend/kubernetes/`. Setup reads exported
 environment variables as data; it does not source a `.env` file.
+
+## Images
+
+Each first-party `*.image` map has `repository`, `tag`, `digest` and
+`pullPolicy`. Defaults point at the public `ghcr.io/rheosoph` packages at the
+`dev` tag; a digest pins one manifest and wins over the tag. Run
+`scripts/resolve-images.py --tag <release>` to pin all images, or
+`scripts/build-images.sh` to build them, and let `deploy.sh` apply the
+resulting file. `global.imageRegistry` prefixes every repository for mirrors;
+`global.imagePullSecrets` lists the `docker-registry` Secrets for private
+packages and reaches the API-created execution Jobs and sink CronJobs as well.
+See [Helm chart images](/self-hosting/kubernetes/helm/#images).
 
 ## Runtime API and web configuration
 

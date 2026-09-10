@@ -1,8 +1,8 @@
 #!/usr/bin/env bun
 
 import { type ChildProcess, spawn, spawnSync } from "node:child_process";
-import { randomBytes, timingSafeEqual } from "node:crypto";
-import { mkdir, open, readFile, stat, unlink } from "node:fs/promises";
+import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
+import { mkdir, open, readFile, rename, stat, unlink } from "node:fs/promises";
 import { arch, platform, tmpdir } from "node:os";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -26,6 +26,12 @@ import {
 	resolveFlowPilotE2ERunCases,
 	resolveFlowPilotE2ETier,
 } from "../lib/flowpilot-e2e";
+import { isArtifact } from "../lib/flowpilot-e2e/cli-contract";
+import {
+	type FlowPilotE2EIsolation,
+	createFlowPilotE2EIsolation,
+	verifyFlowPilotE2EIsolation,
+} from "./flowpilot-e2e-isolation";
 
 const scriptDir = dirname(fileURLToPath(import.meta.url));
 const desktopDir = resolve(scriptDir, "..");
@@ -51,6 +57,8 @@ export interface CliOptions {
 	suite?: "smoke" | "full";
 	modelKey: FlowPilotE2EModelKey;
 	tier: FlowPilotE2ETier;
+	retrievalComparison: boolean;
+	isolated: boolean;
 	minChars?: number;
 	repeat: number;
 	concurrency: number;
@@ -90,6 +98,8 @@ Options:
   --suite <smoke|full>    Select the three-case smoke suite or all cases (default: smoke)
   --model <${FLOWPILOT_E2E_MODEL_KEYS.join("|")}>    Pin the benchmark model, by alias or model id (default: ${FLOWPILOT_E2E_DEFAULT_MODEL_KEY})
   --tier <structural|behavioral>  Validation tier (default: structural)
+  --retrieval-ab          Pair baseline and improved retrieval on seeded intake fixtures
+  --isolated              Use a fresh private development app data root
   --min-chars <n>         Override the non-whitespace FlowScript sanity floor
   --repeat <n>            Repeat each selected case, 1-${MAX_REPEAT} (default: 1)
   --concurrency <n>       Cases in flight at once, 1-${MAX_CONCURRENCY} (default: 1; not with --fail-fast)
@@ -137,6 +147,8 @@ export function parseArgs(args: string[]): CliOptions {
 		caseIds: [],
 		modelKey: FLOWPILOT_E2E_DEFAULT_MODEL_KEY,
 		tier: "structural",
+		retrievalComparison: false,
+		isolated: false,
 		repeat: 1,
 		concurrency: 1,
 		failFast: false,
@@ -155,6 +167,10 @@ export function parseArgs(args: string[]): CliOptions {
 		const arg = normalizedArgs[index] ?? "";
 		if (arg === "--help" || arg === "-h") {
 			options.help = true;
+		} else if (arg === "--retrieval-ab") {
+			options.retrievalComparison = true;
+		} else if (arg === "--isolated") {
+			options.isolated = true;
 		} else if (arg === "--json") {
 			options.json = true;
 		} else if (arg === "--list") {
@@ -250,6 +266,33 @@ export function parseArgs(args: string[]): CliOptions {
 			"--fail-fast needs sequential cases; drop it or use --concurrency 1.",
 		);
 	}
+	if (options.retrievalComparison) {
+		if (
+			options.concurrency !== 1 ||
+			options.failFast ||
+			options.tier !== "structural" ||
+			options.suite
+		)
+			throw new Error(
+				"--retrieval-ab requires serial structural runs without --suite or --fail-fast.",
+			);
+		if (options.caseIds.length === 0) options.caseIds = ["retrieval-intake"];
+		if (options.caseIds.some((id) => id !== "retrieval-intake"))
+			throw new Error(
+				"--retrieval-ab currently supports --case retrieval-intake only.",
+			);
+	}
+	if (
+		options.caseIds.includes("intake-reliability") &&
+		(!options.isolated ||
+			options.tier !== "behavioral" ||
+			options.concurrency !== 1 ||
+			options.caseIds.length !== 1)
+	) {
+		throw new Error(
+			"intake-reliability requires --isolated --tier behavioral and serial runs of that case alone.",
+		);
+	}
 	options.caseIds = [...new Set(options.caseIds)];
 	return options;
 }
@@ -341,7 +384,13 @@ function runningDesktopProcessIds(): string[] {
 		.filter(Boolean);
 }
 
-function assertNoRunningDesktop(): void {
+async function assertNoRunningDesktop(
+	isolation?: FlowPilotE2EIsolation,
+): Promise<void> {
+	if (isolation) {
+		await verifyFlowPilotE2EIsolation(isolation);
+		return;
+	}
 	const pids = runningDesktopProcessIds();
 	if (pids.length === 0) return;
 	throw new Error(
@@ -585,6 +634,89 @@ function printCaseList(json: boolean): void {
 	}
 }
 
+/** Controller source fingerprint. A live native receipt supplies execution evidence separately. */
+async function retrievalRuntimeFingerprint(
+	reliability = false,
+): Promise<string> {
+	const files = [
+		"../../packages/ui/lib/flowpilot/workspace-ranker.ts",
+		"../../packages/ui/lib/flowpilot/workspace-ranker-baseline.ts",
+		"../../packages/ui/lib/flowpilot/workspace-search.ts",
+		"../../packages/ui/lib/flowpilot/workspace-content.ts",
+		"../../packages/ui/lib/flowpilot/workspace-resource.ts",
+		"../../packages/ui/lib/flowpilot/workspace-symbols.ts",
+		"../../packages/ui/lib/flowpilot/workspace-evaluation.ts",
+		"../../packages/ui/lib/flowpilot/board-edit-job-delivery.ts",
+		"../../packages/ui/lib/schema/copilot/types.ts",
+		"../../packages/ui/lib/flowpilot/generated/workspace-docs.json",
+		"../../packages/ui/components/global-chat/global-tool-bridge.tsx",
+		"../../packages/ui/components/global-chat/flowpilot-atomic-readback.ts",
+		"../../packages/ui/components/global-chat/flowpilot-board-inspection.ts",
+		"../../packages/ui/components/global-chat/flowpilot-widget-receipt.ts",
+		"../../packages/ui/components/global-chat/flowpilot-widget-inspection.ts",
+		"../../packages/ui/components/flowpilot/board-edit-guard.ts",
+		"../../packages/ui/components/global-chat/global-chat-body.tsx",
+		"lib/flowpilot-e2e/retrieval-seed.ts",
+		"lib/flowpilot-e2e/retrieval-comparison.ts",
+		"lib/flowpilot-e2e/retrieval-validation.ts",
+		"lib/flowpilot-e2e/cli-contract.ts",
+		"scripts/flowpilot-e2e.ts",
+		"scripts/flowpilot-e2e-isolation.ts",
+		"src-tauri/src/e2e_isolation.rs",
+		"../../packages/core/editor/src/flow/copilot/tool_spec.rs",
+		"../../packages/core/editor/src/flow/copilot/session.rs",
+		"lib/flowpilot-e2e/cases.ts",
+		"lib/flowpilot-e2e/validation.ts",
+		"lib/flowpilot-e2e/receipt-evidence.ts",
+		"lib/flowpilot-e2e/evaluation-identity.ts",
+		"app/developer/flowpilot-e2e/page.tsx",
+		...(reliability
+			? [
+					"lib/flowpilot-e2e/intake-provisioning.ts",
+					"lib/flowpilot-e2e/intake-runtime.ts",
+					"lib/flowpilot-e2e/intake-runtime-host.tsx",
+					"lib/flowpilot-e2e/intake-rendered-state.ts",
+					"lib/flowpilot-e2e/intake-runtime-contract.ts",
+					"lib/flowpilot-e2e/reliability-metrics.ts",
+					"src-tauri/src/e2e_runtime.rs",
+					"src-tauri/src/application.rs",
+					"src-tauri/src/functions/ai/copilot.rs",
+					"src-tauri/src/functions/ai/copilot/board_commits.rs",
+					"src-tauri/src/functions/ai/copilot/board_jobs.rs",
+					"src-tauri/src/functions/ai/copilot_sdk_tools.rs",
+					"../../packages/core/editor/src/copilot/prompts/frontend.rs",
+					"../../packages/core/editor/src/copilot/prompts/board/profile.rs",
+					"../../packages/core/editor/src/flow/copilot/tools.rs",
+					"../../packages/catalog/std-values/src/utils/types/try_transform.rs",
+					"src-tauri/src/functions/flow/run.rs",
+					"components/tauri-provider/board-state.ts",
+					"components/tauri-provider/event-state.ts",
+					"components/tauri-provider/page-state.ts",
+					"src-tauri/src/functions/a2ui/page.rs",
+					"../../packages/ui/components/global-chat/tools/event-tools.ts",
+					"../../packages/ui/components/a2ui/A2UIRenderer.tsx",
+					"../../packages/ui/components/a2ui/ActionHandler.tsx",
+					"../../packages/ui/components/a2ui/LivePageAgentBridge.tsx",
+					"../../packages/ui/components/a2ui/live-page-registry.ts",
+					"../../packages/ui/components/interfaces/page-interface.tsx",
+					"../../packages/ui/state/backend-state/board-state.ts",
+					"../../packages/core/editor/src/flow/copilot/context.rs",
+					"../../packages/ui/lib/app-build/resource-foundation.ts",
+					"../../packages/ui/lib/app-build/resource-events.ts",
+					"../../packages/ui/lib/app-build/resource-materializer.ts",
+					"../../packages/core/editor/src/flow/ast/lower.rs",
+					"../../packages/core/editor/src/flow/ast/reconcile.rs",
+				]
+			: []),
+	];
+	const hash = createHash("sha256");
+	for (const file of files) {
+		hash.update(file);
+		hash.update(await readFile(resolve(desktopDir, file)));
+	}
+	return hash.digest("hex");
+}
+
 function printDryRun(options: CliOptions): void {
 	const definitions = resolveFlowPilotE2ERunCases({
 		caseIds: options.caseIds.length ? options.caseIds : undefined,
@@ -606,6 +738,7 @@ function printDryRun(options: CliOptions): void {
 			options.minChars,
 		),
 		repeat: options.repeat,
+		retrievalComparison: options.retrievalComparison,
 		failFast: options.failFast,
 		prompts,
 	};
@@ -662,7 +795,11 @@ async function run(options: CliOptions): Promise<number> {
 	const runId = `e2e_${Date.now()}_${randomBytes(8).toString("hex")}`;
 	const cliLock = await acquireCliLock(runId);
 	try {
-		assertNoRunningDesktop();
+		const isolation = options.isolated
+			? await createFlowPilotE2EIsolation(runId)
+			: undefined;
+		await assertNoRunningDesktop(isolation);
+		if (isolation) console.error(`Isolated E2E storage: ${isolation.root}`);
 		prepareWindowsPrerequisites();
 		const nonce = randomBytes(24).toString("hex");
 		let callbackResolve!: (value: FlowPilotE2ECliEnvelope) => void;
@@ -685,8 +822,32 @@ async function run(options: CliOptions): Promise<number> {
 			? validatedFrontendUrl(options.frontendUrl)
 			: new URL("http://localhost:3000");
 		const runnerUrl = new URL("/developer/flowpilot-e2e", frontendBase);
+		const reliability = definitions.some(
+			(item) => item.id === "intake-reliability",
+		);
+		const sourceFingerprint =
+			options.retrievalComparison || reliability
+				? await retrievalRuntimeFingerprint(reliability)
+				: undefined;
+		const runtimeFingerprint = options.retrievalComparison
+			? sourceFingerprint
+			: undefined;
+		const output =
+			options.output ??
+			resolve(
+				tmpdir(),
+				"flow-like-flowpilot-e2e",
+				"artifacts",
+				`${runId}.json`,
+			);
+		await mkdir(dirname(output), { recursive: true });
+		const checkpoints = new Map<string, unknown>();
+		let checkpointWrite: Promise<void> = Promise.resolve();
 		const callbackExpectation = {
 			runId,
+			runtimeSourceFingerprint: reliability ? sourceFingerprint : undefined,
+			retrievalComparison: options.retrievalComparison,
+			retrievalRuntimeFingerprint: runtimeFingerprint,
 			caseIds: definitions.map((item) => item.id),
 			modelKey: options.modelKey,
 			tier: options.tier,
@@ -729,6 +890,40 @@ async function run(options: CliOptions): Promise<number> {
 				}
 				try {
 					const body: unknown = await request.json();
+					if (url.searchParams.get("progress") === "1") {
+						const entry = body as { runId?: unknown; artifact?: unknown };
+						const artifact = entry?.artifact;
+						if (
+							!entry ||
+							entry.runId !== runId ||
+							!isArtifact(artifact) ||
+							!definitions.some((item) => item.id === artifact.caseId)
+						) {
+							return Response.json(
+								{ error: "Invalid progress artifact." },
+								{ status: 400, headers: corsHeaders },
+							);
+						}
+						checkpoints.set(artifact.expectedAppName, artifact);
+						checkpointWrite = checkpointWrite
+							.catch(() => {})
+							.then(async () => {
+								const path = `${output}.progress.json`;
+								await Bun.write(
+									`${path}.tmp`,
+									`${JSON.stringify({ schema: "flowpilot.app-creation-e2e-progress/v1", runId, selection: callbackExpectation, updatedAt: new Date().toISOString(), artifacts: [...checkpoints.values()] }, null, 2)}\n`,
+								);
+								await rename(`${path}.tmp`, path);
+							});
+						await checkpointWrite;
+						console.error(
+							`Completed ${checkpoints.size} run(s): ${artifact.caseId}, ${artifact.report?.passed ? "PASS" : "FAIL"}, ${Math.round(artifact.durationMs / 1000)}s. Checkpoint: ${output}.progress.json`,
+						);
+						return Response.json(
+							{ status: "ok", runId },
+							{ headers: corsHeaders },
+						);
+					}
 					if (!isFlowPilotE2ECliEnvelope(body, runId)) {
 						settleCallbackError(
 							new Error("Invalid FlowPilot E2E result envelope."),
@@ -753,7 +948,9 @@ async function run(options: CliOptions): Promise<number> {
 				} catch (error) {
 					const callbackError =
 						error instanceof Error ? error : new Error(String(error));
-					settleCallbackError(callbackError);
+					// Checkpoints are retried by the page; only final-result errors end a batch.
+					if (url.searchParams.get("progress") !== "1")
+						settleCallbackError(callbackError);
 					return Response.json(
 						{ error: callbackError.message },
 						{ status: 400, headers: corsHeaders },
@@ -773,26 +970,42 @@ async function run(options: CliOptions): Promise<number> {
 		runnerUrl.searchParams.set("model", options.modelKey);
 		runnerUrl.searchParams.set("tier", options.tier);
 		runnerUrl.searchParams.set("repeat", String(options.repeat));
+		if (reliability && sourceFingerprint)
+			runnerUrl.searchParams.set("runtimeSourceFingerprint", sourceFingerprint);
+		if (options.retrievalComparison && runtimeFingerprint) {
+			runnerUrl.searchParams.set("retrievalAB", "1");
+			runnerUrl.searchParams.set(
+				"retrievalRuntimeFingerprint",
+				runtimeFingerprint,
+			);
+		}
 		runnerUrl.searchParams.set("concurrency", String(options.concurrency));
 		if (options.minChars !== undefined) {
 			runnerUrl.searchParams.set("minChars", String(options.minChars));
 		}
 		if (options.failFast) runnerUrl.searchParams.set("failFast", "1");
 
-		const inlineConfig = options.frontendUrl
-			? JSON.stringify({
-					build: {
-						beforeDevCommand: null,
-						devUrl: frontendBase.origin,
-					},
-				})
-			: undefined;
+		const inlineConfig =
+			options.frontendUrl || isolation
+				? JSON.stringify({
+						...(options.frontendUrl
+							? {
+									build: {
+										beforeDevCommand: null,
+										devUrl: frontendBase.origin,
+									},
+								}
+							: {}),
+						...isolation?.config,
+					})
+				: undefined;
 		const config = options.config ?? platformConfig();
 		const env: NodeJS.ProcessEnv = {
 			...process.env,
 			FLOWPILOT_E2E_CLI_RUN_ID: runId,
 			FLOWPILOT_E2E_CLI_URL: runnerUrl.toString(),
 			NEXT_TELEMETRY_DISABLED: "1",
+			...isolation?.env,
 		};
 		// A user-level sccache wrapper cannot open its daemon from Codex's sandbox and
 		// otherwise emits one fallback error per rustc process during the feedback loop.
@@ -807,7 +1020,7 @@ async function run(options: CliOptions): Promise<number> {
 
 		const pinnedModel = flowPilotE2EModel(options.modelKey);
 		console.error(
-			`Starting ${definitions.length * options.repeat} FlowPilot run(s) with ${pinnedModel.provider}/${pinnedModel.model}/${pinnedModel.reasoningEffort}...`,
+			`Starting ${definitions.length * options.repeat * (options.retrievalComparison ? 2 : 1)} FlowPilot run(s) with ${pinnedModel.provider}/${pinnedModel.model}/${pinnedModel.reasoningEffort}...`,
 		);
 		const tauriArgs = ["run", "tauri", "dev", "--no-watch", "--config", config];
 		if (inlineConfig) tauriArgs.push("--config", inlineConfig);
@@ -838,6 +1051,7 @@ async function run(options: CliOptions): Promise<number> {
 			options.timeoutMs ??
 			DEFAULT_STARTUP_TIMEOUT_MS +
 				options.repeat *
+					(options.retrievalComparison ? 2 : 1) *
 					definitions.reduce(
 						(total, caseDefinition) =>
 							total +
@@ -883,15 +1097,6 @@ async function run(options: CliOptions): Promise<number> {
 				childExitPromise,
 			]);
 			if (timeout) clearTimeout(timeout);
-			const output =
-				options.output ??
-				resolve(
-					tmpdir(),
-					"flow-like-flowpilot-e2e",
-					"artifacts",
-					`${runId}.json`,
-				);
-			await mkdir(dirname(output), { recursive: true });
 			await Bun.write(output, `${JSON.stringify(envelope, null, 2)}\n`);
 			printEnvelope(envelope, output, options.json);
 

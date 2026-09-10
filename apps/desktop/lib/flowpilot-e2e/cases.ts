@@ -115,6 +115,105 @@ function requirements(
 
 export const FLOWPILOT_APP_CREATION_CASES = [
 	{
+		id: "intake-reliability",
+		title: "Complete a host-provisioned intake app",
+		description:
+			"Builds an intake page and workflow on verified host resources, then checks actual submissions and persisted rows in an isolated local runtime.",
+		appName: "Reliable Intake",
+		smoke: false,
+		runTimeoutMs: 20 * 60_000,
+		prompt: `Complete the local support intake app identified by the host resource contract. The host has already created the app, its workflow board and the typed intake_tickets table. Use those resources and the reserved page ID exactly.
+
+Build and commit the workflow first, then create the reserved page named intake_console at /intake using the returned submitTicket entry node ID. Include an input with component ID summary_input, label Summary, and value bound to /summary; a submit button with component ID submit_ticket and label Submit ticket; and a text result with component ID queue_result. Bind the button's click to exactly one workflow_event action whose context.nodeId is the persisted submitTicket node ID. The Page bootstrap supplies its compiled pageAction. This page only runs workflows on submission; leave page load, unload, and interval handlers unset.
+
+Use an eventsGeneric submitTicket(payload: Struct) entry. Read the current summary_input value through ui::getElement and ui::getElementValue using the host's exact element selector. Page input values arrive in the runtime element payload; a context.summary binding does not supply a top-level summary event pin. After persisting the ticket, display its assigned queue with ui::setElementText on queue_result.
+
+Implement a reusable routeRecord helper. Match summary text case-insensitively: any of outage, service interruption, or cannot log in routes to cobalt-response with response_minutes 17. Otherwise any of refund, charged twice, or billing routes to amber-review with response_minutes 731. Everything else routes to general-desk with response_minutes 2880. Interruption takes precedence when both groups match. The submitTicket entry must call this helper and insert exactly one row containing summary (string), queue (string), and response_minutes (integer) into intake_tickets for each submission.
+
+The host will register the reserved app Events after it reads back your generated page and submitTicket entry, then test real form submissions. Finish the page and workflow, preserve the reserved IDs, and leave Event registration to the host.`,
+		requirements: requirements({
+			minFlowScriptNonWhitespaceChars: 200,
+			maxFlowScriptNonWhitespaceChars: 10000,
+			minBoards: 1,
+			minTotalNodes: 8,
+			minPages: 1,
+			minTables: 1,
+			minEvents: 2,
+			requiredSemanticTableAliases: ["intake_tickets"],
+			requiredIdReferences: [
+				{ entity: "page", alias: "intake_console", source: "canonical" },
+				{ entity: "table", alias: "intake_tickets", source: "canonical" },
+			],
+			requiredNodeCapabilities: [
+				{ alias: "ticket_input", anyOf: ["events_generic"] },
+				{
+					alias: "persist_ticket",
+					anyOf: [
+						"insert_local_db",
+						"upsert_local_db",
+						"batch_insert_local_db",
+						"batch_upsert_local_db",
+					],
+				},
+				{
+					alias: "render_queue",
+					anyOf: [
+						"a2ui_set_element_text",
+						"a2ui_set_page_state",
+						"a2ui_update_data",
+					],
+				},
+			],
+		}),
+	},
+	{
+		id: "retrieval-intake",
+		title: "Reuse intake routing from an existing app",
+		description:
+			"Retrieves a persisted helper, implements its policy in a new app, and binds an intake page to persisted ticket processing.",
+		appName: "Retrieval Intake",
+		smoke: false,
+		runTimeoutMs: 20 * 60_000,
+		prompt: `Build a local support intake app with a page named exactly "intake_console", a table named exactly "intake_tickets", and an app Event for submitting a ticket. The page must have a summary field and submit action wired to the owning workflow board. Read the existing source app provided in the evaluation context to find its handling policy for service interruption and refund requests. Preserve the exact queue labels, response deadlines in minutes, and precedence rules from that helper; do not invent those values. Implement a reusable helper in the destination app, call it from the intake handler, persist fields named summary (string), queue (string), and response_minutes (integer) to intake_tickets, and show the assigned queue on the page. Keep the source app unchanged. Complete the destination app using a compact implementation.`,
+		requirements: requirements({
+			minFlowScriptNonWhitespaceChars: 200,
+			maxFlowScriptNonWhitespaceChars: 10000,
+			minBoards: 1,
+			minTotalNodes: 8,
+			minPages: 1,
+			minTables: 1,
+			minEvents: 1,
+			requiredSemanticTableAliases: ["intake_tickets"],
+			requiredIdReferences: [
+				{ entity: "page", alias: "intake_console", source: "canonical" },
+				{ entity: "table", alias: "intake_tickets", source: "canonical" },
+			],
+			requiredNodeCapabilities: [
+				{
+					alias: "ticket_input",
+					anyOf: ["events_generic", "events_widget_action"],
+				},
+				{
+					alias: "persist_ticket",
+					anyOf: [
+						"insert_local_db",
+						"upsert_local_db",
+						"batch_insert_local_db",
+						"batch_upsert_local_db",
+					],
+				},
+				{
+					alias: "render_queue",
+					anyOf: [
+						"a2ui_set_element_text",
+						"a2ui_set_page_state",
+						"a2ui_update_data",
+					],
+				},
+			],
+		}),
+	},
+	{
 		id: "simple-agent",
 		title: "Simple research and file-library agent",
 		description:
@@ -751,7 +850,10 @@ export function resolveFlowPilotE2ERunCases(
 	}
 
 	return options.suite === "full"
-		? FLOWPILOT_APP_CREATION_CASES
+		? FLOWPILOT_APP_CREATION_CASES.filter(
+				(item) =>
+					item.id !== "retrieval-intake" && item.id !== "intake-reliability",
+			)
 		: FLOWPILOT_APP_CREATION_SMOKE_CASES;
 }
 
@@ -800,24 +902,33 @@ export function buildCasePrompt(
 		resolvedCase.requirements.minPages > 0 ||
 		resolvedCase.requirements.minWidgets > 0 ||
 		resolvedCase.requirements.minTables > 0;
-	const setupLine = needsScaffolding
-		? "- Finish the UI and data setup, then implement every executable behavior as one compact, valid FlowScript program. Do not substitute command JSON or leave placeholder logic."
-		: "- Skip page, widget, and Data Studio scaffolding entirely: go straight to the workflow board and implement every behavior as one compact, valid FlowScript program. Do not substitute command JSON or leave placeholder logic.";
-	const idsLine = needsScaffolding
-		? "- Choose globally unique page ids and caller-selected new-board ids up front when parallel UI/workflow construction needs a shared contract. For tables, persisted widgets, and actions, use ids returned by their tools and never invent substitutes. Preserve requested entity names exactly so the run can resolve their semantic aliases."
-		: "- Database tables are created automatically by the workflow's first write: use the exact requested table names directly in the insert/upsert calls, and use entity ids that come from real tool results.";
+	const hostProvisioned = caseDefinition.id === "intake-reliability";
+	const setupLine = hostProvisioned
+		? "- Build and commit the workflow first. Read back the exact submitTicket entry node ID, then delegate creation of the reserved page with that node ID and the host's app, board, page and component IDs. The table is ready; no Data Studio delegation is needed. The reserved page does not exist until the UI specialist creates it, so do not request a blank-page read."
+		: needsScaffolding
+			? "- Finish the UI and data setup, then implement every executable behavior as one compact, valid FlowScript program. Do not substitute command JSON or leave placeholder logic."
+			: "- Skip page, widget, and Data Studio scaffolding entirely: go straight to the workflow board and implement every behavior as one compact, valid FlowScript program. Do not substitute command JSON or leave placeholder logic.";
+	const idsLine = hostProvisioned
+		? "- Use the verified app, board, table and reserved page/Event IDs from the host contract. The host owns resource provisioning and Event registration."
+		: needsScaffolding
+			? "- Choose globally unique page ids and caller-selected new-board ids up front when parallel UI/workflow construction needs a shared contract. For tables, persisted widgets, and actions, use ids returned by their tools and never invent substitutes. Preserve requested entity names exactly so the run can resolve their semantic aliases."
+			: "- Database tables are created automatically by the workflow's first write: use the exact requested table names directly in the insert/upsert calls, and use entity ids that come from real tool results.";
 	const completionLine = needsScaffolding
 		? "- Complete the whole app in this run and do not report success from UI/data scaffolding alone."
 		: "- Complete the whole app in this run; the committed FlowScript program is the deliverable.";
-	const verificationLine =
-		"- Do NOT execute the workflow, start chat sessions, or run any other runtime verification in this benchmark: compile/lint/reconcile receipts are the only acceptance evidence. Once the FlowScript is committed and the required events are registered, stop and summarize.";
+	const verificationLine = hostProvisioned
+		? "- Commit and read back your generated workflow and page. The host will register Events and execute the acceptance scenarios after generation ends. Do not start workflow runs during authoring."
+		: "- Do NOT execute the workflow, start chat sessions, or run any other runtime verification in this benchmark: compile/lint/reconcile receipts are the only acceptance evidence. Once the FlowScript is committed and the required events are registered, stop and summarize.";
 	const repairBudgetLine =
 		"- REPAIR BUDGET: after the first board build returns a persisted result, delegate at most TWO follow-up board repairs. If problems remain after the second repair, stop and report them honestly instead of iterating further.";
+	const appLine = hostProvisioned
+		? `- Complete the existing LOCAL app named exactly ${JSON.stringify(expectedAppName)} using the host contract supplied below.`
+		: `- Create the app named exactly ${JSON.stringify(expectedAppName)} as a LOCAL app: pass online: false to create_app. The benchmark must stay hermetic — cloud sync (e.g. remote event registration) is unavailable and would fail the run.`;
 	const contract = `FlowPilot E2E contract:
-- Create the app named exactly ${JSON.stringify(expectedAppName)} as a LOCAL app: pass online: false to create_app. The benchmark must stay hermetic — cloud sync (e.g. remote event registration) is unavailable and would fail the run.
+${appLine}
 ${setupLine}
-- The authored FlowScript must compile, lint, reconcile, and persist. Read back and repair the canonical FlowScript until it has no error diagnostics.
-- Keep working FlowScript as short as practical: no comments, padding, repeated helpers, dead branches, or prose. It must still contain at least ${minChars} non-whitespace characters and no more than ${caseDefinition.requirements.maxFlowScriptNonWhitespaceChars}; the lower threshold is only a truncation sanity check, so never pad to reach it.
+- The authored FlowScript must compile, lint, reconcile, and persist. Read back the stored workflow. Repair only a concrete error diagnostic or a mismatch with the requested behavior or bindings.
+- Keep working FlowScript as short as practical: omit prose comments, Markdown wrappers, padding, and unnecessary helpers from authored code. Preserve machine identity anchors (//@), compiler-selected namespace imports, and canonical graph rendering. Repeated printed expressions can refer to one shared node, and an empty rendered else arm can represent an unconnected branch output. These spellings alone do not justify a repair. The program must contain at least ${minChars} non-whitespace characters and no more than ${caseDefinition.requirements.maxFlowScriptNonWhitespaceChars}; the lower threshold is only a truncation sanity check, so never pad to reach it.
 ${idsLine}
 ${verificationLine}
 ${repairBudgetLine}

@@ -65,6 +65,7 @@ import {
 	deliverBoardEditJobReceipt,
 	isDirectFlowPilotBoardEditJob,
 } from "../../lib/flowpilot/board-edit-job-delivery";
+import { WorkspaceSearchSession } from "../../lib/flowpilot/workspace-search";
 import {
 	type FrontendToolApprovalScope,
 	resolveFrontendToolApprovalScope,
@@ -407,6 +408,7 @@ interface FrontendToolRequest {
 	requestId: string;
 	toolName: string;
 	arguments: Record<string, unknown>;
+	context?: { appId?: string; app_id?: string };
 	approval?: FrontendToolApproval;
 	deadlineAtMs?: number;
 	deadline_at_ms?: number;
@@ -1090,6 +1092,7 @@ function FlowPilotImpl({
 	});
 	const approvedFrontendToolKeysRef = useRef<Set<string>>(new Set());
 	const frontendToolRequestGuardRef = useRef(new FrontendToolRequestGuard());
+	const workspaceSearchRef = useRef(new WorkspaceSearchSession());
 	const frontendToolDialogResolverRef = useRef<((value: any) => void) | null>(
 		null,
 	);
@@ -1310,6 +1313,38 @@ function FlowPilotImpl({
 				lease.assertActive("tool execution");
 				let result: unknown;
 				switch (request.toolName) {
+					case "search_workspace":
+					case "read_symbol": {
+						const workspaceScope = {
+							scopedAppId:
+								request.context?.appId ??
+								request.context?.app_id ??
+								activeAppId,
+							getProfileIdentity: async () =>
+								(await backendContext.userState.getSettingsProfile())
+									.hub_profile.id ?? "",
+							getProfileAppIds: async () => {
+								const profile =
+									await backendContext.userState.getSettingsProfile();
+								return new Set(
+									(profile.hub_profile.apps ?? []).map((entry) => entry.app_id),
+								);
+							},
+						};
+						result =
+							request.toolName === "search_workspace"
+								? await workspaceSearchRef.current.search(
+										backendContext,
+										request.arguments,
+										workspaceScope,
+									)
+								: await workspaceSearchRef.current.readSymbol(
+										backendContext,
+										request.arguments,
+										workspaceScope,
+									);
+						break;
+					}
 					case "database_tool":
 					case "storage_tool":
 					case "ui_inspect":
@@ -1345,6 +1380,8 @@ function FlowPilotImpl({
 		[
 			approvalScopeForRequest,
 			executeRuntimeTool,
+			backendContext,
+			activeAppId,
 			requestFrontendToolApproval,
 			requestFrontendUserInput,
 		],

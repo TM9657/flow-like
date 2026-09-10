@@ -30,7 +30,7 @@ Warm means shared. Pool workers handle many runs over their lifetime, so treat t
 
 **`kubernetes_job` creates Jobs, not results.** The API's dispatcher genuinely creates a Kubernetes Job per run — but the checked-in executor's one-job entrypoint is a placeholder that logs "unimplemented" and exits with status 1. It proves Job creation, not a working execution path. Don't select it with the stock images; use the warm pool, or supply and validate your own compatible one-job runner.
 
-**A queue is half a system.** Pushing a job onto Redis, SQS, or Kafka is not execution. A compatible consumer must claim the message, run it, report state, and apply your retry and dead-letter policy. The Compose runtime consumes the Redis list (`QUEUE_WORKER_ENABLED=true`); the Kubernetes chart's executor pool does not — which is exactly why last lesson told you to set both lanes to `http` for a chart-only deployment.
+**A queue is half a system.** Pushing a job onto Redis, SQS, or Kafka is not execution. A compatible consumer must claim the message, run it, report state, and apply your retry and dead-letter policy. On Compose the queue bridge consumes the Redis list (`QUEUE_WORKER_ENABLED=true`), and the Kubernetes chart deploys the same bridge in `per_run` mode; the chart's shared executor pool does not consume it — which is exactly why last lesson told you that `trusted_shared` requires `http` on both lanes.
 
 **Typos don't fail closed.** Unknown backend values silently fall back to `http`. A misspelled backend name won't error at startup — it will quietly change where your runs execute. Validate the rendered configuration; don't rely on a typo to save you.
 

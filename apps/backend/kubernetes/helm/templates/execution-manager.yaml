@@ -1,7 +1,6 @@
 {{- if eq .Values.execution.isolationMode "per_run" }}
 {{- $digest := required "executionManager.image.digest must pin the manager and gateway image" .Values.executionManager.image.digest }}
-{{- if not (regexMatch "^sha256:[a-f0-9]{64}$" $digest) }}{{ fail "executionManager.image.digest must be sha256:<64 hex characters>" }}{{- end }}
-{{- $image := printf "%s%s@%s" .Values.global.imageRegistry .Values.executionManager.image.repository $digest }}
+{{- $image := include "flow-like.image" (dict "image" .Values.executionManager.image "global" .Values.global) }}
 {{- $sandbox := required "executionManager.sandbox.image must pin the executor image by digest" .Values.executionManager.sandbox.image }}
 {{- $storage := index .Values.storage .Values.storage.provider }}
 {{- if not (regexMatch "^.+@sha256:[a-f0-9]{64}$" $sandbox) }}{{ fail "executionManager.sandbox.image must be repository@sha256:<64 hex characters>" }}{{- end }}

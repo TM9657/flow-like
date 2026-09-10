@@ -312,3 +312,27 @@ seccompProfile:
 {{- end -}}
 {{- required "compiler.allowedStorageHosts must contain storage origins" ($hosts | uniq | join ",") -}}
 {{- end -}}
+
+{{/*
+Image reference for one first-party image map. A digest pins the exact
+manifest and wins over the tag; the registry prefix is applied to both forms.
+*/}}
+{{- define "flow-like.image" -}}
+{{- $digest := default "" .image.digest -}}
+{{- $reference := printf "%s%s" (default "" .global.imageRegistry) .image.repository -}}
+{{- if $digest -}}
+{{- if not (regexMatch "^sha256:[a-f0-9]{64}$" $digest) -}}{{- fail (printf "image digest for %s must be sha256:<64 hex characters>" .image.repository) -}}{{- end -}}
+{{- printf "%s@%s" $reference $digest -}}
+{{- else -}}
+{{- printf "%s:%s" $reference (required (printf "image tag or digest is required for %s" .image.repository) (toString (default "" .image.tag))) -}}
+{{- end -}}
+{{- end -}}
+
+{{/*
+Comma-joined global.imagePullSecrets names for controllers that create Pods.
+*/}}
+{{- define "flow-like.imagePullSecretNames" -}}
+{{- $names := list -}}
+{{- range .Values.global.imagePullSecrets -}}{{- $names = append $names .name -}}{{- end -}}
+{{- join "," $names -}}
+{{- end -}}

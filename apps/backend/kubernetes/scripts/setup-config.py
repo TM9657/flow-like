@@ -90,7 +90,11 @@ def origin(value, name):
     return value.rstrip("/")
 
 
-def generate(namespace, release):
+def pull_secret_command(name, namespace):
+    return f"kubectl create secret docker-registry {name} --namespace {namespace} --docker-server=ghcr.io --docker-username=<github-user> --docker-password=<read:packages token>"
+
+
+def generate(namespace, release, image_pull_secrets=()):
     for name, value in [("namespace", namespace), ("release", release)]:
         if len(value) > 40 or not re.fullmatch(r"[a-z0-9](?:[a-z0-9-]*[a-z0-9])?", value):
             raise ValueError(f"{name} must be a DNS label of at most 40 characters")
@@ -138,6 +142,11 @@ def generate(namespace, release):
         values["redis"] = {"auth": {"existingSecret": secret("redis", {"REDIS_PASSWORD": password, "REDIS_URL": redis_url})}}
     if os.environ.get("OPENROUTER_API_KEY"):
         values["llm"] = {"openrouter": {"existingSecret": secret("openrouter", {"OPENROUTER_API_KEY": required("OPENROUTER_API_KEY"), "OPENROUTER_ENDPOINT": os.environ.get("OPENROUTER_ENDPOINT", "https://openrouter.ai/api")})}}
+    for name in image_pull_secrets:
+        if len(name) > 253 or not re.fullmatch(r"[a-z0-9]([-a-z0-9.]*[a-z0-9])?", name):
+            raise ValueError("image pull secret names must be DNS subdomain names")
+    if image_pull_secrets:
+        values["global"] = {"imagePullSecrets": [{"name": name} for name in image_pull_secrets]}
     return {"apiVersion": "v1", "kind": "List", "items": objects}, values
 
 
@@ -146,12 +155,13 @@ def main():
     parser.add_argument("--namespace", default=os.environ.get("K8S_NAMESPACE", "flow-like"))
     parser.add_argument("--release", default=os.environ.get("RELEASE", "flow-like"))
     parser.add_argument("--output-dir", type=Path, default=Path(__file__).resolve().parents[1] / ".generated")
+    parser.add_argument("--image-pull-secret", action="append", default=[], metavar="NAME", help="reference an existing docker-registry Secret for private packages or mirrors (repeatable)")
     args = parser.parse_args()
     os.umask(0o077)
     paths = [args.output_dir / "secrets.yaml", args.output_dir / "values-generated.yaml"]
     if any(path.exists() for path in paths):
         raise ValueError("Generated files already exist. Reuse them; use a new output directory for a deliberate credential rotation.")
-    objects, values = generate(args.namespace, args.release)
+    objects, values = generate(args.namespace, args.release, args.image_pull_secret)
     args.output_dir.mkdir(parents=True, mode=0o700, exist_ok=True)
     for path, content in zip(paths, [objects, values]):
         with path.open("x", encoding="utf-8") as handle:
@@ -159,6 +169,8 @@ def main():
             handle.write("\n")
     print(f"Wrote private configuration to {args.output_dir}. No cluster resources were changed.")
     print("Review values-generated.yaml, apply secrets.yaml, then deploy with that values file.")
+    for name in args.image_pull_secret:
+        print(f"Create the referenced pull secret yourself (no credentials are stored here): {pull_secret_command(name, args.namespace)}")
 
 
 if __name__ == "__main__":

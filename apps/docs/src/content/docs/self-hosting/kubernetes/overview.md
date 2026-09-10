@@ -10,9 +10,10 @@ execution manager that prepares a clean gVisor sandbox for each execution. Use
 this path for untrusted workflows from multiple tenants. The cluster must provide
 gVisor and Cilium before installation.
 
-The chart lives at `apps/backend/kubernetes/helm/`. Follow
+The chart lives at `apps/backend/kubernetes/helm/` and defaults to the public
+multi-architecture images published to `ghcr.io/rheosoph`. Follow
 [Installation](/self-hosting/kubernetes/installation/) for the generated Secrets,
-image builds and deployment commands. For trusted local development, the
+image selection and deployment commands. For trusted local development, the
 [k3d workflow](/self-hosting/kubernetes/local-development/) uses an explicitly
 selected shared runtime.
 

@@ -86,7 +86,7 @@ services:
           pids: ${REDIS_PIDS:-256}
     pids_limit: ${REDIS_PIDS:-256}
   db-init:
-    image: ${DB_INIT_IMAGE:-flow-like-db-init:latest}
+    image: ${DB_INIT_IMAGE:-ghcr.io/rheosoph/flow-like-docker-compose-db-init:${FLOW_LIKE_IMAGE_TAG:-dev}}
     build:
       context: ../../..
       dockerfile: apps/backend/docker-compose/db-init/Dockerfile
@@ -126,7 +126,7 @@ services:
       - /tmp:size=128m,mode=1777
     pids_limit: ${DB_INIT_PIDS:-256}
   api:
-    image: ${API_IMAGE:-flow-like-api:latest}
+    image: ${API_IMAGE:-ghcr.io/rheosoph/flow-like-docker-compose-api:${FLOW_LIKE_IMAGE_TAG:-dev}}
     configs:
       - source: flowlike_runtime_config
         target: /app/flow-like.config.json
@@ -362,7 +362,7 @@ services:
       - ${BIND_ADDRESS:-127.0.0.1}:${SIGNALING_PORT:-4444}:4444
     pids_limit: ${API_GATEWAY_PIDS:-256}
   runtime:
-    image: ${RUNTIME_IMAGE:-flow-like-runtime:latest}
+    image: ${RUNTIME_IMAGE:-ghcr.io/rheosoph/flow-like-docker-compose-runtime:${FLOW_LIKE_IMAGE_TAG:-dev}}
     scale: ${RUNTIME_REPLICAS:-3}
     build:
       context: ../../..
@@ -443,7 +443,7 @@ services:
     pids_limit: ${RUNTIME_PIDS:-512}
     stop_grace_period: ${EXECUTION_STOP_GRACE_PERIOD:-65m}
   compiler:
-    image: ${COMPILER_IMAGE:-flow-like-compiler:latest}
+    image: ${COMPILER_IMAGE:-ghcr.io/rheosoph/flow-like-docker-compose-compiler:${FLOW_LIKE_IMAGE_TAG:-dev}}
     build:
       context: ../../..
       dockerfile: apps/backend/docker-compose/compiler/Dockerfile
@@ -504,7 +504,7 @@ services:
     pids_limit: ${COMPILER_PIDS:-512}
     stop_grace_period: ${SHUTDOWN_GRACE_PERIOD:-60s}
   sink-services:
-    image: ${SINK_SERVICES_IMAGE:-flow-like-sink-services:latest}
+    image: ${SINK_SERVICES_IMAGE:-ghcr.io/rheosoph/flow-like-docker-compose-sink-services:${FLOW_LIKE_IMAGE_TAG:-dev}}
     build:
       context: ../../..
       dockerfile: apps/backend/docker-compose/sink-services/Dockerfile
@@ -550,7 +550,7 @@ services:
     pids_limit: ${SINK_SERVICES_PIDS:-256}
     stop_grace_period: ${SHUTDOWN_GRACE_PERIOD:-60s}
   signaling:
-    image: ${SIGNALING_IMAGE:-flow-like-signaling:latest}
+    image: ${SIGNALING_IMAGE:-ghcr.io/rheosoph/flow-like-docker-compose-signaling:${FLOW_LIKE_IMAGE_TAG:-dev}}
     build:
       context: ../../..
       dockerfile: apps/backend/docker-compose/signaling/Dockerfile
@@ -606,7 +606,7 @@ services:
     pids_limit: ${SIGNALING_PIDS:-256}
     stop_grace_period: ${SHUTDOWN_GRACE_PERIOD:-60s}
   web:
-    image: ${WEB_IMAGE:-flow-like-web:latest}
+    image: ${WEB_IMAGE:-ghcr.io/rheosoph/flow-like-docker-compose-web:${FLOW_LIKE_IMAGE_TAG:-dev}}
     build:
       context: ../../..
       dockerfile: apps/backend/docker-compose/web/Dockerfile
@@ -984,7 +984,7 @@ services:
     build:
       context: ../../..
       dockerfile: apps/backend/docker-compose/object-store/Dockerfile
-    image: ${OBJECT_STORE_INIT_IMAGE:-flow-like-object-store-init:local}
+    image: ${OBJECT_STORE_INIT_IMAGE:-ghcr.io/rheosoph/flow-like-docker-compose-object-store-init:${FLOW_LIKE_IMAGE_TAG:-dev}}
     environment:
       S3_INTERNAL_ENDPOINT: http://object-store:9000
       AWS_REGION: ${AWS_REGION:-us-east-1}
@@ -1073,7 +1073,7 @@ services:
     ports:
       - ${BIND_ADDRESS:-127.0.0.1}:${S3_PORT:-9000}:9000
   execution-manager:
-    image: ${EXECUTION_MANAGER_IMAGE:-flow-like-execution-manager:local}
+    image: ${EXECUTION_MANAGER_IMAGE:-ghcr.io/rheosoph/flow-like-docker-compose-execution-manager:${FLOW_LIKE_IMAGE_TAG:-dev}}
     build:
       context: ../../..
       dockerfile: apps/backend/docker-compose/execution-manager/Dockerfile
@@ -1149,7 +1149,7 @@ services:
     scale: ${EXECUTION_MANAGER_REPLICAS:-1}
     stop_grace_period: ${EXECUTION_STOP_GRACE_PERIOD:-65m}
   queue-bridge:
-    image: ${RUNTIME_IMAGE:-flow-like-runtime:latest}
+    image: ${RUNTIME_IMAGE:-ghcr.io/rheosoph/flow-like-docker-compose-runtime:${FLOW_LIKE_IMAGE_TAG:-dev}}
     scale: ${QUEUE_BRIDGE_REPLICAS:-1}
     build:
       context: ../../..

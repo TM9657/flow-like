@@ -85,10 +85,35 @@ pub struct BoardEditJob {
     pub token: FlowIrCommitToken,
     pub approval: flow_like::flow::copilot::tool_spec::ResolvedToolApproval,
     pub review: BoardEditJobReview,
+    /// Compact post-apply evidence survives delivery without retaining command vectors.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub persisted_board_fingerprint: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub result: Option<ApplyFlowIrCommitResult>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub error: Option<String>,
+}
+
+impl BoardEditJob {
+    pub(super) fn clear_apply_result(&mut self) {
+        self.result = None;
+        self.persisted_board_fingerprint = None;
+    }
+
+    pub(super) fn record_apply_result(&mut self, mut result: ApplyFlowIrCommitResult) {
+        if self.phase == BoardEditJobPhase::AppliedPendingDelivery && result.status == "applied" {
+            // The board owns the command receipt. Keep only enough evidence to verify an already
+            // delivered job after another presenter wins the delivery lease or the app restarts.
+            self.persisted_board_fingerprint = result.persisted_board_fingerprint;
+            self.result = None;
+        } else {
+            self.persisted_board_fingerprint = None;
+            result.persisted_board_fingerprint = None;
+            result.commands.clear();
+            result.board_commands.clear();
+            self.result = Some(result);
+        }
+    }
 }
 
 #[derive(Clone, Serialize)]
@@ -245,6 +270,12 @@ pub(super) fn board_edit_job_record_from_persisted(
     }
     if job.phase == BoardEditJobPhase::AppliedPendingDelivery {
         job.expires_at_ms = now_ms.saturating_add(BOARD_EDIT_DELIVERY_DISPLAY_TTL_MS);
+    }
+    if !matches!(
+        job.phase,
+        BoardEditJobPhase::AppliedPendingDelivery | BoardEditJobPhase::Applied
+    ) {
+        job.persisted_board_fingerprint = None;
     }
     let age_ms = now_ms.saturating_sub(job.updated_at_ms);
     let touched_at = now
@@ -651,7 +682,7 @@ pub async fn flowpilot_create_board_edit_job(
         // can safely be offered for review again.
         if existing.job.phase == BoardEditJobPhase::Stale {
             existing.job.phase = BoardEditJobPhase::AwaitingApproval;
-            existing.job.result = None;
+            existing.job.clear_apply_result();
             existing.job.error = None;
             existing.job.review = review;
             existing.job.approval = approval;
@@ -717,6 +748,7 @@ pub async fn flowpilot_create_board_edit_job(
         token,
         approval,
         review,
+        persisted_board_fingerprint: None,
         result: None,
         error: None,
     };
@@ -950,7 +982,7 @@ pub async fn flowpilot_resolve_board_edit_job(
             BoardEditJobPhase::Denied
         };
         record.job.updated_at_ms = wall_clock_ms();
-        record.job.result = None;
+        record.job.clear_apply_result();
         record.job.error = None;
         record.touched_at = Instant::now();
         let transition = (
@@ -1002,26 +1034,14 @@ pub async fn flowpilot_resolve_board_edit_job(
         }
         record.job.error = matches!(phase, BoardEditJobPhase::Stale | BoardEditJobPhase::Failed)
             .then(|| result.message.clone());
-        let mut retained_result = result;
-        if phase == BoardEditJobPhase::AppliedPendingDelivery {
-            // The board object already contains the compact, atomic replay receipt. Do not retain
-            // another GenericCommand vector in the registry; delivery obtains it by replaying the
-            // exact token under its native lease.
-            record.job.result = None;
-        } else {
-            // Failed/stale reviews need diagnostics, not a renderer-visible duplicate of the
-            // private exact batch.
-            retained_result.commands.clear();
-            retained_result.board_commands.clear();
-            record.job.result = Some(retained_result);
-        }
+        record.job.record_apply_result(result);
         record.delivery_lease = None;
         if matches!(
             phase,
             BoardEditJobPhase::AppliedPendingDelivery | BoardEditJobPhase::Stale
         ) {
-            // Pending delivery is recoverable from `result` plus the board-embedded receipt; stale
-            // work is terminal. Do not retain a second large copy of the exact batch.
+            // Pending delivery recovers from the board-embedded receipt; stale work is terminal.
+            // Do not retain a second large copy of the exact batch.
             record.board_commands.clear();
         }
         record.touched_at = Instant::now();
@@ -1183,7 +1203,7 @@ pub async fn flowpilot_ack_board_edit_job_delivery(
         record.delivery_lease = None;
         record.job.phase = BoardEditJobPhase::Applied;
         // Delivery has completed; neither replay payload nor pre-apply batch belongs in the
-        // long-lived terminal registry entry.
+        // long-lived terminal registry entry. Keep its small graph fingerprint for later readback.
         record.job.result = None;
         record.board_commands.clear();
         record.job.updated_at_ms = wall_clock_ms();

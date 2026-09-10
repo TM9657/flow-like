@@ -244,6 +244,7 @@ fn actual_executed_receipt_is_bounded_before_remote_persistence() {
         board_commands: Vec::new(),
         diagnostics: Vec::new(),
         final_board_node_count: Some(0),
+        persisted_board_fingerprint: Some("flowpilot-board-v1:test".to_string()),
     };
 
     let error = validate_board_edit_delivery_bounds(&result, true)
@@ -278,6 +279,7 @@ fn aggregate_executed_receipt_must_fit_one_atomic_remote_request() {
         board_commands: Vec::new(),
         diagnostics: Vec::new(),
         final_board_node_count: Some(0),
+        persisted_board_fingerprint: Some("flowpilot-board-v1:test".to_string()),
     };
 
     let error = validate_board_edit_delivery_bounds(&result, true)
@@ -299,11 +301,16 @@ fn durable_receipt_drops_redundant_compiler_commands() {
         }],
         diagnostics: Vec::new(),
         final_board_node_count: Some(0),
+        persisted_board_fingerprint: Some("flowpilot-board-v1:test".to_string()),
     };
 
     let compact = compact_durable_apply_receipt(&result);
     assert!(compact.board_commands.is_empty());
     assert_eq!(compact.commands.len(), result.commands.len());
+    assert_eq!(
+        compact.persisted_board_fingerprint,
+        result.persisted_board_fingerprint
+    );
 }
 
 #[test]
@@ -522,6 +529,7 @@ fn atomic_typed_apply_receipt_replays_exact_success_after_lost_response() {
         board_commands: Vec::new(),
         diagnostics: Vec::new(),
         final_board_node_count: Some(3),
+        persisted_board_fingerprint: Some("flowpilot-board-v1:original".to_string()),
     };
 
     retain_flow_ir_applied_receipt("receipt-app", &token, &result);
@@ -530,6 +538,10 @@ fn atomic_typed_apply_receipt_replays_exact_success_after_lost_response() {
     assert_eq!(replay.status, "applied");
     assert!(replay.replayed);
     assert_eq!(replay.final_board_node_count, Some(3));
+    assert_eq!(
+        replay.persisted_board_fingerprint,
+        result.persisted_board_fingerprint
+    );
     assert!(replay.message.contains("idempotent replay"));
 
     let mut wrong_claim = token.clone();
@@ -540,4 +552,278 @@ fn atomic_typed_apply_receipt_replays_exact_success_after_lost_response() {
         .lock()
         .unwrap_or_else(|poisoned| poisoned.into_inner())
         .remove(&flow_ir_applied_receipt_key("receipt-app", &token));
+}
+
+fn atomic_readback_test_board() -> flow_like::flow::board::Board {
+    use flow_like::flow::{board::Board, node::Node, variable::VariableType};
+    let mut board = Board::new_detached(Some("readback-board".into()), "apps/readback-app".into());
+    let mut event = Node::new("events_simple", "Submit", "", "Events");
+    event.start = Some(true);
+    let event_output = event
+        .add_output_pin("exec", "Exec", "", VariableType::Execution)
+        .id
+        .clone();
+    let mut log = Node::new("log_info", "Log", "", "Log");
+    let log_exec = log
+        .add_input_pin("exec", "Exec", "", VariableType::Execution)
+        .id
+        .clone();
+    let log_message = log
+        .add_input_pin("message", "Message", "", VariableType::String)
+        .id
+        .clone();
+    log.add_output_pin("exec_out", "Exec", "", VariableType::Execution);
+    let mut getter = Node::new("a2ui_get_element_value", "Read input", "", "UI/Elements");
+    getter.set_flowscript_name("ui", "getElementValue");
+    getter
+        .add_input_pin("element_ref", "Element", "", VariableType::String)
+        .default_value = Some(br#""page/input""#.to_vec());
+    let value = getter
+        .add_output_pin("value", "Value", "", VariableType::String)
+        .id
+        .clone();
+    event
+        .pins
+        .get_mut(&event_output)
+        .unwrap()
+        .connected_to
+        .insert(log_exec.clone());
+    log.pins
+        .get_mut(&log_exec)
+        .unwrap()
+        .depends_on
+        .insert(event_output);
+    getter
+        .pins
+        .get_mut(&value)
+        .unwrap()
+        .connected_to
+        .insert(log_message.clone());
+    log.pins
+        .get_mut(&log_message)
+        .unwrap()
+        .depends_on
+        .insert(value);
+    for node in [event, log, getter] {
+        board.nodes.insert(node.id.clone(), node);
+    }
+    board
+}
+
+#[test]
+fn atomic_graph_fingerprint_tracks_getter_identity_hidden_by_flowscript() {
+    use super::super::board_commits::persisted_board_graph_fingerprint;
+    use flow_like::flow::copilot::board_fingerprint;
+    let board = atomic_readback_test_board();
+    let mut changed = board.clone();
+    let getter_id = changed
+        .nodes
+        .values()
+        .find(|node| node.name == "a2ui_get_element_value")
+        .unwrap()
+        .id
+        .clone();
+    let mut getter = changed.nodes.remove(&getter_id).unwrap();
+    getter.id = "replacement-getter".into();
+    let output_id = getter
+        .pins
+        .values()
+        .find(|pin| pin.name == "value")
+        .unwrap()
+        .id
+        .clone();
+    let mut output = getter.pins.remove(&output_id).unwrap();
+    output.id = "replacement-output".into();
+    for node in changed.nodes.values_mut() {
+        for pin in node.pins.values_mut() {
+            if pin.depends_on.remove(&output_id) {
+                pin.depends_on.insert(output.id.clone());
+            }
+        }
+    }
+    getter.pins.insert(output.id.clone(), output);
+    changed.nodes.insert(getter.id.clone(), getter);
+    assert_eq!(board_fingerprint(&board), board_fingerprint(&changed));
+    assert_ne!(
+        persisted_board_graph_fingerprint(&board).unwrap(),
+        persisted_board_graph_fingerprint(&changed).unwrap()
+    );
+}
+
+#[test]
+fn atomic_graph_fingerprint_survives_storage_order_and_internal_receipts() {
+    use super::super::board_commits::persisted_board_graph_fingerprint;
+    use flow_like::flow::board::Board;
+    use flow_like_types::{FromProto, ToProto};
+    let mut board = atomic_readback_test_board();
+    let expected = persisted_board_graph_fingerprint(&board).unwrap();
+    board
+        .insert_internal_ref(
+            "__flow_like_internal_v1/flowpilot-apply-receipt/example",
+            "opaque receipt",
+        )
+        .unwrap();
+    board.updated_at = std::time::UNIX_EPOCH;
+    board.hash = Some(42);
+    assert_eq!(persisted_board_graph_fingerprint(&board).unwrap(), expected);
+    for _ in 0..8 {
+        let loaded = Board::from_proto(board.to_proto());
+        assert_eq!(
+            persisted_board_graph_fingerprint(&loaded).unwrap(),
+            expected
+        );
+    }
+    board
+        .refs
+        .insert("user-schema".into(), "{\"type\":\"string\"}".into());
+    assert_ne!(persisted_board_graph_fingerprint(&board).unwrap(), expected);
+}
+
+#[tokio::test]
+async fn atomic_graph_readback_reads_saved_object_and_rejects_later_edits() {
+    use super::super::board_commits::persisted_board_graph_fingerprint;
+    use flow_like::flow::board::Board;
+    use flow_like::flow_like_storage::object_store::memory::InMemory;
+    use flow_like_types::FromProto;
+    let store = std::sync::Arc::new(InMemory::new());
+    let mut board = atomic_readback_test_board();
+    let expected = persisted_board_graph_fingerprint(&board).unwrap();
+    board.save(Some(store.clone())).await.unwrap();
+    board.description = "Unsaved editor edit".into();
+    let saved = Board::from_proto(
+        Board::load_proto(store.clone(), &board.board_dir, &board.id, None)
+            .await
+            .unwrap(),
+    );
+    assert_eq!(persisted_board_graph_fingerprint(&saved).unwrap(), expected);
+    assert_ne!(persisted_board_graph_fingerprint(&board).unwrap(), expected);
+    board.save(Some(store.clone())).await.unwrap();
+    let later = Board::from_proto(
+        Board::load_proto(store, &board.board_dir, &board.id, None)
+            .await
+            .unwrap(),
+    );
+    assert_ne!(persisted_board_graph_fingerprint(&later).unwrap(), expected);
+}
+
+#[test]
+fn legacy_atomic_receipt_deserializes_without_claiming_graph_verification() {
+    let legacy = serde_json::json!({
+        "status": "applied", "message": "old receipt", "commands": [],
+        "board_commands": [], "diagnostics": [], "final_board_node_count": 0,
+    });
+    let receipt: ApplyFlowIrCommitResult = serde_json::from_value(legacy).unwrap();
+    assert!(receipt.persisted_board_fingerprint.is_none());
+}
+
+fn compact_job_test_receipt() -> ApplyFlowIrCommitResult {
+    let mut receipt = ApplyFlowIrCommitResult::empty("applied", "", "Applied exact batch.");
+    receipt.persisted_board_fingerprint = Some(format!("flowpilot-board-v1:{}", "a".repeat(64)));
+    receipt.commands.push(GenericCommand::CopyPaste(
+        flow_like::flow::board::commands::nodes::copy_paste::CopyPasteCommand::new(
+            Vec::new(),
+            Vec::new(),
+            Vec::new(),
+            (0.0, 0.0, 0.0),
+        ),
+    ));
+    receipt.board_commands.push(BoardCommand::RemoveNode {
+        node_id: "old".to_string(),
+        summary: None,
+    });
+    receipt
+}
+
+#[test]
+fn applied_job_retains_compact_proof_without_a_command_receipt() {
+    let mut record = board_edit_job_test_record(
+        "compact-proof",
+        BoardEditJobPhase::AppliedPendingDelivery,
+        Instant::now(),
+    );
+    let receipt = compact_job_test_receipt();
+    let expected = receipt.persisted_board_fingerprint.clone();
+    record.job.record_apply_result(receipt);
+    assert!(record.job.result.is_none());
+    assert_eq!(record.job.persisted_board_fingerprint, expected);
+    record.board_commands.clear();
+
+    for phase in [
+        BoardEditJobPhase::AppliedPendingDelivery,
+        BoardEditJobPhase::Applied,
+    ] {
+        record.job.phase = phase;
+        let persisted = PersistedBoardEditJobEntry::Current(PersistedBoardEditJobRecord {
+            job: record.job.clone(),
+            board_commands: Vec::new(),
+            replacement_mode: false,
+        });
+        let value = serde_json::to_value(&persisted).unwrap();
+        assert!(value["job"].get("result").is_none());
+        assert_eq!(
+            value["job"]["persistedBoardFingerprint"],
+            expected.as_deref().unwrap()
+        );
+        let recovered =
+            board_edit_job_record_from_persisted(serde_json::from_value(value.clone()).unwrap())
+                .unwrap();
+        assert_eq!(recovered.job.phase, phase);
+        assert_eq!(recovered.job.persisted_board_fingerprint, expected);
+        assert!(recovered.job.result.is_none());
+        assert!(recovered.board_commands.is_empty());
+
+        let mut legacy = value;
+        legacy["job"]
+            .as_object_mut()
+            .unwrap()
+            .remove("persistedBoardFingerprint");
+        let recovered =
+            board_edit_job_record_from_persisted(serde_json::from_value(legacy).unwrap()).unwrap();
+        assert!(recovered.job.persisted_board_fingerprint.is_none());
+    }
+}
+
+#[test]
+fn job_attempt_reset_and_failed_apply_discard_previous_proof() {
+    let mut job = board_edit_job_test_record(
+        "retry-proof",
+        BoardEditJobPhase::AppliedPendingDelivery,
+        Instant::now(),
+    )
+    .job;
+    job.record_apply_result(compact_job_test_receipt());
+    job.clear_apply_result();
+    assert!(job.persisted_board_fingerprint.is_none());
+    assert!(job.result.is_none());
+
+    job.record_apply_result(compact_job_test_receipt());
+    job.phase = BoardEditJobPhase::Failed;
+    let mut failed = compact_job_test_receipt();
+    failed.status = "error".to_string();
+    job.record_apply_result(failed);
+    assert!(job.persisted_board_fingerprint.is_none());
+    let result = job.result.unwrap();
+    assert!(result.persisted_board_fingerprint.is_none());
+    assert!(result.commands.is_empty());
+    assert!(result.board_commands.is_empty());
+}
+
+#[test]
+fn restarted_incomplete_job_cannot_keep_post_apply_proof() {
+    let mut record = board_edit_job_test_record(
+        "interrupted-proof",
+        BoardEditJobPhase::Applying,
+        Instant::now(),
+    );
+    record.job.persisted_board_fingerprint = compact_job_test_receipt().persisted_board_fingerprint;
+    let recovered = board_edit_job_record_from_persisted(PersistedBoardEditJobEntry::Current(
+        PersistedBoardEditJobRecord {
+            job: record.job,
+            board_commands: record.board_commands,
+            replacement_mode: false,
+        },
+    ))
+    .unwrap();
+    assert_eq!(recovered.job.phase, BoardEditJobPhase::Failed);
+    assert!(recovered.job.persisted_board_fingerprint.is_none());
 }

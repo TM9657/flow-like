@@ -117,6 +117,29 @@ beforeEach(() => {
 });
 
 describe("event snapshot freshness", () => {
+	test("offline upserts preserve reserved Event IDs on creation and retry", async () => {
+		const backend = fakeBackend({ localOnly: true });
+		const state = new EventState(backend as never);
+		const event = {
+			...remoteEvent(),
+			id: "fp_event_reserved",
+			board_id: "",
+			active: false,
+		};
+		const saved = new Map<string, IEvent>();
+		mocks.invoke.mockImplementation(async (command, args) => {
+			expect(command).toBe("upsert_event");
+			const id = args.enforceId ? args.event.id : `replacement-${saved.size}`;
+			const persisted = { ...args.event, id };
+			saved.set(id, persisted);
+			return persisted;
+		});
+		expect((await state.upsertEvent(APP, event)).id).toBe(event.id);
+		expect((await state.upsertEvent(APP, event)).id).toBe(event.id);
+		expect(saved.size).toBe(1);
+		expect(mocks.fetcher).not.toHaveBeenCalled();
+	});
+
 	test("keeps a strictly newer local Hybrid event", () => {
 		const local = {
 			...remoteEvent(),

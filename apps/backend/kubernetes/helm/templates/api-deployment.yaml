@@ -50,7 +50,7 @@ spec:
       initContainers:
       {{- if .Values.database.migration.enabled }}
         - name: wait-for-database-migration
-          image: "{{ .Values.global.imageRegistry }}{{ .Values.database.migration.image.repository }}:{{ .Values.database.migration.image.tag | default "dev" }}"
+          image: {{ include "flow-like.image" (dict "image" .Values.database.migration.image "global" .Values.global) | quote }}
           imagePullPolicy: {{ .Values.database.migration.image.pullPolicy | default "Always" }}
           command: ["bun", "/usr/local/bin/wait-for-migration.ts"]
           env:
@@ -74,7 +74,7 @@ spec:
       {{- end }}
       {{- if .Values.rustfs.enabled }}
         - name: wait-for-object-store
-          image: "{{ .Values.global.imageRegistry }}{{ .Values.database.migration.image.repository }}:{{ .Values.database.migration.image.tag | default "dev" }}"
+          image: {{ include "flow-like.image" (dict "image" .Values.database.migration.image "global" .Values.global) | quote }}
           imagePullPolicy: {{ .Values.database.migration.image.pullPolicy }}
           command: ["bun", "/usr/local/bin/wait-for-migration.ts"]
           env:
@@ -99,7 +99,7 @@ spec:
       {{- end }}
       containers:
         - name: api
-          image: "{{ .Values.global.imageRegistry }}{{ .Values.api.image.repository }}:{{ .Values.api.image.tag }}"
+          image: {{ include "flow-like.image" (dict "image" .Values.api.image "global" .Values.global) | quote }}
           imagePullPolicy: {{ .Values.api.image.pullPolicy }}
           ports:
             - name: http
@@ -146,8 +146,14 @@ spec:
               valueFrom:
                 fieldRef:
                   fieldPath: metadata.namespace
+            - name: K8S_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
             - name: K8S_EXECUTOR_IMAGE
-              value: "{{ .Values.global.imageRegistry }}{{ .Values.executor.image.repository }}:{{ .Values.executor.image.tag }}"
+              value: {{ include "flow-like.image" (dict "image" .Values.executor.image "global" .Values.global) | quote }}
+            - name: K8S_IMAGE_PULL_SECRETS
+              value: {{ include "flow-like.imagePullSecretNames" . | quote }}
             - name: K8S_EXECUTOR_RUNTIME_CLASS
               value: {{ default .Values.runtimeClass.name .Values.executor.runtimeClass | quote }}
             - name: EXECUTION_ISOLATION_MODE
@@ -316,6 +322,20 @@ spec:
             - name: HOSTED_VERTEX_ENDPOINT
               value: {{ required "llm.vertex.endpoint is required when llm.vertex.apiKey is set" .Values.llm.vertex.endpoint | quote }}
             {{- end }}
+            {{- end }}
+            {{- if .Values.sinkServices.enabled }}
+            - name: SINK_SCHEDULER_PROVIDER
+              value: kubernetes
+            - name: K8S_CONFIGMAP_NAME
+              value: {{ printf "%s-sink-config" (include "flow-like.fullname" .) | quote }}
+            - name: K8S_SECRET_NAME
+              value: {{ printf "%s-sink-secrets" (include "flow-like.fullname" .) | quote }}
+            - name: SINK_TRIGGER_IMAGE
+              value: {{ include "flow-like.image" (dict "image" .Values.sinkServices.image "global" .Values.global) | quote }}
+            - name: IMAGE_PULL_POLICY
+              value: {{ .Values.sinkServices.image.pullPolicy | quote }}
+            - name: SINK_IMAGE_PULL_SECRETS
+              value: {{ include "flow-like.imagePullSecretNames" . | quote }}
             {{- end }}
             {{- if .Values.compiler.enabled }}
             - name: COMPILATION_BACKEND

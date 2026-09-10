@@ -82,6 +82,7 @@ import {
 } from "@flow-like/flow-like-ui/lib/flowscript-apply-failure";
 import { normalizeBoardVersion } from "@flow-like/flow-like-ui/lib/schema/flow/board-version";
 import type { IElementDemand } from "@flow-like/flow-like-ui/lib/schema/flow/element-demand";
+import type { IFlowIrCommitReadback } from "@flow-like/flow-like-ui/state/backend-state/board-state";
 import { createId } from "@paralleldrive/cuid2";
 import { getVersion } from "@tauri-apps/api/app";
 import { Channel, invoke } from "@tauri-apps/api/core";
@@ -3910,6 +3911,13 @@ export class BoardState implements IBoardState {
 			}
 			return { ...result, delivery_complete: true };
 		});
+	}
+
+	async readFlowIrCommitBoard(appId: string, boardId: string) {
+		return await invoke<IFlowIrCommitReadback>(
+			"flowpilot_read_flow_ir_commit_board",
+			{ appId, boardId },
+		);
 	}
 
 	async createBoardEditJob(

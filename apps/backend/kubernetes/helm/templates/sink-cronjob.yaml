@@ -39,7 +39,7 @@ spec:
           restartPolicy: Never
           containers:
             - name: sink-trigger
-              image: {{ .Values.sinkServices.image.repository }}:{{ .Values.sinkServices.image.tag }}
+              image: {{ include "flow-like.image" (dict "image" .Values.sinkServices.image "global" .Values.global) }}
               imagePullPolicy: {{ .Values.sinkServices.image.pullPolicy }}
               env:
                 - name: EVENT_ID

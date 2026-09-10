@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::flow::board::{Board, LayerType};
 use crate::flow::node::Node;
-use crate::flow::pin::PinType;
+use crate::flow::pin::{Pin, PinType};
 use flow_like_types::Result;
 
 /// Compact node representation for context
@@ -206,7 +206,15 @@ fn build_layer_contexts(board: &Board) -> Vec<LayerContext> {
                 }
                 .to_string(),
                 parent_id: layer.parent_id.clone(),
-                node_ids: layer.nodes.keys().cloned().collect(),
+                node_ids: board
+                    .nodes
+                    .values()
+                    .filter(|node| node.layer.as_deref() == Some(layer.id.as_str()))
+                    .map(|node| node.id.clone())
+                    .chain(layer.nodes.keys().cloned())
+                    .collect::<std::collections::BTreeSet<_>>()
+                    .into_iter()
+                    .collect(),
                 position: (x, y),
                 inputs,
                 outputs,
@@ -232,7 +240,7 @@ pub fn prepare_layout_context(board: &Board, selected_node_ids: &[String]) -> Bo
                 NodeLayoutContext {
                     position: node_position(node),
                     estimated_size: estimate_node_size(node),
-                    layer_id: layer_id.map(str::to_string),
+                    layer_id: node.layer.as_deref().or(layer_id).map(str::to_string),
                 },
             );
         }
@@ -252,23 +260,6 @@ pub fn prepare_layout_context(board: &Board, selected_node_ids: &[String]) -> Bo
 /// Prepare graph context from a board
 pub fn prepare_context(board: &Board, selected_node_ids: &[String]) -> Result<GraphContext> {
     let mut node_contexts = Vec::new();
-    let mut pin_to_node_map = std::collections::HashMap::new();
-
-    // Helper to process nodes
-    let mut process_nodes = |nodes: &std::collections::HashMap<String, Node>| {
-        for node in nodes.values() {
-            for pin_id in node.pins.keys() {
-                pin_to_node_map.insert(pin_id.clone(), node.id.clone());
-            }
-        }
-    };
-
-    // Build pin to node map for root nodes
-    process_nodes(&board.nodes);
-    // Build pin to node map for layer nodes
-    for layer in board.layers.values() {
-        process_nodes(&layer.nodes);
-    }
 
     // Helper to create context
     let mut create_node_contexts = |nodes: &std::collections::HashMap<String, Node>| {
@@ -320,33 +311,7 @@ pub fn prepare_context(board: &Board, selected_node_ids: &[String]) -> Result<Gr
         create_node_contexts(&layer.nodes);
     }
 
-    let mut edge_contexts = Vec::new();
-
-    let mut process_edges = |nodes: &std::collections::HashMap<String, Node>| {
-        for node in nodes.values() {
-            for pin in node.pins.values() {
-                // We only care about outgoing connections to avoid duplicates
-                if pin.pin_type == PinType::Output {
-                    for connected_pin_id in &pin.connected_to {
-                        if let Some(target_node_id) = pin_to_node_map.get(connected_pin_id) {
-                            let target_pin = board.get_pin_by_id(connected_pin_id);
-                            edge_contexts.push(EdgeContext {
-                                from_node_id: node.id.clone(),
-                                from_pin_name: pin.name.clone(),
-                                to_node_id: target_node_id.clone(),
-                                to_pin_name: target_pin.map(|p| p.name.clone()).unwrap_or_default(),
-                            });
-                        }
-                    }
-                }
-            }
-        }
-    };
-
-    process_edges(&board.nodes);
-    for layer in board.layers.values() {
-        process_edges(&layer.nodes);
-    }
+    let edge_contexts = prepare_edge_contexts(board);
 
     let layer_contexts = build_layer_contexts(board);
 
@@ -380,11 +345,67 @@ pub fn prepare_context(board: &Board, selected_node_ids: &[String]) -> Result<Gr
     })
 }
 
+fn prepare_edge_contexts(board: &Board) -> Vec<EdgeContext> {
+    let mut endpoints: std::collections::HashMap<&str, (&str, &Pin)> =
+        std::collections::HashMap::new();
+    for node in board
+        .nodes
+        .values()
+        .chain(board.layers.values().flat_map(|layer| layer.nodes.values()))
+    {
+        for pin in node.pins.values() {
+            endpoints.insert(&pin.id, (&node.id, pin));
+        }
+    }
+    for layer in board.layers.values() {
+        for pin in layer.pins.values() {
+            endpoints.insert(&pin.id, (&layer.id, pin));
+        }
+    }
+
+    // Function inputs feed body nodes and function outputs receive their returns. Their stored
+    // directions describe the boundary, so filtering sources to Output pins loses valid edges.
+    // Both persisted edge halves are read, as in FlowScript lowering. Unknown endpoints are omitted.
+    let mut connections = std::collections::BTreeSet::new();
+    for (pin_id, (_, pin)) in &endpoints {
+        for target in &pin.connected_to {
+            if endpoints.contains_key(target.as_str()) {
+                connections.insert((*pin_id, target.as_str()));
+            }
+        }
+        for source in &pin.depends_on {
+            if endpoints.contains_key(source.as_str()) {
+                connections.insert((source.as_str(), *pin_id));
+            }
+        }
+    }
+    connections
+        .into_iter()
+        .map(|(from, to)| {
+            let (from_owner, from_pin) = endpoints[from];
+            let (to_owner, to_pin) = endpoints[to];
+            EdgeContext {
+                from_node_id: from_owner.to_string(),
+                from_pin_name: from_pin.name.clone(),
+                to_node_id: to_owner.to_string(),
+                to_pin_name: to_pin.name.clone(),
+            }
+        })
+        .collect()
+}
+
 #[cfg(test)]
 mod tests {
+    use std::sync::Arc;
+
     use super::*;
+    use crate::flow::ast::apply_flowscript_to_board;
     use crate::flow::board::{Layer, LayerCache, LayerCacheScope, LayerType};
+    use crate::flow::copilot::tools::{build_node_details_output, build_unconfigured_nodes_output};
+    use crate::flow::pin::ValueType;
     use crate::flow::variable::VariableType;
+    use crate::state::{FlowLikeConfig, FlowLikeState};
+    use crate::utils::http::HTTPClient;
     use flow_like_storage::Path;
 
     fn layout_fixture_board() -> (Board, String, String, String) {
@@ -441,6 +462,169 @@ mod tests {
         assert!(fetch_json.get("v").is_none(), "no defaults in layout");
         assert!(json.get("edges").is_none(), "no edges in layout");
         assert!(json.get("variables").is_none(), "no variables in layout");
+    }
+
+    #[tokio::test]
+    async fn compiled_helper_parameter_remains_connected_in_inspection_context() {
+        let mut board = Board::new_detached(Some("helper-context".to_string()), Path::default());
+        let mut contains = Node::new("string_contains_any", "Contains Any", "", "Utils/String");
+        contains.set_flowscript_name("string", "containsAny");
+        contains.set_receiver("string");
+        contains.add_input_pin("string", "String", "", VariableType::String);
+        contains
+            .add_input_pin("substrings", "Substrings", "", VariableType::String)
+            .set_value_type(ValueType::Array);
+        contains.add_input_pin("ignore_case", "Ignore Case", "", VariableType::Boolean);
+        contains.add_output_pin("contains", "Contains", "", VariableType::Boolean);
+        contains.add_output_pin("matched", "Matched", "", VariableType::String);
+        let state = Arc::new(FlowLikeState::new(
+            FlowLikeConfig::new(),
+            HTTPClient::new_without_refetch(),
+        ));
+        let result = apply_flowscript_to_board(
+            &mut board,
+            r#"function routeRecord(summary: string): (contains: bool) {
+    return summary.containsAny({ substrings: ["outage", "service interruption", "cannot log in"], ignoreCase: true }).contains
+}
+"#,
+            &[contains],
+            state,
+            None,
+            false,
+        )
+        .await
+        .expect("helper source applies");
+        assert!(result.diagnostics.is_empty(), "{:?}", result.diagnostics);
+        let layer = board.layers.values().next().expect("helper layer");
+        let layer_id = layer.id.clone();
+        let parameter_id = layer
+            .pins
+            .values()
+            .find(|pin| pin.name == "summary")
+            .expect("summary parameter")
+            .id
+            .clone();
+        let body = board
+            .nodes
+            .values()
+            .find(|node| node.name == "string_contains_any")
+            .expect("compiled Contains Any");
+        let body_id = body.id.clone();
+        let input_id = body
+            .pins
+            .values()
+            .find(|pin| pin.name == "string")
+            .expect("receiver input")
+            .id
+            .clone();
+        assert!(body.pins[&input_id].depends_on.contains(&parameter_id));
+        assert!(layer.pins[&parameter_id].connected_to.contains(&input_id));
+
+        let context = prepare_context(&board, &[]).expect("inspection context");
+        assert_eq!(context.layers[0].node_ids, vec![body_id.clone()]);
+        assert_eq!(
+            prepare_layout_context(&board, &[]).nodes[&body_id].layer_id,
+            Some(layer_id.clone())
+        );
+        let details: serde_json::Value =
+            serde_json::from_str(&build_node_details_output(&body_id, &context)).unwrap();
+        assert_eq!(
+            details["incoming_connections"],
+            serde_json::json!([{
+                "from_node": layer_id,
+                "from_pin": "summary",
+                "to_pin": "string"
+            }])
+        );
+        assert!(build_unconfigured_nodes_output(&context).starts_with("All nodes are configured"));
+        assert!(context.edges.iter().any(|edge| {
+            edge.from_node_id == body_id
+                && edge.from_pin_name == "contains"
+                && edge.to_node_id == layer_id
+                && edge.to_pin_name == "contains"
+        }));
+
+        board
+            .layers
+            .get_mut(&layer_id)
+            .unwrap()
+            .pins
+            .get_mut(&parameter_id)
+            .unwrap()
+            .connected_to
+            .remove(&input_id);
+        board
+            .nodes
+            .get_mut(&body_id)
+            .unwrap()
+            .pins
+            .get_mut(&input_id)
+            .unwrap()
+            .depends_on
+            .remove(&parameter_id);
+        let disconnected = prepare_context(&board, &[]).unwrap();
+        let missing: serde_json::Value =
+            serde_json::from_str(&build_unconfigured_nodes_output(&disconnected)).unwrap();
+        assert_eq!(missing[0]["node_id"], body_id);
+        assert_eq!(
+            missing[0]["missing_inputs"],
+            serde_json::json!([{"pin": "string", "type": "String"}])
+        );
+    }
+
+    #[test]
+    fn inspection_edges_preserve_legacy_boundaries_without_duplicates_or_dangling_sources() {
+        let mut board = Board::new_detached(Some("legacy-context".to_string()), Path::default());
+        let mut layer = Layer::new(
+            "helper".to_string(),
+            "helper".to_string(),
+            LayerType::Function,
+        );
+        let mut boundary = Node::new("boundary", "Boundary", "", "test");
+        let mut parameter = boundary
+            .add_input_pin("summary", "Summary", "", VariableType::String)
+            .clone();
+        let mut body = Node::new("string_contains_any", "Contains Any", "", "Utils/String");
+        let receiver = body.add_input_pin("string", "String", "", VariableType::String);
+        receiver.depends_on.insert(parameter.id.clone());
+        parameter.connected_to.insert(receiver.id.clone());
+        let body_id = body.id.clone();
+        let parameter_id = parameter.id.clone();
+        layer.nodes.insert(body.id.clone(), body);
+        layer.pins.insert(parameter.id.clone(), parameter);
+        board.layers.insert(layer.id.clone(), layer);
+        let context = prepare_context(&board, &[]).unwrap();
+        assert_eq!(
+            context.edges.len(),
+            1,
+            "symmetric wiring must produce one edge"
+        );
+        assert_eq!(context.edges[0].from_node_id, "helper");
+        assert_eq!(context.edges[0].to_node_id, body_id);
+
+        board
+            .layers
+            .get_mut("helper")
+            .unwrap()
+            .pins
+            .get_mut(&parameter_id)
+            .unwrap()
+            .connected_to
+            .clear();
+        assert_eq!(
+            prepare_context(&board, &[]).unwrap().edges,
+            context.edges,
+            "reader-side wiring remains visible as it does in FlowScript lowering"
+        );
+        board
+            .layers
+            .get_mut("helper")
+            .unwrap()
+            .pins
+            .remove(&parameter_id);
+        let dangling = prepare_context(&board, &[]).unwrap();
+        assert!(dangling.edges.is_empty());
+        assert!(build_unconfigured_nodes_output(&dangling).contains("missing_inputs"));
     }
 
     #[test]

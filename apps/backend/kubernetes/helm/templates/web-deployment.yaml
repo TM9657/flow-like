@@ -28,7 +28,7 @@ spec:
       {{- end }}
       containers:
         - name: web
-          image: "{{ .Values.global.imageRegistry }}{{ .Values.web.image.repository }}:{{ .Values.web.image.tag }}"
+          image: {{ include "flow-like.image" (dict "image" .Values.web.image "global" .Values.global) | quote }}
           imagePullPolicy: {{ .Values.web.image.pullPolicy }}
           env:
             - name: FLOW_LIKE_WEB_API_URL

@@ -2,18 +2,19 @@ Go-live review is Thursday. Priya taped three questions to your monitor: "What h
 
 ## 1 · Upgrades without surprises
 
-On the Compose box: `git pull`, then read before you rebuild — the diff of `.env.example`, the hub configuration template, and the release notes. Then:
+On the Compose box: `git pull`, then read before you touch anything — the diff of `.env.example` (merge new lines such as `FLOW_LIKE_IMAGE_TAG` into your protected `.env`), the hub configuration template, and the release notes. Then pin the reviewed release and let the scripts refuse anything inconsistent:
 
 ```bash
-docker compose config --quiet
-docker compose up -d --build --remove-orphans
+python3 scripts/pull-images.py --tag 1.4.0
+python3 scripts/preflight.py
+python3 scripts/up.py
 ```
 
-Schema changes flow through the normal `db-init` dependency; never edit the database schema by hand. On the cluster, `helm upgrade --install` reconciles the release and re-runs the migration Job — the one that executes `prisma db push --accept-data-loss`. Decide once, in writing, whether that runs automatically on upgrade or your DBA runs an approved process with `database.migration.enabled: false`.
+`pull-images.py` moves all nine `*_IMAGE` pins and both sandbox pins to the new digests together, so the queue bridge, manager, and sandboxes never run mixed builds — preflight rejects a `SANDBOX_IMAGE` that drifts from `RUNTIME_IMAGE`. Installations that build locally run `prepare-images.py` and `up.py --build` instead; there is no `--build` shortcut for digest-pinned images. Schema changes flow through the normal `db-init` dependency; never edit the database schema by hand. On the cluster, `resolve-images.py --tag 1.4.0` followed by `deploy.sh` reconciles the release with the new digests and re-runs the migration Job — the one that executes `prisma db push --accept-data-loss`. Decide once, in writing, whether that runs automatically on upgrade or your DBA runs an approved process with `database.migration.enabled: false`.
 
 ## 2 · Question two: backups
 
-Know what's actually yours. `docker compose down` stops containers and keeps named volumes. `docker compose down -v` deletes the Compose-managed PostgreSQL, Redis, Prometheus, Grafana, and Tempo volumes — so back up the database and any monitoring history first. What `-v` never touches: your external object storage. That's the good news and the bad news — deleting the deployment won't destroy your buckets, but nothing in the stack backs them up either. Buckets and the external production database live on your cloud provider's backup schedule, not Compose's.
+Know what's actually yours. `docker compose down` stops containers and keeps named volumes. `docker compose down -v` deletes the Compose-managed PostgreSQL, Redis, bundled RustFS, execution-manager state, Prometheus, Grafana, and Tempo volumes — so back up the database, the bundled object data, and any monitoring history first. What `-v` never touches: external object storage. That's the good news and the bad news — deleting the deployment won't destroy your buckets, but nothing in the stack backs them up either. Buckets and the external production database live on your cloud provider's backup schedule, not Compose's.
 
 ## 3 · Question one: keys and secrets
 
@@ -45,6 +46,6 @@ That's an app's Visibility Status panel: currently Prototype ("development phase
 
 **Recap**
 
-- Upgrades: read the template diffs, rebuild with `--remove-orphans`, and own the migration Job's data-loss policy.
+- Upgrades: read the template diffs, pin the release with `pull-images.py` or `resolve-images.py`, and own the migration Job's data-loss policy.
 - `down -v` deletes local volumes but never touches buckets — external storage and databases need their own backup schedule.
 - Key rotation restarts three services and kills old tokens; alerts page nobody until an Alertmanager exists.

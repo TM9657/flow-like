@@ -79,6 +79,41 @@ import {
 	resolveFlowPilotE2ETier,
 } from "../../../lib/flowpilot-e2e";
 
+import {
+	type WorkspaceEvaluation,
+	registerWorkspaceBuildEvaluation,
+	registerWorkspaceEvaluation,
+	unregisterWorkspaceEvaluation,
+} from "@flow-like/flow-like-ui/lib/flowpilot/workspace-evaluation";
+import {
+	type RetrievalComparisonContext,
+	retrievalPairOrder,
+} from "../../../lib/flowpilot-e2e/retrieval-comparison";
+import {
+	createRetrievalSeed,
+	readRetrievalSeedHash,
+} from "../../../lib/flowpilot-e2e/retrieval-seed";
+
+import {
+	type IntakeReliabilitySetup,
+	finalizeIntakeReliabilityEvents,
+	provisionIntakeReliabilityApp,
+} from "../../../lib/flowpilot-e2e/intake-provisioning";
+import {
+	assertIntakeRuntimeAvailable,
+	runIntakeRuntimeAcceptance,
+} from "../../../lib/flowpilot-e2e/intake-runtime";
+import {
+	IntakeRuntimePageHost,
+	describeIntakeRuntimeMount,
+	mountIntakeRuntimePage,
+	unmountIntakeRuntimePage,
+} from "../../../lib/flowpilot-e2e/intake-runtime-host";
+import {
+	appendRetrievalChecks,
+	validateRetrievalStructure,
+} from "../../../lib/flowpilot-e2e/retrieval-validation";
+
 const START_TIMEOUT_MS = 60_000;
 // After a case timeout the shared chat is still streaming; give cancellation this long to land
 // before abandoning the remaining cases.
@@ -137,7 +172,15 @@ declare global {
 }
 
 function errorMessage(error: unknown): string {
-	return error instanceof Error ? error.message : String(error);
+	if (error instanceof Error) return error.message;
+	if (error !== null && typeof error === "object") {
+		try {
+			return JSON.stringify(error, null, 2).slice(0, 16_000);
+		} catch {
+			// Non-serializable browser errors still need a printable fallback.
+		}
+	}
+	return String(error);
 }
 
 function parseMinimumOverride(value: string | null): number | undefined {
@@ -232,7 +275,9 @@ function delay(ms: number): Promise<void> {
 
 async function postCliEnvelope(
 	callback: URL,
-	envelope: FlowPilotE2ECliEnvelope,
+	envelope:
+		| FlowPilotE2ECliEnvelope
+		| { runId: string; artifact: FlowPilotE2EArtifact },
 ): Promise<void> {
 	let lastError: unknown;
 	for (let attempt = 1; attempt <= CLI_CALLBACK_ATTEMPTS; attempt += 1) {
@@ -549,126 +594,140 @@ async function collectSnapshot(
 			),
 		]);
 
-	const [boardSnapshots, pages, widgets, authoredLintDiagnostics] =
-		await Promise.all([
-			Promise.all(
-				boards.map(async (board) => {
-					const boardAuthored = authoredFlowScriptEvidence(
-						flowScriptGenerationRuns.filter(
-							(run) => run.appId === appId && run.boardId === board.id,
-						),
-					);
-					// Anchors preserve stable identity, so reconciling the persisted canonical
-					// source against the same board must be a zero-command round trip.
-					const flowScript = await collectOr<string | undefined>(
-						issues,
-						`board.${board.id}.flowscript`,
-						undefined,
-						() =>
-							backend.boardState.getFlowScript(
-								appId,
-								board.id,
+	const [boardSnapshots, pages, widgets] = await Promise.all([
+		Promise.all(
+			boards.map(async (board) => {
+				const boardAuthored = authoredFlowScriptEvidence(
+					flowScriptGenerationRuns.filter(
+						(run) => run.appId === appId && run.boardId === board.id,
+					),
+				);
+				// Anchors preserve stable identity, so reconciling the persisted canonical
+				// source against the same board must be a zero-command round trip.
+				const flowScript = await collectOr<string | undefined>(
+					issues,
+					`board.${board.id}.flowscript`,
+					undefined,
+					() =>
+						backend.boardState.getFlowScript(appId, board.id, undefined, true),
+				);
+				const lint =
+					flowScript && lintFlowScript
+						? await collectOr(issues, `board.${board.id}.lint`, undefined, () =>
+								lintFlowScript(flowScript),
+							)
+						: undefined;
+				const boardAuthoredSource = boardAuthored.source;
+				const authoredLint =
+					boardAuthoredSource && lintFlowScript
+						? await collectOr(
+								issues,
+								`board.${board.id}.authored_lint`,
 								undefined,
-								true,
-							),
-					);
-					const lint =
-						flowScript && lintFlowScript
-							? await collectOr(
-									issues,
-									`board.${board.id}.lint`,
-									undefined,
-									() => lintFlowScript(flowScript),
-								)
-							: undefined;
-					const reconcile =
-						flowScript && checkFlowScriptReconcile
-							? await collectOr(
-									issues,
-									`board.${board.id}.reconcile`,
-									undefined,
-									() => checkFlowScriptReconcile(appId, board.id, flowScript),
-								)
-							: undefined;
-					const nodeInventory = boardNodeInventory(board);
+								() =>
+									lintFlowScript(boardAuthoredSource).then(nativeDiagnostics),
+							)
+						: undefined;
+				const reconcile =
+					flowScript && checkFlowScriptReconcile
+						? await collectOr(
+								issues,
+								`board.${board.id}.reconcile`,
+								undefined,
+								() => checkFlowScriptReconcile(appId, board.id, flowScript),
+							)
+						: undefined;
+				const nodeInventory = boardNodeInventory(board);
+				return {
+					id: board.id,
+					name: board.name,
+					nodeCount: nodeInventory.ids.length,
+					nodeIds: nodeInventory.ids,
+					nodeTypes: nodeInventory.types,
+					flowScript,
+					authoredFlowScript: boardAuthored.source,
+					authoredLintDiagnostics: authoredLint,
+					lintDiagnostics: lint ? nativeDiagnostics(lint) : undefined,
+					reconcile: reconcile
+						? {
+								parseValid: reconcile.parse_valid,
+								reconcileValid: reconcile.reconcile_valid,
+								idempotent: reconcile.idempotent,
+								commandCount: reconcile.command_count,
+								corrections: reconcile.corrections,
+								diagnostics: reconcile.diagnostics,
+							}
+						: undefined,
+				};
+			}),
+		),
+		Promise.all(
+			pageEntries.map(async (entry) => {
+				const page = await collectOr(
+					issues,
+					`page.${entry.pageId}`,
+					undefined,
+					() => backend.pageState.getPage(appId, entry.pageId, entry.boardId),
+				);
+				if (!page) {
 					return {
-						id: board.id,
-						name: board.name,
-						nodeCount: nodeInventory.ids.length,
-						nodeIds: nodeInventory.ids,
-						nodeTypes: nodeInventory.types,
-						flowScript,
-						authoredFlowScript: boardAuthored.source,
-						lintDiagnostics: lint ? nativeDiagnostics(lint) : undefined,
-						reconcile: reconcile
-							? {
-									parseValid: reconcile.parse_valid,
-									reconcileValid: reconcile.reconcile_valid,
-									idempotent: reconcile.idempotent,
-									commandCount: reconcile.command_count,
-									corrections: reconcile.corrections,
-									diagnostics: reconcile.diagnostics,
-								}
-							: undefined,
+						id: entry.pageId,
+						name: entry.name,
+						boardId: entry.boardId,
 					};
-				}),
-			),
-			Promise.all(
-				pageEntries.map(async (entry) => {
-					const page = await collectOr(
-						issues,
-						`page.${entry.pageId}`,
-						undefined,
-						() => backend.pageState.getPage(appId, entry.pageId, entry.boardId),
-					);
-					if (!page) {
-						return {
-							id: entry.pageId,
-							name: entry.name,
-							boardId: entry.boardId,
-						};
-					}
-					return {
-						id: page.id,
-						name: page.name,
-						route: page.route,
-						boardId: page.boardId ?? entry.boardId,
-						onLoadEventId: page.onLoadEventId,
-						onUnloadEventId: page.onUnloadEventId,
-						onIntervalEventId: page.onIntervalEventId,
-						content: page.content,
-						widgetRefs: page.widgetRefs,
-					};
-				}),
-			),
-			Promise.all(
-				widgetEntries.map(async ([, widgetId, metadata]) => {
-					const widget = await collectOr(
-						issues,
-						`widget.${widgetId}`,
-						undefined,
-						() => backend.widgetState.getWidget(appId, widgetId),
-					);
-					if (!widget) {
-						return { id: widgetId, name: metadata?.name ?? widgetId };
-					}
-					return {
-						id: widget.id,
-						name: widget.name,
-						actions: widget.actions?.map((action) => ({
-							id: action.id,
-							name: action.label,
-							label: action.label,
-						})),
-					};
-				}),
-			),
-			authoredFlowScript && lintFlowScript
-				? collectOr(issues, "authored_flowscript.lint", undefined, () =>
-						lintFlowScript(authoredFlowScript).then(nativeDiagnostics),
-					)
-				: Promise.resolve(undefined),
-		]);
+				}
+				return {
+					id: page.id,
+					name: page.name,
+					route: page.route,
+					boardId: page.boardId ?? entry.boardId,
+					onLoadEventId: page.onLoadEventId,
+					onUnloadEventId: page.onUnloadEventId,
+					onIntervalEventId: page.onIntervalEventId,
+					content: page.content,
+					components: page.components,
+					widgetRefs: page.widgetRefs,
+				};
+			}),
+		),
+		Promise.all(
+			widgetEntries.map(async ([, widgetId, metadata]) => {
+				const widget = await collectOr(
+					issues,
+					`widget.${widgetId}`,
+					undefined,
+					() => backend.widgetState.getWidget(appId, widgetId),
+				);
+				if (!widget) {
+					return { id: widgetId, name: metadata?.name ?? widgetId };
+				}
+				return {
+					id: widget.id,
+					name: widget.name,
+					actions: widget.actions?.map((action) => ({
+						id: action.id,
+						name: action.label,
+						label: action.label,
+					})),
+				};
+			}),
+		),
+	]);
+	const authoredBoards = boardSnapshots.filter(
+		(board) => board.authoredFlowScript,
+	);
+	// Declarations from separate boards are separate compilation units.
+	const authoredLintDiagnostics = authoredBoards.length
+		? authoredBoards.every(
+				(board) => board.authoredLintDiagnostics !== undefined,
+			)
+			? authoredBoards.flatMap((board) => board.authoredLintDiagnostics ?? [])
+			: undefined
+		: authoredFlowScript && lintFlowScript
+			? await collectOr(issues, "authored_flowscript.lint", undefined, () =>
+					lintFlowScript(authoredFlowScript).then(nativeDiagnostics),
+				)
+			: undefined;
 
 	return {
 		appId,
@@ -783,6 +842,9 @@ export default function FlowPilotE2EPage() {
 	const autoRunStarted = useRef(false);
 	const cliRunStarted = useRef(false);
 	const runningRef = useRef(false);
+	const artifactCheckpoint = useRef<
+		((artifact: FlowPilotE2EArtifact) => Promise<void>) | undefined
+	>(undefined);
 
 	// Prevent the chat surface's best-effort history restoration from racing the benchmark's fresh
 	// conversation. The first benchmark message immediately persists its own replacement key.
@@ -838,7 +900,7 @@ export default function FlowPilotE2EPage() {
 				);
 			}
 		},
-		[codex],
+		[codex, t],
 	);
 
 	const runCases = useCallback(
@@ -849,6 +911,8 @@ export default function FlowPilotE2EPage() {
 			requestedConcurrency = 1,
 			requestedTier: FlowPilotE2ETier = "structural",
 			requestedEvaluationIdentity?: FlowPilotE2EEvaluationIdentity,
+			retrievalContext?: RetrievalComparisonContext,
+			runtimeSourceFingerprint?: string,
 		): Promise<FlowPilotE2EArtifact[]> => {
 			const pinnedModel = flowPilotE2EModel(pinnedModelKey);
 			const evaluationIdentity =
@@ -914,6 +978,11 @@ export default function FlowPilotE2EPage() {
 							? undefined
 							: { minFlowScriptNonWhitespaceChars: minimum },
 					);
+					if (retrievalContext) {
+						built.prompt += `\n\nEvaluation context: existing source app ID ${JSON.stringify(retrievalContext.seed.appId)}. Use workspace content search and exact source reads to inspect its workflow helper before building the destination. The source is read-only; create a separate destination app with the requested name.`;
+					}
+					let workspaceEvaluation: WorkspaceEvaluation | undefined;
+					let canonicalHashAfter: string | undefined;
 					const issues: RunnerIssue[] = [];
 					const suppressedNavigations: string[] = [];
 					const handledPrompts = new Set<string>();
@@ -932,6 +1001,43 @@ export default function FlowPilotE2EPage() {
 						  }
 						| undefined;
 					let snapshotModel: FlowPilotE2EModelConfig | undefined;
+					let intakeSetup: IntakeReliabilitySetup | undefined;
+					let generationStartedAt: number | undefined;
+					const reliability: FlowPilotE2EArtifact["reliability"] =
+						caseDefinition.id === "intake-reliability"
+							? {
+									scope: "host_provisioned_intake",
+									runtimeSourceFingerprint,
+									stages: [],
+								}
+							: undefined;
+					const stage = async <T,>(
+						phase: NonNullable<
+							FlowPilotE2EArtifact["reliability"]
+						>["stages"][number]["phase"],
+						action: () => Promise<T>,
+					): Promise<T> => {
+						const startedAtMs = Date.now();
+						try {
+							const value = await action();
+							reliability?.stages.push({
+								phase,
+								startedAtMs,
+								endedAtMs: Date.now(),
+								status: "ok",
+							});
+							return value;
+						} catch (error) {
+							reliability?.stages.push({
+								phase,
+								startedAtMs,
+								endedAtMs: Date.now(),
+								status: "error",
+								error: errorMessage(error),
+							});
+							throw error;
+						}
+					};
 
 					setRun(caseDefinition.id, {
 						phase: "preparing",
@@ -976,6 +1082,21 @@ export default function FlowPilotE2EPage() {
 					});
 
 					try {
+						if (reliability) {
+							intakeSetup = await stage("provisioning", () =>
+								provisionIntakeReliabilityApp(backend, built.expectedAppName),
+							);
+							reliability.foundation = intakeSetup.setupEvidence;
+							built.prompt += `\n\nHost resource contract:\n${intakeSetup.promptContext}`;
+						}
+						if (
+							retrievalContext &&
+							(await readRetrievalSeedHash(backend, retrievalContext.seed)) !==
+								retrievalContext.seed.canonicalHash
+						) {
+							throw new Error("Retrieval source changed before this arm.");
+						}
+						generationStartedAt = Date.now();
 						const beforeIds = await serializeStart(async () => {
 							const before = await backend.appState.getApps();
 							const seen = new Set(before.map(([app]) => app.id));
@@ -984,6 +1105,17 @@ export default function FlowPilotE2EPage() {
 							conversationId =
 								useGlobalChatStore.getState().activeConversationId;
 							tracker = trackConversationRun(conversationId);
+							if (retrievalContext)
+								workspaceEvaluation = registerWorkspaceEvaluation(
+									conversationId,
+									retrievalContext.mode,
+									retrievalContext.seed.appId,
+								);
+							else if (intakeSetup)
+								workspaceEvaluation = registerWorkspaceBuildEvaluation(
+									conversationId,
+									intakeSetup.appId,
+								);
 							useGlobalChatStore.setState({
 								draft: null,
 								pendingNavigation: null,
@@ -1081,6 +1213,12 @@ export default function FlowPilotE2EPage() {
 							flowPilotE2ECaseRunTimeoutMs(caseDefinition),
 							t("runningId", "Running {{id}}", { id: caseDefinition.id }),
 						);
+						reliability?.stages.push({
+							phase: "generation",
+							startedAtMs: generationStartedAt,
+							endedAtMs: Date.now(),
+							status: "ok",
+						});
 						useGlobalChatStore.getState().setPendingNavigation(null);
 						setRun(caseDefinition.id, { phase: "collecting" });
 
@@ -1112,6 +1250,13 @@ export default function FlowPilotE2EPage() {
 								),
 							});
 						} else if (debugOutcome !== "ok") {
+							const generationStage = reliability?.stages.find(
+								(item) => item.phase === "generation",
+							);
+							if (generationStage) {
+								generationStage.status = "error";
+								generationStage.error = `Agent outcome: ${debugOutcome ?? "missing"}`;
+							}
 							issues.push({
 								code: "runner.agent_outcome",
 								message: t(
@@ -1144,12 +1289,14 @@ export default function FlowPilotE2EPage() {
 							});
 						}
 						const appRefs = trace?.appRefs ?? [];
-						const created = await findCreatedApp(
-							backend,
-							beforeIds,
-							built.expectedAppName,
-							appRefs,
-						);
+						const created = intakeSetup
+							? { appId: intakeSetup.appId, appName: built.expectedAppName }
+							: await findCreatedApp(
+									backend,
+									beforeIds,
+									built.expectedAppName,
+									appRefs,
+								);
 						let createdAppName = created.appName;
 						try {
 							const metadata = await backend.appState.getAppMeta(created.appId);
@@ -1158,19 +1305,85 @@ export default function FlowPilotE2EPage() {
 							// The tuple metadata is still enough to report a deterministic mismatch.
 						}
 						generationRuns = await waitForGenerationReceipts(created.appId);
+						if (intakeSetup && reliability) {
+							const setup = intakeSetup;
+							try {
+								reliability.eventRegistration = await stage(
+									"registration",
+									() => finalizeIntakeReliabilityEvents(backend, setup),
+								);
+							} catch (error) {
+								issues.push({
+									code: "registration.intake",
+									message: errorMessage(error),
+								});
+							}
+						}
 						const compiledAuthored = authoredFlowScriptEvidence(generationRuns);
 						const workspace = useGlobalChatStore.getState().flowscriptWorkspace;
-						snapshot = await collectSnapshot(
-							backend,
-							created.appId,
-							createdAppName,
-							compiledAuthored.source ?? workspace?.source,
-							compiledAuthored.status ?? workspace?.status,
-							compiledAuthored.completion ?? workspace?.completion,
-							snapshotModel,
-							issues,
-							generationRuns,
+						snapshot = await stage("collection", () =>
+							collectSnapshot(
+								backend,
+								created.appId,
+								createdAppName,
+								compiledAuthored.source ?? workspace?.source,
+								compiledAuthored.status ?? workspace?.status,
+								compiledAuthored.completion ?? workspace?.completion,
+								snapshotModel,
+								issues,
+								generationRuns,
+							),
 						);
+						if (intakeSetup && reliability) {
+							const setup = intakeSetup;
+							const runtime = await stage("behavioral", () =>
+								runIntakeRuntimeAcceptance({
+									backend,
+									appId: setup.appId,
+									eventId: setup.pageEventId,
+									pageId: setup.pageId,
+									mountPage: (bootstrap) =>
+										mountIntakeRuntimePage(setup.appId, bootstrap),
+									describeMount: describeIntakeRuntimeMount,
+									unmountPage: unmountIntakeRuntimePage,
+								}),
+							);
+							reliability.runtime = runtime;
+							snapshot = {
+								...snapshot,
+								behavioralScenarioResults: runtime.scenarios,
+							};
+							if (
+								runtime.error ||
+								runtime.scenarios.some((scenario) => scenario.status !== "pass")
+							) {
+								const runtimeError =
+									runtime.error ??
+									"At least one intake scenario failed or has an unknown outcome.";
+								issues.push({
+									code: "runtime.acceptance",
+									message: runtimeError,
+								});
+								const runtimeStage = reliability.stages.findLast(
+									(item) => item.phase === "behavioral",
+								);
+								if (runtimeStage) {
+									runtimeStage.status = "error";
+									runtimeStage.error = runtimeError;
+								}
+							}
+						}
+						if (retrievalContext) {
+							canonicalHashAfter = await readRetrievalSeedHash(
+								backend,
+								retrievalContext.seed,
+							);
+							if (canonicalHashAfter !== retrievalContext.seed.canonicalHash)
+								issues.push({
+									code: "retrieval.source_changed",
+									message: "The read-only source changed during generation.",
+								});
+						}
 						report = appendRunnerFailures(
 							evaluateAppCreationCase(
 								built.caseDefinition,
@@ -1181,11 +1394,51 @@ export default function FlowPilotE2EPage() {
 							),
 							issues,
 						);
+						if (retrievalContext || reliability) {
+							let tableSchema: unknown;
+							try {
+								tableSchema = await backend.dbState.getSchemaAuthoritative(
+									snapshot.appId,
+									"intake_tickets",
+									false,
+								);
+							} catch {
+								/* An unreadable schema fails the structural field assertion. */
+							}
+							report = appendRetrievalChecks(
+								report,
+								validateRetrievalStructure(snapshot, tableSchema),
+							);
+						}
 					} catch (error) {
 						failure = errorMessage(error);
+						if (
+							reliability &&
+							generationStartedAt &&
+							!reliability.stages.some((item) => item.phase === "generation")
+						) {
+							reliability.stages.push({
+								phase: "generation",
+								startedAtMs: generationStartedAt,
+								endedAtMs: Date.now(),
+								status: "error",
+								error: failure,
+							});
+						}
 					} finally {
 						guard();
 						tracker?.stop();
+						if (conversationId) unregisterWorkspaceEvaluation(conversationId);
+						if (retrievalContext && !canonicalHashAfter) {
+							try {
+								canonicalHashAfter = await readRetrievalSeedHash(
+									backend,
+									retrievalContext.seed,
+								);
+							} catch {
+								/* A missing post-run source hash invalidates comparison. */
+							}
+						}
 						useGlobalChatStore.getState().setPendingNavigation(null);
 					}
 					// Last-resort evidence when no app was ever resolved. Conversation attribution is
@@ -1201,7 +1454,20 @@ export default function FlowPilotE2EPage() {
 					}
 
 					const artifact: FlowPilotE2EArtifact = {
+						reliability,
 						schema: "flowpilot.app-creation-e2e-artifact/v1",
+						...(retrievalContext
+							? {
+									retrievalComparison: {
+										...retrievalContext,
+										canonicalHashAfter,
+										sourceUnchanged:
+											canonicalHashAfter ===
+											retrievalContext.seed.canonicalHash,
+										calls: workspaceEvaluation?.calls ?? [],
+									},
+								}
+							: {}),
 						generatedAt: new Date().toISOString(),
 						durationMs: Date.now() - startedAt,
 						requestedModelKey: pinnedModelKey,
@@ -1259,6 +1525,7 @@ export default function FlowPilotE2EPage() {
 							});
 						}
 					}
+					await artifactCheckpoint.current?.(artifact);
 					return artifact;
 				});
 
@@ -1276,16 +1543,34 @@ export default function FlowPilotE2EPage() {
 			}
 			return artifacts;
 		},
-		[backend, codex, ensureModel, setRun],
+		[backend, codex, ensureModel, setRun, t],
 	);
 
 	const runRequestedCases = useCallback(
 		async (options: FlowPilotE2ERunOptions = {}) => {
 			const definitions = resolveFlowPilotE2ERunCases(options);
 			const repeat = validatedRepeat(options.repeat);
+			if (
+				!options.retrievalComparison &&
+				definitions.some((item) => item.id === "retrieval-intake")
+			)
+				throw new Error(
+					"The retrieval-intake case requires paired retrieval mode.",
+				);
 			const requestedModelKey = options.modelKey ?? modelKey;
 			const requestedTier = resolveFlowPilotE2ETier(options.tier);
 			const requestedConcurrency = validatedConcurrency(options.concurrency);
+			if (definitions.some((item) => item.id === "intake-reliability")) {
+				if (
+					requestedConcurrency !== 1 ||
+					requestedTier !== "behavioral" ||
+					definitions.length !== 1
+				)
+					throw new Error(
+						"Intake reliability requires serial behavioral runs of that case alone.",
+					);
+				await assertIntakeRuntimeAvailable();
+			}
 			const evaluationIdentity = createFlowPilotE2EEvaluationIdentity(
 				flowPilotE2EModel(requestedModelKey),
 				requestedTier,
@@ -1293,6 +1578,56 @@ export default function FlowPilotE2EPage() {
 				options.minFlowScriptNonWhitespaceChars,
 			);
 			const artifacts: FlowPilotE2EArtifact[] = [];
+			if (options.retrievalComparison) {
+				if (
+					requestedConcurrency !== 1 ||
+					options.failFast ||
+					requestedTier !== "structural"
+				)
+					throw new Error(
+						"Paired retrieval requires serial structural runs without fail-fast.",
+					);
+				if (!/^[a-f0-9]{64}$/.test(options.retrievalRuntimeFingerprint ?? ""))
+					throw new Error(
+						"Paired retrieval requires a controller source fingerprint.",
+					);
+				try {
+					for (let round = 0; round < repeat; round += 1) {
+						for (const definition of definitions) {
+							if (definition.id !== "retrieval-intake")
+								throw new Error(
+									"Paired retrieval currently supports retrieval-intake only.",
+								);
+							const pairId = crypto.randomUUID();
+							const seed = await createRetrievalSeed(backend, pairId);
+							for (const [order, mode] of retrievalPairOrder(round).entries()) {
+								artifacts.push(
+									...(await runCases(
+										[definition],
+										requestedModelKey,
+										options.minFlowScriptNonWhitespaceChars,
+										1,
+										requestedTier,
+										evaluationIdentity,
+										{
+											pairId,
+											round,
+											order,
+											mode,
+											seed,
+											runtimeFingerprint:
+												options.retrievalRuntimeFingerprint ?? "",
+										},
+									)),
+								);
+							}
+						}
+					}
+					return artifacts;
+				} catch (error) {
+					throw new FlowPilotE2EPartialRunError(errorMessage(error), artifacts);
+				}
+			}
 			// Fail-fast only means something while later cases are still unstarted, so it keeps the
 			// sequential path; everything else hands the whole ordered job list to one pooled run.
 			if (requestedConcurrency > 1 && !options.failFast) {
@@ -1319,6 +1654,8 @@ export default function FlowPilotE2EPage() {
 							1,
 							requestedTier,
 							evaluationIdentity,
+							undefined,
+							options.runtimeSourceFingerprint,
 						);
 						artifacts.push(...completed);
 						if (
@@ -1337,7 +1674,7 @@ export default function FlowPilotE2EPage() {
 			}
 			return artifacts;
 		},
-		[modelKey, runCases],
+		[backend, modelKey, runCases],
 	);
 
 	const selectedCases = useMemo(
@@ -1396,6 +1733,11 @@ export default function FlowPilotE2EPage() {
 			let requestedModelKey: FlowPilotE2EModelKey =
 				FLOWPILOT_E2E_DEFAULT_MODEL_KEY;
 			let requestedTier: FlowPilotE2ETier = "structural";
+			const retrievalComparison = params.get("retrievalAB") === "1";
+			const retrievalRuntimeFingerprint =
+				params.get("retrievalRuntimeFingerprint") ?? undefined;
+			const runtimeSourceFingerprint =
+				params.get("runtimeSourceFingerprint") ?? undefined;
 			let evaluationIdentity: FlowPilotE2EEvaluationIdentity | undefined;
 			let repeat = 1;
 			let minimum: number | undefined;
@@ -1405,6 +1747,15 @@ export default function FlowPilotE2EPage() {
 
 			try {
 				callback = parseCliCallback(params.get("callback"));
+				const checkpointUrl = new URL(callback);
+				checkpointUrl.searchParams.set("progress", "1");
+				artifactCheckpoint.current = async (artifact) => {
+					try {
+						await postCliEnvelope(checkpointUrl, { runId, artifact });
+					} catch (error) {
+						console.error("FlowPilot E2E checkpoint failed", error);
+					}
+				};
 				if (!/^[A-Za-z0-9_-]{8,128}$/.test(runId)) {
 					throw new Error("CLI run id is invalid.");
 				}
@@ -1444,7 +1795,10 @@ export default function FlowPilotE2EPage() {
 				setConcurrency(requestedConcurrency);
 				if (minimum !== undefined) setMinimumOverride(String(minimum));
 				artifacts = await runRequestedCases({
+					runtimeSourceFingerprint,
 					caseIds,
+					retrievalComparison,
+					retrievalRuntimeFingerprint,
 					modelKey: requestedModelKey,
 					tier: requestedTier,
 					minFlowScriptNonWhitespaceChars: minimum,
@@ -1463,7 +1817,8 @@ export default function FlowPilotE2EPage() {
 			const passedRuns = artifacts.filter((artifact) =>
 				flowPilotE2EArtifactPassed(artifact, requestedTier),
 			).length;
-			const requestedRuns = caseIds.length * repeat;
+			const requestedRuns =
+				caseIds.length * repeat * (retrievalComparison ? 2 : 1);
 			const completedAtMs = Date.now();
 			const envelope: FlowPilotE2ECliEnvelope = {
 				schema: "flowpilot.app-creation-e2e-cli-result/v1",
@@ -1472,6 +1827,9 @@ export default function FlowPilotE2EPage() {
 				completedAt: new Date(completedAtMs).toISOString(),
 				durationMs: completedAtMs - startedAtMs,
 				selection: {
+					runtimeSourceFingerprint,
+					retrievalComparison,
+					retrievalRuntimeFingerprint,
 					caseIds,
 					modelKey: requestedModelKey,
 					tier: requestedTier,
@@ -1571,6 +1929,7 @@ export default function FlowPilotE2EPage() {
 
 	return (
 		<div className="flex min-h-0 flex-1 flex-col gap-3">
+			<IntakeRuntimePageHost />
 			<div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border bg-card/60 px-4 py-3">
 				<div className="flex items-center gap-3">
 					<div className="rounded-md bg-primary/10 p-2 text-primary">
@@ -1812,7 +2171,7 @@ export default function FlowPilotE2EPage() {
 														)
 													}
 												>
-													<Download className="h-3.5 w-3.5" /> {`JSON`}
+													<Download className="h-3.5 w-3.5" /> {"JSON"}
 												</Button>
 												<Button
 													size="sm"

@@ -6,3 +6,5 @@ export * from "./receipt-evidence";
 export * from "./report";
 export * from "./types";
 export * from "./validation";
+
+export * from "./retrieval-comparison";

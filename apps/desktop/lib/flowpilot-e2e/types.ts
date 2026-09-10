@@ -1,5 +1,9 @@
 import type { AppScenarioRunResult } from "@flow-like/flow-like-ui/lib/app-build/scenarios";
 import type { FlowScriptGenerationRunReceipt } from "@flow-like/flow-like-ui/lib/flowpilot/flowscript-generation-receipt";
+import type {
+	RetrievalComparisonEvidence,
+	RetrievalPairMetrics,
+} from "./retrieval-comparison";
 
 export type FlowPilotE2ECaseId =
 	| "simple-agent"
@@ -13,7 +17,9 @@ export type FlowPilotE2ECaseId =
 	| "webhook-enrichment"
 	| "agent-tools"
 	| "multi-board-pages"
-	| "ai-adventure";
+	| "ai-adventure"
+	| "intake-reliability"
+	| "retrieval-intake";
 
 export type FlowPilotE2EReasoningEffort = "low" | "medium" | "high";
 export type FlowPilotE2ETier = "structural" | "behavioral";
@@ -173,6 +179,8 @@ export interface FlowPilotBoardSnapshot {
 	flowScript?: string;
 	/** Optional board-local authored source when a runner captures it per board. */
 	authoredFlowScript?: string;
+	/** Lint evidence for this board's exact authored source, before canonical readback. */
+	authoredLintDiagnostics?: readonly FlowPilotLintDiagnosticSnapshot[];
 	lintDiagnostics?: readonly FlowPilotLintDiagnosticSnapshot[];
 	/** Optional authoritative compiler/reconciler result captured by the runner. */
 	reconcile?: FlowPilotReconcileSnapshot;
@@ -190,6 +198,8 @@ export interface FlowPilotPageSnapshot {
 	onIntervalEventId?: string;
 	/** Kept intentionally opaque so browser, API and native collectors can share this type. */
 	content?: unknown;
+	/** Persisted A2UI definitions, retained for runtime failure diagnosis. */
+	components?: unknown;
 	/** Values may be ids, compact refs, or persisted widget definitions. */
 	widgetRefs?: readonly unknown[] | Readonly<Record<string, unknown>>;
 }
@@ -321,6 +331,9 @@ export interface FlowPilotE2ERunReport {
 }
 
 export interface FlowPilotE2ERunOptions {
+	runtimeSourceFingerprint?: string;
+	retrievalComparison?: boolean;
+	retrievalRuntimeFingerprint?: string;
 	/** Backwards-compatible single-case selector used by the browser console API. */
 	caseId?: FlowPilotE2ECaseId;
 	/** Ordered case selection used by the CLI. */
@@ -356,6 +369,26 @@ export interface FlowPilotE2EAssistantTrace {
 }
 
 export interface FlowPilotE2EArtifact {
+	reliability?: {
+		scope: "host_provisioned_intake";
+		runtimeSourceFingerprint?: string;
+		foundation?: unknown;
+		eventRegistration?: unknown;
+		runtime?: unknown;
+		stages: {
+			phase:
+				| "provisioning"
+				| "generation"
+				| "registration"
+				| "collection"
+				| "behavioral";
+			startedAtMs: number;
+			endedAtMs: number;
+			status: "ok" | "error";
+			error?: string;
+		}[];
+	};
+	retrievalComparison?: RetrievalComparisonEvidence;
 	schema: "flowpilot.app-creation-e2e-artifact/v1";
 	generatedAt: string;
 	durationMs: number;
@@ -385,12 +418,19 @@ export interface FlowPilotE2EArtifact {
 }
 
 export interface FlowPilotE2ECliEnvelope {
+	reliabilitySummary?: ReturnType<
+		typeof import("./reliability-metrics").summarizeIntakeReliability
+	>;
+	retrievalComparisonResults?: RetrievalPairMetrics[];
 	schema: "flowpilot.app-creation-e2e-cli-result/v1";
 	runId: string;
 	startedAt: string;
 	completedAt: string;
 	durationMs: number;
 	selection: {
+		runtimeSourceFingerprint?: string;
+		retrievalComparison?: boolean;
+		retrievalRuntimeFingerprint?: string;
 		caseIds: readonly FlowPilotE2ECaseId[];
 		modelKey: FlowPilotE2EModelKey;
 		/** Omitted by legacy callbacks; omission means structural. */

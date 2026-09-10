@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
-"""Select portable container targets and validate complete GHCR build manifests."""
+"""Select portable container targets, validate complete GHCR build manifests and publish release references."""
 
 import argparse
 import hashlib
 import json
 from pathlib import Path
 import re
+import subprocess
 import sys
 
 
@@ -14,6 +15,17 @@ CLOUDS = ("all", "aws", "gcp", "azure", "docker-compose", "kubernetes", "self-ho
 REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
 SELF_HOSTED_CLOUDS = ("docker-compose", "kubernetes")
 KUBERNETES_SHARED_WORKLOADS = {"runtime", "compiler", "signaling", "object-store-init"}
+CHANNEL_BRANCHES = ("dev", "main", "alpha")
+SEMVER = re.compile(
+    r"(?P<major>0|[1-9][0-9]*)\.(?P<minor>0|[1-9][0-9]*)\.(?P<patch>0|[1-9][0-9]*)"
+    r"(?:-(?P<prerelease>[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?"
+)
+TAG = re.compile(r"[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}")
+DIGEST = re.compile(r"sha256:[0-9a-f]{64}")
+COMMIT = re.compile(r"[0-9a-f]{40}")
+REVISION_ANNOTATION = "org.opencontainers.image.revision"
+VERSION_ANNOTATION = "org.opencontainers.image.version"
+SOURCE_ANNOTATION = "org.opencontainers.image.source"
 
 
 def target(cloud, workload, platform="linux/amd64", recipe=None, context=".", architecture_id=False):
@@ -82,7 +94,7 @@ def build_identity(owner, source_sha, run_id, run_attempt):
     owner = owner.lower()
     if not re.fullmatch(r"[a-z0-9](?:[a-z0-9-]{0,37}[a-z0-9])?", owner):
         raise ValueError("owner must be a GitHub user or organization name")
-    if not re.fullmatch(r"[0-9a-f]{40}", source_sha) or source_sha == "0" * 40:
+    if not COMMIT.fullmatch(source_sha) or source_sha == "0" * 40:
         raise ValueError("source SHA must be a nonzero 40-character lowercase Git commit SHA")
     for name, value in (("run ID", run_id), ("run attempt", run_attempt)):
         if not re.fullmatch(r"[1-9][0-9]*", value):
@@ -94,7 +106,7 @@ def record(target_id, owner, source_sha, digest, run_id, run_attempt):
     owner, build = build_identity(owner, source_sha, run_id, run_attempt)
     if target_id not in TARGET_BY_ID:
         raise ValueError("unknown container target")
-    if not isinstance(digest, str) or not re.fullmatch(r"sha256:[0-9a-f]{64}", digest):
+    if not isinstance(digest, str) or not DIGEST.fullmatch(digest):
         raise ValueError("digest must be a lowercase SHA-256 image digest")
     entry = TARGET_BY_ID[target_id]
     repository = f"ghcr.io/{owner}/{entry['image_suffix']}"
@@ -181,6 +193,363 @@ def read_records(directory):
     return records
 
 
+def read_json(path, description):
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeError, json.JSONDecodeError) as error:
+        raise ValueError(f"cannot read {description} {path.name}") from error
+
+
+def validate_manifest(document, source_sha=None, run_id=None, run_attempt=None):
+    if not isinstance(document, dict) or not isinstance(document.get("build"), dict):
+        raise ValueError("release manifest must be an object with build identity")
+    build = document["build"]
+    if not isinstance(document.get("images"), list):
+        raise ValueError("release manifest must list its image records")
+    expected = manifest(
+        document.get("cloud"), str(document.get("owner", "")), str(document.get("source_sha", "")),
+        str(build.get("run_id", "")), str(build.get("run_attempt", "")), document["images"],
+    )
+    if json.dumps(document, sort_keys=True) != json.dumps(expected, sort_keys=True):
+        raise ValueError("release manifest does not match its records")
+    for name, actual, wanted in (
+        ("source SHA", expected["source_sha"], source_sha),
+        ("run ID", build["run_id"], run_id),
+        ("run attempt", build["run_attempt"], run_attempt),
+    ):
+        if wanted is not None and actual != wanted:
+            raise ValueError(f"release manifest {name} {actual} does not belong to this build")
+    return expected
+
+
+def parse_ref(ref):
+    branch = re.fullmatch(r"refs/heads/([a-z]+)", ref or "")
+    if branch and branch.group(1) in CHANNEL_BRANCHES:
+        return {"channel": branch.group(1), "version": branch.group(1), "semver": None}
+    tag = re.fullmatch(r"refs/tags/(?:(?P<channel>[a-z]+)-)?v(?P<version>.+)", ref or "")
+    if tag and SEMVER.fullmatch(tag.group("version")):
+        return {"channel": tag.group("channel"), "version": tag.group("version"), "semver": tag.group("version")}
+    return None
+
+
+def release_version(ref):
+    release = parse_ref(ref)
+    return release["version"] if release else None
+
+
+def channel_tags(ref):
+    release = parse_ref(ref)
+    if release is None:
+        return []
+    if release["semver"] is None:
+        return [release["channel"]]
+    version = release["semver"]
+    if release["channel"]:
+        return [f"{version}-{release['channel']}", release["channel"]]
+    parts = SEMVER.fullmatch(version)
+    tags = [version]
+    if not parts.group("prerelease"):
+        tags.append(f"{parts.group('major')}.{parts.group('minor')}")
+        if parts.group("major") != "0":
+            tags.append(parts.group("major"))
+        tags.append("latest")
+    return tags
+
+
+def tag_guard(tag):
+    if tag == "latest" or re.fullmatch(r"[0-9]+(?:\.[0-9]+)?", tag):
+        return "version"
+    if re.fullmatch(r"[a-z]+", tag):
+        return "ancestor"
+    return None
+
+
+def semver_key(version):
+    parts = SEMVER.fullmatch(version or "")
+    if not parts:
+        return None
+    numbers = tuple(int(parts.group(name)) for name in ("major", "minor", "patch"))
+    prerelease = parts.group("prerelease")
+    if not prerelease:
+        return (*numbers, 1, ())
+    identifiers = tuple((0, int(part)) if part.isdigit() else (1, part) for part in prerelease.split("."))
+    return (*numbers, 0, identifiers)
+
+
+def existing_release(inspection):
+    """Read the revision and version an existing tag was published from."""
+    if not isinstance(inspection, dict):
+        return {}
+    descriptor = inspection.get("manifest") if isinstance(inspection.get("manifest"), dict) else {}
+    image = inspection.get("image") if isinstance(inspection.get("image"), dict) else {}
+    configs = list(image.values()) if "manifests" in descriptor and "config" not in image else [image]
+    labels = {}
+    for config in configs:
+        if isinstance(config, dict) and isinstance(config.get("config"), dict):
+            labels.update(config["config"].get("Labels") or {})
+    annotations = descriptor.get("annotations") or {}
+    return {
+        "revision": annotations.get(REVISION_ANNOTATION) or labels.get(REVISION_ANNOTATION),
+        "version": annotations.get(VERSION_ANNOTATION) or labels.get(VERSION_ANNOTATION),
+    }
+
+
+def tag_decision(tag, existing, source_sha, version, history):
+    """Return (move, note); a guarded tag stays when the registry holds a newer release."""
+    guard = tag_guard(tag)
+    if guard is None:
+        return True, "unguarded tag"
+    if existing is None:
+        return True, "tag is absent"
+    revision = existing.get("revision")
+    if not isinstance(revision, str) or not COMMIT.fullmatch(revision):
+        revision = None
+    if guard == "ancestor":
+        if revision is None:
+            return True, "existing revision is unknown"
+        if revision == source_sha:
+            return True, "existing revision is this commit"
+        ancestor = history.is_ancestor(revision, source_sha)
+        if ancestor is None:
+            return True, f"existing revision {revision} is not in this repository"
+        if ancestor:
+            return True, f"existing revision {revision} is an ancestor"
+        return False, f"existing revision {revision} is not an ancestor of {source_sha}"
+    current = existing.get("version")
+    if semver_key(current) is None:
+        # Docker manifest lists drop index annotations; fall back to the v tag on the recorded commit.
+        current = history.tagged_version(revision) if revision else None
+    if semver_key(current) is None or semver_key(version) is None:
+        return True, "existing version is unknown"
+    if semver_key(version) >= semver_key(current):
+        return True, f"existing version {current} is not newer"
+    return False, f"existing version {current} is newer than {version}"
+
+
+def run_command(command, timeout=900):
+    return subprocess.run(command, capture_output=True, text=True, timeout=timeout)
+
+
+class Registry:
+    """Shell out to docker and git; the process inherits registry credentials from docker login."""
+
+    def __init__(self, run=run_command):
+        self.run = run
+
+    def docker(self, *arguments):
+        try:
+            process = self.run(["docker", "buildx", "imagetools", *arguments])
+        except (OSError, subprocess.SubprocessError) as error:
+            raise ValueError(f"docker buildx imagetools {arguments[0]} could not run") from error
+        if process.returncode != 0:
+            print(process.stderr, file=sys.stderr, end="")
+            raise ValueError(f"docker buildx imagetools {arguments[0]} failed")
+        return process.stdout
+
+    def inspect(self, reference):
+        try:
+            process = self.run(["docker", "buildx", "imagetools", "inspect", reference, "--format", "{{json .}}"])
+        except (OSError, subprocess.SubprocessError):
+            return None
+        if process.returncode != 0:
+            return None
+        try:
+            return json.loads(process.stdout)
+        except json.JSONDecodeError:
+            return {}
+
+    def is_ancestor(self, revision, source_sha):
+        try:
+            process = self.run(["git", "merge-base", "--is-ancestor", revision, source_sha])
+        except (OSError, subprocess.SubprocessError):
+            return None
+        if process.returncode == 0:
+            return True
+        if process.returncode == 1:
+            return False
+        return None
+
+    def tagged_version(self, revision):
+        try:
+            process = self.run(["git", "tag", "--points-at", revision, "v*"])
+        except (OSError, subprocess.SubprocessError):
+            return None
+        if process.returncode != 0:
+            return None
+        versions = [tag[1:] for tag in process.stdout.split() if semver_key(tag[1:]) is not None]
+        return max(versions, key=semver_key) if versions else None
+
+    def descriptor(self, reference):
+        try:
+            descriptor = json.loads(self.docker("inspect", reference, "--format", "{{json .Manifest}}"))
+        except json.JSONDecodeError as error:
+            raise ValueError(f"cannot read the registry descriptor of {reference}") from error
+        if not isinstance(descriptor, dict) or not isinstance(descriptor.get("digest"), str) or not DIGEST.fullmatch(descriptor["digest"]):
+            raise ValueError(f"registry descriptor of {reference} has no digest")
+        return descriptor
+
+    def raw_manifest(self, reference):
+        try:
+            return json.loads(self.docker("inspect", reference, "--raw"))
+        except json.JSONDecodeError as error:
+            raise ValueError(f"cannot read the raw manifest of {reference}") from error
+
+
+def log(message, warning=False):
+    print(f"::warning::{message}" if warning else f"container images: {message}", file=sys.stderr)
+
+
+def publish(document, ref, github_repository, registry):
+    source_sha = document["source_sha"]
+    build = document["build"]
+    immutable_tag = f"sha-{source_sha}-run-{build['run_id']}-{build['run_attempt']}"
+    version = release_version(ref)
+    tags = channel_tags(ref)
+    groups = {}
+    for image in document["images"]:
+        groups.setdefault(image["repository"], []).append(image)
+    images = []
+    for repository, records in sorted(groups.items()):
+        immutable = f"{repository}:{immutable_tag}"
+        sources = [entry["image"] for entry in records]
+        if len(records) == 1:
+            registry.docker("create", "--prefer-index=false", "--tag", immutable, *sources)
+            if "manifests" in registry.raw_manifest(immutable):
+                raise ValueError(f"{immutable} became an image index; the single-platform manifest was not preserved")
+            kind = "manifest"
+        else:
+            annotations = {
+                REVISION_ANNOTATION: source_sha,
+                SOURCE_ANNOTATION: f"https://github.com/{github_repository}",
+            }
+            if version:
+                annotations[VERSION_ANNOTATION] = version
+            registry.docker(
+                "create", "--tag", immutable,
+                *[argument for key, value in sorted(annotations.items()) for argument in ("--annotation", f"index:{key}={value}")],
+                *sources,
+            )
+            kind = "index"
+        descriptor = registry.descriptor(immutable)
+        if kind == "index" and (descriptor.get("annotations") or {}).get(REVISION_ANNOTATION) != source_sha:
+            log(f"{immutable} is a Docker manifest list; index annotations were not stored, the guard will use image labels and Git tags", warning=True)
+        digest = descriptor["digest"]
+        published = {entry.get("digest") for entry in descriptor.get("manifests", [])} if kind == "index" else {digest}
+        if published != {entry["digest"] for entry in records}:
+            raise ValueError(f"{immutable} does not reference exactly the scanned image digests")
+        log(f"{immutable} -> {digest} ({kind})")
+        applied = [immutable_tag]
+        skipped = []
+        for tag in tags:
+            existing = registry.inspect(f"{repository}:{tag}")
+            move, note = tag_decision(tag, None if existing is None else existing_release(existing), source_sha, version, registry)
+            if move:
+                log(f"{repository}:{tag} moves ({note})")
+                applied.append(tag)
+            else:
+                log(f"{repository}:{tag} kept: {note}", warning=True)
+                skipped.append({"tag": tag, "reason": note})
+        if len(applied) > 1:
+            registry.docker(
+                "create", "--prefer-index=false",
+                *[argument for tag in applied[1:] for argument in ("--tag", f"{repository}:{tag}")],
+                f"{repository}@{digest}",
+            )
+        images.append({
+            "repository": repository,
+            "cloud": records[0]["cloud"],
+            "workload": records[0]["workload"],
+            "kind": kind,
+            "digest": digest,
+            "platforms": sorted(entry["platform"] for entry in records),
+            "tags": applied,
+            "skipped_tags": skipped,
+        })
+    return indexes(document, ref, images)
+
+
+def indexes(document, ref, images):
+    document = validate_manifest(document)
+    if not isinstance(ref, str) or not ref.startswith("refs/"):
+        raise ValueError("ref must be a fully qualified Git ref")
+    if not isinstance(images, list):
+        raise ValueError("index images must be a list")
+    build = document["build"]
+    immutable_tag = f"sha-{document['source_sha']}-run-{build['run_id']}-{build['run_attempt']}"
+    channels = channel_tags(ref)
+    groups = {}
+    for image in document["images"]:
+        groups.setdefault(image["repository"], []).append(image)
+    results = {}
+    for entry in images:
+        if not isinstance(entry, dict) or entry.get("repository") not in groups:
+            raise ValueError("index record must be an object naming a released repository")
+        repository = entry["repository"]
+        if repository in results:
+            raise ValueError(f"duplicate index record for {repository}")
+        records = groups[repository]
+        digest = entry.get("digest")
+        if not isinstance(digest, str) or not DIGEST.fullmatch(digest):
+            raise ValueError(f"index record for {repository} needs a SHA-256 digest")
+        tags = entry.get("tags")
+        skipped = entry.get("skipped_tags")
+        if not isinstance(tags, list) or not all(isinstance(tag, str) for tag in tags) or not tags or tags[0] != immutable_tag:
+            raise ValueError(f"index record for {repository} must list the immutable tag first")
+        if not isinstance(skipped, list) or not all(
+            isinstance(item, dict) and isinstance(item.get("tag"), str) and isinstance(item.get("reason"), str) and item["reason"]
+            and set(item) == {"tag", "reason"} for item in skipped
+        ):
+            raise ValueError(f"index record for {repository} has a malformed skipped tag")
+        moved = tags[1:]
+        kept = [item["tag"] for item in skipped]
+        if len(set(moved + kept)) != len(moved) + len(kept) or sorted(moved + kept) != sorted(channels):
+            raise ValueError(f"index record for {repository} does not account for every channel tag")
+        if kind_for(records) == "manifest" and digest != records[0]["digest"]:
+            raise ValueError(f"index record for {repository} must reuse the single-platform digest")
+        expected = {
+            "repository": repository,
+            "cloud": records[0]["cloud"],
+            "workload": records[0]["workload"],
+            "kind": kind_for(records),
+            "digest": digest,
+            "platforms": sorted(record["platform"] for record in records),
+            "tags": tags,
+            "skipped_tags": skipped,
+        }
+        if json.dumps(entry, sort_keys=True) != json.dumps(expected, sort_keys=True):
+            fields = sorted(set(entry) ^ set(expected) | {
+                key for key in expected if key in entry
+                and json.dumps(entry[key], sort_keys=True) != json.dumps(expected[key], sort_keys=True)
+            })
+            raise ValueError(f"index record for {repository} does not match the release: {', '.join(fields)}")
+        results[repository] = expected
+    missing = sorted(groups.keys() - results.keys())
+    if missing:
+        raise ValueError(f"missing index records: {', '.join(missing)}")
+    return {
+        "schema_version": SCHEMA_VERSION,
+        "registry": document["registry"],
+        "owner": document["owner"],
+        "source_sha": document["source_sha"],
+        "build": build,
+        "ref": ref,
+        "images": [results[repository] for repository in sorted(results)],
+    }
+
+
+def kind_for(records):
+    return "index" if len(records) > 1 else "manifest"
+
+
+def validate_indexes(document, release):
+    if not isinstance(document, dict):
+        raise ValueError("index manifest must be an object")
+    expected = indexes(release, document.get("ref"), document.get("images", []))
+    if json.dumps(document, sort_keys=True) != json.dumps(expected, sort_keys=True):
+        raise ValueError("index manifest does not match the release")
+    return expected
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     commands = parser.add_subparsers(dest="command", required=True)
@@ -192,11 +561,22 @@ def main(argv=None):
     manifest_parser = commands.add_parser("manifest", help="validate and merge a complete set of image records")
     manifest_parser.add_argument("--cloud", choices=CLOUDS, default="all")
     manifest_parser.add_argument("--records-dir", type=Path, required=True)
+    tags_parser = commands.add_parser("tags", help="print the channel tags and version for a Git ref")
+    tags_parser.add_argument("--ref", required=True)
+    publish_parser = commands.add_parser("publish", help="create release references from a validated manifest and apply guarded tags")
+    publish_parser.add_argument("--manifest", type=Path, required=True)
+    publish_parser.add_argument("--ref", required=True)
+    publish_parser.add_argument("--github-repository", required=True)
+    indexes_parser = commands.add_parser("indexes", help="validate a published index manifest against its release")
+    indexes_parser.add_argument("--manifest", type=Path, required=True)
+    indexes_parser.add_argument("--path", type=Path, required=True)
     for command in (record_parser, manifest_parser):
         command.add_argument("--owner", required=True)
+    for command in (record_parser, manifest_parser, publish_parser):
         command.add_argument("--source-sha", required=True)
         command.add_argument("--run-id", required=True)
         command.add_argument("--run-attempt", required=True)
+    for command in (record_parser, manifest_parser, publish_parser, indexes_parser):
         command.add_argument("--output", type=Path)
     args = parser.parse_args(argv)
     try:
@@ -204,8 +584,18 @@ def main(argv=None):
             result = matrix(args.cloud)
         elif args.command == "record":
             result = record(args.target, args.owner, args.source_sha, args.digest, args.run_id, args.run_attempt)
-        else:
+        elif args.command == "manifest":
             result = manifest(args.cloud, args.owner, args.source_sha, args.run_id, args.run_attempt, read_records(args.records_dir))
+        elif args.command == "tags":
+            result = {"ref": args.ref, "version": release_version(args.ref), "tags": channel_tags(args.ref)}
+        elif args.command == "publish":
+            if not re.fullmatch(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+", args.github_repository):
+                raise ValueError("GitHub repository must be owner/name")
+            release = validate_manifest(read_json(args.manifest, "release manifest"), args.source_sha, args.run_id, args.run_attempt)
+            result = publish(release, args.ref, args.github_repository, Registry())
+        else:
+            release = validate_manifest(read_json(args.manifest, "release manifest"))
+            result = validate_indexes(read_json(args.path, "index manifest"), release)
         output = json.dumps(result, sort_keys=True, separators=(",", ":")) + "\n"
         if getattr(args, "output", None):
             args.output.parent.mkdir(parents=True, exist_ok=True)

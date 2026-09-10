@@ -10,9 +10,10 @@ preview. For everyday authoring, see [FlowPilot](/studio/flowpilot/).
 
 Use the repository-root CLI to evaluate app generation through the real
 development desktop runtime. Live runs spend model budget and keep generated
-apps for inspection. Install the [desktop prerequisites](/dev/build/), configure
-the Codex provider in the app, and close any running desktop instance before
-starting the harness:
+apps for inspection. Install the [desktop prerequisites](/dev/build/) and authenticate
+the Codex CLI. A normal run uses the desktop's local profile and requires other desktop
+instances to be closed. Add `--isolated` to start with private storage and an empty local
+profile instead:
 
 ```sh
 bun run flowpilot:e2e -- --case simple-agent
@@ -45,10 +46,12 @@ bun run flowpilot:e2e -- --case simple-agent --dry-run
 
 By default Tauri starts the normal desktop Next dev server at `http://localhost:3000`. For a faster
 edit/run loop, keep that Next server running and pass `--frontend-url http://localhost:3000` so the
-CLI reuses it. Close any running Flow Like desktop app first: the native single-instance guard
-rejects a second desktop process rather than risking concurrent writes to shared local app data,
-and a CLI lock rejects parallel benchmark commands. `--keep-desktop` is available for debugging,
-but that retained app must be closed before the next CLI run.
+CLI reuses it. Normal runs reject a running desktop process to keep one writer for shared local
+app data. `--isolated` creates a fresh, private temporary root, a separate application identifier,
+and an incognito webview. It inherits Codex CLI authentication without copying the desktop's
+settings, app inventory or credentials. The CLI prints the data root and retains it for inspection.
+Both modes keep the native single-instance guard and a CLI lock. `--keep-desktop` is available
+for debugging; close that retained process before the next run.
 
 Child-process logs go to stderr, so `--json` reserves stdout for exactly one machine-readable result,
 including on infrastructure errors. Use `--output /tmp/flowpilot-e2e.json` for a stable artifact
@@ -91,10 +94,14 @@ await window.flowPilotE2E.run({
 ```
 
 Each returned artifact includes the resolved prompt; byte-for-byte authored
-FlowScript candidates; exact `check_flowscript` and commit receipts per app/board; canonical board
+FlowScript candidates; exact compiler and commit receipts per app/board; canonical board
 readbacks; parser and authoritative reconciliation results; app/UI/data/event inventory; persisted
 node-capability and generated-ID checks; lower/upper compactness bounds; partial collector failures;
 a stable failure fingerprint for grouping regressions; and the assistant debug trace.
+Compiler evidence accepts a separate `check_flowscript` receipt or the native commit path's
+inline validation. The inline path must match the retained write or patch by exact source,
+revision and compiler fingerprints, then prove the applied command count and persisted readback.
+A generic queued response alone does not establish successful compilation or application.
 The focused Vitest suite tests case construction and artifact evaluation without
 invoking a model.
 
@@ -227,6 +234,196 @@ the observed tool schema hash separately when setup reaches that stage. Setup fa
 in their planned cohort's denominator. External CLI versions, provider-side model updates, and remote configuration still need to
 be recorded alongside a baseline. This benchmark measures isolated workflow behavior. It does
 not certify whole-app integration or enable staged app-build promotion.
+
+## Search existing implementations
+
+FlowPilot's Scout, workflow and Data Studio specialists can search persisted implementation
+content with `search_workspace`, then open an exact result with `read_symbol`. Search indexes
+canonical FlowScript function, Event and interface bodies, Event input contracts, table fields,
+page bindings and selected bundled documentation. Ranking boosts exact symbol and title matches,
+normalizes common word endings, and removes general request words. It tries prefix matches for
+every term, then fuzzy matching when needed. Multiword requests also admit partial candidates
+with at least two meaningful terms and half the weighted query coverage; rarer terms carry more
+weight. Uppercase acronyms in the query must match. `match_mode`, `match_quality` and
+`query_coverage` expose how a hit was found. Coverage measures lexical overlap. Open the source
+to establish whether it implements the requested behavior before reusing it.
+
+Start with a concrete identifier or behavior and narrow by `app_id`, `board_id` or `kinds` when
+the target is known. Search defaults to the current app. Outside an app, it inspects at most four
+apps from the current profile. Each app contributes at most 16 resources per kind; workflow
+boards can contribute multiple symbols. `coverage.complete: false` and `coverage.issues` expose
+read failures, omitted resources and projection limits. A zero-hit result with incomplete
+coverage does not establish that an implementation is absent.
+
+For example, a workflow specialist can search for a payload field used inside a helper:
+
+```json
+{"query":"account_reference","app_id":"APP_ID","kinds":["workflow","event"]}
+```
+
+Copy the selected hit's `resource_id` and `revision` unchanged into `read_symbol`. The host reads
+the source again and rejects a changed revision. Workflow revisions cover the canonical board
+source; contract revisions cover their searchable projection. A read returns at most 16,000
+JSON-escaped content bytes. Continue with `next_offset` when present; offsets count UTF-16 code
+units. Search replies are capped at 24,000 bytes and provide an expiring `next_cursor` for further
+hits. Cursor requests retain the query and scope and recheck the resources they return.
+
+The first search for a scope reads its inventories and source, then builds an index. The component
+can retain two scope indexes for up to 120 seconds from collection start, within an 8 MiB budget
+for serialized documents. Follow-up queries reuse that index and re-read the returned resources;
+workflow hits on the same board share one revision check. Concurrent requests for the same scope
+share collection work. Backend or profile changes and stale or unreadable exact reads invalidate
+retained indexes. Collections with read failures are not retained.
+
+`freshness` reports the observation time, corpus age, cache outcome and number of revalidation
+reads. `coverage_basis: "observed_snapshot"` means inventory coverage describes that observation.
+The cache does not poll for newly created resources or changes to resources outside the returned
+hits. These can remain undiscovered until the scope expires or is invalidated. A cached zero-hit
+answer therefore cannot establish current absence, even when its observed coverage was complete.
+Narrowing the app or board reduces cold collection cost; retaining an index reduces follow-up
+work without eliminating source checks.
+
+These tools share the existing pre-draft inspection budget. Read the most relevant result and
+make one focused refinement if needed. A stale result permits a fresh search without resetting
+that budget. Scout handoffs carry resource IDs and revisions so the implementing specialist can
+read current evidence. The public-web researcher and app orchestrator do not expose these tools.
+
+Search covers contracts and implementation source, excluding table rows, Event configuration
+values, global variable declarations, page state values and embedded widget definitions. Event
+schemas retain bounded structure and reachable local references; omitted validation constraints
+are marked as incomplete. Indexed text remains untrusted source content, and symbol extraction
+does not validate workflow execution. Use the compiler, draft checks and behavior tests before
+reusing an implementation.
+
+The documentation corpus contains sections from nine selected FlowScript, Event, data and A2UI
+pages. Its response metadata lists included source paths and exclusions. After editing those
+pages, regenerate the bundle and check that the generated content is current:
+
+```sh
+bun apps/docs/scripts/generate-flowpilot-corpus.ts
+bun apps/docs/scripts/generate-flowpilot-corpus.ts --check
+```
+
+To compare retrieval over committed workflow fixtures and bundled documentation, run the
+development queries and the frozen holdout separately:
+
+```sh
+bun apps/desktop/scripts/benchmark-workspace-search.ts --output /tmp/workspace-search-development.json
+bun apps/desktop/scripts/benchmark-workspace-search.ts \
+  --queries apps/desktop/scripts/workspace-search-holdout.json \
+  --output /tmp/workspace-search-holdout.json
+```
+
+The default queries live in `apps/desktop/scripts/workspace-search-queries.json`. The independently
+authored holdout has 30 positive and 10 absent-capability queries, with different target symbols
+and documentation sections. It was frozen before evaluating the revised ranker. Keep its queries
+and expected targets unchanged. Once holdout failures inform tuning, freeze another independent
+set for the next evaluation.
+
+The report compares the frozen earlier ranker, the current full-text ranker, and the current
+ranker with body content removed. The descriptor-only comparison measures the contribution of
+body text. None of these replays the old agent. Expected-target hit rates use sparse acceptable
+answer labels, so report absent-query abstention alongside them. Known-target reads separately
+compare the actual `read_flowscript_source` and `read_symbol` handlers. Add `--quality-only` to
+skip timing and response-size experiments; `--repetitions` controls local timing repeats.
+
+The JSON report records source and query hashes, per-query results, serialized response sizes,
+local timing distributions and backend read counts. `index_build_and_rank_ms` rebuilds the index;
+`retained_index_query_ms` measures querying an existing index. Service experiments separate cold
+and follow-up searches at profile, app and board scope. They use an in-memory fixture backend
+with real source files and inject 0, 25 or 100 ms per inventory/source read. The injected delays
+show sensitivity to backend cost; they are simulated timing, not observed hosted latency.
+This benchmark does not invoke a model or measure app-build success.
+
+### Compare live app builds
+
+Run two pairs through the development desktop and real Codex provider:
+
+```sh
+bun run flowpilot:e2e -- --retrieval-ab --isolated --repeat 2 --model terra \
+  --output /tmp/flowpilot-retrieval-ab.json
+```
+
+This selects `retrieval-intake`, the only supported comparison case. Each pair starts from the
+same seeded source app and creates two separate destination apps with the same requirements and
+model settings. One arm uses the frozen earlier ranker with index retention disabled; the other
+uses current ranking and retention. The runner reverses arm order on the second repeat, producing
+four app-build attempts. Runs are serial and use the structural tier; `--suite`, `--fail-fast`
+and behavioral acceptance are unavailable in this mode.
+
+The task retrieves an existing intake policy and builds a page, Event, reusable helper and ticket
+table around it. Host checks inspect compiler receipts, persisted references, table field types,
+policy labels and deadlines, and a static call path to the helper from the registered Event on the
+page's owning board. These are structural checks. Generated workflows are not executed, so a
+pass does not establish routing precedence, runtime persistence or UI behavior. `--isolated`
+separates app storage and webview state; it does not enable the behavioral tier.
+
+The controller verifies the paired model, normalized prompt, fixture and runtime-source
+fingerprints, distinct destination apps, and unchanged source before comparing results.
+`retrievalComparisonResults` includes completed structural requirements, failed wiring checks,
+generation attempts, elapsed time, retrieval-call durations and response bytes, and available
+provider token counts. Missing usage and repair-decision counts remain `null`. Check
+`retrievalExercised` before attributing a difference to search. These timings come from actual
+model-driven builds, while the earlier fixture benchmark uses injected backend delays. Two pairs
+help expose failures and order effects; use more repeats and additional cases before generalizing
+to complex-app success rates.
+
+### Check intake completion through the runtime
+
+The `intake-reliability` case uses the host's AppSpec provisioning operations to create a local
+app, reuse its empty default board, verify the exact ticket schema and reserve page and Event IDs.
+The model builds the page and workflow against those identifiers. After generation, the host
+resolves the persisted `submitTicket` entry and registers the reserved Events. This measures a
+fixed, host-provisioned intake build; its completion rate is a different cohort from free-form
+app creation or the paired retrieval experiment.
+
+Build the workflow first so the page can bind its button to the persisted entry node ID. Page
+actions carry form elements in the runtime payload. The workflow reads the input through
+`ui::getElement` and `ui::getElementValue`, then updates the result through `ui::setElementText`.
+An action's context does not populate top-level Generic Event pins, and returning a value alone
+does not update the page.
+
+Use `flowpilot_board` with `mode="inspect"` and exact app and board IDs to read authoritative
+canonical FlowScript, entry IDs and bounded node/pin connections without a specialist or writes.
+Check coverage before treating the result as complete. Compiler diagnostics are unavailable from
+these read APIs; inspection does not compile or execute the workflow. `mode="explain"` delegates
+a question to a specialist, whose paraphrase is separate from the canonical source.
+
+Canonical source renders a graph. Anchors carry node identity, and repeated expression text can
+refer to one producer connected to several consumers. Wildcard imports and empty rendered
+branches alone do not establish a defect. Use exact graph facts, diagnostics or a behavioral
+failure to justify a repair; avoid changes made only to restyle canonical serialization.
+
+For atomic board edits, the host matches the receipt's graph fingerprint against a fresh storage
+read. The fingerprint includes node and pin identities, so it can verify a replacement whose
+canonical text stays the same. Missing or stale receipts leave the saved state unverified.
+
+UI generation receipts distinguish staged output from a saved page. The host verifies the
+saved identity and content through authoritative readback. Use `flowpilot_widget` with
+`mode="inspect"` and exact app, board and page IDs to read persisted components, actions and
+lifecycle bindings without another generation. Inspection does not verify rendered behavior.
+
+```sh
+bun run flowpilot:e2e -- --case intake-reliability --isolated --tier behavioral \
+  --model terra --repeat 10 --output /tmp/intake-reliability.json
+```
+
+The native development runtime must attest the offline app, exact board snapshot and compiled
+Page actions before execution. The fixture permits a bounded set of local routing, database and
+UI nodes, restricts database access to `intake_tickets`, and rejects credentials, network nodes,
+WASM and lifecycle execution. These constraints apply to this fixture, not arbitrary app builds.
+
+The runner mounts the actual Page, enters five distinct summaries and triggers its submit
+action. Each scenario requires a successful native run, exactly one new row with the expected
+summary, queue and deadline, and the assigned queue visible on the Page. Cases cover interruption,
+refund, general requests, overlapping conditions and case-insensitive matching. Unknown or
+missing runtime evidence fails acceptance. The Page Event is restored after execution.
+
+Artifacts retain provisioning readbacks and durations for provisioning, generation, registration,
+collection and behavioral checks. Native and delegated tool traces remain separate because their
+time windows overlap. The controller writes `<output>.progress.json` after each completed build;
+the final envelope includes all requested runs, including failures. Keep pilot runs separate from
+a repeated cohort and freeze code, prompts and acceptance checks during that cohort.
 
 ## Staged app-build preview
 

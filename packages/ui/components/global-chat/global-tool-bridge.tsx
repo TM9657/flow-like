@@ -1,5 +1,13 @@
 "use client";
 
+import {
+	dispatchWorkspaceEvaluationRead,
+	getWorkspaceEvaluation,
+	registerWorkspaceEvaluationDestination,
+	workspaceEvaluationAllowsApp,
+	workspaceEvaluationTargetError,
+} from "../../lib/flowpilot/workspace-evaluation";
+
 import { i18n as i18next } from "@flow-like/locales";
 import { createId } from "@paralleldrive/cuid2";
 import { usePathname, useRouter } from "next/navigation";
@@ -46,6 +54,7 @@ import {
 	createFlowScriptGenerationTrace,
 	updateFlowScriptGenerationRunReceipt,
 } from "../../lib/flowpilot/flowscript-generation-receipt";
+import { WorkspaceSearchSession } from "../../lib/flowpilot/workspace-search";
 import { resolveFrontendToolApprovalScope } from "../../lib/frontend-tool-approval-scope";
 import {
 	inspectLiveAppPage,
@@ -172,6 +181,17 @@ import {
 	findPersistedPage,
 	pageWithAppliedComponents,
 } from "./detached-page-edit";
+import {
+	verifyAtomicBoardDeliveryReadback,
+	verifyAtomicBoardReadback,
+} from "./flowpilot-atomic-readback";
+import { inspectFlowPilotBoard } from "./flowpilot-board-inspection";
+import { inspectFlowPilotWidgetPage } from "./flowpilot-widget-inspection";
+import {
+	persistFlowPilotWidgetPage,
+	stagedFlowPilotWidgetReceipt,
+	widgetSpecialistMessage,
+} from "./flowpilot-widget-receipt";
 import {
 	flowPilotWidgetCreationScope,
 	isFlowPilotPageNotFoundError,
@@ -1399,6 +1419,7 @@ export function GlobalToolBridge() {
 	// Failed repair candidates are board-scoped (not message-scoped), so a retry in a new turn can
 	// continue the closest source after a provider deadline or lost MCP response.
 	const boardRecoveryRef = useRef(new BoardEditRecoveryStore());
+	const workspaceSearchRef = useRef(new WorkspaceSearchSession());
 	const boardZeroProgressRetryRef = useRef(new BoardZeroProgressRetryGuard());
 	// Crash-durable record of artifacts created per conversation. A retried creating tool (after a
 	// crash, reload, or lost tool response) is answered with the recorded ids instead of a duplicate.
@@ -1742,17 +1763,16 @@ export function GlobalToolBridge() {
 				job.phase === "applied" || job.phase === "applied_pending_delivery";
 			let persistedReadbackVerified = false;
 			if (applied) {
-				try {
-					const persisted = await backend.boardState.getFlowScript(
-						job.appId,
-						job.boardId,
-						undefined,
-						true,
-					);
-					persistedReadbackVerified = persisted.trim().length > 0;
-				} catch {
-					persistedReadbackVerified = false;
-				}
+				const verification = await verifyAtomicBoardReadback({
+					boardState: backend.boardState,
+					appId: job.appId,
+					boardId: job.boardId,
+					result: {
+						status: "applied",
+						persisted_board_fingerprint: job.persistedBoardFingerprint,
+					},
+				});
+				persistedReadbackVerified = verification.verified;
 			}
 			updateFlowScriptGenerationRunReceipt(
 				{
@@ -2125,6 +2145,21 @@ export function GlobalToolBridge() {
 		async (request: FrontendToolRequest, scope: RunScope): Promise<unknown> => {
 			assertRequestActive(request, "tool execution");
 			const args = request.arguments ?? {};
+			const evaluation = getWorkspaceEvaluation(conversationScopeId(request));
+			const evaluationTargetError = (appId: string | undefined) =>
+				workspaceEvaluationTargetError(
+					evaluation,
+					request.toolName,
+					args,
+					appId,
+				);
+			const evaluationError = evaluationTargetError(
+				argString(args, "app_id") ||
+					argString(args, "appId") ||
+					request.context?.appId ||
+					request.context?.app_id,
+			);
+			if (evaluationError) return evaluationError;
 			// Only apps visible in the CURRENT profile are eligible for app-interface and
 			// cross-board source tools.
 			const getProfileAppIds = async (): Promise<Set<string>> => {
@@ -2132,7 +2167,13 @@ export function GlobalToolBridge() {
 					const profile = await backend.userState.getSettingsProfile();
 					await assertHomeProfile(request, profile?.hub_profile?.id ?? "");
 					return new Set(
-						(profile?.hub_profile?.apps ?? []).map((entry) => entry.app_id),
+						(profile?.hub_profile?.apps ?? [])
+							.map((entry) => entry.app_id)
+							.filter(
+								(appId) =>
+									!evaluation ||
+									workspaceEvaluationAllowsApp(evaluation, appId),
+							),
 					);
 				} catch (error) {
 					if (error instanceof HomeProfileRunError) throw error;
@@ -2212,6 +2253,34 @@ export function GlobalToolBridge() {
 				};
 			};
 			switch (request.toolName) {
+				case "search_workspace":
+				case "read_symbol": {
+					const workspaceScope = {
+						getProfileAppIds,
+						getProfileIdentity: async () => {
+							const profile = await backend.userState.getSettingsProfile();
+							const id = profile.hub_profile.id ?? "";
+							await assertHomeProfile(request, id);
+							return id;
+						},
+						scopedAppId: request.context?.appId ?? request.context?.app_id,
+					};
+					if (evaluation)
+						return dispatchWorkspaceEvaluationRead(
+							evaluation,
+							request.toolName,
+							backend,
+							args,
+							workspaceScope,
+						);
+					return request.toolName === "search_workspace"
+						? workspaceSearchRef.current.search(backend, args, workspaceScope)
+						: workspaceSearchRef.current.readSymbol(
+								backend,
+								args,
+								workspaceScope,
+							);
+				}
 				case "read_flowscript_source": {
 					const appId = argString(args, "app_id") || argString(args, "appId");
 					const boardId =
@@ -2925,8 +2994,17 @@ export function GlobalToolBridge() {
 					}
 				}
 				// Scout read tools. All read-only, all digest-shaped — see scout-tools.ts.
-				case "search_apps":
-					return await scoutSearchApps(backend, args);
+				case "search_apps": {
+					const result = await scoutSearchApps(backend, args);
+					if (!evaluation || !Array.isArray(result.apps)) return result;
+					return {
+						...result,
+						apps: result.apps.filter((app) =>
+							workspaceEvaluationAllowsApp(evaluation, app.app_id),
+						),
+						note: "Evaluation app discovery is limited to this arm's source fixture and newly created destinations.",
+					};
+				}
 				case "get_app_detail":
 					return await scoutGetAppDetail(backend, args);
 				case "search_templates":
@@ -3469,6 +3547,8 @@ export function GlobalToolBridge() {
 							});
 						},
 						rememberTarget: (appId) => {
+							if (evaluation)
+								registerWorkspaceEvaluationDestination(evaluation, appId);
 							const owner = ownerMessageIdForRequest(request);
 							if (owner) createdAppTargetsByOwnerRef.current.set(owner, appId);
 							while (createdAppTargetsByOwnerRef.current.size > 128) {
@@ -4365,6 +4445,44 @@ export function GlobalToolBridge() {
 					}
 				}
 				case "flowpilot_board": {
+					if (argString(args, "mode") === "inspect") {
+						const appId = argString(args, "app_id") || argString(args, "appId");
+						const boardId =
+							argString(args, "board_id") || argString(args, "boardId");
+						if (!appId || !boardId)
+							return inspectFlowPilotBoard(backend.boardState, {
+								appId,
+								boardId,
+							});
+						if (!(await getProfileAppIds()).has(appId))
+							return {
+								status: "error",
+								code: "FLOWPILOT_BOARD_INSPECT_APP_OUT_OF_SCOPE",
+								message:
+									"The requested app is not visible in the current profile.",
+							};
+						const release = await boardEditCoordinator.acquire(
+							boardEditLockKey(appId, boardId),
+							{
+								deadlineAtMs: requestDeadline(request),
+								signal:
+									requestExecutionLeasesRef.current.get(request)?.controller
+										.signal,
+								onInvalidated: () => markRequestExpired(request.requestId),
+							},
+						);
+						try {
+							assertRequestActive(request, "board inspection");
+							const result = await inspectFlowPilotBoard(backend.boardState, {
+								appId,
+								boardId,
+							});
+							assertRequestActive(request, "board inspection readback");
+							return result;
+						} finally {
+							release();
+						}
+					}
 					const instruction = argString(args, "instruction");
 					if (!instruction)
 						return {
@@ -4396,6 +4514,8 @@ export function GlobalToolBridge() {
 							? boardSurface
 							: null;
 					const appId = liveSurface?.appId ?? appIdArg;
+					const resolvedEvaluationError = evaluationTargetError(appId);
+					if (resolvedEvaluationError) return resolvedEvaluationError;
 					if (!appId)
 						return {
 							status: "error",
@@ -5179,31 +5299,17 @@ Completion contract: build complete helper logic first and add the Event entry l
 												...diagnostics,
 											];
 										}
-										try {
-											const persistedFlowScript =
-												await backend.boardState.getFlowScript(
-													appId,
-													boardId,
-													undefined,
-													true,
-												);
-											persistedReadbackVerified = flowScriptSnapshotChanged(
-												baselineFlowScript,
-												persistedFlowScript,
-											);
-											if (!persistedReadbackVerified) {
-												persistedReadbackFailed = true;
-												diagnostics = [
-													"PERSISTED_FLOWSCRIPT_MISMATCH: Atomic apply reported success but the persisted board snapshot did not advance.",
-													...diagnostics,
-												];
-											}
-										} catch (error) {
+										const verification =
+											await verifyAtomicBoardDeliveryReadback({
+												boardState: backend.boardState,
+												appId,
+												boardId,
+												delivery,
+											});
+										persistedReadbackVerified = verification.verified;
+										if (!verification.verified) {
 											persistedReadbackFailed = true;
-											diagnostics = [
-												`PERSISTED_FLOWSCRIPT_READBACK_FAILED: Atomic apply succeeded, but verification could not reload the board: ${error instanceof Error ? error.message : String(error)}`,
-												...diagnostics,
-											];
+											diagnostics = [verification.diagnostic, ...diagnostics];
 										}
 									} else if (resolvedJob.phase === "stale") {
 										staleSnapshotBlocked = true;
@@ -5321,31 +5427,16 @@ Completion contract: build complete helper logic first and add the Event entry l
 									appliedCommands = compiledResult.commands.length;
 									appliedViaLive = applyLive !== null;
 									flowIrCommit = undefined;
-									try {
-										const persistedFlowScript =
-											await backend.boardState.getFlowScript(
-												appId,
-												boardId,
-												undefined,
-												true,
-											);
-										persistedReadbackVerified = flowScriptSnapshotChanged(
-											baselineFlowScript,
-											persistedFlowScript,
-										);
-										if (!persistedReadbackVerified) {
-											persistedReadbackFailed = true;
-											diagnostics = [
-												"PERSISTED_FLOWSCRIPT_MISMATCH: Atomic apply reported success but the persisted board snapshot did not advance.",
-												...diagnostics,
-											];
-										}
-									} catch (error) {
+									const verification = await verifyAtomicBoardReadback({
+										boardState: backend.boardState,
+										appId,
+										boardId,
+										result: compiledResult,
+									});
+									persistedReadbackVerified = verification.verified;
+									if (!verification.verified) {
 										persistedReadbackFailed = true;
-										diagnostics = [
-											`PERSISTED_FLOWSCRIPT_READBACK_FAILED: Atomic apply succeeded, but verification could not reload the board: ${error instanceof Error ? error.message : String(error)}`,
-											...diagnostics,
-										];
+										diagnostics = [verification.diagnostic, ...diagnostics];
 									}
 									if (!appliedViaLive && appliedCommands > 0) {
 										void queryClient.invalidateQueries({
@@ -5734,7 +5825,9 @@ Completion contract: build complete helper logic first and add the Event entry l
 										: workspaceStatus === "no_changes"
 											? `No changes needed${repairedSuffix}`
 											: applyFailed
-												? `Not applied — ${diagnostics[0]?.slice(0, 120) ?? "apply failed"}`
+												? persistedReadbackFailed
+													? `Saved state unverified: ${diagnostics[0]?.slice(0, 120) ?? "readback failed"}`
+													: `Not applied — ${diagnostics[0]?.slice(0, 120) ?? "apply failed"}`
 												: partialWorkingSlice
 													? `${appliedCommands} command${appliedCommands === 1 ? "" : "s"} applied as an incomplete testable slice`
 													: canonicalSourceCorrected && appliedCommands === 0
@@ -6044,6 +6137,16 @@ Completion contract: build complete helper logic first and add the Event entry l
 					}
 				}
 				case "flowpilot_widget": {
+					if (argString(args, "mode") === "inspect") {
+						return inspectFlowPilotWidgetPage(backend.pageState, {
+							appId: argString(args, "app_id") || argString(args, "appId"),
+							pageId: argString(args, "page_id") || argString(args, "pageId"),
+							boardId:
+								argString(args, "board_id") ||
+								argString(args, "boardId") ||
+								undefined,
+						});
+					}
 					const instruction = argString(args, "instruction");
 					if (!instruction)
 						return {
@@ -6112,6 +6215,8 @@ Completion contract: build complete helper logic first and add the Event entry l
 							? widgetSurface
 							: null;
 					const targetAppId = targetResolution.appId;
+					const resolvedEvaluationError = evaluationTargetError(targetAppId);
+					if (resolvedEvaluationError) return resolvedEvaluationError;
 					const appId = targetAppId;
 					let boardId = createMode
 						? requestedBoardId
@@ -6207,11 +6312,20 @@ Completion contract: build complete helper logic first and add the Event entry l
 						const journaledPage =
 							createdArtifactJournalRef.current.find(identity);
 						if (!journaledPage?.artifacts.pageId) return undefined;
+						let persistedPage: IPage;
 						try {
-							await backend.pageState.getPage(
+							persistedPage = await backend.pageState.getPageAuthoritative(
 								targetAppId,
 								journaledPage.artifacts.pageId,
+								journaledPage.artifacts.boardId,
 							);
+							if (
+								persistedPage.id !== journaledPage.artifacts.pageId ||
+								persistedPage.boardId !== journaledPage.artifacts.boardId
+							)
+								throw new Error(
+									"The previously created page failed authoritative identity verification.",
+								);
 						} catch (error) {
 							if (isFlowPilotPageNotFoundError(error)) return undefined;
 							throw error;
@@ -6219,12 +6333,21 @@ Completion contract: build complete helper logic first and add the Event entry l
 						scope.referenceApp(targetAppId);
 						return {
 							status: "ok" as const,
+							message: `The previously created page '${persistedPage.name}' (${persistedPage.id}) is present in authoritative storage. Its current component count is ${persistedPage.components.length}.`,
 							already_created: true,
+							applied: true,
+							staged: false,
+							persistence_verified: true,
+							component_count: persistedPage.components.length,
 							app_id: targetAppId,
 							...(journaledPage.artifacts.boardId
 								? { board_id: journaledPage.artifacts.boardId }
 								: {}),
-							page: { id: journaledPage.artifacts.pageId },
+							page: {
+								id: persistedPage.id,
+								name: persistedPage.name,
+								route: persistedPage.route,
+							},
 							widgets: (journaledPage.artifacts.widgetIds ?? []).map((id) => ({
 								id,
 							})),
@@ -6458,7 +6581,9 @@ Completion contract: build complete helper logic first and add the Event entry l
 					if (components.length === 0)
 						return finishWidgetRun({
 							status: "error",
-							message: response.message,
+							message:
+								"The UI specialist returned no applicable components. The host did not change the UI.",
+							...widgetSpecialistMessage(response.message),
 							component_count: 0,
 							note: "IMPORTANT: the widget copilot ended WITHOUT generating any UI components — nothing was changed. Do not tell the user the UI was built; retry once with a clearer instruction or tell the user honestly that nothing was generated.",
 						});
@@ -6748,7 +6873,15 @@ Completion contract: build complete helper logic first and add the Event entry l
 							if (canvasSettings) page.canvasSettings = canvasSettings;
 							if (Object.keys(widgetRefs).length > 0)
 								(page as { widgetRefs?: unknown }).widgetRefs = widgetRefs;
-							await backend.pageState.updatePage(targetAppId, page);
+							const pageReceipt = await persistFlowPilotWidgetPage(
+								backend.pageState,
+								targetAppId,
+								page,
+								"create",
+								response.message,
+							);
+							if (pageReceipt.status !== "ok")
+								return finishWidgetRun(pageReceipt);
 
 							scope.referenceApp(targetAppId);
 							if (widgetCreationIdentity) {
@@ -6787,15 +6920,10 @@ Completion contract: build complete helper logic first and add the Event entry l
 								runId: scope.runId,
 							});
 							return finishWidgetRun({
-								status: "ok",
-								message: response.message,
-								component_count: components.length,
-								app_id: targetAppId,
-								board_id: boardId,
-								page: { id: pageId, name: pageName, route },
+								...pageReceipt,
 								widgets: createdWidgets,
 								...(createdBoard ? { created_board_id: boardId } : {}),
-								note: `Created and applied UI only; no workflow logic was built. If the user's request includes behavior, wiring, data loading, actions, nodes, connections, or events, the next required step is flowpilot_board with this app_id and the returned page route plus widget/action_ids. Do not report the overall build complete until that board specialist succeeds.`,
+								note: "The host persisted the UI after the specialist returned. specialist_message describes the earlier generation stage. Use flowpilot_board for any remaining workflow changes, then verify the requested behavior.",
 							});
 						} catch (error) {
 							return finishWidgetRun({
@@ -6839,11 +6967,10 @@ Completion contract: build complete helper logic first and add the Event entry l
 								});
 								scope.referenceApp(appId);
 								return finishWidgetRun({
-									status: "ok",
-									message: response.message,
-									component_count: components.length,
-									staged: true,
-									applied: false,
+									...stagedFlowPilotWidgetReceipt(
+										components.length,
+										response.message,
+									),
 									app_id: appId,
 									page: { id: detachedPage.id, name: detachedPage.name },
 									note: `The user opened this page's builder while the UI was being generated, so the components are pending their review in the chat instead of being written directly. Tell the user to review and apply them.`,
@@ -6873,7 +7000,8 @@ Completion contract: build complete helper logic first and add the Event entry l
 									code: writeGuard.code,
 									message: writeGuard.message,
 								});
-							await backend.pageState.updatePage(
+							const pageReceipt = await persistFlowPilotWidgetPage(
+								backend.pageState,
 								appId,
 								pageWithAppliedComponents(
 									persisted,
@@ -6881,7 +7009,11 @@ Completion contract: build complete helper logic first and add the Event entry l
 									canvasSettings,
 									new Date().toISOString(),
 								),
+								"edit",
+								response.message,
 							);
+							if (pageReceipt.status !== "ok")
+								return finishWidgetRun(pageReceipt);
 							scope.referenceApp(appId);
 							// Opening the page is the only review the user gets on this path. Deferred
 							// because a mid-stream router.push tears the run down.
@@ -6890,25 +7022,12 @@ Completion contract: build complete helper logic first and add the Event entry l
 								runId: scope.runId,
 							});
 							return finishWidgetRun({
-								status: "ok",
-								message: response.message,
-								component_count: components.length,
-								staged: false,
-								applied: true,
-								app_id: appId,
-								...(detachedPage.boardId
-									? { board_id: detachedPage.boardId }
-									: {}),
-								page: {
-									id: detachedPage.id,
-									name: detachedPage.name,
-									route: detachedPage.route,
-								},
+								...pageReceipt,
 								...(requestedPageTarget?.appIdFromSurface
 									? { app_scope_source: "open_builder" }
 									: {}),
 								...(warnings.length > 0 ? { warnings } : {}),
-								note: "Applied DIRECTLY to the saved page — no builder was open, so there is no review card and the user has NOT reviewed this. Name the page you changed when you report back. Components whose ids the copilot reused were replaced and new ones appended; nothing was deleted, and reusable widgets are not extracted in edit mode. No workflow logic was built — behaviour still needs flowpilot_board.",
+								note: "The host saved the page edit and verified its content after the specialist returned. specialist_message describes the earlier generation stage. Name the changed page when reporting back. Use flowpilot_board for any remaining workflow changes.",
 							});
 						} catch (error) {
 							return finishWidgetRun({
@@ -6937,16 +7056,18 @@ Completion contract: build complete helper logic first and add the Event entry l
 					if (!staged)
 						return finishWidgetRun({
 							status: "error",
-							message: response.message,
+							message:
+								"The generated UI could not be staged because the conversation moved on. The host discarded these components.",
+							...widgetSpecialistMessage(response.message),
 							component_count: components.length,
 							staged: false,
 							note: "IMPORTANT: components were generated but the conversation moved on before they could be staged — they were DISCARDED and there is no review card. Do not tell the user to review anything; offer to regenerate.",
 						});
 					return finishWidgetRun({
-						status: "ok",
-						message: response.message,
-						component_count: components.length,
-						staged: true,
+						...stagedFlowPilotWidgetReceipt(
+							components.length,
+							response.message,
+						),
 						note: "Components are pending user review in the chat — they are NOT applied yet. Tell the user to review and apply them.",
 					});
 				}

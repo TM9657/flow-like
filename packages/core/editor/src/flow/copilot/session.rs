@@ -100,6 +100,7 @@ pub enum ContextReadDomain {
     Database,
     Ui,
     Storage,
+    Workspace,
     Extension(String),
 }
 
@@ -107,7 +108,7 @@ impl ContextReadDomain {
     fn consumes_predraft_budget(&self) -> bool {
         matches!(
             self,
-            Self::Database | Self::Ui | Self::Storage | Self::Extension(_)
+            Self::Database | Self::Ui | Self::Storage | Self::Workspace | Self::Extension(_)
         )
     }
 }
@@ -1055,6 +1056,21 @@ impl WorkflowSession {
         if let Some(domain) = tool_context_domain(tool_name) {
             let operation = context_read_operation(tool_name, arguments);
             let key = ContextReadKey::new(domain, operation, arguments);
+            let owns_reservation = lease.is_some_and(|lease| {
+                lease.key == key
+                    && self
+                        .in_flight_context_reads
+                        .get(&key)
+                        .is_some_and(|read| read.reservation_id == lease.reservation_id)
+            });
+            if owns_reservation && workspace_result_invalidates_search(tool_name, result_text) {
+                // A changed source requires fresh discovery. Keep the consumed budget so stale
+                // revisions cannot reopen an unbounded research loop, and ignore late leases.
+                self.context_reads.retain(|read| {
+                    read.domain != ContextReadDomain::Workspace
+                        || read.operation != "search_workspace"
+                });
+            }
             let decision = if let Some(lease) = lease.filter(|lease| lease.key == key) {
                 self.finish_context_read(lease, succeeded, elapsed_ms)?
             } else if self.in_flight_context_reads.contains_key(&key) {
@@ -2016,8 +2032,21 @@ fn tool_context_domain(tool_name: &str) -> Option<ContextReadDomain> {
         "database_tool" => Some(ContextReadDomain::Database),
         "ui_inspect" => Some(ContextReadDomain::Ui),
         "storage_tool" => Some(ContextReadDomain::Storage),
+        "search_workspace" | "read_symbol" => Some(ContextReadDomain::Workspace),
         _ => None,
     }
+}
+
+fn workspace_result_invalidates_search(tool_name: &str, result_text: &str) -> bool {
+    let expected = match tool_name {
+        "read_symbol" => "WORKSPACE_REVISION_CHANGED",
+        "search_workspace" => "WORKSPACE_SNAPSHOT_CHANGED",
+        _ => return false,
+    };
+    serde_json::from_str::<Value>(result_text).is_ok_and(|result| {
+        result.get("status").and_then(Value::as_str) == Some("stale")
+            && result.get("code").and_then(Value::as_str) == Some(expected)
+    })
 }
 
 /// Interpret the semantic disposition inside provider-neutral tool text. Frontend bridges often
@@ -2840,6 +2869,132 @@ mod tests {
             ContextReadDecision::Accepted { .. }
         ));
         assert_eq!(session.snapshot(8).predraft_unique_context_reads, 2);
+    }
+
+    #[test]
+    fn workspace_research_shares_predraft_budget_and_deduplicates_exact_reads() {
+        let mut session = WorkflowSession::new(manifest(), policy());
+        session.mark_manifest_ready(0).unwrap();
+        session.begin_discovery(0).unwrap();
+        let reads = [
+            (
+                "search_workspace",
+                json!({"query": "retry invoice", "app_id": "source-app"}),
+            ),
+            (
+                "read_symbol",
+                json!({"resource_id": "source-helper", "revision": "revision-1"}),
+            ),
+        ];
+        for (index, (name, args)) in reads.iter().enumerate() {
+            let elapsed = index as u64 + 1;
+            let decision = session.preflight_tool_call(name, args, elapsed).unwrap();
+            assert!(matches!(
+                decision,
+                WorkflowToolPreflightDecision::Dispatch { lease: Some(_) }
+            ));
+            session
+                .complete_tool_call(
+                    decision.lease(),
+                    name,
+                    args,
+                    "{\"status\":\"ok\"}",
+                    true,
+                    elapsed,
+                )
+                .unwrap();
+            assert!(
+                matches!(session.preflight_tool_call(name, args, elapsed).unwrap(),
+                WorkflowToolPreflightDecision::ShortCircuit { ref code, .. } if code == "DUPLICATE_CONTEXT_READ")
+            );
+        }
+        assert_eq!(session.snapshot(3).predraft_unique_context_reads, 2);
+        assert!(matches!(session.preflight_tool_call(
+            "read_symbol", &json!({"resource_id": "source-helper", "revision": "revision-1", "offset": 1000}), 3
+        ).unwrap(), WorkflowToolPreflightDecision::ShortCircuit { ref code, .. } if code == "PREDRAFT_INSPECTION_BUDGET_EXHAUSTED"));
+    }
+
+    #[test]
+    fn changed_workspace_sources_allow_search_refresh_without_resetting_the_budget() {
+        for (tool, args, status, code, should_refresh) in [
+            (
+                "read_symbol",
+                json!({"resource_id": "source-helper", "revision": "revision-1"}),
+                "stale",
+                "WORKSPACE_REVISION_CHANGED",
+                true,
+            ),
+            (
+                "search_workspace",
+                json!({"query": "retry invoice", "cursor": "page-2"}),
+                "stale",
+                "WORKSPACE_SNAPSHOT_CHANGED",
+                true,
+            ),
+            (
+                "search_workspace",
+                json!({"query": "retry invoice", "cursor": "page-2"}),
+                "error",
+                "WORKSPACE_CURSOR_INVALID",
+                false,
+            ),
+        ] {
+            let mut session = WorkflowSession::new(manifest(), policy());
+            session.mark_manifest_ready(0).unwrap();
+            session.begin_discovery(0).unwrap();
+            let query = json!({"query": "retry invoice"});
+            let first = session
+                .preflight_tool_call("search_workspace", &query, 1)
+                .unwrap();
+            session
+                .complete_tool_call(
+                    first.lease(),
+                    "search_workspace",
+                    &query,
+                    "{\"status\":\"ok\"}",
+                    true,
+                    1,
+                )
+                .unwrap();
+            let check = session.preflight_tool_call(tool, &args, 2).unwrap();
+            assert!(check.lease().is_some());
+            session
+                .complete_tool_call(
+                    check.lease(),
+                    tool,
+                    &args,
+                    &json!({"status": status, "code": code}).to_string(),
+                    false,
+                    2,
+                )
+                .unwrap();
+            assert_eq!(session.snapshot(2).predraft_unique_context_reads, 1);
+            let refresh = session
+                .preflight_tool_call("search_workspace", &query, 3)
+                .unwrap();
+            if should_refresh {
+                assert!(refresh.lease().is_some());
+                session
+                    .complete_tool_call(
+                        refresh.lease(),
+                        "search_workspace",
+                        &query,
+                        "{\"status\":\"ok\"}",
+                        true,
+                        3,
+                    )
+                    .unwrap();
+                assert_eq!(session.snapshot(3).predraft_unique_context_reads, 2);
+                assert!(
+                    matches!(session.preflight_tool_call("search_workspace", &json!({"query": "invoice handler"}), 4).unwrap(),
+                    WorkflowToolPreflightDecision::ShortCircuit { ref code, .. } if code == "PREDRAFT_INSPECTION_BUDGET_EXHAUSTED")
+                );
+            } else {
+                assert!(
+                    matches!(refresh, WorkflowToolPreflightDecision::ShortCircuit { ref code, .. } if code == "DUPLICATE_CONTEXT_READ")
+                );
+            }
+        }
     }
 
     #[test]

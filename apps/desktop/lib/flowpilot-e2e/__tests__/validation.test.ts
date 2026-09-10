@@ -307,6 +307,13 @@ describe("FlowPilot app-creation artifact validation", () => {
 		expect(missingCodes).toContain(
 			"flowscript.compiler_receipt.commit_success",
 		);
+		for (const code of ["raw_candidate", "full_envelope"]) {
+			expect(
+				evaluateAppCreationCase(caseDefinition(), missing).checks.find(
+					(check) => check.code === `flowscript.compiler_receipt.${code}`,
+				),
+			).toMatchObject({ status: "fail", actual: false });
+		}
 
 		const mismatched = snapshot();
 		const run = mismatched.flowScriptGenerationRuns?.[0];
@@ -348,6 +355,37 @@ describe("FlowPilot app-creation artifact validation", () => {
 		expect(unboundCodes).toContain(
 			"flowscript.compiler_receipt.exact_revision",
 		);
+	});
+
+	test("accepts a checked inline commit with matching retained validation", () => {
+		const artifacts = snapshot();
+		const run = artifacts.flowScriptGenerationRuns?.[0];
+		if (!run) throw new Error("expected fixture compiler run");
+		run.compilerReceipts = run.compilerReceipts.map((receipt, index) => {
+			const status = index === 0 ? "draft_started" : "queued";
+			return {
+				...receipt,
+				toolName: index === 0 ? "write_flowscript" : "commit_flowscript",
+				status,
+				success: index !== 0,
+				payload: {
+					...receipt.payload,
+					status,
+					validation_sequence: index + 1,
+					source,
+					source_fingerprint: "a".repeat(64),
+					catalog_fingerprint: `b3:${"b".repeat(64)}`,
+					commands_fingerprint: "c".repeat(64),
+				},
+			};
+		});
+		const report = evaluateAppCreationCase(caseDefinition(), artifacts);
+		expect(report.passed).toBe(true);
+		expect(
+			report.checks.find(
+				(check) => check.code === "flowscript.compiler_receipt.check_success",
+			)?.message,
+		).toContain("1 checked inline commit");
 	});
 
 	test("fails a missing model and an invalid authored candidate", () => {
@@ -579,7 +617,7 @@ function memory() { return database({ name: "prefix-adventure_memory" }) }`,
 		);
 	});
 
-	test("requires canonical source, lint and reconcile for every board", () => {
+	test("retains an unused empty board in inventory without treating it as a workflow", () => {
 		const artifacts = snapshot();
 		artifacts.boards = [
 			...artifacts.boards,
@@ -593,10 +631,112 @@ function memory() { return database({ name: "prefix-adventure_memory" }) }`,
 		const report = evaluateAppCreationCase(caseDefinition(), artifacts);
 		const codes = report.failures.map(({ code }) => code);
 
-		expect(codes).toContain("flowscript.canonical.board_present.board-empty");
-		expect(codes).toContain("flowscript.lint.available.board-empty");
-		expect(codes).toContain("flowscript.reconcile.available.board-empty");
-		expect(codes).toContain("boards.nonempty.board-empty");
+		expect(report.passed).toBe(true);
+		expect(report.inventory.boards).toBe(2);
+		expect(codes).not.toContain("boards.nonempty.board-empty");
+		expect(
+			report.checks.some(
+				({ code }) => code === "boards.unused_empty.board-empty",
+			),
+		).toBe(true);
+		const needsTwo = evaluateAppCreationCase(
+			caseDefinition({ minBoards: 2 }),
+			artifacts,
+		);
+		expect(needsTwo.failures.map(({ code }) => code)).toContain("boards.count");
+	});
+
+	test.each([
+		"page",
+		"event",
+		"case",
+		"content",
+		"source",
+		"unknown_inventory",
+		"invalid_lint",
+		"mutating_reconcile",
+	])(
+		"requires source, lint and reconcile for an empty board with %s evidence",
+		(reason) => {
+			const artifacts = snapshot();
+			const empty = {
+				id: "board-empty",
+				name: "Expected workflow",
+				nodeCount: 0,
+				nodeIds: [] as string[],
+			};
+			artifacts.boards = [...artifacts.boards, empty];
+			let definition = caseDefinition();
+			if (reason === "page")
+				artifacts.pages = [{ ...artifacts.pages[0], boardId: empty.id }];
+			if (reason === "event")
+				artifacts.events = [{ ...artifacts.events[0], boardId: empty.id }];
+			if (reason === "case")
+				definition = caseDefinition({
+					requiredPageBoardBindings: [
+						{ page: "expense_queue", board: empty.name },
+					],
+				});
+			if (reason === "content")
+				artifacts.pages = [
+					{ ...artifacts.pages[0], content: { board_id: empty.id } },
+				];
+			if (reason === "source")
+				artifacts.authoredFlowScript += `\nconst targetBoard = "${empty.id}"`;
+			if (reason === "unknown_inventory")
+				artifacts.boards = [
+					...artifacts.boards.slice(0, -1),
+					{ id: empty.id, name: empty.name },
+				];
+			if (reason === "invalid_lint")
+				artifacts.boards = [
+					...artifacts.boards.slice(0, -1),
+					{
+						...empty,
+						lintDiagnostics: [{ severity: "error", message: "Invalid source" }],
+					},
+				];
+			if (reason === "mutating_reconcile")
+				artifacts.boards = [
+					...artifacts.boards.slice(0, -1),
+					{
+						...empty,
+						reconcile: {
+							parseValid: true,
+							reconcileValid: true,
+							commandCount: 1,
+							idempotent: false,
+						},
+					},
+				];
+			const report = evaluateAppCreationCase(definition, artifacts);
+			const codes = report.failures.map(({ code }) => code);
+			expect(codes).toContain("flowscript.canonical.board_present.board-empty");
+			if (reason !== "invalid_lint")
+				expect(codes).toContain("flowscript.lint.available.board-empty");
+			if (reason !== "mutating_reconcile")
+				expect(codes).toContain("flowscript.reconcile.available.board-empty");
+			expect(codes).toContain("boards.nonempty.board-empty");
+		},
+	);
+
+	test("keeps a failed native idempotence result even when no commands are planned", () => {
+		const artifacts = snapshot();
+		artifacts.boards = artifacts.boards.map((board) => ({
+			...board,
+			reconcile: {
+				parseValid: true,
+				reconcileValid: true,
+				commandCount: 0,
+				idempotent: false,
+				corrections: ["`use control::*` is unused."],
+				diagnostics: [],
+			},
+		}));
+		const report = evaluateAppCreationCase(caseDefinition(), artifacts);
+		expect(report.failures.map(({ code }) => code)).toContain(
+			"flowscript.reconcile.idempotent.board-main",
+		);
 	});
 
 	test("requires exact page-to-board ownership and lifecycle-node affinity", () => {

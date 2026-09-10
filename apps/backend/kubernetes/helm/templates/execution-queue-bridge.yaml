@@ -28,7 +28,7 @@ spec:
       {{- end }}
       containers:
         - name: bridge
-          image: {{ printf "%s%s:%s" .Values.global.imageRegistry .Values.executionManager.queueBridge.image.repository .Values.executionManager.queueBridge.image.tag | quote }}
+          image: {{ include "flow-like.image" (dict "image" .Values.executionManager.queueBridge.image "global" .Values.global) | quote }}
           imagePullPolicy: {{ .Values.executionManager.queueBridge.image.pullPolicy }}
           securityContext:
             runAsNonRoot: true

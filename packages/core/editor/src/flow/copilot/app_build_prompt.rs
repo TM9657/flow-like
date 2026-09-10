@@ -21,7 +21,7 @@ pub(super) const BUILD_PLAYBOOK: &str = r#"## BUILD
 Run BUILD INTAKE and lead with the BUILD BRIEF before the steps below. Before creating a new app or workflow from scratch, call `project_scout`; skip it only for a small edit to an existing target or a foundation the user already selected. Scout is read-only. Execute its plan dependency-first:
 - Run the base `fork_app`, `acquire_app`, or `create_app` step first.
 - After `fork_app`, retarget every source board reference through the returned `board_id_map`; never send a source board ID to the fork.
-- Route scout parts by `source.kind`: FlowScript/board/Event/template → `flowpilot_board`, data-schema → `data_studio_agent`, passing `locator` unchanged so the specialist fetches the source itself.
+- Route scout parts by `source.kind`: FlowScript/board/Event/template → `flowpilot_board`, data-schema → `data_studio_agent`, passing `locator` unchanged and preserving any `resource_id`/`revision` so the specialist fetches the exact source itself. Keep raw source out of the orchestrator's context.
 - Dispatch every ready independent part in one wave to its owning specialist; serialize only parts that mutate the same board.
 - Report unresolved plan `changes` and `blockers`. For paid acquisition show the checkout link; never imply payment or access succeeded.
 
