@@ -78,10 +78,43 @@ struct PromptPreset {
     page: &'static str,
     /// Prompt for a standalone or embedded image. Empty = keep the library default.
     image: &'static str,
+    /// Prompt for several images in one request. Empty = keep the library default;
+    /// the page readers leave it empty because they never batch.
+    batch: &'static str,
     /// The model reads rendered pages only. Forces full-page VLM OCR and one image
     /// per request, because it has no useful answer for a text layer or an image batch.
     page_reader: bool,
 }
+
+const DEFAULT_PAGE_PROMPT: &str = "Convert this document page to Markdown. Output only the page content.\n\n\
+     - Transcribe every word exactly as printed, in the original language. Never translate, summarise or invent text.\n\
+     - Follow the human reading order, including across columns.\n\
+     - Use ATX headings (#, ##, ###) matching the visual hierarchy.\n\
+     - Tables as Markdown; use HTML only when cells are merged or nested.\n\
+     - Equations as LaTeX, $...$ inline and $$...$$ for display blocks.\n\
+     - Figures, photos and diagrams as *[Figure: what it shows]*.\n\
+     - Charts: recover the underlying numbers as a Markdown table when they are legible, otherwise describe the trend.\n\
+     - Checkboxes as ☐ unchecked and ☑ checked.\n\
+     - Keep footnotes, citations and reference lists intact.\n\
+     - Wrap running headers, footers and page numbers in <header>, <footer> and <page_number> tags.\n\
+     - Mark unreadable passages [illegible] instead of guessing.\n\
+     - No commentary about your process, no code fences around the output, and never repeat a block you have already written.";
+
+const DEFAULT_IMAGE_PROMPT: &str = "Describe this image so a reader who cannot see it loses nothing.\n\n\
+     - Open with what the image is and what it shows.\n\
+     - Transcribe all visible text exactly, in the original language.\n\
+     - Tables as Markdown, equations as LaTeX.\n\
+     - Charts: give the axes and series, and the data points as a Markdown table when the values are legible.\n\
+     - Diagrams and flowcharts: name every node and describe the connections and direction of flow.\n\
+     - Screenshots: describe the interface, then transcribe labels, fields and values.\n\
+     - Note whatever carries meaning: colour coding, callouts, annotations, stamps, signatures.\n\
+     - Use the source path hint, when one is given, to resolve what the image alone leaves ambiguous.\n\
+     - Say plainly what is unreadable instead of guessing. No commentary about your process, no code fences.";
+
+const DEFAULT_BATCH_PROMPT: &str = "Describe each of the following images. Emit one `## Image N` section per image, in the order given, and nothing else.\n\
+     Within each section: open with what the image is, transcribe all visible text exactly in the original language, reproduce tables as Markdown and equations as LaTeX, and give the axes, series and legible data points of any chart.\n\
+     Use each image's stated context (alt text, page number, source path) to resolve ambiguity. Say plainly what is unreadable instead of guessing.\n\
+     Never merge two images into one section or skip a section, even when an image is blank or duplicated.";
 
 const PRESET_OLM_OCR: &str = "Attached is one page of a document that you must process. Just return the plain text representation of this document as if you were reading it naturally. Convert equations to LateX and tables to HTML.\nIf there are any figures or charts, label them with the following markdown syntax ![Alt text describing the contents of the figure](page_startx_starty_width_height.png)\nReturn your output as markdown, with a front matter section on top specifying values for the primary_language, is_rotation_valid, rotation_correction, is_table, and is_diagram parameters.";
 
@@ -90,50 +123,58 @@ const PRESET_NANONETS: &str = "Extract the text from the above document as if yo
 const PROMPT_PRESETS: &[PromptPreset] = &[
     PromptPreset {
         name: "Default",
-        page: "",
-        image: "",
+        page: DEFAULT_PAGE_PROMPT,
+        image: DEFAULT_IMAGE_PROMPT,
+        batch: DEFAULT_BATCH_PROMPT,
         page_reader: false,
     },
     PromptPreset {
         name: "Unlimited-OCR",
         page: "<image>document parsing.",
         image: "<image>document parsing.",
+        batch: "",
         page_reader: true,
     },
     PromptPreset {
         name: "DeepSeek-OCR",
         page: "<image>\n<|grounding|>Convert the document to markdown. ",
         image: "<image>\n<|grounding|>OCR this image.",
+        batch: "",
         page_reader: true,
     },
     PromptPreset {
         name: "olmOCR",
         page: PRESET_OLM_OCR,
         image: PRESET_OLM_OCR,
+        batch: "",
         page_reader: true,
     },
     PromptPreset {
         name: "Nanonets-OCR",
         page: PRESET_NANONETS,
         image: PRESET_NANONETS,
+        batch: "",
         page_reader: true,
     },
     PromptPreset {
         name: "dots.ocr",
         page: "Extract the text content from this image.",
         image: "Extract the text content from this image.",
+        batch: "",
         page_reader: true,
     },
     PromptPreset {
         name: "Granite-Docling",
         page: "Convert this page to docling.",
         image: "Convert this page to docling.",
+        batch: "",
         page_reader: true,
     },
     PromptPreset {
         name: "PaddleOCR-VL",
         page: "OCR:",
         image: "OCR:",
+        batch: "",
         page_reader: true,
     },
 ];
@@ -143,7 +184,7 @@ fn preset_names() -> Vec<String> {
 }
 
 const PROMPT_PRESET_DESCRIPTION: &str = "Prompt contract of the selected model. Document-parsing models only answer to their own trained prompt:\n\
-     • Default — general vision models (GPT-4o, Claude, Gemini, Qwen-VL)\n\
+     • Default — a tuned general prompt for vision models (GPT-4o, Claude, Gemini, Qwen-VL)\n\
      • Unlimited-OCR — baidu/Unlimited-OCR, self-hosted via vLLM\n\
      • DeepSeek-OCR — deepseek-ai/DeepSeek-OCR and -OCR-2\n\
      • olmOCR — allenai/olmOCR-2, emits YAML front matter\n\
@@ -211,6 +252,7 @@ async fn apply_prompt_pins(
 
     let page = resolve_prompt(&page_prompt, preset.page);
     let image = resolve_prompt(&image_prompt, preset.image);
+    let batch = resolve_prompt(&batch_prompt, preset.batch);
 
     warn_on_unplaceable_image_tag(context, [page.as_ref(), image.as_ref()]);
 
@@ -220,8 +262,8 @@ async fn apply_prompt_pins(
     if let Some(image) = image {
         config = config.with_image_prompt(image);
     }
-    if !batch_prompt.trim().is_empty() {
-        config = config.with_batch_prompt(batch_prompt);
+    if let Some(batch) = batch {
+        config = config.with_batch_prompt(batch);
     }
     if preset.page_reader {
         config = config.with_images_per_message(1);
@@ -250,7 +292,7 @@ fn add_prompt_pins(node: &mut Node) {
     node.add_input_pin(
         "page_prompt",
         "Page Prompt",
-        "Prompt for converting a rendered document page to text. Overrides the preset. Leave empty to use the preset or the built-in default.",
+        "Prompt for converting a rendered document page to text. Switching the preset rewrites this unless you have typed your own. Leave empty to fall back to the preset.",
         VariableType::String,
     )
     .set_default_value(Some(json!("")));
@@ -258,7 +300,7 @@ fn add_prompt_pins(node: &mut Node) {
     node.add_input_pin(
         "image_prompt",
         "Image Prompt",
-        "Prompt for describing a standalone or embedded image. Overrides the preset. Leave empty to use the preset or the built-in default.",
+        "Prompt for describing a standalone or embedded image. Switching the preset rewrites this unless you have typed your own. Leave empty to fall back to the preset.",
         VariableType::String,
     )
     .set_default_value(Some(json!("")));
@@ -266,7 +308,7 @@ fn add_prompt_pins(node: &mut Node) {
     node.add_input_pin(
         "batch_prompt",
         "Batch Image Prompt",
-        "Prompt used when Images Per Message is greater than 1. Leave empty to use the built-in default. Ignored by every preset except Default.",
+        "Prompt used when Images Per Message is greater than 1. Only the Default preset fills this in — the OCR presets never batch. Leave empty to fall back to the preset.",
         VariableType::String,
     )
     .set_default_value(Some(json!("")));
@@ -291,7 +333,7 @@ fn pin_literal(node: &Node, name: &str) -> String {
 /// A literal belongs to the presets only while it is still byte-identical to one of them.
 /// The `Default` row contributes the empty string, so an untouched pin counts as preset-owned.
 fn is_preset_authored(current: &str, field: fn(&PromptPreset) -> &'static str) -> bool {
-    PROMPT_PRESETS.iter().any(|preset| field(preset) == current)
+    current.is_empty() || PROMPT_PRESETS.iter().any(|preset| field(preset) == current)
 }
 
 fn sync_prompt_pin(
@@ -322,9 +364,10 @@ fn apply_preset_to_pins(node: &mut Node) {
         return;
     };
 
-    let (page, image) = (preset.page, preset.image);
+    let (page, image, batch) = (preset.page, preset.image, preset.batch);
     sync_prompt_pin(node, "page_prompt", page, |preset| preset.page);
     sync_prompt_pin(node, "image_prompt", image, |preset| preset.image);
+    sync_prompt_pin(node, "batch_prompt", batch, |preset| preset.batch);
 }
 
 #[cfg(feature = "execute")]
@@ -2211,10 +2254,49 @@ mod prompt_preset_tests {
     }
 
     #[test]
-    fn default_clears_a_preset_prompt() {
+    fn default_replaces_a_preset_prompt_with_the_tuned_default() {
         let mut node = node_with("Default", unlimited_ocr_page());
         apply_preset_to_pins(&mut node);
-        assert_eq!(pin_literal(&node, "page_prompt"), "");
+        assert_eq!(pin_literal(&node, "page_prompt"), DEFAULT_PAGE_PROMPT);
+    }
+
+    #[test]
+    fn default_fills_an_untouched_node_on_first_parse() {
+        let mut node = node_with("Default", "");
+        apply_preset_to_pins(&mut node);
+        assert_eq!(pin_literal(&node, "page_prompt"), DEFAULT_PAGE_PROMPT);
+        assert_eq!(pin_literal(&node, "image_prompt"), DEFAULT_IMAGE_PROMPT);
+        assert_eq!(pin_literal(&node, "batch_prompt"), DEFAULT_BATCH_PROMPT);
+    }
+
+    #[test]
+    fn a_page_reader_preset_clears_the_batch_prompt() {
+        let mut node = node_with("Default", "");
+        apply_preset_to_pins(&mut node);
+        assert_eq!(pin_literal(&node, "batch_prompt"), DEFAULT_BATCH_PROMPT);
+
+        node.get_pin_mut_by_name("prompt_preset")
+            .unwrap()
+            .set_default_value(Some(json!("Unlimited-OCR")));
+        apply_preset_to_pins(&mut node);
+        assert_eq!(pin_literal(&node, "batch_prompt"), "");
+    }
+
+    #[test]
+    fn round_tripping_through_a_preset_restores_the_defaults() {
+        let mut node = node_with("Default", "");
+        apply_preset_to_pins(&mut node);
+
+        for preset in ["olmOCR", "Default"] {
+            node.get_pin_mut_by_name("prompt_preset")
+                .unwrap()
+                .set_default_value(Some(json!(preset)));
+            apply_preset_to_pins(&mut node);
+        }
+
+        assert_eq!(pin_literal(&node, "page_prompt"), DEFAULT_PAGE_PROMPT);
+        assert_eq!(pin_literal(&node, "image_prompt"), DEFAULT_IMAGE_PROMPT);
+        assert_eq!(pin_literal(&node, "batch_prompt"), DEFAULT_BATCH_PROMPT);
     }
 
     #[test]
