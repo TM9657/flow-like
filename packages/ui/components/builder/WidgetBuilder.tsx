@@ -34,6 +34,7 @@ import { applyA2UIMessage } from "../a2ui/apply-a2ui-message";
 import { collectRunElements } from "../a2ui/collect-run-elements";
 import type { ElementSource } from "../a2ui/element-materializer";
 import { handleElementsRequestMessage } from "../a2ui/elements-request-handler";
+import { getFrontendStateStore } from "../a2ui/frontend-state";
 import type {
 	A2UIClientMessage,
 	A2UIComponent,
@@ -1031,6 +1032,7 @@ function BuilderPreview({ surfaceId }: BuilderPreviewProps) {
 	const { components, canvasSettings, actionContext, widgetRefs } =
 		useBuilder();
 	const effectiveSurfaceId = actionContext?.pageId ?? surfaceId;
+	const frontendStateStore = getFrontendStateStore(actionContext?.appId);
 	const previewCanvasId = useId();
 	const [previewSurface, setPreviewSurface] = useState<Surface | null>(null);
 	// Canvas styling the preview is showing right now: the builder's own settings
@@ -1079,6 +1081,7 @@ function BuilderPreview({ surfaceId }: BuilderPreviewProps) {
 
 	const handleA2UIMessage = useCallback(
 		(message: A2UIServerMessage) => {
+			if (frontendStateStore.handleMessage(message)) return;
 			// Canvas styling is handled by the outer div via liveCanvasSettings,
 			// so keep it out of the surface reducer.
 			if (message.type === "setCanvasSettings") {
@@ -1105,7 +1108,7 @@ function BuilderPreview({ surfaceId }: BuilderPreviewProps) {
 				return prev === null && nextSurface === base ? null : nextSurface;
 			});
 		},
-		[effectiveSurfaceId],
+		[effectiveSurfaceId, frontendStateStore],
 	);
 
 	// Reads componentsRef so live builder edits never re-trigger the lifecycle effects.
@@ -1136,17 +1139,21 @@ function BuilderPreview({ surfaceId }: BuilderPreviewProps) {
 	// Execute onLoad event when entering preview mode
 	useEffect(() => {
 		const executeOnLoadEvent = async () => {
-			const { appId, boardId, pageId, onLoadEventId } = actionContext || {};
+			const { appId, boardId, onLoadEventId } = actionContext || {};
 
 			if (!onLoadEventId || !appId || !boardId) return;
 
 			// Prevent duplicate execution
-			const executionKey = `preview:${pageId}:${onLoadEventId}`;
+			const executionKey = `preview:${appId}:${boardId}:${effectiveSurfaceId}:${onLoadEventId}`;
 			if (loadEventExecutedRef.current === executionKey) return;
 			loadEventExecutedRef.current = executionKey;
 
 			try {
+				await frontendStateStore.ensureLoaded(effectiveSurfaceId);
+				if (loadEventExecutedRef.current !== executionKey) return;
 				const builderElements = await collectPreviewElements(appId, boardId);
+				if (loadEventExecutedRef.current !== executionKey) return;
+				const frontendState = frontendStateStore.getSnapshot();
 
 				const payload = {
 					id: onLoadEventId,
@@ -1155,7 +1162,9 @@ function BuilderPreview({ surfaceId }: BuilderPreviewProps) {
 						_elements_mode: "demand",
 						_route: "/preview",
 						_query_params: {},
-						_page_id: pageId,
+						_page_id: effectiveSurfaceId,
+						_global_state: frontendState.globalState,
+						_page_state: frontendState.pageStates[effectiveSurfaceId] ?? {},
 						_event_type: "onLoad",
 						_preview_mode: true,
 					},
@@ -1165,6 +1174,7 @@ function BuilderPreview({ surfaceId }: BuilderPreviewProps) {
 				const execFn =
 					executionService?.executeBoard ?? backend.boardState.executeBoard;
 				await execFn(appId, boardId, payload, false, undefined, (events) => {
+					if (loadEventExecutedRef.current !== executionKey) return;
 					for (const evt of events) {
 						if (evt.event_type === "a2ui") {
 							if (handleWidgetQueryMessage(evt.payload)) {
@@ -1185,6 +1195,8 @@ function BuilderPreview({ surfaceId }: BuilderPreviewProps) {
 		executeOnLoadEvent();
 	}, [
 		actionContext,
+		effectiveSurfaceId,
+		frontendStateStore,
 		backend.boardState,
 		executionService,
 		handleA2UIMessage,
@@ -1194,7 +1206,7 @@ function BuilderPreview({ surfaceId }: BuilderPreviewProps) {
 
 	// Execute onInterval event at configured time intervals (preview mode)
 	useEffect(() => {
-		const { appId, boardId, pageId, onIntervalEventId, onIntervalSeconds } =
+		const { appId, boardId, onIntervalEventId, onIntervalSeconds } =
 			actionContext || {};
 
 		if (
@@ -1207,10 +1219,15 @@ function BuilderPreview({ surfaceId }: BuilderPreviewProps) {
 			return;
 
 		const intervalMs = onIntervalSeconds * 1000;
+		let cancelled = false;
 
 		const intervalId = setInterval(async () => {
 			try {
+				await frontendStateStore.ensureLoaded(effectiveSurfaceId);
+				if (cancelled) return;
 				const builderElements = await collectPreviewElements(appId, boardId);
+				if (cancelled) return;
+				const frontendState = frontendStateStore.getSnapshot();
 
 				const payload = {
 					id: onIntervalEventId,
@@ -1219,7 +1236,9 @@ function BuilderPreview({ surfaceId }: BuilderPreviewProps) {
 						_elements_mode: "demand",
 						_route: "/preview",
 						_query_params: {},
-						_page_id: pageId,
+						_page_id: effectiveSurfaceId,
+						_global_state: frontendState.globalState,
+						_page_state: frontendState.pageStates[effectiveSurfaceId] ?? {},
 						_event_type: "onInterval",
 						_preview_mode: true,
 						_interval_seconds: onIntervalSeconds,
@@ -1230,6 +1249,7 @@ function BuilderPreview({ surfaceId }: BuilderPreviewProps) {
 				const execFn =
 					executionService?.executeBoard ?? backend.boardState.executeBoard;
 				await execFn(appId, boardId, payload, false, undefined, (events) => {
+					if (cancelled) return;
 					for (const evt of events) {
 						if (evt.event_type === "a2ui") {
 							if (handleWidgetQueryMessage(evt.payload)) {
@@ -1250,9 +1270,14 @@ function BuilderPreview({ surfaceId }: BuilderPreviewProps) {
 			}
 		}, intervalMs);
 
-		return () => clearInterval(intervalId);
+		return () => {
+			cancelled = true;
+			clearInterval(intervalId);
+		};
 	}, [
 		actionContext,
+		effectiveSurfaceId,
+		frontendStateStore,
 		backend.boardState,
 		executionService,
 		handleA2UIMessage,

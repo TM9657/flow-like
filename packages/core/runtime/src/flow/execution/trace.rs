@@ -80,7 +80,15 @@ impl Trace {
     }
 
     pub async fn snapshot_variables(&mut self, variables: &Arc<Mutex<AHashMap<String, Variable>>>) {
-        self.variables = Some(variables.lock().await.values().cloned().collect());
+        self.variables = Some(
+            variables
+                .lock()
+                .await
+                .values()
+                .filter(|variable| !variable.secret && !variable.runtime_configured)
+                .cloned()
+                .collect(),
+        );
     }
 }
 
@@ -88,6 +96,37 @@ impl Trace {
 mod tests {
     use super::*;
     use crate::flow::execution::LogLevel;
+    use crate::flow::pin::ValueType;
+    use crate::flow::variable::VariableType;
+
+    #[tokio::test]
+    async fn snapshots_omit_secret_and_runtime_configured_variables() {
+        let mut variables = AHashMap::new();
+        for (name, secret, runtime_configured) in [
+            ("ordinary", false, false),
+            ("secret", true, false),
+            ("runtime", false, true),
+            ("runtime-secret", true, true),
+        ] {
+            let mut variable = Variable::new(name, VariableType::String, ValueType::Normal);
+            variable.secret = secret;
+            variable.runtime_configured = runtime_configured;
+            variable.set_default_value(flow_like_types::json::json!(format!("{name}-value")));
+            variables.insert(name.to_string(), variable);
+        }
+        let variables = Arc::new(Mutex::new(variables));
+        let mut trace = Trace::new("node");
+        trace.snapshot_variables(&variables).await;
+
+        let snapshot = trace.variables.as_ref().expect("variable snapshot");
+        assert_eq!(snapshot.len(), 1);
+        assert_eq!(snapshot[0].name, "ordinary");
+        assert_eq!(
+            snapshot[0].default_value,
+            Some(flow_like_types::json::to_vec(&"ordinary-value").unwrap())
+        );
+        assert_eq!(variables.lock().await.len(), 4);
+    }
 
     #[test]
     fn trace_ids_are_unique() {

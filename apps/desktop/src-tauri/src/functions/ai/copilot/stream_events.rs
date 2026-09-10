@@ -507,7 +507,7 @@ fn summarize_tool_arguments(tool_name: &str, arguments: Option<&serde_json::Valu
                 .unwrap_or_default();
             format!("replace {old_chars} chars with {new_chars} chars")
         }
-        "check_flowscript" | "commit_flowscript" => {
+        "check_flowscript" | "test_flowscript" | "commit_flowscript" => {
             let draft_id = arguments
                 .get("draft_id")
                 .and_then(serde_json::Value::as_str)

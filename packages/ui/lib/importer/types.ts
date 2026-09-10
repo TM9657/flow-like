@@ -1,8 +1,22 @@
 import type { IBoard, INode } from "../schema";
 
+import type { BpmnDefinitions } from "./bpmn-model";
 import type { N8nManualMappingOverrides } from "./mappings/types";
 
-export type ImportFormat = "n8n" | "dify" | "unknown";
+export type ImportFormat = "n8n" | "dify" | "bpmn" | "unknown";
+
+/** What `detectFormat` hands back for a recognised document. */
+export type ParsedImport = N8nWorkflow | DifyWorkflow | BpmnDefinitions;
+
+/**
+ * A classified import document. The format and the parsed value are correlated,
+ * so a caller that checks `format` gets the right type without a cast.
+ */
+export type ImportDetection =
+	| { format: "bpmn"; parsed: BpmnDefinitions; error?: undefined }
+	| { format: "n8n"; parsed: N8nWorkflow; error?: undefined }
+	| { format: "dify"; parsed: DifyWorkflow; error?: undefined }
+	| { format: "unknown"; parsed: null; error?: string };
 
 export type TranslationStatus = "pending" | "success" | "partial" | "error";
 

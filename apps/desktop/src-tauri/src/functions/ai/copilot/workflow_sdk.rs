@@ -16,6 +16,169 @@ use flow_like::flow::copilot::workflow_tool_result_succeeded;
 use flow_like_types::tokio_util::sync::CancellationToken;
 use std::sync::{Arc, Mutex as StdMutex};
 
+type WorkflowDispatchSink =
+    Arc<dyn Fn(&str, &'static str, Option<&'static str>, Option<&'static str>) + Send + Sync>;
+
+/// Records only host tool names and fixed dispatch outcomes for an active benchmark board.
+#[derive(Clone, Default)]
+pub(super) struct WorkflowToolDispatchObserver(Option<WorkflowDispatchSink>);
+
+impl WorkflowToolDispatchObserver {
+    pub(super) fn new(
+        state: Option<&Arc<StdMutex<WorkflowToolLoopState>>>,
+        transport: &'static str,
+    ) -> Self {
+        let board_id = state.and_then(|state| {
+            let state = state.lock().ok()?;
+            Some(state.shared_session.as_ref()?.manifest().board.id.clone())
+        });
+        let Some(board_id) =
+            board_id.filter(|id| super::workflow_benchmark::is_benchmark_board(id))
+        else {
+            return Self::default();
+        };
+        Self(Some(Arc::new(move |tool, phase, code, status| {
+            super::workflow_benchmark::observe_tool_dispatch(
+                &board_id, transport, tool, phase, code, status,
+            );
+        })))
+    }
+
+    pub(super) fn record(
+        &self,
+        tool: &str,
+        phase: &'static str,
+        code: Option<&'static str>,
+        status: Option<&'static str>,
+    ) {
+        if let Some(sink) = &self.0 {
+            sink(tool, phase, code, status);
+        }
+    }
+
+    pub(super) fn short_circuit_text(&self, tool: &str, text: &str) {
+        if self.0.is_none() {
+            return;
+        }
+        let (code, status) = preflight_dispatch_tags(text);
+        self.record(tool, "preflight_short_circuit", code, status);
+    }
+
+    pub(super) fn short_circuit_mcp(&self, tool: &str, result: &rmcp::model::CallToolResult) {
+        let text = result
+            .content
+            .iter()
+            .find_map(|content| match &content.raw {
+                rmcp::model::RawContent::Text(text) => Some(text.text.as_str()),
+                _ => None,
+            });
+        self.short_circuit_text(tool, text.unwrap_or_default());
+    }
+}
+
+fn preflight_dispatch_tags(text: &str) -> (Option<&'static str>, Option<&'static str>) {
+    // A preflight may include a retained source preview. Never copy it into telemetry, and cap
+    // parsing work independently of the size of that preview.
+    if text.len() > 65_536 {
+        return (Some("oversized_result"), Some("unknown"));
+    }
+    let Ok(value) = serde_json::from_str::<serde_json::Value>(text) else {
+        return (Some("unstructured_result"), Some("unknown"));
+    };
+    const CODES: &[&str] = &[
+        "WORKFLOW_LOOP_STATE_UNAVAILABLE",
+        "board_draft_required_before_database_setup",
+        "PREDRAFT_INSPECTION_BUDGET_EXHAUSTED",
+        "CONTEXT_ALREADY_IN_MANIFEST",
+        "FIRST_ARTIFACT_SLA_BREACHED",
+        "DUPLICATE_CONTEXT_READ",
+        "WORKFLOW_ZERO_PROGRESS_CIRCUIT_OPEN",
+        "DECLARATION_LOOKUP_IN_FLIGHT",
+        "WORKFLOW_MUTATION_PATH_CONFLICT",
+        "FLOWSCRIPT_RETAINED_REVISION_REQUIRED",
+        "FLOWSCRIPT_DRAFT_REQUIRED",
+        "TYPED_IR_REPAIR_PROGRESS_STALLED",
+        "TYPED_IR_OPERATION_BUDGET_EXHAUSTED",
+        "FLOWSCRIPT_REPAIR_PROGRESS_STALLED",
+        "FLOWSCRIPT_OPERATION_BUDGET_EXHAUSTED",
+        "TIME_EXTENSION_NO_PROGRESS",
+        "TIME_EXTENSION_CEILING_REACHED",
+        "TIME_EXTENSION_NOT_APPLICABLE",
+        "SCOPE_PLAN_BUDGET_EXHAUSTED",
+        "SCOPE_PLAN_REJECTION_BUDGET_EXHAUSTED",
+        "SCOPE_PLAN_ARGUMENTS_INVALID",
+        "DECLARATION_COVERAGE_EXHAUSTED",
+        "SCOPE_PLAN_REQUIRED",
+        "SCOPE_PLAN_COMMIT_VALIDATED_PREFIX",
+        "FLOWSCRIPT_COMMIT_RETRY_BUDGET_EXHAUSTED",
+        "DECLARATION_FOLLOW_UP_UNRELATED",
+        "candidate_regression",
+        "runtime_verification_deferred",
+        "SCOPE_PLAN_EMPTY",
+        "SCOPE_PLAN_TOO_LARGE",
+        "SCOPE_PLAN_STRATEGY_MISMATCH",
+        "SCOPE_PLAN_INVALID_SEGMENT",
+        "SCOPE_PLAN_DUPLICATE_SEGMENT",
+        "SCOPE_PLAN_SEGMENT_NOT_CONCRETE",
+        "SCOPE_PLAN_CYCLE",
+        "SCOPE_PLAN_INVALID_BOARD_REF",
+        "SCOPE_PLAN_REVISION_EXHAUSTED",
+        "SCOPE_PLAN_COMMITTED_SEGMENT_REDECLARED",
+    ];
+    const STATUSES: &[&str] = &[
+        "internal_state_unavailable",
+        "deferred",
+        "predraft_inspection_budget_exhausted",
+        "context_preloaded",
+        "first_artifact_sla_breached",
+        "duplicate_context_read",
+        "already_queued",
+        "zero_progress_circuit_open",
+        "declaration_lookup_in_flight",
+        "mutation_path_conflict",
+        "retained_revision_required",
+        "flowscript_draft_required",
+        "edit_in_flight",
+        "typed_repair_progress_stalled",
+        "typed_repair_budget_exhausted",
+        "edit_progress_stalled",
+        "edit_budget_exhausted",
+        "time_budget_extended",
+        "time_budget_refused",
+        "scope_plan_budget_exhausted",
+        "scope_plan_rejected",
+        "declaration_coverage_exhausted",
+        "declaration_lookup_required",
+        "scope_plan_required",
+        "commit_validated_prefix",
+        "commit_retry_budget_exhausted",
+        "discovery_blocked",
+        "already_returned",
+        "declaration_batch_required",
+        "declaration_follow_up_unrelated",
+        "discovery_budget_exhausted",
+        "diagnostic_lookup_required",
+        "duplicate_declaration_lookup",
+        "validation_errors",
+        "scope_plan_accepted",
+        "scope_plan_revision_required",
+        "error",
+    ];
+    let bounded = |field: &str, allowed: &'static [&'static str]| {
+        value
+            .get(field)
+            .and_then(serde_json::Value::as_str)
+            .map(|raw| {
+                allowed
+                    .iter()
+                    .copied()
+                    .find(|known| *known == raw)
+                    .unwrap_or("other")
+            })
+    };
+    (bounded("code", CODES), bounded("status", STATUSES))
+}
+
 pub(super) fn workflow_state_has_retained_candidate(
     state: Option<&Arc<StdMutex<WorkflowToolLoopState>>>,
 ) -> bool {
@@ -337,6 +500,15 @@ pub(super) fn guard_sdk_workflow_tools(
     tools: Vec<(copilot_sdk::Tool, copilot_sdk::ToolHandler)>,
     state: Arc<StdMutex<WorkflowToolLoopState>>,
 ) -> Vec<(copilot_sdk::Tool, copilot_sdk::ToolHandler)> {
+    let observer = WorkflowToolDispatchObserver::new(Some(&state), "sdk");
+    guard_sdk_workflow_tools_with_observer(tools, state, observer)
+}
+
+fn guard_sdk_workflow_tools_with_observer(
+    tools: Vec<(copilot_sdk::Tool, copilot_sdk::ToolHandler)>,
+    state: Arc<StdMutex<WorkflowToolLoopState>>,
+    observer: WorkflowToolDispatchObserver,
+) -> Vec<(copilot_sdk::Tool, copilot_sdk::ToolHandler)> {
     let operation_gate = Arc::new(StdMutex::new(()));
     tools
         .into_iter()
@@ -344,7 +516,9 @@ pub(super) fn guard_sdk_workflow_tools(
             let guarded_state = state.clone();
             let guarded_name = tool.name.clone();
             let operation_gate = operation_gate.clone();
+            let observer = observer.clone();
             let guarded_handler: copilot_sdk::ToolHandler = Arc::new(move |called_name, args| {
+                observer.record(&guarded_name, "arrival", None, None);
                 // The SDK may dispatch sibling tool calls concurrently. Hold a lifecycle gate
                 // through preflight, handler execution, and record so a late completion cannot
                 // clear or overwrite the state of a newer typed/raw mutation.
@@ -360,6 +534,7 @@ pub(super) fn guard_sdk_workflow_tools(
                             Some(poisoned.into_inner())
                         }
                         Err(std::sync::TryLockError::WouldBlock) => {
+                            observer.record(&guarded_name, "preflight_short_circuit", None, Some("edit_in_flight"));
                             return copilot_sdk::ToolResultObject::error(
                                 "Another order-sensitive workflow operation is still running. Wait for its retained revision/status before issuing the next mutation.",
                             );
@@ -374,10 +549,12 @@ pub(super) fn guard_sdk_workflow_tools(
                 let preflight =
                     workflow_tool_preflight_sdk(&guarded_state, &guarded_name, args);
                 if let Some(result) = preflight.result {
+                    observer.short_circuit_text(&guarded_name, result.error.as_deref().unwrap_or(&result.text_result_for_llm));
                     return result;
                 }
                 let lease = preflight.lease;
                 let outcome = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                    observer.record(&guarded_name, "dispatched", None, None);
                     let mut result = handler(called_name, args);
                     let succeeded = result.result_type != "error"
                         && result.error.is_none()
@@ -487,6 +664,7 @@ pub(super) fn is_workflow_loop_tool(tool_name: &str) -> bool {
             | "write_flowscript"
             | "patch_flowscript"
             | "check_flowscript"
+            | "test_flowscript"
             | "commit_flowscript"
             // Compatibility-only typed IR tools. New model surfaces do not advertise these.
             | "plan_flow_ir"
@@ -539,6 +717,7 @@ pub(super) fn is_order_sensitive_workflow_tool(tool_name: &str) -> bool {
         "write_flowscript"
             | "patch_flowscript"
             | "check_flowscript"
+            | "test_flowscript"
             | "commit_flowscript"
             | "plan_flow_ir"
             | "begin_flow_ir_draft"
@@ -633,4 +812,96 @@ pub(super) fn typed_ir_result_proves_retained_draft(parsed: &serde_json::Value) 
                     | "error"
             )
         )
+}
+
+#[cfg(test)]
+mod dispatch_telemetry_tests {
+    use super::*;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
+    #[test]
+    fn sdk_arrivals_distinguish_dispatched_handlers_from_preflight_short_circuits() {
+        let events = Arc::new(StdMutex::new(Vec::new()));
+        let recorded = events.clone();
+        let observer =
+            WorkflowToolDispatchObserver(Some(Arc::new(move |tool, phase, code, status| {
+                recorded
+                    .lock()
+                    .unwrap()
+                    .push((tool.to_string(), phase, code, status));
+            })));
+        let state = Arc::new(StdMutex::new(WorkflowToolLoopState::default()));
+        state.lock().unwrap().current_reads = 0;
+        let dispatched = Arc::new(AtomicUsize::new(0));
+        let calls = dispatched.clone();
+        let handler: copilot_sdk::ToolHandler = Arc::new(move |_, _| {
+            calls.fetch_add(1, Ordering::SeqCst);
+            copilot_sdk::ToolResultObject::text("{}")
+        });
+        let mut tools = guard_sdk_workflow_tools_with_observer(
+            vec![(copilot_sdk::Tool::new("get_current_flowscript"), handler)],
+            state,
+            observer,
+        );
+        let (_, handler) = tools.pop().unwrap();
+        let args = serde_json::json!({"ignored_private_argument": "never retained"});
+        handler("get_current_flowscript", &args);
+        handler("get_current_flowscript", &args);
+        assert_eq!(dispatched.load(Ordering::SeqCst), 1);
+        assert_eq!(
+            *events.lock().unwrap(),
+            vec![
+                ("get_current_flowscript".into(), "arrival", None, None),
+                ("get_current_flowscript".into(), "dispatched", None, None),
+                ("get_current_flowscript".into(), "arrival", None, None),
+                (
+                    "get_current_flowscript".into(),
+                    "preflight_short_circuit",
+                    None,
+                    Some("already_returned")
+                ),
+            ]
+        );
+    }
+
+    #[test]
+    fn mcp_preflight_tags_keep_only_fixed_codes_and_statuses() {
+        let events = Arc::new(StdMutex::new(Vec::new()));
+        let recorded = events.clone();
+        let observer =
+            WorkflowToolDispatchObserver(Some(Arc::new(move |_, phase, code, status| {
+                recorded.lock().unwrap().push((phase, code, status));
+            })));
+        let result = workflow_loop_result(
+            serde_json::json!({
+                "code": "DECLARATION_LOOKUP_IN_FLIGHT", "status": "declaration_lookup_in_flight",
+                "source": "private source", "message": "private message", "args": {"token": "private token"},
+            }),
+            true,
+        );
+        observer.short_circuit_mcp("get_declarations", &result);
+        observer.short_circuit_text(
+            "get_declarations",
+            r#"{"code":"private code","status":"private status"}"#,
+        );
+        assert_eq!(
+            *events.lock().unwrap(),
+            vec![
+                (
+                    "preflight_short_circuit",
+                    Some("DECLARATION_LOOKUP_IN_FLIGHT"),
+                    Some("declaration_lookup_in_flight")
+                ),
+                ("preflight_short_circuit", Some("other"), Some("other")),
+            ]
+        );
+        assert_eq!(
+            preflight_dispatch_tags(&"x".repeat(65_537)),
+            (Some("oversized_result"), Some("unknown"))
+        );
+        assert_eq!(
+            preflight_dispatch_tags("unstructured private error"),
+            (Some("unstructured_result"), Some("unknown"))
+        );
+    }
 }

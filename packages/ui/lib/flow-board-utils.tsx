@@ -13,9 +13,8 @@ import {
 } from "./command/generic-command";
 import { geometrySchemasCompatible } from "./geometry";
 import { detectFormat } from "./importer/detect";
-import { translateDify } from "./importer/dify-translator";
-import { translateN8n } from "./importer/n8n-translator";
-import type { DifyWorkflow, N8nWorkflow } from "./importer/types";
+import { buildImportCommands } from "./importer/import-commands";
+import { translateImport } from "./importer/translate";
 import { toastSuccess } from "./messages";
 import { isWebkitLite } from "./platform";
 import type { IGenericCommand, IValueType, IVariable } from "./schema";
@@ -411,7 +410,7 @@ const OPEN_OBJECT_SCHEMA_KEYS = new Set(["type", "additionalProperties"]);
  *
  * `{"type":"object","additionalProperties":true}` declares that a pin's shape is open, so it can
  * never contradict a concrete schema and must never be the basis for rejecting a peer pin. The
- * `includes` guard keeps the drag hot path from parsing multi-KB real schemas.
+ * `includes` guard skips schemas without an `additionalProperties` keyword.
  */
 export function isOpenObjectSchema(schema: string): boolean {
 	if (!schema.includes("additionalProperties")) return false;
@@ -428,6 +427,27 @@ export function isOpenObjectSchema(schema: string): boolean {
 	} catch {
 		return false;
 	}
+}
+
+const pinSchemaCache = new WeakMap<
+	IPin,
+	{ schema: string; concreteSchema: string | undefined }
+>();
+
+function resolvePinSchema(
+	pin: IPin,
+	refs: Record<string, string>,
+): string | undefined {
+	if (!pin.schema) return undefined;
+	const schema = refs[pin.schema] ?? pin.schema;
+	const cached = pinSchemaCache.get(pin);
+	if (cached?.schema === schema) return cached.concreteSchema;
+
+	// Catalog filtering compares the dragged pin with thousands of candidate pins.
+	// Classify its schema once, checking the resolved value so ref edits invalidate it.
+	const concreteSchema = isOpenObjectSchema(schema) ? undefined : schema;
+	pinSchemaCache.set(pin, { schema, concreteSchema });
+	return concreteSchema;
 }
 
 export function doPinsMatch(
@@ -489,14 +509,8 @@ export function doPinsMatch(
 
 	// An open-object schema declares that the shape is open, not a contract to match, so it
 	// resolves to "no schema" for every comparison below.
-	const resolveSchema = (pin: IPin) => {
-		if (!pin.schema) return undefined;
-		const resolved = refs[pin.schema] ?? pin.schema;
-		return isOpenObjectSchema(resolved) ? undefined : resolved;
-	};
-
-	const schemaSource = resolveSchema(sourcePin);
-	const schemaTarget = resolveSchema(targetPin);
+	const schemaSource = resolvePinSchema(sourcePin, refs);
+	const schemaTarget = resolvePinSchema(targetPin, refs);
 
 	if (schemaSource && schemaTarget) {
 		if (
@@ -1357,49 +1371,26 @@ export async function handlePaste(
 		return;
 	} catch (error) {}
 
-	// 2. Try n8n / Dify workflow paste
+	// 2. Try an exported workflow (BPMN, n8n, Dify)
 	try {
 		const clipboard = await navigator.clipboard.readText();
 		const detection = detectFormat(clipboard);
-		if (detection.format !== "unknown" && detection.parsed) {
-			const result =
-				detection.format === "n8n"
-					? translateN8n(detection.parsed as N8nWorkflow, catalog)
-					: translateDify(detection.parsed as DifyWorkflow);
+		const result = translateImport(detection, catalog);
 
-			const boardNodes = Object.values(result.board.nodes);
-			const boardComments = Object.values(result.board.comments);
-			const boardLayers = Object.values(result.board.layers);
-			const boardVariables = Object.values(result.board.variables);
-
-			if (boardNodes.length > 0) {
-				const command = copyPasteCommand({
-					original_nodes: boardNodes,
-					original_comments: boardComments,
-					original_layers: boardLayers,
-					original_variables: boardVariables,
-					original_refs: result.board.refs ?? {},
-					new_comments: [],
-					new_nodes: [],
-					new_layers: [],
-					current_layer: currentLayer,
-					old_mouse: [0, 0, 0],
-					offset: [cursorPosition.x, cursorPosition.y, 0],
-				});
-				await executeCommand(command);
-				if (result.status === "partial") {
-					toastSuccess(
-						`Imported ${result.stats.totalNodes} nodes from ${detection.format} (${result.stats.todo} need manual setup)`,
-						<Import className="w-4 h-4" />,
-					);
-				} else {
-					toastSuccess(
-						`Imported ${result.stats.totalNodes} nodes from ${detection.format}`,
-						<Import className="w-4 h-4" />,
-					);
-				}
-				return;
-			}
+		if (result && Object.keys(result.board.nodes).length > 0) {
+			const plan = buildImportCommands(
+				result,
+				{ kind: "layer", layerId: currentLayer },
+				[cursorPosition.x, cursorPosition.y, 0],
+			);
+			for (const command of plan.commands) await executeCommand(command);
+			toastSuccess(
+				result.stats.todo > 0
+					? `Imported ${result.stats.totalNodes} elements from ${detection.format} (${result.stats.todo} need modelling)`
+					: `Imported ${result.stats.totalNodes} elements from ${detection.format}`,
+				<Import className="w-4 h-4" />,
+			);
+			return;
 		}
 	} catch (error) {}
 

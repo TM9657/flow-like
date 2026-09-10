@@ -1,3 +1,4 @@
+import { createId } from "@paralleldrive/cuid2";
 import { owningModuleId } from "./layer-to-function";
 import { type ILayer, ILayerType } from "./schema/flow/board";
 
@@ -15,6 +16,31 @@ export const MAIN_FILE_LABEL = `main${MODULE_FILE_EXTENSION}`;
  * the FlowScript panel and the apply contract can key on one string per file.
  */
 export const MAIN_FILE_ID = "main";
+
+/**
+ * A new module layer. A module is organizational only — the backend strips
+ * pins, cache and boundary coordinates from one — so everything but the name
+ * and the parent starts empty.
+ */
+export function newModuleLayer(name: string, parentId: string | null): ILayer {
+	return {
+		id: createId(),
+		name,
+		type: ILayerType.Module,
+		coordinates: [0, 0, 0],
+		nodes: {},
+		pins: {},
+		variables: {},
+		comments: {},
+		parent_id: parentId,
+		color: null,
+		comment: null,
+		error: null,
+		category: null,
+		in_coordinates: null,
+		out_coordinates: null,
+	};
+}
 
 /** The file a module id addresses; `null`/undefined is the root. */
 export function moduleFileId(moduleId: string | null | undefined): string {

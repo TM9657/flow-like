@@ -65,20 +65,24 @@ describe("buildFrontendContextPayload", () => {
 		};
 	}
 
-	test("reads route and query params from the current URL", () => {
+	test("keeps the page id distinct from the route and query params", () => {
 		stubLocation("/use", "?id=app-1&route=%2Fmail&mailid=42");
 		expect(
-			buildFrontendContextPayload("/use", { theme: "dark" }, { tab: "inbox" }),
+			buildFrontendContextPayload(
+				"page-mail",
+				{ theme: "dark" },
+				{ tab: "inbox" },
+			),
 		).toEqual({
 			_route: "/use",
 			_query_params: { id: "app-1", route: "/mail", mailid: "42" },
-			_page_id: "/use",
+			_page_id: "page-mail",
 			_global_state: { theme: "dark" },
 			_page_state: { tab: "inbox" },
 		});
 	});
 
-	test("falls back to defaults without a pathname or state", () => {
+	test("falls back to defaults without a page id or state", () => {
 		stubLocation("/use", "");
 		expect(buildFrontendContextPayload(null, undefined, undefined)).toEqual({
 			_route: "/use",

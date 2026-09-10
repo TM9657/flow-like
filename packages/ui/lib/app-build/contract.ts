@@ -41,6 +41,16 @@ export const logicalKeySchema = z
 		"must be a stable lowercase identifier beginning with a letter",
 	);
 
+// Entry selectors resolve against persisted node IDs and names, not logical resource keys.
+const entrySelectorSchema = z
+	.string()
+	.min(1)
+	.max(128)
+	.refine(
+		(value) => value.trim().length > 0,
+		"must name an exact persisted workflow entry",
+	);
+
 export const jsonValueSchema: z.ZodType<JsonValue> = z.lazy(() =>
 	z.union([
 		z.string(),
@@ -133,9 +143,9 @@ export const pageResourceSchema = z
 				route: z.string().trim().min(1).max(256).startsWith("/"),
 				board: logicalKeySchema,
 				instruction,
-				on_load_entry: logicalKeySchema.optional(),
-				on_unload_entry: logicalKeySchema.optional(),
-				on_interval_entry: logicalKeySchema.optional(),
+				on_load_entry: entrySelectorSchema.optional(),
+				on_unload_entry: entrySelectorSchema.optional(),
+				on_interval_entry: entrySelectorSchema.optional(),
 				interval_seconds: z.number().int().positive().max(86_400).optional(),
 			})
 			.strict()
@@ -210,7 +220,7 @@ export const eventResourceSchema = z
 				event_type: appEventTypeSchema,
 				board: logicalKeySchema.optional(),
 				page: logicalKeySchema.optional(),
-				entry_node: logicalKeySchema.optional(),
+				entry_node: entrySelectorSchema.optional(),
 				route: z.string().trim().min(1).max(256).startsWith("/").optional(),
 				config: jsonObjectSchema.optional(),
 			})

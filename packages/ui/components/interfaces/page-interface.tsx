@@ -40,6 +40,7 @@ import { applyA2UIMessage } from "../a2ui/apply-a2ui-message";
 import { collectRunElements } from "../a2ui/collect-run-elements";
 import type { ElementSource } from "../a2ui/element-materializer";
 import { handleElementsRequestMessage } from "../a2ui/elements-request-handler";
+import { getFrontendStateStore } from "../a2ui/frontend-state";
 import {
 	type A2UINavigationMessageInterceptor,
 	interceptA2UINavigationMessage,
@@ -135,6 +136,7 @@ function PageInterfaceInner({
 	const { t } = useTranslation("interfaces");
 	const backend = useBackend();
 	const executionService = useExecutionServiceOptional();
+	const frontendStateStore = getFrontendStateStore(appId);
 	const router = useRouter();
 	const hostSearch = useSearchParams().toString();
 	const runtimeQueryParams = useMemo(() => {
@@ -319,6 +321,7 @@ function PageInterfaceInner({
 	const handleA2UIMessage = useCallback(
 		(message: A2UIServerMessage) => {
 			console.log("[PageInterface] A2UI message", { type: message.type });
+			if (frontendStateStore.handleMessage(message)) return;
 
 			if (handleWidgetQueryMessage(message)) {
 				return;
@@ -442,6 +445,7 @@ function PageInterfaceInner({
 		},
 		[
 			appId,
+			frontendStateStore,
 			router,
 			openDialog,
 			closeDialog,
@@ -470,6 +474,8 @@ function PageInterfaceInner({
 			}
 
 			try {
+				await frontendStateStore.ensureLoaded(page.id);
+				if (isCurrent && !isCurrent()) return;
 				const currentSurface = surfaceRef.current;
 				const surfaceElements = currentSurface
 					? await collectRunElements({
@@ -484,6 +490,7 @@ function PageInterfaceInner({
 						})
 					: {};
 				if (isCurrent && !isCurrent()) return;
+				const frontendState = frontendStateStore.getSnapshot();
 
 				const payload = {
 					id: `page_${specialEvent}`,
@@ -493,6 +500,8 @@ function PageInterfaceInner({
 						_route: pageRoute || "/",
 						_query_params: { ...runtimeQueryParamsRef.current },
 						_page_id: page.id,
+						_global_state: frontendState.globalState,
+						_page_state: frontendState.pageStates[page.id] ?? {},
 						_event_type: eventName,
 						...extraPayload,
 					},
@@ -528,6 +537,7 @@ function PageInterfaceInner({
 		[
 			appId,
 			page,
+			frontendStateStore,
 			event.id,
 			pageExecutionRevision,
 			pageRoute,

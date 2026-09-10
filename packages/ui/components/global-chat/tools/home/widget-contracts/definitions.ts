@@ -250,13 +250,43 @@ export const HOME_WIDGET_CONFIG_CONTRACTS = {
 				string_format: "date-time",
 			}),
 			eyebrow: text("Short label above the content."),
-			imageUrl: imageUrl("HTTP(S) or relative image URL."),
+			imageSource: text("Image source for image and story presentations.", {
+				default: "url",
+				enum: ["url", "storage"],
+			}),
+			imageUrl: imageUrl("HTTP(S) or relative image URL.", {
+				field: "imageSource",
+				not_equals: "storage",
+			}),
+			imageAppId: profileApp("App that owns the selected storage image.", {
+				field: "imageSource",
+				equals: "storage",
+			}),
+			imagePath: text(
+				"App-relative image file path, such as media/banner.png. Home requests download URLs using the viewer's existing app permissions. Save the path instead of a signed URL.",
+				{
+					when: { field: "imageSource", equals: "storage" },
+					string_format: "storage-image-path",
+				},
+			),
 			imageAlt: text("Accessible image description."),
 			actionLabel: text("Call-to-action label."),
 			actionHref: safeUrl("Call-to-action destination."),
 			attribution: text("Quote attribution."),
 		},
 		requirements: [
+			{
+				code: "information_storage_image_app_missing",
+				message: "Choose an app for the storage image.",
+				when: { field: "imageSource", equals: "storage" },
+				non_empty: ["imageAppId"],
+			},
+			{
+				code: "information_storage_image_path_missing",
+				message: "Choose an image file from the app's storage.",
+				when: { field: "imageSource", equals: "storage" },
+				non_empty: ["imagePath"],
+			},
 			{
 				severity: "warning",
 				code: "information_countdown_empty",

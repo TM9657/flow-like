@@ -626,9 +626,10 @@ declare namespace mcp {
      * @node mcp_register_auth @receiver config_in @alias mcpRegisterAuth
      * @param configIn — MCP server config (receiver: `this` in `x.registerAuth(...)`)
      * @param auth — Auth config
+     * @param flowLikeAuth (optional) — Hosted public OAuth servers only: resolve the verified caller to a Flow-Like account and enforce app permissions. Requires a trusted platform issuer and an allowed OAuth client.
      * @returns configOut — Updated config
      */
-    function registerAuth(this: McpServerConfig, { configIn: Struct, auth: Struct }): Struct;
+    function registerAuth(this: McpServerConfig, { configIn: Struct, auth: Struct, flowLikeAuth?: bool }): Struct;
 
     /**
      * Registers referenced Flow functions as MCP tools.

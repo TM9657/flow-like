@@ -34,6 +34,7 @@ import { applyA2UIMessage } from "./apply-a2ui-message";
 import { collectRunElements } from "./collect-run-elements";
 import type { ElementSource } from "./element-materializer";
 import { handleElementsRequestMessage } from "./elements-request-handler";
+import { getFrontendStateStore } from "./frontend-state";
 import type { A2UIServerMessage, Surface, SurfaceComponent } from "./types";
 import { handleWidgetQueryMessage } from "./widget-query-handler";
 
@@ -165,6 +166,7 @@ function RouteDialogRenderer({
 	const { t } = useTranslation("common");
 	const backend = useBackend();
 	const executionService = useExecutionServiceOptional();
+	const frontendStateStore = getFrontendStateStore(appId);
 	const auth = useAuth();
 	const currentUserKey = auth?.user?.profile?.sub ?? "anonymous";
 	const [isLoading, setIsLoading] = useState(true);
@@ -344,15 +346,19 @@ function RouteDialogRenderer({
 		};
 	}, [appId, dialog.route, backend.pageState]);
 
-	const handleServerMessage = useCallback((message: A2UIServerMessage) => {
-		console.log("[RouteDialog] Server message", { type: message.type });
-		if (message.type === "showScreen" || shouldRevealProgressively(message)) {
-			setIsScreenRevealed(true);
-		}
-		setSurface((prevSurface) =>
-			prevSurface ? applyA2UIMessage(prevSurface, message) : prevSurface,
-		);
-	}, []);
+	const handleServerMessage = useCallback(
+		(message: A2UIServerMessage) => {
+			console.log("[RouteDialog] Server message", { type: message.type });
+			if (frontendStateStore.handleMessage(message)) return;
+			if (message.type === "showScreen" || shouldRevealProgressively(message)) {
+				setIsScreenRevealed(true);
+			}
+			setSurface((prevSurface) =>
+				prevSurface ? applyA2UIMessage(prevSurface, message) : prevSurface,
+			);
+		},
+		[frontendStateStore],
+	);
 
 	// Use ref to access current surface without creating dependency cycles
 	const surfaceRef = useRef(surface);
@@ -416,6 +422,12 @@ function RouteDialogRenderer({
 			setIsLoadEventRunning(true);
 
 			try {
+				await frontendStateStore.ensureLoaded(page.id);
+				if (
+					loadEventExecutionKeyRef.current !== executionKey ||
+					loadEventExecutedRef.current !== executionKey
+				)
+					return;
 				const currentSurface = surfaceRef.current;
 				const surfaceElements = currentSurface
 					? await collectRunElements({
@@ -432,6 +444,7 @@ function RouteDialogRenderer({
 					loadEventExecutedRef.current !== executionKey
 				)
 					return;
+				const frontendState = frontendStateStore.getSnapshot();
 
 				const payload = {
 					id: "page_load",
@@ -441,6 +454,8 @@ function RouteDialogRenderer({
 						_route: dialog.route,
 						_query_params: dialog.queryParams || {},
 						_page_id: page.id,
+						_global_state: frontendState.globalState,
+						_page_state: frontendState.pageStates[page.id] ?? {},
 						_dialog_id: dialog.id,
 					},
 				};
@@ -491,6 +506,7 @@ function RouteDialogRenderer({
 	}, [
 		appId,
 		page,
+		frontendStateStore,
 		pageExecutionRevision,
 		routeEvent?.id,
 		loadEventExecutionKey,

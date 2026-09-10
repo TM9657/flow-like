@@ -237,8 +237,6 @@ pub struct DispatchConfig {
     pub lambda_region: Option<String>,
     /// Kubernetes namespace (for KubernetesJob backend)
     pub k8s_namespace: String,
-    /// Kubernetes executor image
-    pub k8s_executor_image: String,
     /// SQS queue URL (for Sqs backend)
     pub sqs_queue_url: Option<String>,
     /// Storage account hosting the work queues (for AzureQueue backend)
@@ -279,8 +277,6 @@ impl DispatchConfig {
                 .or_else(|_| std::env::var("AWS_DEFAULT_REGION"))
                 .ok(),
             k8s_namespace: std::env::var("K8S_NAMESPACE").unwrap_or_else(|_| "default".into()),
-            k8s_executor_image: std::env::var("K8S_EXECUTOR_IMAGE")
-                .unwrap_or_else(|_| "flow-like-executor:latest".into()),
             sqs_queue_url: std::env::var("SQS_EXECUTION_QUEUE_URL").ok(),
             queue_account_name: std::env::var("AZURE_QUEUE_STORAGE_ACCOUNT_NAME").ok(),
             queue_name: std::env::var("AZURE_QUEUE_EXECUTION").ok(),
@@ -426,6 +422,35 @@ pub enum DispatchError {
     Serialization(String),
     #[error("Compiled artifact error: {0}")]
     Artifact(String),
+}
+
+fn validate_runtime_variable_transport(
+    backend: &ExecutionBackend,
+    request: &DispatchRequest,
+) -> Result<(), DispatchError> {
+    if request
+        .runtime_variables
+        .as_ref()
+        .is_none_or(|variables| variables.is_empty())
+    {
+        return Ok(());
+    }
+
+    // Runtime inputs may only travel directly to the executor. Lambda Event
+    // invocation also queues its body, and isolated Jobs use persisted specs.
+    match backend {
+        ExecutionBackend::Http | ExecutionBackend::LambdaStream => Ok(()),
+        ExecutionBackend::LambdaInvoke
+        | ExecutionBackend::KubernetesJob
+        | ExecutionBackend::Sqs
+        | ExecutionBackend::AzureQueue
+        | ExecutionBackend::PubSub
+        | ExecutionBackend::SqsEventBridge
+        | ExecutionBackend::Kafka
+        | ExecutionBackend::Redis => Err(DispatchError::Configuration(format!(
+            "Runtime-configured variables require direct HTTP or Lambda streaming execution; queued or staged dispatch ({backend:?}) cannot receive their values"
+        ))),
+    }
 }
 
 /// Callback that guarantees the compiled artifact for (app, board,
@@ -740,6 +765,7 @@ impl Dispatcher {
         backend: ExecutionBackend,
         mut request: DispatchRequest,
     ) -> Result<DispatchResponse, DispatchError> {
+        validate_runtime_variable_transport(&backend, &request)?;
         self.attach_channel(&mut request).await;
         let ensured = self.ensure_artifact(&request).await?;
         request.artifact = Some(self.sign_artifact(&ensured, &backend).await?);
@@ -770,6 +796,7 @@ impl Dispatcher {
         &self,
         mut request: DispatchRequest,
     ) -> Result<(DispatchResponse, ByteStream), DispatchError> {
+        validate_runtime_variable_transport(&self.config.backend, &request)?;
         self.attach_channel(&mut request).await;
         let ensured = self.ensure_artifact(&request).await?;
         request.artifact = Some(self.sign_artifact(&ensured, &self.config.backend).await?);
@@ -787,8 +814,9 @@ impl Dispatcher {
     #[cfg(not(feature = "lambda"))]
     pub async fn dispatch_streaming(
         &self,
-        _request: DispatchRequest,
+        request: DispatchRequest,
     ) -> Result<(DispatchResponse, ByteStream), DispatchError> {
+        validate_runtime_variable_transport(&self.config.backend, &request)?;
         Err(DispatchError::Configuration(
             "Streaming dispatch requires the 'lambda' feature".into(),
         ))
@@ -833,6 +861,7 @@ impl Dispatcher {
         &self,
         mut request: DispatchRequest,
     ) -> Result<(DispatchResponse, reqwest::Response), DispatchError> {
+        validate_runtime_variable_transport(&ExecutionBackend::Http, &request)?;
         self.attach_channel(&mut request).await;
         let ensured = self.ensure_artifact(&request).await?;
         request.artifact = Some(
@@ -3406,6 +3435,129 @@ mod tests {
             shadow: false,
             artifact: None,
         }
+    }
+
+    fn request_with_runtime_variables(secret: bool) -> DispatchRequest {
+        use flow_like::flow::{
+            pin::ValueType,
+            variable::{Variable, VariableType},
+        };
+
+        let mut variable = Variable::new("private-input", VariableType::String, ValueType::Normal);
+        variable.id = "private-variable".into();
+        variable.runtime_configured = true;
+        variable.secret = secret;
+        variable.default_value = Some(br#""private-value""#.to_vec());
+        let mut request = dispatch_request(DispatchTrigger::User);
+        request.runtime_variables = Some([(variable.id.clone(), variable)].into());
+        request
+    }
+
+    fn runtime_variable_backends() -> [(ExecutionBackend, bool); 10] {
+        [
+            (ExecutionBackend::Http, true),
+            (ExecutionBackend::LambdaStream, true),
+            (ExecutionBackend::LambdaInvoke, false),
+            (ExecutionBackend::KubernetesJob, false),
+            (ExecutionBackend::Sqs, false),
+            (ExecutionBackend::AzureQueue, false),
+            (ExecutionBackend::PubSub, false),
+            (ExecutionBackend::SqsEventBridge, false),
+            (ExecutionBackend::Kafka, false),
+            (ExecutionBackend::Redis, false),
+        ]
+    }
+
+    #[test]
+    fn runtime_variables_require_direct_transport_regardless_of_secret_flag() {
+        for (backend, allowed) in runtime_variable_backends() {
+            for secret in [false, true] {
+                let request = request_with_runtime_variables(secret);
+                let result = validate_runtime_variable_transport(&backend, &request);
+                assert_eq!(result.is_ok(), allowed, "{backend:?}, secret={secret}");
+                if let Err(error) = result {
+                    let diagnostic = error.to_string();
+                    assert!(diagnostic.contains("direct HTTP or Lambda streaming"));
+                    assert!(!diagnostic.contains("private-"));
+                }
+            }
+
+            let mut request = dispatch_request(DispatchTrigger::User);
+            assert!(validate_runtime_variable_transport(&backend, &request).is_ok());
+            request.runtime_variables = Some(Default::default());
+            assert!(validate_runtime_variable_transport(&backend, &request).is_ok());
+        }
+    }
+
+    #[tokio::test]
+    async fn runtime_variables_are_rejected_before_dispatch_side_effects() {
+        for (backend, allowed) in runtime_variable_backends() {
+            if allowed {
+                continue;
+            }
+            let dispatcher = Dispatcher::from_config(DispatchConfig {
+                backend: backend.clone(),
+                async_backend: backend.clone(),
+                ..DispatchConfig::default()
+            });
+            let request = request_with_runtime_variables(false);
+
+            // No artifact ensurer or transport is installed. Every public entry
+            // point must reject the values before reaching either dependency.
+            for result in [
+                dispatcher.dispatch(request.clone()).await,
+                dispatcher.dispatch_async(request.clone()).await,
+                dispatcher
+                    .dispatch_with_backend(backend.clone(), request)
+                    .await,
+            ] {
+                let error = result.expect_err("durable dispatch must reject runtime inputs");
+                assert!(matches!(error, DispatchError::Configuration(_)), "{error}");
+                assert!(error.to_string().contains("Runtime-configured variables"));
+            }
+        }
+    }
+
+    #[test]
+    fn runtime_variables_remain_available_to_direct_executors() {
+        for backend in [ExecutionBackend::Http, ExecutionBackend::LambdaStream] {
+            let request = request_with_runtime_variables(true);
+            validate_runtime_variable_transport(&backend, &request).unwrap();
+            assert_eq!(
+                executor_payload("job-1", &request).runtime_variables,
+                Some(serde_json::to_value(&request.runtime_variables).unwrap())
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn runtime_variables_follow_the_actual_streaming_transport() {
+        let dispatcher = Dispatcher::from_config(DispatchConfig {
+            backend: ExecutionBackend::Sqs,
+            ..DispatchConfig::default()
+        });
+        let request = request_with_runtime_variables(true);
+        let result = dispatcher.dispatch_http_sse(request.clone()).await;
+        assert!(matches!(result, Err(DispatchError::Artifact(_))));
+
+        let result = dispatcher.dispatch_streaming(request.clone()).await;
+        assert!(
+            matches!(result, Err(DispatchError::Configuration(ref reason))
+            if reason.contains("Runtime-configured variables"))
+        );
+
+        let dispatcher = Dispatcher::from_config(DispatchConfig {
+            backend: ExecutionBackend::LambdaStream,
+            ..DispatchConfig::default()
+        });
+        let result = dispatcher.dispatch_streaming(request).await;
+        #[cfg(feature = "lambda")]
+        assert!(matches!(result, Err(DispatchError::Artifact(_))));
+        #[cfg(not(feature = "lambda"))]
+        assert!(
+            matches!(result, Err(DispatchError::Configuration(ref reason))
+            if reason.contains("'lambda' feature"))
+        );
     }
 
     #[tokio::test]

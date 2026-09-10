@@ -14,10 +14,13 @@ Install Docker with BuildKit, Helm 3, a compatible `kubectl`, Python 3 and
 OpenSSL. Python runs configuration and deployment helpers; execution supervision,
 gateway enforcement and the slot adapter run in Rust.
 
-The build machine needs the Flow-Like repository and permission to push images
-to a registry reachable by the cluster. Configure `global.imagePullSecrets`
-when the registry requires authentication. Isolated execution requires immutable
-manager and executor image digests; the image helper records them after a push.
+The self-hosted images are published publicly to `ghcr.io/rheosoph` for AMD64
+and ARM64, so a build machine and registry login are optional. Building
+yourself requires the Flow-Like repository, Docker and permission to push to a
+registry reachable by the cluster. Configure `global.imagePullSecrets` for
+forks, private mirrors and the private Cloud packages. Isolated execution
+requires immutable manager and executor image digests; `resolve-images.py`
+reads them from the registry and `build-images.sh` records them after a push.
 
 ## Execution nodes and Cilium
 

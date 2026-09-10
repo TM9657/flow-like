@@ -26,7 +26,7 @@ impl NodeLogic for BoolEqual {
         node.add_input_pin(
             "boolean",
             "Boolean",
-            "Input Pin for OR Operation",
+            "Boolean value to compare",
             VariableType::Boolean,
         )
         .set_default_value(Some(json!(false)));
@@ -34,7 +34,7 @@ impl NodeLogic for BoolEqual {
         node.add_input_pin(
             "boolean",
             "Boolean",
-            "Input Pin for OR Operation",
+            "Boolean value to compare",
             VariableType::Boolean,
         )
         .set_default_value(Some(json!(false)));
@@ -50,26 +50,26 @@ impl NodeLogic for BoolEqual {
     }
 
     async fn run(&self, context: &mut ExecutionContext) -> flow_like_types::Result<()> {
-        let mut output_value = None;
+        let mut first_value = None;
+        let mut all_equal = true;
 
         let boolean_pins = context.get_pins_by_name("boolean").await?;
 
         for pin in boolean_pins {
             let pin: bool = context.evaluate_pin_ref(pin).await?;
 
-            if output_value.is_none() {
-                output_value = Some(pin);
+            if first_value.is_none() {
+                first_value = Some(pin);
                 continue;
             }
 
-            let out = output_value.unwrap();
-            if out != pin {
-                output_value = Some(false);
+            if first_value != Some(pin) {
+                all_equal = false;
                 break;
             }
         }
 
-        let output_value = output_value.unwrap_or(false);
+        let output_value = first_value.is_some() && all_equal;
 
         context.set_pin_value("result", json!(output_value)).await?;
 

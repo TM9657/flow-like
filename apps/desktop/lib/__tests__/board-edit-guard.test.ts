@@ -788,7 +788,30 @@ eventsSimple() {
 		);
 	});
 
+	test("allows exact board inspection of another app without allowing edits", () => {
+		for (const mode of ["inspect", "explain", "edit", undefined]) {
+			expect(
+				isCreatedAppBuildTargetMismatch({
+					createdAppId: "new-app",
+					requestedAppId: "source-app",
+					toolName: "flowpilot_board",
+					mode,
+				}),
+			).toBe(mode !== "inspect" && mode !== "explain");
+		}
+	});
+
 	test("pins build mutations to the app created in this turn", () => {
+		for (const mode of ["inspect", "create", "edit"]) {
+			expect(
+				isCreatedAppBuildTargetMismatch({
+					createdAppId: "new-app",
+					requestedAppId: "older-app",
+					toolName: "flowpilot_widget",
+					mode,
+				}),
+			).toBe(mode !== "inspect");
+		}
 		expect(
 			isCreatedAppBuildTargetMismatch({
 				createdAppId: "new-app",

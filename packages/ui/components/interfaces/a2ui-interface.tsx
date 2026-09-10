@@ -5,6 +5,7 @@ import { useCallback, useEffect, useRef } from "react";
 import { normalizeBoardVersion } from "../../lib/schema/flow/board-version";
 import { A2UIRenderer } from "../a2ui/A2UIRenderer";
 import { useSurfaceManager } from "../a2ui/SurfaceManager";
+import { getFrontendStateStore } from "../a2ui/frontend-state";
 import type { A2UIClientMessage, A2UIServerMessage } from "../a2ui/types";
 import type { IUseInterfaceProps } from "./interfaces";
 
@@ -41,6 +42,7 @@ export function A2UIInterface({
 		eventSource.onmessage = (evt) => {
 			try {
 				const message = JSON.parse(evt.data) as A2UIServerMessage;
+				if (getFrontendStateStore(appId).handleMessage(message)) return;
 				handleServerMessage(message);
 			} catch (e) {
 				console.error("Failed to parse A2UI message:", e);
@@ -55,7 +57,7 @@ export function A2UIInterface({
 			eventSource.close();
 			streamRef.current = null;
 		};
-	}, [config?.streamUrl, handleServerMessage]);
+	}, [appId, config?.streamUrl, handleServerMessage]);
 
 	const allSurfaces = getAllSurfaces();
 

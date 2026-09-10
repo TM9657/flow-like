@@ -8,7 +8,10 @@ runs PostgreSQL, Redis and Adminer; the API and runtime run on your workstation.
 This development setup uses shared processes, fixed database credentials and
 published infrastructure ports. Use the
 [Compose deployment](/self-hosting/docker-compose/installation/) for isolated
-execution on a Linux host.
+execution on a Linux host, or the
+[k3d workflow](/self-hosting/kubernetes/local-development/) for the Kubernetes
+chart. Both can run the public images published to `ghcr.io/rheosoph` without a
+local build; the native backend below compiles from source.
 
 ## Prepare configuration and infrastructure
 

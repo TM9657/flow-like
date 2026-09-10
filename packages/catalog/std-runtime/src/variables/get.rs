@@ -56,14 +56,14 @@ impl NodeLogic for GetVariable {
 
     async fn run(&self, context: &mut ExecutionContext) -> flow_like_types::Result<()> {
         let var_ref: String = context.evaluate_pin("var_ref").await?;
-        let (value, secret) = context.get_variable_value_ref(&var_ref).await?;
+        let (value, sensitive) = context.get_variable_value_ref(&var_ref).await?;
 
         let value_pin = context.get_pin_by_name("value_ref").await?;
         let value_cloned = value.lock().await.clone();
 
         if context.log_level <= LogLevel::Debug {
-            if secret {
-                context.log_message("Accessed secret variable value", LogLevel::Debug);
+            if sensitive {
+                context.log_message("Accessed variable value (hidden)", LogLevel::Debug);
             } else {
                 context.log_message(
                     &format!("Accessed variable value: {:?}", value_cloned),
@@ -164,5 +164,134 @@ impl NodeLogic for GetVariable {
         });
 
         mut_value.connected_to = connected;
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use ahash::AHashMap;
+    use flow_like::{
+        flow::{
+            board::ExecutionStage,
+            execution::{Run, internal_node::InternalNode, internal_pin::InternalPin},
+            pin::ValueType,
+            variable::Variable,
+        },
+        profile::Profile,
+        state::{FlowLikeConfig, FlowLikeState},
+        utils::http::HTTPClient,
+    };
+    use flow_like_types::{
+        Cacheable,
+        json::{self, json},
+        sync::{Mutex, RwLock},
+    };
+    use std::sync::Weak;
+
+    async fn context_with_variable(variable: Variable, local: bool) -> ExecutionContext {
+        let logic: Arc<dyn NodeLogic> = Arc::new(GetVariable::new());
+        let mut node = logic.get_node();
+        node.get_pin_mut_by_name("var_ref")
+            .unwrap()
+            .set_default_value(Some(json!(variable.id)));
+
+        let mut pins = AHashMap::new();
+        let mut name_cache: AHashMap<String, Vec<Arc<InternalPin>>> = AHashMap::new();
+        for pin in node.pins.values() {
+            let internal_pin = Arc::new(InternalPin::new(pin, false));
+            name_cache
+                .entry(pin.name.clone())
+                .or_default()
+                .push(internal_pin.clone());
+            pins.insert(pin.id.clone(), internal_pin);
+        }
+        let current = Arc::new(InternalNode::new(node, pins, logic, name_cache));
+        for pin in current.pins.iter() {
+            pin.init_node(Arc::downgrade(&current));
+            pin.init_connected_to(Vec::new());
+            pin.init_depends_on(Vec::new());
+        }
+
+        let nodes = Arc::new(AHashMap::from_iter([(
+            current.node_id().to_string(),
+            current.clone(),
+        )]));
+        let state = Arc::new(FlowLikeState::new(
+            FlowLikeConfig::new(),
+            HTTPClient::new_without_refetch(),
+        ));
+        let variables = Arc::new(Mutex::new(AHashMap::new()));
+        let variable_scope = Arc::new(Mutex::new(AHashMap::from_iter([(
+            variable.id.clone(),
+            variable,
+        )])));
+        let cache = Arc::new(RwLock::new(AHashMap::<String, Arc<dyn Cacheable>>::new()));
+        let run: Weak<Mutex<Run>> = Weak::new();
+        let mut context = ExecutionContext::new(
+            nodes,
+            &run,
+            &state,
+            &current,
+            if local { &variables } else { &variable_scope },
+            &cache,
+            LogLevel::Debug,
+            ExecutionStage::Dev,
+            Arc::new(Profile::default()),
+            None,
+            Arc::new(RwLock::new(Vec::new())),
+            None,
+            None,
+            Arc::new(AHashMap::new()),
+            None,
+        )
+        .await;
+        if local {
+            context.local_variables = Some(variable_scope);
+        }
+        context
+    }
+
+    #[tokio::test]
+    async fn sensitive_values_reach_output_without_entering_debug_logs() {
+        let marker = "sensitive-value-must-not-enter-logs";
+        for (secret, runtime_configured) in [(true, false), (false, true), (true, true)] {
+            for local in [false, true] {
+                let mut variable = Variable::new("Input", VariableType::String, ValueType::Normal);
+                variable.secret = secret;
+                variable.runtime_configured = runtime_configured;
+                *variable.value.lock().await = json!(marker);
+                let mut context = context_with_variable(variable, local).await;
+
+                GetVariable::new().run(&mut context).await.unwrap();
+
+                assert_eq!(
+                    context
+                        .get_pin_by_name("value_ref")
+                        .await
+                        .unwrap()
+                        .get_raw_value()
+                        .await,
+                    Some(json!(marker))
+                );
+                let logs = json::to_string(&context.trace.logs).unwrap();
+                assert!(!logs.contains(marker));
+                assert!(logs.contains("Accessed variable value (hidden)"));
+            }
+        }
+    }
+
+    #[tokio::test]
+    async fn ordinary_values_remain_visible_in_debug_logs() {
+        let marker = "ordinary-value-visible-in-debug-logs";
+        let variable = Variable::new("Input", VariableType::String, ValueType::Normal);
+        *variable.value.lock().await = json!(marker);
+        let mut context = context_with_variable(variable, false).await;
+
+        GetVariable::new().run(&mut context).await.unwrap();
+
+        let logs = json::to_string(&context.trace.logs).unwrap();
+        assert!(logs.contains(marker));
+        assert!(!logs.contains("(hidden)"));
     }
 }

@@ -1,6 +1,16 @@
 use super::*;
 
 #[test]
+fn frontend_prompts_defer_new_page_persistence_until_host_apply() {
+    let docs = crate::a2ui::copilot::get_full_documentation();
+    for prompt in [frontend_system_prompt("{}", &docs), frontend_sdk_system_prompt()] {
+        assert!(prompt.contains("host creates or updates the target page only after you return"));
+        assert!(prompt.contains("Do not inspect a newly emitted page"));
+        assert!(prompt.contains("host can apply it and report authoritative persistence evidence"));
+    }
+}
+
+#[test]
 fn frontend_prompts_demand_design_reflection_and_true_styling_channels() {
     let docs = crate::a2ui::copilot::get_full_documentation();
     let prompts = [

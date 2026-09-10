@@ -72,6 +72,16 @@ During execution:
 - A saved runtime value takes precedence over the value carried by the Flow
   definition.
 
+Values supplied for a run are excluded from its saved replay inputs. Automatic
+variable-read logs and debug variable snapshots omit secret and runtime-configured
+values. A replay resolves runtime configuration again instead of restoring it
+from the recorded run.
+
+Remote runs with supplied runtime values require direct HTTP or Lambda streaming
+dispatch. Queue and staged-job backends reject these requests before dispatch
+because they would retain the values server-side. Local configuration storage
+continues to work as described above.
+
 The **Hybrid** execution mode does not split one graph between local and remote
 machines. On Desktop it normally runs locally; on a web or remote-only path it
 runs remotely. See [Offline vs. Online](/apps/offline-online/) for the complete

@@ -12,6 +12,11 @@ import {
 	assertFlowPilotE2ECohortsComparable,
 	createFlowPilotE2EEvaluationIdentity,
 } from "./evaluation-identity";
+import { summarizeIntakeReliability } from "./reliability-metrics";
+import {
+	compareRetrievalArtifacts,
+	retrievalPairOrder,
+} from "./retrieval-comparison";
 import type {
 	FlowPilotE2EArtifact,
 	FlowPilotE2ECaseId,
@@ -22,7 +27,10 @@ import type {
 } from "./types";
 
 export interface FlowPilotE2ECliExpectation {
+	runtimeSourceFingerprint?: string;
 	runId: string;
+	retrievalComparison?: boolean;
+	retrievalRuntimeFingerprint?: string;
 	caseIds: readonly FlowPilotE2ECaseId[];
 	modelKey: FlowPilotE2EModelKey;
 	tier?: FlowPilotE2ETier;
@@ -55,7 +63,7 @@ function isEvaluationIdentity(
 	);
 }
 
-function isArtifact(value: unknown): value is FlowPilotE2EArtifact {
+export function isArtifact(value: unknown): value is FlowPilotE2EArtifact {
 	if (!isRecord(value)) return false;
 	if (
 		value.schema !== "flowpilot.app-creation-e2e-artifact/v1" ||
@@ -175,6 +183,12 @@ export function normalizeFlowPilotE2ECliEnvelope(
 		);
 	}
 	if (
+		envelope.selection.runtimeSourceFingerprint !==
+			expected.runtimeSourceFingerprint ||
+		Boolean(envelope.selection.retrievalComparison) !==
+			Boolean(expected.retrievalComparison) ||
+		envelope.selection.retrievalRuntimeFingerprint !==
+			expected.retrievalRuntimeFingerprint ||
 		!sameCaseIds(envelope.selection.caseIds, expected.caseIds) ||
 		envelope.selection.modelKey !== expected.modelKey ||
 		actualTier !== expectedTier ||
@@ -197,19 +211,47 @@ export function normalizeFlowPilotE2ECliEnvelope(
 		expectedIdentity,
 	);
 
-	const expectedOrder = Array.from({ length: expected.repeat }, () => [
-		...expected.caseIds,
-	]).flat();
+	const expectedOrder = Array.from({ length: expected.repeat }, () =>
+		expected.caseIds.flatMap((id) =>
+			expected.retrievalComparison ? [id, id] : [id],
+		),
+	).flat();
 	if (envelope.artifacts.length > expectedOrder.length) {
 		throw new Error(
 			"FlowPilot E2E callback returned more artifacts than requested.",
 		);
 	}
 	for (const [index, artifact] of envelope.artifacts.entries()) {
+		if (
+			artifact.caseId === "intake-reliability" &&
+			(artifact.reliability?.scope !== "host_provisioned_intake" ||
+				artifact.reliability.runtimeSourceFingerprint !==
+					expected.runtimeSourceFingerprint)
+		) {
+			throw new Error(
+				`Reliability artifact ${index + 1} has a mismatched runtime identity.`,
+			);
+		}
 		if (artifact.caseId !== expectedOrder[index]) {
 			throw new Error(
 				`FlowPilot E2E artifact ${index + 1} is for ${artifact.caseId}; expected ${expectedOrder[index]}.`,
 			);
+		}
+		if (expected.retrievalComparison) {
+			const evidence = artifact.retrievalComparison;
+			const round = Math.floor(index / (expected.caseIds.length * 2));
+			const order = index % 2;
+			if (
+				!evidence ||
+				evidence.mode !== retrievalPairOrder(round)[order] ||
+				evidence.order !== order ||
+				evidence.round !== round ||
+				evidence.runtimeFingerprint !== expected.retrievalRuntimeFingerprint
+			) {
+				throw new Error(
+					`Retrieval artifact ${index + 1} has a mismatched mode, order, or runtime fingerprint.`,
+				);
+			}
 		}
 		if (artifact.requestedModelKey !== expected.modelKey) {
 			throw new Error(
@@ -229,7 +271,24 @@ export function normalizeFlowPilotE2ECliEnvelope(
 		}
 	}
 
-	const error = envelope.error?.trim() || undefined;
+	let comparisonError: string | undefined;
+	let retrievalComparisonResults:
+		| ReturnType<typeof compareRetrievalArtifacts>
+		| undefined;
+	if (
+		expected.retrievalComparison &&
+		envelope.artifacts.length === expectedOrder.length
+	) {
+		try {
+			retrievalComparisonResults = compareRetrievalArtifacts(
+				envelope.artifacts,
+			);
+		} catch (error) {
+			comparisonError = error instanceof Error ? error.message : String(error);
+		}
+	}
+	// Preserve the completed raw artifacts even when source/model invariance invalidates comparison.
+	const error = envelope.error?.trim() || comparisonError || undefined;
 	const passedRuns = envelope.artifacts.filter((artifact) =>
 		flowPilotE2EArtifactPassed(artifact, expectedTier),
 	).length;
@@ -267,7 +326,18 @@ export function normalizeFlowPilotE2ECliEnvelope(
 		passedRuns === requestedRuns;
 	return {
 		...envelope,
+		reliabilitySummary: expected.caseIds.includes("intake-reliability")
+			? summarizeIntakeReliability(envelope.artifacts)
+			: undefined,
+		retrievalComparisonResults,
 		selection: {
+			runtimeSourceFingerprint: expected.runtimeSourceFingerprint,
+			...(expected.retrievalComparison
+				? {
+						retrievalComparison: true,
+						retrievalRuntimeFingerprint: expected.retrievalRuntimeFingerprint,
+					}
+				: {}),
 			caseIds: [...expected.caseIds],
 			modelKey: expected.modelKey,
 			tier: expectedTier,

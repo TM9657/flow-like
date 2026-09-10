@@ -22,7 +22,7 @@ spec:
       {{- end }}
       containers:
         - name: migrate
-          image: "{{ .Values.global.imageRegistry }}{{ .Values.database.migration.image.repository }}:{{ .Values.database.migration.image.tag | default "dev" }}"
+          image: {{ include "flow-like.image" (dict "image" .Values.database.migration.image "global" .Values.global) | quote }}
           imagePullPolicy: {{ .Values.database.migration.image.pullPolicy | default "Always" }}
           command: ["/usr/local/bin/run-migration.sh"]
           env:

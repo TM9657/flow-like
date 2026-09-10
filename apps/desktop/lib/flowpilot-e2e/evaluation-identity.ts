@@ -12,7 +12,7 @@ import type {
  * not source/runtime attestation and not evidence that thresholds were recalibrated.
  */
 export const FLOWPILOT_E2E_HARNESS_CONTRACT_VERSION =
-	"flowpilot.app-creation-e2e-harness/v1" as const;
+	"flowpilot.app-creation-e2e-harness/v3" as const;
 
 function evaluatedFixture(caseDefinition: FlowPilotE2ECaseDefinition) {
 	return {

@@ -107,6 +107,7 @@ const counters = {
 	counters,
 	getSaved: () => (window as any).homeQa.saved,
 	editingEvents: [],
+	images: { revision: 1, denied: false, listings: 0, downloads: 0 },
 };
 const component = (id: string, value: any) => ({
 	id,
@@ -170,6 +171,35 @@ function Harness() {
 				canHostMLX: false,
 			}),
 			isOffline: async () => false,
+			storageState: {
+				...original.storageState,
+				listStorageItems: async (appId: string, prefix: string) => {
+					const images = (window as any).homeQa.images;
+					images.listings++;
+					if (images.denied) throw new Error("File access denied");
+					const item = (name: string, is_dir = false) => ({
+						location: `apps/${appId}/upload/${name}`,
+						is_dir,
+						size: is_dir ? 0 : 180,
+						last_modified: `2026-09-09T10:00:0${images.revision}Z`,
+						e_tag: `${appId}-${images.revision}`,
+					});
+					return prefix === ""
+						? [item("media", true), item("notes.txt")]
+						: prefix === "media"
+							? [item("media/team.svg"), item("media/notes.txt")]
+							: [];
+				},
+				downloadStorageItems: async (appId: string, prefixes: string[]) => {
+					const images = (window as any).homeQa.images;
+					images.downloads++;
+					if (images.denied) throw new Error("File access denied");
+					return prefixes.map((prefix) => ({
+						prefix,
+						url: `${location.origin}/home-fixture-images/${appId}/${prefix}?revision=${images.revision}`,
+					}));
+				},
+			},
 			appState: {
 				...original.appState,
 				getApps: async () => apps,

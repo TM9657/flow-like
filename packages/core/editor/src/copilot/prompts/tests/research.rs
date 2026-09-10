@@ -144,6 +144,10 @@ fn scout_prompt_carries_the_read_only_composite_plan_contract() {
     assert!(prompt.contains("You MODIFY NOTHING"));
     assert!(prompt.contains("NEVER inline FlowScript source"));
     assert!(prompt.contains("REFERENCES (`app_id` + `board_id` + a locator)"));
+    assert!(prompt.contains("`resource_id` and `revision` exactly"));
+    assert!(prompt.contains("`read_symbol` the exact promising hit"));
+    assert!(prompt.contains("one focused query refinement"));
+    assert!(prompt.contains("empty or incomplete results do not prove"));
 
     // The composite plan is the whole point: a base plus parts from
     // different sources, ordered, with unreachable parts surfaced.

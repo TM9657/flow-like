@@ -26,7 +26,8 @@ files and apply credentials as existing Kubernetes Secrets.
 
 The `executorPool` Deployment is rendered only in `trusted_shared` mode. Its
 values do not control isolated capacity. Default values require generated
-credentials, public endpoints and real image references before installation.
+credentials and public endpoints before installation; images default to the
+published `dev` tag and isolated mode additionally requires digests.
 
 ## Execution values
 
@@ -113,20 +114,48 @@ For example, OpenRouter uses `OPENROUTER_API_KEY` and optionally
 `OPENROUTER_ENDPOINT`; OpenAI uses `HOSTED_OPENAI_API_KEY` and optionally
 `HOSTED_OPENAI_ENDPOINT`. These installation-wide keys do not enter isolated runners.
 
-## Images and builds
+## Images
 
-`scripts/build-images.sh` writes values for every application image. In isolated
-mode, `executionManager.image.digest` pins the manager and enforcement gateway,
-while `executionManager.sandbox.image` is a full
-`repository@sha256:...` executor reference.
+Every first-party image is a map with `repository`, `tag`, `digest` and
+`pullPolicy`:
 
-Rebuild and push the manager and executor together when changing their protocol.
-The runner image contains the Rust slot adapter. Apply the generated image values
-last so example tags or empty digests cannot override them.
+| Value | Published repository |
+| --- | --- |
+| `api.image` | `ghcr.io/rheosoph/flow-like-kubernetes-api` |
+| `web.image` | `ghcr.io/rheosoph/flow-like-kubernetes-web` |
+| `executor.image`, `executorPool.image` | `ghcr.io/rheosoph/flow-like-kubernetes-executor` |
+| `executionManager.image` | `ghcr.io/rheosoph/flow-like-kubernetes-execution-manager` |
+| `database.migration.image` | `ghcr.io/rheosoph/flow-like-kubernetes-migration` |
+| `sinkServices.image` | `ghcr.io/rheosoph/flow-like-kubernetes-sink-trigger` |
+| `executionManager.queueBridge.image` | `ghcr.io/rheosoph/flow-like-docker-compose-runtime` |
+| `compiler.image` | `ghcr.io/rheosoph/flow-like-docker-compose-compiler` |
+| `signaling.image` | `ghcr.io/rheosoph/flow-like-docker-compose-signaling` |
+| `rustfs.bootstrap.image` | `ghcr.io/rheosoph/flow-like-docker-compose-object-store-init` |
+
+Defaults use the mutable `dev` tag with `pullPolicy: Always`. A non-empty
+`digest` must be `sha256:` followed by 64 hex characters; the chart then renders
+`repository@digest` and ignores the tag. `scripts/resolve-images.py` fills the
+digests for one published tag and `scripts/build-images.sh` records them after a
+push; both write `.generated/values-images.yaml`, which `deploy.sh` applies
+after every operator file.
+
+In isolated mode, `executionManager.image.digest` pins the manager and
+enforcement gateway, while `executionManager.sandbox.image` is a full
+`repository@sha256:...` executor reference. Rebuild and push the manager and
+executor together when changing their protocol. The runner image contains the
+Rust slot adapter.
 
 `global.imageRegistry` is a literal repository prefix; include its trailing
-slash when setting it manually. Generated full repository references set this
-prefix to an empty string. Use `global.imagePullSecrets` for private registries.
+slash when setting it manually. Generated files set this prefix to an empty
+string because their repositories are complete. `values-production.yaml` shows
+the mirror pattern: prefix `registry.example.com/`, the published repository
+names and filled digests. Use `global.imagePullSecrets` for forks, private
+mirrors and the private Cloud packages; the API forwards the same names to the
+execution Jobs it creates (`K8S_IMAGE_PULL_SECRETS`) and to sink CronJobs
+(`SINK_IMAGE_PULL_SECRETS`), and the manager forwards them to sandbox Pods.
+Those Jobs and CronJobs are created in the release namespace (`K8S_NAMESPACE`
+is always set from the Pod's namespace), where the chart's RBAC and pull
+Secrets live.
 
 ## Public ingress
 
@@ -162,14 +191,14 @@ From `apps/backend/kubernetes/`:
 ```bash
 ./scripts/deploy.sh \
   -f helm/values-production.yaml \
-  -f .generated/values-generated.yaml \
-  -f values-operator.yaml \
-  -f .generated/values-images.yaml
+  -f values-operator.yaml
 ```
 
-The helper lints and renders the ordered values, checks Cilium and waits for the
-release workloads and initialization Jobs. Apply generated Secrets separately
-before the first install. It does not create the namespace or rotate credentials.
+The helper starts with `.generated/values-generated.yaml`, appends
+`.generated/values-images.yaml` after the arguments, lints and renders the
+ordered values, checks Cilium and waits for the release workloads and
+initialization Jobs. Apply generated Secrets separately before the first
+install. It does not create the namespace or rotate credentials.
 
 Keep Redis replay claims, cancellation records and persistent storage during
 upgrades. Drain accepted work before changing queue protocols; rebuild both

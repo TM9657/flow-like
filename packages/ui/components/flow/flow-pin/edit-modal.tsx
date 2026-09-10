@@ -121,7 +121,7 @@ export function PinEditModal({
 				boardId,
 				command,
 			);
-			await pushCommand(result, false);
+			await pushCommand(result);
 			await refetchBoard();
 			stopEditPin();
 			return;
@@ -148,7 +148,7 @@ export function PinEditModal({
 				boardId,
 				command,
 			);
-			await pushCommand(result, false);
+			await pushCommand(result);
 			await refetchBoard();
 			stopEditPin();
 			return;

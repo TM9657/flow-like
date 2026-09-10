@@ -148,6 +148,336 @@ declare namespace geo {
     function searchLocation({ query?: string, limit?: int, countryCodes?: string }): { results: Struct[], firstResult: Struct };
 }
 
+declare namespace geometry {
+    // === Web/Geo/Geometry ===
+
+    /**
+     * Returns minimum and maximum longitude and latitude using a planar coordinate envelope. Empty geometries have no bounds.
+     * @node geometry_bounds @receiver geometry @alias geometryBounds
+     * @param geometry — Validated WGS 84 longitude/latitude GeoJSON geometry (receiver: `this` in `x.bounds(...)`)
+     * @returns minLongitude — Coordinate in degrees
+     * @returns minLatitude — Coordinate in degrees
+     * @returns maxLongitude — Coordinate in degrees
+     * @returns maxLatitude — Coordinate in degrees
+     */
+    function bounds(this: geometry, { geometry: geometry }): { minLongitude: float, minLatitude: float, maxLongitude: float, maxLatitude: float };
+
+    /**
+     * Validates a geometry as GeometryCollection and returns it with an explicit subtype. Incompatible values fail the node.
+     * @node geometry_cast_geometry_collection @receiver geometry @alias geometryCastGeometryCollection
+     * @param geometry — Validated WGS 84 longitude/latitude GeoJSON geometry (receiver: `this` in `x.castGeometryCollection(...)`)
+     * @returns geometryOut — Validated WGS 84 GeoJSON geometry
+     */
+    function castGeometryCollection(this: geometry, { geometry: geometry }): geometry<GeometryCollection>;
+
+    /**
+     * Validates a geometry as LineString and returns it with an explicit subtype. Incompatible values fail the node.
+     * @node geometry_cast_line_string @receiver geometry @alias geometryCastLineString
+     * @param geometry — Validated WGS 84 longitude/latitude GeoJSON geometry (receiver: `this` in `x.castLineString(...)`)
+     * @returns geometryOut — Validated WGS 84 GeoJSON geometry
+     */
+    function castLineString(this: geometry, { geometry: geometry }): geometry<LineString>;
+
+    /**
+     * Validates a geometry as MultiLineString and returns it with an explicit subtype. Incompatible values fail the node.
+     * @node geometry_cast_multi_line_string @receiver geometry @alias geometryCastMultiLineString
+     * @param geometry — Validated WGS 84 longitude/latitude GeoJSON geometry (receiver: `this` in `x.castMultiLineString(...)`)
+     * @returns geometryOut — Validated WGS 84 GeoJSON geometry
+     */
+    function castMultiLineString(this: geometry, { geometry: geometry }): geometry<MultiLineString>;
+
+    /**
+     * Validates a geometry as MultiPoint and returns it with an explicit subtype. Incompatible values fail the node.
+     * @node geometry_cast_multi_point @receiver geometry @alias geometryCastMultiPoint
+     * @param geometry — Validated WGS 84 longitude/latitude GeoJSON geometry (receiver: `this` in `x.castMultiPoint(...)`)
+     * @returns geometryOut — Validated WGS 84 GeoJSON geometry
+     */
+    function castMultiPoint(this: geometry, { geometry: geometry }): geometry<MultiPoint>;
+
+    /**
+     * Validates a geometry as MultiPolygon and returns it with an explicit subtype. Incompatible values fail the node.
+     * @node geometry_cast_multi_polygon @receiver geometry @alias geometryCastMultiPolygon
+     * @param geometry — Validated WGS 84 longitude/latitude GeoJSON geometry (receiver: `this` in `x.castMultiPolygon(...)`)
+     * @returns geometryOut — Validated WGS 84 GeoJSON geometry
+     */
+    function castMultiPolygon(this: geometry, { geometry: geometry }): geometry<MultiPolygon>;
+
+    /**
+     * Validates a geometry as Point and returns it with an explicit subtype. Incompatible values fail the node.
+     * @node geometry_cast_point @receiver geometry @alias geometryCastPoint
+     * @param geometry — Validated WGS 84 longitude/latitude GeoJSON geometry (receiver: `this` in `x.castPoint(...)`)
+     * @returns geometryOut — Validated WGS 84 GeoJSON geometry
+     */
+    function castPoint(this: geometry, { geometry: geometry }): geometry<Point>;
+
+    /**
+     * Validates a geometry as Polygon and returns it with an explicit subtype. Incompatible values fail the node.
+     * @node geometry_cast_polygon @receiver geometry @alias geometryCastPolygon
+     * @param geometry — Validated WGS 84 longitude/latitude GeoJSON geometry (receiver: `this` in `x.castPolygon(...)`)
+     * @returns geometryOut — Validated WGS 84 GeoJSON geometry
+     */
+    function castPolygon(this: geometry, { geometry: geometry }): geometry<Polygon>;
+
+    /**
+     * Computes the centroid in the longitude/latitude coordinate plane. Empty geometries have no centroid.
+     * @node geometry_centroid @receiver geometry @alias geometryCentroid
+     * @param geometry — Validated WGS 84 longitude/latitude GeoJSON geometry (receiver: `this` in `x.centroid(...)`)
+     * @returns geometryOut — Validated WGS 84 GeoJSON geometry
+     */
+    function centroid(this: geometry, { geometry: geometry }): geometry<Point>;
+
+    /**
+     * Tests whether geometry A contains B in the longitude/latitude coordinate plane. A point on a polygon boundary is not contained.
+     * @node geometry_contains @receiver a @alias geometryContains
+     * @param a — Validated WGS 84 longitude/latitude GeoJSON geometry (receiver: `this` in `x.contains(...)`)
+     * @param b — Validated WGS 84 longitude/latitude GeoJSON geometry
+     * @returns result — Planar predicate result
+     */
+    function contains(this: geometry, { a: geometry, b: geometry }): bool;
+
+    /**
+     * Computes a polygon hull in the longitude/latitude coordinate plane. Fails when the input cannot form a valid polygon with at least three non-collinear positions.
+     * @node geometry_convex_hull @receiver geometry @alias geometryConvexHull
+     * @param geometry — Validated WGS 84 longitude/latitude GeoJSON geometry (receiver: `this` in `x.convexHull(...)`)
+     * @returns geometryOut — Validated WGS 84 GeoJSON geometry
+     */
+    function convexHull(this: geometry, { geometry: geometry }): geometry<Polygon>;
+
+    /**
+     * Parses a GeoJSON geometry object, validates its two-dimensional WGS 84 coordinates and normalizes ring winding. Retains bbox and foreign members. Feature wrappers require extraction.
+     * @node geometry_from_geojson @alias geometryFromGeojson
+     * @param text — text
+     * @returns geometryOut — Validated WGS 84 GeoJSON geometry
+     */
+    function fromGeoJson({ text: string }): geometry;
+
+    /**
+     * Converts the coordinate vector emitted by H3 Cell Boundary into a Polygon. Closes the ring and validates topology.
+     * @node geometry_from_legacy_boundary @alias geometryFromLegacyBoundary
+     * @param boundary — boundary
+     * @returns geometryOut — Validated WGS 84 GeoJSON geometry
+     */
+    function fromLegacyBoundary({ boundary: Struct }): geometry<Polygon>;
+
+    /**
+     * Converts the existing GeoCoordinate latitude/longitude object to a Geometry Point without swapping the axes.
+     * @node geometry_from_legacy_coordinate @alias geometryFromLegacyCoordinate
+     * @param coordinate — coordinate
+     * @returns geometryOut — Validated WGS 84 GeoJSON geometry
+     */
+    function fromLegacyCoordinate({ coordinate: Struct }): geometry<Point>;
+
+    /**
+     * Extracts a Point from a search result or waypoint coordinate. Returns the original rich location wrapper unchanged.
+     * @node geometry_from_legacy_location @alias geometryFromLegacyLocation
+     * @param location — location
+     * @returns geometryOut — Validated WGS 84 GeoJSON geometry
+     * @returns locationOut — Original location wrapper
+     */
+    function fromLegacyLocation({ location: Struct }): { geometryOut: geometry<Point>, locationOut: Struct };
+
+    /**
+     * Converts the existing H3 polygon vector, preserving exterior and interior rings and closing each ring.
+     * @node geometry_from_legacy_polygons @alias geometryFromLegacyPolygons
+     * @param polygons — polygons
+     * @returns geometryOut — Validated WGS 84 GeoJSON geometry
+     */
+    function fromLegacyPolygons({ polygons: Struct }): geometry<MultiPolygon>;
+
+    /**
+     * Extracts a LineString from RouteResult.geometry.points or RouteGeometry.points. Returns the original wrapper unchanged.
+     * @node geometry_from_legacy_route @alias geometryFromLegacyRoute
+     * @param route — route
+     * @returns geometryOut — Validated WGS 84 GeoJSON geometry
+     * @returns routeOut — Original route wrapper
+     */
+    function fromLegacyRoute({ route: Struct }): { geometryOut: geometry<LineString>, routeOut: Struct };
+
+    /**
+     * Parses two-dimensional WKB bytes. Calling this node asserts WGS 84 longitude/latitude. Unsupported dimensions, SRIDs and out-of-range coordinates are rejected.
+     * @node geometry_from_wkb @alias geometryFromWkb
+     * @param bytes — bytes
+     * @returns geometryOut — Validated WGS 84 GeoJSON geometry
+     */
+    function fromWkb({ bytes: bytes[] }): geometry;
+
+    /**
+     * Parses two-dimensional WKT. Calling this node asserts coordinates are WGS 84 longitude/latitude; it does not transform a projected CRS. Empty scalar geometries are rejected.
+     * @node geometry_from_wkt @alias geometryFromWkt
+     * @param text — text
+     * @returns geometryOut — Validated WGS 84 GeoJSON geometry
+     */
+    function fromWkt({ text: string }): geometry;
+
+    /**
+     * Computes WGS 84 ellipsoidal Polygon or MultiPolygon area in square meters, subtracting holes. Each polygon must describe a region smaller than half the Earth.
+     * @node geometry_geodesic_area @receiver geometry @alias geometryGeodesicArea
+     * @param geometry — Validated WGS 84 longitude/latitude GeoJSON geometry (receiver: `this` in `x.geodesicArea(...)`)
+     * @returns area — Area in square meters
+     */
+    function geodesicArea(this: geometry, { geometry: geometry }): float;
+
+    /**
+     * Computes the WGS 84 ellipsoidal geodesic distance between two Points in meters, including antimeridian crossings.
+     * @node geometry_geodesic_distance @receiver a @alias geometryGeodesicDistance
+     * @param a — Validated WGS 84 longitude/latitude GeoJSON geometry (receiver: `this` in `x.geodesicDistance(...)`)
+     * @param b — Validated WGS 84 longitude/latitude GeoJSON geometry
+     * @returns distance — Distance in meters
+     */
+    function geodesicDistance(this: geometry<Point>, { a: geometry<Point>, b: geometry<Point> }): float;
+
+    /**
+     * Sums WGS 84 ellipsoidal geodesic segment lengths in meters, including polygon exterior and interior ring perimeters. Points contribute zero.
+     * @node geometry_geodesic_length @receiver geometry @alias geometryGeodesicLength
+     * @param geometry — Validated WGS 84 longitude/latitude GeoJSON geometry (receiver: `this` in `x.geodesicLength(...)`)
+     * @returns length — Length in meters
+     */
+    function geodesicLength(this: geometry, { geometry: geometry }): float;
+
+    /**
+     * Intersects Polygon or MultiPolygon inputs in the longitude/latitude coordinate plane. Returns a MultiPolygon, which can be empty.
+     * @node geometry_intersection @receiver a @alias geometryIntersection
+     * @param a — Validated WGS 84 longitude/latitude GeoJSON geometry (receiver: `this` in `x.intersection(...)`)
+     * @param b — Validated WGS 84 longitude/latitude GeoJSON geometry
+     * @returns geometryOut — Validated WGS 84 GeoJSON geometry
+     */
+    function intersection(this: geometry, { a: geometry, b: geometry }): geometry<MultiPolygon>;
+
+    /**
+     * Tests whether geometries share any point in the longitude/latitude coordinate plane, including boundary touches.
+     * @node geometry_intersects @receiver a @alias geometryIntersects
+     * @param a — Validated WGS 84 longitude/latitude GeoJSON geometry (receiver: `this` in `x.intersects(...)`)
+     * @param b — Validated WGS 84 longitude/latitude GeoJSON geometry
+     * @returns result — Planar predicate result
+     */
+    function intersects(this: geometry, { a: geometry, b: geometry }): bool;
+
+    /**
+     * Creates a WGS 84 Point from longitude and latitude. Both coordinates must be finite and within geographic bounds.
+     * @node geometry_make_point @alias geometryMakePoint
+     * @param longitude — longitude
+     * @param latitude — latitude
+     * @returns geometryOut — Validated WGS 84 GeoJSON geometry
+     */
+    function makePoint({ longitude: float, latitude: float }): geometry<Point>;
+
+    /**
+     * Counts coordinate positions, including closing polygon positions and recursive collection members.
+     * @node geometry_num_points @receiver geometry @alias geometryNumPoints
+     * @param geometry — Validated WGS 84 longitude/latitude GeoJSON geometry (receiver: `this` in `x.numPoints(...)`)
+     * @returns count — Number of positions, including closing ring positions
+     */
+    function numPoints(this: geometry, { geometry: geometry }): int;
+
+    /**
+     * Computes Polygon or MultiPolygon area in square coordinate degrees, subtracting holes. This is a planar measurement.
+     * @node geometry_planar_area @receiver geometry @alias geometryPlanarArea
+     * @param geometry — Validated WGS 84 longitude/latitude GeoJSON geometry (receiver: `this` in `x.planarArea(...)`)
+     * @returns area — Planar area in square coordinate degrees
+     */
+    function planarArea(this: geometry, { geometry: geometry }): float;
+
+    /**
+     * Computes the shortest planar distance in coordinate degrees. This longitude/latitude plane does not wrap at the antimeridian. Empty inputs are rejected.
+     * @node geometry_planar_distance @receiver a @alias geometryPlanarDistance
+     * @param a — Validated WGS 84 longitude/latitude GeoJSON geometry (receiver: `this` in `x.planarDistance(...)`)
+     * @param b — Validated WGS 84 longitude/latitude GeoJSON geometry
+     * @returns distance — Planar distance in coordinate degrees
+     */
+    function planarDistance(this: geometry, { a: geometry, b: geometry }): float;
+
+    /**
+     * Sums line lengths and polygon ring perimeters in planar coordinate degrees. Points contribute zero.
+     * @node geometry_planar_length @receiver geometry @alias geometryPlanarLength
+     * @param geometry — Validated WGS 84 longitude/latitude GeoJSON geometry (receiver: `this` in `x.planarLength(...)`)
+     * @returns length — Planar length in coordinate degrees
+     */
+    function planarLength(this: geometry, { geometry: geometry }): float;
+
+    /**
+     * Simplifies lines and polygon rings with a nonnegative tolerance in coordinate degrees. Validates the result and rejects a topology-breaking result.
+     * @node geometry_simplify @receiver geometry @alias geometrySimplify
+     * @param geometry — Validated WGS 84 longitude/latitude GeoJSON geometry (receiver: `this` in `x.simplify(...)`)
+     * @param tolerance — tolerance
+     * @returns geometryOut — Validated WGS 84 GeoJSON geometry
+     */
+    function simplify(this: geometry, { geometry: geometry, tolerance: float }): geometry;
+
+    /**
+     * Writes a validated geometry as GeoJSON text, retaining bbox and foreign members and normalizing ring winding.
+     * @node geometry_to_geojson @receiver geometry @alias geometryToGeojson
+     * @param geometry — Validated WGS 84 longitude/latitude GeoJSON geometry (receiver: `this` in `x.toGeoJson(...)`)
+     * @returns text — Serialized geometry
+     */
+    function toGeoJson(this: geometry, { geometry: geometry }): string;
+
+    /**
+     * Converts a Geometry Point into the existing GeoCoordinate shape used by H3, routing, search and map nodes.
+     * @node geometry_to_legacy_coordinate @receiver geometry @alias geometryToLegacyCoordinate
+     * @param geometry — Validated WGS 84 longitude/latitude GeoJSON geometry (receiver: `this` in `x.toLegacyCoordinate(...)`)
+     * @returns coordinate — Legacy latitude/longitude object
+     */
+    function toLegacyCoordinate(this: geometry<Point>, { geometry: geometry<Point> }): Struct;
+
+    /**
+     * Updates only the points of an existing RouteResult or RouteGeometry with a LineString, retaining route metadata and other fields.
+     * @node geometry_to_legacy_route @alias geometryToLegacyRoute
+     * @param route — route
+     * @param geometry — Validated WGS 84 longitude/latitude GeoJSON geometry
+     * @returns routeOut — Route with updated points and retained metadata
+     */
+    function toLegacyRoute({ route: Struct, geometry: geometry<LineString> }): Struct;
+
+    /**
+     * Writes two-dimensional WKB bytes. WKB omits GeoJSON bbox and foreign members; keep application properties in a surrounding Struct.
+     * @node geometry_to_wkb @receiver geometry @alias geometryToWkb
+     * @param geometry — Validated WGS 84 longitude/latitude GeoJSON geometry (receiver: `this` in `x.toWkb(...)`)
+     * @returns bytes — WKB byte sequence
+     */
+    function toWkb(this: geometry, { geometry: geometry }): bytes[];
+
+    /**
+     * Writes two-dimensional WKT. WKT omits GeoJSON bbox and foreign members; keep application properties in a surrounding Struct.
+     * @node geometry_to_wkt @receiver geometry @alias geometryToWkt
+     * @param geometry — Validated WGS 84 longitude/latitude GeoJSON geometry (receiver: `this` in `x.toWkt(...)`)
+     * @returns text — Serialized geometry
+     */
+    function toWkt(this: geometry, { geometry: geometry }): string;
+
+    /**
+     * Returns the GeoJSON geometry type name.
+     * @node geometry_type @receiver geometry @alias geometryType
+     * @param geometry — Validated WGS 84 longitude/latitude GeoJSON geometry (receiver: `this` in `x.type(...)`)
+     * @returns type — GeoJSON type name
+     */
+    function type(this: geometry, { geometry: geometry }): string;
+
+    /**
+     * Tests whether geometry B contains A in the longitude/latitude coordinate plane.
+     * @node geometry_within @receiver a @alias geometryWithin
+     * @param a — Validated WGS 84 longitude/latitude GeoJSON geometry (receiver: `this` in `x.within(...)`)
+     * @param b — Validated WGS 84 longitude/latitude GeoJSON geometry
+     * @returns result — Planar predicate result
+     */
+    function within(this: geometry, { a: geometry, b: geometry }): bool;
+
+    /**
+     * Returns the Point x coordinate, longitude in degrees.
+     * @node geometry_x @receiver geometry @alias geometryX
+     * @param geometry — Validated WGS 84 longitude/latitude GeoJSON geometry (receiver: `this` in `x.x(...)`)
+     * @returns value — Coordinate in degrees
+     */
+    function x(this: geometry<Point>, { geometry: geometry<Point> }): float;
+
+    /**
+     * Returns the Point y coordinate, latitude in degrees.
+     * @node geometry_y @receiver geometry @alias geometryY
+     * @param geometry — Validated WGS 84 longitude/latitude GeoJSON geometry (receiver: `this` in `x.y(...)`)
+     * @returns value — Coordinate in degrees
+     */
+    function y(this: geometry<Point>, { geometry: geometry<Point> }): float;
+}
+
 declare namespace h3 {
     // === Web/Geo/H3 ===
 

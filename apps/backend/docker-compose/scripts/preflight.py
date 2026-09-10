@@ -9,9 +9,16 @@ import re
 import stat
 import subprocess
 import sys
+import tempfile
 from urllib.parse import urlsplit
 
 ROOT = Path(__file__).resolve().parents[1]
+IMAGE_WORKLOADS = {"API_IMAGE": "api", "DB_INIT_IMAGE": "db-init", "WEB_IMAGE": "web", "RUNTIME_IMAGE": "runtime",
+                   "COMPILER_IMAGE": "compiler", "SIGNALING_IMAGE": "signaling", "SINK_SERVICES_IMAGE": "sink-services",
+                   "EXECUTION_MANAGER_IMAGE": "execution-manager", "OBJECT_STORE_INIT_IMAGE": "object-store-init"}
+SANDBOX_SOURCES = {"SANDBOX_IMAGE": "RUNTIME_IMAGE", "SANDBOX_GATEWAY_IMAGE": "EXECUTION_MANAGER_IMAGE"}
+IMAGE_TAG_PATTERN = r"[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}"
+DIGEST_PIN_PATTERN = r"[^\s@]+@sha256:[a-f0-9]{64}"
 
 
 def duration_seconds(value):
@@ -39,12 +46,49 @@ def read_env(path):
     return result
 
 
+def ensure_private(path):
+    if not stat.S_ISREG(path.lstat().st_mode) or stat.S_IMODE(path.stat().st_mode) & 0o077:
+        raise ValueError("Deployment env file must be a regular private file (chmod 600)")
+
+
+def write_env(path, updates):
+    """Replace selected assignments atomically; every other line and secret stays untouched."""
+    pattern = re.compile(r"^(" + "|".join(re.escape(key) for key in updates) + r")=.*$", re.M)
+    seen = set()
+
+    def replace(match):
+        seen.add(match[1])
+        return f"{match[1]}={updates[match[1]]}"
+
+    text = pattern.sub(replace, path.read_text())
+    missing = [key for key in updates if key not in seen]
+    if missing:
+        text = text.rstrip("\n") + "\n" + "".join(f"{key}={updates[key]}\n" for key in missing)
+    fd, temporary = tempfile.mkstemp(prefix=".env-pin-", dir=path.parent)
+    try:
+        with os.fdopen(fd, "w") as target:
+            target.write(text)
+            target.flush()
+            os.fsync(target.fileno())
+        os.replace(temporary, path)
+    finally:
+        if os.path.exists(temporary):
+            os.unlink(temporary)
+
+
 def validate(values, config):
     errors = []
     services = config["services"]
     mode = values.get("EXECUTION_ISOLATION_MODE", "per_run")
     if mode not in {"per_run", "trusted_shared"}:
         errors.append("EXECUTION_ISOLATION_MODE must be per_run or trusted_shared")
+    tag = values.get("FLOW_LIKE_IMAGE_TAG", "")
+    if tag and not re.fullmatch(IMAGE_TAG_PATTERN, tag):
+        errors.append("FLOW_LIKE_IMAGE_TAG must be an image tag: letters, digits, '_', '.', '-' up to 128 characters")
+    for key, image_key in SANDBOX_SOURCES.items():
+        pin = values.get(key, "")
+        if re.fullmatch(DIGEST_PIN_PATTERN, pin) and values.get(image_key, "") != pin:
+            errors.append(f"{image_key} must equal the {key} digest pin; run scripts/pull-images.py or scripts/prepare-images.py to align them")
     api = services.get("api", {}).get("environment", {})
     runtime_sources = ("FLOW_LIKE_CONFIG_FILE", "FLOW_LIKE_CONFIG_JSON", "FLOW_LIKE_CONFIG_SECRET_REF")
     for key in runtime_sources:
@@ -190,8 +234,7 @@ def validate(values, config):
 
 
 def run(args):
-    if not stat.S_ISREG(args.env_file.lstat().st_mode) or stat.S_IMODE(args.env_file.stat().st_mode) & 0o077:
-        raise ValueError("Deployment env file must be a regular private file (chmod 600)")
+    ensure_private(args.env_file)
     values = read_env(args.env_file)
     process_env = os.environ.copy()
     # Explicit --env-file is authoritative; do not let an inherited shell silently

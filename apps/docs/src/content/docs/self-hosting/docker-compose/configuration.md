@@ -40,6 +40,43 @@ API CORS origins cannot contain wildcards, credentials, paths or query strings.
 Add desktop origins to both origin lists when required:
 `tauri://localhost,http://tauri.localhost,https://tauri.localhost`.
 
+## Images
+
+| Variable | Default | Meaning |
+| --- | --- | --- |
+| `FLOW_LIKE_IMAGE_TAG` | `dev` | Tag used for every empty `*_IMAGE` value |
+| `API_IMAGE`, `WEB_IMAGE`, `DB_INIT_IMAGE`, `COMPILER_IMAGE`, `SIGNALING_IMAGE`, `SINK_SERVICES_IMAGE`, `OBJECT_STORE_INIT_IMAGE` | empty | Full image reference override |
+| `RUNTIME_IMAGE` | empty | Runner and queue-bridge image |
+| `EXECUTION_MANAGER_IMAGE` | empty | Manager and gateway image |
+| `SANDBOX_IMAGE`, `SANDBOX_GATEWAY_IMAGE` | empty | Immutable references the manager starts per execution |
+
+An empty `*_IMAGE` renders
+`ghcr.io/rheosoph/flow-like-docker-compose-<workload>:${FLOW_LIKE_IMAGE_TAG}`.
+The tag must match `[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}`. Channel tags such as
+`dev`, `beta` and `latest` move with each publication; release tags such as
+`1.4.0` and immutable `sha-<commit>-run-<run>-<attempt>` tags do not. See
+[Containers](/self-hosting/containers/) for the full scheme. The self-hosted
+packages are public; cloud-provider packages are not.
+
+`scripts/pull-images.py` pulls the nine images at one tag and writes their
+`repository@sha256:...` digests into the `*_IMAGE` values, records the tag in
+`FLOW_LIKE_IMAGE_TAG` and copies the runtime and execution-manager pins into
+`SANDBOX_IMAGE` and `SANDBOX_GATEWAY_IMAGE`. Preflight rejects a digest-pinned
+`SANDBOX_IMAGE` that differs from `RUNTIME_IMAGE`, and a digest-pinned
+`SANDBOX_GATEWAY_IMAGE` that differs from `EXECUTION_MANAGER_IMAGE`, so the
+queue bridge, manager and sandboxes always run the same build. Bare
+`sha256:<id>` values written by `prepare-images.py` are local image IDs and are
+exempt from that comparison.
+
+Set a `*_IMAGE` value explicitly to use a mirror, a fork or a locally built tag.
+`up.py --build` builds from the checked-out sources: it first writes
+`flow-like-<workload>:local` into every empty `*_IMAGE` so the build never
+shadows a published name on that daemon, then runs `docker compose up --build`.
+It cannot build digest-pinned references. A plain `docker compose build` with an
+empty `*_IMAGE` tags the local build under the published name, and later
+`up.py` runs keep using it because Compose only pulls missing images;
+`pull-images.py` restores the published digests.
+
 ## Hub configuration and identity
 
 `FLOW_LIKE_RUNTIME_CONFIG_FILE` selects the host-side JSON file mounted into the
@@ -110,8 +147,9 @@ compatibility and proxy-header requirements.
 | `QUEUE_BRIDGE_REPLICAS`, `QUEUE_WORKER_CONCURRENCY` | `1`, `10` | Background dispatchers and concurrency |
 
 `SANDBOX_IMAGE` and `SANDBOX_GATEWAY_IMAGE` must identify immutable images
-already available to the daemon. Run `scripts/prepare-images.py` after changing
-runner or gateway code.
+already available to the daemon. `scripts/pull-images.py` pins published
+digests; run `scripts/prepare-images.py` instead after changing runner or
+gateway code locally.
 
 Only exact HTTPS integration hosts in `EXECUTION_ALLOWED_HTTPS_HOSTS` are
 permitted in addition to the run's callbacks and storage. Configure supported
@@ -204,9 +242,12 @@ of hub JSON.
 
 ```bash
 python3 scripts/preflight.py
-python3 scripts/up.py --build
+python3 scripts/up.py
 docker compose ps --all
 ```
+
+`up.py` starts with `--no-build`; pass `--build` only for installations whose
+nine `*_IMAGE` values are all local tags.
 
 Use `docker compose config --quiet` when checking interpolation manually.
 Rendered configuration without `--quiet` contains deployment secrets.

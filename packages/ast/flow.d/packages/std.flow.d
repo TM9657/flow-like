@@ -436,8 +436,8 @@ declare namespace bool {
     /**
      * Boolean Equal
      * @node bool_equal @receiver boolean @alias boolEqual
-     * @param boolean (optional) — Input Pin for OR Operation (receiver: `this` in `x.equal(...)`)
-     * @param boolean (optional) — Input Pin for OR Operation (receiver: `this` in `x.equal(...)`)
+     * @param boolean (optional) — Boolean value to compare (receiver: `this` in `x.equal(...)`)
+     * @param boolean (optional) — Boolean value to compare (receiver: `this` in `x.equal(...)`)
      * @returns result — == operation between all boolean inputs
      */
     function equal(this: bool, { boolean?: bool, boolean?: bool }): bool;

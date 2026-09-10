@@ -4,7 +4,7 @@ use super::KubernetesConfig;
 use flow_like_types::create_id;
 use k8s_openapi::api::batch::v1::Job;
 use k8s_openapi::api::core::v1::{
-    Container, EnvVar, PodSpec, PodTemplateSpec, ResourceRequirements,
+    Container, EnvVar, LocalObjectReference, PodSpec, PodTemplateSpec, ResourceRequirements,
 };
 use k8s_openapi::apimachinery::pkg::api::resource::Quantity;
 use kube::{
@@ -328,6 +328,16 @@ impl JobDispatcher {
             pod_spec.runtime_class_name = Some(runtime_class.clone());
         }
 
+        if !self.config.image_pull_secrets.is_empty() {
+            pod_spec.image_pull_secrets = Some(
+                self.config
+                    .image_pull_secrets
+                    .iter()
+                    .map(|name| LocalObjectReference { name: name.clone() })
+                    .collect(),
+            );
+        }
+
         Job {
             metadata: k8s_openapi::apimachinery::pkg::apis::meta::v1::ObjectMeta {
                 name: Some(format!("flow-like-{}", job_id)),
@@ -443,10 +453,8 @@ impl std::error::Error for DispatchError {}
 mod tests {
     use super::*;
 
-    #[test]
-    fn isolated_jobs_receive_the_api_proxy_base_url() {
-        let dispatcher = JobDispatcher::new(KubernetesConfig::default());
-        let request = SubmitJobRequest {
+    fn isolated_request() -> SubmitJobRequest {
+        SubmitJobRequest {
             run_id: "run-1".to_string(),
             app_id: "app-1".to_string(),
             board_id: "board-1".to_string(),
@@ -476,13 +484,25 @@ mod tests {
                     },
                 }),
             },
-        };
+        }
+    }
+
+    fn pod_spec(job: Job) -> PodSpec {
+        job.spec
+            .and_then(|spec| spec.template.spec)
+            .expect("job pod spec")
+    }
+
+    #[test]
+    fn isolated_jobs_receive_the_api_proxy_base_url() {
+        let dispatcher = JobDispatcher::new(KubernetesConfig::default());
+        let request = isolated_request();
 
         let job = dispatcher.build_job_spec("job-1", &request);
-        let env = job
-            .spec
-            .and_then(|spec| spec.template.spec)
-            .and_then(|pod| pod.containers.into_iter().next())
+        let env = pod_spec(job)
+            .containers
+            .into_iter()
+            .next()
             .and_then(|container| container.env)
             .expect("executor environment");
         let api_base_url = env
@@ -499,5 +519,32 @@ mod tests {
             .expect("channel grant env");
         let grant: flow_like_types::channel::ChannelGrant = serde_json::from_str(channel).unwrap();
         assert_eq!(grant.channel_id, "run-1");
+    }
+
+    #[test]
+    fn image_pull_secrets_are_forwarded_to_the_job_pod() {
+        let dispatcher = JobDispatcher::new(KubernetesConfig {
+            image_pull_secrets: vec!["ghcr-pull".to_string(), "mirror-pull".to_string()],
+            ..KubernetesConfig::default()
+        });
+
+        let pod = pod_spec(dispatcher.build_job_spec("job-1", &isolated_request()));
+        let names: Vec<String> = pod
+            .image_pull_secrets
+            .expect("imagePullSecrets")
+            .into_iter()
+            .map(|secret| secret.name)
+            .collect();
+        assert_eq!(
+            names,
+            vec!["ghcr-pull".to_string(), "mirror-pull".to_string()]
+        );
+    }
+
+    #[test]
+    fn jobs_without_pull_secrets_leave_the_pod_spec_field_unset() {
+        let dispatcher = JobDispatcher::new(KubernetesConfig::default());
+        let pod = pod_spec(dispatcher.build_job_spec("job-1", &isolated_request()));
+        assert!(pod.image_pull_secrets.is_none());
     }
 }

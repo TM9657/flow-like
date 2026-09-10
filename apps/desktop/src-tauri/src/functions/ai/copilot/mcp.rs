@@ -14,8 +14,9 @@ use super::workflow_results::{
     annotate_modular_fallback_result, suppress_unchanged_flowscript_source_echo,
 };
 use super::workflow_sdk::{
-    ExternalContextPreflight, is_order_sensitive_workflow_tool, workflow_database_setup_preflight,
-    workflow_loop_result, workflow_predraft_context_preflight_with_lease,
+    ExternalContextPreflight, WorkflowToolDispatchObserver, is_order_sensitive_workflow_tool,
+    workflow_database_setup_preflight, workflow_loop_result,
+    workflow_predraft_context_preflight_with_lease,
 };
 use super::workflow_state::{WorkflowToolLoopSnapshot, WorkflowToolLoopState};
 use flow_like::flow::copilot::workflow_tool_result_succeeded;
@@ -33,6 +34,7 @@ struct FlowPilotMcpServer {
     tool_activity: Arc<StdMutex<McpToolActivityState>>,
     handler_quiescence: Arc<tokio::sync::Notify>,
     workflow_operation_gate: Arc<tokio::sync::Mutex<()>>,
+    dispatch_observer: WorkflowToolDispatchObserver,
 }
 
 impl FlowPilotMcpServer {
@@ -43,12 +45,14 @@ impl FlowPilotMcpServer {
         handler_quiescence: Arc<tokio::sync::Notify>,
         workflow_operation_gate: Arc<tokio::sync::Mutex<()>>,
     ) -> Self {
+        let dispatch_observer = WorkflowToolDispatchObserver::new(workflow_state.as_ref(), "mcp");
         Self {
             tools,
             workflow_state,
             tool_activity,
             handler_quiescence,
             workflow_operation_gate,
+            dispatch_observer,
         }
     }
 
@@ -93,10 +97,10 @@ pub(super) fn flowpilot_mcp_server_instructions<'a>(
     }
 
     if workflow_mutation && has_ui {
-        return "This is an explicit combined root FlowPilot surface, not a widget or board specialist. Keep UI changes in emit_ui and executable workflow behavior in the FlowScript lifecycle; never let UI generation author FlowScript or let board generation emit components. For the board portion, the FlowScript render embedded in the system prompt IS the current board — do not call get_current_flowscript before authoring; re-read only after the host applies an incremental segment. Make one bounded get_declarations batch for the highest-leverage catalog calls, call plan_board_scope exactly once, then retain the accepted active segment with write_flowscript. After a plan is accepted, do not call plan_board_scope again unless its tool result explicitly authorizes one revision. Do not enumerate every utility or chase omitted queries before that checkpoint. Repair the retained source with patch_flowscript and use structured compiler diagnostics for focused declaration follow-ups; once a write or patch returns zero diagnostics, finish with commit_flowscript directly at that revision — commit validates inline and returns the same validation_errors on failure. check_flowscript is only the staged-plan growth gate or a re-validation after catalog drift or a host-applied segment. Before the first write, use at most six ancillary database/UI/storage inspections.";
+        return "This is an explicit combined root FlowPilot surface, not a widget or board specialist. Keep UI changes in emit_ui and executable workflow behavior in the FlowScript lifecycle; never let UI generation author FlowScript or let board generation emit components. For the board portion, the FlowScript render embedded in the system prompt IS the current board — do not call get_current_flowscript before authoring; re-read only after the host applies an incremental segment. Make one bounded get_declarations batch for the highest-leverage catalog calls, call plan_board_scope exactly once, then retain the accepted active segment with write_flowscript. After a plan is accepted, do not call plan_board_scope again unless its tool result explicitly authorizes one revision. Do not enumerate every utility or chase omitted queries before that checkpoint. Repair the retained source with patch_flowscript and use structured compiler diagnostics for focused declaration follow-ups; once a write or patch returns zero diagnostics, use test_flowscript for an eligible isolated data transform with an exact revision, entry, payload and expected output. A failing test supplies evidence for a focused patch and retest. Unsupported boards remain untested; preserve the requested behavior. Then finish with commit_flowscript at the retained revision; commit validates inline and returns validation_errors on failure. check_flowscript is only the staged-plan growth gate or a re-validation after catalog drift or a host-applied segment. Before the first write, use at most six ancillary database/UI/storage inspections.";
     }
     if workflow_mutation {
-        return "You are the FlowPilot BOARD specialist. FlowScript is the sole model-authored representation for executable workflow behavior. The FlowScript render embedded in the system prompt IS the current board — do not call get_current_flowscript before authoring; re-read only after the host applies an incremental segment. Make one bounded get_declarations batch for the highest-leverage catalog calls needed to establish the end-to-end shape, call plan_board_scope exactly once, then retain the accepted active segment with write_flowscript. After a plan is accepted, do not call plan_board_scope again unless its tool result explicitly authorizes one revision. Do not enumerate every utility or chase omitted queries before that checkpoint. Repair the retained source with patch_flowscript and use structured compiler diagnostics for focused declaration follow-ups; once a write or patch returns zero diagnostics, finish with commit_flowscript directly at that revision — commit validates inline and returns the same validation_errors on failure. check_flowscript is only the staged-plan growth gate or a re-validation after catalog drift or a host-applied segment. Before the first write, use at most six ancillary database/UI/storage inspections. Preserve every requested capability, helper, Event, and kept //@n anchor across repairs; never replace a failed production draft with a smoke test or empty Event. Use emit_commands only for position-only MoveNode or canvas comments. Cross-domain context tools are read-only: database, storage, and UI inspection. Never emit UI, mutate app data/storage directly, use public-web/ask-user tools, or use Read/shell/filesystem tools for FlowPilot artifacts. After commit_flowscript returns queued/already_queued, stop workflow tools and hand any requested UI work back to the parent for the UI specialist. Cron/schedules are app Event setup on an eventsSimple() entry, never catalog nodes.";
+        return "You are the FlowPilot BOARD specialist. FlowScript is the sole model-authored representation for executable workflow behavior. The FlowScript render embedded in the system prompt IS the current board — do not call get_current_flowscript before authoring; re-read only after the host applies an incremental segment. Make one bounded get_declarations batch for the highest-leverage catalog calls needed to establish the end-to-end shape, call plan_board_scope exactly once, then retain the accepted active segment with write_flowscript. After a plan is accepted, do not call plan_board_scope again unless its tool result explicitly authorizes one revision. Do not enumerate every utility or chase omitted queries before that checkpoint. Repair the retained source with patch_flowscript and use structured compiler diagnostics for focused declaration follow-ups; once a write or patch returns zero diagnostics, use test_flowscript for an eligible isolated data transform with an exact revision, entry, payload and expected output. A failing test supplies evidence for a focused patch and retest. Unsupported boards remain untested; preserve the requested behavior. Then finish with commit_flowscript at the retained revision; commit validates inline and returns validation_errors on failure. check_flowscript is only the staged-plan growth gate or a re-validation after catalog drift or a host-applied segment. Before the first write, use at most six ancillary database/UI/storage inspections. Preserve every requested capability, helper, Event, and kept //@n anchor across repairs; never replace a failed production draft with a smoke test or empty Event. Cross-domain context tools are read-only: database, storage, and UI inspection. Never emit UI, mutate app data/storage directly, use public-web/ask-user tools, or use Read/shell/filesystem tools for FlowPilot artifacts. After commit_flowscript returns queued/already_queued, stop workflow tools and hand any requested UI work back to the parent for the UI specialist. Cron/schedules are app Event setup on an eventsSimple() entry, never catalog nodes.";
     }
     match (has_board, has_ui, has_data) {
         (false, true, false) => {
@@ -118,6 +122,16 @@ pub(super) fn flowpilot_mcp_server_instructions<'a>(
 }
 
 impl rmcp::ServerHandler for FlowPilotMcpServer {
+    fn on_initialized(
+        &self,
+        _context: rmcp::service::NotificationContext<rmcp::RoleServer>,
+    ) -> impl Future<Output = ()> + Send + '_ {
+        self.dispatch_observer
+            .record("mcp", "initialized", None, None);
+        tracing::info!("client initialized");
+        std::future::ready(())
+    }
+
     fn get_info(&self) -> rmcp::model::ServerInfo {
         let instructions = flowpilot_mcp_server_instructions(
             self.tools.keys().map(String::as_str),
@@ -137,6 +151,8 @@ impl rmcp::ServerHandler for FlowPilotMcpServer {
         _context: rmcp::service::RequestContext<rmcp::RoleServer>,
     ) -> impl Future<Output = Result<rmcp::model::ListToolsResult, rmcp::ErrorData>> + Send + '_
     {
+        self.dispatch_observer
+            .record("mcp", "list_tools", None, None);
         let mut tools = self
             .tools
             .values()
@@ -163,9 +179,15 @@ impl rmcp::ServerHandler for FlowPilotMcpServer {
     {
         let tool_name = request.name.to_string();
         let tool = self.tools.get(tool_name.as_str()).cloned();
+        let telemetry_tool = tool
+            .as_ref()
+            .map(|tool| tool.definition.name.clone())
+            .unwrap_or_else(|| "unknown_tool".to_string());
         let args = serde_json::Value::Object(request.arguments.unwrap_or_default());
 
         async move {
+            self.dispatch_observer
+                .record(&telemetry_tool, "arrival", None, None);
             if let Ok(mut activity) = self.tool_activity.lock() {
                 activity.total_tool_calls = activity.total_tool_calls.saturating_add(1);
             }
@@ -175,6 +197,12 @@ impl rmcp::ServerHandler for FlowPilotMcpServer {
                 match self.workflow_operation_gate.clone().try_lock_owned() {
                     Ok(guard) => Some(guard),
                     Err(_) => {
+                        self.dispatch_observer.record(
+                            &telemetry_tool,
+                            "preflight_short_circuit",
+                            None,
+                            Some("edit_in_flight"),
+                        );
                         return Ok(workflow_loop_result(
                             serde_json::json!({
                                 "status": "edit_in_flight",
@@ -197,12 +225,22 @@ impl rmcp::ServerHandler for FlowPilotMcpServer {
                 &self.handler_quiescence,
                 cancellation.clone(),
             )
-            .map_err(|message| rmcp::ErrorData::internal_error(message, None))?;
+            .map_err(|message| {
+                self.dispatch_observer.record(
+                    &telemetry_tool,
+                    "preflight_short_circuit",
+                    Some("handler_registry_unavailable"),
+                    Some("internal_state_unavailable"),
+                );
+                rmcp::ErrorData::internal_error(message, None)
+            })?;
             let mut cancellation_guard = McpToolCancellationGuard::new(cancellation.clone());
 
             let mut context_preflight = ExternalContextPreflight::default();
             if let Some(state) = &self.workflow_state {
                 if let Some(result) = workflow_database_setup_preflight(state, &tool_name, &args) {
+                    self.dispatch_observer
+                        .short_circuit_mcp(&telemetry_tool, &result);
                     return Ok(result);
                 }
                 context_preflight =
@@ -222,11 +260,19 @@ impl rmcp::ServerHandler for FlowPilotMcpServer {
                             "A later host preflight short-circuited the reserved context read",
                         );
                     }
+                    self.dispatch_observer
+                        .short_circuit_mcp(&telemetry_tool, &result);
                     return Ok(result);
                 }
             }
 
             let Some(tool) = tool else {
+                self.dispatch_observer.record(
+                    &telemetry_tool,
+                    "preflight_short_circuit",
+                    Some("unknown_tool"),
+                    Some("invalid_params"),
+                );
                 if let Some(state) = &self.workflow_state {
                     workflow_tool_abort_with_args(
                         state,
@@ -253,6 +299,7 @@ impl rmcp::ServerHandler for FlowPilotMcpServer {
             let recorded_tool_name = tool_name.clone();
             let workflow_state = self.workflow_state.clone();
             let tool_activity = self.tool_activity.clone();
+            let dispatch_observer = self.dispatch_observer.clone();
             flowpilot_debug_trace!(tool = %definition_name, "FlowPilot MCP tool call started");
 
             // Inherit protocol-level `notifications/cancelled` as well as HTTP future drops. A
@@ -265,7 +312,10 @@ impl rmcp::ServerHandler for FlowPilotMcpServer {
                     crate::functions::ai::frontend_tool_bridge::with_frontend_tool_execution_scope(
                         handler_cancellation,
                         None,
-                        || (handler)(&definition_name, &args),
+                        || {
+                            dispatch_observer.record(&telemetry_tool, "dispatched", None, None);
+                            (handler)(&definition_name, &args)
+                        },
                     );
 
                 // Record and annotate on the blocking worker itself. If the MCP HTTP future is

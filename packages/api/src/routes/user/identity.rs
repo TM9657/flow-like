@@ -13,6 +13,7 @@ const MAX_HANDLE_LEN: usize = 64;
 
 /// Minimum length before a substring search is allowed to run.
 pub const MIN_SEARCH_LEN: usize = 2;
+pub const MAX_SEARCH_LEN: usize = 200;
 
 /// Bounds the condition tree a single search query builds.
 const MAX_SEARCH_TOKENS: usize = 5;
@@ -210,7 +211,7 @@ pub fn derive_display_name(info: &UserInfo) -> Option<String> {
 }
 
 /// Escapes the LIKE metacharacters so a user typing `%` searches for a literal `%`.
-/// Pairs with `ESCAPE '\'` on the query side.
+/// Uses PostgreSQL's default backslash escape on the query side.
 pub fn escape_like_pattern(value: &str) -> String {
     let mut escaped = String::with_capacity(value.len() + 8);
     for ch in value.chars() {
@@ -225,7 +226,7 @@ pub fn escape_like_pattern(value: &str) -> String {
 /// Splits a term into the pieces an identity is actually stored in. An address is
 /// two meaningful halves — who, and where — so the domain stays whole; splitting it
 /// into labels would make the TLD a token, and `%de%` matches half the directory.
-/// Returns empty for a single-token term, which the phrase match already covers.
+/// Returns empty when the phrase already covers the only token.
 fn tokenize(lower: &str) -> Vec<String> {
     let (local, domain) = match lower.split_once('@') {
         Some((local, domain)) if !local.is_empty() && !domain.is_empty() => (local, Some(domain)),
@@ -253,12 +254,25 @@ fn tokenize(lower: &str) -> Vec<String> {
         unseen
     });
 
-    if tokens.len() < 2 {
+    if tokens.len() == 1 && tokens[0] == lower {
         return Vec::new();
     }
 
     tokens.truncate(MAX_SEARCH_TOKENS);
     tokens
+}
+
+/// People commonly paste public handles with a leading `@`.
+pub fn normalize_search_query(query: &str) -> String {
+    let normalized = query
+        .chars()
+        .map(|c| if c.is_control() { ' ' } else { c })
+        .collect::<String>()
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ");
+
+    normalized.trim_start_matches('@').trim().to_string()
 }
 
 /// A normalized search term. `raw` is what the user typed (trimmed), `lower` is
@@ -275,15 +289,9 @@ pub struct SearchTerm {
 
 impl SearchTerm {
     pub fn parse(query: &str) -> Option<Self> {
-        let raw = query
-            .chars()
-            .map(|c| if c.is_control() { ' ' } else { c })
-            .collect::<String>()
-            .split_whitespace()
-            .collect::<Vec<_>>()
-            .join(" ");
+        let raw = normalize_search_query(query);
 
-        if raw.chars().count() < MIN_SEARCH_LEN || raw.chars().count() > 200 {
+        if raw.chars().count() < MIN_SEARCH_LEN || raw.chars().count() > MAX_SEARCH_LEN {
             return None;
         }
 
@@ -305,31 +313,37 @@ impl SearchTerm {
     }
 }
 
-const WEIGHT_NAME: i32 = 40;
-const WEIGHT_PREFERRED_USERNAME: i32 = 38;
-const WEIGHT_EMAIL: i32 = 30;
-const WEIGHT_ID: i32 = 20;
-const WEIGHT_USERNAME: i32 = 10;
+pub(super) const WEIGHT_NAME: i32 = 40;
+pub(super) const WEIGHT_PREFERRED_USERNAME: i32 = 38;
+pub(super) const WEIGHT_EMAIL: i32 = 30;
+pub(super) const WEIGHT_ID: i32 = 20;
+pub(super) const WEIGHT_USERNAME: i32 = 10;
+pub(super) const EXACT_MATCH_BONUS: i32 = 1000;
+pub(super) const PREFIX_MATCH_BONUS: i32 = 600;
+pub(super) const WORD_PREFIX_MATCH_BONUS: i32 = 450;
+pub(super) const SUBSTRING_MATCH_BONUS: i32 = 250;
 
 /// A row that holds the whole phrase beats one assembled from tokens scattered
 /// across columns, so token matches sit a tier below.
-const TOKEN_MATCH_PENALTY: i32 = 120;
+pub(super) const TOKEN_MATCH_PENALTY: i32 = 120;
 
 fn match_bonus(haystack: &str, needle: &str) -> Option<i32> {
     if haystack == needle {
-        return Some(1000);
+        return Some(EXACT_MATCH_BONUS);
     }
     if haystack.starts_with(needle) {
-        return Some(600);
+        return Some(PREFIX_MATCH_BONUS);
     }
-    if haystack
-        .split(|c: char| !c.is_alphanumeric())
-        .any(|word| !word.is_empty() && word.starts_with(needle))
-    {
-        return Some(450);
+    if haystack.match_indices(needle).any(|(index, _)| {
+        haystack[..index]
+            .chars()
+            .next_back()
+            .is_some_and(|previous| !previous.is_alphanumeric())
+    }) {
+        return Some(WORD_PREFIX_MATCH_BONUS);
     }
     if haystack.contains(needle) {
-        return Some(250);
+        return Some(SUBSTRING_MATCH_BONUS);
     }
     None
 }
@@ -343,6 +357,18 @@ pub struct RankableUser<'a> {
     pub username: Option<&'a str>,
     pub email: Option<&'a str>,
     pub has_avatar: bool,
+}
+
+pub fn is_exact_identifier_match(candidate: &RankableUser<'_>, lower: &str) -> bool {
+    [
+        Some(candidate.id),
+        candidate.email,
+        candidate.username,
+        candidate.preferred_username,
+    ]
+    .into_iter()
+    .flatten()
+    .any(|value| value.to_lowercase() == lower)
 }
 
 /// Best score any single field gives this needle, 0 when none of them match.
@@ -522,6 +548,69 @@ mod tests {
         assert_eq!(
             SearchTerm::parse("  Felix  Schultz ").unwrap().raw,
             "Felix Schultz"
+        );
+    }
+
+    #[test]
+    fn normalizes_public_handles_without_changing_email_addresses() {
+        assert_eq!(
+            normalize_search_query("  @Felix.Schultz  "),
+            "Felix.Schultz"
+        );
+        assert_eq!(normalize_search_query("@a"), "a");
+        assert_eq!(normalize_search_query("felix@corp.de"), "felix@corp.de");
+        assert!(SearchTerm::parse("@ ").is_none());
+        assert!(SearchTerm::parse(&"x".repeat(MAX_SEARCH_LEN + 1)).is_none());
+    }
+
+    #[test]
+    fn exact_identity_metadata_ignores_names_and_matches_hidden_identifiers() {
+        let name_only = RankableUser {
+            id: "someone",
+            name: Some("felix"),
+            ..Default::default()
+        };
+        assert!(!is_exact_identifier_match(&name_only, "felix"));
+        let email = RankableUser {
+            email: Some("Felix@Corp.DE"),
+            ..name_only
+        };
+        assert!(is_exact_identifier_match(&email, "felix@corp.de"));
+        let handle = RankableUser {
+            preferred_username: Some("FELIX"),
+            ..name_only
+        };
+        assert!(is_exact_identifier_match(&handle, "felix"));
+        assert!(is_exact_identifier_match(&name_only, "someone"));
+    }
+
+    #[test]
+    fn trailing_separators_keep_the_remaining_searchable_token() {
+        let term = SearchTerm::parse("Felix.").unwrap();
+        assert_eq!(term.tokens, ["felix"]);
+        assert!(
+            score_candidate(
+                &RankableUser {
+                    id: "person",
+                    name: Some("Felix"),
+                    ..Default::default()
+                },
+                &term
+            ) > 0
+        );
+    }
+
+    #[test]
+    fn full_phrases_after_a_word_boundary_get_a_word_prefix_bonus() {
+        let term = SearchTerm::parse("Felix Schultz").unwrap();
+        let word_prefix = RankableUser {
+            id: "person",
+            name: Some("Dr. Felix Schultz"),
+            ..Default::default()
+        };
+        assert_eq!(
+            score_candidate(&word_prefix, &term),
+            WORD_PREFIX_MATCH_BONUS + WEIGHT_NAME + 6
         );
     }
 

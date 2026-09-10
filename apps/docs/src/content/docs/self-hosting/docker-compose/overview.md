@@ -52,8 +52,9 @@ exporters.
 
 Follow [Prerequisites](/self-hosting/docker-compose/prerequisites/) and
 [Installation](/self-hosting/docker-compose/installation/). Setup generates a
-private environment file, builds and pins runner images, then checks the host
-before starting services.
+private environment file, pins the published `ghcr.io/rheosoph` images by
+digest, then checks the host before starting services. Building images locally
+remains available for modified or unpublished code.
 
 For a separate installation containing only trusted internal workflows,
 `setup-env.py --mode trusted` enables shared workers. That mode does not isolate

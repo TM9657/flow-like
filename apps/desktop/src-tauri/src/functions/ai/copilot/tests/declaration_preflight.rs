@@ -456,6 +456,39 @@ fn missing_or_stale_base_releases_unusable_draft_coordinates_for_restart() {
 }
 
 #[test]
+fn draft_tests_preserve_source_verdict_and_serialize_with_edits() {
+    let state = Arc::new(StdMutex::new(WorkflowToolLoopState {
+        mutation_path: Some(WorkflowMutationPath::FlowScript),
+        flowscript_draft_id: Some("tested-draft".to_string()),
+        flowscript_draft_retained: true,
+        flowscript_revision: Some(4),
+        last_status: Some("valid".to_string()),
+        last_flowscript: Some("retained source".to_string()),
+        ..Default::default()
+    }));
+    let stale = serde_json::json!({ "draft_id": "tested-draft", "expected_revision": 3 });
+    assert!(workflow_tool_preflight_with_args(&state, "test_flowscript", &stale).is_some());
+    let args = serde_json::json!({ "draft_id": "tested-draft", "expected_revision": 4 });
+    assert!(workflow_tool_preflight_with_args(&state, "test_flowscript", &args).is_none());
+    assert!(workflow_tool_preflight_with_args(&state, "patch_flowscript", &args).is_some());
+    workflow_tool_record(
+        &state,
+        "test_flowscript",
+        &args,
+        &serde_json::json!({ "status": "failed", "output": "unexpected" }).to_string(),
+    );
+    let state = state.lock().expect("state lock");
+    assert!(!state.edit_in_flight);
+    assert!(!state.queued);
+    assert_eq!(state.last_status.as_deref(), Some("valid"));
+    assert_eq!(state.last_flowscript.as_deref(), Some("retained source"));
+    assert_eq!(state.flowscript_revision, Some(4));
+    assert_eq!(state.flowscript_operation_attempts, 0);
+    assert_eq!(state.edit_attempts, 0);
+    assert_eq!(state.valid_checks, 0);
+}
+
+#[test]
 fn incomplete_declaration_coverage_stops_after_bounded_attempts() {
     let state = Arc::new(StdMutex::new(WorkflowToolLoopState::default()));
     let args = serde_json::json!({ "queries": ["unavailable capability"] });

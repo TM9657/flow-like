@@ -471,6 +471,7 @@ impl WorkflowToolLoopState {
                 workflow_strategy_fingerprint(&serde_json::json!({ "source": source })),
                 0,
             );
+            session.observe_flowscript_source(draft_id, revision, source);
         }
         self.shared_session_started_at = Some(Instant::now());
         self.shared_session = Some(session);

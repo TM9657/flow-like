@@ -688,6 +688,17 @@ export async function buildFlowPilotBoardContextAugmentation(
 
 	const pages = Array.isArray(ui.pages) ? ui.pages : [];
 	const widgets = Array.isArray(ui.widgets) ? ui.widgets : [];
+	for (const item of pages) {
+		const page = objectValue(item);
+		if (typeof page.error === "string" && page.error.trim()) {
+			uiErrors.push(
+				`Page ${boundedString(page.page_id, 256) ?? "(unknown)"}: ${boundedString(page.error, 512)}`,
+			);
+		}
+	}
+	if (ui.complete === false && uiErrors.length === 0) {
+		uiErrors.push("UI inspection did not return complete page details.");
+	}
 	const pageTruncation = collectionTruncation(
 		"pages",
 		pages.length,

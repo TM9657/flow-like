@@ -20,19 +20,20 @@ import {
 import { useBackend } from "../../state/backend-state";
 import { useExecutionServiceOptional } from "../../state/execution-service-context";
 import {
-	buildFrontendContextPayload,
 	compactWorkflowPayload,
 	useActionContext,
 	useCollectEventElements,
 	useEventRelevantValues,
 	useMarkComponentTriggering,
 } from "./ActionHandler";
+import { getFrontendStateStore } from "./frontend-state";
 import type {
 	ActionBinding,
 	BoundValue,
 	WidgetAction,
 	WidgetInstance,
 } from "./types";
+import { buildWorkflowFrontendContext } from "./workflow-payload";
 
 export interface WidgetActionContextValue {
 	instance: WidgetInstance | null;
@@ -118,6 +119,26 @@ export function WidgetActionProvider({
 	});
 	const markComponentTriggering = useMarkComponentTriggering();
 
+	const handleA2UIEvents = useCallback(
+		(events: unknown[]) => {
+			const store = getFrontendStateStore(appId);
+			const remaining = events.filter((event) => {
+				if (
+					event &&
+					typeof event === "object" &&
+					"event_type" in event &&
+					event.event_type === "a2ui" &&
+					"payload" in event
+				) {
+					return !store.handleMessage(event.payload);
+				}
+				return true;
+			});
+			if (remaining.length > 0) onA2UIEvents?.(remaining);
+		},
+		[appId, onA2UIEvents],
+	);
+
 	const getBinding = useCallback(
 		(actionId: string): ActionBinding | null => {
 			return instance.actionBindings[actionId] ?? null;
@@ -174,11 +195,10 @@ export function WidgetActionProvider({
 						_surface_id: surfaceId,
 						_input_values: inputValues,
 						_elements: elements,
-						...buildFrontendContextPayload(
-							pathname,
-							runtimeActionContext.globalState,
-							runtimeActionContext.pageState,
-						),
+						...(await buildWorkflowFrontendContext(
+							appId,
+							runtimeActionContext.surfaceId || surfaceId || pathname,
+						)),
 					};
 
 					for (const field of action.contextSchema) {
@@ -227,7 +247,7 @@ export function WidgetActionProvider({
 								baseRunPayload,
 								false,
 								undefined,
-								onA2UIEvents,
+								handleA2UIEvents,
 								undefined,
 								pageTriggerFromAction(pageAction),
 							);
@@ -244,7 +264,7 @@ export function WidgetActionProvider({
 							await (
 								executionService?.executeBoard ??
 								backend.boardState.executeBoard
-							)(appId, flowId, runPayload, false, undefined, onA2UIEvents);
+							)(appId, flowId, runPayload, false, undefined, handleA2UIEvents);
 						}
 					} catch (error) {
 						console.error("[WidgetAction] Failed to execute workflow:", error);
@@ -283,7 +303,7 @@ export function WidgetActionProvider({
 			instance,
 			widgetActions,
 			getBinding,
-			onA2UIEvents,
+			handleA2UIEvents,
 			collectInputValues,
 			collectElements,
 			markComponentTriggering,
@@ -292,8 +312,7 @@ export function WidgetActionProvider({
 			runtimeActionContext.boardVersion,
 			runtimeActionContext.eventId,
 			runtimeActionContext.isGovernedPage,
-			runtimeActionContext.globalState,
-			runtimeActionContext.pageState,
+			runtimeActionContext.surfaceId,
 		],
 	);
 

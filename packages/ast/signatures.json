@@ -3809,7 +3809,7 @@
             "container": "Normal"
           },
           "optional": true,
-          "doc": "Typed SQL expression used to populate existing rows. Examples: 0, '', CAST(NULL AS STRING). Bare NULL is rejected; LanceDB supports int, bigint, float, double, string, binary, boolean, date, timestamp."
+          "doc": "Typed SQL expression used to populate existing rows. Examples: 0, '', CAST(NULL AS STRING). Flow-Like requires an explicit type for NULL. Supported types: int, bigint, float, double, string, binary, boolean, date, timestamp."
         }
       ],
       "outputs": [
@@ -3825,7 +3825,7 @@
         }
       ],
       "impure": true,
-      "doc": "Adds a column using a typed SQL expression (e.g. 0, '', CAST(NULL AS STRING)). LanceDB rejects bare NULL — wrap it in CAST(... AS <type>). Supported types: int, bigint, float, double, string, binary, boolean, date, timestamp.",
+      "doc": "Adds a column using a typed SQL expression (e.g. 0, '', CAST(NULL AS STRING)). Flow-Like requires an explicit type for NULL. Use CAST(NULL AS <type>). Supported types: int, bigint, float, double, string, binary, boolean, date, timestamp.",
       "namespace": "db",
       "alias": "addColumn",
       "receiver": "database"
@@ -10400,6 +10400,51 @@
           },
           "optional": true,
           "doc": "Maximum output tokens per LLM call. Leave at 0 for model default. Set lower for unreliable models."
+        },
+        {
+          "name": "prompt_preset",
+          "ty": {
+            "base": "string",
+            "container": "Normal"
+          },
+          "optional": true,
+          "doc": "Prompt contract of the selected model. Document-parsing models only answer to their own trained prompt:\n• Default — general vision models (GPT-4o, Claude, Gemini, Qwen-VL)\n• Unlimited-OCR — baidu/Unlimited-OCR, self-hosted via vLLM\n• DeepSeek-OCR — deepseek-ai/DeepSeek-OCR and -OCR-2\n• olmOCR — allenai/olmOCR-2, emits YAML front matter\n• Nanonets-OCR — nanonets/Nanonets-OCR-s and -OCR2\n• dots.ocr — plain text extraction; use Page Prompt for its JSON layout mode\n• Granite-Docling — IBM Granite-Docling and SmolDocling, emits DocTags\n• PaddleOCR-VL — PaddlePaddle/PaddleOCR-VL\n\nEvery preset except Default forces full-page OCR and one image per request. Recommended temperature is 0.0 for all of them except olmOCR (0.1)."
+        },
+        {
+          "name": "page_prompt",
+          "ty": {
+            "base": "string",
+            "container": "Normal"
+          },
+          "optional": true,
+          "doc": "Prompt for converting a rendered document page to text. Overrides the preset. Leave empty to use the preset or the built-in default."
+        },
+        {
+          "name": "image_prompt",
+          "ty": {
+            "base": "string",
+            "container": "Normal"
+          },
+          "optional": true,
+          "doc": "Prompt for describing a standalone or embedded image. Overrides the preset. Leave empty to use the preset or the built-in default."
+        },
+        {
+          "name": "batch_prompt",
+          "ty": {
+            "base": "string",
+            "container": "Normal"
+          },
+          "optional": true,
+          "doc": "Prompt used when Images Per Message is greater than 1. Leave empty to use the built-in default. Ignored by every preset except Default."
+        },
+        {
+          "name": "force_ocr",
+          "ty": {
+            "base": "bool",
+            "container": "Normal"
+          },
+          "optional": true,
+          "doc": "Run every PDF page through the model instead of only pages whose extracted text looks poor. Presets other than Default turn this on regardless."
         }
       ],
       "outputs": [
@@ -10532,6 +10577,51 @@
           },
           "optional": true,
           "doc": "Maximum output tokens per LLM call. Leave at 0 for model default. Set lower for unreliable models."
+        },
+        {
+          "name": "prompt_preset",
+          "ty": {
+            "base": "string",
+            "container": "Normal"
+          },
+          "optional": true,
+          "doc": "Prompt contract of the selected model. Document-parsing models only answer to their own trained prompt:\n• Default — general vision models (GPT-4o, Claude, Gemini, Qwen-VL)\n• Unlimited-OCR — baidu/Unlimited-OCR, self-hosted via vLLM\n• DeepSeek-OCR — deepseek-ai/DeepSeek-OCR and -OCR-2\n• olmOCR — allenai/olmOCR-2, emits YAML front matter\n• Nanonets-OCR — nanonets/Nanonets-OCR-s and -OCR2\n• dots.ocr — plain text extraction; use Page Prompt for its JSON layout mode\n• Granite-Docling — IBM Granite-Docling and SmolDocling, emits DocTags\n• PaddleOCR-VL — PaddlePaddle/PaddleOCR-VL\n\nEvery preset except Default forces full-page OCR and one image per request. Recommended temperature is 0.0 for all of them except olmOCR (0.1)."
+        },
+        {
+          "name": "page_prompt",
+          "ty": {
+            "base": "string",
+            "container": "Normal"
+          },
+          "optional": true,
+          "doc": "Prompt for converting a rendered document page to text. Overrides the preset. Leave empty to use the preset or the built-in default."
+        },
+        {
+          "name": "image_prompt",
+          "ty": {
+            "base": "string",
+            "container": "Normal"
+          },
+          "optional": true,
+          "doc": "Prompt for describing a standalone or embedded image. Overrides the preset. Leave empty to use the preset or the built-in default."
+        },
+        {
+          "name": "batch_prompt",
+          "ty": {
+            "base": "string",
+            "container": "Normal"
+          },
+          "optional": true,
+          "doc": "Prompt used when Images Per Message is greater than 1. Leave empty to use the built-in default. Ignored by every preset except Default."
+        },
+        {
+          "name": "force_ocr",
+          "ty": {
+            "base": "bool",
+            "container": "Normal"
+          },
+          "optional": true,
+          "doc": "Run every PDF page through the model instead of only pages whose extracted text looks poor. Presets other than Default turn this on regardless."
         }
       ],
       "outputs": [
@@ -14019,7 +14109,7 @@
             "container": "Normal"
           },
           "optional": true,
-          "doc": "Input Pin for OR Operation"
+          "doc": "Boolean value to compare"
         },
         {
           "name": "boolean",
@@ -14028,7 +14118,7 @@
             "container": "Normal"
           },
           "optional": true,
-          "doc": "Input Pin for OR Operation"
+          "doc": "Boolean value to compare"
         }
       ],
       "outputs": [
@@ -61231,6 +61321,1457 @@
       "alias": "searchLocation"
     },
     {
+      "node_type": "geometry_bounds",
+      "display": "geometryBounds",
+      "friendly": "Geometry Bounds",
+      "category": "Web/Geo/Geometry",
+      "inputs": [
+        {
+          "name": "geometry",
+          "ty": {
+            "base": "geometry",
+            "container": "Normal"
+          },
+          "optional": false,
+          "doc": "Validated WGS 84 longitude/latitude GeoJSON geometry"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "min_longitude",
+          "ty": {
+            "base": "float",
+            "container": "Normal"
+          },
+          "optional": false,
+          "doc": "Coordinate in degrees"
+        },
+        {
+          "name": "min_latitude",
+          "ty": {
+            "base": "float",
+            "container": "Normal"
+          },
+          "optional": false,
+          "doc": "Coordinate in degrees"
+        },
+        {
+          "name": "max_longitude",
+          "ty": {
+            "base": "float",
+            "container": "Normal"
+          },
+          "optional": false,
+          "doc": "Coordinate in degrees"
+        },
+        {
+          "name": "max_latitude",
+          "ty": {
+            "base": "float",
+            "container": "Normal"
+          },
+          "optional": false,
+          "doc": "Coordinate in degrees"
+        }
+      ],
+      "impure": false,
+      "doc": "Returns minimum and maximum longitude and latitude using a planar coordinate envelope. Empty geometries have no bounds.",
+      "namespace": "geometry",
+      "alias": "bounds",
+      "receiver": "geometry"
+    },
+    {
+      "node_type": "geometry_cast_geometry_collection",
+      "display": "geometryCastGeometryCollection",
+      "friendly": "Validate GeometryCollection",
+      "category": "Web/Geo/Geometry",
+      "inputs": [
+        {
+          "name": "geometry",
+          "ty": {
+            "base": "geometry",
+            "container": "Normal"
+          },
+          "optional": false,
+          "doc": "Validated WGS 84 longitude/latitude GeoJSON geometry"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "geometry_out",
+          "ty": {
+            "base": "geometry",
+            "container": "Normal",
+            "geometry_kind": "GeometryCollection"
+          },
+          "optional": false,
+          "doc": "Validated WGS 84 GeoJSON geometry",
+          "schema": "{\"$id\":\"flow:geometry\",\"x-geometry\":\"GeometryCollection\"}"
+        }
+      ],
+      "impure": false,
+      "doc": "Validates a geometry as GeometryCollection and returns it with an explicit subtype. Incompatible values fail the node.",
+      "namespace": "geometry",
+      "alias": "castGeometryCollection",
+      "receiver": "geometry"
+    },
+    {
+      "node_type": "geometry_cast_line_string",
+      "display": "geometryCastLineString",
+      "friendly": "Validate LineString",
+      "category": "Web/Geo/Geometry",
+      "inputs": [
+        {
+          "name": "geometry",
+          "ty": {
+            "base": "geometry",
+            "container": "Normal"
+          },
+          "optional": false,
+          "doc": "Validated WGS 84 longitude/latitude GeoJSON geometry"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "geometry_out",
+          "ty": {
+            "base": "geometry",
+            "container": "Normal",
+            "geometry_kind": "LineString"
+          },
+          "optional": false,
+          "doc": "Validated WGS 84 GeoJSON geometry",
+          "schema": "{\"$id\":\"flow:geometry\",\"x-geometry\":\"LineString\"}"
+        }
+      ],
+      "impure": false,
+      "doc": "Validates a geometry as LineString and returns it with an explicit subtype. Incompatible values fail the node.",
+      "namespace": "geometry",
+      "alias": "castLineString",
+      "receiver": "geometry"
+    },
+    {
+      "node_type": "geometry_cast_multi_line_string",
+      "display": "geometryCastMultiLineString",
+      "friendly": "Validate MultiLineString",
+      "category": "Web/Geo/Geometry",
+      "inputs": [
+        {
+          "name": "geometry",
+          "ty": {
+            "base": "geometry",
+            "container": "Normal"
+          },
+          "optional": false,
+          "doc": "Validated WGS 84 longitude/latitude GeoJSON geometry"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "geometry_out",
+          "ty": {
+            "base": "geometry",
+            "container": "Normal",
+            "geometry_kind": "MultiLineString"
+          },
+          "optional": false,
+          "doc": "Validated WGS 84 GeoJSON geometry",
+          "schema": "{\"$id\":\"flow:geometry\",\"x-geometry\":\"MultiLineString\"}"
+        }
+      ],
+      "impure": false,
+      "doc": "Validates a geometry as MultiLineString and returns it with an explicit subtype. Incompatible values fail the node.",
+      "namespace": "geometry",
+      "alias": "castMultiLineString",
+      "receiver": "geometry"
+    },
+    {
+      "node_type": "geometry_cast_multi_point",
+      "display": "geometryCastMultiPoint",
+      "friendly": "Validate MultiPoint",
+      "category": "Web/Geo/Geometry",
+      "inputs": [
+        {
+          "name": "geometry",
+          "ty": {
+            "base": "geometry",
+            "container": "Normal"
+          },
+          "optional": false,
+          "doc": "Validated WGS 84 longitude/latitude GeoJSON geometry"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "geometry_out",
+          "ty": {
+            "base": "geometry",
+            "container": "Normal",
+            "geometry_kind": "MultiPoint"
+          },
+          "optional": false,
+          "doc": "Validated WGS 84 GeoJSON geometry",
+          "schema": "{\"$id\":\"flow:geometry\",\"x-geometry\":\"MultiPoint\"}"
+        }
+      ],
+      "impure": false,
+      "doc": "Validates a geometry as MultiPoint and returns it with an explicit subtype. Incompatible values fail the node.",
+      "namespace": "geometry",
+      "alias": "castMultiPoint",
+      "receiver": "geometry"
+    },
+    {
+      "node_type": "geometry_cast_multi_polygon",
+      "display": "geometryCastMultiPolygon",
+      "friendly": "Validate MultiPolygon",
+      "category": "Web/Geo/Geometry",
+      "inputs": [
+        {
+          "name": "geometry",
+          "ty": {
+            "base": "geometry",
+            "container": "Normal"
+          },
+          "optional": false,
+          "doc": "Validated WGS 84 longitude/latitude GeoJSON geometry"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "geometry_out",
+          "ty": {
+            "base": "geometry",
+            "container": "Normal",
+            "geometry_kind": "MultiPolygon"
+          },
+          "optional": false,
+          "doc": "Validated WGS 84 GeoJSON geometry",
+          "schema": "{\"$id\":\"flow:geometry\",\"x-geometry\":\"MultiPolygon\"}"
+        }
+      ],
+      "impure": false,
+      "doc": "Validates a geometry as MultiPolygon and returns it with an explicit subtype. Incompatible values fail the node.",
+      "namespace": "geometry",
+      "alias": "castMultiPolygon",
+      "receiver": "geometry"
+    },
+    {
+      "node_type": "geometry_cast_point",
+      "display": "geometryCastPoint",
+      "friendly": "Validate Point",
+      "category": "Web/Geo/Geometry",
+      "inputs": [
+        {
+          "name": "geometry",
+          "ty": {
+            "base": "geometry",
+            "container": "Normal"
+          },
+          "optional": false,
+          "doc": "Validated WGS 84 longitude/latitude GeoJSON geometry"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "geometry_out",
+          "ty": {
+            "base": "geometry",
+            "container": "Normal",
+            "geometry_kind": "Point"
+          },
+          "optional": false,
+          "doc": "Validated WGS 84 GeoJSON geometry",
+          "schema": "{\"$id\":\"flow:geometry\",\"x-geometry\":\"Point\"}"
+        }
+      ],
+      "impure": false,
+      "doc": "Validates a geometry as Point and returns it with an explicit subtype. Incompatible values fail the node.",
+      "namespace": "geometry",
+      "alias": "castPoint",
+      "receiver": "geometry"
+    },
+    {
+      "node_type": "geometry_cast_polygon",
+      "display": "geometryCastPolygon",
+      "friendly": "Validate Polygon",
+      "category": "Web/Geo/Geometry",
+      "inputs": [
+        {
+          "name": "geometry",
+          "ty": {
+            "base": "geometry",
+            "container": "Normal"
+          },
+          "optional": false,
+          "doc": "Validated WGS 84 longitude/latitude GeoJSON geometry"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "geometry_out",
+          "ty": {
+            "base": "geometry",
+            "container": "Normal",
+            "geometry_kind": "Polygon"
+          },
+          "optional": false,
+          "doc": "Validated WGS 84 GeoJSON geometry",
+          "schema": "{\"$id\":\"flow:geometry\",\"x-geometry\":\"Polygon\"}"
+        }
+      ],
+      "impure": false,
+      "doc": "Validates a geometry as Polygon and returns it with an explicit subtype. Incompatible values fail the node.",
+      "namespace": "geometry",
+      "alias": "castPolygon",
+      "receiver": "geometry"
+    },
+    {
+      "node_type": "geometry_centroid",
+      "display": "geometryCentroid",
+      "friendly": "Geometry Centroid (Planar)",
+      "category": "Web/Geo/Geometry",
+      "inputs": [
+        {
+          "name": "geometry",
+          "ty": {
+            "base": "geometry",
+            "container": "Normal"
+          },
+          "optional": false,
+          "doc": "Validated WGS 84 longitude/latitude GeoJSON geometry"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "geometry_out",
+          "ty": {
+            "base": "geometry",
+            "container": "Normal",
+            "geometry_kind": "Point"
+          },
+          "optional": false,
+          "doc": "Validated WGS 84 GeoJSON geometry",
+          "schema": "{\"$id\":\"flow:geometry\",\"x-geometry\":\"Point\"}"
+        }
+      ],
+      "impure": false,
+      "doc": "Computes the centroid in the longitude/latitude coordinate plane. Empty geometries have no centroid.",
+      "namespace": "geometry",
+      "alias": "centroid",
+      "receiver": "geometry"
+    },
+    {
+      "node_type": "geometry_contains",
+      "display": "geometryContains",
+      "friendly": "Geometry Contains (Planar)",
+      "category": "Web/Geo/Geometry",
+      "inputs": [
+        {
+          "name": "a",
+          "ty": {
+            "base": "geometry",
+            "container": "Normal"
+          },
+          "optional": false,
+          "doc": "Validated WGS 84 longitude/latitude GeoJSON geometry"
+        },
+        {
+          "name": "b",
+          "ty": {
+            "base": "geometry",
+            "container": "Normal"
+          },
+          "optional": false,
+          "doc": "Validated WGS 84 longitude/latitude GeoJSON geometry"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "result",
+          "ty": {
+            "base": "bool",
+            "container": "Normal"
+          },
+          "optional": false,
+          "doc": "Planar predicate result"
+        }
+      ],
+      "impure": false,
+      "doc": "Tests whether geometry A contains B in the longitude/latitude coordinate plane. A point on a polygon boundary is not contained.",
+      "namespace": "geometry",
+      "alias": "contains",
+      "receiver": "a"
+    },
+    {
+      "node_type": "geometry_convex_hull",
+      "display": "geometryConvexHull",
+      "friendly": "Geometry Convex Hull (Planar)",
+      "category": "Web/Geo/Geometry",
+      "inputs": [
+        {
+          "name": "geometry",
+          "ty": {
+            "base": "geometry",
+            "container": "Normal"
+          },
+          "optional": false,
+          "doc": "Validated WGS 84 longitude/latitude GeoJSON geometry"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "geometry_out",
+          "ty": {
+            "base": "geometry",
+            "container": "Normal",
+            "geometry_kind": "Polygon"
+          },
+          "optional": false,
+          "doc": "Validated WGS 84 GeoJSON geometry",
+          "schema": "{\"$id\":\"flow:geometry\",\"x-geometry\":\"Polygon\"}"
+        }
+      ],
+      "impure": false,
+      "doc": "Computes a polygon hull in the longitude/latitude coordinate plane. Fails when the input cannot form a valid polygon with at least three non-collinear positions.",
+      "namespace": "geometry",
+      "alias": "convexHull",
+      "receiver": "geometry"
+    },
+    {
+      "node_type": "geometry_from_geojson",
+      "display": "geometryFromGeojson",
+      "friendly": "Parse GeoJSON Geometry",
+      "category": "Web/Geo/Geometry",
+      "inputs": [
+        {
+          "name": "text",
+          "ty": {
+            "base": "string",
+            "container": "Normal"
+          },
+          "optional": false,
+          "doc": "text"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "geometry_out",
+          "ty": {
+            "base": "geometry",
+            "container": "Normal"
+          },
+          "optional": false,
+          "doc": "Validated WGS 84 GeoJSON geometry"
+        }
+      ],
+      "impure": false,
+      "doc": "Parses a GeoJSON geometry object, validates its two-dimensional WGS 84 coordinates and normalizes ring winding. Retains bbox and foreign members. Feature wrappers require extraction.",
+      "namespace": "geometry",
+      "alias": "fromGeoJson"
+    },
+    {
+      "node_type": "geometry_from_legacy_boundary",
+      "display": "geometryFromLegacyBoundary",
+      "friendly": "Legacy Boundary to Polygon",
+      "category": "Web/Geo/Geometry",
+      "inputs": [
+        {
+          "name": "boundary",
+          "ty": {
+            "base": "Struct",
+            "container": "Normal"
+          },
+          "optional": false,
+          "doc": "boundary",
+          "schema": "{\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"title\":\"GeoCoordinate\",\"type\":\"object\",\"properties\":{\"latitude\":{\"type\":\"number\",\"format\":\"double\"},\"longitude\":{\"type\":\"number\",\"format\":\"double\"}},\"required\":[\"latitude\",\"longitude\"]}"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "geometry_out",
+          "ty": {
+            "base": "geometry",
+            "container": "Normal",
+            "geometry_kind": "Polygon"
+          },
+          "optional": false,
+          "doc": "Validated WGS 84 GeoJSON geometry",
+          "schema": "{\"$id\":\"flow:geometry\",\"x-geometry\":\"Polygon\"}"
+        }
+      ],
+      "impure": false,
+      "doc": "Converts the coordinate vector emitted by H3 Cell Boundary into a Polygon. Closes the ring and validates topology.",
+      "namespace": "geometry",
+      "alias": "fromLegacyBoundary"
+    },
+    {
+      "node_type": "geometry_from_legacy_coordinate",
+      "display": "geometryFromLegacyCoordinate",
+      "friendly": "Legacy Coordinate to Point",
+      "category": "Web/Geo/Geometry",
+      "inputs": [
+        {
+          "name": "coordinate",
+          "ty": {
+            "base": "Struct",
+            "container": "Normal"
+          },
+          "optional": false,
+          "doc": "coordinate",
+          "schema": "{\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"title\":\"GeoCoordinate\",\"type\":\"object\",\"properties\":{\"latitude\":{\"type\":\"number\",\"format\":\"double\"},\"longitude\":{\"type\":\"number\",\"format\":\"double\"}},\"required\":[\"latitude\",\"longitude\"]}"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "geometry_out",
+          "ty": {
+            "base": "geometry",
+            "container": "Normal",
+            "geometry_kind": "Point"
+          },
+          "optional": false,
+          "doc": "Validated WGS 84 GeoJSON geometry",
+          "schema": "{\"$id\":\"flow:geometry\",\"x-geometry\":\"Point\"}"
+        }
+      ],
+      "impure": false,
+      "doc": "Converts the existing GeoCoordinate latitude/longitude object to a Geometry Point without swapping the axes.",
+      "namespace": "geometry",
+      "alias": "fromLegacyCoordinate"
+    },
+    {
+      "node_type": "geometry_from_legacy_location",
+      "display": "geometryFromLegacyLocation",
+      "friendly": "Extract Legacy Location Point",
+      "category": "Web/Geo/Geometry",
+      "inputs": [
+        {
+          "name": "location",
+          "ty": {
+            "base": "Struct",
+            "container": "Normal"
+          },
+          "optional": false,
+          "doc": "location"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "geometry_out",
+          "ty": {
+            "base": "geometry",
+            "container": "Normal",
+            "geometry_kind": "Point"
+          },
+          "optional": false,
+          "doc": "Validated WGS 84 GeoJSON geometry",
+          "schema": "{\"$id\":\"flow:geometry\",\"x-geometry\":\"Point\"}"
+        },
+        {
+          "name": "location_out",
+          "ty": {
+            "base": "Struct",
+            "container": "Normal"
+          },
+          "optional": false,
+          "doc": "Original location wrapper"
+        }
+      ],
+      "impure": false,
+      "doc": "Extracts a Point from a search result or waypoint coordinate. Returns the original rich location wrapper unchanged.",
+      "namespace": "geometry",
+      "alias": "fromLegacyLocation"
+    },
+    {
+      "node_type": "geometry_from_legacy_polygons",
+      "display": "geometryFromLegacyPolygons",
+      "friendly": "Legacy H3 Polygons to MultiPolygon",
+      "category": "Web/Geo/Geometry",
+      "inputs": [
+        {
+          "name": "polygons",
+          "ty": {
+            "base": "Struct",
+            "container": "Normal"
+          },
+          "optional": false,
+          "doc": "polygons",
+          "schema": "{\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"title\":\"Polygon\",\"type\":\"object\",\"properties\":{\"exterior\":{\"type\":\"array\",\"items\":{\"$ref\":\"#/$defs/GeoCoordinate\"}},\"interiors\":{\"type\":\"array\",\"items\":{\"type\":\"array\",\"items\":{\"$ref\":\"#/$defs/GeoCoordinate\"}}}},\"required\":[\"exterior\",\"interiors\"],\"$defs\":{\"GeoCoordinate\":{\"type\":\"object\",\"properties\":{\"latitude\":{\"type\":\"number\",\"format\":\"double\"},\"longitude\":{\"type\":\"number\",\"format\":\"double\"}},\"required\":[\"latitude\",\"longitude\"]}}}"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "geometry_out",
+          "ty": {
+            "base": "geometry",
+            "container": "Normal",
+            "geometry_kind": "MultiPolygon"
+          },
+          "optional": false,
+          "doc": "Validated WGS 84 GeoJSON geometry",
+          "schema": "{\"$id\":\"flow:geometry\",\"x-geometry\":\"MultiPolygon\"}"
+        }
+      ],
+      "impure": false,
+      "doc": "Converts the existing H3 polygon vector, preserving exterior and interior rings and closing each ring.",
+      "namespace": "geometry",
+      "alias": "fromLegacyPolygons"
+    },
+    {
+      "node_type": "geometry_from_legacy_route",
+      "display": "geometryFromLegacyRoute",
+      "friendly": "Extract Legacy Route Geometry",
+      "category": "Web/Geo/Geometry",
+      "inputs": [
+        {
+          "name": "route",
+          "ty": {
+            "base": "Struct",
+            "container": "Normal"
+          },
+          "optional": false,
+          "doc": "route"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "geometry_out",
+          "ty": {
+            "base": "geometry",
+            "container": "Normal",
+            "geometry_kind": "LineString"
+          },
+          "optional": false,
+          "doc": "Validated WGS 84 GeoJSON geometry",
+          "schema": "{\"$id\":\"flow:geometry\",\"x-geometry\":\"LineString\"}"
+        },
+        {
+          "name": "route_out",
+          "ty": {
+            "base": "Struct",
+            "container": "Normal"
+          },
+          "optional": false,
+          "doc": "Original route wrapper"
+        }
+      ],
+      "impure": false,
+      "doc": "Extracts a LineString from RouteResult.geometry.points or RouteGeometry.points. Returns the original wrapper unchanged.",
+      "namespace": "geometry",
+      "alias": "fromLegacyRoute"
+    },
+    {
+      "node_type": "geometry_from_wkb",
+      "display": "geometryFromWkb",
+      "friendly": "Parse WGS 84 WKB",
+      "category": "Web/Geo/Geometry",
+      "inputs": [
+        {
+          "name": "bytes",
+          "ty": {
+            "base": "bytes",
+            "container": "Array"
+          },
+          "optional": false,
+          "doc": "bytes"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "geometry_out",
+          "ty": {
+            "base": "geometry",
+            "container": "Normal"
+          },
+          "optional": false,
+          "doc": "Validated WGS 84 GeoJSON geometry"
+        }
+      ],
+      "impure": false,
+      "doc": "Parses two-dimensional WKB bytes. Calling this node asserts WGS 84 longitude/latitude. Unsupported dimensions, SRIDs and out-of-range coordinates are rejected.",
+      "namespace": "geometry",
+      "alias": "fromWkb"
+    },
+    {
+      "node_type": "geometry_from_wkt",
+      "display": "geometryFromWkt",
+      "friendly": "Parse WGS 84 WKT",
+      "category": "Web/Geo/Geometry",
+      "inputs": [
+        {
+          "name": "text",
+          "ty": {
+            "base": "string",
+            "container": "Normal"
+          },
+          "optional": false,
+          "doc": "text"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "geometry_out",
+          "ty": {
+            "base": "geometry",
+            "container": "Normal"
+          },
+          "optional": false,
+          "doc": "Validated WGS 84 GeoJSON geometry"
+        }
+      ],
+      "impure": false,
+      "doc": "Parses two-dimensional WKT. Calling this node asserts coordinates are WGS 84 longitude/latitude; it does not transform a projected CRS. Empty scalar geometries are rejected.",
+      "namespace": "geometry",
+      "alias": "fromWkt"
+    },
+    {
+      "node_type": "geometry_geodesic_area",
+      "display": "geometryGeodesicArea",
+      "friendly": "Geometry Area (Square Meters)",
+      "category": "Web/Geo/Geometry",
+      "inputs": [
+        {
+          "name": "geometry",
+          "ty": {
+            "base": "geometry",
+            "container": "Normal"
+          },
+          "optional": false,
+          "doc": "Validated WGS 84 longitude/latitude GeoJSON geometry"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "area",
+          "ty": {
+            "base": "float",
+            "container": "Normal"
+          },
+          "optional": false,
+          "doc": "Area in square meters"
+        }
+      ],
+      "impure": false,
+      "doc": "Computes WGS 84 ellipsoidal Polygon or MultiPolygon area in square meters, subtracting holes. Each polygon must describe a region smaller than half the Earth.",
+      "namespace": "geometry",
+      "alias": "geodesicArea",
+      "receiver": "geometry"
+    },
+    {
+      "node_type": "geometry_geodesic_distance",
+      "display": "geometryGeodesicDistance",
+      "friendly": "Point Distance (Meters)",
+      "category": "Web/Geo/Geometry",
+      "inputs": [
+        {
+          "name": "a",
+          "ty": {
+            "base": "geometry",
+            "container": "Normal",
+            "geometry_kind": "Point"
+          },
+          "optional": false,
+          "doc": "Validated WGS 84 longitude/latitude GeoJSON geometry",
+          "schema": "{\"$id\":\"flow:geometry\",\"x-geometry\":\"Point\"}"
+        },
+        {
+          "name": "b",
+          "ty": {
+            "base": "geometry",
+            "container": "Normal",
+            "geometry_kind": "Point"
+          },
+          "optional": false,
+          "doc": "Validated WGS 84 longitude/latitude GeoJSON geometry",
+          "schema": "{\"$id\":\"flow:geometry\",\"x-geometry\":\"Point\"}"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "distance",
+          "ty": {
+            "base": "float",
+            "container": "Normal"
+          },
+          "optional": false,
+          "doc": "Distance in meters"
+        }
+      ],
+      "impure": false,
+      "doc": "Computes the WGS 84 ellipsoidal geodesic distance between two Points in meters, including antimeridian crossings.",
+      "namespace": "geometry",
+      "alias": "geodesicDistance",
+      "receiver": "a"
+    },
+    {
+      "node_type": "geometry_geodesic_length",
+      "display": "geometryGeodesicLength",
+      "friendly": "Geometry Length (Meters)",
+      "category": "Web/Geo/Geometry",
+      "inputs": [
+        {
+          "name": "geometry",
+          "ty": {
+            "base": "geometry",
+            "container": "Normal"
+          },
+          "optional": false,
+          "doc": "Validated WGS 84 longitude/latitude GeoJSON geometry"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "length",
+          "ty": {
+            "base": "float",
+            "container": "Normal"
+          },
+          "optional": false,
+          "doc": "Length in meters"
+        }
+      ],
+      "impure": false,
+      "doc": "Sums WGS 84 ellipsoidal geodesic segment lengths in meters, including polygon exterior and interior ring perimeters. Points contribute zero.",
+      "namespace": "geometry",
+      "alias": "geodesicLength",
+      "receiver": "geometry"
+    },
+    {
+      "node_type": "geometry_intersection",
+      "display": "geometryIntersection",
+      "friendly": "Geometry Intersection (Planar)",
+      "category": "Web/Geo/Geometry",
+      "inputs": [
+        {
+          "name": "a",
+          "ty": {
+            "base": "geometry",
+            "container": "Normal"
+          },
+          "optional": false,
+          "doc": "Validated WGS 84 longitude/latitude GeoJSON geometry"
+        },
+        {
+          "name": "b",
+          "ty": {
+            "base": "geometry",
+            "container": "Normal"
+          },
+          "optional": false,
+          "doc": "Validated WGS 84 longitude/latitude GeoJSON geometry"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "geometry_out",
+          "ty": {
+            "base": "geometry",
+            "container": "Normal",
+            "geometry_kind": "MultiPolygon"
+          },
+          "optional": false,
+          "doc": "Validated WGS 84 GeoJSON geometry",
+          "schema": "{\"$id\":\"flow:geometry\",\"x-geometry\":\"MultiPolygon\"}"
+        }
+      ],
+      "impure": false,
+      "doc": "Intersects Polygon or MultiPolygon inputs in the longitude/latitude coordinate plane. Returns a MultiPolygon, which can be empty.",
+      "namespace": "geometry",
+      "alias": "intersection",
+      "receiver": "a"
+    },
+    {
+      "node_type": "geometry_intersects",
+      "display": "geometryIntersects",
+      "friendly": "Geometry Intersects (Planar)",
+      "category": "Web/Geo/Geometry",
+      "inputs": [
+        {
+          "name": "a",
+          "ty": {
+            "base": "geometry",
+            "container": "Normal"
+          },
+          "optional": false,
+          "doc": "Validated WGS 84 longitude/latitude GeoJSON geometry"
+        },
+        {
+          "name": "b",
+          "ty": {
+            "base": "geometry",
+            "container": "Normal"
+          },
+          "optional": false,
+          "doc": "Validated WGS 84 longitude/latitude GeoJSON geometry"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "result",
+          "ty": {
+            "base": "bool",
+            "container": "Normal"
+          },
+          "optional": false,
+          "doc": "Planar predicate result"
+        }
+      ],
+      "impure": false,
+      "doc": "Tests whether geometries share any point in the longitude/latitude coordinate plane, including boundary touches.",
+      "namespace": "geometry",
+      "alias": "intersects",
+      "receiver": "a"
+    },
+    {
+      "node_type": "geometry_make_point",
+      "display": "geometryMakePoint",
+      "friendly": "Make Point",
+      "category": "Web/Geo/Geometry",
+      "inputs": [
+        {
+          "name": "longitude",
+          "ty": {
+            "base": "float",
+            "container": "Normal"
+          },
+          "optional": false,
+          "doc": "longitude"
+        },
+        {
+          "name": "latitude",
+          "ty": {
+            "base": "float",
+            "container": "Normal"
+          },
+          "optional": false,
+          "doc": "latitude"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "geometry_out",
+          "ty": {
+            "base": "geometry",
+            "container": "Normal",
+            "geometry_kind": "Point"
+          },
+          "optional": false,
+          "doc": "Validated WGS 84 GeoJSON geometry",
+          "schema": "{\"$id\":\"flow:geometry\",\"x-geometry\":\"Point\"}"
+        }
+      ],
+      "impure": false,
+      "doc": "Creates a WGS 84 Point from longitude and latitude. Both coordinates must be finite and within geographic bounds.",
+      "namespace": "geometry",
+      "alias": "makePoint"
+    },
+    {
+      "node_type": "geometry_num_points",
+      "display": "geometryNumPoints",
+      "friendly": "Geometry Position Count",
+      "category": "Web/Geo/Geometry",
+      "inputs": [
+        {
+          "name": "geometry",
+          "ty": {
+            "base": "geometry",
+            "container": "Normal"
+          },
+          "optional": false,
+          "doc": "Validated WGS 84 longitude/latitude GeoJSON geometry"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "count",
+          "ty": {
+            "base": "int",
+            "container": "Normal"
+          },
+          "optional": false,
+          "doc": "Number of positions, including closing ring positions"
+        }
+      ],
+      "impure": false,
+      "doc": "Counts coordinate positions, including closing polygon positions and recursive collection members.",
+      "namespace": "geometry",
+      "alias": "numPoints",
+      "receiver": "geometry"
+    },
+    {
+      "node_type": "geometry_planar_area",
+      "display": "geometryPlanarArea",
+      "friendly": "Geometry Area (Square Degrees)",
+      "category": "Web/Geo/Geometry",
+      "inputs": [
+        {
+          "name": "geometry",
+          "ty": {
+            "base": "geometry",
+            "container": "Normal"
+          },
+          "optional": false,
+          "doc": "Validated WGS 84 longitude/latitude GeoJSON geometry"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "area",
+          "ty": {
+            "base": "float",
+            "container": "Normal"
+          },
+          "optional": false,
+          "doc": "Planar area in square coordinate degrees"
+        }
+      ],
+      "impure": false,
+      "doc": "Computes Polygon or MultiPolygon area in square coordinate degrees, subtracting holes. This is a planar measurement.",
+      "namespace": "geometry",
+      "alias": "planarArea",
+      "receiver": "geometry"
+    },
+    {
+      "node_type": "geometry_planar_distance",
+      "display": "geometryPlanarDistance",
+      "friendly": "Geometry Distance (Degrees)",
+      "category": "Web/Geo/Geometry",
+      "inputs": [
+        {
+          "name": "a",
+          "ty": {
+            "base": "geometry",
+            "container": "Normal"
+          },
+          "optional": false,
+          "doc": "Validated WGS 84 longitude/latitude GeoJSON geometry"
+        },
+        {
+          "name": "b",
+          "ty": {
+            "base": "geometry",
+            "container": "Normal"
+          },
+          "optional": false,
+          "doc": "Validated WGS 84 longitude/latitude GeoJSON geometry"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "distance",
+          "ty": {
+            "base": "float",
+            "container": "Normal"
+          },
+          "optional": false,
+          "doc": "Planar distance in coordinate degrees"
+        }
+      ],
+      "impure": false,
+      "doc": "Computes the shortest planar distance in coordinate degrees. This longitude/latitude plane does not wrap at the antimeridian. Empty inputs are rejected.",
+      "namespace": "geometry",
+      "alias": "planarDistance",
+      "receiver": "a"
+    },
+    {
+      "node_type": "geometry_planar_length",
+      "display": "geometryPlanarLength",
+      "friendly": "Geometry Length (Degrees)",
+      "category": "Web/Geo/Geometry",
+      "inputs": [
+        {
+          "name": "geometry",
+          "ty": {
+            "base": "geometry",
+            "container": "Normal"
+          },
+          "optional": false,
+          "doc": "Validated WGS 84 longitude/latitude GeoJSON geometry"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "length",
+          "ty": {
+            "base": "float",
+            "container": "Normal"
+          },
+          "optional": false,
+          "doc": "Planar length in coordinate degrees"
+        }
+      ],
+      "impure": false,
+      "doc": "Sums line lengths and polygon ring perimeters in planar coordinate degrees. Points contribute zero.",
+      "namespace": "geometry",
+      "alias": "planarLength",
+      "receiver": "geometry"
+    },
+    {
+      "node_type": "geometry_simplify",
+      "display": "geometrySimplify",
+      "friendly": "Simplify Geometry (Planar)",
+      "category": "Web/Geo/Geometry",
+      "inputs": [
+        {
+          "name": "geometry",
+          "ty": {
+            "base": "geometry",
+            "container": "Normal"
+          },
+          "optional": false,
+          "doc": "Validated WGS 84 longitude/latitude GeoJSON geometry"
+        },
+        {
+          "name": "tolerance",
+          "ty": {
+            "base": "float",
+            "container": "Normal"
+          },
+          "optional": false,
+          "doc": "tolerance"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "geometry_out",
+          "ty": {
+            "base": "geometry",
+            "container": "Normal"
+          },
+          "optional": false,
+          "doc": "Validated WGS 84 GeoJSON geometry"
+        }
+      ],
+      "impure": false,
+      "doc": "Simplifies lines and polygon rings with a nonnegative tolerance in coordinate degrees. Validates the result and rejects a topology-breaking result.",
+      "namespace": "geometry",
+      "alias": "simplify",
+      "receiver": "geometry"
+    },
+    {
+      "node_type": "geometry_to_geojson",
+      "display": "geometryToGeojson",
+      "friendly": "Geometry to GeoJSON",
+      "category": "Web/Geo/Geometry",
+      "inputs": [
+        {
+          "name": "geometry",
+          "ty": {
+            "base": "geometry",
+            "container": "Normal"
+          },
+          "optional": false,
+          "doc": "Validated WGS 84 longitude/latitude GeoJSON geometry"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "text",
+          "ty": {
+            "base": "string",
+            "container": "Normal"
+          },
+          "optional": false,
+          "doc": "Serialized geometry"
+        }
+      ],
+      "impure": false,
+      "doc": "Writes a validated geometry as GeoJSON text, retaining bbox and foreign members and normalizing ring winding.",
+      "namespace": "geometry",
+      "alias": "toGeoJson",
+      "receiver": "geometry"
+    },
+    {
+      "node_type": "geometry_to_legacy_coordinate",
+      "display": "geometryToLegacyCoordinate",
+      "friendly": "Point to Legacy Coordinate",
+      "category": "Web/Geo/Geometry",
+      "inputs": [
+        {
+          "name": "geometry",
+          "ty": {
+            "base": "geometry",
+            "container": "Normal",
+            "geometry_kind": "Point"
+          },
+          "optional": false,
+          "doc": "Validated WGS 84 longitude/latitude GeoJSON geometry",
+          "schema": "{\"$id\":\"flow:geometry\",\"x-geometry\":\"Point\"}"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "coordinate",
+          "ty": {
+            "base": "Struct",
+            "container": "Normal"
+          },
+          "optional": false,
+          "doc": "Legacy latitude/longitude object",
+          "schema": "{\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"title\":\"GeoCoordinate\",\"type\":\"object\",\"properties\":{\"latitude\":{\"type\":\"number\",\"format\":\"double\"},\"longitude\":{\"type\":\"number\",\"format\":\"double\"}},\"required\":[\"latitude\",\"longitude\"]}"
+        }
+      ],
+      "impure": false,
+      "doc": "Converts a Geometry Point into the existing GeoCoordinate shape used by H3, routing, search and map nodes.",
+      "namespace": "geometry",
+      "alias": "toLegacyCoordinate",
+      "receiver": "geometry"
+    },
+    {
+      "node_type": "geometry_to_legacy_route",
+      "display": "geometryToLegacyRoute",
+      "friendly": "Update Legacy Route Geometry",
+      "category": "Web/Geo/Geometry",
+      "inputs": [
+        {
+          "name": "route",
+          "ty": {
+            "base": "Struct",
+            "container": "Normal"
+          },
+          "optional": false,
+          "doc": "route"
+        },
+        {
+          "name": "geometry",
+          "ty": {
+            "base": "geometry",
+            "container": "Normal",
+            "geometry_kind": "LineString"
+          },
+          "optional": false,
+          "doc": "Validated WGS 84 longitude/latitude GeoJSON geometry",
+          "schema": "{\"$id\":\"flow:geometry\",\"x-geometry\":\"LineString\"}"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "route_out",
+          "ty": {
+            "base": "Struct",
+            "container": "Normal"
+          },
+          "optional": false,
+          "doc": "Route with updated points and retained metadata"
+        }
+      ],
+      "impure": false,
+      "doc": "Updates only the points of an existing RouteResult or RouteGeometry with a LineString, retaining route metadata and other fields.",
+      "namespace": "geometry",
+      "alias": "toLegacyRoute"
+    },
+    {
+      "node_type": "geometry_to_wkb",
+      "display": "geometryToWkb",
+      "friendly": "Geometry to WKB",
+      "category": "Web/Geo/Geometry",
+      "inputs": [
+        {
+          "name": "geometry",
+          "ty": {
+            "base": "geometry",
+            "container": "Normal"
+          },
+          "optional": false,
+          "doc": "Validated WGS 84 longitude/latitude GeoJSON geometry"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "bytes",
+          "ty": {
+            "base": "bytes",
+            "container": "Array"
+          },
+          "optional": false,
+          "doc": "WKB byte sequence"
+        }
+      ],
+      "impure": false,
+      "doc": "Writes two-dimensional WKB bytes. WKB omits GeoJSON bbox and foreign members; keep application properties in a surrounding Struct.",
+      "namespace": "geometry",
+      "alias": "toWkb",
+      "receiver": "geometry"
+    },
+    {
+      "node_type": "geometry_to_wkt",
+      "display": "geometryToWkt",
+      "friendly": "Geometry to WKT",
+      "category": "Web/Geo/Geometry",
+      "inputs": [
+        {
+          "name": "geometry",
+          "ty": {
+            "base": "geometry",
+            "container": "Normal"
+          },
+          "optional": false,
+          "doc": "Validated WGS 84 longitude/latitude GeoJSON geometry"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "text",
+          "ty": {
+            "base": "string",
+            "container": "Normal"
+          },
+          "optional": false,
+          "doc": "Serialized geometry"
+        }
+      ],
+      "impure": false,
+      "doc": "Writes two-dimensional WKT. WKT omits GeoJSON bbox and foreign members; keep application properties in a surrounding Struct.",
+      "namespace": "geometry",
+      "alias": "toWkt",
+      "receiver": "geometry"
+    },
+    {
+      "node_type": "geometry_type",
+      "display": "geometryType",
+      "friendly": "Geometry Type",
+      "category": "Web/Geo/Geometry",
+      "inputs": [
+        {
+          "name": "geometry",
+          "ty": {
+            "base": "geometry",
+            "container": "Normal"
+          },
+          "optional": false,
+          "doc": "Validated WGS 84 longitude/latitude GeoJSON geometry"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "type",
+          "ty": {
+            "base": "string",
+            "container": "Normal"
+          },
+          "optional": false,
+          "doc": "GeoJSON type name"
+        }
+      ],
+      "impure": false,
+      "doc": "Returns the GeoJSON geometry type name.",
+      "namespace": "geometry",
+      "alias": "type",
+      "receiver": "geometry"
+    },
+    {
+      "node_type": "geometry_within",
+      "display": "geometryWithin",
+      "friendly": "Geometry Within (Planar)",
+      "category": "Web/Geo/Geometry",
+      "inputs": [
+        {
+          "name": "a",
+          "ty": {
+            "base": "geometry",
+            "container": "Normal"
+          },
+          "optional": false,
+          "doc": "Validated WGS 84 longitude/latitude GeoJSON geometry"
+        },
+        {
+          "name": "b",
+          "ty": {
+            "base": "geometry",
+            "container": "Normal"
+          },
+          "optional": false,
+          "doc": "Validated WGS 84 longitude/latitude GeoJSON geometry"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "result",
+          "ty": {
+            "base": "bool",
+            "container": "Normal"
+          },
+          "optional": false,
+          "doc": "Planar predicate result"
+        }
+      ],
+      "impure": false,
+      "doc": "Tests whether geometry B contains A in the longitude/latitude coordinate plane.",
+      "namespace": "geometry",
+      "alias": "within",
+      "receiver": "a"
+    },
+    {
+      "node_type": "geometry_x",
+      "display": "geometryX",
+      "friendly": "Point Longitude",
+      "category": "Web/Geo/Geometry",
+      "inputs": [
+        {
+          "name": "geometry",
+          "ty": {
+            "base": "geometry",
+            "container": "Normal",
+            "geometry_kind": "Point"
+          },
+          "optional": false,
+          "doc": "Validated WGS 84 longitude/latitude GeoJSON geometry",
+          "schema": "{\"$id\":\"flow:geometry\",\"x-geometry\":\"Point\"}"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "value",
+          "ty": {
+            "base": "float",
+            "container": "Normal"
+          },
+          "optional": false,
+          "doc": "Coordinate in degrees"
+        }
+      ],
+      "impure": false,
+      "doc": "Returns the Point x coordinate, longitude in degrees.",
+      "namespace": "geometry",
+      "alias": "x",
+      "receiver": "geometry"
+    },
+    {
+      "node_type": "geometry_y",
+      "display": "geometryY",
+      "friendly": "Point Latitude",
+      "category": "Web/Geo/Geometry",
+      "inputs": [
+        {
+          "name": "geometry",
+          "ty": {
+            "base": "geometry",
+            "container": "Normal",
+            "geometry_kind": "Point"
+          },
+          "optional": false,
+          "doc": "Validated WGS 84 longitude/latitude GeoJSON geometry",
+          "schema": "{\"$id\":\"flow:geometry\",\"x-geometry\":\"Point\"}"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "value",
+          "ty": {
+            "base": "float",
+            "container": "Normal"
+          },
+          "optional": false,
+          "doc": "Coordinate in degrees"
+        }
+      ],
+      "impure": false,
+      "doc": "Returns the Point y coordinate, latitude in degrees.",
+      "namespace": "geometry",
+      "alias": "y",
+      "receiver": "geometry"
+    },
+    {
       "node_type": "get_dimensions",
       "display": "getDimensions",
       "friendly": "Get Dimensions",
@@ -62246,7 +63787,7 @@
           },
           "optional": false,
           "doc": "Discovered nodes",
-          "schema": "{\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"title\":\"SubgraphNode\",\"type\":\"object\",\"properties\":{\"id\":{\"type\":\"string\"},\"label\":{\"type\":\"string\"},\"caption\":{\"type\":[\"string\",\"null\"]},\"props\":true,\"stats\":{\"description\":\"Only the seedless sampler knows population counts; every other path\\nleaves this unset. `flow-like-catalog-core` mirrors this struct without\\nthe field, so a subgraph routed through that type loses the stats.\",\"anyOf\":[{\"$ref\":\"#/$defs/SubgraphNodeStats\"},{\"type\":\"null\"}]}},\"required\":[\"id\",\"label\",\"props\"],\"$defs\":{\"SubgraphNodeStats\":{\"description\":\"Population fan-out of one object, as seen through the sampling window.\",\"type\":\"object\",\"properties\":{\"out_by_label\":{\"type\":\"array\",\"items\":{\"$ref\":\"#/$defs/EdgeLabelCount\"}},\"exact\":{\"description\":\"False when the window did not cover the whole relationship table, which\\nmakes every count a lower bound.\",\"type\":\"boolean\"}},\"required\":[\"out_by_label\",\"exact\"]},\"EdgeLabelCount\":{\"type\":\"object\",\"properties\":{\"label\":{\"type\":\"string\"},\"count\":{\"type\":\"integer\",\"format\":\"uint\",\"minimum\":0}},\"required\":[\"label\",\"count\"]}}}"
+          "schema": "{\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"title\":\"SubgraphNode\",\"type\":\"object\",\"properties\":{\"id\":{\"type\":\"string\"},\"label\":{\"type\":\"string\"},\"caption\":{\"type\":[\"string\",\"null\"]},\"props\":true,\"stats\":{\"description\":\"Only the seedless sampler knows population counts; every other path\\nleaves this unset. `flow-like-catalog-core` mirrors this struct without\\nthe field, so a subgraph routed through that type loses the stats.\",\"anyOf\":[{\"$ref\":\"#/$defs/SubgraphNodeStats\"},{\"type\":\"null\"}]},\"property_metadata\":{\"description\":\"Arrow field metadata for typed property previews.\",\"type\":\"object\",\"additionalProperties\":{\"type\":\"object\",\"additionalProperties\":{\"type\":\"string\"}}}},\"required\":[\"id\",\"label\",\"props\"],\"$defs\":{\"SubgraphNodeStats\":{\"description\":\"Population fan-out of one object, as seen through the sampling window.\",\"type\":\"object\",\"properties\":{\"out_by_label\":{\"type\":\"array\",\"items\":{\"$ref\":\"#/$defs/EdgeLabelCount\"}},\"exact\":{\"description\":\"False when the window did not cover the whole relationship table, which\\nmakes every count a lower bound.\",\"type\":\"boolean\"}},\"required\":[\"out_by_label\",\"exact\"]},\"EdgeLabelCount\":{\"type\":\"object\",\"properties\":{\"label\":{\"type\":\"string\"},\"count\":{\"type\":\"integer\",\"format\":\"uint\",\"minimum\":0}},\"required\":[\"label\",\"count\"]}}}"
         },
         {
           "name": "result_edges",
@@ -62256,7 +63797,7 @@
           },
           "optional": false,
           "doc": "Discovered edges",
-          "schema": "{\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"title\":\"SubgraphEdge\",\"type\":\"object\",\"properties\":{\"id\":{\"type\":\"string\"},\"source\":{\"type\":\"string\"},\"target\":{\"type\":\"string\"},\"label\":{\"type\":\"string\"},\"props\":true},\"required\":[\"id\",\"source\",\"target\",\"label\",\"props\"]}"
+          "schema": "{\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"title\":\"SubgraphEdge\",\"type\":\"object\",\"properties\":{\"id\":{\"type\":\"string\"},\"source\":{\"type\":\"string\"},\"target\":{\"type\":\"string\"},\"label\":{\"type\":\"string\"},\"props\":true,\"property_metadata\":{\"description\":\"Arrow field metadata for typed property previews.\",\"type\":\"object\",\"additionalProperties\":{\"type\":\"object\",\"additionalProperties\":{\"type\":\"string\"}}}},\"required\":[\"id\",\"source\",\"target\",\"label\",\"props\"]}"
         }
       ],
       "impure": true,
@@ -62460,7 +64001,7 @@
           },
           "optional": false,
           "doc": "Graph schema with labels and properties",
-          "schema": "{\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"title\":\"GraphSchemaResult\",\"type\":\"object\",\"properties\":{\"node_labels\":{\"type\":\"array\",\"items\":{\"$ref\":\"#/$defs/GraphLabelInfo\"}},\"edge_labels\":{\"type\":\"array\",\"items\":{\"$ref\":\"#/$defs/GraphLabelInfo\"}}},\"required\":[\"node_labels\",\"edge_labels\"],\"$defs\":{\"GraphLabelInfo\":{\"type\":\"object\",\"properties\":{\"label\":{\"type\":\"string\"},\"table\":{\"type\":\"string\"},\"properties\":{\"type\":\"array\",\"items\":{\"$ref\":\"#/$defs/GraphPropertyInfo\"}}},\"required\":[\"label\",\"table\",\"properties\"]},\"GraphPropertyInfo\":{\"type\":\"object\",\"properties\":{\"name\":{\"type\":\"string\"},\"data_type\":{\"type\":\"string\"},\"nullable\":{\"type\":\"boolean\"}},\"required\":[\"name\",\"data_type\",\"nullable\"]}}}"
+          "schema": "{\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"title\":\"GraphSchemaResult\",\"type\":\"object\",\"properties\":{\"node_labels\":{\"type\":\"array\",\"items\":{\"$ref\":\"#/$defs/GraphLabelInfo\"}},\"edge_labels\":{\"type\":\"array\",\"items\":{\"$ref\":\"#/$defs/GraphLabelInfo\"}}},\"required\":[\"node_labels\",\"edge_labels\"],\"$defs\":{\"GraphLabelInfo\":{\"type\":\"object\",\"properties\":{\"label\":{\"type\":\"string\"},\"table\":{\"type\":\"string\"},\"properties\":{\"type\":\"array\",\"items\":{\"$ref\":\"#/$defs/GraphPropertyInfo\"}}},\"required\":[\"label\",\"table\",\"properties\"]},\"GraphPropertyInfo\":{\"type\":\"object\",\"properties\":{\"name\":{\"type\":\"string\"},\"data_type\":{\"type\":\"string\"},\"nullable\":{\"type\":\"boolean\"},\"metadata\":{\"type\":\"object\",\"additionalProperties\":{\"type\":\"string\"}}},\"required\":[\"name\",\"data_type\",\"nullable\"]}}}"
         }
       ],
       "impure": true,
@@ -62522,7 +64063,7 @@
           },
           "optional": false,
           "doc": "Matching objects",
-          "schema": "{\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"title\":\"SubgraphNode\",\"type\":\"object\",\"properties\":{\"id\":{\"type\":\"string\"},\"label\":{\"type\":\"string\"},\"caption\":{\"type\":[\"string\",\"null\"]},\"props\":true,\"stats\":{\"description\":\"Only the seedless sampler knows population counts; every other path\\nleaves this unset. `flow-like-catalog-core` mirrors this struct without\\nthe field, so a subgraph routed through that type loses the stats.\",\"anyOf\":[{\"$ref\":\"#/$defs/SubgraphNodeStats\"},{\"type\":\"null\"}]}},\"required\":[\"id\",\"label\",\"props\"],\"$defs\":{\"SubgraphNodeStats\":{\"description\":\"Population fan-out of one object, as seen through the sampling window.\",\"type\":\"object\",\"properties\":{\"out_by_label\":{\"type\":\"array\",\"items\":{\"$ref\":\"#/$defs/EdgeLabelCount\"}},\"exact\":{\"description\":\"False when the window did not cover the whole relationship table, which\\nmakes every count a lower bound.\",\"type\":\"boolean\"}},\"required\":[\"out_by_label\",\"exact\"]},\"EdgeLabelCount\":{\"type\":\"object\",\"properties\":{\"label\":{\"type\":\"string\"},\"count\":{\"type\":\"integer\",\"format\":\"uint\",\"minimum\":0}},\"required\":[\"label\",\"count\"]}}}"
+          "schema": "{\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"title\":\"SubgraphNode\",\"type\":\"object\",\"properties\":{\"id\":{\"type\":\"string\"},\"label\":{\"type\":\"string\"},\"caption\":{\"type\":[\"string\",\"null\"]},\"props\":true,\"stats\":{\"description\":\"Only the seedless sampler knows population counts; every other path\\nleaves this unset. `flow-like-catalog-core` mirrors this struct without\\nthe field, so a subgraph routed through that type loses the stats.\",\"anyOf\":[{\"$ref\":\"#/$defs/SubgraphNodeStats\"},{\"type\":\"null\"}]},\"property_metadata\":{\"description\":\"Arrow field metadata for typed property previews.\",\"type\":\"object\",\"additionalProperties\":{\"type\":\"object\",\"additionalProperties\":{\"type\":\"string\"}}}},\"required\":[\"id\",\"label\",\"props\"],\"$defs\":{\"SubgraphNodeStats\":{\"description\":\"Population fan-out of one object, as seen through the sampling window.\",\"type\":\"object\",\"properties\":{\"out_by_label\":{\"type\":\"array\",\"items\":{\"$ref\":\"#/$defs/EdgeLabelCount\"}},\"exact\":{\"description\":\"False when the window did not cover the whole relationship table, which\\nmakes every count a lower bound.\",\"type\":\"boolean\"}},\"required\":[\"out_by_label\",\"exact\"]},\"EdgeLabelCount\":{\"type\":\"object\",\"properties\":{\"label\":{\"type\":\"string\"},\"count\":{\"type\":\"integer\",\"format\":\"uint\",\"minimum\":0}},\"required\":[\"label\",\"count\"]}}}"
         }
       ],
       "impure": true,
@@ -64752,7 +66293,7 @@
             "container": "Normal"
           },
           "optional": true,
-          "doc": "Index Type to build"
+          "doc": "Index type to build. Vector indexes use cosine distance; VECTOR and vector AUTO retain IVF-PQ."
         }
       ],
       "outputs": [],
@@ -70913,7 +72454,7 @@
           },
           "optional": false,
           "doc": "MCP server config",
-          "schema": "{\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"title\":\"McpServerConfig\",\"type\":\"object\",\"properties\":{\"host\":{\"type\":\"string\"},\"port\":{\"type\":\"integer\",\"format\":\"uint16\",\"minimum\":0,\"maximum\":65535},\"path\":{\"type\":\"string\",\"default\":\"/mcp\"},\"timeout_seconds\":{\"type\":\"integer\",\"format\":\"uint64\",\"minimum\":0,\"default\":0},\"max_connections\":{\"type\":\"integer\",\"format\":\"uint32\",\"minimum\":0,\"default\":128},\"max_body_bytes\":{\"type\":\"integer\",\"format\":\"uint\",\"minimum\":0,\"default\":10485760},\"tls\":{\"$ref\":\"#/$defs/TlsConfig\",\"default\":{\"secure\":false,\"certificate\":null,\"ca_certificate_pem\":null,\"server_name\":null,\"accept_invalid_certificates\":false}},\"auth\":{\"$ref\":\"#/$defs/RestAuthConfig\",\"default\":{\"type\":\"none\"}},\"function_refs\":{\"type\":\"array\",\"items\":{\"type\":\"string\"},\"default\":[]},\"resources\":{\"type\":\"array\",\"items\":{\"$ref\":\"#/$defs/McpResourceRegistration\"},\"default\":[]},\"prompts\":{\"type\":\"array\",\"items\":{\"$ref\":\"#/$defs/McpPromptRegistration\"},\"default\":[]}},\"required\":[\"host\",\"port\"],\"$defs\":{\"TlsConfig\":{\"type\":\"object\",\"properties\":{\"secure\":{\"type\":\"boolean\",\"default\":false},\"certificate\":{\"anyOf\":[{\"$ref\":\"#/$defs/TlsCertificate\"},{\"type\":\"null\"}],\"default\":null},\"ca_certificate_pem\":{\"type\":[\"string\",\"null\"],\"default\":null},\"server_name\":{\"type\":[\"string\",\"null\"],\"default\":null},\"accept_invalid_certificates\":{\"type\":\"boolean\",\"default\":false}}},\"TlsCertificate\":{\"type\":\"object\",\"properties\":{\"certificate_pem\":{\"type\":\"string\"},\"private_key_pem\":{\"type\":\"string\"}},\"required\":[\"certificate_pem\",\"private_key_pem\"]},\"RestAuthConfig\":{\"oneOf\":[{\"type\":\"object\",\"properties\":{\"type\":{\"type\":\"string\",\"const\":\"none\"}},\"required\":[\"type\"]},{\"type\":\"object\",\"properties\":{\"header\":{\"type\":\"string\"},\"key\":{\"type\":\"string\"},\"type\":{\"type\":\"string\",\"const\":\"api_key\"}},\"required\":[\"type\",\"header\",\"key\"]},{\"type\":\"object\",\"properties\":{\"token\":{\"type\":\"string\"},\"type\":{\"type\":\"string\",\"const\":\"bearer_token\"}},\"required\":[\"type\",\"token\"]},{\"type\":\"object\",\"properties\":{\"username\":{\"type\":\"string\"},\"password\":{\"type\":\"string\"},\"type\":{\"type\":\"string\",\"const\":\"basic_auth\"}},\"required\":[\"type\",\"username\",\"password\"]},{\"type\":\"object\",\"properties\":{\"secret\":{\"type\":\"string\"},\"signature_header\":{\"type\":\"string\",\"default\":\"x-signature\"},\"timestamp_header\":{\"type\":\"string\",\"default\":\"x-timestamp\"},\"max_skew_seconds\":{\"type\":\"integer\",\"format\":\"uint64\",\"minimum\":0,\"default\":300},\"type\":{\"type\":\"string\",\"const\":\"hmac_sha256\"}},\"required\":[\"type\",\"secret\"]},{\"type\":\"object\",\"properties\":{\"issuer\":{\"type\":[\"string\",\"null\"],\"default\":null},\"audience\":{\"type\":[\"string\",\"null\"],\"default\":null},\"required_scopes\":{\"type\":\"array\",\"items\":{\"type\":\"string\"},\"default\":[]},\"jwks_url\":{\"type\":[\"string\",\"null\"],\"default\":null},\"jwks_flow_path\":{\"anyOf\":[{\"$ref\":\"#/$defs/FlowPath\"},{\"type\":\"null\"}],\"default\":null},\"oidc_discovery_url\":{\"type\":[\"string\",\"null\"],\"default\":null},\"type\":{\"type\":\"string\",\"const\":\"oauth_bearer\"}},\"required\":[\"type\"]}]},\"FlowPath\":{\"type\":\"object\",\"properties\":{\"path\":{\"type\":\"string\"},\"store_ref\":{\"type\":\"string\"},\"cache_store_ref\":{\"type\":[\"string\",\"null\"]}},\"required\":[\"path\",\"store_ref\"]},\"McpResourceRegistration\":{\"type\":\"object\",\"properties\":{\"uri\":{\"type\":\"string\"},\"name\":{\"type\":\"string\"},\"flow_path\":{\"$ref\":\"#/$defs/FlowPath\"},\"description\":{\"type\":[\"string\",\"null\"],\"default\":null},\"mime_type\":{\"type\":[\"string\",\"null\"],\"default\":null}},\"required\":[\"uri\",\"name\",\"flow_path\"]},\"McpPromptRegistration\":{\"type\":\"object\",\"properties\":{\"name\":{\"type\":\"string\"},\"description\":{\"type\":[\"string\",\"null\"],\"default\":null},\"template\":{\"type\":\"string\"}},\"required\":[\"name\",\"template\"]}}}"
+          "schema": "{\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"title\":\"McpServerConfig\",\"type\":\"object\",\"properties\":{\"host\":{\"type\":\"string\"},\"port\":{\"type\":\"integer\",\"format\":\"uint16\",\"minimum\":0,\"maximum\":65535},\"path\":{\"type\":\"string\",\"default\":\"/mcp\"},\"timeout_seconds\":{\"type\":\"integer\",\"format\":\"uint64\",\"minimum\":0,\"default\":0},\"max_connections\":{\"type\":\"integer\",\"format\":\"uint32\",\"minimum\":0,\"default\":128},\"max_body_bytes\":{\"type\":\"integer\",\"format\":\"uint\",\"minimum\":0,\"default\":10485760},\"tls\":{\"$ref\":\"#/$defs/TlsConfig\",\"default\":{\"secure\":false,\"certificate\":null,\"ca_certificate_pem\":null,\"server_name\":null,\"accept_invalid_certificates\":false}},\"auth\":{\"$ref\":\"#/$defs/RestAuthConfig\",\"default\":{\"type\":\"none\"}},\"flow_like_auth\":{\"type\":\"boolean\",\"default\":false},\"function_refs\":{\"type\":\"array\",\"items\":{\"type\":\"string\"},\"default\":[]},\"resources\":{\"type\":\"array\",\"items\":{\"$ref\":\"#/$defs/McpResourceRegistration\"},\"default\":[]},\"prompts\":{\"type\":\"array\",\"items\":{\"$ref\":\"#/$defs/McpPromptRegistration\"},\"default\":[]}},\"required\":[\"host\",\"port\"],\"$defs\":{\"TlsConfig\":{\"type\":\"object\",\"properties\":{\"secure\":{\"type\":\"boolean\",\"default\":false},\"certificate\":{\"anyOf\":[{\"$ref\":\"#/$defs/TlsCertificate\"},{\"type\":\"null\"}],\"default\":null},\"ca_certificate_pem\":{\"type\":[\"string\",\"null\"],\"default\":null},\"server_name\":{\"type\":[\"string\",\"null\"],\"default\":null},\"accept_invalid_certificates\":{\"type\":\"boolean\",\"default\":false}}},\"TlsCertificate\":{\"type\":\"object\",\"properties\":{\"certificate_pem\":{\"type\":\"string\"},\"private_key_pem\":{\"type\":\"string\"}},\"required\":[\"certificate_pem\",\"private_key_pem\"]},\"RestAuthConfig\":{\"oneOf\":[{\"type\":\"object\",\"properties\":{\"type\":{\"type\":\"string\",\"const\":\"none\"}},\"required\":[\"type\"]},{\"type\":\"object\",\"properties\":{\"header\":{\"type\":\"string\"},\"key\":{\"type\":\"string\"},\"type\":{\"type\":\"string\",\"const\":\"api_key\"}},\"required\":[\"type\",\"header\",\"key\"]},{\"type\":\"object\",\"properties\":{\"token\":{\"type\":\"string\"},\"type\":{\"type\":\"string\",\"const\":\"bearer_token\"}},\"required\":[\"type\",\"token\"]},{\"type\":\"object\",\"properties\":{\"username\":{\"type\":\"string\"},\"password\":{\"type\":\"string\"},\"type\":{\"type\":\"string\",\"const\":\"basic_auth\"}},\"required\":[\"type\",\"username\",\"password\"]},{\"type\":\"object\",\"properties\":{\"secret\":{\"type\":\"string\"},\"signature_header\":{\"type\":\"string\",\"default\":\"x-signature\"},\"timestamp_header\":{\"type\":\"string\",\"default\":\"x-timestamp\"},\"max_skew_seconds\":{\"type\":\"integer\",\"format\":\"uint64\",\"minimum\":0,\"default\":300},\"type\":{\"type\":\"string\",\"const\":\"hmac_sha256\"}},\"required\":[\"type\",\"secret\"]},{\"type\":\"object\",\"properties\":{\"issuer\":{\"type\":[\"string\",\"null\"],\"default\":null},\"audience\":{\"type\":[\"string\",\"null\"],\"default\":null},\"required_scopes\":{\"type\":\"array\",\"items\":{\"type\":\"string\"},\"default\":[]},\"jwks_url\":{\"type\":[\"string\",\"null\"],\"default\":null},\"jwks_flow_path\":{\"anyOf\":[{\"$ref\":\"#/$defs/FlowPath\"},{\"type\":\"null\"}],\"default\":null},\"oidc_discovery_url\":{\"type\":[\"string\",\"null\"],\"default\":null},\"type\":{\"type\":\"string\",\"const\":\"oauth_bearer\"}},\"required\":[\"type\"]}]},\"FlowPath\":{\"type\":\"object\",\"properties\":{\"path\":{\"type\":\"string\"},\"store_ref\":{\"type\":\"string\"},\"cache_store_ref\":{\"type\":[\"string\",\"null\"]}},\"required\":[\"path\",\"store_ref\"]},\"McpResourceRegistration\":{\"type\":\"object\",\"properties\":{\"uri\":{\"type\":\"string\"},\"name\":{\"type\":\"string\"},\"flow_path\":{\"$ref\":\"#/$defs/FlowPath\"},\"description\":{\"type\":[\"string\",\"null\"],\"default\":null},\"mime_type\":{\"type\":[\"string\",\"null\"],\"default\":null}},\"required\":[\"uri\",\"name\",\"flow_path\"]},\"McpPromptRegistration\":{\"type\":\"object\",\"properties\":{\"name\":{\"type\":\"string\"},\"description\":{\"type\":[\"string\",\"null\"],\"default\":null},\"template\":{\"type\":\"string\"}},\"required\":[\"name\",\"template\"]}}}"
         },
         {
           "name": "auth",
@@ -70924,6 +72465,15 @@
           "optional": false,
           "doc": "Auth config",
           "schema": "{\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"title\":\"RestAuthConfig\",\"oneOf\":[{\"type\":\"object\",\"properties\":{\"type\":{\"type\":\"string\",\"const\":\"none\"}},\"required\":[\"type\"]},{\"type\":\"object\",\"properties\":{\"header\":{\"type\":\"string\"},\"key\":{\"type\":\"string\"},\"type\":{\"type\":\"string\",\"const\":\"api_key\"}},\"required\":[\"type\",\"header\",\"key\"]},{\"type\":\"object\",\"properties\":{\"token\":{\"type\":\"string\"},\"type\":{\"type\":\"string\",\"const\":\"bearer_token\"}},\"required\":[\"type\",\"token\"]},{\"type\":\"object\",\"properties\":{\"username\":{\"type\":\"string\"},\"password\":{\"type\":\"string\"},\"type\":{\"type\":\"string\",\"const\":\"basic_auth\"}},\"required\":[\"type\",\"username\",\"password\"]},{\"type\":\"object\",\"properties\":{\"secret\":{\"type\":\"string\"},\"signature_header\":{\"type\":\"string\",\"default\":\"x-signature\"},\"timestamp_header\":{\"type\":\"string\",\"default\":\"x-timestamp\"},\"max_skew_seconds\":{\"type\":\"integer\",\"format\":\"uint64\",\"minimum\":0,\"default\":300},\"type\":{\"type\":\"string\",\"const\":\"hmac_sha256\"}},\"required\":[\"type\",\"secret\"]},{\"type\":\"object\",\"properties\":{\"issuer\":{\"type\":[\"string\",\"null\"],\"default\":null},\"audience\":{\"type\":[\"string\",\"null\"],\"default\":null},\"required_scopes\":{\"type\":\"array\",\"items\":{\"type\":\"string\"},\"default\":[]},\"jwks_url\":{\"type\":[\"string\",\"null\"],\"default\":null},\"jwks_flow_path\":{\"anyOf\":[{\"$ref\":\"#/$defs/FlowPath\"},{\"type\":\"null\"}],\"default\":null},\"oidc_discovery_url\":{\"type\":[\"string\",\"null\"],\"default\":null},\"type\":{\"type\":\"string\",\"const\":\"oauth_bearer\"}},\"required\":[\"type\"]}],\"$defs\":{\"FlowPath\":{\"type\":\"object\",\"properties\":{\"path\":{\"type\":\"string\"},\"store_ref\":{\"type\":\"string\"},\"cache_store_ref\":{\"type\":[\"string\",\"null\"]}},\"required\":[\"path\",\"store_ref\"]}}}"
+        },
+        {
+          "name": "flow_like_auth",
+          "ty": {
+            "base": "bool",
+            "container": "Normal"
+          },
+          "optional": true,
+          "doc": "Hosted public OAuth servers only: resolve the verified caller to a Flow-Like account and enforce app permissions. Requires a trusted platform issuer and an allowed OAuth client."
         }
       ],
       "outputs": [
@@ -70935,7 +72485,7 @@
           },
           "optional": false,
           "doc": "Updated config",
-          "schema": "{\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"title\":\"McpServerConfig\",\"type\":\"object\",\"properties\":{\"host\":{\"type\":\"string\"},\"port\":{\"type\":\"integer\",\"format\":\"uint16\",\"minimum\":0,\"maximum\":65535},\"path\":{\"type\":\"string\",\"default\":\"/mcp\"},\"timeout_seconds\":{\"type\":\"integer\",\"format\":\"uint64\",\"minimum\":0,\"default\":0},\"max_connections\":{\"type\":\"integer\",\"format\":\"uint32\",\"minimum\":0,\"default\":128},\"max_body_bytes\":{\"type\":\"integer\",\"format\":\"uint\",\"minimum\":0,\"default\":10485760},\"tls\":{\"$ref\":\"#/$defs/TlsConfig\",\"default\":{\"secure\":false,\"certificate\":null,\"ca_certificate_pem\":null,\"server_name\":null,\"accept_invalid_certificates\":false}},\"auth\":{\"$ref\":\"#/$defs/RestAuthConfig\",\"default\":{\"type\":\"none\"}},\"function_refs\":{\"type\":\"array\",\"items\":{\"type\":\"string\"},\"default\":[]},\"resources\":{\"type\":\"array\",\"items\":{\"$ref\":\"#/$defs/McpResourceRegistration\"},\"default\":[]},\"prompts\":{\"type\":\"array\",\"items\":{\"$ref\":\"#/$defs/McpPromptRegistration\"},\"default\":[]}},\"required\":[\"host\",\"port\"],\"$defs\":{\"TlsConfig\":{\"type\":\"object\",\"properties\":{\"secure\":{\"type\":\"boolean\",\"default\":false},\"certificate\":{\"anyOf\":[{\"$ref\":\"#/$defs/TlsCertificate\"},{\"type\":\"null\"}],\"default\":null},\"ca_certificate_pem\":{\"type\":[\"string\",\"null\"],\"default\":null},\"server_name\":{\"type\":[\"string\",\"null\"],\"default\":null},\"accept_invalid_certificates\":{\"type\":\"boolean\",\"default\":false}}},\"TlsCertificate\":{\"type\":\"object\",\"properties\":{\"certificate_pem\":{\"type\":\"string\"},\"private_key_pem\":{\"type\":\"string\"}},\"required\":[\"certificate_pem\",\"private_key_pem\"]},\"RestAuthConfig\":{\"oneOf\":[{\"type\":\"object\",\"properties\":{\"type\":{\"type\":\"string\",\"const\":\"none\"}},\"required\":[\"type\"]},{\"type\":\"object\",\"properties\":{\"header\":{\"type\":\"string\"},\"key\":{\"type\":\"string\"},\"type\":{\"type\":\"string\",\"const\":\"api_key\"}},\"required\":[\"type\",\"header\",\"key\"]},{\"type\":\"object\",\"properties\":{\"token\":{\"type\":\"string\"},\"type\":{\"type\":\"string\",\"const\":\"bearer_token\"}},\"required\":[\"type\",\"token\"]},{\"type\":\"object\",\"properties\":{\"username\":{\"type\":\"string\"},\"password\":{\"type\":\"string\"},\"type\":{\"type\":\"string\",\"const\":\"basic_auth\"}},\"required\":[\"type\",\"username\",\"password\"]},{\"type\":\"object\",\"properties\":{\"secret\":{\"type\":\"string\"},\"signature_header\":{\"type\":\"string\",\"default\":\"x-signature\"},\"timestamp_header\":{\"type\":\"string\",\"default\":\"x-timestamp\"},\"max_skew_seconds\":{\"type\":\"integer\",\"format\":\"uint64\",\"minimum\":0,\"default\":300},\"type\":{\"type\":\"string\",\"const\":\"hmac_sha256\"}},\"required\":[\"type\",\"secret\"]},{\"type\":\"object\",\"properties\":{\"issuer\":{\"type\":[\"string\",\"null\"],\"default\":null},\"audience\":{\"type\":[\"string\",\"null\"],\"default\":null},\"required_scopes\":{\"type\":\"array\",\"items\":{\"type\":\"string\"},\"default\":[]},\"jwks_url\":{\"type\":[\"string\",\"null\"],\"default\":null},\"jwks_flow_path\":{\"anyOf\":[{\"$ref\":\"#/$defs/FlowPath\"},{\"type\":\"null\"}],\"default\":null},\"oidc_discovery_url\":{\"type\":[\"string\",\"null\"],\"default\":null},\"type\":{\"type\":\"string\",\"const\":\"oauth_bearer\"}},\"required\":[\"type\"]}]},\"FlowPath\":{\"type\":\"object\",\"properties\":{\"path\":{\"type\":\"string\"},\"store_ref\":{\"type\":\"string\"},\"cache_store_ref\":{\"type\":[\"string\",\"null\"]}},\"required\":[\"path\",\"store_ref\"]},\"McpResourceRegistration\":{\"type\":\"object\",\"properties\":{\"uri\":{\"type\":\"string\"},\"name\":{\"type\":\"string\"},\"flow_path\":{\"$ref\":\"#/$defs/FlowPath\"},\"description\":{\"type\":[\"string\",\"null\"],\"default\":null},\"mime_type\":{\"type\":[\"string\",\"null\"],\"default\":null}},\"required\":[\"uri\",\"name\",\"flow_path\"]},\"McpPromptRegistration\":{\"type\":\"object\",\"properties\":{\"name\":{\"type\":\"string\"},\"description\":{\"type\":[\"string\",\"null\"],\"default\":null},\"template\":{\"type\":\"string\"}},\"required\":[\"name\",\"template\"]}}}"
+          "schema": "{\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"title\":\"McpServerConfig\",\"type\":\"object\",\"properties\":{\"host\":{\"type\":\"string\"},\"port\":{\"type\":\"integer\",\"format\":\"uint16\",\"minimum\":0,\"maximum\":65535},\"path\":{\"type\":\"string\",\"default\":\"/mcp\"},\"timeout_seconds\":{\"type\":\"integer\",\"format\":\"uint64\",\"minimum\":0,\"default\":0},\"max_connections\":{\"type\":\"integer\",\"format\":\"uint32\",\"minimum\":0,\"default\":128},\"max_body_bytes\":{\"type\":\"integer\",\"format\":\"uint\",\"minimum\":0,\"default\":10485760},\"tls\":{\"$ref\":\"#/$defs/TlsConfig\",\"default\":{\"secure\":false,\"certificate\":null,\"ca_certificate_pem\":null,\"server_name\":null,\"accept_invalid_certificates\":false}},\"auth\":{\"$ref\":\"#/$defs/RestAuthConfig\",\"default\":{\"type\":\"none\"}},\"flow_like_auth\":{\"type\":\"boolean\",\"default\":false},\"function_refs\":{\"type\":\"array\",\"items\":{\"type\":\"string\"},\"default\":[]},\"resources\":{\"type\":\"array\",\"items\":{\"$ref\":\"#/$defs/McpResourceRegistration\"},\"default\":[]},\"prompts\":{\"type\":\"array\",\"items\":{\"$ref\":\"#/$defs/McpPromptRegistration\"},\"default\":[]}},\"required\":[\"host\",\"port\"],\"$defs\":{\"TlsConfig\":{\"type\":\"object\",\"properties\":{\"secure\":{\"type\":\"boolean\",\"default\":false},\"certificate\":{\"anyOf\":[{\"$ref\":\"#/$defs/TlsCertificate\"},{\"type\":\"null\"}],\"default\":null},\"ca_certificate_pem\":{\"type\":[\"string\",\"null\"],\"default\":null},\"server_name\":{\"type\":[\"string\",\"null\"],\"default\":null},\"accept_invalid_certificates\":{\"type\":\"boolean\",\"default\":false}}},\"TlsCertificate\":{\"type\":\"object\",\"properties\":{\"certificate_pem\":{\"type\":\"string\"},\"private_key_pem\":{\"type\":\"string\"}},\"required\":[\"certificate_pem\",\"private_key_pem\"]},\"RestAuthConfig\":{\"oneOf\":[{\"type\":\"object\",\"properties\":{\"type\":{\"type\":\"string\",\"const\":\"none\"}},\"required\":[\"type\"]},{\"type\":\"object\",\"properties\":{\"header\":{\"type\":\"string\"},\"key\":{\"type\":\"string\"},\"type\":{\"type\":\"string\",\"const\":\"api_key\"}},\"required\":[\"type\",\"header\",\"key\"]},{\"type\":\"object\",\"properties\":{\"token\":{\"type\":\"string\"},\"type\":{\"type\":\"string\",\"const\":\"bearer_token\"}},\"required\":[\"type\",\"token\"]},{\"type\":\"object\",\"properties\":{\"username\":{\"type\":\"string\"},\"password\":{\"type\":\"string\"},\"type\":{\"type\":\"string\",\"const\":\"basic_auth\"}},\"required\":[\"type\",\"username\",\"password\"]},{\"type\":\"object\",\"properties\":{\"secret\":{\"type\":\"string\"},\"signature_header\":{\"type\":\"string\",\"default\":\"x-signature\"},\"timestamp_header\":{\"type\":\"string\",\"default\":\"x-timestamp\"},\"max_skew_seconds\":{\"type\":\"integer\",\"format\":\"uint64\",\"minimum\":0,\"default\":300},\"type\":{\"type\":\"string\",\"const\":\"hmac_sha256\"}},\"required\":[\"type\",\"secret\"]},{\"type\":\"object\",\"properties\":{\"issuer\":{\"type\":[\"string\",\"null\"],\"default\":null},\"audience\":{\"type\":[\"string\",\"null\"],\"default\":null},\"required_scopes\":{\"type\":\"array\",\"items\":{\"type\":\"string\"},\"default\":[]},\"jwks_url\":{\"type\":[\"string\",\"null\"],\"default\":null},\"jwks_flow_path\":{\"anyOf\":[{\"$ref\":\"#/$defs/FlowPath\"},{\"type\":\"null\"}],\"default\":null},\"oidc_discovery_url\":{\"type\":[\"string\",\"null\"],\"default\":null},\"type\":{\"type\":\"string\",\"const\":\"oauth_bearer\"}},\"required\":[\"type\"]}]},\"FlowPath\":{\"type\":\"object\",\"properties\":{\"path\":{\"type\":\"string\"},\"store_ref\":{\"type\":\"string\"},\"cache_store_ref\":{\"type\":[\"string\",\"null\"]}},\"required\":[\"path\",\"store_ref\"]},\"McpResourceRegistration\":{\"type\":\"object\",\"properties\":{\"uri\":{\"type\":\"string\"},\"name\":{\"type\":\"string\"},\"flow_path\":{\"$ref\":\"#/$defs/FlowPath\"},\"description\":{\"type\":[\"string\",\"null\"],\"default\":null},\"mime_type\":{\"type\":[\"string\",\"null\"],\"default\":null}},\"required\":[\"uri\",\"name\",\"flow_path\"]},\"McpPromptRegistration\":{\"type\":\"object\",\"properties\":{\"name\":{\"type\":\"string\"},\"description\":{\"type\":[\"string\",\"null\"],\"default\":null},\"template\":{\"type\":\"string\"}},\"required\":[\"name\",\"template\"]}}}"
         }
       ],
       "impure": false,
@@ -70958,7 +72508,7 @@
           },
           "optional": false,
           "doc": "MCP server config",
-          "schema": "{\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"title\":\"McpServerConfig\",\"type\":\"object\",\"properties\":{\"host\":{\"type\":\"string\"},\"port\":{\"type\":\"integer\",\"format\":\"uint16\",\"minimum\":0,\"maximum\":65535},\"path\":{\"type\":\"string\",\"default\":\"/mcp\"},\"timeout_seconds\":{\"type\":\"integer\",\"format\":\"uint64\",\"minimum\":0,\"default\":0},\"max_connections\":{\"type\":\"integer\",\"format\":\"uint32\",\"minimum\":0,\"default\":128},\"max_body_bytes\":{\"type\":\"integer\",\"format\":\"uint\",\"minimum\":0,\"default\":10485760},\"tls\":{\"$ref\":\"#/$defs/TlsConfig\",\"default\":{\"secure\":false,\"certificate\":null,\"ca_certificate_pem\":null,\"server_name\":null,\"accept_invalid_certificates\":false}},\"auth\":{\"$ref\":\"#/$defs/RestAuthConfig\",\"default\":{\"type\":\"none\"}},\"function_refs\":{\"type\":\"array\",\"items\":{\"type\":\"string\"},\"default\":[]},\"resources\":{\"type\":\"array\",\"items\":{\"$ref\":\"#/$defs/McpResourceRegistration\"},\"default\":[]},\"prompts\":{\"type\":\"array\",\"items\":{\"$ref\":\"#/$defs/McpPromptRegistration\"},\"default\":[]}},\"required\":[\"host\",\"port\"],\"$defs\":{\"TlsConfig\":{\"type\":\"object\",\"properties\":{\"secure\":{\"type\":\"boolean\",\"default\":false},\"certificate\":{\"anyOf\":[{\"$ref\":\"#/$defs/TlsCertificate\"},{\"type\":\"null\"}],\"default\":null},\"ca_certificate_pem\":{\"type\":[\"string\",\"null\"],\"default\":null},\"server_name\":{\"type\":[\"string\",\"null\"],\"default\":null},\"accept_invalid_certificates\":{\"type\":\"boolean\",\"default\":false}}},\"TlsCertificate\":{\"type\":\"object\",\"properties\":{\"certificate_pem\":{\"type\":\"string\"},\"private_key_pem\":{\"type\":\"string\"}},\"required\":[\"certificate_pem\",\"private_key_pem\"]},\"RestAuthConfig\":{\"oneOf\":[{\"type\":\"object\",\"properties\":{\"type\":{\"type\":\"string\",\"const\":\"none\"}},\"required\":[\"type\"]},{\"type\":\"object\",\"properties\":{\"header\":{\"type\":\"string\"},\"key\":{\"type\":\"string\"},\"type\":{\"type\":\"string\",\"const\":\"api_key\"}},\"required\":[\"type\",\"header\",\"key\"]},{\"type\":\"object\",\"properties\":{\"token\":{\"type\":\"string\"},\"type\":{\"type\":\"string\",\"const\":\"bearer_token\"}},\"required\":[\"type\",\"token\"]},{\"type\":\"object\",\"properties\":{\"username\":{\"type\":\"string\"},\"password\":{\"type\":\"string\"},\"type\":{\"type\":\"string\",\"const\":\"basic_auth\"}},\"required\":[\"type\",\"username\",\"password\"]},{\"type\":\"object\",\"properties\":{\"secret\":{\"type\":\"string\"},\"signature_header\":{\"type\":\"string\",\"default\":\"x-signature\"},\"timestamp_header\":{\"type\":\"string\",\"default\":\"x-timestamp\"},\"max_skew_seconds\":{\"type\":\"integer\",\"format\":\"uint64\",\"minimum\":0,\"default\":300},\"type\":{\"type\":\"string\",\"const\":\"hmac_sha256\"}},\"required\":[\"type\",\"secret\"]},{\"type\":\"object\",\"properties\":{\"issuer\":{\"type\":[\"string\",\"null\"],\"default\":null},\"audience\":{\"type\":[\"string\",\"null\"],\"default\":null},\"required_scopes\":{\"type\":\"array\",\"items\":{\"type\":\"string\"},\"default\":[]},\"jwks_url\":{\"type\":[\"string\",\"null\"],\"default\":null},\"jwks_flow_path\":{\"anyOf\":[{\"$ref\":\"#/$defs/FlowPath\"},{\"type\":\"null\"}],\"default\":null},\"oidc_discovery_url\":{\"type\":[\"string\",\"null\"],\"default\":null},\"type\":{\"type\":\"string\",\"const\":\"oauth_bearer\"}},\"required\":[\"type\"]}]},\"FlowPath\":{\"type\":\"object\",\"properties\":{\"path\":{\"type\":\"string\"},\"store_ref\":{\"type\":\"string\"},\"cache_store_ref\":{\"type\":[\"string\",\"null\"]}},\"required\":[\"path\",\"store_ref\"]},\"McpResourceRegistration\":{\"type\":\"object\",\"properties\":{\"uri\":{\"type\":\"string\"},\"name\":{\"type\":\"string\"},\"flow_path\":{\"$ref\":\"#/$defs/FlowPath\"},\"description\":{\"type\":[\"string\",\"null\"],\"default\":null},\"mime_type\":{\"type\":[\"string\",\"null\"],\"default\":null}},\"required\":[\"uri\",\"name\",\"flow_path\"]},\"McpPromptRegistration\":{\"type\":\"object\",\"properties\":{\"name\":{\"type\":\"string\"},\"description\":{\"type\":[\"string\",\"null\"],\"default\":null},\"template\":{\"type\":\"string\"}},\"required\":[\"name\",\"template\"]}}}"
+          "schema": "{\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"title\":\"McpServerConfig\",\"type\":\"object\",\"properties\":{\"host\":{\"type\":\"string\"},\"port\":{\"type\":\"integer\",\"format\":\"uint16\",\"minimum\":0,\"maximum\":65535},\"path\":{\"type\":\"string\",\"default\":\"/mcp\"},\"timeout_seconds\":{\"type\":\"integer\",\"format\":\"uint64\",\"minimum\":0,\"default\":0},\"max_connections\":{\"type\":\"integer\",\"format\":\"uint32\",\"minimum\":0,\"default\":128},\"max_body_bytes\":{\"type\":\"integer\",\"format\":\"uint\",\"minimum\":0,\"default\":10485760},\"tls\":{\"$ref\":\"#/$defs/TlsConfig\",\"default\":{\"secure\":false,\"certificate\":null,\"ca_certificate_pem\":null,\"server_name\":null,\"accept_invalid_certificates\":false}},\"auth\":{\"$ref\":\"#/$defs/RestAuthConfig\",\"default\":{\"type\":\"none\"}},\"flow_like_auth\":{\"type\":\"boolean\",\"default\":false},\"function_refs\":{\"type\":\"array\",\"items\":{\"type\":\"string\"},\"default\":[]},\"resources\":{\"type\":\"array\",\"items\":{\"$ref\":\"#/$defs/McpResourceRegistration\"},\"default\":[]},\"prompts\":{\"type\":\"array\",\"items\":{\"$ref\":\"#/$defs/McpPromptRegistration\"},\"default\":[]}},\"required\":[\"host\",\"port\"],\"$defs\":{\"TlsConfig\":{\"type\":\"object\",\"properties\":{\"secure\":{\"type\":\"boolean\",\"default\":false},\"certificate\":{\"anyOf\":[{\"$ref\":\"#/$defs/TlsCertificate\"},{\"type\":\"null\"}],\"default\":null},\"ca_certificate_pem\":{\"type\":[\"string\",\"null\"],\"default\":null},\"server_name\":{\"type\":[\"string\",\"null\"],\"default\":null},\"accept_invalid_certificates\":{\"type\":\"boolean\",\"default\":false}}},\"TlsCertificate\":{\"type\":\"object\",\"properties\":{\"certificate_pem\":{\"type\":\"string\"},\"private_key_pem\":{\"type\":\"string\"}},\"required\":[\"certificate_pem\",\"private_key_pem\"]},\"RestAuthConfig\":{\"oneOf\":[{\"type\":\"object\",\"properties\":{\"type\":{\"type\":\"string\",\"const\":\"none\"}},\"required\":[\"type\"]},{\"type\":\"object\",\"properties\":{\"header\":{\"type\":\"string\"},\"key\":{\"type\":\"string\"},\"type\":{\"type\":\"string\",\"const\":\"api_key\"}},\"required\":[\"type\",\"header\",\"key\"]},{\"type\":\"object\",\"properties\":{\"token\":{\"type\":\"string\"},\"type\":{\"type\":\"string\",\"const\":\"bearer_token\"}},\"required\":[\"type\",\"token\"]},{\"type\":\"object\",\"properties\":{\"username\":{\"type\":\"string\"},\"password\":{\"type\":\"string\"},\"type\":{\"type\":\"string\",\"const\":\"basic_auth\"}},\"required\":[\"type\",\"username\",\"password\"]},{\"type\":\"object\",\"properties\":{\"secret\":{\"type\":\"string\"},\"signature_header\":{\"type\":\"string\",\"default\":\"x-signature\"},\"timestamp_header\":{\"type\":\"string\",\"default\":\"x-timestamp\"},\"max_skew_seconds\":{\"type\":\"integer\",\"format\":\"uint64\",\"minimum\":0,\"default\":300},\"type\":{\"type\":\"string\",\"const\":\"hmac_sha256\"}},\"required\":[\"type\",\"secret\"]},{\"type\":\"object\",\"properties\":{\"issuer\":{\"type\":[\"string\",\"null\"],\"default\":null},\"audience\":{\"type\":[\"string\",\"null\"],\"default\":null},\"required_scopes\":{\"type\":\"array\",\"items\":{\"type\":\"string\"},\"default\":[]},\"jwks_url\":{\"type\":[\"string\",\"null\"],\"default\":null},\"jwks_flow_path\":{\"anyOf\":[{\"$ref\":\"#/$defs/FlowPath\"},{\"type\":\"null\"}],\"default\":null},\"oidc_discovery_url\":{\"type\":[\"string\",\"null\"],\"default\":null},\"type\":{\"type\":\"string\",\"const\":\"oauth_bearer\"}},\"required\":[\"type\"]}]},\"FlowPath\":{\"type\":\"object\",\"properties\":{\"path\":{\"type\":\"string\"},\"store_ref\":{\"type\":\"string\"},\"cache_store_ref\":{\"type\":[\"string\",\"null\"]}},\"required\":[\"path\",\"store_ref\"]},\"McpResourceRegistration\":{\"type\":\"object\",\"properties\":{\"uri\":{\"type\":\"string\"},\"name\":{\"type\":\"string\"},\"flow_path\":{\"$ref\":\"#/$defs/FlowPath\"},\"description\":{\"type\":[\"string\",\"null\"],\"default\":null},\"mime_type\":{\"type\":[\"string\",\"null\"],\"default\":null}},\"required\":[\"uri\",\"name\",\"flow_path\"]},\"McpPromptRegistration\":{\"type\":\"object\",\"properties\":{\"name\":{\"type\":\"string\"},\"description\":{\"type\":[\"string\",\"null\"],\"default\":null},\"template\":{\"type\":\"string\"}},\"required\":[\"name\",\"template\"]}}}"
         }
       ],
       "outputs": [
@@ -70970,7 +72520,7 @@
           },
           "optional": false,
           "doc": "Updated config",
-          "schema": "{\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"title\":\"McpServerConfig\",\"type\":\"object\",\"properties\":{\"host\":{\"type\":\"string\"},\"port\":{\"type\":\"integer\",\"format\":\"uint16\",\"minimum\":0,\"maximum\":65535},\"path\":{\"type\":\"string\",\"default\":\"/mcp\"},\"timeout_seconds\":{\"type\":\"integer\",\"format\":\"uint64\",\"minimum\":0,\"default\":0},\"max_connections\":{\"type\":\"integer\",\"format\":\"uint32\",\"minimum\":0,\"default\":128},\"max_body_bytes\":{\"type\":\"integer\",\"format\":\"uint\",\"minimum\":0,\"default\":10485760},\"tls\":{\"$ref\":\"#/$defs/TlsConfig\",\"default\":{\"secure\":false,\"certificate\":null,\"ca_certificate_pem\":null,\"server_name\":null,\"accept_invalid_certificates\":false}},\"auth\":{\"$ref\":\"#/$defs/RestAuthConfig\",\"default\":{\"type\":\"none\"}},\"function_refs\":{\"type\":\"array\",\"items\":{\"type\":\"string\"},\"default\":[]},\"resources\":{\"type\":\"array\",\"items\":{\"$ref\":\"#/$defs/McpResourceRegistration\"},\"default\":[]},\"prompts\":{\"type\":\"array\",\"items\":{\"$ref\":\"#/$defs/McpPromptRegistration\"},\"default\":[]}},\"required\":[\"host\",\"port\"],\"$defs\":{\"TlsConfig\":{\"type\":\"object\",\"properties\":{\"secure\":{\"type\":\"boolean\",\"default\":false},\"certificate\":{\"anyOf\":[{\"$ref\":\"#/$defs/TlsCertificate\"},{\"type\":\"null\"}],\"default\":null},\"ca_certificate_pem\":{\"type\":[\"string\",\"null\"],\"default\":null},\"server_name\":{\"type\":[\"string\",\"null\"],\"default\":null},\"accept_invalid_certificates\":{\"type\":\"boolean\",\"default\":false}}},\"TlsCertificate\":{\"type\":\"object\",\"properties\":{\"certificate_pem\":{\"type\":\"string\"},\"private_key_pem\":{\"type\":\"string\"}},\"required\":[\"certificate_pem\",\"private_key_pem\"]},\"RestAuthConfig\":{\"oneOf\":[{\"type\":\"object\",\"properties\":{\"type\":{\"type\":\"string\",\"const\":\"none\"}},\"required\":[\"type\"]},{\"type\":\"object\",\"properties\":{\"header\":{\"type\":\"string\"},\"key\":{\"type\":\"string\"},\"type\":{\"type\":\"string\",\"const\":\"api_key\"}},\"required\":[\"type\",\"header\",\"key\"]},{\"type\":\"object\",\"properties\":{\"token\":{\"type\":\"string\"},\"type\":{\"type\":\"string\",\"const\":\"bearer_token\"}},\"required\":[\"type\",\"token\"]},{\"type\":\"object\",\"properties\":{\"username\":{\"type\":\"string\"},\"password\":{\"type\":\"string\"},\"type\":{\"type\":\"string\",\"const\":\"basic_auth\"}},\"required\":[\"type\",\"username\",\"password\"]},{\"type\":\"object\",\"properties\":{\"secret\":{\"type\":\"string\"},\"signature_header\":{\"type\":\"string\",\"default\":\"x-signature\"},\"timestamp_header\":{\"type\":\"string\",\"default\":\"x-timestamp\"},\"max_skew_seconds\":{\"type\":\"integer\",\"format\":\"uint64\",\"minimum\":0,\"default\":300},\"type\":{\"type\":\"string\",\"const\":\"hmac_sha256\"}},\"required\":[\"type\",\"secret\"]},{\"type\":\"object\",\"properties\":{\"issuer\":{\"type\":[\"string\",\"null\"],\"default\":null},\"audience\":{\"type\":[\"string\",\"null\"],\"default\":null},\"required_scopes\":{\"type\":\"array\",\"items\":{\"type\":\"string\"},\"default\":[]},\"jwks_url\":{\"type\":[\"string\",\"null\"],\"default\":null},\"jwks_flow_path\":{\"anyOf\":[{\"$ref\":\"#/$defs/FlowPath\"},{\"type\":\"null\"}],\"default\":null},\"oidc_discovery_url\":{\"type\":[\"string\",\"null\"],\"default\":null},\"type\":{\"type\":\"string\",\"const\":\"oauth_bearer\"}},\"required\":[\"type\"]}]},\"FlowPath\":{\"type\":\"object\",\"properties\":{\"path\":{\"type\":\"string\"},\"store_ref\":{\"type\":\"string\"},\"cache_store_ref\":{\"type\":[\"string\",\"null\"]}},\"required\":[\"path\",\"store_ref\"]},\"McpResourceRegistration\":{\"type\":\"object\",\"properties\":{\"uri\":{\"type\":\"string\"},\"name\":{\"type\":\"string\"},\"flow_path\":{\"$ref\":\"#/$defs/FlowPath\"},\"description\":{\"type\":[\"string\",\"null\"],\"default\":null},\"mime_type\":{\"type\":[\"string\",\"null\"],\"default\":null}},\"required\":[\"uri\",\"name\",\"flow_path\"]},\"McpPromptRegistration\":{\"type\":\"object\",\"properties\":{\"name\":{\"type\":\"string\"},\"description\":{\"type\":[\"string\",\"null\"],\"default\":null},\"template\":{\"type\":\"string\"}},\"required\":[\"name\",\"template\"]}}}"
+          "schema": "{\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"title\":\"McpServerConfig\",\"type\":\"object\",\"properties\":{\"host\":{\"type\":\"string\"},\"port\":{\"type\":\"integer\",\"format\":\"uint16\",\"minimum\":0,\"maximum\":65535},\"path\":{\"type\":\"string\",\"default\":\"/mcp\"},\"timeout_seconds\":{\"type\":\"integer\",\"format\":\"uint64\",\"minimum\":0,\"default\":0},\"max_connections\":{\"type\":\"integer\",\"format\":\"uint32\",\"minimum\":0,\"default\":128},\"max_body_bytes\":{\"type\":\"integer\",\"format\":\"uint\",\"minimum\":0,\"default\":10485760},\"tls\":{\"$ref\":\"#/$defs/TlsConfig\",\"default\":{\"secure\":false,\"certificate\":null,\"ca_certificate_pem\":null,\"server_name\":null,\"accept_invalid_certificates\":false}},\"auth\":{\"$ref\":\"#/$defs/RestAuthConfig\",\"default\":{\"type\":\"none\"}},\"flow_like_auth\":{\"type\":\"boolean\",\"default\":false},\"function_refs\":{\"type\":\"array\",\"items\":{\"type\":\"string\"},\"default\":[]},\"resources\":{\"type\":\"array\",\"items\":{\"$ref\":\"#/$defs/McpResourceRegistration\"},\"default\":[]},\"prompts\":{\"type\":\"array\",\"items\":{\"$ref\":\"#/$defs/McpPromptRegistration\"},\"default\":[]}},\"required\":[\"host\",\"port\"],\"$defs\":{\"TlsConfig\":{\"type\":\"object\",\"properties\":{\"secure\":{\"type\":\"boolean\",\"default\":false},\"certificate\":{\"anyOf\":[{\"$ref\":\"#/$defs/TlsCertificate\"},{\"type\":\"null\"}],\"default\":null},\"ca_certificate_pem\":{\"type\":[\"string\",\"null\"],\"default\":null},\"server_name\":{\"type\":[\"string\",\"null\"],\"default\":null},\"accept_invalid_certificates\":{\"type\":\"boolean\",\"default\":false}}},\"TlsCertificate\":{\"type\":\"object\",\"properties\":{\"certificate_pem\":{\"type\":\"string\"},\"private_key_pem\":{\"type\":\"string\"}},\"required\":[\"certificate_pem\",\"private_key_pem\"]},\"RestAuthConfig\":{\"oneOf\":[{\"type\":\"object\",\"properties\":{\"type\":{\"type\":\"string\",\"const\":\"none\"}},\"required\":[\"type\"]},{\"type\":\"object\",\"properties\":{\"header\":{\"type\":\"string\"},\"key\":{\"type\":\"string\"},\"type\":{\"type\":\"string\",\"const\":\"api_key\"}},\"required\":[\"type\",\"header\",\"key\"]},{\"type\":\"object\",\"properties\":{\"token\":{\"type\":\"string\"},\"type\":{\"type\":\"string\",\"const\":\"bearer_token\"}},\"required\":[\"type\",\"token\"]},{\"type\":\"object\",\"properties\":{\"username\":{\"type\":\"string\"},\"password\":{\"type\":\"string\"},\"type\":{\"type\":\"string\",\"const\":\"basic_auth\"}},\"required\":[\"type\",\"username\",\"password\"]},{\"type\":\"object\",\"properties\":{\"secret\":{\"type\":\"string\"},\"signature_header\":{\"type\":\"string\",\"default\":\"x-signature\"},\"timestamp_header\":{\"type\":\"string\",\"default\":\"x-timestamp\"},\"max_skew_seconds\":{\"type\":\"integer\",\"format\":\"uint64\",\"minimum\":0,\"default\":300},\"type\":{\"type\":\"string\",\"const\":\"hmac_sha256\"}},\"required\":[\"type\",\"secret\"]},{\"type\":\"object\",\"properties\":{\"issuer\":{\"type\":[\"string\",\"null\"],\"default\":null},\"audience\":{\"type\":[\"string\",\"null\"],\"default\":null},\"required_scopes\":{\"type\":\"array\",\"items\":{\"type\":\"string\"},\"default\":[]},\"jwks_url\":{\"type\":[\"string\",\"null\"],\"default\":null},\"jwks_flow_path\":{\"anyOf\":[{\"$ref\":\"#/$defs/FlowPath\"},{\"type\":\"null\"}],\"default\":null},\"oidc_discovery_url\":{\"type\":[\"string\",\"null\"],\"default\":null},\"type\":{\"type\":\"string\",\"const\":\"oauth_bearer\"}},\"required\":[\"type\"]}]},\"FlowPath\":{\"type\":\"object\",\"properties\":{\"path\":{\"type\":\"string\"},\"store_ref\":{\"type\":\"string\"},\"cache_store_ref\":{\"type\":[\"string\",\"null\"]}},\"required\":[\"path\",\"store_ref\"]},\"McpResourceRegistration\":{\"type\":\"object\",\"properties\":{\"uri\":{\"type\":\"string\"},\"name\":{\"type\":\"string\"},\"flow_path\":{\"$ref\":\"#/$defs/FlowPath\"},\"description\":{\"type\":[\"string\",\"null\"],\"default\":null},\"mime_type\":{\"type\":[\"string\",\"null\"],\"default\":null}},\"required\":[\"uri\",\"name\",\"flow_path\"]},\"McpPromptRegistration\":{\"type\":\"object\",\"properties\":{\"name\":{\"type\":\"string\"},\"description\":{\"type\":[\"string\",\"null\"],\"default\":null},\"template\":{\"type\":\"string\"}},\"required\":[\"name\",\"template\"]}}}"
         }
       ],
       "impure": false,
@@ -70993,7 +72543,7 @@
           },
           "optional": false,
           "doc": "MCP server config",
-          "schema": "{\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"title\":\"McpServerConfig\",\"type\":\"object\",\"properties\":{\"host\":{\"type\":\"string\"},\"port\":{\"type\":\"integer\",\"format\":\"uint16\",\"minimum\":0,\"maximum\":65535},\"path\":{\"type\":\"string\",\"default\":\"/mcp\"},\"timeout_seconds\":{\"type\":\"integer\",\"format\":\"uint64\",\"minimum\":0,\"default\":0},\"max_connections\":{\"type\":\"integer\",\"format\":\"uint32\",\"minimum\":0,\"default\":128},\"max_body_bytes\":{\"type\":\"integer\",\"format\":\"uint\",\"minimum\":0,\"default\":10485760},\"tls\":{\"$ref\":\"#/$defs/TlsConfig\",\"default\":{\"secure\":false,\"certificate\":null,\"ca_certificate_pem\":null,\"server_name\":null,\"accept_invalid_certificates\":false}},\"auth\":{\"$ref\":\"#/$defs/RestAuthConfig\",\"default\":{\"type\":\"none\"}},\"function_refs\":{\"type\":\"array\",\"items\":{\"type\":\"string\"},\"default\":[]},\"resources\":{\"type\":\"array\",\"items\":{\"$ref\":\"#/$defs/McpResourceRegistration\"},\"default\":[]},\"prompts\":{\"type\":\"array\",\"items\":{\"$ref\":\"#/$defs/McpPromptRegistration\"},\"default\":[]}},\"required\":[\"host\",\"port\"],\"$defs\":{\"TlsConfig\":{\"type\":\"object\",\"properties\":{\"secure\":{\"type\":\"boolean\",\"default\":false},\"certificate\":{\"anyOf\":[{\"$ref\":\"#/$defs/TlsCertificate\"},{\"type\":\"null\"}],\"default\":null},\"ca_certificate_pem\":{\"type\":[\"string\",\"null\"],\"default\":null},\"server_name\":{\"type\":[\"string\",\"null\"],\"default\":null},\"accept_invalid_certificates\":{\"type\":\"boolean\",\"default\":false}}},\"TlsCertificate\":{\"type\":\"object\",\"properties\":{\"certificate_pem\":{\"type\":\"string\"},\"private_key_pem\":{\"type\":\"string\"}},\"required\":[\"certificate_pem\",\"private_key_pem\"]},\"RestAuthConfig\":{\"oneOf\":[{\"type\":\"object\",\"properties\":{\"type\":{\"type\":\"string\",\"const\":\"none\"}},\"required\":[\"type\"]},{\"type\":\"object\",\"properties\":{\"header\":{\"type\":\"string\"},\"key\":{\"type\":\"string\"},\"type\":{\"type\":\"string\",\"const\":\"api_key\"}},\"required\":[\"type\",\"header\",\"key\"]},{\"type\":\"object\",\"properties\":{\"token\":{\"type\":\"string\"},\"type\":{\"type\":\"string\",\"const\":\"bearer_token\"}},\"required\":[\"type\",\"token\"]},{\"type\":\"object\",\"properties\":{\"username\":{\"type\":\"string\"},\"password\":{\"type\":\"string\"},\"type\":{\"type\":\"string\",\"const\":\"basic_auth\"}},\"required\":[\"type\",\"username\",\"password\"]},{\"type\":\"object\",\"properties\":{\"secret\":{\"type\":\"string\"},\"signature_header\":{\"type\":\"string\",\"default\":\"x-signature\"},\"timestamp_header\":{\"type\":\"string\",\"default\":\"x-timestamp\"},\"max_skew_seconds\":{\"type\":\"integer\",\"format\":\"uint64\",\"minimum\":0,\"default\":300},\"type\":{\"type\":\"string\",\"const\":\"hmac_sha256\"}},\"required\":[\"type\",\"secret\"]},{\"type\":\"object\",\"properties\":{\"issuer\":{\"type\":[\"string\",\"null\"],\"default\":null},\"audience\":{\"type\":[\"string\",\"null\"],\"default\":null},\"required_scopes\":{\"type\":\"array\",\"items\":{\"type\":\"string\"},\"default\":[]},\"jwks_url\":{\"type\":[\"string\",\"null\"],\"default\":null},\"jwks_flow_path\":{\"anyOf\":[{\"$ref\":\"#/$defs/FlowPath\"},{\"type\":\"null\"}],\"default\":null},\"oidc_discovery_url\":{\"type\":[\"string\",\"null\"],\"default\":null},\"type\":{\"type\":\"string\",\"const\":\"oauth_bearer\"}},\"required\":[\"type\"]}]},\"FlowPath\":{\"type\":\"object\",\"properties\":{\"path\":{\"type\":\"string\"},\"store_ref\":{\"type\":\"string\"},\"cache_store_ref\":{\"type\":[\"string\",\"null\"]}},\"required\":[\"path\",\"store_ref\"]},\"McpResourceRegistration\":{\"type\":\"object\",\"properties\":{\"uri\":{\"type\":\"string\"},\"name\":{\"type\":\"string\"},\"flow_path\":{\"$ref\":\"#/$defs/FlowPath\"},\"description\":{\"type\":[\"string\",\"null\"],\"default\":null},\"mime_type\":{\"type\":[\"string\",\"null\"],\"default\":null}},\"required\":[\"uri\",\"name\",\"flow_path\"]},\"McpPromptRegistration\":{\"type\":\"object\",\"properties\":{\"name\":{\"type\":\"string\"},\"description\":{\"type\":[\"string\",\"null\"],\"default\":null},\"template\":{\"type\":\"string\"}},\"required\":[\"name\",\"template\"]}}}"
+          "schema": "{\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"title\":\"McpServerConfig\",\"type\":\"object\",\"properties\":{\"host\":{\"type\":\"string\"},\"port\":{\"type\":\"integer\",\"format\":\"uint16\",\"minimum\":0,\"maximum\":65535},\"path\":{\"type\":\"string\",\"default\":\"/mcp\"},\"timeout_seconds\":{\"type\":\"integer\",\"format\":\"uint64\",\"minimum\":0,\"default\":0},\"max_connections\":{\"type\":\"integer\",\"format\":\"uint32\",\"minimum\":0,\"default\":128},\"max_body_bytes\":{\"type\":\"integer\",\"format\":\"uint\",\"minimum\":0,\"default\":10485760},\"tls\":{\"$ref\":\"#/$defs/TlsConfig\",\"default\":{\"secure\":false,\"certificate\":null,\"ca_certificate_pem\":null,\"server_name\":null,\"accept_invalid_certificates\":false}},\"auth\":{\"$ref\":\"#/$defs/RestAuthConfig\",\"default\":{\"type\":\"none\"}},\"flow_like_auth\":{\"type\":\"boolean\",\"default\":false},\"function_refs\":{\"type\":\"array\",\"items\":{\"type\":\"string\"},\"default\":[]},\"resources\":{\"type\":\"array\",\"items\":{\"$ref\":\"#/$defs/McpResourceRegistration\"},\"default\":[]},\"prompts\":{\"type\":\"array\",\"items\":{\"$ref\":\"#/$defs/McpPromptRegistration\"},\"default\":[]}},\"required\":[\"host\",\"port\"],\"$defs\":{\"TlsConfig\":{\"type\":\"object\",\"properties\":{\"secure\":{\"type\":\"boolean\",\"default\":false},\"certificate\":{\"anyOf\":[{\"$ref\":\"#/$defs/TlsCertificate\"},{\"type\":\"null\"}],\"default\":null},\"ca_certificate_pem\":{\"type\":[\"string\",\"null\"],\"default\":null},\"server_name\":{\"type\":[\"string\",\"null\"],\"default\":null},\"accept_invalid_certificates\":{\"type\":\"boolean\",\"default\":false}}},\"TlsCertificate\":{\"type\":\"object\",\"properties\":{\"certificate_pem\":{\"type\":\"string\"},\"private_key_pem\":{\"type\":\"string\"}},\"required\":[\"certificate_pem\",\"private_key_pem\"]},\"RestAuthConfig\":{\"oneOf\":[{\"type\":\"object\",\"properties\":{\"type\":{\"type\":\"string\",\"const\":\"none\"}},\"required\":[\"type\"]},{\"type\":\"object\",\"properties\":{\"header\":{\"type\":\"string\"},\"key\":{\"type\":\"string\"},\"type\":{\"type\":\"string\",\"const\":\"api_key\"}},\"required\":[\"type\",\"header\",\"key\"]},{\"type\":\"object\",\"properties\":{\"token\":{\"type\":\"string\"},\"type\":{\"type\":\"string\",\"const\":\"bearer_token\"}},\"required\":[\"type\",\"token\"]},{\"type\":\"object\",\"properties\":{\"username\":{\"type\":\"string\"},\"password\":{\"type\":\"string\"},\"type\":{\"type\":\"string\",\"const\":\"basic_auth\"}},\"required\":[\"type\",\"username\",\"password\"]},{\"type\":\"object\",\"properties\":{\"secret\":{\"type\":\"string\"},\"signature_header\":{\"type\":\"string\",\"default\":\"x-signature\"},\"timestamp_header\":{\"type\":\"string\",\"default\":\"x-timestamp\"},\"max_skew_seconds\":{\"type\":\"integer\",\"format\":\"uint64\",\"minimum\":0,\"default\":300},\"type\":{\"type\":\"string\",\"const\":\"hmac_sha256\"}},\"required\":[\"type\",\"secret\"]},{\"type\":\"object\",\"properties\":{\"issuer\":{\"type\":[\"string\",\"null\"],\"default\":null},\"audience\":{\"type\":[\"string\",\"null\"],\"default\":null},\"required_scopes\":{\"type\":\"array\",\"items\":{\"type\":\"string\"},\"default\":[]},\"jwks_url\":{\"type\":[\"string\",\"null\"],\"default\":null},\"jwks_flow_path\":{\"anyOf\":[{\"$ref\":\"#/$defs/FlowPath\"},{\"type\":\"null\"}],\"default\":null},\"oidc_discovery_url\":{\"type\":[\"string\",\"null\"],\"default\":null},\"type\":{\"type\":\"string\",\"const\":\"oauth_bearer\"}},\"required\":[\"type\"]}]},\"FlowPath\":{\"type\":\"object\",\"properties\":{\"path\":{\"type\":\"string\"},\"store_ref\":{\"type\":\"string\"},\"cache_store_ref\":{\"type\":[\"string\",\"null\"]}},\"required\":[\"path\",\"store_ref\"]},\"McpResourceRegistration\":{\"type\":\"object\",\"properties\":{\"uri\":{\"type\":\"string\"},\"name\":{\"type\":\"string\"},\"flow_path\":{\"$ref\":\"#/$defs/FlowPath\"},\"description\":{\"type\":[\"string\",\"null\"],\"default\":null},\"mime_type\":{\"type\":[\"string\",\"null\"],\"default\":null}},\"required\":[\"uri\",\"name\",\"flow_path\"]},\"McpPromptRegistration\":{\"type\":\"object\",\"properties\":{\"name\":{\"type\":\"string\"},\"description\":{\"type\":[\"string\",\"null\"],\"default\":null},\"template\":{\"type\":\"string\"}},\"required\":[\"name\",\"template\"]}}}"
         },
         {
           "name": "name",
@@ -71032,7 +72582,7 @@
           },
           "optional": false,
           "doc": "Updated config",
-          "schema": "{\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"title\":\"McpServerConfig\",\"type\":\"object\",\"properties\":{\"host\":{\"type\":\"string\"},\"port\":{\"type\":\"integer\",\"format\":\"uint16\",\"minimum\":0,\"maximum\":65535},\"path\":{\"type\":\"string\",\"default\":\"/mcp\"},\"timeout_seconds\":{\"type\":\"integer\",\"format\":\"uint64\",\"minimum\":0,\"default\":0},\"max_connections\":{\"type\":\"integer\",\"format\":\"uint32\",\"minimum\":0,\"default\":128},\"max_body_bytes\":{\"type\":\"integer\",\"format\":\"uint\",\"minimum\":0,\"default\":10485760},\"tls\":{\"$ref\":\"#/$defs/TlsConfig\",\"default\":{\"secure\":false,\"certificate\":null,\"ca_certificate_pem\":null,\"server_name\":null,\"accept_invalid_certificates\":false}},\"auth\":{\"$ref\":\"#/$defs/RestAuthConfig\",\"default\":{\"type\":\"none\"}},\"function_refs\":{\"type\":\"array\",\"items\":{\"type\":\"string\"},\"default\":[]},\"resources\":{\"type\":\"array\",\"items\":{\"$ref\":\"#/$defs/McpResourceRegistration\"},\"default\":[]},\"prompts\":{\"type\":\"array\",\"items\":{\"$ref\":\"#/$defs/McpPromptRegistration\"},\"default\":[]}},\"required\":[\"host\",\"port\"],\"$defs\":{\"TlsConfig\":{\"type\":\"object\",\"properties\":{\"secure\":{\"type\":\"boolean\",\"default\":false},\"certificate\":{\"anyOf\":[{\"$ref\":\"#/$defs/TlsCertificate\"},{\"type\":\"null\"}],\"default\":null},\"ca_certificate_pem\":{\"type\":[\"string\",\"null\"],\"default\":null},\"server_name\":{\"type\":[\"string\",\"null\"],\"default\":null},\"accept_invalid_certificates\":{\"type\":\"boolean\",\"default\":false}}},\"TlsCertificate\":{\"type\":\"object\",\"properties\":{\"certificate_pem\":{\"type\":\"string\"},\"private_key_pem\":{\"type\":\"string\"}},\"required\":[\"certificate_pem\",\"private_key_pem\"]},\"RestAuthConfig\":{\"oneOf\":[{\"type\":\"object\",\"properties\":{\"type\":{\"type\":\"string\",\"const\":\"none\"}},\"required\":[\"type\"]},{\"type\":\"object\",\"properties\":{\"header\":{\"type\":\"string\"},\"key\":{\"type\":\"string\"},\"type\":{\"type\":\"string\",\"const\":\"api_key\"}},\"required\":[\"type\",\"header\",\"key\"]},{\"type\":\"object\",\"properties\":{\"token\":{\"type\":\"string\"},\"type\":{\"type\":\"string\",\"const\":\"bearer_token\"}},\"required\":[\"type\",\"token\"]},{\"type\":\"object\",\"properties\":{\"username\":{\"type\":\"string\"},\"password\":{\"type\":\"string\"},\"type\":{\"type\":\"string\",\"const\":\"basic_auth\"}},\"required\":[\"type\",\"username\",\"password\"]},{\"type\":\"object\",\"properties\":{\"secret\":{\"type\":\"string\"},\"signature_header\":{\"type\":\"string\",\"default\":\"x-signature\"},\"timestamp_header\":{\"type\":\"string\",\"default\":\"x-timestamp\"},\"max_skew_seconds\":{\"type\":\"integer\",\"format\":\"uint64\",\"minimum\":0,\"default\":300},\"type\":{\"type\":\"string\",\"const\":\"hmac_sha256\"}},\"required\":[\"type\",\"secret\"]},{\"type\":\"object\",\"properties\":{\"issuer\":{\"type\":[\"string\",\"null\"],\"default\":null},\"audience\":{\"type\":[\"string\",\"null\"],\"default\":null},\"required_scopes\":{\"type\":\"array\",\"items\":{\"type\":\"string\"},\"default\":[]},\"jwks_url\":{\"type\":[\"string\",\"null\"],\"default\":null},\"jwks_flow_path\":{\"anyOf\":[{\"$ref\":\"#/$defs/FlowPath\"},{\"type\":\"null\"}],\"default\":null},\"oidc_discovery_url\":{\"type\":[\"string\",\"null\"],\"default\":null},\"type\":{\"type\":\"string\",\"const\":\"oauth_bearer\"}},\"required\":[\"type\"]}]},\"FlowPath\":{\"type\":\"object\",\"properties\":{\"path\":{\"type\":\"string\"},\"store_ref\":{\"type\":\"string\"},\"cache_store_ref\":{\"type\":[\"string\",\"null\"]}},\"required\":[\"path\",\"store_ref\"]},\"McpResourceRegistration\":{\"type\":\"object\",\"properties\":{\"uri\":{\"type\":\"string\"},\"name\":{\"type\":\"string\"},\"flow_path\":{\"$ref\":\"#/$defs/FlowPath\"},\"description\":{\"type\":[\"string\",\"null\"],\"default\":null},\"mime_type\":{\"type\":[\"string\",\"null\"],\"default\":null}},\"required\":[\"uri\",\"name\",\"flow_path\"]},\"McpPromptRegistration\":{\"type\":\"object\",\"properties\":{\"name\":{\"type\":\"string\"},\"description\":{\"type\":[\"string\",\"null\"],\"default\":null},\"template\":{\"type\":\"string\"}},\"required\":[\"name\",\"template\"]}}}"
+          "schema": "{\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"title\":\"McpServerConfig\",\"type\":\"object\",\"properties\":{\"host\":{\"type\":\"string\"},\"port\":{\"type\":\"integer\",\"format\":\"uint16\",\"minimum\":0,\"maximum\":65535},\"path\":{\"type\":\"string\",\"default\":\"/mcp\"},\"timeout_seconds\":{\"type\":\"integer\",\"format\":\"uint64\",\"minimum\":0,\"default\":0},\"max_connections\":{\"type\":\"integer\",\"format\":\"uint32\",\"minimum\":0,\"default\":128},\"max_body_bytes\":{\"type\":\"integer\",\"format\":\"uint\",\"minimum\":0,\"default\":10485760},\"tls\":{\"$ref\":\"#/$defs/TlsConfig\",\"default\":{\"secure\":false,\"certificate\":null,\"ca_certificate_pem\":null,\"server_name\":null,\"accept_invalid_certificates\":false}},\"auth\":{\"$ref\":\"#/$defs/RestAuthConfig\",\"default\":{\"type\":\"none\"}},\"flow_like_auth\":{\"type\":\"boolean\",\"default\":false},\"function_refs\":{\"type\":\"array\",\"items\":{\"type\":\"string\"},\"default\":[]},\"resources\":{\"type\":\"array\",\"items\":{\"$ref\":\"#/$defs/McpResourceRegistration\"},\"default\":[]},\"prompts\":{\"type\":\"array\",\"items\":{\"$ref\":\"#/$defs/McpPromptRegistration\"},\"default\":[]}},\"required\":[\"host\",\"port\"],\"$defs\":{\"TlsConfig\":{\"type\":\"object\",\"properties\":{\"secure\":{\"type\":\"boolean\",\"default\":false},\"certificate\":{\"anyOf\":[{\"$ref\":\"#/$defs/TlsCertificate\"},{\"type\":\"null\"}],\"default\":null},\"ca_certificate_pem\":{\"type\":[\"string\",\"null\"],\"default\":null},\"server_name\":{\"type\":[\"string\",\"null\"],\"default\":null},\"accept_invalid_certificates\":{\"type\":\"boolean\",\"default\":false}}},\"TlsCertificate\":{\"type\":\"object\",\"properties\":{\"certificate_pem\":{\"type\":\"string\"},\"private_key_pem\":{\"type\":\"string\"}},\"required\":[\"certificate_pem\",\"private_key_pem\"]},\"RestAuthConfig\":{\"oneOf\":[{\"type\":\"object\",\"properties\":{\"type\":{\"type\":\"string\",\"const\":\"none\"}},\"required\":[\"type\"]},{\"type\":\"object\",\"properties\":{\"header\":{\"type\":\"string\"},\"key\":{\"type\":\"string\"},\"type\":{\"type\":\"string\",\"const\":\"api_key\"}},\"required\":[\"type\",\"header\",\"key\"]},{\"type\":\"object\",\"properties\":{\"token\":{\"type\":\"string\"},\"type\":{\"type\":\"string\",\"const\":\"bearer_token\"}},\"required\":[\"type\",\"token\"]},{\"type\":\"object\",\"properties\":{\"username\":{\"type\":\"string\"},\"password\":{\"type\":\"string\"},\"type\":{\"type\":\"string\",\"const\":\"basic_auth\"}},\"required\":[\"type\",\"username\",\"password\"]},{\"type\":\"object\",\"properties\":{\"secret\":{\"type\":\"string\"},\"signature_header\":{\"type\":\"string\",\"default\":\"x-signature\"},\"timestamp_header\":{\"type\":\"string\",\"default\":\"x-timestamp\"},\"max_skew_seconds\":{\"type\":\"integer\",\"format\":\"uint64\",\"minimum\":0,\"default\":300},\"type\":{\"type\":\"string\",\"const\":\"hmac_sha256\"}},\"required\":[\"type\",\"secret\"]},{\"type\":\"object\",\"properties\":{\"issuer\":{\"type\":[\"string\",\"null\"],\"default\":null},\"audience\":{\"type\":[\"string\",\"null\"],\"default\":null},\"required_scopes\":{\"type\":\"array\",\"items\":{\"type\":\"string\"},\"default\":[]},\"jwks_url\":{\"type\":[\"string\",\"null\"],\"default\":null},\"jwks_flow_path\":{\"anyOf\":[{\"$ref\":\"#/$defs/FlowPath\"},{\"type\":\"null\"}],\"default\":null},\"oidc_discovery_url\":{\"type\":[\"string\",\"null\"],\"default\":null},\"type\":{\"type\":\"string\",\"const\":\"oauth_bearer\"}},\"required\":[\"type\"]}]},\"FlowPath\":{\"type\":\"object\",\"properties\":{\"path\":{\"type\":\"string\"},\"store_ref\":{\"type\":\"string\"},\"cache_store_ref\":{\"type\":[\"string\",\"null\"]}},\"required\":[\"path\",\"store_ref\"]},\"McpResourceRegistration\":{\"type\":\"object\",\"properties\":{\"uri\":{\"type\":\"string\"},\"name\":{\"type\":\"string\"},\"flow_path\":{\"$ref\":\"#/$defs/FlowPath\"},\"description\":{\"type\":[\"string\",\"null\"],\"default\":null},\"mime_type\":{\"type\":[\"string\",\"null\"],\"default\":null}},\"required\":[\"uri\",\"name\",\"flow_path\"]},\"McpPromptRegistration\":{\"type\":\"object\",\"properties\":{\"name\":{\"type\":\"string\"},\"description\":{\"type\":[\"string\",\"null\"],\"default\":null},\"template\":{\"type\":\"string\"}},\"required\":[\"name\",\"template\"]}}}"
         }
       ],
       "impure": false,
@@ -71055,7 +72605,7 @@
           },
           "optional": false,
           "doc": "MCP server config",
-          "schema": "{\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"title\":\"McpServerConfig\",\"type\":\"object\",\"properties\":{\"host\":{\"type\":\"string\"},\"port\":{\"type\":\"integer\",\"format\":\"uint16\",\"minimum\":0,\"maximum\":65535},\"path\":{\"type\":\"string\",\"default\":\"/mcp\"},\"timeout_seconds\":{\"type\":\"integer\",\"format\":\"uint64\",\"minimum\":0,\"default\":0},\"max_connections\":{\"type\":\"integer\",\"format\":\"uint32\",\"minimum\":0,\"default\":128},\"max_body_bytes\":{\"type\":\"integer\",\"format\":\"uint\",\"minimum\":0,\"default\":10485760},\"tls\":{\"$ref\":\"#/$defs/TlsConfig\",\"default\":{\"secure\":false,\"certificate\":null,\"ca_certificate_pem\":null,\"server_name\":null,\"accept_invalid_certificates\":false}},\"auth\":{\"$ref\":\"#/$defs/RestAuthConfig\",\"default\":{\"type\":\"none\"}},\"function_refs\":{\"type\":\"array\",\"items\":{\"type\":\"string\"},\"default\":[]},\"resources\":{\"type\":\"array\",\"items\":{\"$ref\":\"#/$defs/McpResourceRegistration\"},\"default\":[]},\"prompts\":{\"type\":\"array\",\"items\":{\"$ref\":\"#/$defs/McpPromptRegistration\"},\"default\":[]}},\"required\":[\"host\",\"port\"],\"$defs\":{\"TlsConfig\":{\"type\":\"object\",\"properties\":{\"secure\":{\"type\":\"boolean\",\"default\":false},\"certificate\":{\"anyOf\":[{\"$ref\":\"#/$defs/TlsCertificate\"},{\"type\":\"null\"}],\"default\":null},\"ca_certificate_pem\":{\"type\":[\"string\",\"null\"],\"default\":null},\"server_name\":{\"type\":[\"string\",\"null\"],\"default\":null},\"accept_invalid_certificates\":{\"type\":\"boolean\",\"default\":false}}},\"TlsCertificate\":{\"type\":\"object\",\"properties\":{\"certificate_pem\":{\"type\":\"string\"},\"private_key_pem\":{\"type\":\"string\"}},\"required\":[\"certificate_pem\",\"private_key_pem\"]},\"RestAuthConfig\":{\"oneOf\":[{\"type\":\"object\",\"properties\":{\"type\":{\"type\":\"string\",\"const\":\"none\"}},\"required\":[\"type\"]},{\"type\":\"object\",\"properties\":{\"header\":{\"type\":\"string\"},\"key\":{\"type\":\"string\"},\"type\":{\"type\":\"string\",\"const\":\"api_key\"}},\"required\":[\"type\",\"header\",\"key\"]},{\"type\":\"object\",\"properties\":{\"token\":{\"type\":\"string\"},\"type\":{\"type\":\"string\",\"const\":\"bearer_token\"}},\"required\":[\"type\",\"token\"]},{\"type\":\"object\",\"properties\":{\"username\":{\"type\":\"string\"},\"password\":{\"type\":\"string\"},\"type\":{\"type\":\"string\",\"const\":\"basic_auth\"}},\"required\":[\"type\",\"username\",\"password\"]},{\"type\":\"object\",\"properties\":{\"secret\":{\"type\":\"string\"},\"signature_header\":{\"type\":\"string\",\"default\":\"x-signature\"},\"timestamp_header\":{\"type\":\"string\",\"default\":\"x-timestamp\"},\"max_skew_seconds\":{\"type\":\"integer\",\"format\":\"uint64\",\"minimum\":0,\"default\":300},\"type\":{\"type\":\"string\",\"const\":\"hmac_sha256\"}},\"required\":[\"type\",\"secret\"]},{\"type\":\"object\",\"properties\":{\"issuer\":{\"type\":[\"string\",\"null\"],\"default\":null},\"audience\":{\"type\":[\"string\",\"null\"],\"default\":null},\"required_scopes\":{\"type\":\"array\",\"items\":{\"type\":\"string\"},\"default\":[]},\"jwks_url\":{\"type\":[\"string\",\"null\"],\"default\":null},\"jwks_flow_path\":{\"anyOf\":[{\"$ref\":\"#/$defs/FlowPath\"},{\"type\":\"null\"}],\"default\":null},\"oidc_discovery_url\":{\"type\":[\"string\",\"null\"],\"default\":null},\"type\":{\"type\":\"string\",\"const\":\"oauth_bearer\"}},\"required\":[\"type\"]}]},\"FlowPath\":{\"type\":\"object\",\"properties\":{\"path\":{\"type\":\"string\"},\"store_ref\":{\"type\":\"string\"},\"cache_store_ref\":{\"type\":[\"string\",\"null\"]}},\"required\":[\"path\",\"store_ref\"]},\"McpResourceRegistration\":{\"type\":\"object\",\"properties\":{\"uri\":{\"type\":\"string\"},\"name\":{\"type\":\"string\"},\"flow_path\":{\"$ref\":\"#/$defs/FlowPath\"},\"description\":{\"type\":[\"string\",\"null\"],\"default\":null},\"mime_type\":{\"type\":[\"string\",\"null\"],\"default\":null}},\"required\":[\"uri\",\"name\",\"flow_path\"]},\"McpPromptRegistration\":{\"type\":\"object\",\"properties\":{\"name\":{\"type\":\"string\"},\"description\":{\"type\":[\"string\",\"null\"],\"default\":null},\"template\":{\"type\":\"string\"}},\"required\":[\"name\",\"template\"]}}}"
+          "schema": "{\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"title\":\"McpServerConfig\",\"type\":\"object\",\"properties\":{\"host\":{\"type\":\"string\"},\"port\":{\"type\":\"integer\",\"format\":\"uint16\",\"minimum\":0,\"maximum\":65535},\"path\":{\"type\":\"string\",\"default\":\"/mcp\"},\"timeout_seconds\":{\"type\":\"integer\",\"format\":\"uint64\",\"minimum\":0,\"default\":0},\"max_connections\":{\"type\":\"integer\",\"format\":\"uint32\",\"minimum\":0,\"default\":128},\"max_body_bytes\":{\"type\":\"integer\",\"format\":\"uint\",\"minimum\":0,\"default\":10485760},\"tls\":{\"$ref\":\"#/$defs/TlsConfig\",\"default\":{\"secure\":false,\"certificate\":null,\"ca_certificate_pem\":null,\"server_name\":null,\"accept_invalid_certificates\":false}},\"auth\":{\"$ref\":\"#/$defs/RestAuthConfig\",\"default\":{\"type\":\"none\"}},\"flow_like_auth\":{\"type\":\"boolean\",\"default\":false},\"function_refs\":{\"type\":\"array\",\"items\":{\"type\":\"string\"},\"default\":[]},\"resources\":{\"type\":\"array\",\"items\":{\"$ref\":\"#/$defs/McpResourceRegistration\"},\"default\":[]},\"prompts\":{\"type\":\"array\",\"items\":{\"$ref\":\"#/$defs/McpPromptRegistration\"},\"default\":[]}},\"required\":[\"host\",\"port\"],\"$defs\":{\"TlsConfig\":{\"type\":\"object\",\"properties\":{\"secure\":{\"type\":\"boolean\",\"default\":false},\"certificate\":{\"anyOf\":[{\"$ref\":\"#/$defs/TlsCertificate\"},{\"type\":\"null\"}],\"default\":null},\"ca_certificate_pem\":{\"type\":[\"string\",\"null\"],\"default\":null},\"server_name\":{\"type\":[\"string\",\"null\"],\"default\":null},\"accept_invalid_certificates\":{\"type\":\"boolean\",\"default\":false}}},\"TlsCertificate\":{\"type\":\"object\",\"properties\":{\"certificate_pem\":{\"type\":\"string\"},\"private_key_pem\":{\"type\":\"string\"}},\"required\":[\"certificate_pem\",\"private_key_pem\"]},\"RestAuthConfig\":{\"oneOf\":[{\"type\":\"object\",\"properties\":{\"type\":{\"type\":\"string\",\"const\":\"none\"}},\"required\":[\"type\"]},{\"type\":\"object\",\"properties\":{\"header\":{\"type\":\"string\"},\"key\":{\"type\":\"string\"},\"type\":{\"type\":\"string\",\"const\":\"api_key\"}},\"required\":[\"type\",\"header\",\"key\"]},{\"type\":\"object\",\"properties\":{\"token\":{\"type\":\"string\"},\"type\":{\"type\":\"string\",\"const\":\"bearer_token\"}},\"required\":[\"type\",\"token\"]},{\"type\":\"object\",\"properties\":{\"username\":{\"type\":\"string\"},\"password\":{\"type\":\"string\"},\"type\":{\"type\":\"string\",\"const\":\"basic_auth\"}},\"required\":[\"type\",\"username\",\"password\"]},{\"type\":\"object\",\"properties\":{\"secret\":{\"type\":\"string\"},\"signature_header\":{\"type\":\"string\",\"default\":\"x-signature\"},\"timestamp_header\":{\"type\":\"string\",\"default\":\"x-timestamp\"},\"max_skew_seconds\":{\"type\":\"integer\",\"format\":\"uint64\",\"minimum\":0,\"default\":300},\"type\":{\"type\":\"string\",\"const\":\"hmac_sha256\"}},\"required\":[\"type\",\"secret\"]},{\"type\":\"object\",\"properties\":{\"issuer\":{\"type\":[\"string\",\"null\"],\"default\":null},\"audience\":{\"type\":[\"string\",\"null\"],\"default\":null},\"required_scopes\":{\"type\":\"array\",\"items\":{\"type\":\"string\"},\"default\":[]},\"jwks_url\":{\"type\":[\"string\",\"null\"],\"default\":null},\"jwks_flow_path\":{\"anyOf\":[{\"$ref\":\"#/$defs/FlowPath\"},{\"type\":\"null\"}],\"default\":null},\"oidc_discovery_url\":{\"type\":[\"string\",\"null\"],\"default\":null},\"type\":{\"type\":\"string\",\"const\":\"oauth_bearer\"}},\"required\":[\"type\"]}]},\"FlowPath\":{\"type\":\"object\",\"properties\":{\"path\":{\"type\":\"string\"},\"store_ref\":{\"type\":\"string\"},\"cache_store_ref\":{\"type\":[\"string\",\"null\"]}},\"required\":[\"path\",\"store_ref\"]},\"McpResourceRegistration\":{\"type\":\"object\",\"properties\":{\"uri\":{\"type\":\"string\"},\"name\":{\"type\":\"string\"},\"flow_path\":{\"$ref\":\"#/$defs/FlowPath\"},\"description\":{\"type\":[\"string\",\"null\"],\"default\":null},\"mime_type\":{\"type\":[\"string\",\"null\"],\"default\":null}},\"required\":[\"uri\",\"name\",\"flow_path\"]},\"McpPromptRegistration\":{\"type\":\"object\",\"properties\":{\"name\":{\"type\":\"string\"},\"description\":{\"type\":[\"string\",\"null\"],\"default\":null},\"template\":{\"type\":\"string\"}},\"required\":[\"name\",\"template\"]}}}"
         },
         {
           "name": "flow_path",
@@ -71104,7 +72654,7 @@
           },
           "optional": false,
           "doc": "Updated config",
-          "schema": "{\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"title\":\"McpServerConfig\",\"type\":\"object\",\"properties\":{\"host\":{\"type\":\"string\"},\"port\":{\"type\":\"integer\",\"format\":\"uint16\",\"minimum\":0,\"maximum\":65535},\"path\":{\"type\":\"string\",\"default\":\"/mcp\"},\"timeout_seconds\":{\"type\":\"integer\",\"format\":\"uint64\",\"minimum\":0,\"default\":0},\"max_connections\":{\"type\":\"integer\",\"format\":\"uint32\",\"minimum\":0,\"default\":128},\"max_body_bytes\":{\"type\":\"integer\",\"format\":\"uint\",\"minimum\":0,\"default\":10485760},\"tls\":{\"$ref\":\"#/$defs/TlsConfig\",\"default\":{\"secure\":false,\"certificate\":null,\"ca_certificate_pem\":null,\"server_name\":null,\"accept_invalid_certificates\":false}},\"auth\":{\"$ref\":\"#/$defs/RestAuthConfig\",\"default\":{\"type\":\"none\"}},\"function_refs\":{\"type\":\"array\",\"items\":{\"type\":\"string\"},\"default\":[]},\"resources\":{\"type\":\"array\",\"items\":{\"$ref\":\"#/$defs/McpResourceRegistration\"},\"default\":[]},\"prompts\":{\"type\":\"array\",\"items\":{\"$ref\":\"#/$defs/McpPromptRegistration\"},\"default\":[]}},\"required\":[\"host\",\"port\"],\"$defs\":{\"TlsConfig\":{\"type\":\"object\",\"properties\":{\"secure\":{\"type\":\"boolean\",\"default\":false},\"certificate\":{\"anyOf\":[{\"$ref\":\"#/$defs/TlsCertificate\"},{\"type\":\"null\"}],\"default\":null},\"ca_certificate_pem\":{\"type\":[\"string\",\"null\"],\"default\":null},\"server_name\":{\"type\":[\"string\",\"null\"],\"default\":null},\"accept_invalid_certificates\":{\"type\":\"boolean\",\"default\":false}}},\"TlsCertificate\":{\"type\":\"object\",\"properties\":{\"certificate_pem\":{\"type\":\"string\"},\"private_key_pem\":{\"type\":\"string\"}},\"required\":[\"certificate_pem\",\"private_key_pem\"]},\"RestAuthConfig\":{\"oneOf\":[{\"type\":\"object\",\"properties\":{\"type\":{\"type\":\"string\",\"const\":\"none\"}},\"required\":[\"type\"]},{\"type\":\"object\",\"properties\":{\"header\":{\"type\":\"string\"},\"key\":{\"type\":\"string\"},\"type\":{\"type\":\"string\",\"const\":\"api_key\"}},\"required\":[\"type\",\"header\",\"key\"]},{\"type\":\"object\",\"properties\":{\"token\":{\"type\":\"string\"},\"type\":{\"type\":\"string\",\"const\":\"bearer_token\"}},\"required\":[\"type\",\"token\"]},{\"type\":\"object\",\"properties\":{\"username\":{\"type\":\"string\"},\"password\":{\"type\":\"string\"},\"type\":{\"type\":\"string\",\"const\":\"basic_auth\"}},\"required\":[\"type\",\"username\",\"password\"]},{\"type\":\"object\",\"properties\":{\"secret\":{\"type\":\"string\"},\"signature_header\":{\"type\":\"string\",\"default\":\"x-signature\"},\"timestamp_header\":{\"type\":\"string\",\"default\":\"x-timestamp\"},\"max_skew_seconds\":{\"type\":\"integer\",\"format\":\"uint64\",\"minimum\":0,\"default\":300},\"type\":{\"type\":\"string\",\"const\":\"hmac_sha256\"}},\"required\":[\"type\",\"secret\"]},{\"type\":\"object\",\"properties\":{\"issuer\":{\"type\":[\"string\",\"null\"],\"default\":null},\"audience\":{\"type\":[\"string\",\"null\"],\"default\":null},\"required_scopes\":{\"type\":\"array\",\"items\":{\"type\":\"string\"},\"default\":[]},\"jwks_url\":{\"type\":[\"string\",\"null\"],\"default\":null},\"jwks_flow_path\":{\"anyOf\":[{\"$ref\":\"#/$defs/FlowPath\"},{\"type\":\"null\"}],\"default\":null},\"oidc_discovery_url\":{\"type\":[\"string\",\"null\"],\"default\":null},\"type\":{\"type\":\"string\",\"const\":\"oauth_bearer\"}},\"required\":[\"type\"]}]},\"FlowPath\":{\"type\":\"object\",\"properties\":{\"path\":{\"type\":\"string\"},\"store_ref\":{\"type\":\"string\"},\"cache_store_ref\":{\"type\":[\"string\",\"null\"]}},\"required\":[\"path\",\"store_ref\"]},\"McpResourceRegistration\":{\"type\":\"object\",\"properties\":{\"uri\":{\"type\":\"string\"},\"name\":{\"type\":\"string\"},\"flow_path\":{\"$ref\":\"#/$defs/FlowPath\"},\"description\":{\"type\":[\"string\",\"null\"],\"default\":null},\"mime_type\":{\"type\":[\"string\",\"null\"],\"default\":null}},\"required\":[\"uri\",\"name\",\"flow_path\"]},\"McpPromptRegistration\":{\"type\":\"object\",\"properties\":{\"name\":{\"type\":\"string\"},\"description\":{\"type\":[\"string\",\"null\"],\"default\":null},\"template\":{\"type\":\"string\"}},\"required\":[\"name\",\"template\"]}}}"
+          "schema": "{\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"title\":\"McpServerConfig\",\"type\":\"object\",\"properties\":{\"host\":{\"type\":\"string\"},\"port\":{\"type\":\"integer\",\"format\":\"uint16\",\"minimum\":0,\"maximum\":65535},\"path\":{\"type\":\"string\",\"default\":\"/mcp\"},\"timeout_seconds\":{\"type\":\"integer\",\"format\":\"uint64\",\"minimum\":0,\"default\":0},\"max_connections\":{\"type\":\"integer\",\"format\":\"uint32\",\"minimum\":0,\"default\":128},\"max_body_bytes\":{\"type\":\"integer\",\"format\":\"uint\",\"minimum\":0,\"default\":10485760},\"tls\":{\"$ref\":\"#/$defs/TlsConfig\",\"default\":{\"secure\":false,\"certificate\":null,\"ca_certificate_pem\":null,\"server_name\":null,\"accept_invalid_certificates\":false}},\"auth\":{\"$ref\":\"#/$defs/RestAuthConfig\",\"default\":{\"type\":\"none\"}},\"flow_like_auth\":{\"type\":\"boolean\",\"default\":false},\"function_refs\":{\"type\":\"array\",\"items\":{\"type\":\"string\"},\"default\":[]},\"resources\":{\"type\":\"array\",\"items\":{\"$ref\":\"#/$defs/McpResourceRegistration\"},\"default\":[]},\"prompts\":{\"type\":\"array\",\"items\":{\"$ref\":\"#/$defs/McpPromptRegistration\"},\"default\":[]}},\"required\":[\"host\",\"port\"],\"$defs\":{\"TlsConfig\":{\"type\":\"object\",\"properties\":{\"secure\":{\"type\":\"boolean\",\"default\":false},\"certificate\":{\"anyOf\":[{\"$ref\":\"#/$defs/TlsCertificate\"},{\"type\":\"null\"}],\"default\":null},\"ca_certificate_pem\":{\"type\":[\"string\",\"null\"],\"default\":null},\"server_name\":{\"type\":[\"string\",\"null\"],\"default\":null},\"accept_invalid_certificates\":{\"type\":\"boolean\",\"default\":false}}},\"TlsCertificate\":{\"type\":\"object\",\"properties\":{\"certificate_pem\":{\"type\":\"string\"},\"private_key_pem\":{\"type\":\"string\"}},\"required\":[\"certificate_pem\",\"private_key_pem\"]},\"RestAuthConfig\":{\"oneOf\":[{\"type\":\"object\",\"properties\":{\"type\":{\"type\":\"string\",\"const\":\"none\"}},\"required\":[\"type\"]},{\"type\":\"object\",\"properties\":{\"header\":{\"type\":\"string\"},\"key\":{\"type\":\"string\"},\"type\":{\"type\":\"string\",\"const\":\"api_key\"}},\"required\":[\"type\",\"header\",\"key\"]},{\"type\":\"object\",\"properties\":{\"token\":{\"type\":\"string\"},\"type\":{\"type\":\"string\",\"const\":\"bearer_token\"}},\"required\":[\"type\",\"token\"]},{\"type\":\"object\",\"properties\":{\"username\":{\"type\":\"string\"},\"password\":{\"type\":\"string\"},\"type\":{\"type\":\"string\",\"const\":\"basic_auth\"}},\"required\":[\"type\",\"username\",\"password\"]},{\"type\":\"object\",\"properties\":{\"secret\":{\"type\":\"string\"},\"signature_header\":{\"type\":\"string\",\"default\":\"x-signature\"},\"timestamp_header\":{\"type\":\"string\",\"default\":\"x-timestamp\"},\"max_skew_seconds\":{\"type\":\"integer\",\"format\":\"uint64\",\"minimum\":0,\"default\":300},\"type\":{\"type\":\"string\",\"const\":\"hmac_sha256\"}},\"required\":[\"type\",\"secret\"]},{\"type\":\"object\",\"properties\":{\"issuer\":{\"type\":[\"string\",\"null\"],\"default\":null},\"audience\":{\"type\":[\"string\",\"null\"],\"default\":null},\"required_scopes\":{\"type\":\"array\",\"items\":{\"type\":\"string\"},\"default\":[]},\"jwks_url\":{\"type\":[\"string\",\"null\"],\"default\":null},\"jwks_flow_path\":{\"anyOf\":[{\"$ref\":\"#/$defs/FlowPath\"},{\"type\":\"null\"}],\"default\":null},\"oidc_discovery_url\":{\"type\":[\"string\",\"null\"],\"default\":null},\"type\":{\"type\":\"string\",\"const\":\"oauth_bearer\"}},\"required\":[\"type\"]}]},\"FlowPath\":{\"type\":\"object\",\"properties\":{\"path\":{\"type\":\"string\"},\"store_ref\":{\"type\":\"string\"},\"cache_store_ref\":{\"type\":[\"string\",\"null\"]}},\"required\":[\"path\",\"store_ref\"]},\"McpResourceRegistration\":{\"type\":\"object\",\"properties\":{\"uri\":{\"type\":\"string\"},\"name\":{\"type\":\"string\"},\"flow_path\":{\"$ref\":\"#/$defs/FlowPath\"},\"description\":{\"type\":[\"string\",\"null\"],\"default\":null},\"mime_type\":{\"type\":[\"string\",\"null\"],\"default\":null}},\"required\":[\"uri\",\"name\",\"flow_path\"]},\"McpPromptRegistration\":{\"type\":\"object\",\"properties\":{\"name\":{\"type\":\"string\"},\"description\":{\"type\":[\"string\",\"null\"],\"default\":null},\"template\":{\"type\":\"string\"}},\"required\":[\"name\",\"template\"]}}}"
         }
       ],
       "impure": false,
@@ -71127,7 +72677,7 @@
           },
           "optional": false,
           "doc": "MCP server config",
-          "schema": "{\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"title\":\"McpServerConfig\",\"type\":\"object\",\"properties\":{\"host\":{\"type\":\"string\"},\"port\":{\"type\":\"integer\",\"format\":\"uint16\",\"minimum\":0,\"maximum\":65535},\"path\":{\"type\":\"string\",\"default\":\"/mcp\"},\"timeout_seconds\":{\"type\":\"integer\",\"format\":\"uint64\",\"minimum\":0,\"default\":0},\"max_connections\":{\"type\":\"integer\",\"format\":\"uint32\",\"minimum\":0,\"default\":128},\"max_body_bytes\":{\"type\":\"integer\",\"format\":\"uint\",\"minimum\":0,\"default\":10485760},\"tls\":{\"$ref\":\"#/$defs/TlsConfig\",\"default\":{\"secure\":false,\"certificate\":null,\"ca_certificate_pem\":null,\"server_name\":null,\"accept_invalid_certificates\":false}},\"auth\":{\"$ref\":\"#/$defs/RestAuthConfig\",\"default\":{\"type\":\"none\"}},\"function_refs\":{\"type\":\"array\",\"items\":{\"type\":\"string\"},\"default\":[]},\"resources\":{\"type\":\"array\",\"items\":{\"$ref\":\"#/$defs/McpResourceRegistration\"},\"default\":[]},\"prompts\":{\"type\":\"array\",\"items\":{\"$ref\":\"#/$defs/McpPromptRegistration\"},\"default\":[]}},\"required\":[\"host\",\"port\"],\"$defs\":{\"TlsConfig\":{\"type\":\"object\",\"properties\":{\"secure\":{\"type\":\"boolean\",\"default\":false},\"certificate\":{\"anyOf\":[{\"$ref\":\"#/$defs/TlsCertificate\"},{\"type\":\"null\"}],\"default\":null},\"ca_certificate_pem\":{\"type\":[\"string\",\"null\"],\"default\":null},\"server_name\":{\"type\":[\"string\",\"null\"],\"default\":null},\"accept_invalid_certificates\":{\"type\":\"boolean\",\"default\":false}}},\"TlsCertificate\":{\"type\":\"object\",\"properties\":{\"certificate_pem\":{\"type\":\"string\"},\"private_key_pem\":{\"type\":\"string\"}},\"required\":[\"certificate_pem\",\"private_key_pem\"]},\"RestAuthConfig\":{\"oneOf\":[{\"type\":\"object\",\"properties\":{\"type\":{\"type\":\"string\",\"const\":\"none\"}},\"required\":[\"type\"]},{\"type\":\"object\",\"properties\":{\"header\":{\"type\":\"string\"},\"key\":{\"type\":\"string\"},\"type\":{\"type\":\"string\",\"const\":\"api_key\"}},\"required\":[\"type\",\"header\",\"key\"]},{\"type\":\"object\",\"properties\":{\"token\":{\"type\":\"string\"},\"type\":{\"type\":\"string\",\"const\":\"bearer_token\"}},\"required\":[\"type\",\"token\"]},{\"type\":\"object\",\"properties\":{\"username\":{\"type\":\"string\"},\"password\":{\"type\":\"string\"},\"type\":{\"type\":\"string\",\"const\":\"basic_auth\"}},\"required\":[\"type\",\"username\",\"password\"]},{\"type\":\"object\",\"properties\":{\"secret\":{\"type\":\"string\"},\"signature_header\":{\"type\":\"string\",\"default\":\"x-signature\"},\"timestamp_header\":{\"type\":\"string\",\"default\":\"x-timestamp\"},\"max_skew_seconds\":{\"type\":\"integer\",\"format\":\"uint64\",\"minimum\":0,\"default\":300},\"type\":{\"type\":\"string\",\"const\":\"hmac_sha256\"}},\"required\":[\"type\",\"secret\"]},{\"type\":\"object\",\"properties\":{\"issuer\":{\"type\":[\"string\",\"null\"],\"default\":null},\"audience\":{\"type\":[\"string\",\"null\"],\"default\":null},\"required_scopes\":{\"type\":\"array\",\"items\":{\"type\":\"string\"},\"default\":[]},\"jwks_url\":{\"type\":[\"string\",\"null\"],\"default\":null},\"jwks_flow_path\":{\"anyOf\":[{\"$ref\":\"#/$defs/FlowPath\"},{\"type\":\"null\"}],\"default\":null},\"oidc_discovery_url\":{\"type\":[\"string\",\"null\"],\"default\":null},\"type\":{\"type\":\"string\",\"const\":\"oauth_bearer\"}},\"required\":[\"type\"]}]},\"FlowPath\":{\"type\":\"object\",\"properties\":{\"path\":{\"type\":\"string\"},\"store_ref\":{\"type\":\"string\"},\"cache_store_ref\":{\"type\":[\"string\",\"null\"]}},\"required\":[\"path\",\"store_ref\"]},\"McpResourceRegistration\":{\"type\":\"object\",\"properties\":{\"uri\":{\"type\":\"string\"},\"name\":{\"type\":\"string\"},\"flow_path\":{\"$ref\":\"#/$defs/FlowPath\"},\"description\":{\"type\":[\"string\",\"null\"],\"default\":null},\"mime_type\":{\"type\":[\"string\",\"null\"],\"default\":null}},\"required\":[\"uri\",\"name\",\"flow_path\"]},\"McpPromptRegistration\":{\"type\":\"object\",\"properties\":{\"name\":{\"type\":\"string\"},\"description\":{\"type\":[\"string\",\"null\"],\"default\":null},\"template\":{\"type\":\"string\"}},\"required\":[\"name\",\"template\"]}}}"
+          "schema": "{\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"title\":\"McpServerConfig\",\"type\":\"object\",\"properties\":{\"host\":{\"type\":\"string\"},\"port\":{\"type\":\"integer\",\"format\":\"uint16\",\"minimum\":0,\"maximum\":65535},\"path\":{\"type\":\"string\",\"default\":\"/mcp\"},\"timeout_seconds\":{\"type\":\"integer\",\"format\":\"uint64\",\"minimum\":0,\"default\":0},\"max_connections\":{\"type\":\"integer\",\"format\":\"uint32\",\"minimum\":0,\"default\":128},\"max_body_bytes\":{\"type\":\"integer\",\"format\":\"uint\",\"minimum\":0,\"default\":10485760},\"tls\":{\"$ref\":\"#/$defs/TlsConfig\",\"default\":{\"secure\":false,\"certificate\":null,\"ca_certificate_pem\":null,\"server_name\":null,\"accept_invalid_certificates\":false}},\"auth\":{\"$ref\":\"#/$defs/RestAuthConfig\",\"default\":{\"type\":\"none\"}},\"flow_like_auth\":{\"type\":\"boolean\",\"default\":false},\"function_refs\":{\"type\":\"array\",\"items\":{\"type\":\"string\"},\"default\":[]},\"resources\":{\"type\":\"array\",\"items\":{\"$ref\":\"#/$defs/McpResourceRegistration\"},\"default\":[]},\"prompts\":{\"type\":\"array\",\"items\":{\"$ref\":\"#/$defs/McpPromptRegistration\"},\"default\":[]}},\"required\":[\"host\",\"port\"],\"$defs\":{\"TlsConfig\":{\"type\":\"object\",\"properties\":{\"secure\":{\"type\":\"boolean\",\"default\":false},\"certificate\":{\"anyOf\":[{\"$ref\":\"#/$defs/TlsCertificate\"},{\"type\":\"null\"}],\"default\":null},\"ca_certificate_pem\":{\"type\":[\"string\",\"null\"],\"default\":null},\"server_name\":{\"type\":[\"string\",\"null\"],\"default\":null},\"accept_invalid_certificates\":{\"type\":\"boolean\",\"default\":false}}},\"TlsCertificate\":{\"type\":\"object\",\"properties\":{\"certificate_pem\":{\"type\":\"string\"},\"private_key_pem\":{\"type\":\"string\"}},\"required\":[\"certificate_pem\",\"private_key_pem\"]},\"RestAuthConfig\":{\"oneOf\":[{\"type\":\"object\",\"properties\":{\"type\":{\"type\":\"string\",\"const\":\"none\"}},\"required\":[\"type\"]},{\"type\":\"object\",\"properties\":{\"header\":{\"type\":\"string\"},\"key\":{\"type\":\"string\"},\"type\":{\"type\":\"string\",\"const\":\"api_key\"}},\"required\":[\"type\",\"header\",\"key\"]},{\"type\":\"object\",\"properties\":{\"token\":{\"type\":\"string\"},\"type\":{\"type\":\"string\",\"const\":\"bearer_token\"}},\"required\":[\"type\",\"token\"]},{\"type\":\"object\",\"properties\":{\"username\":{\"type\":\"string\"},\"password\":{\"type\":\"string\"},\"type\":{\"type\":\"string\",\"const\":\"basic_auth\"}},\"required\":[\"type\",\"username\",\"password\"]},{\"type\":\"object\",\"properties\":{\"secret\":{\"type\":\"string\"},\"signature_header\":{\"type\":\"string\",\"default\":\"x-signature\"},\"timestamp_header\":{\"type\":\"string\",\"default\":\"x-timestamp\"},\"max_skew_seconds\":{\"type\":\"integer\",\"format\":\"uint64\",\"minimum\":0,\"default\":300},\"type\":{\"type\":\"string\",\"const\":\"hmac_sha256\"}},\"required\":[\"type\",\"secret\"]},{\"type\":\"object\",\"properties\":{\"issuer\":{\"type\":[\"string\",\"null\"],\"default\":null},\"audience\":{\"type\":[\"string\",\"null\"],\"default\":null},\"required_scopes\":{\"type\":\"array\",\"items\":{\"type\":\"string\"},\"default\":[]},\"jwks_url\":{\"type\":[\"string\",\"null\"],\"default\":null},\"jwks_flow_path\":{\"anyOf\":[{\"$ref\":\"#/$defs/FlowPath\"},{\"type\":\"null\"}],\"default\":null},\"oidc_discovery_url\":{\"type\":[\"string\",\"null\"],\"default\":null},\"type\":{\"type\":\"string\",\"const\":\"oauth_bearer\"}},\"required\":[\"type\"]}]},\"FlowPath\":{\"type\":\"object\",\"properties\":{\"path\":{\"type\":\"string\"},\"store_ref\":{\"type\":\"string\"},\"cache_store_ref\":{\"type\":[\"string\",\"null\"]}},\"required\":[\"path\",\"store_ref\"]},\"McpResourceRegistration\":{\"type\":\"object\",\"properties\":{\"uri\":{\"type\":\"string\"},\"name\":{\"type\":\"string\"},\"flow_path\":{\"$ref\":\"#/$defs/FlowPath\"},\"description\":{\"type\":[\"string\",\"null\"],\"default\":null},\"mime_type\":{\"type\":[\"string\",\"null\"],\"default\":null}},\"required\":[\"uri\",\"name\",\"flow_path\"]},\"McpPromptRegistration\":{\"type\":\"object\",\"properties\":{\"name\":{\"type\":\"string\"},\"description\":{\"type\":[\"string\",\"null\"],\"default\":null},\"template\":{\"type\":\"string\"}},\"required\":[\"name\",\"template\"]}}}"
         }
       ],
       "outputs": [
@@ -71226,7 +72776,7 @@
           },
           "optional": false,
           "doc": "MCP server config",
-          "schema": "{\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"title\":\"McpServerConfig\",\"type\":\"object\",\"properties\":{\"host\":{\"type\":\"string\"},\"port\":{\"type\":\"integer\",\"format\":\"uint16\",\"minimum\":0,\"maximum\":65535},\"path\":{\"type\":\"string\",\"default\":\"/mcp\"},\"timeout_seconds\":{\"type\":\"integer\",\"format\":\"uint64\",\"minimum\":0,\"default\":0},\"max_connections\":{\"type\":\"integer\",\"format\":\"uint32\",\"minimum\":0,\"default\":128},\"max_body_bytes\":{\"type\":\"integer\",\"format\":\"uint\",\"minimum\":0,\"default\":10485760},\"tls\":{\"$ref\":\"#/$defs/TlsConfig\",\"default\":{\"secure\":false,\"certificate\":null,\"ca_certificate_pem\":null,\"server_name\":null,\"accept_invalid_certificates\":false}},\"auth\":{\"$ref\":\"#/$defs/RestAuthConfig\",\"default\":{\"type\":\"none\"}},\"function_refs\":{\"type\":\"array\",\"items\":{\"type\":\"string\"},\"default\":[]},\"resources\":{\"type\":\"array\",\"items\":{\"$ref\":\"#/$defs/McpResourceRegistration\"},\"default\":[]},\"prompts\":{\"type\":\"array\",\"items\":{\"$ref\":\"#/$defs/McpPromptRegistration\"},\"default\":[]}},\"required\":[\"host\",\"port\"],\"$defs\":{\"TlsConfig\":{\"type\":\"object\",\"properties\":{\"secure\":{\"type\":\"boolean\",\"default\":false},\"certificate\":{\"anyOf\":[{\"$ref\":\"#/$defs/TlsCertificate\"},{\"type\":\"null\"}],\"default\":null},\"ca_certificate_pem\":{\"type\":[\"string\",\"null\"],\"default\":null},\"server_name\":{\"type\":[\"string\",\"null\"],\"default\":null},\"accept_invalid_certificates\":{\"type\":\"boolean\",\"default\":false}}},\"TlsCertificate\":{\"type\":\"object\",\"properties\":{\"certificate_pem\":{\"type\":\"string\"},\"private_key_pem\":{\"type\":\"string\"}},\"required\":[\"certificate_pem\",\"private_key_pem\"]},\"RestAuthConfig\":{\"oneOf\":[{\"type\":\"object\",\"properties\":{\"type\":{\"type\":\"string\",\"const\":\"none\"}},\"required\":[\"type\"]},{\"type\":\"object\",\"properties\":{\"header\":{\"type\":\"string\"},\"key\":{\"type\":\"string\"},\"type\":{\"type\":\"string\",\"const\":\"api_key\"}},\"required\":[\"type\",\"header\",\"key\"]},{\"type\":\"object\",\"properties\":{\"token\":{\"type\":\"string\"},\"type\":{\"type\":\"string\",\"const\":\"bearer_token\"}},\"required\":[\"type\",\"token\"]},{\"type\":\"object\",\"properties\":{\"username\":{\"type\":\"string\"},\"password\":{\"type\":\"string\"},\"type\":{\"type\":\"string\",\"const\":\"basic_auth\"}},\"required\":[\"type\",\"username\",\"password\"]},{\"type\":\"object\",\"properties\":{\"secret\":{\"type\":\"string\"},\"signature_header\":{\"type\":\"string\",\"default\":\"x-signature\"},\"timestamp_header\":{\"type\":\"string\",\"default\":\"x-timestamp\"},\"max_skew_seconds\":{\"type\":\"integer\",\"format\":\"uint64\",\"minimum\":0,\"default\":300},\"type\":{\"type\":\"string\",\"const\":\"hmac_sha256\"}},\"required\":[\"type\",\"secret\"]},{\"type\":\"object\",\"properties\":{\"issuer\":{\"type\":[\"string\",\"null\"],\"default\":null},\"audience\":{\"type\":[\"string\",\"null\"],\"default\":null},\"required_scopes\":{\"type\":\"array\",\"items\":{\"type\":\"string\"},\"default\":[]},\"jwks_url\":{\"type\":[\"string\",\"null\"],\"default\":null},\"jwks_flow_path\":{\"anyOf\":[{\"$ref\":\"#/$defs/FlowPath\"},{\"type\":\"null\"}],\"default\":null},\"oidc_discovery_url\":{\"type\":[\"string\",\"null\"],\"default\":null},\"type\":{\"type\":\"string\",\"const\":\"oauth_bearer\"}},\"required\":[\"type\"]}]},\"FlowPath\":{\"type\":\"object\",\"properties\":{\"path\":{\"type\":\"string\"},\"store_ref\":{\"type\":\"string\"},\"cache_store_ref\":{\"type\":[\"string\",\"null\"]}},\"required\":[\"path\",\"store_ref\"]},\"McpResourceRegistration\":{\"type\":\"object\",\"properties\":{\"uri\":{\"type\":\"string\"},\"name\":{\"type\":\"string\"},\"flow_path\":{\"$ref\":\"#/$defs/FlowPath\"},\"description\":{\"type\":[\"string\",\"null\"],\"default\":null},\"mime_type\":{\"type\":[\"string\",\"null\"],\"default\":null}},\"required\":[\"uri\",\"name\",\"flow_path\"]},\"McpPromptRegistration\":{\"type\":\"object\",\"properties\":{\"name\":{\"type\":\"string\"},\"description\":{\"type\":[\"string\",\"null\"],\"default\":null},\"template\":{\"type\":\"string\"}},\"required\":[\"name\",\"template\"]}}}"
+          "schema": "{\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"title\":\"McpServerConfig\",\"type\":\"object\",\"properties\":{\"host\":{\"type\":\"string\"},\"port\":{\"type\":\"integer\",\"format\":\"uint16\",\"minimum\":0,\"maximum\":65535},\"path\":{\"type\":\"string\",\"default\":\"/mcp\"},\"timeout_seconds\":{\"type\":\"integer\",\"format\":\"uint64\",\"minimum\":0,\"default\":0},\"max_connections\":{\"type\":\"integer\",\"format\":\"uint32\",\"minimum\":0,\"default\":128},\"max_body_bytes\":{\"type\":\"integer\",\"format\":\"uint\",\"minimum\":0,\"default\":10485760},\"tls\":{\"$ref\":\"#/$defs/TlsConfig\",\"default\":{\"secure\":false,\"certificate\":null,\"ca_certificate_pem\":null,\"server_name\":null,\"accept_invalid_certificates\":false}},\"auth\":{\"$ref\":\"#/$defs/RestAuthConfig\",\"default\":{\"type\":\"none\"}},\"flow_like_auth\":{\"type\":\"boolean\",\"default\":false},\"function_refs\":{\"type\":\"array\",\"items\":{\"type\":\"string\"},\"default\":[]},\"resources\":{\"type\":\"array\",\"items\":{\"$ref\":\"#/$defs/McpResourceRegistration\"},\"default\":[]},\"prompts\":{\"type\":\"array\",\"items\":{\"$ref\":\"#/$defs/McpPromptRegistration\"},\"default\":[]}},\"required\":[\"host\",\"port\"],\"$defs\":{\"TlsConfig\":{\"type\":\"object\",\"properties\":{\"secure\":{\"type\":\"boolean\",\"default\":false},\"certificate\":{\"anyOf\":[{\"$ref\":\"#/$defs/TlsCertificate\"},{\"type\":\"null\"}],\"default\":null},\"ca_certificate_pem\":{\"type\":[\"string\",\"null\"],\"default\":null},\"server_name\":{\"type\":[\"string\",\"null\"],\"default\":null},\"accept_invalid_certificates\":{\"type\":\"boolean\",\"default\":false}}},\"TlsCertificate\":{\"type\":\"object\",\"properties\":{\"certificate_pem\":{\"type\":\"string\"},\"private_key_pem\":{\"type\":\"string\"}},\"required\":[\"certificate_pem\",\"private_key_pem\"]},\"RestAuthConfig\":{\"oneOf\":[{\"type\":\"object\",\"properties\":{\"type\":{\"type\":\"string\",\"const\":\"none\"}},\"required\":[\"type\"]},{\"type\":\"object\",\"properties\":{\"header\":{\"type\":\"string\"},\"key\":{\"type\":\"string\"},\"type\":{\"type\":\"string\",\"const\":\"api_key\"}},\"required\":[\"type\",\"header\",\"key\"]},{\"type\":\"object\",\"properties\":{\"token\":{\"type\":\"string\"},\"type\":{\"type\":\"string\",\"const\":\"bearer_token\"}},\"required\":[\"type\",\"token\"]},{\"type\":\"object\",\"properties\":{\"username\":{\"type\":\"string\"},\"password\":{\"type\":\"string\"},\"type\":{\"type\":\"string\",\"const\":\"basic_auth\"}},\"required\":[\"type\",\"username\",\"password\"]},{\"type\":\"object\",\"properties\":{\"secret\":{\"type\":\"string\"},\"signature_header\":{\"type\":\"string\",\"default\":\"x-signature\"},\"timestamp_header\":{\"type\":\"string\",\"default\":\"x-timestamp\"},\"max_skew_seconds\":{\"type\":\"integer\",\"format\":\"uint64\",\"minimum\":0,\"default\":300},\"type\":{\"type\":\"string\",\"const\":\"hmac_sha256\"}},\"required\":[\"type\",\"secret\"]},{\"type\":\"object\",\"properties\":{\"issuer\":{\"type\":[\"string\",\"null\"],\"default\":null},\"audience\":{\"type\":[\"string\",\"null\"],\"default\":null},\"required_scopes\":{\"type\":\"array\",\"items\":{\"type\":\"string\"},\"default\":[]},\"jwks_url\":{\"type\":[\"string\",\"null\"],\"default\":null},\"jwks_flow_path\":{\"anyOf\":[{\"$ref\":\"#/$defs/FlowPath\"},{\"type\":\"null\"}],\"default\":null},\"oidc_discovery_url\":{\"type\":[\"string\",\"null\"],\"default\":null},\"type\":{\"type\":\"string\",\"const\":\"oauth_bearer\"}},\"required\":[\"type\"]}]},\"FlowPath\":{\"type\":\"object\",\"properties\":{\"path\":{\"type\":\"string\"},\"store_ref\":{\"type\":\"string\"},\"cache_store_ref\":{\"type\":[\"string\",\"null\"]}},\"required\":[\"path\",\"store_ref\"]},\"McpResourceRegistration\":{\"type\":\"object\",\"properties\":{\"uri\":{\"type\":\"string\"},\"name\":{\"type\":\"string\"},\"flow_path\":{\"$ref\":\"#/$defs/FlowPath\"},\"description\":{\"type\":[\"string\",\"null\"],\"default\":null},\"mime_type\":{\"type\":[\"string\",\"null\"],\"default\":null}},\"required\":[\"uri\",\"name\",\"flow_path\"]},\"McpPromptRegistration\":{\"type\":\"object\",\"properties\":{\"name\":{\"type\":\"string\"},\"description\":{\"type\":[\"string\",\"null\"],\"default\":null},\"template\":{\"type\":\"string\"}},\"required\":[\"name\",\"template\"]}}}"
         }
       ],
       "impure": false,

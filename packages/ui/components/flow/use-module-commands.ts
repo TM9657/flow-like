@@ -1,13 +1,13 @@
 "use client";
 
-import { createId } from "@paralleldrive/cuid2";
 import { useCallback } from "react";
 import {
 	type IGenericCommand,
 	removeLayerCommand,
 	upsertLayerCommand,
 } from "../../lib";
-import { type ILayer, ILayerType } from "../../lib/schema/flow/board";
+import { newModuleLayer } from "../../lib/flow-modules";
+import type { ILayer } from "../../lib/schema/flow/board";
 
 /**
  * Creating, renaming, moving and deleting module layers — every write the file
@@ -22,24 +22,10 @@ export function useModuleCommands(
 ) {
 	const createModule = useCallback(
 		async (name: string, parentId: string | null) => {
-			const layer: ILayer = {
-				id: createId(),
-				name,
-				type: ILayerType.Module,
-				coordinates: [0, 0, 0],
-				nodes: {},
-				pins: {},
-				variables: {},
-				comments: {},
-				// The backend takes the parent of a *new* layer from `current_layer`;
-				// `parent_id` is what every local reader goes by. Both or the module lands
-				// somewhere else than the tab it was created from.
-				parent_id: parentId,
-				color: null,
-				comment: null,
-				error: null,
-				category: null,
-			};
+			// The backend takes the parent of a *new* layer from `current_layer`;
+			// `parent_id` is what every local reader goes by. Both or the module lands
+			// somewhere else than the tab it was created from.
+			const layer: ILayer = newModuleLayer(name, parentId);
 			await executeCommand(
 				upsertLayerCommand({
 					layer,

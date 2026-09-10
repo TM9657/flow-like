@@ -8,15 +8,16 @@ import tempfile
 import unittest
 import urllib.parse
 from unittest.mock import patch
-import yaml
+
+try:
+    import yaml
+except ImportError:
+    yaml = None
 
 BASE = Path(__file__).resolve().parents[2]
 spec = importlib.util.spec_from_file_location("setup_config", BASE / "scripts/setup-config.py")
 setup = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(setup)
-
-class UniqueLoader(yaml.SafeLoader):
-    pass
 
 def mapping(loader, node, deep=False):
     result = {}
@@ -27,8 +28,13 @@ def mapping(loader, node, deep=False):
         result[key] = loader.construct_object(value_node, deep=deep)
     return result
 
-UniqueLoader.add_constructor(yaml.resolver.BaseResolver.DEFAULT_MAPPING_TAG, mapping)
+if yaml:
+    class UniqueLoader(yaml.SafeLoader):
+        pass
 
+    UniqueLoader.add_constructor(yaml.resolver.BaseResolver.DEFAULT_MAPPING_TAG, mapping)
+
+@unittest.skipUnless(yaml, "PyYAML required (pip install PyYAML)")
 class ChartTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
@@ -74,6 +80,12 @@ class ChartTest(unittest.TestCase):
         self.assertEqual(api["REDIS_EXECUTION_QUEUE"]["value"], "exec:jobs:v3")
         self.assertEqual(queue["REDIS_EXECUTION_QUEUE"]["value"], api["REDIS_EXECUTION_QUEUE"]["value"])
         self.assertFalse(any(x["metadata"]["name"] == "flow-like-executor-pool" for x in self.docs))
+
+    def test_namespace_reaches_api_without_sink_services(self):
+        env = self.env("api", self.render("--set", "sinkServices.enabled=false"))
+        self.assertEqual(env["K8S_NAMESPACE"]["valueFrom"]["fieldRef"]["fieldPath"], "metadata.namespace")
+        self.assertEqual(env["KUBERNETES_NAMESPACE"]["valueFrom"], env["K8S_NAMESPACE"]["valueFrom"])
+        self.assertNotIn("SINK_SCHEDULER_PROVIDER", env)
 
     def test_generated_hub_config_is_secret_mounted_read_only_at_runtime(self):
         env = self.env("api")
@@ -271,6 +283,80 @@ class ChartTest(unittest.TestCase):
                 self.assertIn("resources", container)
                 for mount in container.get("volumeMounts", []):
                     self.assertIn(mount["name"], volumes)
+
+    def test_published_tags_are_pulled_always_and_digests_pin_every_first_party_image(self):
+        for name in ["api", "web", "queue-bridge"]:
+            container = self.resource("Deployment", name)["spec"]["template"]["spec"]["containers"][0]
+            self.assertTrue(container["image"].startswith("ghcr.io/rheosoph/flow-like-"), container["image"])
+            self.assertTrue(container["image"].endswith(":dev"))
+            self.assertEqual(container["imagePullPolicy"], "Always")
+        api = self.resource("Deployment", "api")["spec"]["template"]["spec"]
+        self.assertEqual(api["containers"][0]["image"], "ghcr.io/rheosoph/flow-like-kubernetes-api:dev")
+        self.assertEqual({c["image"] for c in api["initContainers"]}, {"ghcr.io/rheosoph/flow-like-kubernetes-migration:dev"})
+        env = self.env("api")
+        self.assertEqual(env["K8S_EXECUTOR_IMAGE"]["value"], "ghcr.io/rheosoph/flow-like-kubernetes-executor:dev")
+        self.assertEqual(env["K8S_IMAGE_PULL_SECRETS"]["value"], "")
+        digest = "sha256:" + "d" * 64
+        pins = ",".join(f"{key}.image.digest={digest}" for key in ["api", "web", "executor", "database.migration", "executionManager", "executionManager.queueBridge", "rustfs.bootstrap", "compiler", "signaling", "executorPool", "sinkServices"])
+        docs = self.render("--set-string", pins + ",global.imageRegistry=mirror.example.com/", "--set", "compiler.enabled=true,signaling.enabled=true")
+        images = {c["image"] for d in docs if d["kind"] in ("Deployment", "Job") for c in d["spec"]["template"]["spec"].get("containers", []) + d["spec"]["template"]["spec"].get("initContainers", [])}
+        first_party = {i for i in images if "flow-like-" in i}
+        self.assertEqual(len(first_party), 8, first_party)
+        for image in first_party:
+            self.assertTrue(image.startswith("mirror.example.com/ghcr.io/rheosoph/flow-like-"), image)
+            self.assertTrue(image.endswith("@" + digest), image)
+        self.assertEqual(self.env("api", docs)["K8S_EXECUTOR_IMAGE"]["value"], "mirror.example.com/ghcr.io/rheosoph/flow-like-kubernetes-executor@" + digest)
+        for bad in ("sha256:short", "md5:" + "d" * 64, "D" * 71):
+            error = self.render("--set-string", f"api.image.digest={bad}", valid=False)
+            self.assertIn("sha256:<64 hex characters>", error)
+
+    def test_pull_secrets_reach_every_pod_and_the_pod_creating_controllers(self):
+        docs = self.render("--set", "global.imagePullSecrets[0].name=ghcr-pull,global.imagePullSecrets[1].name=mirror-pull,sinkServices.enabled=true")
+        for doc in docs:
+            if doc["kind"] in ("Deployment", "Job", "StatefulSet"):
+                pod = doc["spec"]["template"]["spec"]
+                images = [c["image"] for c in pod.get("containers", []) + pod.get("initContainers", [])]
+                if any("flow-like-" in image for image in images):
+                    self.assertEqual(pod.get("imagePullSecrets"), [{"name": "ghcr-pull"}, {"name": "mirror-pull"}], doc["metadata"]["name"])
+        env = self.env("api", docs)
+        self.assertEqual(env["K8S_IMAGE_PULL_SECRETS"]["value"], "ghcr-pull,mirror-pull")
+        self.assertEqual(env["SINK_IMAGE_PULL_SECRETS"]["value"], "ghcr-pull,mirror-pull")
+        self.assertEqual(env["SINK_TRIGGER_IMAGE"]["value"], "ghcr.io/rheosoph/flow-like-kubernetes-sink-trigger:dev")
+        self.assertEqual(env["SINK_SCHEDULER_PROVIDER"]["value"], "kubernetes")
+        self.assertEqual(env["K8S_CONFIGMAP_NAME"]["value"], "flow-like-sink-config")
+        self.assertEqual(env["K8S_SECRET_NAME"]["value"], "flow-like-sink-secrets")
+        self.assertEqual(self.env("execution-manager", docs)["SANDBOX_IMAGE_PULL_SECRETS"]["value"], json.dumps([{"name": "ghcr-pull"}, {"name": "mirror-pull"}], separators=(",", ":")))
+        self.assertNotIn("SINK_TRIGGER_IMAGE", self.env("api"))
+
+    def test_production_example_mirrors_published_names_by_digest(self):
+        docs = self.render("-f", str(BASE / "helm/values-production.yaml"))
+        images = {c["image"] for d in docs if d["kind"] in ("Deployment", "Job") for c in d["spec"]["template"]["spec"].get("containers", []) + d["spec"]["template"]["spec"].get("initContainers", [])}
+        first_party = sorted(i for i in images if "flow-like-" in i)
+        self.assertTrue(first_party)
+        for image in first_party:
+            self.assertRegex(image, r"^registry\.example\.com/flow-like-(kubernetes|docker-compose)-[a-z-]+@sha256:[0-9a-f]{64}$")
+        pod = self.resource("Deployment", "api", docs)["spec"]["template"]["spec"]
+        self.assertEqual(pod["imagePullSecrets"], [{"name": "registry-credentials"}])
+        self.assertEqual(self.env("execution-manager", docs)["SANDBOX_IMAGE"]["value"], self.env("api", docs)["K8S_EXECUTOR_IMAGE"]["value"])
+
+    def test_resolved_image_values_render_pinned_per_run_deployment(self):
+        spec = importlib.util.spec_from_file_location("resolve_images", BASE / "scripts/resolve-images.py")
+        resolver = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(resolver)
+        resolved = {component: (f"ghcr.io/rheosoph/{name}", "sha256:" + format(index, "x").rjust(64, "0")) for index, (component, name) in enumerate(resolver.REPOSITORIES.items(), start=1)}
+        with tempfile.NamedTemporaryFile("w", suffix=".yaml", dir=self.tmp.name, delete=False) as handle:
+            json.dump(resolver.image_values(resolved, "1.2.3", pull_secrets=["ghcr-pull"], arch="arm64"), handle)
+        docs = self.render("-f", handle.name)
+        manager = self.resource("Deployment", "execution-manager", docs)["spec"]["template"]["spec"]
+        self.assertEqual(manager["containers"][0]["image"], "ghcr.io/rheosoph/flow-like-kubernetes-execution-manager@" + resolved["execution-manager"][1])
+        self.assertEqual(manager["containers"][0]["imagePullPolicy"], "IfNotPresent")
+        self.assertEqual(manager["nodeSelector"], {"kubernetes.io/arch": "arm64"})
+        env = self.env("execution-manager", docs)
+        self.assertEqual(env["SANDBOX_IMAGE"]["value"], "ghcr.io/rheosoph/flow-like-kubernetes-executor@" + resolved["executor"][1])
+        self.assertEqual(json.loads(env["SANDBOX_NODE_SELECTOR"]["value"]), {"kubernetes.io/arch": "arm64"})
+        self.assertEqual(self.env("api", docs)["K8S_EXECUTOR_IMAGE"]["value"], env["SANDBOX_IMAGE"]["value"])
+        self.assertEqual(self.env("api", docs)["K8S_IMAGE_PULL_SECRETS"]["value"], "ghcr-pull")
+        self.assertEqual(self.resource("Deployment", "queue-bridge", docs)["spec"]["template"]["spec"]["containers"][0]["image"], "ghcr.io/rheosoph/flow-like-docker-compose-runtime@" + resolved["runtime"][1])
 
     def test_signaling_scales_with_redis_and_hpa_owns_replicas(self):
         docs = self.render("--set", "compiler.enabled=true,compiler.autoscaling.enabled=true,signaling.enabled=true,signaling.replicaCount=2,signaling.fanoutMode=redis")

@@ -1349,8 +1349,9 @@ export function isCreatedAppBuildTargetMismatch(
 				options.operation ?? "",
 			);
 		case "flowpilot_board":
+			return options.mode !== "explain" && options.mode !== "inspect";
 		case "flowpilot_widget":
-			return options.mode !== "explain";
+			return options.mode !== "inspect";
 		case "database_tool":
 			return DATABASE_MUTATION_OPERATIONS.has(options.operation ?? "");
 		case "upsert_event":

@@ -1,5 +1,10 @@
 "use client";
 
+import {
+	getWorkspaceEvaluation,
+	workspaceEvaluationAllowsApp,
+} from "../../lib/flowpilot/workspace-evaluation";
+
 import { i18n as i18next, useTranslation } from "@flow-like/locales";
 import {
 	BotIcon,
@@ -542,6 +547,7 @@ export function GlobalChatBody({ variant = "page" }: GlobalChatBodyProps) {
 				selectedModelId: state.selectedModelId,
 				reasoningEffort: state.reasoningEffort,
 			});
+			const launchingProfileId = settingsProfileRef.current?.hub_profile.id;
 
 			// Any file type is accepted: files become local tmp files (Tauri) or presigned tmp
 			// uploads — only URLs travel through IPC and land in IndexedDB, no blobs. FlowPilot
@@ -675,40 +681,47 @@ export function GlobalChatBody({ variant = "page" }: GlobalChatBodyProps) {
 			// asking which app/board. Read imperatively at send time — the live surface is the
 			// same one the flowpilot_board tool later resolves.
 			const surface = useAssistantSurface.getState().boardSurface;
-			const boardContext = surface
-				? {
-						app_id: surface.appId,
-						board_id: surface.boardId,
-						board_name: surface.board?.name || undefined,
-						current_layer: surface.currentLayer || undefined,
-						selected_node_ids: surface.selectedNodeIds,
-						node_count: surface.board
-							? Object.keys(surface.board.nodes ?? {}).length +
-								Object.values(surface.board.layers ?? {}).reduce(
-									(sum, layer) => sum + Object.keys(layer?.nodes ?? {}).length,
-									0,
-								)
-							: undefined,
-					}
-				: undefined;
+			const evaluation = getWorkspaceEvaluation(sessionId);
+			const boardContext =
+				surface &&
+				(!evaluation || workspaceEvaluationAllowsApp(evaluation, surface.appId))
+					? {
+							app_id: surface.appId,
+							board_id: surface.boardId,
+							board_name: surface.board?.name || undefined,
+							current_layer: surface.currentLayer || undefined,
+							selected_node_ids: surface.selectedNodeIds,
+							node_count: surface.board
+								? Object.keys(surface.board.nodes ?? {}).length +
+									Object.values(surface.board.layers ?? {}).reduce(
+										(sum, layer) =>
+											sum + Object.keys(layer?.nodes ?? {}).length,
+										0,
+									)
+								: undefined,
+						}
+					: undefined;
 
 			// Forward the open Data Studio page (if any) so the assistant resolves "this data" to the
 			// right app/overlay instead of asking which app.
 			const dataStudio = useAssistantSurface.getState().dataStudioSurface;
-			const dataStudioContext = dataStudio
-				? {
-						app_id: dataStudio.appId,
-						app_name: dataStudio.appName || undefined,
-						overlay_id: dataStudio.overlayId || undefined,
-						overlay_name: dataStudio.overlayName || undefined,
-						selected_table: dataStudio.selectedTable || undefined,
-						user_scoped: dataStudio.userScoped || undefined,
-						overlay_names:
-							dataStudio.overlayNames && dataStudio.overlayNames.length > 0
-								? dataStudio.overlayNames
-								: undefined,
-					}
-				: undefined;
+			const dataStudioContext =
+				dataStudio &&
+				(!evaluation ||
+					workspaceEvaluationAllowsApp(evaluation, dataStudio.appId))
+					? {
+							app_id: dataStudio.appId,
+							app_name: dataStudio.appName || undefined,
+							overlay_id: dataStudio.overlayId || undefined,
+							overlay_name: dataStudio.overlayName || undefined,
+							selected_table: dataStudio.selectedTable || undefined,
+							user_scoped: dataStudio.userScoped || undefined,
+							overlay_names:
+								dataStudio.overlayNames && dataStudio.overlayNames.length > 0
+									? dataStudio.overlayNames
+									: undefined,
+						}
+					: undefined;
 
 			// The stream is driven OUTSIDE this component (global-chat-stream.ts) so it keeps
 			// rendering + finalizing even if this surface unmounts mid-response (the page↔overlay
@@ -766,6 +779,7 @@ export function GlobalChatBody({ variant = "page" }: GlobalChatBodyProps) {
 					: webGlobalChatStart({
 							baseUrl: getApiOrigin(),
 							token: authUser?.access_token ?? undefined,
+							profileId: launchingProfileId,
 							// The server mints its own run id; the transport needs ours to tag tool
 							// requests and to register this run's cancel/steer control.
 							clientRunId: responseMessage.id,

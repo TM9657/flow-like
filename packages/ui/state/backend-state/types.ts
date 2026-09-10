@@ -378,6 +378,8 @@ export interface IInvite {
 
 export interface IUserLookup {
 	id: string;
+	/** Search matched an exact ID, email or handle, including undisclosed fields. */
+	exact_match?: boolean;
 	email?: string;
 	username?: string;
 	preferred_username?: string;
@@ -386,6 +388,11 @@ export interface IUserLookup {
 	additional_info?: string;
 	description?: string;
 	created_at: string;
+}
+
+export interface IProjectContactsPage {
+	users: IUserLookup[];
+	next_cursor: string | null;
 }
 
 export interface INotificationsOverview {

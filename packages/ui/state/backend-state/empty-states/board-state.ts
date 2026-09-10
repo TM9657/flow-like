@@ -137,6 +137,7 @@ export class EmptyBoardState implements IBoardState {
 		appId: string,
 		boardId: string,
 		commands: IGenericCommand[],
+		options?: IBoardMutationOptions,
 	): Promise<void> {
 		throw new Error("Method not implemented.");
 	}
@@ -144,6 +145,7 @@ export class EmptyBoardState implements IBoardState {
 		appId: string,
 		boardId: string,
 		commands: IGenericCommand[],
+		options?: IBoardMutationOptions,
 	): Promise<void> {
 		throw new Error("Method not implemented.");
 	}

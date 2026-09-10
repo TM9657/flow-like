@@ -1,11 +1,128 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import type { IPage } from "../../state/backend-state/page-state";
 import {
 	buildFlowPilotBoardContextAugmentation,
 	clearFlowPilotBoardContextManifestCacheForTests,
 } from "./board-context-manifest";
+import { inspectUiPageList } from "./ui-page-inspection";
 
 describe("FlowPilot board context augmentation", () => {
 	beforeEach(() => clearFlowPilotBoardContextManifestCacheForTests());
+
+	it("keeps failed page reads incomplete and recovers on a fresh inspection", async () => {
+		let unavailable = true;
+		const readPage = vi.fn(
+			async ({ pageId }: { pageId: string }): Promise<IPage> => {
+				if (pageId === "page-missing" && unavailable) {
+					throw new Error(
+						`Backend details that should not be forwarded: ${"x".repeat(5000)}`,
+					);
+				}
+				return {
+					id: pageId,
+					name: pageId,
+					createdAt: "2026-01-01T00:00:00.000Z",
+					updatedAt: "2026-01-01T00:00:00.000Z",
+					layoutType: "stack",
+					content: [],
+					components:
+						pageId === "page-missing"
+							? []
+							: [
+									{
+										id: "heading",
+										component: {
+											type: "text",
+											text: { literalString: "Ready" },
+										},
+									},
+								],
+				};
+			},
+		);
+		const execute = async (tool: string) => {
+			if (tool === "database_tool")
+				return { project_tables: [], user_tables: [] };
+			if (tool !== "ui_inspect") return { items: [] };
+			return {
+				status: "ok",
+				pages: await inspectUiPageList(
+					[
+						{ pageId: "page-ready", name: "Ready page", boardId: "board-1" },
+						{
+							pageId: "page-missing",
+							name: "Unavailable page",
+							boardId: "board-1",
+						},
+					],
+					readPage,
+				),
+				widgets: [{ widget_id: "widget-1" }],
+			};
+		};
+
+		const failed = await buildFlowPilotBoardContextAugmentation(
+			execute,
+			"app-1",
+			"board-1",
+			"same-source",
+		);
+		expect(failed.ui.complete).toBe(false);
+		expect(failed.ui.truncated).toBe(false);
+		expect(failed.ui.errors).toEqual([
+			"Page page-missing: Page details could not be loaded.",
+		]);
+		expect(failed.ui.pages).toEqual([
+			expect.objectContaining({
+				page_id: "page-ready",
+				element_refs: ["page-ready/heading"],
+			}),
+			{
+				page_id: "page-missing",
+				name: "Unavailable page",
+				element_refs: [],
+				error: "Page details could not be loaded.",
+			},
+		]);
+		expect(failed.ui.widgets).toEqual([{ widget_id: "widget-1" }]);
+		expect(failed.data.complete).toBe(true);
+		expect(failed.storage.complete).toBe(true);
+		expect(JSON.stringify(failed)).not.toContain("Backend details");
+
+		unavailable = false;
+		const recovered = await buildFlowPilotBoardContextAugmentation(
+			execute,
+			"app-1",
+			"board-1",
+			"same-source",
+		);
+		expect(recovered.ui.complete).toBe(true);
+		expect(recovered.ui.errors).toEqual([]);
+		expect(recovered.ui.pages[1]).toMatchObject({
+			page_id: "page-missing",
+			element_refs: [],
+		});
+		expect(recovered.ui.pages[1]).not.toHaveProperty("error");
+		expect(readPage).toHaveBeenCalledTimes(4);
+	});
+
+	it("honors an incomplete UI result even when detail errors are absent", async () => {
+		const manifest = await buildFlowPilotBoardContextAugmentation(
+			async (tool) =>
+				tool === "ui_inspect"
+					? { pages: [], widgets: [], complete: false }
+					: tool === "database_tool"
+						? { project_tables: [], user_tables: [] }
+						: { items: [] },
+			"app-1",
+			"board-1",
+			"source",
+		);
+		expect(manifest.ui.complete).toBe(false);
+		expect(manifest.ui.errors).toEqual([
+			"UI inspection did not return complete page details.",
+		]);
+	});
 
 	it("collects one shared deterministic inventory without reading sample rows", async () => {
 		const execute = vi.fn(

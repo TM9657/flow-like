@@ -72,6 +72,119 @@ afterEach(() => {
 });
 
 describe("browser global-chat transport", () => {
+	test("bounds long conversations while retaining the original request and freshest turns", async () => {
+		const fetchMock = vi
+			.fn()
+			.mockResolvedValueOnce(
+				sseResponse(runFrame("long-run"), frame("final", { message: "done" })),
+			);
+		vi.stubGlobal("fetch", fetchMock);
+		const history = Array.from({ length: 40 }, (_, index) => ({
+			role: index % 2 === 0 ? "User" : "Assistant",
+			content: `Message ${index}`,
+		}));
+
+		await webGlobalChatStart({
+			baseUrl: "https://flow.example",
+			body: { user_prompt: "Continue the work", history },
+		})(() => undefined);
+
+		const sent = JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body));
+		expect(sent.user_prompt).toBe("Continue the work");
+		expect(sent.history).toEqual([history[0], ...history.slice(-31)]);
+		expect(sent.history).toHaveLength(32);
+		expect(history).toHaveLength(40);
+	});
+
+	test("clips oversized history by Unicode characters without altering current images or prompt", async () => {
+		const fetchMock = vi
+			.fn()
+			.mockResolvedValueOnce(
+				sseResponse(runFrame("large-run"), frame("final", { message: "done" })),
+			);
+		vi.stubGlobal("fetch", fetchMock);
+		const history = [
+			{ role: "User", content: "😀".repeat(8_000) },
+			{
+				role: "Assistant",
+				content: `Original instructions ${"😀".repeat(8_000)} Latest decisions`,
+			},
+		];
+		const currentImages = [{ data: "image-data", media_type: "image/png" }];
+		const prompt = "Current instructions ".repeat(500);
+
+		await webGlobalChatStart({
+			baseUrl: "https://flow.example",
+			body: { user_prompt: prompt, history, current_images: currentImages },
+		})(() => undefined);
+
+		const sent = JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body));
+		expect(sent.history[0]).toEqual(history[0]);
+		expect(Array.from(sent.history[1].content)).toHaveLength(8_000);
+		expect(sent.history[1].content).toContain(
+			"[Middle of earlier message omitted]",
+		);
+		expect(sent.history[1].content).toMatch(/^Original instructions /);
+		expect(sent.history[1].content).toMatch(/ Latest decisions$/);
+		expect(Array.from(history[1].content).length).toBeGreaterThan(8_000);
+		expect(sent.user_prompt).toBe(prompt);
+		expect(sent.current_images).toEqual(currentImages);
+	});
+
+	test("keeps model selection, memory, and delegated tools on the launching profile", async () => {
+		const onToolRequest = vi.fn().mockResolvedValue({
+			requestId: "profile-tool",
+			approved: true,
+		});
+		const fetchMock = vi
+			.fn()
+			.mockResolvedValueOnce(
+				sseResponse(
+					runFrame("profile-run"),
+					frame("tool_request", {
+						requestId: "profile-tool",
+						toolName: "flowpilot_board",
+						arguments: {},
+						context: { profileId: "other-profile" },
+						channel: httpHandle("profile-run", "profile-tool"),
+					}),
+					frame("final", { message: "done" }),
+				),
+			)
+			.mockResolvedValueOnce(new Response("ack", { status: 200 }));
+		vi.stubGlobal("fetch", fetchMock);
+
+		await webGlobalChatStart({
+			baseUrl: "https://flow.example",
+			token: "user-token",
+			profileId: "selected-profile",
+			clientRunId: "client-profile-run",
+			body: {
+				user_prompt: "Update this board",
+				model_id: "selected-model",
+				embedding_model_id: "selected-embedding",
+			},
+			onToolRequest,
+		})(() => undefined);
+
+		const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+		expect(url).toBe("https://flow.example/api/v1/ai/global-chat");
+		expect(JSON.parse(String(init.body))).toEqual({
+			user_prompt: "Update this board",
+			model_id: "selected-model",
+			embedding_model_id: "selected-embedding",
+			profile_id: "selected-profile",
+		});
+		expect(onToolRequest).toHaveBeenCalledWith(
+			expect.objectContaining({
+				context: {
+					profileId: "selected-profile",
+					runId: "client-profile-run",
+				},
+			}),
+		);
+	});
+
 	test("parses multiline and CRLF SSE frames", () => {
 		expect(
 			parseSseFrame("event: token\r\ndata: first\r\ndata: second"),

@@ -200,6 +200,79 @@ describe("Home widget config contracts", () => {
 		).toEqual({ field: "metric", in: ["errors", "duration"] });
 	});
 
+	test("accepts URL images and advertises app storage image references", () => {
+		for (const imageUrl of [
+			"https://images.example.com/banner.png",
+			"/logo.png",
+		])
+			expect(
+				validateKnownHomeWidgetConfig("information", {
+					mode: "image",
+					imageUrl,
+				}),
+			).toEqual([]);
+		expect(
+			HOME_WIDGET_CONFIG_CONTRACTS.information.fields.imageSource,
+		).toMatchObject({
+			default: "url",
+			enum: ["url", "storage"],
+		});
+		expect(
+			HOME_WIDGET_CONFIG_CONTRACTS.information.fields.imageAppId.reference,
+		).toMatchObject({
+			kind: "profile_app_id",
+			discover_with: "list_apps",
+			when: { field: "imageSource", equals: "storage" },
+		});
+		for (const mode of ["image", "story"])
+			expect(
+				validateKnownHomeWidgetConfig("information", {
+					mode,
+					imageSource: "storage",
+					imageAppId: "app-a",
+					imagePath: "media/team photo.png",
+					imageAlt: "The support team",
+					imageUrl: "javascript:stale-hidden-value",
+				}),
+			).toEqual([]);
+		expect(
+			validateKnownHomeWidgetConfig("information", {
+				mode: "image",
+				imageSource: "url",
+				imageUrl: "/logo.png",
+				imagePath: "../stale-hidden-value",
+			}),
+		).toEqual([]);
+	});
+
+	test("requires a complete storage image reference and rejects malformed paths", () => {
+		expect(
+			issueCodes("information", { mode: "image", imageSource: "storage" }),
+		).toEqual([
+			"information_storage_image_app_missing",
+			"information_storage_image_path_missing",
+		]);
+		for (const imagePath of [
+			"https://images.example.com/banner.png",
+			"/banner.png",
+			"../banner.png",
+			"media/../banner.png",
+			"media/",
+			"media\\banner.png",
+		])
+			expect(
+				issueCodes("information", {
+					mode: "image",
+					imageSource: "storage",
+					imageAppId: "app-a",
+					imagePath,
+				}),
+			).toContain("home_widget_config_storage_image_path_invalid");
+		expect(
+			issueCodes("information", { mode: "image", imageSource: "upload" }),
+		).toContain("home_widget_config_option_invalid");
+	});
+
 	test("rejects incomplete data presentations and malformed nested config", () => {
 		const base = {
 			appId: "app-a",

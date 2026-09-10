@@ -631,14 +631,34 @@ pub async fn get_open_boards(
     Ok(boards)
 }
 
-#[tauri::command(async)]
-pub async fn undo_board(
+/// What a local undo/redo returns: the board diff against the revision the webview holds, when it
+/// sent its manifest, so the replay is visible without a second IPC round trip.
+#[derive(serde::Serialize)]
+pub struct HistoryReplayResponse {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub sync: Option<BoardSyncResponse>,
+}
+
+#[derive(Clone, Copy)]
+enum HistoryDirection {
+    Undo,
+    Redo,
+}
+
+/// Replays a recorded batch on the local board with the same commit discipline as
+/// `execute_local_commands`: the core restores the board itself when a step fails, the write is
+/// rolled back to the pre-replay board when it cannot be persisted, and the sync tail is built
+/// from the committed board.
+async fn replay_local_history(
     handler: AppHandle,
     app_id: String,
     board_id: String,
     commands: Vec<GenericCommand>,
-) -> Result<Board, TauriFunctionError> {
+    sync: Option<BoardSyncRequest>,
+    direction: HistoryDirection,
+) -> Result<HistoryReplayResponse, TauriFunctionError> {
     let flow_like_state = TauriFlowLikeState::construct(&handler).await?;
+    let store = TauriFlowLikeState::get_project_meta_store(&handler).await?;
     let app = App::load(app_id.clone(), flow_like_state.clone()).await?;
     if !app.boards.contains(&board_id) {
         return Err(TauriFunctionError::new(&format!(
@@ -646,15 +666,66 @@ pub async fn undo_board(
         )));
     }
     let board = flow_like_state.get_board(&board_id, None)?;
-    let store = TauriFlowLikeState::get_project_meta_store(&handler).await?;
     let mut board = board.lock().await;
     crate::functions::ai::copilot::ensure_board_mutation_not_reserved_by_flowpilot(
         &app_id, &board_id,
     )
     .map_err(|error| TauriFunctionError::new(&error))?;
-    board.undo(commands, flow_like_state).await?;
-    board.save(Some(store.clone())).await?;
-    Ok(board.clone())
+    let original_board = board.clone();
+    let replayed = match direction {
+        HistoryDirection::Undo => board.undo(commands, flow_like_state).await,
+        HistoryDirection::Redo => board.redo(commands, flow_like_state).await,
+    };
+    if let Err(error) = replayed {
+        *board = original_board;
+        return Err(error.into());
+    }
+    save_board_with_rollback(&mut board, store, Some(original_board)).await?;
+
+    let sync = match sync {
+        Some(request) => match local_board_sync_diff(
+            &handler,
+            local_snapshot_key(&board_id, None),
+            &board,
+            &request,
+        ) {
+            Ok(response) => Some(response),
+            Err(error) => {
+                tracing::warn!(
+                    "board {board_id}: sync tail unavailable after history replay, webview will sync separately: {error:?}"
+                );
+                None
+            }
+        },
+        None => {
+            if let Err(error) =
+                local_board_snapshot(&handler, local_snapshot_key(&board_id, None), &board)
+            {
+                tracing::warn!("board {board_id}: snapshot after history replay failed: {error:?}");
+            }
+            None
+        }
+    };
+    Ok(HistoryReplayResponse { sync })
+}
+
+#[tauri::command(async)]
+pub async fn undo_board(
+    handler: AppHandle,
+    app_id: String,
+    board_id: String,
+    commands: Vec<GenericCommand>,
+    sync: Option<BoardSyncRequest>,
+) -> Result<HistoryReplayResponse, TauriFunctionError> {
+    replay_local_history(
+        handler,
+        app_id,
+        board_id,
+        commands,
+        sync,
+        HistoryDirection::Undo,
+    )
+    .await
 }
 
 #[tauri::command(async)]
@@ -663,24 +734,17 @@ pub async fn redo_board(
     app_id: String,
     board_id: String,
     commands: Vec<GenericCommand>,
-) -> Result<Board, TauriFunctionError> {
-    let flow_like_state = TauriFlowLikeState::construct(&handler).await?;
-    let app = App::load(app_id.clone(), flow_like_state.clone()).await?;
-    if !app.boards.contains(&board_id) {
-        return Err(TauriFunctionError::new(&format!(
-            "Board {board_id} does not belong to app {app_id}"
-        )));
-    }
-    let store = TauriFlowLikeState::get_project_meta_store(&handler).await?;
-    let board = flow_like_state.get_board(&board_id, None)?;
-    let mut board = board.lock().await;
-    crate::functions::ai::copilot::ensure_board_mutation_not_reserved_by_flowpilot(
-        &app_id, &board_id,
+    sync: Option<BoardSyncRequest>,
+) -> Result<HistoryReplayResponse, TauriFunctionError> {
+    replay_local_history(
+        handler,
+        app_id,
+        board_id,
+        commands,
+        sync,
+        HistoryDirection::Redo,
     )
-    .map_err(|error| TauriFunctionError::new(&error))?;
-    board.redo(commands, flow_like_state).await?;
-    board.save(Some(store.clone())).await?;
-    Ok(board.clone())
+    .await
 }
 
 /// Returns the executed command followed by any node state `on_update` derived from it.

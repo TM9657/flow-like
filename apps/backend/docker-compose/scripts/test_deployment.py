@@ -17,6 +17,29 @@ def module(name):
 
 setup = module("setup-env")
 preflight = module("preflight")
+up = module("up")
+
+DOCKER_STUB = '''#!/usr/bin/env python3
+import json, os, sys
+with open(os.environ["DOCKER_LOG"], "a") as out:
+    out.write(json.dumps(sys.argv[1:]) + "\\n")
+if sys.argv[1] == "pull":
+    if os.environ.get("DOCKER_PULL_DENIED") and os.environ["DOCKER_PULL_DENIED"] in sys.argv[-1]:
+        print("Error response from daemon: denied", file=sys.stderr)
+        sys.exit(1)
+    print(sys.argv[-1] + ": Pulling from " + sys.argv[-1].split("/", 1)[-1].rsplit(":", 1)[0])
+    if not os.environ.get("DOCKER_PULL_NO_DIGEST"):
+        print("Digest: sha256:" + format(len(sys.argv[-1]), "064x"))
+    print("Status: Downloaded newer image for " + sys.argv[-1])
+elif sys.argv[1:3] == ["image", "inspect"]:
+    reference = sys.argv[-1]
+    if "{{json .RepoDigests}}" in sys.argv:
+        repository = reference.rsplit(":", 1)[0]
+        digest = "sha256:" + format(len(repository), "064x")
+        print(json.dumps(["mirror.example.test/other@sha256:" + "f" * 64, repository + "@" + digest]))
+    else:
+        print(json.dumps("sha256:" + format(len(reference), "064x")))
+'''
 
 class DeploymentTest(unittest.TestCase):
     def setUp(self):
@@ -26,15 +49,33 @@ class DeploymentTest(unittest.TestCase):
         self.text = setup.generate((ROOT / ".env.example").read_text(), "per-run", "http://localhost:3001", "http://localhost:8080", "http://s3.localhost:9000")
         self.text = self.text.replace("SANDBOX_IMAGE=", "SANDBOX_IMAGE=sha256:" + "a" * 64).replace("SANDBOX_GATEWAY_IMAGE=", "SANDBOX_GATEWAY_IMAGE=sha256:" + "b" * 64)
 
-    def render(self, changes=None, compose_file=None):
+    def values(self, changes=None):
         values = {}
         for line in self.text.splitlines():
             if line and not line.startswith("#"):
                 key, _, value = line.partition("=")
                 values[key] = value
         values.update(changes or {})
+        return values
+
+    def write(self, values):
         self.path.write_text("\n".join(f"{key}={value}" for key, value in values.items()) + "\n")
         self.path.chmod(0o600)
+
+    def stub_docker(self):
+        directory = Path(self.tmp.name) / "bin"
+        directory.mkdir(exist_ok=True)
+        docker = directory / "docker"
+        docker.write_text(DOCKER_STUB)
+        docker.chmod(0o700)
+        log = Path(self.tmp.name) / "docker.log"
+        log.write_text("")
+        env = {"PATH": str(directory) + os.pathsep + os.environ["PATH"], "DOCKER_LOG": str(log)}
+        return env, lambda: [json.loads(line) for line in log.read_text().splitlines()]
+
+    def render(self, changes=None, compose_file=None):
+        values = self.values(changes)
+        self.write(values)
         env = os.environ.copy()
         for key in values:
             env.pop(key, None)
@@ -159,6 +200,157 @@ class DeploymentTest(unittest.TestCase):
         for key, value in [("EXECUTION_MANAGER_WORKER_THREADS", "0"), ("EXECUTION_MANAGER_WORKER_THREADS", "65"), ("SANDBOX_WARM_POOL_SIZE", "0")]:
             values, config = self.render({key: value})
             self.assertTrue(any(key in error for error in preflight.validate(values, config)))
+
+    def test_published_images_default_to_ghcr_tag_and_keep_local_build_blocks(self):
+        for compose_file in ("docker-compose.yml", "docker-stack.yml"):
+            with self.subTest(compose_file=compose_file):
+                _, config = self.render(compose_file=compose_file)
+                services = config["services"]
+                for key, workload in preflight.IMAGE_WORKLOADS.items():
+                    name = "object-store-init" if workload == "object-store-init" else workload
+                    if name not in services:
+                        continue
+                    self.assertEqual(services[name]["image"], f"ghcr.io/rheosoph/flow-like-docker-compose-{workload}:dev", key)
+                if compose_file == "docker-compose.yml":
+                    self.assertEqual(services["queue-bridge"]["image"], "ghcr.io/rheosoph/flow-like-docker-compose-runtime:dev")
+                    for name in ("api", "queue-bridge", "execution-manager", "object-store-init", "db-init", "compiler", "signaling", "web", "sink-services"):
+                        self.assertIn("build", services[name], name)
+        _, config = self.render({"FLOW_LIKE_IMAGE_TAG": "1.2.3", "API_IMAGE": "registry.example.test/api@sha256:" + "c" * 64})
+        self.assertEqual(config["services"]["api"]["image"], "registry.example.test/api@sha256:" + "c" * 64)
+        self.assertEqual(config["services"]["web"]["image"], "ghcr.io/rheosoph/flow-like-docker-compose-web:1.2.3")
+
+    def test_preflight_image_tag_and_digest_pin_alignment(self):
+        for tag in ("dev", "1.2.3-beta", "sha-" + "a" * 40 + "-run-123-1", "_x", ""):
+            values, config = self.render({"FLOW_LIKE_IMAGE_TAG": tag})
+            self.assertEqual(preflight.validate(values, config), [], tag)
+        for tag in ("-dev", "dev tag", "dev:latest", "a" * 129):
+            values, config = self.render({"FLOW_LIKE_IMAGE_TAG": tag})
+            self.assertTrue(any("FLOW_LIKE_IMAGE_TAG" in error for error in preflight.validate(values, config)), tag)
+        runtime = "ghcr.io/rheosoph/flow-like-docker-compose-runtime@sha256:" + "1" * 64
+        manager = "ghcr.io/rheosoph/flow-like-docker-compose-execution-manager@sha256:" + "2" * 64
+        values, config = self.render({"SANDBOX_IMAGE": runtime, "SANDBOX_GATEWAY_IMAGE": manager, "RUNTIME_IMAGE": runtime, "EXECUTION_MANAGER_IMAGE": manager})
+        self.assertEqual(preflight.validate(values, config), [])
+        values, config = self.render({"SANDBOX_IMAGE": runtime, "SANDBOX_GATEWAY_IMAGE": manager, "RUNTIME_IMAGE": "", "EXECUTION_MANAGER_IMAGE": "flow-like-execution-manager:local"})
+        errors = preflight.validate(values, config)
+        self.assertTrue(any(error.startswith("RUNTIME_IMAGE must equal the SANDBOX_IMAGE") for error in errors))
+        self.assertTrue(any(error.startswith("EXECUTION_MANAGER_IMAGE must equal the SANDBOX_GATEWAY_IMAGE") for error in errors))
+        values, config = self.render({"RUNTIME_IMAGE": "flow-like-runtime:local", "EXECUTION_MANAGER_IMAGE": manager})
+        self.assertEqual(preflight.validate(values, config), [])
+
+    def test_pull_images_pins_digests_and_preserves_secrets(self):
+        values = self.values({"FLOW_LIKE_IMAGE_TAG": "1.4.0", "API_IMAGE": "stale:local"})
+        self.write(values)
+        env, calls = self.stub_docker()
+        result = subprocess.run(["python3", str(ROOT / "scripts/pull-images.py"), "--env-file", str(self.path)], env=env, capture_output=True, text=True)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(self.path.stat().st_mode & 0o777, 0o600)
+        pinned = preflight.read_env(self.path)
+        for key, workload in preflight.IMAGE_WORKLOADS.items():
+            repository = f"ghcr.io/rheosoph/flow-like-docker-compose-{workload}"
+            self.assertEqual(pinned[key], repository + "@sha256:" + format(len(repository + ":1.4.0"), "064x"))
+        self.assertEqual(len([call for call in calls() if call[:2] == ["image", "inspect"]]), 0)
+        self.assertEqual(pinned["SANDBOX_IMAGE"], pinned["RUNTIME_IMAGE"])
+        self.assertEqual(pinned["SANDBOX_GATEWAY_IMAGE"], pinned["EXECUTION_MANAGER_IMAGE"])
+        self.assertEqual(pinned["FLOW_LIKE_IMAGE_TAG"], "1.4.0")
+        for key, value in values.items():
+            if key not in pinned or (key.endswith("_IMAGE") and key in preflight.IMAGE_WORKLOADS) or key in preflight.SANDBOX_SOURCES:
+                continue
+            self.assertEqual(pinned[key], value.strip("'"), key)
+        self.assertEqual(len(pinned), len(values))
+        pulls = [call[-1] for call in calls() if call[0] == "pull"]
+        self.assertEqual(pulls, [f"ghcr.io/rheosoph/flow-like-docker-compose-{workload}:1.4.0" for workload in preflight.IMAGE_WORKLOADS.values()])
+        self.assertNotIn(values["BACKEND_KEY"], result.stdout + result.stderr)
+        self.assertEqual(preflight.validate(pinned, self.render(pinned)[1]), [])
+        immutable = "sha-" + "b" * 40 + "-run-42-1"
+        result = subprocess.run(["python3", str(ROOT / "scripts/pull-images.py"), "--env-file", str(self.path), "--tag", immutable, "--registry", "ghcr.io/fork/"], env=env, capture_output=True, text=True)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        pinned = preflight.read_env(self.path)
+        self.assertEqual(pinned["FLOW_LIKE_IMAGE_TAG"], immutable)
+        self.assertTrue(pinned["WEB_IMAGE"].startswith("ghcr.io/fork/flow-like-docker-compose-web@sha256:"))
+        self.assertIn(f"ghcr.io/fork/flow-like-docker-compose-web:{immutable}", [call[-1] for call in calls() if call[0] == "pull"])
+
+    def test_pull_images_falls_back_to_repository_digest_for_the_pulled_repository(self):
+        self.write(self.values())
+        env, calls = self.stub_docker()
+        env["DOCKER_PULL_NO_DIGEST"] = "1"
+        result = subprocess.run(["python3", str(ROOT / "scripts/pull-images.py"), "--env-file", str(self.path), "--tag", "1.4.0"], env=env, capture_output=True, text=True)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        pinned = preflight.read_env(self.path)
+        for key, workload in preflight.IMAGE_WORKLOADS.items():
+            repository = f"ghcr.io/rheosoph/flow-like-docker-compose-{workload}"
+            self.assertEqual(pinned[key], repository + "@sha256:" + format(len(repository), "064x"))
+        inspected = [call[-1] for call in calls() if call[:2] == ["image", "inspect"]]
+        self.assertEqual(inspected, [f"ghcr.io/rheosoph/flow-like-docker-compose-{workload}:1.4.0" for workload in preflight.IMAGE_WORKLOADS.values()])
+
+    def test_pull_images_failure_hints_login_and_changes_nothing(self):
+        self.write(self.values())
+        before = self.path.read_text()
+        env, calls = self.stub_docker()
+        env["DOCKER_PULL_DENIED"] = "flow-like-docker-compose-compiler"
+        result = subprocess.run(["python3", str(ROOT / "scripts/pull-images.py"), "--env-file", str(self.path)], env=env, capture_output=True, text=True)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("docker login ghcr.io", result.stderr)
+        self.assertEqual(self.path.read_text(), before)
+        pulls = [call[-1] for call in calls() if call[0] == "pull"]
+        self.assertEqual(pulls[-1], "ghcr.io/rheosoph/flow-like-docker-compose-compiler:dev")
+        self.assertEqual(len(pulls), list(preflight.IMAGE_WORKLOADS.values()).index("compiler") + 1)
+        for arguments in (["--tag", "bad tag"], ["--registry", "ghcr.io"]):
+            result = subprocess.run(["python3", str(ROOT / "scripts/pull-images.py"), "--env-file", str(self.path), *arguments], env=env, capture_output=True, text=True)
+            self.assertNotEqual(result.returncode, 0, arguments)
+        self.path.chmod(0o644)
+        result = subprocess.run(["python3", str(ROOT / "scripts/pull-images.py"), "--env-file", str(self.path)], env=env, capture_output=True, text=True)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("chmod 600", result.stderr)
+        self.assertEqual(len([call for call in calls() if call[0] == "pull"]), len(pulls))
+
+    def test_prepare_images_resets_digest_pins_to_local_tags(self):
+        digest = "ghcr.io/rheosoph/flow-like-docker-compose-runtime@sha256:" + "1" * 64
+        self.write(self.values({"RUNTIME_IMAGE": digest, "EXECUTION_MANAGER_IMAGE": "", "COMPILER_IMAGE": "keep@sha256:" + "3" * 64}))
+        env, calls = self.stub_docker()
+        result = subprocess.run(["python3", str(ROOT / "scripts/prepare-images.py"), "--env-file", str(self.path)], env=env, capture_output=True, text=True)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        pinned = preflight.read_env(self.path)
+        self.assertEqual(pinned["RUNTIME_IMAGE"], "flow-like-runtime:local")
+        self.assertEqual(pinned["EXECUTION_MANAGER_IMAGE"], "flow-like-execution-manager:local")
+        self.assertEqual(pinned["COMPILER_IMAGE"], "keep@sha256:" + "3" * 64)
+        self.assertEqual(pinned["SANDBOX_IMAGE"], "sha256:" + format(len("flow-like-runtime:local"), "064x"))
+        self.assertEqual(pinned["SANDBOX_GATEWAY_IMAGE"], "sha256:" + format(len("flow-like-execution-manager:local"), "064x"))
+        self.assertEqual(self.path.stat().st_mode & 0o777, 0o600)
+        build = next(call for call in calls() if call[0] == "compose")
+        self.assertEqual(build[-3:], ["build", "runtime", "execution-manager"])
+        self.write(self.values({"RUNTIME_IMAGE": "custom/runtime:review", "EXECUTION_MANAGER_IMAGE": "custom/manager:review"}))
+        subprocess.run(["python3", str(ROOT / "scripts/prepare-images.py"), "--env-file", str(self.path)], env=env, check=True, capture_output=True)
+        pinned = preflight.read_env(self.path)
+        self.assertEqual(pinned["RUNTIME_IMAGE"], "custom/runtime:review")
+        self.assertEqual(pinned["SANDBOX_IMAGE"], "sha256:" + format(len("custom/runtime:review"), "064x"))
+
+    def test_up_defaults_to_no_build_and_assigns_local_tags_when_building(self):
+        values = self.values()
+        self.assertEqual(up.compose_command(values, self.path, False)[-2:], ["-d", "--no-build"])
+        self.assertEqual(up.compose_command(values, self.path, True)[-2:], ["-d", "--build"])
+        self.assertEqual(up.local_tags(values), {key: f"flow-like-{workload}:local" for key, workload in preflight.IMAGE_WORKLOADS.items()})
+        local = self.values({key: f"flow-like-{workload}:local" for key, workload in preflight.IMAGE_WORKLOADS.items()})
+        self.assertEqual(up.local_tags(local), {})
+        local["SIGNALING_IMAGE"] = ""
+        self.assertEqual(up.local_tags(local), {"SIGNALING_IMAGE": "flow-like-signaling:local"})
+        values["WEB_IMAGE"] = "ghcr.io/rheosoph/flow-like-docker-compose-web@sha256:" + "4" * 64
+        self.assertEqual(up.compose_command(values, self.path, False)[-1], "--no-build")
+        with self.assertRaisesRegex(ValueError, r"digest-pinned images \(WEB_IMAGE\)"):
+            up.compose_command(values, self.path, True)
+        self.write(values)
+        env, calls = self.stub_docker()
+        result = subprocess.run(["python3", str(ROOT / "scripts/up.py"), "--env-file", str(self.path), "--build"], env=env, capture_output=True, text=True)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("prepare-images.py", result.stderr)
+        self.assertEqual(calls(), [])
+        self.write(self.values({"RUNTIME_IMAGE": "custom/runtime:review"}))
+        result = subprocess.run(["python3", str(ROOT / "scripts/up.py"), "--env-file", str(self.path), "--build"], env=env, capture_output=True, text=True)
+        written = preflight.read_env(self.path)
+        self.assertEqual(written["RUNTIME_IMAGE"], "custom/runtime:review")
+        self.assertEqual(written["API_IMAGE"], "flow-like-api:local")
+        self.assertEqual(written["OBJECT_STORE_INIT_IMAGE"], "flow-like-object-store-init:local")
+        self.assertIn("Set API_IMAGE", result.stdout)
+        self.assertNotIn("RUNTIME_IMAGE", result.stdout)
 
     def test_rejects_unsupported_compiler_and_unpinned_sandbox(self):
         values, config = self.render({"COMPILATION_BACKEND": "redis", "SANDBOX_IMAGE": "runtime:latest"})

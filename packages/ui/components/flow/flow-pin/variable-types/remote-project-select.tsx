@@ -160,7 +160,7 @@ export function RemoteProjectSelect({
 					boardId,
 					command,
 				);
-				await pushCommand(result, false);
+				await pushCommand(result);
 			} catch {
 				toast.error("Failed to save remote project selection");
 			} finally {

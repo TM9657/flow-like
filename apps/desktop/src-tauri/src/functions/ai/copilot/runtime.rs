@@ -164,6 +164,9 @@ pub(super) fn sdk_tool_handler_watchdog_timeout(tool_name: &str) -> Duration {
                 .find(|spec| spec.name == tool_name)
         })
         .or_else(|| flow_like::flow::copilot::tool_spec::find_home_tool_spec(tool_name))
+        .or_else(|| {
+            flow_like::flow::copilot::tool_spec::find_workspace_research_tool_spec(tool_name)
+        })
         .map(|spec| Duration::from_secs(spec.timeout_secs))
         .or_else(|| {
             (tool_name == "ui_inspect")

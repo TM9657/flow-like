@@ -108,7 +108,7 @@ use super::*;
 use crate::flow::ast::reconcile_text_with_catalog;
 use crate::flow::board::{Board, ExecutionMode, ExecutionStage};
 use crate::flow::copilot::{
-    FlowIrProgram, NodeMetadata, PinMetadata, UpsertFlowIrModuleArgs, compile_flow_ir,
+    BoardCommand, FlowIrProgram, NodeMetadata, PinMetadata, UpsertFlowIrModuleArgs, compile_flow_ir,
 };
 use crate::flow::execution::LogLevel;
 use flow_like_ast::{Container, SigParam, Signature, SignatureSet, parse};
@@ -117,15 +117,22 @@ use std::collections::HashMap;
 use std::time::SystemTime;
 
 fn verified_microexamples() -> Vec<&'static str> {
-    FLOWSCRIPT_FEW_SHOT_EXAMPLES
-        .split("```flowscript-verified\n")
-        .skip(1)
-        .map(|rest| {
-            rest.split_once("\n```")
-                .expect("verified FlowScript fence must be closed")
-                .0
-        })
-        .collect()
+    [
+        FLOWSCRIPT_FEW_SHOT_EXAMPLES,
+        crate::copilot::prompts::board::FOCUSED_CORE_EXAMPLES,
+    ]
+    .into_iter()
+    .flat_map(|document| {
+        document
+            .split("```flowscript-verified\n")
+            .skip(1)
+            .map(|rest| {
+                rest.split_once("\n```")
+                    .expect("verified FlowScript fence must be closed")
+                    .0
+            })
+    })
+    .collect()
 }
 
 fn verified_typed_upserts() -> Vec<UpsertFlowIrModuleArgs> {
@@ -299,7 +306,7 @@ fn verified_flowscript_microexamples_parse() {
     let examples = verified_microexamples();
     assert_eq!(
         examples.len(),
-        5,
+        9,
         "keep the verified suite intentionally small"
     );
     for (index, example) in examples.iter().enumerate() {
@@ -323,6 +330,148 @@ fn verified_flowscript_microexamples_reconcile_against_generated_catalog() {
             !result.commands.is_empty(),
             "verified FlowScript example {index} produced no materialization commands"
         );
+    }
+}
+
+#[test]
+fn verified_flowscript_payload_preserves_computed_values() {
+    let example = verified_microexamples()
+        .into_iter()
+        .find(|example| example.contains("function makePayload("))
+        .expect("the prompt must demonstrate computed payloads");
+    let result =
+        reconcile_text_with_catalog(&empty_board(), example, &generated_catalog_metadata());
+    assert!(result.diagnostics.is_empty(), "{:?}", result.diagnostics);
+
+    let node_types: HashMap<&str, &str> = result
+        .commands
+        .iter()
+        .filter_map(|command| match command {
+            BoardCommand::AddNode {
+                node_type,
+                ref_id: Some(id),
+                ..
+            } => Some((id.as_str(), node_type.as_str())),
+            _ => None,
+        })
+        .collect();
+    let connected = |source_type: &str, source_pin: &str, target_type: &str, target_pin: &str| {
+        result.commands.iter().any(|command| match command {
+            BoardCommand::ConnectPins {
+                from_node,
+                from_pin,
+                to_node,
+                to_pin,
+                ..
+            } => {
+                node_types.get(from_node.as_str()) == Some(&source_type)
+                    && from_pin == source_pin
+                    && node_types.get(to_node.as_str()) == Some(&target_type)
+                    && (to_pin == target_pin || to_pin.starts_with(&format!("{target_pin}[#")))
+            }
+            _ => false,
+        })
+    };
+    assert!(
+        connected("int_add", "sum", "struct_set", "value"),
+        "the calculated revision must feed a payload field"
+    );
+    assert!(
+        connected("struct_set", "struct_out", "array_push", "value"),
+        "the computed row must feed an array element"
+    );
+    assert!(
+        connected("array_push", "array_out", "struct_set", "value"),
+        "the computed array must feed the enclosing payload"
+    );
+}
+
+#[test]
+fn verified_flowscript_array_literals_preserve_cardinality_and_execution() {
+    let catalog = generated_catalog_metadata();
+    for (expression, computed_items) in [
+        ("[]", 0),
+        (r#"["literal"]"#, 0),
+        ("[first]", 1),
+        ("[first, second]", 2),
+    ] {
+        let source = format!(
+            "function collect(first: Struct, second: Struct): (rows: any[]) {{\n    return {expression}\n}}"
+        );
+        let result = reconcile_text_with_catalog(&empty_board(), &source, &catalog);
+        assert!(
+            result.diagnostics.is_empty(),
+            "{expression}: {:?}",
+            result.diagnostics
+        );
+        let added = |kind: &str| {
+            result.commands.iter().find_map(|command| match command {
+                BoardCommand::AddNode {
+                    node_type,
+                    ref_id: Some(id),
+                    ..
+                } if node_type == kind => Some(id.as_str()),
+                _ => None,
+            })
+        };
+        assert_eq!(added("array_push").is_some(), computed_items == 1);
+        assert_eq!(added("construct_array").is_some(), computed_items == 2);
+        if computed_items != 1 {
+            continue;
+        }
+
+        let push = added("array_push").unwrap();
+        let layer = result
+            .commands
+            .iter()
+            .find_map(|command| match command {
+                BoardCommand::CreateLayer {
+                    ref_id: Some(id), ..
+                } => Some(id.as_str()),
+                _ => None,
+            })
+            .expect("the helper must have a function layer");
+        assert!(
+            result.commands.iter().any(|command| matches!(
+                command,
+                BoardCommand::UpdateNodePin { node_id, pin_id, value, .. }
+                    if node_id == push && pin_id == "array_in" && value == &serde_json::json!([])
+            )),
+            "the singleton must start from an empty array"
+        );
+        for (from, from_pin, to, to_pin) in [
+            (layer, "first", push, "value"),
+            (push, "array_out", layer, "rows"),
+            (layer, "exec_in", push, "exec_in"),
+            (push, "exec_out", layer, "exec_out"),
+        ] {
+            assert!(result.commands.iter().any(|command| matches!(
+                command,
+                BoardCommand::ConnectPins { from_node, from_pin: output, to_node, to_pin: input, .. }
+                    if from_node == from && output == from_pin && to_node == to && input == to_pin
+            )), "missing singleton data/execution edge {from}.{from_pin} -> {to}.{to_pin}");
+        }
+    }
+}
+
+#[test]
+fn board_prompts_do_not_prohibit_supported_payload_expressions() {
+    for prompt in [
+        board_system_prompt("{}", "", 0, false, false),
+        board_sdk_flowscript_system_prompt("", 0),
+    ] {
+        assert!(prompt.contains("function makePayload("));
+        for obsolete_restriction in [
+            "is only for binding a node-call output",
+            "not a plain literal, object, array, field access, or arithmetic expression",
+            "Do not put dynamic field expressions directly",
+            "Inline object literals are\n  safe only when all fields are literal defaults",
+        ] {
+            assert!(
+                !prompt.contains(obsolete_restriction),
+                "prompt contradicts compiler-supported syntax: {obsolete_restriction}"
+            );
+        }
     }
 }
 

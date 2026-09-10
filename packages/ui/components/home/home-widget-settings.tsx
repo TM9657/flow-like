@@ -36,6 +36,8 @@ import {
 	informationItems,
 } from "./home-content/personal-content";
 import { useHomeScope } from "./home-content/shared";
+import { homeImageSource } from "./home-image-config";
+import { HomeStorageImagePicker } from "./home-storage-image-picker";
 import type { IHomeWidget } from "./types";
 
 interface SettingsProps {
@@ -703,9 +705,62 @@ function InformationSettings({ widget, onChange }: SettingsProps) {
 				"markdown",
 			].includes(mode) && (
 				<>
+					<Choice
+						label="Image source"
+						value={homeImageSource(config)}
+						onChange={(value) => update("imageSource", value)}
+						choices={[
+							["url", "URL"],
+							["storage", "App storage"],
+						]}
+					/>
+					{homeImageSource(config) === "storage" ? (
+						<div className="space-y-3">
+							<HomeAppPicker
+								label="Image app"
+								allowExplore={false}
+								value={
+									textConfig(config, "imageAppId")
+										? [textConfig(config, "imageAppId")]
+										: []
+								}
+								onChange={(ids) =>
+									onChange({
+										...config,
+										imageAppId: ids[0] ?? "",
+										imagePath:
+											ids[0] === textConfig(config, "imageAppId")
+												? textConfig(config, "imagePath")
+												: "",
+									})
+								}
+							/>
+							{textConfig(config, "imageAppId") ? (
+								<HomeStorageImagePicker
+									appId={textConfig(config, "imageAppId")}
+									value={textConfig(config, "imagePath")}
+									onChange={(path) => update("imagePath", path)}
+								/>
+							) : (
+								<p className="text-xs text-muted-foreground">
+									Choose an app to browse its shared storage.
+								</p>
+							)}
+						</div>
+					) : (
+						<Field label="Image URL">
+							{(id) => (
+								<Input
+									id={id}
+									value={textConfig(config, "imageUrl")}
+									onChange={(event) => update("imageUrl", event.target.value)}
+									placeholder="https://example.com/image.png"
+								/>
+							)}
+						</Field>
+					)}
 					{[
 						["eyebrow", "Label"],
-						["imageUrl", "Image URL"],
 						["imageAlt", "Image description"],
 						["actionLabel", "Button label"],
 						["actionHref", "Button destination"],

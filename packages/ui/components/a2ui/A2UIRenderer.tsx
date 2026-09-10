@@ -75,6 +75,15 @@ function A2UIComponentNode({
 	renderScopedComponent,
 }: A2UIComponentNodeProps) {
 	const { resolve } = useData();
+	const elementRef = useCallback(
+		(element: HTMLElement | SVGElement | null) => {
+			element?.setAttribute(
+				"data-a2ui-element-ref",
+				`${surfaceId}/${componentId}`,
+			);
+		},
+		[surfaceId, componentId],
+	);
 	const { component, style } = surfaceComponent;
 	if (!component || resolveHidden(component.hidden, resolve)) return null;
 	const resolvedStyle = resolveStyleBindings(style ?? component.style, resolve);
@@ -92,6 +101,7 @@ function A2UIComponentNode({
 		appId,
 		boardId,
 		style: resolvedStyle,
+		elementRef,
 		onAction: handleAction,
 		renderChild: (childId, childScope) =>
 			renderScopedComponent(childId, childScope),

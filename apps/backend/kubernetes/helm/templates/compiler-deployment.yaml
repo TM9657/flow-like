@@ -32,7 +32,7 @@ spec:
       {{- end }}
       containers:
         - name: compiler
-          image: "{{ .Values.global.imageRegistry }}{{ .Values.compiler.image.repository }}:{{ .Values.compiler.image.tag }}"
+          image: {{ include "flow-like.image" (dict "image" .Values.compiler.image "global" .Values.global) | quote }}
           imagePullPolicy: {{ .Values.compiler.image.pullPolicy }}
           env:
             - name: PORT

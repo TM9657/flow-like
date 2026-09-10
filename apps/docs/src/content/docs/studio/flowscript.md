@@ -7,8 +7,8 @@ sidebar:
 
 **FlowScript** is a TypeScript-flavoured rendering of a board. Every board can be shown as
 FlowScript, edited as text, and applied back onto the graph; it is also the language FlowPilot
-reads and writes when it changes a workflow. This page is the language reference. The examples are
-copied from real rendered boards, so what you see here is exactly what the editor renders.
+reads and writes when it changes a workflow. This language reference combines examples from
+rendered boards with authoring patterns that map back to the graph.
 
 ## File layout
 
@@ -211,11 +211,33 @@ eventsGeneric fetchPage(url: string, payload: Struct) {
 }
 ```
 
-A `function` is a Function layer; a handler block such as `eventsGeneric fetchPage(…)` declared
-inside another function is an entry node that agents can invoke (`tools: [fetchPage]`). A function
-that returns a value declares its return pins: `function double(n: int): (out: int) { return n * 2 }`.
-User functions join the method tables too — the first parameter is the receiver, so
-`fullName.parseName()` calls `function parseName(name: string)`.
+A `function` becomes a Function layer. Declare named output pins for returned values:
+`function double(n: int): (out: int) { return n * 2 }`. User functions also join the method tables.
+The first parameter is the receiver, so `fullName.parseName()` calls
+`function parseName(name: string)`.
+
+A helper function may omit `return` when it has no outputs. If it returns values, use one
+`return` as the last statement in the function body, outside every branch, loop and execution
+arm. Early, nested and multiple function returns are rejected. Initialize a mutable `let` with
+a literal, assign it in the branches, then return it after the control block:
+
+```ts
+function chooseLabel(enabled: bool, left: string, right: string): (label: string) {
+    let label = ""
+    if (enabled) {
+        label = left.trim()
+    } else {
+        label = right.trim()
+    }
+    return label
+}
+```
+
+Event handlers keep separate return semantics. A Generic Event can return from a branch and
+emits one value; the return examples under [Control flow](#control-flow) are handler examples.
+A handler such as `eventsGeneric fetchPage(…)` declared inside a function is an entry node that
+agents can invoke with `tools: [fetchPage]`. Its returns belong to that handler, not its enclosing
+function.
 
 ## Anchors and editing
 

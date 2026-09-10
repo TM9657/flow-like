@@ -5,8 +5,10 @@ use async_trait::async_trait;
 use flow_like::{
     app::App,
     flow::{
+        ast::apply_board_commands_to_board,
+        board::Board,
         copilot::{
-            CatalogProvider, NodeMetadata, PinMetadata, enrich_node_metadata,
+            BoardCommand, CatalogProvider, NodeMetadata, PinMetadata, enrich_node_metadata,
             score_catalog_metadata,
         },
         node::Node,
@@ -170,6 +172,38 @@ fn node_to_metadata(node: &Node) -> NodeMetadata {
 
 #[async_trait]
 impl CatalogProvider for DesktopCatalogProvider {
+    async fn test_draft_board(
+        &self,
+        board: Board,
+        commands: Vec<BoardCommand>,
+        entry: String,
+        payload: Option<serde_json::Value>,
+    ) -> Result<serde_json::Value, String> {
+        let result = flow_like_catalog::draft_test::prepare_and_test_draft_board(
+            board,
+            &entry,
+            payload,
+            |mut board, state| async move {
+                let catalog = state
+                    .node_registry
+                    .read()
+                    .await
+                    .get_nodes()
+                    .map_err(|error| error.to_string())?;
+                let applied =
+                    apply_board_commands_to_board(&mut board, commands, &catalog, state, None)
+                        .await
+                        .map_err(|error| error.to_string())?;
+                if !applied.diagnostics.is_empty() {
+                    return Err(applied.diagnostics.join("\n"));
+                }
+                Ok(board)
+            },
+        )
+        .await?;
+        serde_json::to_value(result).map_err(|error| error.to_string())
+    }
+
     async fn search(&self, query: &str) -> Vec<NodeMetadata> {
         let mut scored_matches: Vec<(i32, NodeMetadata)> = Vec::new();
 
@@ -182,7 +216,11 @@ impl CatalogProvider for DesktopCatalogProvider {
             }
         }
 
-        scored_matches.sort_by_key(|(score, _)| std::cmp::Reverse(*score));
+        scored_matches.sort_by(|(left_score, left), (right_score, right)| {
+            right_score
+                .cmp(left_score)
+                .then_with(|| left.name.cmp(&right.name))
+        });
         scored_matches
             .into_iter()
             .take(10)
@@ -252,5 +290,86 @@ impl CatalogProvider for DesktopCatalogProvider {
 
     async fn get_all_metadata(&self) -> Vec<NodeMetadata> {
         self.all_metadata()
+    }
+}
+
+#[cfg(test)]
+mod retrieval_tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn live_catalog_retrieval_covers_contract_fields_and_service_names() {
+        let provider = DesktopCatalogProvider::new(None);
+        let cases = [
+            ("attachment MIME", "email::attachmentToFields"),
+            ("microsoft graph odata deltaLink", "microsoft::graphRequest"),
+            ("ontology action idempotency key", "ontology::actionInput"),
+            ("jira attachment upload", "jira::uploadAttachment"),
+            (
+                "confluence attachment upload",
+                "confluence::uploadAttachment",
+            ),
+            ("datafusion create session", "df::createSession"),
+            ("datafusion register Lance", "df::registerLance"),
+        ];
+        let queries = cases
+            .iter()
+            .map(|(query, _)| (*query).to_string())
+            .collect::<Vec<_>>();
+        let started = std::time::Instant::now();
+        let results = provider.get_declarations_batch(&queries).await;
+        let elapsed = started.elapsed();
+        let mut failures = Vec::new();
+        for ((query, expected), result) in cases.into_iter().zip(results) {
+            let resolution: serde_json::Value = result
+                .lines()
+                .find_map(|line| {
+                    line.strip_prefix("// flowpilot.declaration-resolution/v1 ")
+                        .and_then(|payload| serde_json::from_str(payload).ok())
+                })
+                .expect("declaration response must report resolution evidence");
+            let top = &resolution["candidates"][0];
+            println!(
+                "{}",
+                serde_json::json!({
+                    "query": query, "expected": expected,
+                    "status": resolution["status"], "top": top,
+                })
+            );
+            // This query names data but no service or operation. Several live contracts
+            // contain MIME information, so the resolver must ask for refinement.
+            if query == "attachment MIME" {
+                if resolution["status"] != "ambiguous"
+                    || !resolution["candidates"]
+                        .as_array()
+                        .unwrap()
+                        .iter()
+                        .any(|candidate| candidate["function_name"] == expected)
+                {
+                    failures.push(format!("{query}: {resolution}"));
+                }
+                for candidate in resolution["candidates"].as_array().unwrap() {
+                    assert!(
+                        !result.contains(&format!(
+                            "function {}(",
+                            candidate["function_name"].as_str().unwrap()
+                        )),
+                        "ambiguous results must not expose usable declarations: {result}"
+                    );
+                }
+            } else if top["function_name"] != expected
+                || top["accepted"] != true
+                || resolution["status"] != "resolved"
+            {
+                failures.push(format!("{query}: {resolution}"));
+            }
+        }
+        println!(
+            "catalog_nodes={} queries={} elapsed_ms={}",
+            provider.len(),
+            queries.len(),
+            elapsed.as_millis()
+        );
+        assert!(failures.is_empty(), "{}", failures.join("\n"));
     }
 }

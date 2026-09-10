@@ -6,6 +6,9 @@
 // archiving the full desktop dependency graph into those artifacts on every
 // host build.
 mod deeplink;
+#[cfg(debug_assertions)]
+mod e2e_isolation;
+mod e2e_runtime;
 #[cfg(desktop)]
 mod diffusion_runtime;
 mod event_bus;
@@ -326,6 +329,13 @@ macro_rules! eprintln { ($($t:tt)*) => { tracing::error!($($t)*); } }
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 #[allow(clippy::too_many_lines, clippy::cognitive_complexity)]
 pub fn run() {
+    #[cfg(debug_assertions)]
+    let context = std::thread::spawn(crate::application_context)
+        .join()
+        .expect("context thread");
+    #[cfg(debug_assertions)]
+    e2e_isolation::initialize(context.config()).expect("Invalid E2E isolation configuration");
+
     // Reference point for the anonymous `app_start` performance metric; taken
     // before any init work so the frontend can measure process start to first render.
     functions::telemetry::mark_process_start();
@@ -990,6 +1000,9 @@ pub fn run() {
             Some(idb_sql_dir),
         ))
         .invoke_handler(tauri::generate_handler![
+            e2e_runtime::attest_intake_e2e_runtime,
+            e2e_runtime::read_intake_e2e_outcomes,
+            e2e_runtime::intake_e2e_runtime_status,
             restart_app,
             deeplink::deeplink_replay_pending,
             functions::file::get_path_meta,
@@ -1183,6 +1196,9 @@ pub fn run() {
             functions::flow::template::get_template_meta,
             functions::flow::template::push_template_meta,
             functions::ai::copilot::copilot_chat,
+            functions::ai::copilot::flowpilot_workflow_benchmark_cases,
+            functions::ai::copilot::flowpilot_workflow_benchmark_scorecards,
+            functions::ai::copilot::flowpilot_run_workflow_benchmark,
             functions::ai::copilot::cancel_copilot_chat,
             functions::ai::copilot::flowpilot_flow_ir_commit_disposition,
             functions::ai::copilot::flowpilot_create_board_edit_job,
@@ -1192,6 +1208,7 @@ pub fn run() {
             functions::ai::copilot::flowpilot_claim_board_edit_job_delivery,
             functions::ai::copilot::flowpilot_ack_board_edit_job_delivery,
             functions::ai::copilot::flowpilot_apply_flow_ir_commit,
+            functions::ai::copilot::flowpilot_read_flow_ir_commit_board,
             functions::ai::copilot::global_chat,
             functions::ai::copilot::global_chat_resume,
             functions::ai::copilot::global_chat_steer,
@@ -1320,13 +1337,18 @@ pub fn run() {
         }
     }
 
-    let context: tauri::Context<_> = std::thread::spawn(|| tauri::generate_context!())
+    #[cfg(not(debug_assertions))]
+    let context = std::thread::spawn(crate::application_context)
         .join()
         .expect("context thread");
 
     builder
         .run(context)
         .expect("error while running tauri application");
+}
+
+pub(crate) fn application_context() -> tauri::Context<tauri::Wry> {
+    tauri::generate_context!()
 }
 
 fn handle_instance(app: &AppHandle, args: Vec<String>, _cwd: String) {

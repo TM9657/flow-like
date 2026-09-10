@@ -27,17 +27,20 @@ kubectl wait --for=condition=Ready nodes --all --timeout=120s
 if [[ ! -f "$BACKEND_DIR/.generated/values-generated.yaml" ]]; then
   "$SCRIPT_DIR/setup-config.sh" --namespace "$NAMESPACE"
 fi
-# Images are imported directly. The isolated deployment requires a real registry.
+# Locally built flow-like-kubernetes-* and flow-like-docker-compose-* images are
+# imported by tag. Digest-pinned entries come from a registry and are skipped.
 TAG="${TAG:-dev}" PUSH=false "$SCRIPT_DIR/build-images.sh"
 python3 - "$BACKEND_DIR/.generated/values-images.yaml" <<'PY' | while IFS= read -r image; do
 import json,sys
 values=json.load(open(sys.argv[1]))
+seen=set()
 def walk(value):
     if isinstance(value,dict):
-        if 'repository' in value and 'tag' in value:
-            print(value['repository']+':'+value['tag'])
+        if 'repository' in value and 'tag' in value and not value.get('digest'):
+            seen.add(value['repository']+':'+value['tag'])
         for nested in value.values(): walk(nested)
 walk(values)
+if seen: print('\n'.join(sorted(seen)))
 PY
   k3d image import "$image" -c "$CLUSTER_NAME"
 done
